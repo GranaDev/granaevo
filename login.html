@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GranaEvo - Acesso Premium</title>
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <!-- Partículas de moedas flutuantes -->
+    <div class="money-particles" id="moneyParticles"></div>
+    
+    <!-- Gráficos animados de fundo -->
+    <div class="animated-charts" id="animatedCharts"></div>
+
+    <!-- Orbs de gradiente verde -->
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+    <div class="gradient-orb orb-3"></div>
+
+    <!-- Container principal -->
+    <div class="login-container">
+        <!-- Lado esquerdo - Visualização Financeira 3D -->
+        <div class="financial-side">
+            <div class="financial-3d-wrapper">
+                <div class="financial-visual">
+                    <!-- Card de crescimento -->
+                    <div class="growth-card">
+                        <div class="card-content">
+                            <div class="logo-section">
+                                <div class="logo-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <h1 class="logo-text">GranaEvo</h1>
+                            </div>
+                            
+                            <p class="tagline">Evolua suas finanças com inteligência</p>
+                            
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <div class="stat-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <line x1="12" y1="1" x2="12" y2="23" stroke-width="2" stroke-linecap="round"/>
+                                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Controle Total</span>
+                                        <span class="stat-value">100%</span>
+                                    </div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Análises</span>
+                                        <span class="stat-value">Real-time</span>
+                                    </div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <circle cx="12" cy="12" r="10" stroke-width="2"/>
+                                            <polyline points="12 6 12 12 16 14" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Metas</span>
+                                        <span class="stat-value">Inteligentes</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="decoration">
+                                <div class="deco-line"></div>
+                                <div class="deco-dot"></div>
+                                <div class="deco-line"></div>
+                            </div>
+
+                            <div class="features-list">
+                                <div class="feature-item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <polyline points="20 6 9 17 4 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>Dashboard inteligente e intuitivo</span>
+                                </div>
+                                <div class="feature-item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <polyline points="20 6 9 17 4 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>Relatórios detalhados automáticos</span>
+                                </div>
+                                <div class="feature-item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <polyline points="20 6 9 17 4 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>Segurança bancária avançada</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lado direito - Formulário -->
+        <div class="form-side">
+            <div class="form-wrapper">
+                <!-- Tela de Login -->
+                <div class="screen active" id="loginScreen">
+                    <a href="landingpage.html" class="back-button">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M19 12H5M12 19l-7-7 7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Voltar</span>
+                    </a>
+
+                    <div class="form-header">
+                        <h2 class="form-title">Bem-vindo de volta!</h2>
+                        <p class="form-subtitle">Acesse sua conta para continuar evoluindo</p>
+                    </div>
+
+                    <!-- Mensagem de erro/sucesso -->
+                    <div id="authErrorMessage" class="auth-message" style="display: none;"></div>
+
+                    <form class="login-form" id="loginForm">
+                        <div class="form-group">
+                            <label for="email" class="form-label">Email</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke-width="2"/>
+                                    <path d="M22 6l-10 7L2 6" stroke-width="2"/>
+                                </svg>
+                                <input 
+                                    type="email" 
+                                    id="loginEmail"
+                                    class="form-input" 
+                                    placeholder="seu@email.com"
+                                    required
+                                    autocomplete="email"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password" class="form-label">Senha</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
+                                </svg>
+                                <input 
+                                    type="password" 
+                                    id="loginPassword"
+                                    class="form-input" 
+                                    placeholder="••••••••"
+                                    required
+                                    autocomplete="current-password"
+                                >
+                                <button type="button" class="toggle-password" id="togglePassword">
+                                    <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke-width="2"/>
+                                        <circle cx="12" cy="12" r="3" stroke-width="2"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-options">
+                            <label class="checkbox-wrapper">
+                                <input type="checkbox" id="remember">
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-label">Lembrar de mim</span>
+                            </label>
+                            <a href="#" class="forgot-link" id="forgotPasswordBtn">Esqueceu a senha?</a>
+                        </div>
+
+                        <button type="submit" class="btn-submit">
+                            <span class="btn-text">Entrar</span>
+                            <span class="btn-loading">
+                                <svg class="spinner" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="32" stroke-dashoffset="32">
+                                        <animate attributeName="stroke-dashoffset" dur="1s" from="32" to="0" repeatCount="indefinite"/>
+                                    </circle>
+                                </svg>
+                            </span>
+                            <div class="btn-glow"></div>
+                        </button>
+
+                        <div class="divider">
+                            <span class="divider-line"></span>
+                            <span class="divider-text">É novo por aqui?</span>
+                            <span class="divider-line"></span>
+                        </div>
+
+                        <div class="register-link">
+                            <span>Ainda não tem conta?</span>
+                            <a href="planos.html">Confira os planos</a>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Tela de Recuperação - Email -->
+                <div class="screen" id="forgotEmailScreen">
+                    <button class="back-btn" id="backToLogin">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Voltar
+                    </button>
+
+                    <div class="recovery-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 16v-4M12 8h.01"/>
+                        </svg>
+                    </div>
+
+                    <h2 class="form-title">Recuperar senha</h2>
+                    <p class="form-subtitle">Digite seu email para receber o código de verificação</p>
+
+                    <form class="recovery-form">
+                        <div class="form-group">
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke-width="2"/>
+                                    <path d="M22 6l-10 7L2 6" stroke-width="2"/>
+                                </svg>
+                                <input type="email" id="recoveryEmail" class="form-input" placeholder="Digite seu email" required>
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn-submit" id="sendCodeBtn">
+                            <span class="btn-text">Enviar código</span>
+                            <div class="btn-glow"></div>
+                        </button>
+
+                        <p class="help-text">
+                            <a href="planos.html" class="link-text">Ver planos</a>
+                        </p>
+                    </form>
+                </div>
+
+                <!-- Tela de Código de Verificação -->
+                <div class="screen" id="codeScreen">
+                    <button class="back-btn" id="backToEmail">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Voltar
+                    </button>
+
+                    <div class="recovery-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                    </div>
+
+                    <h2 class="form-title">Código de verificação</h2>
+                    <p class="form-subtitle">Digite o código de 6 dígitos enviado para seu email</p>
+
+                    <form class="recovery-form">
+                        <div class="code-inputs">
+                            <input type="text" maxlength="1" class="code-input" data-index="0">
+                            <input type="text" maxlength="1" class="code-input" data-index="1">
+                            <input type="text" maxlength="1" class="code-input" data-index="2">
+                            <input type="text" maxlength="1" class="code-input" data-index="3">
+                            <input type="text" maxlength="1" class="code-input" data-index="4">
+                            <input type="text" maxlength="1" class="code-input" data-index="5">
+                        </div>
+
+                        <button type="button" class="btn-submit" id="verifyCodeBtn">
+                            <span class="btn-text">Confirmar código</span>
+                            <div class="btn-glow"></div>
+                        </button>
+
+                        <p class="help-text">
+                            Não recebeu o código? <a href="#" class="link-text" id="resendCode">Reenviar</a>
+                        </p>
+                    </form>
+                </div>
+
+                <!-- Tela de Nova Senha -->
+                <div class="screen" id="newPasswordScreen">
+                    <button class="back-btn" id="backToCode">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Voltar
+                    </button>
+
+                    <div class="recovery-icon success">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </div>
+
+                    <h2 class="form-title">Nova senha</h2>
+                    <p class="form-subtitle">Digite sua nova senha</p>
+
+                    <form class="recovery-form">
+                        <div class="form-group">
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
+                                </svg>
+                                <input type="password" id="newPassword" class="form-input" placeholder="Nova senha" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
+                                </svg>
+                                <input type="password" id="confirmPassword" class="form-input" placeholder="Confirme sua senha" required>
+                            </div>
+                        </div>
+
+                        <div class="error-message" id="errorMessage"></div>
+
+                        <button type="button" class="btn-submit" id="changePasswordBtn">
+                            <span class="btn-text">Alterar senha</span>
+                            <div class="btn-glow"></div>
+                        </button>
+
+                        <p class="help-text">
+                            <a href="planos.html" class="link-text">Ver planos</a>
+                        </p>
+                    </form>
+                </div>
+
+                <!-- Tela de Sucesso -->
+                <div class="screen" id="successScreen">
+                    <div class="recovery-icon success animated">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </div>
+
+                    <h2 class="form-title">Senha alterada!</h2>
+                    <p class="form-subtitle">Sua senha foi alterada com sucesso</p>
+
+                    <button type="button" class="btn-submit" id="backToLoginFinal">
+                        <span class="btn-text">Fazer login</span>
+                        <div class="btn-glow"></div>
+                    </button>
+
+                    <p class="help-text">
+                        <a href="planos.html" class="link-text">Ver planos</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="login.js"></script>
+</body>
+</html>

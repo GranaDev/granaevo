@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - GranaEvo</title>
+    <link rel="stylesheet" href="dashboard.css">
+    <link rel="stylesheet" href="graficos.css">
+    <link rel="stylesheet" href="chat-assistant.css">
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- AUTH GUARD - PROTEÇÃO -->
+    <script src="auth-guard.js"></script>
+
+    <!-- LOADING DE AUTENTICAÇÃO -->
+    <div class="auth-loading" id="authLoading">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- CONTEÚDO PROTEGIDO -->
+    <div data-protected-content>
+        
+        <!-- ========== SELEÇÃO DE PERFIS ========== -->
+        <div id="selecaoPerfis" class="perfis-screen">
+            <div class="perfis-container">
+                <h1 id="saudacaoPerfis" class="perfis-title">Selecione seu Perfil</h1>
+                <div id="listaPerfis" class="perfis-grid"></div>
+            </div>
+        </div>
+
+        <!-- ========== BOTÃO MOBILE (FORA DA SIDEBAR) ========== -->
+        <button class="sidebar-toggle" id="sidebarToggle">
+            <span class="hamburger"></span>
+        </button>
+
+        <!-- ========== SIDEBAR ========== -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon"><i class="fas fa-wallet"></i></div>
+                    <span class="logo-text">GranaEvo</span>
+                </div>
+            </div>
+
+            <div class="sidebar-user">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Ccircle cx='40' cy='40' r='40' fill='%2310b981'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial' font-size='32' fill='white'%3EU%3C/text%3E%3C/svg%3E" 
+                     alt="Foto" 
+                     id="userPhoto" 
+                     class="user-photo">
+                <div class="user-info">
+                    <div class="user-name" id="userName">Usuário</div>
+                    <div class="user-plan" data-user-plan>Plano Premium</div>
+                </div>
+                <label for="photoUpload" class="photo-upload-btn"><i class="fas fa-camera"></i></label>
+                <input type="file" id="photoUpload" accept="image/*" style="display:none;">
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-page="dashboard">
+                    <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
+                    <span class="nav-text">Dashboard</span>
+                </button>
+                <button class="nav-btn" data-page="transacoes">
+                    <span class="nav-icon"><i class="fas fa-credit-card"></i></span>
+                    <span class="nav-text">Transações</span>
+                </button>
+                <button class="nav-btn" data-page="reservas">
+                    <span class="nav-icon"><i class="fas fa-bullseye"></i></span>
+                    <span class="nav-text">Reservas</span>
+                </button>
+                <button class="nav-btn" data-page="cartoes">
+                    <span class="nav-icon"><i class="fas fa-gem"></i></span>
+                    <span class="nav-text">Cartões</span>
+                </button>
+                <button class="nav-btn" data-page="graficos">
+                    <span class="nav-icon"><i class="fas fa-chart-bar"></i></span>
+                    <span class="nav-text">Gráficos</span>
+                </button>
+                <button class="nav-btn" data-page="relatorios">
+                    <span class="nav-icon"><i class="fas fa-file-alt"></i></span>
+                    <span class="nav-text">Relatórios</span>
+                </button>
+                <button class="nav-btn" data-page="configuracoes">
+                    <span class="nav-icon"><i class="fas fa-cog"></i></span>
+                    <span class="nav-text">Configurações</span>
+                </button>
+            </nav>
+        </aside>
+
+        <!-- ========== MAIN CONTENT ========== -->
+        <main class="main-content" id="mainContent">
+            
+            <!-- DASHBOARD -->
+            <section class="page active" id="dashboardPage">
+                <div class="page-header-premium">
+                    <div class="header-content">
+                        <div class="header-title-group">
+                            <div class="breadcrumb-premium">
+                                <a href="dashboard.html">Início</a>
+                                <span class="separator">›</span>
+                                <span>Dashboard</span>
+                            </div>
+                            <h1 class="page-title-premium"><i class="fas fa-chart-line"></i> Dashboard</h1>
+                            <p class="page-subtitle-premium">Visão geral completa das suas finanças</p>
+                        </div>
+                        <div class="header-actions">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cards-grid">
+                    <div class="card card-green">
+                        <div class="card-icon"><i class="fas fa-arrow-up"></i></div>
+                        <div class="card-content">
+                            <div class="card-label">Entradas</div>
+                            <div class="card-value" id="totalEntradas">R$ 0,00</div>
+                        </div>
+                    </div>
+
+                    <div class="card card-red">
+                        <div class="card-icon"><i class="fas fa-arrow-down"></i></div>
+                        <div class="card-content">
+                            <div class="card-label">Saídas</div>
+                            <div class="card-value" id="totalSaidas">R$ 0,00</div>
+                        </div>
+                    </div>
+
+                    <div class="card card-blue">
+                        <div class="card-icon"><i class="fas fa-wallet"></i></div>
+                        <div class="card-content">
+                            <div class="card-label">Saldo</div>
+                            <div class="card-value" id="totalSaldo">R$ 0,00</div>
+                        </div>
+                    </div>
+
+                    <div class="card card-yellow">
+                        <div class="card-icon"><i class="fas fa-piggy-bank"></i></div>
+                        <div class="card-content">
+                            <div class="card-label">Reservas</div>
+                            <div class="card-value" id="totalReservas">R$ 0,00</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-box">
+                    <div class="section-header">
+                        <h2 class="section-title"><i class="fas fa-file-invoice-dollar"></i> Contas Fixas</h2>
+                        <button class="btn-primary" id="btnNovaContaFixa"><i class="fas fa-plus"></i> Nova Conta</button>
+                    </div>
+                    <div id="listaContasFixas" class="contas-grid">
+                        <p class="empty-state">Nenhuma conta fixa cadastrada.</p>
+                    </div>
+                </div>
+
+                <!-- ADICIONAR APÓS A SEÇÃO DE CONTAS FIXAS -->
+            <div class="section-box" style="margin-top:32px; text-align:center; cursor:pointer; transition:all 0.3s;" 
+                onclick="abrirWidgetOndeForDinheiro()"
+                onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 24px rgba(67,160,71,0.3)';"
+                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
+                <div style="font-size:3rem; margin-bottom:12px;">💸</div>
+                <h3 style="margin-bottom:8px; color:var(--text-primary);">Onde Foi Meu Dinheiro?</h3>
+                <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:16px;">
+                    Descubra para onde seus gastos estão indo com análise inteligente
+                </p>
+                <button class="btn-primary" style="pointer-events:none;">
+                    🔍 Analisar Agora
+                </button>
+            </div>
+            </section>
+
+            <!-- TRANSAÇÕES -->
+            <section class="page" id="transacoesPage">
+                <div class="page-header-premium">
+                    <div class="header-content">
+                        <div class="header-title-group">
+                            <div class="breadcrumb-premium">
+                                <a href="dashboard.html">Início</a>
+                                <span class="separator">›</span>
+                                <span>Transações</span>
+                            </div>
+                            <h1 class="page-title-premium"><i class="fas fa-credit-card"></i> Transações</h1>
+                            <p class="page-subtitle-premium">Registre e gerencie todas as suas movimentações financeiras</p>
+                        </div>
+                        <div class="header-actions">
+                            <button class="btn-header-premium primary" onclick="abrirModalTransacao()">
+                                <i class="fas fa-plus"></i> Nova Transação
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="transaction-form">
+                    <select id="selectCategoria" class="form-input">
+                        <option value="">Selecione a categoria</option>
+                        <option value="entrada"><i class="fas fa-arrow-up"></i> Entrada</option>
+                        <option value="saida"><i class="fas fa-arrow-down"></i> Saída</option>
+                        <option value="reserva"><i class="fas fa-bullseye"></i> Reserva</option>
+                        <option value="saida_credito"><i class="fas fa-credit-card"></i> Saída no Crédito</option>
+                    </select>
+
+                    <select id="selectTipo" class="form-input">
+                        <option value="">Selecione o tipo</option>
+                    </select>
+
+                    <input type="text" id="inputDescricao" class="form-input" placeholder="Descrição">
+                    <input type="number" id="inputValor" class="form-input" placeholder="Valor (R$)" step="0.01" min="0">
+
+                    <div id="creditoFields" style="display:none;">
+                        <select id="selectCartao" class="form-input">
+                            <option value="">Selecione o cartão</option>
+                        </select>
+                        <select id="selectParcelas" class="form-input">
+                            <option value="1">1x</option>
+                        </select>
+                    </div>
+
+                    <button class="btn-primary btn-large" id="btnLancar">Lançar Transação</button>
+                </div>
+
+                <div class="section-box">
+                    <h2 class="section-title"><i class="fas fa-list"></i> Movimentações</h2>
+                    <div id="listaMovimentacoes" class="movimentacoes-list">
+                        <p class="empty-state">Nenhuma movimentação registrada.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RESERVAS -->
+            <section class="page" id="reservasPage">
+                <div class="page-header-premium">
+                    <div class="header-content">
+                        <div class="header-title-group">
+                            <div class="breadcrumb-premium">
+                                <a href="dashboard.html">Início</a>
+                                <span class="separator">›</span>
+                                <span>Reservas</span>
+                            </div>
+                            <h1 class="page-title-premium"><i class="fas fa-bullseye"></i> Reservas</h1>
+                            <p class="page-subtitle-premium">Organize e acompanhe suas reservas e objetivos financeiros</p>
+                        </div>
+                    </div>
+                    <div class="header-stats">
+                        <div class="header-stat-item">
+                            <span class="header-stat-label">Total Reservado</span>
+                            <span class="header-stat-value" id="headerTotalReservas">R$ 0,00</span>
+                        </div>
+                        <div class="header-stat-item">
+                            <span class="header-stat-label">Reservas Ativas</span>
+                            <span class="header-stat-value" id="headerQtdReservas">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="reservas-layout">
+                    <div class="reservas-sidebar">
+                        <div class="section-header">
+                            <h3>Lista de Metas</h3>
+                            <button class="btn-primary" id="btnNovaMeta"><i class="fas fa-plus"></i> Nova Meta</button>
+                        </div>
+                        <div id="listaMetas" class="metas-list">
+                            <p class="empty-state">Nenhuma meta criada.</p>
+                        </div>
+                    </div>
+
+                    <div class="reservas-main">
+                        <div class="meta-visual">
+                            <div class="charts-container">
+                                <div class="chart-wrapper">
+                                    <canvas id="donutChart" width="180" height="180"></canvas>
+                                    <div id="metaProgress" class="meta-progress-text">Selecione uma meta</div>
+                                </div>
+                                <div class="chart-wrapper">
+                                    <canvas id="lineChart" width="400" height="200"></canvas>
+                                </div>
+                            </div>
+                            <div id="metaDetalhes" class="meta-details"></div>
+                            <button class="btn-warning" id="btnRetirar" style="display:none;">Retirar Dinheiro</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CARTÕES -->
+            <section class="page" id="cartoesPage">
+                <div class="page-header-premium">
+                    <div class="header-content">
+                        <div class="header-title-group">
+                            <div class="breadcrumb-premium">
+                                <a href="dashboard.html">Início</a>
+                                <span class="separator">›</span>
+                                <span>Cartões</span>
+                            </div>
+                            <h1 class="page-title-premium"><i class="fas fa-credit-card"></i> Cartões</h1>
+                            <p class="page-subtitle-premium">Controle total dos seus cartões de crédito e faturas</p>
+                        </div>
+                        <div class="header-actions">
+                        </div>
+                    </div>
+                </div>
+                <div id="cartoesGrid" class="cartoes-grid"></div>
+            </section>
+
+            <!-- GRÁFICOS PREMIUM -->
+            <section class="page" id="graficosPage">
+                <div class="page-header-premium">
+                    <div class="header-content">
+                        <div class="header-title-group">
+                            <div class="breadcrumb-premium">
+                                <a href="dashboard.html">Início</a>
+                                <span class="separator">›</span>
+                                <span>Gráficos</span>
+                            </div>
+                            <h1 class="page-title-premium"><i class="fas fa-chart-pie"></i> Análise Financeira</h1>
+                            <p class="page-subtitle-premium">Visualize seus dados de forma inteligente e profissional</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FILTROS DOS GRÁFICOS -->
+                <div class="graficos-filtros">
+                    <div class="view-type-btns">
+                        <button class="view-btn active" data-tipo="individual">
+                            <i class="fas fa-user"></i> Individual
+                        </button>
+                        <button class="view-btn" data-tipo="casal">
+                            <i class="fas fa-heart"></i> Casal
+                        </button>
+                        <button class="view-btn" data-tipo="familia">
+                            <i class="fas fa-users"></i> Família
+                        </button>
+                    </div>
+                    
+                    <!-- Toggle de Comparação -->
+                    <div class="comparacao-toggle">
+                        <label>
+                            <input type="checkbox" id="toggleComparacao">
+                            <i class="fas fa-balance-scale"></i>
+                            Ativar Gráficos Comparativos
+                        </label>
+                    </div>
+                    
+                    <!-- Filtros Normais -->
+                    <div class="filtros-row">
+                        <div class="filtro-group">
+                            <label class="filtro-label">Mês</label>
+                            <select id="mesGrafico" class="filtro-select">
+                                <!-- Preenchido via JS -->
+                            </select>
+                        </div>
+                        <div class="filtro-group">
+                            <label class="filtro-label">Ano</label>
+                            <select id="anoGrafico" class="filtro-select">
+                                <!-- Preenchido via JS -->
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Filtros de Comparação (ocultos por padrão) -->
+                    <div id="comparacaoContainer" class="comparacao-filtros">
+                        <h4 style="color: var(--text-primary); margin-bottom: 16px; text-align: center;">
+                            <i class="fas fa-calendar-alt"></i> Selecione o Período para Comparar
+                        </h4>
+                        <div class="filtros-row">
+                            <div class="filtro-group">
+                                <label class="filtro-label">Mês de Comparação</label>
+                                <select id="mesComparacao" class="filtro-select">
+                                    <!-- Preenchido via JS -->
+                                </select>
+                            </div>
+                            <div class="filtro-group">
+                                <label class="filtro-label">Ano de Comparação</label>
+                                <select id="anoComparacao" class="filtro-select">
+                                    <!-- Preenchido via JS -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Botão Gerar Gráficos -->
+                    <button class="btn-primary btn-large" onclick="gerarGraficos()" style="margin-top: 20px;">
+                        <i class="fas fa-chart-area"></i> Gerar Gráficos
+                    </button>
+                </div>
+
+                <!-- CONTAINER DOS GRÁFICOS -->
+                <div class="graficos-container">
+                    <div id="graficosConteudo">
+                        <!-- Gráficos serão renderizados aqui via JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- RELATÓRIOS -->
+            <section class="page" id="relatoriosPage">
+                <div class="page-header-premium">
+                    <div class="header-content">
+                        <div class="header-title-group">
+                            <div class="breadcrumb-premium">
+                                <a href="dashboard.html">Início</a>
+                                <span class="separator">›</span>
+                                <span>Relatórios</span>
+                            </div>
+                            <h1 class="page-title-premium"><i class="fas fa-chart-line"></i> Relatórios</h1>
+                            <p class="page-subtitle-premium">Análises detalhadas e insights sobre suas finanças</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="filtros-box">
+                    <div class="tipo-relatorio-btns">
+                        <button class="tipo-btn active" data-tipo="individual"><i class="fas fa-user"></i> Individual</button>
+                        <button class="tipo-btn" data-tipo="casal"><i class="fas fa-heart"></i> Casal</button>
+                        <button class="tipo-btn" data-tipo="familia"><i class="fas fa-users"></i> Família</button>
+                    </div>
+
+                    <div id="perfilSelectorDiv" class="perfil-selector">
+                        <select id="selectPerfilRelatorio" class="form-input">
+                            <option value="">Selecione o perfil</option>
+                        </select>
+                    </div>
+
+                    <div class="filtros-row">
+                        <select id="mesRelatorio" class="form-input">
+                            <option value="">Mês</option>
+                        </select>
+                        <select id="anoRelatorio" class="form-input">
+                            <option value="">Ano</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary btn-large" id="btnGerarRelatorio">Gerar Relatório</button>
+                </div>
+
+                <div id="relatorioResultado" style="display:none;"></div>
+            </section>
+
+            <!-- CONFIGURAÇÕES -->
+            <section class="page" id="configuracoesPage">
+                <div class="page-header-premium">
+                    <div class="header-content">
+                        <div class="header-title-group">
+                            <div class="breadcrumb-premium">
+                                <a href="dashboard.html">Início</a>
+                                <span class="separator">›</span>
+                                <span>Configurações</span>
+                            </div>
+                            <h1 class="page-title-premium"><i class="fas fa-cog"></i> Configurações</h1>
+                            <p class="page-subtitle-premium">Personalize sua experiência no GranaEvo</p>
+                        </div>
+                        <div class="header-actions">
+                            <button class="btn-header-premium primary" onclick="salvarConfiguracoes()">
+                                <i class="fas fa-save"></i> Salvar Alterações
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="config-grid">
+                    <button class="config-card" id="btnAlterarNome">
+                        <div class="config-icon"><i class="fas fa-user"></i></div>
+                        <div class="config-text">
+                            <h3>Alterar Nome</h3>
+                            <p>Mude seu nome ou apelido</p>
+                        </div>
+                        <span class="config-arrow">→</span>
+                    </button>
+
+                    <button class="config-card" id="btnAlterarEmail">
+                        <div class="config-icon"><i class="fas fa-envelope"></i></div>
+                        <div class="config-text">
+                            <h3>Alterar Email</h3>
+                            <p>Atualize seu email de acesso</p>
+                        </div>
+                        <span class="config-arrow">→</span>
+                    </button>
+
+                    <button class="config-card" id="btnAlterarSenha">
+                        <div class="config-icon"><i class="fas fa-lock"></i></div>
+                        <div class="config-text">
+                            <h3>Alterar Senha</h3>
+                            <p>Defina uma nova senha</p>
+                        </div>
+                        <span class="config-arrow">→</span>
+                    </button>
+
+                    <button class="config-card" id="btnTrocarPerfil">
+                        <div class="config-icon"><i class="fas fa-sync-alt"></i></div>
+                        <div class="config-text">
+                            <h3>Trocar Perfil</h3>
+                            <p>Alternar entre perfis</p>
+                        </div>
+                        <span class="config-arrow">→</span>
+                    </button>
+
+                    <button class="config-card" id="btnComoUsar">
+                        <div class="config-icon"><i class="fas fa-question-circle"></i></div>
+                        <div class="config-text">
+                            <h3>Como Usar</h3>
+                            <p>Guia do GranaEvo</p>
+                        </div>
+                        <span class="config-arrow">→</span>
+                    </button>
+
+                    <button class="config-card config-danger" id="btnLogout">
+                        <div class="config-icon"><i class="fas fa-sign-out-alt"></i></div>
+                        <div class="config-text">
+                            <h3>Sair / Logout</h3>
+                            <p>Encerrar sessão</p>
+                        </div>
+                        <span class="config-arrow">→</span>
+                    </button>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- MODAL/POPUP -->
+    <div id="modalOverlay" class="modal-overlay"></div>
+    <div id="modalContainer"></div>
+
+<!-- Scripts do Sistema -->
+<script src="chat-assistant.js"></script>
+<script src="dashboard.js"></script>
+<script src="graficos.js"></script>
+
+</body>
+</html>

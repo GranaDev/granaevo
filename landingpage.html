@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="description" content="Controle suas finanças com inteligência. O GranaEvo é o app que transforma sua relação com o dinheiro.">
+    <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="landingpage.css">
+</head>
+<body>
+    
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loader">
+            <div class="loader-icon">G</div>
+            <div class="loader-bar"></div>
+        </div>
+    </div>
+
+    <!-- Scroll Progress -->
+    <div class="scroll-progress" id="scrollProgress"></div>
+
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="grid-overlay"></div>
+        <canvas id="particlesCanvas"></canvas>
+        <div class="glow-orb glow-orb-1"></div>
+        <div class="glow-orb glow-orb-2"></div>
+        <div class="glow-orb glow-orb-3"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="header" id="header">
+        <nav class="nav-container">
+            <a href="#" class="logo">
+                <div class="logo-icon">G</div>
+                <span class="logo-text">GranaEvo</span>
+            </a>
+            
+            <div class="nav-links" id="navLinks">
+                <a href="#recursos" class="nav-link">Recursos</a>
+                <a href="#como-funciona" class="nav-link">Como Funciona</a>
+                <a href="#depoimentos" class="nav-link">Depoimentos</a>
+                <a href="login.html" class="nav-link">Login</a>
+                <a href="planos.html" class="btn-nav">Começar Agora</a>
+            </div>
+            
+            <button class="mobile-toggle" id="mobileToggle" aria-label="Menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- Mobile CTA Floating -->
+    <div class="mobile-cta-float" id="mobileCTA">
+        <a href="planos.html" class="btn-float">
+            <span>Começar Agora</span>
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </a>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero" id="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text" data-parallax="0.1">
+                    <div class="badge">
+                        <span class="pulse-dot"></span>
+                        <span>Revolucionando o Controle Financeiro</span>
+                    </div>
+                    
+                    <h1 class="hero-title">
+                        Domine Suas Finanças<br>
+                        <span class="gradient-text">Com Inteligência</span>
+                    </h1>
+                    
+                    <p class="hero-description">
+                        Controle total de gastos, metas inteligentes e análises em tempo real. 
+                        Transforme seus hábitos financeiros em 30 dias.
+                    </p>
+                    
+                    <div class="hero-buttons">
+                        <a href="planos.html" class="btn-primary">
+                            Começar AGORA!
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </a>
+                        <a href="login.html" class="btn-secondary">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 7L13 10L8 13V7Z" fill="currentColor"/>
+                            </svg>
+                            Login
+                        </a>
+                    </div>
+                    
+                    <div class="hero-stats">
+                        <div class="stat-item">
+                            <div class="stat-value" data-count="4.9">0</div>
+                            <div class="stat-label">Avaliação ★</div>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <div class="stat-value" data-count="10000">0</div>
+                            <div class="stat-label">Usuários Ativos</div>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <div class="stat-value" data-count="120">0</div>
+                            <div class="stat-label">Milhões Economizados</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hero-visual" data-parallax="0.05">
+                    <div class="dashboard-mockup" data-tilt>
+                        <div class="mockup-glow"></div>
+                        <div class="mockup-card">
+                            <div class="mockup-header">
+                                <div class="mockup-dots">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                                <span class="mockup-title">Painel Financeiro</span>
+                                <span class="mockup-badge">Nov 2024</span>
+                            </div>
+                            
+                            <div class="balance-card">
+                                <div class="balance-label">Saldo Previsto</div>
+                                <div class="balance-amount">R$ 5.240</div>
+                                <div class="balance-trend">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                    <span>+23% este mês</span>
+                                </div>
+                            </div>
+                            
+                            <div class="mockup-stats">
+                                <div class="stat-box stat-income">
+                                    <div class="stat-icon">
+                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                            <path d="M10 4V16M10 4L6 8M10 4L14 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Receitas</span>
+                                        <span class="stat-value">R$ 8.500</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="stat-box stat-expense">
+                                    <div class="stat-icon">
+                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                            <path d="M10 16V4M10 16L6 12M10 16L14 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Despesas</span>
+                                        <span class="stat-value">R$ 3.260</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mockup-chart">
+                                <canvas id="miniChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="problem-section" id="problema">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">O Problema</span>
+                <h2 class="section-title">Você está cansado disso?</h2>
+                <p class="section-subtitle">Esses são os desafios que impedem você de ter controle financeiro</p>
+            </div>
+            
+            <div class="problem-grid">
+                <div class="problem-card" data-tilt>
+                    <div class="problem-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Dinheiro Desaparece</h3>
+                    <p>Você recebe o salário mas não sabe para onde ele foi até o fim do mês</p>
+                </div>
+                
+                <div class="problem-card" data-tilt>
+                    <div class="problem-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 10H21" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 3V8M17 3V8" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Fatura Surpresa</h3>
+                    <p>O cartão sempre vem maior do que você esperava e você não sabe o porquê</p>
+                </div>
+                
+                <div class="problem-card" data-tilt>
+                    <div class="problem-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 7V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="12" cy="16" r="1" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <h3>Metas Impossíveis</h3>
+                    <p>Quer economizar mas nunca sobra dinheiro no final do mês</p>
+                </div>
+                
+                <div class="problem-card" data-tilt>
+                    <div class="problem-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M3 3V18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M7 14L10 10L14 14L20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Sem Visão</h3>
+                    <p>Não tem ideia de quanto gasta em cada categoria ou onde cortar custos</p>
+                </div>
+            </div>
+            
+            <div class="solution-box">
+                <div class="solution-icon">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="solution-content">
+                    <h3>O problema não é o quanto você ganha</h3>
+                    <p>É como você controla. O GranaEvo te dá visão total e controle inteligente de cada centavo.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features-section" id="recursos">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Recursos</span>
+                <h2 class="section-title">Tudo que você precisa</h2>
+                <p class="section-subtitle">Ferramentas poderosas para organizar sua vida financeira</p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M3 3V18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M18 9L13 14L10 11L7 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Dashboard Completo</h3>
+                    <p>Visualize todas suas finanças de forma clara. Entradas, saídas, saldo e reservas em tempo real.</p>
+                </div>
+                
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 10H21" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 3V8M17 3V8" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Controle de Cartões</h3>
+                    <p>Nunca mais seja pego de surpresa. Acompanhe todos os gastos e parcelas do seu cartão.</p>
+                </div>
+                
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 6V12L16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Metas e Reservas</h3>
+                    <p>Crie objetivos financeiros e acompanhe seu progresso com gráficos intuitivos.</p>
+                </div>
+                
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="16" cy="17" r="3" stroke="currentColor" stroke-width="2"/>
+                            <path d="M13 7H20M5 16H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Múltiplos Perfis</h3>
+                    <p>Perfeito para casais e famílias. Cada um com seu controle individual ou compartilhado.</p>
+                </div>
+                
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 11V7C7 4.79086 8.79086 3 11 3H13C15.2091 3 17 4.79086 17 7V11" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>100% Seguro</h3>
+                    <p>Seus dados são criptografados e nunca compartilhados com terceiros.</p>
+                </div>
+                
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Automação Completa</h3>
+                    <p>Configure contas fixas e deixe o sistema trabalhar para você.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-section" id="como-funciona">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Como Funciona</span>
+                <h2 class="section-title">Simples como deve ser</h2>
+                <p class="section-subtitle">Comece em minutos e veja resultados em dias</p>
+            </div>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot">1</div>
+                    <div class="timeline-content">
+                        <h3>Selecione um Plano</h3>
+                        <p>Escolha o plano ideal para você. Em poucos minutos, o acesso é liberado!</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot">2</div>
+                    <div class="timeline-content">
+                        <h3>Registre Transações</h3>
+                        <p>Adicione suas entradas e saídas de forma simples e rápida.</p>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot">3</div>
+                    <div class="timeline-content">
+                        <h3>Acompanhe e Evolua</h3>
+                        <p>Veja relatórios, estabeleça metas e tome decisões inteligentes.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="testimonials-section" id="depoimentos">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Depoimentos</span>
+                <h2 class="section-title">Quem usa, aprova</h2>
+                <p class="section-subtitle">Veja o que nossos usuários dizem</p>
+            </div>
+        </div>
+        
+        <div class="testimonials-carousel">
+            <div class="testimonials-track" id="testimonialsTrack">
+                <!-- Will be populated by JS -->
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <div class="cta-box">
+                <div class="cta-content">
+                    <h2>Pronto para transformar suas finanças?</h2>
+                    <p>Junte-se a milhares de pessoas que já organizaram sua vida financeira</p>
+                    <a href="planos.html" class="btn-primary btn-large">
+                        Começar Agora!!
+                        <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
+                            <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </a>
+                    <span class="cta-note">✓ Compre uma vez, tenha acesso vitalício</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <a href="#" class="logo">
+                        <div class="logo-icon">G</div>
+                        <span class="logo-text">GranaEvo</span>
+                    </a>
+                    <p>Sua evolução financeira começa aqui</p>
+                </div>
+                
+                <div class="footer-links">
+                    <h4>Produto</h4>
+                    <a href="#recursos">Recursos</a>
+                    <a href="planos.html">Planos</a>
+                    <a href="#como-funciona">Como Funciona</a>
+                </div>
+                
+                <div class="footer-links">
+                    <h4>Suporte</h4>
+                    <a href="#">Central de Ajuda</a>
+                    <a href="#">Contato</a>
+                    <a href="#">FAQ</a>
+                </div>
+                
+                <div class="footer-links">
+                    <h4>Legal</h4>
+                    <a href="#">Termos de Uso</a>
+                    <a href="#">Privacidade</a>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2025 GranaEvo. Todos os direitos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script type="module" src="script.js"></script>
+    <!-- Script: Previne Overflow Horizontal -->
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atualizar Plano - GranaEvo</title>
+    <meta name="description" content="Faça upgrade do seu plano e desbloqueie mais recursos">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="atualizarplano.css">
+</head>
+<body>
+    
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loader">
+            <div class="loader-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <div class="loader-bar"></div>
+        </div>
+    </div>
+
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="grid-overlay"></div>
+        <canvas id="particlesCanvas"></canvas>
+        <div class="glow-orb glow-orb-1"></div>
+        <div class="glow-orb glow-orb-2"></div>
+        <div class="glow-orb glow-orb-3"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="header" id="header">
+        <nav class="nav-container">
+            <a href="dashboard.html" class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <span class="logo-text">GranaEvo</span>
+            </a>
+            
+            <div class="nav-links">
+                <a href="dashboard.html" class="btn-nav">← Voltar ao Dashboard</a>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-upgrade">
+        <div class="container">
+            <div class="hero-content">
+                <div class="badge">
+                    <span class="pulse-dot"></span>
+                    <span>Upgrade Instantâneo • Sem Burocracia</span>
+                </div>
+                
+                <h1 class="hero-title">
+                    Evolua Seu Plano e
+                    <span class="gradient-text">Desbloqueie Mais Recursos</span>
+                </h1>
+                
+                <p class="hero-description">
+                    Seu plano atual: <strong id="planoAtualDisplay">Carregando...</strong><br>
+                    Pague apenas a diferença e aproveite recursos adicionais imediatamente.
+                </p>
+
+                <div class="current-plan-card" id="currentPlanCard">
+                    <!-- Preenchido via JS -->
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Plans Section -->
+    <section class="upgrade-plans-section">
+        <div class="container">
+            <h2 class="section-title">📈 Planos Disponíveis para Upgrade</h2>
+            <p class="section-subtitle">Pague apenas a diferença entre os planos</p>
+            
+            <div class="plans-grid" id="upgradeCardsGrid">
+                <!-- Cards serão gerados via JS -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Benefits Section -->
+    <section class="benefits-section">
+        <div class="container">
+            <h2 class="section-title">✨ Vantagens do Upgrade</h2>
+            
+            <div class="benefits-grid">
+                <div class="benefit-card">
+                    <div class="benefit-icon">👥</div>
+                    <h3>Mais Perfis</h3>
+                    <p>Adicione membros da família e compartilhe o controle financeiro</p>
+                </div>
+                
+                <div class="benefit-card">
+                    <div class="benefit-icon">📊</div>
+                    <h3>Relatórios Avançados</h3>
+                    <p>Análises comparativas entre todos os perfis da família</p>
+                </div>
+                
+                <div class="benefit-card">
+                    <div class="benefit-icon">🎯</div>
+                    <h3>Metas Compartilhadas</h3>
+                    <p>Economize em conjunto para objetivos comuns</p>
+                </div>
+                
+                <div class="benefit-card">
+                    <div class="benefit-icon">⚡</div>
+                    <h3>Upgrade Instantâneo</h3>
+                    <p>Novos recursos liberados imediatamente após pagamento</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq-section">
+        <div class="container">
+            <h2 class="section-title">❓ Perguntas Frequentes</h2>
+            
+            <div class="faq-grid">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>Como funciona o upgrade?</h3>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Você paga apenas a diferença entre seu plano atual e o novo plano. Por exemplo, se você tem o Individual (R$ 19,99) e quer o Casal (R$ 29,99), pagará apenas R$ 10,00.</p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>Meus dados são mantidos?</h3>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Sim! Todas as suas transações, metas e configurações são preservadas. Você apenas ganha acesso a mais recursos.</p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>Posso fazer downgrade depois?</h3>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Como todos os planos são vitalícios e de pagamento único, não fazemos downgrade. Mas você sempre pode remover perfis extras se necessário.</p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>O upgrade é instantâneo?</h3>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Sim! Após a confirmação do pagamento, seu plano é atualizado automaticamente e você já pode adicionar novos perfis.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <a href="dashboard.html" class="logo">
+                        <div class="logo-icon">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <span class="logo-text">GranaEvo</span>
+                    </a>
+                    <p>Sua evolução financeira começa aqui</p>
+                </div>
+                
+                <div class="footer-links">
+                    <h4>Produto</h4>
+                    <a href="dashboard.html">Dashboard</a>
+                    <a href="planos.html">Planos</a>
+                </div>
+                
+                <div class="footer-links">
+                    <h4>Suporte</h4>
+                    <a href="#">Central de Ajuda</a>
+                    <a href="#">Contato</a>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2025 GranaEvo. Todos os direitos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Auth Guard -->
+    <script src="auth-guard.js"></script>
+    
+    <!-- Scripts -->
+    <script type="module" src="atualizarplano.js"></script>
+</body>
+</html>
