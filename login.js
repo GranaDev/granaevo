@@ -1,45 +1,10 @@
+import { supabase } from './supabase-client.js';
+
 // ===== CONFIGURAÇÕES =====
 const CONFIG = {
     moneyParticleCount: 15,
     chartLineCount: 8
 };
-
-// login.js - Parte de autenticação (SUBSTITUIR)
-import { supabase } from './supabase-client.js';
-
-loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const email = inputs.loginEmail.value.trim();
-    const password = inputs.loginPassword.value;
-    
-    if (!email || !password) {
-        showAuthMessage('Preencha todos os campos', 'error');
-        return;
-    }
-
-    try {
-        // Fazer login no Supabase
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email: email,
-            password: password
-        });
-
-        if (error) throw error;
-
-        showAuthMessage(`Bem-vindo de volta!`, 'success');
-        
-        setTimeout(() => {
-            window.location.href = 'dashboard.html';
-        }, 1500);
-        
-    } catch (error) {
-        showAuthMessage('Email ou senha incorretos', 'error');
-        shakeInput(inputs.loginEmail);
-        shakeInput(inputs.loginPassword);
-        inputs.loginPassword.value = '';
-    }
-});
 
 // ===== CRIAR PARTÍCULAS DE MOEDAS =====
 function createMoneyParticles() {
@@ -136,14 +101,14 @@ const togglePassword = document.getElementById('togglePassword');
 const CORRECT_CODE = '123456';
 
 // ===== INICIALIZAÇÃO =====
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     // Verificar autenticação
-    if (Auth.isAuthenticated()) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
         console.log('✅ Usuário já autenticado, redirecionando...');
         window.location.href = 'dashboard.html';
         return;
     }
-    
     // Criar partículas e gráficos
     createMoneyParticles();
     createAnimatedCharts();
@@ -161,7 +126,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===== SISTEMA DE LOGIN =====
-loginForm.addEventListener('submit', (e) => {
+loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const email = inputs.loginEmail.value.trim();
@@ -178,32 +143,51 @@ loginForm.addEventListener('submit', (e) => {
         shakeInput(inputs.loginEmail);
         return;
     }
-    
-    // Validar login
-    const user = Auth.validateLogin(email, password);
-    
-    if (!user) {
-        showAuthMessage('Email ou senha incorretos', 'error');
-        shakeInput(inputs.loginEmail);
-        shakeInput(inputs.loginPassword);
-        inputs.loginPassword.value = '';
-        inputs.loginPassword.focus();
-        return;
+
+    try {
+        showAuthMessage('Verificando credenciais...', 'info');
+        
+        // Login no Supabase
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password
+        });
+
+        if (error) {
+            showAuthMessage('Email ou senha incorretos', 'error');
+            shakeInput(inputs.loginEmail);
+            shakeInput(inputs.loginPassword);
+            inputs.loginPassword.value = '';
+            return;
+        }
+
+        // Verificar se tem assinatura ativa
+        const { data: subscription } = await supabase
+            .from('subscriptions')
+            .select('*, plans(*)')
+            .eq('user_id', data.user.id)
+            .eq('payment_status', 'approved')
+            .single();
+
+        if (!subscription) {
+            showAuthMessage('Você precisa adquirir um plano primeiro!', 'error');
+            setTimeout(() => {
+                window.location.href = 'planos.html';
+            }, 2000);
+            return;
+        }
+
+        // Login bem-sucedido
+        showAuthMessage(`Bem-vindo de volta, ${data.user.user_metadata.name || 'Usuário'}!`, 'success');
+        
+        setTimeout(() => {
+            window.location.href = 'dashboard.html';
+        }, 1500);
+        
+    } catch (error) {
+        showAuthMessage('Erro ao fazer login. Tente novamente.', 'error');
+        console.error(error);
     }
-    
-    // Login bem-sucedido
-    console.log('✅ Login bem-sucedido!', user);
-    
-    // Criar sessão
-    Auth.createSession(user);
-    
-    // Feedback visual
-    showAuthMessage(`Bem-vindo, ${user.name}!`, 'success');
-    
-    // Redirecionar
-    setTimeout(() => {
-        window.location.href = 'dashboard.html';
-    }, 1500);
 });
 
 // ===== TOGGLE PASSWORD =====

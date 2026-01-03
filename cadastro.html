@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro - GranaEvo</title>
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <div class="money-particles" id="moneyParticles"></div>
+    <div class="animated-charts" id="animatedCharts"></div>
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+    <div class="gradient-orb orb-3"></div>
+
+    <div class="login-container">
+        <div class="financial-side">
+            <div class="financial-3d-wrapper">
+                <div class="financial-visual">
+                    <div class="growth-card">
+                        <div class="card-content">
+                            <div class="logo-section">
+                                <div class="logo-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <h1 class="logo-text">GranaEvo</h1>
+                            </div>
+                            <p class="tagline">Crie sua conta e comece a evoluir</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-side">
+            <div class="form-wrapper">
+                <div class="screen active">
+                    <a href="planos.html" class="back-button">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M19 12H5M12 19l-7-7 7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Voltar</span>
+                    </a>
+
+                    <div class="form-header">
+                        <h2 class="form-title">Criar sua conta</h2>
+                        <p class="form-subtitle">Preencha seus dados para continuar</p>
+                    </div>
+
+                    <div id="authErrorMessage" class="auth-message" style="display: none;"></div>
+
+                    <form class="login-form" id="cadastroForm">
+                        <div class="form-group">
+                            <label for="nome" class="form-label">Nome completo</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <circle cx="12" cy="8" r="4" stroke-width="2"/>
+                                    <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke-width="2"/>
+                                </svg>
+                                <input type="text" id="cadastroNome" class="form-input" placeholder="Seu nome completo" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="email" class="form-label">Email</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke-width="2"/>
+                                    <path d="M22 6l-10 7L2 6" stroke-width="2"/>
+                                </svg>
+                                <input type="email" id="cadastroEmail" class="form-input" placeholder="seu@email.com" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password" class="form-label">Senha</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
+                                </svg>
+                                <input type="password" id="cadastroSenha" class="form-input" placeholder="Mínimo 6 caracteres" required>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-submit">
+                            <span class="btn-text">Criar conta e continuar</span>
+                            <div class="btn-glow"></div>
+                        </button>
+
+                        <div class="register-link">
+                            <span>Já tem conta?</span>
+                            <a href="login.html">Fazer login</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="cadastro.js"></script>
+</body>
+</html>

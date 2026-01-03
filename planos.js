@@ -1,3 +1,5 @@
+import { supabase } from './supabase-client.js';
+
 // ==========================================
 // CAROUSEL DE PLANOS (MOBILE)
 // ==========================================
@@ -596,3 +598,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }, 500);
 });
+
+// ==========================================
+// CHECKOUT - REDIRECIONAR PARA MERCADO PAGO
+// ==========================================
+async function iniciarCheckout(planName) {
+    // Verificar se usuário está logado
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+        // Se não estiver logado, mostrar popup para criar conta
+        const confirmar = confirm(
+            '⚠️ Você precisa criar uma conta primeiro.\n\n' +
+            'Clique OK para se cadastrar ou Cancelar para fazer login.'
+        );
+        
+        if (confirmar) {
+            // Redirecionar para cadastro
+            localStorage.setItem('plano_selecionado', planName);
+            window.location.href = 'cadastro.html';
+        } else {
+            window.location.href = 'login.html';
+        }
+        return;
+    }
+    
+    // Se já estiver logado, ir direto para checkout
+    window.location.href = `checkout.html?plan=${planName}`;
+}
+
+window.iniciarCheckout = iniciarCheckout;
