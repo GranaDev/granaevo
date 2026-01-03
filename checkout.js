@@ -1,7 +1,7 @@
 import { supabase } from './supabase-client.js';
 
 // ⚠️ IMPORTANTE: Cole sua Public Key do Mercado Pago aqui
-const MERCADO_PAGO_PUBLIC_KEY = 'APP_USR-COLE_SUA_PUBLIC_KEY_AQUI';
+const MERCADO_PAGO_PUBLIC_KEY = 'APP_USR-757bf3df-9b23-4b20-b6d4-a2f4d0062345';
 
 const mp = new MercadoPago(MERCADO_PAGO_PUBLIC_KEY);
 
