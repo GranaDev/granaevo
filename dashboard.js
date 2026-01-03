@@ -1,3 +1,6 @@
+// ========== IMPORT SUPABASE ==========
+import { supabase } from './supabase-client.js';
+
 /* ==============================================
    GRANAEVO - DASHBOARD.JS COMPLETO
    Todas as funcionalidades separadas do HTML
@@ -97,96 +100,222 @@ function carregarDados() {
     }
 }
 
-function carregarPerfis() {
+async function carregarPerfis() {
     try {
-        const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
-        if(perfis.length > 0) {
-            perfis.forEach((p, i) => {
-                if (!p.id) p.id = i + 1;
-            });
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+            throw new Error('Sessão não encontrada');
+        }
+
+        // Buscar perfis do banco
+        const { data: perfis, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .order('id', { ascending: true });
+
+        if (error) throw error;
+
+        if (perfis && perfis.length > 0) {
             usuarioLogado.perfis = perfis;
         } else {
-            usuarioLogado.perfis = [{
-                id: 1, 
-                nome: usuarioAtual.usuario, 
-                foto: usuarioAtual.foto
-            }];
-            localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
-        }
-    } catch(e) {
-        console.error('Erro ao carregar perfis', e);
-        usuarioLogado.perfis = [{
-            id: 1, 
-            nome: usuarioAtual.usuario, 
-            foto: usuarioAtual.foto
-        }];
-    }
-}
+            // Criar perfil inicial
+            const { data: novoPerfil, error: createError } = await supabase
+                .from('profiles')
+                .insert({
+                    user_id: session.user.id,
+                    name: usuarioLogado.nome,
+                    photo: null
+                })
+                .select()
+                .single();
 
-function carregarDadosPerfil(perfilId) {
-    try {
-        const chave = `granaevo_perfil_${perfilId}`;
-        const dados = JSON.parse(localStorage.getItem(chave) || 'null');
+            if (createError) throw createError;
+
+            usuarioLogado.perfis = [novoPerfil];
+        }
+
+        console.log('✅ Perfis carregados:', usuarioLogado.perfis);
         
-        if(dados) {
-            transacoes = dados.transacoes || [];
-            metas = dados.metas || [];
-            contasFixas = dados.contasFixas || [];
-            cartoesCredito = dados.cartoesCredito || [];
-            nextTransId = transacoes.reduce((max, x) => Math.max(max, x.id || 0), 0) + 1;
-            nextMetaId = metas.reduce((max, x) => Math.max(max, x.id || 0), 0) + 1;
-            nextContaFixaId = contasFixas.reduce((max, x) => Math.max(max, x.id || 0), 0) + 1;
-            nextCartaoId = cartoesCredito.reduce((max, x) => Math.max(max, x.id || 0), 0) + 1;
-        } else {
-            transacoes = [];
-            metas = [];
-            contasFixas = [];
-            cartoesCredito = [];
-            nextTransId = 1;
-            nextMetaId = 1;
-            nextContaFixaId = 1;
-            nextCartaoId = 1;
-        }
     } catch(e) {
-        console.error('Erro carregarDadosPerfil', e);
+        console.error('❌ Erro ao carregar perfis:', e);
+        usuarioLogado.perfis = [];
     }
 }
 
-function salvarDados() {
-    localStorage.setItem('granaevo_usuario', JSON.stringify(usuarioAtual));
-    localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
-    if(perfilAtivo) {
-        const chave = `granaevo_perfil_${perfilAtivo.id}`;
-        const dados = {
-            transacoes: transacoes,
-            metas: metas,
-            contasFixas: contasFixas,
-            cartoesCredito: cartoesCredito
-        };
-        localStorage.setItem(chave, JSON.stringify(dados));
+async function carregarDadosPerfil(perfilId) {
+    try {
+        console.log('📦 Carregando dados do perfil:', perfilId);
+
+        // Buscar transações
+        const { data: transData } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('profile_id', perfilId)
+            .order('date', { ascending: false });
+
+        // Buscar metas
+        const { data: goalsData } = await supabase
+            .from('goals')
+            .select('*')
+            .eq('profile_id', perfilId);
+
+        // Buscar contas fixas
+        const { data: billsData } = await supabase
+            .from('fixed_bills')
+            .select('*')
+            .eq('profile_id', perfilId);
+
+        // Buscar cartões
+        const { data: cardsData } = await supabase
+            .from('credit_cards')
+            .select('*')
+            .eq('profile_id', perfilId);
+
+        // Mapear dados do Supabase para formato local
+        transacoes = (transData || []).map(t => ({
+            id: t.id,
+            categoria: t.category,
+            tipo: t.type,
+            descricao: t.description,
+            valor: parseFloat(t.value),
+            data: formatarDataBR(t.date),
+            hora: t.time,
+            metaId: t.meta_id,
+            contaFixaId: t.conta_fixa_id
+        }));
+
+        metas = (goalsData || []).map(m => ({
+            id: m.id,
+            descricao: m.description,
+            objetivo: parseFloat(m.target_amount),
+            saved: parseFloat(m.saved_amount),
+            monthly: m.monthly_data || {}
+        }));
+
+        contasFixas = (billsData || []).map(b => ({
+            id: b.id,
+            descricao: b.description,
+            valor: parseFloat(b.value),
+            vencimento: b.due_date,
+            pago: b.paid,
+            cartaoId: b.card_id,
+            parcelaAtual: b.installment_current,
+            totalParcelas: b.installment_total
+        }));
+
+        cartoesCredito = (cardsData || []).map(c => ({
+            id: c.id,
+            nomeBanco: c.bank_name,
+            limite: parseFloat(c.card_limit),
+            usado: parseFloat(c.used_amount),
+            vencimentoDia: c.due_day,
+            bandeiraImg: c.brand_image
+        }));
+
+        // Atualizar IDs
+        nextTransId = transacoes.length > 0 ? Math.max(...transacoes.map(t => t.id)) + 1 : 1;
+        nextMetaId = metas.length > 0 ? Math.max(...metas.map(m => m.id)) + 1 : 1;
+        nextContaFixaId = contasFixas.length > 0 ? Math.max(...contasFixas.map(c => c.id)) + 1 : 1;
+        nextCartaoId = cartoesCredito.length > 0 ? Math.max(...cartoesCredito.map(c => c.id)) + 1 : 1;
+
+        console.log('✅ Dados carregados:', {
+            transacoes: transacoes.length,
+            metas: metas.length,
+            contas: contasFixas.length,
+            cartoes: cartoesCredito.length
+        });
+        
+    } catch(e) {
+        console.error('❌ Erro ao carregar dados do perfil:', e);
+        transacoes = [];
+        metas = [];
+        contasFixas = [];
+        cartoesCredito = [];
+    }
+}
+
+async function salvarDados() {
+    if (!perfilAtivo) {
+        console.warn('⚠️ Nenhum perfil ativo para salvar');
+        return;
+    }
+
+    try {
+        console.log('💾 Salvando dados do perfil:', perfilAtivo.id);
+
+        // Salvar dados localmente para backup
+        localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
+
+        console.log('✅ Dados salvos localmente');
+        
+    } catch(e) {
+        console.error('❌ Erro ao salvar dados:', e);
     }
 }
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
-function verificarLogin() {
-    const session = AuthGuard.getUserData();
+async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
     
-    if (!session) {
+    try {
+        // Verificar sessão do Supabase
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session) {
+            if(authLoading) authLoading.style.display = 'none';
+            window.location.href = 'login.html';
+            return;
+        }
+
+        // Buscar assinatura do usuário
+        const { data: subscription, error: subError } = await supabase
+            .from('subscriptions')
+            .select('*, plans(*)')
+            .eq('user_id', session.user.id)
+            .eq('payment_status', 'approved')
+            .single();
+
+        if (subError || !subscription) {
+            alert('Você precisa adquirir um plano primeiro!');
+            window.location.href = 'planos.html';
+            return;
+        }
+
+        // Configurar dados do usuário
+        usuarioLogado.nome = session.user.user_metadata.name || session.user.email.split('@')[0];
+        usuarioLogado.plano = subscription.plans.name;
+        usuarioLogado.userId = session.user.id;
+
+        // Carregar perfis do banco
+        await carregarPerfis();
+        
+        if(authLoading) authLoading.style.display = 'none';
+        
+        // Verificar se tem perfil ativo salvo localmente
+        const perfilAtivoLocal = localStorage.getItem('perfilAtivo');
+        
+        if (perfilAtivoLocal) {
+            const perfilData = JSON.parse(perfilAtivoLocal);
+            const perfilExiste = usuarioLogado.perfis.find(p => p.id === perfilData.id);
+            
+            if (perfilExiste) {
+                // Carregar perfil salvo
+                await entrarNoPerfil(usuarioLogado.perfis.findIndex(p => p.id === perfilData.id));
+                return;
+            }
+        }
+        
+        // Mostrar seleção de perfis
+        mostrarSelecaoPerfis();
+        
+    } catch (error) {
+        console.error('Erro na verificação de login:', error);
         if(authLoading) authLoading.style.display = 'none';
         window.location.href = 'login.html';
-        return;
     }
-    usuarioLogado.nome = session.name;
-    usuarioLogado.plano = session.plan;  // ❌ Busca do sessionStorage temporário
-
-    carregarPerfis();
-    localStorage.removeItem('perfilAtivo');
-    
-    if(authLoading) authLoading.style.display = 'none';
-    mostrarSelecaoPerfis();
 }
-
 
 // ========== SELEÇÃO DE PERFIS ==========
 function mostrarSelecaoPerfis() {
@@ -242,12 +371,18 @@ function atualizarTelaPerfis() {
     }
 }
 
-function entrarNoPerfil(idx) {
+async function entrarNoPerfil(idx) {
     perfilAtivo = usuarioLogado.perfis[idx];
     localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
-    carregarDadosPerfil(perfilAtivo.id);
+    
+    // Mostrar loading
+    const authLoading = document.getElementById('authLoading');
+    if (authLoading) authLoading.style.display = 'flex';
+    
+    await carregarDadosPerfil(perfilAtivo.id);
     atualizarNomeUsuario();
     atualizarTudo();
+    
     document.getElementById('selecaoPerfis').style.display = 'none';
     document.getElementById('sidebar').style.display = 'flex';
     
@@ -255,6 +390,8 @@ function entrarNoPerfil(idx) {
     window.scrollTo({ top: 0, behavior: 'instant' });
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
+    
+    if (authLoading) authLoading.style.display = 'none';
     
     mostrarTela('dashboard');
 }
@@ -283,15 +420,70 @@ function adicionarNovoPerfil() {
     `);
     
     document.getElementById('cancelarPerfilBtn').onclick = () => fecharPopup();
-    document.getElementById('criarPerfilBtn').onclick = () => {
-        const nome = document.getElementById('novoPerfilNome').value.trim();
-        const fotoInput = document.getElementById('novoPerfilFoto');
-        if(!nome) return alert("Digite o nome do usuário!");
-        if(usuarioLogado.perfis.length >= limitesPlano[plano]) {
-            mostrarPopupLimite();
-            fecharPopup();
-            return;
+    document.getElementById('criarPerfilBtn').onclick = async () => {
+    const nome = document.getElementById('novoPerfilNome').value.trim();
+    const fotoInput = document.getElementById('novoPerfilFoto');
+    
+    if(!nome) return alert("Digite o nome do usuário!");
+    
+    if(usuarioLogado.perfis.length >= limitesPlano[usuarioLogado.plano]) {
+        mostrarPopupLimite();
+        fecharPopup();
+        return;
+    }
+
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        let fotoUrl = null;
+        
+        // Upload da foto se fornecida
+        if(fotoInput.files && fotoInput.files[0]) {
+            const arquivo = fotoInput.files[0];
+            const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name}`;
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('profile-photos')
+                .upload(nomeArquivo, arquivo);
+            
+            if (uploadError) throw uploadError;
+            
+            const { data: urlData } = supabase.storage
+                .from('profile-photos')
+                .getPublicUrl(nomeArquivo);
+            
+            fotoUrl = urlData.publicUrl;
         }
+        
+        // Criar perfil no banco
+        const { data: novoPerfil, error } = await supabase
+            .from('profiles')
+            .insert({
+                user_id: session.user.id,
+                name: nome,
+                photo: fotoUrl
+            })
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        // Adicionar à lista local
+        usuarioLogado.perfis.push({
+            id: novoPerfil.id,
+            nome: novoPerfil.name,
+            foto: novoPerfil.photo
+        });
+        
+        fecharPopup();
+        atualizarTelaPerfis();
+        alert('✅ Perfil criado com sucesso!');
+        
+    } catch (error) {
+        console.error('Erro ao criar perfil:', error);
+        alert('❌ Erro ao criar perfil. Tente novamente.');
+    }
+};
         
         const novoId = usuarioLogado.perfis.length > 0 ? 
             Math.max(...usuarioLogado.perfis.map(p => p.id || 0)) + 1 : 1;
@@ -312,7 +504,6 @@ function adicionarNovoPerfil() {
             atualizarTelaPerfis();
         }
     };
-}
 
 function mostrarPopupLimite(msgCustom) {
     let msg = msgCustom || "";
@@ -5890,3 +6081,7 @@ function desenharTopGastos(dados, label) {
     ctx.font = '12px sans-serif';
     ctx.textAlign
 }
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await verificarLogin();
+});
