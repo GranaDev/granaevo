@@ -61,10 +61,20 @@ function togglePaymentForm() {
     const cardFields = document.querySelectorAll('.card-field');
     
     if (selectedPaymentMethod === 'pix') {
-        cardFields.forEach(field => field.style.display = 'none');
+        // Ocultar campos de cartão e remover required
+        cardFields.forEach(field => {
+            field.style.display = 'none';
+            const inputs = field.querySelectorAll('input');
+            inputs.forEach(input => input.removeAttribute('required'));
+        });
         document.getElementById('submitButton').textContent = 'Gerar QR Code PIX';
     } else {
-        cardFields.forEach(field => field.style.display = 'block');
+        // Mostrar campos de cartão e adicionar required
+        cardFields.forEach(field => {
+            field.style.display = 'block';
+            const inputs = field.querySelectorAll('input');
+            inputs.forEach(input => input.setAttribute('required', 'required'));
+        });
         document.getElementById('submitButton').textContent = 'Finalizar Pagamento';
     }
 }
@@ -72,8 +82,14 @@ function togglePaymentForm() {
 // Adicionar classe aos campos de cartão
 document.querySelectorAll('#cardNumber, #cardholderName, #cardExpirationMonth, #securityCode').forEach(field => {
     field.closest('.form-group').classList.add('card-field');
-    if (field.closest('.form-row')) {
-        field.closest('.form-row').classList.add('card-field');
+});
+
+// Adicionar classe à linha com dois campos
+const formRows = document.querySelectorAll('.form-row');
+formRows.forEach(row => {
+    const hasCardField = row.querySelector('#cardExpirationMonth, #securityCode');
+    if (hasCardField) {
+        row.classList.add('card-field');
     }
 });
 
@@ -212,6 +228,8 @@ async function processPixPayment() {
         loadingOverlay.classList.add('active');
         errorMessage.classList.remove('show');
         
+        console.log('📱 Processando pagamento PIX...');
+        
         // Buscar plano
         const { data: plan, error: planError } = await supabase
             .from('plans')
@@ -245,7 +263,7 @@ async function processPixPayment() {
         
         if (error) throw error;
         
-        console.log('Resposta PIX:', data);
+        console.log('✅ Resposta PIX:', data);
         
         // Mostrar QR Code do PIX
         if (data.pix) {
@@ -255,7 +273,7 @@ async function processPixPayment() {
         }
         
     } catch (error) {
-        console.error('Erro ao processar PIX:', error);
+        console.error('❌ Erro ao processar PIX:', error);
         showError(error.message || 'Erro ao processar pagamento PIX.');
     } finally {
         loadingOverlay.classList.remove('active');
@@ -325,6 +343,8 @@ async function processCreditCardPayment() {
         loadingOverlay.classList.add('active');
         errorMessage.classList.remove('show');
         
+        console.log('💳 Criando token do cartão...');
+        
         const [month, year] = expiration.split('/');
         
         // Criar token
@@ -338,7 +358,7 @@ async function processCreditCardPayment() {
             identificationNumber: identificationNumber
         });
         
-        console.log('Token criado:', token.id);
+        console.log('✅ Token criado:', token.id);
         
         // Buscar plano
         const { data: plan, error: planError } = await supabase
@@ -348,6 +368,8 @@ async function processCreditCardPayment() {
             .single();
         
         if (planError) throw new Error('Erro ao buscar plano');
+        
+        console.log('📤 Enviando pagamento...');
         
         // Processar pagamento
         const { data, error } = await supabase.functions.invoke('process-payment', {
@@ -375,9 +397,12 @@ async function processCreditCardPayment() {
             }
         });
         
-        if (error) throw error;
+        if (error) {
+            console.error('❌ Erro da função:', error);
+            throw error;
+        }
         
-        console.log('Resposta do pagamento:', data);
+        console.log('✅ Resposta do pagamento:', data);
         
         if (data.status === 'approved') {
             alert('🎉 Pagamento aprovado! Bem-vindo ao GranaEvo!\n\nVocê receberá um email com suas credenciais de acesso em instantes.');
@@ -390,7 +415,7 @@ async function processCreditCardPayment() {
         }
         
     } catch (error) {
-        console.error('Erro ao processar pagamento:', error);
+        console.error('❌ Erro ao processar pagamento:', error);
         showError(error.message || 'Erro ao processar pagamento. Tente novamente.');
     } finally {
         loadingOverlay.classList.remove('active');
