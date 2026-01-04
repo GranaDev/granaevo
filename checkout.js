@@ -261,7 +261,12 @@ async function processPixPayment() {
             }
         });
         
-        if (error) throw error;
+        if (error) {
+            console.error('❌ Erro da função:', error);
+            // Tentar pegar mensagem de erro mais detalhada
+            const errorMsg = data?.error || error.message || 'Erro desconhecido';
+            throw new Error(errorMsg);
+        }
         
         console.log('✅ Resposta PIX:', data);
         
@@ -399,7 +404,9 @@ async function processCreditCardPayment() {
         
         if (error) {
             console.error('❌ Erro da função:', error);
-            throw error;
+            // Tentar pegar mensagem de erro mais detalhada
+            const errorMsg = data?.error || error.message || 'Erro desconhecido';
+            throw new Error(errorMsg);
         }
         
         console.log('✅ Resposta do pagamento:', data);
