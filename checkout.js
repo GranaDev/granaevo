@@ -1,6 +1,8 @@
 import { supabase } from './supabase-client.js';
 
-// ⚠️ SUBSTITUA pela sua Public Key REAL do Mercado Pago
+// ⚠️ OBTENHA A PUBLIC KEY CORRETA EM:
+// https://www.mercadopago.com.br/developers/panel/app
+// Credentials → Production credentials → Public Key
 const MERCADO_PAGO_PUBLIC_KEY = 'APP_USR-757bf3df-9b23-4b20-b6d4-a2f4d0062345';
 
 const mp = new MercadoPago(MERCADO_PAGO_PUBLIC_KEY, {
@@ -24,10 +26,8 @@ if (!planName || !PLANS[planName]) {
 document.getElementById('planName').textContent = planName;
 document.getElementById('planPrice').textContent = PLANS[planName].price.toFixed(2);
 
-// Estado do pagamento
 let selectedPaymentMethod = 'credit_card';
 
-// Adicionar seletor de método de pagamento
 function setupPaymentMethodSelector() {
     const planInfo = document.querySelector('.plan-info');
     const methodSelector = document.createElement('div');
@@ -45,7 +45,6 @@ function setupPaymentMethodSelector() {
     
     planInfo.after(methodSelector);
     
-    // Event listeners
     document.querySelectorAll('.payment-method-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.payment-method-btn').forEach(b => b.classList.remove('active'));
@@ -56,12 +55,10 @@ function setupPaymentMethodSelector() {
     });
 }
 
-// Alternar formulário baseado no método
 function togglePaymentForm() {
     const cardFields = document.querySelectorAll('.card-field');
     
     if (selectedPaymentMethod === 'pix') {
-        // Ocultar campos de cartão e remover required
         cardFields.forEach(field => {
             field.style.display = 'none';
             const inputs = field.querySelectorAll('input');
@@ -69,7 +66,6 @@ function togglePaymentForm() {
         });
         document.getElementById('submitButton').textContent = 'Gerar QR Code PIX';
     } else {
-        // Mostrar campos de cartão e adicionar required
         cardFields.forEach(field => {
             field.style.display = 'block';
             const inputs = field.querySelectorAll('input');
@@ -79,12 +75,10 @@ function togglePaymentForm() {
     }
 }
 
-// Adicionar classe aos campos de cartão
 document.querySelectorAll('#cardNumber, #cardholderName, #cardExpirationMonth, #securityCode').forEach(field => {
     field.closest('.form-group').classList.add('card-field');
 });
 
-// Adicionar classe à linha com dois campos
 const formRows = document.querySelectorAll('.form-row');
 formRows.forEach(row => {
     const hasCardField = row.querySelector('#cardExpirationMonth, #securityCode');
@@ -95,10 +89,7 @@ formRows.forEach(row => {
 
 setupPaymentMethodSelector();
 
-// ==========================================
-// MÁSCARAS E VALIDAÇÕES
-// ==========================================
-
+// MÁSCARAS
 const cardNumberInput = document.getElementById('cardNumber');
 cardNumberInput.addEventListener('input', (e) => {
     let value = e.target.value.replace(/\s/g, '');
@@ -140,7 +131,6 @@ identificationInput.addEventListener('input', (e) => {
     e.target.value = value;
 });
 
-// Identificar bandeira do cartão (apenas se for cartão)
 cardNumberInput.addEventListener('input', async (e) => {
     if (selectedPaymentMethod !== 'credit_card') return;
     
@@ -170,10 +160,7 @@ cardNumberInput.addEventListener('input', async (e) => {
     }
 });
 
-// ==========================================
 // PROCESSAR PAGAMENTO
-// ==========================================
-
 const form = document.getElementById('form-checkout');
 const submitButton = document.getElementById('submitButton');
 
@@ -187,7 +174,6 @@ form.addEventListener('submit', async (e) => {
     }
 });
 
-// Processar PIX
 async function processPixPayment() {
     const loadingOverlay = document.getElementById('loadingOverlay');
     const errorMessage = document.getElementById('errorMessage');
@@ -198,7 +184,6 @@ async function processPixPayment() {
         const identificationType = document.getElementById('identificationType').value;
         const identificationNumber = document.getElementById('identificationNumber').value.replace(/\D/g, '');
         
-        // Validações
         if (!userEmail || !userName) {
             showError('Por favor, preencha seu email e nome completo.');
             return;
@@ -230,7 +215,6 @@ async function processPixPayment() {
         
         console.log('📱 Processando pagamento PIX...');
         
-        // Buscar plano
         const { data: plan, error: planError } = await supabase
             .from('plans')
             .select('id')
@@ -239,7 +223,6 @@ async function processPixPayment() {
         
         if (planError) throw new Error('Erro ao buscar plano');
         
-        // Processar pagamento PIX
         const { data, error } = await supabase.functions.invoke('process-payment', {
             body: {
                 email: userEmail,
@@ -262,19 +245,17 @@ async function processPixPayment() {
         });
         
         if (error) {
-            console.error('❌ Erro da função:', error);
-            // Tentar pegar mensagem de erro mais detalhada
-            const errorMsg = data?.error || error.message || 'Erro desconhecido';
+            console.error('❌ Erro:', error);
+            const errorMsg = data?.error || error.message || 'Erro ao processar pagamento';
             throw new Error(errorMsg);
         }
         
         console.log('✅ Resposta PIX:', data);
         
-        // Mostrar QR Code do PIX
         if (data.pix) {
             showPixQRCode(data.pix);
         } else {
-            showError('Erro ao gerar PIX. Tente novamente.');
+            showError('Erro ao gerar PIX. Detalhes: ' + JSON.stringify(data));
         }
         
     } catch (error) {
@@ -286,7 +267,6 @@ async function processPixPayment() {
     }
 }
 
-// Processar Cartão de Crédito
 async function processCreditCardPayment() {
     const loadingOverlay = document.getElementById('loadingOverlay');
     const errorMessage = document.getElementById('errorMessage');
@@ -303,7 +283,6 @@ async function processCreditCardPayment() {
         const paymentMethodId = document.getElementById('paymentMethodId').value;
         const issuerId = document.getElementById('issuer').value;
         
-        // Validações
         if (!userEmail || !userName) {
             showError('Por favor, preencha seu email e nome completo.');
             return;
@@ -352,7 +331,6 @@ async function processCreditCardPayment() {
         
         const [month, year] = expiration.split('/');
         
-        // Criar token
         const token = await mp.createCardToken({
             cardNumber: cardNumber,
             cardholderName: cardholderName,
@@ -365,7 +343,6 @@ async function processCreditCardPayment() {
         
         console.log('✅ Token criado:', token.id);
         
-        // Buscar plano
         const { data: plan, error: planError } = await supabase
             .from('plans')
             .select('id')
@@ -376,7 +353,6 @@ async function processCreditCardPayment() {
         
         console.log('📤 Enviando pagamento...');
         
-        // Processar pagamento
         const { data, error } = await supabase.functions.invoke('process-payment', {
             body: {
                 email: userEmail,
@@ -403,13 +379,12 @@ async function processCreditCardPayment() {
         });
         
         if (error) {
-            console.error('❌ Erro da função:', error);
-            // Tentar pegar mensagem de erro mais detalhada
-            const errorMsg = data?.error || error.message || 'Erro desconhecido';
+            console.error('❌ Erro:', error);
+            const errorMsg = data?.error || error.message || 'Erro ao processar pagamento';
             throw new Error(errorMsg);
         }
         
-        console.log('✅ Resposta do pagamento:', data);
+        console.log('✅ Resposta:', data);
         
         if (data.status === 'approved') {
             alert('🎉 Pagamento aprovado! Bem-vindo ao GranaEvo!\n\nVocê receberá um email com suas credenciais de acesso em instantes.');
@@ -418,7 +393,7 @@ async function processCreditCardPayment() {
             alert('⏳ Pagamento em análise.\n\nVocê receberá um email assim que for aprovado.');
             window.location.href = 'planos.html';
         } else {
-            showError('Pagamento recusado. Verifique os dados do cartão e tente novamente.');
+            showError('Pagamento recusado. Detalhes: ' + (data.status_detail || 'Verifique os dados do cartão'));
         }
         
     } catch (error) {
@@ -430,7 +405,6 @@ async function processCreditCardPayment() {
     }
 }
 
-// Mostrar QR Code do PIX
 function showPixQRCode(pixData) {
     const container = document.querySelector('.checkout-container');
     
@@ -474,7 +448,6 @@ function showPixQRCode(pixData) {
     container.appendChild(pixModal);
 }
 
-// Copiar código PIX
 window.copyPixCode = function(code) {
     navigator.clipboard.writeText(code).then(() => {
         alert('✅ Código PIX copiado!');
