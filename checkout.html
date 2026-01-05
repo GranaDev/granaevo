@@ -53,30 +53,6 @@
             font-weight: bold;
         }
         
-        /* Seletor de método de pagamento */
-        .payment-method-btn {
-            flex: 1;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            color: rgba(255, 255, 255, 0.6);
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 14px;
-        }
-        
-        .payment-method-btn:hover {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(16, 185, 129, 0.3);
-        }
-        
-        .payment-method-btn.active {
-            background: rgba(16, 185, 129, 0.2);
-            border-color: #10b981;
-            color: #10b981;
-        }
-        
         .form-group {
             margin-bottom: 20px;
         }
@@ -89,8 +65,7 @@
             font-weight: 500;
         }
         
-        .form-group input,
-        .form-group select {
+        .form-group input {
             width: 100%;
             padding: 12px;
             background: rgba(255, 255, 255, 0.05);
@@ -101,8 +76,7 @@
             transition: all 0.3s;
         }
         
-        .form-group input:focus,
-        .form-group select:focus {
+        .form-group input:focus {
             outline: none;
             border-color: #10b981;
             background: rgba(255, 255, 255, 0.08);
@@ -110,12 +84,6 @@
         
         .form-group input::placeholder {
             color: rgba(255, 255, 255, 0.4);
-        }
-        
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
         }
         
         .submit-button {
@@ -154,6 +122,7 @@
             z-index: 9999;
             justify-content: center;
             align-items: center;
+            flex-direction: column;
         }
         
         .loading-overlay.active {
@@ -167,6 +136,12 @@
             border-top-color: #10b981;
             border-radius: 50%;
             animation: spin 1s linear infinite;
+        }
+        
+        .loading-text {
+            color: #10b981;
+            margin-top: 20px;
+            font-size: 18px;
         }
         
         @keyframes spin {
@@ -210,43 +185,10 @@
             color: #10b981;
         }
 
-        /* Modal PIX */
-        .pix-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-            padding: 20px;
-        }
-
-        .pix-modal-content {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 20px;
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            backdrop-filter: blur(10px);
-            padding: 40px;
-            max-width: 500px;
-            width: 100%;
-        }
-
         @media (max-width: 768px) {
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-            
             .checkout-container {
                 padding: 30px 20px;
                 margin: 20px auto;
-            }
-
-            .pix-modal-content {
-                padding: 30px 20px;
             }
         }
     </style>
@@ -254,12 +196,13 @@
 <body>
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
+        <div class="loading-text">Processando seu pagamento...</div>
     </div>
 
     <div class="checkout-container">
         <div class="checkout-header">
             <h1>🎉 Finalize sua compra</h1>
-            <p style="color: rgba(255,255,255,0.6);">Acesso vitalício ao GranaEvo</p>
+            <p style="color: rgba(255,255,255,0.6);">Pagamento seguro via Stripe</p>
         </div>
 
         <div class="plan-info">
@@ -271,7 +214,6 @@
         <div class="error-message" id="errorMessage"></div>
 
         <form id="form-checkout">
-            <!-- Dados Pessoais -->
             <div class="form-group">
                 <label for="userEmail">Email *</label>
                 <input type="email" id="userEmail" name="userEmail" placeholder="seu@email.com" required>
@@ -282,49 +224,8 @@
                 <input type="text" id="userName" name="userName" placeholder="Seu nome completo" required>
             </div>
 
-            <!-- Dados do Cartão -->
-            <div class="form-group">
-                <label for="cardNumber">Número do Cartão *</label>
-                <input type="text" id="cardNumber" name="cardNumber" placeholder="0000 0000 0000 0000" maxlength="19" required>
-            </div>
-
-            <div class="form-group">
-                <label for="cardholderName">Nome no Cartão *</label>
-                <input type="text" id="cardholderName" name="cardholderName" placeholder="Como está no cartão" required>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="cardExpirationMonth">Validade *</label>
-                    <input type="text" id="cardExpirationMonth" name="cardExpirationMonth" placeholder="MM/AA" maxlength="5" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="securityCode">CVV *</label>
-                    <input type="text" id="securityCode" name="securityCode" placeholder="123" maxlength="4" required>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label for="identificationType">Tipo de Documento *</label>
-                <select id="identificationType" name="identificationType" required>
-                    <option value="">Selecione</option>
-                    <option value="CPF">CPF</option>
-                    <option value="CNPJ">CNPJ</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="identificationNumber">Número do Documento *</label>
-                <input type="text" id="identificationNumber" name="identificationNumber" placeholder="000.000.000-00" required>
-            </div>
-
-            <input type="hidden" id="paymentMethodId" name="paymentMethodId">
-            <input type="hidden" id="issuer" name="issuer">
-            <input type="hidden" id="installments" name="installments" value="1">
-
             <button type="submit" class="submit-button" id="submitButton">
-                Finalizar Pagamento
+                Ir para Pagamento Seguro
             </button>
         </form>
 
@@ -334,18 +235,17 @@
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
                     <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
                 </svg>
-                <span>Pagamento Seguro</span>
+                <span>Pagamento via Stripe</span>
             </div>
             <div class="security-badge">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2"/>
                 </svg>
-                <span>SSL Criptografado</span>
+                <span>Anti-fraude ativo</span>
             </div>
         </div>
     </div>
     
-    <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script type="module" src="checkout.js"></script>
 </body>
 </html>
