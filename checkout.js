@@ -1,7 +1,7 @@
 import { supabase } from './supabase-client.js';
 
 // Inicializar MercadoPago
-const mp = new MercadoPago('APP_USR-757bf3df-9b23-4b20-b6d4-a2f4d0062345', {
+const mp = new MercadoPago('APP_USR-474597c2-5121-4b24-8dfe-922d32e49233', {
   locale: 'pt-BR'
 });
 
