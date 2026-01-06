@@ -96,6 +96,8 @@ form.addEventListener('submit', async (e) => {
       
       const [month, year] = cardExpiry.split('/');
       
+      console.log('🔐 Criando token do cartão...');
+      
       const tokenResponse = await mp.fields.createCardToken({
         cardNumber: cardNumber,
         cardholderName: cardholderName,
@@ -111,7 +113,10 @@ form.addEventListener('submit', async (e) => {
       }
       
       cardToken = tokenResponse.id;
+      console.log('✅ Token criado:', cardToken);
     }
+    
+    console.log('📤 Enviando dados:', { email, name, planName, paymentMethod: selectedMethod });
     
     // Chamar Edge Function
     const { data, error } = await supabase.functions.invoke('process-mercadopago-payment', {
@@ -124,7 +129,12 @@ form.addEventListener('submit', async (e) => {
       }
     });
     
-    if (error) throw error;
+    console.log('📦 Resposta completa:', { data, error });
+    
+    if (error) {
+      console.error('❌ Erro da Edge Function:', error);
+      throw error;
+    }
     
     loadingOverlay.classList.remove('active');
     
@@ -141,8 +151,10 @@ form.addEventListener('submit', async (e) => {
     
   } catch (error) {
     loadingOverlay.classList.remove('active');
-    console.error('❌ Erro:', error);
-    alert('Erro ao processar pagamento. Tente novamente.');
+    console.error('❌ Erro completo:', error);
+    console.error('❌ Error name:', error.name);
+    console.error('❌ Error message:', error.message);
+    alert('Erro ao processar pagamento: ' + error.message);
   }
 });
 
