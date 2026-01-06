@@ -1,6 +1,6 @@
 import { supabase } from './supabase-client.js';
 
-// Inicializar MercadoPago
+// Inicializar MercadoPago com credenciais de TESTE
 const mp = new MercadoPago('APP_USR-474597c2-5121-4b24-8dfe-922d32e49233', {
   locale: 'pt-BR'
 });
@@ -118,12 +118,17 @@ form.addEventListener('submit', async (e) => {
     
     console.log('📤 Enviando dados:', { email, name, planName, paymentMethod: selectedMethod });
     
+    // Gerar um ID único para esta transação (evita pagamentos duplicados)
+    const idempotencyKey = `${email}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log('🔑 Idempotency Key:', idempotencyKey);
+    
     // Chamar Edge Function usando fetch direto
     const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/process-mercadopago-payment', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo'
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo',
+        'X-Idempotency-Key': idempotencyKey
       },
       body: JSON.stringify({
         email,
