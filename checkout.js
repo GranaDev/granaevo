@@ -118,22 +118,37 @@ form.addEventListener('submit', async (e) => {
     
     console.log('📤 Enviando dados:', { email, name, planName, paymentMethod: selectedMethod });
     
-    // Chamar Edge Function
-    const { data, error } = await supabase.functions.invoke('process-mercadopago-payment', {
-      body: {
+    // Chamar Edge Function usando fetch direto
+    const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/process-mercadopago-payment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo'
+      },
+      body: JSON.stringify({
         email,
         name,
         planName,
         paymentMethod: selectedMethod,
         cardToken
-      }
+      })
     });
-    
-    console.log('📦 Resposta completa:', { data, error });
-    
-    if (error) {
-      console.error('❌ Erro da Edge Function:', error);
-      throw error;
+
+    const responseText = await response.text();
+    console.log('📦 Resposta RAW:', responseText);
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+      console.log('📦 Resposta JSON:', data);
+    } catch (e) {
+      console.error('❌ Erro ao fazer parse:', e);
+      throw new Error('Resposta inválida do servidor: ' + responseText);
+    }
+
+    if (!response.ok) {
+      console.error('❌ Erro do servidor:', data);
+      throw new Error(data.error || 'Erro desconhecido');
     }
     
     loadingOverlay.classList.remove('active');
