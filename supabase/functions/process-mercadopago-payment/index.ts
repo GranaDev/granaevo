@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-idempotency-key',
   'Access-Control-Max-Age': '86400',
 }
 
@@ -19,6 +19,14 @@ serve(async (req) => {
 
   try {
     console.log('🚀 Iniciando process-mercadopago-payment')
+    
+    // Pegar Idempotency Key do header
+    const idempotencyKey = req.headers.get('X-Idempotency-Key')
+    console.log('🔑 Idempotency Key recebido:', idempotencyKey)
+    
+    if (!idempotencyKey) {
+      throw new Error('Header X-Idempotency-Key can\'t be null')
+    }
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -140,7 +148,8 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${mpToken}`
+        'Authorization': `Bearer ${mpToken}`,
+        'X-Idempotency-Key': idempotencyKey
       },
       body: JSON.stringify(paymentData)
     })
