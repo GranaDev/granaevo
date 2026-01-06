@@ -7,21 +7,57 @@
     <link rel="stylesheet" href="dashboard.css">
     <link rel="stylesheet" href="graficos.css">
     <link rel="stylesheet" href="chat-assistant.css">
-    <!-- Font Awesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <!-- ⚡ AUTH GUARD - DEVE SER MODULE -->
+    <script type="module" src="auth-guard.js"></script>
+    
+    <style>
+        /* Loading de autenticação */
+        .auth-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0a0f1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999;
+            flex-direction: column;
+        }
+        
+        .auth-loading .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(16, 185, 129, 0.3);
+            border-top-color: #10b981;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .auth-loading p {
+            color: #10b981;
+            margin-top: 20px;
+            font-size: 16px;
+        }
+    </style>
 </head>
 <body>
-    <!-- AUTH GUARD - PROTEÇÃO -->
-    <script src="auth-guard.js"></script>
-
     <!-- LOADING DE AUTENTICAÇÃO -->
     <div class="auth-loading" id="authLoading">
         <div class="spinner"></div>
+        <p>🔒 Verificando acesso...</p>
     </div>
 
     <!-- CONTEÚDO PROTEGIDO -->
-    <div data-protected-content>
+    <div data-protected-content style="display: none;">
         
         <!-- ========== SELEÇÃO DE PERFIS ========== -->
         <div id="selecaoPerfis" class="perfis-screen">
@@ -521,10 +557,9 @@
     <div id="modalOverlay" class="modal-overlay"></div>
     <div id="modalContainer"></div>
 
-<!-- Scripts do Sistema -->
-<script src="chat-assistant.js"></script>
-<script src="dashboard.js"></script>
-<script src="graficos.js"></script>
-
+    <!-- Scripts do Sistema -->
+    <script src="chat-assistant.js"></script>
+    <script src="dashboard.js"></script>
+    <script src="graficos.js"></script>
 </body>
 </html>

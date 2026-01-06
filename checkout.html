@@ -283,14 +283,20 @@
             </button>
         </form>
 
+        <!-- SUBSTITUIR APENAS A SEÇÃO DO PIX (linha ~238) -->
         <div class="pix-qrcode" id="pixQrcode">
             <h3 style="color: #10b981;">Escaneie o QR Code</h3>
             <img id="pixQrcodeImg" src="" alt="QR Code PIX">
-            <button class="submit-button" onclick="window.location.href='dashboard.html'">
-                Já realizei o pagamento
+            <p style="color: rgba(255,255,255,0.7); margin: 16px 0; font-size: 14px;">
+                Após realizar o pagamento, clique no botão abaixo para confirmar.
+            </p>
+            <button class="submit-button" onclick="verificarPagamentoPix()">
+                ✅ Já realizei o pagamento
             </button>
+            <p style="color: rgba(255,255,255,0.5); margin-top: 12px; font-size: 12px;">
+                ⏳ O sistema irá verificar se o pagamento foi aprovado antes de liberar o acesso
+            </p>
         </div>
-    </div>
     
     <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script type="module" src="checkout.js"></script>

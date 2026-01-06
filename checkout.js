@@ -1,6 +1,6 @@
 import { supabase } from './supabase-client.js';
 
-// Inicializar MercadoPago com credenciais de TESTE
+// Inicializar MercadoPago
 const mp = new MercadoPago('APP_USR-474597c2-5121-4b24-8dfe-922d32e49233', {
   locale: 'pt-BR'
 });
@@ -10,6 +10,10 @@ const PLANS = {
   'Casal': { price: 29.99, max_profiles: 2 },
   'Família': { price: 49.99, max_profiles: 4 }
 };
+
+// Variável global para armazenar o paymentId
+let currentPaymentId = null;
+let currentUserEmail = null;
 
 // Pegar plano da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -76,6 +80,7 @@ form.addEventListener('submit', async (e) => {
     return;
   }
   
+  currentUserEmail = email; // Guardar email
   loadingOverlay.classList.add('active');
   
   try {
@@ -118,11 +123,11 @@ form.addEventListener('submit', async (e) => {
     
     console.log('📤 Enviando dados:', { email, name, planName, paymentMethod: selectedMethod });
     
-    // Gerar um ID único para esta transação (evita pagamentos duplicados)
+    // Gerar um ID único para esta transação
     const idempotencyKey = `${email}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     console.log('🔑 Idempotency Key:', idempotencyKey);
     
-    // Chamar Edge Function usando fetch direto
+    // Chamar Edge Function
     const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/process-mercadopago-payment', {
       method: 'POST',
       headers: {
@@ -160,6 +165,7 @@ form.addEventListener('submit', async (e) => {
     
     // Se for PIX, mostrar QR Code
     if (data.paymentMethod === 'pix') {
+      currentPaymentId = data.paymentId; // GUARDAR payment ID
       document.getElementById('pixQrcodeImg').src = `data:image/png;base64,${data.qrCodeBase64}`;
       document.getElementById('pixQrcode').classList.add('active');
       form.style.display = 'none';
@@ -177,5 +183,53 @@ form.addEventListener('submit', async (e) => {
     alert('Erro ao processar pagamento: ' + error.message);
   }
 });
+
+// FUNÇÃO PARA VERIFICAR PAGAMENTO PIX
+async function verificarPagamentoPix() {
+  if (!currentPaymentId) {
+    alert('Erro: ID do pagamento não encontrado');
+    return;
+  }
+
+  const loadingText = document.querySelector('.loading-text');
+  loadingOverlay.classList.add('active');
+  loadingText.textContent = 'Verificando pagamento...';
+
+  try {
+    console.log('🔍 Verificando pagamento:', currentPaymentId);
+
+    const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/verify-pix-payment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo'
+      },
+      body: JSON.stringify({
+        paymentId: currentPaymentId,
+        email: currentUserEmail
+      })
+    });
+
+    const data = await response.json();
+    console.log('📦 Status do pagamento:', data);
+
+    loadingOverlay.classList.remove('active');
+
+    if (data.paid) {
+      alert('✅ Pagamento confirmado! Redirecionando para o login...');
+      window.location.href = 'login.html';
+    } else {
+      alert(`⏳ Pagamento ainda não detectado.\n\nStatus: ${data.statusMessage}\n\nPor favor, aguarde alguns instantes após efetuar o pagamento e tente novamente.`);
+    }
+
+  } catch (error) {
+    loadingOverlay.classList.remove('active');
+    console.error('❌ Erro ao verificar pagamento:', error);
+    alert('Erro ao verificar pagamento. Tente novamente em alguns instantes.');
+  }
+}
+
+// Expor função globalmente para o botão HTML
+window.verificarPagamentoPix = verificarPagamentoPix;
 
 console.log('✅ Checkout carregado');
