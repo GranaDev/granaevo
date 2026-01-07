@@ -11,9 +11,10 @@ const PLANS = {
   'Família': { price: 49.99, max_profiles: 4 }
 };
 
-// Variável global para armazenar o paymentId
+// Variáveis globais
 let currentPaymentId = null;
 let currentUserEmail = null;
+let currentPixCode = null;
 
 // Pegar plano da URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -27,7 +28,87 @@ if (!planName || !PLANS[planName]) {
 document.getElementById('planName').textContent = planName;
 document.getElementById('planPrice').textContent = PLANS[planName].price.toFixed(2);
 
-// Alternar métodos de pagamento
+// ==========================================
+// VALIDAÇÃO DE EMAIL
+// ==========================================
+const emailInput = document.getElementById('userEmail');
+const emailError = document.getElementById('emailError');
+
+emailInput.addEventListener('blur', () => {
+  const email = emailInput.value.trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  
+  if (email && !emailRegex.test(email)) {
+    emailInput.classList.add('error');
+    emailError.classList.add('show');
+  } else {
+    emailInput.classList.remove('error');
+    emailError.classList.remove('show');
+  }
+});
+
+// ==========================================
+// VALIDAÇÃO DE SENHA
+// ==========================================
+const passwordInput = document.getElementById('userPassword');
+const passwordConfirmInput = document.getElementById('userPasswordConfirm');
+const passwordError = document.getElementById('passwordError');
+const passwordConfirmError = document.getElementById('passwordConfirmError');
+const strengthBar = document.getElementById('passwordStrengthBar');
+
+function checkPasswordStrength(password) {
+  let strength = 0;
+  
+  if (password.length >= 6) strength++;
+  if (password.length >= 8) strength++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
+  if (/[0-9]/.test(password)) strength++;
+  if (/[^a-zA-Z0-9]/.test(password)) strength++;
+  
+  return strength;
+}
+
+passwordInput.addEventListener('input', () => {
+  const password = passwordInput.value;
+  const strength = checkPasswordStrength(password);
+  
+  strengthBar.classList.remove('weak', 'medium', 'strong');
+  
+  if (password.length === 0) {
+    strengthBar.style.width = '0%';
+  } else if (strength <= 2) {
+    strengthBar.classList.add('weak');
+  } else if (strength <= 3) {
+    strengthBar.classList.add('medium');
+  } else {
+    strengthBar.classList.add('strong');
+  }
+  
+  if (password.length > 0 && password.length < 6) {
+    passwordInput.classList.add('error');
+    passwordError.classList.add('show');
+  } else {
+    passwordInput.classList.remove('error');
+    passwordError.classList.remove('show');
+  }
+});
+
+passwordConfirmInput.addEventListener('blur', () => {
+  const password = passwordInput.value;
+  const confirm = passwordConfirmInput.value;
+  
+  if (confirm && password !== confirm) {
+    passwordConfirmInput.classList.add('error');
+    passwordConfirmError.classList.add('show');
+  } else {
+    passwordConfirmInput.classList.remove('error');
+    passwordConfirmError.classList.remove('show');
+  }
+});
+
+// ==========================================
+// ALTERNAR MÉTODOS DE PAGAMENTO
+// ==========================================
 const paymentMethods = document.querySelectorAll('.payment-method');
 const creditCardFields = document.getElementById('creditCardFields');
 let selectedMethod = 'pix';
@@ -46,7 +127,9 @@ paymentMethods.forEach(method => {
   });
 });
 
-// Formatação dos campos
+// ==========================================
+// FORMATAÇÃO DOS CAMPOS DE CARTÃO
+// ==========================================
 document.getElementById('cardNumber')?.addEventListener('input', (e) => {
   let value = e.target.value.replace(/\s/g, '');
   let formatted = value.match(/.{1,4}/g)?.join(' ') || value;
@@ -65,7 +148,34 @@ document.getElementById('cardCvv')?.addEventListener('input', (e) => {
   e.target.value = e.target.value.replace(/\D/g, '');
 });
 
-// Enviar formulário
+// ==========================================
+// COPIAR CÓDIGO PIX
+// ==========================================
+window.copyPixCode = function() {
+  const pixCode = document.getElementById('pixCode').textContent;
+  const copyButton = document.querySelector('.copy-button');
+  const copyIcon = document.getElementById('copyIcon');
+  const copyText = document.getElementById('copyText');
+  
+  navigator.clipboard.writeText(pixCode).then(() => {
+    copyButton.classList.add('copied');
+    copyIcon.textContent = '✅';
+    copyText.textContent = 'Código copiado!';
+    
+    setTimeout(() => {
+      copyButton.classList.remove('copied');
+      copyIcon.textContent = '📋';
+      copyText.textContent = 'Copiar código PIX';
+    }, 3000);
+  }).catch(err => {
+    console.error('Erro ao copiar:', err);
+    alert('Erro ao copiar código. Tente copiar manualmente.');
+  });
+};
+
+// ==========================================
+// ENVIAR FORMULÁRIO
+// ==========================================
 const form = document.getElementById('form-checkout');
 const loadingOverlay = document.getElementById('loadingOverlay');
 
@@ -74,13 +184,28 @@ form.addEventListener('submit', async (e) => {
   
   const email = document.getElementById('userEmail').value.trim();
   const name = document.getElementById('userName').value.trim();
+  const password = document.getElementById('userPassword').value;
+  const passwordConfirm = document.getElementById('userPasswordConfirm').value;
   
-  if (!email || !name) {
-    alert('Preencha todos os campos');
+  // Validações
+  if (!email || !name || !password || !passwordConfirm) {
+    alert('Preencha todos os campos obrigatórios');
     return;
   }
   
-  currentUserEmail = email; // Guardar email
+  if (password.length < 6) {
+    alert('A senha deve ter no mínimo 6 caracteres');
+    passwordInput.focus();
+    return;
+  }
+  
+  if (password !== passwordConfirm) {
+    alert('As senhas não coincidem');
+    passwordConfirmInput.focus();
+    return;
+  }
+  
+  currentUserEmail = email;
   loadingOverlay.classList.add('active');
   
   try {
@@ -123,7 +248,7 @@ form.addEventListener('submit', async (e) => {
     
     console.log('📤 Enviando dados:', { email, name, planName, paymentMethod: selectedMethod });
     
-    // Gerar um ID único para esta transação
+    // Gerar ID único para esta transação
     const idempotencyKey = `${email}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     console.log('🔑 Idempotency Key:', idempotencyKey);
     
@@ -138,6 +263,7 @@ form.addEventListener('submit', async (e) => {
       body: JSON.stringify({
         email,
         name,
+        password, // A Edge Function irá fazer o hash
         planName,
         paymentMethod: selectedMethod,
         cardToken
@@ -165,27 +291,30 @@ form.addEventListener('submit', async (e) => {
     
     // Se for PIX, mostrar QR Code
     if (data.paymentMethod === 'pix') {
-      currentPaymentId = data.paymentId; // GUARDAR payment ID
+      currentPaymentId = data.paymentId;
+      currentPixCode = data.pixCode;
+      
       document.getElementById('pixQrcodeImg').src = `data:image/png;base64,${data.qrCodeBase64}`;
+      document.getElementById('pixCode').textContent = data.pixCode;
       document.getElementById('pixQrcode').classList.add('active');
       form.style.display = 'none';
     } else {
       // Se for cartão aprovado
-      alert('✅ Pagamento aprovado! Verifique seu email para as credenciais de acesso.');
+      alert('✅ Pagamento aprovado! Você já pode fazer login no aplicativo.');
       window.location.href = 'login.html';
     }
     
   } catch (error) {
     loadingOverlay.classList.remove('active');
     console.error('❌ Erro completo:', error);
-    console.error('❌ Error name:', error.name);
-    console.error('❌ Error message:', error.message);
     alert('Erro ao processar pagamento: ' + error.message);
   }
 });
 
-// FUNÇÃO PARA VERIFICAR PAGAMENTO PIX
-async function verificarPagamentoPix() {
+// ==========================================
+// VERIFICAR PAGAMENTO PIX
+// ==========================================
+window.verificarPagamentoPix = async function() {
   if (!currentPaymentId) {
     alert('Erro: ID do pagamento não encontrado');
     return;
@@ -227,9 +356,6 @@ async function verificarPagamentoPix() {
     console.error('❌ Erro ao verificar pagamento:', error);
     alert('Erro ao verificar pagamento. Tente novamente em alguns instantes.');
   }
-}
+};
 
-// Expor função globalmente para o botão HTML
-window.verificarPagamentoPix = verificarPagamentoPix;
-
-console.log('✅ Checkout carregado');
+console.log('✅ Checkout carregado com validações');

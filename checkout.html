@@ -52,31 +52,47 @@
         
         .info-tooltip {
             cursor: help;
-            width: 18px;
-            height: 18px;
+            width: 20px;
+            height: 20px;
             background: rgba(16, 185, 129, 0.2);
             border-radius: 50%;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
             color: #10b981;
-            font-size: 12px;
+            font-size: 13px;
+            font-weight: bold;
             position: relative;
+            flex-shrink: 0;
         }
         
         .info-tooltip:hover::after {
             content: attr(data-tooltip);
             position: absolute;
             left: 30px;
-            top: -10px;
+            top: 50%;
+            transform: translateY(-50%);
             background: #1a1a2e;
             color: white;
-            padding: 8px 12px;
+            padding: 10px 14px;
             border-radius: 8px;
             font-size: 12px;
             white-space: nowrap;
-            z-index: 10;
+            z-index: 1000;
             border: 1px solid rgba(16, 185, 129, 0.3);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            font-weight: normal;
+        }
+        
+        .info-tooltip:hover::before {
+            content: '';
+            position: absolute;
+            left: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 6px solid transparent;
+            border-right-color: rgba(16, 185, 129, 0.3);
+            z-index: 999;
         }
         
         .form-input {
@@ -94,6 +110,21 @@
             outline: none;
             border-color: #10b981;
             background: rgba(255, 255, 255, 0.08);
+        }
+        
+        .form-input.error {
+            border-color: #ef4444;
+        }
+        
+        .error-message {
+            color: #ef4444;
+            font-size: 12px;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
         }
         
         .payment-methods {
@@ -160,6 +191,12 @@
             box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
         }
         
+        .submit-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
         .loading-overlay {
             display: none;
             position: fixed;
@@ -207,6 +244,78 @@
         .pix-qrcode img {
             max-width: 300px;
             margin: 20px auto;
+            display: block;
+        }
+        
+        .pix-code-container {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        
+        .pix-code {
+            font-family: monospace;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            word-break: break-all;
+            margin-bottom: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        
+        .copy-button {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid #10b981;
+            color: #10b981;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+        
+        .copy-button:hover {
+            background: rgba(16, 185, 129, 0.3);
+        }
+        
+        .copy-button.copied {
+            background: rgba(16, 185, 129, 0.4);
+        }
+        
+        .password-strength {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        
+        .password-strength-bar {
+            height: 100%;
+            width: 0%;
+            transition: all 0.3s;
+            border-radius: 2px;
+        }
+        
+        .password-strength-bar.weak {
+            width: 33%;
+            background: #ef4444;
+        }
+        
+        .password-strength-bar.medium {
+            width: 66%;
+            background: #f59e0b;
+        }
+        
+        .password-strength-bar.strong {
+            width: 100%;
+            background: #10b981;
         }
     </style>
 </head>
@@ -232,14 +341,33 @@
             <div class="form-group">
                 <label for="userEmail">
                     Email *
-                    <span class="info-tooltip" data-tooltip="Use o email que você utilizará para fazer login">?</span>
+                    <span class="info-tooltip" data-tooltip="Email que você usará para fazer login">?</span>
                 </label>
                 <input type="email" id="userEmail" name="userEmail" placeholder="seu@email.com" class="form-input" required>
+                <div class="error-message" id="emailError">Email inválido</div>
             </div>
 
             <div class="form-group">
                 <label for="userName">Nome Completo *</label>
                 <input type="text" id="userName" name="userName" placeholder="Seu nome completo" class="form-input" required>
+            </div>
+
+            <div class="form-group">
+                <label for="userPassword">
+                    Senha *
+                    <span class="info-tooltip" data-tooltip="Senha que você usará para acessar o aplicativo">?</span>
+                </label>
+                <input type="password" id="userPassword" name="userPassword" placeholder="Mínimo 6 caracteres" class="form-input" required minlength="6">
+                <div class="password-strength">
+                    <div class="password-strength-bar" id="passwordStrengthBar"></div>
+                </div>
+                <div class="error-message" id="passwordError">A senha deve ter no mínimo 6 caracteres</div>
+            </div>
+
+            <div class="form-group">
+                <label for="userPasswordConfirm">Confirmar Senha *</label>
+                <input type="password" id="userPasswordConfirm" name="userPasswordConfirm" placeholder="Digite a senha novamente" class="form-input" required>
+                <div class="error-message" id="passwordConfirmError">As senhas não coincidem</div>
             </div>
 
             <div class="form-group">
@@ -283,11 +411,23 @@
             </button>
         </form>
 
-        <!-- SUBSTITUIR APENAS A SEÇÃO DO PIX (linha ~238) -->
+        <!-- Área do PIX -->
         <div class="pix-qrcode" id="pixQrcode">
-            <h3 style="color: #10b981;">Escaneie o QR Code</h3>
+            <h3 style="color: #10b981; margin-bottom: 20px;">Escaneie o QR Code</h3>
             <img id="pixQrcodeImg" src="" alt="QR Code PIX">
-            <p style="color: rgba(255,255,255,0.7); margin: 16px 0; font-size: 14px;">
+            
+            <div class="pix-code-container">
+                <p style="color: rgba(255,255,255,0.7); margin-bottom: 10px; font-size: 14px;">
+                    Ou copie o código PIX:
+                </p>
+                <div class="pix-code" id="pixCode"></div>
+                <button class="copy-button" onclick="copyPixCode()">
+                    <span id="copyIcon">📋</span>
+                    <span id="copyText">Copiar código PIX</span>
+                </button>
+            </div>
+            
+            <p style="color: rgba(255,255,255,0.7); margin: 20px 0; font-size: 14px;">
                 Após realizar o pagamento, clique no botão abaixo para confirmar.
             </p>
             <button class="submit-button" onclick="verificarPagamentoPix()">
@@ -297,6 +437,7 @@
                 ⏳ O sistema irá verificar se o pagamento foi aprovado antes de liberar o acesso
             </p>
         </div>
+    </div>
     
     <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script type="module" src="checkout.js"></script>
