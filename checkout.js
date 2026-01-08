@@ -11,7 +11,6 @@ const PLANS = {
   'Família': { price: 49.99, max_profiles: 4 }
 };
 
-// Variável global para armazenar o paymentId
 let currentPaymentId = null;
 let currentUserEmail = null;
 
@@ -46,7 +45,7 @@ paymentMethods.forEach(method => {
   });
 });
 
-// Formatação dos campos
+// Formatação dos campos de cartão
 document.getElementById('cardNumber')?.addEventListener('input', (e) => {
   let value = e.target.value.replace(/\s/g, '');
   let formatted = value.match(/.{1,4}/g)?.join(' ') || value;
@@ -65,7 +64,9 @@ document.getElementById('cardCvv')?.addEventListener('input', (e) => {
   e.target.value = e.target.value.replace(/\D/g, '');
 });
 
-// Enviar formulário
+// ========================================
+// ENVIAR FORMULÁRIO
+// ========================================
 const form = document.getElementById('form-checkout');
 const loadingOverlay = document.getElementById('loadingOverlay');
 
@@ -73,14 +74,26 @@ form.addEventListener('submit', async (e) => {
   e.preventDefault();
   
   const email = document.getElementById('userEmail').value.trim();
-  const name = document.getElementById('userName').value.trim();
+  const password = document.getElementById('userPassword').value.trim();
+  const confirmPassword = document.getElementById('confirmPassword').value.trim();
   
-  if (!email || !name) {
+  // Validações
+  if (!email || !password || !confirmPassword) {
     alert('Preencha todos os campos');
     return;
   }
   
-  currentUserEmail = email; // Guardar email
+  if (password !== confirmPassword) {
+    alert('As senhas não coincidem!');
+    return;
+  }
+  
+  if (password.length < 6) {
+    alert('A senha deve ter no mínimo 6 caracteres');
+    return;
+  }
+  
+  currentUserEmail = email;
   loadingOverlay.classList.add('active');
   
   try {
@@ -121,11 +134,10 @@ form.addEventListener('submit', async (e) => {
       console.log('✅ Token criado:', cardToken);
     }
     
-    console.log('📤 Enviando dados:', { email, name, planName, paymentMethod: selectedMethod });
+    console.log('📤 Enviando dados:', { email, planName, paymentMethod: selectedMethod });
     
-    // Gerar um ID único para esta transação
+    // Gerar idempotency key único
     const idempotencyKey = `${email}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    console.log('🔑 Idempotency Key:', idempotencyKey);
     
     // Chamar Edge Function
     const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/process-mercadopago-payment', {
@@ -137,27 +149,17 @@ form.addEventListener('submit', async (e) => {
       },
       body: JSON.stringify({
         email,
-        name,
+        password,
         planName,
         paymentMethod: selectedMethod,
         cardToken
       })
     });
 
-    const responseText = await response.text();
-    console.log('📦 Resposta RAW:', responseText);
+    const data = await response.json();
+    console.log('📦 Resposta:', data);
 
-    let data;
-    try {
-      data = JSON.parse(responseText);
-      console.log('📦 Resposta JSON:', data);
-    } catch (e) {
-      console.error('❌ Erro ao fazer parse:', e);
-      throw new Error('Resposta inválida do servidor: ' + responseText);
-    }
-
-    if (!response.ok) {
-      console.error('❌ Erro do servidor:', data);
+    if (!response.ok || !data.success) {
       throw new Error(data.error || 'Erro desconhecido');
     }
     
@@ -165,7 +167,7 @@ form.addEventListener('submit', async (e) => {
     
     // Se for PIX, mostrar QR Code
     if (data.paymentMethod === 'pix') {
-      currentPaymentId = data.paymentId; // GUARDAR payment ID
+      currentPaymentId = data.paymentId;
       document.getElementById('pixQrcodeImg').src = `data:image/png;base64,${data.qrCodeBase64}`;
       document.getElementById('pixQrcode').classList.add('active');
       form.style.display = 'none';
@@ -177,14 +179,14 @@ form.addEventListener('submit', async (e) => {
     
   } catch (error) {
     loadingOverlay.classList.remove('active');
-    console.error('❌ Erro completo:', error);
-    console.error('❌ Error name:', error.name);
-    console.error('❌ Error message:', error.message);
+    console.error('❌ Erro:', error);
     alert('Erro ao processar pagamento: ' + error.message);
   }
 });
 
-// FUNÇÃO PARA VERIFICAR PAGAMENTO PIX
+// ========================================
+// VERIFICAR PAGAMENTO PIX
+// ========================================
 async function verificarPagamentoPix() {
   if (!currentPaymentId) {
     alert('Erro: ID do pagamento não encontrado');
@@ -196,8 +198,6 @@ async function verificarPagamentoPix() {
   loadingText.textContent = 'Verificando pagamento...';
 
   try {
-    console.log('🔍 Verificando pagamento:', currentPaymentId);
-
     const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/verify-pix-payment', {
       method: 'POST',
       headers: {
@@ -211,8 +211,6 @@ async function verificarPagamentoPix() {
     });
 
     const data = await response.json();
-    console.log('📦 Status do pagamento:', data);
-
     loadingOverlay.classList.remove('active');
 
     if (data.paid) {
@@ -224,12 +222,9 @@ async function verificarPagamentoPix() {
 
   } catch (error) {
     loadingOverlay.classList.remove('active');
-    console.error('❌ Erro ao verificar pagamento:', error);
-    alert('Erro ao verificar pagamento. Tente novamente em alguns instantes.');
+    console.error('❌ Erro:', error);
+    alert('Erro ao verificar pagamento. Tente novamente.');
   }
 }
 
-// Expor função globalmente para o botão HTML
 window.verificarPagamentoPix = verificarPagamentoPix;
-
-console.log('✅ Checkout carregado');
