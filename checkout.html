@@ -127,51 +127,6 @@
             display: block;
         }
         
-        .payment-methods {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-        
-        .payment-method {
-            flex: 1;
-            padding: 15px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-align: center;
-        }
-        
-        .payment-method:hover {
-            border-color: rgba(16, 185, 129, 0.5);
-        }
-        
-        .payment-method.active {
-            border-color: #10b981;
-            background: rgba(16, 185, 129, 0.1);
-        }
-        
-        .payment-method-icon {
-            font-size: 2rem;
-            margin-bottom: 8px;
-        }
-        
-        .credit-card-fields {
-            display: none;
-        }
-        
-        .credit-card-fields.active {
-            display: block;
-        }
-        
-        .card-row {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 12px;
-        }
-        
         .submit-button {
             width: 100%;
             padding: 16px;
@@ -228,66 +183,6 @@
             to { transform: rotate(360deg); }
         }
         
-        .pix-qrcode {
-            display: none;
-            text-align: center;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            margin-top: 20px;
-        }
-        
-        .pix-qrcode.active {
-            display: block;
-        }
-        
-        .pix-qrcode img {
-            max-width: 300px;
-            margin: 20px auto;
-            display: block;
-        }
-        
-        .pix-code-container {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-            border: 1px solid rgba(16, 185, 129, 0.2);
-        }
-        
-        .pix-code {
-            font-family: monospace;
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.7);
-            word-break: break-all;
-            margin-bottom: 10px;
-            max-height: 100px;
-            overflow-y: auto;
-        }
-        
-        .copy-button {
-            background: rgba(16, 185, 129, 0.2);
-            border: 1px solid #10b981;
-            color: #10b981;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s;
-        }
-        
-        .copy-button:hover {
-            background: rgba(16, 185, 129, 0.3);
-        }
-        
-        .copy-button.copied {
-            background: rgba(16, 185, 129, 0.4);
-        }
-        
         .password-strength {
             height: 4px;
             background: rgba(255, 255, 255, 0.1);
@@ -317,12 +212,29 @@
             width: 100%;
             background: #10b981;
         }
+
+        .payment-info {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 20px 0;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .payment-info strong {
+            color: #60a5fa;
+        }
     </style>
 </head>
 <body>
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
-        <div class="loading-text" style="color: #10b981; margin-top: 20px; font-size: 18px;">Processando...</div>
+        <div class="loading-text" style="color: #10b981; margin-top: 20px; font-size: 18px;">
+            Redirecionando para pagamento seguro...
+        </div>
     </div>
 
     <div class="checkout-container">
@@ -335,6 +247,11 @@
             <div class="price" style="font-size: 32px; color: #fff; font-weight: bold;">
                 R$ <span id="planPrice"></span>
             </div>
+        </div>
+
+        <div class="payment-info">
+            <strong>💳 Pagamento 100% seguro via Stripe</strong><br>
+            Após preencher os dados abaixo, você será redirecionado para a página de pagamento do Stripe, onde poderá escolher entre <strong>cartão de crédito</strong> ou <strong>boleto bancário</strong>.
         </div>
 
         <form id="form-checkout">
@@ -370,76 +287,16 @@
                 <div class="error-message" id="passwordConfirmError">As senhas não coincidem</div>
             </div>
 
-            <div class="form-group">
-                <label>Forma de Pagamento *</label>
-                <div class="payment-methods">
-                    <div class="payment-method active" data-method="pix">
-                        <div class="payment-method-icon">📱</div>
-                        <div>PIX</div>
-                    </div>
-                    <div class="payment-method" data-method="credit_card">
-                        <div class="payment-method-icon">💳</div>
-                        <div>Cartão</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Campos do Cartão -->
-            <div class="credit-card-fields" id="creditCardFields">
-                <div class="form-group">
-                    <label>Número do Cartão</label>
-                    <input type="text" id="cardNumber" class="form-input" placeholder="0000 0000 0000 0000" maxlength="19">
-                </div>
-                <div class="card-row">
-                    <div class="form-group">
-                        <label>Validade</label>
-                        <input type="text" id="cardExpiry" class="form-input" placeholder="MM/AA" maxlength="5">
-                    </div>
-                    <div class="form-group">
-                        <label>CVV</label>
-                        <input type="text" id="cardCvv" class="form-input" placeholder="123" maxlength="4">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Nome no Cartão</label>
-                    <input type="text" id="cardholderName" class="form-input" placeholder="Nome como está no cartão">
-                </div>
-            </div>
-
             <button type="submit" class="submit-button">
-                Finalizar Compra
+                Prosseguir para Pagamento →
             </button>
         </form>
 
-        <!-- Área do PIX -->
-        <div class="pix-qrcode" id="pixQrcode">
-            <h3 style="color: #10b981; margin-bottom: 20px;">Escaneie o QR Code</h3>
-            <img id="pixQrcodeImg" src="" alt="QR Code PIX">
-            
-            <div class="pix-code-container">
-                <p style="color: rgba(255,255,255,0.7); margin-bottom: 10px; font-size: 14px;">
-                    Ou copie o código PIX:
-                </p>
-                <div class="pix-code" id="pixCode"></div>
-                <button class="copy-button" onclick="copyPixCode()">
-                    <span id="copyIcon">📋</span>
-                    <span id="copyText">Copiar código PIX</span>
-                </button>
-            </div>
-            
-            <p style="color: rgba(255,255,255,0.7); margin: 20px 0; font-size: 14px;">
-                Após realizar o pagamento, clique no botão abaixo para confirmar.
-            </p>
-            <button class="submit-button" onclick="verificarPagamentoPix()">
-                ✅ Já realizei o pagamento
-            </button>
-            <p style="color: rgba(255,255,255,0.5); margin-top: 12px; font-size: 12px;">
-                ⏳ O sistema irá verificar se o pagamento foi aprovado antes de liberar o acesso
-            </p>
-        </div>
+        <p style="color: rgba(255,255,255,0.5); text-align: center; margin-top: 20px; font-size: 12px;">
+            🔒 Seus dados de pagamento são processados de forma segura pelo Stripe
+        </p>
     </div>
     
-    <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script type="module" src="checkout.js"></script>
 </body>
 </html>
