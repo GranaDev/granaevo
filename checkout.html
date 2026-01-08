@@ -211,99 +211,180 @@
     </style>
 </head>
 <body>
-
-    <input type="email" id="userEmail" name="userEmail" required>
-    <input type="password" id="userPassword" name="userPassword" required>
-    <input type="password" id="confirmPassword" name="confirmPassword" required>
-
     <div class="loading-overlay" id="loadingOverlay">
-        <div class="spinner"></div>
-        <div class="loading-text" style="color: #10b981; margin-top: 20px; font-size: 18px;">Processando...</div>
+    <div class="spinner"></div>
+    <div class="loading-text" style="color: #10b981; margin-top: 20px; font-size: 18px;">
+        Processando...
+    </div>
+</div>
+
+<div class="checkout-container">
+    <div class="checkout-header">
+        <h1>🎉 Finalize sua compra</h1>
     </div>
 
-    <div class="checkout-container">
-        <div class="checkout-header">
-            <h1>🎉 Finalize sua compra</h1>
+    <div class="plan-info">
+        <h3>Plano: <span id="planName"></span></h3>
+        <div class="price" style="font-size: 32px; color: #fff; font-weight: bold;">
+            R$ <span id="planPrice"></span>
+        </div>
+    </div>
+
+    <form id="form-checkout">
+
+        <!-- EMAIL -->
+        <div class="form-group">
+            <label for="userEmail">
+                Email *
+                <span class="info-tooltip"
+                      data-tooltip="Use o email que você utilizará para fazer login no site">
+                    ?
+                </span>
+            </label>
+            <input
+                type="email"
+                id="userEmail"
+                name="userEmail"
+                placeholder="seu@email.com"
+                class="form-input"
+                required
+            >
         </div>
 
-        <div class="plan-info">
-            <h3>Plano: <span id="planName"></span></h3>
-            <div class="price" style="font-size: 32px; color: #fff; font-weight: bold;">
-                R$ <span id="planPrice"></span>
-            </div>
+        <!-- SENHA -->
+        <div class="form-group">
+            <label for="userPassword">
+                Senha *
+                <span class="info-tooltip"
+                      data-tooltip="Esta será a senha que você utilizará para fazer login no site">
+                    ?
+                </span>
+            </label>
+            <input
+                type="password"
+                id="userPassword"
+                name="userPassword"
+                class="form-input"
+                required
+            >
         </div>
 
-        <form id="form-checkout">
-            <div class="form-group">
-                <label for="userEmail">
-                    Email *
-                    <span class="info-tooltip" data-tooltip="Use o email que você utilizará para fazer login">?</span>
-                </label>
-                <input type="email" id="userEmail" name="userEmail" placeholder="seu@email.com" class="form-input" required>
-            </div>
+        <!-- CONFIRMAR SENHA -->
+        <div class="form-group">
+            <label for="confirmPassword">
+                Confirmar Senha *
+            </label>
+            <input
+                type="password"
+                id="confirmPassword"
+                name="confirmPassword"
+                class="form-input"
+                required
+            >
+        </div>
 
-            <div class="form-group">
-                <label for="userName">Nome Completo *</label>
-                <input type="text" id="userName" name="userName" placeholder="Seu nome completo" class="form-input" required>
-            </div>
+        <!-- NOME COMPLETO -->
+        <div class="form-group">
+            <label for="userName">Nome Completo *</label>
+            <input
+                type="text"
+                id="userName"
+                name="userName"
+                placeholder="Seu nome completo"
+                class="form-input"
+                required
+            >
+        </div>
 
-            <div class="form-group">
-                <label>Forma de Pagamento *</label>
-                <div class="payment-methods">
-                    <div class="payment-method active" data-method="pix">
-                        <div class="payment-method-icon">📱</div>
-                        <div>PIX</div>
-                    </div>
-                    <div class="payment-method" data-method="credit_card">
-                        <div class="payment-method-icon">💳</div>
-                        <div>Cartão</div>
-                    </div>
+        <!-- FORMA DE PAGAMENTO -->
+        <div class="form-group">
+            <label>Forma de Pagamento *</label>
+            <div class="payment-methods">
+                <div class="payment-method active" data-method="pix">
+                    <div class="payment-method-icon">📱</div>
+                    <div>PIX</div>
+                </div>
+                <div class="payment-method" data-method="credit_card">
+                    <div class="payment-method-icon">💳</div>
+                    <div>Cartão</div>
                 </div>
             </div>
+        </div>
 
-            <!-- Campos do Cartão -->
-            <div class="credit-card-fields" id="creditCardFields">
+        <!-- CAMPOS DO CARTÃO -->
+        <div class="credit-card-fields" id="creditCardFields">
+            <div class="form-group">
+                <label>Número do Cartão</label>
+                <input
+                    type="text"
+                    id="cardNumber"
+                    class="form-input"
+                    placeholder="0000 0000 0000 0000"
+                    maxlength="19"
+                >
+            </div>
+
+            <div class="card-row">
                 <div class="form-group">
-                    <label>Número do Cartão</label>
-                    <input type="text" id="cardNumber" class="form-input" placeholder="0000 0000 0000 0000" maxlength="19">
+                    <label>Validade</label>
+                    <input
+                        type="text"
+                        id="cardExpiry"
+                        class="form-input"
+                        placeholder="MM/AA"
+                        maxlength="5"
+                    >
                 </div>
-                <div class="card-row">
-                    <div class="form-group">
-                        <label>Validade</label>
-                        <input type="text" id="cardExpiry" class="form-input" placeholder="MM/AA" maxlength="5">
-                    </div>
-                    <div class="form-group">
-                        <label>CVV</label>
-                        <input type="text" id="cardCvv" class="form-input" placeholder="123" maxlength="4">
-                    </div>
-                </div>
+
                 <div class="form-group">
-                    <label>Nome no Cartão</label>
-                    <input type="text" id="cardholderName" class="form-input" placeholder="Nome como está no cartão">
+                    <label>CVV</label>
+                    <input
+                        type="text"
+                        id="cardCvv"
+                        class="form-input"
+                        placeholder="123"
+                        maxlength="4"
+                    >
                 </div>
             </div>
 
-            <button type="submit" class="submit-button">
-                Finalizar Compra
-            </button>
-        </form>
-
-        <!-- SUBSTITUIR APENAS A SEÇÃO DO PIX (linha ~238) -->
-        <div class="pix-qrcode" id="pixQrcode">
-            <h3 style="color: #10b981;">Escaneie o QR Code</h3>
-            <img id="pixQrcodeImg" src="" alt="QR Code PIX">
-            <p style="color: rgba(255,255,255,0.7); margin: 16px 0; font-size: 14px;">
-                Após realizar o pagamento, clique no botão abaixo para confirmar.
-            </p>
-            <button class="submit-button" onclick="verificarPagamentoPix()">
-                ✅ Já realizei o pagamento
-            </button>
-            <p style="color: rgba(255,255,255,0.5); margin-top: 12px; font-size: 12px;">
-                ⏳ O sistema irá verificar se o pagamento foi aprovado antes de liberar o acesso
-            </p>
+            <div class="form-group">
+                <label>Nome no Cartão</label>
+                <input
+                    type="text"
+                    id="cardholderName"
+                    class="form-input"
+                    placeholder="Nome como está no cartão"
+                >
+            </div>
         </div>
-    
-    <script src="https://sdk.mercadopago.com/js/v2"></script>
-    <script type="module" src="checkout.js"></script>
+
+        <button type="submit" class="submit-button">
+            Finalizar Compra
+        </button>
+    </form>
+
+    <!-- SEÇÃO DO PIX -->
+    <div class="pix-qrcode" id="pixQrcode">
+        <h3 style="color: #10b981;">Escaneie o QR Code</h3>
+
+        <img id="pixQrcodeImg" src="" alt="QR Code PIX">
+
+        <p style="color: rgba(255,255,255,0.7); margin: 16px 0; font-size: 14px;">
+            Após realizar o pagamento, clique no botão abaixo para confirmar.
+        </p>
+
+        <button class="submit-button" onclick="verificarPagamentoPix()">
+            ✅ Já realizei o pagamento
+        </button>
+
+        <p style="color: rgba(255,255,255,0.5); margin-top: 12px; font-size: 12px;">
+            ⏳ O sistema irá verificar se o pagamento foi aprovado antes de liberar o acesso
+        </p>
+    </div>
+</div>
+
+<script src="https://sdk.mercadopago.com/js/v2"></script>
+<script type="module" src="checkout.js"></script>
 </body>
 </html>
