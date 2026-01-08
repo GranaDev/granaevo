@@ -52,47 +52,31 @@
         
         .info-tooltip {
             cursor: help;
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             background: rgba(16, 185, 129, 0.2);
             border-radius: 50%;
-            display: inline-flex;
+            display: flex;
             align-items: center;
             justify-content: center;
             color: #10b981;
-            font-size: 13px;
-            font-weight: bold;
+            font-size: 12px;
             position: relative;
-            flex-shrink: 0;
         }
         
         .info-tooltip:hover::after {
             content: attr(data-tooltip);
             position: absolute;
             left: 30px;
-            top: 50%;
-            transform: translateY(-50%);
+            top: -10px;
             background: #1a1a2e;
             color: white;
-            padding: 10px 14px;
+            padding: 8px 12px;
             border-radius: 8px;
             font-size: 12px;
             white-space: nowrap;
-            z-index: 1000;
+            z-index: 10;
             border: 1px solid rgba(16, 185, 129, 0.3);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            font-weight: normal;
-        }
-        
-        .info-tooltip:hover::before {
-            content: '';
-            position: absolute;
-            left: 24px;
-            top: 50%;
-            transform: translateY(-50%);
-            border: 6px solid transparent;
-            border-right-color: rgba(16, 185, 129, 0.3);
-            z-index: 999;
         }
         
         .form-input {
@@ -112,19 +96,49 @@
             background: rgba(255, 255, 255, 0.08);
         }
         
-        .form-input.error {
-            border-color: #ef4444;
+        .payment-methods {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
         }
         
-        .error-message {
-            color: #ef4444;
-            font-size: 12px;
-            margin-top: 5px;
+        .payment-method {
+            flex: 1;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .payment-method:hover {
+            border-color: rgba(16, 185, 129, 0.5);
+        }
+        
+        .payment-method.active {
+            border-color: #10b981;
+            background: rgba(16, 185, 129, 0.1);
+        }
+        
+        .payment-method-icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+        
+        .credit-card-fields {
             display: none;
         }
         
-        .error-message.show {
+        .credit-card-fields.active {
             display: block;
+        }
+        
+        .card-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 12px;
         }
         
         .submit-button {
@@ -144,12 +158,6 @@
         .submit-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
-        }
-        
-        .submit-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
         }
         
         .loading-overlay {
@@ -183,58 +191,29 @@
             to { transform: rotate(360deg); }
         }
         
-        .password-strength {
-            height: 4px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 2px;
-            margin-top: 8px;
-            overflow: hidden;
-        }
-        
-        .password-strength-bar {
-            height: 100%;
-            width: 0%;
-            transition: all 0.3s;
-            border-radius: 2px;
-        }
-        
-        .password-strength-bar.weak {
-            width: 33%;
-            background: #ef4444;
-        }
-        
-        .password-strength-bar.medium {
-            width: 66%;
-            background: #f59e0b;
-        }
-        
-        .password-strength-bar.strong {
-            width: 100%;
-            background: #10b981;
-        }
-
-        .payment-info {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
+        .pix-qrcode {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 12px;
-            padding: 15px;
-            margin: 20px 0;
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 14px;
-            line-height: 1.6;
+            margin-top: 20px;
         }
-
-        .payment-info strong {
-            color: #60a5fa;
+        
+        .pix-qrcode.active {
+            display: block;
+        }
+        
+        .pix-qrcode img {
+            max-width: 300px;
+            margin: 20px auto;
         }
     </style>
 </head>
 <body>
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
-        <div class="loading-text" style="color: #10b981; margin-top: 20px; font-size: 18px;">
-            Redirecionando para pagamento seguro...
-        </div>
+        <div class="loading-text" style="color: #10b981; margin-top: 20px; font-size: 18px;">Processando...</div>
     </div>
 
     <div class="checkout-container">
@@ -249,19 +228,13 @@
             </div>
         </div>
 
-        <div class="payment-info">
-            <strong>💳 Pagamento 100% seguro via Stripe</strong><br>
-            Após preencher os dados abaixo, você será redirecionado para a página de pagamento do Stripe, onde poderá escolher entre <strong>cartão de crédito</strong> ou <strong>boleto bancário</strong>.
-        </div>
-
         <form id="form-checkout">
             <div class="form-group">
                 <label for="userEmail">
                     Email *
-                    <span class="info-tooltip" data-tooltip="Email que você usará para fazer login">?</span>
+                    <span class="info-tooltip" data-tooltip="Use o email que você utilizará para fazer login">?</span>
                 </label>
                 <input type="email" id="userEmail" name="userEmail" placeholder="seu@email.com" class="form-input" required>
-                <div class="error-message" id="emailError">Email inválido</div>
             </div>
 
             <div class="form-group">
@@ -270,33 +243,62 @@
             </div>
 
             <div class="form-group">
-                <label for="userPassword">
-                    Senha *
-                    <span class="info-tooltip" data-tooltip="Senha que você usará para acessar o aplicativo">?</span>
-                </label>
-                <input type="password" id="userPassword" name="userPassword" placeholder="Mínimo 6 caracteres" class="form-input" required minlength="6">
-                <div class="password-strength">
-                    <div class="password-strength-bar" id="passwordStrengthBar"></div>
+                <label>Forma de Pagamento *</label>
+                <div class="payment-methods">
+                    <div class="payment-method active" data-method="pix">
+                        <div class="payment-method-icon">📱</div>
+                        <div>PIX</div>
+                    </div>
+                    <div class="payment-method" data-method="credit_card">
+                        <div class="payment-method-icon">💳</div>
+                        <div>Cartão</div>
+                    </div>
                 </div>
-                <div class="error-message" id="passwordError">A senha deve ter no mínimo 6 caracteres</div>
             </div>
 
-            <div class="form-group">
-                <label for="userPasswordConfirm">Confirmar Senha *</label>
-                <input type="password" id="userPasswordConfirm" name="userPasswordConfirm" placeholder="Digite a senha novamente" class="form-input" required>
-                <div class="error-message" id="passwordConfirmError">As senhas não coincidem</div>
+            <!-- Campos do Cartão -->
+            <div class="credit-card-fields" id="creditCardFields">
+                <div class="form-group">
+                    <label>Número do Cartão</label>
+                    <input type="text" id="cardNumber" class="form-input" placeholder="0000 0000 0000 0000" maxlength="19">
+                </div>
+                <div class="card-row">
+                    <div class="form-group">
+                        <label>Validade</label>
+                        <input type="text" id="cardExpiry" class="form-input" placeholder="MM/AA" maxlength="5">
+                    </div>
+                    <div class="form-group">
+                        <label>CVV</label>
+                        <input type="text" id="cardCvv" class="form-input" placeholder="123" maxlength="4">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Nome no Cartão</label>
+                    <input type="text" id="cardholderName" class="form-input" placeholder="Nome como está no cartão">
+                </div>
             </div>
 
             <button type="submit" class="submit-button">
-                Prosseguir para Pagamento →
+                Finalizar Compra
             </button>
         </form>
 
-        <p style="color: rgba(255,255,255,0.5); text-align: center; margin-top: 20px; font-size: 12px;">
-            🔒 Seus dados de pagamento são processados de forma segura pelo Stripe
-        </p>
-    </div>
+        <!-- SUBSTITUIR APENAS A SEÇÃO DO PIX (linha ~238) -->
+        <div class="pix-qrcode" id="pixQrcode">
+            <h3 style="color: #10b981;">Escaneie o QR Code</h3>
+            <img id="pixQrcodeImg" src="" alt="QR Code PIX">
+            <p style="color: rgba(255,255,255,0.7); margin: 16px 0; font-size: 14px;">
+                Após realizar o pagamento, clique no botão abaixo para confirmar.
+            </p>
+            <button class="submit-button" onclick="verificarPagamentoPix()">
+                ✅ Já realizei o pagamento
+            </button>
+            <p style="color: rgba(255,255,255,0.5); margin-top: 12px; font-size: 12px;">
+                ⏳ O sistema irá verificar se o pagamento foi aprovado antes de liberar o acesso
+            </p>
+        </div>
     
+    <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script type="module" src="checkout.js"></script>
 </body>
 </html>
