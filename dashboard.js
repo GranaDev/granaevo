@@ -104,11 +104,9 @@ async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
         
-        if (!session) {
-            throw new Error('Sessão não encontrada');
-        }
+        if (!session) throw new Error('Sessão não encontrada');
 
-        // Buscar perfis do banco
+        // ✅ Buscar perfis do banco
         const { data: perfis, error } = await supabase
             .from('profiles')
             .select('*')
@@ -118,9 +116,13 @@ async function carregarPerfis() {
         if (error) throw error;
 
         if (perfis && perfis.length > 0) {
-            usuarioLogado.perfis = perfis;
+            usuarioLogado.perfis = perfis.map(p => ({
+                id: p.id,
+                nome: p.name,
+                foto: p.photo
+            }));
         } else {
-            // Criar perfil inicial
+            // Criar perfil inicial se não existir
             const { data: novoPerfil, error: createError } = await supabase
                 .from('profiles')
                 .insert({
@@ -133,7 +135,11 @@ async function carregarPerfis() {
 
             if (createError) throw createError;
 
-            usuarioLogado.perfis = [novoPerfil];
+            usuarioLogado.perfis = [{
+                id: novoPerfil.id,
+                nome: novoPerfil.name,
+                foto: novoPerfil.photo
+            }];
         }
 
         console.log('✅ Perfis carregados:', usuarioLogado.perfis);
@@ -148,26 +154,26 @@ async function carregarDadosPerfil(perfilId) {
     try {
         console.log('📦 Carregando dados do perfil:', perfilId);
 
-        // Buscar transações
+        // ✅ Buscar transações do banco
         const { data: transData } = await supabase
             .from('transactions')
             .select('*')
             .eq('profile_id', perfilId)
             .order('date', { ascending: false });
 
-        // Buscar metas
+        // ✅ Buscar metas
         const { data: goalsData } = await supabase
             .from('goals')
             .select('*')
             .eq('profile_id', perfilId);
 
-        // Buscar contas fixas
+        // ✅ Buscar contas fixas
         const { data: billsData } = await supabase
             .from('fixed_bills')
             .select('*')
             .eq('profile_id', perfilId);
 
-        // Buscar cartões
+        // ✅ Buscar cartões
         const { data: cardsData } = await supabase
             .from('credit_cards')
             .select('*')
@@ -214,7 +220,7 @@ async function carregarDadosPerfil(perfilId) {
             bandeiraImg: c.brand_image
         }));
 
-        // Atualizar IDs
+        // Atualizar IDs para próximas inserções
         nextTransId = transacoes.length > 0 ? Math.max(...transacoes.map(t => t.id)) + 1 : 1;
         nextMetaId = metas.length > 0 ? Math.max(...metas.map(m => m.id)) + 1 : 1;
         nextContaFixaId = contasFixas.length > 0 ? Math.max(...contasFixas.map(c => c.id)) + 1 : 1;
@@ -245,14 +251,147 @@ async function salvarDados() {
     try {
         console.log('💾 Salvando dados do perfil:', perfilAtivo.id);
 
-        // Salvar dados localmente para backup
-        localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
+        // ✅ SALVAR TRANSAÇÕES
+        for (const trans of transacoes) {
+            const transData = {
+                profile_id: perfilAtivo.id,
+                category: trans.categoria,
+                type: trans.tipo,
+                description: trans.descricao,
+                value: trans.valor,
+                date: dataParaISO(trans.data),
+                time: trans.hora,
+                meta_id: trans.metaId || null,
+                conta_fixa_id: trans.contaFixaId || null
+            };
 
-        console.log('✅ Dados salvos localmente');
+            // Verificar se já existe
+            const { data: existing } = await supabase
+                .from('transactions')
+                .select('id')
+                .eq('id', trans.id)
+                .maybeSingle();
+
+            if (existing) {
+                // Atualizar
+                await supabase
+                    .from('transactions')
+                    .update(transData)
+                    .eq('id', trans.id);
+            } else {
+                // Inserir
+                await supabase
+                    .from('transactions')
+                    .insert({ ...transData, id: trans.id });
+            }
+        }
+
+        // ✅ SALVAR METAS
+        for (const meta of metas) {
+            const metaData = {
+                profile_id: perfilAtivo.id,
+                description: meta.descricao,
+                target_amount: meta.objetivo,
+                saved_amount: meta.saved,
+                monthly_data: meta.monthly || {}
+            };
+
+            const { data: existing } = await supabase
+                .from('goals')
+                .select('id')
+                .eq('id', meta.id)
+                .maybeSingle();
+
+            if (existing) {
+                await supabase
+                    .from('goals')
+                    .update(metaData)
+                    .eq('id', meta.id);
+            } else {
+                await supabase
+                    .from('goals')
+                    .insert({ ...metaData, id: meta.id });
+            }
+        }
+
+        // ✅ SALVAR CONTAS FIXAS
+        for (const conta of contasFixas) {
+            const contaData = {
+                profile_id: perfilAtivo.id,
+                description: conta.descricao,
+                value: conta.valor,
+                due_date: conta.vencimento,
+                paid: conta.pago,
+                card_id: conta.cartaoId || null,
+                installment_current: conta.parcelaAtual || null,
+                installment_total: conta.totalParcelas || null
+            };
+
+            const { data: existing } = await supabase
+                .from('fixed_bills')
+                .select('id')
+                .eq('id', conta.id)
+                .maybeSingle();
+
+            if (existing) {
+                await supabase
+                    .from('fixed_bills')
+                    .update(contaData)
+                    .eq('id', conta.id);
+            } else {
+                await supabase
+                    .from('fixed_bills')
+                    .insert({ ...contaData, id: conta.id });
+            }
+        }
+
+        // ✅ SALVAR CARTÕES
+        for (const cartao of cartoesCredito) {
+            const cartaoData = {
+                profile_id: perfilAtivo.id,
+                bank_name: cartao.nomeBanco,
+                card_limit: cartao.limite,
+                used_amount: cartao.usado,
+                due_day: cartao.vencimentoDia,
+                brand_image: cartao.bandeiraImg || null
+            };
+
+            const { data: existing } = await supabase
+                .from('credit_cards')
+                .select('id')
+                .eq('id', cartao.id)
+                .maybeSingle();
+
+            if (existing) {
+                await supabase
+                    .from('credit_cards')
+                    .update(cartaoData)
+                    .eq('id', cartao.id);
+            } else {
+                await supabase
+                    .from('credit_cards')
+                    .insert({ ...cartaoData, id: cartao.id });
+            }
+        }
+
+        console.log('✅ Dados salvos com sucesso no banco!');
         
     } catch(e) {
         console.error('❌ Erro ao salvar dados:', e);
     }
+}
+
+let autoSaveInterval = null;
+
+function iniciarAutoSave() {
+    if (autoSaveInterval) clearInterval(autoSaveInterval);
+    
+    autoSaveInterval = setInterval(async () => {
+        if (perfilAtivo && transacoes.length > 0) {
+            await salvarDados();
+            console.log('🔄 Auto-save executado');
+        }
+    }, 10000); // 10 segundos
 }
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
@@ -375,7 +514,6 @@ async function entrarNoPerfil(idx) {
     perfilAtivo = usuarioLogado.perfis[idx];
     localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
     
-    // Mostrar loading
     const authLoading = document.getElementById('authLoading');
     if (authLoading) authLoading.style.display = 'flex';
     
@@ -386,12 +524,12 @@ async function entrarNoPerfil(idx) {
     document.getElementById('selecaoPerfis').style.display = 'none';
     document.getElementById('sidebar').style.display = 'flex';
     
-    // Força scroll para o topo ANTES de mostrar a tela
     window.scrollTo({ top: 0, behavior: 'instant' });
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
     
     if (authLoading) authLoading.style.display = 'none';
+    
+    // ✅ ADICIONAR ESTA LINHA:
+    iniciarAutoSave();
     
     mostrarTela('dashboard');
 }
@@ -5395,8 +5533,6 @@ function excluirCompraFatura(faturaId, compraId) {
 
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
-    carregarDados();
-    carregarPerfis();
     verificarLogin();
     bindEventos();
     setupSidebarToggle();
@@ -6084,4 +6220,10 @@ function desenharTopGastos(dados, label) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await verificarLogin();
+});
+
+window.addEventListener('beforeunload', async (e) => {
+    if(perfilAtivo) {
+        await salvarDados();
+    }
 });

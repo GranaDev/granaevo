@@ -1,44 +1,28 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const MERCADOPAGO_ACCESS_TOKEN = 'APP_USR-4646534918736333-123104-db4e913a378f25709b38d0620e35fcf2-758074021'
+const MERCADOPAGO_ACCESS_TOKEN = Deno.env.get('MERCADOPAGO_ACCESS_TOKEN')!
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-idempotency-key',
 }
 
-interface PaymentRequest {
-  email: string
-  password: string
-  planName: string
-  paymentMethod: string
-  cardToken?: string
-}
-
 serve(async (req) => {
-  // ✅ Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { email, password, planName, paymentMethod, cardToken }: PaymentRequest = await req.json()
+    const { email, password, planName, paymentMethod, cardToken } = await req.json()
+    
+    console.log('📥 Requisição recebida:', { email, planName, paymentMethod })
 
-    console.log('📥 Recebendo pagamento:', { email, planName, paymentMethod })
-
-    // Validações
-    if (!email || !password || !planName || !paymentMethod) {
-      throw new Error('Dados incompletos')
-    }
-
-    // ✅ Criar cliente Supabase
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    // ✅ 1. Buscar plano
+    // ✅ 1. Buscar plano no banco
     const { data: plan, error: planError } = await supabaseAdmin
       .from('plans')
       .select('*')
@@ -49,39 +33,39 @@ serve(async (req) => {
       throw new Error('Plano não encontrado')
     }
 
-    console.log('📦 Plano encontrado:', plan)
+    console.log('✅ Plano encontrado:', plan.name, plan.price)
 
-    // ✅ 2. Criar usuário no Supabase Auth (SEM CONFIRMAR EMAIL)
+    // ✅ 2. Criar usuário no Supabase Auth
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: password,
-      email_confirm: false, // Não confirma ainda
+      email_confirm: true,
       user_metadata: {
-        plan: planName,
-        name: email.split('@')[0]
+        name: email.split('@')[0],
+        plan: planName
       }
     })
 
-    if (authError || !authData.user) {
-      console.error('❌ Erro ao criar usuário:', authError)
-      throw new Error('Erro ao criar conta: ' + authError?.message)
+    if (authError) {
+      if (authError.message.includes('already registered')) {
+        throw new Error('Este email já está cadastrado!')
+      }
+      throw authError
     }
 
-    console.log('✅ Usuário criado:', authData.user.id)
+    const userId = authData.user.id
+    console.log('✅ Usuário criado:', userId)
 
-    // ✅ 3. Criar pagamento no Mercado Pago
-    const paymentData: any = {
+    // ✅ 3. Preparar dados de pagamento
+    const idempotencyKey = req.headers.get('X-Idempotency-Key') || `${email}-${Date.now()}`
+    
+    const paymentData = {
       transaction_amount: plan.price,
-      description: `GranaEvo - Plano ${planName}`,
+      description: `Plano ${planName} - GranaEvo`,
       payment_method_id: paymentMethod === 'pix' ? 'pix' : 'credit_card',
       payer: {
         email: email,
-      },
-      notification_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-mercadopago`,
-      metadata: {
-        user_id: authData.user.id,
-        plan_id: plan.id,
-        email: email
+        first_name: email.split('@')[0]
       }
     }
 
@@ -89,66 +73,83 @@ serve(async (req) => {
     if (paymentMethod === 'credit_card' && cardToken) {
       paymentData.token = cardToken
       paymentData.installments = 1
-      paymentData.issuer_id = '' // Será preenchido pelo MP
     }
 
     console.log('💳 Criando pagamento no Mercado Pago...')
 
+    // ✅ 4. Criar pagamento no Mercado Pago
     const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${MERCADOPAGO_ACCESS_TOKEN}`,
-        'X-Idempotency-Key': req.headers.get('X-Idempotency-Key') || crypto.randomUUID()
+        'X-Idempotency-Key': idempotencyKey
       },
       body: JSON.stringify(paymentData)
     })
 
-    const mpData = await mpResponse.json()
+    const payment = await mpResponse.json()
 
-    if (!mpResponse.ok) {
-      console.error('❌ Erro Mercado Pago:', mpData)
-      throw new Error(mpData.message || 'Erro ao processar pagamento')
+    if (!payment.id) {
+      console.error('❌ Erro no Mercado Pago:', payment)
+      throw new Error('Erro ao criar pagamento no Mercado Pago')
     }
 
-    console.log('✅ Pagamento criado:', mpData.id)
+    console.log('✅ Pagamento criado:', payment.id, payment.status)
 
-    // ✅ 4. Salvar subscription no Supabase
-    const expiresAt = new Date()
-    expiresAt.setHours(expiresAt.getHours() + 24)
-
+    // ✅ 5. Salvar assinatura no banco COM EMAIL E NOME
     const { error: subError } = await supabaseAdmin
       .from('subscriptions')
       .insert({
-        user_id: authData.user.id,
+        user_id: userId,
         plan_id: plan.id,
-        payment_id: String(mpData.id),
+        payment_id: payment.id.toString(),
         payment_method: paymentMethod,
-        payment_status: mpData.status, // pending, approved, etc
-        expires_at: expiresAt.toISOString()
+        payment_status: payment.status,
+        user_email: email,  // ✅ NOVO: Salvando email
+        user_name: email.split('@')[0],  // ✅ NOVO: Salvando nome
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
       })
 
     if (subError) {
-      console.error('❌ Erro ao salvar subscription:', subError)
-      throw new Error('Erro ao salvar dados')
+      console.error('❌ Erro ao salvar assinatura:', subError)
+      throw subError
     }
 
-    console.log('✅ Subscription salva com sucesso')
+    console.log('✅ Assinatura salva no banco')
 
-    // ✅ 5. Retornar resposta
-    const response: any = {
+    // ✅ 6. Se pagamento aprovado, criar perfil inicial
+    if (payment.status === 'approved') {
+      const { error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .insert({
+          user_id: userId,
+          name: email.split('@')[0],
+          photo: null
+        })
+
+      if (profileError) {
+        console.error('⚠️ Erro ao criar perfil:', profileError)
+      } else {
+        console.log('✅ Perfil inicial criado')
+      }
+    }
+
+    // ✅ 7. Preparar resposta
+    const response = {
       success: true,
-      paymentId: mpData.id,
+      paymentId: payment.id,
       paymentMethod: paymentMethod,
-      status: mpData.status,
-      userId: authData.user.id
+      status: payment.status
     }
 
-    // Se for PIX, retornar QR Code
-    if (paymentMethod === 'pix' && mpData.point_of_interaction?.transaction_data) {
-      response.qrCode = mpData.point_of_interaction.transaction_data.qr_code
-      response.qrCodeBase64 = mpData.point_of_interaction.transaction_data.qr_code_base64
+    // Se for PIX, adicionar QR Code
+    if (paymentMethod === 'pix' && payment.point_of_interaction) {
+      response.qrCodeBase64 = payment.point_of_interaction.transaction_data.qr_code_base64
+      response.qrCode = payment.point_of_interaction.transaction_data.qr_code
     }
+
+    console.log('✅ Processamento concluído com sucesso')
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -156,11 +157,12 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Erro geral:', error)
+    
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message 
-      }), 
+        error: error.message || 'Erro desconhecido ao processar pagamento'
+      }),
       { 
         status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
