@@ -438,15 +438,14 @@ async function verificarLogin() {
         if (perfilAtivoLocal) {
             const perfilData = JSON.parse(perfilAtivoLocal);
             const perfilExiste = usuarioLogado.perfis.find(p => p.id === perfilData.id);
-            
             if (perfilExiste) {
-                // Carregar perfil salvo
+                if(authLoading) authLoading.style.display = 'none';
                 await entrarNoPerfil(usuarioLogado.perfis.findIndex(p => p.id === perfilData.id));
                 return;
             }
         }
         
-        // Mostrar seleção de perfis
+        if(authLoading) authLoading.style.display = 'none';
         mostrarSelecaoPerfis();
         
     } catch (error) {
