@@ -95,7 +95,7 @@ async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
-            console.error('❌ Sessão não encontrada ao carregar perfis. O usuário será deslogado.');
+            console.error('❌ Sessão não encontrada ao carregar perfis.');
             throw new Error('Sessão de usuário inválida.');
         }
 
@@ -109,7 +109,7 @@ async function carregarPerfis() {
 
         if (error) {
             console.error('❌ Erro ao buscar perfis no Supabase:', error);
-            throw error; // Propaga o erro para ser tratado no `catch`
+            throw error;
         }
 
         if (perfis && perfis.length > 0) {
@@ -117,18 +117,21 @@ async function carregarPerfis() {
             usuarioLogado.perfis = perfis.map(p => ({
                 id: p.id,
                 nome: p.name,
-                foto: p.photo_url // Corrigido para o nome padrão do Supabase Storage
+                foto: p.photo_url // ✅ CORRIGIDO
             }));
+            
+            // ✅ Atualizar tabela de gerenciamento
+            await atualizarTabelaGerenciamento(session.user.id);
+            
             return { sucesso: true, perfisEncontrados: true };
         } else {
             console.log('⚠️ Nenhum perfil encontrado. A tela de criação será exibida.');
-            usuarioLogado.perfis = []; // Garante que a lista de perfis esteja vazia
+            usuarioLogado.perfis = [];
             return { sucesso: true, perfisEncontrados: false };
         }
         
     } catch(e) {
         console.error('❌ Erro crítico na função carregarPerfis:', e.message);
-        // Em caso de erro crítico, limpamos os perfis para forçar um estado seguro
         usuarioLogado.perfis = [];
         return { sucesso: false, perfisEncontrados: false, erro: e };
     }
@@ -473,17 +476,15 @@ async function entrarNoPerfil(index) {
 
 
 
-function adicionarNovoPerfil() {
+async function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
-    const limitePerfis = limitesPlano[plano]; // Pega o limite do objeto: 1, 2 ou 4
+    const limitePerfis = limitesPlano[plano];
     const perfisAtuais = usuarioLogado.perfis.length;
 
-    // ✅ CORREÇÃO: Validação unificada e correta.
-    // Verifica se o número de perfis atuais JÁ ATINGIU ou ULTRAPASSOU o limite do plano.
     if (perfisAtuais >= limitePerfis) {
         console.log(`🚫 Tentativa de adicionar perfil bloqueada. Limite do plano "${plano}" (${limitePerfis}) atingido.`);
-        mostrarPopupLimite(); // Mostra a mensagem de limite genérica, que já é inteligente.
-        return; // Para a execução
+        mostrarPopupLimite();
+        return;
     }
     
     console.log('📝 Abrindo formulário de novo perfil...');
@@ -513,7 +514,6 @@ function adicionarNovoPerfil() {
             return;
         }
         
-        // ✅ Segunda verificação de segurança (boa prática)
         if(usuarioLogado.perfis.length >= limitesPlano[plano]) {
             mostrarPopupLimite();
             fecharPopup();
@@ -531,6 +531,7 @@ function adicionarNovoPerfil() {
             
             let fotoUrl = null;
             
+            // ✅ UPLOAD DE FOTO COM TRATAMENTO DE ERRO MELHORADO
             if(fotoInput.files && fotoInput.files[0]) {
                 console.log('📸 Fazendo upload da foto...');
                 
@@ -541,17 +542,30 @@ function adicionarNovoPerfil() {
                     return;
                 }
                 
-                const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name}`;
+                // Nome único do arquivo
+                const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
                 
+                // Upload com tratamento de erro
                 const { data: uploadData, error: uploadError } = await supabase.storage
                     .from('profile-photos')
-                    .upload(nomeArquivo, arquivo);
+                    .upload(nomeArquivo, arquivo, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
                 
                 if (uploadError) {
                     console.error('❌ Erro no upload:', uploadError);
-                    throw uploadError;
+                    
+                    // Mensagem de erro mais amigável
+                    if(uploadError.message.includes('row-level security')) {
+                        alert('❌ Erro de permissão ao fazer upload. Verifique as políticas do Supabase Storage.');
+                    } else {
+                        alert(`❌ Erro ao fazer upload da foto: ${uploadError.message}`);
+                    }
+                    return;
                 }
                 
+                // Obter URL pública
                 const { data: urlData } = supabase.storage
                     .from('profile-photos')
                     .getPublicUrl(nomeArquivo);
@@ -562,12 +576,13 @@ function adicionarNovoPerfil() {
             
             console.log('💾 Inserindo perfil no banco...');
             
+            // ✅ CORRIGIDO: Usar 'photo_url' em vez de 'photo'
             const { data: novoPerfil, error } = await supabase
                 .from('profiles')
                 .insert({
                     user_id: session.user.id,
                     name: nome,
-                    photo: fotoUrl
+                    photo_url: fotoUrl // ✅ Nome correto da coluna
                 })
                 .select()
                 .single();
@@ -579,10 +594,13 @@ function adicionarNovoPerfil() {
             
             console.log('✅ Perfil criado com ID:', novoPerfil.id);
             
+            // ✅ ATUALIZAR TABELA DE GERENCIAMENTO
+            await atualizarTabelaGerenciamento(session.user.id);
+            
             usuarioLogado.perfis.push({
                 id: novoPerfil.id,
                 nome: novoPerfil.name,
-                foto: novoPerfil.photo
+                foto: novoPerfil.photo_url // ✅ Nome correto
             });
             
             fecharPopup();
@@ -596,6 +614,54 @@ function adicionarNovoPerfil() {
         }
     };
 }
+
+// ========== NOVA FUNÇÃO: Atualizar tabela de gerenciamento ==========
+async function atualizarTabelaGerenciamento(userId) {
+    try {
+        // Buscar todos os perfis do usuário
+        const { data: perfis } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', userId);
+        
+        // Buscar email do usuário
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        // Buscar plano ativo
+        const { data: subscription } = await supabase
+            .from('subscriptions')
+            .select('plans(name)')
+            .eq('user_id', userId)
+            .eq('payment_status', 'approved')
+            .single();
+        
+        const profileNames = perfis ? perfis.map(p => p.name) : [];
+        
+        // Inserir ou atualizar
+        const { error } = await supabase
+            .from('user_profile_management')
+            .upsert({
+                user_id: userId,
+                email: user?.email || '',
+                active_profiles_count: profileNames.length,
+                profile_names: profileNames,
+                plan_name: subscription?.plans?.name || 'N/A',
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'user_id'
+            });
+        
+        if(error) {
+            console.error('⚠️ Erro ao atualizar gerenciamento:', error);
+        } else {
+            console.log('✅ Tabela de gerenciamento atualizada');
+        }
+        
+    } catch(e) {
+        console.error('❌ Erro na atualização de gerenciamento:', e);
+    }
+}
+
 
 
 function mostrarPopupLimite(msgCustom) {
@@ -6009,9 +6075,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // ========== FIM DO ARQUIVO ========== = 'center';
-    ctx.fillText('Valor (R$)', 0, 0);
-    ctx.restore()
-
 function desenharGraficoLinha() {
     const canvas = document.getElementById('linhaChart');
     if(!canvas) return;
@@ -6121,6 +6184,56 @@ function desenharGraficoLinha() {
             alert(`Mês: ${ponto.mes}\nSaldo: ${formatBRL(ponto.saldo)}`);
         }
     };
+}
+
+function desenharTopGastos(dados, label) {
+    const canvas = document.getElementById('topGastosChart');
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    if(dados.top5.length === 0) {
+        ctx.fillStyle = '#ccc';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Sem gastos registrados', canvas.width/2, canvas.height/2);
+        return;
+    }
+    
+    const padding = 40;
+    const w = canvas.width - padding * 2 - 100;
+    const h = canvas.height - padding * 2;
+    const barHeight = h / dados.top5.length - 10;
+    
+    const maxValor = Math.max(...dados.top5.map(g => g.valor));
+    
+    dados.top5.forEach((gasto, i) => {
+        const y = padding + i * (barHeight + 10);
+        const largura = (gasto.valor / maxValor) * w;
+        
+        const gradient = ctx.createLinearGradient(padding + 100, 0, padding + 100 + largura, 0);
+        gradient.addColorStop(0, '#ff4b4b');
+        gradient.addColorStop(1, '#ff7a7a');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(padding + 100, y, largura, barHeight);
+        
+        ctx.strokeStyle = '#ff4b4b';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(padding + 100, y, largura, barHeight);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(gasto.tipo, padding + 95, y + barHeight/2 + 4);
+        
+        ctx.textAlign = 'left';
+        ctx.fillText(formatBRL(gasto.valor), padding + 105 + largura, y + barHeight/2 + 4);
+    });
+    ctx.fillStyle = '#ccc';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

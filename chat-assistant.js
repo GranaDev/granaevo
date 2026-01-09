@@ -420,13 +420,14 @@ const AnalisadorAvancado = {
 // ========== CLASSE PRINCIPAL DO CHAT ASSISTANT ==========
 class ChatAssistant {
     constructor() {
-    this.isOpen = false;
-    this.messages = [];
-    this.waitingForCardSelection = false;
-    this.waitingForTypeSelection = false;
-    this.pendingTransaction = null;
-    this.conversationContext = [];
-    this.init();
+        this.isOpen = false;
+        this.messages = [];
+        this.waitingForCardSelection = false;
+        this.waitingForTypeSelection = false;
+        this.pendingTransaction = null;
+        this.conversationContext = [];
+        this.perfilAtivo = null;
+        this.init();
     }
     
     // ========== FUNÇÕES DE UTILIDADE DE UI ==========
@@ -441,29 +442,29 @@ class ChatAssistant {
         return 'Ge';
     }
 
-    // ========== INICIALIZAÇÃO ==========
-    // Dentro da classe ChatAssistant
+// ========== INICIALIZAÇÃO ==========
     init() {
-    this.createChatUI();
-    this.attachEventListeners();
-    window.chatAssistant = this; // <-- ADICIONADO: Torna o chat acessível globalmente
-    // A linha this.loadMessages() foi REMOVIDA daqui.
-    // A mensagem de boas-vindas será enviada quando o perfil for selecionado.
-    // Adicione este novo método DENTRO da classe ChatAssistant
-onProfileSelected(perfil); {
-    console.log('💬 Chat Assistant recebeu o sinal do perfil:', perfil);
-    this.perfilAtivo = perfil; // Armazena a referência do perfil ativo
-
-    // Agora que temos um perfil, carregamos as mensagens
-    this.loadMessages();
-
-    // Se não houver mensagens, envia a mensagem de boas-vindas personalizada
-    if (this.messages.length === 0) {
-        this.sendWelcomeMessage();
-    }
-}
+        this.createChatUI();
+        this.attachEventListeners();
+        window.chatAssistant = this; // ✅ Torna o chat acessível globalmente
+        
+        // ✅ NÃO carregar mensagens aqui - aguardar seleção de perfil
+        console.log('💬 Chat Assistant inicializado. Aguardando seleção de perfil...');
     }
 
+    // ✅ MÉTODO CORRIGIDO: onProfileSelected
+    onProfileSelected(perfil) {
+        console.log('💬 Chat Assistant recebeu o sinal do perfil:', perfil);
+        this.perfilAtivo = perfil; // Armazena a referência do perfil ativo
+
+        // Agora que temos um perfil, carregamos as mensagens
+        this.loadMessages();
+
+        // Se não houver mensagens, envia a mensagem de boas-vindas personalizada
+        if (this.messages.length === 0) {
+            this.sendWelcomeMessage();
+        }
+    }
 
 
     // ========== CRIAR INTERFACE DO CHAT ==========
@@ -508,7 +509,6 @@ onProfileSelected(perfil); {
         `;
         document.body.appendChild(chatContainer);
         
-        // Atualizar avatar do header
         this.updateHeaderAvatar();
     }
 
@@ -552,7 +552,7 @@ onProfileSelected(perfil); {
         document.getElementById('chatAssistantContainer').classList.remove('active');
     }
 
-    // ========== MENSAGEM DE BOAS-VINDAS ==========
+     // ========== MENSAGEM DE BOAS-VINDAS ==========
     sendWelcomeMessage() {
         const hora = new Date().getHours();
         let saudacao = 'Olá';
@@ -560,7 +560,7 @@ onProfileSelected(perfil); {
         else if (hora >= 12 && hora < 18) saudacao = 'Boa tarde';
         else saudacao = 'Boa noite';
 
-        const nome = perfilAtivo?.nome || 'amigo(a)';
+        const nome = this.perfilAtivo?.nome || 'amigo(a)'; // ✅ USA this.perfilAtivo
         
         const welcomeMsg = `${saudacao}, ${nome}! 👋\n\nEu sou a **Ge**, sua assistente financeira virtual inteligente!\n\n**Como posso te ajudar hoje?**\n\n💰 Fazer lançamentos rápidos\n📊 Analisar seus gastos\n💡 Dar dicas personalizadas\n📈 Consultar saldo e reservas\n\n**Exemplos do que você pode dizer:**\n• "Recebi 2500 de salário"\n• "Gastei 50 no mercado"\n• "Comprei um monitor de 600 em 3x"\n• "Como está meu saldo?"\n• "Me dê dicas de economia"\n\n✨ Pode escrever naturalmente, eu entendo!`;
         
@@ -1652,8 +1652,8 @@ openEditTransaction(transactionId) {
 
     // ========== SALVAR MENSAGENS ==========
     saveMessages() {
-        if (perfilAtivo) {
-            const chave = `granaevo_chat_${perfilAtivo.id}`;
+        if (this.perfilAtivo) { // ✅ USA this.perfilAtivo
+            const chave = `granaevo_chat_${this.perfilAtivo.id}`;
             localStorage.setItem(chave, JSON.stringify(this.messages));
         }
     }
