@@ -442,14 +442,29 @@ class ChatAssistant {
     }
 
     // ========== INICIALIZAÇÃO ==========
+    // Dentro da classe ChatAssistant
     init() {
-        this.createChatUI();
-        this.attachEventListeners();
-        this.loadMessages();
-        if (this.messages.length === 0) {
-            this.sendWelcomeMessage();
-        }
+    this.createChatUI();
+    this.attachEventListeners();
+    window.chatAssistant = this; // <-- ADICIONADO: Torna o chat acessível globalmente
+    // A linha this.loadMessages() foi REMOVIDA daqui.
+    // A mensagem de boas-vindas será enviada quando o perfil for selecionado.
+    // Adicione este novo método DENTRO da classe ChatAssistant
+onProfileSelected(perfil); {
+    console.log('💬 Chat Assistant recebeu o sinal do perfil:', perfil);
+    this.perfilAtivo = perfil; // Armazena a referência do perfil ativo
+
+    // Agora que temos um perfil, carregamos as mensagens
+    this.loadMessages();
+
+    // Se não houver mensagens, envia a mensagem de boas-vindas personalizada
+    if (this.messages.length === 0) {
+        this.sendWelcomeMessage();
     }
+}
+    }
+
+
 
     // ========== CRIAR INTERFACE DO CHAT ==========
     createChatUI() {

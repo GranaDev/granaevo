@@ -444,41 +444,33 @@ async function entrarNoPerfil(index) {
         if (authLoading) authLoading.style.display = 'flex';
 
         perfilAtivo = usuarioLogado.perfis[index];
-        
-        // ✅ CORREÇÃO: Salvar perfil ativo ANTES de carregar dados
-        localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
+        // Salva o ID do perfil ativo para recarregar a sessão depois
+        localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id); 
 
-        console.log('📂 Carregando dados do perfil:', perfilAtivo.id);
-
-        // ✅ AGUARDAR carregamento COMPLETO
         await carregarDadosPerfil(perfilAtivo.id);
 
-        console.log('✅ Dados carregados, inicializando auto-save...');
         iniciarAutoSave();
-        
-        console.log('✅ Atualizando interface...');
         atualizarTudo();
 
-        console.log('✅ Ocultando seleção de perfis...');
         document.getElementById('selecaoPerfis').style.display = 'none';
         document.getElementById('sidebar').style.display = 'flex';
 
-        console.log('✅ Mostrando dashboard...');
+        // ✅ PASSO CRÍTICO: "Acorda" o assistente de chat e passa o perfil
+        if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
+            window.chatAssistant.onProfileSelected(perfilAtivo);
+        }
+
         mostrarTela('dashboard');
 
     } catch (e) {
         console.error('❌ Erro ao entrar no perfil:', e);
-        alert('❌ Erro ao carregar o perfil: ' + e.message);
-        
-        // ✅ NOVO: Voltar para seleção de perfis em caso de erro
-        perfilAtivo = null;
-        localStorage.removeItem('perfilAtivo');
-        mostrarSelecaoPerfis();
-        
+        alert('Erro ao carregar o perfil.');
     } finally {
         if (authLoading) authLoading.style.display = 'none';
     }
 }
+
+
 
 
 function adicionarNovoPerfil() {
