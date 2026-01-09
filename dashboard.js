@@ -576,13 +576,13 @@ async function adicionarNovoPerfil() {
             
             console.log('💾 Inserindo perfil no banco...');
             
-            // ✅ USAR O NOME CORRETO DA COLUNA (ajuste conforme sua tabela)
+            // ✅ CORRIGIDO: Usar 'photo_url' em vez de 'photo'
             const { data: novoPerfil, error } = await supabase
                 .from('profiles')
                 .insert({
                     user_id: session.user.id,
                     name: nome,
-                    photo: fotoUrl // ✅ Ajuste: 'photo' ou 'photo_url' conforme sua tabela
+                    photo_url: fotoUrl // ✅ Nome correto da coluna
                 })
                 .select()
                 .single();
