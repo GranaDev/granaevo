@@ -6123,56 +6123,6 @@ function desenharGraficoLinha() {
     };
 }
 
-function desenharTopGastos(dados, label) {
-    const canvas = document.getElementById('topGastosChart');
-    if(!canvas) return;
-    const ctx = canvas.getContext('2d');
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    if(dados.top5.length === 0) {
-        ctx.fillStyle = '#ccc';
-        ctx.font = '14px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Sem gastos registrados', canvas.width/2, canvas.height/2);
-        return;
-    }
-    
-    const padding = 40;
-    const w = canvas.width - padding * 2 - 100;
-    const h = canvas.height - padding * 2;
-    const barHeight = h / dados.top5.length - 10;
-    
-    const maxValor = Math.max(...dados.top5.map(g => g.valor));
-    
-    dados.top5.forEach((gasto, i) => {
-        const y = padding + i * (barHeight + 10);
-        const largura = (gasto.valor / maxValor) * w;
-        
-        const gradient = ctx.createLinearGradient(padding + 100, 0, padding + 100 + largura, 0);
-        gradient.addColorStop(0, '#ff4b4b');
-        gradient.addColorStop(1, '#ff7a7a');
-        
-        ctx.fillStyle = gradient;
-        ctx.fillRect(padding + 100, y, largura, barHeight);
-        
-        ctx.strokeStyle = '#ff4b4b';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(padding + 100, y, largura, barHeight);
-        
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 11px sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText(gasto.tipo, padding + 95, y + barHeight/2 + 4);
-        
-        ctx.textAlign = 'left';
-        ctx.fillText(formatBRL(gasto.valor), padding + 105 + largura, y + barHeight/2 + 4);
-    });
-    ctx.fillStyle = '#ccc';
-    ctx.font = '12px sans-serif';
-    ctx.textAlign
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
     await verificarLogin();
 });
