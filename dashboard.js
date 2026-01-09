@@ -91,15 +91,6 @@ function getMesNome(mes) {
 }
 
 // ========== CARREGAR E SALVAR DADOS ==========
-function carregarDados() {
-    try {
-        const u = JSON.parse(localStorage.getItem('granaevo_usuario') || 'null');
-        if(u) usuarioAtual = u;
-    } catch(e) {
-        console.error('Erro carregarDados', e);
-    }
-}
-
 async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -133,7 +124,7 @@ async function carregarPerfis() {
         } else {
             console.log('⚠️ Nenhum perfil encontrado. Criando perfil inicial...');
             
-            // ✅ Criar perfil inicial e AGUARDAR conclusão
+            // ✅ CORREÇÃO: Criar perfil inicial e AGUARDAR conclusão
             const { data: novoPerfil, error: createError } = await supabase
                 .from('profiles')
                 .insert({
@@ -164,15 +155,17 @@ async function carregarPerfis() {
     } catch(e) {
         console.error('❌ Erro crítico ao carregar perfis:', e);
         
-        // ✅ NÃO limpa perfis - mantém estado anterior se houver
-        if (!usuarioLogado.perfis || usuarioLogado.perfis.length === 0) {
-            // ✅ Cria perfil de fallback para não deixar usuário sem opção
-            usuarioLogado.perfis = [{
-                id: 'temp_' + Date.now(),
-                nome: usuarioLogado.nome || 'Usuário',
-                foto: null,
-                isTemp: true // ✅ Marca como temporário
-            }];
+        // ✅ NOVO: Mostrar erro na tela ao invés de criar perfil temporário
+        const selecao = document.getElementById('selecaoPerfis');
+        if(selecao) {
+            selecao.innerHTML = `
+                <div style="text-align:center; padding:40px; color:#ff4b4b;">
+                    <h2>❌ Erro ao Carregar Perfis</h2>
+                    <p>${e.message}</p>
+                    <button class="btn-primary" onclick="window.location.reload()">Tentar Novamente</button>
+                    <button class="btn-cancelar" onclick="AuthGuard.performLogout()">Fazer Logout</button>
+                </div>
+            `;
         }
         
         return false; // ✅ Retorna falha
@@ -378,21 +371,28 @@ async function verificarLogin() {
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
+            console.log('❌ Sem sessão ativa, redirecionando...');
             window.location.href = 'login.html';
             return;
         }
 
+        console.log('✅ Sessão ativa encontrada');
+
         const { data: subscription, error } = await supabase
             .from('subscriptions')
-            .select('plans(name)')
+            .select('plans(name, max_profiles)')
             .eq('user_id', session.user.id)
             .eq('payment_status', 'approved')
             .single();
 
         if (error || !subscription) {
+            console.log('❌ Assinatura não encontrada');
+            alert('⚠️ Você precisa de um plano ativo para continuar!');
             window.location.href = 'planos.html';
             return;
         }
+
+        console.log('✅ Assinatura ativa:', subscription.plans.name);
 
         usuarioLogado = {
             userId: session.user.id,
@@ -401,24 +401,33 @@ async function verificarLogin() {
             perfis: []
         };
 
+        console.log('📋 Carregando perfis...');
         const sucesso = await carregarPerfis();
 
-        if (!sucesso || usuarioLogado.perfis.length === 0) {
-            mostrarSelecaoPerfis();
+        // ✅ CORREÇÃO: Validar retorno antes de prosseguir
+        if (!sucesso) {
+            console.error('❌ Falha ao carregar perfis');
+            // carregarPerfis() já mostra erro na tela
             return;
         }
 
+        if (usuarioLogado.perfis.length === 0) {
+            console.error('❌ Nenhum perfil disponível após carregamento');
+            alert('❌ Erro: Nenhum perfil foi carregado. Tente fazer logout e login novamente.');
+            return;
+        }
+
+        console.log('✅ Perfis carregados com sucesso, mostrando seleção...');
         mostrarSelecaoPerfis();
 
     } catch (e) {
         console.error('❌ Erro no login:', e);
-        alert('Erro ao inicializar o sistema.');
+        alert('❌ Erro ao inicializar o sistema: ' + e.message);
         window.location.href = 'login.html';
     } finally {
         if (authLoading) authLoading.style.display = 'none';
     }
 }
-
 
 
 // ========== SELEÇÃO DE PERFIS ==========
@@ -490,26 +499,41 @@ async function entrarNoPerfil(index) {
         if (authLoading) authLoading.style.display = 'flex';
 
         perfilAtivo = usuarioLogado.perfis[index];
+        
+        // ✅ CORREÇÃO: Salvar perfil ativo ANTES de carregar dados
         localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
 
+        console.log('📂 Carregando dados do perfil:', perfilAtivo.id);
+
+        // ✅ AGUARDAR carregamento COMPLETO
         await carregarDadosPerfil(perfilAtivo.id);
 
+        console.log('✅ Dados carregados, inicializando auto-save...');
         iniciarAutoSave();
+        
+        console.log('✅ Atualizando interface...');
         atualizarTudo();
 
+        console.log('✅ Ocultando seleção de perfis...');
         document.getElementById('selecaoPerfis').style.display = 'none';
         document.getElementById('sidebar').style.display = 'flex';
 
+        console.log('✅ Mostrando dashboard...');
         mostrarTela('dashboard');
 
     } catch (e) {
         console.error('❌ Erro ao entrar no perfil:', e);
-        alert('Erro ao carregar o perfil.');
+        alert('❌ Erro ao carregar o perfil: ' + e.message);
+        
+        // ✅ NOVO: Voltar para seleção de perfis em caso de erro
+        perfilAtivo = null;
+        localStorage.removeItem('perfilAtivo');
+        mostrarSelecaoPerfis();
+        
     } finally {
         if (authLoading) authLoading.style.display = 'none';
     }
 }
-
 
 
 function adicionarNovoPerfil() {
@@ -539,10 +563,18 @@ function adicionarNovoPerfil() {
         <button class="btn-cancelar" id="cancelarPerfilBtn">Cancelar</button>
     `);
     
+    // ✅ CORREÇÃO: Remover event listener antes de adicionar
+    const btnCriar = document.getElementById('criarPerfilBtn');
+    const btnCancelar = document.getElementById('cancelarPerfilBtn');
+    
+    // ✅ NOVO: Clonar e substituir para remover todos os listeners
+    const novoBtnCriar = btnCriar.cloneNode(true);
+    btnCriar.parentNode.replaceChild(novoBtnCriar, btnCriar);
+    
     document.getElementById('cancelarPerfilBtn').onclick = () => fecharPopup();
     
-    // ✅ ÚNICO manipulador de evento
-    document.getElementById('criarPerfilBtn').onclick = async () => {
+    // ✅ ÚNICO manipulador de evento (agora no botão clonado)
+    novoBtnCriar.addEventListener('click', async () => {
         const nome = document.getElementById('novoPerfilNome').value.trim();
         const fotoInput = document.getElementById('novoPerfilFoto');
         
@@ -642,7 +674,7 @@ function adicionarNovoPerfil() {
             console.error('❌ Erro ao criar perfil:', error);
             alert('❌ Erro ao criar perfil. Tente novamente.');
         }
-    };
+    }, { once: true }); // ✅ ADICIONA OPÇÃO { once: true } PARA EXECUTAR APENAS 1 VEZ
 }
 
 function mostrarPopupLimite(msgCustom) {
