@@ -104,7 +104,12 @@ async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
         
-        if (!session) throw new Error('Sessão não encontrada');
+        if (!session) {
+            console.error('❌ Sessão não encontrada ao carregar perfis');
+            throw new Error('Sessão não encontrada');
+        }
+
+        console.log('🔍 Buscando perfis do usuário:', session.user.id);
 
         // ✅ Buscar perfis do banco
         const { data: perfis, error } = await supabase
@@ -113,27 +118,38 @@ async function carregarPerfis() {
             .eq('user_id', session.user.id)
             .order('id', { ascending: true });
 
-        if (error) throw error;
+        if (error) {
+            console.error('❌ Erro ao buscar perfis:', error);
+            throw error;
+        }
 
         if (perfis && perfis.length > 0) {
+            console.log('✅ Perfis encontrados:', perfis.length);
             usuarioLogado.perfis = perfis.map(p => ({
                 id: p.id,
                 nome: p.name,
                 foto: p.photo
             }));
         } else {
-            // Criar perfil inicial se não existir
+            console.log('⚠️ Nenhum perfil encontrado. Criando perfil inicial...');
+            
+            // ✅ Criar perfil inicial e AGUARDAR conclusão
             const { data: novoPerfil, error: createError } = await supabase
                 .from('profiles')
                 .insert({
                     user_id: session.user.id,
-                    name: usuarioLogado.nome,
+                    name: usuarioLogado.nome || 'Novo Usuário',
                     photo: null
                 })
                 .select()
                 .single();
 
-            if (createError) throw createError;
+            if (createError) {
+                console.error('❌ Erro ao criar perfil inicial:', createError);
+                throw createError;
+            }
+
+            console.log('✅ Perfil inicial criado:', novoPerfil);
 
             usuarioLogado.perfis = [{
                 id: novoPerfil.id,
@@ -142,11 +158,24 @@ async function carregarPerfis() {
             }];
         }
 
-        console.log('✅ Perfis carregados:', usuarioLogado.perfis);
+        console.log('✅ Total de perfis carregados:', usuarioLogado.perfis.length);
+        return true; // ✅ Retorna sucesso
         
     } catch(e) {
-        console.error('❌ Erro ao carregar perfis:', e);
-        usuarioLogado.perfis = [];
+        console.error('❌ Erro crítico ao carregar perfis:', e);
+        
+        // ✅ NÃO limpa perfis - mantém estado anterior se houver
+        if (!usuarioLogado.perfis || usuarioLogado.perfis.length === 0) {
+            // ✅ Cria perfil de fallback para não deixar usuário sem opção
+            usuarioLogado.perfis = [{
+                id: 'temp_' + Date.now(),
+                nome: usuarioLogado.nome || 'Usuário',
+                foto: null,
+                isTemp: true // ✅ Marca como temporário
+            }];
+        }
+        
+        return false; // ✅ Retorna falha
     }
 }
 
@@ -399,16 +428,21 @@ async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
     
     try {
-        // Verificar sessão do Supabase
+        console.log('🔐 Iniciando verificação de login...');
+        
+        // ✅ Verificar sessão do Supabase
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session) {
+            console.error('❌ Sessão inválida:', sessionError);
             if(authLoading) authLoading.style.display = 'none';
             window.location.href = 'login.html';
             return;
         }
 
-        // Buscar assinatura do usuário
+        console.log('✅ Sessão válida:', session.user.email);
+
+        // ✅ Buscar assinatura do usuário
         const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
             .select('*, plans(*)')
@@ -417,40 +451,73 @@ async function verificarLogin() {
             .single();
 
         if (subError || !subscription) {
+            console.error('❌ Assinatura não encontrada:', subError);
             alert('Você precisa adquirir um plano primeiro!');
             window.location.href = 'planos.html';
             return;
         }
 
-        // Configurar dados do usuário
+        console.log('✅ Assinatura ativa:', subscription.plans.name);
+
+        // ✅ Configurar dados do usuário
         usuarioLogado.nome = session.user.user_metadata.name || session.user.email.split('@')[0];
         usuarioLogado.plano = subscription.plans.name;
         usuarioLogado.userId = session.user.id;
 
-        // Carregar perfis do banco
-        await carregarPerfis();
+        // ✅ Carregar perfis e AGUARDAR conclusão
+        console.log('📦 Carregando perfis...');
+        const perfisCarregados = await carregarPerfis();
         
+        if (!perfisCarregados) {
+            console.warn('⚠️ Falha ao carregar perfis, mas continuando com fallback');
+        }
+
+        // ✅ Garantir que há pelo menos 1 perfil
+        if (!usuarioLogado.perfis || usuarioLogado.perfis.length === 0) {
+            console.error('❌ Nenhum perfil disponível após carregamento');
+            alert('Erro ao carregar perfis. Tente novamente.');
+            window.location.href = 'login.html';
+            return;
+        }
+
+        console.log('✅ Perfis disponíveis:', usuarioLogado.perfis.length);
+        
+        // ✅ Ocultar loading
         if(authLoading) authLoading.style.display = 'none';
         
-        // Verificar se tem perfil ativo salvo localmente
+        // ✅ Verificar se tem perfil ativo salvo localmente
         const perfilAtivoLocal = localStorage.getItem('perfilAtivo');
         
         if (perfilAtivoLocal) {
-            const perfilData = JSON.parse(perfilAtivoLocal);
-            const perfilExiste = usuarioLogado.perfis.find(p => p.id === perfilData.id);
-            if (perfilExiste) {
-                if(authLoading) authLoading.style.display = 'none';
-                await entrarNoPerfil(usuarioLogado.perfis.findIndex(p => p.id === perfilData.id));
-                return;
+            try {
+                const perfilData = JSON.parse(perfilAtivoLocal);
+                console.log('🔍 Perfil ativo salvo encontrado:', perfilData.nome);
+                
+                const perfilIndex = usuarioLogado.perfis.findIndex(p => p.id === perfilData.id);
+                
+                if (perfilIndex !== -1) {
+                    console.log('✅ Entrando automaticamente no perfil:', perfilData.nome);
+                    await entrarNoPerfil(perfilIndex);
+                    return;
+                } else {
+                    console.warn('⚠️ Perfil salvo não encontrado na lista');
+                    localStorage.removeItem('perfilAtivo');
+                }
+            } catch(e) {
+                console.error('❌ Erro ao processar perfil salvo:', e);
+                localStorage.removeItem('perfilAtivo');
             }
         }
         
-        if(authLoading) authLoading.style.display = 'none';
+        // ✅ Mostrar seleção de perfis
+        console.log('📋 Exibindo seleção de perfis');
         mostrarSelecaoPerfis();
+        solicitarPermissaoNotificacoes(); // ✅ Movido para cá
         
     } catch (error) {
-        console.error('Erro na verificação de login:', error);
+        console.error('❌ Erro crítico na verificação de login:', error);
         if(authLoading) authLoading.style.display = 'none';
+        alert('Erro ao inicializar. Tente fazer login novamente.');
         window.location.href = 'login.html';
     }
 }
@@ -466,15 +533,48 @@ solicitarPermissaoNotificacoes();
 }
 
 function atualizarTelaPerfis() {
+    console.log('🎨 Atualizando tela de perfis...');
+    
     const saudacao = document.getElementById('saudacaoPerfis');
+    const lista = document.getElementById('listaPerfis');
+    
+    if (!saudacao || !lista) {
+        console.error('❌ Elementos da tela de perfis não encontrados');
+        return;
+    }
+    
+    // ✅ Atualizar saudação
     saudacao.innerHTML = `Olá <b>${usuarioLogado.nome}</b> - Plano <b>${usuarioLogado.plano}</b>`;
     
-    const lista = document.getElementById('listaPerfis');
+    // ✅ Limpar lista
     lista.innerHTML = '';
     
+    // ✅ Verificar se há perfis
+    if (!usuarioLogado.perfis || usuarioLogado.perfis.length === 0) {
+        console.error('❌ Nenhum perfil disponível para renderizar');
+        lista.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                    ⚠️ Nenhum perfil encontrado.
+                </p>
+                <button class="btn-primary" onclick="location.reload()">
+                    🔄 Recarregar Página
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    console.log(`📋 Renderizando ${usuarioLogado.perfis.length} perfil(is)...`);
+    
+    // ✅ Renderizar perfis
     usuarioLogado.perfis.forEach((perfil, idx) => {
         const card = document.createElement('button');
         card.className = 'perfil-card';
+        
+        // ✅ Indicador de perfil temporário
+        const isTemp = perfil.isTemp ? '<span style="color: #ffd166;">⚠️ Temporário</span>' : '';
+        
         card.innerHTML = `
             <div class="perfil-foto">
                 ${perfil.foto ? 
@@ -483,11 +583,15 @@ function atualizarTelaPerfis() {
                 }
             </div>
             <div class="perfil-nome">${perfil.nome}</div>
+            ${isTemp}
         `;
         card.onclick = () => entrarNoPerfil(idx);
         lista.appendChild(card);
+        
+        console.log(`✅ Perfil renderizado: ${perfil.nome}`);
     });
     
+    // ✅ Botão adicionar (se dentro do limite)
     if(usuarioLogado.perfis.length < limitesPlano[usuarioLogado.plano]) {
         const addCard = document.createElement('button');
         addCard.className = 'perfil-card';
@@ -507,6 +611,8 @@ function atualizarTelaPerfis() {
         addCard.onclick = () => mostrarPopupLimite();
         lista.appendChild(addCard);
     }
+    
+    console.log('✅ Tela de perfis atualizada com sucesso');
 }
 
 async function entrarNoPerfil(idx) {
@@ -535,6 +641,8 @@ async function entrarNoPerfil(idx) {
 
 function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
+    
+    // ✅ Validações de limite
     if(plano === "Individual") {
         mostrarPopupLimite("Seu plano é Individual e só permite um perfil. Atualize seu plano para adicionar mais perfis.");
         return;
@@ -548,6 +656,8 @@ function adicionarNovoPerfil() {
         return;
     }
     
+    console.log('📝 Abrindo formulário de novo perfil...');
+    
     const popup = criarPopup(`
         <h3>Novo Perfil</h3>
         <input type="text" id="novoPerfilNome" class="form-input" placeholder="Nome do usuário (obrigatório)">
@@ -557,90 +667,110 @@ function adicionarNovoPerfil() {
     `);
     
     document.getElementById('cancelarPerfilBtn').onclick = () => fecharPopup();
+    
+    // ✅ ÚNICO manipulador de evento
     document.getElementById('criarPerfilBtn').onclick = async () => {
-    const nome = document.getElementById('novoPerfilNome').value.trim();
-    const fotoInput = document.getElementById('novoPerfilFoto');
-    
-    if(!nome) return alert("Digite o nome do usuário!");
-    
-    if(usuarioLogado.perfis.length >= limitesPlano[usuarioLogado.plano]) {
-        mostrarPopupLimite();
-        fecharPopup();
-        return;
-    }
-
-    try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const nome = document.getElementById('novoPerfilNome').value.trim();
+        const fotoInput = document.getElementById('novoPerfilFoto');
         
-        let fotoUrl = null;
-        
-        // Upload da foto se fornecida
-        if(fotoInput.files && fotoInput.files[0]) {
-            const arquivo = fotoInput.files[0];
-            const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name}`;
-            
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('profile-photos')
-                .upload(nomeArquivo, arquivo);
-            
-            if (uploadError) throw uploadError;
-            
-            const { data: urlData } = supabase.storage
-                .from('profile-photos')
-                .getPublicUrl(nomeArquivo);
-            
-            fotoUrl = urlData.publicUrl;
+        if(!nome) {
+            alert("Digite o nome do usuário!");
+            return;
         }
         
-        // Criar perfil no banco
-        const { data: novoPerfil, error } = await supabase
-            .from('profiles')
-            .insert({
-                user_id: session.user.id,
-                name: nome,
-                photo: fotoUrl
-            })
-            .select()
-            .single();
+        if(nome.length < 2) {
+            alert("O nome deve ter pelo menos 2 caracteres.");
+            return;
+        }
         
-        if (error) throw error;
-        
-        // Adicionar à lista local
-        usuarioLogado.perfis.push({
-            id: novoPerfil.id,
-            nome: novoPerfil.name,
-            foto: novoPerfil.photo
-        });
-        
-        fecharPopup();
-        atualizarTelaPerfis();
-        alert('✅ Perfil criado com sucesso!');
-        
-    } catch (error) {
-        console.error('Erro ao criar perfil:', error);
-        alert('❌ Erro ao criar perfil. Tente novamente.');
-    }
-};
-        
-        const novoId = usuarioLogado.perfis.length > 0 ? 
-            Math.max(...usuarioLogado.perfis.map(p => p.id || 0)) + 1 : 1;
-        
-        if(fotoInput.files && fotoInput.files[0]) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                usuarioLogado.perfis.push({id: novoId, nome, foto: e.target.result});
-                localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
-                fecharPopup();
-                atualizarTelaPerfis();
-            };
-            reader.readAsDataURL(fotoInput.files[0]);
-        } else {
-            usuarioLogado.perfis.push({id: novoId, nome, foto: null});
-            localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
+        // ✅ Verificar limite novamente (segurança)
+        if(usuarioLogado.perfis.length >= limitesPlano[usuarioLogado.plano]) {
+            mostrarPopupLimite();
+            fecharPopup();
+            return;
+        }
+
+        try {
+            console.log('💾 Criando novo perfil no banco...');
+            
+            const { data: { session } } = await supabase.auth.getSession();
+            
+            if (!session) {
+                throw new Error('Sessão não encontrada');
+            }
+            
+            let fotoUrl = null;
+            
+            // ✅ Upload da foto se fornecida
+            if(fotoInput.files && fotoInput.files[0]) {
+                console.log('📸 Fazendo upload da foto...');
+                
+                const arquivo = fotoInput.files[0];
+                
+                // ✅ Validar tamanho (máx 2MB)
+                if(arquivo.size > 2 * 1024 * 1024) {
+                    alert('A foto deve ter no máximo 2MB');
+                    return;
+                }
+                
+                const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name}`;
+                
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('profile-photos')
+                    .upload(nomeArquivo, arquivo);
+                
+                if (uploadError) {
+                    console.error('❌ Erro no upload:', uploadError);
+                    throw uploadError;
+                }
+                
+                const { data: urlData } = supabase.storage
+                    .from('profile-photos')
+                    .getPublicUrl(nomeArquivo);
+                
+                fotoUrl = urlData.publicUrl;
+                console.log('✅ Foto carregada:', fotoUrl);
+            }
+            
+            // ✅ Criar perfil no banco
+            console.log('💾 Inserindo perfil no banco...');
+            
+            const { data: novoPerfil, error } = await supabase
+                .from('profiles')
+                .insert({
+                    user_id: session.user.id,
+                    name: nome,
+                    photo: fotoUrl
+                })
+                .select()
+                .single();
+            
+            if (error) {
+                console.error('❌ Erro ao criar perfil:', error);
+                throw error;
+            }
+            
+            console.log('✅ Perfil criado com ID:', novoPerfil.id);
+            
+            // ✅ Adicionar à lista local
+            usuarioLogado.perfis.push({
+                id: novoPerfil.id,
+                nome: novoPerfil.name,
+                foto: novoPerfil.photo
+            });
+            
+            // ✅ Atualizar interface
             fecharPopup();
             atualizarTelaPerfis();
+            
+            alert('✅ Perfil criado com sucesso!');
+            
+        } catch (error) {
+            console.error('❌ Erro ao criar perfil:', error);
+            alert('❌ Erro ao criar perfil. Tente novamente.');
         }
     };
+}
 
 function mostrarPopupLimite(msgCustom) {
     let msg = msgCustom || "";
