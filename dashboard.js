@@ -475,19 +475,15 @@ async function entrarNoPerfil(index) {
 
 function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
-    
-    // ✅ Validações de limite
-    if(plano === "Individual") {
-        mostrarPopupLimite("Seu plano é Individual e só permite um perfil. Atualize seu plano para adicionar mais perfis.");
-        return;
-    }
-    if(plano === "Casal" && usuarioLogado.perfis.length >= 2) {
-        mostrarPopupLimite("Seu plano Casal permite apenas dois perfis. Atualize seu plano para adicionar mais perfis.");
-        return;
-    }
-    if(plano === "Família" && usuarioLogado.perfis.length >= 4) {
-        mostrarPopupLimite("Você atingiu a quantidade máxima de usuários do plano Família.");
-        return;
+    const limitePerfis = limitesPlano[plano]; // Pega o limite do objeto: 1, 2 ou 4
+    const perfisAtuais = usuarioLogado.perfis.length;
+
+    // ✅ CORREÇÃO: Validação unificada e correta.
+    // Verifica se o número de perfis atuais JÁ ATINGIU ou ULTRAPASSOU o limite do plano.
+    if (perfisAtuais >= limitePerfis) {
+        console.log(`🚫 Tentativa de adicionar perfil bloqueada. Limite do plano "${plano}" (${limitePerfis}) atingido.`);
+        mostrarPopupLimite(); // Mostra a mensagem de limite genérica, que já é inteligente.
+        return; // Para a execução
     }
     
     console.log('📝 Abrindo formulário de novo perfil...');
@@ -495,23 +491,15 @@ function adicionarNovoPerfil() {
     const popup = criarPopup(`
         <h3>Novo Perfil</h3>
         <input type="text" id="novoPerfilNome" class="form-input" placeholder="Nome do usuário (obrigatório)">
-        <input type="file" id="novoPerfilFoto" class="form-input" accept="image/*" style="padding:10px;"><br>
+        <input type="file" id="novoPerfilFoto" class="form-input" accept="image/*" style="padding:10px;">  
+
         <button class="btn-primary" id="criarPerfilBtn">Criar Perfil</button>
         <button class="btn-cancelar" id="cancelarPerfilBtn">Cancelar</button>
     `);
     
-    // ✅ CORREÇÃO: Remover event listener antes de adicionar
-    const btnCriar = document.getElementById('criarPerfilBtn');
-    const btnCancelar = document.getElementById('cancelarPerfilBtn');
-    
-    // ✅ NOVO: Clonar e substituir para remover todos os listeners
-    const novoBtnCriar = btnCriar.cloneNode(true);
-    btnCriar.parentNode.replaceChild(novoBtnCriar, btnCriar);
-    
     document.getElementById('cancelarPerfilBtn').onclick = () => fecharPopup();
     
-    // ✅ ÚNICO manipulador de evento (agora no botão clonado)
-    novoBtnCriar.addEventListener('click', async () => {
+    document.getElementById('criarPerfilBtn').onclick = async () => {
         const nome = document.getElementById('novoPerfilNome').value.trim();
         const fotoInput = document.getElementById('novoPerfilFoto');
         
@@ -525,8 +513,8 @@ function adicionarNovoPerfil() {
             return;
         }
         
-        // ✅ Verificar limite novamente (segurança)
-        if(usuarioLogado.perfis.length >= limitesPlano[usuarioLogado.plano]) {
+        // ✅ Segunda verificação de segurança (boa prática)
+        if(usuarioLogado.perfis.length >= limitesPlano[plano]) {
             mostrarPopupLimite();
             fecharPopup();
             return;
@@ -543,13 +531,11 @@ function adicionarNovoPerfil() {
             
             let fotoUrl = null;
             
-            // ✅ Upload da foto se fornecida
             if(fotoInput.files && fotoInput.files[0]) {
                 console.log('📸 Fazendo upload da foto...');
                 
                 const arquivo = fotoInput.files[0];
                 
-                // ✅ Validar tamanho (máx 2MB)
                 if(arquivo.size > 2 * 1024 * 1024) {
                     alert('A foto deve ter no máximo 2MB');
                     return;
@@ -574,7 +560,6 @@ function adicionarNovoPerfil() {
                 console.log('✅ Foto carregada:', fotoUrl);
             }
             
-            // ✅ Criar perfil no banco
             console.log('💾 Inserindo perfil no banco...');
             
             const { data: novoPerfil, error } = await supabase
@@ -594,25 +579,24 @@ function adicionarNovoPerfil() {
             
             console.log('✅ Perfil criado com ID:', novoPerfil.id);
             
-            // ✅ Adicionar à lista local
             usuarioLogado.perfis.push({
                 id: novoPerfil.id,
                 nome: novoPerfil.name,
                 foto: novoPerfil.photo
             });
             
-            // ✅ Atualizar interface
             fecharPopup();
             atualizarTelaPerfis();
             
-            alert('✅ Perfil criado com sucesso!');
+            alert('✅ Perfil criado com sucesso! Agora você pode selecioná-lo para entrar.');
             
         } catch (error) {
             console.error('❌ Erro ao criar perfil:', error);
             alert('❌ Erro ao criar perfil. Tente novamente.');
         }
-    }, { once: true }); // ✅ ADICIONA OPÇÃO { once: true } PARA EXECUTAR APENAS 1 VEZ
+    };
 }
+
 
 function mostrarPopupLimite(msgCustom) {
     let msg = msgCustom || "";
