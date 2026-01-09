@@ -272,57 +272,42 @@ async function carregarDadosPerfil(perfilId) {
 }
 
 async function salvarDados() {
-    if (!perfilAtivo) {
-        console.warn('⚠️ Nenhum perfil ativo para salvar');
-        return;
-    }
+    if (!perfilAtivo) return;
 
     try {
-        console.log('💾 Salvando dados do perfil:', perfilAtivo.id);
-
-        // ✅ SALVAR TRANSAÇÕES
-        for (const trans of transacoes) {
-            const transData = {
+        // TRANSAÇÕES
+        for (const t of transacoes) {
+            const data = {
                 profile_id: perfilAtivo.id,
-                category: trans.categoria,
-                type: trans.tipo,
-                description: trans.descricao,
-                value: trans.valor,
-                date: dataParaISO(trans.data),
-                time: trans.hora,
-                meta_id: trans.metaId || null,
-                conta_fixa_id: trans.contaFixaId || null
+                type: t.tipo,
+                description: t.descricao,
+                value: t.valor,
+                date: t.data,
+                hour: t.hora,
+                category: t.categoria,
+                meta_id: t.metaId || null
             };
 
-            // Verificar se já existe
             const { data: existing } = await supabase
                 .from('transactions')
                 .select('id')
-                .eq('id', trans.id)
+                .eq('id', t.id)
                 .maybeSingle();
 
             if (existing) {
-                // Atualizar
-                await supabase
-                    .from('transactions')
-                    .update(transData)
-                    .eq('id', trans.id);
+                await supabase.from('transactions').update(data).eq('id', t.id);
             } else {
-                // Inserir
-                await supabase
-                    .from('transactions')
-                    .insert({ ...transData, id: trans.id });
+                await supabase.from('transactions').insert({ ...data, id: t.id });
             }
         }
 
-        // ✅ SALVAR METAS
+        // METAS
         for (const meta of metas) {
             const metaData = {
                 profile_id: perfilAtivo.id,
                 description: meta.descricao,
-                target_amount: meta.objetivo,
-                saved_amount: meta.saved,
-                monthly_data: meta.monthly || {}
+                target_value: meta.objetivo,
+                saved_value: meta.guardado
             };
 
             const { data: existing } = await supabase
@@ -332,18 +317,13 @@ async function salvarDados() {
                 .maybeSingle();
 
             if (existing) {
-                await supabase
-                    .from('goals')
-                    .update(metaData)
-                    .eq('id', meta.id);
+                await supabase.from('goals').update(metaData).eq('id', meta.id);
             } else {
-                await supabase
-                    .from('goals')
-                    .insert({ ...metaData, id: meta.id });
+                await supabase.from('goals').insert({ ...metaData, id: meta.id });
             }
         }
 
-        // ✅ SALVAR CONTAS FIXAS
+        // CONTAS FIXAS
         for (const conta of contasFixas) {
             const contaData = {
                 profile_id: perfilAtivo.id,
@@ -351,9 +331,7 @@ async function salvarDados() {
                 value: conta.valor,
                 due_date: conta.vencimento,
                 paid: conta.pago,
-                card_id: conta.cartaoId || null,
-                installment_current: conta.parcelaAtual || null,
-                installment_total: conta.totalParcelas || null
+                card_id: conta.cartaoId || null
             };
 
             const { data: existing } = await supabase
@@ -363,52 +341,19 @@ async function salvarDados() {
                 .maybeSingle();
 
             if (existing) {
-                await supabase
-                    .from('fixed_bills')
-                    .update(contaData)
-                    .eq('id', conta.id);
+                await supabase.from('fixed_bills').update(contaData).eq('id', conta.id);
             } else {
-                await supabase
-                    .from('fixed_bills')
-                    .insert({ ...contaData, id: conta.id });
+                await supabase.from('fixed_bills').insert({ ...contaData, id: conta.id });
             }
         }
 
-        // ✅ SALVAR CARTÕES
-        for (const cartao of cartoesCredito) {
-            const cartaoData = {
-                profile_id: perfilAtivo.id,
-                bank_name: cartao.nomeBanco,
-                card_limit: cartao.limite,
-                used_amount: cartao.usado,
-                due_day: cartao.vencimentoDia,
-                brand_image: cartao.bandeiraImg || null
-            };
+        console.log('✅ Dados salvos com sucesso');
 
-            const { data: existing } = await supabase
-                .from('credit_cards')
-                .select('id')
-                .eq('id', cartao.id)
-                .maybeSingle();
-
-            if (existing) {
-                await supabase
-                    .from('credit_cards')
-                    .update(cartaoData)
-                    .eq('id', cartao.id);
-            } else {
-                await supabase
-                    .from('credit_cards')
-                    .insert({ ...cartaoData, id: cartao.id });
-            }
-        }
-
-        console.log('✅ Dados salvos com sucesso no banco!');
-        
-    } catch(e) {
+    } catch (e) {
         console.error('❌ Erro ao salvar dados:', e);
     }
 }
+
 
 let autoSaveInterval = null;
 
@@ -426,101 +371,53 @@ function iniciarAutoSave() {
 // ========== VERIFICAÇÃO DE LOGIN ==========
 async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
-    
+
     try {
-        console.log('🔐 Iniciando verificação de login...');
-        
-        // ✅ Verificar sessão do Supabase
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError || !session) {
-            console.error('❌ Sessão inválida:', sessionError);
-            if(authLoading) authLoading.style.display = 'none';
+        if (authLoading) authLoading.style.display = 'flex';
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
             window.location.href = 'login.html';
             return;
         }
 
-        console.log('✅ Sessão válida:', session.user.email);
-
-        // ✅ Buscar assinatura do usuário
-        const { data: subscription, error: subError } = await supabase
+        const { data: subscription } = await supabase
             .from('subscriptions')
-            .select('*, plans(*)')
+            .select('plans(*)')
             .eq('user_id', session.user.id)
             .eq('payment_status', 'approved')
             .single();
 
-        if (subError || !subscription) {
-            console.error('❌ Assinatura não encontrada:', subError);
-            alert('Você precisa adquirir um plano primeiro!');
+        if (!subscription) {
             window.location.href = 'planos.html';
             return;
         }
 
-        console.log('✅ Assinatura ativa:', subscription.plans.name);
+        usuarioLogado = {
+            userId: session.user.id,
+            nome: session.user.user_metadata?.name || session.user.email,
+            plano: subscription.plans.name,
+            perfis: []
+        };
 
-        // ✅ Configurar dados do usuário
-        usuarioLogado.nome = session.user.user_metadata.name || session.user.email.split('@')[0];
-        usuarioLogado.plano = subscription.plans.name;
-        usuarioLogado.userId = session.user.id;
+        await carregarPerfis();
 
-        // ✅ Carregar perfis e AGUARDAR conclusão
-        console.log('📦 Carregando perfis...');
-        const perfisCarregados = await carregarPerfis();
-        
-        if (!perfisCarregados) {
-            console.warn('⚠️ Falha ao carregar perfis, mas continuando com fallback');
-        }
-
-        // ✅ Garantir que há pelo menos 1 perfil
         if (!usuarioLogado.perfis || usuarioLogado.perfis.length === 0) {
-            console.error('❌ Nenhum perfil disponível após carregamento');
-            alert('Erro ao carregar perfis. Tente novamente.');
-            window.location.href = 'login.html';
+            mostrarSelecaoPerfis();
             return;
         }
 
-        console.log('✅ Perfis disponíveis:', usuarioLogado.perfis.length);
-        
-        // ✅ Ocultar loading
-        if(authLoading) authLoading.style.display = 'none';
-        
-        // ✅ Verificar se tem perfil ativo salvo localmente
-        const perfilAtivoLocal = localStorage.getItem('perfilAtivo');
-        
-        if (perfilAtivoLocal) {
-            try {
-                const perfilData = JSON.parse(perfilAtivoLocal);
-                console.log('🔍 Perfil ativo salvo encontrado:', perfilData.nome);
-                
-                const perfilIndex = usuarioLogado.perfis.findIndex(p => p.id === perfilData.id);
-                
-                if (perfilIndex !== -1) {
-                    console.log('✅ Entrando automaticamente no perfil:', perfilData.nome);
-                    await entrarNoPerfil(perfilIndex);
-                    return;
-                } else {
-                    console.warn('⚠️ Perfil salvo não encontrado na lista');
-                    localStorage.removeItem('perfilAtivo');
-                }
-            } catch(e) {
-                console.error('❌ Erro ao processar perfil salvo:', e);
-                localStorage.removeItem('perfilAtivo');
-            }
-        }
-        
-        // ✅ Mostrar seleção de perfis
-        console.log('📋 Exibindo seleção de perfis');
         mostrarSelecaoPerfis();
-        solicitarPermissaoNotificacoes(); // ✅ Movido para cá
-        
-    } catch (error) {
-        console.error('❌ Erro crítico na verificação de login:', error);
-        if(authLoading) authLoading.style.display = 'none';
-        alert('Erro ao inicializar. Tente fazer login novamente.');
+
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao inicializar');
         window.location.href = 'login.html';
+    } finally {
+        if (authLoading) authLoading.style.display = 'none';
     }
 }
+
 
 // ========== SELEÇÃO DE PERFIS ==========
 function mostrarSelecaoPerfis() {
@@ -615,29 +512,33 @@ function atualizarTelaPerfis() {
     console.log('✅ Tela de perfis atualizada com sucesso');
 }
 
-async function entrarNoPerfil(idx) {
-    perfilAtivo = usuarioLogado.perfis[idx];
-    localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
-    
+async function entrarNoPerfil(index) {
     const authLoading = document.getElementById('authLoading');
-    if (authLoading) authLoading.style.display = 'flex';
-    
-    await carregarDadosPerfil(perfilAtivo.id);
-    atualizarNomeUsuario();
-    atualizarTudo();
-    
-    document.getElementById('selecaoPerfis').style.display = 'none';
-    document.getElementById('sidebar').style.display = 'flex';
-    
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    
-    if (authLoading) authLoading.style.display = 'none';
-    
-    // ✅ ADICIONAR ESTA LINHA:
-    iniciarAutoSave();
-    
-    mostrarTela('dashboard');
+
+    try {
+        if (authLoading) authLoading.style.display = 'flex';
+
+        perfilAtivo = usuarioLogado.perfis[index];
+        localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
+
+        await carregarDadosPerfil(perfilAtivo.id);
+
+        atualizarTudo();
+        iniciarAutoSave();
+
+        document.getElementById('selecaoPerfis').style.display = 'none';
+        document.getElementById('sidebar').style.display = 'flex';
+
+        mostrarTela('dashboard');
+
+    } catch (e) {
+        console.error('Erro ao entrar no perfil:', e);
+        alert('Erro ao carregar perfil');
+    } finally {
+        if (authLoading) authLoading.style.display = 'none';
+    }
 }
+
 
 function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
