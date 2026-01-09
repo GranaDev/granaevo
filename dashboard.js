@@ -94,15 +94,13 @@ function getMesNome(mes) {
 async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
-        
         if (!session) {
-            console.error('❌ Sessão não encontrada ao carregar perfis');
-            throw new Error('Sessão não encontrada');
+            console.error('❌ Sessão não encontrada ao carregar perfis. O usuário será deslogado.');
+            throw new Error('Sessão de usuário inválida.');
         }
 
-        console.log('🔍 Buscando perfis do usuário:', session.user.id);
+        console.log('🔍 Buscando perfis para o usuário:', session.user.id);
 
-        // ✅ Buscar perfis do banco
         const { data: perfis, error } = await supabase
             .from('profiles')
             .select('*')
@@ -110,99 +108,54 @@ async function carregarPerfis() {
             .order('id', { ascending: true });
 
         if (error) {
-            console.error('❌ Erro ao buscar perfis:', error);
-            throw error;
+            console.error('❌ Erro ao buscar perfis no Supabase:', error);
+            throw error; // Propaga o erro para ser tratado no `catch`
         }
 
         if (perfis && perfis.length > 0) {
-            console.log('✅ Perfis encontrados:', perfis.length);
+            console.log(`✅ ${perfis.length} perfil(s) encontrado(s).`);
             usuarioLogado.perfis = perfis.map(p => ({
                 id: p.id,
                 nome: p.name,
-                foto: p.photo
+                foto: p.photo_url // Corrigido para o nome padrão do Supabase Storage
             }));
+            return { sucesso: true, perfisEncontrados: true };
         } else {
-            console.log('⚠️ Nenhum perfil encontrado. Criando perfil inicial...');
-            
-            // ✅ CORREÇÃO: Criar perfil inicial e AGUARDAR conclusão
-            const { data: novoPerfil, error: createError } = await supabase
-                .from('profiles')
-                .insert({
-                    user_id: session.user.id,
-                    name: usuarioLogado.nome || 'Novo Usuário',
-                    photo: null
-                })
-                .select()
-                .single();
-
-            if (createError) {
-                console.error('❌ Erro ao criar perfil inicial:', createError);
-                throw createError;
-            }
-
-            console.log('✅ Perfil inicial criado:', novoPerfil);
-
-            usuarioLogado.perfis = [{
-                id: novoPerfil.id,
-                nome: novoPerfil.name,
-                foto: novoPerfil.photo
-            }];
+            console.log('⚠️ Nenhum perfil encontrado. A tela de criação será exibida.');
+            usuarioLogado.perfis = []; // Garante que a lista de perfis esteja vazia
+            return { sucesso: true, perfisEncontrados: false };
         }
-
-        console.log('✅ Total de perfis carregados:', usuarioLogado.perfis.length);
-        return true; // ✅ Retorna sucesso
         
     } catch(e) {
-        console.error('❌ Erro crítico ao carregar perfis:', e);
-        
-        // ✅ NOVO: Mostrar erro na tela ao invés de criar perfil temporário
-        const selecao = document.getElementById('selecaoPerfis');
-        if(selecao) {
-            selecao.innerHTML = `
-                <div style="text-align:center; padding:40px; color:#ff4b4b;">
-                    <h2>❌ Erro ao Carregar Perfis</h2>
-                    <p>${e.message}</p>
-                    <button class="btn-primary" onclick="window.location.reload()">Tentar Novamente</button>
-                    <button class="btn-cancelar" onclick="AuthGuard.performLogout()">Fazer Logout</button>
-                </div>
-            `;
-        }
-        
-        return false; // ✅ Retorna falha
+        console.error('❌ Erro crítico na função carregarPerfis:', e.message);
+        // Em caso de erro crítico, limpamos os perfis para forçar um estado seguro
+        usuarioLogado.perfis = [];
+        return { sucesso: false, perfisEncontrados: false, erro: e };
     }
 }
 
+
+
 async function carregarDadosPerfil(perfilId) {
     try {
-        console.log('📦 Carregando dados do perfil:', perfilId);
+        console.log(`📦 Carregando todos os dados para o perfil ID: ${perfilId}`);
 
-        // ✅ Buscar transações do banco
-        const { data: transData } = await supabase
-            .from('transactions')
-            .select('*')
-            .eq('profile_id', perfilId)
-            .order('date', { ascending: false });
+        // Executa todas as buscas em paralelo para mais performance
+        const [transData, goalsData, billsData, cardsData] = await Promise.all([
+            supabase.from('transactions').select('*').eq('profile_id', perfilId).order('date', { ascending: false }),
+            supabase.from('goals').select('*').eq('profile_id', perfilId),
+            supabase.from('fixed_bills').select('*').eq('profile_id', perfilId),
+            supabase.from('credit_cards').select('*').eq('profile_id', perfilId)
+        ]);
 
-        // ✅ Buscar metas
-        const { data: goalsData } = await supabase
-            .from('goals')
-            .select('*')
-            .eq('profile_id', perfilId);
+        // Verifica erros em cada uma das respostas
+        if (transData.error) throw transData.error;
+        if (goalsData.error) throw goalsData.error;
+        if (billsData.error) throw billsData.error;
+        if (cardsData.error) throw cardsData.error;
 
-        // ✅ Buscar contas fixas
-        const { data: billsData } = await supabase
-            .from('fixed_bills')
-            .select('*')
-            .eq('profile_id', perfilId);
-
-        // ✅ Buscar cartões
-        const { data: cardsData } = await supabase
-            .from('credit_cards')
-            .select('*')
-            .eq('profile_id', perfilId);
-
-        // Mapear dados do Supabase para formato local
-        transacoes = (transData || []).map(t => ({
+        // Mapeia os dados do Supabase para o formato local, garantindo que sejam arrays
+        transacoes = (transData.data || []).map(t => ({
             id: t.id,
             categoria: t.category,
             tipo: t.type,
@@ -214,7 +167,7 @@ async function carregarDadosPerfil(perfilId) {
             contaFixaId: t.conta_fixa_id
         }));
 
-        metas = (goalsData || []).map(m => ({
+        metas = (goalsData.data || []).map(m => ({
             id: m.id,
             descricao: m.description,
             objetivo: parseFloat(m.target_amount),
@@ -222,7 +175,7 @@ async function carregarDadosPerfil(perfilId) {
             monthly: m.monthly_data || {}
         }));
 
-        contasFixas = (billsData || []).map(b => ({
+        contasFixas = (billsData.data || []).map(b => ({
             id: b.id,
             descricao: b.description,
             valor: parseFloat(b.value),
@@ -233,7 +186,7 @@ async function carregarDadosPerfil(perfilId) {
             totalParcelas: b.installment_total
         }));
 
-        cartoesCredito = (cardsData || []).map(c => ({
+        cartoesCredito = (cardsData.data || []).map(c => ({
             id: c.id,
             nomeBanco: c.bank_name,
             limite: parseFloat(c.card_limit),
@@ -242,13 +195,7 @@ async function carregarDadosPerfil(perfilId) {
             bandeiraImg: c.brand_image
         }));
 
-        // Atualizar IDs para próximas inserções
-        nextTransId = transacoes.length > 0 ? Math.max(...transacoes.map(t => t.id)) + 1 : 1;
-        nextMetaId = metas.length > 0 ? Math.max(...metas.map(m => m.id)) + 1 : 1;
-        nextContaFixaId = contasFixas.length > 0 ? Math.max(...contasFixas.map(c => c.id)) + 1 : 1;
-        nextCartaoId = cartoesCredito.length > 0 ? Math.max(...cartoesCredito.map(c => c.id)) + 1 : 1;
-
-        console.log('✅ Dados carregados:', {
+        console.log('✅ Dados do perfil carregados com sucesso:', {
             transacoes: transacoes.length,
             metas: metas.length,
             contas: contasFixas.length,
@@ -256,13 +203,16 @@ async function carregarDadosPerfil(perfilId) {
         });
         
     } catch(e) {
-        console.error('❌ Erro ao carregar dados do perfil:', e);
+        console.error('❌ Erro crítico ao carregar dados do perfil:', e);
+        // Em caso de erro, zera todos os dados para garantir um estado limpo
         transacoes = [];
         metas = [];
         contasFixas = [];
         cartoesCredito = [];
+        alert('Houve um erro ao carregar os dados deste perfil. Tente novamente.');
     }
 }
+
 
 async function salvarDados() {
     if (!perfilAtivo) return;
@@ -364,35 +314,33 @@ function iniciarAutoSave() {
 // ========== VERIFICAÇÃO DE LOGIN ==========
 async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
+    const protectedContent = document.querySelector('[data-protected-content]');
 
     try {
         if (authLoading) authLoading.style.display = 'flex';
+        if (protectedContent) protectedContent.style.display = 'none';
 
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        if (!session) {
-            console.log('❌ Sem sessão ativa, redirecionando...');
+        if (sessionError || !session) {
+            console.log('🔌 Sessão não encontrada ou erro. Redirecionando para login.');
             window.location.href = 'login.html';
             return;
         }
 
-        console.log('✅ Sessão ativa encontrada');
-
-        const { data: subscription, error } = await supabase
+        // A verificação de assinatura pode ser mantida ou removida se já houver um Auth Guard
+        const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
-            .select('plans(name, max_profiles)')
+            .select('plans(name)')
             .eq('user_id', session.user.id)
             .eq('payment_status', 'approved')
             .single();
 
-        if (error || !subscription) {
-            console.log('❌ Assinatura não encontrada');
-            alert('⚠️ Você precisa de um plano ativo para continuar!');
+        if (subError || !subscription) {
+            console.log('🧾 Assinatura não encontrada ou inválida. Redirecionando para planos.');
             window.location.href = 'planos.html';
             return;
         }
-
-        console.log('✅ Assinatura ativa:', subscription.plans.name);
 
         usuarioLogado = {
             userId: session.user.id,
@@ -401,33 +349,30 @@ async function verificarLogin() {
             perfis: []
         };
 
-        console.log('📋 Carregando perfis...');
-        const sucesso = await carregarPerfis();
+        // Chama a nova função carregarPerfis e aguarda seu resultado detalhado
+        const resultadoPerfis = await carregarPerfis();
 
-        // ✅ CORREÇÃO: Validar retorno antes de prosseguir
-        if (!sucesso) {
-            console.error('❌ Falha ao carregar perfis');
-            // carregarPerfis() já mostra erro na tela
-            return;
+        if (!resultadoPerfis.sucesso) {
+            // Se houve um erro crítico no Supabase, é mais seguro deslogar.
+            throw new Error("Não foi possível carregar os dados do usuário. Tente fazer login novamente.");
         }
-
-        if (usuarioLogado.perfis.length === 0) {
-            console.error('❌ Nenhum perfil disponível após carregamento');
-            alert('❌ Erro: Nenhum perfil foi carregado. Tente fazer logout e login novamente.');
-            return;
-        }
-
-        console.log('✅ Perfis carregados com sucesso, mostrando seleção...');
+        
+        // Agora, com os perfis carregados (ou a certeza de que não existem), mostramos a tela de seleção.
+        // A própria tela de seleção saberá o que renderizar (lista de perfis ou botão de criar).
+        console.log('✅ Verificação concluída. Exibindo tela de seleção de perfis.');
         mostrarSelecaoPerfis();
 
     } catch (e) {
-        console.error('❌ Erro no login:', e);
-        alert('❌ Erro ao inicializar o sistema: ' + e.message);
-        window.location.href = 'login.html';
+        console.error('❌ Erro crítico na inicialização:', e.message);
+        alert(e.message); // Informa o usuário sobre o erro
+        AuthGuard.performLogout(); // Usa a função de logout do seu auth-guard
     } finally {
+        // Esconde o loading e mostra o conteúdo principal (que conterá a tela de perfis)
         if (authLoading) authLoading.style.display = 'none';
+        if (protectedContent) protectedContent.style.display = 'block';
     }
 }
+
 
 
 // ========== SELEÇÃO DE PERFIS ==========
