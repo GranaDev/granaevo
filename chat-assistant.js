@@ -1651,28 +1651,31 @@ openEditTransaction(transactionId) {
     }
 
     // ========== SALVAR MENSAGENS ==========
-    saveMessages() {
-        if (this.perfilAtivo) { // ✅ USA this.perfilAtivo
-            const chave = `granaevo_chat_${this.perfilAtivo.id}`;
-            localStorage.setItem(chave, JSON.stringify(this.messages));
-        }
+saveMessages() {
+    if (this.perfilAtivo) { // ✅ CORRIGIDO: usando this.perfilAtivo
+        const chave = `granaevo_chat_${this.perfilAtivo.id}`;
+        localStorage.setItem(chave, JSON.stringify(this.messages));
+        console.log(`💾 Mensagens do chat salvas para perfil ${this.perfilAtivo.nome}`);
     }
+}
 
     // ========== CARREGAR MENSAGENS ==========
-    loadMessages() {
-        if (perfilAtivo) {
-            const chave = `granaevo_chat_${perfilAtivo.id}`;
-            const saved = localStorage.getItem(chave);
-            if (saved) {
-                try {
-                    this.messages = JSON.parse(saved);
-                    this.renderMessages();
-                } catch (e) {
-                    console.error('Erro ao carregar mensagens', e);
-                }
+loadMessages() {
+    if (this.perfilAtivo) {  // ✅ CORRIGIDO: usando this.perfilAtivo
+        const chave = `granaevo_chat_${this.perfilAtivo.id}`;
+        const saved = localStorage.getItem(chave);
+        if (saved) {
+            try {
+                this.messages = JSON.parse(saved);
+                this.renderMessages();
+            } catch (e) {
+                console.error('Erro ao carregar mensagens do chat', e);
             }
         }
+    } else {
+        console.log('💬 Nenhum perfil ativo encontrado para carregar mensagens do chat');
     }
+}
 
     // ========== RENDERIZAR MENSAGENS ==========
     renderMessages() {
