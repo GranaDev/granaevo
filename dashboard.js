@@ -221,19 +221,26 @@ async function salvarDados() {
     if (!perfilAtivo) return;
 
     try {
-        // TRANSAÇÕES
+        console.log('💾 Iniciando salvamento de dados...');
+        
+        // ========== TRANSAÇÕES ==========
         for (const t of transacoes) {
+            // ✅ Converter data BR para ISO
+            const dataISO = dataParaISO(t.data);
+            
             const data = {
                 profile_id: perfilAtivo.id,
                 type: t.tipo,
                 description: t.descricao,
                 value: t.valor,
-                date: t.data,
-                hour: t.hora,
+                date: dataISO,  // ✅ Agora em formato correto
+                time: t.hora,   // ✅ Nome correto da coluna
                 category: t.categoria,
-                meta_id: t.metaId || null
+                meta_id: t.metaId || null,
+                conta_fixa_id: t.contaFixaId || null  // ✅ Adicionado
             };
 
+            // Verificar se a transação já existe
             const { data: existing } = await supabase
                 .from('transactions')
                 .select('id')
@@ -241,19 +248,39 @@ async function salvarDados() {
                 .maybeSingle();
 
             if (existing) {
-                await supabase.from('transactions').update(data).eq('id', t.id);
+                // Atualizar transação existente
+                const { error } = await supabase
+                    .from('transactions')
+                    .update(data)
+                    .eq('id', t.id);
+                
+                if (error) {
+                    console.error(`❌ Erro ao atualizar transação ${t.id}:`, error);
+                    throw error;
+                }
             } else {
-                await supabase.from('transactions').insert({ ...data, id: t.id });
+                // Inserir nova transação
+                const { error } = await supabase
+                    .from('transactions')
+                    .insert({ ...data, id: t.id });
+                
+                if (error) {
+                    console.error(`❌ Erro ao inserir transação ${t.id}:`, error);
+                    throw error;
+                }
             }
         }
+        
+        console.log(`✅ ${transacoes.length} transação(ões) salva(s)`);
 
-        // METAS
+        // ========== METAS ==========
         for (const meta of metas) {
             const metaData = {
                 profile_id: perfilAtivo.id,
                 description: meta.descricao,
-                target_value: meta.objetivo,
-                saved_value: meta.guardado
+                target_amount: meta.objetivo,     // ✅ Corrigido
+                saved_amount: meta.saved,         // ✅ Corrigido
+                monthly_data: meta.monthly || {}  // ✅ Adicionado
             };
 
             const { data: existing } = await supabase
@@ -268,8 +295,10 @@ async function salvarDados() {
                 await supabase.from('goals').insert({ ...metaData, id: meta.id });
             }
         }
+        
+        console.log(`✅ ${metas.length} meta(s) salva(s)`);
 
-        // CONTAS FIXAS
+        // ========== CONTAS FIXAS ==========
         for (const conta of contasFixas) {
             const contaData = {
                 profile_id: perfilAtivo.id,
@@ -277,7 +306,9 @@ async function salvarDados() {
                 value: conta.valor,
                 due_date: conta.vencimento,
                 paid: conta.pago,
-                card_id: conta.cartaoId || null
+                card_id: conta.cartaoId || null,
+                installment_current: conta.parcelaAtual || null,  // ✅ Adicionado
+                installment_total: conta.totalParcelas || null    // ✅ Adicionado
             };
 
             const { data: existing } = await supabase
@@ -292,11 +323,39 @@ async function salvarDados() {
                 await supabase.from('fixed_bills').insert({ ...contaData, id: conta.id });
             }
         }
+        
+        console.log(`✅ ${contasFixas.length} conta(s) fixa(s) salva(s)`);
+        
+        // ========== CARTÕES ==========
+        for (const cartao of cartoesCredito) {
+            const cartaoData = {
+                profile_id: perfilAtivo.id,
+                bank_name: cartao.nomeBanco,
+                card_limit: cartao.limite,
+                used_amount: cartao.usado || 0,
+                due_day: cartao.vencimentoDia,
+                brand_image: cartao.bandeiraImg || null
+            };
 
-        console.log('✅ Dados salvos com sucesso');
+            const { data: existing } = await supabase
+                .from('credit_cards')
+                .select('id')
+                .eq('id', cartao.id)
+                .maybeSingle();
+
+            if (existing) {
+                await supabase.from('credit_cards').update(cartaoData).eq('id', cartao.id);
+            } else {
+                await supabase.from('credit_cards').insert({ ...cartaoData, id: cartao.id });
+            }
+        }
+        
+        console.log(`✅ ${cartoesCredito.length} cartão(ões) salvo(s)`);
+        console.log('🎉 Todos os dados foram salvos com sucesso!');
 
     } catch (e) {
-        console.error('❌ Erro ao salvar dados:', e);
+        console.error('❌ Erro crítico ao salvar dados:', e);
+        alert('Erro ao salvar dados. Verifique o console para mais detalhes.');
     }
 }
 
