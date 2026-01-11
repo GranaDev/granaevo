@@ -6722,25 +6722,66 @@ document.addEventListener('DOMContentLoaded', () => {
     verificarLogin();
 });
 
-// ========== INICIALIZAÇÃO AUTOMÁTICA ==========
-console.log('🚀 Dashboard.js carregado, aguardando DOMContentLoaded...');
+// ========== INICIALIZAÇÃO FORÇADA ==========
+console.log('🎬 Preparando inicialização forçada...');
 
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('📄 DOM carregado, iniciando sistema...');
+// Função de inicialização
+async function inicializarSistema() {
+    console.log('🔥 INICIANDO SISTEMA - FORÇADO');
+    console.log('📍 Etapa 1: Verificar login');
     
-    // Aguardar um pouco para garantir que tudo foi carregado
-    await new Promise(resolve => setTimeout(resolve, 100));
+    try {
+        await verificarLogin();
+        console.log('✅ Etapa 1: Completa');
+    } catch(e) {
+        console.error('❌ Erro na verificação de login:', e);
+    }
     
-    console.log('🎯 Executando verificarLogin()...');
-    await verificarLogin();
+    console.log('📍 Etapa 2: Bind eventos');
+    try {
+        bindEventos();
+        console.log('✅ Etapa 2: Completa');
+    } catch(e) {
+        console.error('❌ Erro ao vincular eventos:', e);
+    }
     
-    console.log('🎯 Vinculando eventos...');
-    bindEventos();
+    console.log('📍 Etapa 3: Setup sidebar');
+    try {
+        setupSidebarToggle();
+        console.log('✅ Etapa 3: Completa');
+    } catch(e) {
+        console.error('❌ Erro no setup sidebar:', e);
+    }
     
-    console.log('🎯 Configurando sidebar...');
-    setupSidebarToggle();
-    
-    console.log('✅ Sistema inicializado completamente!');
+    console.log('🎉 SISTEMA INICIALIZADO COM SUCESSO!');
+}
+
+// Múltiplas tentativas de inicialização
+console.log('🔄 Registrando listeners de inicialização...');
+
+// Tentativa 1: DOMContentLoaded
+if (document.readyState === 'loading') {
+    console.log('📄 DOM ainda carregando, aguardando...');
+    document.addEventListener('DOMContentLoaded', inicializarSistema);
+} else {
+    // DOM já está pronto
+    console.log('⚡ DOM já pronto, iniciando imediatamente...');
+    inicializarSistema();
+}
+
+// Tentativa 2: window.load (backup)
+window.addEventListener('load', () => {
+    console.log('🌐 Window.load disparado');
 });
 
-console.log('✅ Event listeners registrados');
+// Tentativa 3: Timeout de segurança (último recurso)
+setTimeout(() => {
+    console.log('⏰ Timeout de segurança: verificando se inicializou...');
+    if (!perfilAtivo && !document.getElementById('selecaoPerfis').style.display) {
+        console.warn('⚠️ Sistema não inicializou! Tentando forçar...');
+        inicializarSistema();
+    }
+}, 2000);
+
+console.log('✅ Listeners de inicialização registrados');
+console.log('🎯 Dashboard.js pronto para iniciar');
