@@ -5950,7 +5950,6 @@ function excluirCompraFatura(faturaId, compraId) {
 
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
-    verificarLogin();
     bindEventos();
     setupSidebarToggle();
 });
@@ -6632,17 +6631,59 @@ function desenharTopGastos(dados, label) {
     ctx.textAlign
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await verificarLogin();
-});
-
 window.addEventListener('beforeunload', async (e) => {
     if(perfilAtivo) {
         await salvarDados();
     }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 Dashboard carregado, iniciando verificação de login...');
-    verificarLogin();
-});
+// NO FINAL DO dashboard.js, ADICIONE ESTE BLOCO DE EXPORTAÇÃO
+
+// Função para agrupar todas as funções que precisam ser globais para o HTML
+function exportFunctions() {
+    return {
+        abrirContaFixaForm,
+        abrirPopupPagarContaFixa,
+        pagarContaFixa,
+        abrirMetaForm,
+        removerMeta,
+        selecionarMeta,
+        abrirRetiradaForm,
+        abrirCartaoForm,
+        fecharPopup,
+        atualizarGraficos,
+        gerarRelatorio,
+        alterarNome,
+        alterarEmail,
+        abrirAlterarSenha,
+        trocarPerfil,
+        comoUsar,
+        confirmarLogout,
+        mostrarTela,
+        lancarTransacao,
+        abrirDetalhesTransacao,
+        abrirVisualizacaoFatura,
+        pagarCompraIndividual,
+        editarCompraFatura,
+        excluirCompraFatura,
+        criarPopup,
+        fecharPopup,
+        exportarDadosJSON,
+        exportarDadosCSV,
+        mostrarNotificacao,
+        abrirWidgetOndeForDinheiro,
+        processarAnaliseOndeForDinheiro,
+        abrirDetalhesPerfilRelatorio,
+        abrirDetalhesCartaoRelatorio,
+        abrirAnaliseDisciplina,
+        irParaAtualizarPlano,
+        confirmarSelecaoPerfisCasal
+    };
+}
+
+// Exporta a função de inicialização e o agrupador de funções globais
+export { verificarLogin, exportFunctions };
+
+// Garante que os eventos principais sejam ligados quando o script carregar
+bindEventos();
+setupSidebarToggle();
