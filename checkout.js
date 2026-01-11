@@ -76,20 +76,26 @@ form.addEventListener('submit', async (e) => {
   const email = document.getElementById('userEmail').value.trim();
   const password = document.getElementById('userPassword').value.trim();
   const confirmPassword = document.getElementById('confirmPassword').value.trim();
+  const nomeCompleto = document.getElementById('userName').value.trim();
   
   // Validações
-  if (!email || !password || !confirmPassword) {
-    alert('Preencha todos os campos');
+  if (!email || !password || !confirmPassword || !nomeCompleto) {
+    alert('❌ Preencha todos os campos!');
     return;
   }
   
   if (password !== confirmPassword) {
-    alert('As senhas não coincidem!');
+    alert('❌ As senhas não coincidem!');
     return;
   }
   
   if (password.length < 6) {
-    alert('A senha deve ter no mínimo 6 caracteres');
+    alert('❌ A senha deve ter no mínimo 6 caracteres');
+    return;
+  }
+  
+  if (nomeCompleto.length < 3) {
+    alert('❌ Digite seu nome completo (mínimo 3 caracteres)');
     return;
   }
   
@@ -134,7 +140,12 @@ form.addEventListener('submit', async (e) => {
       console.log('✅ Token criado:', cardToken);
     }
     
-    console.log('📤 Enviando dados:', { email, planName, paymentMethod: selectedMethod });
+    console.log('📤 Enviando dados:', { 
+      email, 
+      nomeCompleto, 
+      planName, 
+      paymentMethod: selectedMethod 
+    });
     
     // Gerar idempotency key único
     const idempotencyKey = `${email}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -150,6 +161,7 @@ form.addEventListener('submit', async (e) => {
       body: JSON.stringify({
         email,
         password,
+        userName: nomeCompleto,
         planName,
         paymentMethod: selectedMethod,
         cardToken
@@ -168,9 +180,25 @@ form.addEventListener('submit', async (e) => {
     // Se for PIX, mostrar QR Code
     if (data.paymentMethod === 'pix') {
       currentPaymentId = data.paymentId;
+      
+      // Exibir QR Code
       document.getElementById('pixQrcodeImg').src = `data:image/png;base64,${data.qrCodeBase64}`;
+      
+      // Exibir código PIX para copiar
+      const pixCodeContainer = document.getElementById('pixCodeContainer');
+      const pixCopyCode = document.getElementById('pixCopyCode');
+      
+      if (pixCodeContainer && pixCopyCode && data.qrCode) {
+        pixCodeContainer.style.display = 'block';
+        pixCopyCode.value = data.qrCode;
+        console.log('✅ Código PIX exibido para copiar');
+      } else {
+        console.warn('⚠️ Elementos de código PIX não encontrados no HTML');
+      }
+      
       document.getElementById('pixQrcode').classList.add('active');
       form.style.display = 'none';
+      
     } else {
       // Se for cartão aprovado
       alert('✅ Pagamento aprovado! Verifique seu email para as credenciais de acesso.');

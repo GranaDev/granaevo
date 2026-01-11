@@ -364,25 +364,74 @@
         </button>
     </form>
 
-    <!-- SEÇÃO DO PIX -->
-    <div class="pix-qrcode" id="pixQrcode">
-        <h3 style="color: #10b981;">Escaneie o QR Code</h3>
+    <!-- SEÇÃO DO PIX - ATUALIZADA -->
+<div class="pix-qrcode" id="pixQrcode">
+    <h3 style="color: #10b981;">Escaneie o QR Code</h3>
 
-        <img id="pixQrcodeImg" src="" alt="QR Code PIX">
+    <img id="pixQrcodeImg" src="" alt="QR Code PIX">
 
-        <p style="color: rgba(255,255,255,0.7); margin: 16px 0; font-size: 14px;">
-            Após realizar o pagamento, clique no botão abaixo para confirmar.
-        </p>
-
-        <button class="submit-button" onclick="verificarPagamentoPix()">
-            ✅ Já realizei o pagamento
-        </button>
-
-        <p style="color: rgba(255,255,255,0.5); margin-top: 12px; font-size: 12px;">
-            ⏳ O sistema irá verificar se o pagamento foi aprovado antes de liberar o acesso
+    <!-- ✅ NOVO: CÓDIGO PIX PARA COPIAR -->
+    <div id="pixCodeContainer" style="display:none; margin-top:20px;">
+        <label style="display:block; color:rgba(255,255,255,0.8); margin-bottom:8px; font-weight:600;">
+            📱 Ou copie o código PIX:
+        </label>
+        <div style="display:flex; gap:8px;">
+            <input 
+                type="text" 
+                id="pixCopyCode" 
+                readonly 
+                class="form-input" 
+                style="flex:1; font-size:12px; font-family:monospace; background:rgba(255,255,255,0.1);"
+            >
+            <button 
+                class="btn-primary" 
+                onclick="copiarCodigoPix()" 
+                style="padding:12px 20px; white-space:nowrap;">
+                📋 Copiar
+            </button>
+        </div>
+        <p style="color:rgba(255,255,255,0.5); font-size:12px; margin-top:8px; text-align:center;">
+            ✅ Cole no seu app de pagamento para facilitar
         </p>
     </div>
+
+    <p style="color: rgba(255,255,255,0.7); margin: 16px 0; font-size: 14px;">
+        Após realizar o pagamento, clique no botão abaixo para confirmar.
+    </p>
+
+    <button class="submit-button" onclick="verificarPagamentoPix()">
+        ✅ Já realizei o pagamento
+    </button>
+
+    <p style="color: rgba(255,255,255,0.5); margin-top: 12px; font-size: 12px;">
+        ⏳ O sistema irá verificar se o pagamento foi aprovado antes de liberar o acesso
+    </p>
 </div>
+
+<script>
+// ✅ FUNÇÃO PARA COPIAR CÓDIGO PIX
+function copiarCodigoPix() {
+    const input = document.getElementById('pixCopyCode');
+    input.select();
+    input.setSelectionRange(0, 99999); // Para mobile
+    
+    navigator.clipboard.writeText(input.value).then(() => {
+        // Feedback visual
+        const btn = event.target;
+        const textoOriginal = btn.innerHTML;
+        btn.innerHTML = '✅ Copiado!';
+        btn.style.background = '#00ff99';
+        
+        setTimeout(() => {
+            btn.innerHTML = textoOriginal;
+            btn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+        }, 2000);
+    }).catch(err => {
+        alert('❌ Erro ao copiar. Tente manualmente.');
+        console.error('Erro ao copiar:', err);
+    });
+}
+</script>
 
 <script src="https://sdk.mercadopago.com/js/v2"></script>
 <script type="module" src="checkout.js"></script>

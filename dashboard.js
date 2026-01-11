@@ -141,35 +141,68 @@ async function carregarPerfis() {
 
 async function carregarDadosPerfil(perfilId) {
     try {
-        console.log(`📦 Carregando todos os dados para o perfil ID: ${perfilId}`);
+        console.log(`📦 Carregando TODOS os dados para o perfil ID: ${perfilId}`);
 
-        // Executa todas as buscas em paralelo para mais performance
+        // ✅ Buscar TODAS as tabelas em paralelo
         const [transData, goalsData, billsData, cardsData] = await Promise.all([
-            supabase.from('transactions').select('*').eq('profile_id', perfilId).order('date', { ascending: false }),
-            supabase.from('goals').select('*').eq('profile_id', perfilId),
-            supabase.from('fixed_bills').select('*').eq('profile_id', perfilId),
-            supabase.from('credit_cards').select('*').eq('profile_id', perfilId)
+            supabase
+                .from('transactions')
+                .select('*')
+                .eq('profile_id', perfilId)
+                .order('date', { ascending: false })
+                .order('time', { ascending: false }),
+            
+            supabase
+                .from('goals')
+                .select('*')
+                .eq('profile_id', perfilId),
+            
+            supabase
+                .from('fixed_bills')
+                .select('*')
+                .eq('profile_id', perfilId),
+            
+            supabase
+                .from('credit_cards')
+                .select('*')
+                .eq('profile_id', perfilId)
         ]);
 
-        // Verifica erros em cada uma das respostas
-        if (transData.error) throw transData.error;
-        if (goalsData.error) throw goalsData.error;
-        if (billsData.error) throw billsData.error;
-        if (cardsData.error) throw cardsData.error;
+        // ✅ Verificar erros
+        if (transData.error) {
+            console.error('❌ Erro ao buscar transações:', transData.error);
+            throw transData.error;
+        }
+        if (goalsData.error) {
+            console.error('❌ Erro ao buscar metas:', goalsData.error);
+            throw goalsData.error;
+        }
+        if (billsData.error) {
+            console.error('❌ Erro ao buscar contas fixas:', billsData.error);
+            throw billsData.error;
+        }
+        if (cardsData.error) {
+            console.error('❌ Erro ao buscar cartões:', cardsData.error);
+            throw cardsData.error;
+        }
 
-        // Mapeia os dados do Supabase para o formato local, garantindo que sejam arrays
+        // ✅ MAPEAR DADOS DO SUPABASE PARA FORMATO LOCAL
+        console.log('🔄 Mapeando dados para formato local...');
+
+        // TRANSAÇÕES
         transacoes = (transData.data || []).map(t => ({
             id: t.id,
             categoria: t.category,
             tipo: t.type,
             descricao: t.description,
             valor: parseFloat(t.value),
-            data: formatarDataBR(t.date),
+            data: formatarDataBR(t.date), // ✅ Converter ISO para BR
             hora: t.time,
             metaId: t.meta_id,
             contaFixaId: t.conta_fixa_id
         }));
 
+        // METAS
         metas = (goalsData.data || []).map(m => ({
             id: m.id,
             descricao: m.description,
@@ -178,17 +211,19 @@ async function carregarDadosPerfil(perfilId) {
             monthly: m.monthly_data || {}
         }));
 
+        // CONTAS FIXAS
         contasFixas = (billsData.data || []).map(b => ({
             id: b.id,
             descricao: b.description,
             valor: parseFloat(b.value),
-            vencimento: b.due_date,
+            vencimento: b.due_date, // ✅ Já em formato ISO
             pago: b.paid,
             cartaoId: b.card_id,
             parcelaAtual: b.installment_current,
             totalParcelas: b.installment_total
         }));
 
+        // CARTÕES
         cartoesCredito = (cardsData.data || []).map(c => ({
             id: c.id,
             nomeBanco: c.bank_name,
@@ -198,30 +233,54 @@ async function carregarDadosPerfil(perfilId) {
             bandeiraImg: c.brand_image
         }));
 
+        // ✅ ATUALIZAR CONTADORES DE IDs
+        if (transacoes.length > 0) {
+            nextTransId = Math.max(...transacoes.map(t => t.id)) + 1;
+        }
+        if (metas.length > 0) {
+            nextMetaId = Math.max(...metas.map(m => m.id)) + 1;
+        }
+        if (contasFixas.length > 0) {
+            nextContaFixaId = Math.max(...contasFixas.map(c => c.id)) + 1;
+        }
+        if (cartoesCredito.length > 0) {
+            nextCartaoId = Math.max(...cartoesCredito.map(c => c.id)) + 1;
+        }
+
         console.log('✅ Dados do perfil carregados com sucesso:', {
             transacoes: transacoes.length,
             metas: metas.length,
             contas: contasFixas.length,
-            cartoes: cartoesCredito.length
+            cartoes: cartoesCredito.length,
+            nextTransId,
+            nextMetaId,
+            nextContaFixaId,
+            nextCartaoId
         });
         
     } catch(e) {
-        console.error('❌ Erro crítico ao carregar dados do perfil:', e);
-        // Em caso de erro, zera todos os dados para garantir um estado limpo
+        console.error('❌ ERRO CRÍTICO ao carregar dados do perfil:', e);
+        
+        // ✅ Zerar arrays para garantir estado limpo
         transacoes = [];
         metas = [];
         contasFixas = [];
         cartoesCredito = [];
-        alert('Houve um erro ao carregar os dados deste perfil. Tente novamente.');
+        
+        alert('❌ Houve um erro ao carregar os dados deste perfil. Tente novamente.');
+        throw e; // Re-throw para tratamento superior
     }
 }
 
 
 async function salvarDados() {
-    if (!perfilAtivo) return;
+    if (!perfilAtivo) {
+        console.warn('⚠️ Nenhum perfil ativo. Salvamento cancelado.');
+        return;
+    }
 
     try {
-        console.log('💾 Iniciando salvamento de dados...');
+        console.log('💾 Iniciando salvamento de dados para perfil:', perfilAtivo.nome);
         
         // ========== TRANSAÇÕES ==========
         for (const t of transacoes) {
@@ -233,70 +292,99 @@ async function salvarDados() {
                 type: t.tipo,
                 description: t.descricao,
                 value: t.valor,
-                date: dataISO,  // ✅ Agora em formato correto
-                time: t.hora,   // ✅ Nome correto da coluna
+                date: dataISO,
+                time: t.hora,
                 category: t.categoria,
                 meta_id: t.metaId || null,
-                conta_fixa_id: t.contaFixaId || null  // ✅ Adicionado
+                conta_fixa_id: t.contaFixaId || null
             };
 
-            // Verificar se a transação já existe
-            const { data: existing } = await supabase
+            // ✅ CORREÇÃO: Verificar se existe PELO profile_id + descrição + data + valor
+            const { data: existing, error: searchError } = await supabase
                 .from('transactions')
                 .select('id')
-                .eq('id', t.id)
+                .eq('profile_id', perfilAtivo.id)
+                .eq('description', t.descricao)
+                .eq('date', dataISO)
+                .eq('value', t.valor)
+                .eq('time', t.hora)
                 .maybeSingle();
 
+            if (searchError) {
+                console.error('❌ Erro ao buscar transação:', searchError);
+                continue;
+            }
+
             if (existing) {
-                // Atualizar transação existente
+                // ✅ Atualizar transação existente
                 const { error } = await supabase
                     .from('transactions')
                     .update(data)
-                    .eq('id', t.id);
+                    .eq('id', existing.id);
                 
                 if (error) {
-                    console.error(`❌ Erro ao atualizar transação ${t.id}:`, error);
-                    throw error;
+                    console.error(`❌ Erro ao atualizar transação ${existing.id}:`, error);
+                } else {
+                    console.log(`✅ Transação ${existing.id} atualizada`);
+                    // ✅ Atualizar ID local com o ID do banco
+                    t.id = existing.id;
                 }
             } else {
-                // Inserir nova transação
-                const { error } = await supabase
+                // ✅ Inserir NOVA transação SEM forçar ID
+                const { data: inserted, error } = await supabase
                     .from('transactions')
-                    .insert({ ...data, id: t.id });
+                    .insert(data)
+                    .select()
+                    .single();
                 
                 if (error) {
-                    console.error(`❌ Erro ao inserir transação ${t.id}:`, error);
-                    throw error;
+                    console.error('❌ Erro ao inserir transação:', error);
+                } else {
+                    console.log(`✅ Transação inserida com ID ${inserted.id}`);
+                    // ✅ Atualizar ID local com o ID retornado do banco
+                    t.id = inserted.id;
                 }
             }
         }
         
-        console.log(`✅ ${transacoes.length} transação(ões) salva(s)`);
+        console.log(`✅ ${transacoes.length} transação(ões) processada(s)`);
 
         // ========== METAS ==========
         for (const meta of metas) {
             const metaData = {
                 profile_id: perfilAtivo.id,
                 description: meta.descricao,
-                target_amount: meta.objetivo,     // ✅ Corrigido
-                saved_amount: meta.saved,         // ✅ Corrigido
-                monthly_data: meta.monthly || {}  // ✅ Adicionado
+                target_amount: meta.objetivo,
+                saved_amount: meta.saved,
+                monthly_data: meta.monthly || {}
             };
 
             const { data: existing } = await supabase
                 .from('goals')
                 .select('id')
-                .eq('id', meta.id)
+                .eq('profile_id', perfilAtivo.id)
+                .eq('description', meta.descricao)
                 .maybeSingle();
 
             if (existing) {
-                await supabase.from('goals').update(metaData).eq('id', meta.id);
+                await supabase.from('goals').update(metaData).eq('id', existing.id);
+                meta.id = existing.id;
+                console.log(`✅ Meta ${existing.id} atualizada`);
             } else {
-                await supabase.from('goals').insert({ ...metaData, id: meta.id });
+                const { data: inserted } = await supabase
+                    .from('goals')
+                    .insert(metaData)
+                    .select()
+                    .single();
+                
+                if (inserted) {
+                    meta.id = inserted.id;
+                    console.log(`✅ Meta inserida com ID ${inserted.id}`);
+                }
             }
         }
         
-        console.log(`✅ ${metas.length} meta(s) salva(s)`);
+        console.log(`✅ ${metas.length} meta(s) processada(s)`);
 
         // ========== CONTAS FIXAS ==========
         for (const conta of contasFixas) {
@@ -307,24 +395,37 @@ async function salvarDados() {
                 due_date: conta.vencimento,
                 paid: conta.pago,
                 card_id: conta.cartaoId || null,
-                installment_current: conta.parcelaAtual || null,  // ✅ Adicionado
-                installment_total: conta.totalParcelas || null    // ✅ Adicionado
+                installment_current: conta.parcelaAtual || null,
+                installment_total: conta.totalParcelas || null
             };
 
             const { data: existing } = await supabase
                 .from('fixed_bills')
                 .select('id')
-                .eq('id', conta.id)
+                .eq('profile_id', perfilAtivo.id)
+                .eq('description', conta.descricao)
+                .eq('due_date', conta.vencimento)
                 .maybeSingle();
 
             if (existing) {
-                await supabase.from('fixed_bills').update(contaData).eq('id', conta.id);
+                await supabase.from('fixed_bills').update(contaData).eq('id', existing.id);
+                conta.id = existing.id;
+                console.log(`✅ Conta fixa ${existing.id} atualizada`);
             } else {
-                await supabase.from('fixed_bills').insert({ ...contaData, id: conta.id });
+                const { data: inserted } = await supabase
+                    .from('fixed_bills')
+                    .insert(contaData)
+                    .select()
+                    .single();
+                
+                if (inserted) {
+                    conta.id = inserted.id;
+                    console.log(`✅ Conta fixa inserida com ID ${inserted.id}`);
+                }
             }
         }
         
-        console.log(`✅ ${contasFixas.length} conta(s) fixa(s) salva(s)`);
+        console.log(`✅ ${contasFixas.length} conta(s) fixa(s) processada(s)`);
         
         // ========== CARTÕES ==========
         for (const cartao of cartoesCredito) {
@@ -340,37 +441,108 @@ async function salvarDados() {
             const { data: existing } = await supabase
                 .from('credit_cards')
                 .select('id')
-                .eq('id', cartao.id)
+                .eq('profile_id', perfilAtivo.id)
+                .eq('bank_name', cartao.nomeBanco)
                 .maybeSingle();
 
             if (existing) {
-                await supabase.from('credit_cards').update(cartaoData).eq('id', cartao.id);
+                await supabase.from('credit_cards').update(cartaoData).eq('id', existing.id);
+                cartao.id = existing.id;
+                console.log(`✅ Cartão ${existing.id} atualizado`);
             } else {
-                await supabase.from('credit_cards').insert({ ...cartaoData, id: cartao.id });
+                const { data: inserted } = await supabase
+                    .from('credit_cards')
+                    .insert(cartaoData)
+                    .select()
+                    .single();
+                
+                if (inserted) {
+                    cartao.id = inserted.id;
+                    console.log(`✅ Cartão inserido com ID ${inserted.id}`);
+                }
             }
         }
         
-        console.log(`✅ ${cartoesCredito.length} cartão(ões) salvo(s)`);
-        console.log('🎉 Todos os dados foram salvos com sucesso!');
+        console.log(`✅ ${cartoesCredito.length} cartão(ões) processado(s)`);
+        console.log('🎉 TODOS OS DADOS FORAM SALVOS COM SUCESSO!');
 
     } catch (e) {
-        console.error('❌ Erro crítico ao salvar dados:', e);
-        alert('Erro ao salvar dados. Verifique o console para mais detalhes.');
+        console.error('❌ ERRO CRÍTICO ao salvar dados:', e);
+        alert('❌ Erro ao salvar dados. Verifique o console para mais detalhes.');
     }
 }
 
 
+// ========== AUTO-SAVE CORRIGIDO ==========
 let autoSaveInterval = null;
+let ultimoSalvamento = null;
 
 function iniciarAutoSave() {
-    if (autoSaveInterval) clearInterval(autoSaveInterval);
+    // Limpar intervalo anterior se existir
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+        console.log('🔄 Auto-save anterior cancelado');
+    }
     
+    console.log('⚙️ Iniciando Auto-Save a cada 10 segundos...');
+    
+    // ✅ Salvar a cada 10 segundos
     autoSaveInterval = setInterval(async () => {
-        if (perfilAtivo && transacoes.length > 0) {
-            await salvarDados();
-            console.log('🔄 Auto-save executado');
+        if (!perfilAtivo) {
+            console.warn('⚠️ Auto-save: Nenhum perfil ativo');
+            return;
         }
+        
+        // ✅ Verificar se há dados para salvar
+        const temDados = transacoes.length > 0 || 
+                        metas.length > 0 || 
+                        contasFixas.length > 0 || 
+                        cartoesCredito.length > 0;
+        
+        if (!temDados) {
+            console.log('ℹ️ Auto-save: Sem dados para salvar');
+            return;
+        }
+        
+        const agora = Date.now();
+        
+        // ✅ Evitar salvar duas vezes seguidas rapidamente (debounce)
+        if (ultimoSalvamento && (agora - ultimoSalvamento) < 5000) {
+            console.log('⏭️ Auto-save: Aguardando intervalo mínimo');
+            return;
+        }
+        
+        console.log('💾 Auto-save executando...');
+        await salvarDados();
+        ultimoSalvamento = agora;
+        console.log('✅ Auto-save concluído:', new Date().toLocaleTimeString());
+        
     }, 10000); // 10 segundos
+}
+
+// ✅ Parar auto-save quando sair
+function pararAutoSave() {
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+        autoSaveInterval = null;
+        console.log('🛑 Auto-save interrompido');
+    }
+}
+
+// ✅ Salvar antes de sair da página
+window.addEventListener('beforeunload', async (e) => {
+    if (perfilAtivo) {
+        console.log('🚪 Salvando dados antes de sair...');
+        await salvarDados();
+    }
+});
+
+// ✅ Salvar ao trocar de perfil
+async function trocarPerfil() {
+    console.log('🔄 Salvando dados antes de trocar perfil...');
+    await salvarDados();
+    pararAutoSave();
+    mostrarSelecaoPerfis();
 }
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
@@ -1494,6 +1666,7 @@ function lancarTransacao() {
     const descricao = document.getElementById('inputDescricao').value.trim();
     const valorStr = document.getElementById('inputValor').value;
     
+    // ✅ Validações
     if(!categoria) return alert('Escolha Entrada, Saída ou Reserva.');
     if(categoria === 'reserva' && metas.filter(m => m.id !== 'emergency').length === 0) {
         return alert('Você ainda não criou nenhuma meta ou reserva, crie no menu "Reservas"');
@@ -1593,7 +1766,7 @@ function lancarTransacao() {
     return;
 }
     
-    let showTipo = tipo;
+     let showTipo = tipo;
     let metaId = null;
     if(categoria === 'reserva') {
         if(tipo.startsWith('meta_')) {
@@ -1602,6 +1775,7 @@ function lancarTransacao() {
         }
     }
     
+    // ✅ POPUP DE CONFIRMAÇÃO
     criarPopup(`
         <h3>Comprovante</h3>
         <div class="small">Confirme antes de lançar</div>
@@ -1617,7 +1791,7 @@ function lancarTransacao() {
         <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
     `);
     
-    document.getElementById('confirmBtn').onclick = () => {
+    document.getElementById('confirmBtn').onclick = async () => {
         let metaIdInner = null;
         let tipoSalvo = tipo;
         if(categoria === 'reserva') {
@@ -1627,9 +1801,9 @@ function lancarTransacao() {
             }
         }
         
-        const id = nextTransId++;
+        // ✅ NÃO usar nextTransId aqui, deixar o banco gerar
         const t = {
-            id,
+            id: null, // ✅ Será gerado pelo banco
             categoria,
             tipo: tipoSalvo,
             descricao,
@@ -1638,8 +1812,11 @@ function lancarTransacao() {
             hora: dh.hora,
             metaId: metaIdInner
         };
+        
+        // ✅ Adicionar ao array LOCAL
         transacoes.push(t);
         
+        // ✅ Atualizar meta se for reserva
         if(categoria === 'reserva' && metaIdInner) {
             let meta = metas.find(m => String(m.id) === String(metaIdInner));
             if(meta) {
@@ -1650,14 +1827,22 @@ function lancarTransacao() {
             }
         }
         
-        salvarDados();
+        // ✅ SALVAR IMEDIATAMENTE NO BANCO
+        console.log('💾 Salvando transação no banco...');
+        await salvarDados();
+        
+        // ✅ Atualizar interface
         atualizarTudo();
         fecharPopup();
         
+        // ✅ Limpar formulário
         document.getElementById('selectCategoria').value = '';
         document.getElementById('selectTipo').innerHTML = '<option value="">Tipo</option>';
         document.getElementById('inputDescricao').value = '';
         document.getElementById('inputValor').value = '';
+        
+        // ✅ Feedback visual
+        mostrarNotificacao('✅ Transação salva com sucesso!', 'success');
     };
 }
 
