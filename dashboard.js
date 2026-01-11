@@ -94,12 +94,14 @@ function getMesNome(mes) {
 async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
+        
         if (!session) {
-            console.error('❌ Sessão não encontrada ao carregar perfis.');
+            console.error('❌ ERRO: Sessão não encontrada ao carregar perfis.');
             throw new Error('Sessão de usuário inválida.');
         }
 
         console.log('🔍 Buscando perfis para o usuário:', session.user.id);
+        console.log('📧 Email do usuário:', session.user.email);
 
         const { data: perfis, error } = await supabase
             .from('profiles')
@@ -109,34 +111,54 @@ async function carregarPerfis() {
 
         if (error) {
             console.error('❌ Erro ao buscar perfis no Supabase:', error);
+            console.error('Código do erro:', error.code);
+            console.error('Mensagem:', error.message);
             throw error;
         }
 
-        console.log('📦 Perfis retornados do banco:', perfis);
+        console.log('📦 DADOS BRUTOS retornados do Supabase:', perfis);
+        console.log('📊 Quantidade de perfis encontrados:', perfis ? perfis.length : 0);
 
         if (perfis && perfis.length > 0) {
             console.log(`✅ ${perfis.length} perfil(s) encontrado(s).`);
             
-            // ✅ MAPEAR CORRETAMENTE OS PERFIS
-            usuarioLogado.perfis = perfis.map(p => ({
-                id: p.id,
-                nome: p.name,
-                foto: p.photo_url
-            }));
+            // ✅ MAPEAR CORRETAMENTE OS PERFIS COM LOGS DETALHADOS
+            usuarioLogado.perfis = perfis.map((p, index) => {
+                console.log(`🔄 Mapeando perfil ${index + 1}:`, {
+                    id: p.id,
+                    nome_original: p.name,
+                    foto_original: p.photo_url,
+                    user_id: p.user_id
+                });
+                
+                return {
+                    id: p.id,
+                    nome: p.name,
+                    foto: p.photo_url
+                };
+            });
             
-            console.log('✅ Perfis mapeados:', usuarioLogado.perfis);
+            console.log('✅ Perfis MAPEADOS com sucesso:', usuarioLogado.perfis);
             
+            // ✅ Atualizar tabela de gerenciamento
             await atualizarTabelaGerenciamento(session.user.id);
             
             return { sucesso: true, perfisEncontrados: true };
+            
         } else {
-            console.log('⚠️ Nenhum perfil encontrado. A tela de criação será exibida.');
+            console.log('⚠️ Nenhum perfil encontrado no banco de dados.');
+            console.log('📝 Isso significa que o usuário ainda não criou nenhum perfil.');
+            
             usuarioLogado.perfis = [];
             return { sucesso: true, perfisEncontrados: false };
         }
         
     } catch(e) {
-        console.error('❌ Erro crítico na função carregarPerfis:', e.message);
+        console.error('❌ ERRO CRÍTICO na função carregarPerfis:');
+        console.error('Tipo do erro:', e.name);
+        console.error('Mensagem:', e.message);
+        console.error('Stack trace:', e.stack);
+        
         usuarioLogado.perfis = [];
         return { sucesso: false, perfisEncontrados: false, erro: e };
     }
@@ -529,68 +551,6 @@ async function trocarPerfil() {
     mostrarSelecaoPerfis();
 }
 
-// ========== VERIFICAÇÃO DE LOGIN ==========
-async function verificarLogin() {
-    const authLoading = document.getElementById('authLoading');
-    const protectedContent = document.querySelector('[data-protected-content]');
-
-    try {
-        if (authLoading) authLoading.style.display = 'flex';
-        if (protectedContent) protectedContent.style.display = 'none';
-
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-        if (sessionError || !session) {
-            console.log('🔌 Sessão não encontrada ou erro. Redirecionando para login.');
-            window.location.href = 'login.html';
-            return;
-        }
-
-        // A verificação de assinatura pode ser mantida ou removida se já houver um Auth Guard
-        const { data: subscription, error: subError } = await supabase
-            .from('subscriptions')
-            .select('plans(name)')
-            .eq('user_id', session.user.id)
-            .eq('payment_status', 'approved')
-            .single();
-
-        if (subError || !subscription) {
-            console.log('🧾 Assinatura não encontrada ou inválida. Redirecionando para planos.');
-            window.location.href = 'planos.html';
-            return;
-        }
-
-        usuarioLogado = {
-            userId: session.user.id,
-            nome: session.user.user_metadata?.name || session.user.email,
-            plano: subscription.plans.name,
-            perfis: []
-        };
-
-        // Chama a nova função carregarPerfis e aguarda seu resultado detalhado
-        const resultadoPerfis = await carregarPerfis();
-
-        if (!resultadoPerfis.sucesso) {
-            // Se houve um erro crítico no Supabase, é mais seguro deslogar.
-            throw new Error("Não foi possível carregar os dados do usuário. Tente fazer login novamente.");
-        }
-        
-        // Agora, com os perfis carregados (ou a certeza de que não existem), mostramos a tela de seleção.
-        // A própria tela de seleção saberá o que renderizar (lista de perfis ou botão de criar).
-        console.log('✅ Verificação concluída. Exibindo tela de seleção de perfis.');
-        mostrarSelecaoPerfis();
-
-    } catch (e) {
-        console.error('❌ Erro crítico na inicialização:', e.message);
-        alert(e.message); // Informa o usuário sobre o erro
-        AuthGuard.performLogout(); // Usa a função de logout do seu auth-guard
-    } finally {
-        // Esconde o loading e mostra o conteúdo principal (que conterá a tela de perfis)
-        if (authLoading) authLoading.style.display = 'none';
-        if (protectedContent) protectedContent.style.display = 'block';
-    }
-}
-
 
 
 // ========== SELEÇÃO DE PERFIS ==========
@@ -598,29 +558,50 @@ function mostrarSelecaoPerfis() {
     const selecao = document.getElementById('selecaoPerfis');
     const sidebar = document.getElementById('sidebar');
 
+    console.log('🎬 ===== EXIBINDO TELA DE SELEÇÃO DE PERFIS =====');
+
     if (!selecao) {
-        console.error('❌ Elemento #selecaoPerfis não existe no HTML');
+        console.error('❌ ERRO CRÍTICO: Elemento #selecaoPerfis NÃO EXISTE no HTML!');
+        console.error('Verifique se o HTML contém: <div id="selecaoPerfis">');
         return;
     }
 
-    console.log('🎬 Exibindo tela de seleção de perfis...');
+    console.log('✅ Elemento #selecaoPerfis encontrado');
+    console.log('📊 Estado atual do elemento:');
+    console.log('  - Display:', window.getComputedStyle(selecao).display);
+    console.log('  - Visibilidade:', window.getComputedStyle(selecao).visibility);
 
+    // ✅ EXIBIR TELA DE SELEÇÃO
     selecao.style.display = 'flex';
-    if (sidebar) sidebar.style.display = 'none';
+    console.log('✅ Tela de perfis definida como display: flex');
+    
+    // ✅ OCULTAR SIDEBAR
+    if (sidebar) {
+        sidebar.style.display = 'none';
+        console.log('✅ Sidebar ocultada');
+    } else {
+        console.warn('⚠️ Sidebar não encontrada');
+    }
 
     // ✅ ESCONDER TODAS AS PÁGINAS
-    document.querySelectorAll('.page').forEach(p => {
+    const paginas = document.querySelectorAll('.page');
+    console.log(`🔄 Ocultando ${paginas.length} página(s)...`);
+    
+    paginas.forEach((p, index) => {
         p.style.display = 'none';
         p.classList.remove('active');
+        console.log(`  - Página ${index + 1} ocultada`);
     });
 
     // ✅ ATUALIZAR TELA DE PERFIS
+    console.log('🎨 Chamando atualizarTelaPerfis()...');
     atualizarTelaPerfis();
     
     // ✅ SOLICITAR PERMISSÕES DE NOTIFICAÇÃO
+    console.log('🔔 Solicitando permissões de notificação...');
     solicitarPermissaoNotificacoes();
     
-    console.log('✅ Tela de seleção de perfis exibida');
+    console.log('🎉 ===== TELA DE SELEÇÃO EXIBIDA COM SUCESSO =====');
 }
 
 // ========== ATUALIZAR TELA DE PERFIS - CORRIGIDO ==========
@@ -629,19 +610,24 @@ function atualizarTelaPerfis() {
     const lista = document.getElementById('listaPerfis');
 
     if (!saudacao || !lista) {
-        console.error('❌ Elementos da tela de perfis não encontrados no HTML');
+        console.error('❌ ERRO: Elementos da tela de perfis não encontrados no HTML');
+        console.error('saudacao existe?', !!saudacao);
+        console.error('lista existe?', !!lista);
         return;
     }
 
     console.log('🎨 Atualizando tela de perfis...');
+    console.log('📊 Dados do usuário logado:', usuarioLogado);
     console.log('📊 Perfis disponíveis:', usuarioLogado.perfis);
     console.log('📊 Limite do plano:', limitesPlano[usuarioLogado.plano]);
 
     // ✅ ATUALIZAR SAUDAÇÃO
     saudacao.innerHTML = `Olá <b>${usuarioLogado.nome}</b> — Plano <b>${usuarioLogado.plano}</b>`;
+    console.log('✅ Saudação atualizada:', saudacao.innerHTML);
     
     // ✅ LIMPAR LISTA
     lista.innerHTML = '';
+    console.log('🧹 Lista de perfis limpa');
 
     // ✅ VERIFICAR SE HÁ PERFIS
     if (!usuarioLogado.perfis || usuarioLogado.perfis.length === 0) {
@@ -660,20 +646,27 @@ function atualizarTelaPerfis() {
                 </button>
             </div>
         `;
+        
+        console.log('✅ Mensagem de "nenhum perfil" exibida');
         return;
     }
 
     // ✅ RENDERIZAR PERFIS EXISTENTES
+    console.log(`🔄 Renderizando ${usuarioLogado.perfis.length} perfil(s)...`);
+    
     usuarioLogado.perfis.forEach((perfil, index) => {
+        console.log(`🎨 Renderizando perfil ${index + 1}:`, perfil);
+        
         const btn = document.createElement('button');
         btn.className = 'perfil-card';
 
         const inicialNome = perfil.nome ? perfil.nome[0].toUpperCase() : 'U';
+        console.log(`📝 Inicial do nome: ${inicialNome}`);
 
         btn.innerHTML = `
             <div class="perfil-foto">
                 ${perfil.foto 
-                    ? `<img src="${perfil.foto}" alt="${perfil.nome}">`
+                    ? `<img src="${perfil.foto}" alt="${perfil.nome}" onerror="console.error('Erro ao carregar foto:', this.src)">`
                     : `<div class="perfil-placeholder">${inicialNome}</div>`
                 }
             </div>
@@ -681,16 +674,17 @@ function atualizarTelaPerfis() {
         `;
 
         btn.onclick = () => {
-            console.log(`🎯 Perfil selecionado: ${perfil.nome} (ID: ${perfil.id})`);
+            console.log(`🎯 Perfil "${perfil.nome}" clicado (ID: ${perfil.id})`);
             entrarNoPerfil(index);
         };
         
         lista.appendChild(btn);
-        console.log(`✅ Perfil renderizado: ${perfil.nome}`);
+        console.log(`✅ Perfil "${perfil.nome}" renderizado com sucesso`);
     });
 
     // ✅ BOTÃO DE ADICIONAR NOVO PERFIL (se ainda tiver espaço)
     const limiteAtual = limitesPlano[usuarioLogado.plano] || 1;
+    console.log(`📊 Verificando limite: ${usuarioLogado.perfis.length}/${limiteAtual}`);
     
     if (usuarioLogado.perfis.length < limiteAtual) {
         const add = document.createElement('button');
@@ -709,7 +703,7 @@ function atualizarTelaPerfis() {
         console.log(`ℹ️ Limite de perfis atingido (${limiteAtual}/${limiteAtual})`);
     }
 
-    console.log('✅ Tela de perfis atualizada com sucesso');
+    console.log('🎉 Tela de perfis atualizada com SUCESSO!');
 }
 
 // ========== VERIFICAR LOGIN - CORRIGIDO ==========
@@ -718,22 +712,39 @@ async function verificarLogin() {
     const protectedContent = document.querySelector('[data-protected-content]');
 
     try {
-        if (authLoading) authLoading.style.display = 'flex';
-        if (protectedContent) protectedContent.style.display = 'none';
+        console.log('🔐 ===== INICIANDO VERIFICAÇÃO DE LOGIN =====');
+        
+        if (authLoading) {
+            authLoading.style.display = 'flex';
+            console.log('⏳ Loading exibido');
+        }
+        
+        if (protectedContent) {
+            protectedContent.style.display = 'none';
+            console.log('🔒 Conteúdo protegido ocultado');
+        }
 
-        console.log('🔐 Verificando sessão...');
-
+        console.log('📡 Verificando sessão no Supabase...');
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        if (sessionError || !session) {
-            console.log('🔌 Sessão não encontrada ou erro. Redirecionando para login.');
+        if (sessionError) {
+            console.error('❌ Erro ao obter sessão:', sessionError);
+            throw sessionError;
+        }
+
+        if (!session) {
+            console.log('🔌 Sessão não encontrada. Redirecionando para login...');
             window.location.href = 'login.html';
             return;
         }
 
-        console.log('✅ Sessão encontrada:', session.user.email);
+        console.log('✅ Sessão encontrada:');
+        console.log('  - User ID:', session.user.id);
+        console.log('  - Email:', session.user.email);
+        console.log('  - Metadata:', session.user.user_metadata);
 
         // ✅ VERIFICAR ASSINATURA
+        console.log('💳 Verificando assinatura ativa...');
         const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
             .select('plans(name)')
@@ -741,8 +752,15 @@ async function verificarLogin() {
             .eq('payment_status', 'approved')
             .single();
 
-        if (subError || !subscription) {
-            console.log('🧾 Assinatura não encontrada ou inválida. Redirecionando para planos.');
+        if (subError) {
+            console.error('❌ Erro ao verificar assinatura:', subError);
+            console.log('🔄 Redirecionando para página de planos...');
+            window.location.href = 'planos.html';
+            return;
+        }
+
+        if (!subscription) {
+            console.log('🧾 Nenhuma assinatura ativa encontrada. Redirecionando...');
             window.location.href = 'planos.html';
             return;
         }
@@ -760,19 +778,27 @@ async function verificarLogin() {
         console.log('👤 Usuário logado configurado:', usuarioLogado);
 
         // ✅ CARREGAR PERFIS
-        console.log('📂 Carregando perfis...');
+        console.log('📂 Carregando perfis do banco de dados...');
         const resultadoPerfis = await carregarPerfis();
 
+        console.log('📊 Resultado do carregamento de perfis:', resultadoPerfis);
+
         if (!resultadoPerfis.sucesso) {
+            console.error('❌ Falha ao carregar perfis');
             throw new Error("Não foi possível carregar os dados do usuário. Tente fazer login novamente.");
         }
         
-        console.log('✅ Perfis carregados. Exibindo tela de seleção...');
+        console.log('✅ Perfis carregados com sucesso!');
+        console.log('🎬 Exibindo tela de seleção de perfis...');
         mostrarSelecaoPerfis();
 
     } catch (e) {
-        console.error('❌ Erro crítico na inicialização:', e.message);
-        alert(e.message);
+        console.error('❌ ===== ERRO CRÍTICO NA INICIALIZAÇÃO =====');
+        console.error('Tipo:', e.name);
+        console.error('Mensagem:', e.message);
+        console.error('Stack:', e.stack);
+        
+        alert(`Erro ao inicializar: ${e.message}`);
         
         if (typeof AuthGuard !== 'undefined' && AuthGuard.performLogout) {
             AuthGuard.performLogout();
@@ -780,8 +806,19 @@ async function verificarLogin() {
             window.location.href = 'login.html';
         }
     } finally {
-        if (authLoading) authLoading.style.display = 'none';
-        if (protectedContent) protectedContent.style.display = 'block';
+        console.log('🏁 Finalizando verificação de login...');
+        
+        if (authLoading) {
+            authLoading.style.display = 'none';
+            console.log('✅ Loading ocultado');
+        }
+        
+        if (protectedContent) {
+            protectedContent.style.display = 'block';
+            console.log('✅ Conteúdo protegido exibido');
+        }
+        
+        console.log('🔐 ===== VERIFICAÇÃO DE LOGIN CONCLUÍDA =====');
     }
 }
 
