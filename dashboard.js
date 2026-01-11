@@ -14,7 +14,7 @@ let usuarioAtual = {
     foto: null 
 };
 
-let usuarioLogado = {
+window.usuarioLogado = {
     nome: "Fulano",
     plano: "Casal",
     perfis: []
@@ -123,8 +123,8 @@ async function carregarPerfis() {
             console.log(`✅ ${perfis.length} perfil(s) encontrado(s).`);
             
             // ✅ MAPEAR CORRETAMENTE OS PERFIS COM LOGS DETALHADOS
-            usuarioLogado.perfis = perfis.map((p, index) => {
-                console.log(`🔄 Mapeando perfil ${index + 1}:`, {
+            window.usuarioLogado.perfis = perfis.map((p, index) => {
+                console.log(`📄 Mapeando perfil ${index + 1}:`, {
                     id: p.id,
                     nome_original: p.name,
                     foto_original: p.photo_url,
@@ -768,12 +768,10 @@ async function verificarLogin() {
         console.log('✅ Assinatura ativa:', subscription.plans.name);
 
         // ✅ CONFIGURAR USUÁRIO LOGADO
-        usuarioLogado = {
-            userId: session.user.id,
-            nome: session.user.user_metadata?.name || session.user.email.split('@')[0],
-            plano: subscription.plans.name,
-            perfis: []
-        };
+        window.usuarioLogado.userId = session.user.id;
+        window.usuarioLogado.nome = session.user.user_metadata?.name || session.user.email.split('@')[0];
+        window.usuarioLogado.plano = subscription.plans.name;
+        window.usuarioLogado.perfis = []; // Resetar perfis
 
         console.log('👤 Usuário logado configurado:', usuarioLogado);
 
