@@ -712,7 +712,7 @@ async function verificarLogin() {
     const protectedContent = document.querySelector('[data-protected-content]');
 
     try {
-        console.log('🔐 ===== INICIANDO VERIFICAÇÃO DE LOGIN =====');
+        console.log('🔍 ===== DASHBOARD.JS: INICIANDO VERIFICAÇÃO DE LOGIN =====');
         
         if (authLoading) {
             authLoading.style.display = 'flex';
@@ -733,7 +733,7 @@ async function verificarLogin() {
         }
 
         if (!session) {
-            console.log('🔌 Sessão não encontrada. Redirecionando para login...');
+            console.log('🚪 Sessão não encontrada. Redirecionando para login...');
             window.location.href = 'login.html';
             return;
         }
@@ -741,7 +741,6 @@ async function verificarLogin() {
         console.log('✅ Sessão encontrada:');
         console.log('  - User ID:', session.user.id);
         console.log('  - Email:', session.user.email);
-        console.log('  - Metadata:', session.user.user_metadata);
 
         // ✅ VERIFICAR ASSINATURA
         console.log('💳 Verificando assinatura ativa...');
@@ -772,6 +771,7 @@ async function verificarLogin() {
             userId: session.user.id,
             nome: session.user.user_metadata?.name || session.user.email.split('@')[0],
             plano: subscription.plans.name,
+            email: session.user.email,
             perfis: []
         };
 
@@ -789,6 +789,10 @@ async function verificarLogin() {
         }
         
         console.log('✅ Perfis carregados com sucesso!');
+        console.log('📋 Total de perfis:', usuarioLogado.perfis.length);
+        console.log('📋 Perfis:', usuarioLogado.perfis);
+        
+        // ✅ EXIBIR TELA DE SELEÇÃO
         console.log('🎬 Exibindo tela de seleção de perfis...');
         mostrarSelecaoPerfis();
 
@@ -818,7 +822,7 @@ async function verificarLogin() {
             console.log('✅ Conteúdo protegido exibido');
         }
         
-        console.log('🔐 ===== VERIFICAÇÃO DE LOGIN CONCLUÍDA =====');
+        console.log('🔍 ===== VERIFICAÇÃO DE LOGIN CONCLUÍDA =====');
     }
 }
 
@@ -6706,3 +6710,26 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Dashboard carregado, iniciando verificação de login...');
     verificarLogin();
 });
+
+// ========== INICIALIZAÇÃO AUTOMÁTICA ==========
+console.log('🚀 Dashboard.js carregado, aguardando DOMContentLoaded...');
+
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('📄 DOM carregado, iniciando sistema...');
+    
+    // Aguardar um pouco para garantir que tudo foi carregado
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    console.log('🎯 Executando verificarLogin()...');
+    await verificarLogin();
+    
+    console.log('🎯 Vinculando eventos...');
+    bindEventos();
+    
+    console.log('🎯 Configurando sidebar...');
+    setupSidebarToggle();
+    
+    console.log('✅ Sistema inicializado completamente!');
+});
+
+console.log('✅ Event listeners registrados');
