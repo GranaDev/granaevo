@@ -112,15 +112,20 @@ async function carregarPerfis() {
             throw error;
         }
 
+        console.log('📦 Perfis retornados do banco:', perfis);
+
         if (perfis && perfis.length > 0) {
             console.log(`✅ ${perfis.length} perfil(s) encontrado(s).`);
+            
+            // ✅ MAPEAR CORRETAMENTE OS PERFIS
             usuarioLogado.perfis = perfis.map(p => ({
                 id: p.id,
                 nome: p.name,
-                foto: p.photo_url // ✅ CORRIGIDO
+                foto: p.photo_url
             }));
             
-            // ✅ Atualizar tabela de gerenciamento
+            console.log('✅ Perfis mapeados:', usuarioLogado.perfis);
+            
             await atualizarTabelaGerenciamento(session.user.id);
             
             return { sucesso: true, perfisEncontrados: true };
@@ -598,54 +603,185 @@ function mostrarSelecaoPerfis() {
         return;
     }
 
+    console.log('🎬 Exibindo tela de seleção de perfis...');
+
     selecao.style.display = 'flex';
     if (sidebar) sidebar.style.display = 'none';
 
+    // ✅ ESCONDER TODAS AS PÁGINAS
     document.querySelectorAll('.page').forEach(p => {
         p.style.display = 'none';
         p.classList.remove('active');
     });
 
+    // ✅ ATUALIZAR TELA DE PERFIS
     atualizarTelaPerfis();
+    
+    // ✅ SOLICITAR PERMISSÕES DE NOTIFICAÇÃO
     solicitarPermissaoNotificacoes();
+    
+    console.log('✅ Tela de seleção de perfis exibida');
 }
 
+// ========== ATUALIZAR TELA DE PERFIS - CORRIGIDO ==========
 function atualizarTelaPerfis() {
     const saudacao = document.getElementById('saudacaoPerfis');
     const lista = document.getElementById('listaPerfis');
 
     if (!saudacao || !lista) {
-        console.error('❌ Tela de perfis incompleta no HTML');
+        console.error('❌ Elementos da tela de perfis não encontrados no HTML');
         return;
     }
 
+    console.log('🎨 Atualizando tela de perfis...');
+    console.log('📊 Perfis disponíveis:', usuarioLogado.perfis);
+    console.log('📊 Limite do plano:', limitesPlano[usuarioLogado.plano]);
+
+    // ✅ ATUALIZAR SAUDAÇÃO
     saudacao.innerHTML = `Olá <b>${usuarioLogado.nome}</b> — Plano <b>${usuarioLogado.plano}</b>`;
+    
+    // ✅ LIMPAR LISTA
     lista.innerHTML = '';
 
+    // ✅ VERIFICAR SE HÁ PERFIS
+    if (!usuarioLogado.perfis || usuarioLogado.perfis.length === 0) {
+        console.log('⚠️ Nenhum perfil cadastrado ainda');
+        
+        // ✅ MOSTRAR MENSAGEM E BOTÃO PARA CRIAR PRIMEIRO PERFIL
+        lista.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+                <div style="font-size: 3rem; margin-bottom: 20px; opacity: 0.5;">👤</div>
+                <h3 style="color: var(--text-primary); margin-bottom: 12px;">Nenhum perfil criado ainda</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 24px;">
+                    Crie seu primeiro perfil para começar a usar o GranaEvo
+                </p>
+                <button class="btn-primary" onclick="adicionarNovoPerfil()" style="padding: 12px 24px; font-size: 1rem;">
+                    ➕ Criar Primeiro Perfil
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    // ✅ RENDERIZAR PERFIS EXISTENTES
     usuarioLogado.perfis.forEach((perfil, index) => {
         const btn = document.createElement('button');
         btn.className = 'perfil-card';
 
+        const inicialNome = perfil.nome ? perfil.nome[0].toUpperCase() : 'U';
+
         btn.innerHTML = `
             <div class="perfil-foto">
                 ${perfil.foto 
-                    ? `<img src="${perfil.foto}">`
-                    : `<div class="perfil-placeholder">${perfil.nome[0]}</div>`
+                    ? `<img src="${perfil.foto}" alt="${perfil.nome}">`
+                    : `<div class="perfil-placeholder">${inicialNome}</div>`
                 }
             </div>
             <div class="perfil-nome">${perfil.nome}</div>
         `;
 
-        btn.onclick = () => entrarNoPerfil(index);
+        btn.onclick = () => {
+            console.log(`🎯 Perfil selecionado: ${perfil.nome} (ID: ${perfil.id})`);
+            entrarNoPerfil(index);
+        };
+        
         lista.appendChild(btn);
+        console.log(`✅ Perfil renderizado: ${perfil.nome}`);
     });
 
-    if (usuarioLogado.perfis.length < limitesPlano[usuarioLogado.plano]) {
+    // ✅ BOTÃO DE ADICIONAR NOVO PERFIL (se ainda tiver espaço)
+    const limiteAtual = limitesPlano[usuarioLogado.plano] || 1;
+    
+    if (usuarioLogado.perfis.length < limiteAtual) {
         const add = document.createElement('button');
         add.className = 'perfil-card perfil-add';
-        add.innerHTML = `<div class="perfil-foto">+</div><div>Novo Perfil</div>`;
-        add.onclick = adicionarNovoPerfil;
+        add.innerHTML = `
+            <div class="perfil-foto">+</div>
+            <div>Novo Perfil</div>
+        `;
+        add.onclick = () => {
+            console.log('➕ Botão "Novo Perfil" clicado');
+            adicionarNovoPerfil();
+        };
         lista.appendChild(add);
+        console.log('✅ Botão "Novo Perfil" renderizado');
+    } else {
+        console.log(`ℹ️ Limite de perfis atingido (${limiteAtual}/${limiteAtual})`);
+    }
+
+    console.log('✅ Tela de perfis atualizada com sucesso');
+}
+
+// ========== VERIFICAR LOGIN - CORRIGIDO ==========
+async function verificarLogin() {
+    const authLoading = document.getElementById('authLoading');
+    const protectedContent = document.querySelector('[data-protected-content]');
+
+    try {
+        if (authLoading) authLoading.style.display = 'flex';
+        if (protectedContent) protectedContent.style.display = 'none';
+
+        console.log('🔐 Verificando sessão...');
+
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError || !session) {
+            console.log('🔌 Sessão não encontrada ou erro. Redirecionando para login.');
+            window.location.href = 'login.html';
+            return;
+        }
+
+        console.log('✅ Sessão encontrada:', session.user.email);
+
+        // ✅ VERIFICAR ASSINATURA
+        const { data: subscription, error: subError } = await supabase
+            .from('subscriptions')
+            .select('plans(name)')
+            .eq('user_id', session.user.id)
+            .eq('payment_status', 'approved')
+            .single();
+
+        if (subError || !subscription) {
+            console.log('🧾 Assinatura não encontrada ou inválida. Redirecionando para planos.');
+            window.location.href = 'planos.html';
+            return;
+        }
+
+        console.log('✅ Assinatura ativa:', subscription.plans.name);
+
+        // ✅ CONFIGURAR USUÁRIO LOGADO
+        usuarioLogado = {
+            userId: session.user.id,
+            nome: session.user.user_metadata?.name || session.user.email.split('@')[0],
+            plano: subscription.plans.name,
+            perfis: []
+        };
+
+        console.log('👤 Usuário logado configurado:', usuarioLogado);
+
+        // ✅ CARREGAR PERFIS
+        console.log('📂 Carregando perfis...');
+        const resultadoPerfis = await carregarPerfis();
+
+        if (!resultadoPerfis.sucesso) {
+            throw new Error("Não foi possível carregar os dados do usuário. Tente fazer login novamente.");
+        }
+        
+        console.log('✅ Perfis carregados. Exibindo tela de seleção...');
+        mostrarSelecaoPerfis();
+
+    } catch (e) {
+        console.error('❌ Erro crítico na inicialização:', e.message);
+        alert(e.message);
+        
+        if (typeof AuthGuard !== 'undefined' && AuthGuard.performLogout) {
+            AuthGuard.performLogout();
+        } else {
+            window.location.href = 'login.html';
+        }
+    } finally {
+        if (authLoading) authLoading.style.display = 'none';
+        if (protectedContent) protectedContent.style.display = 'block';
     }
 }
 
