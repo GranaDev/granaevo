@@ -138,12 +138,10 @@ async function carregarPerfis() {
 }
 
 
-
 async function carregarDadosPerfil(perfilId) {
     try {
         console.log(`📦 Carregando TODOS os dados para o perfil ID: ${perfilId}`);
 
-        // ✅ Buscar TODAS as tabelas em paralelo
         const [transData, goalsData, billsData, cardsData] = await Promise.all([
             supabase
                 .from('transactions')
@@ -168,25 +166,11 @@ async function carregarDadosPerfil(perfilId) {
                 .eq('profile_id', perfilId)
         ]);
 
-        // ✅ Verificar erros
-        if (transData.error) {
-            console.error('❌ Erro ao buscar transações:', transData.error);
-            throw transData.error;
-        }
-        if (goalsData.error) {
-            console.error('❌ Erro ao buscar metas:', goalsData.error);
-            throw goalsData.error;
-        }
-        if (billsData.error) {
-            console.error('❌ Erro ao buscar contas fixas:', billsData.error);
-            throw billsData.error;
-        }
-        if (cardsData.error) {
-            console.error('❌ Erro ao buscar cartões:', cardsData.error);
-            throw cardsData.error;
-        }
+        if (transData.error) throw transData.error;
+        if (goalsData.error) throw goalsData.error;
+        if (billsData.error) throw billsData.error;
+        if (cardsData.error) throw cardsData.error;
 
-        // ✅ MAPEAR DADOS DO SUPABASE PARA FORMATO LOCAL
         console.log('🔄 Mapeando dados para formato local...');
 
         // TRANSAÇÕES
@@ -196,7 +180,7 @@ async function carregarDadosPerfil(perfilId) {
             tipo: t.type,
             descricao: t.description,
             valor: parseFloat(t.value),
-            data: formatarDataBR(t.date), // ✅ Converter ISO para BR
+            data: formatarDataBR(t.date),
             hora: t.time,
             metaId: t.meta_id,
             contaFixaId: t.conta_fixa_id
@@ -208,7 +192,8 @@ async function carregarDadosPerfil(perfilId) {
             descricao: m.description,
             objetivo: parseFloat(m.target_amount),
             saved: parseFloat(m.saved_amount),
-            monthly: m.monthly_data || {}
+            monthly: m.monthly_data || {},
+            historicoRetiradas: m.withdrawal_history || [] // ✅ NOVO CAMPO
         }));
 
         // CONTAS FIXAS
@@ -216,11 +201,13 @@ async function carregarDadosPerfil(perfilId) {
             id: b.id,
             descricao: b.description,
             valor: parseFloat(b.value),
-            vencimento: b.due_date, // ✅ Já em formato ISO
+            vencimento: b.due_date,
             pago: b.paid,
             cartaoId: b.card_id,
             parcelaAtual: b.installment_current,
-            totalParcelas: b.installment_total
+            totalParcelas: b.installment_total,
+            tipoContaFixa: b.bill_type || 'normal', // ✅ NOVO CAMPO
+            compras: b.purchases_data || [] // ✅ NOVO CAMPO
         }));
 
         // CARTÕES
@@ -233,7 +220,7 @@ async function carregarDadosPerfil(perfilId) {
             bandeiraImg: c.brand_image
         }));
 
-        // ✅ ATUALIZAR CONTADORES DE IDs
+        // Atualizar contadores de IDs
         if (transacoes.length > 0) {
             nextTransId = Math.max(...transacoes.map(t => t.id)) + 1;
         }
@@ -251,24 +238,19 @@ async function carregarDadosPerfil(perfilId) {
             transacoes: transacoes.length,
             metas: metas.length,
             contas: contasFixas.length,
-            cartoes: cartoesCredito.length,
-            nextTransId,
-            nextMetaId,
-            nextContaFixaId,
-            nextCartaoId
+            cartoes: cartoesCredito.length
         });
         
     } catch(e) {
         console.error('❌ ERRO CRÍTICO ao carregar dados do perfil:', e);
         
-        // ✅ Zerar arrays para garantir estado limpo
         transacoes = [];
         metas = [];
         contasFixas = [];
         cartoesCredito = [];
         
         alert('❌ Houve um erro ao carregar os dados deste perfil. Tente novamente.');
-        throw e; // Re-throw para tratamento superior
+        throw e;
     }
 }
 
@@ -284,7 +266,6 @@ async function salvarDados() {
         
         // ========== TRANSAÇÕES ==========
         for (const t of transacoes) {
-            // ✅ Converter data BR para ISO
             const dataISO = dataParaISO(t.data);
             
             const data = {
@@ -299,7 +280,6 @@ async function salvarDados() {
                 conta_fixa_id: t.contaFixaId || null
             };
 
-            // ✅ CORREÇÃO: Verificar se existe PELO profile_id + descrição + data + valor
             const { data: existing, error: searchError } = await supabase
                 .from('transactions')
                 .select('id')
@@ -316,7 +296,6 @@ async function salvarDados() {
             }
 
             if (existing) {
-                // ✅ Atualizar transação existente
                 const { error } = await supabase
                     .from('transactions')
                     .update(data)
@@ -326,11 +305,9 @@ async function salvarDados() {
                     console.error(`❌ Erro ao atualizar transação ${existing.id}:`, error);
                 } else {
                     console.log(`✅ Transação ${existing.id} atualizada`);
-                    // ✅ Atualizar ID local com o ID do banco
                     t.id = existing.id;
                 }
             } else {
-                // ✅ Inserir NOVA transação SEM forçar ID
                 const { data: inserted, error } = await supabase
                     .from('transactions')
                     .insert(data)
@@ -341,7 +318,6 @@ async function salvarDados() {
                     console.error('❌ Erro ao inserir transação:', error);
                 } else {
                     console.log(`✅ Transação inserida com ID ${inserted.id}`);
-                    // ✅ Atualizar ID local com o ID retornado do banco
                     t.id = inserted.id;
                 }
             }
@@ -356,7 +332,8 @@ async function salvarDados() {
                 description: meta.descricao,
                 target_amount: meta.objetivo,
                 saved_amount: meta.saved,
-                monthly_data: meta.monthly || {}
+                monthly_data: meta.monthly || {},
+                withdrawal_history: meta.historicoRetiradas || [] // ✅ NOVO CAMPO
             };
 
             const { data: existing } = await supabase
@@ -396,7 +373,9 @@ async function salvarDados() {
                 paid: conta.pago,
                 card_id: conta.cartaoId || null,
                 installment_current: conta.parcelaAtual || null,
-                installment_total: conta.totalParcelas || null
+                installment_total: conta.totalParcelas || null,
+                bill_type: conta.tipoContaFixa || 'normal', // ✅ NOVO CAMPO
+                purchases_data: conta.compras || [] // ✅ NOVO CAMPO
             };
 
             const { data: existing } = await supabase
