@@ -827,32 +827,92 @@ async function entrarNoPerfil(index) {
     const authLoading = document.getElementById('authLoading');
 
     try {
-        if (authLoading) authLoading.style.display = 'flex';
-
-        perfilAtivo = usuarioLogado.perfis[index];
-        // Salva o ID do perfil ativo para recarregar a sessão depois
-        localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id); 
-
-        await carregarDadosPerfil(perfilAtivo.id);
-
-        iniciarAutoSave();
-        atualizarTudo();
-
-        document.getElementById('selecaoPerfis').style.display = 'none';
-        document.getElementById('sidebar').style.display = 'flex';
-
-        // ✅ PASSO CRÍTICO: "Acorda" o assistente de chat e passa o perfil
-        if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
-            window.chatAssistant.onProfileSelected(perfilAtivo);
+        console.log('🎯 Entrando no perfil:', index);
+        
+        if (authLoading) {
+            authLoading.style.display = 'flex';
+            console.log('⏳ Loading exibido');
         }
 
+        // ✅ Validar índice
+        if(index < 0 || index >= usuarioLogado.perfis.length) {
+            throw new Error('Índice de perfil inválido');
+        }
+
+        perfilAtivo = usuarioLogado.perfis[index];
+        console.log('✅ Perfil ativo definido:', perfilAtivo.nome);
+        
+        // Salva o ID do perfil ativo
+        localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id);
+
+        // ✅ Carregar dados do perfil
+        console.log('📦 Carregando dados do perfil...');
+        await carregarDadosPerfil(perfilAtivo.id);
+        console.log('✅ Dados carregados com sucesso');
+
+        // ✅ Iniciar auto-save
+        iniciarAutoSave();
+        console.log('💾 Auto-save iniciado');
+        
+        // ✅ Atualizar interface
+        atualizarTudo();
+        console.log('🎨 Interface atualizada');
+
+        // ✅ Ocultar seleção de perfis
+        const selecaoPerfis = document.getElementById('selecaoPerfis');
+        const sidebar = document.getElementById('sidebar');
+        
+        if(selecaoPerfis) {
+            selecaoPerfis.style.display = 'none';
+            console.log('✅ Tela de perfis ocultada');
+        }
+        
+        if(sidebar) {
+            sidebar.style.display = 'flex';
+            console.log('✅ Sidebar exibida');
+        }
+
+        // ✅ CORREÇÃO CRÍTICA: Ativar chat assistant COM verificação
+        console.log('🤖 Verificando chat assistant...');
+        
+        // Aguardar um pouco para garantir que o chat-assistant.js foi carregado
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
+            console.log('✅ Chat assistant encontrado, ativando...');
+            window.chatAssistant.onProfileSelected(perfilAtivo);
+            console.log('✅ Chat assistant ativado com sucesso');
+        } else {
+            console.warn('⚠️ Chat assistant não está disponível ainda');
+            // Não bloqueia o sistema, apenas avisa
+        }
+
+        // ✅ Mostrar dashboard
+        console.log('🎬 Exibindo dashboard...');
         mostrarTela('dashboard');
+        console.log('✅ Dashboard exibida');
+
+        // ✅ Verificar vencimentos
+        setTimeout(() => {
+            verificacaoAutomaticaVencimentos();
+        }, 2000);
+
+        console.log('🎉 Entrada no perfil concluída com SUCESSO!');
 
     } catch (e) {
-        console.error('❌ Erro ao entrar no perfil:', e);
-        alert('Erro ao carregar o perfil.');
+        console.error('❌ ERRO CRÍTICO ao entrar no perfil:', e);
+        console.error('Stack trace:', e.stack);
+        
+        alert('❌ Erro ao carregar o perfil: ' + e.message + '\n\nTente novamente.');
+        
+        // Retornar para seleção de perfis
+        mostrarSelecaoPerfis();
+        
     } finally {
-        if (authLoading) authLoading.style.display = 'none';
+        if (authLoading) {
+            authLoading.style.display = 'none';
+            console.log('✅ Loading ocultado');
+        }
     }
 }
 
@@ -5950,6 +6010,7 @@ function excluirCompraFatura(faturaId, compraId) {
 
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
+    verificarLogin();
     bindEventos();
     setupSidebarToggle();
 });
@@ -6631,59 +6692,17 @@ function desenharTopGastos(dados, label) {
     ctx.textAlign
 }
 
+document.addEventListener('DOMContentLoaded', async () => {
+    await verificarLogin();
+});
+
 window.addEventListener('beforeunload', async (e) => {
     if(perfilAtivo) {
         await salvarDados();
     }
 });
 
-// NO FINAL DO dashboard.js, ADICIONE ESTE BLOCO DE EXPORTAÇÃO
-
-// Função para agrupar todas as funções que precisam ser globais para o HTML
-function exportFunctions() {
-    return {
-        abrirContaFixaForm,
-        abrirPopupPagarContaFixa,
-        pagarContaFixa,
-        abrirMetaForm,
-        removerMeta,
-        selecionarMeta,
-        abrirRetiradaForm,
-        abrirCartaoForm,
-        fecharPopup,
-        atualizarGraficos,
-        gerarRelatorio,
-        alterarNome,
-        alterarEmail,
-        abrirAlterarSenha,
-        trocarPerfil,
-        comoUsar,
-        confirmarLogout,
-        mostrarTela,
-        lancarTransacao,
-        abrirDetalhesTransacao,
-        abrirVisualizacaoFatura,
-        pagarCompraIndividual,
-        editarCompraFatura,
-        excluirCompraFatura,
-        criarPopup,
-        fecharPopup,
-        exportarDadosJSON,
-        exportarDadosCSV,
-        mostrarNotificacao,
-        abrirWidgetOndeForDinheiro,
-        processarAnaliseOndeForDinheiro,
-        abrirDetalhesPerfilRelatorio,
-        abrirDetalhesCartaoRelatorio,
-        abrirAnaliseDisciplina,
-        irParaAtualizarPlano,
-        confirmarSelecaoPerfisCasal
-    };
-}
-
-// Exporta a função de inicialização e o agrupador de funções globais
-export { verificarLogin, exportFunctions };
-
-// Garante que os eventos principais sejam ligados quando o script carregar
-bindEventos();
-setupSidebarToggle();
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('🚀 Dashboard carregado, iniciando verificação de login...');
+    verificarLogin();
+});
