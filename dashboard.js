@@ -1,6 +1,17 @@
 // ========== IMPORT SUPABASE ==========
 import { supabase } from './supabase-client.js';
 
+// ========== IMPORT SUPABASE ==========
+import { supabase } from './supabase-client.js';
+
+// ========== VERIFICAÇÃO DE CARREGAMENTO ==========
+console.log('🚀🚀🚀 DASHBOARD.JS FOI CARREGADO! 🚀🚀🚀');
+console.log('📅 Timestamp:', new Date().toISOString());
+console.log('🌐 URL atual:', window.location.href);
+console.log('📦 Supabase importado?', !!supabase);
+console.log('👤 Objeto usuarioLogado existe?', typeof usuarioLogado);
+
+
 /* ==============================================
    GRANAEVO - DASHBOARD.JS COMPLETO
    Todas as funcionalidades separadas do HTML
