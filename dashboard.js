@@ -610,42 +610,30 @@ function atualizarTelaPerfis() {
     const lista = document.getElementById('listaPerfis');
 
     if (!saudacao || !lista) {
-        console.error('❌ ERRO: Elementos da tela não encontrados');
-        return;
-    }
-
-    // ✅ VALIDAÇÃO CRÍTICA
-    if (!usuarioLogado) {
-        console.error('❌ ERRO CRÍTICO: usuarioLogado não definido!');
-        lista.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
-                <div style="font-size: 3rem; margin-bottom: 20px;">⚠️</div>
-                <h3 style="color: var(--text-primary);">Erro ao carregar dados</h3>
-                <p style="color: var(--text-secondary); margin: 20px 0;">
-                    Não foi possível carregar seus dados.<br>
-                    Por favor, faça login novamente.
-                </p>
-                <button class="btn-primary" onclick="window.location.href='login.html'">
-                    Voltar ao Login
-                </button>
-            </div>
-        `;
+        console.error('❌ ERRO: Elementos da tela de perfis não encontrados no HTML');
+        console.error('saudacao existe?', !!saudacao);
+        console.error('lista existe?', !!lista);
         return;
     }
 
     console.log('🎨 Atualizando tela de perfis...');
-    console.log('📊 Perfis disponíveis:', usuarioLogado.perfis?.length || 0);
+    console.log('📊 Dados do usuário logado:', usuarioLogado);
+    console.log('📊 Perfis disponíveis:', usuarioLogado.perfis);
+    console.log('📊 Limite do plano:', limitesPlano[usuarioLogado.plano]);
 
     // ✅ ATUALIZAR SAUDAÇÃO
     saudacao.innerHTML = `Olá <b>${usuarioLogado.nome}</b> — Plano <b>${usuarioLogado.plano}</b>`;
+    console.log('✅ Saudação atualizada:', saudacao.innerHTML);
     
     // ✅ LIMPAR LISTA
     lista.innerHTML = '';
+    console.log('🧹 Lista de perfis limpa');
 
-    // ✅ SE NÃO HÁ PERFIS
+    // ✅ VERIFICAR SE HÁ PERFIS
     if (!usuarioLogado.perfis || usuarioLogado.perfis.length === 0) {
-        console.log('⚠️ Nenhum perfil cadastrado');
+        console.log('⚠️ Nenhum perfil cadastrado ainda');
         
+        // ✅ MOSTRAR MENSAGEM E BOTÃO PARA CRIAR PRIMEIRO PERFIL
         lista.innerHTML = `
             <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
                 <div style="font-size: 3rem; margin-bottom: 20px; opacity: 0.5;">👤</div>
@@ -658,22 +646,27 @@ function atualizarTelaPerfis() {
                 </button>
             </div>
         `;
+        
+        console.log('✅ Mensagem de "nenhum perfil" exibida');
         return;
     }
 
-    // ✅ RENDERIZAR PERFIS
-    console.log(`🔄 Renderizando ${usuarioLogado.perfis.length} perfil(s)`);
+    // ✅ RENDERIZAR PERFIS EXISTENTES
+    console.log(`🔄 Renderizando ${usuarioLogado.perfis.length} perfil(s)...`);
     
     usuarioLogado.perfis.forEach((perfil, index) => {
+        console.log(`🎨 Renderizando perfil ${index + 1}:`, perfil);
+        
         const btn = document.createElement('button');
         btn.className = 'perfil-card';
 
         const inicialNome = perfil.nome ? perfil.nome[0].toUpperCase() : 'U';
+        console.log(`📝 Inicial do nome: ${inicialNome}`);
 
         btn.innerHTML = `
             <div class="perfil-foto">
                 ${perfil.foto 
-                    ? `<img src="${perfil.foto}" alt="${perfil.nome}">`
+                    ? `<img src="${perfil.foto}" alt="${perfil.nome}" onerror="console.error('Erro ao carregar foto:', this.src)">`
                     : `<div class="perfil-placeholder">${inicialNome}</div>`
                 }
             </div>
@@ -681,15 +674,17 @@ function atualizarTelaPerfis() {
         `;
 
         btn.onclick = () => {
-            console.log(`🎯 Perfil clicado: ${perfil.nome}`);
+            console.log(`🎯 Perfil "${perfil.nome}" clicado (ID: ${perfil.id})`);
             entrarNoPerfil(index);
         };
         
         lista.appendChild(btn);
+        console.log(`✅ Perfil "${perfil.nome}" renderizado com sucesso`);
     });
 
-    // ✅ BOTÃO ADICIONAR (se tiver espaço)
+    // ✅ BOTÃO DE ADICIONAR NOVO PERFIL (se ainda tiver espaço)
     const limiteAtual = limitesPlano[usuarioLogado.plano] || 1;
+    console.log(`📊 Verificando limite: ${usuarioLogado.perfis.length}/${limiteAtual}`);
     
     if (usuarioLogado.perfis.length < limiteAtual) {
         const add = document.createElement('button');
@@ -698,11 +693,17 @@ function atualizarTelaPerfis() {
             <div class="perfil-foto">+</div>
             <div>Novo Perfil</div>
         `;
-        add.onclick = () => adicionarNovoPerfil();
+        add.onclick = () => {
+            console.log('➕ Botão "Novo Perfil" clicado');
+            adicionarNovoPerfil();
+        };
         lista.appendChild(add);
+        console.log('✅ Botão "Novo Perfil" renderizado');
+    } else {
+        console.log(`ℹ️ Limite de perfis atingido (${limiteAtual}/${limiteAtual})`);
     }
 
-    console.log('🎉 Tela atualizada com sucesso!');
+    console.log('🎉 Tela de perfis atualizada com SUCESSO!');
 }
 
 // ========== VERIFICAR LOGIN - CORRIGIDO ==========
@@ -740,6 +741,7 @@ async function verificarLogin() {
         console.log('✅ Sessão encontrada:');
         console.log('  - User ID:', session.user.id);
         console.log('  - Email:', session.user.email);
+        console.log('  - Metadata:', session.user.user_metadata);
 
         // ✅ VERIFICAR ASSINATURA
         console.log('💳 Verificando assinatura ativa...');
@@ -750,8 +752,15 @@ async function verificarLogin() {
             .eq('payment_status', 'approved')
             .single();
 
-        if (subError || !subscription) {
+        if (subError) {
             console.error('❌ Erro ao verificar assinatura:', subError);
+            console.log('🔄 Redirecionando para página de planos...');
+            window.location.href = 'planos.html';
+            return;
+        }
+
+        if (!subscription) {
+            console.log('🧾 Nenhuma assinatura ativa encontrada. Redirecionando...');
             window.location.href = 'planos.html';
             return;
         }
@@ -776,29 +785,40 @@ async function verificarLogin() {
 
         if (!resultadoPerfis.sucesso) {
             console.error('❌ Falha ao carregar perfis');
-            throw new Error("Não foi possível carregar os dados do usuário.");
+            throw new Error("Não foi possível carregar os dados do usuário. Tente fazer login novamente.");
         }
         
-        console.log('✅ Perfis carregados! Total:', usuarioLogado.perfis.length);
-        
-        // ✅ AGUARDAR DOM ESTAR PRONTO
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
+        console.log('✅ Perfis carregados com sucesso!');
         console.log('🎬 Exibindo tela de seleção de perfis...');
         mostrarSelecaoPerfis();
 
     } catch (e) {
-        console.error('❌ ===== ERRO CRÍTICO =====');
+        console.error('❌ ===== ERRO CRÍTICO NA INICIALIZAÇÃO =====');
+        console.error('Tipo:', e.name);
         console.error('Mensagem:', e.message);
         console.error('Stack:', e.stack);
         
         alert(`Erro ao inicializar: ${e.message}`);
-        window.location.href = 'login.html';
         
+        if (typeof AuthGuard !== 'undefined' && AuthGuard.performLogout) {
+            AuthGuard.performLogout();
+        } else {
+            window.location.href = 'login.html';
+        }
     } finally {
-        if (authLoading) authLoading.style.display = 'none';
-        if (protectedContent) protectedContent.style.display = 'block';
-        console.log('🔐 ===== VERIFICAÇÃO CONCLUÍDA =====');
+        console.log('🏁 Finalizando verificação de login...');
+        
+        if (authLoading) {
+            authLoading.style.display = 'none';
+            console.log('✅ Loading ocultado');
+        }
+        
+        if (protectedContent) {
+            protectedContent.style.display = 'block';
+            console.log('✅ Conteúdo protegido exibido');
+        }
+        
+        console.log('🔐 ===== VERIFICAÇÃO DE LOGIN CONCLUÍDA =====');
     }
 }
 
@@ -6436,6 +6456,8 @@ class ParticleSystem {
         
         window.addEventListener('mousemove', (e) => this.handleMouse(e));
     }
+    
+    // ... resto do código permanece igual
 }
 
 // ⚡ Inicializa APENAS em desktop
@@ -6623,28 +6645,4 @@ window.addEventListener('beforeunload', async (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Dashboard carregado, iniciando verificação de login...');
     verificarLogin();
-});
-
-
-// ========== EXPOR VARIÁVEIS PARA DEBUG ==========
-window.debugGranaEvo = () => {
-    console.log('=== DEBUG GRANAEVO ===');
-    console.log('Usuário Logado:', usuarioLogado);
-    console.log('Perfil Ativo:', perfilAtivo);
-    console.log('Transações:', transacoes);
-    console.log('=====================');
-};
-
-window.getUsuarioLogado = () => usuarioLogado;
-
-// ========== INICIALIZAÇÃO ==========
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 Dashboard carregado');
-    verificarLogin();
-    bindEventos();
-    setupSidebarToggle();
-});
-
-window.addEventListener('beforeunload', async () => {
-    if(perfilAtivo) await salvarDados();
 });
