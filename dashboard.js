@@ -1,17 +1,6 @@
 // ========== IMPORT SUPABASE ==========
 import { supabase } from './supabase-client.js';
 
-// ========== IMPORT SUPABASE ==========
-import { supabase } from './supabase-client.js';
-
-// ========== VERIFICAÇÃO DE CARREGAMENTO ==========
-console.log('🚀🚀🚀 DASHBOARD.JS FOI CARREGADO! 🚀🚀🚀');
-console.log('📅 Timestamp:', new Date().toISOString());
-console.log('🌐 URL atual:', window.location.href);
-console.log('📦 Supabase importado?', !!supabase);
-console.log('👤 Objeto usuarioLogado existe?', typeof usuarioLogado);
-
-
 /* ==============================================
    GRANAEVO - DASHBOARD.JS COMPLETO
    Todas as funcionalidades separadas do HTML
@@ -718,12 +707,13 @@ function atualizarTelaPerfis() {
 }
 
 // ========== VERIFICAR LOGIN - CORRIGIDO ==========
+// ========== VERIFICAR LOGIN - CORRIGIDO ==========
 async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
     const protectedContent = document.querySelector('[data-protected-content]');
 
     try {
-        console.log('🔍 ===== DASHBOARD.JS: INICIANDO VERIFICAÇÃO DE LOGIN =====');
+        console.log('🔍 ===== INICIANDO VERIFICAÇÃO DE LOGIN =====');
         
         if (authLoading) {
             authLoading.style.display = 'flex';
@@ -744,7 +734,7 @@ async function verificarLogin() {
         }
 
         if (!session) {
-            console.log('🚪 Sessão não encontrada. Redirecionando para login...');
+            console.log('🔌 Sessão não encontrada. Redirecionando para login...');
             window.location.href = 'login.html';
             return;
         }
@@ -752,6 +742,7 @@ async function verificarLogin() {
         console.log('✅ Sessão encontrada:');
         console.log('  - User ID:', session.user.id);
         console.log('  - Email:', session.user.email);
+        console.log('  - Metadata:', session.user.user_metadata);
 
         // ✅ VERIFICAR ASSINATURA
         console.log('💳 Verificando assinatura ativa...');
@@ -777,14 +768,11 @@ async function verificarLogin() {
 
         console.log('✅ Assinatura ativa:', subscription.plans.name);
 
-        // ✅ CONFIGURAR USUÁRIO LOGADO
-        usuarioLogado = {
-            userId: session.user.id,
-            nome: session.user.user_metadata?.name || session.user.email.split('@')[0],
-            plano: subscription.plans.name,
-            email: session.user.email,
-            perfis: []
-        };
+        // ✅ CORREÇÃO CRÍTICA: Atualizar variável GLOBAL (sem const/let)
+        usuarioLogado.userId = session.user.id;
+        usuarioLogado.nome = session.user.user_metadata?.name || session.user.email.split('@')[0];
+        usuarioLogado.plano = subscription.plans.name;
+        usuarioLogado.perfis = []; // Resetar perfis
 
         console.log('👤 Usuário logado configurado:', usuarioLogado);
 
@@ -800,10 +788,6 @@ async function verificarLogin() {
         }
         
         console.log('✅ Perfis carregados com sucesso!');
-        console.log('📋 Total de perfis:', usuarioLogado.perfis.length);
-        console.log('📋 Perfis:', usuarioLogado.perfis);
-        
-        // ✅ EXIBIR TELA DE SELEÇÃO
         console.log('🎬 Exibindo tela de seleção de perfis...');
         mostrarSelecaoPerfis();
 
@@ -833,7 +817,7 @@ async function verificarLogin() {
             console.log('✅ Conteúdo protegido exibido');
         }
         
-        console.log('🔍 ===== VERIFICAÇÃO DE LOGIN CONCLUÍDA =====');
+        console.log('🏁 ===== VERIFICAÇÃO DE LOGIN CONCLUÍDA =====');
     }
 }
 
@@ -842,92 +826,32 @@ async function entrarNoPerfil(index) {
     const authLoading = document.getElementById('authLoading');
 
     try {
-        console.log('🎯 Entrando no perfil:', index);
-        
-        if (authLoading) {
-            authLoading.style.display = 'flex';
-            console.log('⏳ Loading exibido');
-        }
-
-        // ✅ Validar índice
-        if(index < 0 || index >= usuarioLogado.perfis.length) {
-            throw new Error('Índice de perfil inválido');
-        }
+        if (authLoading) authLoading.style.display = 'flex';
 
         perfilAtivo = usuarioLogado.perfis[index];
-        console.log('✅ Perfil ativo definido:', perfilAtivo.nome);
-        
-        // Salva o ID do perfil ativo
-        localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id);
+        // Salva o ID do perfil ativo para recarregar a sessão depois
+        localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id); 
 
-        // ✅ Carregar dados do perfil
-        console.log('📦 Carregando dados do perfil...');
         await carregarDadosPerfil(perfilAtivo.id);
-        console.log('✅ Dados carregados com sucesso');
 
-        // ✅ Iniciar auto-save
         iniciarAutoSave();
-        console.log('💾 Auto-save iniciado');
-        
-        // ✅ Atualizar interface
         atualizarTudo();
-        console.log('🎨 Interface atualizada');
 
-        // ✅ Ocultar seleção de perfis
-        const selecaoPerfis = document.getElementById('selecaoPerfis');
-        const sidebar = document.getElementById('sidebar');
-        
-        if(selecaoPerfis) {
-            selecaoPerfis.style.display = 'none';
-            console.log('✅ Tela de perfis ocultada');
-        }
-        
-        if(sidebar) {
-            sidebar.style.display = 'flex';
-            console.log('✅ Sidebar exibida');
-        }
+        document.getElementById('selecaoPerfis').style.display = 'none';
+        document.getElementById('sidebar').style.display = 'flex';
 
-        // ✅ CORREÇÃO CRÍTICA: Ativar chat assistant COM verificação
-        console.log('🤖 Verificando chat assistant...');
-        
-        // Aguardar um pouco para garantir que o chat-assistant.js foi carregado
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
+        // ✅ PASSO CRÍTICO: "Acorda" o assistente de chat e passa o perfil
         if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
-            console.log('✅ Chat assistant encontrado, ativando...');
             window.chatAssistant.onProfileSelected(perfilAtivo);
-            console.log('✅ Chat assistant ativado com sucesso');
-        } else {
-            console.warn('⚠️ Chat assistant não está disponível ainda');
-            // Não bloqueia o sistema, apenas avisa
         }
 
-        // ✅ Mostrar dashboard
-        console.log('🎬 Exibindo dashboard...');
         mostrarTela('dashboard');
-        console.log('✅ Dashboard exibida');
-
-        // ✅ Verificar vencimentos
-        setTimeout(() => {
-            verificacaoAutomaticaVencimentos();
-        }, 2000);
-
-        console.log('🎉 Entrada no perfil concluída com SUCESSO!');
 
     } catch (e) {
-        console.error('❌ ERRO CRÍTICO ao entrar no perfil:', e);
-        console.error('Stack trace:', e.stack);
-        
-        alert('❌ Erro ao carregar o perfil: ' + e.message + '\n\nTente novamente.');
-        
-        // Retornar para seleção de perfis
-        mostrarSelecaoPerfis();
-        
+        console.error('❌ Erro ao entrar no perfil:', e);
+        alert('Erro ao carregar o perfil.');
     } finally {
-        if (authLoading) {
-            authLoading.style.display = 'none';
-            console.log('✅ Loading ocultado');
-        }
+        if (authLoading) authLoading.style.display = 'none';
     }
 }
 
@@ -6721,67 +6645,3 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Dashboard carregado, iniciando verificação de login...');
     verificarLogin();
 });
-
-// ========== INICIALIZAÇÃO FORÇADA ==========
-console.log('🎬 Preparando inicialização forçada...');
-
-// Função de inicialização
-async function inicializarSistema() {
-    console.log('🔥 INICIANDO SISTEMA - FORÇADO');
-    console.log('📍 Etapa 1: Verificar login');
-    
-    try {
-        await verificarLogin();
-        console.log('✅ Etapa 1: Completa');
-    } catch(e) {
-        console.error('❌ Erro na verificação de login:', e);
-    }
-    
-    console.log('📍 Etapa 2: Bind eventos');
-    try {
-        bindEventos();
-        console.log('✅ Etapa 2: Completa');
-    } catch(e) {
-        console.error('❌ Erro ao vincular eventos:', e);
-    }
-    
-    console.log('📍 Etapa 3: Setup sidebar');
-    try {
-        setupSidebarToggle();
-        console.log('✅ Etapa 3: Completa');
-    } catch(e) {
-        console.error('❌ Erro no setup sidebar:', e);
-    }
-    
-    console.log('🎉 SISTEMA INICIALIZADO COM SUCESSO!');
-}
-
-// Múltiplas tentativas de inicialização
-console.log('🔄 Registrando listeners de inicialização...');
-
-// Tentativa 1: DOMContentLoaded
-if (document.readyState === 'loading') {
-    console.log('📄 DOM ainda carregando, aguardando...');
-    document.addEventListener('DOMContentLoaded', inicializarSistema);
-} else {
-    // DOM já está pronto
-    console.log('⚡ DOM já pronto, iniciando imediatamente...');
-    inicializarSistema();
-}
-
-// Tentativa 2: window.load (backup)
-window.addEventListener('load', () => {
-    console.log('🌐 Window.load disparado');
-});
-
-// Tentativa 3: Timeout de segurança (último recurso)
-setTimeout(() => {
-    console.log('⏰ Timeout de segurança: verificando se inicializou...');
-    if (!perfilAtivo && !document.getElementById('selecaoPerfis').style.display) {
-        console.warn('⚠️ Sistema não inicializou! Tentando forçar...');
-        inicializarSistema();
-    }
-}, 2000);
-
-console.log('✅ Listeners de inicialização registrados');
-console.log('🎯 Dashboard.js pronto para iniciar');
