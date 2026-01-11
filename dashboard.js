@@ -1,36 +1,32 @@
-// ========== IMPORT SUPABASE ==========
-import { supabase } from './supabase-client.js';
+// ========== CONFIGURAÇÃO GLOBAL ==========
+// Importar Supabase via script tag no HTML
+const supabase = window.supabase;
 
-/* ==============================================
-   GRANAEVO - DASHBOARD.JS COMPLETO
-   Todas as funcionalidades separadas do HTML
-   ============================================== */
-
-// ========== ESTADO GLOBAL E PERSISTÊNCIA ==========
-let usuarioAtual = { 
+// ========== ESTADO GLOBAL ==========
+var usuarioAtual = { 
     usuario: 'Admin', 
     senha: '1234', 
     email: 'admin@granaevo.com', 
     foto: null 
 };
 
-let usuarioLogado = {
+var usuarioLogado = {
     nome: "Fulano",
     plano: "Casal",
     perfis: []
 };
 
-let perfilAtivo = null;
-let cartoesCredito = [];
-let nextCartaoId = 1;
-let transacoes = [];
-let metas = [];
-let contasFixas = [];
-let nextTransId = 1;
-let nextMetaId = 1;
-let nextContaFixaId = 1;
-let metaSelecionadaId = null;
-let tipoRelatorioAtivo = 'individual';
+var perfilAtivo = null;
+var cartoesCredito = [];
+var nextCartaoId = 1;
+var transacoes = [];
+var metas = [];
+var contasFixas = [];
+var nextTransId = 1;
+var nextMetaId = 1;
+var nextContaFixaId = 1;
+var metaSelecionadaId = null;
+var tipoRelatorioAtivo = 'individual';
 
 // Limites por plano
 const limitesPlano = {
@@ -38,7 +34,6 @@ const limitesPlano = {
     "Casal": 2,
     "Família": 4
 };
-
 // ========== FUNÇÕES DE FORMATAÇÃO ==========
 function formatBRL(v) { 
     return 'R$ ' + Number(v).toLocaleString('pt-BR', {
