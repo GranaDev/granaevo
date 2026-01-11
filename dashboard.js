@@ -707,7 +707,6 @@ function atualizarTelaPerfis() {
 }
 
 // ========== VERIFICAR LOGIN - CORRIGIDO ==========
-// ========== VERIFICAR LOGIN - CORRIGIDO ==========
 async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
     const protectedContent = document.querySelector('[data-protected-content]');
@@ -742,7 +741,6 @@ async function verificarLogin() {
         console.log('✅ Sessão encontrada:');
         console.log('  - User ID:', session.user.id);
         console.log('  - Email:', session.user.email);
-        console.log('  - Metadata:', session.user.user_metadata);
 
         // ✅ VERIFICAR ASSINATURA
         console.log('💳 Verificando assinatura ativa...');
@@ -755,69 +753,48 @@ async function verificarLogin() {
 
         if (subError) {
             console.error('❌ Erro ao verificar assinatura:', subError);
-            console.log('🔄 Redirecionando para página de planos...');
             window.location.href = 'planos.html';
             return;
         }
 
         if (!subscription) {
-            console.log('🧾 Nenhuma assinatura ativa encontrada. Redirecionando...');
+            console.log('🧾 Nenhuma assinatura ativa encontrada.');
             window.location.href = 'planos.html';
             return;
         }
 
         console.log('✅ Assinatura ativa:', subscription.plans.name);
 
-        // ✅ CORREÇÃO CRÍTICA: Atualizar variável GLOBAL (sem const/let)
+        // ✅✅✅ CORREÇÃO CRÍTICA: ATUALIZAR GLOBAL SEM REDECLARAR
         usuarioLogado.userId = session.user.id;
         usuarioLogado.nome = session.user.user_metadata?.name || session.user.email.split('@')[0];
         usuarioLogado.plano = subscription.plans.name;
-        usuarioLogado.perfis = []; // Resetar perfis
+        usuarioLogado.perfis = [];
 
-        console.log('👤 Usuário logado configurado:', usuarioLogado);
+        console.log('👤 UsuarioLogado GLOBAL atualizado:', usuarioLogado);
+        console.log('🔍 Verificando acesso global:', window.usuarioLogado);
 
         // ✅ CARREGAR PERFIS
-        console.log('📂 Carregando perfis do banco de dados...');
+        console.log('📂 Carregando perfis...');
         const resultadoPerfis = await carregarPerfis();
-
-        console.log('📊 Resultado do carregamento de perfis:', resultadoPerfis);
 
         if (!resultadoPerfis.sucesso) {
             console.error('❌ Falha ao carregar perfis');
-            throw new Error("Não foi possível carregar os dados do usuário. Tente fazer login novamente.");
+            throw new Error("Não foi possível carregar os perfis.");
         }
         
-        console.log('✅ Perfis carregados com sucesso!');
-        console.log('🎬 Exibindo tela de seleção de perfis...');
+        console.log('✅ Perfis carregados:', usuarioLogado.perfis);
+        console.log('🎬 Exibindo seleção de perfis...');
+        
         mostrarSelecaoPerfis();
 
     } catch (e) {
-        console.error('❌ ===== ERRO CRÍTICO NA INICIALIZAÇÃO =====');
-        console.error('Tipo:', e.name);
-        console.error('Mensagem:', e.message);
-        console.error('Stack:', e.stack);
-        
-        alert(`Erro ao inicializar: ${e.message}`);
-        
-        if (typeof AuthGuard !== 'undefined' && AuthGuard.performLogout) {
-            AuthGuard.performLogout();
-        } else {
-            window.location.href = 'login.html';
-        }
+        console.error('❌ ERRO CRÍTICO:', e);
+        alert(`Erro: ${e.message}`);
+        window.location.href = 'login.html';
     } finally {
-        console.log('🏁 Finalizando verificação de login...');
-        
-        if (authLoading) {
-            authLoading.style.display = 'none';
-            console.log('✅ Loading ocultado');
-        }
-        
-        if (protectedContent) {
-            protectedContent.style.display = 'block';
-            console.log('✅ Conteúdo protegido exibido');
-        }
-        
-        console.log('🏁 ===== VERIFICAÇÃO DE LOGIN CONCLUÍDA =====');
+        if (authLoading) authLoading.style.display = 'none';
+        if (protectedContent) protectedContent.style.display = 'block';
     }
 }
 
@@ -5983,6 +5960,10 @@ window.excluirCompraFatura = excluirCompraFatura;
 window.criarPopup = criarPopup;
 window.fecharPopup = fecharPopup;
 
+// ========== VARIÁVEIS GLOBAIS EXPOSTAS ==========
+window.usuarioLogado = usuarioLogado;
+window.perfilAtivo = perfilAtivo;
+
 // ========== UTILITÁRIOS ADICIONAIS ==========
 
 // Função para preencher seletor de parcelas dinamicamente
@@ -6641,7 +6622,19 @@ window.addEventListener('beforeunload', async (e) => {
     }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 Dashboard carregado, iniciando verificação de login...');
-    verificarLogin();
+    
+    // ✅ Expor globalmente ANTES de verificar
+    window.usuarioLogado = usuarioLogado;
+    window.perfilAtivo = perfilAtivo;
+    
+    console.log('🌐 Variáveis globais expostas:', {
+        usuarioLogado: window.usuarioLogado,
+        perfilAtivo: window.perfilAtivo
+    });
+    
+    await verificarLogin();
+    bindEventos();
+    setupSidebarToggle();
 });
