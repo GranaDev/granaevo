@@ -295,18 +295,32 @@ async function salvarDados() {
         for (const t of transacoes) {
             const dataISO = dataParaISO(t.data);
             
-            const data = {
-                profile_id: perfilAtivo.id,
-                type: t.tipo,
-                description: t.descricao,
-                value: t.valor,
-                date: dataISO,
-                time: t.hora,
-                category: t.categoria,
-                meta_id: t.metaId || null,
-                conta_fixa_id: t.contaFixaId || null
-            };
-
+            // ✅ CORREÇÃO: Verificar se transação já tem ID do banco
+            if (t.id && typeof t.id === 'number' && t.id > 1000000) {
+                // ✅ Transação já existe no banco, apenas atualizar
+                const { error } = await supabase
+                    .from('transactions')
+                    .update({
+                        type: t.tipo,
+                        description: t.descricao,
+                        value: t.valor,
+                        date: dataISO,
+                        time: t.hora,
+                        category: t.categoria,
+                        meta_id: t.metaId || null,
+                        conta_fixa_id: t.contaFixaId || null
+                    })
+                    .eq('id', t.id);
+                
+                if (error) {
+                    console.error(`❌ Erro ao atualizar transação ${t.id}:`, error);
+                } else {
+                    console.log(`✅ Transação ${t.id} atualizada`);
+                }
+                continue;
+            }
+            
+            // ✅ Buscar se já existe transação idêntica
             const { data: existing, error: searchError } = await supabase
                 .from('transactions')
                 .select('id')
@@ -323,21 +337,38 @@ async function salvarDados() {
             }
 
             if (existing) {
+                // ✅ Atualizar transação existente
                 const { error } = await supabase
                     .from('transactions')
-                    .update(data)
+                    .update({
+                        type: t.tipo,
+                        category: t.categoria,
+                        meta_id: t.metaId || null,
+                        conta_fixa_id: t.contaFixaId || null
+                    })
                     .eq('id', existing.id);
                 
                 if (error) {
                     console.error(`❌ Erro ao atualizar transação ${existing.id}:`, error);
                 } else {
                     console.log(`✅ Transação ${existing.id} atualizada`);
-                    t.id = existing.id;
+                    t.id = existing.id; // ✅ Atualizar ID local
                 }
             } else {
+                // ✅ Inserir nova transação
                 const { data: inserted, error } = await supabase
                     .from('transactions')
-                    .insert(data)
+                    .insert({
+                        profile_id: perfilAtivo.id,
+                        type: t.tipo,
+                        description: t.descricao,
+                        value: t.valor,
+                        date: dataISO,
+                        time: t.hora,
+                        category: t.categoria,
+                        meta_id: t.metaId || null,
+                        conta_fixa_id: t.contaFixaId || null
+                    })
                     .select()
                     .single();
                 
@@ -345,7 +376,7 @@ async function salvarDados() {
                     console.error('❌ Erro ao inserir transação:', error);
                 } else {
                     console.log(`✅ Transação inserida com ID ${inserted.id}`);
-                    t.id = inserted.id;
+                    t.id = inserted.id; // ✅ Atualizar ID local
                 }
             }
         }
@@ -354,36 +385,79 @@ async function salvarDados() {
 
         // ========== METAS ==========
         for (const meta of metas) {
-            const metaData = {
-                profile_id: perfilAtivo.id,
-                description: meta.descricao,
-                target_amount: meta.objetivo,
-                saved_amount: meta.saved,
-                monthly_data: meta.monthly || {},
-                withdrawal_history: meta.historicoRetiradas || [] // ✅ NOVO CAMPO
-            };
-
-            const { data: existing } = await supabase
+            // ✅ CORREÇÃO: Verificar se meta já tem ID do banco
+            if (meta.id && typeof meta.id === 'number' && meta.id > 1000000) {
+                // ✅ Meta já existe, atualizar
+                const { error } = await supabase
+                    .from('goals')
+                    .update({
+                        description: meta.descricao,
+                        target_amount: meta.objetivo,
+                        saved_amount: meta.saved,
+                        monthly_data: meta.monthly || {},
+                        withdrawal_history: meta.historicoRetiradas || []
+                    })
+                    .eq('id', meta.id);
+                
+                if (error) {
+                    console.error(`❌ Erro ao atualizar meta ${meta.id}:`, error);
+                } else {
+                    console.log(`✅ Meta ${meta.id} atualizada`);
+                }
+                continue;
+            }
+            
+            // ✅ Buscar meta existente
+            const { data: existing, error: searchError } = await supabase
                 .from('goals')
                 .select('id')
                 .eq('profile_id', perfilAtivo.id)
                 .eq('description', meta.descricao)
                 .maybeSingle();
 
+            if (searchError) {
+                console.error('❌ Erro ao buscar meta:', searchError);
+                continue;
+            }
+
             if (existing) {
-                await supabase.from('goals').update(metaData).eq('id', existing.id);
-                meta.id = existing.id;
-                console.log(`✅ Meta ${existing.id} atualizada`);
-            } else {
-                const { data: inserted } = await supabase
+                // ✅ Atualizar meta existente
+                const { error } = await supabase
                     .from('goals')
-                    .insert(metaData)
+                    .update({
+                        target_amount: meta.objetivo,
+                        saved_amount: meta.saved,
+                        monthly_data: meta.monthly || {},
+                        withdrawal_history: meta.historicoRetiradas || []
+                    })
+                    .eq('id', existing.id);
+                
+                if (error) {
+                    console.error(`❌ Erro ao atualizar meta ${existing.id}:`, error);
+                } else {
+                    console.log(`✅ Meta ${existing.id} atualizada`);
+                    meta.id = existing.id;
+                }
+            } else {
+                // ✅ Inserir nova meta
+                const { data: inserted, error } = await supabase
+                    .from('goals')
+                    .insert({
+                        profile_id: perfilAtivo.id,
+                        description: meta.descricao,
+                        target_amount: meta.objetivo,
+                        saved_amount: meta.saved,
+                        monthly_data: meta.monthly || {},
+                        withdrawal_history: meta.historicoRetiradas || []
+                    })
                     .select()
                     .single();
                 
-                if (inserted) {
-                    meta.id = inserted.id;
+                if (error) {
+                    console.error('❌ Erro ao inserir meta:', error);
+                } else {
                     console.log(`✅ Meta inserida com ID ${inserted.id}`);
+                    meta.id = inserted.id;
                 }
             }
         }
@@ -392,20 +466,34 @@ async function salvarDados() {
 
         // ========== CONTAS FIXAS ==========
         for (const conta of contasFixas) {
-            const contaData = {
-                profile_id: perfilAtivo.id,
-                description: conta.descricao,
-                value: conta.valor,
-                due_date: conta.vencimento,
-                paid: conta.pago,
-                card_id: conta.cartaoId || null,
-                installment_current: conta.parcelaAtual || null,
-                installment_total: conta.totalParcelas || null,
-                bill_type: conta.tipoContaFixa || 'normal', // ✅ NOVO CAMPO
-                purchases_data: conta.compras || [] // ✅ NOVO CAMPO
-            };
-
-            const { data: existing } = await supabase
+            // ✅ CORREÇÃO: Verificar se conta já tem ID do banco
+            if (conta.id && typeof conta.id === 'number' && conta.id > 1000000) {
+                // ✅ Conta já existe, atualizar
+                const { error } = await supabase
+                    .from('fixed_bills')
+                    .update({
+                        description: conta.descricao,
+                        value: conta.valor,
+                        due_date: conta.vencimento,
+                        paid: conta.pago,
+                        card_id: conta.cartaoId || null,
+                        installment_current: conta.parcelaAtual || null,
+                        installment_total: conta.totalParcelas || null,
+                        bill_type: conta.tipoContaFixa || 'normal',
+                        purchases_data: conta.compras || []
+                    })
+                    .eq('id', conta.id);
+                
+                if (error) {
+                    console.error(`❌ Erro ao atualizar conta ${conta.id}:`, error);
+                } else {
+                    console.log(`✅ Conta fixa ${conta.id} atualizada`);
+                }
+                continue;
+            }
+            
+            // ✅ Buscar conta existente
+            const { data: existing, error: searchError } = await supabase
                 .from('fixed_bills')
                 .select('id')
                 .eq('profile_id', perfilAtivo.id)
@@ -413,20 +501,56 @@ async function salvarDados() {
                 .eq('due_date', conta.vencimento)
                 .maybeSingle();
 
+            if (searchError) {
+                console.error('❌ Erro ao buscar conta:', searchError);
+                continue;
+            }
+
             if (existing) {
-                await supabase.from('fixed_bills').update(contaData).eq('id', existing.id);
-                conta.id = existing.id;
-                console.log(`✅ Conta fixa ${existing.id} atualizada`);
-            } else {
-                const { data: inserted } = await supabase
+                // ✅ Atualizar conta existente
+                const { error } = await supabase
                     .from('fixed_bills')
-                    .insert(contaData)
+                    .update({
+                        value: conta.valor,
+                        paid: conta.pago,
+                        card_id: conta.cartaoId || null,
+                        installment_current: conta.parcelaAtual || null,
+                        installment_total: conta.totalParcelas || null,
+                        bill_type: conta.tipoContaFixa || 'normal',
+                        purchases_data: conta.compras || []
+                    })
+                    .eq('id', existing.id);
+                
+                if (error) {
+                    console.error(`❌ Erro ao atualizar conta ${existing.id}:`, error);
+                } else {
+                    console.log(`✅ Conta fixa ${existing.id} atualizada`);
+                    conta.id = existing.id;
+                }
+            } else {
+                // ✅ Inserir nova conta
+                const { data: inserted, error } = await supabase
+                    .from('fixed_bills')
+                    .insert({
+                        profile_id: perfilAtivo.id,
+                        description: conta.descricao,
+                        value: conta.valor,
+                        due_date: conta.vencimento,
+                        paid: conta.pago,
+                        card_id: conta.cartaoId || null,
+                        installment_current: conta.parcelaAtual || null,
+                        installment_total: conta.totalParcelas || null,
+                        bill_type: conta.tipoContaFixa || 'normal',
+                        purchases_data: conta.compras || []
+                    })
                     .select()
                     .single();
                 
-                if (inserted) {
-                    conta.id = inserted.id;
+                if (error) {
+                    console.error('❌ Erro ao inserir conta:', error);
+                } else {
                     console.log(`✅ Conta fixa inserida com ID ${inserted.id}`);
+                    conta.id = inserted.id;
                 }
             }
         }
@@ -435,36 +559,79 @@ async function salvarDados() {
         
         // ========== CARTÕES ==========
         for (const cartao of cartoesCredito) {
-            const cartaoData = {
-                profile_id: perfilAtivo.id,
-                bank_name: cartao.nomeBanco,
-                card_limit: cartao.limite,
-                used_amount: cartao.usado || 0,
-                due_day: cartao.vencimentoDia,
-                brand_image: cartao.bandeiraImg || null
-            };
-
-            const { data: existing } = await supabase
+            // ✅ CORREÇÃO: Verificar se cartão já tem ID do banco
+            if (cartao.id && typeof cartao.id === 'number' && cartao.id > 1000000) {
+                // ✅ Cartão já existe, atualizar
+                const { error } = await supabase
+                    .from('credit_cards')
+                    .update({
+                        bank_name: cartao.nomeBanco,
+                        card_limit: cartao.limite,
+                        used_amount: cartao.usado || 0,
+                        due_day: cartao.vencimentoDia,
+                        brand_image: cartao.bandeiraImg || null
+                    })
+                    .eq('id', cartao.id);
+                
+                if (error) {
+                    console.error(`❌ Erro ao atualizar cartão ${cartao.id}:`, error);
+                } else {
+                    console.log(`✅ Cartão ${cartao.id} atualizado`);
+                }
+                continue;
+            }
+            
+            // ✅ Buscar cartão existente
+            const { data: existing, error: searchError } = await supabase
                 .from('credit_cards')
                 .select('id')
                 .eq('profile_id', perfilAtivo.id)
                 .eq('bank_name', cartao.nomeBanco)
                 .maybeSingle();
 
+            if (searchError) {
+                console.error('❌ Erro ao buscar cartão:', searchError);
+                continue;
+            }
+
             if (existing) {
-                await supabase.from('credit_cards').update(cartaoData).eq('id', existing.id);
-                cartao.id = existing.id;
-                console.log(`✅ Cartão ${existing.id} atualizado`);
-            } else {
-                const { data: inserted } = await supabase
+                // ✅ Atualizar cartão existente
+                const { error } = await supabase
                     .from('credit_cards')
-                    .insert(cartaoData)
+                    .update({
+                        card_limit: cartao.limite,
+                        used_amount: cartao.usado || 0,
+                        due_day: cartao.vencimentoDia,
+                        brand_image: cartao.bandeiraImg || null
+                    })
+                    .eq('id', existing.id);
+                
+                if (error) {
+                    console.error(`❌ Erro ao atualizar cartão ${existing.id}:`, error);
+                } else {
+                    console.log(`✅ Cartão ${existing.id} atualizado`);
+                    cartao.id = existing.id;
+                }
+            } else {
+                // ✅ Inserir novo cartão
+                const { data: inserted, error } = await supabase
+                    .from('credit_cards')
+                    .insert({
+                        profile_id: perfilAtivo.id,
+                        bank_name: cartao.nomeBanco,
+                        card_limit: cartao.limite,
+                        used_amount: cartao.usado || 0,
+                        due_day: cartao.vencimentoDia,
+                        brand_image: cartao.bandeiraImg || null
+                    })
                     .select()
                     .single();
                 
-                if (inserted) {
-                    cartao.id = inserted.id;
+                if (error) {
+                    console.error('❌ Erro ao inserir cartão:', error);
+                } else {
                     console.log(`✅ Cartão inserido com ID ${inserted.id}`);
+                    cartao.id = inserted.id;
                 }
             }
         }
@@ -828,6 +995,9 @@ async function entrarNoPerfil(index) {
         if (authLoading) authLoading.style.display = 'flex';
 
         perfilAtivo = usuarioLogado.perfis[index];
+        console.log('🎯 Entrando no perfil:', perfilAtivo);
+        console.log('📸 URL da foto do perfil:', perfilAtivo.foto);
+        
         // Salva o ID do perfil ativo para recarregar a sessão depois
         localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id); 
 
@@ -835,11 +1005,14 @@ async function entrarNoPerfil(index) {
 
         iniciarAutoSave();
         atualizarTudo();
+        
+        // ✅ ATUALIZAR NOME E FOTO NA INTERFACE
+        atualizarNomeUsuario();
 
         document.getElementById('selecaoPerfis').style.display = 'none';
         document.getElementById('sidebar').style.display = 'flex';
 
-        // ✅ PASSO CRÍTICO: "Acorda" o assistente de chat e passa o perfil
+        // ✅ Acorda o assistente de chat e passa o perfil
         if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
             window.chatAssistant.onProfileSelected(perfilAtivo);
         }
@@ -853,9 +1026,6 @@ async function entrarNoPerfil(index) {
         if (authLoading) authLoading.style.display = 'none';
     }
 }
-
-
-
 
 async function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
@@ -924,7 +1094,11 @@ async function adicionarNovoPerfil() {
                 }
                 
                 // Nome único do arquivo
-                const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+                const timestamp = Date.now();
+                const nomeArquivoOriginal = arquivo.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                const nomeArquivo = `${session.user.id}/${timestamp}_${nomeArquivoOriginal}`;
+                
+                console.log('📤 Fazendo upload para:', nomeArquivo);
                 
                 // Upload com tratamento de erro
                 const { data: uploadData, error: uploadError } = await supabase.storage
@@ -952,18 +1126,18 @@ async function adicionarNovoPerfil() {
                     .getPublicUrl(nomeArquivo);
                 
                 fotoUrl = urlData.publicUrl;
-                console.log('✅ Foto carregada:', fotoUrl);
+                console.log('✅ Foto carregada com URL:', fotoUrl);
             }
             
             console.log('💾 Inserindo perfil no banco...');
             
-            // ✅ CORRIGIDO: Usar 'photo_url' em vez de 'photo'
+            // ✅ Inserir perfil no banco
             const { data: novoPerfil, error } = await supabase
                 .from('profiles')
                 .insert({
                     user_id: session.user.id,
                     name: nome,
-                    photo_url: fotoUrl // ✅ Nome correto da coluna
+                    photo_url: fotoUrl
                 })
                 .select()
                 .single();
@@ -974,15 +1148,19 @@ async function adicionarNovoPerfil() {
             }
             
             console.log('✅ Perfil criado com ID:', novoPerfil.id);
+            console.log('📸 URL da foto salva:', novoPerfil.photo_url);
             
             // ✅ ATUALIZAR TABELA DE GERENCIAMENTO
             await atualizarTabelaGerenciamento(session.user.id);
             
+            // ✅ ADICIONAR PERFIL À LISTA LOCAL
             usuarioLogado.perfis.push({
                 id: novoPerfil.id,
                 nome: novoPerfil.name,
-                foto: novoPerfil.photo_url // ✅ Nome correto
+                foto: novoPerfil.photo_url
             });
+            
+            console.log('✅ Perfil adicionado à lista local:', usuarioLogado.perfis[usuarioLogado.perfis.length - 1]);
             
             fecharPopup();
             atualizarTelaPerfis();
@@ -1134,15 +1312,52 @@ function atualizarNomeUsuario() {
     const userNameEl = document.getElementById('userName');
     const welcomeNameEl = document.getElementById('welcomeName');
     
-    if(userNameEl) userNameEl.textContent = nome;
-    if(welcomeNameEl) welcomeNameEl.textContent = nome;
+    if(userNameEl) {
+        userNameEl.textContent = nome;
+        console.log('✅ Nome atualizado na interface:', nome);
+    }
     
+    if(welcomeNameEl) {
+        welcomeNameEl.textContent = nome;
+    }
+    
+    // ✅ ATUALIZAR FOTO DO PERFIL
     const userPhotoEl = document.getElementById('userPhoto');
     if(userPhotoEl) {
         if(perfilAtivo && perfilAtivo.foto) {
+            console.log('📸 Atualizando foto do perfil:', perfilAtivo.foto);
             userPhotoEl.src = perfilAtivo.foto;
+            
+            // ✅ Adicionar tratamento de erro de carregamento
+            userPhotoEl.onerror = function() {
+                console.error('❌ Erro ao carregar foto do perfil:', perfilAtivo.foto);
+                // Fallback para inicial do nome
+                this.style.display = 'none';
+                const placeholder = document.createElement('div');
+                placeholder.className = 'perfil-placeholder';
+                placeholder.textContent = perfilAtivo.nome[0].toUpperCase();
+                placeholder.style.cssText = `
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 50%;
+                    background: var(--primary);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: 700;
+                    font-size: 1.2rem;
+                `;
+                this.parentNode.appendChild(placeholder);
+            };
+            
+            userPhotoEl.onload = function() {
+                console.log('✅ Foto carregada com sucesso');
+                this.style.display = 'block';
+            };
         } else if(usuarioAtual.foto) {
             userPhotoEl.src = usuarioAtual.foto;
+        } else {
+            console.log('⚠️ Nenhuma foto disponível para exibir');
         }
     }
 }
@@ -5399,7 +5614,7 @@ function obterDicaAleatoria() {
 window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
 
 // ========== CONFIGURAÇÕES ==========
-function alterarNome() {
+async function alterarNome() {
     if(!perfilAtivo) {
         alert('Erro: Nenhum perfil ativo encontrado.');
         return;
@@ -5413,7 +5628,7 @@ function alterarNome() {
         <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
     `);
     
-    document.getElementById('concluirNome').onclick = () => {
+    document.getElementById('concluirNome').onclick = async () => {
         const novoNome = document.getElementById('novoNome').value.trim();
         
         if(!novoNome) {
@@ -5426,19 +5641,46 @@ function alterarNome() {
             return;
         }
         
-        perfilAtivo.nome = novoNome;
-        
-        const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-        if(idx !== -1) {
-            usuarioLogado.perfis[idx].nome = novoNome;
+        try {
+            console.log('💾 Atualizando nome no banco de dados...');
+            
+            // ✅ ATUALIZAR NO SUPABASE
+            const { error } = await supabase
+                .from('profiles')
+                .update({ name: novoNome })
+                .eq('id', perfilAtivo.id);
+            
+            if (error) {
+                console.error('❌ Erro ao atualizar nome:', error);
+                throw error;
+            }
+            
+            console.log('✅ Nome atualizado no banco com sucesso');
+            
+            // ✅ Atualizar localmente
+            perfilAtivo.nome = novoNome;
+            
+            const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
+            if(idx !== -1) {
+                usuarioLogado.perfis[idx].nome = novoNome;
+            }
+            
+            // ✅ Atualizar tabela de gerenciamento
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                await atualizarTabelaGerenciamento(session.user.id);
+            }
+            
+            // ✅ Atualizar interface
+            atualizarNomeUsuario();
+            fecharPopup();
+            
+            mostrarNotificacao('✅ Nome alterado com sucesso!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao alterar nome:', error);
+            alert('❌ Erro ao alterar nome. Tente novamente.');
         }
-        
-        localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
-        localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
-        
-        atualizarNomeUsuario();
-        fecharPopup();
-        alert('✅ Nome alterado com sucesso!');
     };
 }
 
