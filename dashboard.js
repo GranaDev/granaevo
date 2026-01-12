@@ -214,86 +214,193 @@ async function carregarDadosPerfil(perfilId) {
 }
 
 
+
 async function salvarDados() {
     if (!perfilAtivo) return;
 
     try {
-        // TRANSAÇÕES
+        // ✅ TRANSAÇÕES - Mapeamento correto
         for (const t of transacoes) {
-            const data = {
+            // Converter data de DD/MM/YYYY para YYYY-MM-DD
+            const dataISO = dataParaISO(t.data);
+            
+            const transactionData = {
                 profile_id: perfilAtivo.id,
                 type: t.tipo,
                 description: t.descricao,
-                value: t.valor,
-                date: t.data,
-                hour: t.hora,
+                value: parseFloat(t.valor),
+                date: dataISO, // ✅ Formato correto
+                time: t.hora,
                 category: t.categoria,
-                meta_id: t.metaId || null
+                meta_id: t.metaId || null,
+                conta_fixa_id: t.contaFixaId || null
             };
 
-            const { data: existing } = await supabase
+            const { data: existing, error: checkError } = await supabase
                 .from('transactions')
                 .select('id')
                 .eq('id', t.id)
                 .maybeSingle();
 
+            if (checkError) {
+                console.error('Erro ao verificar transação:', checkError);
+                continue;
+            }
+
             if (existing) {
-                await supabase.from('transactions').update(data).eq('id', t.id);
+                const { error: updateError } = await supabase
+                    .from('transactions')
+                    .update(transactionData)
+                    .eq('id', t.id);
+                
+                if (updateError) {
+                    console.error(`❌ Erro ao atualizar transação ${t.id}:`, updateError);
+                }
             } else {
-                await supabase.from('transactions').insert({ ...data, id: t.id });
+                const { error: insertError } = await supabase
+                    .from('transactions')
+                    .insert(transactionData);
+                
+                if (insertError) {
+                    console.error(`❌ Erro ao inserir transação:`, insertError);
+                }
             }
         }
 
-        // METAS
+        // ✅ METAS - Mapeamento correto
         for (const meta of metas) {
-            const metaData = {
+            const goalData = {
                 profile_id: perfilAtivo.id,
                 description: meta.descricao,
-                target_value: meta.objetivo,
-                saved_value: meta.guardado
+                target_amount: parseFloat(meta.objetivo), // ✅ Nome correto
+                saved_amount: parseFloat(meta.saved || 0), // ✅ Nome correto
+                monthly_data: meta.monthly || {}, // ✅ Nome correto
+                withdrawal_history: meta.historicoRetiradas || [] // ✅ Histórico de retiradas
             };
 
-            const { data: existing } = await supabase
+            const { data: existing, error: checkError } = await supabase
                 .from('goals')
                 .select('id')
                 .eq('id', meta.id)
                 .maybeSingle();
 
+            if (checkError) {
+                console.error('Erro ao verificar meta:', checkError);
+                continue;
+            }
+
             if (existing) {
-                await supabase.from('goals').update(metaData).eq('id', meta.id);
+                const { error: updateError } = await supabase
+                    .from('goals')
+                    .update(goalData)
+                    .eq('id', meta.id);
+                
+                if (updateError) {
+                    console.error(`❌ Erro ao atualizar meta ${meta.id}:`, updateError);
+                }
             } else {
-                await supabase.from('goals').insert({ ...metaData, id: meta.id });
+                const { error: insertError } = await supabase
+                    .from('goals')
+                    .insert(goalData);
+                
+                if (insertError) {
+                    console.error(`❌ Erro ao inserir meta:`, insertError);
+                }
             }
         }
 
-        // CONTAS FIXAS
+        // ✅ CONTAS FIXAS - Mapeamento correto
         for (const conta of contasFixas) {
-            const contaData = {
+            const billData = {
                 profile_id: perfilAtivo.id,
                 description: conta.descricao,
-                value: conta.valor,
-                due_date: conta.vencimento,
-                paid: conta.pago,
-                card_id: conta.cartaoId || null
+                value: parseFloat(conta.valor),
+                due_date: conta.vencimento, // Já deve estar em formato YYYY-MM-DD
+                paid: conta.pago || false,
+                card_id: conta.cartaoId || null,
+                installment_current: conta.parcelaAtual || null,
+                installment_total: conta.totalParcelas || null,
+                bill_type: conta.tipoContaFixa || null,
+                purchases_data: conta.compras || []
             };
 
-            const { data: existing } = await supabase
+            const { data: existing, error: checkError } = await supabase
                 .from('fixed_bills')
                 .select('id')
                 .eq('id', conta.id)
                 .maybeSingle();
 
+            if (checkError) {
+                console.error('Erro ao verificar conta fixa:', checkError);
+                continue;
+            }
+
             if (existing) {
-                await supabase.from('fixed_bills').update(contaData).eq('id', conta.id);
+                const { error: updateError } = await supabase
+                    .from('fixed_bills')
+                    .update(billData)
+                    .eq('id', conta.id);
+                
+                if (updateError) {
+                    console.error(`❌ Erro ao atualizar conta fixa ${conta.id}:`, updateError);
+                }
             } else {
-                await supabase.from('fixed_bills').insert({ ...contaData, id: conta.id });
+                const { error: insertError } = await supabase
+                    .from('fixed_bills')
+                    .insert(billData);
+                
+                if (insertError) {
+                    console.error(`❌ Erro ao inserir conta fixa:`, insertError);
+                }
             }
         }
 
-        console.log('✅ Dados salvos com sucesso');
+        // ✅ CARTÕES DE CRÉDITO
+        for (const cartao of cartoesCredito) {
+            const cardData = {
+                profile_id: perfilAtivo.id,
+                bank_name: cartao.nomeBanco,
+                card_limit: parseFloat(cartao.limite),
+                used_amount: parseFloat(cartao.usado || 0),
+                due_day: parseInt(cartao.vencimentoDia),
+                brand_image: cartao.bandeiraImg || null
+            };
+
+            const { data: existing, error: checkError } = await supabase
+                .from('credit_cards')
+                .select('id')
+                .eq('id', cartao.id)
+                .maybeSingle();
+
+            if (checkError) {
+                console.error('Erro ao verificar cartão:', checkError);
+                continue;
+            }
+
+            if (existing) {
+                const { error: updateError } = await supabase
+                    .from('credit_cards')
+                    .update(cardData)
+                    .eq('id', cartao.id);
+                
+                if (updateError) {
+                    console.error(`❌ Erro ao atualizar cartão ${cartao.id}:`, updateError);
+                }
+            } else {
+                const { error: insertError } = await supabase
+                    .from('credit_cards')
+                    .insert(cardData);
+                
+                if (insertError) {
+                    console.error(`❌ Erro ao inserir cartão:`, insertError);
+                }
+            }
+        }
+
+        console.log('✅ Dados salvos com sucesso no Supabase');
 
     } catch (e) {
-        console.error('❌ Erro ao salvar dados:', e);
+        console.error('❌ Erro crítico ao salvar dados:', e);
     }
 }
 
