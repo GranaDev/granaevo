@@ -95,7 +95,7 @@ async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
-            console.error('❌ Sessão não encontrada ao carregar perfis. O usuário será deslogado.');
+            console.error('❌ Sessão não encontrada.');
             throw new Error('Sessão de usuário inválida.');
         }
 
@@ -108,8 +108,8 @@ async function carregarPerfis() {
             .order('id', { ascending: true });
 
         if (error) {
-            console.error('❌ Erro ao buscar perfis no Supabase:', error);
-            throw error; // Propaga o erro para ser tratado no `catch`
+            console.error('❌ Erro ao buscar perfis:', error);
+            throw error;
         }
 
         if (perfis && perfis.length > 0) {
@@ -117,18 +117,17 @@ async function carregarPerfis() {
             usuarioLogado.perfis = perfis.map(p => ({
                 id: p.id,
                 nome: p.name,
-                foto: p.photo_url // Corrigido para o nome padrão do Supabase Storage
+                foto: p.photo_url // ✅ CORRIGIDO: photo_url, não photo
             }));
             return { sucesso: true, perfisEncontrados: true };
         } else {
-            console.log('⚠️ Nenhum perfil encontrado. A tela de criação será exibida.');
-            usuarioLogado.perfis = []; // Garante que a lista de perfis esteja vazia
+            console.log('⚠️ Nenhum perfil encontrado.');
+            usuarioLogado.perfis = [];
             return { sucesso: true, perfisEncontrados: false };
         }
         
     } catch(e) {
-        console.error('❌ Erro crítico na função carregarPerfis:', e.message);
-        // Em caso de erro crítico, limpamos os perfis para forçar um estado seguro
+        console.error('❌ Erro crítico em carregarPerfis:', e.message);
         usuarioLogado.perfis = [];
         return { sucesso: false, perfisEncontrados: false, erro: e };
     }
@@ -138,9 +137,9 @@ async function carregarPerfis() {
 
 async function carregarDadosPerfil(perfilId) {
     try {
-        console.log(`📦 Carregando todos os dados para o perfil ID: ${perfilId}`);
+        console.log(`📦 Carregando dados do perfil ID: ${perfilId}`);
 
-        // Executa todas as buscas em paralelo para mais performance
+        // Busca paralela de todos os dados
         const [transData, goalsData, billsData, cardsData] = await Promise.all([
             supabase.from('transactions').select('*').eq('profile_id', perfilId).order('date', { ascending: false }),
             supabase.from('goals').select('*').eq('profile_id', perfilId),
@@ -148,13 +147,13 @@ async function carregarDadosPerfil(perfilId) {
             supabase.from('credit_cards').select('*').eq('profile_id', perfilId)
         ]);
 
-        // Verifica erros em cada uma das respostas
+        // Verifica erros
         if (transData.error) throw transData.error;
         if (goalsData.error) throw goalsData.error;
         if (billsData.error) throw billsData.error;
         if (cardsData.error) throw cardsData.error;
 
-        // Mapeia os dados do Supabase para o formato local, garantindo que sejam arrays
+        // ✅ MAPEIA TRANSAÇÕES
         transacoes = (transData.data || []).map(t => ({
             id: t.id,
             categoria: t.category,
@@ -167,14 +166,17 @@ async function carregarDadosPerfil(perfilId) {
             contaFixaId: t.conta_fixa_id
         }));
 
+        // ✅ MAPEIA METAS (com histórico de retiradas)
         metas = (goalsData.data || []).map(m => ({
             id: m.id,
             descricao: m.description,
             objetivo: parseFloat(m.target_amount),
             saved: parseFloat(m.saved_amount),
-            monthly: m.monthly_data || {}
+            monthly: m.monthly_data || {},
+            historicoRetiradas: m.withdrawal_history || [] // ✅ ADICIONADO
         }));
 
+        // ✅ MAPEIA CONTAS FIXAS (com dados de compras)
         contasFixas = (billsData.data || []).map(b => ({
             id: b.id,
             descricao: b.description,
@@ -183,9 +185,12 @@ async function carregarDadosPerfil(perfilId) {
             pago: b.paid,
             cartaoId: b.card_id,
             parcelaAtual: b.installment_current,
-            totalParcelas: b.installment_total
+            totalParcelas: b.installment_total,
+            tipoContaFixa: b.bill_type, // ✅ ADICIONADO
+            compras: b.purchases_data || [] // ✅ ADICIONADO
         }));
 
+        // ✅ MAPEIA CARTÕES
         cartoesCredito = (cardsData.data || []).map(c => ({
             id: c.id,
             nomeBanco: c.bank_name,
@@ -195,7 +200,7 @@ async function carregarDadosPerfil(perfilId) {
             bandeiraImg: c.brand_image
         }));
 
-        console.log('✅ Dados do perfil carregados com sucesso:', {
+        console.log('✅ Dados carregados:', {
             transacoes: transacoes.length,
             metas: metas.length,
             contas: contasFixas.length,
@@ -203,34 +208,40 @@ async function carregarDadosPerfil(perfilId) {
         });
         
     } catch(e) {
-        console.error('❌ Erro crítico ao carregar dados do perfil:', e);
-        // Em caso de erro, zera todos os dados para garantir um estado limpo
+        console.error('❌ Erro ao carregar dados:', e);
         transacoes = [];
         metas = [];
         contasFixas = [];
         cartoesCredito = [];
-        alert('Houve um erro ao carregar os dados deste perfil. Tente novamente.');
+        alert('Erro ao carregar dados. Tente novamente.');
     }
 }
 
 
 async function salvarDados() {
-    if (!perfilAtivo) return;
+    if (!perfilAtivo) {
+        console.warn('⚠️ Nenhum perfil ativo para salvar.');
+        return;
+    }
 
     try {
-        // TRANSAÇÕES
+        console.log('💾 Salvando dados do perfil:', perfilAtivo.id);
+
+        // ========== 1. SALVAR TRANSAÇÕES ==========
         for (const t of transacoes) {
-            const data = {
+            const transData = {
                 profile_id: perfilAtivo.id,
                 type: t.tipo,
                 description: t.descricao,
                 value: t.valor,
-                date: t.data,
-                hour: t.hora,
+                date: dataParaISO(t.data),
+                time: t.hora,
                 category: t.categoria,
-                meta_id: t.metaId || null
+                meta_id: t.metaId || null,
+                conta_fixa_id: t.contaFixaId || null
             };
 
+            // Verifica se existe (pelo ID)
             const { data: existing } = await supabase
                 .from('transactions')
                 .select('id')
@@ -238,19 +249,29 @@ async function salvarDados() {
                 .maybeSingle();
 
             if (existing) {
-                await supabase.from('transactions').update(data).eq('id', t.id);
+                // Atualiza
+                await supabase.from('transactions').update(transData).eq('id', t.id);
             } else {
-                await supabase.from('transactions').insert({ ...data, id: t.id });
+                // Insere com ID
+                const { data: inserted } = await supabase
+                    .from('transactions')
+                    .insert(transData)
+                    .select('id')
+                    .single();
+                
+                if (inserted) t.id = inserted.id; // Atualiza ID local
             }
         }
 
-        // METAS
+        // ========== 2. SALVAR METAS ==========
         for (const meta of metas) {
             const metaData = {
                 profile_id: perfilAtivo.id,
                 description: meta.descricao,
-                target_value: meta.objetivo,
-                saved_value: meta.guardado
+                target_amount: meta.objetivo,
+                saved_amount: meta.saved,
+                monthly_data: meta.monthly || {},
+                withdrawal_history: meta.historicoRetiradas || [] // ✅ SALVA HISTÓRICO
             };
 
             const { data: existing } = await supabase
@@ -262,11 +283,17 @@ async function salvarDados() {
             if (existing) {
                 await supabase.from('goals').update(metaData).eq('id', meta.id);
             } else {
-                await supabase.from('goals').insert({ ...metaData, id: meta.id });
+                const { data: inserted } = await supabase
+                    .from('goals')
+                    .insert(metaData)
+                    .select('id')
+                    .single();
+                
+                if (inserted) meta.id = inserted.id;
             }
         }
 
-        // CONTAS FIXAS
+        // ========== 3. SALVAR CONTAS FIXAS ==========
         for (const conta of contasFixas) {
             const contaData = {
                 profile_id: perfilAtivo.id,
@@ -274,7 +301,11 @@ async function salvarDados() {
                 value: conta.valor,
                 due_date: conta.vencimento,
                 paid: conta.pago,
-                card_id: conta.cartaoId || null
+                card_id: conta.cartaoId || null,
+                installment_current: conta.parcelaAtual || null,
+                installment_total: conta.totalParcelas || null,
+                bill_type: conta.tipoContaFixa || null, // ✅ SALVA TIPO
+                purchases_data: conta.compras || [] // ✅ SALVA COMPRAS
             };
 
             const { data: existing } = await supabase
@@ -286,14 +317,51 @@ async function salvarDados() {
             if (existing) {
                 await supabase.from('fixed_bills').update(contaData).eq('id', conta.id);
             } else {
-                await supabase.from('fixed_bills').insert({ ...contaData, id: conta.id });
+                const { data: inserted } = await supabase
+                    .from('fixed_bills')
+                    .insert(contaData)
+                    .select('id')
+                    .single();
+                
+                if (inserted) conta.id = inserted.id;
             }
         }
 
-        console.log('✅ Dados salvos com sucesso');
+        // ========== 4. SALVAR CARTÕES ==========
+        for (const cartao of cartoesCredito) {
+            const cartaoData = {
+                profile_id: perfilAtivo.id,
+                bank_name: cartao.nomeBanco,
+                card_limit: cartao.limite,
+                used_amount: cartao.usado,
+                due_day: cartao.vencimentoDia,
+                brand_image: cartao.bandeiraImg || null
+            };
+
+            const { data: existing } = await supabase
+                .from('credit_cards')
+                .select('id')
+                .eq('id', cartao.id)
+                .maybeSingle();
+
+            if (existing) {
+                await supabase.from('credit_cards').update(cartaoData).eq('id', cartao.id);
+            } else {
+                const { data: inserted } = await supabase
+                    .from('credit_cards')
+                    .insert(cartaoData)
+                    .select('id')
+                    .single();
+                
+                if (inserted) cartao.id = inserted.id;
+            }
+        }
+
+        console.log('✅ Todos os dados salvos com sucesso!');
 
     } catch (e) {
         console.error('❌ Erro ao salvar dados:', e);
+        mostrarNotificacao('Erro ao salvar dados: ' + e.message, 'error');
     }
 }
 
@@ -473,17 +541,15 @@ async function entrarNoPerfil(index) {
 
 
 
-function adicionarNovoPerfil() {
+async function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
-    const limitePerfis = limitesPlano[plano]; // Pega o limite do objeto: 1, 2 ou 4
+    const limitePerfis = limitesPlano[plano];
     const perfisAtuais = usuarioLogado.perfis.length;
 
-    // ✅ CORREÇÃO: Validação unificada e correta.
-    // Verifica se o número de perfis atuais JÁ ATINGIU ou ULTRAPASSOU o limite do plano.
     if (perfisAtuais >= limitePerfis) {
-        console.log(`🚫 Tentativa de adicionar perfil bloqueada. Limite do plano "${plano}" (${limitePerfis}) atingido.`);
-        mostrarPopupLimite(); // Mostra a mensagem de limite genérica, que já é inteligente.
-        return; // Para a execução
+        console.log(`🚫 Limite atingido. Plano "${plano}" permite ${limitePerfis} perfis.`);
+        mostrarPopupLimite();
+        return;
     }
     
     console.log('📝 Abrindo formulário de novo perfil...');
@@ -503,18 +569,17 @@ function adicionarNovoPerfil() {
         const nome = document.getElementById('novoPerfilNome').value.trim();
         const fotoInput = document.getElementById('novoPerfilFoto');
         
-        if(!nome) {
-            alert("Digite o nome do usuário!");
+        if (!nome) {
+            alert("❌ Digite o nome do usuário!");
             return;
         }
         
-        if(nome.length < 2) {
-            alert("O nome deve ter pelo menos 2 caracteres.");
+        if (nome.length < 2) {
+            alert("❌ O nome deve ter pelo menos 2 caracteres.");
             return;
         }
         
-        // ✅ Segunda verificação de segurança (boa prática)
-        if(usuarioLogado.perfis.length >= limitesPlano[plano]) {
+        if (usuarioLogado.perfis.length >= limitesPlano[plano]) {
             mostrarPopupLimite();
             fecharPopup();
             return;
@@ -524,20 +589,18 @@ function adicionarNovoPerfil() {
             console.log('💾 Criando novo perfil no banco...');
             
             const { data: { session } } = await supabase.auth.getSession();
-            
-            if (!session) {
-                throw new Error('Sessão não encontrada');
-            }
+            if (!session) throw new Error('Sessão não encontrada');
             
             let fotoUrl = null;
             
-            if(fotoInput.files && fotoInput.files[0]) {
+            // ✅ UPLOAD DE FOTO (se houver)
+            if (fotoInput.files && fotoInput.files[0]) {
                 console.log('📸 Fazendo upload da foto...');
                 
                 const arquivo = fotoInput.files[0];
                 
-                if(arquivo.size > 2 * 1024 * 1024) {
-                    alert('A foto deve ter no máximo 2MB');
+                if (arquivo.size > 2 * 1024 * 1024) {
+                    alert('❌ A foto deve ter no máximo 2MB');
                     return;
                 }
                 
@@ -562,12 +625,13 @@ function adicionarNovoPerfil() {
             
             console.log('💾 Inserindo perfil no banco...');
             
+            // ✅ INSERIR PERFIL NO BANCO
             const { data: novoPerfil, error } = await supabase
                 .from('profiles')
                 .insert({
                     user_id: session.user.id,
                     name: nome,
-                    photo: fotoUrl
+                    photo_url: fotoUrl // ✅ CORRIGIDO: photo_url
                 })
                 .select()
                 .single();
@@ -579,20 +643,21 @@ function adicionarNovoPerfil() {
             
             console.log('✅ Perfil criado com ID:', novoPerfil.id);
             
+            // ✅ ATUALIZAR LOCALMENTE
             usuarioLogado.perfis.push({
                 id: novoPerfil.id,
                 nome: novoPerfil.name,
-                foto: novoPerfil.photo
+                foto: novoPerfil.photo_url
             });
             
             fecharPopup();
             atualizarTelaPerfis();
             
-            alert('✅ Perfil criado com sucesso! Agora você pode selecioná-lo para entrar.');
+            mostrarNotificacao('✅ Perfil criado com sucesso!', 'success');
             
         } catch (error) {
             console.error('❌ Erro ao criar perfil:', error);
-            alert('❌ Erro ao criar perfil. Tente novamente.');
+            alert('❌ Erro ao criar perfil: ' + error.message);
         }
     };
 }
@@ -700,23 +765,74 @@ function atualizarNomeUsuario() {
     }
 }
 
-function alterarFoto(event) {
+// ========== UPLOAD DE FOTO (CORRIGIDO) ==========
+async function alterarFoto(event) {
     const file = event.target.files[0];
-    if(file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            if(perfilAtivo) {
-                perfilAtivo.foto = e.target.result;
-                const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-                if(idx !== -1) {
-                    usuarioLogado.perfis[idx].foto = e.target.result;
-                }
-                document.getElementById('userPhoto').src = e.target.result;
-                localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
-                localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
-            }
-        };
-        reader.readAsDataURL(file);
+    if (!file) return;
+
+    if (!perfilAtivo) {
+        alert('❌ Nenhum perfil ativo.');
+        return;
+    }
+
+    try {
+        console.log('📸 Iniciando upload de foto...');
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Sessão não encontrada');
+
+        // Validar tamanho (2MB)
+        if (file.size > 2 * 1024 * 1024) {
+            alert('❌ A foto deve ter no máximo 2MB');
+            return;
+        }
+
+        // Gerar nome único
+        const nomeArquivo = `${session.user.id}/${Date.now()}_${file.name}`;
+
+        // ✅ UPLOAD NO STORAGE
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('profile-photos')
+            .upload(nomeArquivo, file, {
+                upsert: true
+            });
+
+        if (uploadError) {
+            console.error('❌ Erro no upload:', uploadError);
+            throw uploadError;
+        }
+
+        // ✅ OBTER URL PÚBLICA
+        const { data: urlData } = supabase.storage
+            .from('profile-photos')
+            .getPublicUrl(nomeArquivo);
+
+        const fotoUrl = urlData.publicUrl;
+        console.log('✅ Foto carregada:', fotoUrl);
+
+        // ✅ ATUALIZAR NO BANCO
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ photo_url: fotoUrl })
+            .eq('id', perfilAtivo.id);
+
+        if (updateError) throw updateError;
+
+        // ✅ ATUALIZAR LOCALMENTE
+        perfilAtivo.foto = fotoUrl;
+        const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
+        if (idx !== -1) {
+            usuarioLogado.perfis[idx].foto = fotoUrl;
+        }
+
+        // Atualizar UI
+        document.getElementById('userPhoto').src = fotoUrl;
+        
+        mostrarNotificacao('✅ Foto atualizada com sucesso!', 'success');
+
+    } catch (error) {
+        console.error('❌ Erro ao alterar foto:', error);
+        alert('❌ Erro ao alterar foto: ' + error.message);
     }
 }
 
