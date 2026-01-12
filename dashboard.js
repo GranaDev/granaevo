@@ -1,6 +1,10 @@
 // ========== IMPORT SUPABASE ==========
 import { supabase } from './supabase-client.js';
 
+// ✅ LOG DE CARREGAMENTO DO ARQUIVO
+console.log('📦 dashboard.js: Arquivo sendo carregado...');
+console.log('🔗 Supabase importado:', typeof supabase);
+
 /* ==============================================
    GRANAEVO - DASHBOARD.JS COMPLETO
    Todas as funcionalidades separadas do HTML
@@ -5957,20 +5961,51 @@ function excluirCompraFatura(faturaId, compraId) {
     }, 200);
 }
 
-// ========== INICIALIZAÇÃO ==========
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 DOM Carregado, iniciando verificação...');
+// ========== INICIALIZAÇÃO CORRIGIDA ==========
+console.log('🔧 Arquivo dashboard.js carregado!');
+
+// ✅ GARANTIR QUE TUDO ESTÁ PRONTO ANTES DE VERIFICAR LOGIN
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', inicializarSistema);
+} else {
+    // DOM já está carregado
+    inicializarSistema();
+}
+
+async function inicializarSistema() {
+    console.log('🚀 ===== INICIANDO SISTEMA GRANAEVO =====');
     
-    // ✅ AGUARDAR verificarLogin() antes de bind de eventos
-    await verificarLogin();
-    
-    // ✅ Só bindar eventos se login foi bem-sucedido
-    if (window.usuarioLogado) {
+    try {
+        // ✅ PASSO 1: Verificar login e carregar perfis
+        console.log('📋 Passo 1: Verificando autenticação...');
+        await verificarLogin();
+        
+        // ✅ PASSO 2: Verificar se usuário foi configurado
+        if (!window.usuarioLogado) {
+            console.error('❌ Erro crítico: window.usuarioLogado não foi inicializado');
+            throw new Error('Falha na inicialização do usuário');
+        }
+        
+        console.log('✅ Usuário configurado:', window.usuarioLogado);
+        
+        // ✅ PASSO 3: Configurar eventos
+        console.log('📋 Passo 3: Configurando eventos...');
         bindEventos();
         setupSidebarToggle();
-        console.log('✅ Sistema totalmente inicializado');
+        
+        console.log('🎉 ===== SISTEMA INICIALIZADO COM SUCESSO =====');
+        
+    } catch (erro) {
+        console.error('❌ ===== ERRO NA INICIALIZAÇÃO DO SISTEMA =====');
+        console.error('Detalhes:', erro);
+        alert('Erro ao inicializar o sistema. Por favor, faça login novamente.');
+        
+        // Redirecionar para login em caso de erro
+        setTimeout(() => {
+            window.location.href = 'login.html';
+        }, 2000);
     }
-});
+}
 
 // ========== FUNÇÕES GLOBAIS EXPOSTAS ==========
 // Estas funções precisam ser acessíveis globalmente para os event handlers inline no HTML
@@ -6000,6 +6035,22 @@ window.editarCompraFatura = editarCompraFatura;
 window.excluirCompraFatura = excluirCompraFatura;
 window.criarPopup = criarPopup;
 window.fecharPopup = fecharPopup;
+window.abrirDetalhesPerfilRelatorio = abrirDetalhesPerfilRelatorio;
+window.gerarRelatorioCompartilhadoPersonalizado = gerarRelatorioCompartilhadoPersonalizado;
+window.abrirSelecaoPerfisCasal = abrirSelecaoPerfisCasal;
+window.confirmarSelecaoPerfisCasal = confirmarSelecaoPerfisCasal;
+window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
+window.abrirAnaliseDisciplina = abrirAnaliseDisciplina;
+window.abrirWidgetOndeForDinheiro = abrirWidgetOndeForDinheiro;
+window.processarAnaliseOndeForDinheiro = processarAnaliseOndeForDinheiro;
+window.exportarDadosJSON = exportarDadosJSON;
+window.exportarDadosCSV = exportarDadosCSV;
+window.mostrarNotificacao = mostrarNotificacao;
+window.obterEstatisticas = obterEstatisticas;
+window.sistemaLog = sistemaLog;
+window.irParaAtualizarPlano = irParaAtualizarPlano;
+
+console.log('✅ Funções globais expostas com sucesso!');
 
 // ========== UTILITÁRIOS ADICIONAIS ==========
 
