@@ -14,11 +14,7 @@ let usuarioAtual = {
     foto: null 
 };
 
-window.usuarioLogado = {
-    nome: "Fulano",
-    plano: "Casal",
-    perfis: []
-};
+window.usuarioLogado = null;
 
 let perfilAtivo = null;
 let cartoesCredito = [];
@@ -557,6 +553,7 @@ async function trocarPerfil() {
 function mostrarSelecaoPerfis() {
     const selecao = document.getElementById('selecaoPerfis');
     const sidebar = document.getElementById('sidebar');
+    const authLoading = document.getElementById('authLoading');
 
     console.log('🎬 ===== EXIBINDO TELA DE SELEÇÃO DE PERFIS =====');
 
@@ -570,6 +567,12 @@ function mostrarSelecaoPerfis() {
     console.log('📊 Estado atual do elemento:');
     console.log('  - Display:', window.getComputedStyle(selecao).display);
     console.log('  - Visibilidade:', window.getComputedStyle(selecao).visibility);
+
+    // ✅ GARANTIR QUE LOADING ESTÁ OCULTO
+    if (authLoading) {
+        authLoading.style.display = 'none';
+        console.log('✅ Loading de autenticação ocultado');
+    }
 
     // ✅ EXIBIR TELA DE SELEÇÃO
     selecao.style.display = 'flex';
@@ -767,13 +770,16 @@ async function verificarLogin() {
 
         console.log('✅ Assinatura ativa:', subscription.plans.name);
 
-        // ✅ CONFIGURAR USUÁRIO LOGADO
-        window.usuarioLogado.userId = session.user.id;
-        window.usuarioLogado.nome = session.user.user_metadata?.name || session.user.email.split('@')[0];
-        window.usuarioLogado.plano = subscription.plans.name;
-        window.usuarioLogado.perfis = []; // Resetar perfis
+        // ✅ CONFIGURAR USUÁRIO LOGADO - CORRIGIDO
+        // CRIAR O OBJETO PRIMEIRO, DEPOIS POPULAR
+        window.usuarioLogado = {
+            userId: session.user.id,
+            nome: session.user.user_metadata?.name || session.user.email.split('@')[0],
+            plano: subscription.plans.name,
+            perfis: []
+        };
 
-        console.log('👤 Usuário logado configurado:', usuarioLogado);
+        console.log('👤 Usuário logado configurado:', window.usuarioLogado);
 
         // ✅ CARREGAR PERFIS
         console.log('📂 Carregando perfis do banco de dados...');
@@ -787,6 +793,18 @@ async function verificarLogin() {
         }
         
         console.log('✅ Perfis carregados com sucesso!');
+        
+        // ✅ OCULTAR LOADING ANTES DE MOSTRAR PERFIS
+        if (authLoading) {
+            authLoading.style.display = 'none';
+            console.log('✅ Loading ocultado');
+        }
+        
+        if (protectedContent) {
+            protectedContent.style.display = 'block';
+            console.log('✅ Conteúdo protegido exibido');
+        }
+        
         console.log('🎬 Exibindo tela de seleção de perfis...');
         mostrarSelecaoPerfis();
 
@@ -798,26 +816,19 @@ async function verificarLogin() {
         
         alert(`Erro ao inicializar: ${e.message}`);
         
+        // ✅ OCULTAR LOADING EM CASO DE ERRO TAMBÉM
+        if (authLoading) {
+            authLoading.style.display = 'none';
+        }
+        
         if (typeof AuthGuard !== 'undefined' && AuthGuard.performLogout) {
             AuthGuard.performLogout();
         } else {
             window.location.href = 'login.html';
         }
-    } finally {
-        console.log('🏁 Finalizando verificação de login...');
-        
-        if (authLoading) {
-            authLoading.style.display = 'none';
-            console.log('✅ Loading ocultado');
-        }
-        
-        if (protectedContent) {
-            protectedContent.style.display = 'block';
-            console.log('✅ Conteúdo protegido exibido');
-        }
-        
-        console.log('🔐 ===== VERIFICAÇÃO DE LOGIN CONCLUÍDA =====');
     }
+    
+    console.log('🔐 ===== VERIFICAÇÃO DE LOGIN CONCLUÍDA =====');
 }
 
 
@@ -5947,10 +5958,18 @@ function excluirCompraFatura(faturaId, compraId) {
 }
 
 // ========== INICIALIZAÇÃO ==========
-document.addEventListener('DOMContentLoaded', () => {
-    verificarLogin();
-    bindEventos();
-    setupSidebarToggle();
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 DOM Carregado, iniciando verificação...');
+    
+    // ✅ AGUARDAR verificarLogin() antes de bind de eventos
+    await verificarLogin();
+    
+    // ✅ Só bindar eventos se login foi bem-sucedido
+    if (window.usuarioLogado) {
+        bindEventos();
+        setupSidebarToggle();
+        console.log('✅ Sistema totalmente inicializado');
+    }
 });
 
 // ========== FUNÇÕES GLOBAIS EXPOSTAS ==========

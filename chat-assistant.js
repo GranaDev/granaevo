@@ -432,15 +432,15 @@ class ChatAssistant {
     
     // ========== FUNÇÕES DE UTILIDADE DE UI ==========
     getAvatarHtml(isUser = false) {
-        if (isUser) {
-            const perfil = perfilAtivo;
-            if (perfil && perfil.foto) {
-                return `<img src="${perfil.foto}" alt="${perfil.nome.charAt(0).toUpperCase()}">`;
-            }
-            return perfil?.nome?.charAt(0).toUpperCase() || 'U';
+    if (isUser) {
+        const perfil = this.perfilAtivo || window.perfilAtivo;
+        if (perfil && perfil.foto) {
+            return `<img src="${perfil.foto}" alt="${perfil.nome.charAt(0).toUpperCase()}">`;
         }
-        return 'Ge';
+        return perfil?.nome?.charAt(0).toUpperCase() || 'U';
     }
+    return 'Ge';
+}
 
 // ========== INICIALIZAÇÃO ==========
     init() {
