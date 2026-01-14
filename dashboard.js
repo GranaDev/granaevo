@@ -930,7 +930,7 @@ function atualizarListaContasFixas() {
                 </div>
                 ${status !== 'Pago' ? `
                     <div class="conta-actions">
-                        <button class="conta-btn" onclick="event.stopPropagation(); abrirPopupPagarContaFixa(${c.id})">Pagar Fatura</button>
+                        <button class="conta-btn" data-conta-id="${c.id}" data-action="pagar-fatura">Pagar Fatura</button>
                     </div>
                 ` : ''}
             `;
@@ -953,16 +953,18 @@ function atualizarListaContasFixas() {
                 </div>
                 ${status !== 'Pago' ? `
                     <div class="conta-actions">
-                        <button class="conta-btn" onclick="abrirPopupPagarContaFixa(${c.id})">Pagar</button>
+                        <button class="conta-btn" data-conta-id="${c.id}" data-action="pagar">Pagar</button>
                     </div>
                 ` : ''}
             `;
         }
         
+        // ✅ CORREÇÃO: Usar event delegation com data attributes
         div.onclick = (e) => {
+            // Se clicou em um botão, não fazer nada (o botão tem seu próprio handler)
             if(e.target.tagName === 'BUTTON') return;
             
-            // Se for fatura de cartão, abrir visualização detalhada
+            // Se clicou no card (fora do botão), abrir edição/visualização
             if(c.tipoContaFixa === 'fatura_cartao') {
                 abrirVisualizacaoFatura(c.id);
             } else {
@@ -974,6 +976,23 @@ function atualizarListaContasFixas() {
     });
     
     lista.appendChild(containerContas);
+    
+    // ✅ ADICIONAR EVENT LISTENERS NOS BOTÕES APÓS RENDERIZAR
+    document.querySelectorAll('[data-action="pagar"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const contaId = parseInt(btn.getAttribute('data-conta-id'));
+            abrirPopupPagarContaFixa(contaId);
+        });
+    });
+    
+    document.querySelectorAll('[data-action="pagar-fatura"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const contaId = parseInt(btn.getAttribute('data-conta-id'));
+            abrirPopupPagarContaFixa(contaId);
+        });
+    });
 }
 
 function abrirContaFixaForm(editId = null) {
