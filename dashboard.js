@@ -913,86 +913,123 @@ function atualizarListaContasFixas() {
         const div = document.createElement('div');
         div.className = 'conta-card';
         
+        // ✅ CRIAR ELEMENTOS PROGRAMATICAMENTE EM VEZ DE innerHTML
+        
+        // Header
+        const header = document.createElement('div');
+        header.className = 'conta-header';
+        
+        const title = document.createElement('div');
+        title.className = 'conta-title';
+        
+        const statusSpan = document.createElement('span');
+        statusSpan.className = `conta-status ${statusClass}`;
+        statusSpan.textContent = status;
+        
+        // Info
+        const info = document.createElement('div');
+        info.className = 'conta-info';
+        
         // Verificar se é fatura de cartão
         if(c.tipoContaFixa === 'fatura_cartao' && c.compras && c.compras.length > 0) {
             const totalCompras = c.compras.length;
-            div.innerHTML = `
-                <div class="conta-header">
-                    <div class="conta-title">💳 ${c.descricao}</div>
-                    <span class="conta-status ${statusClass}">${status}</span>
+            
+            title.innerHTML = `💳 ${c.descricao}`;
+            
+            info.innerHTML = `
+                <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">Valor: ${formatBRL(c.valor)}</div>
+                <div>Vencimento: ${formatarDataBR(c.vencimento)}</div>
+                <div style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 6px;">
+                    📦 ${totalCompras} compra${totalCompras > 1 ? 's' : ''} nesta fatura
                 </div>
-                <div class="conta-info">
-                    <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">Valor: ${formatBRL(c.valor)}</div>
-                    <div>Vencimento: ${formatarDataBR(c.vencimento)}</div>
-                    <div style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 6px;">
-                        📦 ${totalCompras} compra${totalCompras > 1 ? 's' : ''} nesta fatura
-                    </div>
-                </div>
-                ${status !== 'Pago' ? `
-                    <div class="conta-actions">
-                        <button class="conta-btn" data-conta-id="${c.id}" data-action="pagar-fatura">Pagar Fatura</button>
-                    </div>
-                ` : ''}
             `;
-        } else {
-            // Conta fixa normal
-            let parcelasInfo = '';
-            if(c.totalParcelas && c.parcelaAtual) {
-                parcelasInfo = `<div style="color: var(--warning); font-size: 0.85rem; margin-top: 4px;">Parcela: ${c.parcelaAtual}/${c.totalParcelas}</div>`;
+            
+            if(status !== 'Pago') {
+                const actions = document.createElement('div');
+                actions.className = 'conta-actions';
+                
+                const btnPagar = document.createElement('button');
+                btnPagar.className = 'conta-btn';
+                btnPagar.textContent = 'Pagar Fatura';
+                
+                // ✅ ARMAZENAR O ID NO CLOSURE
+                btnPagar.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    console.log('🔍 Clicado em Pagar Fatura - ID:', c.id);
+                    abrirPopupPagarContaFixa(c.id);
+                });
+                
+                actions.appendChild(btnPagar);
+                div.appendChild(header);
+                div.appendChild(info);
+                div.appendChild(actions);
+            } else {
+                div.appendChild(header);
+                div.appendChild(info);
             }
             
-            div.innerHTML = `
-                <div class="conta-header">
-                    <div class="conta-title">${c.descricao}</div>
-                    <span class="conta-status ${statusClass}">${status}</span>
-                </div>
-                <div class="conta-info">
-                    <div>Valor: ${formatBRL(c.valor)}</div>
-                    <div>Vencimento: ${formatarDataBR(c.vencimento)}</div>
-                    ${parcelasInfo}
-                </div>
-                ${status !== 'Pago' ? `
-                    <div class="conta-actions">
-                        <button class="conta-btn" data-conta-id="${c.id}" data-action="pagar">Pagar</button>
-                    </div>
-                ` : ''}
+        } else {
+            // Conta fixa normal
+            title.textContent = c.descricao;
+            
+            let infoHTML = `
+                <div>Valor: ${formatBRL(c.valor)}</div>
+                <div>Vencimento: ${formatarDataBR(c.vencimento)}</div>
             `;
+            
+            if(c.totalParcelas && c.parcelaAtual) {
+                infoHTML += `<div style="color: var(--warning); font-size: 0.85rem; margin-top: 4px;">Parcela: ${c.parcelaAtual}/${c.totalParcelas}</div>`;
+            }
+            
+            info.innerHTML = infoHTML;
+            
+            if(status !== 'Pago') {
+                const actions = document.createElement('div');
+                actions.className = 'conta-actions';
+                
+                const btnPagar = document.createElement('button');
+                btnPagar.className = 'conta-btn';
+                btnPagar.textContent = 'Pagar';
+                
+                // ✅ ARMAZENAR O ID NO CLOSURE
+                const contaId = c.id; // Guardar em variável local
+                btnPagar.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    console.log('🔍 Clicado em Pagar - ID:', contaId, 'Conta:', c.descricao);
+                    abrirPopupPagarContaFixa(contaId);
+                });
+                
+                actions.appendChild(btnPagar);
+                div.appendChild(header);
+                div.appendChild(info);
+                div.appendChild(actions);
+            } else {
+                div.appendChild(header);
+                div.appendChild(info);
+            }
         }
         
-        // ✅ CORREÇÃO: Usar event delegation com data attributes
-        div.onclick = (e) => {
-            // Se clicou em um botão, não fazer nada (o botão tem seu próprio handler)
+        header.appendChild(title);
+        header.appendChild(statusSpan);
+        
+        // ✅ Evento de clique no card (para editar)
+        div.addEventListener('click', (e) => {
+            // Não fazer nada se clicou em um botão
             if(e.target.tagName === 'BUTTON') return;
             
-            // Se clicou no card (fora do botão), abrir edição/visualização
+            console.log('🔍 Clicado no card - ID:', c.id, 'Conta:', c.descricao);
+            
             if(c.tipoContaFixa === 'fatura_cartao') {
                 abrirVisualizacaoFatura(c.id);
             } else {
                 abrirContaFixaForm(c.id);
             }
-        };
+        });
         
         containerContas.appendChild(div);
     });
     
     lista.appendChild(containerContas);
-    
-    // ✅ ADICIONAR EVENT LISTENERS NOS BOTÕES APÓS RENDERIZAR
-    document.querySelectorAll('[data-action="pagar"]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const contaId = parseInt(btn.getAttribute('data-conta-id'));
-            abrirPopupPagarContaFixa(contaId);
-        });
-    });
-    
-    document.querySelectorAll('[data-action="pagar-fatura"]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const contaId = parseInt(btn.getAttribute('data-conta-id'));
-            abrirPopupPagarContaFixa(contaId);
-        });
-    });
 }
 
 function abrirContaFixaForm(editId = null) {
