@@ -1,22 +1,13 @@
 // ========== IMPORT SUPABASE ==========
 import { supabase } from './supabase-client.js';
+import { dataManager } from './data-manager.js'; // ✅ ADICIONAR ESTA LINHA
 
-/* ==============================================
-   GRANAEVO - DASHBOARD.JS COMPLETO
-   Todas as funcionalidades separadas do HTML
-   ============================================== */
-
-// ========== ESTADO GLOBAL E PERSISTÊNCIA ==========
-let usuarioAtual = { 
-    usuario: 'Admin', 
-    senha: '1234', 
-    email: 'admin@granaevo.com', 
-    foto: null 
-};
-
+// ========== ESTADO GLOBAL ==========
 let usuarioLogado = {
-    nome: "Fulano",
-    plano: "Casal",
+    userId: null,        // ✅ ADICIONAR userId
+    nome: "",           // ✅ ADICIONAR nome
+    email: "",          // ✅ ADICIONAR email
+    plano: "",
     perfis: []
 };
 
@@ -95,42 +86,38 @@ async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
-            console.error('❌ Sessão não encontrada ao carregar perfis. O usuário será deslogado.');
-            throw new Error('Sessão de usuário inválida.');
+            throw new Error('Sessão inválida');
         }
 
         console.log('🔍 Buscando perfis para o usuário:', session.user.id);
 
+        // ✅ NOVO: Buscar apenas id, name e photo_url
         const { data: perfis, error } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, name, photo_url') // ✅ Apenas campos necessários
             .eq('user_id', session.user.id)
             .order('id', { ascending: true });
 
-        if (error) {
-            console.error('❌ Erro ao buscar perfis no Supabase:', error);
-            throw error; // Propaga o erro para ser tratado no `catch`
-        }
+        if (error) throw error;
 
         if (perfis && perfis.length > 0) {
             console.log(`✅ ${perfis.length} perfil(s) encontrado(s).`);
             usuarioLogado.perfis = perfis.map(p => ({
                 id: p.id,
                 nome: p.name,
-                foto: p.photo_url // Corrigido para o nome padrão do Supabase Storage
+                foto: p.photo_url
             }));
             return { sucesso: true, perfisEncontrados: true };
         } else {
-            console.log('⚠️ Nenhum perfil encontrado. A tela de criação será exibida.');
-            usuarioLogado.perfis = []; // Garante que a lista de perfis esteja vazia
+            console.log('⚠️ Nenhum perfil encontrado.');
+            usuarioLogado.perfis = [];
             return { sucesso: true, perfisEncontrados: false };
         }
         
     } catch(e) {
-        console.error('❌ Erro crítico na função carregarPerfis:', e.message);
-        // Em caso de erro crítico, limpamos os perfis para forçar um estado seguro
+        console.error('❌ Erro ao carregar perfis:', e);
         usuarioLogado.perfis = [];
-        return { sucesso: false, perfisEncontrados: false, erro: e };
+        return { sucesso: false, perfisEncontrados: false };
     }
 }
 
@@ -138,64 +125,29 @@ async function carregarPerfis() {
 
 async function carregarDadosPerfil(perfilId) {
     try {
-        console.log(`📦 Carregando todos os dados para o perfil ID: ${perfilId}`);
+        console.log(`📦 Carregando dados do perfil ID: ${perfilId}`);
 
-        // Executa todas as buscas em paralelo para mais performance
-        const [transData, goalsData, billsData, cardsData] = await Promise.all([
-            supabase.from('transactions').select('*').eq('profile_id', perfilId).order('date', { ascending: false }),
-            supabase.from('goals').select('*').eq('profile_id', perfilId),
-            supabase.from('fixed_bills').select('*').eq('profile_id', perfilId),
-            supabase.from('credit_cards').select('*').eq('profile_id', perfilId)
-        ]);
+        // ✅ NOVO: Carregar do JSON unificado
+        const userData = await dataManager.loadUserData();
+        
+        const perfilData = userData.profiles.find(p => p.id === perfilId);
 
-        // Verifica erros em cada uma das respostas
-        if (transData.error) throw transData.error;
-        if (goalsData.error) throw goalsData.error;
-        if (billsData.error) throw billsData.error;
-        if (cardsData.error) throw cardsData.error;
+        if (!perfilData) {
+            console.log('ℹ️ Perfil sem dados salvos. Criando estrutura vazia.');
+            transacoes = [];
+            metas = [];
+            contasFixas = [];
+            cartoesCredito = [];
+            return;
+        }
 
-        // Mapeia os dados do Supabase para o formato local, garantindo que sejam arrays
-        transacoes = (transData.data || []).map(t => ({
-            id: t.id,
-            categoria: t.category,
-            tipo: t.type,
-            descricao: t.description,
-            valor: parseFloat(t.value),
-            data: formatarDataBR(t.date),
-            hora: t.time,
-            metaId: t.meta_id,
-            contaFixaId: t.conta_fixa_id
-        }));
+        // ✅ NOVO: Mapear dados do JSON
+        transacoes = perfilData.transacoes || [];
+        metas = perfilData.metas || [];
+        contasFixas = perfilData.contasFixas || [];
+        cartoesCredito = perfilData.cartoesCredito || [];
 
-        metas = (goalsData.data || []).map(m => ({
-            id: m.id,
-            descricao: m.description,
-            objetivo: parseFloat(m.target_amount),
-            saved: parseFloat(m.saved_amount),
-            monthly: m.monthly_data || {}
-        }));
-
-        contasFixas = (billsData.data || []).map(b => ({
-            id: b.id,
-            descricao: b.description,
-            valor: parseFloat(b.value),
-            vencimento: b.due_date,
-            pago: b.paid,
-            cartaoId: b.card_id,
-            parcelaAtual: b.installment_current,
-            totalParcelas: b.installment_total
-        }));
-
-        cartoesCredito = (cardsData.data || []).map(c => ({
-            id: c.id,
-            nomeBanco: c.bank_name,
-            limite: parseFloat(c.card_limit),
-            usado: parseFloat(c.used_amount),
-            vencimentoDia: c.due_day,
-            bandeiraImg: c.brand_image
-        }));
-
-        console.log('✅ Dados do perfil carregados com sucesso:', {
+        console.log('✅ Dados do perfil carregados:', {
             transacoes: transacoes.length,
             metas: metas.length,
             contas: contasFixas.length,
@@ -203,220 +155,54 @@ async function carregarDadosPerfil(perfilId) {
         });
         
     } catch(e) {
-        console.error('❌ Erro crítico ao carregar dados do perfil:', e);
-        // Em caso de erro, zera todos os dados para garantir um estado limpo
+        console.error('❌ Erro ao carregar dados do perfil:', e);
         transacoes = [];
         metas = [];
         contasFixas = [];
         cartoesCredito = [];
-        alert('Houve um erro ao carregar os dados deste perfil. Tente novamente.');
     }
 }
 
 
 
+// ========== SALVAR DADOS ==========
 async function salvarDados() {
     if (!perfilAtivo) return;
 
     try {
-        // ✅ TRANSAÇÕES - Mapeamento correto
-        for (const t of transacoes) {
-            // Converter data de DD/MM/YYYY para YYYY-MM-DD
-            const dataISO = dataParaISO(t.data);
-            
-            const transactionData = {
-                profile_id: perfilAtivo.id,
-                type: t.tipo,
-                description: t.descricao,
-                value: parseFloat(t.valor),
-                date: dataISO, // ✅ Formato correto
-                time: t.hora,
-                category: t.categoria,
-                meta_id: t.metaId || null,
-                conta_fixa_id: t.contaFixaId || null
-            };
+        // ✅ NOVO: Carregar dados completos
+        const userData = await dataManager.loadUserData();
+        
+        // Encontrar ou criar perfil
+        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
+        
+        const dadosPerfil = {
+            id: perfilAtivo.id,
+            nome: perfilAtivo.nome,
+            foto: perfilAtivo.foto,
+            transacoes: transacoes,
+            metas: metas,
+            contasFixas: contasFixas,
+            cartoesCredito: cartoesCredito,
+            lastUpdate: new Date().toISOString()
+        };
 
-            const { data: existing, error: checkError } = await supabase
-                .from('transactions')
-                .select('id')
-                .eq('id', t.id)
-                .maybeSingle();
-
-            if (checkError) {
-                console.error('Erro ao verificar transação:', checkError);
-                continue;
-            }
-
-            if (existing) {
-                const { error: updateError } = await supabase
-                    .from('transactions')
-                    .update(transactionData)
-                    .eq('id', t.id);
-                
-                if (updateError) {
-                    console.error(`❌ Erro ao atualizar transação ${t.id}:`, updateError);
-                }
-            } else {
-                const { error: insertError } = await supabase
-                    .from('transactions')
-                    .insert(transactionData);
-                
-                if (insertError) {
-                    console.error(`❌ Erro ao inserir transação:`, insertError);
-                }
-            }
+        if (perfilIndex !== -1) {
+            userData.profiles[perfilIndex] = dadosPerfil;
+        } else {
+            userData.profiles.push(dadosPerfil);
         }
 
-        // ✅ METAS - Mapeamento correto
-        for (const meta of metas) {
-            const goalData = {
-                profile_id: perfilAtivo.id,
-                description: meta.descricao,
-                target_amount: parseFloat(meta.objetivo), // ✅ Nome correto
-                saved_amount: parseFloat(meta.saved || 0), // ✅ Nome correto
-                monthly_data: meta.monthly || {}, // ✅ Nome correto
-                withdrawal_history: meta.historicoRetiradas || [] // ✅ Histórico de retiradas
-            };
+        // ✅ NOVO: Adicionar à fila de salvamento
+        dataManager.queueSave(userData.profiles);
 
-            const { data: existing, error: checkError } = await supabase
-                .from('goals')
-                .select('id')
-                .eq('id', meta.id)
-                .maybeSingle();
-
-            if (checkError) {
-                console.error('Erro ao verificar meta:', checkError);
-                continue;
-            }
-
-            if (existing) {
-                const { error: updateError } = await supabase
-                    .from('goals')
-                    .update(goalData)
-                    .eq('id', meta.id);
-                
-                if (updateError) {
-                    console.error(`❌ Erro ao atualizar meta ${meta.id}:`, updateError);
-                }
-            } else {
-                const { error: insertError } = await supabase
-                    .from('goals')
-                    .insert(goalData);
-                
-                if (insertError) {
-                    console.error(`❌ Erro ao inserir meta:`, insertError);
-                }
-            }
-        }
-
-        // ✅ CONTAS FIXAS - Mapeamento correto
-        for (const conta of contasFixas) {
-            const billData = {
-                profile_id: perfilAtivo.id,
-                description: conta.descricao,
-                value: parseFloat(conta.valor),
-                due_date: conta.vencimento, // Já deve estar em formato YYYY-MM-DD
-                paid: conta.pago || false,
-                card_id: conta.cartaoId || null,
-                installment_current: conta.parcelaAtual || null,
-                installment_total: conta.totalParcelas || null,
-                bill_type: conta.tipoContaFixa || null,
-                purchases_data: conta.compras || []
-            };
-
-            const { data: existing, error: checkError } = await supabase
-                .from('fixed_bills')
-                .select('id')
-                .eq('id', conta.id)
-                .maybeSingle();
-
-            if (checkError) {
-                console.error('Erro ao verificar conta fixa:', checkError);
-                continue;
-            }
-
-            if (existing) {
-                const { error: updateError } = await supabase
-                    .from('fixed_bills')
-                    .update(billData)
-                    .eq('id', conta.id);
-                
-                if (updateError) {
-                    console.error(`❌ Erro ao atualizar conta fixa ${conta.id}:`, updateError);
-                }
-            } else {
-                const { error: insertError } = await supabase
-                    .from('fixed_bills')
-                    .insert(billData);
-                
-                if (insertError) {
-                    console.error(`❌ Erro ao inserir conta fixa:`, insertError);
-                }
-            }
-        }
-
-        // ✅ CARTÕES DE CRÉDITO
-        for (const cartao of cartoesCredito) {
-            const cardData = {
-                profile_id: perfilAtivo.id,
-                bank_name: cartao.nomeBanco,
-                card_limit: parseFloat(cartao.limite),
-                used_amount: parseFloat(cartao.usado || 0),
-                due_day: parseInt(cartao.vencimentoDia),
-                brand_image: cartao.bandeiraImg || null
-            };
-
-            const { data: existing, error: checkError } = await supabase
-                .from('credit_cards')
-                .select('id')
-                .eq('id', cartao.id)
-                .maybeSingle();
-
-            if (checkError) {
-                console.error('Erro ao verificar cartão:', checkError);
-                continue;
-            }
-
-            if (existing) {
-                const { error: updateError } = await supabase
-                    .from('credit_cards')
-                    .update(cardData)
-                    .eq('id', cartao.id);
-                
-                if (updateError) {
-                    console.error(`❌ Erro ao atualizar cartão ${cartao.id}:`, updateError);
-                }
-            } else {
-                const { error: insertError } = await supabase
-                    .from('credit_cards')
-                    .insert(cardData);
-                
-                if (insertError) {
-                    console.error(`❌ Erro ao inserir cartão:`, insertError);
-                }
-            }
-        }
-
-        console.log('✅ Dados salvos com sucesso no Supabase');
+        console.log('💾 Dados adicionados à fila de salvamento');
 
     } catch (e) {
-        console.error('❌ Erro crítico ao salvar dados:', e);
+        console.error('❌ Erro ao salvar dados:', e);
     }
 }
 
-
-let autoSaveInterval = null;
-
-function iniciarAutoSave() {
-    if (autoSaveInterval) clearInterval(autoSaveInterval);
-    
-    autoSaveInterval = setInterval(async () => {
-        if (perfilAtivo && transacoes.length > 0) {
-            await salvarDados();
-            console.log('🔄 Auto-save executado');
-        }
-    }, 10000); // 10 segundos
-}
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
 async function verificarLogin() {
@@ -430,12 +216,12 @@ async function verificarLogin() {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError || !session) {
-            console.log('🔌 Sessão não encontrada ou erro. Redirecionando para login.');
+            console.log('🔌 Sessão não encontrada. Redirecionando para login.');
             window.location.href = 'login.html';
             return;
         }
 
-        // A verificação de assinatura pode ser mantida ou removida se já houver um Auth Guard
+        // Verificar assinatura
         const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
             .select('plans(name)')
@@ -444,37 +230,38 @@ async function verificarLogin() {
             .single();
 
         if (subError || !subscription) {
-            console.log('🧾 Assinatura não encontrada ou inválida. Redirecionando para planos.');
+            console.log('🧾 Assinatura inválida. Redirecionando para planos.');
             window.location.href = 'planos.html';
             return;
         }
 
+        // ✅ NOVO: Inicializar usuário com todos os dados
         usuarioLogado = {
             userId: session.user.id,
             nome: session.user.user_metadata?.name || session.user.email,
+            email: session.user.email, // ✅ ADICIONAR email
             plano: subscription.plans.name,
             perfis: []
         };
 
-        // Chama a nova função carregarPerfis e aguarda seu resultado detalhado
+        // ✅ NOVO: Inicializar DataManager
+        await dataManager.initialize(usuarioLogado.userId, usuarioLogado.email);
+
+        // Carregar perfis
         const resultadoPerfis = await carregarPerfis();
 
         if (!resultadoPerfis.sucesso) {
-            // Se houve um erro crítico no Supabase, é mais seguro deslogar.
-            throw new Error("Não foi possível carregar os dados do usuário. Tente fazer login novamente.");
+            throw new Error("Não foi possível carregar os dados do usuário.");
         }
-        
-        // Agora, com os perfis carregados (ou a certeza de que não existem), mostramos a tela de seleção.
-        // A própria tela de seleção saberá o que renderizar (lista de perfis ou botão de criar).
-        console.log('✅ Verificação concluída. Exibindo tela de seleção de perfis.');
+
+        console.log('✅ Verificação concluída. Exibindo seleção de perfis.');
         mostrarSelecaoPerfis();
 
     } catch (e) {
         console.error('❌ Erro crítico na inicialização:', e.message);
-        alert(e.message); // Informa o usuário sobre o erro
-        AuthGuard.performLogout(); // Usa a função de logout do seu auth-guard
+        alert(e.message);
+        AuthGuard.performLogout();
     } finally {
-        // Esconde o loading e mostra o conteúdo principal (que conterá a tela de perfis)
         if (authLoading) authLoading.style.display = 'none';
         if (protectedContent) protectedContent.style.display = 'block';
     }
@@ -551,18 +338,18 @@ async function entrarNoPerfil(index) {
         if (authLoading) authLoading.style.display = 'flex';
 
         perfilAtivo = usuarioLogado.perfis[index];
-        // Salva o ID do perfil ativo para recarregar a sessão depois
-        localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id); 
+        localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id);
 
         await carregarDadosPerfil(perfilAtivo.id);
 
-        iniciarAutoSave();
+        // ✅ REMOVER: iniciarAutoSave() não é mais necessário
+        // O DataManager já inicia auto-save ao ser inicializado
+
         atualizarTudo();
 
         document.getElementById('selecaoPerfis').style.display = 'none';
         document.getElementById('sidebar').style.display = 'flex';
 
-        // ✅ PASSO CRÍTICO: "Acorda" o assistente de chat e passa o perfil
         if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
             window.chatAssistant.onProfileSelected(perfilAtivo);
         }
@@ -576,8 +363,6 @@ async function entrarNoPerfil(index) {
         if (authLoading) authLoading.style.display = 'none';
     }
 }
-
-
 
 
 function adicionarNovoPerfil() {
@@ -5601,7 +5386,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ========== FUNÇÕES GLOBAIS EXPOSTAS ==========
-// Estas funções precisam ser acessíveis globalmente para os event handlers inline no HTML
 window.abrirContaFixaForm = abrirContaFixaForm;
 window.abrirPopupPagarContaFixa = abrirPopupPagarContaFixa;
 window.pagarContaFixa = pagarContaFixa;
@@ -5628,6 +5412,7 @@ window.editarCompraFatura = editarCompraFatura;
 window.excluirCompraFatura = excluirCompraFatura;
 window.criarPopup = criarPopup;
 window.fecharPopup = fecharPopup;
+window.formatBRL = formatBRL;
 
 // ========== UTILITÁRIOS ADICIONAIS ==========
 
@@ -5650,13 +5435,6 @@ function debug(msg, obj) {
     console.log(`[GranaEvo Debug] ${msg}`, obj || '');
 }
 
-// Prevenção de perda de dados ao sair da página
-window.addEventListener('beforeunload', (e) => {
-    // Salva dados antes de sair
-    if(perfilAtivo) {
-        salvarDados();
-    }
-});
 
 // Auto-save a cada 30 segundos (opcional)
 setInterval(() => {
@@ -6284,9 +6062,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     await verificarLogin();
 });
 
+// ========== SALVAMENTO ANTES DE SAIR ==========
 window.addEventListener('beforeunload', async (e) => {
     if(perfilAtivo) {
         await salvarDados();
+        await dataManager.processSaveQueue();
     }
 });
 
