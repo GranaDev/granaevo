@@ -167,9 +167,14 @@ async function carregarDadosPerfil(perfilId) {
 
 // ========== SALVAR DADOS ==========
 async function salvarDados() {
-    if (!perfilAtivo) return;
+    if (!perfilAtivo) {
+        console.log('⚠️ Salvamento ignorado: Nenhum perfil ativo');
+        return;
+    }
 
     try {
+        console.log('🔄 Preparando dados para salvamento...');
+        
         // ✅ NOVO: Carregar dados completos
         const userData = await dataManager.loadUserData();
         
@@ -188,21 +193,26 @@ async function salvarDados() {
         };
 
         if (perfilIndex !== -1) {
+            console.log(`📝 Atualizando perfil existente: ${perfilAtivo.nome}`);
             userData.profiles[perfilIndex] = dadosPerfil;
         } else {
+            console.log(`➕ Adicionando novo perfil: ${perfilAtivo.nome}`);
             userData.profiles.push(dadosPerfil);
         }
 
-        // ✅ NOVO: Adicionar à fila de salvamento
-        dataManager.queueSave(userData.profiles);
-
-        console.log('💾 Dados adicionados à fila de salvamento');
+        // ✅ NOVO: Salvar IMEDIATAMENTE (não usar fila)
+        const sucesso = await dataManager.saveUserData(userData.profiles);
+        
+        if (sucesso) {
+            console.log('✅ Dados salvos com sucesso no Supabase!');
+        } else {
+            console.error('❌ Falha ao salvar dados');
+        }
 
     } catch (e) {
-        console.error('❌ Erro ao salvar dados:', e);
+        console.error('❌ Erro crítico ao salvar dados:', e);
     }
 }
-
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
 async function verificarLogin() {
