@@ -335,8 +335,8 @@ window.confirmarSelecaoPerfisCasalGraficos = confirmarSelecaoPerfisCasalGraficos
     }, 500);
 }
 
-// ========== GERAR GRÁFICOS COMPARTILHADOS (CASAL/FAMÍLIA) ==========
-function gerarGraficosCompartilhados(perfisAtivos) {
+// ========== GERAR GRÁFICOS COMPARTILHADOS (CASAL/FAMÍLIA) - CORRIGIDO ==========
+async function gerarGraficosCompartilhados(perfisAtivos) {
     console.log('👨‍👩‍👧‍👦 Gerando gráficos compartilhados para:', perfisAtivos.map(p => p.nome).join(', '));
     
     // ✅ VALIDAÇÃO: Verificar se há perfis suficientes
@@ -352,12 +352,14 @@ function gerarGraficosCompartilhados(perfisAtivos) {
         return;
     }
     
+    // ✅ NOVO: Buscar dados via DataManager
+    const userData = await dataManager.loadUserData();
+    
     // Coletar todas as transações de todos os perfis
     const todasTransacoes = [];
     
     perfisAtivos.forEach(perfil => {
-        const chave = `granaevo_perfil_${perfil.id}`;
-        const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
+        const dadosPerfil = userData.profiles.find(p => p.id === perfil.id);
         
         if (dadosPerfil && dadosPerfil.transacoes) {
             // Adicionar identificador do perfil a cada transação
@@ -406,7 +408,7 @@ function gerarGraficosCompartilhados(perfisAtivos) {
     
     // Renderizar interface
     if (filtroAtual.comparacao) {
-        renderizarGraficosComparativos(todasTransacoes);
+        await renderizarGraficosComparativos(todasTransacoes);
     } else {
         renderizarGraficosCompartilhadosUI(dadosGerais, dadosPorPerfil);
     }
@@ -604,7 +606,7 @@ function gerarInsightsComparacaoCasal(perfil1, perfil2) {
 
 
 // ========== RENDERIZAÇÃO DOS GRÁFICOS ==========
-function renderizarTodosGraficos(transacoes) {
+async function renderizarTodosGraficos(transacoes) {
     console.log('🎨 Iniciando renderização de todos os gráficos...');
     
     const container = document.getElementById('graficosConteudo');
@@ -631,26 +633,26 @@ function renderizarTodosGraficos(transacoes) {
             ${renderizarGraficoLinha(dados)}
         </div>
         ${renderizarRankingCategorias(dados)}
-        ${renderizarComparacaoPerfis()}
+        ${await renderizarComparacaoPerfis()}
         ${renderizarTendencias(dados)}
     `;
     
     console.log('✅ HTML dos gráficos inserido no DOM');
     
     setTimeout(() => {
-    console.log('🎨 Criando gráficos Chart.js...');
-    criarGraficoPizza('pizzaGastosChart', dados);
-    
-    setTimeout(() => {
-        criarGraficoBarras('barrasCategoriasChart', dados);
-    }, 150);
-    
-    setTimeout(() => {
-        criarGraficoLinha('linhaEvolucaoChart', dados);
-    }, 300);
-    
-    console.log('✅ Gráficos Chart.js criados!');
-}, 100);
+        console.log('🎨 Criando gráficos Chart.js...');
+        criarGraficoPizza('pizzaGastosChart', dados);
+        
+        setTimeout(() => {
+            criarGraficoBarras('barrasCategoriasChart', dados);
+        }, 150);
+        
+        setTimeout(() => {
+            criarGraficoLinha('linhaEvolucaoChart', dados);
+        }, 300);
+        
+        console.log('✅ Gráficos Chart.js criados!');
+    }, 100);
 }
 
 // ========== GRÁFICOS COMPARATIVOS ==========
@@ -1613,7 +1615,7 @@ function renderizarRankingCategorias(dados) {
 }
 
 // ========== COMPARAÇÃO DE PERFIS ==========
-function renderizarComparacaoPerfis() {
+async function renderizarComparacaoPerfis() {
     if (filtroAtual.tipo === 'individual') {
         return '';
     }
@@ -1621,7 +1623,7 @@ function renderizarComparacaoPerfis() {
     try {
         console.log('👥 Carregando comparação de perfis...');
         
-        // ✅ CORREÇÃO: Obter perfis diretamente do localStorage
+        // ✅ CORREÇÃO: Obter perfis do localStorage
         const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
         
         if (!perfis || perfis.length === 0) {
@@ -1631,10 +1633,12 @@ function renderizarComparacaoPerfis() {
         
         console.log(`📊 Processando ${perfis.length} perfis...`);
         
+        // ✅ NOVO: Buscar dados via DataManager
+        const userData = await dataManager.loadUserData();
+        
         // Obter dados de cada perfil
         const perfisComDados = perfis.map(perfil => {
-            const chave = `granaevo_perfil_${perfil.id}`;
-            const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
+            const dadosPerfil = userData.profiles.find(p => p.id === perfil.id);
             
             if (!dadosPerfil) {
                 return null;
@@ -1672,7 +1676,7 @@ function renderizarComparacaoPerfis() {
                 <div class="perfis-comparacao-grid">
                     ${perfisComDados.map(p => `
                         <div class="perfil-comparacao-card ${p.perfil.id === vencedor.perfil.id ? 'winner' : ''}">
-                            <img src="${p.perfil.foto || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Ccircle cx=\'40\' cy=\'40\' r=\'40\' fill=\'%2310b981\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' font-family=\'Arial\' font-size=\'32\' fill=\'white\'%3EU%3C/text%3E%3C/svg%3E'}" 
+                            <img src="${p.perfil.foto || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Ccircle cx=\'40\' cy=\'40\' r=\'40\' fill=\'%2310b981\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' font-family=\'Arial\' font-size=\'32\' fill=\'white\'%3E${p.perfil.nome.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E'}" 
                                  class="perfil-avatar" 
                                  alt="${p.perfil.nome}">
                             <h4 class="perfil-nome-comparacao">${p.perfil.nome}</h4>
