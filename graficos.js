@@ -142,149 +142,77 @@ function configurarComparacao() {
 }
 
 // ========== FUNÇÃO PRINCIPAL - GERAR GRÁFICOS ==========
-function gerarGraficos() {
+async function gerarGraficos() {
     mostrarLoading();
     
-    setTimeout(() => {
+    setTimeout(async () => {
         try {
             console.log('🔍 Iniciando geração de gráficos...');
             
-            // ✅ CORREÇÃO: Verificar tipo de relatório antes de processar
+            // Verificar dataManager
+            if (typeof dataManager === 'undefined') {
+                console.error('❌ DataManager não encontrado!');
+                mostrarEmptyState('Erro: Sistema de dados não carregado. Recarregue a página.');
+                esconderLoading();
+                return;
+            }
+            
+            // Verificar tipo de relatório - CASAL
             if (filtroAtual.tipo === 'casal') {
-            const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
-            const usuarioLogado = JSON.parse(sessionStorage.getItem('granaevo_session') || '{}');
-            
-            if (perfis.length < 2) {
-                mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
-                esconderLoading();
-                return;
-            }
-            
-            // ✅ SEMPRE abrir seleção se tiver mais de 2 perfis
-            if (perfis.length > 2) {
-                abrirSelecaoPerfisCasalGraficos();
-                esconderLoading();
-                return;
-            }
-            
-            // Se tiver exatamente 2 perfis, usar ambos automaticamente
-            const perfisAtivos = perfis.slice(0, 2);
-                if (perfisAtivos.length < 2) {
+                const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
+                
+                if (perfis.length < 2) {
                     mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
+                    esconderLoading();
                     return;
                 }
                 
-                gerarGraficosCompartilhados(perfisAtivos);
+                if (perfis.length > 2) {
+                    abrirSelecaoPerfisCasalGraficos();
+                    esconderLoading();
+                    return;
+                }
+                
+                const perfisAtivos = perfis.slice(0, 2);
+                await gerarGraficosCompartilhados(perfisAtivos);
+                esconderLoading();
                 return;
             }
             
+            // Verificar tipo de relatório - FAMÍLIA
             if (filtroAtual.tipo === 'familia') {
                 const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
                 
                 if (perfis.length < 2) {
                     mostrarEmptyState('Você precisa ter pelo menos 2 perfis para gerar gráficos da família.');
+                    esconderLoading();
                     return;
                 }
                 
-                gerarGraficosCompartilhados(perfis);
+                await gerarGraficosCompartilhados(perfis);
+                esconderLoading();
                 return;
             }
-            
-            // INDIVIDUAL (código existente)
+
+            // INDIVIDUAL
             const perfilAtivo = JSON.parse(localStorage.getItem('perfilAtivo'));
             
             if (!perfilAtivo || !perfilAtivo.id) {
                 console.error('❌ Nenhum perfil selecionado');
                 mostrarEmptyState('Nenhum perfil está ativo. Por favor, selecione um perfil no Dashboard.');
+                esconderLoading();
                 return;
             }
 
-            // ========== SELEÇÃO DE PERFIS PARA GRÁFICO CASAL (PLANO FAMÍLIA) ==========
-function abrirSelecaoPerfisCasalGraficos() {
-    const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
-    
-    let htmlPerfis = '';
-    
-    perfis.forEach(perfil => {
-        htmlPerfis += `
-            <div style="margin-bottom:12px;">
-                <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; cursor:pointer; transition:all 0.3s;"
-                       onmouseover="this.style.background='rgba(67,160,71,0.1)'" 
-                       onmouseout="this.style.background='rgba(255,255,255,0.05)'">
-                    <input type="checkbox" class="perfil-checkbox-casal-graficos" value="${perfil.id}" 
-                           style="width:20px; height:20px; cursor:pointer; accent-color:var(--primary);">
-                    <span style="font-weight:600; color: var(--text-primary);">${perfil.nome}</span>
-                </label>
-            </div>
-        `;
-    });
-    
-    // Usar a função criarPopup do dashboard.js
-    if (typeof criarPopup === 'function') {
-        criarPopup(`
-            <h3>👥 Selecione 2 Perfis para Gráfico Casal</h3>
-            <p style="color: var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
-                Escolha exatamente 2 perfis para gerar os gráficos conjuntos
-            </p>
-            
-            <div style="max-height:300px; overflow-y:auto; margin-bottom:20px;">
-                ${htmlPerfis}
-            </div>
-            
-            <div id="avisoSelecaoGraficos" style="display:none; background:rgba(255,75,75,0.1); padding:12px; border-radius:8px; margin-bottom:16px; border-left:3px solid #ff4b4b;">
-                <span style="color:#ff4b4b; font-weight:600;">⚠️ Selecione exatamente 2 perfis</span>
-            </div>
-            
-            <button class="btn-primary" onclick="confirmarSelecaoPerfisCasalGraficos()" style="width:100%; margin-bottom:10px;">
-                Gerar Gráficos
-            </button>
-            <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">
-                Cancelar
-            </button>
-        `);
-    }
-}
-
-function confirmarSelecaoPerfisCasalGraficos() {
-    const checkboxes = document.querySelectorAll('.perfil-checkbox-casal-graficos:checked');
-    const avisoEl = document.getElementById('avisoSelecaoGraficos');
-    
-    if (checkboxes.length !== 2) {
-        avisoEl.style.display = 'block';
-        setTimeout(() => {
-            avisoEl.style.display = 'none';
-        }, 3000);
-        return;
-    }
-    
-    const perfisIds = Array.from(checkboxes).map(cb => cb.value);
-    const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
-    const perfisSelecionados = perfis.filter(p => perfisIds.includes(String(p.id)));
-    
-    if (typeof fecharPopup === 'function') {
-        fecharPopup();
-    }
-    
-    // Gerar gráficos com os perfis selecionados
-    mostrarLoading();
-    setTimeout(() => {
-        gerarGraficosCompartilhados(perfisSelecionados);
-    }, 300);
-}
-
-// Expor funções globalmente
-window.abrirSelecaoPerfisCasalGraficos = abrirSelecaoPerfisCasalGraficos;
-window.confirmarSelecaoPerfisCasalGraficos = confirmarSelecaoPerfisCasalGraficos;
-            
             console.log('✅ Perfil ativo encontrado:', perfilAtivo.nome);
             
-            // ✅ Carregar dados do perfil do localStorage
-            const chave = `granaevo_perfil_${perfilAtivo.id}`;
-            const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
+            const userData = await dataManager.loadUserData();
+            const dadosPerfil = userData.profiles.find(p => p.id == perfilAtivo.id);
             
             if (!dadosPerfil) {
-                console.error('❌ Dados do perfil não encontrados');
+                console.error('❌ Dados do perfil não encontrados no DataManager');
                 mostrarEmptyState('Não foi possível carregar os dados do perfil.');
+                esconderLoading();
                 return;
             }
             
@@ -296,41 +224,38 @@ window.confirmarSelecaoPerfisCasalGraficos = confirmarSelecaoPerfisCasalGraficos
             if (todasTransacoes.length === 0) {
                 console.warn('⚠️ Nenhuma transação encontrada');
                 mostrarEmptyState('Nenhuma transação encontrada. Comece adicionando suas movimentações na página de Transações!');
+                esconderLoading();
                 return;
             }
             
-            // Filtrar transações por período
             const transacoesFiltradas = filtrarTransacoesPorPeriodo(todasTransacoes);
             console.log('🔎 Transações filtradas:', transacoesFiltradas.length);
             console.log('📅 Filtro aplicado:', `Mês ${filtroAtual.mes}/${filtroAtual.ano}`);
             
             if (transacoesFiltradas.length === 0) {
-                const mesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                               'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][filtroAtual.mes - 1];
+                const mesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][filtroAtual.mes - 1];
                 console.warn(`⚠️ Nenhuma transação para ${mesNome}/${filtroAtual.ano}`);
                 mostrarEmptyState(`Nenhuma transação encontrada para ${mesNome}/${filtroAtual.ano}. Tente outro período!`);
+                esconderLoading();
                 return;
             }
             
             console.log('🎨 Renderizando gráficos...');
             
             if (filtroAtual.comparacao) {
-                renderizarGraficosComparativos(todasTransacoes);
+                await renderizarGraficosComparativos(todasTransacoes);
             } else {
                 renderizarTodosGraficos(transacoesFiltradas);
             }
             
             console.log('✅ Gráficos renderizados com sucesso!');
+            esconderLoading();
             
         } catch (error) {
             console.error('❌ ERRO ao gerar gráficos:', error);
             console.error('Stack trace:', error.stack);
-            
-            mostrarEmptyState(`
-                Erro ao processar dados: ${error.message}
-                <br><br>
-                <small>Verifique o console (F12) para mais detalhes</small>
-            `);
+            mostrarEmptyState('Erro ao processar dados: ' + error.message + '<br><br><small>Verifique o console (F12) para mais detalhes</small>');
+            esconderLoading();
         }
     }, 500);
 }
