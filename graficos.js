@@ -142,77 +142,149 @@ function configurarComparacao() {
 }
 
 // ========== FUNÇÃO PRINCIPAL - GERAR GRÁFICOS ==========
-async function gerarGraficos() {
+function gerarGraficos() {
     mostrarLoading();
     
-    setTimeout(async () => {
+    setTimeout(() => {
         try {
             console.log('🔍 Iniciando geração de gráficos...');
             
-            // Verificar dataManager
-            if (typeof dataManager === 'undefined') {
-                console.error('❌ DataManager não encontrado!');
-                mostrarEmptyState('Erro: Sistema de dados não carregado. Recarregue a página.');
-                esconderLoading();
-                return;
-            }
-            
-            // Verificar tipo de relatório - CASAL
+            // ✅ CORREÇÃO: Verificar tipo de relatório antes de processar
             if (filtroAtual.tipo === 'casal') {
-                const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
-                
-                if (perfis.length < 2) {
-                    mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
-                    esconderLoading();
-                    return;
-                }
-                
-                if (perfis.length > 2) {
-                    abrirSelecaoPerfisCasalGraficos();
-                    esconderLoading();
-                    return;
-                }
-                
-                const perfisAtivos = perfis.slice(0, 2);
-                await gerarGraficosCompartilhados(perfisAtivos);
+            const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
+            const usuarioLogado = JSON.parse(sessionStorage.getItem('granaevo_session') || '{}');
+            
+            if (perfis.length < 2) {
+                mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
                 esconderLoading();
                 return;
             }
             
-            // Verificar tipo de relatório - FAMÍLIA
+            // ✅ SEMPRE abrir seleção se tiver mais de 2 perfis
+            if (perfis.length > 2) {
+                abrirSelecaoPerfisCasalGraficos();
+                esconderLoading();
+                return;
+            }
+            
+            // Se tiver exatamente 2 perfis, usar ambos automaticamente
+            const perfisAtivos = perfis.slice(0, 2);
+                if (perfisAtivos.length < 2) {
+                    mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
+                    return;
+                }
+                
+                gerarGraficosCompartilhados(perfisAtivos);
+                return;
+            }
+            
             if (filtroAtual.tipo === 'familia') {
                 const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
                 
                 if (perfis.length < 2) {
                     mostrarEmptyState('Você precisa ter pelo menos 2 perfis para gerar gráficos da família.');
-                    esconderLoading();
                     return;
                 }
                 
-                await gerarGraficosCompartilhados(perfis);
-                esconderLoading();
+                gerarGraficosCompartilhados(perfis);
                 return;
             }
-
-            // INDIVIDUAL
+            
+            // INDIVIDUAL (código existente)
             const perfilAtivo = JSON.parse(localStorage.getItem('perfilAtivo'));
             
             if (!perfilAtivo || !perfilAtivo.id) {
                 console.error('❌ Nenhum perfil selecionado');
                 mostrarEmptyState('Nenhum perfil está ativo. Por favor, selecione um perfil no Dashboard.');
-                esconderLoading();
                 return;
             }
 
+            // ========== SELEÇÃO DE PERFIS PARA GRÁFICO CASAL (PLANO FAMÍLIA) ==========
+function abrirSelecaoPerfisCasalGraficos() {
+    const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
+    
+    let htmlPerfis = '';
+    
+    perfis.forEach(perfil => {
+        htmlPerfis += `
+            <div style="margin-bottom:12px;">
+                <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; cursor:pointer; transition:all 0.3s;"
+                       onmouseover="this.style.background='rgba(67,160,71,0.1)'" 
+                       onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                    <input type="checkbox" class="perfil-checkbox-casal-graficos" value="${perfil.id}" 
+                           style="width:20px; height:20px; cursor:pointer; accent-color:var(--primary);">
+                    <span style="font-weight:600; color: var(--text-primary);">${perfil.nome}</span>
+                </label>
+            </div>
+        `;
+    });
+    
+    // Usar a função criarPopup do dashboard.js
+    if (typeof criarPopup === 'function') {
+        criarPopup(`
+            <h3>👥 Selecione 2 Perfis para Gráfico Casal</h3>
+            <p style="color: var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
+                Escolha exatamente 2 perfis para gerar os gráficos conjuntos
+            </p>
+            
+            <div style="max-height:300px; overflow-y:auto; margin-bottom:20px;">
+                ${htmlPerfis}
+            </div>
+            
+            <div id="avisoSelecaoGraficos" style="display:none; background:rgba(255,75,75,0.1); padding:12px; border-radius:8px; margin-bottom:16px; border-left:3px solid #ff4b4b;">
+                <span style="color:#ff4b4b; font-weight:600;">⚠️ Selecione exatamente 2 perfis</span>
+            </div>
+            
+            <button class="btn-primary" onclick="confirmarSelecaoPerfisCasalGraficos()" style="width:100%; margin-bottom:10px;">
+                Gerar Gráficos
+            </button>
+            <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">
+                Cancelar
+            </button>
+        `);
+    }
+}
+
+function confirmarSelecaoPerfisCasalGraficos() {
+    const checkboxes = document.querySelectorAll('.perfil-checkbox-casal-graficos:checked');
+    const avisoEl = document.getElementById('avisoSelecaoGraficos');
+    
+    if (checkboxes.length !== 2) {
+        avisoEl.style.display = 'block';
+        setTimeout(() => {
+            avisoEl.style.display = 'none';
+        }, 3000);
+        return;
+    }
+    
+    const perfisIds = Array.from(checkboxes).map(cb => cb.value);
+    const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
+    const perfisSelecionados = perfis.filter(p => perfisIds.includes(String(p.id)));
+    
+    if (typeof fecharPopup === 'function') {
+        fecharPopup();
+    }
+    
+    // Gerar gráficos com os perfis selecionados
+    mostrarLoading();
+    setTimeout(() => {
+        gerarGraficosCompartilhados(perfisSelecionados);
+    }, 300);
+}
+
+// Expor funções globalmente
+window.abrirSelecaoPerfisCasalGraficos = abrirSelecaoPerfisCasalGraficos;
+window.confirmarSelecaoPerfisCasalGraficos = confirmarSelecaoPerfisCasalGraficos;
+            
             console.log('✅ Perfil ativo encontrado:', perfilAtivo.nome);
             
-            const userData = await dataManager.loadUserData();
-            const dadosPerfil = userData.profiles.find(p => p.id == perfilAtivo.id);
+            // ✅ Carregar dados do perfil do localStorage
+            const chave = `granaevo_perfil_${perfilAtivo.id}`;
+            const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
             
             if (!dadosPerfil) {
-                console.error('❌ Dados do perfil não encontrados no DataManager');
+                console.error('❌ Dados do perfil não encontrados');
                 mostrarEmptyState('Não foi possível carregar os dados do perfil.');
-                esconderLoading();
                 return;
             }
             
@@ -224,44 +296,47 @@ async function gerarGraficos() {
             if (todasTransacoes.length === 0) {
                 console.warn('⚠️ Nenhuma transação encontrada');
                 mostrarEmptyState('Nenhuma transação encontrada. Comece adicionando suas movimentações na página de Transações!');
-                esconderLoading();
                 return;
             }
             
+            // Filtrar transações por período
             const transacoesFiltradas = filtrarTransacoesPorPeriodo(todasTransacoes);
             console.log('🔎 Transações filtradas:', transacoesFiltradas.length);
             console.log('📅 Filtro aplicado:', `Mês ${filtroAtual.mes}/${filtroAtual.ano}`);
             
             if (transacoesFiltradas.length === 0) {
-                const mesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][filtroAtual.mes - 1];
+                const mesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                               'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][filtroAtual.mes - 1];
                 console.warn(`⚠️ Nenhuma transação para ${mesNome}/${filtroAtual.ano}`);
                 mostrarEmptyState(`Nenhuma transação encontrada para ${mesNome}/${filtroAtual.ano}. Tente outro período!`);
-                esconderLoading();
                 return;
             }
             
             console.log('🎨 Renderizando gráficos...');
             
             if (filtroAtual.comparacao) {
-                await renderizarGraficosComparativos(todasTransacoes);
+                renderizarGraficosComparativos(todasTransacoes);
             } else {
                 renderizarTodosGraficos(transacoesFiltradas);
             }
             
             console.log('✅ Gráficos renderizados com sucesso!');
-            esconderLoading();
             
         } catch (error) {
             console.error('❌ ERRO ao gerar gráficos:', error);
             console.error('Stack trace:', error.stack);
-            mostrarEmptyState('Erro ao processar dados: ' + error.message + '<br><br><small>Verifique o console (F12) para mais detalhes</small>');
-            esconderLoading();
+            
+            mostrarEmptyState(`
+                Erro ao processar dados: ${error.message}
+                <br><br>
+                <small>Verifique o console (F12) para mais detalhes</small>
+            `);
         }
     }, 500);
 }
 
-// ========== GERAR GRÁFICOS COMPARTILHADOS (CASAL/FAMÍLIA) - CORRIGIDO ==========
-async function gerarGraficosCompartilhados(perfisAtivos) {
+// ========== GERAR GRÁFICOS COMPARTILHADOS (CASAL/FAMÍLIA) ==========
+function gerarGraficosCompartilhados(perfisAtivos) {
     console.log('👨‍👩‍👧‍👦 Gerando gráficos compartilhados para:', perfisAtivos.map(p => p.nome).join(', '));
     
     // ✅ VALIDAÇÃO: Verificar se há perfis suficientes
@@ -277,14 +352,12 @@ async function gerarGraficosCompartilhados(perfisAtivos) {
         return;
     }
     
-    // ✅ NOVO: Buscar dados via DataManager
-    const userData = await dataManager.loadUserData();
-    
     // Coletar todas as transações de todos os perfis
     const todasTransacoes = [];
     
     perfisAtivos.forEach(perfil => {
-        const dadosPerfil = userData.profiles.find(p => p.id === perfil.id);
+        const chave = `granaevo_perfil_${perfil.id}`;
+        const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
         
         if (dadosPerfil && dadosPerfil.transacoes) {
             // Adicionar identificador do perfil a cada transação
@@ -333,7 +406,7 @@ async function gerarGraficosCompartilhados(perfisAtivos) {
     
     // Renderizar interface
     if (filtroAtual.comparacao) {
-        await renderizarGraficosComparativos(todasTransacoes);
+        renderizarGraficosComparativos(todasTransacoes);
     } else {
         renderizarGraficosCompartilhadosUI(dadosGerais, dadosPorPerfil);
     }
@@ -531,7 +604,7 @@ function gerarInsightsComparacaoCasal(perfil1, perfil2) {
 
 
 // ========== RENDERIZAÇÃO DOS GRÁFICOS ==========
-async function renderizarTodosGraficos(transacoes) {
+function renderizarTodosGraficos(transacoes) {
     console.log('🎨 Iniciando renderização de todos os gráficos...');
     
     const container = document.getElementById('graficosConteudo');
@@ -558,26 +631,26 @@ async function renderizarTodosGraficos(transacoes) {
             ${renderizarGraficoLinha(dados)}
         </div>
         ${renderizarRankingCategorias(dados)}
-        ${await renderizarComparacaoPerfis()}
+        ${renderizarComparacaoPerfis()}
         ${renderizarTendencias(dados)}
     `;
     
     console.log('✅ HTML dos gráficos inserido no DOM');
     
     setTimeout(() => {
-        console.log('🎨 Criando gráficos Chart.js...');
-        criarGraficoPizza('pizzaGastosChart', dados);
-        
-        setTimeout(() => {
-            criarGraficoBarras('barrasCategoriasChart', dados);
-        }, 150);
-        
-        setTimeout(() => {
-            criarGraficoLinha('linhaEvolucaoChart', dados);
-        }, 300);
-        
-        console.log('✅ Gráficos Chart.js criados!');
-    }, 100);
+    console.log('🎨 Criando gráficos Chart.js...');
+    criarGraficoPizza('pizzaGastosChart', dados);
+    
+    setTimeout(() => {
+        criarGraficoBarras('barrasCategoriasChart', dados);
+    }, 150);
+    
+    setTimeout(() => {
+        criarGraficoLinha('linhaEvolucaoChart', dados);
+    }, 300);
+    
+    console.log('✅ Gráficos Chart.js criados!');
+}, 100);
 }
 
 // ========== GRÁFICOS COMPARATIVOS ==========
@@ -1540,7 +1613,7 @@ function renderizarRankingCategorias(dados) {
 }
 
 // ========== COMPARAÇÃO DE PERFIS ==========
-async function renderizarComparacaoPerfis() {
+function renderizarComparacaoPerfis() {
     if (filtroAtual.tipo === 'individual') {
         return '';
     }
@@ -1548,7 +1621,7 @@ async function renderizarComparacaoPerfis() {
     try {
         console.log('👥 Carregando comparação de perfis...');
         
-        // ✅ CORREÇÃO: Obter perfis do localStorage
+        // ✅ CORREÇÃO: Obter perfis diretamente do localStorage
         const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
         
         if (!perfis || perfis.length === 0) {
@@ -1558,12 +1631,10 @@ async function renderizarComparacaoPerfis() {
         
         console.log(`📊 Processando ${perfis.length} perfis...`);
         
-        // ✅ NOVO: Buscar dados via DataManager
-        const userData = await dataManager.loadUserData();
-        
         // Obter dados de cada perfil
         const perfisComDados = perfis.map(perfil => {
-            const dadosPerfil = userData.profiles.find(p => p.id === perfil.id);
+            const chave = `granaevo_perfil_${perfil.id}`;
+            const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
             
             if (!dadosPerfil) {
                 return null;
@@ -1601,7 +1672,7 @@ async function renderizarComparacaoPerfis() {
                 <div class="perfis-comparacao-grid">
                     ${perfisComDados.map(p => `
                         <div class="perfil-comparacao-card ${p.perfil.id === vencedor.perfil.id ? 'winner' : ''}">
-                            <img src="${p.perfil.foto || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Ccircle cx=\'40\' cy=\'40\' r=\'40\' fill=\'%2310b981\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' font-family=\'Arial\' font-size=\'32\' fill=\'white\'%3E${p.perfil.nome.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E'}" 
+                            <img src="${p.perfil.foto || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'80\' height=\'80\'%3E%3Ccircle cx=\'40\' cy=\'40\' r=\'40\' fill=\'%2310b981\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' font-family=\'Arial\' font-size=\'32\' fill=\'white\'%3EU%3C/text%3E%3C/svg%3E'}" 
                                  class="perfil-avatar" 
                                  alt="${p.perfil.nome}">
                             <h4 class="perfil-nome-comparacao">${p.perfil.nome}</h4>
