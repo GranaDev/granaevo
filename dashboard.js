@@ -3094,19 +3094,38 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
 window.gerarRelatorioCompartilhadoPersonalizado = gerarRelatorioCompartilhadoPersonalizado;
 
 async function gerarRelatorioIndividual(mes, ano, perfilId) {
+    console.log(`📊 Gerando relatório individual para perfil ${perfilId}, ${mes}/${ano}`);
+    
+    // ✅ BUSCAR DADOS VIA DATAMANAGER
     const userData = await dataManager.loadUserData();
-    const dadosPerfil = userData.profiles.find(p => p.id === perfilId);   
-    const transacoesPerfil = dadosPerfil ? dadosPerfil.transacoes || [] : [];
-    const metasPerfil = dadosPerfil ? dadosPerfil.metas || [] : [];
-    const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
-    const contasFixasPerfil = dadosPerfil ? dadosPerfil.contasFixas || [] : [];
+    const dadosPerfil = userData.profiles.find(p => p.id == perfilId);
+    
+    if(!dadosPerfil) {
+        console.error('❌ Perfil não encontrado no DataManager');
+        const resultado = document.getElementById('relatorioResultado');
+        if(resultado) {
+            resultado.innerHTML = `
+                <div class="relatorio-vazio">
+                    <h3>⚠️ Erro ao Carregar Dados</h3>
+                    <p>Não foi possível encontrar os dados do perfil selecionado.</p>
+                </div>
+            `;
+            resultado.style.display = 'block';
+        }
+        return;
+    }
+    
+    const transacoesPerfil = dadosPerfil.transacoes || [];
+    const metasPerfil = dadosPerfil.metas || [];
+    const cartoesPerfil = dadosPerfil.cartoesCredito || [];
+    const contasFixasPerfil = dadosPerfil.contasFixas || [];
+    
+    console.log(`✅ Dados carregados: ${transacoesPerfil.length} transações, ${metasPerfil.length} metas`);
     
     const periodoSelecionado = `${ano}-${mes}`;
-    
-    // ✅ DECLARAÇÃO ÚNICA DE hojeISO NO INÍCIO
     const hojeISO = new Date().toISOString().slice(0, 10);
     
-    // Filtrar transações E excluir retiradas de reserva
+    // Filtrar transações do período (excluir retiradas de reserva)
     const transacoesPeriodo = transacoesPerfil.filter(t => {
         const dataISO = dataParaISO(t.data);
         if(!dataISO) return false;
@@ -3114,37 +3133,27 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         return dataISO.startsWith(periodoSelecionado);
     });
     
+    console.log(`📅 Transações do período: ${transacoesPeriodo.length}`);
+    
     // ✅ CALCULAR SALDO INICIAL (até o mês anterior)
     let saldoInicial = 0;
-
     transacoesPerfil.forEach(t => {
         const dataISO = dataParaISO(t.data);
-        if(!dataISO) return;
+        if(!dataISO || dataISO >= periodoSelecionado) return;
         
-        if(dataISO < periodoSelecionado) {
-            if(t.categoria === 'entrada') {
-                saldoInicial += Number(t.valor);
-            }
-            else if(t.categoria === 'saida') {
-                saldoInicial -= Number(t.valor);
-            }
-            else if(t.categoria === 'reserva') {
-                saldoInicial -= Number(t.valor);
-            }
-            else if(t.categoria === 'retirada_reserva') {
-                saldoInicial += Number(t.valor);
-            }
-        }
+        if(t.categoria === 'entrada') saldoInicial += Number(t.valor);
+        else if(t.categoria === 'saida') saldoInicial -= Number(t.valor);
+        else if(t.categoria === 'reserva') saldoInicial -= Number(t.valor);
+        else if(t.categoria === 'retirada_reserva') saldoInicial += Number(t.valor);
     });
-
+    
     // ✅ CÁLCULOS DO MÊS ATUAL
     let totalEntradas = 0;
     let totalSaidas = 0;
     let totalGuardado = 0;
     let totalRetirado = 0;
     const categorias = {};
-    const comprasCredito = [];
-
+    
     transacoesPerfil.forEach(t => {
         const dataISO = dataParaISO(t.data);
         if(!dataISO || !dataISO.startsWith(periodoSelecionado)) return;
@@ -3163,25 +3172,25 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
             totalRetirado += Number(t.valor);
         }
     });
-
+    
+    console.log(`💰 Entradas: ${formatBRL(totalEntradas)}, Saídas: ${formatBRL(totalSaidas)}`);
+    
     // ✅ CALCULAR SALDOS
     const valorReservadoLiquido = totalGuardado - totalRetirado;
     const saldoDoMes = totalEntradas - totalSaidas;
     const saldoFinal = saldoInicial + saldoDoMes - valorReservadoLiquido;
-
-    // ✅ FILTRAR CONTAS FIXAS - VERSÃO CORRIGIDA COMPLETA
+    
+    // ✅ FILTRAR CONTAS FIXAS DO MÊS
     const [anoAtual, mesAtual] = hojeISO.split('-').slice(0, 2);
     const periodoAtualCompleto = `${anoAtual}-${mesAtual}`;
-
-    // ✅ NOVA LÓGICA: Buscar contas do mês + contas pagas no mês
+    
     const contasFixasMes = contasFixasPerfil.filter(c => {
         if(!c.vencimento) return false;
         
-        // 1️⃣ Contas com vencimento no mês selecionado
+        // Contas com vencimento no mês selecionado
         if(c.vencimento.startsWith(periodoSelecionado)) return true;
         
-        // 2️⃣ Contas pagas NESTE mês (mesmo com vencimento anterior)
-        // Buscar transações de pagamento desta conta no período
+        // Contas pagas neste mês
         const pagamentoNoMes = transacoesPerfil.find(t => {
             const dataISO = dataParaISO(t.data);
             return dataISO && 
@@ -3192,17 +3201,20 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         
         if(pagamentoNoMes) return true;
         
-        // 3️⃣ Se estamos vendo o mês atual, incluir contas vencidas de meses anteriores (pendentes)
-        if(periodoSelecionado === periodoAtualCompleto && c.vencimento < periodoSelecionado && !c.pago) {
+        // Contas vencidas pendentes (se estamos vendo mês atual)
+        if(periodoSelecionado === periodoAtualCompleto && 
+           c.vencimento < periodoSelecionado && !c.pago) {
             return true;
         }
         
         return false;
     });
-
-    const taxaEconomia = totalEntradas > 0 ? ((valorReservadoLiquido / totalEntradas) * 100).toFixed(1) : 0;
-
-    // Dias no mês
+    
+    console.log(`📋 Contas fixas do mês: ${contasFixasMes.length}`);
+    
+    const taxaEconomia = totalEntradas > 0 ? 
+        ((valorReservadoLiquido / totalEntradas) * 100).toFixed(1) : 0;
+    
     const diasNoMes = new Date(ano, mes, 0).getDate();
     const mediaGastoDiario = totalSaidas / diasNoMes;
     
@@ -3211,7 +3223,9 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
     
     const perfilNome = usuarioLogado.perfis.find(p => p.id == perfilId)?.nome || 'Perfil';
     
+    // ✅ VERIFICAR SE HÁ DADOS
     if(transacoesPeriodo.length === 0 && contasFixasMes.length === 0) {
+        console.log('⚠️ Nenhum dado encontrado para o período');
         resultado.innerHTML = `
             <div class="relatorio-vazio">
                 <h3>📊 Nenhum relatório disponível</h3>
@@ -3221,6 +3235,8 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         resultado.style.display = 'block';
         return;
     }
+    
+    console.log('✅ Gerando HTML do relatório...');
     
     let html = `
     <h2 style="text-align:center; margin-bottom:30px;">
