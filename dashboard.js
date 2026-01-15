@@ -2821,7 +2821,7 @@ function setupBotoesRelatorio() {
     console.log('Botões de relatório configurados com sucesso!');
 }
 
-function gerarRelatorio() {
+async function gerarRelatorio() {
     const mesEl = document.getElementById('mesRelatorio');
     const anoEl = document.getElementById('anoRelatorio');
     
@@ -2842,18 +2842,17 @@ function gerarRelatorio() {
         if(!perfilId) {
             return alert('Por favor, selecione um perfil.');
         }
-        gerarRelatorioIndividual(mes, ano, perfilId);
+        await gerarRelatorioIndividual(mes, ano, perfilId); // ✅ Adicionado await
     } 
     else if(tipoRelatorioAtivo === 'casal') {
-        // ✅ NOVO: Se for Família, permitir escolher os 2 perfis
         if(usuarioLogado.plano === 'Família' && usuarioLogado.perfis.length > 2) {
             abrirSelecaoPerfisCasal(mes, ano);
         } else {
-            gerarRelatorioCompartilhado(mes, ano, 2);
+            await gerarRelatorioCompartilhado(mes, ano, 2); // ✅ Adicionado await
         }
     } 
     else {
-        gerarRelatorioCompartilhado(mes, ano, usuarioLogado.perfis.length);
+        await gerarRelatorioCompartilhado(mes, ano, usuarioLogado.perfis.length); // ✅ Adicionado await
     }
 }
 
@@ -2922,10 +2921,9 @@ window.abrirSelecaoPerfisCasal = abrirSelecaoPerfisCasal;
 window.confirmarSelecaoPerfisCasal = confirmarSelecaoPerfisCasal;
 
 // ========== GERAR RELATÓRIO CASAL PERSONALIZADO ==========
-function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
+async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
     const periodoSelecionado = `${ano}-${mes}`;
     
-    // Filtrar apenas os perfis selecionados
     const perfisAtivos = usuarioLogado.perfis.filter(p => perfisIds.includes(String(p.id)));
     
     if(perfisAtivos.length !== 2) {
@@ -2933,7 +2931,6 @@ function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
         return;
     }
     
-    // Mesma lógica do gerarRelatorioCompartilhado, mas com perfis filtrados
     let mesAnterior, anoAnterior;
     if(mes === '01') {
         mesAnterior = '12';
@@ -2944,9 +2941,12 @@ function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
     }
     const periodoAnterior = `${anoAnterior}-${mesAnterior}`;
     
+    // ✅ CORREÇÃO: Buscar dados via dataManager
+    const userData = await dataManager.loadUserData();
+    
     const dadosPorPerfil = perfisAtivos.map(perfil => {
-        const chave = `granaevo_perfil_${perfil.id}`;
-        const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
+        // ✅ NOVO: Buscar perfil no JSON
+        const dadosPerfil = userData.profiles.find(p => p.id === perfil.id);
         const transacoesPerfil = dadosPerfil ? dadosPerfil.transacoes || [] : [];
         const metasPerfil = dadosPerfil ? dadosPerfil.metas || [] : [];
         const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
@@ -3087,16 +3087,15 @@ function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
         return;
     }
     
-    // Renderizar usando a mesma função
     renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior);
 }
 
 // Expor globalmente
 window.gerarRelatorioCompartilhadoPersonalizado = gerarRelatorioCompartilhadoPersonalizado;
 
-function gerarRelatorioIndividual(mes, ano, perfilId) {
-    const chave = `granaevo_perfil_${perfilId}`;
-    const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
+async function gerarRelatorioIndividual(mes, ano, perfilId) {
+    const userData = await dataManager.loadUserData();
+    const dadosPerfil = userData.profiles.find(p => p.id === perfilId);   
     const transacoesPerfil = dadosPerfil ? dadosPerfil.transacoes || [] : [];
     const metasPerfil = dadosPerfil ? dadosPerfil.metas || [] : [];
     const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
@@ -3732,11 +3731,10 @@ let htmlMeta = `
     }
 }
 
-function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
+async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
     const periodoSelecionado = `${ano}-${mes}`;
     const perfisAtivos = usuarioLogado.perfis.slice(0, numPerfis);
     
-    // ✅ CORREÇÃO: Validação de perfis
     if(perfisAtivos.length < 2) {
         const resultado = document.getElementById('relatorioResultado');
         if(resultado) {
@@ -3752,7 +3750,6 @@ function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
         return;
     }
     
-    // Calcula dados do mês anterior para comparação
     let mesAnterior, anoAnterior;
     if(mes === '01') {
         mesAnterior = '12';
@@ -3763,30 +3760,29 @@ function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
     }
     const periodoAnterior = `${anoAnterior}-${mesAnterior}`;
     
+    // ✅ CORREÇÃO: Buscar dados via dataManager
+    const userData = await dataManager.loadUserData();
+    
     const dadosPorPerfil = perfisAtivos.map(perfil => {
-        const chave = `granaevo_perfil_${perfil.id}`;
-        const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
+        // ✅ NOVO: Buscar perfil no JSON
+        const dadosPerfil = userData.profiles.find(p => p.id === perfil.id);
         const transacoesPerfil = dadosPerfil ? dadosPerfil.transacoes || [] : [];
         const metasPerfil = dadosPerfil ? dadosPerfil.metas || [] : [];
         const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
         
-        // Filtrar transações do período atual
         const transacoesPeriodo = transacoesPerfil.filter(t => {
             const dataISO = dataParaISO(t.data);
             if(!dataISO) return false;
             return dataISO.startsWith(periodoSelecionado);
         });
         
-        // Filtrar transações do período anterior
         const transacoesPeriodoAnterior = transacoesPerfil.filter(t => {
             const dataISO = dataParaISO(t.data);
             if(!dataISO) return false;
             return dataISO.startsWith(periodoAnterior);
         });
         
-        // ✅ CALCULAR SALDO INICIAL (até o mês anterior)
         let saldoInicial = 0;
-
         transacoesPerfil.forEach(t => {
             const dataISO = dataParaISO(t.data);
             if(!dataISO) return;
@@ -3807,7 +3803,6 @@ function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
             }
         });
         
-        // ✅ CALCULAR DADOS DO MÊS ATUAL (CORRIGIDO)
         let entradas = 0, saidas = 0, totalGuardado = 0, totalRetirado = 0;
         const categorias = {};
         
@@ -3824,19 +3819,17 @@ function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
             } 
             else if(t.categoria === 'reserva') {
                 totalGuardado += Number(t.valor);
-                saidas += Number(t.valor); // ✅ Impacta o saldo
+                saidas += Number(t.valor);
             }
             else if(t.categoria === 'retirada_reserva') {
                 totalRetirado += Number(t.valor);
-                saidas -= Number(t.valor); // ✅ Compensa o impacto no saldo
+                saidas -= Number(t.valor);
             }
         });
         
-        // ✅ CALCULAR SALDOS
         const saldoDoMes = entradas - saidas;
         const saldoFinal = saldoInicial + saldoDoMes;
         
-        // Calcular dados do mês anterior
         let entradasAnt = 0, saidasAnt = 0, guardadoAnt = 0, retiradoAnt = 0;
         
         transacoesPerfil.forEach(t => {
@@ -3860,7 +3853,6 @@ function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
         const taxaEconomia = entradas > 0 ? ((reservasLiquido / entradas) * 100) : 0;
         const taxaEconomiaAnt = entradasAnt > 0 ? ((reservasLiquidoAnt / entradasAnt) * 100) : 0;
         
-        // Calcular totais de cartões
         let totalLimiteCartoes = 0, totalUsadoCartoes = 0;
         cartoesPerfil.forEach(c => {
             totalLimiteCartoes += Number(c.limite || 0);
@@ -3895,7 +3887,6 @@ function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
         };
     });
     
-    // ✅ VERIFICAÇÃO: Tem dados suficientes?
     const temDados = dadosPorPerfil.some(d => d.transacoes.length > 0);
     
     const resultado = document.getElementById('relatorioResultado');
@@ -3916,7 +3907,6 @@ function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
         return;
     }
     
-    // ✅ CHAMAR RENDERIZAÇÃO
     renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior);
 }
 
@@ -4622,9 +4612,11 @@ window.abrirDetalhesPerfilRelatorio = abrirDetalhesPerfilRelatorio;
 
 // ========== DETALHES DO CARTÃO NO RELATÓRIO ==========
 
-function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
-    const chave = `granaevo_perfil_${perfilId}`;
-    const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
+async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
+    // ✅ CORREÇÃO: Buscar dados via dataManager
+    const userData = await dataManager.loadUserData();
+    const dadosPerfil = userData.profiles.find(p => p.id === perfilId);
+    
     const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
     const contasFixasPerfil = dadosPerfil ? dadosPerfil.contasFixas || [] : [];
     
@@ -4636,14 +4628,12 @@ function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
     
     const periodoSelecionado = `${ano}-${mes}`;
     
-    // Buscar todas as faturas deste cartão no período
     const faturasCartao = contasFixasPerfil.filter(c => 
         c.cartaoId === cartaoId && 
         c.vencimento && 
         c.vencimento.startsWith(periodoSelecionado)
     );
     
-    // Coletar todas as compras
     let todasCompras = [];
     faturasCartao.forEach(fatura => {
         if(fatura.compras && fatura.compras.length > 0) {
@@ -4657,7 +4647,6 @@ function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
         }
     });
     
-    // Calcular estatísticas
     const usado = Number(cartao.usado || 0);
     const limite = Number(cartao.limite || 0);
     const disponivel = limite - usado;
@@ -4667,10 +4656,8 @@ function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
     const comprasPagas = todasCompras.filter(c => c.parcelaAtual > c.totalParcelas).length;
     const comprasPendentes = todasCompras.length - comprasPagas;
     
-    // Obter dica aleatória
     const dica = obterDicaAleatoria();
     
-    // Gerar HTML das compras
     let htmlCompras = '';
     if(todasCompras.length === 0) {
         htmlCompras = `
@@ -4734,7 +4721,6 @@ function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
         });
     }
     
-    // Criar pop-up
     // Criar pop-up
 criarPopup(`
     <div style="max-height:80vh; overflow-y:auto; overflow-x:hidden; position:relative; padding-right:10px;">
