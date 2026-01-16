@@ -1341,9 +1341,6 @@ function renderizarGraficoPizza(dados) {
                     Distribuição de Gastos
                 </h3>
                 <div class="grafico-actions">
-                    <button class="grafico-action-btn" onclick="exportarGrafico('pizzaGastosChart')">
-                        <i class="fas fa-download"></i>
-                    </button>
                 </div>
             </div>
             <div class="grafico-canvas-wrapper">
@@ -1432,9 +1429,6 @@ function renderizarGraficoBarras(dados) {
                     Gastos por Categoria
                 </h3>
                 <div class="grafico-actions">
-                    <button class="grafico-action-btn" onclick="exportarGrafico('barrasCategoriasChart')">
-                        <i class="fas fa-download"></i>
-                    </button>
                 </div>
             </div>
             <div class="grafico-canvas-wrapper">
@@ -1524,9 +1518,6 @@ function renderizarGraficoLinha(dados) {
                     Evolução: Entradas vs Saídas
                 </h3>
                 <div class="grafico-actions">
-                    <button class="grafico-action-btn" onclick="exportarGrafico('linhaEvolucaoChart')">
-                        <i class="fas fa-download"></i>
-                    </button>
                 </div>
             </div>
             <div class="grafico-canvas-wrapper">
