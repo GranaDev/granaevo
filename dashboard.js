@@ -310,7 +310,9 @@ function atualizarTelaPerfis() {
         return;
     }
 
-    saudacao.innerHTML = `Olá <b>${usuarioLogado.nome}</b> — Plano <b>${usuarioLogado.plano}</b>`;
+    const nomeExibir = perfilAtivo ? perfilAtivo.nome : usuarioLogado.nome;
+    saudacao.innerHTML = `Olá <b>${nomeExibir}</b> – Plano <b>${usuarioLogado.plano}</b>`;
+    
     lista.innerHTML = '';
 
     usuarioLogado.perfis.forEach((perfil, index) => {
@@ -352,10 +354,10 @@ async function entrarNoPerfil(index) {
 
         await carregarDadosPerfil(perfilAtivo.id);
 
-        // ✅ REMOVER: iniciarAutoSave() não é mais necessário
-        // O DataManager já inicia auto-save ao ser inicializado
-
         atualizarTudo();
+        
+        // ✅ ADICIONAR ESTA LINHA
+        atualizarNomeUsuario();
 
         document.getElementById('selecaoPerfis').style.display = 'none';
         document.getElementById('sidebar').style.display = 'flex';
@@ -584,7 +586,7 @@ function mostrarTela(tela) {
 
 // ========== ATUALIZAR NOME E FOTO DO USUÁRIO ==========
 function atualizarNomeUsuario() {
-    const nome = perfilAtivo ? perfilAtivo.nome : usuarioAtual.usuario;
+    const nome = perfilAtivo ? perfilAtivo.nome : 'Usuário';
     
     const userNameEl = document.getElementById('userName');
     const welcomeNameEl = document.getElementById('welcomeName');
@@ -593,12 +595,8 @@ function atualizarNomeUsuario() {
     if(welcomeNameEl) welcomeNameEl.textContent = nome;
     
     const userPhotoEl = document.getElementById('userPhoto');
-    if(userPhotoEl) {
-        if(perfilAtivo && perfilAtivo.foto) {
-            userPhotoEl.src = perfilAtivo.foto;
-        } else if(usuarioAtual.foto) {
-            userPhotoEl.src = usuarioAtual.foto;
-        }
+    if(userPhotoEl && perfilAtivo && perfilAtivo.foto) {
+        userPhotoEl.src = perfilAtivo.foto;
     }
 }
 
@@ -4899,7 +4897,7 @@ function obterDicaAleatoria() {
 window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
 
 // ========== CONFIGURAÇÕES ==========
-function alterarNome() {
+async function alterarNome() {
     if(!perfilAtivo) {
         alert('Erro: Nenhum perfil ativo encontrado.');
         return;
@@ -4913,7 +4911,7 @@ function alterarNome() {
         <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
     `);
     
-    document.getElementById('concluirNome').onclick = () => {
+    document.getElementById('concluirNome').onclick = async () => {
         const novoNome = document.getElementById('novoNome').value.trim();
         
         if(!novoNome) {
@@ -4925,20 +4923,45 @@ function alterarNome() {
             alert('O nome deve ter pelo menos 2 caracteres.');
             return;
         }
-        
-        perfilAtivo.nome = novoNome;
-        
-        const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-        if(idx !== -1) {
-            usuarioLogado.perfis[idx].nome = novoNome;
+
+        try {
+            console.log('🔄 Atualizando nome do perfil no Supabase...');
+            
+            // ✅ ATUALIZAR NO SUPABASE
+            const { data, error } = await supabase
+                .from('profiles')
+                .update({ name: novoNome })
+                .eq('id', perfilAtivo.id)
+                .select()
+                .single();
+
+            if (error) {
+                console.error('❌ Erro ao atualizar nome no Supabase:', error);
+                throw error;
+            }
+
+            console.log('✅ Nome atualizado no Supabase:', data);
+
+            // ✅ ATUALIZAR LOCALMENTE
+            perfilAtivo.nome = novoNome;
+            
+            const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
+            if(idx !== -1) {
+                usuarioLogado.perfis[idx].nome = novoNome;
+            }
+
+            // ✅ ATUALIZAR INTERFACE
+            atualizarNomeUsuario();
+            
+            await salvarDados();
+            
+            fecharPopup();
+            mostrarNotificacao('✅ Nome alterado com sucesso!', 'success');
+            
+        } catch (error) {
+            console.error('❌ Erro ao alterar nome:', error);
+            alert('❌ Erro ao alterar nome. Tente novamente.');
         }
-        
-        localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
-        localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
-        
-        atualizarNomeUsuario();
-        fecharPopup();
-        alert('✅ Nome alterado com sucesso!');
     };
 }
 
