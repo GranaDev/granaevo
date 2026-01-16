@@ -256,4 +256,11 @@ class DataManager {
 }
 
 // ========== INSTÂNCIA GLOBAL ==========
-export const dataManager = new DataManager();
+// ========== INSTÂNCIA GLOBAL ==========
+const dataManagerInstance = new DataManager();
+
+// ✅ CORREÇÃO DEFINITIVA: Expor ao window imediatamente
+window.dataManager = dataManagerInstance;
+
+// Também exportar para compatibilidade com outros módulos
+export const dataManager = dataManagerInstance;
