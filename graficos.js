@@ -142,17 +142,16 @@ function configurarComparacao() {
 }
 
 // ========== FUNÇÃO PRINCIPAL - GERAR GRÁFICOS ==========
-function gerarGraficos() {
+// ========== FUNÇÃO PRINCIPAL - GERAR GRÁFICOS (VERSÃO CORRIGIDA) ==========
+async function gerarGraficos() {
     mostrarLoading();
     
-    setTimeout(() => {
-        try {
-            console.log('🔍 Iniciando geração de gráficos...');
-            
-            // ✅ CORREÇÃO: Verificar tipo de relatório antes de processar
-            if (filtroAtual.tipo === 'casal') {
+    try {
+        console.log('🔍 Iniciando geração de gráficos...');
+        
+        // ✅ CORREÇÃO: Verificar tipo de relatório antes de processar
+        if (filtroAtual.tipo === 'casal') {
             const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
-            const usuarioLogado = JSON.parse(sessionStorage.getItem('granaevo_session') || '{}');
             
             if (perfis.length < 2) {
                 mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
@@ -169,35 +168,112 @@ function gerarGraficos() {
             
             // Se tiver exatamente 2 perfis, usar ambos automaticamente
             const perfisAtivos = perfis.slice(0, 2);
-                if (perfisAtivos.length < 2) {
-                    mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
-                    return;
-                }
-                
-                gerarGraficosCompartilhados(perfisAtivos);
+            if (perfisAtivos.length < 2) {
+                mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
+                esconderLoading();
                 return;
             }
             
-            if (filtroAtual.tipo === 'familia') {
-                const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
-                
-                if (perfis.length < 2) {
-                    mostrarEmptyState('Você precisa ter pelo menos 2 perfis para gerar gráficos da família.');
-                    return;
-                }
-                
-                gerarGraficosCompartilhados(perfis);
+            await gerarGraficosCompartilhados(perfisAtivos);
+            esconderLoading();
+            return;
+        }
+        
+        if (filtroAtual.tipo === 'familia') {
+            const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
+            
+            if (perfis.length < 2) {
+                mostrarEmptyState('Você precisa ter pelo menos 2 perfis para gerar gráficos da família.');
+                esconderLoading();
                 return;
             }
             
-            // INDIVIDUAL (código existente)
-            const perfilAtivo = JSON.parse(localStorage.getItem('perfilAtivo'));
-            
-            if (!perfilAtivo || !perfilAtivo.id) {
-                console.error('❌ Nenhum perfil selecionado');
-                mostrarEmptyState('Nenhum perfil está ativo. Por favor, selecione um perfil no Dashboard.');
-                return;
-            }
+            await gerarGraficosCompartilhados(perfis);
+            esconderLoading();
+            return;
+        }
+        
+        // INDIVIDUAL (código corrigido)
+        const perfilAtivo = JSON.parse(localStorage.getItem('perfilAtivo'));
+        
+        if (!perfilAtivo || !perfilAtivo.id) {
+            console.error('❌ Nenhum perfil selecionado');
+            mostrarEmptyState('Nenhum perfil está ativo. Por favor, selecione um perfil no Dashboard.');
+            esconderLoading();
+            return;
+        }
+
+        console.log('✅ Perfil ativo encontrado:', perfilAtivo.nome);
+        
+        // ✅ CORREÇÃO CRÍTICA: Carregar dados via dataManager
+        const userData = await window.dataManager.loadUserData();
+        
+        if (!userData || !userData.profiles) {
+            console.error('❌ Dados do usuário não encontrados');
+            mostrarEmptyState('Não foi possível carregar os dados do usuário.');
+            esconderLoading();
+            return;
+        }
+        
+        // ✅ Buscar perfil específico no JSON
+        const dadosPerfil = userData.profiles.find(p => p.id === perfilAtivo.id);
+        
+        if (!dadosPerfil) {
+            console.error('❌ Dados do perfil não encontrados');
+            mostrarEmptyState('Não foi possível carregar os dados do perfil.');
+            esconderLoading();
+            return;
+        }
+        
+        filtroAtual.perfil = perfilAtivo.id;
+        const todasTransacoes = dadosPerfil.transacoes || [];
+        
+        console.log('📊 Total de transações encontradas:', todasTransacoes.length);
+        
+        if (todasTransacoes.length === 0) {
+            console.warn('⚠️ Nenhuma transação encontrada');
+            mostrarEmptyState('Nenhuma transação encontrada. Comece adicionando suas movimentações na página de Transações!');
+            esconderLoading();
+            return;
+        }
+        
+        // Filtrar transações por período
+        const transacoesFiltradas = filtrarTransacoesPorPeriodo(todasTransacoes);
+        console.log('🔎 Transações filtradas:', transacoesFiltradas.length);
+        console.log('📅 Filtro aplicado:', `Mês ${filtroAtual.mes}/${filtroAtual.ano}`);
+        
+        if (transacoesFiltradas.length === 0) {
+            const mesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                           'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][filtroAtual.mes - 1];
+            console.warn(`⚠️ Nenhuma transação para ${mesNome}/${filtroAtual.ano}`);
+            mostrarEmptyState(`Nenhuma transação encontrada para ${mesNome}/${filtroAtual.ano}. Tente outro período!`);
+            esconderLoading();
+            return;
+        }
+        
+        console.log('🎨 Renderizando gráficos...');
+        
+        if (filtroAtual.comparacao) {
+            await renderizarGraficosComparativos(todasTransacoes);
+        } else {
+            renderizarTodosGraficos(transacoesFiltradas);
+        }
+        
+        console.log('✅ Gráficos renderizados com sucesso!');
+        esconderLoading();
+        
+    } catch (error) {
+        console.error('❌ ERRO ao gerar gráficos:', error);
+        console.error('Stack trace:', error.stack);
+        
+        mostrarEmptyState(`
+            Erro ao processar dados: ${error.message}
+            <br><br>
+            <small>Verifique o console (F12) para mais detalhes</small>
+        `);
+        esconderLoading();
+    }
+}
 
             // ========== SELEÇÃO DE PERFIS PARA GRÁFICO CASAL (PLANO FAMÍLIA) ==========
 function abrirSelecaoPerfisCasalGraficos() {
@@ -275,140 +351,96 @@ function confirmarSelecaoPerfisCasalGraficos() {
 // Expor funções globalmente
 window.abrirSelecaoPerfisCasalGraficos = abrirSelecaoPerfisCasalGraficos;
 window.confirmarSelecaoPerfisCasalGraficos = confirmarSelecaoPerfisCasalGraficos;
-            
-            console.log('✅ Perfil ativo encontrado:', perfilAtivo.nome);
-            
-            // ✅ Carregar dados do perfil do localStorage
-            const chave = `granaevo_perfil_${perfilAtivo.id}`;
-            const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
-            
-            if (!dadosPerfil) {
-                console.error('❌ Dados do perfil não encontrados');
-                mostrarEmptyState('Não foi possível carregar os dados do perfil.');
-                return;
-            }
-            
-            filtroAtual.perfil = perfilAtivo.id;
-            const todasTransacoes = dadosPerfil.transacoes || [];
-            
-            console.log('📊 Total de transações encontradas:', todasTransacoes.length);
-            
-            if (todasTransacoes.length === 0) {
-                console.warn('⚠️ Nenhuma transação encontrada');
-                mostrarEmptyState('Nenhuma transação encontrada. Comece adicionando suas movimentações na página de Transações!');
-                return;
-            }
-            
-            // Filtrar transações por período
-            const transacoesFiltradas = filtrarTransacoesPorPeriodo(todasTransacoes);
-            console.log('🔎 Transações filtradas:', transacoesFiltradas.length);
-            console.log('📅 Filtro aplicado:', `Mês ${filtroAtual.mes}/${filtroAtual.ano}`);
-            
-            if (transacoesFiltradas.length === 0) {
-                const mesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                               'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][filtroAtual.mes - 1];
-                console.warn(`⚠️ Nenhuma transação para ${mesNome}/${filtroAtual.ano}`);
-                mostrarEmptyState(`Nenhuma transação encontrada para ${mesNome}/${filtroAtual.ano}. Tente outro período!`);
-                return;
-            }
-            
-            console.log('🎨 Renderizando gráficos...');
-            
-            if (filtroAtual.comparacao) {
-                renderizarGraficosComparativos(todasTransacoes);
-            } else {
-                renderizarTodosGraficos(transacoesFiltradas);
-            }
-            
-            console.log('✅ Gráficos renderizados com sucesso!');
-            
-        } catch (error) {
-            console.error('❌ ERRO ao gerar gráficos:', error);
-            console.error('Stack trace:', error.stack);
-            
-            mostrarEmptyState(`
-                Erro ao processar dados: ${error.message}
-                <br><br>
-                <small>Verifique o console (F12) para mais detalhes</small>
-            `);
-        }
-    }, 500);
-}
 
 // ========== GERAR GRÁFICOS COMPARTILHADOS (CASAL/FAMÍLIA) ==========
-function gerarGraficosCompartilhados(perfisAtivos) {
+async function gerarGraficosCompartilhados(perfisAtivos) {
     console.log('👨‍👩‍👧‍👦 Gerando gráficos compartilhados para:', perfisAtivos.map(p => p.nome).join(', '));
     
-    // ✅ VALIDAÇÃO: Verificar se há perfis suficientes
-    if (!perfisAtivos || perfisAtivos.length === 0) {
-        mostrarEmptyState('Nenhum perfil foi selecionado.');
-        esconderLoading();
-        return;
-    }
-    
-    if (filtroAtual.tipo === 'casal' && perfisAtivos.length !== 2) {
-        mostrarEmptyState('Selecione exatamente 2 perfis para gerar gráficos de casal.');
-        esconderLoading();
-        return;
-    }
-    
-    // Coletar todas as transações de todos os perfis
-    const todasTransacoes = [];
-    
-    perfisAtivos.forEach(perfil => {
-        const chave = `granaevo_perfil_${perfil.id}`;
-        const dadosPerfil = JSON.parse(localStorage.getItem(chave) || 'null');
-        
-        if (dadosPerfil && dadosPerfil.transacoes) {
-            // Adicionar identificador do perfil a cada transação
-            dadosPerfil.transacoes.forEach(t => {
-                todasTransacoes.push({
-                    ...t,
-                    perfilId: perfil.id,
-                    perfilNome: perfil.nome
-                });
-            });
+    try {
+        // ✅ VALIDAÇÃO: Verificar se há perfis suficientes
+        if (!perfisAtivos || perfisAtivos.length === 0) {
+            mostrarEmptyState('Nenhum perfil foi selecionado.');
+            esconderLoading();
+            return;
         }
-    });
-    
-    console.log('📊 Total de transações coletadas:', todasTransacoes.length);
-    
-    if (todasTransacoes.length === 0) {
-        mostrarEmptyState('Nenhuma transação encontrada nos perfis selecionados. Adicione movimentações primeiro!');
-        return;
-    }
-    
-    // Filtrar por período
-    const transacoesFiltradas = filtrarTransacoesPorPeriodo(todasTransacoes);
-    
-    console.log('🔎 Transações após filtro:', transacoesFiltradas.length);
-    
-    if (transacoesFiltradas.length === 0) {
-        const mesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][filtroAtual.mes - 1];
-        mostrarEmptyState(`Nenhuma transação encontrada para ${mesNome}/${filtroAtual.ano} nos perfis selecionados.`);
-        return;
-    }
-    
-    // Processar dados
-    const dadosGerais = processarDadosGraficos(transacoesFiltradas);
-    
-    // Processar dados por perfil para comparação
-    const dadosPorPerfil = perfisAtivos.map(perfil => {
-        const transacoesPerfil = transacoesFiltradas.filter(t => t.perfilId === perfil.id);
-        return {
-            perfil: perfil,
-            ...processarDadosGraficos(transacoesPerfil)
-        };
-    });
-    
-    console.log('✅ Dados processados. Renderizando...');
-    
-    // Renderizar interface
-    if (filtroAtual.comparacao) {
-        renderizarGraficosComparativos(todasTransacoes);
-    } else {
-        renderizarGraficosCompartilhadosUI(dadosGerais, dadosPorPerfil);
+        
+        if (filtroAtual.tipo === 'casal' && perfisAtivos.length !== 2) {
+            mostrarEmptyState('Selecione exatamente 2 perfis para gerar gráficos de casal.');
+            esconderLoading();
+            return;
+        }
+        
+        // ✅ CORREÇÃO CRÍTICA: Carregar dados via dataManager
+        const userData = await window.dataManager.loadUserData();
+        
+        if (!userData || !userData.profiles) {
+            console.error('❌ Dados do usuário não encontrados');
+            mostrarEmptyState('Não foi possível carregar os dados do usuário.');
+            return;
+        }
+        
+        // Coletar todas as transações de todos os perfis
+        const todasTransacoes = [];
+        
+        perfisAtivos.forEach(perfil => {
+            // ✅ Buscar perfil no JSON carregado
+            const dadosPerfil = userData.profiles.find(p => p.id === perfil.id);
+            
+            if (dadosPerfil && dadosPerfil.transacoes) {
+                // Adicionar identificador do perfil a cada transação
+                dadosPerfil.transacoes.forEach(t => {
+                    todasTransacoes.push({
+                        ...t,
+                        perfilId: perfil.id,
+                        perfilNome: perfil.nome
+                    });
+                });
+            }
+        });
+        
+        console.log('📊 Total de transações coletadas:', todasTransacoes.length);
+        
+        if (todasTransacoes.length === 0) {
+            mostrarEmptyState('Nenhuma transação encontrada nos perfis selecionados. Adicione movimentações primeiro!');
+            return;
+        }
+        
+        // Filtrar por período
+        const transacoesFiltradas = filtrarTransacoesPorPeriodo(todasTransacoes);
+        
+        console.log('🔎 Transações após filtro:', transacoesFiltradas.length);
+        
+        if (transacoesFiltradas.length === 0) {
+            const mesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                           'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][filtroAtual.mes - 1];
+            mostrarEmptyState(`Nenhuma transação encontrada para ${mesNome}/${filtroAtual.ano} nos perfis selecionados.`);
+            return;
+        }
+        
+        // Processar dados
+        const dadosGerais = processarDadosGraficos(transacoesFiltradas);
+        
+        // Processar dados por perfil para comparação
+        const dadosPorPerfil = perfisAtivos.map(perfil => {
+            const transacoesPerfil = transacoesFiltradas.filter(t => t.perfilId === perfil.id);
+            return {
+                perfil: perfil,
+                ...processarDadosGraficos(transacoesPerfil)
+            };
+        });
+        
+        console.log('✅ Dados processados. Renderizando...');
+        
+        // Renderizar interface
+        if (filtroAtual.comparacao) {
+            await renderizarGraficosComparativos(todasTransacoes);
+        } else {
+            renderizarGraficosCompartilhadosUI(dadosGerais, dadosPorPerfil);
+        }
+        
+    } catch (error) {
+        console.error('❌ ERRO ao gerar gráficos compartilhados:', error);
+        mostrarEmptyState(`Erro ao processar dados: ${error.message}`);
     }
 }
 
@@ -654,41 +686,52 @@ function renderizarTodosGraficos(transacoes) {
 }
 
 // ========== GRÁFICOS COMPARATIVOS ==========
-function renderizarGraficosComparativos(todasTransacoes) {
-    const container = document.getElementById('graficosConteudo');
-    
-    // Dados do período 1
-    const transacoes1 = filtrarTransacoesPorPeriodo(todasTransacoes, filtroAtual.mes, filtroAtual.ano);
-    const dados1 = processarDadosGraficos(transacoes1);
-    
-    // Dados do período 2
-    const transacoes2 = filtrarTransacoesPorPeriodo(todasTransacoes, filtroAtual.mesComparacao, filtroAtual.anoComparacao);
-    const dados2 = processarDadosGraficos(transacoes2);
-    
-    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    
-    const periodo1 = `${meses[filtroAtual.mes - 1]}/${filtroAtual.ano}`;
-    const periodo2 = `${meses[filtroAtual.mesComparacao - 1]}/${filtroAtual.anoComparacao}`;
-    
-    container.innerHTML = `
-        <div class="comparacao-header-especial">
-            <h2><i class="fas fa-balance-scale"></i> Análise Comparativa</h2>
-            <p>Comparando ${periodo1} vs ${periodo2}</p>
-        </div>
+async function renderizarGraficosComparativos(todasTransacoes) {
+    try {
+        const container = document.getElementById('graficosConteudo');
         
-        ${renderizarCardsComparativos(dados1, dados2, periodo1, periodo2)}
-        ${renderizarGraficoBarrasComparativo(dados1, dados2, periodo1, periodo2)}
-        ${renderizarGraficoLinhaComparativo(dados1, dados2, periodo1, periodo2)}
-        ${renderizarGraficoPizzaComparativo(dados1, dados2, periodo1, periodo2)}
-        ${renderizarInsightsComparativos(dados1, dados2, periodo1, periodo2)}
-    `;
-    
-    setTimeout(() => {
-        criarGraficoBarrasComparativo('barrasComparativoChart', dados1, dados2, periodo1, periodo2);
-        criarGraficoLinhaComparativo('linhaComparativoChart', dados1, dados2, periodo1, periodo2);
-        criarGraficoPizzaDuplo('pizzaComparativo1', 'pizzaComparativo2', dados1, dados2, periodo1, periodo2);
-    }, 100);
+        if (!container) {
+            console.error('❌ Container de gráficos não encontrado');
+            return;
+        }
+        
+        // Dados do período 1
+        const transacoes1 = filtrarTransacoesPorPeriodo(todasTransacoes, filtroAtual.mes, filtroAtual.ano);
+        const dados1 = processarDadosGraficos(transacoes1);
+        
+        // Dados do período 2
+        const transacoes2 = filtrarTransacoesPorPeriodo(todasTransacoes, filtroAtual.mesComparacao, filtroAtual.anoComparacao);
+        const dados2 = processarDadosGraficos(transacoes2);
+        
+        const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        
+        const periodo1 = `${meses[filtroAtual.mes - 1]}/${filtroAtual.ano}`;
+        const periodo2 = `${meses[filtroAtual.mesComparacao - 1]}/${filtroAtual.anoComparacao}`;
+        
+        container.innerHTML = `
+            <div class="comparacao-header-especial">
+                <h2><i class="fas fa-balance-scale"></i> Análise Comparativa</h2>
+                <p>Comparando ${periodo1} vs ${periodo2}</p>
+            </div>
+            
+            ${renderizarCardsComparativos(dados1, dados2, periodo1, periodo2)}
+            ${renderizarGraficoBarrasComparativo(dados1, dados2, periodo1, periodo2)}
+            ${renderizarGraficoLinhaComparativo(dados1, dados2, periodo1, periodo2)}
+            ${renderizarGraficoPizzaComparativo(dados1, dados2, periodo1, periodo2)}
+            ${renderizarInsightsComparativos(dados1, dados2, periodo1, periodo2)}
+        `;
+        
+        setTimeout(() => {
+            criarGraficoBarrasComparativo('barrasComparativoChart', dados1, dados2, periodo1, periodo2);
+            criarGraficoLinhaComparativo('linhaComparativoChart', dados1, dados2, periodo1, periodo2);
+            criarGraficoPizzaDuplo('pizzaComparativo1', 'pizzaComparativo2', dados1, dados2, periodo1, periodo2);
+        }, 100);
+        
+    } catch (error) {
+        console.error('❌ Erro ao renderizar gráficos comparativos:', error);
+        mostrarEmptyState(`Erro ao processar comparação: ${error.message}`);
+    }
 }
 
 function renderizarCardsComparativos(dados1, dados2, periodo1, periodo2) {

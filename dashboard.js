@@ -1,12 +1,12 @@
 // ========== IMPORT SUPABASE ==========
 import { supabase } from './supabase-client.js';
-import { dataManager } from './data-manager.js'; // ✅ ADICIONAR ESTA LINHA
+import { dataManager } from './data-manager.js';
 
 // ========== ESTADO GLOBAL ==========
 let usuarioLogado = {
-    userId: null,        // ✅ ADICIONAR userId
-    nome: "",           // ✅ ADICIONAR nome
-    email: "",          // ✅ ADICIONAR email
+    userId: null,     
+    nome: "",          
+    email: "",         
     plano: "",
     perfis: []
 };
