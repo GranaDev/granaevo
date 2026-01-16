@@ -1,8 +1,6 @@
 /* =====================================================
    GRANAEVO - GRÁFICOS JAVASCRIPT COMPLETO
    ===================================================== */
-// ========== IMPORTS ==========
-import { dataManager } from './data-manager.js';
 
 // ========== FUNÇÕES AUXILIARES ==========
 function dataParaISO(dataBR) {
