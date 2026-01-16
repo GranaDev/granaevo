@@ -142,7 +142,6 @@ function configurarComparacao() {
 }
 
 // ========== FUNÇÃO PRINCIPAL - GERAR GRÁFICOS ==========
-// ========== FUNÇÃO PRINCIPAL - GERAR GRÁFICOS (VERSÃO CORRIGIDA) ==========
 async function gerarGraficos() {
     mostrarLoading();
     
@@ -206,7 +205,8 @@ async function gerarGraficos() {
         console.log('✅ Perfil ativo encontrado:', perfilAtivo.nome);
         
         // ✅ CORREÇÃO CRÍTICA: Carregar dados via dataManager
-        const userData = await window.dataManager.loadUserData();
+        // Acessa a instância do DataManager que foi anexada ao objeto window
+        const userData = await window.dataManager.loadUserData(); 
         
         if (!userData || !userData.profiles) {
             console.error('❌ Dados do usuário não encontrados');
@@ -268,7 +268,9 @@ async function gerarGraficos() {
         
         mostrarEmptyState(`
             Erro ao processar dados: ${error.message}
-            <br><br>
+              
+  
+
             <small>Verifique o console (F12) para mais detalhes</small>
         `);
         esconderLoading();
