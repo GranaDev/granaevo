@@ -206,7 +206,13 @@ async function gerarGraficos() {
         
         // ✅ CORREÇÃO CRÍTICA: Carregar dados via dataManager
         // Acessa a instância do DataManager que foi anexada ao objeto window
-        const userData = await window.dataManager.loadUserData(); 
+        // ✅ CORREÇÃO: Aguardar o DataManager estar disponível se necessário
+        if (!window.dataManager) {
+            console.warn('⏳ DataManager não encontrado no window, tentando novamente em 500ms...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            if (!window.dataManager) throw new Error('DataManager não inicializado corretamente.');
+        }
+        const userData = await window.dataManager.loadUserData();
         
         if (!userData || !userData.profiles) {
             console.error('❌ Dados do usuário não encontrados');
@@ -373,6 +379,12 @@ async function gerarGraficosCompartilhados(perfisAtivos) {
         }
         
         // ✅ CORREÇÃO CRÍTICA: Carregar dados via dataManager
+        // ✅ CORREÇÃO: Aguardar o DataManager estar disponível se necessário
+        if (!window.dataManager) {
+            console.warn('⏳ DataManager não encontrado no window, tentando novamente em 500ms...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            if (!window.dataManager) throw new Error('DataManager não inicializado corretamente.');
+        }
         const userData = await window.dataManager.loadUserData();
         
         if (!userData || !userData.profiles) {
