@@ -3,22 +3,26 @@ import { supabase } from './supabase-client.js';
 // ==========================================
 // ELEMENTOS DO DOM
 // ==========================================
-const loadingState = document.getElementById('loadingState');
-const errorState = document.getElementById('errorState');
-const formState = document.getElementById('formState');
-const successState = document.getElementById('successState');
+const accessForm = document.getElementById('accessForm');
+const emailCheckState = document.getElementById('emailCheckState');
+const passwordInputs = document.getElementById('passwordInputs');
+const checkEmailBtn = document.getElementById('checkEmailBtn');
+const submitBtn = document.getElementById('submitBtn');
 
-const errorMessage = document.getElementById('errorMessage');
+const emailInput = document.getElementById('email');
+const passwordInput = document.getElementById('password');
+const confirmPasswordInput = document.getElementById('confirmPassword');
+
+const alertBox = document.getElementById('alertBox');
+const alertMessage = document.getElementById('alertMessage');
+const infoBox = document.getElementById('infoBox');
+const userName = document.getElementById('userName');
 const userEmail = document.getElementById('userEmail');
 const planName = document.getElementById('planName');
 
-const passwordForm = document.getElementById('passwordForm');
-const passwordInput = document.getElementById('password');
-const confirmPasswordInput = document.getElementById('confirmPassword');
 const confirmError = document.getElementById('confirmError');
 const strengthFill = document.getElementById('strengthFill');
 const strengthText = document.getElementById('strengthText');
-const submitBtn = document.getElementById('submitBtn');
 
 const togglePassword1 = document.getElementById('togglePassword1');
 const togglePassword2 = document.getElementById('togglePassword2');
@@ -26,73 +30,169 @@ const togglePassword2 = document.getElementById('togglePassword2');
 // ==========================================
 // VARIÁVEIS GLOBAIS
 // ==========================================
-let currentToken = null;
-let subscriptionData = null;
+let currentSubscriptionData = null;
+const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
 
 // ==========================================
-// INICIALIZAÇÃO
+// VERIFICAR EMAIL
 // ==========================================
-async function init() {
-    // Pegar token da URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
+checkEmailBtn.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
 
-    if (!token) {
-        showError('Link inválido. Token não encontrado.');
+    if (!email) {
+        showAlert('error', 'Por favor, digite seu email.');
         return;
     }
 
-    currentToken = token;
+    if (!isValidEmail(email)) {
+        showAlert('error', 'Email inválido. Digite um email válido.');
+        return;
+    }
 
-    // Validar token
-    await validateToken(token);
+    // Desabilitar botão e mostrar loading
+    checkEmailBtn.disabled = true;
+    checkEmailBtn.innerHTML = `
+        <svg class="spinner" viewBox="0 0 24 24" style="width: 20px; height: 20px; animation: spin 1s linear infinite;">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"/>
+        </svg>
+        Verificando...
+    `;
+
+    try {
+        // Chamar Edge Function
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/check-email-status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabase.supabaseKey}`,
+            },
+            body: JSON.stringify({ email }),
+        });
+
+        const result = await response.json();
+
+        console.log('📋 Resultado da verificação:', result);
+
+        // Processar resposta
+        switch (result.status) {
+            case 'not_found':
+                showAlert('error', 'Email não reconhecido. Verifique se o pagamento foi aprovado ou se digitou corretamente.');
+                hidePasswordInputs();
+                break;
+
+            case 'payment_pending':
+                showAlert('warning', 'Pagamento ainda não aprovado para este email. Aguarde a confirmação do pagamento.');
+                hidePasswordInputs();
+                break;
+
+            case 'password_exists':
+                showAlert('warning', 'Email já possui uma senha cadastrada. <a href="login.html">Fazer login</a> ou <a href="login.html#esqueci-senha">esqueceu a senha?</a>');
+                hidePasswordInputs();
+                break;
+
+            case 'ready':
+                // Salvar dados e mostrar formulário de senha
+                currentSubscriptionData = result.data;
+                showPasswordForm(result.data);
+                break;
+
+            case 'error':
+                showAlert('error', 'Erro ao verificar email: ' + result.message);
+                hidePasswordInputs();
+                break;
+
+            default:
+                showAlert('error', 'Resposta inesperada do servidor. Tente novamente.');
+                hidePasswordInputs();
+        }
+
+    } catch (error) {
+        console.error('❌ Erro ao verificar email:', error);
+        showAlert('error', 'Erro de conexão. Verifique sua internet e tente novamente.');
+        hidePasswordInputs();
+    } finally {
+        // Reabilitar botão
+        checkEmailBtn.disabled = false;
+        checkEmailBtn.innerHTML = `
+            Verificar Email
+            <svg viewBox="0 0 20 20" fill="none">
+                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        `;
+    }
+});
+
+// ==========================================
+// MOSTRAR FORMULÁRIO DE SENHA
+// ==========================================
+function showPasswordForm(data) {
+    // Esconder alert
+    alertBox.style.display = 'none';
+
+    // Mostrar info box
+    infoBox.style.display = 'block';
+    userName.textContent = data.user_name || 'Usuário';
+    userEmail.textContent = data.email;
+    planName.textContent = data.plan_name;
+
+    // Esconder email input
+    emailCheckState.style.display = 'none';
+
+    // Mostrar password inputs
+    passwordInputs.style.display = 'block';
+
+    // Focar no campo de senha
+    setTimeout(() => {
+        passwordInput.focus();
+    }, 300);
 }
 
 // ==========================================
-// VALIDAR TOKEN
+// ESCONDER INPUTS DE SENHA
 // ==========================================
-async function validateToken(token) {
-    try {
-        // Chamar função SQL para validar
-        const { data, error } = await supabase
-            .rpc('validate_access_token', { token_input: token });
+function hidePasswordInputs() {
+    passwordInputs.style.display = 'none';
+    infoBox.style.display = 'none';
+    emailCheckState.style.display = 'block';
+}
 
-        if (error) throw error;
+// ==========================================
+// MOSTRAR ALERT
+// ==========================================
+function showAlert(type, message) {
+    alertBox.className = 'alert-box ' + type;
+    alertBox.style.display = 'flex';
+    alertMessage.innerHTML = message;
 
-        const validation = data[0];
-
-        if (!validation.is_valid) {
-            showError(validation.error_message);
-            return;
-        }
-
-        // Token válido! Mostrar formulário
-        subscriptionData = validation;
-        userEmail.textContent = validation.user_email;
-        planName.textContent = validation.plan_name;
-
-        showForm();
-
-    } catch (error) {
-        console.error('Erro ao validar token:', error);
-        showError('Erro ao validar link. Tente novamente mais tarde.');
+    // Auto-hide após 8 segundos (exceto para errors)
+    if (type !== 'error') {
+        setTimeout(() => {
+            alertBox.style.display = 'none';
+        }, 8000);
     }
+}
+
+// ==========================================
+// VALIDAR EMAIL
+// ==========================================
+function isValidEmail(email) {
+    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return regex.test(email);
 }
 
 // ==========================================
 // TOGGLE PASSWORD VISIBILITY
 // ==========================================
-function setupPasswordToggles() {
-    togglePassword1.addEventListener('click', () => {
-        const type = passwordInput.type === 'password' ? 'text' : 'password';
-        passwordInput.type = type;
-    });
+togglePassword1.addEventListener('click', () => {
+    const type = passwordInput.type === 'password' ? 'text' : 'password';
+    passwordInput.type = type;
+});
 
-    togglePassword2.addEventListener('click', () => {
-        const type = confirmPasswordInput.type === 'password' ? 'text' : 'password';
-        confirmPasswordInput.type = type;
-    });
-}
+togglePassword2.addEventListener('click', () => {
+    const type = confirmPasswordInput.type === 'password' ? 'text' : 'password';
+    confirmPasswordInput.type = type;
+});
 
 // ==========================================
 // PASSWORD STRENGTH CHECKER
@@ -133,7 +233,7 @@ function updatePasswordStrength() {
 passwordInput.addEventListener('input', updatePasswordStrength);
 
 // ==========================================
-// VALIDAR SENHA CONFIRMAÇÃO
+// VALIDAR CONFIRMAÇÃO DE SENHA
 // ==========================================
 confirmPasswordInput.addEventListener('input', () => {
     if (confirmPasswordInput.value && confirmPasswordInput.value !== passwordInput.value) {
@@ -146,79 +246,128 @@ confirmPasswordInput.addEventListener('input', () => {
 });
 
 // ==========================================
-// SUBMIT FORM
+// SUBMIT FORM - CRIAR SENHA
 // ==========================================
-passwordForm.addEventListener('submit', async (e) => {
+accessForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    if (!currentSubscriptionData) {
+        showAlert('error', 'Dados da assinatura não encontrados. Recarregue a página.');
+        return;
+    }
 
     const password = passwordInput.value;
     const confirmPassword = confirmPasswordInput.value;
 
     // Validações
     if (password.length < 8) {
-        alert('A senha deve ter no mínimo 8 caracteres');
+        showAlert('error', 'A senha deve ter no mínimo 8 caracteres');
+        passwordInput.focus();
         return;
     }
 
     if (password !== confirmPassword) {
-        alert('As senhas não coincidem');
+        showAlert('error', 'As senhas não coincidem');
         confirmPasswordInput.focus();
         return;
     }
 
     // Desabilitar botão
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Criando sua conta...';
+    submitBtn.innerHTML = `
+        <svg class="spinner" viewBox="0 0 24 24" style="width: 20px; height: 20px; animation: spin 1s linear infinite;">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"/>
+        </svg>
+        Criando sua conta...
+    `;
 
     try {
+        console.log('🔐 Criando usuário no Auth...');
+
         // 1. Criar usuário no Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: subscriptionData.user_email,
+            email: currentSubscriptionData.email,
             password: password,
+            options: {
+                data: {
+                    name: currentSubscriptionData.user_name,
+                    plan: currentSubscriptionData.plan_name,
+                }
+            }
         });
 
-        if (authError) throw authError;
+        if (authError) {
+            console.error('❌ Erro no Auth:', authError);
+            throw authError;
+        }
 
         const userId = authData.user.id;
+        console.log('✅ Usuário criado no Auth:', userId);
 
-        // 2. Atualizar subscription com user_id e marcar token como usado
+        // 2. Atualizar subscription com user_id e marcar senha como criada
+        console.log('📝 Atualizando subscription...');
         const { error: updateError } = await supabase
             .from('subscriptions')
             .update({
                 user_id: userId,
-                access_token_used: true,
+                password_created: true,
                 password_created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             })
-            .eq('id', subscriptionData.subscription_id);
+            .eq('id', currentSubscriptionData.subscription_id);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+            console.error('❌ Erro ao atualizar subscription:', updateError);
+            throw updateError;
+        }
+
+        console.log('✅ Subscription atualizada');
 
         // 3. Criar entrada em user_data
+        console.log('💾 Criando user_data...');
         const { error: userDataError } = await supabase
             .from('user_data')
             .insert({
                 user_id: userId,
-                email: subscriptionData.user_email,
+                email: currentSubscriptionData.email,
                 data_json: {
                     created_via: 'first_access',
-                    plan: subscriptionData.plan_name,
+                    plan: currentSubscriptionData.plan_name,
+                    name: currentSubscriptionData.user_name,
                 },
             });
 
-        if (userDataError) throw userDataError;
+        if (userDataError) {
+            console.error('❌ Erro ao criar user_data:', userDataError);
+            throw userDataError;
+        }
+
+        console.log('✅ User_data criado');
 
         // Sucesso!
-        showSuccess();
-
+        showAlert('info', '✅ Senha criada com sucesso! Redirecionando...');
+        
         // Redirecionar após 2 segundos
         setTimeout(() => {
             window.location.href = 'login.html';
         }, 2000);
 
     } catch (error) {
-        console.error('Erro ao criar senha:', error);
-        alert('Erro ao criar senha. ' + (error.message || 'Tente novamente.'));
+        console.error('❌ Erro ao criar senha:', error);
+        
+        let errorMessage = 'Erro ao criar senha. ';
+        
+        if (error.message.includes('already registered')) {
+            errorMessage = 'Este email já está registrado. Tente fazer login.';
+        } else if (error.message.includes('Invalid email')) {
+            errorMessage = 'Email inválido.';
+        } else {
+            errorMessage += error.message || 'Tente novamente.';
+        }
+        
+        showAlert('error', errorMessage);
+        
         submitBtn.disabled = false;
         submitBtn.innerHTML = `
             Criar Senha e Acessar
@@ -230,32 +379,17 @@ passwordForm.addEventListener('submit', async (e) => {
 });
 
 // ==========================================
-// ESTADOS DA UI
+// ADICIONAR ESTILO DO SPINNER
 // ==========================================
-function showForm() {
-    loadingState.style.display = 'none';
-    errorState.style.display = 'none';
-    formState.style.display = 'block';
-    successState.style.display = 'none';
-}
-
-function showError(message) {
-    loadingState.style.display = 'none';
-    errorState.style.display = 'block';
-    formState.style.display = 'none';
-    successState.style.display = 'none';
-    errorMessage.textContent = message;
-}
-
-function showSuccess() {
-    loadingState.style.display = 'none';
-    errorState.style.display = 'none';
-    formState.style.display = 'none';
-    successState.style.display = 'block';
-}
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+`;
+document.head.appendChild(style);
 
 // ==========================================
-// INICIAR
+// INICIALIZAÇÃO
 // ==========================================
-setupPasswordToggles();
-init();
+console.log('✅ Primeiro Acesso carregado');
