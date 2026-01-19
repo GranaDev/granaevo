@@ -21,9 +21,8 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 async function getCaktoAccessToken(): Promise<string> {
   console.log('🔑 Obtendo token OAuth2 da Cakto...')
   
-  // Preparar dados no formato URL-encoded
+  // Preparar dados no formato URL-encoded (SEM grant_type para Cakto!)
   const params = new URLSearchParams()
-  params.append('grant_type', 'client_credentials')
   params.append('client_id', CAKTO_CLIENT_ID)
   params.append('client_secret', CAKTO_CLIENT_SECRET)
   

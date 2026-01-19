@@ -15,7 +15,6 @@ async function getCaktoAccessToken(): Promise<string> {
   console.log('🔑 Obtendo token OAuth2...')
   
   const params = new URLSearchParams()
-  params.append('grant_type', 'client_credentials')
   params.append('client_id', CAKTO_CLIENT_ID)
   params.append('client_secret', CAKTO_CLIENT_SECRET)
   
