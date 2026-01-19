@@ -14,17 +14,18 @@ const corsHeaders = {
 async function getCaktoAccessToken(): Promise<string> {
   console.log('🔑 Obtendo token OAuth2...')
   
-  const response = await fetch('https://api.cakto.com.br/oauth/token', {
+  const params = new URLSearchParams()
+  params.append('grant_type', 'client_credentials')
+  params.append('client_id', CAKTO_CLIENT_ID)
+  params.append('client_secret', CAKTO_CLIENT_SECRET)
+  
+  const response = await fetch('https://api.cakto.com.br/o/token/', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
       'Accept': 'application/json'
     },
-    body: JSON.stringify({
-      client_id: CAKTO_CLIENT_ID,
-      client_secret: CAKTO_CLIENT_SECRET,
-      grant_type: 'client_credentials'
-    })
+    body: params.toString()
   })
 
   if (!response.ok) {

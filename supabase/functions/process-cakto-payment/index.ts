@@ -21,17 +21,19 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 async function getCaktoAccessToken(): Promise<string> {
   console.log('🔑 Obtendo token OAuth2 da Cakto...')
   
-  const response = await fetch('https://api.cakto.com.br/oauth/token', {
+  // Preparar dados no formato URL-encoded
+  const params = new URLSearchParams()
+  params.append('grant_type', 'client_credentials')
+  params.append('client_id', CAKTO_CLIENT_ID)
+  params.append('client_secret', CAKTO_CLIENT_SECRET)
+  
+  const response = await fetch('https://api.cakto.com.br/o/token/', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
       'Accept': 'application/json'
     },
-    body: JSON.stringify({
-      client_id: CAKTO_CLIENT_ID,
-      client_secret: CAKTO_CLIENT_SECRET,
-      grant_type: 'client_credentials'
-    })
+    body: params.toString()
   })
 
   const responseText = await response.text()
