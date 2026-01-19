@@ -14,7 +14,7 @@ const corsHeaders = {
 async function getCaktoAccessToken(): Promise<string> {
   console.log('🔑 Obtendo token OAuth2...')
   
-  const response = await fetch('https://api.cakto.com.br/v1/oauth/token', {
+  const response = await fetch('https://api.cakto.com.br/oauth/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -29,7 +29,7 @@ async function getCaktoAccessToken(): Promise<string> {
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(`Erro auth Cakto: ${text}`)
+    throw new Error(`Erro ao obter token: ${text}`)
   }
 
   const data = await response.json()
@@ -50,10 +50,10 @@ serve(async (req) => {
 
     console.log('🔍 Verificando pagamento:', paymentId)
 
-    // Obter token
+    // Obter token OAuth2
     const accessToken = await getCaktoAccessToken()
 
-    // Consultar status na Cakto
+    // Consultar cobrança na Cakto
     const caktoResponse = await fetch(`https://api.cakto.com.br/v1/charges/${paymentId}`, {
       method: 'GET',
       headers: {
@@ -66,7 +66,7 @@ serve(async (req) => {
     console.log('📥 Resposta Cakto:', responseText.substring(0, 200))
 
     if (!caktoResponse.ok) {
-      throw new Error(`Erro ao consultar Cakto (${caktoResponse.status}): ${responseText}`)
+      throw new Error(`Erro ao consultar Cakto (${caktoResponse.status})`)
     }
 
     const caktoData = JSON.parse(responseText)
@@ -103,8 +103,8 @@ serve(async (req) => {
 
       console.log('✅ Subscription encontrada:', subscription.id)
 
-      // Atualizar status da subscription
-      const { error: updateError } = await supabaseAdmin
+      // Atualizar subscription
+      await supabaseAdmin
         .from('subscriptions')
         .update({ 
           payment_status: 'approved',
@@ -113,12 +113,8 @@ serve(async (req) => {
         })
         .eq('payment_id', paymentId.toString())
 
-      if (updateError) {
-        console.error('⚠️ Erro ao atualizar subscription:', updateError)
-      }
-
-      // Liberar acesso: confirmar email
-      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+      // Liberar acesso do usuário
+      await supabaseAdmin.auth.admin.updateUserById(
         subscription.user_id,
         { 
           email_confirm: true,
@@ -126,11 +122,7 @@ serve(async (req) => {
         }
       )
 
-      if (authError) {
-        console.error('⚠️ Erro ao liberar acesso:', authError)
-      } else {
-        console.log('✅ Acesso liberado para:', subscription.user_id)
-      }
+      console.log('✅ Acesso liberado para:', subscription.user_id)
     }
 
     return new Response(
