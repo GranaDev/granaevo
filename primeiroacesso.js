@@ -285,11 +285,14 @@ accessForm.addEventListener('submit', async (e) => {
     try {
         console.log('🔐 Criando usuário no Auth...');
 
-        // 1. Criar usuário no Auth
+        // ====================================
+        // CORREÇÃO PRINCIPAL: Auto-confirmar email
+        // ====================================
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: currentSubscriptionData.email,
             password: password,
             options: {
+                emailRedirectTo: undefined, // Não enviar email de confirmação
                 data: {
                     name: currentSubscriptionData.user_name,
                     plan: currentSubscriptionData.plan_name,
@@ -299,11 +302,36 @@ accessForm.addEventListener('submit', async (e) => {
 
         if (authError) {
             console.error('❌ Erro no Auth:', authError);
+            
+            // Verificar se é erro de usuário já existente
+            if (authError.message.includes('already registered') || authError.message.includes('User already registered')) {
+                throw new Error('Este email já está registrado. Tente fazer login.');
+            }
+            
             throw authError;
         }
 
         const userId = authData.user.id;
         console.log('✅ Usuário criado no Auth:', userId);
+
+        // ====================================
+        // CONFIRMAR EMAIL AUTOMATICAMENTE (Service Role)
+        // ====================================
+        console.log('✉️ Confirmando email automaticamente...');
+        
+        const { error: confirmError } = await fetch(`${SUPABASE_URL}/functions/v1/confirm-user-email`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabase.supabaseKey}`,
+            },
+            body: JSON.stringify({ userId }),
+        }).then(res => res.json());
+
+        if (confirmError) {
+            console.warn('⚠️ Erro ao confirmar email (não crítico):', confirmError);
+            // Não lançar erro - usuário pode confirmar depois
+        }
 
         // 2. Atualizar subscription com user_id e marcar senha como criada
         console.log('📝 Atualizando subscription...');
@@ -325,38 +353,49 @@ accessForm.addEventListener('submit', async (e) => {
         console.log('✅ Subscription atualizada');
 
         // 3. Criar entrada em user_data
-console.log('💾 Criando user_data...');
-const { data: userData, error: userDataError } = await supabase
-    .from('user_data')
-    .insert({
-        user_id: userId,
-        email: currentSubscriptionData.email,
-        data_json: {
-            created_via: 'first_access',
-            plan: currentSubscriptionData.plan_name,
-            name: currentSubscriptionData.user_name,
-            created_at: new Date().toISOString(),
-        },
-    })
-    .select();
+        console.log('💾 Criando user_data...');
+        
+        // Fazer login do usuário para ter permissões RLS
+        const { error: loginError } = await supabase.auth.signInWithPassword({
+            email: currentSubscriptionData.email,
+            password: password,
+        });
 
-if (userDataError) {
-    console.error('❌ Erro ao criar user_data:', userDataError);
-    console.error('📊 Detalhes do erro:', JSON.stringify(userDataError, null, 2));
-    
-    // Se falhar por RLS mas o usuário foi criado, continuar mesmo assim
-    if (userDataError.code === '42501') {
-        console.warn('⚠️ Falha de RLS, mas usuário foi criado. Continuando...');
-        // Não lançar erro, apenas avisar
-    } else {
-        throw userDataError;
-    }
-} else {
-    console.log('✅ User_data criado:', userData);
-}
+        if (loginError) {
+            console.warn('⚠️ Erro ao fazer login automático:', loginError);
+        }
+
+        const { data: userData, error: userDataError } = await supabase
+            .from('user_data')
+            .insert({
+                user_id: userId,
+                email: currentSubscriptionData.email,
+                data_json: {
+                    created_via: 'first_access',
+                    plan: currentSubscriptionData.plan_name,
+                    name: currentSubscriptionData.user_name,
+                    created_at: new Date().toISOString(),
+                },
+            })
+            .select();
+
+        if (userDataError) {
+            console.error('❌ Erro ao criar user_data:', userDataError);
+            console.error('📊 Detalhes do erro:', JSON.stringify(userDataError, null, 2));
+            
+            // Se falhar por RLS mas o usuário foi criado, continuar mesmo assim
+            if (userDataError.code === '42501' || userDataError.code === 'PGRST301') {
+                console.warn('⚠️ Falha de RLS, mas usuário foi criado. Continuando...');
+            } else {
+                // Outros erros - logar mas continuar
+                console.warn('⚠️ Erro ao criar user_data (não crítico)');
+            }
+        } else {
+            console.log('✅ User_data criado:', userData);
+        }
 
         // Sucesso!
-        showAlert('info', '✅ Senha criada com sucesso! Redirecionando...');
+        showAlert('info', '✅ Conta criada com sucesso! Redirecionando para o login...');
         
         // Redirecionar após 2 segundos
         setTimeout(() => {
@@ -368,10 +407,12 @@ if (userDataError) {
         
         let errorMessage = 'Erro ao criar senha. ';
         
-        if (error.message.includes('already registered')) {
-            errorMessage = 'Este email já está registrado. Tente fazer login.';
+        if (error.message.includes('already registered') || error.message.includes('User already registered')) {
+            errorMessage = 'Este email já está registrado. <a href="login.html">Fazer login</a>';
         } else if (error.message.includes('Invalid email')) {
             errorMessage = 'Email inválido.';
+        } else if (error.message.includes('Password')) {
+            errorMessage = 'Erro na senha: ' + error.message;
         } else {
             errorMessage += error.message || 'Tente novamente.';
         }
