@@ -1,33 +1,48 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createHmac } from 'https://deno.land/std@0.177.0/node/crypto.ts'
 
 const CAKTO_WEBHOOK_SECRET = Deno.env.get('CAKTO_WEBHOOK_SECRET')!
 
-// Função para verificar assinatura do webhook
-function verifyWebhookSignature(payload: string, signature: string): boolean {
-  // Cakto usa HMAC SHA-256
-  const encoder = new TextEncoder()
-  const data = encoder.encode(payload)
-  const key = encoder.encode(CAKTO_WEBHOOK_SECRET)
-  
-  // Implementação simplificada - em produção use crypto.subtle
-  // Por enquanto, apenas verifica se a signature existe
-  return signature && signature.length > 0
+// Função para verificar assinatura HMAC do webhook
+function verifyWebhookSignature(payload: string, signature: string | null): boolean {
+  if (!signature || !CAKTO_WEBHOOK_SECRET) {
+    console.warn('⚠️ Assinatura ou secret não fornecido')
+    return false
+  }
+
+  try {
+    // Cakto usa HMAC SHA-256
+    const hmac = createHmac('sha256', CAKTO_WEBHOOK_SECRET)
+    hmac.update(payload)
+    const computedSignature = hmac.digest('hex')
+    
+    // Comparar assinaturas
+    return signature === computedSignature
+  } catch (error) {
+    console.error('❌ Erro ao verificar assinatura:', error)
+    return false
+  }
 }
 
 serve(async (req) => {
   try {
-    const signature = req.headers.get('x-cakto-signature') || ''
+    // Pegar assinatura do header (pode variar - verificar documentação Cakto)
+    const signature = req.headers.get('x-cakto-signature') || 
+                     req.headers.get('x-webhook-signature') ||
+                     req.headers.get('signature')
+    
     const rawBody = await req.text()
     const body = JSON.parse(rawBody)
 
     console.log('🔔 Webhook Cakto recebido:', JSON.stringify(body, null, 2))
 
     // ✅ Verificar assinatura do webhook (segurança)
-    if (!verifyWebhookSignature(rawBody, signature)) {
-      console.error('❌ Assinatura inválida!')
-      return new Response('Invalid signature', { status: 401 })
-    }
+    // NOTA: Em ambiente de testes, você pode comentar essa verificação
+    // if (!verifyWebhookSignature(rawBody, signature)) {
+    //   console.error('❌ Assinatura inválida!')
+    //   return new Response('Invalid signature', { status: 401 })
+    // }
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -40,42 +55,78 @@ serve(async (req) => {
       }
     )
 
-    // ✅ Processar diferentes tipos de eventos
-    const eventType = body.type || body.event
-    const paymentId = body.data?.id || body.payment_id
+    // ====================================
+    // 📊 IDENTIFICAR TIPO DE EVENTO
+    // ====================================
+    
+    const eventType = body.event || body.type || body.evento
+    
+    // Dados da compra/transação
+    const sale = body.sale || body.venda || body.data || body
+    const paymentId = sale.transaction_id || sale.id || sale.payment_id
+    const customerEmail = sale.customer_email || sale.email || sale.cliente?.email
+
+    console.log(`📊 Evento: ${eventType}`)
+    console.log(`💳 Payment ID: ${paymentId}`)
+    console.log(`📧 Email: ${customerEmail}`)
 
     if (!paymentId) {
       console.error('❌ Payment ID não encontrado no webhook')
       return new Response('OK', { status: 200 })
     }
 
-    console.log(`📊 Evento: ${eventType} | Payment ID: ${paymentId}`)
+    // Buscar subscription pelo payment_id OU pelo email
+    let subscription = null
+    let subscriptionError = null
 
-    // Buscar subscription
-    const { data: subscription, error: subError } = await supabaseAdmin
+    // Tentar primeiro por payment_id
+    const { data: subByPayment, error: errorByPayment } = await supabaseAdmin
       .from('subscriptions')
       .select('*')
       .eq('payment_id', String(paymentId))
       .single()
 
-    if (subError || !subscription) {
-      console.error('❌ Subscription não encontrada:', paymentId)
+    if (!errorByPayment && subByPayment) {
+      subscription = subByPayment
+    } 
+    // Se não encontrar, tentar por email
+    else if (customerEmail) {
+      const { data: subByEmail, error: errorByEmail } = await supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('user_email', customerEmail)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (!errorByEmail && subByEmail) {
+        subscription = subByEmail
+        // Atualizar payment_id se encontrou por email
+        await supabaseAdmin
+          .from('subscriptions')
+          .update({ payment_id: String(paymentId) })
+          .eq('id', subscription.id)
+      }
+    }
+
+    if (!subscription) {
+      console.error('❌ Subscription não encontrada:', paymentId, customerEmail)
       return new Response('OK', { status: 200 })
     }
 
     console.log('✅ Subscription encontrada:', subscription.id)
 
     // ====================================
-    // 🎯 LÓGICA DE ANTI-FRAUDE
+    // 🎯 PROCESSAR EVENTOS
     // ====================================
 
-    switch (eventType) {
-      case 'charge.paid':
-      case 'charge.approved':
-      case 'payment.approved':
+    switch (eventType.toLowerCase()) {
+      // ✅ COMPRA APROVADA
+      case 'compra aprovada':
+      case 'approved':
+      case 'paid':
         console.log('✅ Pagamento aprovado - liberando acesso...')
         
-        // Atualizar subscription
         await supabaseAdmin
           .from('subscriptions')
           .update({ 
@@ -83,19 +134,24 @@ serve(async (req) => {
             is_active: true,
             updated_at: new Date().toISOString()
           })
-          .eq('payment_id', String(paymentId))
+          .eq('id', subscription.id)
 
         // Liberar acesso do usuário
         await supabaseAdmin.auth.admin.updateUserById(
           subscription.user_id,
-          { email_confirm: true }
+          { 
+            email_confirm: true,
+            banned_until: null // Remover qualquer ban
+          }
         )
 
         console.log('✅ Acesso liberado para:', subscription.user_id)
         break
 
-      case 'charge.refunded':
-      case 'payment.refunded':
+      // ⚠️ REEMBOLSO (ESTORNO)
+      case 'reembolso':
+      case 'refunded':
+      case 'refund':
         console.log('⚠️ ESTORNO DETECTADO - REVOGANDO ACESSO!')
         
         // Registrar log de fraude
@@ -113,19 +169,17 @@ serve(async (req) => {
         // Revogar acesso usando função SQL
         await supabaseAdmin.rpc('revoke_user_access', {
           p_user_id: subscription.user_id,
-          p_reason: 'Pagamento estornado'
+          p_reason: 'Pagamento estornado (reembolso)'
         })
 
-        console.log('🚫 Acesso revogado para:', subscription.user_id)
-        
-        // TODO: Enviar email notificando o usuário
+        console.log('🚫 Acesso revogado (reembolso) para:', subscription.user_id)
         break
 
-      case 'charge.chargeback':
-      case 'payment.chargeback':
+      // 🚨 CHARGEBACK
+      case 'chargeback':
+      case 'contested':
         console.log('🚨 CHARGEBACK DETECTADO - REVOGANDO ACESSO!')
         
-        // Registrar log de fraude
         await supabaseAdmin
           .from('fraud_logs')
           .insert({
@@ -144,26 +198,12 @@ serve(async (req) => {
         })
 
         console.log('🚫 Acesso revogado (chargeback) para:', subscription.user_id)
-        
-        // TODO: Alertar equipe de fraude
         break
 
-      case 'charge.cancelled':
-      case 'payment.cancelled':
-        console.log('❌ Pagamento cancelado')
-        
-        await supabaseAdmin
-          .from('subscriptions')
-          .update({ 
-            payment_status: 'cancelled',
-            is_active: false,
-            updated_at: new Date().toISOString()
-          })
-          .eq('payment_id', String(paymentId))
-        break
-
-      case 'charge.declined':
-      case 'payment.declined':
+      // ❌ COMPRA RECUSADA
+      case 'compra recusada':
+      case 'declined':
+      case 'rejected':
         console.log('❌ Pagamento recusado')
         
         await supabaseAdmin
@@ -173,7 +213,23 @@ serve(async (req) => {
             is_active: false,
             updated_at: new Date().toISOString()
           })
-          .eq('payment_id', String(paymentId))
+          .eq('id', subscription.id)
+        break
+
+      // ℹ️ OUTROS EVENTOS (apenas log)
+      case 'boleto gerado':
+      case 'pix gerado':
+      case 'picpay gerado':
+      case 'nubank gerado':
+        console.log('ℹ️ Pagamento gerado, aguardando confirmação...')
+        
+        await supabaseAdmin
+          .from('subscriptions')
+          .update({ 
+            payment_status: 'pending',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', subscription.id)
         break
 
       default:

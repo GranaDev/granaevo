@@ -1,8 +1,9 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CAKTO_CLIENT_ID = Deno.env.get('CAKTO_CLIENT_ID')!
-const CAKTO_CLIENT_SECRET = Deno.env.get('CAKTO_CLIENT_SECRET')!
+// IMPORTANTE: Na Cakto, você pega o Bearer Token no painel
+// Vá em: Configurações → API → Token de Acesso
+const CAKTO_API_KEY = Deno.env.get('CAKTO_API_KEY')!
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
@@ -18,36 +19,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-idempotency-key',
 }
 
-// Função para obter token de acesso da Cakto
-async function getCaktoAccessToken(): Promise<string> {
-  const response = await fetch('https://api.cakto.com.br/v1/oauth/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      client_id: CAKTO_CLIENT_ID,
-      client_secret: CAKTO_CLIENT_SECRET,
-      grant_type: 'client_credentials'
-    })
-  })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Erro ao obter token Cakto: ${error}`)
-  }
-
-  const data = await response.json()
-  return data.access_token
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { email, password, userName, planName, paymentMethod, cardToken, cpf } = await req.json()
+    const { email, password, userName, planName, paymentMethod, cpf } = await req.json()
     
     console.log('📥 Requisição recebida:', { email, planName, paymentMethod })
 
@@ -82,11 +60,11 @@ serve(async (req) => {
       throw new Error('Este email já está cadastrado!')
     }
 
-    // ✅ 3. Criar usuário no Supabase Auth (ANTES do pagamento)
+    // ✅ 3. Criar usuário no Supabase Auth
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: password,
-      email_confirm: true,
+      email_confirm: false, // Só confirmar após pagamento aprovado
       user_metadata: {
         name: userName || email.split('@')[0],
         plan: planName,
@@ -102,58 +80,38 @@ serve(async (req) => {
     const userId = authData.user.id
     console.log('✅ Usuário criado no Auth:', userId, email)
 
-    // ✅ 4. Obter token de acesso da Cakto
-    const accessToken = await getCaktoAccessToken()
-
-    // ✅ 5. Preparar dados de pagamento
-    const idempotencyKey = req.headers.get('X-Idempotency-Key') || `${email}-${Date.now()}`
-    
-    const paymentData: any = {
-      amount: Math.round(plan.price * 100), // Cakto usa centavos
-      currency: 'BRL',
-      description: `Plano ${planName} - GranaEvo`,
+    // ✅ 4. Preparar dados de pagamento para Cakto
+    // ESTRUTURA CORRETA DA API CAKTO:
+    const caktoPayload = {
+      product: {
+        name: `GranaEvo - ${planName}`,
+        price: plan.price
+      },
       customer: {
-        email: email,
         name: userName || email.split('@')[0],
+        email: email,
         document: cpf.replace(/\D/g, '')
+      },
+      payment: {
+        method: paymentMethod === 'pix' ? 'pix' : 'credit_card'
       },
       metadata: {
         user_id: userId,
-        plan_name: planName,
-        plan_id: plan.id
+        plan_id: plan.id,
+        plan_name: planName
       }
-    }
-
-    let paymentEndpoint = ''
-    
-    // Se for PIX
-    if (paymentMethod === 'pix') {
-      paymentEndpoint = 'https://api.cakto.com.br/v1/charges/pix'
-      paymentData.payment_method = 'pix'
-      paymentData.expires_in = 3600 // 1 hora
-    }
-    // Se for cartão
-    else if (paymentMethod === 'credit_card' && cardToken) {
-      paymentEndpoint = 'https://api.cakto.com.br/v1/charges/card'
-      paymentData.payment_method = 'credit_card'
-      paymentData.card_token = cardToken
-      paymentData.installments = 1
-      paymentData.capture = true // Captura automática
-    } else {
-      throw new Error('Método de pagamento inválido')
     }
 
     console.log('💳 Criando pagamento na Cakto...')
 
-    // ✅ 6. Criar pagamento na Cakto
-    const caktoResponse = await fetch(paymentEndpoint, {
+    // ✅ 5. Criar pagamento na Cakto
+    const caktoResponse = await fetch('https://api.cakto.com.br/v1/payments', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        'X-Idempotency-Key': idempotencyKey
+        'Authorization': `Bearer ${CAKTO_API_KEY}`
       },
-      body: JSON.stringify(paymentData)
+      body: JSON.stringify(caktoPayload)
     })
 
     const payment = await caktoResponse.json()
@@ -164,12 +122,12 @@ serve(async (req) => {
       // Rollback: deletar usuário criado
       await supabaseAdmin.auth.admin.deleteUser(userId)
       
-      throw new Error(payment.message || 'Erro ao processar pagamento na Cakto')
+      throw new Error(payment.message || payment.error || 'Erro ao processar pagamento na Cakto')
     }
 
     console.log('✅ Pagamento criado na Cakto:', payment.id, 'Status:', payment.status)
 
-    // ✅ 7. Salvar assinatura no banco
+    // ✅ 6. Salvar assinatura no banco
     const { error: subError } = await supabaseAdmin
       .from('subscriptions')
       .insert({
@@ -177,11 +135,11 @@ serve(async (req) => {
         plan_id: plan.id,
         payment_id: payment.id.toString(),
         payment_method: paymentMethod,
-        payment_status: payment.status,
+        payment_status: payment.status || 'pending',
         user_email: email,
         user_name: userName || email.split('@')[0],
-        is_active: payment.status === 'approved', // Ativo se já aprovado
-        expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 ano (vitalício)
+        is_active: false, // Só ativar quando webhook confirmar
+        expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 ano
       })
 
     if (subError) {
@@ -195,7 +153,7 @@ serve(async (req) => {
 
     console.log('✅ Assinatura salva no banco')
 
-    // ✅ 8. Criar perfil inicial
+    // ✅ 7. Criar perfil inicial
     const profileName = userName || email.split('@')[0]
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
@@ -211,19 +169,34 @@ serve(async (req) => {
       console.log('✅ Perfil inicial criado')
     }
 
-    // ✅ 9. Preparar resposta
+    // ✅ 8. Preparar resposta
     const response: any = {
       success: true,
       paymentId: payment.id,
       paymentMethod: paymentMethod,
-      status: payment.status
+      status: payment.status || 'pending'
     }
 
     // Se for PIX, adicionar QR Code
     if (paymentMethod === 'pix' && payment.pix) {
-      response.qrCodeBase64 = payment.pix.qr_code_base64
-      response.qrCode = payment.pix.qr_code_text
-      response.expiresAt = payment.pix.expires_at
+      response.qrCodeBase64 = payment.pix.qr_code_base64 || payment.pix.qrCodeBase64
+      response.qrCode = payment.pix.qr_code || payment.pix.qrCode || payment.pix.code
+      response.expiresAt = payment.pix.expires_at || payment.pix.expiresAt
+    }
+
+    // Se cartão foi aprovado imediatamente
+    if (paymentMethod === 'credit_card' && payment.status === 'approved') {
+      // Liberar acesso imediatamente
+      await supabaseAdmin
+        .from('subscriptions')
+        .update({ is_active: true })
+        .eq('payment_id', payment.id.toString())
+
+      await supabaseAdmin.auth.admin.updateUserById(userId, {
+        email_confirm: true
+      })
+
+      response.approved = true
     }
 
     console.log('✅ Processamento concluído com sucesso!')
