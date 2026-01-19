@@ -600,11 +600,26 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ==========================================
-// CHECKOUT - REDIRECIONAR DIRETO PARA MERCADO PAGO
+// CHECKOUT - REDIRECIONAR PARA CAKTO
 // ==========================================
 async function iniciarCheckout(planName) {
-    // Ir direto para o checkout - não precisa estar logado
-    window.location.href = `checkout.html?plan=${planName}`;
+    // URLs dos checkouts da Cakto para cada plano
+    const checkoutUrls = {
+        'Individual': 'https://pay.cakto.com.br/figw38w_731973',
+        'Casal': 'https://pay.cakto.com.br/rmq8b33_731974',
+        'Família': 'https://pay.cakto.com.br/4x7ii5i_731976'
+    };
+
+    const checkoutUrl = checkoutUrls[planName];
+
+    if (!checkoutUrl || checkoutUrl.includes('SUA_URL')) {
+        alert('Checkout ainda não configurado. Por favor, configure as URLs na Cakto.');
+        console.error('Configure as URLs dos checkouts da Cakto no arquivo planos.js');
+        return;
+    }
+
+    // Redirecionar para o checkout da Cakto
+    window.location.href = checkoutUrl;
 }
 
 window.iniciarCheckout = iniciarCheckout;

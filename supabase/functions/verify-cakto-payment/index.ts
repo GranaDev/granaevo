@@ -1,103 +1,86 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Max-Age': '86400',
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { status: 200, headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { userId } = await req.json()
+    const { orderId } = await req.json()
 
-    if (!userId) {
-      throw new Error('User ID não fornecido')
+    if (!orderId) {
+      throw new Error('orderId é obrigatório')
     }
 
-    console.log('🔍 Verificando pagamento do usuário:', userId)
+    // Obter token da Cakto
+    const accessToken = await getCaktoAccessToken()
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    // Buscar pedido na API da Cakto
+    const orderResponse = await fetch(
+      `https://api.cakto.com.br/api/orders/${orderId}/`,
       {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
       }
     )
 
-    // Buscar subscription do usuário
-    const { data: subscription, error: subError } = await supabaseAdmin
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (subError || !subscription) {
-      console.log('❌ Subscription não encontrada para user:', userId)
-      return new Response(
-        JSON.stringify({
-          paid: false,
-          status: 'pending',
-          statusMessage: 'Aguardando confirmação do pagamento...'
-        }),
-        { 
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+    if (!orderResponse.ok) {
+      throw new Error(`Erro ao buscar pedido: ${orderResponse.statusText}`)
     }
 
-    console.log('📊 Subscription encontrada:', subscription.id, '- Status:', subscription.payment_status)
+    const orderData = await orderResponse.json()
 
-    const isPaid = subscription.is_active && subscription.payment_status === 'approved'
-
-    return new Response(
-      JSON.stringify({
-        paid: isPaid,
-        status: subscription.payment_status,
-        statusMessage: getStatusMessage(subscription.payment_status)
-      }),
-      { 
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
-
-  } catch (error: any) {
-    console.error('❌ Erro:', error)
     return new Response(
       JSON.stringify({ 
-        paid: false,
-        error: error.message 
+        success: true, 
+        order: orderData 
       }),
       { 
-        status: 400, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200 
+      },
+    )
+
+  } catch (error) {
+    console.error('❌ Erro:', error)
+    return new Response(
+      JSON.stringify({ success: false, error: error.message }),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500 
+      },
     )
   }
 })
 
-function getStatusMessage(status: string): string {
-  const messages: Record<string, string> = {
-    'pending': 'Aguardando pagamento...',
-    'processing': 'Processando pagamento...',
-    'approved': 'Pagamento confirmado!',
-    'paid': 'Pagamento confirmado!',
-    'declined': 'Pagamento recusado',
-    'cancelled': 'Pagamento cancelado',
-    'refunded': 'Pagamento estornado',
-    'chargeback': 'Pagamento contestado'
+async function getCaktoAccessToken(): Promise<string> {
+  const clientId = Deno.env.get('CAKTO_CLIENT_ID')
+  const clientSecret = Deno.env.get('CAKTO_CLIENT_SECRET')
+
+  const response = await fetch('https://api.cakto.com.br/oauth/token/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Falha ao obter token da Cakto')
   }
-  return messages[status] || 'Status desconhecido'
+
+  const data = await response.json()
+  return data.access_token
 }
