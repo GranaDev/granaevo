@@ -10,14 +10,12 @@ const PLANS = {
 const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo';
 
-let currentPaymentId = null;
-let currentUserEmail = null;
+let currentUserId = null;
 
 // ========================================
 // INICIALIZAÇÃO
 // ========================================
 
-// Pegar plano da URL
 const urlParams = new URLSearchParams(window.location.search);
 const planName = urlParams.get('plan');
 
@@ -29,32 +27,21 @@ if (!planName || !PLANS[planName]) {
 document.getElementById('planName').textContent = planName;
 document.getElementById('planPrice').textContent = PLANS[planName].price.toFixed(2);
 
-// ========================================
-// ALTERNAR MÉTODOS DE PAGAMENTO
-// ========================================
-const paymentMethods = document.querySelectorAll('.payment-method');
-const creditCardFields = document.getElementById('creditCardFields');
-let selectedMethod = 'pix';
+// Remover seleção de método de pagamento (não é mais necessário)
+const paymentMethodsSection = document.querySelector('.payment-methods');
+if (paymentMethodsSection) {
+  paymentMethodsSection.closest('.form-group').style.display = 'none';
+}
 
-paymentMethods.forEach(method => {
-  method.addEventListener('click', () => {
-    paymentMethods.forEach(m => m.classList.remove('active'));
-    method.classList.add('active');
-    selectedMethod = method.dataset.method;
-    
-    if (selectedMethod === 'credit_card') {
-      creditCardFields.classList.add('active');
-    } else {
-      creditCardFields.classList.remove('active');
-    }
-  });
-});
+const creditCardFields = document.getElementById('creditCardFields');
+if (creditCardFields) {
+  creditCardFields.style.display = 'none';
+}
 
 // ========================================
 // FORMATAÇÃO DOS CAMPOS
 // ========================================
 
-// CPF
 const cpfInput = document.getElementById('userCPF');
 if (cpfInput) {
   cpfInput.addEventListener('input', (e) => {
@@ -68,41 +55,12 @@ if (cpfInput) {
   });
 }
 
-// Número do cartão
-const cardNumberInput = document.getElementById('cardNumber');
-if (cardNumberInput) {
-  cardNumberInput.addEventListener('input', (e) => {
-    let value = e.target.value.replace(/\s/g, '');
-    let formatted = value.match(/.{1,4}/g)?.join(' ') || value;
-    e.target.value = formatted;
-  });
-}
-
-// Validade do cartão
-const cardExpiryInput = document.getElementById('cardExpiry');
-if (cardExpiryInput) {
-  cardExpiryInput.addEventListener('input', (e) => {
-    let value = e.target.value.replace(/\D/g, '');
-    if (value.length >= 2) {
-      value = value.slice(0, 2) + '/' + value.slice(2, 4);
-    }
-    e.target.value = value;
-  });
-}
-
-// CVV
-const cardCvvInput = document.getElementById('cardCvv');
-if (cardCvvInput) {
-  cardCvvInput.addEventListener('input', (e) => {
-    e.target.value = e.target.value.replace(/\D/g, '');
-  });
-}
-
 // ========================================
 // ENVIAR FORMULÁRIO
 // ========================================
 const form = document.getElementById('form-checkout');
 const loadingOverlay = document.getElementById('loadingOverlay');
+const loadingText = document.querySelector('.loading-text');
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -134,74 +92,34 @@ form.addEventListener('submit', async (e) => {
     return;
   }
   
-  // Validar CPF
   const cpfLimpo = cpf.replace(/\D/g, '');
   if (cpfLimpo.length !== 11) {
     alert('❌ CPF inválido! Digite os 11 dígitos.');
     return;
   }
   
-  currentUserEmail = email;
   loadingOverlay.classList.add('active');
+  loadingText.textContent = 'Criando sua conta...';
   
   try {
-    let cardToken = null;
+    console.log('📤 Enviando dados:', { email, nomeCompleto, planName });
     
-    // Se for cartão, validar campos
-    if (selectedMethod === 'credit_card') {
-      const cardNumber = document.getElementById('cardNumber').value.replace(/\s/g, '');
-      const cardExpiry = document.getElementById('cardExpiry').value;
-      const cardCvv = document.getElementById('cardCvv').value;
-      const cardholderName = document.getElementById('cardholderName').value;
-      
-      if (!cardNumber || !cardExpiry || !cardCvv || !cardholderName) {
-        alert('Preencha todos os dados do cartão');
-        loadingOverlay.classList.remove('active');
-        return;
-      }
-      
-      const [month, year] = cardExpiry.split('/');
-      
-      // Para Cakto, preparar dados do cartão
-      cardToken = {
-        number: cardNumber,
-        holder_name: cardholderName,
-        exp_month: month,
-        exp_year: '20' + year,
-        cvv: cardCvv
-      };
-    }
-    
-    console.log('📤 Enviando dados:', { 
-      email, 
-      nomeCompleto, 
-      planName, 
-      paymentMethod: selectedMethod 
-    });
-    
-    // Gerar idempotency key único
-    const idempotencyKey = `${email}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    // ✅ CHAMAR EDGE FUNCTION DA CAKTO
+    // ✅ Chamar Edge Function
     const response = await fetch(`${SUPABASE_URL}/functions/v1/process-cakto-payment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'X-Idempotency-Key': idempotencyKey
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
       },
       body: JSON.stringify({
         email,
         password,
         userName: nomeCompleto,
         planName,
-        paymentMethod: selectedMethod,
-        cardToken,
         cpf: cpfLimpo
       })
     });
 
-    // Verificar se a resposta é JSON
     const contentType = response.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
       const textResponse = await response.text();
@@ -216,84 +134,164 @@ form.addEventListener('submit', async (e) => {
       throw new Error(data.error || 'Erro desconhecido');
     }
     
+    currentUserId = data.userId;
     loadingOverlay.classList.remove('active');
     
-    // Se for PIX, mostrar QR Code
-    if (data.paymentMethod === 'pix' && !data.approved) {
-      currentPaymentId = data.paymentId;
-      
-      // Exibir QR Code
-      if (data.qrCodeBase64) {
-        document.getElementById('pixQrcodeImg').src = `data:image/png;base64,${data.qrCodeBase64}`;
-      }
-      
-      // Exibir código PIX para copiar
-      const pixCodeContainer = document.getElementById('pixCodeContainer');
-      const pixCopyCode = document.getElementById('pixCopyCode');
-      
-      if (pixCodeContainer && pixCopyCode && data.qrCode) {
-        pixCodeContainer.style.display = 'block';
-        pixCopyCode.value = data.qrCode;
-        console.log('✅ Código PIX exibido para copiar');
-      }
-      
-      document.getElementById('pixQrcode').classList.add('active');
-      form.style.display = 'none';
-      
-    } else {
-      // Se for cartão aprovado ou pagamento instantâneo
-      alert('✅ Pagamento aprovado! Redirecionando para o login...');
-      window.location.href = 'login.html';
-    }
+    // ✅ Mostrar modal com checkout da Cakto
+    mostrarCheckoutCakto(data.checkoutUrl);
     
   } catch (error) {
     loadingOverlay.classList.remove('active');
     console.error('❌ Erro:', error);
-    alert('Erro ao processar pagamento: ' + error.message);
+    alert('Erro ao processar: ' + error.message);
   }
 });
 
 // ========================================
-// VERIFICAR PAGAMENTO PIX
+// MODAL DE CHECKOUT CAKTO
 // ========================================
-async function verificarPagamentoPix() {
-  if (!currentPaymentId) {
-    alert('Erro: ID do pagamento não encontrado');
-    return;
-  }
+function mostrarCheckoutCakto(checkoutUrl) {
+  // Esconder formulário
+  form.style.display = 'none';
+  
+  // Criar modal
+  const modalHTML = `
+    <div style="
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.95);
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    " id="caktoModal">
+      <div style="
+        background: white;
+        border-radius: 12px;
+        width: 100%;
+        max-width: 600px;
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      ">
+        <div style="
+          padding: 20px;
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        ">
+          <h2 style="margin: 0; font-size: 18px;">💳 Finalizar Pagamento</h2>
+          <button onclick="fecharCheckout()" style="
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+          ">×</button>
+        </div>
+        
+        <iframe 
+          src="${checkoutUrl}" 
+          style="
+            flex: 1;
+            border: none;
+            width: 100%;
+          "
+          id="caktoIframe"
+        ></iframe>
+        
+        <div style="
+          padding: 15px;
+          background: #f3f4f6;
+          text-align: center;
+          color: #6b7280;
+          font-size: 13px;
+        ">
+          ✅ Após o pagamento, você será redirecionado automaticamente
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  
+  // Verificar status do pagamento periodicamente
+  iniciarVerificacaoPagamento();
+}
 
-  const loadingText = document.querySelector('.loading-text');
-  loadingOverlay.classList.add('active');
-  loadingText.textContent = 'Verificando pagamento...';
-
-  try {
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/verify-cakto-payment`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      },
-      body: JSON.stringify({
-        paymentId: currentPaymentId
-      })
-    });
-
-    const data = await response.json();
-    loadingOverlay.classList.remove('active');
-
-    if (data.paid) {
-      alert('✅ Pagamento confirmado! Redirecionando para o login...');
-      window.location.href = 'login.html';
-    } else {
-      alert(`⏳ Pagamento ainda não detectado.\n\nStatus: ${data.statusMessage}\n\nPor favor, aguarde alguns instantes após efetuar o pagamento e tente novamente.`);
+window.fecharCheckout = function() {
+  const modal = document.getElementById('caktoModal');
+  if (modal) {
+    if (confirm('⚠️ Tem certeza? Seu pagamento ainda não foi confirmado.')) {
+      modal.remove();
+      form.style.display = 'block';
     }
-
-  } catch (error) {
-    loadingOverlay.classList.remove('active');
-    console.error('❌ Erro:', error);
-    alert('Erro ao verificar pagamento. Tente novamente.');
   }
 }
 
-// Expor função globalmente
-window.verificarPagamentoPix = verificarPagamentoPix;
+// ========================================
+// VERIFICAR PAGAMENTO
+// ========================================
+let verificacaoInterval = null;
+
+function iniciarVerificacaoPagamento() {
+  console.log('🔄 Iniciando verificação de pagamento...');
+  
+  // Verificar a cada 3 segundos
+  verificacaoInterval = setInterval(async () => {
+    if (!currentUserId) return;
+    
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/verify-cakto-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          userId: currentUserId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.paid) {
+        clearInterval(verificacaoInterval);
+        
+        const modal = document.getElementById('caktoModal');
+        if (modal) modal.remove();
+        
+        loadingOverlay.classList.add('active');
+        loadingText.textContent = '✅ Pagamento confirmado!';
+        
+        setTimeout(() => {
+          alert('✅ Pagamento confirmado! Redirecionando para o login...');
+          window.location.href = 'login.html';
+        }, 1500);
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao verificar pagamento:', error);
+    }
+  }, 3000); // Verificar a cada 3 segundos
+}
+
+// Limpar interval quando sair da página
+window.addEventListener('beforeunload', () => {
+  if (verificacaoInterval) {
+    clearInterval(verificacaoInterval);
+  }
+});

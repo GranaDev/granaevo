@@ -1,10 +1,15 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CAKTO_CLIENT_ID = Deno.env.get('CAKTO_CLIENT_ID')!
-const CAKTO_CLIENT_SECRET = Deno.env.get('CAKTO_CLIENT_SECRET')!
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+// ✅ Links de checkout da Cakto (já prontos!)
+const CAKTO_CHECKOUT_LINKS: Record<string, string> = {
+  'Individual': 'https://pay.cakto.com.br/nxbsjtg_731847',
+  'Casal': 'https://pay.cakto.com.br/jsatqgw_731852',
+  'Família': 'https://pay.cakto.com.br/98h5igj_731853'
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,51 +22,15 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false }
 })
 
-// 🔑 Obter token OAuth2 da Cakto
-async function getCaktoAccessToken(): Promise<string> {
-  console.log('🔑 Obtendo token OAuth2 da Cakto...')
-  
-  // Preparar dados no formato URL-encoded (SEM grant_type para Cakto!)
-  const params = new URLSearchParams()
-  params.append('client_id', CAKTO_CLIENT_ID)
-  params.append('client_secret', CAKTO_CLIENT_SECRET)
-  
-  const response = await fetch('https://api.cakto.com.br/o/token/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/json'
-    },
-    body: params.toString()
-  })
-
-  const responseText = await response.text()
-  
-  if (!response.ok) {
-    console.error('❌ Erro auth Cakto:', responseText)
-    throw new Error(`Erro na autenticação Cakto (${response.status})`)
-  }
-
-  const data = JSON.parse(responseText)
-  
-  if (!data.access_token) {
-    throw new Error('Token não retornado pela Cakto')
-  }
-
-  console.log('✅ Token OAuth2 obtido com sucesso')
-  return data.access_token
-}
-
 serve(async (req) => {
-  // CORS Preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200, headers: corsHeaders })
   }
 
   try {
-    const { email, password, userName, planName, paymentMethod, cpf, cardToken } = await req.json()
+    const { email, password, userName, planName, cpf } = await req.json()
     
-    console.log('📥 Nova requisição:', { email, planName, paymentMethod })
+    console.log('📥 Nova requisição:', { email, planName })
 
     // Validações
     if (!email || !password || !planName || !cpf) {
@@ -94,15 +63,16 @@ serve(async (req) => {
       throw new Error('Este email já está cadastrado!')
     }
 
-    // 3. Criar usuário no Supabase Auth
+    // 3. Criar usuário no Supabase (mas deixar inativo até o pagamento)
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: false,
+      email_confirm: false, // Só confirma após pagamento
       user_metadata: {
         name: userName || email.split('@')[0],
         plan: planName,
-        cpf
+        cpf,
+        awaiting_payment: true
       }
     })
 
@@ -114,81 +84,19 @@ serve(async (req) => {
     const userId = authData.user.id
     console.log('✅ Usuário criado no Auth:', userId)
 
-    // 4. Obter token OAuth2 da Cakto
-    const accessToken = await getCaktoAccessToken()
-
-    // 5. Preparar payload para Cakto (formato da documentação deles)
-    const caktoPayload: any = {
-      amount: Math.round(plan.price * 100), // Valor em centavos
-      description: `GranaEvo - Plano ${planName}`,
-      customer: {
-        name: userName || email.split('@')[0],
-        email: email,
-        document: cpf.replace(/\D/g, ''),
-        document_type: 'CPF'
-      },
-      metadata: {
-        user_id: userId,
-        plan_id: plan.id,
-        plan_name: planName
-      }
-    }
-
-    // Adicionar método de pagamento
-    if (paymentMethod === 'pix') {
-      caktoPayload.payment_method = 'pix'
-    } else if (paymentMethod === 'credit_card' && cardToken) {
-      caktoPayload.payment_method = 'credit_card'
-      caktoPayload.card = cardToken
-    }
-
-    console.log('💳 Criando cobrança na Cakto...')
-
-    // 6. Criar cobrança na Cakto
-    const caktoResponse = await fetch('https://api.cakto.com.br/v1/charges', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      body: JSON.stringify(caktoPayload)
-    })
-
-    const caktoText = await caktoResponse.text()
-    console.log('📥 Resposta Cakto:', caktoText.substring(0, 300))
-
-    if (!caktoResponse.ok) {
-      console.error('❌ Erro na Cakto:', caktoText)
-      
-      // Rollback: deletar usuário criado
-      await supabaseAdmin.auth.admin.deleteUser(userId)
-      
-      throw new Error(`Erro ao processar pagamento na Cakto (${caktoResponse.status})`)
-    }
-
-    const payment = JSON.parse(caktoText)
-    
-    if (!payment.id) {
-      await supabaseAdmin.auth.admin.deleteUser(userId)
-      throw new Error('ID do pagamento não retornado pela Cakto')
-    }
-
-    console.log('✅ Cobrança criada na Cakto:', payment.id, '- Status:', payment.status)
-
-    // 7. Salvar assinatura no banco
+    // 4. Salvar assinatura pendente
     const { error: subError } = await supabaseAdmin
       .from('subscriptions')
       .insert({
         user_id: userId,
         plan_id: plan.id,
-        payment_id: payment.id.toString(),
-        payment_method: paymentMethod,
-        payment_status: payment.status || 'pending',
+        payment_id: null, // Será preenchido pelo webhook
+        payment_method: 'cakto_checkout',
+        payment_status: 'pending',
         user_email: email,
         user_name: userName || email.split('@')[0],
         is_active: false,
-        expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 dias
       })
 
     if (subError) {
@@ -197,9 +105,9 @@ serve(async (req) => {
       throw new Error(`Erro ao salvar assinatura: ${subError.message}`)
     }
 
-    console.log('✅ Assinatura salva no banco')
+    console.log('✅ Assinatura pendente criada')
 
-    // 8. Criar perfil inicial
+    // 5. Criar perfil inicial
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert({
@@ -214,42 +122,38 @@ serve(async (req) => {
       console.log('✅ Perfil criado')
     }
 
-    // 9. Preparar resposta
-    const response: any = {
-      success: true,
-      paymentId: payment.id,
-      paymentMethod,
-      status: payment.status || 'pending'
+    // 6. Obter link de checkout da Cakto
+    const checkoutBaseUrl = CAKTO_CHECKOUT_LINKS[planName]
+    
+    if (!checkoutBaseUrl) {
+      throw new Error(`Link de checkout não encontrado para o plano: ${planName}`)
     }
 
-    // Se for PIX, adicionar QR Code
-    if (paymentMethod === 'pix' && payment.pix) {
-      response.qrCodeBase64 = payment.pix.qr_code_base64 || payment.pix.qrCodeBase64
-      response.qrCode = payment.pix.qr_code || payment.pix.code || payment.pix.qrCode
-      response.expiresAt = payment.pix.expires_at || payment.pix.expiresAt
-      console.log('✅ QR Code PIX gerado')
-    }
+    // 7. Adicionar parâmetros para pré-preencher o checkout
+    const checkoutUrl = new URL(checkoutBaseUrl)
+    checkoutUrl.searchParams.append('customer_name', userName || email.split('@')[0])
+    checkoutUrl.searchParams.append('customer_email', email)
+    checkoutUrl.searchParams.append('customer_document', cpf.replace(/\D/g, ''))
+    
+    // Metadados para identificar no webhook
+    checkoutUrl.searchParams.append('metadata[user_id]', userId)
+    checkoutUrl.searchParams.append('metadata[plan_id]', plan.id)
+    checkoutUrl.searchParams.append('metadata[user_email]', email)
 
-    // Se cartão foi aprovado imediatamente
-    if (paymentMethod === 'credit_card' && payment.status === 'approved') {
-      await supabaseAdmin
-        .from('subscriptions')
-        .update({ is_active: true })
-        .eq('payment_id', payment.id.toString())
+    console.log('✅ URL de checkout gerada')
 
-      await supabaseAdmin.auth.admin.updateUserById(userId, {
-        email_confirm: true
-      })
-
-      response.approved = true
-      console.log('✅ Cartão aprovado - acesso liberado')
-    }
-
-    console.log('✅ Processamento concluído com sucesso!')
-
-    return new Response(JSON.stringify(response), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        checkoutUrl: checkoutUrl.toString(),
+        userId: userId,
+        message: 'Conta criada com sucesso. Prossiga para o pagamento.'
+      }),
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    )
 
   } catch (error: any) {
     console.error('❌ Erro geral:', error)
