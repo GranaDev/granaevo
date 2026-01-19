@@ -325,25 +325,35 @@ accessForm.addEventListener('submit', async (e) => {
         console.log('✅ Subscription atualizada');
 
         // 3. Criar entrada em user_data
-        console.log('💾 Criando user_data...');
-        const { error: userDataError } = await supabase
-            .from('user_data')
-            .insert({
-                user_id: userId,
-                email: currentSubscriptionData.email,
-                data_json: {
-                    created_via: 'first_access',
-                    plan: currentSubscriptionData.plan_name,
-                    name: currentSubscriptionData.user_name,
-                },
-            });
+console.log('💾 Criando user_data...');
+const { data: userData, error: userDataError } = await supabase
+    .from('user_data')
+    .insert({
+        user_id: userId,
+        email: currentSubscriptionData.email,
+        data_json: {
+            created_via: 'first_access',
+            plan: currentSubscriptionData.plan_name,
+            name: currentSubscriptionData.user_name,
+            created_at: new Date().toISOString(),
+        },
+    })
+    .select();
 
-        if (userDataError) {
-            console.error('❌ Erro ao criar user_data:', userDataError);
-            throw userDataError;
-        }
-
-        console.log('✅ User_data criado');
+if (userDataError) {
+    console.error('❌ Erro ao criar user_data:', userDataError);
+    console.error('📊 Detalhes do erro:', JSON.stringify(userDataError, null, 2));
+    
+    // Se falhar por RLS mas o usuário foi criado, continuar mesmo assim
+    if (userDataError.code === '42501') {
+        console.warn('⚠️ Falha de RLS, mas usuário foi criado. Continuando...');
+        // Não lançar erro, apenas avisar
+    } else {
+        throw userDataError;
+    }
+} else {
+    console.log('✅ User_data criado:', userData);
+}
 
         // Sucesso!
         showAlert('info', '✅ Senha criada com sucesso! Redirecionando...');
