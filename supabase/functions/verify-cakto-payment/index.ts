@@ -1,11 +1,31 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const MERCADOPAGO_ACCESS_TOKEN = 'APP_USR-4646534918736333-123104-db4e913a378f25709b38d0620e35fcf2-758074021'
+const CAKTO_CLIENT_ID = Deno.env.get('CAKTO_CLIENT_ID')!
+const CAKTO_CLIENT_SECRET = Deno.env.get('CAKTO_CLIENT_SECRET')!
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+async function getCaktoAccessToken(): Promise<string> {
+  const response = await fetch('https://api.cakto.com.br/v1/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: CAKTO_CLIENT_ID,
+      client_secret: CAKTO_CLIENT_SECRET,
+      grant_type: 'client_credentials'
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error('Erro ao obter token Cakto')
+  }
+
+  const data = await response.json()
+  return data.access_token
 }
 
 serve(async (req) => {
@@ -14,7 +34,7 @@ serve(async (req) => {
   }
 
   try {
-    const { paymentId, email } = await req.json()
+    const { paymentId } = await req.json()
 
     if (!paymentId) {
       throw new Error('Payment ID não fornecido')
@@ -22,22 +42,25 @@ serve(async (req) => {
 
     console.log('🔍 Verificando pagamento:', paymentId)
 
-    // ✅ Consultar status no Mercado Pago
-    const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+    // ✅ Obter token de acesso
+    const accessToken = await getCaktoAccessToken()
+
+    // ✅ Consultar status na Cakto
+    const caktoResponse = await fetch(`https://api.cakto.com.br/v1/charges/${paymentId}`, {
       headers: {
-        'Authorization': `Bearer ${MERCADOPAGO_ACCESS_TOKEN}`
+        'Authorization': `Bearer ${accessToken}`
       }
     })
 
-    const mpData = await mpResponse.json()
+    const caktoData = await caktoResponse.json()
 
-    if (!mpResponse.ok) {
-      throw new Error('Erro ao consultar Mercado Pago')
+    if (!caktoResponse.ok) {
+      throw new Error('Erro ao consultar Cakto')
     }
 
-    console.log('📊 Status:', mpData.status)
+    console.log('📊 Status:', caktoData.status)
 
-    const isPaid = mpData.status === 'approved'
+    const isPaid = caktoData.status === 'approved' || caktoData.status === 'paid'
 
     // ✅ Se foi aprovado, liberar acesso
     if (isPaid) {
@@ -60,7 +83,10 @@ serve(async (req) => {
       // Atualizar status
       await supabaseAdmin
         .from('subscriptions')
-        .update({ payment_status: 'approved' })
+        .update({ 
+          payment_status: 'approved',
+          is_active: true
+        })
         .eq('payment_id', paymentId)
 
       // ✅ LIBERAR ACESSO: Confirmar email do usuário
@@ -74,8 +100,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         paid: isPaid,
-        status: mpData.status,
-        statusMessage: getStatusMessage(mpData.status)
+        status: caktoData.status,
+        statusMessage: getStatusMessage(caktoData.status)
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
@@ -93,10 +119,12 @@ function getStatusMessage(status: string): string {
   const messages: Record<string, string> = {
     'pending': 'Aguardando pagamento...',
     'approved': 'Pagamento aprovado!',
-    'in_process': 'Pagamento em análise',
-    'rejected': 'Pagamento rejeitado',
+    'paid': 'Pagamento confirmado!',
+    'processing': 'Pagamento em análise',
+    'declined': 'Pagamento recusado',
     'cancelled': 'Pagamento cancelado',
-    'refunded': 'Pagamento estornado'
+    'refunded': 'Pagamento estornado',
+    'chargeback': 'Pagamento contestado'
   }
   return messages[status] || 'Status desconhecido'
 }

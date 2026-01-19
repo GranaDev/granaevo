@@ -1,10 +1,5 @@
 import { supabase } from './supabase-client.js';
 
-// Inicializar MercadoPago
-const mp = new MercadoPago('APP_USR-474597c2-5121-4b24-8dfe-922d32e49233', {
-  locale: 'pt-BR'
-});
-
 const PLANS = {
   'Individual': { price: 19.99, max_profiles: 1 },
   'Casal': { price: 29.99, max_profiles: 2 },
@@ -45,13 +40,29 @@ paymentMethods.forEach(method => {
   });
 });
 
-// Formatação dos campos de cartão
+// ========================================
+// FORMATAÇÃO DOS CAMPOS
+// ========================================
+
+// CPF
+document.getElementById('userCPF')?.addEventListener('input', (e) => {
+  let value = e.target.value.replace(/\D/g, '');
+  if (value.length <= 11) {
+    value = value.replace(/(\d{3})(\d)/, '$1.$2');
+    value = value.replace(/(\d{3})(\d)/, '$1.$2');
+    value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  }
+  e.target.value = value;
+});
+
+// Número do cartão
 document.getElementById('cardNumber')?.addEventListener('input', (e) => {
   let value = e.target.value.replace(/\s/g, '');
   let formatted = value.match(/.{1,4}/g)?.join(' ') || value;
   e.target.value = formatted;
 });
 
+// Validade do cartão
 document.getElementById('cardExpiry')?.addEventListener('input', (e) => {
   let value = e.target.value.replace(/\D/g, '');
   if (value.length >= 2) {
@@ -60,6 +71,7 @@ document.getElementById('cardExpiry')?.addEventListener('input', (e) => {
   e.target.value = value;
 });
 
+// CVV
 document.getElementById('cardCvv')?.addEventListener('input', (e) => {
   e.target.value = e.target.value.replace(/\D/g, '');
 });
@@ -77,9 +89,10 @@ form.addEventListener('submit', async (e) => {
   const password = document.getElementById('userPassword').value.trim();
   const confirmPassword = document.getElementById('confirmPassword').value.trim();
   const nomeCompleto = document.getElementById('userName').value.trim();
+  const cpf = document.getElementById('userCPF').value.trim();
   
   // Validações
-  if (!email || !password || !confirmPassword || !nomeCompleto) {
+  if (!email || !password || !confirmPassword || !nomeCompleto || !cpf) {
     alert('❌ Preencha todos os campos!');
     return;
   }
@@ -99,13 +112,20 @@ form.addEventListener('submit', async (e) => {
     return;
   }
   
+  // Validar CPF
+  const cpfLimpo = cpf.replace(/\D/g, '');
+  if (cpfLimpo.length !== 11) {
+    alert('❌ CPF inválido! Digite os 11 dígitos.');
+    return;
+  }
+  
   currentUserEmail = email;
   loadingOverlay.classList.add('active');
   
   try {
     let cardToken = null;
     
-    // Se for cartão, criar token
+    // Se for cartão, validar campos
     if (selectedMethod === 'credit_card') {
       const cardNumber = document.getElementById('cardNumber').value.replace(/\s/g, '');
       const cardExpiry = document.getElementById('cardExpiry').value;
@@ -120,24 +140,15 @@ form.addEventListener('submit', async (e) => {
       
       const [month, year] = cardExpiry.split('/');
       
-      console.log('🔐 Criando token do cartão...');
-      
-      const tokenResponse = await mp.fields.createCardToken({
-        cardNumber: cardNumber,
-        cardholderName: cardholderName,
-        cardExpirationMonth: month,
-        cardExpirationYear: '20' + year,
-        securityCode: cardCvv,
-        identificationType: 'CPF',
-        identificationNumber: '00000000000'
-      });
-      
-      if (tokenResponse.error) {
-        throw new Error('Erro ao processar cartão');
-      }
-      
-      cardToken = tokenResponse.id;
-      console.log('✅ Token criado:', cardToken);
+      // Para Cakto, você precisará criar um token usando o SDK deles
+      // Por enquanto, vamos passar os dados diretamente
+      cardToken = {
+        number: cardNumber,
+        holder_name: cardholderName,
+        exp_month: month,
+        exp_year: '20' + year,
+        cvv: cardCvv
+      };
     }
     
     console.log('📤 Enviando dados:', { 
@@ -150,8 +161,8 @@ form.addEventListener('submit', async (e) => {
     // Gerar idempotency key único
     const idempotencyKey = `${email}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
-    // Chamar Edge Function
-    const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/process-mercadopago-payment', {
+    // ✅ CHAMAR EDGE FUNCTION DA CAKTO
+    const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/process-cakto-payment', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -164,7 +175,8 @@ form.addEventListener('submit', async (e) => {
         userName: nomeCompleto,
         planName,
         paymentMethod: selectedMethod,
-        cardToken
+        cardToken,
+        cpf: cpfLimpo
       })
     });
 
@@ -192,8 +204,6 @@ form.addEventListener('submit', async (e) => {
         pixCodeContainer.style.display = 'block';
         pixCopyCode.value = data.qrCode;
         console.log('✅ Código PIX exibido para copiar');
-      } else {
-        console.warn('⚠️ Elementos de código PIX não encontrados no HTML');
       }
       
       document.getElementById('pixQrcode').classList.add('active');
@@ -226,15 +236,14 @@ async function verificarPagamentoPix() {
   loadingText.textContent = 'Verificando pagamento...';
 
   try {
-    const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/verify-pix-payment', {
+    const response = await fetch('https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/verify-cakto-payment', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo'
       },
       body: JSON.stringify({
-        paymentId: currentPaymentId,
-        email: currentUserEmail
+        paymentId: currentPaymentId
       })
     });
 
