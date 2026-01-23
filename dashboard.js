@@ -471,7 +471,7 @@ function adicionarNovoPerfil() {
                 .insert({
                     user_id: session.user.id,
                     name: nome,
-                    photo: fotoUrl
+                    photo_url: fotoUrl
                 })
                 .select()
                 .single();
