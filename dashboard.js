@@ -91,10 +91,9 @@ async function carregarPerfis() {
 
         console.log('🔍 Buscando perfis para o usuário:', session.user.id);
 
-        // ✅ NOVO: Buscar apenas id, name e photo_url
         const { data: perfis, error } = await supabase
             .from('profiles')
-            .select('id, name, photo_url') // ✅ Apenas campos necessários
+            .select('id, name, photo_url') // ✅ Campo correto
             .eq('user_id', session.user.id)
             .order('id', { ascending: true });
 
@@ -105,7 +104,7 @@ async function carregarPerfis() {
             usuarioLogado.perfis = perfis.map(p => ({
                 id: p.id,
                 nome: p.name,
-                foto: p.photo_url
+                foto: p.photo_url  // ✅ Campo correto
             }));
             return { sucesso: true, perfisEncontrados: true };
         } else {
@@ -377,7 +376,7 @@ async function entrarNoPerfil(index) {
 }
 
 
-async function adicionarNovoPerfil() {
+function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
     const limitePerfis = limitesPlano[plano];
     const perfisAtuais = usuarioLogado.perfis.length;
@@ -432,7 +431,6 @@ async function adicionarNovoPerfil() {
             
             let fotoUrl = null;
             
-            // ✅ UPLOAD DA FOTO (se selecionada)
             if(fotoInput.files && fotoInput.files[0]) {
                 console.log('📸 Fazendo upload da foto...');
                 
@@ -443,16 +441,11 @@ async function adicionarNovoPerfil() {
                     return;
                 }
                 
-                const timestamp = Date.now();
-                const extensao = arquivo.name.split('.').pop();
-                const nomeArquivo = `${session.user.id}/temp_${timestamp}.${extensao}`;
+                const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name}`;
                 
                 const { data: uploadData, error: uploadError } = await supabase.storage
                     .from('profile-photos')
-                    .upload(nomeArquivo, arquivo, {
-                        cacheControl: '3600',
-                        upsert: false
-                    });
+                    .upload(nomeArquivo, arquivo);
                 
                 if (uploadError) {
                     console.error('❌ Erro no upload:', uploadError);
@@ -469,13 +462,13 @@ async function adicionarNovoPerfil() {
             
             console.log('💾 Inserindo perfil no banco...');
             
-            // ✅ CRIAR PERFIL NO BANCO
+            // ✅ CORREÇÃO: Usar photo_url em vez de photo
             const { data: novoPerfil, error } = await supabase
                 .from('profiles')
                 .insert({
                     user_id: session.user.id,
                     name: nome,
-                    photo_url: fotoUrl
+                    photo_url: fotoUrl  // ✅ CORRIGIDO!
                 })
                 .select()
                 .single();
@@ -487,42 +480,10 @@ async function adicionarNovoPerfil() {
             
             console.log('✅ Perfil criado com ID:', novoPerfil.id);
             
-            // ✅ RENOMEAR FOTO (de temp_ para o ID do perfil)
-            if(fotoUrl && fotoUrl.includes('temp_')) {
-                try {
-                    const timestamp = Date.now();
-                    const extensao = fotoUrl.split('.').pop().split('?')[0];
-                    const novoNome = `${session.user.id}/${novoPerfil.id}_${timestamp}.${extensao}`;
-                    const nomeAntigo = fotoUrl.split('/profile-photos/')[1].split('?')[0];
-                    
-                    const { error: moveError } = await supabase.storage
-                        .from('profile-photos')
-                        .move(nomeAntigo, novoNome);
-                    
-                    if(!moveError) {
-                        const { data: urlData } = supabase.storage
-                            .from('profile-photos')
-                            .getPublicUrl(novoNome);
-                        
-                        fotoUrl = urlData.publicUrl;
-                        
-                        await supabase
-                            .from('profiles')
-                            .update({ photo_url: fotoUrl })
-                            .eq('id', novoPerfil.id);
-                        
-                        console.log('✅ Foto renomeada para:', novoNome);
-                    }
-                } catch(e) {
-                    console.warn('⚠️ Erro ao renomear foto:', e);
-                }
-            }
-            
-            // ✅ ATUALIZAR LOCALMENTE
             usuarioLogado.perfis.push({
                 id: novoPerfil.id,
                 nome: novoPerfil.name,
-                foto: fotoUrl
+                foto: novoPerfil.photo_url  // ✅ CORRIGIDO!
             });
             
             fecharPopup();
