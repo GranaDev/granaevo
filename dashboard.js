@@ -597,23 +597,113 @@ function atualizarNomeUsuario() {
     }
 }
 
-function alterarFoto(event) {
+async function alterarFoto(event) {
     const file = event.target.files[0];
-    if(file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            if(perfilAtivo) {
-                perfilAtivo.foto = e.target.result;
-                const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-                if(idx !== -1) {
-                    usuarioLogado.perfis[idx].foto = e.target.result;
-                }
-                document.getElementById('userPhoto').src = e.target.result;
-                localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
-                localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
-            }
-        };
-        reader.readAsDataURL(file);
+    
+    if(!file) {
+        console.log('⚠️ Nenhum arquivo selecionado');
+        return;
+    }
+    
+    console.log('📸 Iniciando alteração de foto...');
+    console.log('📁 Arquivo:', file.name, '| Tamanho:', (file.size / 1024).toFixed(2), 'KB');
+    
+    if(!perfilAtivo) {
+        alert('Erro: Nenhum perfil ativo encontrado.');
+        return;
+    }
+    
+    if(file.size > 2 * 1024 * 1024) {
+        alert('A foto deve ter no máximo 2MB');
+        return;
+    }
+    
+    try {
+        console.log('🔍 Buscando sessão...');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session) {
+            console.error('❌ Erro de sessão:', sessionError);
+            throw new Error('Sessão inválida');
+        }
+        
+        console.log('✅ Sessão válida. User ID:', session.user.id);
+        
+        // UPLOAD DA NOVA FOTO
+        const nomeArquivo = `${session.user.id}/${Date.now()}_${file.name}`;
+        console.log('📂 Caminho do arquivo:', nomeArquivo);
+        
+        console.log('🔍 Fazendo upload para Supabase Storage...');
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('profile-photos')
+            .upload(nomeArquivo, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+        
+        console.log('📤 Resposta do upload:', { data: uploadData, error: uploadError });
+        
+        if (uploadError) {
+            console.error('❌ Erro no upload:', uploadError);
+            alert(`Erro ao fazer upload: ${uploadError.message}`);
+            throw uploadError;
+        }
+        
+        console.log('✅ Upload concluído!');
+        
+        // OBTER URL PÚBLICA
+        const { data: urlData } = supabase.storage
+            .from('profile-photos')
+            .getPublicUrl(nomeArquivo);
+        
+        const fotoUrl = urlData.publicUrl;
+        console.log('🔗 URL pública:', fotoUrl);
+        
+        // ATUALIZAR NO BANCO DE DADOS
+        console.log('🔍 Atualizando foto no banco de dados...');
+        console.log('📝 Perfil ID:', perfilAtivo.id);
+        
+        const { data: updateData, error: updateError } = await supabase
+            .from('profiles')
+            .update({ photo_url: fotoUrl })
+            .eq('id', perfilAtivo.id)
+            .select()
+            .single();
+        
+        console.log('📤 Resposta da atualização:', { data: updateData, error: updateError });
+        
+        if (updateError) {
+            console.error('❌ Erro ao atualizar no banco:', updateError);
+            alert(`Erro ao salvar foto: ${updateError.message}`);
+            throw updateError;
+        }
+        
+        console.log('✅ Foto atualizada no banco!');
+        
+        // ATUALIZAR LOCALMENTE
+        perfilAtivo.foto = fotoUrl;
+        
+        const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
+        if(idx !== -1) {
+            usuarioLogado.perfis[idx].foto = fotoUrl;
+        }
+        
+        // ATUALIZAR UI
+        const userPhotoEl = document.getElementById('userPhoto');
+        if(userPhotoEl) {
+            userPhotoEl.src = fotoUrl;
+        }
+        
+        await salvarDados();
+        atualizarTelaPerfis();
+        
+        console.log('✅ Foto alterada com sucesso!');
+        mostrarNotificacao('✅ Foto alterada com sucesso!', 'success');
+        
+    } catch (error) {
+        console.error('❌ ERRO GERAL ao alterar foto:', error);
+        console.error('Stack trace:', error.stack);
+        alert(`❌ Erro ao alterar foto: ${error.message}`);
     }
 }
 
