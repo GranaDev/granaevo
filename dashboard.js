@@ -600,23 +600,226 @@ function atualizarNomeUsuario() {
     }
 }
 
-function alterarFoto(event) {
+// ========== UPLOAD DE FOTO DE PERFIL ==========
+async function alterarFoto(event) {
     const file = event.target.files[0];
-    if(file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            if(perfilAtivo) {
-                perfilAtivo.foto = e.target.result;
-                const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-                if(idx !== -1) {
-                    usuarioLogado.perfis[idx].foto = e.target.result;
+    if(!file) return;
+    
+    if(!perfilAtivo) {
+        alert('❌ Erro: Nenhum perfil ativo encontrado.');
+        return;
+    }
+    
+    // Validar tamanho (máximo 2MB)
+    if(file.size > 2 * 1024 * 1024) {
+        alert('❌ A foto deve ter no máximo 2MB');
+        return;
+    }
+    
+    // Validar tipo de arquivo
+    if(!file.type.startsWith('image/')) {
+        alert('❌ Por favor, selecione apenas arquivos de imagem');
+        return;
+    }
+    
+    try {
+        console.log('📸 Iniciando upload da foto de perfil...');
+        
+        // Mostrar loading
+        const userPhotoEl = document.getElementById('userPhoto');
+        if(userPhotoEl) {
+            userPhotoEl.style.opacity = '0.5';
+        }
+        
+        const { data: { session } } = await supabase.auth.getSession();
+        if(!session) {
+            throw new Error('Sessão não encontrada');
+        }
+        
+        // ✅ PASSO 1: Deletar foto antiga do Storage (se existir)
+        if(perfilAtivo.foto) {
+            try {
+                const urlParts = perfilAtivo.foto.split('/');
+                const pathParts = urlParts.slice(urlParts.indexOf('profile-photos') + 1);
+                const caminhoAntigo = pathParts.join('/');
+                
+                console.log('🗑️ Removendo foto antiga:', caminhoAntigo);
+                
+                const { error: deleteError } = await supabase.storage
+                    .from('profile-photos')
+                    .remove([caminhoAntigo]);
+                
+                if(deleteError) {
+                    console.warn('⚠️ Erro ao deletar foto antiga (pode não existir):', deleteError);
                 }
-                document.getElementById('userPhoto').src = e.target.result;
-                localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
-                localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
+            } catch(e) {
+                console.warn('⚠️ Erro ao processar foto antiga:', e);
             }
-        };
-        reader.readAsDataURL(file);
+        }
+        
+        // ✅ PASSO 2: Fazer upload da nova foto
+        const timestamp = Date.now();
+        const extensao = file.name.split('.').pop();
+        const nomeArquivo = `${session.user.id}/${perfilAtivo.id}_${timestamp}.${extensao}`;
+        
+        console.log('⬆️ Fazendo upload:', nomeArquivo);
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('profile-photos')
+            .upload(nomeArquivo, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+        
+        if(uploadError) {
+            console.error('❌ Erro no upload:', uploadError);
+            throw uploadError;
+        }
+        
+        console.log('✅ Upload concluído:', uploadData);
+        
+        // ✅ PASSO 3: Obter URL pública da nova foto
+        const { data: urlData } = supabase.storage
+            .from('profile-photos')
+            .getPublicUrl(nomeArquivo);
+        
+        const novaFotoUrl = urlData.publicUrl;
+        console.log('🔗 URL pública gerada:', novaFotoUrl);
+        
+        // ✅ PASSO 4: Atualizar no banco de dados
+        const { data: updateData, error: updateError } = await supabase
+            .from('profiles')
+            .update({ photo_url: novaFotoUrl })
+            .eq('id', perfilAtivo.id)
+            .select()
+            .single();
+        
+        if(updateError) {
+            console.error('❌ Erro ao atualizar banco:', updateError);
+            throw updateError;
+        }
+        
+        console.log('✅ Banco atualizado:', updateData);
+        
+        // ✅ PASSO 5: Atualizar localmente
+        perfilAtivo.foto = novaFotoUrl;
+        
+        const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
+        if(idx !== -1) {
+            usuarioLogado.perfis[idx].foto = novaFotoUrl;
+        }
+        
+        // ✅ PASSO 6: Atualizar interface
+        if(userPhotoEl) {
+            userPhotoEl.src = novaFotoUrl;
+            userPhotoEl.style.opacity = '1';
+            
+            // Animação de sucesso
+            userPhotoEl.style.transform = 'scale(1.1)';
+            setTimeout(() => {
+                userPhotoEl.style.transform = 'scale(1)';
+            }, 300);
+        }
+        
+        // Salvar dados localmente
+        await salvarDados();
+        
+        mostrarNotificacao('✅ Foto de perfil atualizada com sucesso!', 'success');
+        console.log('✅ Processo de atualização de foto concluído!');
+        
+    } catch(error) {
+        console.error('❌ Erro ao alterar foto:', error);
+        alert('❌ Erro ao atualizar foto. Tente novamente.');
+        
+        // Restaurar opacidade em caso de erro
+        const userPhotoEl = document.getElementById('userPhoto');
+        if(userPhotoEl) {
+            userPhotoEl.style.opacity = '1';
+        }
+    }
+}
+
+// ========== ADICIONAR FOTO AO CRIAR NOVO PERFIL ==========
+// Substitua a parte do upload de foto na função adicionarNovoPerfil()
+
+// Encontre esta parte no código:
+// if(fotoInput.files && fotoInput.files[0]) { ... }
+
+// E substitua por:
+
+async function uploadFotoNovoPerfil(arquivo, userId) {
+    try {
+        if(arquivo.size > 2 * 1024 * 1024) {
+            throw new Error('A foto deve ter no máximo 2MB');
+        }
+        
+        const timestamp = Date.now();
+        const extensao = arquivo.name.split('.').pop();
+        const nomeArquivo = `${userId}/temp_${timestamp}.${extensao}`;
+        
+        console.log('📸 Fazendo upload da foto do novo perfil...');
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('profile-photos')
+            .upload(nomeArquivo, arquivo, {
+                cacheControl: '3600',
+                upsert: false
+            });
+        
+        if(uploadError) {
+            console.error('❌ Erro no upload:', uploadError);
+            throw uploadError;
+        }
+        
+        const { data: urlData } = supabase.storage
+            .from('profile-photos')
+            .getPublicUrl(nomeArquivo);
+        
+        console.log('✅ Foto do novo perfil carregada:', urlData.publicUrl);
+        return urlData.publicUrl;
+        
+    } catch(error) {
+        console.error('❌ Erro ao fazer upload:', error);
+        throw error;
+    }
+}
+
+// Atualize a parte de criação de perfil:
+// Dentro da função adicionarNovoPerfil(), SUBSTITUA o bloco:
+
+// let fotoUrl = null;
+// if(fotoInput.files && fotoInput.files[0]) { ... }
+
+// POR:
+
+let fotoUrl = null;
+if(fotoInput.files && fotoInput.files[0]) {
+    console.log('📸 Fazendo upload da foto...');
+    fotoUrl = await uploadFotoNovoPerfil(fotoInput.files[0], session.user.id);
+}
+
+// E depois do insert do perfil, atualize o nome do arquivo:
+if(fotoUrl && fotoUrl.includes('temp_')) {
+    const timestamp = Date.now();
+    const extensao = fotoUrl.split('.').pop().split('?')[0];
+    const novoNome = `${session.user.id}/${novoPerfil.id}_${timestamp}.${extensao}`;
+    const nomeAntigo = fotoUrl.split('/profile-photos/')[1].split('?')[0];
+    
+    const { error: moveError } = await supabase.storage
+        .from('profile-photos')
+        .move(nomeAntigo, novoNome);
+    
+    if(!moveError) {
+        const { data: urlData } = supabase.storage
+            .from('profile-photos')
+            .getPublicUrl(novoNome);
+        
+        fotoUrl = urlData.publicUrl;
+        
+        await supabase
+            .from('profiles')
+            .update({ photo_url: fotoUrl })
+            .eq('id', novoPerfil.id);
     }
 }
 
