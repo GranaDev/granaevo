@@ -377,17 +377,15 @@ async function entrarNoPerfil(index) {
 }
 
 
-function adicionarNovoPerfil() {
+async function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
-    const limitePerfis = limitesPlano[plano]; // Pega o limite do objeto: 1, 2 ou 4
+    const limitePerfis = limitesPlano[plano];
     const perfisAtuais = usuarioLogado.perfis.length;
 
-    // ✅ CORREÇÃO: Validação unificada e correta.
-    // Verifica se o número de perfis atuais JÁ ATINGIU ou ULTRAPASSOU o limite do plano.
     if (perfisAtuais >= limitePerfis) {
         console.log(`🚫 Tentativa de adicionar perfil bloqueada. Limite do plano "${plano}" (${limitePerfis}) atingido.`);
-        mostrarPopupLimite(); // Mostra a mensagem de limite genérica, que já é inteligente.
-        return; // Para a execução
+        mostrarPopupLimite();
+        return;
     }
     
     console.log('📝 Abrindo formulário de novo perfil...');
@@ -417,7 +415,6 @@ function adicionarNovoPerfil() {
             return;
         }
         
-        // ✅ Segunda verificação de segurança (boa prática)
         if(usuarioLogado.perfis.length >= limitesPlano[plano]) {
             mostrarPopupLimite();
             fecharPopup();
@@ -435,6 +432,7 @@ function adicionarNovoPerfil() {
             
             let fotoUrl = null;
             
+            // ✅ UPLOAD DA FOTO (se selecionada)
             if(fotoInput.files && fotoInput.files[0]) {
                 console.log('📸 Fazendo upload da foto...');
                 
@@ -445,11 +443,16 @@ function adicionarNovoPerfil() {
                     return;
                 }
                 
-                const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name}`;
+                const timestamp = Date.now();
+                const extensao = arquivo.name.split('.').pop();
+                const nomeArquivo = `${session.user.id}/temp_${timestamp}.${extensao}`;
                 
                 const { data: uploadData, error: uploadError } = await supabase.storage
                     .from('profile-photos')
-                    .upload(nomeArquivo, arquivo);
+                    .upload(nomeArquivo, arquivo, {
+                        cacheControl: '3600',
+                        upsert: false
+                    });
                 
                 if (uploadError) {
                     console.error('❌ Erro no upload:', uploadError);
@@ -466,6 +469,7 @@ function adicionarNovoPerfil() {
             
             console.log('💾 Inserindo perfil no banco...');
             
+            // ✅ CRIAR PERFIL NO BANCO
             const { data: novoPerfil, error } = await supabase
                 .from('profiles')
                 .insert({
@@ -483,10 +487,42 @@ function adicionarNovoPerfil() {
             
             console.log('✅ Perfil criado com ID:', novoPerfil.id);
             
+            // ✅ RENOMEAR FOTO (de temp_ para o ID do perfil)
+            if(fotoUrl && fotoUrl.includes('temp_')) {
+                try {
+                    const timestamp = Date.now();
+                    const extensao = fotoUrl.split('.').pop().split('?')[0];
+                    const novoNome = `${session.user.id}/${novoPerfil.id}_${timestamp}.${extensao}`;
+                    const nomeAntigo = fotoUrl.split('/profile-photos/')[1].split('?')[0];
+                    
+                    const { error: moveError } = await supabase.storage
+                        .from('profile-photos')
+                        .move(nomeAntigo, novoNome);
+                    
+                    if(!moveError) {
+                        const { data: urlData } = supabase.storage
+                            .from('profile-photos')
+                            .getPublicUrl(novoNome);
+                        
+                        fotoUrl = urlData.publicUrl;
+                        
+                        await supabase
+                            .from('profiles')
+                            .update({ photo_url: fotoUrl })
+                            .eq('id', novoPerfil.id);
+                        
+                        console.log('✅ Foto renomeada para:', novoNome);
+                    }
+                } catch(e) {
+                    console.warn('⚠️ Erro ao renomear foto:', e);
+                }
+            }
+            
+            // ✅ ATUALIZAR LOCALMENTE
             usuarioLogado.perfis.push({
                 id: novoPerfil.id,
                 nome: novoPerfil.name,
-                foto: novoPerfil.photo
+                foto: fotoUrl
             });
             
             fecharPopup();
