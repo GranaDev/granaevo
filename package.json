@@ -2,19 +2,20 @@
   "name": "granaevo-oficial",
   "version": "1.0.0",
   "description": "GranaEvo - Controle Financeiro Inteligente",
-  "main": "app.js",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --host",
+    "clean": "rm -rf dist node_modules"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "finance",
+    "dashboard",
+    "supabase"
+  ],
+  "author": "GranaEvo Team",
   "license": "ISC",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.93.1"
-  },
   "devDependencies": {
     "vite": "^7.3.1"
   }
