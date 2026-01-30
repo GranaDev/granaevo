@@ -9,30 +9,26 @@
       }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/landingpage.html",
-      "dest": "/landingpage.html"
+      "source": "/landingpage.html",
+      "destination": "/landingpage.html"
     },
     {
-      "src": "/planos.html",
-      "dest": "/planos.html"
+      "source": "/planos.html",
+      "destination": "/planos.html"
     },
     {
-      "src": "/login.html",
-      "dest": "/login.html"
+      "source": "/login.html",
+      "destination": "/login.html"
     },
     {
-      "src": "/primeiroacesso.html",
-      "dest": "/primeiroacesso.html"
+      "source": "/primeiroacesso.html",
+      "destination": "/primeiroacesso.html"
     },
     {
-      "src": "/dashboard.html",
-      "dest": "/dashboard.html"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
+      "source": "/dashboard.html",
+      "destination": "/dashboard.html"
     }
   ],
   "headers": [
