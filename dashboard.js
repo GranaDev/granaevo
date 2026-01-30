@@ -165,64 +165,62 @@ async function carregarDadosPerfil(perfilId) {
 
 
 // ========== SALVAR DADOS ==========
-// ========== SALVAR DADOS - VERSÃO CORRIGIDA ==========
 async function salvarDados() {
     if (!perfilAtivo) {
         console.log('⚠️ Salvamento ignorado: Nenhum perfil ativo');
         return false;
     }
 
+    // ✅ VALIDAÇÃO CRÍTICA
+    if (!usuarioLogado || !usuarioLogado.userId) {
+        console.error('❌ ERRO: usuarioLogado não está definido!');
+        console.error('Estado atual:', { usuarioLogado, perfilAtivo });
+        return false;
+    }
+
     try {
-        console.log('🔄 Preparando dados para salvamento...', {
-            perfil: perfilAtivo.nome,
-            transacoes: transacoes.length,
-            metas: metas.length,
-            contasFixas: contasFixas.length,
-            cartoes: cartoesCredito.length
-        });
+        console.log('🔄 Salvando dados do perfil:', perfilAtivo.nome);
         
-        // ✅ CARREGAR estrutura completa atual
+        // ✅ CARREGAR estrutura completa
         const userData = await dataManager.loadUserData();
         
-        // ✅ MONTAR objeto do perfil atual
+        // ✅ MONTAR dados do perfil
         const dadosPerfil = {
             id: perfilAtivo.id,
             nome: perfilAtivo.nome,
             foto: perfilAtivo.foto,
-            transacoes: transacoes,
-            metas: metas,
-            contasFixas: contasFixas,
-            cartoesCredito: cartoesCredito,
+            transacoes: transacoes || [],
+            metas: metas || [],
+            contasFixas: contasFixas || [],
+            cartoesCredito: cartoesCredito || [],
             lastUpdate: new Date().toISOString()
         };
 
-        // ✅ ATUALIZAR ou ADICIONAR perfil no array
+        // ✅ ATUALIZAR ou ADICIONAR perfil
         const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
         
         if (perfilIndex !== -1) {
-            console.log(`📝 Atualizando perfil existente: ${perfilAtivo.nome}`);
             userData.profiles[perfilIndex] = dadosPerfil;
         } else {
-            console.log(`➕ Adicionando novo perfil: ${perfilAtivo.nome}`);
             userData.profiles.push(dadosPerfil);
         }
 
-        // ✅ SALVAR IMEDIATAMENTE (sem fila)
+        // ✅ SALVAR IMEDIATAMENTE
         const sucesso = await dataManager.forceSave(userData.profiles);
         
         if (sucesso) {
-            console.log('✅ Dados salvos com sucesso no Supabase!');
-            mostrarNotificacao('💾 Dados salvos com sucesso!', 'success');
+            console.log('✅ Dados salvos!');
+            mostrarNotificacao('💾 Dados salvos!', 'success');
             return true;
         } else {
-            console.error('❌ Falha ao salvar dados');
-            mostrarNotificacao('❌ Erro ao salvar dados', 'error');
+            console.error('❌ Falha ao salvar');
+            mostrarNotificacao('❌ Erro ao salvar', 'error');
             return false;
         }
 
     } catch (e) {
-        console.error('❌ Erro crítico ao salvar dados:', e);
-        mostrarNotificacao('❌ Erro crítico ao salvar', 'error');
+        console.error('❌ Erro crítico:', e);
+        mostrarNotificacao('❌ Erro crítico', 'error');
         return false;
     }
 }
@@ -239,12 +237,12 @@ async function verificarLogin() {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError || !session) {
-            console.log('🔌 Sessão não encontrada. Redirecionando para login.');
+            console.log('🔌 Sessão não encontrada. Redirecionando...');
             window.location.href = 'login.html';
             return;
         }
 
-        // Verificar assinatura
+        // ✅ BUSCAR ASSINATURA
         const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
             .select('plans(name)')
@@ -253,44 +251,53 @@ async function verificarLogin() {
             .single();
 
         if (subError || !subscription) {
-            console.log('🧾 Assinatura inválida. Redirecionando para planos.');
+            console.log('🧾 Assinatura inválida. Redirecionando...');
             window.location.href = 'planos.html';
             return;
         }
 
-        // ✅ NOVO: Inicializar usuário com todos os dados
+        // ✅ INICIALIZAR usuarioLogado PRIMEIRO
         usuarioLogado = {
             userId: session.user.id,
             nome: session.user.user_metadata?.name || session.user.email,
-            email: session.user.email, // ✅ ADICIONAR email
+            email: session.user.email,
             plano: subscription.plans.name,
             perfis: []
         };
 
-        // ✅ NOVO: Inicializar DataManager
-        await dataManager.initialize(usuarioLogado.userId, usuarioLogado.email);
+        console.log('✅ usuarioLogado criado:', usuarioLogado);
 
-        // Carregar perfis
+        // ✅ INICIALIZAR DataManager IMEDIATAMENTE
+        const initSuccess = await dataManager.initialize(
+            usuarioLogado.userId, 
+            usuarioLogado.email
+        );
+
+        if (!initSuccess) {
+            throw new Error('Falha ao inicializar DataManager');
+        }
+
+        console.log('✅ DataManager inicializado com sucesso');
+
+        // ✅ CARREGAR PERFIS
         const resultadoPerfis = await carregarPerfis();
 
         if (!resultadoPerfis.sucesso) {
-            throw new Error("Não foi possível carregar os dados do usuário.");
+            throw new Error("Erro ao carregar perfis");
         }
 
-        console.log('✅ Verificação concluída. Exibindo seleção de perfis.');
+        console.log('✅ Verificação concluída');
         mostrarSelecaoPerfis();
 
     } catch (e) {
-        console.error('❌ Erro crítico na inicialização:', e.message);
-        alert(e.message);
+        console.error('❌ Erro crítico:', e.message);
+        alert(`Erro: ${e.message}`);
         AuthGuard.performLogout();
     } finally {
         if (authLoading) authLoading.style.display = 'none';
         if (protectedContent) protectedContent.style.display = 'block';
     }
 }
-
-
 
 // ========== SELEÇÃO DE PERFIS ==========
 function mostrarSelecaoPerfis() {
