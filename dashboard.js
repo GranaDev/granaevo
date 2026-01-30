@@ -165,21 +165,26 @@ async function carregarDadosPerfil(perfilId) {
 
 
 // ========== SALVAR DADOS ==========
+// ========== SALVAR DADOS - VERSÃO CORRIGIDA ==========
 async function salvarDados() {
     if (!perfilAtivo) {
         console.log('⚠️ Salvamento ignorado: Nenhum perfil ativo');
-        return;
+        return false;
     }
 
     try {
-        console.log('🔄 Preparando dados para salvamento...');
+        console.log('🔄 Preparando dados para salvamento...', {
+            perfil: perfilAtivo.nome,
+            transacoes: transacoes.length,
+            metas: metas.length,
+            contasFixas: contasFixas.length,
+            cartoes: cartoesCredito.length
+        });
         
-        // ✅ NOVO: Carregar dados completos
+        // ✅ CARREGAR estrutura completa atual
         const userData = await dataManager.loadUserData();
         
-        // Encontrar ou criar perfil
-        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
-        
+        // ✅ MONTAR objeto do perfil atual
         const dadosPerfil = {
             id: perfilAtivo.id,
             nome: perfilAtivo.nome,
@@ -191,6 +196,9 @@ async function salvarDados() {
             lastUpdate: new Date().toISOString()
         };
 
+        // ✅ ATUALIZAR ou ADICIONAR perfil no array
+        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
+        
         if (perfilIndex !== -1) {
             console.log(`📝 Atualizando perfil existente: ${perfilAtivo.nome}`);
             userData.profiles[perfilIndex] = dadosPerfil;
@@ -199,17 +207,23 @@ async function salvarDados() {
             userData.profiles.push(dadosPerfil);
         }
 
-        // ✅ NOVO: Salvar IMEDIATAMENTE (não usar fila)
-        const sucesso = await dataManager.saveUserData(userData.profiles);
+        // ✅ SALVAR IMEDIATAMENTE (sem fila)
+        const sucesso = await dataManager.forceSave(userData.profiles);
         
         if (sucesso) {
             console.log('✅ Dados salvos com sucesso no Supabase!');
+            mostrarNotificacao('💾 Dados salvos com sucesso!', 'success');
+            return true;
         } else {
             console.error('❌ Falha ao salvar dados');
+            mostrarNotificacao('❌ Erro ao salvar dados', 'error');
+            return false;
         }
 
     } catch (e) {
         console.error('❌ Erro crítico ao salvar dados:', e);
+        mostrarNotificacao('❌ Erro crítico ao salvar', 'error');
+        return false;
     }
 }
 
@@ -6242,11 +6256,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ========== SALVAMENTO ANTES DE SAIR ==========
 window.addEventListener('beforeunload', async (e) => {
-    if(perfilAtivo) {
+    if (perfilAtivo && (transacoes.length > 0 || metas.length > 0 || contasFixas.length > 0)) {
+        console.log('🚪 Usuário saindo, forçando salvamento final...');
+        
+        // Força salvamento imediato
         await salvarDados();
-        await dataManager.processSaveQueue();
+        
+        // Processa fila se houver
+        if (dataManager.saveQueue.length > 0) {
+            await dataManager.processSaveQueue();
+        }
     }
 });
+
+// ========== SALVAMENTO PERIÓDICO (AUTO-SAVE) ==========
+setInterval(async () => {
+    if (perfilAtivo && (transacoes.length > 0 || metas.length > 0)) {
+        console.log('⏰ Auto-save periódico...');
+        await salvarDados();
+    }
+}, 60000); // A cada 60 segundos
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Dashboard carregado, iniciando verificação de login...');

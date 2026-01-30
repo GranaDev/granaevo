@@ -1,115 +1,228 @@
+// ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
 import { supabase } from './supabase-client.js';
 
-const AuthGuard = {
-    async checkAuth() {
-        console.log('🔒 AuthGuard: Verificando autenticação...');
-        
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-            console.log('❌ AuthGuard: Sem sessão ativa, redirecionando...');
-            alert('Você precisa fazer login para acessar esta página.');
-            window.location.href = 'login.html';
-            return null;
-        }
-        
-        console.log('✅ AuthGuard: Usuário autenticado:', session.user.email);
-        return session.user;
-    },
+class DataManager {
+    constructor() {
+        this.userId = null;
+        this.userEmail = null;
+        this.autoSaveInterval = null;
+        this.saveQueue = [];
+        this.isSaving = false;
+        this.lastSaveTime = null;
+    }
 
-    async getUserData() {
-        console.log('📊 AuthGuard: Buscando dados do usuário...');
+    // ========== INICIALIZAÇÃO ==========
+    async initialize(userId, userEmail) {
+        this.userId = userId;
+        this.userEmail = userEmail;
         
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return null;
+        console.log('📦 DataManager inicializado para:', userEmail);
+        
+        // Iniciar auto-save a cada 30 segundos
+        this.startAutoSave();
+        
+        return true;
+    }
 
-        // Buscar assinatura do usuário
-        const { data: subscription, error } = await supabase
-            .from('subscriptions')
-            .select('*, plans(*)')
-            .eq('user_id', session.user.id)
-            .eq('payment_status', 'approved')
-            .single();
-
-        if (error || !subscription) {
-            console.error('❌ AuthGuard: Assinatura não encontrada ou não aprovada');
-            alert('⚠️ Você ainda não possui um plano ativo!\n\nPor favor, adquira um plano para continuar.');
-            window.location.href = 'planos.html';
-            return null;
+    // ========== CARREGAR DADOS DO USUÁRIO ==========
+    async loadUserData() {
+        if (!this.userId) {
+            throw new Error('❌ UserID não definido');
         }
 
-        console.log('✅ AuthGuard: Assinatura ativa encontrada:', subscription.plans.name);
+        try {
+            console.log('📥 Carregando dados do usuário:', this.userEmail);
 
+            const { data, error } = await supabase
+                .from('user_data')
+                .select('data_json')
+                .eq('user_id', this.userId)
+                .maybeSingle();
+
+            if (error) {
+                console.error('❌ Erro ao carregar dados:', error);
+                throw error;
+            }
+
+            if (!data || !data.data_json) {
+                console.log('ℹ️ Nenhum dado salvo encontrado. Retornando estrutura vazia.');
+                return this.createEmptyStructure();
+            }
+
+            console.log('✅ Dados carregados com sucesso');
+            return data.data_json;
+
+        } catch (e) {
+            console.error('❌ Erro crítico ao carregar dados:', e);
+            return this.createEmptyStructure();
+        }
+    }
+
+    // ========== SALVAR DADOS DO USUÁRIO - VERSÃO CORRIGIDA ==========
+    async saveUserData(profilesData) {
+        if (!this.userId) {
+            console.error('❌ Não é possível salvar: UserID não definido');
+            return false;
+        }
+
+        // ✅ Evitar salvamentos duplicados
+        if (this.isSaving) {
+            console.log('⏳ Salvamento já em progresso, adicionando à fila...');
+            this.queueSave(profilesData);
+            return true;
+        }
+
+        this.isSaving = true;
+
+        try {
+            console.log('💾 Salvando dados do usuário...', {
+                userId: this.userId,
+                email: this.userEmail,
+                totalPerfis: profilesData.length
+            });
+
+            const dataToSave = {
+                version: '1.0',
+                user: {
+                    userId: this.userId,
+                    email: this.userEmail
+                },
+                profiles: profilesData,
+                metadata: {
+                    lastSync: new Date().toISOString(),
+                    totalProfiles: profilesData.length
+                }
+            };
+
+            // ✅ Verifica se já existe registro
+            const { data: existing, error: checkError } = await supabase
+                .from('user_data')
+                .select('id')
+                .eq('user_id', this.userId)
+                .maybeSingle();
+
+            if (checkError && checkError.code !== 'PGRST116') {
+                throw checkError;
+            }
+
+            let result;
+
+            if (existing) {
+                // ✅ UPDATE
+                console.log('🔄 Atualizando registro existente...');
+                result = await supabase
+                    .from('user_data')
+                    .update({
+                        data_json: dataToSave,
+                        email: this.userEmail,
+                        last_modified: new Date().toISOString()
+                    })
+                    .eq('user_id', this.userId);
+            } else {
+                // ✅ INSERT
+                console.log('➕ Criando novo registro...');
+                result = await supabase
+                    .from('user_data')
+                    .insert({
+                        user_id: this.userId,
+                        email: this.userEmail,
+                        data_json: dataToSave
+                    });
+            }
+
+            if (result.error) {
+                console.error('❌ Erro ao salvar:', result.error);
+                throw result.error;
+            }
+
+            this.lastSaveTime = new Date().toISOString();
+            console.log('✅ Dados salvos com sucesso no Supabase!', {
+                timestamp: this.lastSaveTime,
+                perfisCount: profilesData.length
+            });
+            
+            return true;
+
+        } catch (e) {
+            console.error('❌ Erro crítico ao salvar dados:', e);
+            return false;
+        } finally {
+            this.isSaving = false;
+        }
+    }
+
+    // ========== AUTO-SAVE - VERSÃO MELHORADA ==========
+    startAutoSave() {
+        if (this.autoSaveInterval) {
+            clearInterval(this.autoSaveInterval);
+        }
+
+        this.autoSaveInterval = setInterval(() => {
+            if (this.saveQueue.length > 0 && !this.isSaving) {
+                console.log('⏰ Auto-save: processando fila...');
+                this.processSaveQueue();
+            }
+        }, 30000); // 30 segundos
+
+        console.log('⏰ Auto-save ativado (30s)');
+    }
+
+    stopAutoSave() {
+        if (this.autoSaveInterval) {
+            clearInterval(this.autoSaveInterval);
+            this.autoSaveInterval = null;
+            console.log('⏸️ Auto-save desativado');
+        }
+    }
+
+    // ========== FILA DE SALVAMENTO ==========
+    queueSave(profilesData) {
+        this.saveQueue = [profilesData]; // Substitui sempre pelo mais recente
+        console.log('📋 Dados adicionados à fila de salvamento');
+    }
+
+    async processSaveQueue() {
+        if (this.saveQueue.length === 0 || this.isSaving) return;
+
+        const dataToSave = this.saveQueue.pop();
+
+        try {
+            await this.saveUserData(dataToSave);
+            this.saveQueue = []; // Limpa fila após sucesso
+        } catch (e) {
+            console.error('❌ Erro ao processar fila de salvamento:', e);
+        }
+    }
+
+    // ========== ESTRUTURA VAZIA ==========
+    createEmptyStructure() {
         return {
-            email: session.user.email,
-            name: session.user.user_metadata.name || 'Usuário',
-            plan: subscription.plans.name,
-            planLevel: subscription.plans.max_profiles
+            version: '1.0',
+            user: {
+                userId: this.userId,
+                email: this.userEmail
+            },
+            profiles: [],
+            metadata: {
+                lastSync: new Date().toISOString(),
+                totalProfiles: 0
+            }
         };
-    },
-
-    async performLogout() {
-        console.log('🚪 AuthGuard: Realizando logout...');
-        await supabase.auth.signOut();
-        window.location.href = 'login.html';
-    }
-};
-
-// PROTEÇÃO AUTOMÁTICA DA DASHBOARD
-(async function protectPage() {
-    // Verificar se a página tem conteúdo protegido
-    const protectedContent = document.querySelector('[data-protected-content]');
-    
-    if (!protectedContent) {
-        console.log('ℹ️ AuthGuard: Página não protegida, pulando verificação.');
-        return;
     }
 
-    console.log('🛡️ AuthGuard: Página protegida detectada, iniciando verificação...');
-
-    // Mostrar loading
-    const authLoading = document.getElementById('authLoading');
-    if (authLoading) {
-        authLoading.style.display = 'flex';
-    }
-
-    // Esconder conteúdo protegido
-    protectedContent.style.display = 'none';
-
-    try {
-        // 1. Verificar se está autenticado
-        const user = await AuthGuard.checkAuth();
-        if (!user) return; // Já redireciona automaticamente
-
-        // 2. Verificar se tem assinatura ativa
-        const userData = await AuthGuard.getUserData();
-        if (!userData) return; // Já redireciona automaticamente
-
-        // 3. Tudo OK, liberar acesso
-        console.log('✅ AuthGuard: Acesso liberado!');
+    // ========== FORÇA SALVAMENTO IMEDIATO ==========
+    async forceSave(profilesData) {
+        console.log('🚨 Salvamento forçado iniciado...');
         
-        if (authLoading) {
-            authLoading.style.display = 'none';
-        }
-        protectedContent.style.display = 'block';
-
-        // Atualizar dados do usuário na interface
-        const userNameElement = document.getElementById('userName');
-        const userPlanElement = document.querySelector('[data-user-plan]');
+        // Limpa a fila e salva imediatamente
+        this.saveQueue = [];
         
-        if (userNameElement) {
-            userNameElement.textContent = userData.name;
-        }
-        if (userPlanElement) {
-            userPlanElement.textContent = `Plano ${userData.plan}`;
-        }
-
-    } catch (error) {
-        console.error('❌ AuthGuard: Erro na verificação:', error);
-        alert('Erro ao verificar autenticação. Por favor, faça login novamente.');
-        window.location.href = 'login.html';
+        return await this.saveUserData(profilesData);
     }
-})();
+}
 
-// Expor globalmente
-window.AuthGuard = AuthGuard;
+// ========== INSTÂNCIA GLOBAL ==========
+const dataManagerInstance = new DataManager();
+window.dataManager = dataManagerInstance;
+
+export const dataManager = dataManagerInstance;
