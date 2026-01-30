@@ -9,28 +9,6 @@
       }
     }
   ],
-  "rewrites": [
-    {
-      "source": "/landingpage.html",
-      "destination": "/landingpage.html"
-    },
-    {
-      "source": "/planos.html",
-      "destination": "/planos.html"
-    },
-    {
-      "source": "/login.html",
-      "destination": "/login.html"
-    },
-    {
-      "source": "/primeiroacesso.html",
-      "destination": "/primeiroacesso.html"
-    },
-    {
-      "source": "/dashboard.html",
-      "destination": "/dashboard.html"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",
