@@ -3,7 +3,7 @@ import { supabase } from './supabase-client.js';
 import { dataManager } from './data-manager.js';
 
 // ========== ESTADO GLOBAL ==========
-let usuarioLogado = {
+window.usuarioLogado = {
     userId: null,     
     nome: "",          
     email: "",         
@@ -11,17 +11,17 @@ let usuarioLogado = {
     perfis: []
 };
 
-let perfilAtivo = null;
-let cartoesCredito = [];
-let nextCartaoId = 1;
-let transacoes = [];
-let metas = [];
-let contasFixas = [];
-let nextTransId = 1;
-let nextMetaId = 1;
-let nextContaFixaId = 1;
-let metaSelecionadaId = null;
-let tipoRelatorioAtivo = 'individual';
+window.perfilAtivo = null;
+window.cartoesCredito = [];
+window.nextCartaoId = 1;
+window.transacoes = [];
+window.metas = [];
+window.contasFixas = [];
+window.nextTransId = 1;
+window.nextMetaId = 1;
+window.nextContaFixaId = 1;
+window.metaSelecionadaId = null;
+window.tipoRelatorioAtivo = 'individual';
 
 // Limites por plano
 const limitesPlano = {
@@ -266,7 +266,7 @@ async function verificarLogin() {
         };
         // ✅ EXPOR GLOBALMENTE
         window.usuarioLogado = usuarioLogado;
-        
+
         console.log('✅ usuarioLogado criado:', usuarioLogado);
 
         // ✅ INICIALIZAR DataManager IMEDIATAMENTE
