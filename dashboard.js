@@ -264,7 +264,9 @@ async function verificarLogin() {
             plano: subscription.plans.name,
             perfis: []
         };
-
+        // ✅ EXPOR GLOBALMENTE
+        window.usuarioLogado = usuarioLogado;
+        
         console.log('✅ usuarioLogado criado:', usuarioLogado);
 
         // ✅ INICIALIZAR DataManager IMEDIATAMENTE
@@ -5585,6 +5587,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ========== FUNÇÕES GLOBAIS EXPOSTAS ==========
+window.usuarioLogado = usuarioLogado;
+window.perfilAtivo = perfilAtivo;
+window.transacoes = transacoes;
+window.salvarDados = salvarDados; 
 window.abrirContaFixaForm = abrirContaFixaForm;
 window.abrirPopupPagarContaFixa = abrirPopupPagarContaFixa;
 window.pagarContaFixa = pagarContaFixa;
