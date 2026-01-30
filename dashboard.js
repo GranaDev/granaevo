@@ -3,7 +3,7 @@ import { supabase } from './supabase-client.js';
 import { dataManager } from './data-manager.js';
 
 // ========== ESTADO GLOBAL ==========
-window.usuarioLogado = {
+let usuarioLogado = {
     userId: null,     
     nome: "",          
     email: "",         
@@ -11,17 +11,17 @@ window.usuarioLogado = {
     perfis: []
 };
 
-window.perfilAtivo = null;
-window.cartoesCredito = [];
-window.nextCartaoId = 1;
-window.transacoes = [];
-window.metas = [];
-window.contasFixas = [];
-window.nextTransId = 1;
-window.nextMetaId = 1;
-window.nextContaFixaId = 1;
-window.metaSelecionadaId = null;
-window.tipoRelatorioAtivo = 'individual';
+let perfilAtivo = null;
+let cartoesCredito = [];
+let nextCartaoId = 1;
+let transacoes = [];
+let metas = [];
+let contasFixas = [];
+let nextTransId = 1;
+let nextMetaId = 1;
+let nextContaFixaId = 1;
+let metaSelecionadaId = null;
+let tipoRelatorioAtivo = 'individual';
 
 // Limites por plano
 const limitesPlano = {
@@ -168,60 +168,48 @@ async function carregarDadosPerfil(perfilId) {
 async function salvarDados() {
     if (!perfilAtivo) {
         console.log('⚠️ Salvamento ignorado: Nenhum perfil ativo');
-        return false;
-    }
-
-    // ✅ VALIDAÇÃO CRÍTICA
-    if (!usuarioLogado || !usuarioLogado.userId) {
-        console.error('❌ ERRO: usuarioLogado não está definido!');
-        console.error('Estado atual:', { usuarioLogado, perfilAtivo });
-        return false;
+        return;
     }
 
     try {
-        console.log('🔄 Salvando dados do perfil:', perfilAtivo.nome);
+        console.log('🔄 Preparando dados para salvamento...');
         
-        // ✅ CARREGAR estrutura completa
+        // ✅ NOVO: Carregar dados completos
         const userData = await dataManager.loadUserData();
         
-        // ✅ MONTAR dados do perfil
+        // Encontrar ou criar perfil
+        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
+        
         const dadosPerfil = {
             id: perfilAtivo.id,
             nome: perfilAtivo.nome,
             foto: perfilAtivo.foto,
-            transacoes: transacoes || [],
-            metas: metas || [],
-            contasFixas: contasFixas || [],
-            cartoesCredito: cartoesCredito || [],
+            transacoes: transacoes,
+            metas: metas,
+            contasFixas: contasFixas,
+            cartoesCredito: cartoesCredito,
             lastUpdate: new Date().toISOString()
         };
 
-        // ✅ ATUALIZAR ou ADICIONAR perfil
-        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
-        
         if (perfilIndex !== -1) {
+            console.log(`📝 Atualizando perfil existente: ${perfilAtivo.nome}`);
             userData.profiles[perfilIndex] = dadosPerfil;
         } else {
+            console.log(`➕ Adicionando novo perfil: ${perfilAtivo.nome}`);
             userData.profiles.push(dadosPerfil);
         }
 
-        // ✅ SALVAR IMEDIATAMENTE
-        const sucesso = await dataManager.forceSave(userData.profiles);
+        // ✅ NOVO: Salvar IMEDIATAMENTE (não usar fila)
+        const sucesso = await dataManager.saveUserData(userData.profiles);
         
         if (sucesso) {
-            console.log('✅ Dados salvos!');
-            mostrarNotificacao('💾 Dados salvos!', 'success');
-            return true;
+            console.log('✅ Dados salvos com sucesso no Supabase!');
         } else {
-            console.error('❌ Falha ao salvar');
-            mostrarNotificacao('❌ Erro ao salvar', 'error');
-            return false;
+            console.error('❌ Falha ao salvar dados');
         }
 
     } catch (e) {
-        console.error('❌ Erro crítico:', e);
-        mostrarNotificacao('❌ Erro crítico', 'error');
-        return false;
+        console.error('❌ Erro crítico ao salvar dados:', e);
     }
 }
 
@@ -237,12 +225,12 @@ async function verificarLogin() {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError || !session) {
-            console.log('🔌 Sessão não encontrada. Redirecionando...');
+            console.log('🔌 Sessão não encontrada. Redirecionando para login.');
             window.location.href = 'login.html';
             return;
         }
 
-        // ✅ BUSCAR ASSINATURA
+        // Verificar assinatura
         const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
             .select('plans(name)')
@@ -251,55 +239,44 @@ async function verificarLogin() {
             .single();
 
         if (subError || !subscription) {
-            console.log('🧾 Assinatura inválida. Redirecionando...');
+            console.log('🧾 Assinatura inválida. Redirecionando para planos.');
             window.location.href = 'planos.html';
             return;
         }
 
-        // ✅ INICIALIZAR usuarioLogado PRIMEIRO
+        // ✅ NOVO: Inicializar usuário com todos os dados
         usuarioLogado = {
             userId: session.user.id,
             nome: session.user.user_metadata?.name || session.user.email,
-            email: session.user.email,
+            email: session.user.email, // ✅ ADICIONAR email
             plano: subscription.plans.name,
             perfis: []
         };
-        // ✅ EXPOR GLOBALMENTE
-        window.usuarioLogado = usuarioLogado;
 
-        console.log('✅ usuarioLogado criado:', usuarioLogado);
+        // ✅ NOVO: Inicializar DataManager
+        await dataManager.initialize(usuarioLogado.userId, usuarioLogado.email);
 
-        // ✅ INICIALIZAR DataManager IMEDIATAMENTE
-        const initSuccess = await dataManager.initialize(
-            usuarioLogado.userId, 
-            usuarioLogado.email
-        );
-
-        if (!initSuccess) {
-            throw new Error('Falha ao inicializar DataManager');
-        }
-
-        console.log('✅ DataManager inicializado com sucesso');
-
-        // ✅ CARREGAR PERFIS
+        // Carregar perfis
         const resultadoPerfis = await carregarPerfis();
 
         if (!resultadoPerfis.sucesso) {
-            throw new Error("Erro ao carregar perfis");
+            throw new Error("Não foi possível carregar os dados do usuário.");
         }
 
-        console.log('✅ Verificação concluída');
+        console.log('✅ Verificação concluída. Exibindo seleção de perfis.');
         mostrarSelecaoPerfis();
 
     } catch (e) {
-        console.error('❌ Erro crítico:', e.message);
-        alert(`Erro: ${e.message}`);
+        console.error('❌ Erro crítico na inicialização:', e.message);
+        alert(e.message);
         AuthGuard.performLogout();
     } finally {
         if (authLoading) authLoading.style.display = 'none';
         if (protectedContent) protectedContent.style.display = 'block';
     }
 }
+
+
 
 // ========== SELEÇÃO DE PERFIS ==========
 function mostrarSelecaoPerfis() {
@@ -5587,10 +5564,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ========== FUNÇÕES GLOBAIS EXPOSTAS ==========
-window.usuarioLogado = usuarioLogado;
-window.perfilAtivo = perfilAtivo;
-window.transacoes = transacoes;
-window.salvarDados = salvarDados; 
 window.abrirContaFixaForm = abrirContaFixaForm;
 window.abrirPopupPagarContaFixa = abrirPopupPagarContaFixa;
 window.pagarContaFixa = pagarContaFixa;
@@ -6269,26 +6242,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ========== SALVAMENTO ANTES DE SAIR ==========
 window.addEventListener('beforeunload', async (e) => {
-    if (perfilAtivo && (transacoes.length > 0 || metas.length > 0 || contasFixas.length > 0)) {
-        console.log('🚪 Usuário saindo, forçando salvamento final...');
-        
-        // Força salvamento imediato
+    if(perfilAtivo) {
         await salvarDados();
-        
-        // Processa fila se houver
-        if (dataManager.saveQueue.length > 0) {
-            await dataManager.processSaveQueue();
-        }
+        await dataManager.processSaveQueue();
     }
 });
-
-// ========== SALVAMENTO PERIÓDICO (AUTO-SAVE) ==========
-setInterval(async () => {
-    if (perfilAtivo && (transacoes.length > 0 || metas.length > 0)) {
-        console.log('⏰ Auto-save periódico...');
-        await salvarDados();
-    }
-}, 60000); // A cada 60 segundos
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Dashboard carregado, iniciando verificação de login...');
