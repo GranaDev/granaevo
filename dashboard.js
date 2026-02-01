@@ -26,13 +26,19 @@ let nextContaFixaId = 1;
 let metaSelecionadaId = null;
 let tipoRelatorioAtivo = 'individual';
 
-// ✅ ADICIONE ESTAS LINHAS PARA EXPOR GLOBALMENTE
-window.perfilAtivo = perfilAtivo;
-window.transacoes = transacoes;
-window.metas = metas;
-window.contasFixas = contasFixas;
-window.cartoesCredito = cartoesCredito;
-window.usuarioLogado = usuarioLogado;
+// ✅ FUNÇÃO PARA ATUALIZAR REFERÊNCIAS GLOBAIS
+function atualizarReferenciasGlobais() {
+    window.perfilAtivo = perfilAtivo;
+    window.transacoes = transacoes;
+    window.metas = metas;
+    window.contasFixas = contasFixas;
+    window.cartoesCredito = cartoesCredito;
+    window.usuarioLogado = usuarioLogado;
+}
+
+// ✅ EXPOR FUNÇÕES ESSENCIAIS
+window.atualizarReferenciasGlobais = atualizarReferenciasGlobais;
+window.salvarDados = salvarDados;
 
 // Limites por plano
 const limitesPlano = {
@@ -153,6 +159,14 @@ async function carregarDadosPerfil(perfilId) {
             metas = [];
             contasFixas = [];
             cartoesCredito = [];
+            
+            // ✅ RESETAR IDs
+            nextTransId = 1;
+            nextMetaId = 1;
+            nextContaFixaId = 1;
+            nextCartaoId = 1;
+            
+            atualizarReferenciasGlobais();
             return;
         }
 
@@ -162,12 +176,22 @@ async function carregarDadosPerfil(perfilId) {
         contasFixas = Array.isArray(perfilData.contasFixas) ? perfilData.contasFixas : [];
         cartoesCredito = Array.isArray(perfilData.cartoesCredito) ? perfilData.cartoesCredito : [];
 
+        // ✅ RESTAURAR IDs INCREMENTAIS
+        nextTransId = perfilData.nextTransId || (transacoes.length > 0 ? Math.max(...transacoes.map(t => t.id)) + 1 : 1);
+        nextMetaId = perfilData.nextMetaId || (metas.length > 0 ? Math.max(...metas.map(m => m.id)) + 1 : 1);
+        nextContaFixaId = perfilData.nextContaFixaId || (contasFixas.length > 0 ? Math.max(...contasFixas.map(c => c.id)) + 1 : 1);
+        nextCartaoId = perfilData.nextCartaoId || (cartoesCredito.length > 0 ? Math.max(...cartoesCredito.map(c => c.id)) + 1 : 1);
+
         console.log('✅ Dados do perfil carregados:', {
             transacoes: transacoes.length,
             metas: metas.length,
             contas: contasFixas.length,
-            cartoes: cartoesCredito.length
+            cartoes: cartoesCredito.length,
+            nextIds: { nextTransId, nextMetaId, nextContaFixaId, nextCartaoId }
         });
+        
+        // ✅ ATUALIZAR REFERÊNCIAS GLOBAIS
+        atualizarReferenciasGlobais();
         
     } catch(e) {
         console.error('❌ Erro ao carregar dados do perfil:', e);
@@ -175,46 +199,37 @@ async function carregarDadosPerfil(perfilId) {
         metas = [];
         contasFixas = [];
         cartoesCredito = [];
+        atualizarReferenciasGlobais();
     }
 }
 
 // ========== SALVAR DADOS ==========
-// ========== SALVAR DADOS (VERSÃO COM LOGS DETALHADOS) ==========
 async function salvarDados() {
     console.log('🔍 [DEBUG] salvarDados() chamada');
-    console.log('🔍 [DEBUG] perfilAtivo:', perfilAtivo);
-    console.log('🔍 [DEBUG] window.perfilAtivo:', window.perfilAtivo);
     
-    // ✅ TENTAR USAR A REFERÊNCIA GLOBAL SE LOCAL FALHAR
-    const perfil = perfilAtivo || window.perfilAtivo;
+    // ✅ SEMPRE USAR REFERÊNCIAS ATUALIZADAS
+    atualizarReferenciasGlobais();
     
-    if (!perfil) {
-        console.error('❌ Nenhum perfil ativo (nem local nem global)');
+    if (!perfilAtivo) {
+        console.error('❌ Nenhum perfil ativo');
         return false;
     }
 
     if (!dataManager || !dataManager.userId) {
         console.error('❌ DataManager não inicializado!');
-        console.error('DataManager:', dataManager);
         return false;
     }
 
     try {
         console.log('💾 [AUTO-SAVE] Iniciando salvamento...');
-        console.log('👤 Perfil:', perfil.nome);
-        console.log('🔑 Perfil ID:', perfil.id);
-        
-        // ✅ USAR REFERÊNCIAS GLOBAIS SE LOCAIS FALHAREM
-        const trans = transacoes || window.transacoes || [];
-        const met = metas || window.metas || [];
-        const contas = contasFixas || window.contasFixas || [];
-        const cartoes = cartoesCredito || window.cartoesCredito || [];
+        console.log('👤 Perfil:', perfilAtivo.nome);
+        console.log('🔑 Perfil ID:', perfilAtivo.id);
         
         console.log('📊 Arrays antes de salvar:', {
-            transacoes: trans.length,
-            metas: met.length,
-            contasFixas: contas.length,
-            cartoes: cartoes.length
+            transacoes: transacoes.length,
+            metas: metas.length,
+            contasFixas: contasFixas.length,
+            cartoes: cartoesCredito.length
         });
         
         // ✅ CARREGAR DADOS EXISTENTES
@@ -223,13 +238,18 @@ async function salvarDados() {
         
         // ✅ PREPARAR DADOS DO PERFIL ATUAL
         const dadosPerfil = {
-            id: perfil.id,
-            nome: perfil.nome,
-            foto: perfil.foto,
-            transacoes: trans,
-            metas: met,
-            contasFixas: contas,
-            cartoesCredito: cartoes,
+            id: perfilAtivo.id,
+            nome: perfilAtivo.nome,
+            foto: perfilAtivo.foto,
+            transacoes: transacoes,
+            metas: metas,
+            contasFixas: contasFixas,
+            cartoesCredito: cartoesCredito,
+            // ✅ SALVAR IDs INCREMENTAIS
+            nextTransId: nextTransId,
+            nextMetaId: nextMetaId,
+            nextContaFixaId: nextContaFixaId,
+            nextCartaoId: nextCartaoId,
             lastUpdate: new Date().toISOString()
         };
 
@@ -243,7 +263,7 @@ async function salvarDados() {
         });
 
         // ✅ ATUALIZAR OU ADICIONAR PERFIL
-        const perfilIndex = userData.profiles.findIndex(p => p.id === perfil.id);
+        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
         
         if (perfilIndex !== -1) {
             console.log('📝 Atualizando perfil existente no índice:', perfilIndex);
@@ -419,7 +439,6 @@ async function entrarNoPerfil(index) {
         if (authLoading) authLoading.style.display = 'flex';
 
         perfilAtivo = usuarioLogado.perfis[index];
-        window.perfilAtivo = perfilAtivo; // ✅ ATUALIZAR REFERÊNCIA GLOBAL
         
         localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id);
 
@@ -428,11 +447,8 @@ async function entrarNoPerfil(index) {
         
         await carregarDadosPerfil(perfilAtivo.id);
 
-        // ✅ ATUALIZAR REFERÊNCIAS GLOBAIS APÓS CARREGAR
-        window.transacoes = transacoes;
-        window.metas = metas;
-        window.contasFixas = contasFixas;
-        window.cartoesCredito = cartoesCredito;
+        // ✅ ATUALIZAR REFERÊNCIAS GLOBAIS USANDO A FUNÇÃO
+        atualizarReferenciasGlobais();
 
         console.log('📊 Dados carregados:', {
             transacoes: transacoes.length,
