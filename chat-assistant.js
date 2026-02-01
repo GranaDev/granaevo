@@ -455,6 +455,10 @@ class ChatAssistant {
     // ✅ MÉTODO CORRIGIDO: onProfileSelected
     onProfileSelected(perfil) {
         console.log('💬 Chat Assistant recebeu o sinal do perfil:', perfil);
+        // Após o usuário selecionar o perfil
+        dataManager.setActiveProfile(profileSelecionado);
+        dataManager.startAutoSave(5000);
+
         this.perfilAtivo = perfil; // Armazena a referência do perfil ativo
 
         // Agora que temos um perfil, carregamos as mensagens

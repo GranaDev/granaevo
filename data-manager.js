@@ -10,6 +10,26 @@ class DataManager {
         this.lastSaveTime = null;
     }
 
+    // ========== PERFIL ATIVO ==========
+setActiveProfile(profile) {
+    if (!profile || !profile.id) {
+        console.error('❌ Perfil inválido recebido:', profile);
+        return;
+    }
+
+    this.activeProfile = profile;
+
+    console.log('🎯 Perfil ativo definido no DataManager:', {
+        id: profile.id,
+        nome: profile.nome
+    });
+}
+
+getActiveProfile() {
+    return this.activeProfile || null;
+}
+
+
     // ========== INICIALIZAÇÃO ==========
     async initialize(userId, userEmail) {
         this.userId = userId;

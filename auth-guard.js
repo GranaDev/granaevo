@@ -151,21 +151,32 @@ class DataManager {
         }
     }
 
-    // ========== AUTO-SAVE - VERSÃO MELHORADA ==========
-    startAutoSave() {
-        if (this.autoSaveInterval) {
-            clearInterval(this.autoSaveInterval);
-        }
-
-        this.autoSaveInterval = setInterval(() => {
-            if (this.saveQueue.length > 0 && !this.isSaving) {
-                console.log('⏰ Auto-save: processando fila...');
-                this.processSaveQueue();
-            }
-        }, 30000); // 30 segundos
-
-        console.log('⏰ Auto-save ativado (30s)');
+    // ========== AUTO SAVE ==========
+startAutoSave(intervalMs = 5000) {
+    if (this.autoSaveInterval) {
+        console.warn('⚠️ Auto-save já está ativo');
+        return;
     }
+
+    console.log('🔁 Auto-save iniciado a cada', intervalMs, 'ms');
+
+    this.autoSaveInterval = setInterval(async () => {
+        try {
+            if (!this.activeProfile) {
+                console.warn('⚠️ Auto-save ignorado: nenhum perfil ativo');
+                return;
+            }
+
+            console.log('💾 Auto-save disparado para perfil:', this.activeProfile.id);
+
+            await this.saveProfile(this.activeProfile.id, this.activeProfile);
+
+        } catch (e) {
+            console.error('❌ Erro no auto-save:', e);
+        }
+    }, intervalMs);
+}
+
 
     stopAutoSave() {
         if (this.autoSaveInterval) {
