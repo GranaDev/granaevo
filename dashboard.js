@@ -304,9 +304,6 @@ async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
     const protectedContent = document.querySelector('[data-protected-content]');
 
-    // Log de início (mantido para clareza)
-    console.log('🏁 [ETAPA 1/7] Iniciando verificação de login...');
-
     try {
         if (authLoading) authLoading.style.display = 'flex';
         if (protectedContent) protectedContent.style.display = 'none';
@@ -345,15 +342,11 @@ async function verificarLogin() {
             perfis: []
         };
 
-        // Log de verificação (mantido para clareza)
-        console.log('👤 [ETAPA 2/7] Dados do usuário logado carregados:', JSON.parse(JSON.stringify(usuarioLogado)));
+        console.log('👤 Usuário inicializado:', usuarioLogado.email);
 
-        // 4️⃣ ⚠️ CRÍTICO: INICIALIZAR DATAMANAGER (CORRIGIDO - MOVIDO PARA DEPOIS DA INICIALIZAÇÃO DO USUÁRIO)
-        // Agora, temos certeza de que usuarioLogado.userId existe.
+        // 4️⃣ ⚠️ CRÍTICO: INICIALIZAR DATAMANAGER
         await dataManager.initialize(usuarioLogado.userId, usuarioLogado.email);
-        
-        // Log de verificação (mantido para clareza)
-        console.log('📦 [ETAPA 3/7] DataManager inicializado para o usuário:', dataManager.userId);
+        console.log('📦 DataManager inicializado com sucesso');
 
         // 5️⃣ CARREGAR PERFIS
         const resultadoPerfis = await carregarPerfis();
@@ -362,22 +355,18 @@ async function verificarLogin() {
             throw new Error("Não foi possível carregar os dados do usuário.");
         }
 
-        // Log de verificação (mantido para clareza)
-        console.log('👨‍👩‍👧 [ETAPA 4/7] Perfis carregados no objeto usuarioLogado:', JSON.parse(JSON.stringify(usuarioLogado.perfis)));
-
         console.log('✅ Login completo. Mostrando seleção de perfis.');
         mostrarSelecaoPerfis();
 
     } catch (e) {
         console.error('❌ Erro crítico na inicialização:', e.message);
         alert(e.message);
-        AuthGuard.performLogout(); // Supondo que você tenha um objeto AuthGuard
+        AuthGuard.performLogout();
     } finally {
         if (authLoading) authLoading.style.display = 'none';
         if (protectedContent) protectedContent.style.display = 'block';
     }
 }
-
 
 // ========== SELEÇÃO DE PERFIS ==========
 function mostrarSelecaoPerfis() {
