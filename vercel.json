@@ -1,36 +1,28 @@
 {
-  "version": 2,
-  "routes": [
+  "rewrites": [
     {
-      "src": "/",
-      "dest": "/landingpage.html"
+      "source": "/",
+      "destination": "/landingpage.html"
     },
     {
-      "src": "/landingpage",
-      "dest": "/landingpage.html"
+      "source": "/landingpage",
+      "destination": "/landingpage.html"
     },
     {
-      "src": "/planos",
-      "dest": "/planos.html"
+      "source": "/planos",
+      "destination": "/planos.html"
     },
     {
-      "src": "/login",
-      "dest": "/login.html"
+      "source": "/login",
+      "destination": "/login.html"
     },
     {
-      "src": "/primeiroacesso",
-      "dest": "/primeiroacesso.html"
+      "source": "/primeiroacesso",
+      "destination": "/primeiroacesso.html"
     },
     {
-      "src": "/dashboard",
-      "dest": "/dashboard.html"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/landingpage.html"
+      "source": "/dashboard",
+      "destination": "/dashboard.html"
     }
   ],
   "headers": [
