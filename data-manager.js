@@ -70,14 +70,24 @@ class DataManager {
 
         if (this.isSaving) {
             console.log('⏳ Salvamento em andamento, aguardando...');
-            return false;
+            
+            // ✅ AGUARDAR O SALVAMENTO ATUAL TERMINAR
+            await new Promise(resolve => {
+                const checkInterval = setInterval(() => {
+                    if (!this.isSaving) {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+            });
         }
 
         this.isSaving = true;
 
         try {
-            console.log('💾 Iniciando salvamento...');
-            console.log('📊 Perfis a salvar:', profilesData.length);
+            console.log('💾 [SUPABASE] Iniciando salvamento...');
+            console.log('📊 Total de perfis:', profilesData.length);
+            console.log('🔑 User ID:', this.userId);
 
             const dataToSave = {
                 version: '1.0',
@@ -92,6 +102,8 @@ class DataManager {
                 }
             };
 
+            console.log('📦 Tamanho dos dados:', JSON.stringify(dataToSave).length, 'bytes');
+
             // ✅ VERIFICAR SE JÁ EXISTE REGISTRO
             const { data: existing, error: checkError } = await supabase
                 .from('user_data')
@@ -100,24 +112,26 @@ class DataManager {
                 .maybeSingle();
 
             if (checkError && checkError.code !== 'PGRST116') {
+                console.error('❌ Erro ao verificar dados existentes:', checkError);
                 throw checkError;
             }
 
             let result;
 
             if (existing) {
-                console.log('🔄 Atualizando dados existentes...');
+                console.log('🔄 Registro encontrado. Atualizando...');
                 
                 result = await supabase
                     .from('user_data')
                     .update({
                         data_json: dataToSave,
-                        email: this.userEmail
+                        email: this.userEmail,
+                        last_modified: new Date().toISOString()
                     })
                     .eq('user_id', this.userId);
 
             } else {
-                console.log('➕ Criando novo registro...');
+                console.log('➕ Nenhum registro encontrado. Criando novo...');
                 
                 result = await supabase
                     .from('user_data')
@@ -129,17 +143,20 @@ class DataManager {
             }
 
             if (result.error) {
-                console.error('❌ Erro ao salvar:', result.error);
+                console.error('❌ Erro ao salvar no Supabase:', result.error);
+                console.error('Código:', result.error.code);
+                console.error('Mensagem:', result.error.message);
                 throw result.error;
             }
 
             this.lastSaveTime = new Date();
-            console.log('✅ Dados salvos com sucesso às', this.lastSaveTime.toLocaleTimeString());
+            console.log('✅ [SUPABASE] Dados salvos com sucesso!');
+            console.log('🕐 Horário:', this.lastSaveTime.toLocaleTimeString());
             
             return true;
 
         } catch (e) {
-            console.error('❌ Erro crítico ao salvar:', e);
+            console.error('❌ [SUPABASE] Erro crítico ao salvar:', e);
             console.error('Stack:', e.stack);
             return false;
 
