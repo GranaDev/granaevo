@@ -5,9 +5,9 @@ class DataManager {
     constructor() {
         this.userId = null;
         this.userEmail = null;
-        this.autoSaveInterval = null;
         this.saveQueue = [];
         this.isSaving = false;
+        this.lastSaveTime = null;
     }
 
     // ========== INICIALIZAÇÃO ==========
@@ -15,10 +15,9 @@ class DataManager {
         this.userId = userId;
         this.userEmail = userEmail;
         
-        console.log('📦 DataManager inicializado para:', userEmail);
-        
-        // Iniciar auto-save a cada 10 segundos
-        this.startAutoSave();
+        console.log('📦 DataManager inicializado');
+        console.log('👤 UserID:', userId);
+        console.log('📧 Email:', userEmail);
         
         return true;
     }
@@ -30,7 +29,8 @@ class DataManager {
         }
 
         try {
-            console.log('📥 Carregando dados do usuário:', this.userEmail);
+            console.log('📥 Carregando dados do Supabase...');
+            console.log('🔑 User ID:', this.userId);
 
             const { data, error } = await supabase
                 .from('user_data')
@@ -44,15 +44,19 @@ class DataManager {
             }
 
             if (!data || !data.data_json) {
-                console.log('ℹ️ Nenhum dado salvo encontrado. Retornando estrutura vazia.');
+                console.log('ℹ️ Nenhum dado salvo. Criando estrutura vazia.');
                 return this.createEmptyStructure();
             }
 
-            console.log('✅ Dados carregados com sucesso');
+            console.log('✅ Dados carregados:', {
+                profiles: data.data_json.profiles?.length || 0,
+                version: data.data_json.version
+            });
+
             return data.data_json;
 
         } catch (e) {
-            console.error('❌ Erro crítico ao carregar dados:', e);
+            console.error('❌ Erro crítico ao carregar:', e);
             return this.createEmptyStructure();
         }
     }
@@ -64,8 +68,16 @@ class DataManager {
             return false;
         }
 
+        if (this.isSaving) {
+            console.log('⏳ Salvamento em andamento, aguardando...');
+            return false;
+        }
+
+        this.isSaving = true;
+
         try {
-            console.log('💾 Salvando dados do usuário...');
+            console.log('💾 Iniciando salvamento...');
+            console.log('📊 Perfis a salvar:', profilesData.length);
 
             const dataToSave = {
                 version: '1.0',
@@ -80,7 +92,7 @@ class DataManager {
                 }
             };
 
-            // Verifica se já existe registro
+            // ✅ VERIFICAR SE JÁ EXISTE REGISTRO
             const { data: existing, error: checkError } = await supabase
                 .from('user_data')
                 .select('id')
@@ -94,7 +106,8 @@ class DataManager {
             let result;
 
             if (existing) {
-                // UPDATE
+                console.log('🔄 Atualizando dados existentes...');
+                
                 result = await supabase
                     .from('user_data')
                     .update({
@@ -102,8 +115,10 @@ class DataManager {
                         email: this.userEmail
                     })
                     .eq('user_id', this.userId);
+
             } else {
-                // INSERT
+                console.log('➕ Criando novo registro...');
+                
                 result = await supabase
                     .from('user_data')
                     .insert({
@@ -118,86 +133,57 @@ class DataManager {
                 throw result.error;
             }
 
-            console.log('✅ Dados salvos com sucesso!');
+            this.lastSaveTime = new Date();
+            console.log('✅ Dados salvos com sucesso às', this.lastSaveTime.toLocaleTimeString());
+            
             return true;
 
         } catch (e) {
-            console.error('❌ Erro crítico ao salvar dados:', e);
+            console.error('❌ Erro crítico ao salvar:', e);
+            console.error('Stack:', e.stack);
             return false;
+
+        } finally {
+            this.isSaving = false;
         }
     }
 
     // ========== SALVAR PERFIL ESPECÍFICO ==========
     async saveProfile(profileId, profileData) {
         try {
+            console.log('💾 Salvando perfil específico:', profileId);
+
             // Carrega dados completos
             const fullData = await this.loadUserData();
             
             // Atualiza/adiciona o perfil específico
             const profileIndex = fullData.profiles.findIndex(p => p.id === profileId);
             
+            const profileToSave = {
+                ...profileData,
+                lastUpdate: new Date().toISOString()
+            };
+
             if (profileIndex !== -1) {
-                fullData.profiles[profileIndex] = {
-                    ...profileData,
-                    lastUpdate: new Date().toISOString()
-                };
+                console.log('📝 Atualizando perfil existente');
+                fullData.profiles[profileIndex] = profileToSave;
             } else {
-                fullData.profiles.push({
-                    ...profileData,
-                    lastUpdate: new Date().toISOString()
-                });
+                console.log('➕ Adicionando novo perfil');
+                fullData.profiles.push(profileToSave);
             }
 
             // Salva tudo de volta
-            return await this.saveUserData(fullData.profiles);
+            const success = await this.saveUserData(fullData.profiles);
+            
+            if (success) {
+                console.log('✅ Perfil salvo com sucesso');
+            }
+
+            return success;
 
         } catch (e) {
             console.error('❌ Erro ao salvar perfil:', e);
             return false;
-        }
-    }
-
-    // ========== AUTO-SAVE ==========
-    startAutoSave() {
-        if (this.autoSaveInterval) {
-            clearInterval(this.autoSaveInterval);
-        }
-
-        this.autoSaveInterval = setInterval(() => {
-            if (this.saveQueue.length > 0 && !this.isSaving) {
-                this.processSaveQueue();
-            }
-        }, 10000); // 10 segundos
-
-        console.log('⏰ Auto-save ativado (10s)');
-    }
-
-    stopAutoSave() {
-        if (this.autoSaveInterval) {
-            clearInterval(this.autoSaveInterval);
-            this.autoSaveInterval = null;
-            console.log('⏸️ Auto-save desativado');
-        }
-    }
-
-    // ========== FILA DE SALVAMENTO ==========
-    queueSave(profilesData) {
-        this.saveQueue = [profilesData]; // Substitui sempre pelo mais recente
-    }
-
-    async processSaveQueue() {
-        if (this.saveQueue.length === 0 || this.isSaving) return;
-
-        this.isSaving = true;
-        const dataToSave = this.saveQueue.pop();
-
-        try {
-            await this.saveUserData(dataToSave);
-            this.saveQueue = []; // Limpa fila após sucesso
-        } catch (e) {
-            console.error('❌ Erro ao processar fila de salvamento:', e);
-        } finally {
-            this.isSaving = false;
         }
     }
 
@@ -234,31 +220,29 @@ class DataManager {
         console.log('✅ Backup exportado com sucesso!');
     }
 
-    // ========== IMPORTAR DADOS (RESTAURAR BACKUP) ==========
-    async importUserData(fileData) {
-        try {
-            const data = JSON.parse(fileData);
-            
-            // Validação básica
-            if (!data.version || !data.profiles) {
-                throw new Error('Arquivo de backup inválido');
-            }
-
-            await this.saveUserData(data.profiles);
-            console.log('✅ Backup restaurado com sucesso!');
-            return true;
-
-        } catch (e) {
-            console.error('❌ Erro ao importar backup:', e);
-            return false;
-        }
+    // ========== STATUS DO SISTEMA ==========
+    getStatus() {
+        return {
+            initialized: !!this.userId,
+            userId: this.userId,
+            email: this.userEmail,
+            isSaving: this.isSaving,
+            lastSaveTime: this.lastSaveTime
+        };
     }
 }
 
 // ========== INSTÂNCIA GLOBAL ==========
 const dataManagerInstance = new DataManager();
 
+// Expor globalmente para debugging
 window.dataManager = dataManagerInstance;
 
-// Também exportar para compatibilidade com outros módulos
+// Debug helper
+window.debugDataManager = () => {
+    console.log('=== DATA MANAGER STATUS ===');
+    console.log(dataManagerInstance.getStatus());
+    console.log('==========================');
+};
+
 export const dataManager = dataManagerInstance;
