@@ -9,6 +9,40 @@
       }
     }
   ],
+  "routes": [
+    {
+      "src": "/",
+      "dest": "/landingpage.html"
+    },
+    {
+      "src": "/landingpage",
+      "dest": "/landingpage.html"
+    },
+    {
+      "src": "/planos",
+      "dest": "/planos.html"
+    },
+    {
+      "src": "/login",
+      "dest": "/login.html"
+    },
+    {
+      "src": "/primeiroacesso",
+      "dest": "/primeiroacesso.html"
+    },
+    {
+      "src": "/dashboard",
+      "dest": "/dashboard.html"
+    },
+    {
+      "src": "/(.*\\..+)",
+      "dest": "/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
