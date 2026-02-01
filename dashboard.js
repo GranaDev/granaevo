@@ -171,74 +171,48 @@ async function carregarDadosPerfil(perfilId) {
 async function salvarDados() {
     if (!perfilAtivo) {
         console.log('⚠️ Salvamento ignorado: Nenhum perfil ativo');
-        return false;
-    }
-
-    if (!dataManager.userId) {
-        console.error('❌ DataManager não inicializado!');
-        return false;
+        return;
     }
 
     try {
-        console.log('🔄 Preparando salvamento...');
-        console.log('👤 Perfil ativo:', perfilAtivo.nome);
+        console.log('🔄 Preparando dados para salvamento...');
         
-        // ✅ CARREGAR DADOS COMPLETOS
+        // ✅ NOVO: Carregar dados completos
         const userData = await dataManager.loadUserData();
         
-        console.log('📊 Dados atuais:', {
-            totalProfiles: userData.profiles.length
-        });
-
-        // ✅ PREPARAR DADOS DO PERFIL ATUAL
+        // Encontrar ou criar perfil
+        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
+        
         const dadosPerfil = {
             id: perfilAtivo.id,
             nome: perfilAtivo.nome,
             foto: perfilAtivo.foto,
-            transacoes: transacoes || [],
-            metas: metas || [],
-            contasFixas: contasFixas || [],
-            cartoesCredito: cartoesCredito || [],
+            transacoes: transacoes,
+            metas: metas,
+            contasFixas: contasFixas,
+            cartoesCredito: cartoesCredito,
             lastUpdate: new Date().toISOString()
         };
 
-        console.log('💾 Dados a salvar:', {
-            id: dadosPerfil.id,
-            nome: dadosPerfil.nome,
-            transacoes: dadosPerfil.transacoes.length,
-            metas: dadosPerfil.metas.length,
-            contas: dadosPerfil.contasFixas.length,
-            cartoes: dadosPerfil.cartoesCredito.length
-        });
-
-        // ✅ ATUALIZAR OU ADICIONAR PERFIL
-        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
-        
         if (perfilIndex !== -1) {
-            console.log(`📝 Atualizando perfil existente (index ${perfilIndex})`);
+            console.log(`📝 Atualizando perfil existente: ${perfilAtivo.nome}`);
             userData.profiles[perfilIndex] = dadosPerfil;
         } else {
-            console.log(`➕ Adicionando novo perfil`);
+            console.log(`➕ Adicionando novo perfil: ${perfilAtivo.nome}`);
             userData.profiles.push(dadosPerfil);
         }
 
-        // ✅ SALVAR IMEDIATAMENTE NO SUPABASE
-        console.log('💾 Salvando no Supabase...');
+        // ✅ NOVO: Salvar IMEDIATAMENTE (não usar fila)
         const sucesso = await dataManager.saveUserData(userData.profiles);
         
         if (sucesso) {
-            console.log('✅ DADOS SALVOS COM SUCESSO!');
-            console.log('⏰ Horário:', new Date().toLocaleTimeString());
-            return true;
+            console.log('✅ Dados salvos com sucesso no Supabase!');
         } else {
-            console.error('❌ FALHA AO SALVAR DADOS');
-            return false;
+            console.error('❌ Falha ao salvar dados');
         }
 
     } catch (e) {
         console.error('❌ Erro crítico ao salvar dados:', e);
-        console.error('Stack trace:', e.stack);
-        return false;
     }
 }
 
@@ -375,81 +349,6 @@ function atualizarTelaPerfis() {
 }
 
 
-async function salvarDados() {
-    if (!perfilAtivo) {
-        console.log('⚠️ Salvamento ignorado: Nenhum perfil ativo');
-        return false;
-    }
-
-    if (!dataManager.userId) {
-        console.error('❌ DataManager não inicializado!');
-        return false;
-    }
-
-    try {
-        console.log('🔄 Preparando salvamento...');
-        console.log('👤 Perfil ativo:', perfilAtivo.nome);
-        
-        // ✅ CARREGAR DADOS COMPLETOS
-        const userData = await dataManager.loadUserData();
-        
-        console.log('📊 Dados atuais:', {
-            totalProfiles: userData.profiles.length
-        });
-
-        // ✅ PREPARAR DADOS DO PERFIL ATUAL
-        const dadosPerfil = {
-            id: perfilAtivo.id,
-            nome: perfilAtivo.nome,
-            foto: perfilAtivo.foto,
-            transacoes: transacoes || [],
-            metas: metas || [],
-            contasFixas: contasFixas || [],
-            cartoesCredito: cartoesCredito || [],
-            lastUpdate: new Date().toISOString()
-        };
-
-        console.log('💾 Dados a salvar:', {
-            id: dadosPerfil.id,
-            nome: dadosPerfil.nome,
-            transacoes: dadosPerfil.transacoes.length,
-            metas: dadosPerfil.metas.length,
-            contas: dadosPerfil.contasFixas.length,
-            cartoes: dadosPerfil.cartoesCredito.length
-        });
-
-        // ✅ ATUALIZAR OU ADICIONAR PERFIL
-        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
-        
-        if (perfilIndex !== -1) {
-            console.log(`📝 Atualizando perfil existente (index ${perfilIndex})`);
-            userData.profiles[perfilIndex] = dadosPerfil;
-        } else {
-            console.log(`➕ Adicionando novo perfil`);
-            userData.profiles.push(dadosPerfil);
-        }
-
-        // ✅ SALVAR IMEDIATAMENTE NO SUPABASE
-        console.log('💾 Salvando no Supabase...');
-        const sucesso = await dataManager.saveUserData(userData.profiles);
-        
-        if (sucesso) {
-            console.log('✅ DADOS SALVOS COM SUCESSO!');
-            console.log('⏰ Horário:', new Date().toLocaleTimeString());
-            return true;
-        } else {
-            console.error('❌ FALHA AO SALVAR DADOS');
-            return false;
-        }
-
-    } catch (e) {
-        console.error('❌ Erro crítico ao salvar dados:', e);
-        console.error('Stack trace:', e.stack);
-        return false;
-    }
-}
-
-// ========== ENTRAR NO PERFIL (CORRIGIDA) ==========
 async function entrarNoPerfil(index) {
     const authLoading = document.getElementById('authLoading');
 
@@ -457,33 +356,23 @@ async function entrarNoPerfil(index) {
         if (authLoading) authLoading.style.display = 'flex';
 
         perfilAtivo = usuarioLogado.perfis[index];
-        
-        console.log('👤 Entrando no perfil:', perfilAtivo.nome);
-        console.log('🆔 ID do perfil:', perfilAtivo.id);
-
-        // ✅ SALVAR ID DO PERFIL ATIVO
         localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id);
 
-        // ✅ CARREGAR DADOS DO PERFIL
         await carregarDadosPerfil(perfilAtivo.id);
 
-        // ✅ ATUALIZAR INTERFACE
         atualizarTudo();
+        
+        // ✅ ADICIONAR ESTA LINHA
         atualizarNomeUsuario();
 
-        // ✅ ESCONDER SELEÇÃO DE PERFIS
         document.getElementById('selecaoPerfis').style.display = 'none';
         document.getElementById('sidebar').style.display = 'flex';
 
-        // ✅ NOTIFICAR CHAT ASSISTANT (se existir)
         if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
             window.chatAssistant.onProfileSelected(perfilAtivo);
         }
 
-        // ✅ MOSTRAR DASHBOARD
         mostrarTela('dashboard');
-
-        console.log('✅ Perfil carregado com sucesso!');
 
     } catch (e) {
         console.error('❌ Erro ao entrar no perfil:', e);
@@ -493,58 +382,6 @@ async function entrarNoPerfil(index) {
     }
 }
 
-// ========== LANÇAR TRANSAÇÃO (COM SALVAMENTO GARANTIDO) ==========
-async function lancarTransacaoComSalvamento() {
-    const categoria = document.getElementById('selectCategoria').value;
-    const tipo = document.getElementById('selectTipo').value;
-    const descricao = document.getElementById('inputDescricao').value.trim();
-    const valorStr = document.getElementById('inputValor').value;
-    
-    // Validações...
-    if(!categoria) return alert('Escolha Entrada, Saída ou Reserva.');
-    if(!descricao) return alert('Digite a descrição.');
-    if(!valorStr || isNaN(valorStr) || Number(valorStr) <= 0) return alert('Digite um valor válido.');
-    
-    const valor = parseFloat(parseFloat(valorStr).toFixed(2));
-    const dh = agoraDataHora();
-    
-    const id = nextTransId++;
-    const t = {
-        id,
-        categoria,
-        tipo: tipo || 'Outros',
-        descricao,
-        valor,
-        data: dh.data,
-        hora: dh.hora
-    };
-    
-    // ✅ ADICIONAR TRANSAÇÃO
-    transacoes.push(t);
-    
-    console.log('💰 Nova transação adicionada:', t);
-    
-    // ✅ SALVAR IMEDIATAMENTE
-    const sucesso = await salvarDados();
-    
-    if (sucesso) {
-        console.log('✅ Transação salva com sucesso!');
-        
-        // ✅ ATUALIZAR INTERFACE
-        atualizarTudo();
-        
-        // ✅ LIMPAR FORMULÁRIO
-        document.getElementById('selectCategoria').value = '';
-        document.getElementById('selectTipo').innerHTML = '<option value="">Tipo</option>';
-        document.getElementById('inputDescricao').value = '';
-        document.getElementById('inputValor').value = '';
-        
-        // ✅ MOSTRAR NOTIFICAÇÃO
-        mostrarNotificacao('Transação lançada com sucesso!', 'success');
-    } else {
-        alert('❌ Erro ao salvar transação. Tente novamente.');
-    }
-}
 
 function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
