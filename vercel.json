@@ -1,28 +1,33 @@
 {
   "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
   "routes": [
     {
-      "src": "/",
+      "src": "/landingpage.html",
       "dest": "/landingpage.html"
     },
     {
-      "src": "/landingpage",
-      "dest": "/landingpage.html"
-    },
-    {
-      "src": "/planos",
+      "src": "/planos.html",
       "dest": "/planos.html"
     },
     {
-      "src": "/login",
+      "src": "/login.html",
       "dest": "/login.html"
     },
     {
-      "src": "/primeiroacesso",
+      "src": "/primeiroacesso.html",
       "dest": "/primeiroacesso.html"
     },
     {
-      "src": "/dashboard",
+      "src": "/dashboard.html",
       "dest": "/dashboard.html"
     },
     {
