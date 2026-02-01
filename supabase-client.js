@@ -1,36 +1,38 @@
 // ==========================================
-// SUPABASE CLIENT - CONFIGURAÇÃO CORRIGIDA
+// SUPABASE CLIENT - ES MODULES
 // ==========================================
+
+// ✅ Importar do CDN com ES Modules
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo';
 
-// ✅ VERIFICAR SE SUPABASE ESTÁ DISPONÍVEL
-if (typeof window.supabase === 'undefined') {
-    console.error('❌ ERRO: Biblioteca Supabase não carregada!');
-    console.error('📝 Adicione no HTML: <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>');
-    throw new Error('Supabase library not loaded');
+// ✅ Verificar configurações
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.error('❌ Configurações do Supabase não encontradas!');
+    throw new Error('Supabase não configurado corretamente');
 }
 
-// ✅ CRIAR CLIENTE SUPABASE
-export const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// ✅ Criar cliente Supabase
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ✅ LOG DE INICIALIZAÇÃO
-console.log('✅ Supabase Client inicializado:', {
+// ✅ Log de inicialização
+console.log('✅ Supabase Client inicializado (ES Modules):', {
     url: SUPABASE_URL,
     connected: !!supabase,
     hasAuth: !!supabase.auth
 });
 
-// ✅ TESTE DE CONEXÃO
+// ✅ Teste de conexão
 supabase.auth.getSession()
     .then(({ data, error }) => {
         if (error) {
-            console.warn('⚠️ Nenhuma sessão ativa');
+            console.warn('⚠️ Erro ao verificar sessão:', error.message);
         } else {
-            console.log('🔐 Sessão encontrada:', data.session ? 'Ativa' : 'Inativa');
+            console.log('🔐 Status da sessão:', data.session ? '✅ Ativa' : '⭕ Inativa');
         }
     })
     .catch(err => {
-        console.error('❌ Erro ao verificar sessão:', err);
+        console.error('❌ Erro crítico ao conectar:', err);
     });
