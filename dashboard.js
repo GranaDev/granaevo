@@ -1,9 +1,6 @@
-// ========== IMPORTS ESSENCIAIS ==========
+// ========== IMPORT SUPABASE ==========
 import { supabase } from './supabase-client.js';
 import { dataManager } from './data-manager.js';
-
-console.log('🚀 Dashboard.js carregado');
-console.log('📦 DataManager disponível:', !!dataManager);
 
 // ========== ESTADO GLOBAL ==========
 let usuarioLogado = {
@@ -25,20 +22,6 @@ let nextMetaId = 1;
 let nextContaFixaId = 1;
 let metaSelecionadaId = null;
 let tipoRelatorioAtivo = 'individual';
-
-// ✅ FUNÇÃO PARA ATUALIZAR REFERÊNCIAS GLOBAIS
-function atualizarReferenciasGlobais() {
-    window.perfilAtivo = perfilAtivo;
-    window.transacoes = transacoes;
-    window.metas = metas;
-    window.contasFixas = contasFixas;
-    window.cartoesCredito = cartoesCredito;
-    window.usuarioLogado = usuarioLogado;
-}
-
-// ✅ EXPOR FUNÇÕES ESSENCIAIS
-window.atualizarReferenciasGlobais = atualizarReferenciasGlobais;
-window.salvarDados = salvarDados;
 
 // Limites por plano
 const limitesPlano = {
@@ -108,9 +91,10 @@ async function carregarPerfis() {
 
         console.log('🔍 Buscando perfis para o usuário:', session.user.id);
 
+        // ✅ NOVO: Buscar apenas id, name e photo_url
         const { data: perfis, error } = await supabase
             .from('profiles')
-            .select('id, name, photo_url') // ✅ Campo correto
+            .select('id, name, photo_url') // ✅ Apenas campos necessários
             .eq('user_id', session.user.id)
             .order('id', { ascending: true });
 
@@ -121,7 +105,7 @@ async function carregarPerfis() {
             usuarioLogado.perfis = perfis.map(p => ({
                 id: p.id,
                 nome: p.name,
-                foto: p.photo_url  // ✅ Campo correto
+                foto: p.photo_url
             }));
             return { sucesso: true, perfisEncontrados: true };
         } else {
@@ -137,20 +121,15 @@ async function carregarPerfis() {
     }
 }
 
-// ========== CARREGAR DADOS DO PERFIL (CORRIGIDA) ==========
+
+
 async function carregarDadosPerfil(perfilId) {
     try {
         console.log(`📦 Carregando dados do perfil ID: ${perfilId}`);
 
-        // ✅ CARREGAR JSON COMPLETO DO DATAMANAGER
+        // ✅ NOVO: Carregar do JSON unificado
         const userData = await dataManager.loadUserData();
         
-        console.log('📊 Dados recebidos:', {
-            totalProfiles: userData.profiles?.length || 0,
-            version: userData.version
-        });
-
-        // ✅ BUSCAR PERFIL ESPECÍFICO
         const perfilData = userData.profiles.find(p => p.id === perfilId);
 
         if (!perfilData) {
@@ -159,39 +138,21 @@ async function carregarDadosPerfil(perfilId) {
             metas = [];
             contasFixas = [];
             cartoesCredito = [];
-            
-            // ✅ RESETAR IDs
-            nextTransId = 1;
-            nextMetaId = 1;
-            nextContaFixaId = 1;
-            nextCartaoId = 1;
-            
-            atualizarReferenciasGlobais();
             return;
         }
 
-        // ✅ MAPEAR DADOS DO JSON PARA VARIÁVEIS GLOBAIS
-        transacoes = Array.isArray(perfilData.transacoes) ? perfilData.transacoes : [];
-        metas = Array.isArray(perfilData.metas) ? perfilData.metas : [];
-        contasFixas = Array.isArray(perfilData.contasFixas) ? perfilData.contasFixas : [];
-        cartoesCredito = Array.isArray(perfilData.cartoesCredito) ? perfilData.cartoesCredito : [];
-
-        // ✅ RESTAURAR IDs INCREMENTAIS
-        nextTransId = perfilData.nextTransId || (transacoes.length > 0 ? Math.max(...transacoes.map(t => t.id)) + 1 : 1);
-        nextMetaId = perfilData.nextMetaId || (metas.length > 0 ? Math.max(...metas.map(m => m.id)) + 1 : 1);
-        nextContaFixaId = perfilData.nextContaFixaId || (contasFixas.length > 0 ? Math.max(...contasFixas.map(c => c.id)) + 1 : 1);
-        nextCartaoId = perfilData.nextCartaoId || (cartoesCredito.length > 0 ? Math.max(...cartoesCredito.map(c => c.id)) + 1 : 1);
+        // ✅ NOVO: Mapear dados do JSON
+        transacoes = perfilData.transacoes || [];
+        metas = perfilData.metas || [];
+        contasFixas = perfilData.contasFixas || [];
+        cartoesCredito = perfilData.cartoesCredito || [];
 
         console.log('✅ Dados do perfil carregados:', {
             transacoes: transacoes.length,
             metas: metas.length,
             contas: contasFixas.length,
-            cartoes: cartoesCredito.length,
-            nextIds: { nextTransId, nextMetaId, nextContaFixaId, nextCartaoId }
+            cartoes: cartoesCredito.length
         });
-        
-        // ✅ ATUALIZAR REFERÊNCIAS GLOBAIS
-        atualizarReferenciasGlobais();
         
     } catch(e) {
         console.error('❌ Erro ao carregar dados do perfil:', e);
@@ -199,44 +160,27 @@ async function carregarDadosPerfil(perfilId) {
         metas = [];
         contasFixas = [];
         cartoesCredito = [];
-        atualizarReferenciasGlobais();
     }
 }
 
+
+
 // ========== SALVAR DADOS ==========
 async function salvarDados() {
-    console.log('🔍 [DEBUG] salvarDados() chamada');
-    
-    // ✅ SEMPRE USAR REFERÊNCIAS ATUALIZADAS
-    atualizarReferenciasGlobais();
-    
     if (!perfilAtivo) {
-        console.error('❌ Nenhum perfil ativo');
-        return false;
-    }
-
-    if (!dataManager || !dataManager.userId) {
-        console.error('❌ DataManager não inicializado!');
-        return false;
+        console.log('⚠️ Salvamento ignorado: Nenhum perfil ativo');
+        return;
     }
 
     try {
-        console.log('💾 [AUTO-SAVE] Iniciando salvamento...');
-        console.log('👤 Perfil:', perfilAtivo.nome);
-        console.log('🔑 Perfil ID:', perfilAtivo.id);
+        console.log('🔄 Preparando dados para salvamento...');
         
-        console.log('📊 Arrays antes de salvar:', {
-            transacoes: transacoes.length,
-            metas: metas.length,
-            contasFixas: contasFixas.length,
-            cartoes: cartoesCredito.length
-        });
-        
-        // ✅ CARREGAR DADOS EXISTENTES
+        // ✅ NOVO: Carregar dados completos
         const userData = await dataManager.loadUserData();
-        console.log('📥 Dados carregados do Supabase:', userData);
         
-        // ✅ PREPARAR DADOS DO PERFIL ATUAL
+        // Encontrar ou criar perfil
+        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
+        
         const dadosPerfil = {
             id: perfilAtivo.id,
             nome: perfilAtivo.nome,
@@ -245,59 +189,30 @@ async function salvarDados() {
             metas: metas,
             contasFixas: contasFixas,
             cartoesCredito: cartoesCredito,
-            // ✅ SALVAR IDs INCREMENTAIS
-            nextTransId: nextTransId,
-            nextMetaId: nextMetaId,
-            nextContaFixaId: nextContaFixaId,
-            nextCartaoId: nextCartaoId,
             lastUpdate: new Date().toISOString()
         };
 
-        console.log('📦 Dados preparados para salvar:', {
-            perfilId: dadosPerfil.id,
-            perfilNome: dadosPerfil.nome,
-            totalTransacoes: dadosPerfil.transacoes.length,
-            totalMetas: dadosPerfil.metas.length,
-            totalContas: dadosPerfil.contasFixas.length,
-            totalCartoes: dadosPerfil.cartoesCredito.length
-        });
-
-        // ✅ ATUALIZAR OU ADICIONAR PERFIL
-        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
-        
         if (perfilIndex !== -1) {
-            console.log('📝 Atualizando perfil existente no índice:', perfilIndex);
+            console.log(`📝 Atualizando perfil existente: ${perfilAtivo.nome}`);
             userData.profiles[perfilIndex] = dadosPerfil;
         } else {
-            console.log('➕ Adicionando novo perfil');
+            console.log(`➕ Adicionando novo perfil: ${perfilAtivo.nome}`);
             userData.profiles.push(dadosPerfil);
         }
 
-        console.log('📊 Total de perfis a salvar:', userData.profiles.length);
-
-        // ✅ SALVAR NO SUPABASE
-        console.log('🚀 Chamando dataManager.saveUserData()...');
+        // ✅ NOVO: Salvar IMEDIATAMENTE (não usar fila)
         const sucesso = await dataManager.saveUserData(userData.profiles);
         
         if (sucesso) {
-            console.log('✅ [AUTO-SAVE] Dados salvos com sucesso!');
-            console.log('🕐 Timestamp:', new Date().toLocaleTimeString());
-            return true;
+            console.log('✅ Dados salvos com sucesso no Supabase!');
         } else {
-            console.error('❌ [AUTO-SAVE] dataManager.saveUserData() retornou false');
-            return false;
+            console.error('❌ Falha ao salvar dados');
         }
 
     } catch (e) {
-        console.error('❌ [AUTO-SAVE] Erro crítico:', e);
-        console.error('Mensagem:', e.message);
-        console.error('Stack:', e.stack);
-        return false;
+        console.error('❌ Erro crítico ao salvar dados:', e);
     }
 }
-
-// ✅ EXPOR GLOBALMENTE
-window.salvarDados = salvarDados;
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
 async function verificarLogin() {
@@ -308,18 +223,15 @@ async function verificarLogin() {
         if (authLoading) authLoading.style.display = 'flex';
         if (protectedContent) protectedContent.style.display = 'none';
 
-        // 1️⃣ VERIFICAR SESSÃO
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError || !session) {
-            console.log('🔌 Sessão não encontrada. Redirecionando...');
+            console.log('🔌 Sessão não encontrada. Redirecionando para login.');
             window.location.href = 'login.html';
             return;
         }
 
-        console.log('✅ Sessão válida:', session.user.email);
-
-        // 2️⃣ VERIFICAR ASSINATURA
+        // Verificar assinatura
         const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
             .select('plans(name)')
@@ -328,34 +240,31 @@ async function verificarLogin() {
             .single();
 
         if (subError || !subscription) {
-            console.log('🧾 Assinatura inválida. Redirecionando...');
+            console.log('🧾 Assinatura inválida. Redirecionando para planos.');
             window.location.href = 'planos.html';
             return;
         }
 
-        // 3️⃣ INICIALIZAR USUÁRIO
+        // ✅ NOVO: Inicializar usuário com todos os dados
         usuarioLogado = {
             userId: session.user.id,
             nome: session.user.user_metadata?.name || session.user.email,
-            email: session.user.email,
+            email: session.user.email, // ✅ ADICIONAR email
             plano: subscription.plans.name,
             perfis: []
         };
 
-        console.log('👤 Usuário inicializado:', usuarioLogado.email);
-
-        // 4️⃣ ⚠️ CRÍTICO: INICIALIZAR DATAMANAGER
+        // ✅ NOVO: Inicializar DataManager
         await dataManager.initialize(usuarioLogado.userId, usuarioLogado.email);
-        console.log('📦 DataManager inicializado com sucesso');
 
-        // 5️⃣ CARREGAR PERFIS
+        // Carregar perfis
         const resultadoPerfis = await carregarPerfis();
 
         if (!resultadoPerfis.sucesso) {
             throw new Error("Não foi possível carregar os dados do usuário.");
         }
 
-        console.log('✅ Login completo. Mostrando seleção de perfis.');
+        console.log('✅ Verificação concluída. Exibindo seleção de perfis.');
         mostrarSelecaoPerfis();
 
     } catch (e) {
@@ -367,6 +276,8 @@ async function verificarLogin() {
         if (protectedContent) protectedContent.style.display = 'block';
     }
 }
+
+
 
 // ========== SELEÇÃO DE PERFIS ==========
 function mostrarSelecaoPerfis() {
@@ -399,9 +310,7 @@ function atualizarTelaPerfis() {
         return;
     }
 
-    const nomeExibir = perfilAtivo ? perfilAtivo.nome : usuarioLogado.nome;
-    saudacao.innerHTML = `Olá <b>${nomeExibir}</b> – Plano <b>${usuarioLogado.plano}</b>`;
-    
+    saudacao.innerHTML = `Olá <b>${usuarioLogado.nome}</b> — Plano <b>${usuarioLogado.plano}</b>`;
     lista.innerHTML = '';
 
     usuarioLogado.perfis.forEach((perfil, index) => {
@@ -439,26 +348,14 @@ async function entrarNoPerfil(index) {
         if (authLoading) authLoading.style.display = 'flex';
 
         perfilAtivo = usuarioLogado.perfis[index];
-        
         localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id);
 
-        console.log('📂 Carregando dados do perfil:', perfilAtivo.nome);
-        console.log('🔑 Perfil ID:', perfilAtivo.id);
-        
         await carregarDadosPerfil(perfilAtivo.id);
 
-        // ✅ ATUALIZAR REFERÊNCIAS GLOBAIS USANDO A FUNÇÃO
-        atualizarReferenciasGlobais();
-
-        console.log('📊 Dados carregados:', {
-            transacoes: transacoes.length,
-            metas: metas.length,
-            contasFixas: contasFixas.length,
-            cartoes: cartoesCredito.length
-        });
+        // ✅ REMOVER: iniciarAutoSave() não é mais necessário
+        // O DataManager já inicia auto-save ao ser inicializado
 
         atualizarTudo();
-        atualizarNomeUsuario();
 
         document.getElementById('selecaoPerfis').style.display = 'none';
         document.getElementById('sidebar').style.display = 'flex';
@@ -467,35 +364,28 @@ async function entrarNoPerfil(index) {
             window.chatAssistant.onProfileSelected(perfilAtivo);
         }
 
-        // ✅ CRÍTICO: INICIAR AUTO-SAVE
-        console.log('🔄 Iniciando sistema de auto-save...');
-        iniciarAutoSave();
-
-        // ✅ SALVAR IMEDIATAMENTE AO ENTRAR
-        console.log('💾 Salvando dados iniciais do perfil...');
-        const salvouInicial = await salvarDados();
-        console.log('Resultado do salvamento inicial:', salvouInicial);
-
         mostrarTela('dashboard');
 
     } catch (e) {
         console.error('❌ Erro ao entrar no perfil:', e);
-        console.error('Stack completo:', e.stack);
         alert('Erro ao carregar o perfil.');
     } finally {
         if (authLoading) authLoading.style.display = 'none';
     }
 }
 
+
 function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
-    const limitePerfis = limitesPlano[plano];
+    const limitePerfis = limitesPlano[plano]; // Pega o limite do objeto: 1, 2 ou 4
     const perfisAtuais = usuarioLogado.perfis.length;
 
+    // ✅ CORREÇÃO: Validação unificada e correta.
+    // Verifica se o número de perfis atuais JÁ ATINGIU ou ULTRAPASSOU o limite do plano.
     if (perfisAtuais >= limitePerfis) {
         console.log(`🚫 Tentativa de adicionar perfil bloqueada. Limite do plano "${plano}" (${limitePerfis}) atingido.`);
-        mostrarPopupLimite();
-        return;
+        mostrarPopupLimite(); // Mostra a mensagem de limite genérica, que já é inteligente.
+        return; // Para a execução
     }
     
     console.log('📝 Abrindo formulário de novo perfil...');
@@ -525,6 +415,7 @@ function adicionarNovoPerfil() {
             return;
         }
         
+        // ✅ Segunda verificação de segurança (boa prática)
         if(usuarioLogado.perfis.length >= limitesPlano[plano]) {
             mostrarPopupLimite();
             fecharPopup();
@@ -573,13 +464,12 @@ function adicionarNovoPerfil() {
             
             console.log('💾 Inserindo perfil no banco...');
             
-            // ✅ CORREÇÃO: Usar photo_url em vez de photo
             const { data: novoPerfil, error } = await supabase
                 .from('profiles')
                 .insert({
                     user_id: session.user.id,
                     name: nome,
-                    photo_url: fotoUrl  // ✅ CORRIGIDO!
+                    photo: fotoUrl
                 })
                 .select()
                 .single();
@@ -594,7 +484,7 @@ function adicionarNovoPerfil() {
             usuarioLogado.perfis.push({
                 id: novoPerfil.id,
                 nome: novoPerfil.name,
-                foto: novoPerfil.photo_url  // ✅ CORRIGIDO!
+                foto: novoPerfil.photo
             });
             
             fecharPopup();
@@ -694,7 +584,7 @@ function mostrarTela(tela) {
 
 // ========== ATUALIZAR NOME E FOTO DO USUÁRIO ==========
 function atualizarNomeUsuario() {
-    const nome = perfilAtivo ? perfilAtivo.nome : 'Usuário';
+    const nome = perfilAtivo ? perfilAtivo.nome : usuarioAtual.usuario;
     
     const userNameEl = document.getElementById('userName');
     const welcomeNameEl = document.getElementById('welcomeName');
@@ -703,118 +593,32 @@ function atualizarNomeUsuario() {
     if(welcomeNameEl) welcomeNameEl.textContent = nome;
     
     const userPhotoEl = document.getElementById('userPhoto');
-    if(userPhotoEl && perfilAtivo && perfilAtivo.foto) {
-        userPhotoEl.src = perfilAtivo.foto;
+    if(userPhotoEl) {
+        if(perfilAtivo && perfilAtivo.foto) {
+            userPhotoEl.src = perfilAtivo.foto;
+        } else if(usuarioAtual.foto) {
+            userPhotoEl.src = usuarioAtual.foto;
+        }
     }
 }
 
-async function alterarFoto(event) {
+function alterarFoto(event) {
     const file = event.target.files[0];
-    
-    if(!file) {
-        console.log('⚠️ Nenhum arquivo selecionado');
-        return;
-    }
-    
-    console.log('📸 Iniciando alteração de foto...');
-    console.log('📁 Arquivo:', file.name, '| Tamanho:', (file.size / 1024).toFixed(2), 'KB');
-    
-    if(!perfilAtivo) {
-        alert('Erro: Nenhum perfil ativo encontrado.');
-        return;
-    }
-    
-    if(file.size > 2 * 1024 * 1024) {
-        alert('A foto deve ter no máximo 2MB');
-        return;
-    }
-    
-    try {
-        console.log('🔍 Buscando sessão...');
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError || !session) {
-            console.error('❌ Erro de sessão:', sessionError);
-            throw new Error('Sessão inválida');
-        }
-        
-        console.log('✅ Sessão válida. User ID:', session.user.id);
-        
-        // UPLOAD DA NOVA FOTO
-        const nomeArquivo = `${session.user.id}/${Date.now()}_${file.name}`;
-        console.log('📂 Caminho do arquivo:', nomeArquivo);
-        
-        console.log('🔍 Fazendo upload para Supabase Storage...');
-        const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('profile-photos')
-            .upload(nomeArquivo, file, {
-                cacheControl: '3600',
-                upsert: false
-            });
-        
-        console.log('📤 Resposta do upload:', { data: uploadData, error: uploadError });
-        
-        if (uploadError) {
-            console.error('❌ Erro no upload:', uploadError);
-            alert(`Erro ao fazer upload: ${uploadError.message}`);
-            throw uploadError;
-        }
-        
-        console.log('✅ Upload concluído!');
-        
-        // OBTER URL PÚBLICA
-        const { data: urlData } = supabase.storage
-            .from('profile-photos')
-            .getPublicUrl(nomeArquivo);
-        
-        const fotoUrl = urlData.publicUrl;
-        console.log('🔗 URL pública:', fotoUrl);
-        
-        // ATUALIZAR NO BANCO DE DADOS
-        console.log('🔍 Atualizando foto no banco de dados...');
-        console.log('📝 Perfil ID:', perfilAtivo.id);
-        
-        const { data: updateData, error: updateError } = await supabase
-            .from('profiles')
-            .update({ photo_url: fotoUrl })
-            .eq('id', perfilAtivo.id)
-            .select()
-            .single();
-        
-        console.log('📤 Resposta da atualização:', { data: updateData, error: updateError });
-        
-        if (updateError) {
-            console.error('❌ Erro ao atualizar no banco:', updateError);
-            alert(`Erro ao salvar foto: ${updateError.message}`);
-            throw updateError;
-        }
-        
-        console.log('✅ Foto atualizada no banco!');
-        
-        // ATUALIZAR LOCALMENTE
-        perfilAtivo.foto = fotoUrl;
-        
-        const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-        if(idx !== -1) {
-            usuarioLogado.perfis[idx].foto = fotoUrl;
-        }
-        
-        // ATUALIZAR UI
-        const userPhotoEl = document.getElementById('userPhoto');
-        if(userPhotoEl) {
-            userPhotoEl.src = fotoUrl;
-        }
-        
-        await salvarDados();
-        atualizarTelaPerfis();
-        
-        console.log('✅ Foto alterada com sucesso!');
-        mostrarNotificacao('✅ Foto alterada com sucesso!', 'success');
-        
-    } catch (error) {
-        console.error('❌ ERRO GERAL ao alterar foto:', error);
-        console.error('Stack trace:', error.stack);
-        alert(`❌ Erro ao alterar foto: ${error.message}`);
+    if(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if(perfilAtivo) {
+                perfilAtivo.foto = e.target.result;
+                const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
+                if(idx !== -1) {
+                    usuarioLogado.perfis[idx].foto = e.target.result;
+                }
+                document.getElementById('userPhoto').src = e.target.result;
+                localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
+                localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
+            }
+        };
+        reader.readAsDataURL(file);
     }
 }
 
@@ -5095,7 +4899,7 @@ function obterDicaAleatoria() {
 window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
 
 // ========== CONFIGURAÇÕES ==========
-async function alterarNome() {
+function alterarNome() {
     if(!perfilAtivo) {
         alert('Erro: Nenhum perfil ativo encontrado.');
         return;
@@ -5109,7 +4913,7 @@ async function alterarNome() {
         <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
     `);
     
-    document.getElementById('concluirNome').onclick = async () => {
+    document.getElementById('concluirNome').onclick = () => {
         const novoNome = document.getElementById('novoNome').value.trim();
         
         if(!novoNome) {
@@ -5121,45 +4925,20 @@ async function alterarNome() {
             alert('O nome deve ter pelo menos 2 caracteres.');
             return;
         }
-
-        try {
-            console.log('🔄 Atualizando nome do perfil no Supabase...');
-            
-            // ✅ ATUALIZAR NO SUPABASE
-            const { data, error } = await supabase
-                .from('profiles')
-                .update({ name: novoNome })
-                .eq('id', perfilAtivo.id)
-                .select()
-                .single();
-
-            if (error) {
-                console.error('❌ Erro ao atualizar nome no Supabase:', error);
-                throw error;
-            }
-
-            console.log('✅ Nome atualizado no Supabase:', data);
-
-            // ✅ ATUALIZAR LOCALMENTE
-            perfilAtivo.nome = novoNome;
-            
-            const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-            if(idx !== -1) {
-                usuarioLogado.perfis[idx].nome = novoNome;
-            }
-
-            // ✅ ATUALIZAR INTERFACE
-            atualizarNomeUsuario();
-            
-            await salvarDados();
-            
-            fecharPopup();
-            mostrarNotificacao('✅ Nome alterado com sucesso!', 'success');
-            
-        } catch (error) {
-            console.error('❌ Erro ao alterar nome:', error);
-            alert('❌ Erro ao alterar nome. Tente novamente.');
+        
+        perfilAtivo.nome = novoNome;
+        
+        const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
+        if(idx !== -1) {
+            usuarioLogado.perfis[idx].nome = novoNome;
         }
+        
+        localStorage.setItem('perfilAtivo', JSON.stringify(perfilAtivo));
+        localStorage.setItem('granaevo_perfis', JSON.stringify(usuarioLogado.perfis));
+        
+        atualizarNomeUsuario();
+        fecharPopup();
+        alert('✅ Nome alterado com sucesso!');
     };
 }
 
@@ -5227,33 +5006,9 @@ function confirmarLogout() {
         <button class="btn-cancelar" onclick="fecharPopup()">Não</button>
     `);
 
-    document.getElementById('simLogout').onclick = async () => {
-        // ✅ SALVAR DADOS ANTES DE SAIR
-        if (perfilAtivo) {
-            console.log('💾 Salvando dados antes do logout...');
-            
-            const popup = document.querySelector('.popup');
-            if (popup) {
-                popup.innerHTML = `
-                    <h3>Salvando dados...</h3>
-                    <div style="text-align:center; padding:30px;">
-                        <div style="width:40px; height:40px; margin:0 auto; border:4px solid rgba(16,185,129,0.3); border-top-color:#10b981; border-radius:50%; animation:spin 1s linear infinite;"></div>
-                        <p style="margin-top:16px; color: var(--text-secondary);">Aguarde...</p>
-                    </div>
-                `;
-            }
-            
-            await salvarDados();
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            console.log('✅ Dados salvos. Fazendo logout...');
-        }
-        
-        pararAutoSave();
+    document.getElementById('simLogout').onclick = () => {
         localStorage.removeItem('perfilAtivo');
-        localStorage.removeItem('granaevo_perfilAtivoId');
         perfilAtivo = null;
-        
         AuthGuard.performLogout();
     };
 }
@@ -5749,41 +5504,13 @@ function debug(msg, obj) {
 }
 
 
-// ========== SISTEMA DE AUTO-SAVE PERIÓDICO ==========
-let autoSaveInterval = null;
-
-function iniciarAutoSave() {
-    // Limpar intervalo anterior (se existir)
-    if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
+// Auto-save a cada 30 segundos (opcional)
+setInterval(() => {
+    if(perfilAtivo && transacoes.length > 0) {
+        salvarDados();
+        debug('Auto-save executado');
     }
-
-    console.log('🔄 Auto-save iniciado (a cada 5 segundos)');
-
-    // ✅ SALVAR A CADA 5 SEGUNDOS
-    autoSaveInterval = setInterval(async () => {
-        if (perfilAtivo) {
-            console.log('⏰ [AUTO-SAVE PERIÓDICO] Executando...');
-            const sucesso = await salvarDados();
-            
-            if (sucesso) {
-                console.log('✅ [AUTO-SAVE PERIÓDICO] Concluído');
-            }
-        }
-    }, 5000); // ✅ 5 SEGUNDOS (conforme solicitado)
-}
-
-function pararAutoSave() {
-    if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
-        autoSaveInterval = null;
-        console.log('🛑 Auto-save pausado');
-    }
-}
-
-// ✅ EXPOR GLOBALMENTE
-window.iniciarAutoSave = iniciarAutoSave;
-window.pararAutoSave = pararAutoSave;
+}, 30000);
 
 // ========== VALIDAÇÕES ADICIONAIS ==========
 
@@ -6403,49 +6130,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     await verificarLogin();
 });
 
-// ========== SALVAMENTO ANTES DE SAIR (VERSÃO CORRIGIDA) ==========
-window.addEventListener('beforeunload', (e) => {
-    if (perfilAtivo) {
-        console.log('🚪 Usuário saindo - Salvando dados...');
-        
-        // ✅ USAR FETCH SÍNCRONO (navigator.sendBeacon é mais confiável)
-        const dadosParaSalvar = JSON.stringify({
-            userId: dataManager.userId,
-            profiles: [{
-                id: perfilAtivo.id,
-                nome: perfilAtivo.nome,
-                foto: perfilAtivo.foto,
-                transacoes: transacoes,
-                metas: metas,
-                contasFixas: contasFixas,
-                cartoesCredito: cartoesCredito,
-                lastUpdate: new Date().toISOString()
-            }]
-        });
-
-        // ✅ TENTAR SALVAR SÍNCRONAMENTE
-        try {
-            salvarDados(); // Dispara salvamento sem esperar
-            console.log('✅ Salvamento disparado');
-        } catch (err) {
-            console.error('❌ Erro ao salvar:', err);
-        }
-    }
-});
-
-// ✅ ADICIONAR TAMBÉM EVENTOS DE VISIBILIDADE
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden && perfilAtivo) {
-        console.log('👁️ Aba oculta - Salvando...');
-        salvarDados();
-    }
-});
-
-// ✅ SALVAR QUANDO A JANELA PERDE O FOCO
-window.addEventListener('blur', () => {
-    if (perfilAtivo) {
-        console.log('🔄 Janela perdeu foco - Salvando...');
-        salvarDados();
+// ========== SALVAMENTO ANTES DE SAIR ==========
+window.addEventListener('beforeunload', async (e) => {
+    if(perfilAtivo) {
+        await salvarDados();
+        await dataManager.processSaveQueue();
     }
 });
 
