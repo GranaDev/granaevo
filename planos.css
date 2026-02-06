@@ -321,8 +321,31 @@ button {
     transition: all var(--transition);
 }
 
-.nav-links a:not(.btn-nav):hover {
-    color: var(--primary);
+.nav-links.active a:not(.btn-nav):hover,
+.nav-links.active a:not(.btn-nav):active {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(16, 185, 129, 0.3);
+    transform: translateX(8px);
+}
+
+.nav-links.active .btn-nav {
+    border: 2px solid var(--primary);
+    background: rgba(16, 185, 129, 0.1);
+    text-align: center;
+    justify-content: center;
+    margin-top: 1rem;
+    padding: 1.125rem 1.5rem;
+    min-height: auto;
+    font-weight: 700;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.nav-links.active .btn-nav:hover,
+.nav-links.active .btn-nav:active {
+    background: var(--primary);
+    color: var(--dark);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(16, 185, 129, 0.5);
 }
 
 .btn-nav {
@@ -378,12 +401,19 @@ button {
     top: 64px;
     left: 0;
     right: 0;
-    bottom: 0;
-    background: rgba(10, 11, 20, 0.98);
-    backdrop-filter: blur(20px);
-    padding: 2rem 1rem;
-    gap: 1.25rem;
+    height: calc(100vh - 64px);
+    height: calc(100dvh - 64px);
+    background: linear-gradient(180deg, rgba(10, 11, 20, 0.98) 0%, rgba(13, 14, 31, 0.98) 100%);
+    backdrop-filter: blur(30px);
+    padding: 2rem 1.5rem;
+    gap: 0.75rem;
+    border-top: 1px solid rgba(16, 185, 129, 0.2);
     animation: slideDown 0.3s ease;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    z-index: 999;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
 @keyframes slideDown {
@@ -398,8 +428,16 @@ button {
 }
 
 .nav-links.active a {
-    padding: 0.875rem 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 1rem 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 12px;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    min-height: 56px;
+    transition: all 0.3s ease;
+    font-weight: 500;
 }
 
 /* ==========================================
