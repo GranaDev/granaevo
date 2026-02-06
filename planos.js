@@ -23,78 +23,6 @@ function initCarousel() {
             dot.className = 'indicator-dot';
             dot.setAttribute('aria-label', `Ir para plano ${i + 1}`);
             if (i === currentSlide) dot.classList.add('active');
-            dot.addEventListener('click', () => {
-                pauseAutoPlay(); // Pausa auto-play ao clicar
-                goToSlide(i);
-            });
-            indicators.appendChild(dot);
-        }
-    }
-    
-    // Navegar para o slide inicial (Casal)
-    goToSlide(currentSlide);
-    
-    // Iniciar auto-play
-    startAutoPlay();
-    
-    // Event listeners dos botões - PAUSA AUTO-PLAY
-    if (prevBtn) {
-        prevBtn.addEventListener('click', () => {
-            pauseAutoPlay(); // ✅ PAUSA AO CLICAR NA SETA
-            currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
-            goToSlide(currentSlide);
-        });
-    }
-    
-    if (nextBtn) {
-        nextBtn.addEventListener('click', () => {
-            pauseAutoPlay(); // ✅ PAUSA AO CLICAR NA SETA
-            currentSlide = (currentSlide + 1) % totalSlides;
-            goToSlide(currentSlide);
-        });
-    }
-    
-    // Touch/Swipe support - PAUSA AUTO-PLAY
-    let touchStartX = 0;
-    let touchEndX = 0;
-    
-    track.addEventListener('touchstart', (e) => {
-        touchStartX = e.changedTouches[0].screenX;
-        pauseAutoPlay(); // ✅ PAUSA AO TOCAR
-    }, { passive: true });
-    
-    track.addEventListener('touchend', (e) => {
-        touchEndX = e.changedTouches[0].screenX;
-        handleSwipe();
-    }, { passive: true });
-    
-    function handleSwipe() {
-        const swipeThreshold = 50;
-        const diff = touchStartX - touchEndX;
-        
-        if (Math.abs(diff) > swipeThreshold) {
-            if (diff > 0) {
-                // Swipe left - próximo
-                currentSlide = (currentSlide + 1) % totalSlides;
-            } else {
-                // Swipe right - anterior
-                currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
-            }
-            goToSlide(currentSlide);
-        }
-    }
-}
-    
-    if (!track || window.innerWidth >= 768) return;
-    
-    // Criar indicadores
-    if (indicators) {
-        indicators.innerHTML = '';
-        for (let i = 0; i < totalSlides; i++) {
-            const dot = document.createElement('button');
-            dot.className = 'indicator-dot';
-            dot.setAttribute('aria-label', `Ir para plano ${i + 1}`);
-            if (i === currentSlide) dot.classList.add('active');
             dot.addEventListener('click', () => goToSlide(i));
             indicators.appendChild(dot);
         }
@@ -146,6 +74,7 @@ function initCarousel() {
             goToSlide(currentSlide);
         }
     }
+}
 
 function goToSlide(index) {
     const track = document.getElementById('plansTrack');
@@ -200,33 +129,9 @@ window.addEventListener('resize', () => {
 });
 
 // ==========================================
-// AUTO-PLAY DO CAROUSEL (com pausa ao interagir)
+// GRANAEVO PLANOS - JAVASCRIPT PREMIUM
+// Microinterações e Conversão Otimizada
 // ==========================================
-let autoPlayInterval;
-let autoPlayEnabled = true;
-
-function startAutoPlay() {
-    if (!autoPlayEnabled || window.innerWidth >= 768) return;
-    
-    stopAutoPlay(); // Limpa qualquer interval existente
-    
-    autoPlayInterval = setInterval(() => {
-        currentSlide = (currentSlide + 1) % totalSlides;
-        goToSlide(currentSlide);
-    }, 5000); // Muda a cada 5 segundos
-}
-
-function stopAutoPlay() {
-    if (autoPlayInterval) {
-        clearInterval(autoPlayInterval);
-        autoPlayInterval = null;
-    }
-}
-
-function pauseAutoPlay() {
-    autoPlayEnabled = false;
-    stopAutoPlay();
-}
 
 // ==========================================
 // CONFIGURAÇÕES
