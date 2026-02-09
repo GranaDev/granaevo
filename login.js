@@ -7,7 +7,7 @@ const CONFIG = {
 };
 
 // URL das Edge Functions do Supabase
-const SUPABASE_FUNCTIONS_URL = 'https://SEU-PROJECT-REF.supabase.co/functions/v1';
+const SUPABASE_FUNCTIONS_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1';
 
 // ===== CRIAR PARTÍCULAS DE MOEDAS =====
 function createMoneyParticles() {
