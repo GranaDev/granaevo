@@ -6,9 +6,6 @@ const CONFIG = {
     chartLineCount: 8
 };
 
-// URL das Edge Functions do Supabase
-const SUPABASE_FUNCTIONS_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1';
-
 // ===== CRIAR PARTÍCULAS DE MOEDAS =====
 function createMoneyParticles() {
     const container = document.getElementById('moneyParticles');
@@ -99,6 +96,9 @@ const inputs = {
 const loginForm = document.getElementById('loginForm');
 const errorMessage = document.getElementById('errorMessage');
 const togglePassword = document.getElementById('togglePassword');
+
+// Código correto para recuperação (simulação)
+const CORRECT_CODE = '123456';
 
 // ===== INICIALIZAÇÃO =====
 window.addEventListener('DOMContentLoaded', async () => {
@@ -267,87 +267,22 @@ if (buttons.backToLogin) {
     });
 }
 
-// ===== ENVIAR CÓDIGO DE RECUPERAÇÃO =====
 if (buttons.sendCode) {
-    buttons.sendCode.addEventListener('click', async () => {
-        const email = inputs.recoveryEmail.value.trim();
+    buttons.sendCode.addEventListener('click', () => {
+        const email = inputs.recoveryEmail.value;
         
-        if (!email || !email.includes('@')) {
-            inputs.recoveryEmail.style.borderColor = 'var(--error-red)';
-            setTimeout(() => {
-                inputs.recoveryEmail.style.borderColor = '';
-            }, 2000);
-            return;
-        }
-
-        try {
-            // Desabilitar botão e mostrar loading
-            buttons.sendCode.disabled = true;
-            const btnText = buttons.sendCode.querySelector('.btn-text');
-            const originalText = btnText.textContent;
-            btnText.textContent = 'Enviando...';
-
-            console.log('📧 Enviando código para:', email);
-
-            const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/send-reset-code`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                throw new Error(data.error || 'Erro ao enviar código');
-            }
-
-            console.log('✅ Código enviado com sucesso!');
-            
-            // Mostrar mensagem de sucesso
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'auth-message success show';
-            messageDiv.textContent = 'Código enviado! Verifique seu email.';
-            messageDiv.style.display = 'flex';
-            messageDiv.style.marginBottom = '20px';
-            
-            const form = buttons.sendCode.closest('.recovery-form');
-            form.insertBefore(messageDiv, form.firstChild);
-            
-            setTimeout(() => {
-                messageDiv.remove();
-            }, 3000);
-
-            // Ir para tela de código
+        if (email && email.includes('@')) {
+            console.log('Código enviado para:', email);
             switchScreen(screens.forgotEmail, screens.code);
             
             setTimeout(() => {
                 inputs.codeInputs[0].focus();
             }, 500);
-
-        } catch (error) {
-            console.error('❌ Erro ao enviar código:', error);
-            
-            // Mostrar mensagem de erro
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'auth-message error show';
-            messageDiv.textContent = error.message || 'Erro ao enviar código. Tente novamente.';
-            messageDiv.style.display = 'flex';
-            messageDiv.style.marginBottom = '20px';
-            
-            const form = buttons.sendCode.closest('.recovery-form');
-            form.insertBefore(messageDiv, form.firstChild);
-            
+        } else {
+            inputs.recoveryEmail.style.borderColor = 'var(--error-red)';
             setTimeout(() => {
-                messageDiv.remove();
-            }, 3000);
-            
-        } finally {
-            // Reabilitar botão
-            buttons.sendCode.disabled = false;
-            const btnText = buttons.sendCode.querySelector('.btn-text');
-            btnText.textContent = 'Enviar código';
+                inputs.recoveryEmail.style.borderColor = '';
+            }, 2000);
         }
     });
 }
@@ -360,63 +295,27 @@ if (buttons.backToEmail) {
     });
 }
 
-// ===== VERIFICAR CÓDIGO =====
 if (buttons.verifyCode) {
-    buttons.verifyCode.addEventListener('click', async () => {
+    buttons.verifyCode.addEventListener('click', () => {
         const code = Array.from(inputs.codeInputs).map(input => input.value).join('');
-        const email = inputs.recoveryEmail.value.trim();
         
-        if (code.length !== 6) {
-            return;
-        }
-
-        try {
-            // Desabilitar botão e mostrar loading
-            buttons.verifyCode.disabled = true;
-            const btnText = buttons.verifyCode.querySelector('.btn-text');
-            const originalText = btnText.textContent;
-            btnText.textContent = 'Verificando...';
-
-            console.log('🔍 Verificando código...');
-
-            const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/verify-reset-code`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email, code })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                throw new Error('Código inválido ou expirado');
-            }
-
-            console.log('✅ Código verificado com sucesso!');
-            switchScreen(screens.code, screens.newPassword);
-
-        } catch (error) {
-            console.error('❌ Erro ao verificar código:', error);
-            
-            // Animar erro nos inputs
-            inputs.codeInputs.forEach(input => {
-                input.classList.add('error');
-            });
-            
-            setTimeout(() => {
+        if (code.length === 6) {
+            if (code === CORRECT_CODE) {
+                console.log('Código correto!');
+                switchScreen(screens.code, screens.newPassword);
+            } else {
                 inputs.codeInputs.forEach(input => {
-                    input.classList.remove('error');
-                    input.value = '';
+                    input.classList.add('error');
                 });
-                inputs.codeInputs[0].focus();
-            }, 500);
-            
-        } finally {
-            // Reabilitar botão
-            buttons.verifyCode.disabled = false;
-            const btnText = buttons.verifyCode.querySelector('.btn-text');
-            btnText.textContent = 'Confirmar código';
+                
+                setTimeout(() => {
+                    inputs.codeInputs.forEach(input => {
+                        input.classList.remove('error');
+                        input.value = '';
+                    });
+                    inputs.codeInputs[0].focus();
+                }, 500);
+            }
         }
     });
 }
@@ -431,13 +330,10 @@ if (buttons.backToCode) {
     });
 }
 
-// ===== ALTERAR SENHA =====
 if (buttons.changePassword) {
-    buttons.changePassword.addEventListener('click', async () => {
+    buttons.changePassword.addEventListener('click', () => {
         const newPass = inputs.newPassword.value;
         const confirmPass = inputs.confirmPassword.value;
-        const email = inputs.recoveryEmail.value.trim();
-        const code = Array.from(inputs.codeInputs).map(input => input.value).join('');
         
         hideError();
         
@@ -464,47 +360,9 @@ if (buttons.changePassword) {
             
             return;
         }
-
-        try {
-            // Desabilitar botão e mostrar loading
-            buttons.changePassword.disabled = true;
-            const btnText = buttons.changePassword.querySelector('.btn-text');
-            const originalText = btnText.textContent;
-            btnText.textContent = 'Alterando...';
-
-            console.log('🔐 Alterando senha...');
-
-            const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/reset-password`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ 
-                    email, 
-                    code, 
-                    newPassword: newPass 
-                })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                throw new Error(data.error || 'Erro ao alterar senha');
-            }
-
-            console.log('✅ Senha alterada com sucesso!');
-            switchScreen(screens.newPassword, screens.success);
-
-        } catch (error) {
-            console.error('❌ Erro ao alterar senha:', error);
-            showError(error.message || 'Erro ao alterar senha. Tente novamente.');
-            
-        } finally {
-            // Reabilitar botão
-            buttons.changePassword.disabled = false;
-            const btnText = buttons.changePassword.querySelector('.btn-text');
-            btnText.textContent = 'Alterar senha';
-        }
+        
+        console.log('Senha alterada com sucesso!');
+        switchScreen(screens.newPassword, screens.success);
     });
 }
 
@@ -520,71 +378,21 @@ if (buttons.backToLoginFinal) {
     });
 }
 
-// ===== REENVIAR CÓDIGO =====
 if (buttons.resendCode) {
-    buttons.resendCode.addEventListener('click', async (e) => {
+    buttons.resendCode.addEventListener('click', (e) => {
         e.preventDefault();
+        console.log('Código reenviado!');
         
-        const email = inputs.recoveryEmail.value.trim();
+        buttons.resendCode.style.color = 'var(--neon-green)';
+        buttons.resendCode.textContent = 'Código enviado!';
         
-        if (!email || !email.includes('@')) {
-            console.error('Email não encontrado');
-            return;
-        }
-
-        try {
-            // Desabilitar botão temporariamente
-            buttons.resendCode.disabled = true;
-            const originalText = buttons.resendCode.textContent;
-            buttons.resendCode.textContent = 'Enviando...';
-
-            console.log('📧 Reenviando código para:', email);
-
-            const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/send-reset-code`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                throw new Error(data.error || 'Erro ao reenviar código');
-            }
-
-            console.log('✅ Código reenviado com sucesso!');
-            
-            // Feedback visual de sucesso
-            buttons.resendCode.style.color = 'var(--neon-green)';
-            buttons.resendCode.textContent = 'Código enviado!';
-            
-            // Resetar inputs de código
-            resetCodeInputs();
-            inputs.codeInputs[0].focus();
-            
-            setTimeout(() => {
-                buttons.resendCode.style.color = '';
-                buttons.resendCode.textContent = originalText;
-            }, 3000);
-
-        } catch (error) {
-            console.error('❌ Erro ao reenviar código:', error);
-            buttons.resendCode.textContent = 'Erro ao enviar';
-            buttons.resendCode.style.color = 'var(--error-red)';
-            
-            setTimeout(() => {
-                buttons.resendCode.style.color = '';
-                buttons.resendCode.textContent = 'Reenviar';
-            }, 3000);
-            
-        } finally {
-            // Reabilitar botão após 3 segundos
-            setTimeout(() => {
-                buttons.resendCode.disabled = false;
-            }, 3000);
-        }
+        setTimeout(() => {
+            buttons.resendCode.style.color = '';
+            buttons.resendCode.textContent = 'Reenviar';
+        }, 2000);
+        
+        resetCodeInputs();
+        inputs.codeInputs[0].focus();
     });
 }
 
@@ -824,4 +632,4 @@ socialButtons.forEach(button => {
     });
 });
 
-console.log('🚀 Sistema de recuperação de senha integrado com Resend!');
+console.log('💡 Código correto para recuperação:', CORRECT_CODE);
