@@ -224,6 +224,57 @@
             display: none;
         }
 
+        /* Terms Warning Banner */
+        .terms-warning {
+            display: none;
+            background: rgba(239, 68, 68, 0.15);
+            border: 2px solid var(--error);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            gap: 1rem;
+            align-items: flex-start;
+            animation: slideDown 0.5s ease;
+        }
+
+        .terms-warning.show {
+            display: flex;
+        }
+
+        .terms-warning svg {
+            width: 28px;
+            height: 28px;
+            color: var(--error);
+            flex-shrink: 0;
+            margin-top: 0.25rem;
+        }
+
+        .terms-warning strong {
+            display: block;
+            color: var(--error);
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+
+        .terms-warning p {
+            color: var(--white);
+            font-size: 0.875rem;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         .password-strength {
             margin-top: 0.5rem;
             font-size: 0.75rem;
@@ -266,9 +317,32 @@
 
         .error-text {
             color: var(--error);
-            font-size: 0.75rem;
-            margin-top: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-top: 0.75rem;
             display: none;
+            padding: 0.75rem;
+            background: rgba(239, 68, 68, 0.1);
+            border-left: 3px solid var(--error);
+            border-radius: 8px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
         }
 
         /* Checkbox Wrapper */
@@ -286,6 +360,21 @@
         .checkbox-wrapper:hover {
             background: rgba(255, 255, 255, 0.04);
             border-color: rgba(16, 185, 129, 0.2);
+        }
+
+        .checkbox-wrapper.error {
+            border-color: var(--error) !important;
+            background: rgba(239, 68, 68, 0.05) !important;
+            animation: pulse-error 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-error {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+            }
         }
 
         .checkbox-input {
@@ -548,6 +637,19 @@
 
                 <!-- Password Inputs (hidden initially) -->
                 <div class="password-inputs" id="passwordInputs">
+                    <!-- Aviso sobre Termos Obrigatórios -->
+                    <div class="terms-warning" id="termsWarning" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <line x1="12" y1="9" x2="12" y2="13" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <div>
+                            <strong>Ação Obrigatória</strong>
+                            <p>Você DEVE concordar com os Termos de Uso antes de criar sua conta. Role até o final do formulário e marque a caixa.</p>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label for="password">Nova Senha</label>
                         <div class="input-wrapper">
@@ -601,6 +703,9 @@
                                 id="termsCheckbox" 
                                 name="termsCheckbox"
                                 class="checkbox-input"
+                                required
+                                aria-required="true"
+                                aria-describedby="termsError"
                             />
                             <label for="termsCheckbox" class="checkbox-label">
                                 Ao me cadastrar concordo com os 
@@ -608,7 +713,9 @@
                                 e políticas do site
                             </label>
                         </div>
-                        <p class="error-text" id="termsError">Você precisa concordar com os termos de uso</p>
+                        <p class="error-text" id="termsError">
+                            ⚠️ OBRIGATÓRIO: Você DEVE concordar com os Termos de Uso para criar sua conta
+                        </p>
                     </div>
 
                     <button type="submit" class="btn" id="submitBtn">

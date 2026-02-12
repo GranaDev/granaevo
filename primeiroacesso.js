@@ -12,6 +12,7 @@ const submitBtn = document.getElementById('submitBtn');
 const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
 const confirmPasswordInput = document.getElementById('confirmPassword');
+const termsCheckbox = document.getElementById('termsCheckbox');
 
 const alertBox = document.getElementById('alertBox');
 const alertMessage = document.getElementById('alertMessage');
@@ -21,6 +22,7 @@ const userEmail = document.getElementById('userEmail');
 const planName = document.getElementById('planName');
 
 const confirmError = document.getElementById('confirmError');
+const termsError = document.getElementById('termsError');
 const strengthFill = document.getElementById('strengthFill');
 const strengthText = document.getElementById('strengthText');
 
@@ -246,6 +248,65 @@ confirmPasswordInput.addEventListener('input', () => {
 });
 
 // ==========================================
+// VALIDAR CHECKBOX DE TERMOS - FEEDBACK VISUAL
+// ==========================================
+const checkboxWrapper = document.querySelector('.checkbox-wrapper');
+
+termsCheckbox.addEventListener('change', () => {
+    if (termsCheckbox.checked) {
+        termsError.style.display = 'none';
+        checkboxWrapper.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        checkboxWrapper.style.background = 'rgba(16, 185, 129, 0.05)';
+    } else {
+        checkboxWrapper.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+        checkboxWrapper.style.background = 'rgba(255, 255, 255, 0.02)';
+    }
+});
+
+// Função para mostrar erro no checkbox
+function showTermsError() {
+    // Mostrar banner de aviso no topo
+    const termsWarning = document.getElementById('termsWarning');
+    if (termsWarning) {
+        termsWarning.classList.add('show');
+        termsWarning.style.display = 'flex';
+    }
+    
+    // Mostrar erro abaixo do checkbox
+    termsError.style.display = 'block';
+    checkboxWrapper.classList.add('error');
+    checkboxWrapper.style.borderColor = 'var(--error)';
+    checkboxWrapper.style.background = 'rgba(239, 68, 68, 0.05)';
+    checkboxWrapper.style.animation = 'shake 0.5s';
+    
+    // Scroll para o checkbox
+    checkboxWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Focar no checkbox
+    setTimeout(() => {
+        termsCheckbox.focus();
+    }, 500);
+}
+
+// Limpar erro quando marcar
+termsCheckbox.addEventListener('change', () => {
+    const termsWarning = document.getElementById('termsWarning');
+    
+    if (termsCheckbox.checked) {
+        // Esconder tudo
+        termsError.style.display = 'none';
+        checkboxWrapper.classList.remove('error');
+        checkboxWrapper.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        checkboxWrapper.style.background = 'rgba(16, 185, 129, 0.05)';
+        
+        if (termsWarning) {
+            termsWarning.classList.remove('show');
+            termsWarning.style.display = 'none';
+        }
+    }
+});
+
+// ==========================================
 // SUBMIT FORM - CRIAR SENHA
 // ==========================================
 accessForm.addEventListener('submit', async (e) => {
@@ -258,6 +319,15 @@ accessForm.addEventListener('submit', async (e) => {
 
     const password = passwordInput.value;
     const confirmPassword = confirmPasswordInput.value;
+
+    // ==========================================
+    // VALIDAÇÃO OBRIGATÓRIA DOS TERMOS - PRIORIDADE MÁXIMA
+    // ==========================================
+    if (!termsCheckbox.checked) {
+        showTermsError();
+        showAlert('error', '⚠️ ATENÇÃO: Você DEVE aceitar os Termos de Uso para criar sua conta. Marque a caixa acima para continuar.');
+        return; // BLOQUEIA o cadastro completamente
+    }
 
     // Validações
     if (password.length < 8) {
@@ -285,14 +355,12 @@ accessForm.addEventListener('submit', async (e) => {
     try {
         console.log('🔐 Criando usuário no Auth...');
 
-        // ====================================
-        // CORREÇÃO PRINCIPAL: Auto-confirmar email
-        // ====================================
+        // 1. Criar usuário no Auth com auto-confirmação
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: currentSubscriptionData.email,
             password: password,
             options: {
-                emailRedirectTo: undefined, // Não enviar email de confirmação
+                emailRedirectTo: undefined,
                 data: {
                     name: currentSubscriptionData.user_name,
                     plan: currentSubscriptionData.plan_name,
@@ -303,7 +371,6 @@ accessForm.addEventListener('submit', async (e) => {
         if (authError) {
             console.error('❌ Erro no Auth:', authError);
             
-            // Verificar se é erro de usuário já existente
             if (authError.message.includes('already registered') || authError.message.includes('User already registered')) {
                 throw new Error('Este email já está registrado. Tente fazer login.');
             }
@@ -314,9 +381,7 @@ accessForm.addEventListener('submit', async (e) => {
         const userId = authData.user.id;
         console.log('✅ Usuário criado no Auth:', userId);
 
-        // ====================================
-        // CONFIRMAR EMAIL AUTOMATICAMENTE (Service Role)
-        // ====================================
+        // 2. Confirmar email automaticamente
         console.log('✉️ Confirmando email automaticamente...');
         
         const { error: confirmError } = await fetch(`${SUPABASE_URL}/functions/v1/confirm-user-email`, {
@@ -330,10 +395,9 @@ accessForm.addEventListener('submit', async (e) => {
 
         if (confirmError) {
             console.warn('⚠️ Erro ao confirmar email (não crítico):', confirmError);
-            // Não lançar erro - usuário pode confirmar depois
         }
 
-        // 2. Atualizar subscription com user_id e marcar senha como criada
+        // 3. Atualizar subscription
         console.log('📝 Atualizando subscription...');
         const { error: updateError } = await supabase
             .from('subscriptions')
@@ -352,10 +416,7 @@ accessForm.addEventListener('submit', async (e) => {
 
         console.log('✅ Subscription atualizada');
 
-        // 3. Criar entrada em user_data
-        console.log('💾 Criando user_data...');
-        
-        // Fazer login do usuário para ter permissões RLS
+        // 4. Fazer login do usuário
         const { error: loginError } = await supabase.auth.signInWithPassword({
             email: currentSubscriptionData.email,
             password: password,
@@ -365,6 +426,9 @@ accessForm.addEventListener('submit', async (e) => {
             console.warn('⚠️ Erro ao fazer login automático:', loginError);
         }
 
+        // 5. Criar entrada em user_data
+        console.log('💾 Criando user_data...');
+        
         const { data: userData, error: userDataError } = await supabase
             .from('user_data')
             .insert({
@@ -381,17 +445,39 @@ accessForm.addEventListener('submit', async (e) => {
 
         if (userDataError) {
             console.error('❌ Erro ao criar user_data:', userDataError);
-            console.error('📊 Detalhes do erro:', JSON.stringify(userDataError, null, 2));
             
-            // Se falhar por RLS mas o usuário foi criado, continuar mesmo assim
             if (userDataError.code === '42501' || userDataError.code === 'PGRST301') {
                 console.warn('⚠️ Falha de RLS, mas usuário foi criado. Continuando...');
             } else {
-                // Outros erros - logar mas continuar
                 console.warn('⚠️ Erro ao criar user_data (não crítico)');
             }
         } else {
             console.log('✅ User_data criado:', userData);
+        }
+
+        // ==========================================
+        // 6. REGISTRAR ACEITAÇÃO DOS TERMOS
+        // ==========================================
+        console.log('📜 Registrando aceitação dos termos...');
+        
+        const { data: termsData, error: termsError } = await supabase
+            .from('terms_acceptance')
+            .insert({
+                user_id: userId,
+                email: currentSubscriptionData.email,
+                accepted: true,
+                accepted_at: new Date().toISOString(),
+                ip_address: null, // Opcional: pode adicionar detecção de IP
+                user_agent: navigator.userAgent,
+            })
+            .select();
+
+        if (termsError) {
+            console.error('❌ Erro ao registrar aceitação dos termos:', termsError);
+            // Não bloquear o fluxo se falhar
+            console.warn('⚠️ Aceitação dos termos não registrada (não crítico)');
+        } else {
+            console.log('✅ Aceitação dos termos registrada:', termsData);
         }
 
         // Sucesso!
@@ -443,4 +529,4 @@ document.head.appendChild(style);
 // ==========================================
 // INICIALIZAÇÃO
 // ==========================================
-console.log('✅ Primeiro Acesso carregado');
+console.log('✅ Primeiro Acesso carregado (com validação de termos)');
