@@ -5273,6 +5273,7 @@ function comoUsar() {
     alert('Funcionalidade "Como usar o GranaEvo?" será implementada em breve!');
 }
 
+// ========== CONFIRMAR LOGOUT (VERSÃO FINAL CORRIGIDA) ==========
 function confirmarLogout() {
     criarPopup(`
         <h3>Confirmar Saída</h3>
@@ -5282,10 +5283,11 @@ function confirmarLogout() {
     `);
 
     document.getElementById('simLogout').onclick = async () => {
-        // ✅ SALVAR DADOS ANTES DE SAIR
-        if (perfilAtivo) {
-            console.log('💾 Salvando dados antes do logout...');
+        try {
+            // ✅ PARAR AUTO-SAVE IMEDIATAMENTE
+            pararAutoSave();
             
+            // ✅ MOSTRAR INDICADOR DE CARREGAMENTO
             const popup = document.querySelector('.popup');
             if (popup) {
                 popup.innerHTML = `
@@ -5297,18 +5299,54 @@ function confirmarLogout() {
                 `;
             }
             
-            await salvarDados();
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // ✅ SALVAR DADOS SE HOUVER PERFIL ATIVO
+            if (perfilAtivo) {
+                console.log('💾 Salvando dados antes do logout...');
+                const salvou = await salvarDados();
+                console.log(salvou ? '✅ Dados salvos com sucesso' : '⚠️ Falha ao salvar dados');
+                
+                // ✅ AGUARDAR UM POUCO PARA GARANTIR QUE SALVOU
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
             
-            console.log('✅ Dados salvos. Fazendo logout...');
+            // ✅ LIMPAR DADOS LOCAIS
+            localStorage.removeItem('perfilAtivo');
+            localStorage.removeItem('granaevo_perfilAtivoId');
+            perfilAtivo = null;
+            
+            // ✅ FAZER LOGOUT DO SUPABASE
+            console.log('🚪 Realizando logout...');
+            const { error } = await supabase.auth.signOut();
+            
+            if (error) {
+                console.error('❌ Erro ao fazer logout:', error);
+                throw error;
+            }
+            
+            console.log('✅ Logout realizado com sucesso');
+            
+            // ✅ REDIRECIONAR PARA LOGIN
+            window.location.href = 'login.html';
+            
+        } catch (error) {
+            console.error('❌ Erro durante logout:', error);
+            
+            // ✅ MESMO COM ERRO, TENTAR LOGOUT E REDIRECIONAR
+            alert('Houve um erro ao salvar os dados, mas você será desconectado.');
+            
+            // ✅ LIMPAR DADOS LOCAIS
+            localStorage.clear();
+            
+            // ✅ FORÇAR LOGOUT DO SUPABASE
+            try {
+                await supabase.auth.signOut();
+            } catch (e) {
+                console.error('❌ Erro ao forçar logout:', e);
+            }
+            
+            // ✅ REDIRECIONAR DE QUALQUER FORMA
+            window.location.href = 'login.html';
         }
-        
-        pararAutoSave();
-        localStorage.removeItem('perfilAtivo');
-        localStorage.removeItem('granaevo_perfilAtivoId');
-        perfilAtivo = null;
-        
-        AuthGuard.performLogout();
     };
 }
 
