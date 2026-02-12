@@ -1900,7 +1900,7 @@ function renderMetasList() {
     cont.innerHTML = '';
     
     if(metas.length === 0) {
-        cont.innerHTML = '<p class="empty-state">Nenhuma meta criada.</p>';
+        cont.innerHTML = '<p class="empty-state">Nenhuma reserva criada.</p>';
         return;
     }
     
@@ -2090,9 +2090,9 @@ function renderMetaVisual() {
     ctxLine.clearRect(0, 0, line.width, line.height);
     
     if(!metaSelecionadaId) {
-        details.innerHTML = '<div style="color: var(--text-secondary);">Selecione uma meta para ver detalhes e gráficos</div>';
+        details.innerHTML = '<div style="color: var(--text-secondary);">Selecione uma reserva para ver detalhes e gráficos</div>';
         const progressEl = document.getElementById('metaProgress');
-        if(progressEl) progressEl.textContent = 'Selecione uma meta';
+        if(progressEl) progressEl.textContent = 'Selecione uma reserva';
         const btnRetirar = document.getElementById('btnRetirar');
         if(btnRetirar) btnRetirar.style.display = 'none';
         return;
