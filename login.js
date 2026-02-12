@@ -97,8 +97,9 @@ const loginForm = document.getElementById('loginForm');
 const errorMessage = document.getElementById('errorMessage');
 const togglePassword = document.getElementById('togglePassword');
 
-// Código correto para recuperação (simulação)
-const CORRECT_CODE = '123456';
+// ===== VARIÁVEIS GLOBAIS PARA RECUPERAÇÃO =====
+let recoveryEmailGlobal = '';
+let verifiedCodeGlobal = '';
 
 // ===== INICIALIZAÇÃO =====
 window.addEventListener('DOMContentLoaded', async () => {
@@ -109,6 +110,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         window.location.href = 'dashboard.html';
         return;
     }
+    
     // Criar partículas e gráficos
     createMoneyParticles();
     createAnimatedCharts();
@@ -121,8 +123,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     
     console.log('🚀 GranaEvo Login carregado!');
-    console.log('📧 Email de teste: admin@granaevo.com');
-    console.log('🔑 Senha de teste: 1234');
 });
 
 // ===== SISTEMA DE LOGIN =====
@@ -230,29 +230,25 @@ function shakeInput(input) {
 
 // ===== NAVEGAÇÃO ENTRE TELAS =====
 function switchScreen(currentScreen, nextScreen) {
-    // Remove active de todas as telas exceto a atual
     Object.values(screens).forEach(screen => {
         if (screen !== currentScreen) {
             screen.classList.remove('active', 'exit-left');
         }
     });
     
-    // Aplica animação de saída na tela atual
     if (currentScreen) {
         currentScreen.classList.add('exit-left');
         
-        // Aguarda a animação de saída completar antes de mostrar a próxima
         setTimeout(() => {
             currentScreen.classList.remove('active', 'exit-left');
             nextScreen.classList.add('active');
         }, 500);
     } else {
-        // Se não há tela atual (primeira vez), mostra direto
         nextScreen.classList.add('active');
     }
 }
 
-// Event Listeners - Navegação
+// ===== NAVEGAÇÃO - BOTÕES =====
 if (buttons.forgotPassword) {
     buttons.forgotPassword.addEventListener('click', (e) => {
         e.preventDefault();
@@ -263,26 +259,77 @@ if (buttons.forgotPassword) {
 if (buttons.backToLogin) {
     buttons.backToLogin.addEventListener('click', (e) => {
         e.preventDefault();
+        inputs.recoveryEmail.value = '';
         switchScreen(screens.forgotEmail, screens.login);
     });
 }
 
+// ===== ENVIAR CÓDIGO DE RECUPERAÇÃO =====
 if (buttons.sendCode) {
-    buttons.sendCode.addEventListener('click', () => {
-        const email = inputs.recoveryEmail.value;
+    buttons.sendCode.addEventListener('click', async () => {
+        const email = inputs.recoveryEmail.value.trim();
         
-        if (email && email.includes('@')) {
-            console.log('Código enviado para:', email);
-            switchScreen(screens.forgotEmail, screens.code);
-            
-            setTimeout(() => {
-                inputs.codeInputs[0].focus();
-            }, 500);
-        } else {
+        if (!email || !email.includes('@')) {
             inputs.recoveryEmail.style.borderColor = 'var(--error-red)';
+            showAuthMessage('Digite um email válido', 'error');
             setTimeout(() => {
                 inputs.recoveryEmail.style.borderColor = '';
             }, 2000);
+            return;
+        }
+
+        // Desabilitar botão
+        buttons.sendCode.disabled = true;
+        buttons.sendCode.innerHTML = `
+            <svg class="spinner" viewBox="0 0 24 24" style="width: 20px; height: 20px; animation: spin 1s linear infinite;">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"/>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"/>
+            </svg>
+            Enviando...
+        `;
+
+        try {
+            console.log('📧 Solicitando código de recuperação para:', email);
+
+            const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
+            
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/send-password-reset-code`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${supabase.supabaseKey}`,
+                },
+                body: JSON.stringify({ email }),
+            });
+
+            const result = await response.json();
+            console.log('📋 Resposta:', result);
+
+            if (result.status === 'sent') {
+                recoveryEmailGlobal = email;
+                showAuthMessage('Código enviado! Verifique seu email.', 'success');
+                switchScreen(screens.forgotEmail, screens.code);
+                
+                setTimeout(() => {
+                    inputs.codeInputs[0].focus();
+                }, 500);
+            } else if (result.status === 'not_found') {
+                showAuthMessage('Email não encontrado ou sem plano ativo', 'error');
+            } else if (result.status === 'payment_not_approved') {
+                showAuthMessage('Seu plano não está aprovado. Verifique o pagamento.', 'error');
+            } else {
+                showAuthMessage(result.message || 'Erro ao enviar código', 'error');
+            }
+
+        } catch (error) {
+            console.error('❌ Erro:', error);
+            showAuthMessage('Erro de conexão. Tente novamente.', 'error');
+        } finally {
+            buttons.sendCode.disabled = false;
+            buttons.sendCode.innerHTML = `
+                <span class="btn-text">Enviar código</span>
+                <div class="btn-glow"></div>
+            `;
         }
     });
 }
@@ -295,28 +342,25 @@ if (buttons.backToEmail) {
     });
 }
 
+// ===== VERIFICAR CÓDIGO =====
 if (buttons.verifyCode) {
     buttons.verifyCode.addEventListener('click', () => {
         const code = Array.from(inputs.codeInputs).map(input => input.value).join('');
         
-        if (code.length === 6) {
-            if (code === CORRECT_CODE) {
-                console.log('Código correto!');
-                switchScreen(screens.code, screens.newPassword);
-            } else {
-                inputs.codeInputs.forEach(input => {
-                    input.classList.add('error');
-                });
-                
-                setTimeout(() => {
-                    inputs.codeInputs.forEach(input => {
-                        input.classList.remove('error');
-                        input.value = '';
-                    });
-                    inputs.codeInputs[0].focus();
-                }, 500);
-            }
+        if (code.length !== 6) {
+            showAuthMessage('Digite o código completo de 6 dígitos', 'error');
+            return;
         }
+
+        // Salvar código verificado
+        verifiedCodeGlobal = code;
+        console.log('✅ Código inserido:', code);
+        
+        switchScreen(screens.code, screens.newPassword);
+        
+        setTimeout(() => {
+            inputs.newPassword.focus();
+        }, 500);
     });
 }
 
@@ -330,8 +374,9 @@ if (buttons.backToCode) {
     });
 }
 
+// ===== ALTERAR SENHA =====
 if (buttons.changePassword) {
-    buttons.changePassword.addEventListener('click', () => {
+    buttons.changePassword.addEventListener('click', async () => {
         const newPass = inputs.newPassword.value;
         const confirmPass = inputs.confirmPassword.value;
         
@@ -360,9 +405,57 @@ if (buttons.changePassword) {
             
             return;
         }
-        
-        console.log('Senha alterada com sucesso!');
-        switchScreen(screens.newPassword, screens.success);
+
+        // Desabilitar botão
+        buttons.changePassword.disabled = true;
+        buttons.changePassword.innerHTML = `
+            <svg class="spinner" viewBox="0 0 24 24" style="width: 20px; height: 20px; animation: spin 1s linear infinite;">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"/>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"/>
+            </svg>
+            Alterando...
+        `;
+
+        try {
+            console.log('🔐 Verificando código e alterando senha...');
+
+            const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
+            
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/verify-and-reset-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${supabase.supabaseKey}`,
+                },
+                body: JSON.stringify({ 
+                    email: recoveryEmailGlobal,
+                    code: verifiedCodeGlobal,
+                    newPassword: newPass
+                }),
+            });
+
+            const result = await response.json();
+            console.log('📋 Resposta:', result);
+
+            if (result.status === 'success') {
+                console.log('✅ Senha alterada com sucesso!');
+                switchScreen(screens.newPassword, screens.success);
+            } else if (result.status === 'invalid_code') {
+                showError('Código inválido, expirado ou já utilizado');
+            } else {
+                showError(result.message || 'Erro ao alterar senha');
+            }
+
+        } catch (error) {
+            console.error('❌ Erro:', error);
+            showError('Erro de conexão. Tente novamente.');
+        } finally {
+            buttons.changePassword.disabled = false;
+            buttons.changePassword.innerHTML = `
+                <span class="btn-text">Alterar senha</span>
+                <div class="btn-glow"></div>
+            `;
+        }
     });
 }
 
@@ -373,26 +466,63 @@ if (buttons.backToLoginFinal) {
         inputs.newPassword.value = '';
         inputs.confirmPassword.value = '';
         hideError();
+        recoveryEmailGlobal = '';
+        verifiedCodeGlobal = '';
         
         switchScreen(screens.success, screens.login);
     });
 }
 
+// ===== REENVIAR CÓDIGO =====
 if (buttons.resendCode) {
-    buttons.resendCode.addEventListener('click', (e) => {
+    buttons.resendCode.addEventListener('click', async (e) => {
         e.preventDefault();
-        console.log('Código reenviado!');
         
-        buttons.resendCode.style.color = 'var(--neon-green)';
-        buttons.resendCode.textContent = 'Código enviado!';
-        
-        setTimeout(() => {
-            buttons.resendCode.style.color = '';
-            buttons.resendCode.textContent = 'Reenviar';
-        }, 2000);
-        
-        resetCodeInputs();
-        inputs.codeInputs[0].focus();
+        if (!recoveryEmailGlobal) {
+            showAuthMessage('Email não encontrado. Volte e digite novamente.', 'error');
+            return;
+        }
+
+        buttons.resendCode.disabled = true;
+        const originalText = buttons.resendCode.textContent;
+        buttons.resendCode.textContent = 'Enviando...';
+
+        try {
+            const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
+            
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/send-password-reset-code`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${supabase.supabaseKey}`,
+                },
+                body: JSON.stringify({ email: recoveryEmailGlobal }),
+            });
+
+            const result = await response.json();
+
+            if (result.status === 'sent') {
+                showAuthMessage('Novo código enviado!', 'success');
+                buttons.resendCode.style.color = 'var(--neon-green)';
+                buttons.resendCode.textContent = 'Código enviado!';
+                
+                setTimeout(() => {
+                    buttons.resendCode.style.color = '';
+                    buttons.resendCode.textContent = originalText;
+                }, 3000);
+                
+                resetCodeInputs();
+                inputs.codeInputs[0].focus();
+            } else {
+                showAuthMessage('Erro ao reenviar código', 'error');
+            }
+
+        } catch (error) {
+            console.error('❌ Erro:', error);
+            showAuthMessage('Erro de conexão', 'error');
+        } finally {
+            buttons.resendCode.disabled = false;
+        }
     });
 }
 
@@ -552,19 +682,20 @@ rippleStyle.textContent = `
             opacity: 0;
         }
     }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
 `;
 document.head.appendChild(rippleStyle);
 
 // ===== ATALHOS DE TECLADO =====
 document.addEventListener('keydown', (e) => {
-    // Enter no email foca na senha
     if (e.key === 'Enter' && document.activeElement === inputs.loginEmail) {
         e.preventDefault();
         inputs.loginPassword.focus();
     }
 });
 
-// Enter nos inputs de senha de recuperação
 if (inputs.newPassword) {
     inputs.newPassword.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
@@ -581,7 +712,6 @@ if (inputs.confirmPassword) {
     });
 }
 
-// Enter no email de recuperação
 if (inputs.recoveryEmail) {
     inputs.recoveryEmail.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
@@ -621,15 +751,4 @@ if (checkbox) {
     });
 }
 
-// ===== SOCIAL LOGIN HANDLERS =====
-const socialButtons = document.querySelectorAll('.btn-social');
-
-socialButtons.forEach(button => {
-    button.addEventListener('click', () => {
-        const provider = button.classList.contains('btn-google') ? 'Google' : 'GitHub';
-        console.log(`Login com ${provider} em desenvolvimento`);
-        showAuthMessage(`Login com ${provider} em desenvolvimento`, 'error');
-    });
-});
-
-console.log('💡 Código correto para recuperação:', CORRECT_CODE);
+console.log('✅ GranaEvo Login com Recuperação de Senha carregado!');
