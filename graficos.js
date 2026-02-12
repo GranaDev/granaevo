@@ -142,6 +142,7 @@ function configurarComparacao() {
 }
 
 // ========== FUNÇÃO PRINCIPAL - GERAR GRÁFICOS ==========
+// ========== FUNÇÃO PRINCIPAL - GERAR GRÁFICOS ==========
 async function gerarGraficos() {
     mostrarLoading();
     
@@ -150,7 +151,8 @@ async function gerarGraficos() {
         
         // ✅ CORREÇÃO: Verificar tipo de relatório antes de processar
         if (filtroAtual.tipo === 'casal') {
-            const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
+            // ✅ CORREÇÃO: Buscar perfis do window global
+            const perfis = window.usuarioLogado?.perfis || [];
             
             if (perfis.length < 2) {
                 mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
@@ -167,19 +169,13 @@ async function gerarGraficos() {
             
             // Se tiver exatamente 2 perfis, usar ambos automaticamente
             const perfisAtivos = perfis.slice(0, 2);
-            if (perfisAtivos.length < 2) {
-                mostrarEmptyState('Você precisa ter pelo menos 2 perfis cadastrados para gerar gráficos de casal.');
-                esconderLoading();
-                return;
-            }
-            
             await gerarGraficosCompartilhados(perfisAtivos);
             esconderLoading();
             return;
         }
         
         if (filtroAtual.tipo === 'familia') {
-            const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
+            const perfis = window.usuarioLogado?.perfis || [];
             
             if (perfis.length < 2) {
                 mostrarEmptyState('Você precisa ter pelo menos 2 perfis para gerar gráficos da família.');
@@ -192,8 +188,9 @@ async function gerarGraficos() {
             return;
         }
         
-        // INDIVIDUAL (código corrigido)
-        const perfilAtivo = JSON.parse(localStorage.getItem('perfilAtivo'));
+        // ✅ INDIVIDUAL - CORREÇÃO CRÍTICA
+        // Usar referências globais do dashboard.js
+        const perfilAtivo = window.perfilAtivo;
         
         if (!perfilAtivo || !perfilAtivo.id) {
             console.error('❌ Nenhum perfil selecionado');
@@ -204,35 +201,8 @@ async function gerarGraficos() {
 
         console.log('✅ Perfil ativo encontrado:', perfilAtivo.nome);
         
-        // ✅ CORREÇÃO CRÍTICA: Carregar dados via dataManager
-        // Acessa a instância do DataManager que foi anexada ao objeto window
-        // ✅ CORREÇÃO: Aguardar o DataManager estar disponível se necessário
-        if (!window.dataManager) {
-            console.warn('⏳ DataManager não encontrado no window, tentando novamente em 500ms...');
-            await new Promise(resolve => setTimeout(resolve, 500));
-            if (!window.dataManager) throw new Error('DataManager não inicializado corretamente.');
-        }
-        const userData = await window.dataManager.loadUserData();
-        
-        if (!userData || !userData.profiles) {
-            console.error('❌ Dados do usuário não encontrados');
-            mostrarEmptyState('Não foi possível carregar os dados do usuário.');
-            esconderLoading();
-            return;
-        }
-        
-        // ✅ Buscar perfil específico no JSON
-        const dadosPerfil = userData.profiles.find(p => p.id === perfilAtivo.id);
-        
-        if (!dadosPerfil) {
-            console.error('❌ Dados do perfil não encontrados');
-            mostrarEmptyState('Não foi possível carregar os dados do perfil.');
-            esconderLoading();
-            return;
-        }
-        
-        filtroAtual.perfil = perfilAtivo.id;
-        const todasTransacoes = dadosPerfil.transacoes || [];
+        // ✅ CORREÇÃO: Usar dados globais do dashboard.js
+        const todasTransacoes = window.transacoes || [];
         
         console.log('📊 Total de transações encontradas:', todasTransacoes.length);
         
@@ -244,6 +214,7 @@ async function gerarGraficos() {
         }
         
         // Filtrar transações por período
+        filtroAtual.perfil = perfilAtivo.id;
         const transacoesFiltradas = filtrarTransacoesPorPeriodo(todasTransacoes);
         console.log('🔎 Transações filtradas:', transacoesFiltradas.length);
         console.log('📅 Filtro aplicado:', `Mês ${filtroAtual.mes}/${filtroAtual.ano}`);
@@ -274,9 +245,7 @@ async function gerarGraficos() {
         
         mostrarEmptyState(`
             Erro ao processar dados: ${error.message}
-              
-  
-
+            <br><br>
             <small>Verifique o console (F12) para mais detalhes</small>
         `);
         esconderLoading();
