@@ -2,33 +2,36 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="theme-color" content="#10b981">
     <title>Planos - GranaEvo | Transforme Suas Finanças</title>
     <meta name="description" content="Escolha o plano ideal e comece sua evolução financeira hoje. Acesso vitalício, dashboard completo e controle total de suas finanças.">
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-    <!-- Fonts -->
+    <!-- Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <!-- CSS -->
     <link rel="stylesheet" href="planos.css">
 </head>
 <body>
     
-    <!-- Loading Screen -->
+    <!-- Loading Screen com Logo -->
     <div class="loading-screen" id="loadingScreen">
         <div class="loader">
-            <div class="loader-icon">
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+            <div class="loader-logo">
+                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader">
             </div>
-            <div class="loader-bar"></div>
+            <div class="loader-bar">
+                <div class="loader-progress"></div>
+            </div>
+            <p class="loader-text">Carregando...</p>
         </div>
     </div>
 
@@ -48,13 +51,7 @@
     <header class="header" id="header">
         <nav class="nav-container">
             <a href="landingpage.html" class="logo">
-                <div class="logo-icon">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </div>
+                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
                 <span class="logo-text">GranaEvo</span>
             </a>
             
@@ -65,10 +62,10 @@
                 <a href="login.html" class="btn-nav">Fazer Login</a>
             </div>
             
-            <button class="mobile-toggle" id="mobileToggle" aria-label="Menu">
-                <span></span>
-                <span></span>
-                <span></span>
+            <button class="mobile-toggle" id="mobileToggle" aria-label="Menu" aria-expanded="false">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
             </button>
         </nav>
     </header>
@@ -104,7 +101,7 @@
                 </h1>
                 
                 <p class="hero-description">
-                    Pagamento único. Sem mensalidades. Sem surpresas.
+                    Pagamento único. Sem mensalidades. Sem surpresas.<br>
                     Controle total das suas finanças para sempre.
                 </p>
 
@@ -135,19 +132,19 @@
     </section>
 
     <!-- Plans Section -->
-    <section class="plans-section">
+    <section class="plans-section" id="plans">
         <div class="container">
             <!-- Mobile Carousel Controls -->
             <div class="carousel-controls mobile-only">
                 <button class="carousel-btn prev" id="prevBtn" aria-label="Plano anterior">
                     <svg viewBox="0 0 24 24" fill="none">
-                        <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
                 <div class="carousel-indicators" id="carouselIndicators"></div>
                 <button class="carousel-btn next" id="nextBtn" aria-label="Próximo plano">
                     <svg viewBox="0 0 24 24" fill="none">
-                        <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
             </div>
@@ -155,246 +152,247 @@
             <div class="plans-carousel" id="plansCarousel">
                 <div class="plans-track" id="plansTrack">
                 
-                <!-- Plano Individual -->
-                <div class="plan-card" data-plan="individual">
-                    <div class="plan-header">
-                        <div class="plan-icon">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
-                                <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" stroke-width="2"/>
-                            </svg>
+                    <!-- Plano Individual -->
+                    <div class="plan-card" data-plan="individual">
+                        <div class="plan-header">
+                            <div class="plan-icon">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </div>
+                            <h3 class="plan-name">Individual</h3>
+                            <p class="plan-subtitle">Para quem quer organizar suas finanças sozinho</p>
                         </div>
-                        <h3 class="plan-name">Individual</h3>
-                        <p class="plan-subtitle">Para quem quer organizar suas finanças sozinho</p>
+
+                        <div class="plan-pricing">
+                            <div class="plan-price">
+                                <span class="currency">R$</span>
+                                <span class="amount">19</span>
+                                <span class="cents">,99</span>
+                            </div>
+                            <div class="plan-period">pagamento único</div>
+                            <div class="plan-savings">Acesso vitalício incluído</div>
+                        </div>
+
+                        <ul class="plan-features">
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span><strong>1 perfil</strong> de usuário</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Dashboard completo e intuitivo</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Controle total de cartões</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Metas e reservas financeiras</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Relatórios detalhados</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Gráficos e análises em tempo real</span>
+                            </li>
+                        </ul>
+
+                        <button class="btn-plan" onclick="iniciarCheckout('Individual')">
+                            <span class="btn-text">Começar Agora</span>
+                            <svg viewBox="0 0 20 20" fill="none">
+                                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <div class="btn-glow"></div>
+                        </button>
+
+                        <div class="plan-note">Ideal para controle pessoal</div>
                     </div>
 
-                    <div class="plan-pricing">
-                        <div class="plan-price">
-                            <span class="currency">R$</span>
-                            <span class="amount">19</span>
-                            <span class="cents">,99</span>
+                    <!-- Plano Casal - DESTAQUE -->
+                    <div class="plan-card featured" data-plan="casal">
+                        <div class="plan-badge">
+                            <svg viewBox="0 0 24 24" fill="none">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>
+                            </svg>
+                            <span>Mais Popular</span>
                         </div>
-                        <div class="plan-period">pagamento único</div>
-                        <div class="plan-savings">Acesso vitalício incluído</div>
+
+                        <div class="plan-header">
+                            <div class="plan-icon">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
+                                    <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </div>
+                            <h3 class="plan-name">Casal</h3>
+                            <p class="plan-subtitle">Construam juntos um futuro financeiro sólido</p>
+                        </div>
+
+                        <div class="plan-pricing">
+                            <div class="plan-price">
+                                <span class="currency">R$</span>
+                                <span class="amount">29</span>
+                                <span class="cents">,99</span>
+                            </div>
+                            <div class="plan-period">pagamento único</div>
+                            <div class="plan-savings">Economia de R$ 10 vs 2 individuais</div>
+                        </div>
+
+                        <ul class="plan-features">
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span><strong>2 perfis</strong> de usuário</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Dashboard completo e intuitivo</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Controle total de cartões</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Metas e reservas financeiras</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Relatórios detalhados</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Gráficos e análises em tempo real</span>
+                            </li>
+                            <li class="feature-item highlight">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                                <span>Visão compartilhada das finanças</span>
+                            </li>
+                        </ul>
+
+                        <button class="btn-plan" onclick="iniciarCheckout('Casal')">
+                            <span class="btn-text">Começar Agora</span>
+                            <svg viewBox="0 0 20 20" fill="none">
+                                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <div class="btn-glow"></div>
+                        </button>
+
+                        <div class="plan-note">Organize as finanças em conjunto</div>
                     </div>
 
-                    <ul class="plan-features">
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span><strong>1 perfil</strong> de usuário</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Dashboard completo e intuitivo</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Controle total de cartões</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Metas e reservas financeiras</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Relatórios detalhados</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Gráficos e análises em tempo real</span>
-                        </li>
-                    </ul>
+                    <!-- Plano Família -->
+                    <div class="plan-card" data-plan="familia">
+                        <div class="plan-header">
+                            <div class="plan-icon">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M21 21v-2a4 4 0 0 0-3-3.85" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </div>
+                            <h3 class="plan-name">Família</h3>
+                            <p class="plan-subtitle">Toda família unida rumo à prosperidade</p>
+                        </div>
 
-                    <button class="btn-plan" onclick="iniciarCheckout('Individual')">
-                        <span class="btn-text">Começar Agora</span>
-                        <svg viewBox="0 0 20 20" fill="none">
-                            <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                        <div class="btn-glow"></div>
-                    </button>
+                        <div class="plan-pricing">
+                            <div class="plan-price">
+                                <span class="currency">R$</span>
+                                <span class="amount">49</span>
+                                <span class="cents">,99</span>
+                            </div>
+                            <div class="plan-period">pagamento único</div>
+                            <div class="plan-savings">Economia de R$ 30 vs 4 individuais</div>
+                        </div>
 
-                    <div class="plan-note">Ideal para controle pessoal</div>
+                        <ul class="plan-features">
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span><strong>4 perfis</strong> de usuário</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Dashboard completo e intuitivo</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Controle total de cartões</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Metas e reservas financeiras</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Relatórios detalhados</span>
+                            </li>
+                            <li class="feature-item">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                <span>Gráficos e análises em tempo real</span>
+                            </li>
+                            <li class="feature-item highlight">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                                <span>Controle centralizado para todos</span>
+                            </li>
+                        </ul>
+
+                        <button class="btn-plan" onclick="iniciarCheckout('Família')">
+                            <span class="btn-text">Começar Agora</span>
+                            <svg viewBox="0 0 20 20" fill="none">
+                                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <div class="btn-glow"></div>
+                        </button>
+
+                        <div class="plan-note">Perfeito para controle familiar</div>
+                    </div>
+
                 </div>
-
-                <!-- Plano Casal - DESTAQUE -->
-                <div class="plan-card featured" data-plan="casal">
-                    <div class="plan-badge">
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>
-                        </svg>
-                        <span>Mais Popular</span>
-                    </div>
-
-                    <div class="plan-header">
-                        <div class="plan-icon">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
-                                <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                        </div>
-                        <h3 class="plan-name">Casal</h3>
-                        <p class="plan-subtitle">Construam juntos um futuro financeiro sólido</p>
-                    </div>
-
-                    <div class="plan-pricing">
-                        <div class="plan-price">
-                            <span class="currency">R$</span>
-                            <span class="amount">29</span>
-                            <span class="cents">,99</span>
-                        </div>
-                        <div class="plan-period">pagamento único</div>
-                        <div class="plan-savings">Economia de R$ 10 vs 2 individuais</div>
-                    </div>
-
-                    <ul class="plan-features">
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span><strong>2 perfis</strong> de usuário</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Dashboard completo e intuitivo</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Controle total de cartões</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Metas e reservas financeiras</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Relatórios detalhados</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Gráficos e análises em tempo real</span>
-                        </li>
-                        <li class="feature-item highlight">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                            <span>Visão compartilhada das finanças</span>
-                        </li>
-                    </ul>
-
-                    <button class="btn-plan" onclick="iniciarCheckout('Casal')">
-                        <span class="btn-text">Começar Agora</span>
-                        <svg viewBox="0 0 20 20" fill="none">
-                            <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                        <div class="btn-glow"></div>
-                    </button>
-
-                    <div class="plan-note">Organize as finanças em conjunto</div>
-                </div>
-
-                <!-- Plano Família -->
-                <div class="plan-card" data-plan="familia">
-                    <div class="plan-header">
-                        <div class="plan-icon">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
-                                <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" stroke-width="2"/>
-                                <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2"/>
-                                <path d="M21 21v-2a4 4 0 0 0-3-3.85" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                        </div>
-                        <h3 class="plan-name">Família</h3>
-                        <p class="plan-subtitle">Toda família unida rumo à prosperidade</p>
-                    </div>
-
-                    <div class="plan-pricing">
-                        <div class="plan-price">
-                            <span class="currency">R$</span>
-                            <span class="amount">49</span>
-                            <span class="cents">,99</span>
-                        </div>
-                        <div class="plan-period">pagamento único</div>
-                        <div class="plan-savings">Economia de R$ 30 vs 4 individuais</div>
-                    </div>
-
-                    <ul class="plan-features">
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span><strong>4 perfis</strong> de usuário</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Dashboard completo e intuitivo</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Controle total de cartões</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Metas e reservas financeiras</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Relatórios detalhados</span>
-                        </li>
-                        <li class="feature-item">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            <span>Gráficos e análises em tempo real</span>
-                        </li>
-                        <li class="feature-item highlight">
-                            <svg viewBox="0 0 24 24" fill="none">
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                            <span>Controle centralizado para todos</span>
-                        </li>
-                    </ul>
-
-                    <button class="btn-plan" onclick="iniciarCheckout('Família')">
-                        <span class="btn-text">Começar Agora</span>
-                        <svg viewBox="0 0 20 20" fill="none">
-                            <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                        <div class="btn-glow"></div>
-                    </button>
-
-                    <div class="plan-note">Perfeito para controle familiar</div>
-                </div>
-
             </div>
         </div>
     </section>
@@ -403,8 +401,8 @@
     <section class="benefits-section">
         <div class="container">
             <div class="section-header">
-                <h2 class="section-title">Por que escolher o GranaEvo?</h2>
-                <p class="section-subtitle">Invista uma vez, tenha controle para sempre</p>
+                <h2 class="section-title">Por Que Escolher o GranaEvo?</h2>
+                <p class="section-subtitle">Benefícios exclusivos em todos os planos</p>
             </div>
 
             <div class="benefits-grid">
@@ -412,17 +410,18 @@
                     <div class="benefit-icon">
                         <svg viewBox="0 0 24 24" fill="none">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                            <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2"/>
                         </svg>
                     </div>
                     <h3>Acesso Vitalício</h3>
-                    <p>Pague uma vez e use para sempre. Sem mensalidades, sem renovações.</p>
+                    <p>Pague uma vez e use para sempre, sem renovações.</p>
                 </div>
 
                 <div class="benefit-card">
                     <div class="benefit-icon">
                         <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/>
                         </svg>
                     </div>
                     <h3>100% Seguro</h3>
@@ -523,7 +522,7 @@
                 <p>Junte-se a milhares de pessoas que transformaram suas finanças com o GranaEvo</p>
                 <div class="cta-buttons">
                     <a href="#plans" class="btn-primary btn-large">
-                        Escolher Meu Plano
+                        <span>Escolher Meu Plano</span>
                         <svg viewBox="0 0 20 20" fill="none">
                             <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
@@ -545,13 +544,7 @@
             <div class="footer-content">
                 <div class="footer-brand">
                     <a href="landingpage.html" class="logo">
-                        <div class="logo-icon">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        </div>
+                        <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
                         <span class="logo-text">GranaEvo</span>
                     </a>
                     <p>Sua evolução financeira começa aqui</p>
@@ -586,9 +579,6 @@
 
     <!-- Scripts -->
     <script type="module" src="planos.js"></script>
-    <!-- SDK Mercado Pago -->
-    <script src="https://sdk.mercadopago.com/js/v2"></script>
     
 </body>
 </html>
-
