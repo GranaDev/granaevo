@@ -1,6 +1,6 @@
 /* ==========================================
    GRANAEVO LANDING PAGE - CSS
-   ULTRA MOBILE RESPONSIVE V2.0
+   ULTRA MOBILE RESPONSIVE V2.1 - CARROSSEL OTIMIZADO
    ========================================== */
 
 :root {
@@ -30,7 +30,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    min-width: 0; /* Previne expansão excessiva */
+    min-width: 0;
 }
 
 /* HTML e Body - Base Sólida */
@@ -51,11 +51,10 @@ body {
     line-height: 1.6;
     min-height: 100vh;
     width: 100%;
-    overflow-x: clip; /* ✅ CLIP em vez de HIDDEN */
+    overflow-x: clip;
     position: relative;
 }
 
-/* Previne elementos de ultrapassar EXCETO carrossel */
 body > *:not(.testimonials-section) {
     max-width: 100vw;
 }
@@ -157,7 +156,6 @@ button {
 }
 
 /* Animated Background */
-/* Animated Background - CORRIGIDO */
 .animated-bg {
     position: fixed;
     top: 0;
@@ -246,7 +244,6 @@ button {
     position: relative;
 }
 
-/* Mobile: padding ajustado */
 @media (max-width: 768px) {
     .container {
         padding: 0 1rem;
@@ -397,7 +394,7 @@ button {
     left: 0;
     right: 0;
     height: calc(100vh - 64px);
-    height: calc(100dvh - 64px); /* Dynamic viewport height para mobile */
+    height: calc(100dvh - 64px);
     background: rgba(10, 11, 20, 0.98);
     backdrop-filter: blur(20px);
     padding: 1.5rem 1rem 2rem;
@@ -410,7 +407,6 @@ button {
     z-index: 999;
 }
 
-/* Esconde scrollbar no menu mobile */
 .nav-links.active::-webkit-scrollbar {
     display: none;
 }
@@ -572,7 +568,6 @@ button {
 }
 
 /* Hero Section */
-/* Hero Section - CORRIGIDO */
 .hero {
     position: relative;
     min-height: 100vh;
@@ -701,7 +696,6 @@ button {
 }
 
 /* Dashboard Mockup */
-/* Dashboard Mockup - CORRIGIDO */
 .hero-visual {
     animation: fadeInUp 0.8s ease 0.5s backwards;
     padding: 0 1rem;
@@ -714,7 +708,6 @@ button {
     width: 100%;
     margin: 0 auto;
 }
-
 
 @media (max-width: 480px) {
     .dashboard-mockup {
@@ -740,7 +733,7 @@ button {
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
     transition: all var(--transition-smooth);
     width: 100%;
-    overflow: hidden; /* Impede qualquer scroll interno */
+    overflow: hidden;
 }
 
 .mockup-card:active {
@@ -898,17 +891,16 @@ button {
     background: rgba(255, 255, 255, 0.02);
     border-radius: 9px;
     padding: 0.625rem;
-    overflow: hidden; /* Impede scroll no gráfico */
+    overflow: hidden;
 }
 
 .mockup-chart canvas {
-    pointer-events: none !important; /* Desabilita interação que causa scroll */
-    touch-action: none !important; /* Bloqueia toque no canvas */
+    pointer-events: none !important;
+    touch-action: none !important;
     max-width: 100%;
     max-height: 100%;
     display: block;
 }
-
 
 /* Section Common Styles */
 .section-header {
@@ -1215,25 +1207,16 @@ button {
     font-size: 0.9375rem;
 }
 
-/* Testimonials Section - PROTEÇÃO CONTRA OVERFLOW */
-.testimonials-section,
-.testimonials-carousel,
-.testimonials-track {
-    overflow-x: visible !important;
-    max-width: none !important;
-    width: 100% !important;
-}
+/* ==========================================
+   TESTIMONIALS - CARROSSEL ULTRA OTIMIZADO
+   ========================================== */
 
-.testimonials-carousel {
-    overflow: hidden !important; /* Apenas o carousel tem hidden */
-}
-
-/* Testimonials Section */
 .testimonials-section {
     position: relative;
     padding: 4rem 0;
     width: 100%;
     max-width: 100%;
+    overflow: visible;
 }
 
 .testimonials-carousel {
@@ -1241,16 +1224,32 @@ button {
     position: relative;
     width: 100%;
     overflow: hidden;
-    padding: 1rem 0;
+    padding: 1.5rem 0;
+    /* Sombras laterais mais suaves */
+    mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        black 5%,
+        black 95%,
+        transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        black 5%,
+        black 95%,
+        transparent 100%
+    );
 }
 
+/* Gradientes laterais para efeito fade */
 .testimonials-carousel::before,
 .testimonials-carousel::after {
     content: '';
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 80px;
+    width: 120px;
     z-index: 10;
     pointer-events: none;
 }
@@ -1265,60 +1264,93 @@ button {
     background: linear-gradient(to left, #0a0b14 0%, transparent 100%);
 }
 
+/* Track do carrossel - VELOCIDADE CONFORTÁVEL */
 .testimonials-track {
     display: flex;
-    gap: 1rem;
+    gap: 1.25rem;
     width: fit-content;
-    animation: infiniteScroll 35s linear infinite;
+    will-change: transform;
+    /* 🔥 VELOCIDADE CONFORTÁVEL - Mobile: 50s, Desktop: 40s */
+    animation: infiniteScroll 40s linear infinite;
 }
 
+/* Mobile: velocidade bem confortável para leitura (50 segundos) */
 @media (max-width: 768px) {
     .testimonials-track {
-        animation: infiniteScroll 15s linear infinite;
+        animation: infiniteScroll 50s linear infinite;
+        gap: 1rem;
     }
 }
 
+/* Pausa no hover (apenas desktop) */
+@media (hover: hover) {
+    .testimonials-track:hover {
+        animation-play-state: paused;
+    }
+}
+
+/* Animação otimizada com GPU acceleration */
 @keyframes infiniteScroll {
-    from {
-        transform: translateX(0);
+    0% {
+        transform: translate3d(0, 0, 0);
     }
-    to {
-        transform: translateX(-50%);
+    100% {
+        transform: translate3d(-50%, 0, 0);
     }
 }
 
-.testimonials-track:hover {
-    animation-play-state: paused;
-}
-
+/* Card de depoimento otimizado */
 .testimonial-card {
     flex: 0 0 auto;
-    width: 280px;
-    background: rgba(19, 20, 31, 0.6);
+    width: 300px;
+    background: rgba(19, 20, 31, 0.7);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 14px;
-    padding: 1.5rem 1.25rem;
-    transition: transform 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 1.75rem 1.5rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Performance boost */
+    will-change: transform, border-color;
+    transform: translateZ(0);
 }
 
-.testimonial-card:hover {
-    transform: translateY(-5px);
-    border-color: rgba(16, 185, 129, 0.3);
+/* Efeito hover apenas em desktop */
+@media (hover: hover) {
+    .testimonial-card:hover {
+        transform: translateY(-6px) scale(1.02);
+        border-color: rgba(16, 185, 129, 0.4);
+        box-shadow: 0 12px 40px rgba(16, 185, 129, 0.2);
+    }
+}
+
+/* Mobile: cards menores e mais compactos */
+@media (max-width: 768px) {
+    .testimonial-card {
+        width: 280px;
+        padding: 1.5rem 1.25rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .testimonial-card {
+        width: 260px;
+        padding: 1.25rem 1rem;
+    }
 }
 
 .testimonial-stars {
     color: var(--warning);
-    font-size: 1rem;
-    margin-bottom: 0.875rem;
+    font-size: 1.125rem;
+    margin-bottom: 1rem;
     letter-spacing: 2px;
+    line-height: 1;
 }
 
 .testimonial-text {
-    font-size: 0.875rem;
-    line-height: 1.7;
+    font-size: 0.9375rem;
+    line-height: 1.75;
     color: var(--gray-light);
-    margin-bottom: 1rem;
+    margin-bottom: 1.125rem;
     font-style: italic;
 }
 
@@ -1326,13 +1358,7 @@ button {
     font-weight: 700;
     color: var(--white);
     font-size: 0.875rem;
-}
-
-@media (min-width: 768px) {
-    .testimonial-card {
-        width: 320px;
-        padding: 1.75rem;
-    }
+    opacity: 0.9;
 }
 
 /* CTA Section */
@@ -1489,7 +1515,6 @@ img, svg {
     user-select: none;
 }
 
-/* Smooth Scrollbar */
 /* Scrollbar apenas para desktop */
 @media (min-width: 1024px) {
     ::-webkit-scrollbar {
@@ -1511,7 +1536,6 @@ img, svg {
     }
 }
 
-/* Esconde scrollbar em mobile */
 @media (max-width: 1023px) {
     body::-webkit-scrollbar {
         display: none;
@@ -1533,39 +1557,6 @@ img, svg {
 :focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 3px;
-}
-
-/* ==========================================
-   RESPONSIVE - SMALL MOBILE (< 375px)
-   ========================================== */
-@media (max-width: 374px) {
-    .hero-title {
-        font-size: 1.625rem;
-    }
-    
-    .hero-description {
-        font-size: 0.875rem;
-    }
-    
-    .section-title {
-        font-size: 1.625rem;
-    }
-    
-    .balance-amount {
-        font-size: 1.5rem;
-    }
-    
-    .testimonial-card {
-        min-width: 260px;
-    }
-    
-    .dashboard-mockup {
-        max-width: 340px;
-    }
-    
-    .stat-value {
-        font-size: 1.5rem;
-    }
 }
 
 /* ==========================================
@@ -1654,79 +1645,6 @@ img, svg {
     .dashboard-mockup {
         max-width: 420px;
     }
-    
-    .mockup-card {
-        padding: 1.5rem;
-        border-radius: 20px;
-    }
-    
-    .mockup-header {
-        margin-bottom: 1.125rem;
-    }
-    
-    .mockup-title {
-        font-size: 1.0625rem;
-    }
-    
-    .mockup-badge {
-        font-size: 0.75rem;
-        padding: 0.3125rem 0.625rem;
-    }
-    
-    .balance-card {
-        padding: 1.625rem 1.375rem;
-        margin-bottom: 1.125rem;
-        border-radius: 14px;
-    }
-    
-    .balance-label {
-        font-size: 0.75rem;
-    }
-    
-    .balance-amount {
-        font-size: 2.125rem;
-    }
-    
-    .balance-trend {
-        font-size: 0.8125rem;
-    }
-    
-    .mockup-stats {
-        gap: 0.875rem;
-        margin-bottom: 1.125rem;
-    }
-    
-    .stat-box {
-        flex-direction: row;
-        align-items: center;
-        padding: 1rem;
-        border-radius: 10px;
-    }
-    
-    .stat-icon {
-        width: 36px;
-        height: 36px;
-        border-radius: 8px;
-    }
-    
-    .stat-icon svg {
-        width: 18px;
-        height: 18px;
-    }
-    
-    .stat-label {
-        font-size: 0.6875rem;
-    }
-    
-    .stat-value {
-        font-size: 1.0625rem;
-    }
-    
-    .mockup-chart {
-        height: 110px;
-        padding: 0.875rem;
-        border-radius: 10px;
-    }
 
     .section-title {
         font-size: 2.5rem;
@@ -1746,17 +1664,6 @@ img, svg {
         text-align: left;
         padding: 2.5rem 2rem;
     }
-    
-    .solution-icon {
-        width: 80px;
-        height: 80px;
-        border-radius: 20px;
-    }
-    
-    .solution-icon svg {
-        width: 40px;
-        height: 40px;
-    }
 
     .features-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -1774,9 +1681,10 @@ img, svg {
         font-size: 1.25rem;
     }
 
+    /* Testimonials otimizado para tablet */
     .testimonial-card {
-        min-width: 320px;
-        padding: 1.75rem;
+        width: 340px;
+        padding: 2rem 1.75rem;
     }
     
     .cta-box {
@@ -1806,27 +1714,6 @@ img, svg {
     
     .footer-links {
         text-align: left;
-    }
-    
-    .footer-links a {
-        padding: 0.25rem 0;
-    }
-}
-
-@media (max-width: 768px) { 
-    
-    /* Garante que nenhum elemento filho ultrapasse */
-    .hero-content > *,
-    .problem-grid > *,
-    .features-grid > * {
-        max-width: 100%;
-    }
-}
-
-@media (max-width: 768px) {
-    .dashboard-mockup {
-        max-width: min(380px, calc(100vw - 2rem)); /* 🔥 Adapta ao viewport */
-        margin: 0 auto;
     }
 }
 
@@ -1862,15 +1749,29 @@ img, svg {
     .dashboard-mockup {
         max-width: 500px;
     }
-    
-    .mockup-card:hover {
-        transform: translateY(-10px) scale(1.02);
-        box-shadow: 0 30px 80px rgba(16, 185, 129, 0.3);
-    }
 
     .problem-grid {
         grid-template-columns: repeat(4, 1fr);
         gap: 1.5rem;
+    }
+
+    .features-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+    }
+
+    .section-title {
+        font-size: 3rem;
+    }
+    
+    .cta-box h2 {
+        font-size: 3rem;
+    }
+    
+    /* Hover effects apenas em desktop */
+    .mockup-card:hover {
+        transform: translateY(-10px) scale(1.02);
+        box-shadow: 0 30px 80px rgba(16, 185, 129, 0.3);
     }
     
     .problem-card:hover {
@@ -1887,11 +1788,6 @@ img, svg {
         background: var(--danger);
         color: var(--white);
         transform: scale(1.1) rotate(5deg);
-    }
-
-    .features-grid {
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1.5rem;
     }
     
     .feature-card:hover {
@@ -1921,12 +1817,6 @@ img, svg {
         box-shadow: 0 10px 40px rgba(16, 185, 129, 0.1);
     }
     
-    .testimonial-card:hover {
-        transform: translateY(-8px);
-        border-color: rgba(16, 185, 129, 0.3);
-        box-shadow: 0 20px 60px rgba(16, 185, 129, 0.15);
-    }
-    
     .btn-primary:hover {
         transform: translateY(-3px);
         box-shadow: var(--neon-glow-strong);
@@ -1946,64 +1836,6 @@ img, svg {
         color: var(--primary);
         padding-left: 5px;
     }
-
-    .section-title {
-        font-size: 3rem;
-    }
-    
-    .cta-box h2 {
-        font-size: 3rem;
-    }
-}
-
-/* ==========================================
-   RESPONSIVE - LARGE DESKTOP (1400px+)
-   ========================================== */
-@media (min-width: 1400px) {
-    .hero-title {
-        font-size: 4rem;
-    }
-    
-    .section-title {
-        font-size: 3.5rem;
-    }
-    
-    .dashboard-mockup {
-        max-width: 550px;
-    }
-    
-    .glow-orb-1 {
-        width: 600px;
-        height: 600px;
-    }
-    
-    .glow-orb-2 {
-        width: 500px;
-        height: 500px;
-    }
-    
-    .glow-orb-3 {
-        width: 400px;
-        height: 400px;
-    }
-}
-
-/* ==========================================
-   LANDSCAPE MOBILE FIX
-   ========================================== */
-@media (max-height: 600px) and (orientation: landscape) {
-    .hero {
-        min-height: auto;
-        padding: 5rem 0 3rem;
-    }
-    
-    .hero-stats {
-        grid-template-columns: repeat(3, 1fr);
-    }
-    
-    .stat-divider {
-        display: block;
-    }
 }
 
 /* Reduce Motion */
@@ -2016,89 +1848,9 @@ img, svg {
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
     }
-}
-
-/* ==========================================
-   CORREÇÃO UNIVERSAL - MOBILE FIRST
-   ========================================== */
-
-/* Força todos os elementos principais a respeitarem o viewport */
-.hero,
-.problem-section,
-.features-section,
-.how-section,
-.testimonials-section,
-.cta-section,
-.footer {
-    width: 100%;
-    max-width: 100vw;
-    position: relative;
-}
-
-/* Previne qualquer overflow em grids */
-.problem-grid,
-.features-grid,
-.testimonials-track {
-    width: 100%;
-    max-width: 100%;
-}
-
-/* Mobile: ajustes finais */
-@media (max-width: 768px) {
-    * {
-        max-width: 100vw;
-    }
     
-    .container,
-    .hero-content,
-    .hero-text,
-    .hero-buttons,
-    .hero-stats,
-    .hero-visual {
-        width: 100%;
-        max-width: 100%;
-    }
-    
-    /* Remove qualquer padding/margin que cause overflow */
-    .section-header,
-    .section-title,
-    .section-subtitle {
-        padding-left: 1rem;
-        padding-right: 1rem;
-        max-width: 100%;
-    }
-}
-
-/* Ultra small devices */
-@media (max-width: 360px) {
-    .container {
-        padding: 0 0.75rem;
-    }
-    
-    .hero-text,
-    .hero-buttons,
-    .hero-visual {
-        padding: 0 0.5rem;
-    }
-    
-    .dashboard-mockup {
-        max-width: calc(100vw - 1.5rem);
-    }
-}
-
-/* Previne scroll no mockup em mobile */
-@media (max-width: 768px) {
-    .dashboard-mockup,
-    .mockup-card,
-    .mockup-chart,
-    .balance-card,
-    .mockup-stats {
-        pointer-events: none; /* Desabilita captura de eventos */
-        user-select: none; /* Impede seleção */
-    }
-    
-    /* Garante que o scroll funcione na página */
-    .hero-visual {
-        pointer-events: auto; /* Reabilita eventos no container pai */
+    /* Mantém o carrossel funcionando mesmo com reduced motion */
+    .testimonials-track {
+        animation-duration: 60s !important;
     }
 }

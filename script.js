@@ -1,6 +1,7 @@
 // ==========================================
 // GRANAEVO LANDING PAGE - JAVASCRIPT
 // Ultra Professional & Interactive
+// CARROSSEL OTIMIZADO V2.1
 // ==========================================
 
 // ==========================================
@@ -376,7 +377,7 @@ if (miniChartCanvas) {
 }
 
 // ==========================================
-// TESTIMONIALS DATA & RENDER
+// TESTIMONIALS DATA & RENDER - OTIMIZADO
 // ==========================================
 const testimonials = [
     {
@@ -448,12 +449,15 @@ function renderTestimonials() {
     
     track.innerHTML = '';
     
-    // Duplica array para loop infinito perfeito
-    const doubled = [...testimonials, ...testimonials];
+    // 🔥 TRIPLICAMOS o array para um scroll mais suave e contínuo
+    const tripled = [...testimonials, ...testimonials, ...testimonials];
     
-    doubled.forEach(testimonial => {
+    tripled.forEach((testimonial, index) => {
         const card = document.createElement('div');
         card.className = 'testimonial-card';
+        
+        // Adiciona atributo de identificação para evitar duplicatas visuais
+        card.setAttribute('data-index', index);
         
         const stars = '★'.repeat(testimonial.stars);
         
@@ -465,9 +469,37 @@ function renderTestimonials() {
         
         track.appendChild(card);
     });
+    
+    // Log para debug
+    console.log(`✓ Carrossel renderizado com ${tripled.length} cards (${testimonials.length} × 3)`);
 }
 
+// Renderiza os depoimentos ao carregar
 renderTestimonials();
+
+// ==========================================
+// CARROSSEL: CONTROLE DE VELOCIDADE DINÂMICO
+// ==========================================
+function adjustCarouselSpeed() {
+    const track = document.getElementById('testimonialsTrack');
+    if (!track) return;
+    
+    const isMobile = window.innerWidth <= 768;
+    
+    // Velocidades otimizadas (em segundos)
+    // Mobile: velocidade bem confortável para leitura tranquila
+    // Desktop: velocidade balanceada
+    const speed = isMobile ? 50 : 40;
+    
+    // Aplica a velocidade via CSS custom property
+    track.style.animationDuration = `${speed}s`;
+    
+    console.log(`⚡ Velocidade do carrossel: ${speed}s (${isMobile ? 'Mobile' : 'Desktop'})`);
+}
+
+// Ajusta velocidade ao carregar e ao redimensionar
+window.addEventListener('load', adjustCarouselSpeed);
+window.addEventListener('resize', debounce(adjustCarouselSpeed, 250));
 
 // ==========================================
 // PERFORMANCE TRACKING
@@ -504,8 +536,8 @@ function debounce(func, wait) {
 
 // Optimize resize events
 const optimizedResize = debounce(() => {
-    // Handle resize logic here
     handleMobileCTA();
+    adjustCarouselSpeed();
 }, 250);
 
 window.addEventListener('resize', optimizedResize);
@@ -526,7 +558,6 @@ plansLinks.forEach(link => {
 // ==========================================
 // ACCESSIBILITY IMPROVEMENTS
 // ==========================================
-// Add keyboard navigation for mobile menu
 if (mobileToggle) {
     mobileToggle.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -536,7 +567,6 @@ if (mobileToggle) {
     });
 }
 
-// Trap focus in mobile menu when open
 if (navLinks) {
     navLinks.addEventListener('keydown', (e) => {
         if (!navLinks.classList.contains('active')) return;
@@ -581,11 +611,15 @@ window.addEventListener('offline', () => {
 // CONSOLE BRANDING
 // ==========================================
 console.log(
-    '%c🚀 GranaEvo Landing Page',
+    '%c🚀 GranaEvo Landing Page v2.1',
     'background: #10b981; color: white; padding: 12px 24px; border-radius: 8px; font-weight: bold; font-size: 16px;'
 );
 console.log(
-    '%c✓ All systems operational',
+    '%c✓ Carrossel otimizado ativo',
+    'color: #10b981; font-weight: bold; font-size: 14px;'
+);
+console.log(
+    '%c✓ Performance melhorada',
     'color: #10b981; font-weight: bold; font-size: 14px;'
 );
 
@@ -594,4 +628,5 @@ console.log(
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     console.log('✓ DOM loaded and interactive');
+    console.log('✓ Testimonials carousel ready');
 });
