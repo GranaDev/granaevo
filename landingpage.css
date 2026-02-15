@@ -420,15 +420,14 @@ button {
 
 .btn-nav {
     background: var(--primary);
-    color: var #ffffff;
-    padding: 0.875rem 2rem;
+    color: var(--dark);
+    padding: 0.75rem 1.5rem;
     border-radius: 10px;
     font-weight: 700;
-    font-size: 0.9375rem;
+    font-size: 0.875rem;
     box-shadow: var(--neon-glow);
     transition: all var(--transition);
     white-space: nowrap;
-    min-width: fit-content;
 }
 
 .btn-nav:hover {
@@ -1708,8 +1707,8 @@ img, svg {
     }
     
     .btn-nav {
-        padding: 0.875rem 2.25rem;
-        font-size: 1rem;
+        padding: 0.75rem 1.75rem;
+        font-size: 0.9375rem;
     }
 
     .hero {
@@ -1847,7 +1846,7 @@ img, svg {
     }
     
     .btn-nav {
-        padding: 1rem 2.5rem;
+        padding: 0.875rem 2rem;
         font-size: 1rem;
     }
 
