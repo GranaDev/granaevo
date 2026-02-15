@@ -420,7 +420,7 @@ button {
 
 .btn-nav {
     background: var(--primary);
-    color: var(--dark);
+    color: var #ffffff;
     padding: 0.875rem 2rem;
     border-radius: 10px;
     font-weight: 700;
