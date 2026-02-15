@@ -373,7 +373,7 @@ button {
 
 .btn-nav {
     background: var(--primary);
-    color: var(--dark);
+    color: var #ffffff;
     padding: 0.625rem 1.25rem;
     border-radius: var(--radius-sm);
     font-weight: 700;
