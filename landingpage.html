@@ -2,13 +2,16 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <meta name="description" content="Controle suas finanças com inteligência. O GranaEvo é o app que transforma sua relação com o dinheiro.">
+    <meta name="theme-color" content="#10b981">
     <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
     
-    <!-- Fonts -->
+    <!-- Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     
     <!-- CSS -->
@@ -16,11 +19,16 @@
 </head>
 <body>
     
-    <!-- Loading Screen -->
+    <!-- Loading Screen com Logo -->
     <div class="loading-screen" id="loadingScreen">
         <div class="loader">
-            <div class="loader-icon">G</div>
-            <div class="loader-bar"></div>
+            <div class="loader-logo">
+                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader">
+            </div>
+            <div class="loader-bar">
+                <div class="loader-progress"></div>
+            </div>
+            <p class="loader-text">Carregando...</p>
         </div>
     </div>
 
@@ -40,7 +48,7 @@
     <header class="header" id="header">
         <nav class="nav-container">
             <a href="#" class="logo">
-                <div class="logo-icon">G</div>
+                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
                 <span class="logo-text">GranaEvo</span>
             </a>
             
@@ -52,10 +60,10 @@
                 <a href="planos.html" class="btn-nav">Começar Agora</a>
             </div>
             
-            <button class="mobile-toggle" id="mobileToggle" aria-label="Menu">
-                <span></span>
-                <span></span>
-                <span></span>
+            <button class="mobile-toggle" id="mobileToggle" aria-label="Menu" aria-expanded="false">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
             </button>
         </nav>
     </header>
@@ -92,7 +100,7 @@
                     
                     <div class="hero-buttons">
                         <a href="planos.html" class="btn-primary">
-                            Começar AGORA!
+                            <span>Começar AGORA!</span>
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
@@ -102,7 +110,7 @@
                                 <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/>
                                 <path d="M8 7L13 10L8 13V7Z" fill="currentColor"/>
                             </svg>
-                            Login
+                            <span>Login</span>
                         </a>
                     </div>
                     
@@ -135,7 +143,7 @@
                                     <span></span>
                                 </div>
                                 <span class="mockup-title">Painel Financeiro</span>
-                                <span class="mockup-badge">Nov 2024</span>
+                                <span class="mockup-badge">Fev 2026</span>
                             </div>
                             
                             <div class="balance-card">
@@ -398,7 +406,7 @@
                     <h2>Pronto para transformar suas finanças?</h2>
                     <p>Junte-se a milhares de pessoas que já organizaram sua vida financeira</p>
                     <a href="planos.html" class="btn-primary btn-large">
-                        Começar Agora!!
+                        <span>Começar Agora!!</span>
                         <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
                             <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
@@ -415,7 +423,7 @@
             <div class="footer-content">
                 <div class="footer-brand">
                     <a href="#" class="logo">
-                        <div class="logo-icon">G</div>
+                        <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
                         <span class="logo-text">GranaEvo</span>
                     </a>
                     <p>Sua evolução financeira começa aqui</p>
@@ -450,6 +458,6 @@
 
     <!-- Scripts -->
     <script type="module" src="script.js"></script>
-    <!-- Script: Previne Overflow Horizontal -->
+    
 </body>
 </html>

@@ -1,7 +1,6 @@
 // ==========================================
 // GRANAEVO LANDING PAGE - JAVASCRIPT
-// Ultra Professional & Interactive
-// CARROSSEL OTIMIZADO V2.1
+// Ultra Otimizado - V3.0
 // ==========================================
 
 // ==========================================
@@ -11,7 +10,7 @@ window.addEventListener('load', () => {
     const loadingScreen = document.getElementById('loadingScreen');
     setTimeout(() => {
         loadingScreen.classList.add('hidden');
-    }, 1500);
+    }, 1200);
 });
 
 // ==========================================
@@ -26,7 +25,7 @@ function updateScrollProgress() {
     const progress = (scrolled / documentHeight) * 100;
     
     if (scrollProgress) {
-        scrollProgress.style.width = `${progress}%`;
+        scrollProgress.style.width = `${Math.min(progress, 100)}%`;
     }
 }
 
@@ -60,26 +59,29 @@ const navLinks = document.getElementById('navLinks');
 
 if (mobileToggle && navLinks) {
     mobileToggle.addEventListener('click', () => {
-        mobileToggle.classList.toggle('active');
+        const isActive = mobileToggle.classList.toggle('active');
         navLinks.classList.toggle('active');
-        document.body.style.overflow = navLinks.classList.contains('active') ? 'hidden' : '';
+        document.body.style.overflow = isActive ? 'hidden' : '';
+        mobileToggle.setAttribute('aria-expanded', isActive);
     });
 
-    // Close menu when clicking on a link
+    // Fechar menu ao clicar em um link
     navLinks.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', () => {
             mobileToggle.classList.remove('active');
             navLinks.classList.remove('active');
             document.body.style.overflow = '';
+            mobileToggle.setAttribute('aria-expanded', 'false');
         });
     });
 
-    // Close menu when clicking outside
+    // Fechar menu ao clicar fora
     document.addEventListener('click', (e) => {
         if (!navLinks.contains(e.target) && !mobileToggle.contains(e.target)) {
             mobileToggle.classList.remove('active');
             navLinks.classList.remove('active');
             document.body.style.overflow = '';
+            mobileToggle.setAttribute('aria-expanded', 'false');
         }
     });
 }
@@ -90,18 +92,20 @@ if (mobileToggle && navLinks) {
 const mobileCTA = document.getElementById('mobileCTA');
 
 function handleMobileCTA() {
-    if (window.innerWidth <= 768 && window.scrollY > 800) {
+    if (window.innerWidth < 768 && window.scrollY > 800) {
         mobileCTA.classList.add('visible');
     } else {
         mobileCTA.classList.remove('visible');
     }
 }
 
-window.addEventListener('scroll', handleMobileCTA, { passive: true });
-window.addEventListener('resize', handleMobileCTA, { passive: true });
+if (mobileCTA) {
+    window.addEventListener('scroll', handleMobileCTA, { passive: true });
+    window.addEventListener('resize', handleMobileCTA, { passive: true });
+}
 
 // ==========================================
-// SMOOTH SCROLL FOR ANCHOR LINKS
+// SMOOTH SCROLL
 // ==========================================
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
@@ -125,29 +129,231 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
 });
 
 // ==========================================
-// ANIMATED COUNTER
+// PARTICLES CANVAS
 // ==========================================
-function animateCounter(element, target, duration = 2000, decimals = 0) {
-    const start = 0;
-    const increment = target / (duration / 16);
-    let current = start;
+const canvas = document.getElementById('particlesCanvas');
+if (canvas) {
+    const ctx = canvas.getContext('2d');
     
-    const timer = setInterval(() => {
-        current += increment;
-        
-        if (current >= target) {
-            current = target;
-            clearInterval(timer);
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    
+    const particles = [];
+    const particleCount = window.innerWidth < 768 ? 30 : 50;
+    
+    class Particle {
+        constructor() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.size = Math.random() * 2 + 1;
+            this.speedX = Math.random() * 0.5 - 0.25;
+            this.speedY = Math.random() * 0.5 - 0.25;
+            this.opacity = Math.random() * 0.5 + 0.2;
         }
         
-        element.textContent = decimals > 0 
-            ? current.toFixed(decimals) 
-            : Math.floor(current).toLocaleString('pt-BR');
-    }, 16);
+        update() {
+            this.x += this.speedX;
+            this.y += this.speedY;
+            
+            if (this.x > canvas.width) this.x = 0;
+            if (this.x < 0) this.x = canvas.width;
+            if (this.y > canvas.height) this.y = 0;
+            if (this.y < 0) this.y = canvas.height;
+        }
+        
+        draw() {
+            ctx.fillStyle = `rgba(16, 185, 129, ${this.opacity})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    for (let i = 0; i < particleCount; i++) {
+        particles.push(new Particle());
+    }
+    
+    function animateParticles() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        particles.forEach(particle => {
+            particle.update();
+            particle.draw();
+        });
+        
+        requestAnimationFrame(animateParticles);
+    }
+    
+    animateParticles();
 }
 
 // ==========================================
-// INTERSECTION OBSERVER FOR ANIMATIONS
+// HERO STATS COUNTER ANIMATION
+// ==========================================
+function animateCounter(element) {
+    const target = parseFloat(element.getAttribute('data-count'));
+    const duration = 2000;
+    const increment = target / (duration / 16);
+    let current = 0;
+    
+    const updateCounter = () => {
+        current += increment;
+        if (current < target) {
+            element.textContent = Math.floor(current).toLocaleString('pt-BR');
+            requestAnimationFrame(updateCounter);
+        } else {
+            element.textContent = target.toLocaleString('pt-BR');
+        }
+    };
+    
+    updateCounter();
+}
+
+// Animate counters when visible
+const statValues = document.querySelectorAll('.stat-value[data-count]');
+const counterObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting && entry.target.textContent === '0') {
+            animateCounter(entry.target);
+        }
+    });
+}, { threshold: 0.5 });
+
+statValues.forEach(stat => counterObserver.observe(stat));
+
+// ==========================================
+// MINI CHART
+// ==========================================
+const miniChart = document.getElementById('miniChart');
+if (miniChart) {
+    const ctx = miniChart.getContext('2d');
+    miniChart.width = miniChart.offsetWidth;
+    miniChart.height = miniChart.offsetHeight;
+    
+    const data = [20, 45, 30, 60, 40, 70, 50, 80, 65, 90];
+    const max = Math.max(...data);
+    const padding = 10;
+    const width = miniChart.width;
+    const height = miniChart.height;
+    const stepX = (width - padding * 2) / (data.length - 1);
+    
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    // Draw gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
+    gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+    
+    ctx.beginPath();
+    ctx.moveTo(padding, height - padding);
+    
+    data.forEach((value, index) => {
+        const x = padding + index * stepX;
+        const y = height - padding - (value / max) * (height - padding * 2);
+        
+        if (index === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    });
+    
+    ctx.lineTo(width - padding, height - padding);
+    ctx.lineTo(padding, height - padding);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    
+    // Draw line
+    ctx.beginPath();
+    data.forEach((value, index) => {
+        const x = padding + index * stepX;
+        const y = height - padding - (value / max) * (height - padding * 2);
+        
+        if (index === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    });
+    ctx.stroke();
+}
+
+// ==========================================
+// TESTIMONIALS CAROUSEL
+// ==========================================
+const testimonialsTrack = document.getElementById('testimonialsTrack');
+
+const testimonials = [
+    {
+        stars: '★★★★★',
+        text: 'O GranaEvo mudou completamente minha relação com o dinheiro. Finalmente sei exatamente para onde vai cada centavo!',
+        author: 'Maria Silva'
+    },
+    {
+        stars: '★★★★★',
+        text: 'Nunca mais fui pego de surpresa pela fatura do cartão. O controle é total e muito fácil de usar.',
+        author: 'João Santos'
+    },
+    {
+        stars: '★★★★★',
+        text: 'Consegui economizar R$ 5.000 em 6 meses só organizando melhor meus gastos com o GranaEvo.',
+        author: 'Ana Costa'
+    },
+    {
+        stars: '★★★★★',
+        text: 'Perfeito para casais! Agora eu e meu marido temos visão completa das nossas finanças juntos.',
+        author: 'Patricia Oliveira'
+    },
+    {
+        stars: '★★★★★',
+        text: 'Interface super intuitiva. Até minha mãe de 65 anos conseguiu usar sem dificuldade!',
+        author: 'Carlos Pereira'
+    },
+    {
+        stars: '★★★★★',
+        text: 'Vale cada centavo! O investimento se paga só na economia que você consegue fazer.',
+        author: 'Roberto Lima'
+    },
+    {
+        stars: '★★★★★',
+        text: 'Tinha medo de apps financeiros, mas o GranaEvo é simples e seguro. Recomendo muito!',
+        author: 'Juliana Martins'
+    },
+    {
+        stars: '★★★★★',
+        text: 'Os gráficos e relatórios me ajudaram a identificar gastos que eu nem sabia que tinha.',
+        author: 'Fernando Souza'
+    }
+];
+
+function createTestimonialCards() {
+    if (!testimonialsTrack) return;
+    
+    // Duplicar para efeito infinito
+    const allTestimonials = [...testimonials, ...testimonials];
+    
+    testimonialsTrack.innerHTML = allTestimonials.map(testimonial => `
+        <div class="testimonial-card">
+            <div class="testimonial-stars">${testimonial.stars}</div>
+            <p class="testimonial-text">${testimonial.text}</p>
+            <div class="testimonial-author">${testimonial.author}</div>
+        </div>
+    `).join('');
+}
+
+createTestimonialCards();
+
+// ==========================================
+// INTERSECTION OBSERVER
 // ==========================================
 const observerOptions = {
     threshold: 0.1,
@@ -158,405 +364,165 @@ const fadeObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
             entry.target.classList.add('active');
-            
-            // Animate counters when visible
-            if (entry.target.classList.contains('hero-stats')) {
-                const counters = entry.target.querySelectorAll('.stat-value');
-                counters.forEach(counter => {
-                    const target = parseFloat(counter.getAttribute('data-count'));
-                    const decimals = target % 1 !== 0 ? 1 : 0;
-                    animateCounter(counter, target, 2000, decimals);
-                });
-                fadeObserver.unobserve(entry.target);
-            }
         }
     });
 }, observerOptions);
 
-// Observe elements for fade-in animation
 const animatedElements = document.querySelectorAll(
-    '.problem-card, .feature-card, .timeline-item, .hero-stats, .solution-box'
+    '.problem-card, .feature-card, .timeline-item'
 );
 
 animatedElements.forEach((el, index) => {
     el.classList.add('reveal');
-    el.style.transitionDelay = `${index * 0.1}s`;
     fadeObserver.observe(el);
 });
 
 // ==========================================
-// PARTICLES CANVAS BACKGROUND
+// PARALLAX EFFECT (DESKTOP)
 // ==========================================
-const canvas = document.getElementById('particlesCanvas');
-if (canvas) {
-    const ctx = canvas.getContext('2d');
-    let particles = [];
-    let animationId;
-
-    function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-
-    class Particle {
-        constructor() {
-            this.x = Math.random() * canvas.width;
-            this.y = Math.random() * canvas.height;
-            this.size = Math.random() * 2 + 1;
-            this.speedX = (Math.random() - 0.5) * 0.5;
-            this.speedY = (Math.random() - 0.5) * 0.5;
-            this.opacity = Math.random() * 0.5 + 0.2;
-        }
-
-        update() {
-            this.x += this.speedX;
-            this.y += this.speedY;
-
-            if (this.x > canvas.width) this.x = 0;
-            if (this.x < 0) this.x = canvas.width;
-            if (this.y > canvas.height) this.y = 0;
-            if (this.y < 0) this.y = canvas.height;
-        }
-
-        draw() {
-            ctx.fillStyle = `rgba(16, 185, 129, ${this.opacity})`;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-
-    function init() {
-        particles = [];
-        const particleCount = window.innerWidth < 768 ? 50 : 100;
+if (window.innerWidth >= 1024) {
+    const parallaxElements = document.querySelectorAll('[data-parallax]');
+    
+    window.addEventListener('scroll', () => {
+        const scrolled = window.scrollY;
         
-        for (let i = 0; i < particleCount; i++) {
-            particles.push(new Particle());
-        }
-    }
+        parallaxElements.forEach(element => {
+            const speed = parseFloat(element.getAttribute('data-parallax'));
+            const offset = scrolled * speed;
+            element.style.transform = `translateY(${offset}px)`;
+        });
+    }, { passive: true });
+}
 
-    function animate() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+// ==========================================
+// TILT EFFECT (DESKTOP)
+// ==========================================
+if (window.innerWidth >= 1024) {
+    const tiltElements = document.querySelectorAll('[data-tilt]');
+    
+    tiltElements.forEach(element => {
+        element.addEventListener('mousemove', (e) => {
+            const rect = element.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            
+            const rotateX = (y - centerY) / 10;
+            const rotateY = (centerX - x) / 10;
+            
+            element.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
+        });
         
-        particles.forEach(particle => {
-            particle.update();
-            particle.draw();
+        element.addEventListener('mouseleave', () => {
+            element.style.transform = '';
         });
-
-        // Draw connections
-        particles.forEach((particleA, indexA) => {
-            particles.slice(indexA + 1).forEach(particleB => {
-                const dx = particleA.x - particleB.x;
-                const dy = particleA.y - particleB.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                if (distance < 120) {
-                    ctx.strokeStyle = `rgba(16, 185, 129, ${0.15 * (1 - distance / 120)})`;
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(particleA.x, particleA.y);
-                    ctx.lineTo(particleB.x, particleB.y);
-                    ctx.stroke();
-                }
-            });
-        });
-
-        animationId = requestAnimationFrame(animate);
-    }
-
-    resizeCanvas();
-    init();
-    animate();
-
-    window.addEventListener('resize', () => {
-        resizeCanvas();
-        init();
     });
 }
 
 // ==========================================
-// TILT EFFECT ON CARDS
+// BUTTON RIPPLE EFFECT
 // ==========================================
-const tiltElements = document.querySelectorAll('[data-tilt]');
+const buttons = document.querySelectorAll('.btn-primary, .btn-secondary, .btn-nav, .btn-float');
 
-tiltElements.forEach(element => {
-    element.addEventListener('mousemove', (e) => {
-        const rect = element.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+buttons.forEach(button => {
+    button.addEventListener('click', function(e) {
+        const ripple = document.createElement('span');
+        const rect = this.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height);
+        const x = e.clientX - rect.left - size / 2;
+        const y = e.clientY - rect.top - size / 2;
         
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
+        ripple.style.cssText = `
+            position: absolute;
+            width: ${size}px;
+            height: ${size}px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            left: ${x}px;
+            top: ${y}px;
+            pointer-events: none;
+            animation: ripple 0.6s ease-out;
+        `;
         
-        const rotateX = (y - centerY) / 20;
-        const rotateY = (centerX - x) / 20;
+        this.style.position = 'relative';
+        this.style.overflow = 'hidden';
+        this.appendChild(ripple);
         
-        element.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
+        setTimeout(() => ripple.remove(), 600);
     });
+});
+
+const rippleStyle = document.createElement('style');
+rippleStyle.textContent = `
+    @keyframes ripple {
+        to {
+            transform: scale(2.5);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(rippleStyle);
+
+// ==========================================
+// TRACK INTERACTIONS
+// ==========================================
+function trackEvent(category, action, label) {
+    console.log(`📊 Event: ${category} - ${action} - ${label}`);
     
-    element.addEventListener('mouseleave', () => {
-        element.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) scale3d(1, 1, 1)';
+    // Google Analytics
+    if (window.gtag) {
+        gtag('event', action, {
+            'event_category': category,
+            'event_label': label
+        });
+    }
+    
+    // Facebook Pixel
+    if (window.fbq) {
+        fbq('track', action, {
+            category: category,
+            label: label
+        });
+    }
+}
+
+// Track CTA clicks
+document.querySelectorAll('.btn-primary').forEach(btn => {
+    btn.addEventListener('click', () => {
+        trackEvent('CTA', 'click', 'primary_button');
+    });
+});
+
+document.querySelectorAll('.btn-secondary').forEach(btn => {
+    btn.addEventListener('click', () => {
+        trackEvent('CTA', 'click', 'secondary_button');
     });
 });
 
 // ==========================================
-// PARALLAX EFFECT
-// ==========================================
-const parallaxElements = document.querySelectorAll('[data-parallax]');
-
-function handleParallax() {
-    const scrolled = window.scrollY;
-    
-    parallaxElements.forEach(element => {
-        const speed = parseFloat(element.getAttribute('data-parallax')) || 0.5;
-        const yPos = -(scrolled * speed);
-        element.style.transform = `translateY(${yPos}px)`;
-    });
-}
-
-window.addEventListener('scroll', handleParallax, { passive: true });
-
-// ==========================================
-// MINI CHART IN MOCKUP
-// ==========================================
-const miniChartCanvas = document.getElementById('miniChart');
-if (miniChartCanvas) {
-    const ctx = miniChartCanvas.getContext('2d');
-    const width = miniChartCanvas.width = miniChartCanvas.offsetWidth * 2;
-    const height = miniChartCanvas.height = miniChartCanvas.offsetHeight * 2;
-    
-    ctx.scale(2, 2);
-    
-    const data = [30, 45, 35, 50, 40, 60, 55, 70, 65, 80, 75, 85];
-    const maxData = Math.max(...data);
-    const padding = 10;
-    const chartWidth = width / 2 - padding * 2;
-    const chartHeight = height / 2 - padding * 2;
-    
-    // Draw gradient
-    const gradient = ctx.createLinearGradient(0, padding, 0, chartHeight + padding);
-    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.3)');
-    gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
-    
-    // Draw area
-    ctx.beginPath();
-    ctx.moveTo(padding, chartHeight + padding);
-    
-    data.forEach((value, index) => {
-        const x = padding + (chartWidth / (data.length - 1)) * index;
-        const y = chartHeight + padding - (value / maxData) * chartHeight;
-        
-        if (index === 0) {
-            ctx.lineTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
-    });
-    
-    ctx.lineTo(chartWidth + padding, chartHeight + padding);
-    ctx.closePath();
-    ctx.fillStyle = gradient;
-    ctx.fill();
-    
-    // Draw line
-    ctx.beginPath();
-    data.forEach((value, index) => {
-        const x = padding + (chartWidth / (data.length - 1)) * index;
-        const y = chartHeight + padding - (value / maxData) * chartHeight;
-        
-        if (index === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
-    });
-    
-    ctx.strokeStyle = '#10b981';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-}
-
-// ==========================================
-// TESTIMONIALS DATA & RENDER - OTIMIZADO
-// ==========================================
-const testimonials = [
-    {
-        stars: 5,
-        text: "Finalmente consegui organizar minhas finanças! Em 3 meses eliminei minhas dívidas e criei uma reserva.",
-        author: "Maria Silva"
-    },
-    {
-        stars: 5,
-        text: "Agora eu e minha esposa controlamos os gastos juntos. Acabaram as brigas por dinheiro!",
-        author: "João Santos"
-    },
-    {
-        stars: 5,
-        text: "Super fácil de usar! Em 2 meses economizei mais de R$ 1.000 só por ter controle.",
-        author: "Ana Costa"
-    },
-    {
-        stars: 5,
-        text: "O controle de cartão é sensacional! Nunca mais fui pego de surpresa pela fatura.",
-        author: "Carlos Pereira"
-    },
-    {
-        stars: 5,
-        text: "Os gráficos são incríveis! Consigo ver exatamente para onde meu dinheiro vai.",
-        author: "Patricia Oliveira"
-    },
-    {
-        stars: 5,
-        text: "Perfeito para quem tem família! Cada um tem seu perfil e vemos os gastos da casa.",
-        author: "Roberto Lima"
-    },
-    {
-        stars: 5,
-        text: "As metas mudaram minha vida! Guardei R$ 5.000 para minha viagem dos sonhos.",
-        author: "Juliana Martins"
-    },
-    {
-        stars: 5,
-        text: "Interface linda e intuitiva! Não preciso ser expert em finanças para usar.",
-        author: "Fernando Souza"
-    },
-    {
-        stars: 5,
-        text: "O controle de parcelas é perfeito! Sei exatamente quanto vou pagar mês a mês.",
-        author: "Camila Rocha"
-    },
-    {
-        stars: 5,
-        text: "Depois que comecei a usar, paguei todas as dívidas e estou investindo!",
-        author: "Ricardo Alves"
-    },
-    {
-        stars: 5,
-        text: "Melhor decisão financeira! Consegui convencer toda minha família a usar.",
-        author: "Beatriz Fernandes"
-    },
-    {
-        stars: 5,
-        text: "Simples e eficiente! Não preciso de planilhas complicadas.",
-        author: "Thiago Mendes"
-    }
-];
-
-function renderTestimonials() {
-    const track = document.getElementById('testimonialsTrack');
-    
-    if (!track) return;
-    
-    track.innerHTML = '';
-    
-    // 🔥 TRIPLICAMOS o array para um scroll mais suave e contínuo
-    const tripled = [...testimonials, ...testimonials, ...testimonials];
-    
-    tripled.forEach((testimonial, index) => {
-        const card = document.createElement('div');
-        card.className = 'testimonial-card';
-        
-        // Adiciona atributo de identificação para evitar duplicatas visuais
-        card.setAttribute('data-index', index);
-        
-        const stars = '★'.repeat(testimonial.stars);
-        
-        card.innerHTML = `
-            <div class="testimonial-stars">${stars}</div>
-            <div class="testimonial-text">"${testimonial.text}"</div>
-            <div class="testimonial-author">— ${testimonial.author}</div>
-        `;
-        
-        track.appendChild(card);
-    });
-    
-    // Log para debug
-    console.log(`✓ Carrossel renderizado com ${tripled.length} cards (${testimonials.length} × 3)`);
-}
-
-// Renderiza os depoimentos ao carregar
-renderTestimonials();
-
-// ==========================================
-// CARROSSEL: CONTROLE DE VELOCIDADE DINÂMICO
-// ==========================================
-function adjustCarouselSpeed() {
-    const track = document.getElementById('testimonialsTrack');
-    if (!track) return;
-    
-    const isMobile = window.innerWidth <= 768;
-    
-    // Velocidades otimizadas (em segundos)
-    // Mobile: velocidade bem confortável para leitura tranquila
-    // Desktop: velocidade balanceada
-    const speed = isMobile ? 50 : 40;
-    
-    // Aplica a velocidade via CSS custom property
-    track.style.animationDuration = `${speed}s`;
-    
-    console.log(`⚡ Velocidade do carrossel: ${speed}s (${isMobile ? 'Mobile' : 'Desktop'})`);
-}
-
-// Ajusta velocidade ao carregar e ao redimensionar
-window.addEventListener('load', adjustCarouselSpeed);
-window.addEventListener('resize', debounce(adjustCarouselSpeed, 250));
-
-// ==========================================
-// PERFORMANCE TRACKING
+// PERFORMANCE MONITORING
 // ==========================================
 window.addEventListener('load', () => {
     if (window.performance) {
         const perfData = window.performance.timing;
         const pageLoadTime = perfData.loadEventEnd - perfData.navigationStart;
-        console.log(`⚡ Page loaded in ${pageLoadTime}ms`);
+        console.log(`⚡ Página carregada em ${pageLoadTime}ms`);
+        
+        if (pageLoadTime > 3000) {
+            console.warn('⚠️ Tempo de carregamento alto');
+        }
     }
 });
 
-// ==========================================
-// PREVENT SCROLL RESTORATION
-// ==========================================
+// Disable scroll restoration
 if ('scrollRestoration' in history) {
     history.scrollRestoration = 'manual';
 }
 
 // ==========================================
-// DEBOUNCE UTILITY
-// ==========================================
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// Optimize resize events
-const optimizedResize = debounce(() => {
-    handleMobileCTA();
-    adjustCarouselSpeed();
-}, 250);
-
-window.addEventListener('resize', optimizedResize);
-
-// ==========================================
-// PREFETCH IMPORTANT PAGES
-// ==========================================
-const plansLinks = document.querySelectorAll('a[href="planos.html"]');
-plansLinks.forEach(link => {
-    link.addEventListener('mouseenter', () => {
-        const prefetch = document.createElement('link');
-        prefetch.rel = 'prefetch';
-        prefetch.href = 'planos.html';
-        document.head.appendChild(prefetch);
-    }, { once: true });
-});
-
-// ==========================================
-// ACCESSIBILITY IMPROVEMENTS
+// ACCESSIBILITY
 // ==========================================
 if (mobileToggle) {
     mobileToggle.addEventListener('keydown', (e) => {
@@ -567,66 +533,58 @@ if (mobileToggle) {
     });
 }
 
-if (navLinks) {
-    navLinks.addEventListener('keydown', (e) => {
-        if (!navLinks.classList.contains('active')) return;
-        
-        const focusableElements = navLinks.querySelectorAll(
-            'a[href], button:not([disabled])'
-        );
-        const firstElement = focusableElements[0];
-        const lastElement = focusableElements[focusableElements.length - 1];
-        
-        if (e.key === 'Tab') {
-            if (e.shiftKey && document.activeElement === firstElement) {
-                e.preventDefault();
-                lastElement.focus();
-            } else if (!e.shiftKey && document.activeElement === lastElement) {
-                e.preventDefault();
-                firstElement.focus();
-            }
-        }
-        
-        if (e.key === 'Escape') {
-            mobileToggle.classList.remove('active');
-            navLinks.classList.remove('active');
-            document.body.style.overflow = '';
-            mobileToggle.focus();
-        }
-    });
-}
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && navLinks?.classList.contains('active')) {
+        mobileToggle.classList.remove('active');
+        navLinks.classList.remove('active');
+        document.body.style.overflow = '';
+        mobileToggle.setAttribute('aria-expanded', 'false');
+    }
+});
 
 // ==========================================
 // ONLINE/OFFLINE STATUS
 // ==========================================
 window.addEventListener('online', () => {
-    console.log('✓ Connection restored');
+    console.log('✔ Conexão restaurada');
 });
 
 window.addEventListener('offline', () => {
-    console.warn('⚠ Connection lost');
+    console.warn('⚠ Conexão perdida');
 });
 
 // ==========================================
 // CONSOLE BRANDING
 // ==========================================
 console.log(
-    '%c🚀 GranaEvo Landing Page v2.1',
+    '%c🚀 GranaEvo Landing Page',
     'background: #10b981; color: white; padding: 12px 24px; border-radius: 8px; font-weight: bold; font-size: 16px;'
 );
 console.log(
-    '%c✓ Carrossel otimizado ativo',
-    'color: #10b981; font-weight: bold; font-size: 14px;'
-);
-console.log(
-    '%c✓ Performance melhorada',
+    '%c✔ Sistema Ultra Otimizado Ativo',
     'color: #10b981; font-weight: bold; font-size: 14px;'
 );
 
 // ==========================================
-// INITIALIZATION COMPLETE
+// INITIALIZATION
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('✓ DOM loaded and interactive');
-    console.log('✓ Testimonials carousel ready');
+    console.log('✔ DOM carregado');
+    
+    // Animação inicial suave
+    setTimeout(() => {
+        document.body.style.opacity = '1';
+    }, 100);
 });
+
+// ==========================================
+// SERVICE WORKER (OPCIONAL)
+// ==========================================
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        // Descomentar quando tiver service worker
+        // navigator.serviceWorker.register('/sw.js')
+        //     .then(reg => console.log('✔ Service Worker registrado'))
+        //     .catch(err => console.error('❌ Service Worker erro:', err));
+    });
+}
