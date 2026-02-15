@@ -610,7 +610,7 @@ button {
     gap: 0.5rem;
     padding: 0.875rem 1.75rem;
     background: var(--primary);
-    color: var(--dark);
+    color: var #ffffff;
     font-weight: 700;
     font-size: 0.9375rem;
     border-radius: 12px;
