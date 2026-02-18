@@ -1000,8 +1000,8 @@ function atualizarBadgeVencimentos() {
         badge.textContent = alertas.total;
         badge.style.cssText = `
             position: absolute;
-            top: 8px;
-            right: 8px;
+            top: 13px;
+            right: 22px;
             background: ${alertas.vencidas.length > 0 ? '#ff4b4b' : '#ffd166'};
             color: white;
             font-size: 0.7rem;
