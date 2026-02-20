@@ -373,7 +373,6 @@ async function verificarLogin() {
 
             if (ownerSubError || !ownerSub) {
                 console.log('❌ [VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
-                window.location.href = 'planos.html';
                 return;
             }
 
