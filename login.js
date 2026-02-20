@@ -199,7 +199,6 @@ loginForm.addEventListener('submit', async (e) => {
         if (!subscription) {
             showAuthMessage('Você precisa adquirir um plano primeiro!', 'error');
             setTimeout(() => {
-                window.location.href = 'planos.html';
             }, 2000);
             return;
         }

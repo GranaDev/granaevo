@@ -359,7 +359,6 @@ async function verificarLogin() {
 
             if (memberError || !membership) {
                 console.log('❌ [VERIFICAR LOGIN] Sem assinatura e sem membership. Redirecionando...');
-                window.location.href = 'planos.html';
                 return;
             }
 
