@@ -26,6 +26,9 @@ let nextContaFixaId = 1;
 let metaSelecionadaId = null;
 let tipoRelatorioAtivo = 'individual';
 
+
+window._supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
+
 // ✅ FUNÇÃO PARA ATUALIZAR REFERÊNCIAS GLOBAIS
 function atualizarReferenciasGlobais() {
     window.perfilAtivo = perfilAtivo;
