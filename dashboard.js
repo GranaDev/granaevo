@@ -326,31 +326,71 @@ async function verificarLogin() {
         console.log('✅ [VERIFICAR LOGIN] Sessão válida:', session.user.email);
         console.log('👤 [VERIFICAR LOGIN] User ID:', session.user.id);
 
-        // 2️⃣ VERIFICAR ASSINATURA
+    // 2️⃣ VERIFICAR ASSINATURA (própria ou via membership de convidado)
         console.log('🔍 [VERIFICAR LOGIN] Buscando assinatura...');
+
+        let planName = '';
+        let effectiveUserId = session.user.id;
+        let effectiveEmail = session.user.email;
+        let isGuest = false;
+
         const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
             .select('plans(name)')
             .eq('user_id', session.user.id)
             .eq('payment_status', 'approved')
-            .single();
+            .maybeSingle();
 
-        if (subError || !subscription) {
-            console.log('❌ [VERIFICAR LOGIN] Assinatura inválida. Redirecionando...');
-            console.error('[VERIFICAR LOGIN] Erro:', subError);
-            window.location.href = 'planos.html';
-            return;
+        if (!subError && subscription) {
+            planName = subscription.plans.name;
+            console.log('✅ [VERIFICAR LOGIN] Assinatura própria encontrada:', planName);
+        } else {
+            // ✅ VERIFICAR SE É CONVIDADO (member de outra conta)
+            console.log('🔍 [VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
+            const { data: membership, error: memberError } = await supabase
+                .from('account_members')
+                .select('owner_user_id, owner_email')
+                .eq('member_user_id', session.user.id)
+                .eq('is_active', true)
+                .maybeSingle();
+
+            if (memberError || !membership) {
+                console.log('❌ [VERIFICAR LOGIN] Sem assinatura e sem membership. Redirecionando...');
+                window.location.href = 'planos.html';
+                return;
+            }
+
+            // Buscar assinatura do dono
+            const { data: ownerSub, error: ownerSubError } = await supabase
+                .from('subscriptions')
+                .select('plans(name)')
+                .eq('user_id', membership.owner_user_id)
+                .eq('payment_status', 'approved')
+                .eq('is_active', true)
+                .maybeSingle();
+
+            if (ownerSubError || !ownerSub) {
+                console.log('❌ [VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
+                window.location.href = 'planos.html';
+                return;
+            }
+
+            planName = ownerSub.plans.name;
+            effectiveUserId = membership.owner_user_id;
+            effectiveEmail = membership.owner_email;
+            isGuest = true;
+            console.log('✅ [VERIFICAR LOGIN] Acesso como convidado. Dono:', effectiveEmail, 'Plano:', planName);
         }
-
-        console.log('✅ [VERIFICAR LOGIN] Assinatura encontrada:', subscription.plans.name);
 
         // 3️⃣ INICIALIZAR USUÁRIO
         usuarioLogado = {
-            userId: session.user.id,
+            userId: session.user.id,        // ID real do usuário logado
+            effectiveUserId: effectiveUserId, // ID do dono (para carregar dados)
             nome: session.user.user_metadata?.name || session.user.email.split('@')[0],
             email: session.user.email,
-            plano: subscription.plans.name, // ✅ CORRIGIDO: Pega o nome do plano
-            perfis: []
+            plano: planName,
+            perfis: [],
+            isGuest: isGuest,
         };
 
         console.log('👤 [VERIFICAR LOGIN] Usuário inicializado:', {
@@ -360,9 +400,9 @@ async function verificarLogin() {
             plano: usuarioLogado.plano
         });
 
-        // 4️⃣ ⚠️ CRÍTICO: INICIALIZAR DATAMANAGER ANTES DE CARREGAR PERFIS
+        // 4️⃣ ⚠️ CRÍTICO: INICIALIZAR DATAMANAGER (usa effectiveUserId para convidados)
         console.log('📦 [VERIFICAR LOGIN] Inicializando DataManager...');
-        await dataManager.initialize(usuarioLogado.userId, usuarioLogado.email);
+        await dataManager.initialize(usuarioLogado.effectiveUserId, effectiveEmail);
         console.log('✅ [VERIFICAR LOGIN] DataManager inicializado com sucesso');
 
         // 5️⃣ CARREGAR PERFIS
@@ -5217,9 +5257,255 @@ async function alterarNome() {
     };
 }
 
-function alterarEmail() {
-    alert('Funcionalidade "Alterar Email" será implementada em breve!');
+// ========== GERENCIADOR DE CONVIDADOS ==========
+async function alterarEmail() {
+    // Convidados não podem gerenciar acesso
+    if (usuarioLogado.isGuest) {
+        criarPopup(`
+            <h3>🔒 Função Restrita</h3>
+            <p style="margin:16px 0; color:var(--text-secondary); line-height:1.6;">
+                Apenas o <strong>titular da conta</strong> pode gerenciar convidados.
+                Entre em contato com quem te convidou para alterações.
+            </p>
+            <button class="btn-primary" onclick="fecharPopup()">Entendi</button>
+        `);
+        return;
+    }
+
+    // Carregar membros atuais
+    const { data: members, error: membersError } = await supabase
+        .from('account_members')
+        .select('id, member_email, member_name, joined_at, is_active')
+        .eq('owner_user_id', usuarioLogado.userId)
+        .eq('is_active', true);
+
+    const plano = usuarioLogado.plano;
+    const limitesConvidados = { 'Individual': 0, 'Casal': 1, 'Família': 3 };
+    const limiteConvidados = limitesConvidados[plano] ?? 0;
+    const totalAllowed = limiteConvidados + 1; // +1 pelo dono
+    const memberCount = members?.length ?? 0;
+
+    let membersHtml = '';
+    if (memberCount > 0) {
+        members.forEach(m => {
+            const dataEntrada = m.joined_at ? new Date(m.joined_at).toLocaleDateString('pt-BR') : 'Pendente';
+            membersHtml += `
+                <div style="display:flex; justify-content:space-between; align-items:center; 
+                            padding:12px 16px; background:rgba(255,255,255,0.04); 
+                            border-radius:10px; margin-bottom:8px; border-left:3px solid #10b981;">
+                    <div>
+                        <div style="font-weight:600; color:var(--text-primary);">${m.member_name}</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">${m.member_email}</div>
+                        <div style="font-size:0.78rem; color:var(--text-muted);">Entrou em: ${dataEntrada}</div>
+                    </div>
+                    <button class="btn-excluir" style="padding:6px 12px; font-size:0.8rem;" 
+                            onclick="removerConvidado('${m.id}', '${m.member_name}')">
+                        🗑️ Remover
+                    </button>
+                </div>
+            `;
+        });
+    } else {
+        membersHtml = `<p style="color:var(--text-muted); text-align:center; padding:16px 0;">Nenhum convidado ainda.</p>`;
+    }
+
+    if (limiteConvidados === 0) {
+        criarPopup(`
+            <h3>👥 Convidar Usuário</h3>
+            <div style="background:rgba(255,209,102,0.1); border:1px solid rgba(255,209,102,0.3); 
+                        border-radius:12px; padding:16px; margin:16px 0; text-align:center;">
+                <div style="font-size:2rem; margin-bottom:8px;">🔒</div>
+                <div style="font-weight:600; color:#ffd166; margin-bottom:6px;">Plano ${plano}</div>
+                <div style="font-size:0.9rem; color:var(--text-secondary); line-height:1.6;">
+                    Seu plano permite apenas <strong>01 email por conta</strong>.<br>
+                    Faça upgrade para o Plano Casal ou Família para convidar pessoas.
+                </div>
+            </div>
+            <button class="btn-primary" onclick="irParaAtualizarPlano()" style="width:100%; margin-bottom:10px;">
+                ⬆️ Fazer Upgrade
+            </button>
+            <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">Fechar</button>
+        `);
+        return;
+    }
+
+    criarPopup(`
+        <div style="max-height:70vh; overflow-y:auto; padding-right:8px;">
+            <h3 style="text-align:center; margin-bottom:6px;">👥 Gerenciar Convidados</h3>
+            <p style="text-align:center; font-size:0.85rem; color:var(--text-secondary); margin-bottom:20px;">
+                Plano ${plano} — ${memberCount}/${limiteConvidados} convidado(s)
+            </p>
+
+            <!-- Convidados atuais -->
+            <div style="margin-bottom:20px;">
+                <div style="font-size:0.8rem; font-weight:700; letter-spacing:2px; text-transform:uppercase; 
+                            color:var(--text-muted); margin-bottom:10px;">Convidados Ativos</div>
+                ${membersHtml}
+            </div>
+
+            <!-- Formulário de convite (só se não atingiu limite) -->
+            ${memberCount < limiteConvidados ? `
+            <div style="border-top:1px solid var(--border); padding-top:20px;">
+                <div style="font-size:0.8rem; font-weight:700; letter-spacing:2px; text-transform:uppercase; 
+                            color:#10b981; margin-bottom:14px;">+ Novo Convite</div>
+                <input type="text" id="inputNomeConvidado" class="form-input" 
+                       placeholder="Nome do convidado" style="margin-bottom:10px;">
+                <input type="email" id="inputEmailConvidado" class="form-input" 
+                       placeholder="Email do convidado" style="margin-bottom:10px;">
+                <input type="email" id="inputEmailConvidadoConfirm" class="form-input" 
+                       placeholder="Confirme o email" style="margin-bottom:16px;">
+                <button class="btn-primary" id="btnEnviarConvite" style="width:100%;">
+                    📨 Enviar Convite
+                </button>
+            </div>
+            ` : `
+            <div style="background:rgba(255,209,102,0.08); border:1px solid rgba(255,209,102,0.25); 
+                        border-radius:10px; padding:14px; text-align:center; margin-top:8px;">
+                <div style="color:#ffd166; font-weight:600; margin-bottom:4px;">Limite atingido</div>
+                <div style="font-size:0.85rem; color:var(--text-secondary);">
+                    Você já possui ${memberCount}/${limiteConvidados} convidado(s) para o Plano ${plano}.
+                </div>
+            </div>
+            `}
+        </div>
+        <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%; margin-top:14px;">Fechar</button>
+    `);
+
+    // Bind do botão de convite
+    const btnEnviar = document.getElementById('btnEnviarConvite');
+    if (btnEnviar) {
+        btnEnviar.onclick = () => enviarConvite();
+    }
 }
+
+async function enviarConvite() {
+    const nome = document.getElementById('inputNomeConvidado')?.value.trim();
+    const email = document.getElementById('inputEmailConvidado')?.value.trim().toLowerCase();
+    const emailConfirm = document.getElementById('inputEmailConvidadoConfirm')?.value.trim().toLowerCase();
+
+    if (!nome || nome.length < 2) return alert('Digite o nome do convidado (mínimo 2 caracteres).');
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert('Digite um email válido.');
+    if (email !== emailConfirm) return alert('Os emails não coincidem.');
+
+    const btnEnviar = document.getElementById('btnEnviarConvite');
+    if (btnEnviar) { btnEnviar.disabled = true; btnEnviar.textContent = '⏳ Enviando...'; }
+
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Sessão expirada. Faça login novamente.');
+
+        const supabaseUrl = window._supabaseUrl || 'https://SEU_PROJETO.supabase.co'; // ← ajuste aqui
+        const response = await fetch(`${supabaseUrl}/functions/v1/send-guest-invite`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ guestName: nome, guestEmail: email }),
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+            const err = result.error || '';
+            // Tratamentos especiais de erro
+            if (err.startsWith('PLAN_BLOCK:')) {
+                const [, planName, msg] = err.split(':');
+                fecharPopup();
+                mostrarPopupLimite(`Seu plano ${planName} não permite convidados. Faça upgrade para continuar.`);
+                return;
+            }
+            if (err.startsWith('LIMIT_REACHED:')) {
+                const parts = err.split(':');
+                const planName = parts[1];
+                const total = parts[2];
+                const emails = parts[3] || '';
+                fecharPopup();
+                criarPopup(`
+                    <h3>🔒 Limite do Plano</h3>
+                    <p style="margin:16px 0; color:var(--text-secondary); line-height:1.6;">
+                        Você possui o Plano <strong>${planName}</strong>, que permite até 
+                        <strong>${total} email(s)</strong> no total.<br><br>
+                        ${emails ? `Emails cadastrados: <strong>${emails}</strong>` : ''}
+                    </p>
+                    <button class="btn-primary" onclick="irParaAtualizarPlano()" style="width:100%; margin-bottom:10px;">⬆️ Fazer Upgrade</button>
+                    <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">Fechar</button>
+                `);
+                return;
+            }
+            throw new Error(err);
+        }
+
+        // ✅ SUCESSO — Mostrar código para o dono
+        const code = result.code;
+        const expiresAt = new Date(result.expiresAt).toLocaleString('pt-BR');
+
+        fecharPopup();
+        criarPopup(`
+            <div style="text-align:center;">
+                <div style="font-size:3rem; margin-bottom:12px;">🎉</div>
+                <h3 style="margin-bottom:6px;">Convite Enviado!</h3>
+                <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:24px;">
+                    Email enviado para <strong>${email}</strong>.<br>
+                    Compartilhe o código abaixo com <strong>${nome}</strong>:
+                </p>
+
+                <div style="background:rgba(16,185,129,0.1); border:2px solid rgba(16,185,129,0.4); 
+                            border-radius:16px; padding:24px; margin-bottom:20px;">
+                    <div style="font-size:0.8rem; color:#6ee7b7; letter-spacing:2px; margin-bottom:10px;">
+                        CÓDIGO DE 6 DÍGITOS
+                    </div>
+                    <div id="codigoConvite" style="font-size:3rem; font-weight:900; letter-spacing:12px; 
+                                color:#10b981; font-family:'Courier New',monospace;">
+                        ${code}
+                    </div>
+                    <div style="font-size:0.8rem; color:var(--text-muted); margin-top:10px;">
+                        ⏰ Expira em: ${expiresAt}
+                    </div>
+                </div>
+
+                <button class="btn-primary" onclick="navigator.clipboard.writeText('${code}').then(()=>mostrarNotificacao('Código copiado!','success'))" 
+                        style="width:100%; margin-bottom:10px;">
+                    📋 Copiar Código
+                </button>
+                <div style="background:rgba(255,209,102,0.1); border:1px solid rgba(255,209,102,0.3); 
+                            border-radius:10px; padding:12px; font-size:0.85rem; color:#ffd166; margin-bottom:14px;">
+                    ⚠️ Guarde este código! Ele não será exibido novamente.
+                </div>
+                <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">Fechar</button>
+            </div>
+        `);
+
+    } catch (err) {
+        console.error('❌ Erro ao enviar convite:', err);
+        alert(`❌ ${err.message}`);
+        if (btnEnviar) { btnEnviar.disabled = false; btnEnviar.textContent = '📨 Enviar Convite'; }
+    }
+}
+
+async function removerConvidado(memberId, memberName) {
+    if (!confirm(`Remover o acesso de "${memberName}"? Ele(a) não poderá mais entrar na conta.`)) return;
+
+    try {
+        const { error } = await supabase
+            .from('account_members')
+            .update({ is_active: false })
+            .eq('id', memberId)
+            .eq('owner_user_id', usuarioLogado.userId);
+
+        if (error) throw error;
+
+        mostrarNotificacao(`Acesso de ${memberName} removido.`, 'success');
+        fecharPopup();
+        setTimeout(() => alterarEmail(), 200);
+    } catch (err) {
+        console.error('Erro ao remover membro:', err);
+        alert('Erro ao remover convidado. Tente novamente.');
+    }
+}
+
+// Expor globalmente
+window.removerConvidado = removerConvidado;
 
 function abrirAlterarSenha() {
     criarPopup(`

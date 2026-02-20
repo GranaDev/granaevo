@@ -1,0 +1,432 @@
+/* ========== RESET & BASE ========== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --primary: #10b981;
+    --primary-dark: #059669;
+    --bg: #060810;
+    --surface: #0d1117;
+    --surface2: #111827;
+    --border: rgba(255, 255, 255, 0.08);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #475569;
+    --danger: #ff4b4b;
+    --warning: #ffd166;
+}
+
+body {
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ========== CANVAS DE FUNDO ========== */
+#bg-canvas {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ========== WRAPPER ========== */
+.invite-wrapper {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+}
+
+/* ========== LOGO ========== */
+.invite-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 28px;
+}
+
+.logo-ring {
+    position: relative;
+    width: 52px;
+    height: 52px;
+}
+
+.logo-ring::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 14px;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    animation: logoPulse 3s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.05); }
+}
+
+.logo-img {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    object-fit: contain;
+    background: #fff;
+    display: block;
+}
+
+.logo-text {
+    font-size: 24px;
+    font-weight: 900;
+    background: linear-gradient(135deg, #10b981, #34d399);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.3px;
+}
+
+/* ========== CARD ========== */
+.invite-card {
+    width: 100%;
+    background: linear-gradient(160deg, var(--surface) 0%, var(--surface2) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.18);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow:
+        0 32px 64px rgba(0, 0, 0, 0.6),
+        0 0 0 1px rgba(16, 185, 129, 0.06),
+        0 0 60px rgba(16, 185, 129, 0.05) inset;
+}
+
+/* ========== STEPS ========== */
+.step {
+    display: none;
+    padding: 40px 36px;
+    animation: fadeInUp 0.4s ease;
+}
+
+.step.active { display: block; }
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.step-icon {
+    font-size: 3rem;
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.step-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--text-primary);
+    text-align: center;
+    margin-bottom: 12px;
+    letter-spacing: -0.3px;
+}
+
+.step-desc {
+    font-size: 15px;
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.7;
+    margin-bottom: 28px;
+}
+
+.step-desc strong { color: var(--text-primary); }
+
+/* ========== FORM ========== */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
+}
+
+.form-label i {
+    margin-right: 6px;
+    color: var(--primary);
+}
+
+.inv-input {
+    width: 100%;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.inv-input:focus {
+    border-color: rgba(16, 185, 129, 0.5);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.inv-input::placeholder { color: var(--text-muted); }
+
+.code-input {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 10px;
+    font-family: 'Courier New', monospace;
+    padding: 16px;
+}
+
+.input-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+
+/* ========== PASSWORD ========== */
+.password-wrapper {
+    position: relative;
+}
+
+.password-wrapper .inv-input {
+    padding-right: 48px;
+}
+
+.toggle-pwd {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    transition: color 0.2s;
+}
+
+.toggle-pwd:hover { color: var(--primary); }
+
+.password-strength {
+    height: 4px;
+    border-radius: 2px;
+    margin-top: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    transition: all 0.3s;
+    position: relative;
+}
+
+.password-strength::after {
+    content: attr(data-label);
+    position: absolute;
+    right: 0;
+    top: -20px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.password-strength.muito-fraca { background: #ff4b4b; width: 20%; }
+.password-strength.fraca { background: #ff7a7a; width: 40%; }
+.password-strength.razoavel { background: var(--warning); width: 60%; }
+.password-strength.boa { background: #4ecdc4; width: 80%; }
+.password-strength.forte { background: var(--primary); width: 100%; }
+
+/* ========== TERMS ========== */
+.terms-box {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+}
+
+.terms-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.terms-check { display: none; }
+
+.terms-custom-check {
+    min-width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    background: transparent;
+    margin-top: 1px;
+}
+
+.terms-check:checked + .terms-custom-check {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.terms-check:checked + .terms-custom-check::after {
+    content: '✓';
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.terms-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.terms-link:hover { text-decoration: underline; }
+
+/* ========== BUTTONS ========== */
+.inv-btn {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+    display: block;
+    text-align: center;
+}
+
+.inv-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 30px rgba(16, 185, 129, 0.4);
+}
+
+.inv-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.inv-btn-ghost {
+    width: 100%;
+    padding: 12px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 10px;
+}
+
+.inv-btn-ghost:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-secondary);
+}
+
+/* ========== WELCOME BOX ========== */
+.welcome-box {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: 14px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.wb-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #6ee7b7;
+    margin-bottom: 8px;
+}
+
+.wb-name {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--primary);
+}
+
+/* ========== SUCCESS BOX ========== */
+.success-box {
+    background: rgba(16, 185, 129, 0.06);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 14px;
+    padding: 24px;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.success-pulse {
+    animation: successPulse 1s ease-out;
+}
+
+@keyframes successPulse {
+    0% { transform: scale(0); opacity: 0; }
+    70% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* ========== ERROR BOX ========== */
+.error-box {
+    background: rgba(255, 75, 75, 0.1);
+    border: 1px solid rgba(255, 75, 75, 0.3);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 14px;
+    color: #ff7a7a;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+/* ========== FOOTER ========== */
+.invite-footer {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 24px;
+}
+
+.invite-footer a {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.invite-footer a:hover { color: var(--primary); }
+
+/* ========== MOBILE ========== */
+@media (max-width: 520px) {
+    .step { padding: 32px 24px; }
+    .step-title { font-size: 22px; }
+    .code-input { font-size: 1.5rem; letter-spacing: 6px; }
+}
