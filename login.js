@@ -101,6 +101,75 @@ const togglePassword = document.getElementById('togglePassword');
 let recoveryEmailGlobal = '';
 let verifiedCodeGlobal = '';
 
+// ===== VARIÁVEIS DO RECAPTCHA =====
+let loginAttempts = 0;
+const MAX_ATTEMPTS_BEFORE_CAPTCHA = 3;
+let captchaToken = null;
+let captchaResolved = false;
+
+// Callback global chamado pelo reCAPTCHA quando resolvido
+window.onCaptchaResolved = function(token) {
+    captchaToken = token;
+    captchaResolved = true;
+    console.log('✅ reCAPTCHA resolvido');
+};
+
+// Callback chamado quando o reCAPTCHA expira
+window.onCaptchaExpired = function() {
+    captchaToken = null;
+    captchaResolved = false;
+    console.log('⚠️ reCAPTCHA expirou');
+};
+
+// ===== EXIBIR / ESCONDER CAPTCHA =====
+function showCaptcha() {
+    const captchaContainer = document.getElementById('captchaContainer');
+    if (captchaContainer) {
+        captchaContainer.style.display = 'block';
+        captchaContainer.style.animation = 'fadeInUp 0.4s ease';
+    }
+}
+
+function hideCaptcha() {
+    const captchaContainer = document.getElementById('captchaContainer');
+    if (captchaContainer) {
+        captchaContainer.style.display = 'none';
+    }
+}
+
+function resetCaptcha() {
+    captchaToken = null;
+    captchaResolved = false;
+    if (typeof grecaptcha !== 'undefined') {
+        try {
+            grecaptcha.reset();
+        } catch (e) {
+            // Ignora se o widget ainda não foi renderizado
+        }
+    }
+}
+
+// ===== VALIDAR CAPTCHA NA EDGE FUNCTION DO SUPABASE =====
+async function validateCaptcha(token) {
+    try {
+        const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/verify-recaptcha`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabase.supabaseKey}`,
+            },
+            body: JSON.stringify({ token }),
+        });
+
+        const result = await response.json();
+        return result.success === true;
+    } catch (error) {
+        console.error('❌ Erro ao validar reCAPTCHA:', error);
+        return false;
+    }
+}
+
 // ===== INICIALIZAÇÃO =====
 window.addEventListener('DOMContentLoaded', async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -158,7 +227,7 @@ async function getActiveSubscription(userId) {
     return { subscription: null, isGuest: false };
 }
 
-// ===== SISTEMA DE LOGIN =====
+// ===== SISTEMA DE LOGIN COM RECAPTCHA =====
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -176,6 +245,34 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
 
+    // ===== VERIFICAÇÃO DO CAPTCHA (após 3 tentativas) =====
+    if (loginAttempts >= MAX_ATTEMPTS_BEFORE_CAPTCHA) {
+        if (!captchaResolved || !captchaToken) {
+            showAuthMessage('Por favor, resolva o reCAPTCHA para continuar', 'error');
+            // Destaca o container do captcha
+            const captchaContainer = document.getElementById('captchaContainer');
+            if (captchaContainer) {
+                captchaContainer.style.border = '2px solid var(--error-red)';
+                captchaContainer.style.borderRadius = '12px';
+                captchaContainer.style.padding = '8px';
+                setTimeout(() => {
+                    captchaContainer.style.border = '';
+                    captchaContainer.style.padding = '';
+                }, 2000);
+            }
+            return;
+        }
+
+        // Valida o token no backend (Supabase Edge Function)
+        showAuthMessage('Verificando reCAPTCHA...', 'info');
+        const captchaValid = await validateCaptcha(captchaToken);
+        if (!captchaValid) {
+            showAuthMessage('Falha na verificação do reCAPTCHA. Tente novamente.', 'error');
+            resetCaptcha();
+            return;
+        }
+    }
+
     try {
         showAuthMessage('Verificando credenciais...', 'info');
         
@@ -186,20 +283,42 @@ loginForm.addEventListener('submit', async (e) => {
         });
 
         if (error) {
-            showAuthMessage('Email ou senha incorretos', 'error');
+            loginAttempts++;
+            inputs.loginPassword.value = '';
+            
+            // Reseta o captcha para nova resolução na próxima tentativa
+            resetCaptcha();
+
+            if (loginAttempts >= MAX_ATTEMPTS_BEFORE_CAPTCHA) {
+                showCaptcha();
+                showAuthMessage(
+                    `Email ou senha incorretos. Resolva o reCAPTCHA para continuar (tentativa ${loginAttempts}).`,
+                    'error'
+                );
+            } else {
+                const restantes = MAX_ATTEMPTS_BEFORE_CAPTCHA - loginAttempts;
+                showAuthMessage(
+                    `Email ou senha incorretos. ${restantes} tentativa${restantes > 1 ? 's' : ''} restante${restantes > 1 ? 's' : ''} antes do reCAPTCHA.`,
+                    'error'
+                );
+            }
+
             shakeInput(inputs.loginEmail);
             shakeInput(inputs.loginPassword);
-            inputs.loginPassword.value = '';
             return;
         }
 
-        // ✅ CORREÇÃO: verifica subscription do próprio usuário OU do dono (se for convidado)
+        // ✅ Login bem-sucedido - reseta contagem
+        loginAttempts = 0;
+        resetCaptcha();
+        hideCaptcha();
+
+        // Verifica subscription do próprio usuário OU do dono (se for convidado)
         const { subscription, isGuest } = await getActiveSubscription(data.user.id);
 
         if (!subscription) {
             showAuthMessage('Você precisa adquirir um plano primeiro!', 'error');
-            setTimeout(() => {
-            }, 2000);
+            setTimeout(() => {}, 2000);
             return;
         }
 

@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GranaEvo - Acesso Premium</title>
     <link rel="stylesheet" href="login.css">
+    <!-- reCAPTCHA v2 -->
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </head>
 <body>
     <!-- Partículas de moedas flutuantes -->
@@ -181,6 +183,24 @@
                             </label>
                             <a href="#" class="forgot-link" id="forgotPasswordBtn">Esqueceu a senha?</a>
                         </div>
+
+                        <!-- ===== CONTAINER DO RECAPTCHA (oculto até 3 erros) ===== -->
+                        <div id="captchaContainer" style="display: none;">
+                            <div class="captcha-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:16px;height:16px;stroke:var(--error-red);flex-shrink:0;">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Verificação de segurança necessária
+                            </div>
+                            <div 
+                                class="g-recaptcha" 
+                                data-sitekey="6LeVj3IsAAAAAOpQyNtfDH_s_RdFjhTAvY9jpXZ5"
+                                data-callback="onCaptchaResolved"
+                                data-expired-callback="onCaptchaExpired"
+                                data-theme="dark"
+                            ></div>
+                        </div>
+                        <!-- ===== FIM DO CONTAINER DO RECAPTCHA ===== -->
 
                         <button type="submit" class="btn-submit">
                             <span class="btn-text">Entrar</span>
