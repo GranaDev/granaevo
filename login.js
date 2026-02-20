@@ -103,7 +103,6 @@ let verifiedCodeGlobal = '';
 
 // ===== INICIALIZAÇÃO =====
 window.addEventListener('DOMContentLoaded', async () => {
-    // Verificar autenticação
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         console.log('✅ Usuário já autenticado, redirecionando...');
@@ -111,11 +110,9 @@ window.addEventListener('DOMContentLoaded', async () => {
         return;
     }
     
-    // Criar partículas e gráficos
     createMoneyParticles();
     createAnimatedCharts();
     
-    // Verificar mensagem de erro
     const authError = sessionStorage.getItem('auth_error');
     if (authError) {
         showAuthMessage(authError, 'error');
@@ -125,6 +122,42 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 GranaEvo Login carregado!');
 });
 
+// ===== FUNÇÃO: BUSCAR SUBSCRIPTION ATIVA (dono OU convidado) =====
+async function getActiveSubscription(userId) {
+    // 1️⃣ Verifica se o próprio usuário tem assinatura ativa
+    const { data: ownSub } = await supabase
+        .from('subscriptions')
+        .select('*, plans(*)')
+        .eq('user_id', userId)
+        .eq('payment_status', 'approved')
+        .eq('is_active', true)
+        .maybeSingle();
+
+    if (ownSub) return { subscription: ownSub, isGuest: false };
+
+    // 2️⃣ Verifica se é um convidado vinculado a uma conta com assinatura ativa
+    const { data: membership } = await supabase
+        .from('account_members')
+        .select('owner_user_id')
+        .eq('member_user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+    if (!membership) return { subscription: null, isGuest: false };
+
+    const { data: ownerSub } = await supabase
+        .from('subscriptions')
+        .select('*, plans(*)')
+        .eq('user_id', membership.owner_user_id)
+        .eq('payment_status', 'approved')
+        .eq('is_active', true)
+        .maybeSingle();
+
+    if (ownerSub) return { subscription: ownerSub, isGuest: true };
+
+    return { subscription: null, isGuest: false };
+}
+
 // ===== SISTEMA DE LOGIN =====
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -132,7 +165,6 @@ loginForm.addEventListener('submit', async (e) => {
     const email = inputs.loginEmail.value.trim();
     const password = inputs.loginPassword.value;
     
-    // Validações
     if (!email || !password) {
         showAuthMessage('Por favor, preencha todos os campos', 'error');
         return;
@@ -147,7 +179,7 @@ loginForm.addEventListener('submit', async (e) => {
     try {
         showAuthMessage('Verificando credenciais...', 'info');
         
-        // Login no Supabase
+        // Autenticar no Supabase
         const { data, error } = await supabase.auth.signInWithPassword({
             email: email,
             password: password
@@ -161,13 +193,8 @@ loginForm.addEventListener('submit', async (e) => {
             return;
         }
 
-        // Verificar se tem assinatura ativa
-        const { data: subscription } = await supabase
-            .from('subscriptions')
-            .select('*, plans(*)')
-            .eq('user_id', data.user.id)
-            .eq('payment_status', 'approved')
-            .single();
+        // ✅ CORREÇÃO: verifica subscription do próprio usuário OU do dono (se for convidado)
+        const { subscription, isGuest } = await getActiveSubscription(data.user.id);
 
         if (!subscription) {
             showAuthMessage('Você precisa adquirir um plano primeiro!', 'error');
@@ -177,8 +204,15 @@ loginForm.addEventListener('submit', async (e) => {
             return;
         }
 
-        // Login bem-sucedido
-        showAuthMessage(`Bem-vindo de volta, ${data.user.user_metadata.name || 'Usuário'}!`, 'success');
+        // Armazenar flag de convidado para uso no dashboard, se necessário
+        if (isGuest) {
+            sessionStorage.setItem('is_guest_member', 'true');
+        } else {
+            sessionStorage.removeItem('is_guest_member');
+        }
+
+        const userName = data.user.user_metadata?.name || 'Usuário';
+        showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
         
         setTimeout(() => {
             window.location.href = 'dashboard.html';
@@ -278,7 +312,6 @@ if (buttons.sendCode) {
             return;
         }
 
-        // Desabilitar botão
         buttons.sendCode.disabled = true;
         buttons.sendCode.innerHTML = `
             <svg class="spinner" viewBox="0 0 24 24" style="width: 20px; height: 20px; animation: spin 1s linear infinite;">
@@ -289,8 +322,6 @@ if (buttons.sendCode) {
         `;
 
         try {
-            console.log('📧 Solicitando código de recuperação para:', email);
-
             const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
             
             const response = await fetch(`${SUPABASE_URL}/functions/v1/send-password-reset-code`, {
@@ -303,7 +334,6 @@ if (buttons.sendCode) {
             });
 
             const result = await response.json();
-            console.log('📋 Resposta:', result);
 
             if (result.status === 'sent') {
                 recoveryEmailGlobal = email;
@@ -352,10 +382,7 @@ if (buttons.verifyCode) {
             return;
         }
 
-        // Salvar código verificado
         verifiedCodeGlobal = code;
-        console.log('✅ Código inserido:', code);
-        
         switchScreen(screens.code, screens.newPassword);
         
         setTimeout(() => {
@@ -394,19 +421,15 @@ if (buttons.changePassword) {
         
         if (newPass !== confirmPass) {
             showError('As senhas não coincidem');
-            
             inputs.newPassword.style.borderColor = 'var(--error-red)';
             inputs.confirmPassword.style.borderColor = 'var(--error-red)';
-            
             setTimeout(() => {
                 inputs.newPassword.style.borderColor = '';
                 inputs.confirmPassword.style.borderColor = '';
             }, 2000);
-            
             return;
         }
 
-        // Desabilitar botão
         buttons.changePassword.disabled = true;
         buttons.changePassword.innerHTML = `
             <svg class="spinner" viewBox="0 0 24 24" style="width: 20px; height: 20px; animation: spin 1s linear infinite;">
@@ -417,8 +440,6 @@ if (buttons.changePassword) {
         `;
 
         try {
-            console.log('🔐 Verificando código e alterando senha...');
-
             const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
             
             const response = await fetch(`${SUPABASE_URL}/functions/v1/verify-and-reset-password`, {
@@ -435,10 +456,8 @@ if (buttons.changePassword) {
             });
 
             const result = await response.json();
-            console.log('📋 Resposta:', result);
 
             if (result.status === 'success') {
-                console.log('✅ Senha alterada com sucesso!');
                 switchScreen(screens.newPassword, screens.success);
             } else if (result.status === 'invalid_code') {
                 showError('Código inválido, expirado ou já utilizado');
@@ -468,7 +487,6 @@ if (buttons.backToLoginFinal) {
         hideError();
         recoveryEmailGlobal = '';
         verifiedCodeGlobal = '';
-        
         switchScreen(screens.success, screens.login);
     });
 }
@@ -533,7 +551,6 @@ inputs.codeInputs.forEach((input, index) => {
         
         if (value.length === 1) {
             input.classList.add('filled');
-            
             if (index < inputs.codeInputs.length - 1) {
                 inputs.codeInputs[index + 1].focus();
             }
@@ -556,7 +573,6 @@ inputs.codeInputs.forEach((input, index) => {
             inputs.codeInputs[index - 1].value = '';
             inputs.codeInputs[index - 1].classList.remove('filled');
         }
-        
         if (e.key === 'Enter') {
             buttons.verifyCode.click();
         }
@@ -673,14 +689,10 @@ buttons_ripple.forEach(button => {
     });
 });
 
-// Adicionar animação de ripple
 const rippleStyle = document.createElement('style');
 rippleStyle.textContent = `
     @keyframes ripple {
-        to {
-            transform: scale(2.5);
-            opacity: 0;
-        }
+        to { transform: scale(2.5); opacity: 0; }
     }
     @keyframes spin {
         to { transform: rotate(360deg); }
@@ -698,25 +710,19 @@ document.addEventListener('keydown', (e) => {
 
 if (inputs.newPassword) {
     inputs.newPassword.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            inputs.confirmPassword.focus();
-        }
+        if (e.key === 'Enter') inputs.confirmPassword.focus();
     });
 }
 
 if (inputs.confirmPassword) {
     inputs.confirmPassword.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            buttons.changePassword.click();
-        }
+        if (e.key === 'Enter') buttons.changePassword.click();
     });
 }
 
 if (inputs.recoveryEmail) {
     inputs.recoveryEmail.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            buttons.sendCode.click();
-        }
+        if (e.key === 'Enter') buttons.sendCode.click();
     });
 }
 
@@ -726,16 +732,12 @@ const allInputs = document.querySelectorAll('.form-input');
 allInputs.forEach(input => {
     input.addEventListener('focus', () => {
         const wrapper = input.closest('.input-wrapper');
-        if (wrapper) {
-            wrapper.style.transform = 'scale(1.01)';
-        }
+        if (wrapper) wrapper.style.transform = 'scale(1.01)';
     });
     
     input.addEventListener('blur', () => {
         const wrapper = input.closest('.input-wrapper');
-        if (wrapper) {
-            wrapper.style.transform = 'scale(1)';
-        }
+        if (wrapper) wrapper.style.transform = 'scale(1)';
     });
 });
 
@@ -751,4 +753,4 @@ if (checkbox) {
     });
 }
 
-console.log('✅ GranaEvo Login com Recuperação de Senha carregado!');
+console.log('✅ GranaEvo Login carregado!');
