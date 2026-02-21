@@ -329,7 +329,7 @@ async function verificarLogin() {
         console.log('✅ [VERIFICAR LOGIN] Sessão válida:', session.user.email);
         console.log('👤 [VERIFICAR LOGIN] User ID:', session.user.id);
 
-    // 2️⃣ VERIFICAR ASSINATURA (própria ou via membership de convidado)
+        // 2️⃣ VERIFICAR ASSINATURA PRÓPRIA
         console.log('🔍 [VERIFICAR LOGIN] Buscando assinatura...');
 
         let planName = '';
@@ -342,14 +342,16 @@ async function verificarLogin() {
             .select('plans(name)')
             .eq('user_id', session.user.id)
             .eq('payment_status', 'approved')
+            .eq('is_active', true)
             .maybeSingle();
 
         if (!subError && subscription) {
             planName = subscription.plans.name;
             console.log('✅ [VERIFICAR LOGIN] Assinatura própria encontrada:', planName);
         } else {
-            // ✅ VERIFICAR SE É CONVIDADO (member de outra conta)
+            // 3️⃣ VERIFICAR SE É CONVIDADO
             console.log('🔍 [VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
+            
             const { data: membership, error: memberError } = await supabase
                 .from('account_members')
                 .select('owner_user_id, owner_email')
@@ -358,11 +360,14 @@ async function verificarLogin() {
                 .maybeSingle();
 
             if (memberError || !membership) {
-                console.log('❌ [VERIFICAR LOGIN] Sem assinatura e sem membership. Redirecionando...');
+                // ✅ CORRIGIDO: agora redireciona de verdade
+                console.log('❌ [VERIFICAR LOGIN] Sem assinatura e sem membership ativo.');
+                await supabase.auth.signOut();
+                window.location.href = 'login.html?erro=sem_plano';
                 return;
             }
 
-            // Buscar assinatura do dono
+            // 4️⃣ BUSCAR ASSINATURA DO DONO
             const { data: ownerSub, error: ownerSubError } = await supabase
                 .from('subscriptions')
                 .select('plans(name)')
@@ -372,7 +377,10 @@ async function verificarLogin() {
                 .maybeSingle();
 
             if (ownerSubError || !ownerSub) {
+                // ✅ CORRIGIDO: agora redireciona de verdade
                 console.log('❌ [VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
+                await supabase.auth.signOut();
+                window.location.href = 'login.html?erro=plano_dono_inativo';
                 return;
             }
 
@@ -383,10 +391,10 @@ async function verificarLogin() {
             console.log('✅ [VERIFICAR LOGIN] Acesso como convidado. Dono:', effectiveEmail, 'Plano:', planName);
         }
 
-        // 3️⃣ INICIALIZAR USUÁRIO
+        // 5️⃣ INICIALIZAR USUÁRIO
         usuarioLogado = {
-            userId: session.user.id,        // ID real do usuário logado
-            effectiveUserId: effectiveUserId, // ID do dono (para carregar dados)
+            userId: session.user.id,
+            effectiveUserId: effectiveUserId,
             nome: session.user.user_metadata?.name || session.user.email.split('@')[0],
             email: session.user.email,
             plano: planName,
@@ -397,16 +405,16 @@ async function verificarLogin() {
         console.log('👤 [VERIFICAR LOGIN] Usuário inicializado:', {
             userId: usuarioLogado.userId,
             nome: usuarioLogado.nome,
-            email: usuarioLogado.email,
-            plano: usuarioLogado.plano
+            plano: usuarioLogado.plano,
+            isGuest: usuarioLogado.isGuest
         });
 
-        // 4️⃣ ⚠️ CRÍTICO: INICIALIZAR DATAMANAGER (usa effectiveUserId para convidados)
+        // 6️⃣ INICIALIZAR DATAMANAGER
         console.log('📦 [VERIFICAR LOGIN] Inicializando DataManager...');
         await dataManager.initialize(usuarioLogado.effectiveUserId, effectiveEmail);
-        console.log('✅ [VERIFICAR LOGIN] DataManager inicializado com sucesso');
+        console.log('✅ [VERIFICAR LOGIN] DataManager inicializado');
 
-        // 5️⃣ CARREGAR PERFIS
+        // 7️⃣ CARREGAR PERFIS
         console.log('👥 [VERIFICAR LOGIN] Carregando perfis...');
         const resultadoPerfis = await carregarPerfis();
 
@@ -414,15 +422,16 @@ async function verificarLogin() {
             throw new Error("Não foi possível carregar os dados do usuário.");
         }
 
+        // 8️⃣ MOSTRAR SELEÇÃO DE PERFIS (NUNCA PULA ESTA ETAPA)
         console.log('✅ [VERIFICAR LOGIN] Login completo. Mostrando seleção de perfis.');
         mostrarSelecaoPerfis();
 
     } catch (e) {
         console.error('❌ [VERIFICAR LOGIN] Erro crítico na inicialização:', e.message);
-        console.error('[VERIFICAR LOGIN] Stack:', e.stack);
         alert(e.message);
-        AuthGuard.performLogout();
+        window.location.href = 'login.html';
     } finally {
+        // ✅ CORRIGIDO: só mostra o conteúdo se chegou até aqui sem redirecionar
         if (authLoading) authLoading.style.display = 'none';
         if (protectedContent) protectedContent.style.display = 'block';
     }
