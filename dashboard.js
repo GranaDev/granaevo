@@ -1,6 +1,7 @@
 // ========== IMPORTS ESSENCIAIS ==========
 import { supabase } from './supabase-client.js';
 import { dataManager } from './data-manager.js';
+import AuthGuard from './auth-guard.js';
 
 console.log('🚀 Dashboard.js carregado');
 console.log('📦 DataManager disponível:', !!dataManager);
@@ -5569,7 +5570,7 @@ function comoUsar() {
 }
 
 // ========== CONFIRMAR LOGOUT (VERSÃO FINAL CORRIGIDA) ==========
-function confirmarLogout() {
+async function confirmarLogout_seguro() {
     criarPopup(`
         <h3>Confirmar Saída</h3>
         <div style="margin: 20px 0; color: var(--text-secondary);">Quer mesmo sair?</div>
@@ -5579,71 +5580,39 @@ function confirmarLogout() {
 
     document.getElementById('simLogout').onclick = async () => {
         try {
-            // ✅ PARAR AUTO-SAVE IMEDIATAMENTE
             pararAutoSave();
-            
-            // ✅ MOSTRAR INDICADOR DE CARREGAMENTO
+
             const popup = document.querySelector('.popup');
             if (popup) {
                 popup.innerHTML = `
                     <h3>Salvando dados...</h3>
                     <div style="text-align:center; padding:30px;">
-                        <div style="width:40px; height:40px; margin:0 auto; border:4px solid rgba(16,185,129,0.3); border-top-color:#10b981; border-radius:50%; animation:spin 1s linear infinite;"></div>
+                        <div style="width:40px; height:40px; margin:0 auto;
+                             border:4px solid rgba(16,185,129,0.3);
+                             border-top-color:#10b981; border-radius:50%;
+                             animation:spin 1s linear infinite;"></div>
                         <p style="margin-top:16px; color: var(--text-secondary);">Aguarde...</p>
                     </div>
                 `;
             }
-            
-            // ✅ SALVAR DADOS SE HOUVER PERFIL ATIVO
+
             if (perfilAtivo) {
-                console.log('💾 Salvando dados antes do logout...');
-                const salvou = await salvarDados();
-                console.log(salvou ? '✅ Dados salvos com sucesso' : '⚠️ Falha ao salvar dados');
-                
-                // ✅ AGUARDAR UM POUCO PARA GARANTIR QUE SALVOU
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await salvarDados();
+                await new Promise(r => setTimeout(r, 400));
             }
-            
-            // ✅ LIMPAR DADOS LOCAIS
-            localStorage.removeItem('perfilAtivo');
-            localStorage.removeItem('granaevo_perfilAtivoId');
-            perfilAtivo = null;
-            
-            // ✅ FAZER LOGOUT DO SUPABASE
-            console.log('🚪 Realizando logout...');
-            const { error } = await supabase.auth.signOut();
-            
-            if (error) {
-                console.error('❌ Erro ao fazer logout:', error);
-                throw error;
-            }
-            
-            console.log('✅ Logout realizado com sucesso');
-            
-            // ✅ REDIRECIONAR PARA LOGIN
-            window.location.href = 'login.html';
-            
-        } catch (error) {
-            console.error('❌ Erro durante logout:', error);
-            
-            // ✅ MESMO COM ERRO, TENTAR LOGOUT E REDIRECIONAR
-            alert('Houve um erro ao salvar os dados, mas você será desconectado.');
-            
-            // ✅ LIMPAR DADOS LOCAIS
-            localStorage.clear();
-            
-            // ✅ FORÇAR LOGOUT DO SUPABASE
-            try {
-                await supabase.auth.signOut();
-            } catch (e) {
-                console.error('❌ Erro ao forçar logout:', e);
-            }
-            
-            // ✅ REDIRECIONAR DE QUALQUER FORMA
-            window.location.href = 'login.html';
+
+            // AuthGuard cuida de: limpar storage, signOut e redirect
+            await AuthGuard.logout('logout_voluntario');
+
+        } catch (e) {
+            console.error('Erro no logout:', e);
+            AuthGuard.forceLogout('logout_com_erro');
         }
     };
 }
+
+// Sobrescreve a versão original
+window.confirmarLogout = confirmarLogout_seguro;
 
 // ========== ATUALIZAR TUDO ==========
 function atualizarTudo() {

@@ -5,6 +5,7 @@
    ============================================= */
 
 import { supabase } from './supabase-client.js';
+import AuthGuard from './auth-guard.js';
 
 // ========== CONFIGURAÇÕES DE PLANOS ==========
 const PLANOS_CONFIG = {
@@ -66,45 +67,94 @@ const PLANOS_CONFIG = {
 let usuarioAtual = null;
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
-// Lê a sessão diretamente do Supabase — sem depender do AuthGuard
 async function verificarLogin() {
     const authLoading = document.getElementById('loadingScreen');
 
-    try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+    const userData = await AuthGuard.protect({
+        requirePlan:      true,
+        allowGuest:       true,    // Convidado PODE ver a página...
+        guestCanUpgrade:  false,   // ...mas NÃO pode fazer upgrade (só o dono)
+        loadingElementId: 'loadingScreen',
+        redirectOnFail:   true,
 
-        if (error || !session || !session.user) {
-            if (authLoading) authLoading.style.display = 'none';
-            alert('⚠️ Você precisa estar logado para atualizar seu plano!');
-            window.location.href = 'login.html';
-            return;
-        }
+        onSuccess: async (user) => {
+            // Popula o objeto usuarioAtual que o restante do script usa
+            usuarioAtual = {
+                nome:        user.nome,
+                planoAtual:  user.plano,
+                userId:      user.userId,
+                email:       user.email,
+                isGuest:     user.isGuest,
+                ownerEmail:  user.ownerEmail || null,
+            };
 
-        const user = session.user;
+            // Esconde o loading e mostra a página
+            if (authLoading) {
+                setTimeout(() => authLoading.classList.add('hidden'), 800);
+            }
 
-        // ⚠️ Ajuste o campo do plano conforme o que você salva no Supabase.
-        // Exemplos comuns: user.user_metadata.plan | user.app_metadata.plan
-        const plano = user.user_metadata?.plan || 'Individual';
+            // ── Se for convidado, exibe aviso e bloqueia upgrade ──────
+            if (user.isGuest) {
+                _exibirAvisoConvidado(user);
+                return;
+            }
 
-        usuarioAtual = {
-            nome: user.user_metadata?.name || user.email,
-            planoAtual: plano,
-            userId: user.id,
-            email: user.email
-        };
+            // Inicializa a página normalmente
+            inicializarPagina();
+        },
 
-        if (authLoading) {
-            setTimeout(() => authLoading.classList.add('hidden'), 1000);
-        }
+        onFail: (error) => {
+            console.error(`🔒 [UPGRADE PAGE] Auth falhou: ${error?.code}`);
+            // redirect já é feito pelo guard
+        },
+    });
 
-        inicializarPagina();
+    return userData;
+}
 
-    } catch (e) {
-        console.error('❌ Erro ao verificar sessão:', e);
-        if (authLoading) authLoading.style.display = 'none';
-        alert('❌ Erro ao verificar autenticação. Faça login novamente.');
-        window.location.href = 'login.html';
-    }
+// ─────────────────────────────────────────────────────────────
+//  AVISO PARA CONVIDADOS — não podem gerenciar planos
+// ─────────────────────────────────────────────────────────────
+function _exibirAvisoConvidado(user) {
+    const container = document.querySelector('.upgrade-container') ||
+                      document.querySelector('main') ||
+                      document.body;
+
+    const aviso = document.createElement('div');
+    aviso.style.cssText = `
+        max-width: 520px;
+        margin: 80px auto;
+        padding: 40px;
+        background: linear-gradient(135deg, #1a1d3a, #0d0f1f);
+        border: 1px solid rgba(255,209,102,0.3);
+        border-radius: 20px;
+        text-align: center;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    `;
+
+    aviso.innerHTML = `
+        <div style="font-size:3rem; margin-bottom:16px;">🔒</div>
+        <h2 style="color:#ffd166; font-size:1.6rem; margin-bottom:12px;">
+            Acesso Restrito
+        </h2>
+        <p style="color:#9ca3af; line-height:1.7; margin-bottom:24px;">
+            Você acessa o GranaEvo como <strong style="color:white;">convidado</strong>
+            da conta de <strong style="color:#6c63ff;">${user.ownerEmail || 'outro usuário'}</strong>.
+            <br><br>
+            Apenas o <strong style="color:white;">titular da conta</strong> pode
+            gerenciar e atualizar o plano.
+        </p>
+        <button onclick="window.location.href='dashboard.html'"
+                style="padding:14px 32px; background:linear-gradient(135deg,#6c63ff,#4a42cc);
+                       border:none; border-radius:12px; color:white; font-size:1rem;
+                       font-weight:700; cursor:pointer; box-shadow:0 4px 16px rgba(108,99,255,0.4);">
+            ← Voltar ao Dashboard
+        </button>
+    `;
+
+    // Limpa o conteúdo atual e exibe somente o aviso
+    container.innerHTML = '';
+    container.appendChild(aviso);
 }
 
 // ========== INICIALIZAÇÃO ==========
