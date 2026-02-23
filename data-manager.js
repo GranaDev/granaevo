@@ -244,6 +244,32 @@ async loadUserData() {
         }
     }
 
+    // ========== SALVAMENTO IMEDIATO (para beforeunload) ==========
+saveImmediate(profilesData) {
+    if (!this.userId) return false;
+
+    const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
+
+    const payload = JSON.stringify({
+        userId: this.userId,
+        userEmail: this.userEmail,
+        profiles: profilesData
+    });
+
+    // ✅ sendBeacon garante envio mesmo ao fechar/recarregar a página
+    const sent = navigator.sendBeacon(
+        `${SUPABASE_URL}/functions/v1/save-user-data`,
+        new Blob([payload], { type: 'application/json' })
+    );
+
+    console.log(sent 
+        ? '✅ [BEACON] Dados enviados com sucesso no unload' 
+        : '❌ [BEACON] Falha ao enviar dados no unload'
+    );
+
+    return sent;
+}
+
     // ========== ESTRUTURA VAZIA ==========
     createEmptyStructure() {
         return {

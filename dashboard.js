@@ -6798,32 +6798,46 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ========== SALVAMENTO ANTES DE SAIR (VERSÃO CORRIGIDA) ==========
-window.addEventListener('beforeunload', (e) => {
-    if (perfilAtivo) {
-        console.log('🚪 Usuário saindo - Salvando dados...');
-        
-        // ✅ USAR FETCH SÍNCRONO (navigator.sendBeacon é mais confiável)
-        const dadosParaSalvar = JSON.stringify({
-            userId: dataManager.userId,
-            profiles: [{
-                id: perfilAtivo.id,
-                nome: perfilAtivo.nome,
-                foto: perfilAtivo.foto,
-                transacoes: transacoes,
-                metas: metas,
-                contasFixas: contasFixas,
-                cartoesCredito: cartoesCredito,
-                lastUpdate: new Date().toISOString()
-            }]
-        });
+// ========== SALVAMENTO GARANTIDO AO SAIR ==========
+window.addEventListener('beforeunload', () => {
+    if (perfilAtivo && dataManager.userId) {
+        console.log('🚪 Usuário saindo - Enviando dados via beacon...');
 
-        // ✅ TENTAR SALVAR SÍNCRONAMENTE
-        try {
-            salvarDados(); // Dispara salvamento sem esperar
-            console.log('✅ Salvamento disparado');
-        } catch (err) {
-            console.error('❌ Erro ao salvar:', err);
-        }
+        atualizarReferenciasGlobais();
+
+        const profilesAtual = [{
+            id: perfilAtivo.id,
+            nome: perfilAtivo.nome,
+            foto: perfilAtivo.foto,
+            transacoes,
+            metas,
+            contasFixas,
+            cartoesCredito,
+            nextTransId,
+            nextMetaId,
+            nextContaFixaId,
+            nextCartaoId,
+            lastUpdate: new Date().toISOString()
+        }];
+
+        // ✅ sendBeacon — garante envio mesmo em F5/fechar aba
+        dataManager.saveImmediate(profilesAtual);
+    }
+});
+
+// ✅ Trocar de aba ou minimizar — tem tempo suficiente para async normal
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && perfilAtivo) {
+        console.log('👁️ Aba oculta - Salvando...');
+        salvarDados();
+    }
+});
+
+// ✅ Janela perde foco — salva também
+window.addEventListener('blur', () => {
+    if (perfilAtivo) {
+        console.log('🔄 Janela perdeu foco - Salvando...');
+        salvarDados();
     }
 });
 
