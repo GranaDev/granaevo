@@ -105,34 +105,33 @@ function getMesNome(mes) {
 async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            throw new Error('Sessão inválida');
-        }
+        if (!session) throw new Error('Sessão inválida');
 
-        console.log('🔍 Buscando perfis para o usuário:', session.user.id);
+        // ✅ Sempre usar effectiveUserId (dono) para buscar dados
+        const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
+
+        console.log('🔍 Buscando perfis para userId:', targetUserId);
 
         const { data: perfis, error } = await supabase
             .from('profiles')
-            .select('id, name, photo_url') // ✅ Campo correto
-            .eq('user_id', session.user.id)
+            .select('id, name, photo_url')
+            .eq('user_id', targetUserId) // ← CORRIGIDO
             .order('id', { ascending: true });
 
         if (error) throw error;
 
         if (perfis && perfis.length > 0) {
-            console.log(`✅ ${perfis.length} perfil(s) encontrado(s).`);
             usuarioLogado.perfis = perfis.map(p => ({
                 id: p.id,
                 nome: p.name,
-                foto: p.photo_url  // ✅ Campo correto
+                foto: p.photo_url
             }));
             return { sucesso: true, perfisEncontrados: true };
-        } else {
-            console.log('⚠️ Nenhum perfil encontrado.');
-            usuarioLogado.perfis = [];
-            return { sucesso: true, perfisEncontrados: false };
         }
-        
+
+        usuarioLogado.perfis = [];
+        return { sucesso: true, perfisEncontrados: false };
+
     } catch(e) {
         console.error('❌ Erro ao carregar perfis:', e);
         usuarioLogado.perfis = [];
@@ -654,12 +653,12 @@ function adicionarNovoPerfil() {
             
             // ✅ CORREÇÃO: Usar photo_url em vez de photo
             const { data: novoPerfil, error } = await supabase
-                .from('profiles')
-                .insert({
-                    user_id: session.user.id,
-                    name: nome,
-                    photo_url: fotoUrl  // ✅ CORRIGIDO!
-                })
+            .from('profiles')
+            .insert({
+                user_id: usuarioLogado.effectiveUserId, // ← ID do dono sempre
+                name: nome,
+                photo_url: fotoUrl
+            })
                 .select()
                 .single();
             
