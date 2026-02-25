@@ -321,36 +321,35 @@ async function salvarDados() {
 window.salvarDados = salvarDados;
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
-// ═══════════════════════════════════════════════════════════════
-//  SUBSTITUA *APENAS UMA* verificarLogin no seu arquivo.
-//  Delete a versão antiga por completo antes de colar esta.
-// ═══════════════════════════════════════════════════════════════
-
 async function verificarLogin() {
-    const authLoading      = document.getElementById('authLoading');
-    const protectedContent = document.getElementById('protectedContent');
-
-    // Spinner visível, conteúdo oculto durante verificação
-    if (authLoading)      authLoading.style.display      = 'flex';
-    if (protectedContent) protectedContent.style.display = 'none';
-
-    // Flag: só libera o conteúdo se tudo passar
-    let verificacaoConcluida = false;
+    const authLoading = document.getElementById('authLoading');
+    const protectedContent = document.querySelector('[data-protected-content]');
 
     try {
-        // ── 1. Verificar sessão ──────────────────────────────────
+        console.log('🔐 [VERIFICAR LOGIN] Iniciando verificação...');
+        
+        if (authLoading) authLoading.style.display = 'flex';
+        if (protectedContent) protectedContent.style.display = 'none';
+
+        // 1️⃣ VERIFICAR SESSÃO
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError || !session) {
-            window.location.replace('login.html');
+            console.log('❌ [VERIFICAR LOGIN] Sessão não encontrada. Redirecionando...');
+            window.location.href = 'login.html';
             return;
         }
 
-        // ── 2. Verificar assinatura própria ──────────────────────
-        let planName        = '';
+        console.log('✅ [VERIFICAR LOGIN] Sessão válida:', session.user.email);
+        console.log('👤 [VERIFICAR LOGIN] User ID:', session.user.id);
+
+        // 2️⃣ VERIFICAR ASSINATURA PRÓPRIA
+        console.log('🔍 [VERIFICAR LOGIN] Buscando assinatura...');
+
+        let planName = '';
         let effectiveUserId = session.user.id;
-        let effectiveEmail  = session.user.email;
-        let isGuest         = false;
+        let effectiveEmail = session.user.email;
+        let isGuest = false;
 
         const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
@@ -362,9 +361,11 @@ async function verificarLogin() {
 
         if (!subError && subscription) {
             planName = subscription.plans.name;
-
+            console.log('✅ [VERIFICAR LOGIN] Assinatura própria encontrada:', planName);
         } else {
-            // ── 3. Verificar se é convidado ──────────────────────
+            // 3️⃣ VERIFICAR SE É CONVIDADO
+            console.log('🔍 [VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
+            
             const { data: membership, error: memberError } = await supabase
                 .from('account_members')
                 .select('owner_user_id, owner_email')
@@ -373,12 +374,14 @@ async function verificarLogin() {
                 .maybeSingle();
 
             if (memberError || !membership) {
+                // ✅ CORRIGIDO: agora redireciona de verdade
+                console.log('❌ [VERIFICAR LOGIN] Sem assinatura e sem membership ativo.');
                 await supabase.auth.signOut();
-                window.location.replace('login.html?c=a7');
+                window.location.href = 'login.html?erro=sem_plano';
                 return;
             }
 
-            // ── 4. Verificar assinatura do dono ──────────────────
+            // 4️⃣ BUSCAR ASSINATURA DO DONO
             const { data: ownerSub, error: ownerSubError } = await supabase
                 .from('subscriptions')
                 .select('plans(name)')
@@ -388,58 +391,63 @@ async function verificarLogin() {
                 .maybeSingle();
 
             if (ownerSubError || !ownerSub) {
+                // ✅ CORRIGIDO: agora redireciona de verdade
+                console.log('❌ [VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
                 await supabase.auth.signOut();
-                window.location.replace('login.html?c=a8');
+                window.location.href = 'login.html?erro=plano_dono_inativo';
                 return;
             }
 
-            planName        = ownerSub.plans.name;
+            planName = ownerSub.plans.name;
             effectiveUserId = membership.owner_user_id;
-            effectiveEmail  = membership.owner_email;
-            isGuest         = true;
+            effectiveEmail = membership.owner_email;
+            isGuest = true;
+            console.log('✅ [VERIFICAR LOGIN] Acesso como convidado. Dono:', effectiveEmail, 'Plano:', planName);
         }
 
-        // ── 5. Inicializar estado do usuário ─────────────────────
+        // 5️⃣ INICIALIZAR USUÁRIO
         usuarioLogado = {
-            userId:          session.user.id,
+            userId: session.user.id,
             effectiveUserId: effectiveUserId,
-            nome:            _sanitizeText(
-                                 session.user.user_metadata?.name ||
-                                 session.user.email.split('@')[0] ||
-                                 'Usuário'
-                             ),
-            email:           session.user.email,
-            plano:           planName,
-            perfis:          [],
-            isGuest:         isGuest,
+            nome: session.user.user_metadata?.name || session.user.email.split('@')[0],
+            email: session.user.email,
+            plano: planName,
+            perfis: [],
+            isGuest: isGuest,
         };
 
-        // ── 6. Inicializar DataManager ───────────────────────────
-        await dataManager.initialize(effectiveUserId, effectiveEmail);
+        console.log('👤 [VERIFICAR LOGIN] Usuário inicializado:', {
+            userId: usuarioLogado.userId,
+            nome: usuarioLogado.nome,
+            plano: usuarioLogado.plano,
+            isGuest: usuarioLogado.isGuest
+        });
 
-        // ── 7. Carregar perfis ───────────────────────────────────
+        // 6️⃣ INICIALIZAR DATAMANAGER
+        console.log('📦 [VERIFICAR LOGIN] Inicializando DataManager...');
+        await dataManager.initialize(usuarioLogado.effectiveUserId, effectiveEmail);
+        console.log('✅ [VERIFICAR LOGIN] DataManager inicializado');
+
+        // 7️⃣ CARREGAR PERFIS
+        console.log('👥 [VERIFICAR LOGIN] Carregando perfis...');
         const resultadoPerfis = await carregarPerfis();
+
         if (!resultadoPerfis.sucesso) {
-            throw new Error('Não foi possível carregar os dados do usuário.');
+            throw new Error("Não foi possível carregar os dados do usuário.");
         }
 
-        // ✅ Tudo passou — marca como concluído
-        verificacaoConcluida = true;
+        // 8️⃣ MOSTRAR SELEÇÃO DE PERFIS (NUNCA PULA ESTA ETAPA)
+        console.log('✅ [VERIFICAR LOGIN] Login completo. Mostrando seleção de perfis.');
+        mostrarSelecaoPerfis();
 
     } catch (e) {
-        _log.error('LOGIN_001', e);
-        alert('Erro ao verificar acesso. Tente novamente.');
-        window.location.replace('login.html');
-
+        console.error('❌ [VERIFICAR LOGIN] Erro crítico na inicialização:', e.message);
+        alert(e.message);
+        window.location.href = 'login.html';
     } finally {
-        // Spinner sempre some
+        // ✅ CORRIGIDO: só mostra o conteúdo se chegou até aqui sem redirecionar
         if (authLoading) authLoading.style.display = 'none';
-
-        if (verificacaoConcluida) {
-            if (protectedContent) protectedContent.style.display = 'block';
-            mostrarSelecaoPerfis();
-        }
-
+        if (protectedContent) protectedContent.style.display = 'block';
     }
 }
 
@@ -6656,7 +6664,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 500);
     }
 });
-
 
 function desenharGraficoLinha() {
     const canvas = document.getElementById('linhaChart');
