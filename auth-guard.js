@@ -41,6 +41,10 @@ const SECURITY = {
         NO_PLAN:              'a7',
         GUEST_BLOCKED:        'a8',
         GUEST_UPGRADE_BLOCKED:'a9',
+        SESSION_GONE:         'b1',
+        LOGOUT:               'b2',
+        FORCE_LOGOUT:         'b3',
+        UNKNOWN:              'b4',
     },
 };
 

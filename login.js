@@ -238,7 +238,14 @@ async function getActiveSubscription(userId) {
         .eq('is_active', true)
         .maybeSingle();
 
-    if (ownSub) return { subscription: ownSub, isGuest: false };
+    // Verifica expires_at igual ao AuthGuard — evita inconsistência
+    if (ownSub) {
+        if (ownSub.expires_at && new Date(ownSub.expires_at) < new Date()) {
+            // Plano tecnicamente vencido mas ainda marcado como ativo no DB
+            return { subscription: null, isGuest: false };
+        }
+        return { subscription: ownSub, isGuest: false };
+    }
 
     // 2️⃣ Verifica se é um convidado vinculado a uma conta com assinatura ativa
     const { data: membership } = await supabase
@@ -258,7 +265,12 @@ async function getActiveSubscription(userId) {
         .eq('is_active', true)
         .maybeSingle();
 
-    if (ownerSub) return { subscription: ownerSub, isGuest: true };
+    if (ownerSub) {
+        if (ownerSub.expires_at && new Date(ownerSub.expires_at) < new Date()) {
+            return { subscription: null, isGuest: false };
+        }
+        return { subscription: ownerSub, isGuest: true };
+    }
 
     return { subscription: null, isGuest: false };
 }
