@@ -32,17 +32,31 @@ window._supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
 
 // ✅ FUNÇÃO PARA ATUALIZAR REFERÊNCIAS GLOBAIS
 function atualizarReferenciasGlobais() {
-    window.perfilAtivo = perfilAtivo;
-    window.transacoes = transacoes;
-    window.metas = metas;
-    window.contasFixas = contasFixas;
-    window.cartoesCredito = cartoesCredito;
-    window.usuarioLogado = usuarioLogado;
+    window.__GE__ = Object.freeze({
+        perfilAtivo:    Object.freeze({ ...perfilAtivo }),
+        usuarioLogado:  Object.freeze({ ...usuarioLogado, perfis: Object.freeze([...usuarioLogado.perfis]) }),
+        transacoes:     Object.freeze([...transacoes]),
+        metas:          Object.freeze([...metas]),
+        contasFixas:    Object.freeze([...contasFixas]),
+        cartoesCredito: Object.freeze([...cartoesCredito]),
+    });
+    window.__GE_save__ = _throttledSave;
 }
 
-// ✅ EXPOR FUNÇÕES ESSENCIAIS
+const _throttledSave = (() => {
+    let _ultimaChamada = 0;
+    return async function() {
+        const agora = Date.now();
+        if (agora - _ultimaChamada < 3000) {
+            _log.warn('SAVE: chamada throttled (muito rápida)');
+            return false;
+        }
+        _ultimaChamada = agora;
+        return salvarDados();
+    };
+})();
+
 window.atualizarReferenciasGlobais = atualizarReferenciasGlobais;
-window.salvarDados = salvarDados;
 
 // Limites por plano
 const limitesPlano = {
