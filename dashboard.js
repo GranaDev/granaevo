@@ -566,119 +566,124 @@ async function entrarNoPerfil(index) {
     }
 }
 
-async function adicionarNovoPerfil() {
+function adicionarNovoPerfil() {
     const plano = usuarioLogado.plano;
     const limitePerfis = limitesPlano[plano];
     const perfisAtuais = usuarioLogado.perfis.length;
 
     if (perfisAtuais >= limitePerfis) {
+        console.log(`🚫 Tentativa de adicionar perfil bloqueada. Limite do plano "${plano}" (${limitePerfis}) atingido.`);
         mostrarPopupLimite();
         return;
     }
-
+    
+    console.log('📝 Abrindo formulário de novo perfil...');
+    
     const popup = criarPopup(`
         <h3>Novo Perfil</h3>
-        <input type="text" id="novoPerfilNome" class="form-input" placeholder="Nome do usuário (obrigatório)" maxlength="50">
-        <input type="file" id="novoPerfilFoto" class="form-input" accept="image/*" style="padding:10px;">
+        <input type="text" id="novoPerfilNome" class="form-input" placeholder="Nome do usuário (obrigatório)">
+        <input type="file" id="novoPerfilFoto" class="form-input" accept="image/*" style="padding:10px;">  
+
         <button class="btn-primary" id="criarPerfilBtn">Criar Perfil</button>
         <button class="btn-cancelar" id="cancelarPerfilBtn">Cancelar</button>
     `);
-
+    
     document.getElementById('cancelarPerfilBtn').onclick = () => fecharPopup();
-
+    
     document.getElementById('criarPerfilBtn').onclick = async () => {
         const nome = document.getElementById('novoPerfilNome').value.trim();
         const fotoInput = document.getElementById('novoPerfilFoto');
-
-        if (!nome) {
-            alert('Digite o nome do usuário!');
+        
+        if(!nome) {
+            alert("Digite o nome do usuário!");
             return;
         }
-
-        if (nome.length < 2) {
-            alert('O nome deve ter pelo menos 2 caracteres.');
+        
+        if(nome.length < 2) {
+            alert("O nome deve ter pelo menos 2 caracteres.");
             return;
         }
-
-        const btnCriar = document.getElementById('criarPerfilBtn');
-        btnCriar.disabled = true;
-        btnCriar.textContent = 'Criando...';
+        
+        if(usuarioLogado.perfis.length >= limitesPlano[plano]) {
+            mostrarPopupLimite();
+            fecharPopup();
+            return;
+        }
 
         try {
+            console.log('💾 Criando novo perfil no banco...');
+            
             const { data: { session } } = await supabase.auth.getSession();
-
+            
             if (!session) {
                 throw new Error('Sessão não encontrada');
             }
-
+            
             let fotoUrl = null;
-
-            if (fotoInput.files && fotoInput.files[0]) {
+            
+            if(fotoInput.files && fotoInput.files[0]) {
+                console.log('📸 Fazendo upload da foto...');
+                
                 const arquivo = fotoInput.files[0];
-
-                if (arquivo.size > 2 * 1024 * 1024) {
+                
+                if(arquivo.size > 2 * 1024 * 1024) {
                     alert('A foto deve ter no máximo 2MB');
-                    btnCriar.disabled = false;
-                    btnCriar.textContent = 'Criar Perfil';
                     return;
                 }
-
+                
                 const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name}`;
-
-                const { error: uploadError } = await supabase.storage
+                
+                const { data: uploadData, error: uploadError } = await supabase.storage
                     .from('profile-photos')
                     .upload(nomeArquivo, arquivo);
-
+                
                 if (uploadError) {
+                    console.error('❌ Erro no upload:', uploadError);
                     throw uploadError;
                 }
-
+                
                 const { data: urlData } = supabase.storage
                     .from('profile-photos')
                     .getPublicUrl(nomeArquivo);
-
+                
                 fotoUrl = urlData.publicUrl;
+                console.log('✅ Foto carregada:', fotoUrl);
             }
-
+            
+            console.log('💾 Inserindo perfil no banco...');
+            
+            // ✅ CORREÇÃO: Usar photo_url em vez de photo
             const { data: novoPerfil, error } = await supabase
-                .from('profiles')
-                .insert({
-                    user_id: usuarioLogado.effectiveUserId,
-                    name: nome,
-                    photo_url: fotoUrl
-                })
+            .from('profiles')
+            .insert({
+                user_id: usuarioLogado.effectiveUserId, // ← ID do dono sempre
+                name: nome,
+                photo_url: fotoUrl
+            })
                 .select()
                 .single();
-
+            
             if (error) {
-                if (error.message && error.message.includes('PLAN_LIMIT_EXCEEDED')) {
-                    fecharPopup();
-                    mostrarPopupLimite();
-                    return;
-                }
+                console.error('❌ Erro ao criar perfil:', error);
                 throw error;
             }
-
+            
+            console.log('✅ Perfil criado com ID:', novoPerfil.id);
+            
             usuarioLogado.perfis.push({
                 id: novoPerfil.id,
                 nome: novoPerfil.name,
-                foto: novoPerfil.photo_url
+                foto: novoPerfil.photo_url  // ✅ CORRIGIDO!
             });
-
+            
             fecharPopup();
             atualizarTelaPerfis();
+            
             alert('✅ Perfil criado com sucesso! Agora você pode selecioná-lo para entrar.');
-
+            
         } catch (error) {
-            if (error.message && error.message.includes('PLAN_LIMIT_EXCEEDED')) {
-                fecharPopup();
-                mostrarPopupLimite();
-            } else {
-                alert('Erro ao criar perfil. Tente novamente.');
-            }
-
-            btnCriar.disabled = false;
-            btnCriar.textContent = 'Criar Perfil';
+            console.error('❌ Erro ao criar perfil:', error);
+            alert('❌ Erro ao criar perfil. Tente novamente.');
         }
     };
 }

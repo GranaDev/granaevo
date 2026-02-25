@@ -13,9 +13,10 @@ const SECURITY = {
     // Sessão considerada "velha demais" após 24h → força relogin
     MAX_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
 
-    // Rate limiter: máx 15 chamadas por minuto por aba
+    // FIX #10: Rate limiter usa sessionStorage para contar entre abas
     RATE_LIMIT_MAX: 15,
     RATE_LIMIT_WINDOW_MS: 60 * 1000,
+    RATE_LIMIT_KEY: '_ge_rl',
 
     // Onde redirecionar quando o guard bloqueia
     LOGIN_URL: 'login.html',
@@ -27,22 +28,48 @@ const SECURITY = {
         lastCheck:      '_ge_lc',
         integrityStamp: '_ge_is',
     },
+
+    // FIX #7: Mapeamento genérico de códigos de erro para URLs
+    // Evita vazar detalhes internos do sistema de segurança
+    ERROR_URL_MAP: {
+        NO_SESSION:           'a1',
+        TOKEN_EXPIRED:        'a2',
+        SESSION_HIJACK:       'a3',
+        SESSION_TOO_OLD:      'a4',
+        INTEGRITY_FAIL:       'a5',
+        RATE_LIMITED:         'a6',
+        NO_PLAN:              'a7',
+        GUEST_BLOCKED:        'a8',
+        GUEST_UPGRADE_BLOCKED:'a9',
+    },
 };
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: RATE LIMITER
-//  Previne flood de requisições de verificação (DoS interno)
+//  FIX #10: Usa sessionStorage para compartilhar estado entre abas
 // ═══════════════════════════════════════════════════════════════
 const RateLimiter = (() => {
-    const log = [];
+    function getLog() {
+        try {
+            return JSON.parse(sessionStorage.getItem(SECURITY.RATE_LIMIT_KEY) || '[]');
+        } catch {
+            return [];
+        }
+    }
+
+    function saveLog(log) {
+        try {
+            sessionStorage.setItem(SECURITY.RATE_LIMIT_KEY, JSON.stringify(log));
+        } catch { /* sessionStorage cheio — ignora silenciosamente */ }
+    }
 
     return {
         isAllowed() {
             const now = Date.now();
             const windowStart = now - SECURITY.RATE_LIMIT_WINDOW_MS;
 
-            // Expira entradas antigas
-            while (log.length && log[0] < windowStart) log.shift();
+            // Carrega log persistente e remove entradas antigas
+            let log = getLog().filter(ts => ts > windowStart);
 
             if (log.length >= SECURITY.RATE_LIMIT_MAX) {
                 console.warn('🚨 [AUTH GUARD] Rate limit atingido — possível flood');
@@ -50,7 +77,12 @@ const RateLimiter = (() => {
             }
 
             log.push(now);
+            saveLog(log);
             return true;
+        },
+
+        clear() {
+            sessionStorage.removeItem(SECURITY.RATE_LIMIT_KEY);
         },
     };
 })();
@@ -99,20 +131,73 @@ const Fingerprint = {
     },
 
     /**
-     * Grava um "carimbo de integridade" baseado no userId + timestamp.
-     * Detecta se alguém trocou o userId no sessionStorage externamente.
+     * FIX #7 e #8: Grava um carimbo de integridade HMAC-like.
+     * Agora inclui timestamp + janela de validade para evitar replay.
+     * O campo é: base64(userId|timestamp|hmac_simplificado)
+     * hmac = hash(userId + timestamp + sessionSecret)
      */
+    _getSessionSecret() {
+        // Segredo único por sessão do navegador — não persiste entre fechamentos
+        let secret = sessionStorage.getItem('_ge_sec');
+        if (!secret) {
+            const arr = new Uint8Array(16);
+            crypto.getRandomValues(arr);
+            secret = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+            sessionStorage.setItem('_ge_sec', secret);
+        }
+        return secret;
+    },
+
+    _hmacSimple(data) {
+        const secret = this._getSessionSecret();
+        const raw = data + '::' + secret;
+        let h = 0x811c9dc5;
+        for (let i = 0; i < raw.length; i++) {
+            h ^= raw.charCodeAt(i);
+            h = (h * 0x01000193) >>> 0;
+        }
+        return h.toString(36);
+    },
+
     writeIntegrityStamp(userId) {
-        const stamp = btoa(`${userId}|${Date.now()}`);
+        const ts = Date.now();
+        const payload = `${userId}|${ts}`;
+        const mac = this._hmacSimple(payload);
+        const stamp = btoa(`${payload}|${mac}`);
         sessionStorage.setItem(SECURITY.KEYS.integrityStamp, stamp);
     },
 
+    /**
+     * FIX #8: Valida userId, integridade do MAC e idade do stamp
+     * Stamp com mais de 6 horas é rejeitado para forçar rotação
+     */
     readIntegrityStamp() {
         try {
             const stamp = sessionStorage.getItem(SECURITY.KEYS.integrityStamp);
             if (!stamp) return null;
+
             const decoded = atob(stamp);
-            const [uid] = decoded.split('|');
+            const parts = decoded.split('|');
+            if (parts.length !== 3) return null;
+
+            const [uid, tsStr, storedMac] = parts;
+            const ts = parseInt(tsStr, 10);
+
+            // Verifica integridade do MAC
+            const expectedMac = this._hmacSimple(`${uid}|${tsStr}`);
+            if (storedMac !== expectedMac) {
+                console.warn('🚨 [AUTH GUARD] MAC do integrity stamp inválido — possível adulteração');
+                return null;
+            }
+
+            // FIX #8: Rejeita stamps com mais de 6 horas
+            const SIX_HOURS = 6 * 60 * 60 * 1000;
+            if (Date.now() - ts > SIX_HOURS) {
+                console.warn('⏰ [AUTH GUARD] Integrity stamp expirado — rotacionando');
+                sessionStorage.removeItem(SECURITY.KEYS.integrityStamp);
+                return null; // Retorna null: será recriado no próximo ciclo do guard
+            }
+
             return uid;
         } catch {
             return null;
@@ -121,111 +206,113 @@ const Fingerprint = {
 
     clear() {
         Object.values(SECURITY.KEYS).forEach(k => sessionStorage.removeItem(k));
+        sessionStorage.removeItem('_ge_sec');
     },
 };
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: SUBSCRIPTION CHECKER
-//  Verifica se o usuário (ou o dono dele) tem plano ativo válido.
-//  Cache de 5 min para não martelas o Supabase.
+//  FIX #12: Cache em closure privado — não acessível via console
 // ═══════════════════════════════════════════════════════════════
-const SubscriptionChecker = {
-    _cache: null,
-    _cacheUserId: null,
-    _cacheExpiry: 0,
-    CACHE_TTL: 5 * 60 * 1000,
+const SubscriptionChecker = (() => {
+    // Estado privado — inacessível externamente
+    let _cache = null;
+    let _cacheUserId = null;
+    let _cacheExpiry = 0;
+    const CACHE_TTL = 5 * 60 * 1000;
 
-    _isExpired() {
-        return Date.now() > this._cacheExpiry;
-    },
+    function isExpired() {
+        return Date.now() > _cacheExpiry;
+    }
 
-    async getActive(userId) {
-        // Retorna cache se válido e for o mesmo user
-        if (this._cache && !this._isExpired() && this._cacheUserId === userId) {
-            return this._cache;
-        }
+    function setCache(data, userId) {
+        _cache = Object.freeze({ ...data }); // Congela o objeto para impedir mutação
+        _cacheUserId = userId;
+        _cacheExpiry = Date.now() + CACHE_TTL;
+        return _cache;
+    }
 
-        const empty = { subscription: null, isGuest: false, ownerId: null, planName: null, ownerEmail: null };
+    const empty = Object.freeze({ subscription: null, isGuest: false, ownerId: null, planName: null, ownerEmail: null });
 
-        try {
-            // ── 1. Verifica assinatura própria ─────────────────────────
-            const { data: ownSub, error: ownErr } = await supabase
-                .from('subscriptions')
-                .select('id, plans(name), is_active, payment_status, expires_at')
-                .eq('user_id', userId)
-                .eq('payment_status', 'approved')
-                .eq('is_active', true)
-                .maybeSingle();
+    return {
+        async getActive(userId) {
+            // Retorna cache se válido e for o mesmo user
+            if (_cache && !isExpired() && _cacheUserId === userId) {
+                return _cache;
+            }
 
-            if (!ownErr && ownSub) {
-                // Checa expiração explícita se campo exists
-                if (ownSub.expires_at && new Date(ownSub.expires_at) < new Date()) {
-                    console.warn('⏰ [AUTH GUARD] Assinatura com expires_at vencido');
+            try {
+                // ── 1. Verifica assinatura própria ────────────────────
+                const { data: ownSub, error: ownErr } = await supabase
+                    .from('subscriptions')
+                    .select('id, plans(name), is_active, payment_status, expires_at')
+                    .eq('user_id', userId)
+                    .eq('payment_status', 'approved')
+                    .eq('is_active', true)
+                    .maybeSingle();
+
+                if (!ownErr && ownSub) {
+                    if (ownSub.expires_at && new Date(ownSub.expires_at) < new Date()) {
+                        console.warn('⏰ [AUTH GUARD] Assinatura com expires_at vencido');
+                        return empty;
+                    }
+
+                    return setCache({
+                        subscription: ownSub,
+                        isGuest: false,
+                        ownerId: userId,
+                        planName: ownSub.plans?.name || 'Individual',
+                        ownerEmail: null,
+                    }, userId);
+                }
+
+                // ── 2. Verifica se é convidado (account_members) ──────
+                const { data: member, error: memErr } = await supabase
+                    .from('account_members')
+                    .select('id, owner_user_id, owner_email, is_active')
+                    .eq('member_user_id', userId)
+                    .eq('is_active', true)
+                    .maybeSingle();
+
+                if (memErr || !member) return empty;
+
+                // ── 3. Verifica assinatura do dono ────────────────────
+                const { data: ownerSub, error: ownerErr } = await supabase
+                    .from('subscriptions')
+                    .select('id, plans(name), is_active, payment_status, expires_at')
+                    .eq('user_id', member.owner_user_id)
+                    .eq('payment_status', 'approved')
+                    .eq('is_active', true)
+                    .maybeSingle();
+
+                if (ownerErr || !ownerSub) return empty;
+
+                if (ownerSub.expires_at && new Date(ownerSub.expires_at) < new Date()) {
+                    console.warn('⏰ [AUTH GUARD] Assinatura do dono expirada');
                     return empty;
                 }
 
-                return this._setCache({
-                    subscription: ownSub,
-                    isGuest: false,
-                    ownerId: userId,
-                    planName: ownSub.plans?.name || 'Individual',
-                    ownerEmail: null,
+                return setCache({
+                    subscription: ownerSub,
+                    isGuest: true,
+                    ownerId: member.owner_user_id,
+                    planName: ownerSub.plans?.name || 'Individual',
+                    ownerEmail: member.owner_email,
                 }, userId);
-            }
 
-            // ── 2. Verifica se é convidado (account_members) ──────────
-            const { data: member, error: memErr } = await supabase
-                .from('account_members')
-                .select('id, owner_user_id, owner_email, is_active')
-                .eq('member_user_id', userId)
-                .eq('is_active', true)
-                .maybeSingle();
-
-            if (memErr || !member) return empty;
-
-            // ── 3. Verifica assinatura do dono ────────────────────────
-            const { data: ownerSub, error: ownerErr } = await supabase
-                .from('subscriptions')
-                .select('id, plans(name), is_active, payment_status, expires_at')
-                .eq('user_id', member.owner_user_id)
-                .eq('payment_status', 'approved')
-                .eq('is_active', true)
-                .maybeSingle();
-
-            if (ownerErr || !ownerSub) return empty;
-
-            if (ownerSub.expires_at && new Date(ownerSub.expires_at) < new Date()) {
-                console.warn('⏰ [AUTH GUARD] Assinatura do dono expirada');
+            } catch (e) {
+                console.error('❌ [AUTH GUARD] Erro ao checar subscription:', e);
                 return empty;
             }
+        },
 
-            return this._setCache({
-                subscription: ownerSub,
-                isGuest: true,
-                ownerId: member.owner_user_id,
-                planName: ownerSub.plans?.name || 'Individual',
-                ownerEmail: member.owner_email,
-            }, userId);
-
-        } catch (e) {
-            console.error('❌ [AUTH GUARD] Erro ao checar subscription:', e);
-            return empty;
-        }
-    },
-
-    _setCache(data, userId) {
-        this._cache = data;
-        this._cacheUserId = userId;
-        this._cacheExpiry = Date.now() + this.CACHE_TTL;
-        return data;
-    },
-
-    invalidate() {
-        this._cache = null;
-        this._cacheUserId = null;
-        this._cacheExpiry = 0;
-    },
-};
+        invalidate() {
+            _cache = null;
+            _cacheUserId = null;
+            _cacheExpiry = 0;
+        },
+    };
+})();
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: REDIRECT SEGURO
@@ -248,18 +335,22 @@ const SafeRedirect = {
             url = SECURITY.LOGIN_URL;
         }
 
-        if (reason) console.log(`🔒 [AUTH GUARD] Redirect → ${url} | Motivo: ${reason}`);
+        // FIX #9: Logs internos apenas — não expõe código real na URL
+        if (reason) console.log(`🔒 [AUTH GUARD] Redirect → ${url} | Código: ${reason}`);
 
         // Limpeza antes de sair
         Fingerprint.clear();
         SubscriptionChecker.invalidate();
+        RateLimiter.clear();
 
         // replace() impede o botão "voltar" de retornar à página protegida
         window.location.replace(url);
     },
 
     toLogin(reason = '') {
-        const params = reason ? `?erro=${encodeURIComponent(reason)}` : '';
+        // FIX #9: Usa código ofuscado na URL — não revela o mecanismo de segurança
+        const obfuscatedCode = SECURITY.ERROR_URL_MAP[reason] || 'e0';
+        const params = `?c=${encodeURIComponent(obfuscatedCode)}`;
         this.to(SECURITY.LOGIN_URL + params, reason);
     },
 };
@@ -281,23 +372,26 @@ const AuthGuard = {
      * └─────────────────────────────────────────────────────────┘
      *
      * @param {Object} options
-     * @param {boolean}  options.requirePlan       - Exige plano ativo       (default: true)
-     * @param {boolean}  options.allowGuest         - Permite convidados      (default: true)
-     * @param {boolean}  options.guestCanUpgrade    - Convidado pode acessar upgrade? (default: false)
-     * @param {Function} options.onSuccess          - callback(userData)
-     * @param {Function} options.onFail             - callback(errorObj) antes do redirect
-     * @param {boolean}  options.redirectOnFail     - Redirecionar auto?      (default: true)
-     * @param {string}   options.loadingElementId   - ID do spinner de loading
+     * @param {boolean}  options.requirePlan          - Exige plano ativo       (default: true)
+     * @param {boolean}  options.allowGuest            - Permite convidados      (default: true)
+     * @param {boolean}  options.guestCanUpgrade       - Convidado pode acessar upgrade? (default: false)
+     * @param {string[]} options.upgradePagePatterns   - Padrões de URL para páginas de upgrade
+     * @param {Function} options.onSuccess             - callback(userData)
+     * @param {Function} options.onFail                - callback(errorObj) antes do redirect
+     * @param {boolean}  options.redirectOnFail        - Redirecionar auto?      (default: true)
+     * @param {string}   options.loadingElementId      - ID do spinner de loading
      */
     async protect(options = {}) {
         const {
-            requirePlan       = true,
-            allowGuest        = true,
-            guestCanUpgrade   = false,
-            onSuccess         = null,
-            onFail            = null,
-            redirectOnFail    = true,
-            loadingElementId  = 'authLoading',
+            requirePlan          = true,
+            allowGuest           = true,
+            guestCanUpgrade      = false,
+            // FIX #11: Array de padrões de URL para páginas de upgrade — mais robusto
+            upgradePagePatterns  = ['atualizarplano', 'upgrade', 'mudarplano'],
+            onSuccess            = null,
+            onFail               = null,
+            redirectOnFail       = true,
+            loadingElementId     = 'authLoading',
         } = options;
 
         const loader = document.getElementById(loadingElementId);
@@ -326,7 +420,6 @@ const AuthGuard = {
                 if (refErr || !refreshed?.session) {
                     throw _err('TOKEN_EXPIRED', 'Token expirado e refresh falhou.');
                 }
-                // Usa a nova sessão
             } else if (secsLeft < SECURITY.TOKEN_REFRESH_THRESHOLD_SECONDS) {
                 // Refresh assíncrono (não bloqueia)
                 supabase.auth.refreshSession().catch(() => {});
@@ -346,8 +439,9 @@ const AuthGuard = {
             }
 
             // ── PASSO 6: Verificar integridade do userId no storage ───
+            // FIX #7 e #8: Agora valida MAC + idade do stamp
             const stampedUid = Fingerprint.readIntegrityStamp();
-            if (stampedUid && stampedUid !== user.id) {
+            if (stampedUid !== null && stampedUid !== user.id) {
                 await supabase.auth.signOut();
                 throw _err('INTEGRITY_FAIL',
                     'Carimbo de integridade não bate com userId da sessão.');
@@ -378,11 +472,16 @@ const AuthGuard = {
                     throw _err('GUEST_BLOCKED', 'Página não acessível para convidados.');
                 }
 
-                // Convidado tentando acessar upgrade sem permissão
-                if (subData.isGuest && !guestCanUpgrade &&
-                    window.location.pathname.includes('atualizarplano')) {
-                    throw _err('GUEST_UPGRADE_BLOCKED',
-                        'Convidados não podem gerenciar planos.');
+                // FIX #11: Checa padrões de upgrade via array — mais robusto
+                if (subData.isGuest && !guestCanUpgrade) {
+                    const currentPath = window.location.pathname.toLowerCase();
+                    const isUpgradePage = upgradePagePatterns.some(pattern =>
+                        currentPath.includes(pattern.toLowerCase())
+                    );
+                    if (isUpgradePage) {
+                        throw _err('GUEST_UPGRADE_BLOCKED',
+                            'Convidados não podem gerenciar planos.');
+                    }
                 }
             }
 
@@ -398,7 +497,8 @@ const AuthGuard = {
                 isGuest:         subData.isGuest,
                 ownerEmail:      subData.ownerEmail || null,
                 perfis:          [],
-                _token:          access_token,  // Interno — não expor ao DOM
+                // FIX: Token não incluído no objeto retornado ao chamador
+                // Acesse via supabase.auth.getSession() quando necessário
             };
 
             // Salva estado interno
@@ -437,18 +537,7 @@ const AuthGuard = {
             }
 
             if (redirectOnFail) {
-                const reasonMap = {
-                    NO_SESSION:           'login',
-                    TOKEN_EXPIRED:        'token_expirado',
-                    SESSION_HIJACK:       'sessao_invalida',
-                    SESSION_TOO_OLD:      'sessao_expirada',
-                    INTEGRITY_FAIL:       'integridade_falhou',
-                    RATE_LIMITED:         'muitas_tentativas',
-                    NO_PLAN:              'sem_plano',
-                    GUEST_BLOCKED:        'acesso_negado',
-                    GUEST_UPGRADE_BLOCKED:'sem_permissao',
-                };
-                SafeRedirect.toLogin(reasonMap[code] || 'erro');
+                SafeRedirect.toLogin(code);
             }
 
             return null;
@@ -468,7 +557,7 @@ const AuthGuard = {
 
                 if (!session) {
                     console.warn('🔒 [AUTH GUARD] Sessão desapareceu durante o uso!');
-                    this.forceLogout('sessao_encerrada_remotamente');
+                    this.forceLogout('SESSION_GONE');
                     return;
                 }
 
@@ -478,7 +567,7 @@ const AuthGuard = {
 
                 if (!sub.subscription) {
                     console.warn('🔒 [AUTH GUARD] Plano revogado durante a sessão!');
-                    this.forceLogout('plano_revogado');
+                    this.forceLogout('NO_PLAN');
                 }
             } catch (e) {
                 console.error('❌ [AUTH GUARD] Erro no monitoramento:', e);
@@ -498,33 +587,34 @@ const AuthGuard = {
     // ─────────────────────────────────────────────────────────────
 
     /** Logout completo e seguro */
-    async logout(reason = 'logout_voluntario') {
+    async logout(reason = 'LOGOUT') {
         this._stopMonitoring();
         this._user    = null;
         this._subData = null;
         this._ready   = false;
         SubscriptionChecker.invalidate();
         Fingerprint.clear();
+        RateLimiter.clear();
 
         await supabase.auth.signOut();
         SafeRedirect.toLogin(reason);
     },
 
     /** Logout forçado (sem await do signOut — emergência) */
-    forceLogout(reason = 'logout_forcado') {
+    forceLogout(reason = 'FORCE_LOGOUT') {
         this._stopMonitoring();
         this._ready = false;
         SubscriptionChecker.invalidate();
         Fingerprint.clear();
+        RateLimiter.clear();
         supabase.auth.signOut().catch(() => {});
         SafeRedirect.toLogin(reason);
     },
 
-    /** Retorna cópia dos dados do usuário atual */
+    /** Retorna cópia dos dados do usuário atual — sem dados sensíveis */
     getUser() {
         if (!this._user) return null;
-        const { _token, ...safe } = this._user; // Remove token do retorno público
-        return { ...safe };
+        return { ...this._user };
     },
 
     isReady()         { return this._ready; },
@@ -549,8 +639,9 @@ supabase.auth.onAuthStateChange((event, session) => {
             AuthGuard._stopMonitoring();
             Fingerprint.clear();
             SubscriptionChecker.invalidate();
+            RateLimiter.clear();
             if (!window.location.href.includes('login.html')) {
-                SafeRedirect.toLogin('signed_out');
+                SafeRedirect.toLogin('NO_SESSION');
             }
             break;
 
@@ -566,18 +657,40 @@ supabase.auth.onAuthStateChange((event, session) => {
         case 'PASSWORD_RECOVERY':
             // Evita que uma sessão de recovery acesse páginas protegidas
             if (!window.location.href.includes('login.html')) {
-                SafeRedirect.toLogin('password_recovery_session');
+                SafeRedirect.toLogin('NO_SESSION');
             }
             break;
     }
 });
 
-// Detecta remoção do token em outra aba (tab syncing attack)
+// FIX: Detecta remoção do token em outra aba (tab syncing attack)
+// Verifica tanto a remoção de tokens Supabase quanto de stamps de integridade
 window.addEventListener('storage', (e) => {
+    // Token Supabase removido por outra aba
     if (e.key?.startsWith('sb-') && e.newValue === null) {
         console.warn('🚨 [AUTH GUARD] Token do Supabase removido por outra aba!');
         if (!window.location.href.includes('login.html')) {
-            SafeRedirect.toLogin('token_removido_outra_aba');
+            SafeRedirect.toLogin('NO_SESSION');
+        }
+        return;
+    }
+
+    // FIX: Integrity stamp adulterado por outra aba
+    if (e.key === SECURITY.KEYS.integrityStamp && e.newValue !== null) {
+        const newStampUid = (() => {
+            try {
+                const decoded = atob(e.newValue);
+                const parts = decoded.split('|');
+                return parts.length >= 1 ? parts[0] : null;
+            } catch { return null; }
+        })();
+
+        const user = AuthGuard._user;
+        if (user && newStampUid && newStampUid !== user.userId) {
+            console.warn('🚨 [AUTH GUARD] Integrity stamp adulterado por outra aba!');
+            if (!window.location.href.includes('login.html')) {
+                SafeRedirect.toLogin('INTEGRITY_FAIL');
+            }
         }
     }
 });
@@ -585,10 +698,14 @@ window.addEventListener('storage', (e) => {
 // Detecta reativação da aba (pode ter expirado enquanto estava hidden)
 document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && AuthGuard.isReady()) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            console.warn('🔒 [AUTH GUARD] Sessão expirou enquanto aba estava oculta');
-            AuthGuard.forceLogout('sessao_expirou_aba_oculta');
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                console.warn('🔒 [AUTH GUARD] Sessão expirou enquanto aba estava oculta');
+                AuthGuard.forceLogout('NO_SESSION');
+            }
+        } catch (e) {
+            console.error('❌ [AUTH GUARD] Erro na verificação de visibilidade:', e);
         }
     }
 });

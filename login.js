@@ -102,10 +102,23 @@ let recoveryEmailGlobal = '';
 let verifiedCodeGlobal = '';
 
 // ===== VARIÁVEIS DO RECAPTCHA =====
-let loginAttempts = 0;
+// FIX #2: loginAttempts persiste na sessão para evitar bypass por refresh de página
+const LOGIN_ATTEMPTS_KEY = '_ge_la';
 const MAX_ATTEMPTS_BEFORE_CAPTCHA = 3;
 let captchaToken = null;
 let captchaResolved = false;
+
+function getLoginAttempts() {
+    return parseInt(sessionStorage.getItem(LOGIN_ATTEMPTS_KEY) || '0', 10);
+}
+
+function setLoginAttempts(n) {
+    sessionStorage.setItem(LOGIN_ATTEMPTS_KEY, String(n));
+}
+
+function resetLoginAttempts() {
+    sessionStorage.removeItem(LOGIN_ATTEMPTS_KEY);
+}
 
 // Callback global chamado pelo reCAPTCHA quando resolvido
 window.onCaptchaResolved = function(token) {
@@ -151,6 +164,12 @@ function resetCaptcha() {
 
 // ===== VALIDAR CAPTCHA NA EDGE FUNCTION DO SUPABASE =====
 async function validateCaptcha(token) {
+    // FIX #3: Token vazio ou claramente inválido é rejeitado imediatamente
+    if (!token || typeof token !== 'string' || token.trim().length < 20) {
+        console.warn('⚠️ Token reCAPTCHA inválido ou muito curto — rejeitado localmente');
+        return false;
+    }
+
     try {
         const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
         const response = await fetch(`${SUPABASE_URL}/functions/v1/verify-recaptcha`, {
@@ -162,12 +181,24 @@ async function validateCaptcha(token) {
             body: JSON.stringify({ token }),
         });
 
+        if (!response.ok) {
+            console.error('❌ Erro HTTP ao validar reCAPTCHA:', response.status);
+            return false;
+        }
+
         const result = await response.json();
         return result.success === true;
     } catch (error) {
         console.error('❌ Erro ao validar reCAPTCHA:', error);
         return false;
     }
+}
+
+// ===== VALIDAÇÃO DE EMAIL (FIX #4: regex adequado) =====
+function isValidEmail(email) {
+    // Regex RFC 5322 simplificado — cobre 99.9% dos casos reais
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    return emailRegex.test(email);
 }
 
 // ===== INICIALIZAÇÃO =====
@@ -177,6 +208,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         console.log('✅ Usuário já autenticado, redirecionando...');
         window.location.href = 'dashboard.html';
         return;
+    }
+
+    // Se já havia tentativas na sessão e ultrapassam o limite, exibe reCAPTCHA de imediato
+    if (getLoginAttempts() >= MAX_ATTEMPTS_BEFORE_CAPTCHA) {
+        showCaptcha();
     }
     
     createMoneyParticles();
@@ -239,17 +275,19 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
     
-    if (!email.includes('@')) {
+    // FIX #4: Validação de email com regex adequado
+    if (!isValidEmail(email)) {
         showAuthMessage('Email inválido', 'error');
         shakeInput(inputs.loginEmail);
         return;
     }
 
+    const currentAttempts = getLoginAttempts();
+
     // ===== VERIFICAÇÃO DO CAPTCHA (após 3 tentativas) =====
-    if (loginAttempts >= MAX_ATTEMPTS_BEFORE_CAPTCHA) {
+    if (currentAttempts >= MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         if (!captchaResolved || !captchaToken) {
             showAuthMessage('Por favor, resolva o reCAPTCHA para continuar', 'error');
-            // Destaca o container do captcha
             const captchaContainer = document.getElementById('captchaContainer');
             if (captchaContainer) {
                 captchaContainer.style.border = '2px solid var(--error-red)';
@@ -283,20 +321,22 @@ loginForm.addEventListener('submit', async (e) => {
         });
 
         if (error) {
-            loginAttempts++;
+            // FIX #2: Incrementa contador persistente
+            const newAttempts = currentAttempts + 1;
+            setLoginAttempts(newAttempts);
             inputs.loginPassword.value = '';
             
             // Reseta o captcha para nova resolução na próxima tentativa
             resetCaptcha();
 
-            if (loginAttempts >= MAX_ATTEMPTS_BEFORE_CAPTCHA) {
+            if (newAttempts >= MAX_ATTEMPTS_BEFORE_CAPTCHA) {
                 showCaptcha();
                 showAuthMessage(
-                    `Email ou senha incorretos. Resolva o reCAPTCHA para continuar (tentativa ${loginAttempts}).`,
+                    `Email ou senha incorretos. Resolva o reCAPTCHA para continuar (tentativa ${newAttempts}).`,
                     'error'
                 );
             } else {
-                const restantes = MAX_ATTEMPTS_BEFORE_CAPTCHA - loginAttempts;
+                const restantes = MAX_ATTEMPTS_BEFORE_CAPTCHA - newAttempts;
                 showAuthMessage(
                     `Email ou senha incorretos. ${restantes} tentativa${restantes > 1 ? 's' : ''} restante${restantes > 1 ? 's' : ''} antes do reCAPTCHA.`,
                     'error'
@@ -308,8 +348,8 @@ loginForm.addEventListener('submit', async (e) => {
             return;
         }
 
-        // ✅ Login bem-sucedido - reseta contagem
-        loginAttempts = 0;
+        // ✅ Login bem-sucedido — reseta contagem persistente
+        resetLoginAttempts();
         resetCaptcha();
         hideCaptcha();
 
@@ -317,12 +357,18 @@ loginForm.addEventListener('submit', async (e) => {
         const { subscription, isGuest } = await getActiveSubscription(data.user.id);
 
         if (!subscription) {
-            showAuthMessage('Você precisa adquirir um plano primeiro!', 'error');
-            setTimeout(() => {}, 2000);
+            // FIX #1 e #bogfix: Deslogar o usuário imediatamente — sem plano, sem sessão ativa
+            await supabase.auth.signOut();
+            showAuthMessage('Você precisa adquirir um plano para acessar o sistema.', 'error');
+            setTimeout(() => {
+                window.location.href = 'planos.html';
+            }, 2500);
             return;
         }
 
-        // Armazenar flag de convidado para uso no dashboard, se necessário
+        // FIX #6: is_guest_member é apenas um hint de UI — a autorização real é feita
+        // pelo AuthGuard no dashboard via consulta ao banco. Mantemos o flag mas
+        // o dashboard NÃO deve confiar nele para decisões de segurança.
         if (isGuest) {
             sessionStorage.setItem('is_guest_member', 'true');
         } else {
@@ -417,16 +463,27 @@ if (buttons.backToLogin) {
 }
 
 // ===== ENVIAR CÓDIGO DE RECUPERAÇÃO =====
+// FIX #5: Throttle para evitar flood de emails
+let sendCodeCooldown = false;
+const SEND_CODE_COOLDOWN_MS = 30000; // 30 segundos entre envios
+
 if (buttons.sendCode) {
     buttons.sendCode.addEventListener('click', async () => {
         const email = inputs.recoveryEmail.value.trim();
         
-        if (!email || !email.includes('@')) {
+        // FIX #4: Usa regex de validação de email
+        if (!email || !isValidEmail(email)) {
             inputs.recoveryEmail.style.borderColor = 'var(--error-red)';
             showAuthMessage('Digite um email válido', 'error');
             setTimeout(() => {
                 inputs.recoveryEmail.style.borderColor = '';
             }, 2000);
+            return;
+        }
+
+        // FIX #5: Bloqueia envio repetido em menos de 30s
+        if (sendCodeCooldown) {
+            showAuthMessage('Aguarde alguns segundos antes de solicitar um novo código.', 'error');
             return;
         }
 
@@ -451,10 +508,20 @@ if (buttons.sendCode) {
                 body: JSON.stringify({ email }),
             });
 
+            if (!response.ok) {
+                showAuthMessage('Erro de conexão. Tente novamente.', 'error');
+                return;
+            }
+
             const result = await response.json();
 
             if (result.status === 'sent') {
                 recoveryEmailGlobal = email;
+
+                // Ativa cooldown para evitar flood
+                sendCodeCooldown = true;
+                setTimeout(() => { sendCodeCooldown = false; }, SEND_CODE_COOLDOWN_MS);
+
                 showAuthMessage('Código enviado! Verifique seu email.', 'success');
                 switchScreen(screens.forgotEmail, screens.code);
                 
@@ -495,7 +562,7 @@ if (buttons.verifyCode) {
     buttons.verifyCode.addEventListener('click', () => {
         const code = Array.from(inputs.codeInputs).map(input => input.value).join('');
         
-        if (code.length !== 6) {
+        if (code.length !== 6 || !/^\d{6}$/.test(code)) {
             showAuthMessage('Digite o código completo de 6 dígitos', 'error');
             return;
         }
@@ -532,8 +599,14 @@ if (buttons.changePassword) {
             return;
         }
         
-        if (newPass.length < 6) {
-            showError('A senha deve ter no mínimo 6 caracteres');
+        if (newPass.length < 8) {
+            showError('A senha deve ter no mínimo 8 caracteres');
+            return;
+        }
+
+        // Verificação básica de complexidade de senha
+        if (!/[A-Za-z]/.test(newPass) || !/[0-9]/.test(newPass)) {
+            showError('A senha deve conter letras e números');
             return;
         }
         
@@ -544,6 +617,21 @@ if (buttons.changePassword) {
             setTimeout(() => {
                 inputs.newPassword.style.borderColor = '';
                 inputs.confirmPassword.style.borderColor = '';
+            }, 2000);
+            return;
+        }
+
+        // Garante que temos email e código antes de continuar
+        if (!recoveryEmailGlobal || !verifiedCodeGlobal) {
+            showError('Sessão de recuperação expirada. Por favor, recomece o processo.');
+            setTimeout(() => {
+                resetCodeInputs();
+                inputs.newPassword.value = '';
+                inputs.confirmPassword.value = '';
+                hideError();
+                recoveryEmailGlobal = '';
+                verifiedCodeGlobal = '';
+                switchScreen(screens.newPassword, screens.login);
             }, 2000);
             return;
         }
@@ -573,12 +661,21 @@ if (buttons.changePassword) {
                 }),
             });
 
+            if (!response.ok) {
+                showError('Erro de conexão. Tente novamente.');
+                return;
+            }
+
             const result = await response.json();
 
             if (result.status === 'success') {
+                // Limpa dados sensíveis da memória imediatamente após sucesso
+                verifiedCodeGlobal = '';
                 switchScreen(screens.newPassword, screens.success);
             } else if (result.status === 'invalid_code') {
                 showError('Código inválido, expirado ou já utilizado');
+                // Limpa o código para forçar nova solicitação
+                verifiedCodeGlobal = '';
             } else {
                 showError(result.message || 'Erro ao alterar senha');
             }
@@ -610,12 +707,22 @@ if (buttons.backToLoginFinal) {
 }
 
 // ===== REENVIAR CÓDIGO =====
+// FIX #5: Throttle independente para o botão de reenvio
+let resendCodeCooldown = false;
+const RESEND_CODE_COOLDOWN_MS = 30000; // 30 segundos
+
 if (buttons.resendCode) {
     buttons.resendCode.addEventListener('click', async (e) => {
         e.preventDefault();
         
         if (!recoveryEmailGlobal) {
             showAuthMessage('Email não encontrado. Volte e digite novamente.', 'error');
+            return;
+        }
+
+        // FIX #5: Bloqueia reenvio rápido
+        if (resendCodeCooldown) {
+            showAuthMessage('Aguarde alguns segundos antes de reenviar o código.', 'error');
             return;
         }
 
@@ -635,9 +742,18 @@ if (buttons.resendCode) {
                 body: JSON.stringify({ email: recoveryEmailGlobal }),
             });
 
+            if (!response.ok) {
+                showAuthMessage('Erro de conexão. Tente novamente.', 'error');
+                return;
+            }
+
             const result = await response.json();
 
             if (result.status === 'sent') {
+                // Ativa cooldown
+                resendCodeCooldown = true;
+                setTimeout(() => { resendCodeCooldown = false; }, RESEND_CODE_COOLDOWN_MS);
+
                 showAuthMessage('Novo código enviado!', 'success');
                 buttons.resendCode.style.color = 'var(--neon-green)';
                 buttons.resendCode.textContent = 'Código enviado!';
@@ -665,8 +781,10 @@ if (buttons.resendCode) {
 // ===== LÓGICA DOS INPUTS DE CÓDIGO =====
 inputs.codeInputs.forEach((input, index) => {
     input.addEventListener('input', (e) => {
-        const value = e.target.value;
-        
+        // Aceita apenas dígitos numéricos
+        const value = e.target.value.replace(/[^0-9]/g, '');
+        e.target.value = value;
+
         if (value.length === 1) {
             input.classList.add('filled');
             if (index < inputs.codeInputs.length - 1) {
@@ -704,17 +822,19 @@ inputs.codeInputs.forEach((input, index) => {
     
     input.addEventListener('paste', (e) => {
         e.preventDefault();
-        const pastedData = e.clipboardData.getData('text').slice(0, 6);
+        const pastedData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
         
         pastedData.split('').forEach((char, i) => {
-            if (inputs.codeInputs[i] && /[0-9]/.test(char)) {
+            if (inputs.codeInputs[i]) {
                 inputs.codeInputs[i].value = char;
                 inputs.codeInputs[i].classList.add('filled');
             }
         });
         
         const lastFilledIndex = Math.min(pastedData.length - 1, 5);
-        inputs.codeInputs[lastFilledIndex].focus();
+        if (lastFilledIndex >= 0) {
+            inputs.codeInputs[lastFilledIndex].focus();
+        }
     });
 });
 
