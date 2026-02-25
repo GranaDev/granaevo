@@ -587,190 +587,204 @@ function atualizarTelaPerfis() {
 async function entrarNoPerfil(index) {
     const authLoading = document.getElementById('authLoading');
 
+    if (!Number.isInteger(index) || index < 0 || index >= usuarioLogado.perfis.length) {
+        _log.error('PERFIL_IDX_001', `Índice inválido: ${index}`);
+        alert('Perfil não encontrado. Tente novamente.');
+        return;
+    }
+
     try {
-        console.log('🔓 [ENTRAR PERFIL] Iniciando entrada no perfil...');
-        console.log('📍 [ENTRAR PERFIL] Índice selecionado:', index);
-        
         if (authLoading) authLoading.style.display = 'flex';
 
         perfilAtivo = usuarioLogado.perfis[index];
-        
-        console.log('✅ [ENTRAR PERFIL] Perfil selecionado:', perfilAtivo.nome);
-        console.log('🔑 [ENTRAR PERFIL] Perfil ID:', perfilAtivo.id);
-        
+
         localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id);
 
-        console.log('📂 [ENTRAR PERFIL] Carregando dados do perfil...');
         await carregarDadosPerfil(perfilAtivo.id);
-
-        // ✅ ATUALIZAR REFERÊNCIAS GLOBAIS
         atualizarReferenciasGlobais();
 
-        console.log('📊 [ENTRAR PERFIL] Dados carregados:', {
-            transacoes: transacoes.length,
-            metas: metas.length,
-            contasFixas: contasFixas.length,
-            cartoes: cartoesCredito.length
-        });
-
-        // ✅ ATUALIZAR UI
         atualizarTudo();
-        atualizarNomeUsuario(); // ✅ CRÍTICO: Atualiza nome E plano
+        atualizarNomeUsuario();
 
-        // ✅ MOSTRAR INTERFACE
-        document.getElementById('selecaoPerfis').style.display = 'none';
-        document.getElementById('sidebar').style.display = 'flex';
+        const selecao = document.getElementById('selecaoPerfis');
+        const sidebar = document.getElementById('sidebar');
+        if (selecao) selecao.style.display = 'none';
+        if (sidebar) sidebar.style.display = 'flex';
 
-        // ✅ NOTIFICAR CHAT ASSISTANT
         if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
-            window.chatAssistant.onProfileSelected(perfilAtivo);
+            window.chatAssistant.onProfileSelected(Object.freeze({ ...perfilAtivo }));
         }
 
-        // ✅ CRÍTICO: INICIAR AUTO-SAVE
-        console.log('🔄 [ENTRAR PERFIL] Iniciando sistema de auto-save...');
         iniciarAutoSave();
 
-        // ✅ SALVAR IMEDIATAMENTE AO ENTRAR
-        console.log('💾 [ENTRAR PERFIL] Salvando dados iniciais...');
-        const salvouInicial = await salvarDados();
-        console.log('✅ [ENTRAR PERFIL] Resultado do salvamento inicial:', salvouInicial ? 'Sucesso' : 'Falhou');
+        await salvarDados();
 
-        // ✅ MOSTRAR DASHBOARD
         mostrarTela('dashboard');
-        
-        console.log('✅ [ENTRAR PERFIL] Entrada no perfil concluída com sucesso!');
 
     } catch (e) {
-        console.error('❌ [ENTRAR PERFIL] Erro ao entrar no perfil:', e);
-        console.error('[ENTRAR PERFIL] Stack:', e.stack);
-        alert('Erro ao carregar o perfil.');
+        _log.error('PERFIL_ENTER_001', e);
+        alert('Erro ao carregar o perfil. Tente novamente.');
     } finally {
         if (authLoading) authLoading.style.display = 'none';
     }
 }
 
 function adicionarNovoPerfil() {
-    const plano = usuarioLogado.plano;
-    const limitePerfis = limitesPlano[plano];
+    // ✅ Verificação local serve apenas como UX — a validação real ocorre no backend via RLS
+    const plano       = usuarioLogado.plano;
+    const limitePerfis = limitesPlano[plano] ?? 1; // fallback seguro: plano desconhecido = 1
     const perfisAtuais = usuarioLogado.perfis.length;
 
     if (perfisAtuais >= limitePerfis) {
-        console.log(`🚫 Tentativa de adicionar perfil bloqueada. Limite do plano "${plano}" (${limitePerfis}) atingido.`);
         mostrarPopupLimite();
         return;
     }
-    
-    console.log('📝 Abrindo formulário de novo perfil...');
-    
-    const popup = criarPopup(`
-        <h3>Novo Perfil</h3>
-        <input type="text" id="novoPerfilNome" class="form-input" placeholder="Nome do usuário (obrigatório)">
-        <input type="file" id="novoPerfilFoto" class="form-input" accept="image/*" style="padding:10px;">  
 
-        <button class="btn-primary" id="criarPerfilBtn">Criar Perfil</button>
-        <button class="btn-cancelar" id="cancelarPerfilBtn">Cancelar</button>
-    `);
-    
-    document.getElementById('cancelarPerfilBtn').onclick = () => fecharPopup();
-    
-    document.getElementById('criarPerfilBtn').onclick = async () => {
-        const nome = document.getElementById('novoPerfilNome').value.trim();
-        const fotoInput = document.getElementById('novoPerfilFoto');
-        
-        if(!nome) {
-            alert("Digite o nome do usuário!");
-            return;
-        }
-        
-        if(nome.length < 2) {
-            alert("O nome deve ter pelo menos 2 caracteres.");
-            return;
-        }
-        
-        if(usuarioLogado.perfis.length >= limitesPlano[plano]) {
-            mostrarPopupLimite();
-            fecharPopup();
-            return;
-        }
+    // ✅ Popup construído via DOM — sem innerHTML com dados variáveis
+    const container = criarPopupDOM((popup) => {
+        const titulo = document.createElement('h3');
+        titulo.textContent = 'Novo Perfil';
 
-        try {
-            console.log('💾 Criando novo perfil no banco...');
-            
-            const { data: { session } } = await supabase.auth.getSession();
-            
-            if (!session) {
-                throw new Error('Sessão não encontrada');
-            }
-            
-            let fotoUrl = null;
-            
-            if(fotoInput.files && fotoInput.files[0]) {
-                console.log('📸 Fazendo upload da foto...');
-                
-                const arquivo = fotoInput.files[0];
-                
-                if(arquivo.size > 2 * 1024 * 1024) {
-                    alert('A foto deve ter no máximo 2MB');
-                    return;
-                }
-                
-                const nomeArquivo = `${session.user.id}/${Date.now()}_${arquivo.name}`;
-                
-                const { data: uploadData, error: uploadError } = await supabase.storage
-                    .from('profile-photos')
-                    .upload(nomeArquivo, arquivo);
-                
-                if (uploadError) {
-                    console.error('❌ Erro no upload:', uploadError);
-                    throw uploadError;
-                }
-                
-                const { data: urlData } = supabase.storage
-                    .from('profile-photos')
-                    .getPublicUrl(nomeArquivo);
-                
-                fotoUrl = urlData.publicUrl;
-                console.log('✅ Foto carregada:', fotoUrl);
-            }
-            
-            console.log('💾 Inserindo perfil no banco...');
-            
-            // ✅ CORREÇÃO: Usar photo_url em vez de photo
-            const { data: novoPerfil, error } = await supabase
-            .from('profiles')
-            .insert({
-                user_id: usuarioLogado.effectiveUserId, // ← ID do dono sempre
-                name: nome,
-                photo_url: fotoUrl
-            })
-                .select()
-                .single();
-            
-            if (error) {
-                console.error('❌ Erro ao criar perfil:', error);
-                throw error;
-            }
-            
-            console.log('✅ Perfil criado com ID:', novoPerfil.id);
-            
-            usuarioLogado.perfis.push({
-                id: novoPerfil.id,
-                nome: novoPerfil.name,
-                foto: novoPerfil.photo_url  // ✅ CORRIGIDO!
-            });
-            
-            fecharPopup();
-            atualizarTelaPerfis();
-            
-            alert('✅ Perfil criado com sucesso! Agora você pode selecioná-lo para entrar.');
-            
-        } catch (error) {
-            console.error('❌ Erro ao criar perfil:', error);
-            alert('❌ Erro ao criar perfil. Tente novamente.');
-        }
-    };
+        const inputNome = document.createElement('input');
+        inputNome.type        = 'text';
+        inputNome.id          = 'novoPerfilNome';
+        inputNome.className   = 'form-input';
+        inputNome.placeholder = 'Nome do usuário (obrigatório)';
+        inputNome.maxLength   = 50; // ✅ limite no próprio campo
+
+        const inputFoto = document.createElement('input');
+        inputFoto.type      = 'file';
+        inputFoto.id        = 'novoPerfilFoto';
+        inputFoto.className = 'form-input';
+        inputFoto.accept    = 'image/jpeg,image/png,image/webp'; // ✅ restringe seleção
+        inputFoto.style.padding = '10px';
+
+        const btnCriar     = document.createElement('button');
+        btnCriar.className = 'btn-primary';
+        btnCriar.type      = 'button';
+        btnCriar.textContent = 'Criar Perfil';
+
+        const btnCancelar     = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar';
+        btnCancelar.type      = 'button';
+        btnCancelar.textContent = 'Cancelar';
+
+        btnCancelar.addEventListener('click', fecharPopup);
+        btnCriar.addEventListener('click', () => _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis));
+
+        popup.appendChild(titulo);
+        popup.appendChild(inputNome);
+        popup.appendChild(inputFoto);
+        popup.appendChild(btnCriar);
+        popup.appendChild(btnCancelar);
+    });
 }
 
+// ✅ Handler separado — lógica de criação isolada e testável
+async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
+    const nome = inputNome.value.trim();
+
+    if (!nome) {
+        alert('Digite o nome do usuário!');
+        return;
+    }
+    if (nome.length < 2) {
+        alert('O nome deve ter pelo menos 2 caracteres.');
+        return;
+    }
+    if (usuarioLogado.perfis.length >= limitePerfis) {
+        mostrarPopupLimite();
+        fecharPopup();
+        return;
+    }
+
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('SEM_SESSAO');
+
+        let fotoUrl = null;
+
+        if (inputFoto.files && inputFoto.files[0]) {
+            const arquivo = inputFoto.files[0];
+
+            if (arquivo.size > 2 * 1024 * 1024) {
+                alert('A foto deve ter no máximo 2MB.');
+                return;
+            }
+
+            const mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
+            if (!mimesPermitidos.includes(arquivo.type)) {
+                alert('Tipo de arquivo inválido. Use JPG, PNG ou WebP.');
+                return;
+            }
+
+            const magicValido = await _validarMagicBytes(arquivo);
+            if (!magicValido) {
+                alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.');
+                return;
+            }
+
+            const ext = arquivo.type === 'image/jpeg' ? 'jpg'
+                      : arquivo.type === 'image/png'  ? 'png'
+                      :                                 'webp';
+
+            const nomeArquivo = `${session.user.id}/${Date.now()}.${ext}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('profile-photos')
+                .upload(nomeArquivo, arquivo, { contentType: arquivo.type });
+
+            if (uploadError) {
+                _log.error('PERFIL_FOTO_001', uploadError);
+                alert('Erro ao fazer upload da foto. Tente novamente.');
+                return;
+            }
+
+            const { data: urlData } = supabase.storage
+                .from('profile-photos')
+                .getPublicUrl(nomeArquivo);
+
+            fotoUrl = _sanitizeImgUrl(urlData.publicUrl) || null;
+        }
+
+
+        const { data: novoPerfil, error } = await supabase
+            .from('profiles')
+            .insert({
+                user_id:   usuarioLogado.effectiveUserId,
+                name:      nome, // ✅ não sanitizamos aqui — o banco salva o original
+                photo_url: fotoUrl
+            })
+            .select()
+            .single();
+
+        if (error) {
+            _log.error('PERFIL_001', error);
+            if (error.code === '23514') { // check_violation do Postgres
+                mostrarPopupLimite();
+            } else {
+                alert('Erro ao criar perfil. Tente novamente.');
+            }
+            fecharPopup();
+            return;
+        }
+
+        usuarioLogado.perfis.push({
+            id:   novoPerfil.id,
+            nome: _sanitizeText(novoPerfil.name),
+            foto: _sanitizeImgUrl(novoPerfil.photo_url)
+        });
+
+        fecharPopup();
+        atualizarTelaPerfis();
+        atualizarReferenciasGlobais();
+        mostrarNotificacao('Perfil criado com sucesso!', 'success');
+
+    } catch (error) {
+        _log.error('PERFIL_002', error);
+        alert('Ocorreu um erro ao criar o perfil. Tente novamente.');
+    }
+}
 
 function mostrarPopupLimite(msgCustom) {
     let msg = msgCustom || "";
@@ -810,22 +824,50 @@ function irParaAtualizarPlano() {
 window.irParaAtualizarPlano = irParaAtualizarPlano;
 
 // ========== FUNÇÕES DE POPUP ==========
+// ✅ criarPopup (legado) — mantida para compatibilidade com chamadas existentes que
+//    passam HTML estático controlado (sem dados do usuário), ex: mostrarPopupLimite.
+//    NÃO usar para qualquer popup que receba input do usuário — use criarPopupDOM().
 function criarPopup(html) {
-    const overlay = document.getElementById('modalOverlay');
+    const overlay   = document.getElementById('modalOverlay');
     const container = document.getElementById('modalContainer');
-    
+    if (!overlay || !container) return null;
+
     overlay.classList.add('active');
+
+    // ✅ Continua usando innerHTML aqui porque o conteúdo é 100% hardcoded no código
+    //    (strings literais de template, nunca variáveis do usuário).
+    //    TODO: migrar todos os callers para criarPopupDOM() futuramente.
     container.innerHTML = `<div class="popup">${html}</div>`;
-    
+
+    return container;
+}
+
+function criarPopupDOM(builderFn) {
+    const overlay   = document.getElementById('modalOverlay');
+    const container = document.getElementById('modalContainer');
+    if (!overlay || !container) return null;
+
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    const popup = document.createElement('div');
+    popup.className = 'popup';
+
+    builderFn(popup);
+
+    container.appendChild(popup);
+    overlay.classList.add('active');
+
     return container;
 }
 
 function fecharPopup() {
-    const overlay = document.getElementById('modalOverlay');
+    const overlay   = document.getElementById('modalOverlay');
     const container = document.getElementById('modalContainer');
-    
+    if (!overlay || !container) return;
+
     overlay.classList.remove('active');
-    container.innerHTML = '';
+
+    while (container.firstChild) container.removeChild(container.firstChild);
 }
 
 // ========== NAVEGAÇÃO ENTRE TELAS ==========
@@ -879,113 +921,137 @@ function atualizarNomeUsuario() {
     }
 }
 
+// Magic bytes das extensões permitidas
+const _IMG_SIGNATURES = [
+    { mime: 'image/jpeg', bytes: [0xFF, 0xD8, 0xFF] },
+    { mime: 'image/png',  bytes: [0x89, 0x50, 0x4E, 0x47] },
+    { mime: 'image/webp', header: 'WEBP', offset: 8 },
+];
+
+// ✅ Lê os primeiros 12 bytes e valida contra magic bytes reais
+async function _validarMagicBytes(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const arr = new Uint8Array(e.target.result);
+            const matchJpeg = [0xFF, 0xD8, 0xFF].every((b, i) => arr[i] === b);
+            const matchPng  = [0x89, 0x50, 0x4E, 0x47].every((b, i) => arr[i] === b);
+            // WebP: bytes 0-3 = "RIFF", bytes 8-11 = "WEBP"
+            const matchWebp = arr[0] === 0x52 && arr[1] === 0x49 &&
+                              arr[2] === 0x46 && arr[3] === 0x46 &&
+                              arr[8] === 0x57 && arr[9] === 0x45 &&
+                              arr[10]=== 0x42 && arr[11]=== 0x50;
+            resolve(matchJpeg || matchPng || matchWebp);
+        };
+        reader.onerror = () => resolve(false);
+        reader.readAsArrayBuffer(file.slice(0, 12));
+    });
+}
+
 async function alterarFoto(event) {
     const file = event.target.files[0];
-    
-    if(!file) {
-        console.log('⚠️ Nenhum arquivo selecionado');
-        return;
-    }
-    
-    console.log('📸 Iniciando alteração de foto...');
-    console.log('📁 Arquivo:', file.name, '| Tamanho:', (file.size / 1024).toFixed(2), 'KB');
-    
-    if(!perfilAtivo) {
+
+    if (!file) return;
+
+    if (!perfilAtivo) {
         alert('Erro: Nenhum perfil ativo encontrado.');
         return;
     }
-    
-    if(file.size > 2 * 1024 * 1024) {
-        alert('A foto deve ter no máximo 2MB');
+
+    // ✅ 1. Validar tamanho
+    if (file.size > 2 * 1024 * 1024) {
+        alert('A foto deve ter no máximo 2MB.');
         return;
     }
-    
+
+    // ✅ 2. Validar MIME type declarado (primeira barreira)
+    const mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!mimesPermitidos.includes(file.type)) {
+        alert('Tipo de arquivo inválido. Use JPG, PNG ou WebP.');
+        return;
+    }
+
+    // ✅ 3. Validar magic bytes reais (segunda barreira — impede renomear .js para .png)
+    const magicValido = await _validarMagicBytes(file);
+    if (!magicValido) {
+        alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.');
+        return;
+    }
+
     try {
-        console.log('🔍 Buscando sessão...');
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
+
         if (sessionError || !session) {
-            console.error('❌ Erro de sessão:', sessionError);
             throw new Error('Sessão inválida');
         }
-        
-        console.log('✅ Sessão válida. User ID:', session.user.id);
-        
-        // UPLOAD DA NOVA FOTO
-        const nomeArquivo = `${session.user.id}/${Date.now()}_${file.name}`;
-        console.log('📂 Caminho do arquivo:', nomeArquivo);
-        
-        console.log('🔍 Fazendo upload para Supabase Storage...');
-        const { data: uploadData, error: uploadError } = await supabase.storage
+
+        // ✅ 4. Nome de arquivo sem usar file.name original (evita path traversal e nomes maliciosos)
+        const ext        = file.type === 'image/jpeg' ? 'jpg'
+                         : file.type === 'image/png'  ? 'png'
+                         :                              'webp';
+        const nomeArquivo = `${session.user.id}/${Date.now()}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
             .from('profile-photos')
             .upload(nomeArquivo, file, {
                 cacheControl: '3600',
-                upsert: false
+                upsert: false,
+                contentType: file.type, // ✅ força o content-type correto no storage
             });
-        
-        console.log('📤 Resposta do upload:', { data: uploadData, error: uploadError });
-        
+
         if (uploadError) {
-            console.error('❌ Erro no upload:', uploadError);
-            alert(`Erro ao fazer upload: ${uploadError.message}`);
-            throw uploadError;
+            _log.error('FOTO_001', uploadError);
+            alert('Erro ao fazer upload. Tente novamente.');
+            return;
         }
-        
-        console.log('✅ Upload concluído!');
-        
-        // OBTER URL PÚBLICA
+
         const { data: urlData } = supabase.storage
             .from('profile-photos')
             .getPublicUrl(nomeArquivo);
-        
+
         const fotoUrl = urlData.publicUrl;
-        console.log('🔗 URL pública:', fotoUrl);
-        
-        // ATUALIZAR NO BANCO DE DADOS
-        console.log('🔍 Atualizando foto no banco de dados...');
-        console.log('📝 Perfil ID:', perfilAtivo.id);
-        
-        const { data: updateData, error: updateError } = await supabase
+
+        // ✅ 5. Valida a URL gerada antes de persistir (defesa em profundidade)
+        const urlSegura = _sanitizeImgUrl(fotoUrl);
+        if (!urlSegura) {
+            _log.error('FOTO_002', 'URL gerada fora do domínio permitido');
+            alert('Erro interno ao processar a foto. Tente novamente.');
+            return;
+        }
+
+        const { error: updateError } = await supabase
             .from('profiles')
-            .update({ photo_url: fotoUrl })
+            .update({ photo_url: urlSegura })
             .eq('id', perfilAtivo.id)
             .select()
             .single();
-        
-        console.log('📤 Resposta da atualização:', { data: updateData, error: updateError });
-        
+
         if (updateError) {
-            console.error('❌ Erro ao atualizar no banco:', updateError);
-            alert(`Erro ao salvar foto: ${updateError.message}`);
-            throw updateError;
+            _log.error('FOTO_003', updateError);
+            // ✅ Mensagem genérica — não expõe detalhes do backend
+            alert('Erro ao salvar a foto. Tente novamente.');
+            return;
         }
-        
-        console.log('✅ Foto atualizada no banco!');
-        
-        // ATUALIZAR LOCALMENTE
-        perfilAtivo.foto = fotoUrl;
-        
+
+        // ✅ 6. Atualiza estado local sem mutar dados originais desnecessariamente
+        perfilAtivo.foto = urlSegura;
         const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-        if(idx !== -1) {
-            usuarioLogado.perfis[idx].foto = fotoUrl;
-        }
-        
-        // ATUALIZAR UI
+        if (idx !== -1) usuarioLogado.perfis[idx].foto = urlSegura;
+
+        // ✅ 7. Atualiza foto na UI com validação de URL
         const userPhotoEl = document.getElementById('userPhoto');
-        if(userPhotoEl) {
-            userPhotoEl.src = fotoUrl;
-        }
-        
+        if (userPhotoEl) userPhotoEl.src = urlSegura;
+
         await salvarDados();
         atualizarTelaPerfis();
-        
-        console.log('✅ Foto alterada com sucesso!');
-        mostrarNotificacao('✅ Foto alterada com sucesso!', 'success');
-        
+        atualizarReferenciasGlobais();
+
+        mostrarNotificacao('Foto alterada com sucesso!', 'success');
+
     } catch (error) {
-        console.error('❌ ERRO GERAL ao alterar foto:', error);
-        console.error('Stack trace:', error.stack);
-        alert(`❌ Erro ao alterar foto: ${error.message}`);
+        _log.error('FOTO_004', error);
+        // ✅ Nunca expõe error.message ao usuário
+        alert('Ocorreu um erro ao alterar a foto. Tente novamente.');
     }
 }
 
