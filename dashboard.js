@@ -6650,10 +6650,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-// ========== FIM DO ARQUIVO ========== = 'center';
-    ctx.fillText('Valor (R$)', 0, 0);
-    ctx.restore()
-
 function desenharGraficoLinha() {
     const canvas = document.getElementById('linhaChart');
     if(!canvas) return;
