@@ -151,7 +151,6 @@ async function carregarPerfis() {
         return { sucesso: false, perfisEncontrados: false };
     }
 }
-
 // ========== CARREGAR DADOS DO PERFIL (CORRIGIDA) ==========
 async function carregarDadosPerfil(perfilId) {
     try {
@@ -219,98 +218,101 @@ async function carregarDadosPerfil(perfilId) {
 }
 
 // ========== SALVAR DADOS ==========
+// ── Validadores de schema — evitam persistência de dados corrompidos/injetados
+const _validators = {
+    transacao(t) {
+        if (!t || typeof t !== 'object') return false;
+        const cats = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
+        if (!Number.isInteger(t.id) || t.id <= 0)          return false;
+        if (!cats.includes(t.categoria))                    return false;
+        if (typeof t.descricao !== 'string' || t.descricao.length > 300) return false;
+        if (typeof t.valor !== 'number' || t.valor < 0 || t.valor > 99999999) return false;
+        if (typeof t.data !== 'string' || !/^\d{2}\/\d{2}\/\d{4}$/.test(t.data)) return false;
+        return true;
+    },
+    meta(m) {
+        if (!m || typeof m !== 'object')  return false;
+        if (!Number.isInteger(m.id) || m.id <= 0) return false;
+        if (typeof m.descricao !== 'string' || m.descricao.length > 200) return false;
+        if (typeof m.objetivo !== 'number' || m.objetivo < 0 || m.objetivo > 99999999) return false;
+        if (typeof m.saved !== 'number'   || m.saved < 0)    return false;
+        return true;
+    },
+    contaFixa(c) {
+        if (!c || typeof c !== 'object')  return false;
+        if (!Number.isInteger(c.id) || c.id <= 0) return false;
+        if (typeof c.descricao !== 'string' || c.descricao.length > 200) return false;
+        if (typeof c.valor !== 'number' || c.valor < 0 || c.valor > 99999999) return false;
+        if (typeof c.vencimento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(c.vencimento)) return false;
+        return true;
+    },
+    cartao(c) {
+        if (!c || typeof c !== 'object')  return false;
+        if (!Number.isInteger(c.id) || c.id <= 0) return false;
+        if (typeof c.nomeBanco !== 'string' || c.nomeBanco.length > 100) return false;
+        if (typeof c.limite !== 'number' || c.limite <= 0 || c.limite > 9999999) return false;
+        if (!Number.isInteger(c.vencimentoDia) || c.vencimentoDia < 1 || c.vencimentoDia > 28) return false;
+        return true;
+    },
+};
+
 async function salvarDados() {
-    const timestamp = new Date().toLocaleTimeString();
-    console.log(`⏰ [${timestamp}] [SALVAR DADOS] ========== INÍCIO ==========`);
-    
-    // ✅ SEMPRE USAR REFERÊNCIAS ATUALIZADAS
     atualizarReferenciasGlobais();
-    
-    // ✅ VALIDAÇÕES
+
     if (!perfilAtivo) {
-        console.error(`❌ [${timestamp}] [SALVAR DADOS] Nenhum perfil ativo`);
+        _log.error('SAVE_001', 'Nenhum perfil ativo');
         return false;
     }
-
-    if (!dataManager || !dataManager.userId) {
-        console.error(`❌ [${timestamp}] [SALVAR DADOS] DataManager não inicializado!`);
+    if (!dataManager?.userId) {
+        _log.error('SAVE_002', 'DataManager não inicializado');
         return false;
     }
 
     try {
-        console.log(`💾 [${timestamp}] [SALVAR DADOS] Iniciando salvamento...`);
-        console.log(`👤 [${timestamp}] [SALVAR DADOS] Perfil: ${perfilAtivo.nome}`);
-        console.log(`🔑 [${timestamp}] [SALVAR DADOS] Perfil ID: ${perfilAtivo.id}`);
-        
-        console.log(`📊 [${timestamp}] [SALVAR DADOS] Arrays antes de salvar:`, {
-            transacoes: transacoes.length,
-            metas: metas.length,
-            contasFixas: contasFixas.length,
-            cartoes: cartoesCredito.length
-        });
-        
-        // ✅ CARREGAR DADOS EXISTENTES
-        console.log(`📥 [${timestamp}] [SALVAR DADOS] Carregando dados do Supabase...`);
+        // ✅ Filtra registros inválidos antes de persistir
+        const transacoesValidas   = transacoes.filter(_validators.transacao);
+        const metasValidas        = metas.filter(_validators.meta);
+        const contasValidas       = contasFixas.filter(_validators.contaFixa);
+        const cartoesValidos      = cartoesCredito.filter(_validators.cartao);
+
+        // Alerta silencioso se houve itens descartados
+        if (transacoesValidas.length  !== transacoes.length   ||
+            metasValidas.length       !== metas.length         ||
+            contasValidas.length      !== contasFixas.length   ||
+            cartoesValidos.length     !== cartoesCredito.length) {
+            _log.warn('SAVE: itens inválidos descartados antes de persistir');
+        }
+
         const userData = await dataManager.loadUserData();
-        console.log(`📦 [${timestamp}] [SALVAR DADOS] Dados carregados:`, {
-            totalProfiles: userData.profiles?.length || 0,
-            version: userData.version
-        });
-        
-        // ✅ PREPARAR DADOS DO PERFIL ATUAL
+
         const dadosPerfil = {
-            id: perfilAtivo.id,
-            nome: perfilAtivo.nome,
-            foto: perfilAtivo.foto,
-            transacoes: transacoes,
-            metas: metas,
-            contasFixas: contasFixas,
-            cartoesCredito: cartoesCredito,
-            nextTransId: nextTransId,
-            nextMetaId: nextMetaId,
-            nextContaFixaId: nextContaFixaId,
-            nextCartaoId: nextCartaoId,
-            lastUpdate: new Date().toISOString()
+            id:             perfilAtivo.id,
+            nome:           _sanitizeText(perfilAtivo.nome),
+            foto:           _sanitizeImgUrl(perfilAtivo.foto) || null,
+            transacoes:     transacoesValidas,
+            metas:          metasValidas,
+            contasFixas:    contasValidas,
+            cartoesCredito: cartoesValidos,
+            nextTransId:    Number.isInteger(nextTransId)    && nextTransId > 0    ? nextTransId    : 1,
+            nextMetaId:     Number.isInteger(nextMetaId)     && nextMetaId > 0     ? nextMetaId     : 1,
+            nextContaFixaId:Number.isInteger(nextContaFixaId)&& nextContaFixaId > 0? nextContaFixaId : 1,
+            nextCartaoId:   Number.isInteger(nextCartaoId)   && nextCartaoId > 0   ? nextCartaoId   : 1,
+            lastUpdate:     new Date().toISOString(),
         };
 
-        console.log(`📦 [${timestamp}] [SALVAR DADOS] Dados preparados:`, {
-            perfilId: dadosPerfil.id,
-            perfilNome: dadosPerfil.nome,
-            totalTransacoes: dadosPerfil.transacoes.length,
-            totalMetas: dadosPerfil.metas.length,
-            totalContas: dadosPerfil.contasFixas.length,
-            totalCartoes: dadosPerfil.cartoesCredito.length
-        });
-
-        // ✅ ATUALIZAR OU ADICIONAR PERFIL
         const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
-        
         if (perfilIndex !== -1) {
-            console.log(`📝 [${timestamp}] [SALVAR DADOS] Atualizando perfil existente no índice: ${perfilIndex}`);
             userData.profiles[perfilIndex] = dadosPerfil;
         } else {
-            console.log(`➕ [${timestamp}] [SALVAR DADOS] Adicionando novo perfil`);
             userData.profiles.push(dadosPerfil);
         }
 
-        console.log(`📊 [${timestamp}] [SALVAR DADOS] Total de perfis a salvar: ${userData.profiles.length}`);
-
-        // ✅ SALVAR NO SUPABASE
-        console.log(`🚀 [${timestamp}] [SALVAR DADOS] Enviando para Supabase...`);
         const sucesso = await dataManager.saveUserData(userData.profiles);
-        
-        if (sucesso) {
-            console.log(`✅ [${timestamp}] [SALVAR DADOS] ========== SUCESSO ==========`);
-            return true;
-        } else {
-            console.error(`❌ [${timestamp}] [SALVAR DADOS] dataManager.saveUserData() retornou false`);
-            return false;
-        }
+        if (!sucesso) _log.error('SAVE_003', 'saveUserData retornou false');
+        return !!sucesso;
 
     } catch (e) {
-        console.error(`❌ [${timestamp}] [SALVAR DADOS] Erro crítico:`, e);
-        console.error(`[${timestamp}] [SALVAR DADOS] Mensagem:`, e.message);
-        console.error(`[${timestamp}] [SALVAR DADOS] Stack:`, e.stack);
+        _log.error('SAVE_004', e);
         return false;
     }
 }
