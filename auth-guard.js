@@ -357,13 +357,50 @@ const SafeRedirect = {
 
 // ═══════════════════════════════════════════════════════════════
 //  GUARD PRINCIPAL
+//  Estado interno em closure privada — inacessível via console
 // ═══════════════════════════════════════════════════════════════
-const AuthGuard = {
-    _ready: false,
-    _user: null,
-    _subData: null,
-    _monitorTimer: null,
+const AuthGuard = (() => {
+    // Estado privado — não acessível por AuthGuard._xxx no console
+    let _ready        = false;
+    let _user         = null;
+    let _subData      = null;
+    let _monitorTimer = null;
 
+    function _stopMonitoring() {
+        if (_monitorTimer) {
+            clearInterval(_monitorTimer);
+            _monitorTimer = null;
+        }
+    }
+
+    function _startMonitoring() {
+        if (_monitorTimer) return; // Já rodando
+
+        _monitorTimer = setInterval(async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+
+                if (!session) {
+                    console.warn('🔒 [AUTH GUARD] Sessão desapareceu durante o uso!');
+                    publicAPI.forceLogout('SESSION_GONE');
+                    return;
+                }
+
+                // Invalidar cache e re-checar plano
+                SubscriptionChecker.invalidate();
+                const sub = await SubscriptionChecker.getActive(session.user.id);
+
+                if (!sub.subscription) {
+                    console.warn('🔒 [AUTH GUARD] Plano revogado durante a sessão!');
+                    publicAPI.forceLogout('NO_PLAN');
+                }
+            } catch (e) {
+                console.error('❌ [AUTH GUARD] Erro no monitoramento:', e);
+            }
+        }, SECURITY.SESSION_POLL_INTERVAL);
+    }
+
+    const publicAPI = {
     /**
      * ┌─────────────────────────────────────────────────────────┐
      * │  AuthGuard.protect(options)                             │
@@ -410,7 +447,8 @@ const AuthGuard = {
                 throw _err('NO_SESSION', 'Sem sessão ativa.');
             }
 
-            const { user, access_token, expires_at } = session;
+            // Usa let para permitir reatribuição após refresh
+            let { user, expires_at } = session;
 
             // ── PASSO 3: Token expirado → tentar refresh ──────────────
             const secsLeft = expires_at - Math.floor(Date.now() / 1000);
@@ -420,6 +458,9 @@ const AuthGuard = {
                 if (refErr || !refreshed?.session) {
                     throw _err('TOKEN_EXPIRED', 'Token expirado e refresh falhou.');
                 }
+                // FIX: Usa o user da sessão RENOVADA — não a sessão antiga
+                user       = refreshed.session.user;
+                expires_at = refreshed.session.expires_at;
             } else if (secsLeft < SECURITY.TOKEN_REFRESH_THRESHOLD_SECONDS) {
                 // Refresh assíncrono (não bloqueia)
                 supabase.auth.refreshSession().catch(() => {});
@@ -501,13 +542,13 @@ const AuthGuard = {
                 // Acesse via supabase.auth.getSession() quando necessário
             };
 
-            // Salva estado interno
-            this._user    = userData;
-            this._subData = subData;
-            this._ready   = true;
+            // Salva estado privado
+            _user    = userData;
+            _subData = subData;
+            _ready   = true;
 
             // ── PASSO 10: Iniciar monitoramento em background ─────────
-            this._startMonitoring();
+            _startMonitoring();
 
             if (loader) loader.style.display = 'none';
 
@@ -545,53 +586,15 @@ const AuthGuard = {
     },
 
     // ─────────────────────────────────────────────────────────────
-    //  MONITORAMENTO CONTÍNUO
-    //  Re-verifica sessão e plano periodicamente em background
-    // ─────────────────────────────────────────────────────────────
-    _startMonitoring() {
-        if (this._monitorTimer) return; // Já rodando
-
-        this._monitorTimer = setInterval(async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-
-                if (!session) {
-                    console.warn('🔒 [AUTH GUARD] Sessão desapareceu durante o uso!');
-                    this.forceLogout('SESSION_GONE');
-                    return;
-                }
-
-                // Invalidar cache e re-checar plano
-                SubscriptionChecker.invalidate();
-                const sub = await SubscriptionChecker.getActive(session.user.id);
-
-                if (!sub.subscription) {
-                    console.warn('🔒 [AUTH GUARD] Plano revogado durante a sessão!');
-                    this.forceLogout('NO_PLAN');
-                }
-            } catch (e) {
-                console.error('❌ [AUTH GUARD] Erro no monitoramento:', e);
-            }
-        }, SECURITY.SESSION_POLL_INTERVAL);
-    },
-
-    _stopMonitoring() {
-        if (this._monitorTimer) {
-            clearInterval(this._monitorTimer);
-            this._monitorTimer = null;
-        }
-    },
-
-    // ─────────────────────────────────────────────────────────────
     //  API PÚBLICA
     // ─────────────────────────────────────────────────────────────
 
     /** Logout completo e seguro */
     async logout(reason = 'LOGOUT') {
-        this._stopMonitoring();
-        this._user    = null;
-        this._subData = null;
-        this._ready   = false;
+        _stopMonitoring();
+        _user    = null;
+        _subData = null;
+        _ready   = false;
         SubscriptionChecker.invalidate();
         Fingerprint.clear();
         RateLimiter.clear();
@@ -602,8 +605,8 @@ const AuthGuard = {
 
     /** Logout forçado (sem await do signOut — emergência) */
     forceLogout(reason = 'FORCE_LOGOUT') {
-        this._stopMonitoring();
-        this._ready = false;
+        _stopMonitoring();
+        _ready = false;
         SubscriptionChecker.invalidate();
         Fingerprint.clear();
         RateLimiter.clear();
@@ -613,19 +616,25 @@ const AuthGuard = {
 
     /** Retorna cópia dos dados do usuário atual — sem dados sensíveis */
     getUser() {
-        if (!this._user) return null;
-        return { ...this._user };
+        if (!_user) return null;
+        return { ..._user };
     },
 
-    isReady()         { return this._ready; },
-    isGuest()         { return this._user?.isGuest ?? false; },
-    getCurrentPlan()  { return this._user?.plano ?? null; },
+    isReady()         { return _ready; },
+    isGuest()         { return _user?.isGuest ?? false; },
+    getCurrentPlan()  { return _user?.plano ?? null; },
 
     /** Força invalidação do cache de plano (usar após upgrade) */
     refreshSubscription() {
         SubscriptionChecker.invalidate();
     },
+
+    // Expõe _stopMonitoring apenas para o listener onAuthStateChange interno
+    _internalStop() { _stopMonitoring(); },
 };
+
+    return publicAPI;
+})();
 
 // ═══════════════════════════════════════════════════════════════
 //  LISTENERS GLOBAIS DE SEGURANÇA
@@ -636,7 +645,7 @@ supabase.auth.onAuthStateChange((event, session) => {
     switch (event) {
         case 'SIGNED_OUT':
             console.log('🔒 [AUTH GUARD] SIGNED_OUT detectado');
-            AuthGuard._stopMonitoring();
+            AuthGuard._internalStop();
             Fingerprint.clear();
             SubscriptionChecker.invalidate();
             RateLimiter.clear();

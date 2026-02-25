@@ -463,9 +463,19 @@ if (buttons.backToLogin) {
 }
 
 // ===== ENVIAR CÓDIGO DE RECUPERAÇÃO =====
-// FIX #5: Throttle para evitar flood de emails
-let sendCodeCooldown = false;
-const SEND_CODE_COOLDOWN_MS = 30000; // 30 segundos entre envios
+// FIX #5: Throttle persiste em sessionStorage para sobreviver a refresh de página
+const SEND_CODE_COOLDOWN_KEY  = '_ge_scc';
+const RESEND_CODE_COOLDOWN_KEY = '_ge_rcc';
+const SEND_CODE_COOLDOWN_MS   = 30000; // 30 segundos entre envios
+
+function isSendCooldownActive(key) {
+    const until = parseInt(sessionStorage.getItem(key) || '0', 10);
+    return Date.now() < until;
+}
+
+function setSendCooldown(key, ms) {
+    sessionStorage.setItem(key, String(Date.now() + ms));
+}
 
 if (buttons.sendCode) {
     buttons.sendCode.addEventListener('click', async () => {
@@ -481,8 +491,8 @@ if (buttons.sendCode) {
             return;
         }
 
-        // FIX #5: Bloqueia envio repetido em menos de 30s
-        if (sendCodeCooldown) {
+        // FIX #5: Bloqueia envio repetido em menos de 30s (persiste em refresh)
+        if (isSendCooldownActive(SEND_CODE_COOLDOWN_KEY)) {
             showAuthMessage('Aguarde alguns segundos antes de solicitar um novo código.', 'error');
             return;
         }
@@ -518,9 +528,8 @@ if (buttons.sendCode) {
             if (result.status === 'sent') {
                 recoveryEmailGlobal = email;
 
-                // Ativa cooldown para evitar flood
-                sendCodeCooldown = true;
-                setTimeout(() => { sendCodeCooldown = false; }, SEND_CODE_COOLDOWN_MS);
+                // Ativa cooldown persistente para evitar flood
+                setSendCooldown(SEND_CODE_COOLDOWN_KEY, SEND_CODE_COOLDOWN_MS);
 
                 showAuthMessage('Código enviado! Verifique seu email.', 'success');
                 switchScreen(screens.forgotEmail, screens.code);
@@ -707,8 +716,7 @@ if (buttons.backToLoginFinal) {
 }
 
 // ===== REENVIAR CÓDIGO =====
-// FIX #5: Throttle independente para o botão de reenvio
-let resendCodeCooldown = false;
+// FIX #5: Throttle independente para o botão de reenvio (também persistente)
 const RESEND_CODE_COOLDOWN_MS = 30000; // 30 segundos
 
 if (buttons.resendCode) {
@@ -720,8 +728,8 @@ if (buttons.resendCode) {
             return;
         }
 
-        // FIX #5: Bloqueia reenvio rápido
-        if (resendCodeCooldown) {
+        // FIX #5: Bloqueia reenvio rápido (persiste em refresh)
+        if (isSendCooldownActive(RESEND_CODE_COOLDOWN_KEY)) {
             showAuthMessage('Aguarde alguns segundos antes de reenviar o código.', 'error');
             return;
         }
@@ -750,9 +758,8 @@ if (buttons.resendCode) {
             const result = await response.json();
 
             if (result.status === 'sent') {
-                // Ativa cooldown
-                resendCodeCooldown = true;
-                setTimeout(() => { resendCodeCooldown = false; }, RESEND_CODE_COOLDOWN_MS);
+                // Ativa cooldown persistente
+                setSendCooldown(RESEND_CODE_COOLDOWN_KEY, RESEND_CODE_COOLDOWN_MS);
 
                 showAuthMessage('Novo código enviado!', 'success');
                 buttons.resendCode.style.color = 'var(--neon-green)';
