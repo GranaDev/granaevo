@@ -313,6 +313,10 @@ loginForm.addEventListener('submit', async (e) => {
 
     try {
         showAuthMessage('Verificando credenciais...', 'info');
+
+        // Proteção contra double-submit
+        const submitBtn = loginForm.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
         
         // Autenticar no Supabase
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -321,6 +325,8 @@ loginForm.addEventListener('submit', async (e) => {
         });
 
         if (error) {
+            if (submitBtn) submitBtn.disabled = false;
+
             // FIX #2: Incrementa contador persistente
             const newAttempts = currentAttempts + 1;
             setLoginAttempts(newAttempts);
@@ -353,37 +359,49 @@ loginForm.addEventListener('submit', async (e) => {
         resetCaptcha();
         hideCaptcha();
 
-        // Verifica subscription do próprio usuário OU do dono (se for convidado)
-        const { subscription, isGuest } = await getActiveSubscription(data.user.id);
+        try {
+            // Verifica subscription do próprio usuário OU do dono (se for convidado)
+            const { subscription, isGuest } = await getActiveSubscription(data.user.id);
 
-        if (!subscription) {
-            // FIX #1 e #bogfix: Deslogar o usuário imediatamente — sem plano, sem sessão ativa
-            await supabase.auth.signOut();
-            showAuthMessage('Você precisa adquirir um plano para acessar o sistema.', 'error');
+            if (!subscription) {
+                // FIX #1: Deslogar o usuário imediatamente — sem plano, sem sessão ativa
+                await supabase.auth.signOut();
+                showAuthMessage('Você precisa adquirir um plano para acessar o sistema.', 'error');
+                setTimeout(() => {
+                    window.location.href = 'planos.html';
+                }, 2500);
+                return;
+            }
+
+            // FIX #6: is_guest_member é apenas um hint de UI — a autorização real é feita
+            // pelo AuthGuard no dashboard via consulta ao banco. Mantemos o flag mas
+            // o dashboard NÃO deve confiar nele para decisões de segurança.
+            if (isGuest) {
+                sessionStorage.setItem('is_guest_member', 'true');
+            } else {
+                sessionStorage.removeItem('is_guest_member');
+            }
+
+            const userName = data.user.user_metadata?.name || 'Usuário';
+            showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
+            
             setTimeout(() => {
-                window.location.href = 'planos.html';
-            }, 2500);
-            return;
-        }
+                window.location.href = 'dashboard.html';
+            }, 1500);
 
-        // FIX #6: is_guest_member é apenas um hint de UI — a autorização real é feita
-        // pelo AuthGuard no dashboard via consulta ao banco. Mantemos o flag mas
-        // o dashboard NÃO deve confiar nele para decisões de segurança.
-        if (isGuest) {
-            sessionStorage.setItem('is_guest_member', 'true');
-        } else {
-            sessionStorage.removeItem('is_guest_member');
+        } catch (subError) {
+            // FIX: Erro de rede APÓS login bem-sucedido — destrói a sessão para não deixar
+            // o usuário autenticado sem verificação de plano
+            console.error('❌ Erro ao verificar plano após login:', subError);
+            await supabase.auth.signOut().catch(() => {});
+            if (submitBtn) submitBtn.disabled = false;
+            showAuthMessage('Erro ao verificar seu plano. Tente novamente.', 'error');
         }
-
-        const userName = data.user.user_metadata?.name || 'Usuário';
-        showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
-        
-        setTimeout(() => {
-            window.location.href = 'dashboard.html';
-        }, 1500);
         
     } catch (error) {
         showAuthMessage('Erro ao fazer login. Tente novamente.', 'error');
+        const submitBtn = loginForm.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = false;
         console.error(error);
     }
 });

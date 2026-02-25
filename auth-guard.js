@@ -694,8 +694,9 @@ window.addEventListener('storage', (e) => {
             } catch { return null; }
         })();
 
-        const user = AuthGuard._user;
-        if (user && newStampUid && newStampUid !== user.userId) {
+        // FIX: Usa getUser() — _user é privado na closure, AuthGuard._user é undefined
+        const currentUser = AuthGuard.getUser();
+        if (currentUser && newStampUid && newStampUid !== currentUser.userId) {
             console.warn('🚨 [AUTH GUARD] Integrity stamp adulterado por outra aba!');
             if (!window.location.href.includes('login.html')) {
                 SafeRedirect.toLogin('INTEGRITY_FAIL');
