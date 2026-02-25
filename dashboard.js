@@ -842,43 +842,27 @@ function mostrarTela(tela) {
 
 // ========== ATUALIZAR NOME E FOTO DO USUÁRIO ==========
 function atualizarNomeUsuario() {
-    console.log('🔄 [ATUALIZAR NOME] Iniciando atualização...');
-    
-    const nome = perfilAtivo ? perfilAtivo.nome : usuarioLogado.nome || 'Usuário';
-    const plano = usuarioLogado.plano || 'Plano Indefinido';
-    
-    console.log('👤 [ATUALIZAR NOME] Nome:', nome);
-    console.log('💳 [ATUALIZAR NOME] Plano:', plano);
-    
-    // Atualizar nome
-    const userNameEl = document.getElementById('userName');
+    const nome  = _sanitizeText(perfilAtivo?.nome || usuarioLogado.nome || 'Usuário');
+    const plano = _sanitizeText(usuarioLogado.plano || 'Plano Indefinido');
+
+    // ✅ textContent em todos — nunca innerHTML
+    const userNameEl    = document.getElementById('userName');
     const welcomeNameEl = document.getElementById('welcomeName');
-    
-    if(userNameEl) {
-        userNameEl.textContent = nome;
-        console.log('✅ [ATUALIZAR NOME] userName atualizado');
+    const userPlanEl    = document.querySelector('[data-user-plan]');
+    const userPhotoEl   = document.getElementById('userPhoto');
+
+    if (userNameEl)    userNameEl.textContent    = nome;
+    if (welcomeNameEl) welcomeNameEl.textContent = nome;
+    if (userPlanEl)    userPlanEl.textContent     = plano;
+
+    if (userPhotoEl && perfilAtivo?.foto) {
+        // ✅ Valida URL antes de atribuir ao src
+        const urlSegura = _sanitizeImgUrl(perfilAtivo.foto);
+        if (urlSegura) {
+            userPhotoEl.src = urlSegura;
+        }
+        // Se URL inválida, mantém o SVG padrão definido no HTML
     }
-    
-    if(welcomeNameEl) {
-        welcomeNameEl.textContent = nome;
-        console.log('✅ [ATUALIZAR NOME] welcomeName atualizado');
-    }
-    
-    // ✅ NOVO: Atualizar plano
-    const userPlanEl = document.querySelector('[data-user-plan]');
-    if(userPlanEl) {
-        userPlanEl.textContent = plano;
-        console.log('✅ [ATUALIZAR NOME] Plano atualizado para:', plano);
-    }
-    
-    // Atualizar foto
-    const userPhotoEl = document.getElementById('userPhoto');
-    if(userPhotoEl && perfilAtivo && perfilAtivo.foto) {
-        userPhotoEl.src = perfilAtivo.foto;
-        console.log('✅ [ATUALIZAR NOME] Foto atualizada');
-    }
-    
-    console.log('✅ [ATUALIZAR NOME] Atualização concluída');
 }
 
 async function alterarFoto(event) {
