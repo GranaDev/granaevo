@@ -322,11 +322,11 @@ window.salvarDados = salvarDados;
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
 async function verificarLogin() {
-    const authLoading     = document.getElementById('authLoading');
-    const protectedContent = document.getElementById('protectedContent');
-    let   verificacaoConcluida = false; // ✅ flag de controle
+    const authLoading      = document.getElementById('authLoading');
+    const protectedContent = document.getElementById('protectedContent'); // ✅ getElementById, não querySelector
+    let   verificacaoConcluida = false;
 
-    // ✅ Conteúdo permanece oculto enquanto verificação ocorre
+    // Mantém conteúdo oculto e spinner visível durante verificação
     if (authLoading)      authLoading.style.display      = 'flex';
     if (protectedContent) protectedContent.style.display = 'none';
 
@@ -335,7 +335,7 @@ async function verificarLogin() {
 
         if (sessionError || !session) {
             window.location.replace('login.html');
-            return; // ✅ return antes do finally — não exibe conteúdo
+            return;
         }
 
         // ── Verificar assinatura própria
@@ -355,7 +355,7 @@ async function verificarLogin() {
         if (!subError && subscription) {
             planName = subscription.plans.name;
         } else {
-            // ── Verificar membership de convidado
+            // ── Verificar se é convidado
             const { data: membership, error: memberError } = await supabase
                 .from('account_members')
                 .select('owner_user_id, owner_email')
@@ -389,15 +389,14 @@ async function verificarLogin() {
             isGuest         = true;
         }
 
-        // ── Inicializar estado
+        // ── Inicializar estado do usuário (sem logs de dados sensíveis)
         usuarioLogado = {
             userId:          session.user.id,
             effectiveUserId: effectiveUserId,
-            // ✅ sanitiza nome ao entrar no sistema
             nome:            _sanitizeText(
-                                session.user.user_metadata?.name ||
-                                session.user.email.split('@')[0] ||
-                                'Usuário'
+                                 session.user.user_metadata?.name ||
+                                 session.user.email.split('@')[0] ||
+                                 'Usuário'
                              ),
             email:           session.user.email,
             plano:           planName,
@@ -405,24 +404,31 @@ async function verificarLogin() {
             isGuest:         isGuest,
         };
 
+        // ── Inicializar DataManager
         await dataManager.initialize(effectiveUserId, effectiveEmail);
 
+        // ── Carregar perfis
         const resultadoPerfis = await carregarPerfis();
         if (!resultadoPerfis.sucesso) {
             throw new Error('Não foi possível carregar os dados do usuário.');
         }
 
-        // ✅ Só marca como concluída APÓS toda verificação passar
+        // ✅ Verificação 100% concluída — libera o conteúdo
         verificacaoConcluida = true;
         mostrarSelecaoPerfis();
 
     } catch (e) {
         _log.error('LOGIN_001', e);
-        // ✅ Mensagem genérica — não expõe estrutura interna
-        window.location.replace('login.html?c=b4');
+        // Mensagem genérica — não expõe estrutura interna ao usuário
+        alert('Erro ao verificar acesso. Tente novamente.');
+        window.location.replace('login.html');
+
     } finally {
+        // Spinner sempre some
         if (authLoading) authLoading.style.display = 'none';
-        // ✅ Conteúdo só aparece se verificação foi 100% concluída
+
+        // ✅ Conteúdo só aparece se toda verificação passou com sucesso
+        // ✅ Se houve redirect acima, verificacaoConcluida = false → conteúdo NÃO aparece
         if (protectedContent && verificacaoConcluida) {
             protectedContent.style.display = 'block';
         }
