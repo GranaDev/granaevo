@@ -103,29 +103,41 @@ function getMesNome(mes) {
 }
 
 // ========== CARREGAR E SALVAR DADOS ==========
+// ── Logger interno: em produção, suprime dados sensíveis
+const _log = (() => {
+    const IS_DEV = window.location.hostname === 'localhost' ||
+                   window.location.hostname === '127.0.0.1';
+    return {
+        info:  IS_DEV ? (...a) => console.info('[GE]',  ...a) : () => {},
+        warn:  IS_DEV ? (...a) => console.warn('[GE]',  ...a) : () => {},
+        // Em prod, loga apenas código de erro — nunca dados do usuário
+        error: (code, e) => {
+            if (IS_DEV) { console.error('[GE] Erro ' + code + ':', e); }
+            else         { console.error('[GE] Erro ' + code); }
+        },
+    };
+})();
+
 async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('Sessão inválida');
+        if (!session) throw new Error('SEM_SESSAO');
 
-        // ✅ Sempre usar effectiveUserId (dono) para buscar dados
         const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
-
-        console.log('🔍 Buscando perfis para userId:', targetUserId);
 
         const { data: perfis, error } = await supabase
             .from('profiles')
             .select('id, name, photo_url')
-            .eq('user_id', targetUserId) // ← CORRIGIDO
+            .eq('user_id', targetUserId)
             .order('id', { ascending: true });
 
         if (error) throw error;
 
         if (perfis && perfis.length > 0) {
             usuarioLogado.perfis = perfis.map(p => ({
-                id: p.id,
-                nome: p.name,
-                foto: p.photo_url
+                id:   p.id,
+                nome: _sanitizeText(p.name),      // ✅ sanitiza ao entrar
+                foto: _sanitizeImgUrl(p.photo_url) // ✅ valida URL ao entrar
             }));
             return { sucesso: true, perfisEncontrados: true };
         }
@@ -133,8 +145,8 @@ async function carregarPerfis() {
         usuarioLogado.perfis = [];
         return { sucesso: true, perfisEncontrados: false };
 
-    } catch(e) {
-        console.error('❌ Erro ao carregar perfis:', e);
+    } catch (e) {
+        _log.error('PERFIS_001', e);
         usuarioLogado.perfis = [];
         return { sucesso: false, perfisEncontrados: false };
     }
