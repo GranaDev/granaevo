@@ -321,16 +321,24 @@ async function salvarDados() {
 window.salvarDados = salvarDados;
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
+// ═══════════════════════════════════════════════════════════════
+//  SUBSTITUA *APENAS UMA* verificarLogin no seu arquivo.
+//  Delete a versão antiga por completo antes de colar esta.
+// ═══════════════════════════════════════════════════════════════
+
 async function verificarLogin() {
     const authLoading      = document.getElementById('authLoading');
-    const protectedContent = document.getElementById('protectedContent'); // ✅ getElementById, não querySelector
-    let   verificacaoConcluida = false;
+    const protectedContent = document.getElementById('protectedContent');
 
-    // Mantém conteúdo oculto e spinner visível durante verificação
+    // Spinner visível, conteúdo oculto durante verificação
     if (authLoading)      authLoading.style.display      = 'flex';
     if (protectedContent) protectedContent.style.display = 'none';
 
+    // Flag: só libera o conteúdo se tudo passar
+    let verificacaoConcluida = false;
+
     try {
+        // ── 1. Verificar sessão ──────────────────────────────────
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError || !session) {
@@ -338,7 +346,7 @@ async function verificarLogin() {
             return;
         }
 
-        // ── Verificar assinatura própria
+        // ── 2. Verificar assinatura própria ──────────────────────
         let planName        = '';
         let effectiveUserId = session.user.id;
         let effectiveEmail  = session.user.email;
@@ -354,8 +362,9 @@ async function verificarLogin() {
 
         if (!subError && subscription) {
             planName = subscription.plans.name;
+
         } else {
-            // ── Verificar se é convidado
+            // ── 3. Verificar se é convidado ──────────────────────
             const { data: membership, error: memberError } = await supabase
                 .from('account_members')
                 .select('owner_user_id, owner_email')
@@ -369,6 +378,7 @@ async function verificarLogin() {
                 return;
             }
 
+            // ── 4. Verificar assinatura do dono ──────────────────
             const { data: ownerSub, error: ownerSubError } = await supabase
                 .from('subscriptions')
                 .select('plans(name)')
@@ -389,7 +399,7 @@ async function verificarLogin() {
             isGuest         = true;
         }
 
-        // ── Inicializar estado do usuário (sem logs de dados sensíveis)
+        // ── 5. Inicializar estado do usuário ─────────────────────
         usuarioLogado = {
             userId:          session.user.id,
             effectiveUserId: effectiveUserId,
@@ -404,22 +414,20 @@ async function verificarLogin() {
             isGuest:         isGuest,
         };
 
-        // ── Inicializar DataManager
+        // ── 6. Inicializar DataManager ───────────────────────────
         await dataManager.initialize(effectiveUserId, effectiveEmail);
 
-        // ── Carregar perfis
+        // ── 7. Carregar perfis ───────────────────────────────────
         const resultadoPerfis = await carregarPerfis();
         if (!resultadoPerfis.sucesso) {
             throw new Error('Não foi possível carregar os dados do usuário.');
         }
 
-        // ✅ Verificação 100% concluída — libera o conteúdo
+        // ✅ Tudo passou — marca como concluído
         verificacaoConcluida = true;
-        mostrarSelecaoPerfis();
 
     } catch (e) {
         _log.error('LOGIN_001', e);
-        // Mensagem genérica — não expõe estrutura interna ao usuário
         alert('Erro ao verificar acesso. Tente novamente.');
         window.location.replace('login.html');
 
@@ -427,11 +435,11 @@ async function verificarLogin() {
         // Spinner sempre some
         if (authLoading) authLoading.style.display = 'none';
 
-        // ✅ Conteúdo só aparece se toda verificação passou com sucesso
-        // ✅ Se houve redirect acima, verificacaoConcluida = false → conteúdo NÃO aparece
-        if (protectedContent && verificacaoConcluida) {
-            protectedContent.style.display = 'block';
+        if (verificacaoConcluida) {
+            if (protectedContent) protectedContent.style.display = 'block';
+            mostrarSelecaoPerfis();
         }
+
     }
 }
 
