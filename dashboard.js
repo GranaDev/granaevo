@@ -459,43 +459,98 @@ function mostrarSelecaoPerfis() {
     solicitarPermissaoNotificacoes();
 }
 
-function atualizarTelaPerfis() {
-    const saudacao = document.getElementById('saudacaoPerfis');
-    const lista = document.getElementById('listaPerfis');
+// ── Utilitário interno: escapa texto para uso em DOM via textContent
+function _sanitizeText(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[^\w\s\-.,!?áéíóúàèìòùâêîôûãõäëïöüçñÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇÑ]/gi, '');
+}
 
-    if (!saudacao || !lista) {
-        console.error('❌ Tela de perfis incompleta no HTML');
-        return;
+// ── Utilitário interno: valida URL de imagem (apenas HTTPS, domínios permitidos)
+function _sanitizeImgUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+    try {
+        const parsed = new URL(url);
+        const allowed = [
+            'fvrhqqeofqedmhadzzqw.supabase.co',
+            'cdn-icons-png.flaticon.com',
+            'logospng.org',
+        ];
+        if (parsed.protocol !== 'https:') return null;
+        if (!allowed.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) return null;
+        return parsed.href;
+    } catch {
+        return null;
     }
+}
 
-    const nomeExibir = perfilAtivo ? perfilAtivo.nome : usuarioLogado.nome;
-    saudacao.innerHTML = `Olá <b>${nomeExibir}</b> – Plano <b>${usuarioLogado.plano}</b>`;
-    
+function atualizarTelaPerfis() {
+    const saudacaoNomeEl  = document.getElementById('saudacaoNome');
+    const saudacaoPlanoEl = document.getElementById('saudacaoPlano');
+    const lista           = document.getElementById('listaPerfis');
+
+    if (!lista) return;
+
+    // ✅ textContent — nunca innerHTML com dados do usuário
+    const nomeExibir = perfilAtivo ? perfilAtivo.nome : (usuarioLogado.nome || 'Usuário');
+    if (saudacaoNomeEl)  saudacaoNomeEl.textContent  = _sanitizeText(nomeExibir);
+    if (saudacaoPlanoEl) saudacaoPlanoEl.textContent = _sanitizeText(usuarioLogado.plano || '');
+
     lista.innerHTML = '';
 
     usuarioLogado.perfis.forEach((perfil, index) => {
         const btn = document.createElement('button');
         btn.className = 'perfil-card';
+        btn.type      = 'button';
 
-        btn.innerHTML = `
-            <div class="perfil-foto">
-                ${perfil.foto 
-                    ? `<img src="${perfil.foto}">`
-                    : `<div class="perfil-placeholder">${perfil.nome[0]}</div>`
-                }
-            </div>
-            <div class="perfil-nome">${perfil.nome}</div>
-        `;
+        // ── Foto
+        const fotoDiv = document.createElement('div');
+        fotoDiv.className = 'perfil-foto';
 
-        btn.onclick = () => entrarNoPerfil(index);
+        const urlSegura = _sanitizeImgUrl(perfil.foto);
+        if (urlSegura) {
+            const img = document.createElement('img');
+            img.src = urlSegura;
+            img.alt = 'Foto de perfil';
+            img.onerror = function () { this.remove(); }; // Remove se falhar
+            fotoDiv.appendChild(img);
+        } else {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'perfil-placeholder';
+            // ✅ textContent — evita XSS com nomes maliciosos
+            placeholder.textContent = _sanitizeText(perfil.nome).charAt(0).toUpperCase() || '?';
+            fotoDiv.appendChild(placeholder);
+        }
+
+        // ── Nome
+        const nomeDiv = document.createElement('div');
+        nomeDiv.className   = 'perfil-nome';
+        nomeDiv.textContent = _sanitizeText(perfil.nome); // ✅ textContent
+
+        btn.appendChild(fotoDiv);
+        btn.appendChild(nomeDiv);
+
+        // ✅ addEventListener em vez de onclick inline
+        btn.addEventListener('click', () => entrarNoPerfil(index));
         lista.appendChild(btn);
     });
 
-    if (usuarioLogado.perfis.length < limitesPlano[usuarioLogado.plano]) {
+    // ── Botão "Novo Perfil"
+    const limiteAtingido = usuarioLogado.perfis.length >= (limitesPlano[usuarioLogado.plano] || 1);
+    if (!limiteAtingido) {
         const add = document.createElement('button');
         add.className = 'perfil-card perfil-add';
-        add.innerHTML = `<div class="perfil-foto">+</div><div>Novo Perfil</div>`;
-        add.onclick = adicionarNovoPerfil;
+        add.type      = 'button';
+
+        const fotoDiv = document.createElement('div');
+        fotoDiv.className   = 'perfil-foto';
+        fotoDiv.textContent = '+';
+
+        const label = document.createElement('div');
+        label.textContent = 'Novo Perfil';
+
+        add.appendChild(fotoDiv);
+        add.appendChild(label);
+        add.addEventListener('click', adicionarNovoPerfil);
         lista.appendChild(add);
     }
 }
