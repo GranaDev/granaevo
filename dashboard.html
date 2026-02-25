@@ -3,56 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!--
-      ╔══════════════════════════════════════════════════════════════╗
-      ║  CORREÇÃO 1 — Content Security Policy (CSP)                 ║
-      ║  Bloqueia execução de scripts inline não autorizados,       ║
-      ║  carregamento de recursos externos não listados e           ║
-      ║  ataques de clickjacking via frame-ancestors 'none'.        ║
-      ║  Ajuste as origens conforme seu ambiente de produção.       ║
-      ╚══════════════════════════════════════════════════════════════╝
-    -->
-    <meta http-equiv="Content-Security-Policy"
-          content="
-            default-src 'self';
-            script-src 'self'
-                        https://cdn.jsdelivr.net
-                        https://cdnjs.cloudflare.com
-                        https://fonts.googleapis.com;
-            style-src  'self' 'unsafe-inline'
-                        https://fonts.googleapis.com
-                        https://cdnjs.cloudflare.com;
-            font-src   'self'
-                        https://fonts.gstatic.com
-                        https://cdnjs.cloudflare.com;
-            img-src    'self' data: blob:
-                        https://fvrhqqeofqedmhadzzqw.supabase.co
-                        https://logospng.org
-                        https://cdn-icons-png.flaticon.com;
-            connect-src 'self'
-                        https://fvrhqqeofqedmhadzzqw.supabase.co;
-            frame-ancestors 'none';
-            base-uri   'self';
-            form-action 'self';
-          ">
-
-    <!--
-      CORREÇÃO 2 — Impede clickjacking com X-Frame-Options
-      (reforce também no servidor/Nginx/Vercel headers)
-    -->
-    <meta http-equiv="X-Frame-Options" content="DENY">
-
-    <!--
-      CORREÇÃO 3 — Impede MIME-sniffing
-    -->
-    <meta http-equiv="X-Content-Type-Options" content="nosniff">
-
-    <!--
-      CORREÇÃO 4 — Referrer controlado: não vaza URL interna
-    -->
-    <meta name="referrer" content="strict-origin-when-cross-origin">
-
     <title>Dashboard - GranaEvo</title>
     <link rel="stylesheet" href="dashboard.css">
     <link rel="stylesheet" href="graficos.css">
@@ -63,12 +13,13 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
+    
     <script type="module" src="supabase-client.js"></script>
     <script type="module" src="data-manager.js"></script>
     <script type="module" src="auth-guard.js"></script>
-
+    
     <style>
+        /* Loading de autenticação */
         .auth-loading {
             position: fixed;
             top: 0;
@@ -82,7 +33,7 @@
             z-index: 99999;
             flex-direction: column;
         }
-
+        
         .auth-loading .spinner {
             width: 50px;
             height: 50px;
@@ -91,11 +42,11 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
-
+        
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-
+        
         .auth-loading p {
             color: #10b981;
             margin-top: 20px;
@@ -104,101 +55,79 @@
     </style>
 </head>
 <body>
-
     <!-- LOADING DE AUTENTICAÇÃO -->
     <div class="auth-loading" id="authLoading">
         <div class="spinner"></div>
         <p>🔒 Verificando acesso...</p>
     </div>
 
-    <!--
-      CORREÇÃO 5 — Conteúdo protegido começa oculto via CSS,
-      não apenas via atributo inline.
-      O JS só o exibe DEPOIS da verificação bem-sucedida,
-      nunca no bloco finally (ver correção no JS).
-    -->
-    <div id="protectedContent" style="display:none;">
-
+    <!-- CONTEÚDO PROTEGIDO -->
+    <div data-protected-content style="display: none;">
+        
         <!-- ========== SELEÇÃO DE PERFIS ========== -->
         <div id="selecaoPerfis" class="perfis-screen">
             <div class="perfis-container">
-                <!--
-                  CORREÇÃO 6 — Saudação usa <span> com textContent
-                  via JS (sem innerHTML), eliminando XSS.
-                  Estrutura fixa; apenas os <span> internos recebem texto.
-                -->
-                <h1 class="perfis-title">
-                    Olá <span id="saudacaoNome"></span>
-                    – Plano <span id="saudacaoPlano"></span>
-                </h1>
+                <h1 id="saudacaoPerfis" class="perfis-title">Selecione seu Perfil</h1>
                 <div id="listaPerfis" class="perfis-grid"></div>
             </div>
         </div>
 
         <!-- ========== BOTÃO MOBILE (FORA DA SIDEBAR) ========== -->
-        <button class="sidebar-toggle" id="sidebarToggle" aria-label="Abrir menu lateral">
+        <button class="sidebar-toggle" id="sidebarToggle">
             <span class="hamburger"></span>
         </button>
 
         <!-- ========== SIDEBAR ========== -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="logo">
-                    <div class="logo-img-wrapper">
-                        <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
-                    </div>
-                    <span class="logo-text">GranaEvo</span>
+            <div class="logo">
+                <div class="logo-img-wrapper">
+                    <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
                 </div>
+                <span class="logo-text">GranaEvo</span>
             </div>
+        </div>
 
             <div class="sidebar-user">
-                <!--
-                  CORREÇÃO 7 — src padrão é SVG inline data-URI;
-                  o JS valida a URL da foto antes de atribuir ao src
-                  (ver sanitizarUrlFoto() no JS).
-                -->
-                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Ccircle cx='40' cy='40' r='40' fill='%2310b981'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial' font-size='32' fill='white'%3EU%3C/text%3E%3C/svg%3E"
-                     alt="Foto de perfil"
-                     id="userPhoto"
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Ccircle cx='40' cy='40' r='40' fill='%2310b981'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial' font-size='32' fill='white'%3EU%3C/text%3E%3C/svg%3E" 
+                     alt="Foto" 
+                     id="userPhoto" 
                      class="user-photo">
                 <div class="user-info">
-                    <!-- textContent definido via JS — sem innerHTML -->
-                    <div class="user-name" id="userName"></div>
-                    <div class="user-plan" data-user-plan></div>
+                    <div class="user-name" id="userName">Usuário</div>
+                    <div class="user-plan" data-user-plan>Plano Premium</div>
                 </div>
-                <label for="photoUpload" class="photo-upload-btn" aria-label="Alterar foto">
-                    <i class="fas fa-camera"></i>
-                </label>
-                <input type="file" id="photoUpload" accept="image/jpeg,image/png,image/webp" style="display:none;">
+                <label for="photoUpload" class="photo-upload-btn"><i class="fas fa-camera"></i></label>
+                <input type="file" id="photoUpload" accept="image/*" style="display:none;">
             </div>
 
-            <nav class="sidebar-nav" aria-label="Navegação principal">
-                <button class="nav-btn active" data-page="dashboard" type="button">
-                    <span class="nav-icon"><i class="fas fa-chart-line" aria-hidden="true"></i></span>
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-page="dashboard">
+                    <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
                     <span class="nav-text">Dashboard</span>
                 </button>
-                <button class="nav-btn" data-page="transacoes" type="button">
-                    <span class="nav-icon"><i class="fas fa-credit-card" aria-hidden="true"></i></span>
+                <button class="nav-btn" data-page="transacoes">
+                    <span class="nav-icon"><i class="fas fa-credit-card"></i></span>
                     <span class="nav-text">Transações</span>
                 </button>
-                <button class="nav-btn" data-page="reservas" type="button">
-                    <span class="nav-icon"><i class="fas fa-bullseye" aria-hidden="true"></i></span>
+                <button class="nav-btn" data-page="reservas">
+                    <span class="nav-icon"><i class="fas fa-bullseye"></i></span>
                     <span class="nav-text">Reservas</span>
                 </button>
-                <button class="nav-btn" data-page="cartoes" type="button">
-                    <span class="nav-icon"><i class="fas fa-gem" aria-hidden="true"></i></span>
+                <button class="nav-btn" data-page="cartoes">
+                    <span class="nav-icon"><i class="fas fa-gem"></i></span>
                     <span class="nav-text">Cartões</span>
                 </button>
-                <button class="nav-btn" data-page="graficos" type="button">
-                    <span class="nav-icon"><i class="fas fa-chart-bar" aria-hidden="true"></i></span>
+                <button class="nav-btn" data-page="graficos">
+                    <span class="nav-icon"><i class="fas fa-chart-bar"></i></span>
                     <span class="nav-text">Gráficos</span>
                 </button>
-                <button class="nav-btn" data-page="relatorios" type="button">
-                    <span class="nav-icon"><i class="fas fa-file-alt" aria-hidden="true"></i></span>
+                <button class="nav-btn" data-page="relatorios">
+                    <span class="nav-icon"><i class="fas fa-file-alt"></i></span>
                     <span class="nav-text">Relatórios</span>
                 </button>
-                <button class="nav-btn" data-page="configuracoes" type="button">
-                    <span class="nav-icon"><i class="fas fa-cog" aria-hidden="true"></i></span>
+                <button class="nav-btn" data-page="configuracoes">
+                    <span class="nav-icon"><i class="fas fa-cog"></i></span>
                     <span class="nav-text">Configurações</span>
                 </button>
             </nav>
@@ -206,7 +135,7 @@
 
         <!-- ========== MAIN CONTENT ========== -->
         <main class="main-content" id="mainContent">
-
+            
             <!-- DASHBOARD -->
             <section class="page active" id="dashboardPage">
                 <div class="page-header-premium">
@@ -217,39 +146,41 @@
                                 <span class="separator">›</span>
                                 <span>Dashboard</span>
                             </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-chart-line" aria-hidden="true"></i> Dashboard
-                            </h1>
+                            <h1 class="page-title-premium"><i class="fas fa-chart-line"></i> Dashboard</h1>
                             <p class="page-subtitle-premium">Visão geral completa das suas finanças</p>
                         </div>
-                        <div class="header-actions"></div>
+                        <div class="header-actions">
+                        </div>
                     </div>
                 </div>
 
                 <div class="cards-grid">
                     <div class="card card-green">
-                        <div class="card-icon"><i class="fas fa-arrow-up" aria-hidden="true"></i></div>
+                        <div class="card-icon"><i class="fas fa-arrow-up"></i></div>
                         <div class="card-content">
                             <div class="card-label">Entradas</div>
                             <div class="card-value" id="totalEntradas">R$ 0,00</div>
                         </div>
                     </div>
+
                     <div class="card card-red">
-                        <div class="card-icon"><i class="fas fa-arrow-down" aria-hidden="true"></i></div>
+                        <div class="card-icon"><i class="fas fa-arrow-down"></i></div>
                         <div class="card-content">
                             <div class="card-label">Saídas</div>
                             <div class="card-value" id="totalSaidas">R$ 0,00</div>
                         </div>
                     </div>
+
                     <div class="card card-blue">
-                        <div class="card-icon"><i class="fas fa-wallet" aria-hidden="true"></i></div>
+                        <div class="card-icon"><i class="fas fa-wallet"></i></div>
                         <div class="card-content">
                             <div class="card-label">Saldo</div>
                             <div class="card-value" id="totalSaldo">R$ 0,00</div>
                         </div>
                     </div>
+
                     <div class="card card-yellow">
-                        <div class="card-icon"><i class="fas fa-piggy-bank" aria-hidden="true"></i></div>
+                        <div class="card-icon"><i class="fas fa-piggy-bank"></i></div>
                         <div class="card-content">
                             <div class="card-label">Reservas</div>
                             <div class="card-value" id="totalReservas">R$ 0,00</div>
@@ -259,37 +190,28 @@
 
                 <div class="section-box">
                     <div class="section-header">
-                        <h2 class="section-title">
-                            <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> Contas Fixas
-                        </h2>
-                        <!--
-                          CORREÇÃO 8 — Botões de ação sem handlers inline.
-                          Todos os eventos são registrados via addEventListener no JS.
-                        -->
-                        <button class="btn-primary" id="btnNovaContaFixa" type="button">
-                            <i class="fas fa-plus" aria-hidden="true"></i> Nova Conta
-                        </button>
+                        <h2 class="section-title"><i class="fas fa-file-invoice-dollar"></i> Contas Fixas</h2>
+                        <button class="btn-primary" id="btnNovaContaFixa"><i class="fas fa-plus"></i> Nova Conta</button>
                     </div>
                     <div id="listaContasFixas" class="contas-grid">
                         <p class="empty-state">Nenhuma conta fixa cadastrada.</p>
                     </div>
                 </div>
 
-                <!--
-                  CORREÇÃO 9 — Removidos handlers onclick/onmouseover/onmouseout inline.
-                  O efeito hover é feito via CSS; o clique via addEventListener no JS.
-                -->
-                <div class="section-box onde-foi-dinheiro-card" id="btnOndeForDinheiro"
-                     role="button"
-                     tabindex="0"
-                     aria-label="Abrir análise: Onde foi meu dinheiro?">
-                    <div style="font-size:3rem; margin-bottom:12px;">💸</div>
-                    <h3 style="margin-bottom:8px; color:var(--text-primary);">Onde Foi Meu Dinheiro?</h3>
-                    <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:16px;">
-                        Descubra para onde seus gastos estão indo com análise inteligente
-                    </p>
-                    <span class="btn-primary">🔍 Analisar Agora</span>
-                </div>
+                <!-- ADICIONAR APÓS A SEÇÃO DE CONTAS FIXAS -->
+            <div class="section-box" style="margin-top:32px; text-align:center; cursor:pointer; transition:all 0.3s;" 
+                onclick="abrirWidgetOndeForDinheiro()"
+                onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 24px rgba(67,160,71,0.3)';"
+                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
+                <div style="font-size:3rem; margin-bottom:12px;">💸</div>
+                <h3 style="margin-bottom:8px; color:var(--text-primary);">Onde Foi Meu Dinheiro?</h3>
+                <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:16px;">
+                    Descubra para onde seus gastos estão indo com análise inteligente
+                </p>
+                <button class="btn-primary" style="pointer-events:none;">
+                    🔍 Analisar Agora
+                </button>
+            </div>
             </section>
 
             <!-- TRANSAÇÕES -->
@@ -302,61 +224,44 @@
                                 <span class="separator">›</span>
                                 <span>Transações</span>
                             </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-credit-card" aria-hidden="true"></i> Transações
-                            </h1>
-                            <p class="page-subtitle-premium">
-                                Registre e gerencie todas as suas movimentações financeiras
-                            </p>
+                            <h1 class="page-title-premium"><i class="fas fa-credit-card"></i> Transações</h1>
+                            <p class="page-subtitle-premium">Registre e gerencie todas as suas movimentações financeiras</p>
+                        </div>
+                        <div class="header-actions">
                         </div>
                     </div>
                 </div>
 
                 <div class="transaction-form">
-                    <select id="selectCategoria" class="form-input" aria-label="Categoria da transação">
+                    <select id="selectCategoria" class="form-input">
                         <option value="">Selecione a categoria</option>
-                        <option value="entrada">Entrada</option>
-                        <option value="saida">Saída</option>
-                        <option value="reserva">Reserva</option>
-                        <option value="saida_credito">Saída no Crédito</option>
+                        <option value="entrada"><i class="fas fa-arrow-up"></i> Entrada</option>
+                        <option value="saida"><i class="fas fa-arrow-down"></i> Saída</option>
+                        <option value="reserva"><i class="fas fa-bullseye"></i> Reserva</option>
+                        <option value="saida_credito"><i class="fas fa-credit-card"></i> Saída no Crédito</option>
                     </select>
 
-                    <select id="selectTipo" class="form-input" aria-label="Tipo da transação">
+                    <select id="selectTipo" class="form-input">
                         <option value="">Selecione o tipo</option>
                     </select>
 
-                    <input type="text"
-                           id="inputDescricao"
-                           class="form-input"
-                           placeholder="Descrição"
-                           maxlength="200"
-                           autocomplete="off">
-                    <input type="number"
-                           id="inputValor"
-                           class="form-input"
-                           placeholder="Valor (R$)"
-                           step="0.01"
-                           min="0"
-                           max="9999999.99">
+                    <input type="text" id="inputDescricao" class="form-input" placeholder="Descrição">
+                    <input type="number" id="inputValor" class="form-input" placeholder="Valor (R$)" step="0.01" min="0">
 
                     <div id="creditoFields" style="display:none;">
-                        <select id="selectCartao" class="form-input" aria-label="Cartão de crédito">
+                        <select id="selectCartao" class="form-input">
                             <option value="">Selecione o cartão</option>
                         </select>
-                        <select id="selectParcelas" class="form-input" aria-label="Número de parcelas">
+                        <select id="selectParcelas" class="form-input">
                             <option value="1">1x</option>
                         </select>
                     </div>
 
-                    <button class="btn-primary btn-large" id="btnLancar" type="button">
-                        Lançar Transação
-                    </button>
+                    <button class="btn-primary btn-large" id="btnLancar">Lançar Transação</button>
                 </div>
 
                 <div class="section-box">
-                    <h2 class="section-title">
-                        <i class="fas fa-list" aria-hidden="true"></i> Movimentações
-                    </h2>
+                    <h2 class="section-title"><i class="fas fa-list"></i> Movimentações</h2>
                     <div id="listaMovimentacoes" class="movimentacoes-list">
                         <p class="empty-state">Nenhuma movimentação registrada.</p>
                     </div>
@@ -373,12 +278,8 @@
                                 <span class="separator">›</span>
                                 <span>Reservas</span>
                             </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-bullseye" aria-hidden="true"></i> Reservas
-                            </h1>
-                            <p class="page-subtitle-premium">
-                                Organize e acompanhe suas reservas e objetivos financeiros
-                            </p>
+                            <h1 class="page-title-premium"><i class="fas fa-bullseye"></i> Reservas</h1>
+                            <p class="page-subtitle-premium">Organize e acompanhe suas reservas e objetivos financeiros</p>
                         </div>
                     </div>
                     <div class="header-stats">
@@ -397,9 +298,7 @@
                     <div class="reservas-sidebar">
                         <div class="section-header">
                             <h3>Lista de Reservas</h3>
-                            <button class="btn-primary" id="btnNovaMeta" type="button">
-                                <i class="fas fa-plus" aria-hidden="true"></i> Nova Reserva
-                            </button>
+                            <button class="btn-primary" id="btnNovaMeta"><i class="fas fa-plus"></i> Nova Reserva</button>
                         </div>
                         <div id="listaMetas" class="metas-list">
                             <p class="empty-state">Nenhuma reserva criada.</p>
@@ -411,18 +310,14 @@
                             <div class="charts-container">
                                 <div class="chart-wrapper">
                                     <canvas id="donutChart" width="180" height="180"></canvas>
-                                    <div id="metaProgress" class="meta-progress-text">
-                                        Selecione uma reserva
-                                    </div>
+                                    <div id="metaProgress" class="meta-progress-text">Selecione uma reserva</div>
                                 </div>
                                 <div class="chart-wrapper">
                                     <canvas id="lineChart" width="400" height="200"></canvas>
                                 </div>
                             </div>
                             <div id="metaDetalhes" class="meta-details"></div>
-                            <button class="btn-warning" id="btnRetirar" type="button" style="display:none;">
-                                Retirar Dinheiro
-                            </button>
+                            <button class="btn-warning" id="btnRetirar" style="display:none;">Retirar Dinheiro</button>
                         </div>
                     </div>
                 </div>
@@ -438,19 +333,17 @@
                                 <span class="separator">›</span>
                                 <span>Cartões</span>
                             </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-credit-card" aria-hidden="true"></i> Cartões
-                            </h1>
-                            <p class="page-subtitle-premium">
-                                Controle total dos seus cartões de crédito e faturas
-                            </p>
+                            <h1 class="page-title-premium"><i class="fas fa-credit-card"></i> Cartões</h1>
+                            <p class="page-subtitle-premium">Controle total dos seus cartões de crédito e faturas</p>
+                        </div>
+                        <div class="header-actions">
                         </div>
                     </div>
                 </div>
                 <div id="cartoesGrid" class="cartoes-grid"></div>
             </section>
 
-            <!-- GRÁFICOS -->
+            <!-- GRÁFICOS PREMIUM -->
             <section class="page" id="graficosPage">
                 <div class="page-header-premium">
                     <div class="header-content">
@@ -460,77 +353,83 @@
                                 <span class="separator">›</span>
                                 <span>Gráficos</span>
                             </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-chart-pie" aria-hidden="true"></i> Análise Financeira
-                            </h1>
-                            <p class="page-subtitle-premium">
-                                Visualize seus dados de forma inteligente e profissional
-                            </p>
+                            <h1 class="page-title-premium"><i class="fas fa-chart-pie"></i> Análise Financeira</h1>
+                            <p class="page-subtitle-premium">Visualize seus dados de forma inteligente e profissional</p>
                         </div>
                     </div>
                 </div>
 
+                <!-- FILTROS DOS GRÁFICOS -->
                 <div class="graficos-filtros">
                     <div class="view-type-btns">
-                        <button class="view-btn active" data-tipo="individual" type="button">
-                            <i class="fas fa-user" aria-hidden="true"></i> Individual
+                        <button class="view-btn active" data-tipo="individual">
+                            <i class="fas fa-user"></i> Individual
                         </button>
-                        <button class="view-btn" data-tipo="casal" type="button">
-                            <i class="fas fa-heart" aria-hidden="true"></i> Casal
+                        <button class="view-btn" data-tipo="casal">
+                            <i class="fas fa-heart"></i> Casal
                         </button>
-                        <button class="view-btn" data-tipo="familia" type="button">
-                            <i class="fas fa-users" aria-hidden="true"></i> Família
+                        <button class="view-btn" data-tipo="familia">
+                            <i class="fas fa-users"></i> Família
                         </button>
                     </div>
-
+                    
+                    <!-- Toggle de Comparação -->
                     <div class="comparacao-toggle">
                         <label>
                             <input type="checkbox" id="toggleComparacao">
-                            <i class="fas fa-balance-scale" aria-hidden="true"></i>
+                            <i class="fas fa-balance-scale"></i>
                             Ativar Gráficos Comparativos
                         </label>
                     </div>
-
+                    
+                    <!-- Filtros Normais -->
                     <div class="filtros-row">
                         <div class="filtro-group">
-                            <label class="filtro-label" for="mesGrafico">Mês</label>
-                            <select id="mesGrafico" class="filtro-select"></select>
+                            <label class="filtro-label">Mês</label>
+                            <select id="mesGrafico" class="filtro-select">
+                                <!-- Preenchido via JS -->
+                            </select>
                         </div>
                         <div class="filtro-group">
-                            <label class="filtro-label" for="anoGrafico">Ano</label>
-                            <select id="anoGrafico" class="filtro-select"></select>
+                            <label class="filtro-label">Ano</label>
+                            <select id="anoGrafico" class="filtro-select">
+                                <!-- Preenchido via JS -->
+                            </select>
                         </div>
                     </div>
-
+                    
+                    <!-- Filtros de Comparação (ocultos por padrão) -->
                     <div id="comparacaoContainer" class="comparacao-filtros">
                         <h4 style="color: var(--text-primary); margin-bottom: 16px; text-align: center;">
-                            <i class="fas fa-calendar-alt" aria-hidden="true"></i>
-                            Selecione o Período para Comparar
+                            <i class="fas fa-calendar-alt"></i> Selecione o Período para Comparar
                         </h4>
                         <div class="filtros-row">
                             <div class="filtro-group">
-                                <label class="filtro-label" for="mesComparacao">Mês de Comparação</label>
-                                <select id="mesComparacao" class="filtro-select"></select>
+                                <label class="filtro-label">Mês de Comparação</label>
+                                <select id="mesComparacao" class="filtro-select">
+                                    <!-- Preenchido via JS -->
+                                </select>
                             </div>
                             <div class="filtro-group">
-                                <label class="filtro-label" for="anoComparacao">Ano de Comparação</label>
-                                <select id="anoComparacao" class="filtro-select"></select>
+                                <label class="filtro-label">Ano de Comparação</label>
+                                <select id="anoComparacao" class="filtro-select">
+                                    <!-- Preenchido via JS -->
+                                </select>
                             </div>
                         </div>
                     </div>
-
-                    <!--
-                      CORREÇÃO 10 — Removido onclick inline.
-                      Evento registrado via addEventListener no JS (id="btnGerarGraficos").
-                    -->
-                    <button class="btn-primary btn-large" id="btnGerarGraficos" type="button"
-                            style="margin-top: 20px;">
-                        <i class="fas fa-chart-area" aria-hidden="true"></i> Gerar Gráficos
+                    
+                    <!-- Botão Gerar Gráficos -->
+                    <button class="btn-primary btn-large" onclick="gerarGraficos()" style="margin-top: 20px;">
+                        <i class="fas fa-chart-area"></i> Gerar Gráficos
                     </button>
                 </div>
 
+                <!-- CONTAINER DOS GRÁFICOS -->
                 <div class="graficos-container">
-                    <div id="graficosConteudo"></div>
+                    <div id="graficosConteudo">
+                        <!-- Gráficos serão renderizados aqui via JS -->
+                    </div>
                 </div>
             </section>
 
@@ -544,49 +443,34 @@
                                 <span class="separator">›</span>
                                 <span>Relatórios</span>
                             </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-chart-line" aria-hidden="true"></i> Relatórios
-                            </h1>
-                            <p class="page-subtitle-premium">
-                                Análises detalhadas e insights sobre suas finanças
-                            </p>
+                            <h1 class="page-title-premium"><i class="fas fa-chart-line"></i> Relatórios</h1>
+                            <p class="page-subtitle-premium">Análises detalhadas e insights sobre suas finanças</p>
                         </div>
                     </div>
                 </div>
 
                 <div class="filtros-box">
                     <div class="tipo-relatorio-btns">
-                        <button class="tipo-btn active" data-tipo="individual" type="button">
-                            <i class="fas fa-user" aria-hidden="true"></i> Individual
-                        </button>
-                        <button class="tipo-btn" data-tipo="casal" type="button">
-                            <i class="fas fa-heart" aria-hidden="true"></i> Casal
-                        </button>
-                        <button class="tipo-btn" data-tipo="familia" type="button">
-                            <i class="fas fa-users" aria-hidden="true"></i> Família
-                        </button>
+                        <button class="tipo-btn active" data-tipo="individual"><i class="fas fa-user"></i> Individual</button>
+                        <button class="tipo-btn" data-tipo="casal"><i class="fas fa-heart"></i> Casal</button>
+                        <button class="tipo-btn" data-tipo="familia"><i class="fas fa-users"></i> Família</button>
                     </div>
 
                     <div id="perfilSelectorDiv" class="perfil-selector">
-                        <label for="selectPerfilRelatorio" class="sr-only">Selecione o perfil</label>
                         <select id="selectPerfilRelatorio" class="form-input">
                             <option value="">Selecione o perfil</option>
                         </select>
                     </div>
 
                     <div class="filtros-row">
-                        <label for="mesRelatorio" class="sr-only">Mês</label>
                         <select id="mesRelatorio" class="form-input">
                             <option value="">Mês</option>
                         </select>
-                        <label for="anoRelatorio" class="sr-only">Ano</label>
                         <select id="anoRelatorio" class="form-input">
                             <option value="">Ano</option>
                         </select>
                     </div>
-                    <button class="btn-primary btn-large" id="btnGerarRelatorio" type="button">
-                        Gerar Relatório
-                    </button>
+                    <button class="btn-primary btn-large" id="btnGerarRelatorio">Gerar Relatório</button>
                 </div>
 
                 <div id="relatorioResultado" style="display:none;"></div>
@@ -602,97 +486,95 @@
                                 <span class="separator">›</span>
                                 <span>Configurações</span>
                             </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-cog" aria-hidden="true"></i> Configurações
-                            </h1>
-                            <p class="page-subtitle-premium">
-                                Personalize sua experiência no GranaEvo
-                            </p>
+                            <h1 class="page-title-premium"><i class="fas fa-cog"></i> Configurações</h1>
+                            <p class="page-subtitle-premium">Personalize sua experiência no GranaEvo</p>
+                        </div>
+                        <div class="header-actions">
                         </div>
                     </div>
                 </div>
 
                 <div class="config-grid">
-                    <button class="config-card" id="btnAlterarNome" type="button">
-                        <div class="config-icon"><i class="fas fa-user" aria-hidden="true"></i></div>
+                    <button class="config-card" id="btnAlterarNome">
+                        <div class="config-icon"><i class="fas fa-user"></i></div>
                         <div class="config-text">
                             <h3>Alterar Nome</h3>
                             <p>Mude seu nome ou apelido</p>
                         </div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
+                        <span class="config-arrow">→</span>
                     </button>
 
-                    <button class="config-card" id="btnAlterarEmail" type="button">
-                        <div class="config-icon"><i class="fas fa-user-plus" aria-hidden="true"></i></div>
+                    <button class="config-card" id="btnAlterarEmail">
+                        <div class="config-icon"><i class="fas fa-user-plus"></i></div>
                         <div class="config-text">
                             <h3>Convidar Usuário</h3>
                             <p>Compartilhe o acesso à sua conta com amigos e familiares</p>
                         </div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
+                        <span class="config-arrow">→</span>
                     </button>
 
-                    <button class="config-card" id="btnAlterarSenha" type="button">
-                        <div class="config-icon"><i class="fas fa-lock" aria-hidden="true"></i></div>
+                    <button class="config-card" id="btnAlterarSenha">
+                        <div class="config-icon"><i class="fas fa-lock"></i></div>
                         <div class="config-text">
                             <h3>Alterar Senha</h3>
                             <p>Defina uma nova senha</p>
                         </div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
+                        <span class="config-arrow">→</span>
                     </button>
 
-                    <button class="config-card" id="btnTrocarPerfil" type="button">
-                        <div class="config-icon"><i class="fas fa-sync-alt" aria-hidden="true"></i></div>
+                    <button class="config-card" id="btnTrocarPerfil">
+                        <div class="config-icon"><i class="fas fa-sync-alt"></i></div>
                         <div class="config-text">
                             <h3>Trocar Perfil</h3>
                             <p>Alternar entre perfis</p>
                         </div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
+                        <span class="config-arrow">→</span>
                     </button>
 
-                    <button class="config-card" id="btnComoUsar" type="button">
-                        <div class="config-icon"><i class="fas fa-question-circle" aria-hidden="true"></i></div>
+                    <button class="config-card" id="btnComoUsar">
+                        <div class="config-icon"><i class="fas fa-question-circle"></i></div>
                         <div class="config-text">
                             <h3>Como Usar</h3>
                             <p>Guia do GranaEvo</p>
                         </div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
+                        <span class="config-arrow">→</span>
                     </button>
 
-                    <button class="config-card" id="btnDownload" type="button">
-                        <div class="config-icon"><i class="fas fa-download" aria-hidden="true"></i></div>
+                    <button class="config-card" id="btnDownload">
+                        <div class="config-icon"><i class="fas fa-question-circle"></i></div>
                         <div class="config-text">
                             <h3>Download</h3>
                             <p>Faça o download e tenha fácil acesso</p>
                         </div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
-                    </button>
+                        <span class="config-arrow">→</span>
+                    </button>                    
 
-                    <button class="config-card" id="btnUpgradePlano" type="button">
-                        <div class="config-icon"><i class="fas fa-star" aria-hidden="true"></i></div>
+                    <button class="config-card" id="btnUpgradePlano">
+                        <div class="config-icon"><i class="fas fa-question-circle"></i></div>
                         <div class="config-text">
                             <h3>Upgrade de plano</h3>
                             <p>Tenha mais perfis</p>
                         </div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
-                    </button>
+                        <span class="config-arrow">→</span>
+                    </button>     
 
-                    <button class="config-card config-danger" id="btnLogout" type="button">
-                        <div class="config-icon"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></div>
+                    <button class="config-card config-danger" id="btnLogout">
+                        <div class="config-icon"><i class="fas fa-sign-out-alt"></i></div>
                         <div class="config-text">
                             <h3>Sair / Logout</h3>
                             <p>Encerrar sessão</p>
                         </div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
+                        <span class="config-arrow">→</span>
                     </button>
                 </div>
             </section>
 
         </main>
-    </div><!-- /#protectedContent -->
+    </div>
 
     <!-- MODAL/POPUP -->
-    <div id="modalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true"></div>
-    <div id="modalContainer" aria-live="polite"></div>
+    <div id="modalOverlay" class="modal-overlay"></div>
+    <div id="modalContainer"></div>
 
     <!-- Scripts do Sistema -->
     <script type="module" src="dashboard.js"></script>
