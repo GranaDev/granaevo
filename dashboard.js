@@ -129,6 +129,35 @@ const _log = (() => {
     };
 })();
 
+// ── Detecta se o valor salvo no banco é um path relativo ou URL completa
+//    Path relativo: "df7743f0-b0fe.../1234567890.jpg"
+//    URL completa:  "https://fvrhqqeofqedmhadzzqw.supabase.co/..."
+function _isStoragePath(valor) {
+    if (!valor || typeof valor !== 'string') return false;
+    try {
+        new URL(valor);
+        return false; // conseguiu parsear → é URL completa
+    } catch {
+        return true;  // não é URL → é path relativo
+    }
+}
+
+// ── Resolve foto: se for path → gera signed URL; se for URL → valida normalmennte
+async function _resolverFotoPerfil(photo_url) {
+    if (!photo_url) return { url: null, storagePath: null };
+
+    if (_isStoragePath(photo_url)) {
+        // ✅ Novo formato: path relativo no storage → gera signed URL
+        const urlSegura = await _gerarSignedUrl(photo_url);
+        return { url: urlSegura, storagePath: photo_url };
+    } else {
+        // ✅ Formato antigo: URL completa → valida e usa diretamente
+        //    (perfis criados antes da migração para signed URL)
+        const urlSegura = _sanitizeImgUrl(photo_url);
+        return { url: urlSegura, storagePath: null };
+    }
+}
+
 async function carregarPerfis() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -145,11 +174,26 @@ async function carregarPerfis() {
         if (error) throw error;
 
         if (perfis && perfis.length > 0) {
-            usuarioLogado.perfis = perfis.map(p => ({
-                id:   p.id,
-                nome: _sanitizeText(p.name),      // ✅ sanitiza ao entrar
-                foto: _sanitizeImgUrl(p.photo_url) // ✅ valida URL ao entrar
-            }));
+            // ✅ Resolve fotos em paralelo — _resolverFotoPerfil é async
+            //    (gerar signed URLs requer chamada ao Supabase Storage)
+            const perfisResolvidos = await Promise.all(
+                perfis.map(async (p) => {
+                    const { url, storagePath } = await _resolverFotoPerfil(p.photo_url);
+                    return {
+                        id:           p.id,
+                        nome:         _sanitizeText(p.name),
+                        foto:         url,          // signed URL pronta para uso no <img>
+                        _storagePath: storagePath,  // path permanente para renovação futura
+                    };
+                })
+            );
+
+            usuarioLogado.perfis = perfisResolvidos;
+
+            // ✅ Inicia renovação automática de signed URLs (50 min)
+            //    Só inicia se ainda não estava rodando
+            iniciarRenovacaoFotos();
+
             return { sucesso: true, perfisEncontrados: true };
         }
 
@@ -162,6 +206,7 @@ async function carregarPerfis() {
         return { sucesso: false, perfisEncontrados: false };
     }
 }
+
 // ========== CARREGAR DADOS DO PERFIL (CORRIGIDA) ==========
 async function carregarDadosPerfil(perfilId) {
     try {
