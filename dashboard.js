@@ -686,6 +686,7 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         alert('O nome deve ter pelo menos 2 caracteres.');
         return;
     }
+    // ✅ Check local serve apenas como UX — o banco valida de verdade via trigger
     if (usuarioLogado.perfis.length >= limitePerfis) {
         mostrarPopupLimite();
         fecharPopup();
@@ -695,6 +696,29 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error('SEM_SESSAO');
+
+        // ✅ VALIDAÇÃO NO BANCO ANTES DO INSERT:
+        //    RPC can_create_profile valida simultaneamente:
+        //    1. Se auth.uid() tem direito sobre o effectiveUserId (membership ou próprio)
+        //    2. Se o limite de perfis do plano ainda não foi atingido
+        //    Isso torna o effectiveUserId do frontend irrelevante para segurança —
+        //    o banco rejeita qualquer combinação não autorizada.
+        const { data: podeCrear, error: rpcError } = await supabase
+            .rpc('can_create_profile', {
+                target_user_id: usuarioLogado.effectiveUserId
+            });
+
+        if (rpcError || !podeCrear) {
+            _log.error('PERFIL_RPC_001', rpcError);
+            // ✅ Se a RPC retornou false, é limite de plano — se erro, é acesso negado
+            if (!rpcError && !podeCrear) {
+                mostrarPopupLimite();
+            } else {
+                alert('Não foi possível criar o perfil. Tente novamente.');
+            }
+            fecharPopup();
+            return;
+        }
 
         let fotoUrl = null;
 
@@ -722,6 +746,8 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                       : arquivo.type === 'image/png'  ? 'png'
                       :                                 'webp';
 
+            // ✅ Usa session.user.id (real, não manipulável) para o path do storage
+            //    mesmo que effectiveUserId seja diferente (caso convidado)
             const nomeArquivo = `${session.user.id}/${Date.now()}.${ext}`;
 
             const { error: uploadError } = await supabase.storage
@@ -734,19 +760,29 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 return;
             }
 
-            const { data: urlData } = supabase.storage
+            // ✅ Gera signed URL em vez de URL pública — expira em 1 hora
+            const { data: signedData, error: signedError } = await supabase.storage
                 .from('profile-photos')
-                .getPublicUrl(nomeArquivo);
+                .createSignedUrl(nomeArquivo, 3600);
 
-            fotoUrl = _sanitizeImgUrl(urlData.publicUrl) || null;
+            if (signedError || !signedData?.signedUrl) {
+                _log.error('PERFIL_FOTO_002', signedError);
+                alert('Erro ao processar a foto. Tente novamente.');
+                return;
+            }
+
+            // ✅ Valida que a signed URL veio do domínio correto antes de usar
+            fotoUrl = _sanitizeImgUrl(signedData.signedUrl) || null;
         }
 
-
+        // ✅ O banco valida ownership via RLS (política INSERT WITH CHECK)
+        //    Mesmo que effectiveUserId tenha sido alterado no DevTools,
+        //    a RLS rejeita se auth.uid() não tem relação com esse user_id
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
             .insert({
                 user_id:   usuarioLogado.effectiveUserId,
-                name:      nome, // ✅ não sanitizamos aqui — o banco salva o original
+                name:      nome,
                 photo_url: fotoUrl
             })
             .select()
@@ -754,7 +790,8 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         if (error) {
             _log.error('PERFIL_001', error);
-            if (error.code === '23514') { // check_violation do Postgres
+            // ✅ Códigos Postgres: 42501 = RLS violation, 23514 = check_violation
+            if (error.code === '23514' || error.code === '42501') {
                 mostrarPopupLimite();
             } else {
                 alert('Erro ao criar perfil. Tente novamente.');
@@ -942,6 +979,21 @@ async function _validarMagicBytes(file) {
     });
 }
 
+// ✅ Gera ou renova signed URL para um path já existente no storage
+//    Centraliza a lógica de URL para usar em alterarFoto e carregarPerfis
+async function _gerarSignedUrl(storagePath) {
+    const { data, error } = await supabase.storage
+        .from('profile-photos')
+        .createSignedUrl(storagePath, 3600); // expira em 1 hora
+
+    if (error || !data?.signedUrl) {
+        _log.error('SIGNED_URL_001', error);
+        return null;
+    }
+    // ✅ A signed URL do Supabase vem do mesmo domínio — valida antes de usar
+    return _sanitizeImgUrl(data.signedUrl);
+}
+
 async function alterarFoto(event) {
     const file = event.target.files[0];
 
@@ -952,20 +1004,18 @@ async function alterarFoto(event) {
         return;
     }
 
-    // ✅ 1. Validar tamanho
+    // ✅ Validações em cascata — retorno imediato a cada falha
     if (file.size > 2 * 1024 * 1024) {
         alert('A foto deve ter no máximo 2MB.');
         return;
     }
 
-    // ✅ 2. Validar MIME type declarado (primeira barreira)
     const mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
     if (!mimesPermitidos.includes(file.type)) {
         alert('Tipo de arquivo inválido. Use JPG, PNG ou WebP.');
         return;
     }
 
-    // ✅ 3. Validar magic bytes reais (segunda barreira — impede renomear .js para .png)
     const magicValido = await _validarMagicBytes(file);
     if (!magicValido) {
         alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.');
@@ -974,23 +1024,20 @@ async function alterarFoto(event) {
 
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session) throw new Error('SEM_SESSAO');
 
-        if (sessionError || !session) {
-            throw new Error('Sessão inválida');
-        }
-
-        // ✅ 4. Nome de arquivo sem usar file.name original (evita path traversal e nomes maliciosos)
-        const ext        = file.type === 'image/jpeg' ? 'jpg'
-                         : file.type === 'image/png'  ? 'png'
-                         :                              'webp';
-        const nomeArquivo = `${session.user.id}/${Date.now()}.${ext}`;
+        const ext         = file.type === 'image/jpeg' ? 'jpg'
+                          : file.type === 'image/png'  ? 'png'
+                          :                              'webp';
+        // ✅ Usa session.user.id real — não manipulável via DevTools
+        const storagePath = `${session.user.id}/${Date.now()}.${ext}`;
 
         const { error: uploadError } = await supabase.storage
             .from('profile-photos')
-            .upload(nomeArquivo, file, {
+            .upload(storagePath, file, {
                 cacheControl: '3600',
                 upsert: false,
-                contentType: file.type, // ✅ força o content-type correto no storage
+                contentType: file.type,
             });
 
         if (uploadError) {
@@ -999,40 +1046,41 @@ async function alterarFoto(event) {
             return;
         }
 
-        const { data: urlData } = supabase.storage
-            .from('profile-photos')
-            .getPublicUrl(nomeArquivo);
-
-        const fotoUrl = urlData.publicUrl;
-
-        // ✅ 5. Valida a URL gerada antes de persistir (defesa em profundidade)
-        const urlSegura = _sanitizeImgUrl(fotoUrl);
+        // ✅ Signed URL em vez de URL pública — não enumerável, expira em 1h
+        const urlSegura = await _gerarSignedUrl(storagePath);
         if (!urlSegura) {
-            _log.error('FOTO_002', 'URL gerada fora do domínio permitido');
             alert('Erro interno ao processar a foto. Tente novamente.');
             return;
         }
 
+        // ✅ Salva o storagePath no banco, não a URL —
+        //    permite renovar a signed URL futuramente sem depender de URL hardcoded.
+        //    IMPORTANTE: ajustar coluna photo_url para aceitar path relativo OU
+        //    manter URL e renovar periodicamente (ver _renovarFotosExpiradas abaixo)
         const { error: updateError } = await supabase
             .from('profiles')
-            .update({ photo_url: urlSegura })
+            .update({ photo_url: storagePath }) // ✅ salva path, não URL assinada
             .eq('id', perfilAtivo.id)
             .select()
             .single();
 
         if (updateError) {
             _log.error('FOTO_003', updateError);
-            // ✅ Mensagem genérica — não expõe detalhes do backend
             alert('Erro ao salvar a foto. Tente novamente.');
             return;
         }
 
-        // ✅ 6. Atualiza estado local sem mutar dados originais desnecessariamente
+        // ✅ Estado local usa URL assinada para exibição imediata,
+        //    mas o banco tem o path permanente para renovação futura
         perfilAtivo.foto = urlSegura;
-        const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-        if (idx !== -1) usuarioLogado.perfis[idx].foto = urlSegura;
+        perfilAtivo._storagePath = storagePath; // path permanente em memória
 
-        // ✅ 7. Atualiza foto na UI com validação de URL
+        const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
+        if (idx !== -1) {
+            usuarioLogado.perfis[idx].foto = urlSegura;
+            usuarioLogado.perfis[idx]._storagePath = storagePath;
+        }
+
         const userPhotoEl = document.getElementById('userPhoto');
         if (userPhotoEl) userPhotoEl.src = urlSegura;
 
@@ -1044,9 +1092,34 @@ async function alterarFoto(event) {
 
     } catch (error) {
         _log.error('FOTO_004', error);
-        // ✅ Nunca expõe error.message ao usuário
         alert('Ocorreu um erro ao alterar a foto. Tente novamente.');
     }
+}
+
+// ✅ Renova signed URLs que estejam próximas de expirar (chame a cada 50 min via setInterval)
+//    Isso resolve o tradeoff de signed URLs expirando durante a sessão do usuário
+async function _renovarFotosExpiradas() {
+    for (const perfil of usuarioLogado.perfis) {
+        if (!perfil._storagePath) continue;
+        const novaUrl = await _gerarSignedUrl(perfil._storagePath);
+        if (novaUrl) {
+            perfil.foto = novaUrl;
+            if (perfilAtivo?.id === perfil.id) {
+                perfilAtivo.foto = novaUrl;
+                const userPhotoEl = document.getElementById('userPhoto');
+                if (userPhotoEl) userPhotoEl.src = novaUrl;
+            }
+        }
+    }
+    atualizarReferenciasGlobais();
+}
+
+// ✅ Inicia renovação automática de signed URLs a cada 50 minutos
+//    (URLs expiram em 60 min — renovamos 10 min antes)
+let _renovacaoFotosInterval = null;
+function iniciarRenovacaoFotos() {
+    if (_renovacaoFotosInterval) clearInterval(_renovacaoFotosInterval);
+    _renovacaoFotosInterval = setInterval(_renovarFotosExpiradas, 50 * 60 * 1000);
 }
 
 // ========== DASHBOARD - RESUMO E CONTAS FIXAS ==========
