@@ -27,83 +27,12 @@ let nextContaFixaId = 1;
 let metaSelecionadaId = null;
 let tipoRelatorioAtivo = 'individual';
 
-// ✅ FUNÇÃO PARA ATUALIZAR REFERÊNCIAS GLOBAIS
-// ── Controla se __GE__ já foi definida como não-reescritável
-let _GE_definida = false;
+// ========== REFERÊNCIAS GLOBAIS PROTEGIDAS ==========
 
-function atualizarReferenciasGlobais() {
-    const snapshot = Object.freeze({
-        perfilAtivo:    Object.freeze({ ...perfilAtivo }),
-        usuarioLogado:  Object.freeze({ ...usuarioLogado, perfis: Object.freeze([...usuarioLogado.perfis]) }),
-        transacoes:     Object.freeze([...transacoes]),
-        metas:          Object.freeze([...metas]),
-        contasFixas:    Object.freeze([...contasFixas]),
-        cartoesCredito: Object.freeze([...cartoesCredito]),
-    });
-
-    if (!_GE_definida) {
-        // ✅ Primeira chamada: define __GE__ como não-reescritável e não-configurável
-        //    window.__GE__ = { hacked } passa a ser silenciosamente ignorado em strict mode
-        //    e lança TypeError em modo não-strict se alguém tentar sobrescrever
-        Object.defineProperty(window, '__GE__', {
-            get: () => snapshot,
-            set: () => { _log.warn('Tentativa de sobrescrita de __GE__ bloqueada'); },
-            configurable: false,
-            enumerable: false, // ✅ não aparece em Object.keys(window)
-        });
-
-        // ✅ __GE_save__ também protegido contra sobrescrita
-        Object.defineProperty(window, '__GE_save__', {
-            value:        _throttledSave,
-            writable:     false,
-            configurable: false,
-            enumerable:   false,
-        });
-
-        _GE_definida = true;
-
-    } else {
-        // ✅ Chamadas subsequentes: apenas atualiza o getter via redefine
-        //    (configurable: false impede reconfigurar — usamos um wrapper mutável)
-        // NOTA: como configurable é false após a primeira definição, não podemos
-        // redefir o descriptor. Por isso usamos uma referência interna mutável:
-        _GE_snapshot_atual = snapshot;
-    }
-}
-
-// ✅ Referência interna que o getter usa — permite atualizar sem redefinir o descriptor
+// ✅ Referência interna mutável — o getter de __GE__ sempre aponta para cá
 let _GE_snapshot_atual = null;
 
-// Redefine com getter apontando para referência mutável desde o início
-(function _inicializarGE() {
-    Object.defineProperty(window, '__GE__', {
-        get: () => _GE_snapshot_atual,
-        set: () => { _log.warn('Tentativa de sobrescrita de __GE__ bloqueada'); },
-        configurable: false,
-        enumerable:   false,
-    });
-    Object.defineProperty(window, '__GE_save__', {
-        value:        _throttledSave,
-        writable:     false,
-        configurable: false,
-        enumerable:   false,
-    });
-    // ✅ Também remove atualizarReferenciasGlobais do window — não precisa ser pública
-    // (era exposta para chat-assistant, que pode usar window.__GE__ diretamente)
-})();
-
-// ✅ Atualiza snapshot interno — o getter sempre retorna o mais recente
-function atualizarReferenciasGlobais() {
-    _GE_snapshot_atual = Object.freeze({
-        perfilAtivo:    Object.freeze({ ...perfilAtivo }),
-        usuarioLogado:  Object.freeze({ ...usuarioLogado, perfis: Object.freeze([...usuarioLogado.perfis]) }),
-        transacoes:     Object.freeze([...transacoes]),
-        metas:          Object.freeze([...metas]),
-        contasFixas:    Object.freeze([...contasFixas]),
-        cartoesCredito: Object.freeze([...cartoesCredito]),
-    });
-}
-
+// ✅ Throttle de save exposto via __GE_save__ (declarado antes de _inicializarGE)
 const _throttledSave = (() => {
     let _ultimaChamada = 0;
     return async function() {
@@ -116,6 +45,38 @@ const _throttledSave = (() => {
         return salvarDados();
     };
 })();
+
+// ✅ Define __GE__ e __GE_save__ como não-reescritáveis UMA única vez no carregamento
+//    - __GE__ usa getter → sempre retorna o snapshot mais recente via _GE_snapshot_atual
+//    - Tentativa de window.__GE__ = x é bloqueada silenciosamente (setter no-op)
+//    - __GE_save__ é valor fixo, writable: false
+(function _inicializarGE() {
+    Object.defineProperty(window, '__GE__', {
+        get:          () => _GE_snapshot_atual,
+        set:          () => { _log.warn('Tentativa de sobrescrita de __GE__ bloqueada'); },
+        configurable: false,
+        enumerable:   false,
+    });
+    Object.defineProperty(window, '__GE_save__', {
+        value:        _throttledSave,
+        writable:     false,
+        configurable: false,
+        enumerable:   false,
+    });
+})();
+
+// ✅ Única declaração de atualizarReferenciasGlobais
+//    Atualiza _GE_snapshot_atual — o getter de __GE__ entrega automaticamente o novo valor
+function atualizarReferenciasGlobais() {
+    _GE_snapshot_atual = Object.freeze({
+        perfilAtivo:    Object.freeze({ ...perfilAtivo }),
+        usuarioLogado:  Object.freeze({ ...usuarioLogado, perfis: Object.freeze([...usuarioLogado.perfis]) }),
+        transacoes:     Object.freeze([...transacoes]),
+        metas:          Object.freeze([...metas]),
+        contasFixas:    Object.freeze([...contasFixas]),
+        cartoesCredito: Object.freeze([...cartoesCredito]),
+    });
+}
 
 // Limites por plano
 const limitesPlano = {
