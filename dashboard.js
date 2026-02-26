@@ -26,13 +26,10 @@ let nextMetaId = 1;
 let nextContaFixaId = 1;
 let metaSelecionadaId = null;
 let tipoRelatorioAtivo = 'individual';
+let _GE_definida = false;
 
-
-window._supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
-
-// ✅ FUNÇÃO PARA ATUALIZAR REFERÊNCIAS GLOBAIS
 function atualizarReferenciasGlobais() {
-    window.__GE__ = Object.freeze({
+    const snapshot = Object.freeze({
         perfilAtivo:    Object.freeze({ ...perfilAtivo }),
         usuarioLogado:  Object.freeze({ ...usuarioLogado, perfis: Object.freeze([...usuarioLogado.perfis]) }),
         transacoes:     Object.freeze([...transacoes]),
@@ -40,7 +37,56 @@ function atualizarReferenciasGlobais() {
         contasFixas:    Object.freeze([...contasFixas]),
         cartoesCredito: Object.freeze([...cartoesCredito]),
     });
-    window.__GE_save__ = _throttledSave;
+
+    if (!_GE_definida) {
+        Object.defineProperty(window, '__GE__', {
+            get: () => snapshot,
+            set: () => { _log.warn('Tentativa de sobrescrita de __GE__ bloqueada'); },
+            configurable: false,
+            enumerable: false,
+        });
+
+        Object.defineProperty(window, '__GE_save__', {
+            value:        _throttledSave,
+            writable:     false,
+            configurable: false,
+            enumerable:   false,
+        });
+
+        _GE_definida = true;
+
+    } else {
+        _GE_snapshot_atual = snapshot;
+    }
+}
+
+let _GE_snapshot_atual = null;
+
+(function _inicializarGE() {
+    Object.defineProperty(window, '__GE__', {
+        get: () => _GE_snapshot_atual,
+        set: () => { _log.warn('Tentativa de sobrescrita de __GE__ bloqueada'); },
+        configurable: false,
+        enumerable:   false,
+    });
+    Object.defineProperty(window, '__GE_save__', {
+        value:        _throttledSave,
+        writable:     false,
+        configurable: false,
+        enumerable:   false,
+    });
+})();
+
+
+function atualizarReferenciasGlobais() {
+    _GE_snapshot_atual = Object.freeze({
+        perfilAtivo:    Object.freeze({ ...perfilAtivo }),
+        usuarioLogado:  Object.freeze({ ...usuarioLogado, perfis: Object.freeze([...usuarioLogado.perfis]) }),
+        transacoes:     Object.freeze([...transacoes]),
+        metas:          Object.freeze([...metas]),
+        contasFixas:    Object.freeze([...contasFixas]),
+        cartoesCredito: Object.freeze([...cartoesCredito]),
+    });
 }
 
 const _throttledSave = (() => {
@@ -48,15 +94,13 @@ const _throttledSave = (() => {
     return async function() {
         const agora = Date.now();
         if (agora - _ultimaChamada < 3000) {
-            _log.warn('SAVE: chamada throttled (muito rápida)');
+            _log.warn('SAVE: chamada throttled');
             return false;
         }
         _ultimaChamada = agora;
         return salvarDados();
     };
 })();
-
-window.atualizarReferenciasGlobais = atualizarReferenciasGlobais;
 
 // Limites por plano
 const limitesPlano = {
@@ -330,9 +374,6 @@ async function salvarDados() {
         return false;
     }
 }
-
-// ✅ EXPOR GLOBALMENTE
-window.salvarDados = salvarDados;
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
 async function verificarLogin() {
