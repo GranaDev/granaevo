@@ -783,7 +783,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         alert('O nome deve ter pelo menos 2 caracteres.');
         return;
     }
-    // ✅ Check local serve apenas como UX — o banco valida de verdade via trigger
     if (usuarioLogado.perfis.length >= limitePerfis) {
         mostrarPopupLimite();
         fecharPopup();
@@ -794,20 +793,27 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error('SEM_SESSAO');
 
-        // ✅ VALIDAÇÃO NO BANCO ANTES DO INSERT:
-        //    RPC can_create_profile valida simultaneamente:
-        //    1. Se auth.uid() tem direito sobre o effectiveUserId (membership ou próprio)
-        //    2. Se o limite de perfis do plano ainda não foi atingido
-        //    Isso torna o effectiveUserId do frontend irrelevante para segurança —
-        //    o banco rejeita qualquer combinação não autorizada.
+        // ✅ Garante que effectiveUserId está populado — fallback para session
+        const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
+
+        console.log('🔍 [RPC] target_user_id:', targetUserId);
+        console.log('🔍 [RPC] auth uid (session):', session.user.id);
+
+        if (!targetUserId) {
+            alert('Erro interno: sessão incompleta. Faça logout e login novamente.');
+            fecharPopup();
+            return;
+        }
+
         const { data: podeCrear, error: rpcError } = await supabase
             .rpc('can_create_profile', {
-                target_user_id: usuarioLogado.effectiveUserId
+                target_user_id: targetUserId
             });
+
+        console.log('🔍 [RPC] resultado:', podeCrear, '| erro:', rpcError);
 
         if (rpcError || !podeCrear) {
             _log.error('PERFIL_RPC_001', rpcError);
-            // ✅ Se a RPC retornou false, é limite de plano — se erro, é acesso negado
             if (!rpcError && !podeCrear) {
                 mostrarPopupLimite();
             } else {
@@ -843,8 +849,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                       : arquivo.type === 'image/png'  ? 'png'
                       :                                 'webp';
 
-            // ✅ Usa session.user.id (real, não manipulável) para o path do storage
-            //    mesmo que effectiveUserId seja diferente (caso convidado)
             const nomeArquivo = `${session.user.id}/${Date.now()}.${ext}`;
 
             const { error: uploadError } = await supabase.storage
@@ -857,7 +861,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 return;
             }
 
-            // ✅ Gera signed URL em vez de URL pública — expira em 1 hora
             const { data: signedData, error: signedError } = await supabase.storage
                 .from('profile-photos')
                 .createSignedUrl(nomeArquivo, 3600);
@@ -868,17 +871,13 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 return;
             }
 
-            // ✅ Valida que a signed URL veio do domínio correto antes de usar
             fotoUrl = _sanitizeImgUrl(signedData.signedUrl) || null;
         }
 
-        // ✅ O banco valida ownership via RLS (política INSERT WITH CHECK)
-        //    Mesmo que effectiveUserId tenha sido alterado no DevTools,
-        //    a RLS rejeita se auth.uid() não tem relação com esse user_id
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
             .insert({
-                user_id:   usuarioLogado.effectiveUserId,
+                user_id:   targetUserId,
                 name:      nome,
                 photo_url: fotoUrl
             })
@@ -887,7 +886,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         if (error) {
             _log.error('PERFIL_001', error);
-            // ✅ Códigos Postgres: 42501 = RLS violation, 23514 = check_violation
             if (error.code === '23514' || error.code === '42501') {
                 mostrarPopupLimite();
             } else {
