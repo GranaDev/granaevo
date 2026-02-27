@@ -810,7 +810,8 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 target_user_id: targetUserId
             });
 
-        console.log('🔍 [RPC] resultado:', podeCrear, '| erro:', rpcError);
+        console.log('🔍 [RPC] resultado:', podeCrear);
+        console.log('🔍 [RPC] erro completo:', JSON.stringify(rpcError));
 
         if (rpcError || !podeCrear) {
             _log.error('PERFIL_RPC_001', rpcError);
