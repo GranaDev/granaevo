@@ -398,20 +398,60 @@ const SubscriptionChecker = (() => {
             }
 
             try {
-                // 1. Verifica assinatura própria
-                const { data: ownSub, error: ownErr } = await supabase
+                // 1. Verifica assinatura própria por user_id
+                let ownSub = null;
+                let ownErr = null;
+
+                const byId = await supabase
                     .from('subscriptions')
-                    .select('id, plans(name), is_active, payment_status, expires_at')
+                    .select('id, plans(name), is_active, payment_status, expires_at, user_id')
                     .eq('user_id', userId)
                     .eq('payment_status', 'approved')
                     .eq('is_active', true)
                     .maybeSingle();
 
+                ownSub = byId.data;
+                ownErr = byId.error;
+
+                // FALLBACK: busca por email se não encontrou por user_id
+                if (!ownErr && !ownSub) {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const userEmail = user?.email;
+
+                    if (userEmail) {
+                        const byEmail = await supabase
+                            .from('subscriptions')
+                            .select('id, plans(name), is_active, payment_status, expires_at, user_id')
+                            .eq('user_email', userEmail)
+                            .eq('payment_status', 'approved')
+                            .eq('is_active', true)
+                            .maybeSingle();
+
+                        ownSub = byEmail.data;
+                        ownErr = byEmail.error;
+
+                        // Vincula user_id automaticamente se ainda estiver NULL
+                        if (!ownErr && ownSub && !ownSub.user_id) {
+                            supabase
+                                .from('subscriptions')
+                                .update({
+                                    user_id:             userId,
+                                    password_created:    true,
+                                    password_created_at: new Date().toISOString(),
+                                    updated_at:          new Date().toISOString(),
+                                })
+                                .eq('id', ownSub.id)
+                                .then(() => {})
+                                .catch(() => {});
+                        }
+                    }
+                }
+
                 if (!ownErr && ownSub) {
                     if (ownSub.expires_at && new Date(ownSub.expires_at) < new Date()) {
                         return EMPTY;
                     }
-                    _cache     = Object.freeze({
+                    _cache = Object.freeze({
                         subscription: ownSub,
                         isGuest:      false,
                         ownerId:      userId,
