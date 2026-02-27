@@ -405,9 +405,9 @@ async function validateCaptchaOnBackend(token) {
 // ═══════════════════════════════════════════════════════════════
 //  SUBSCRIPTION: VERIFICAÇÃO PÓS-LOGIN
 // ═══════════════════════════════════════════════════════════════
-async function getActiveSubscription(userId) {
+async function getActiveSubscription(userId, userEmail) {
     try {
-        // 1. Verifica se o próprio usuário tem assinatura ativa
+        // 1. Tenta buscar por user_id (caminho normal)
         const { data: ownSub, error: ownErr } = await supabase
             .from('subscriptions')
             .select('id, plans(name), is_active, payment_status, expires_at')
@@ -423,7 +423,41 @@ async function getActiveSubscription(userId) {
             return { subscription: ownSub, isGuest: false };
         }
 
-        // 2. Verifica se é convidado com dono de plano ativo
+        // 2. FALLBACK: busca por email (cobre usuários com user_id = NULL)
+        if (userEmail) {
+            const { data: emailSub, error: emailErr } = await supabase
+                .from('subscriptions')
+                .select('id, plans(name), is_active, payment_status, expires_at, user_id')
+                .eq('user_email', userEmail)
+                .eq('payment_status', 'approved')
+                .eq('is_active', true)
+                .maybeSingle();
+
+            if (!emailErr && emailSub) {
+                if (emailSub.expires_at && new Date(emailSub.expires_at) < new Date()) {
+                    return { subscription: null, isGuest: false };
+                }
+
+                // Vincula o user_id automaticamente se ainda estiver NULL
+                if (!emailSub.user_id) {
+                    supabase
+                        .from('subscriptions')
+                        .update({
+                            user_id:             userId,
+                            password_created:    true,
+                            password_created_at: new Date().toISOString(),
+                            updated_at:          new Date().toISOString(),
+                        })
+                        .eq('id', emailSub.id)
+                        .then(() => {})
+                        .catch(() => {});
+                }
+
+                return { subscription: emailSub, isGuest: false };
+            }
+        }
+
+        // 3. Verifica se é convidado com dono de plano ativo
         const { data: membership, error: memErr } = await supabase
             .from('account_members')
             .select('owner_user_id')
@@ -448,6 +482,7 @@ async function getActiveSubscription(userId) {
         }
 
         return { subscription: ownerSub, isGuest: true };
+
     } catch {
         return { subscription: null, isGuest: false };
     }
@@ -553,7 +588,7 @@ loginForm.addEventListener('submit', async (e) => {
         // A autorização real é verificada pelo AuthGuard no dashboard
 
         try {
-            const { subscription } = await getActiveSubscription(data.user.id);
+            const { subscription } = await getActiveSubscription(data.user.id, data.user.email);
 
             if (!subscription) {
                 // Sem plano: destrói sessão imediatamente
