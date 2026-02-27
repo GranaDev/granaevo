@@ -439,63 +439,93 @@ async function verificarLogin() {
             planName = subscription.plans.name;
             console.log('✅ [VERIFICAR LOGIN] Assinatura própria encontrada:', planName);
         } else {
-            // 3️⃣ VERIFICAR SE É CONVIDADO
-            console.log('🔍 [VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
-            
-            const { data: membership, error: memberError } = await supabase
-                .from('account_members')
-                .select('owner_user_id, owner_email')
-                .eq('member_user_id', session.user.id)
-                .eq('is_active', true)
-                .maybeSingle();
+            // ── FALLBACK: busca por email (user_id pode estar NULL para usuários legados) ──
+            console.log('🔍 [VERIFICAR LOGIN] Sem assinatura por user_id. Tentando fallback por email...');
 
-            if (memberError || !membership) {
-                // ✅ CORRIGIDO: agora redireciona de verdade
-                console.log('❌ [VERIFICAR LOGIN] Sem assinatura e sem membership ativo.');
-                await supabase.auth.signOut();
-                window.location.href = 'login.html?erro=sem_plano';
-                return;
-            }
-
-            // 4️⃣ BUSCAR ASSINATURA DO DONO
-            const { data: ownerSub, error: ownerSubError } = await supabase
+            const { data: subByEmail, error: subEmailError } = await supabase
                 .from('subscriptions')
-                .select('plans(name)')
-                .eq('user_id', membership.owner_user_id)
+                .select('id, plans(name), user_id')
+                .eq('user_email', session.user.email)
                 .eq('payment_status', 'approved')
                 .eq('is_active', true)
                 .maybeSingle();
 
-            if (ownerSubError || !ownerSub) {
-                // ✅ CORRIGIDO: agora redireciona de verdade
-                console.log('❌ [VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
-                await supabase.auth.signOut();
-                window.location.href = 'login.html?erro=plano_dono_inativo';
-                return;
-            }
+            if (!subEmailError && subByEmail) {
+                planName = subByEmail.plans.name;
+                console.log('✅ [VERIFICAR LOGIN] Assinatura encontrada por email:', planName);
 
-            planName = ownerSub.plans.name;
-            effectiveUserId = membership.owner_user_id;
-            effectiveEmail = membership.owner_email;
-            isGuest = true;
-            console.log('✅ [VERIFICAR LOGIN] Acesso como convidado. Dono:', effectiveEmail, 'Plano:', planName);
+                // Vincula user_id automaticamente se ainda estiver NULL
+                if (!subByEmail.user_id) {
+                    console.log('🔗 [VERIFICAR LOGIN] Vinculando user_id à subscription...');
+                    supabase
+                        .from('subscriptions')
+                        .update({
+                            user_id:             session.user.id,
+                            password_created:    true,
+                            password_created_at: new Date().toISOString(),
+                            updated_at:          new Date().toISOString(),
+                        })
+                        .eq('id', subByEmail.id)
+                        .then(() => console.log('✅ [VERIFICAR LOGIN] user_id vinculado com sucesso.'))
+                        .catch((e) => console.warn('⚠️ [VERIFICAR LOGIN] Falha ao vincular user_id:', e));
+                }
+            } else {
+                // 3️⃣ VERIFICAR SE É CONVIDADO
+                console.log('🔍 [VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
+
+                const { data: membership, error: memberError } = await supabase
+                    .from('account_members')
+                    .select('owner_user_id, owner_email')
+                    .eq('member_user_id', session.user.id)
+                    .eq('is_active', true)
+                    .maybeSingle();
+
+                if (memberError || !membership) {
+                    console.log('❌ [VERIFICAR LOGIN] Sem assinatura e sem membership ativo.');
+                    await supabase.auth.signOut();
+                    window.location.href = 'login.html?erro=sem_plano';
+                    return;
+                }
+
+                // 4️⃣ BUSCAR ASSINATURA DO DONO
+                const { data: ownerSub, error: ownerSubError } = await supabase
+                    .from('subscriptions')
+                    .select('plans(name)')
+                    .eq('user_id', membership.owner_user_id)
+                    .eq('payment_status', 'approved')
+                    .eq('is_active', true)
+                    .maybeSingle();
+
+                if (ownerSubError || !ownerSub) {
+                    console.log('❌ [VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
+                    await supabase.auth.signOut();
+                    window.location.href = 'login.html?erro=plano_dono_inativo';
+                    return;
+                }
+
+                planName = ownerSub.plans.name;
+                effectiveUserId = membership.owner_user_id;
+                effectiveEmail = membership.owner_email;
+                isGuest = true;
+                console.log('✅ [VERIFICAR LOGIN] Acesso como convidado. Dono:', effectiveEmail, 'Plano:', planName);
+            }
         }
 
         // 5️⃣ INICIALIZAR USUÁRIO
         usuarioLogado = {
-            userId: session.user.id,
+            userId:          session.user.id,
             effectiveUserId: effectiveUserId,
-            nome: session.user.user_metadata?.name || session.user.email.split('@')[0],
-            email: session.user.email,
-            plano: planName,
-            perfis: [],
-            isGuest: isGuest,
+            nome:            session.user.user_metadata?.name || session.user.email.split('@')[0],
+            email:           session.user.email,
+            plano:           planName,
+            perfis:          [],
+            isGuest:         isGuest,
         };
 
         console.log('👤 [VERIFICAR LOGIN] Usuário inicializado:', {
-            userId: usuarioLogado.userId,
-            nome: usuarioLogado.nome,
-            plano: usuarioLogado.plano,
+            userId:  usuarioLogado.userId,
+            nome:    usuarioLogado.nome,
+            plano:   usuarioLogado.plano,
             isGuest: usuarioLogado.isGuest
         });
 
@@ -521,7 +551,6 @@ async function verificarLogin() {
         alert(e.message);
         window.location.href = 'login.html';
     } finally {
-        // ✅ CORRIGIDO: só mostra o conteúdo se chegou até aqui sem redirecionar
         if (authLoading) authLoading.style.display = 'none';
         if (protectedContent) protectedContent.style.display = 'block';
     }
