@@ -771,7 +771,6 @@ function adicionarNovoPerfil() {
     });
 }
 
-// ✅ Handler separado — lógica de criação isolada e testável
 async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
     const nome = inputNome.value.trim();
 
@@ -793,7 +792,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error('SEM_SESSAO');
 
-        // ✅ Garante que effectiveUserId está populado — fallback para session
         const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
 
         console.log('🔍 [RPC] target_user_id:', targetUserId);
@@ -812,9 +810,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         console.log('🔍 [RPC] resultado:', podeCrear);
         console.log('🔍 [RPC] erro completo:', JSON.stringify(rpcError));
-        if (error) {
-            console.log('🔍 [PERFIL INSERT] erro completo:', JSON.stringify(error)); }
-
 
         if (rpcError || !podeCrear) {
             _log.error('PERFIL_RPC_001', rpcError);
@@ -878,6 +873,12 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             fotoUrl = _sanitizeImgUrl(signedData.signedUrl) || null;
         }
 
+        console.log('🔍 [INSERT] Tentando inserir perfil:', {
+            user_id:   targetUserId,
+            name:      nome,
+            photo_url: fotoUrl
+        });
+
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
             .insert({
@@ -889,6 +890,7 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             .single();
 
         if (error) {
+            console.log('🔍 [INSERT] erro completo:', JSON.stringify(error));
             _log.error('PERFIL_001', error);
             if (error.code === '23514' || error.code === '42501') {
                 mostrarPopupLimite();
@@ -898,6 +900,8 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             fecharPopup();
             return;
         }
+
+        console.log('✅ [INSERT] Perfil criado:', novoPerfil);
 
         usuarioLogado.perfis.push({
             id:   novoPerfil.id,
