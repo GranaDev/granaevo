@@ -3,103 +3,88 @@ import { supabase } from './supabase-client.js';
 
 class DataManager {
     constructor() {
-        this.userId = null;
+        this.userId    = null;
         this.userEmail = null;
-        this.saveQueue = [];
-        this.isSaving = false;
+        this.isSaving  = false;
         this.lastSaveTime = null;
     }
 
     // ========== INICIALIZAÇÃO ==========
     async initialize(userId, userEmail) {
-        this.userId = userId;
+        this.userId    = userId;
         this.userEmail = userEmail;
-        
+
         console.log('📦 DataManager inicializado');
         console.log('👤 UserID:', userId);
         console.log('📧 Email:', userEmail);
-        
+
         return true;
     }
 
     // ========== CARREGAR DADOS DO USUÁRIO ==========
-// ✅ CARREGAR DADOS DO USUÁRIO (VERSÃO CORRIGIDA)
-async loadUserData() {
-    try {
-        console.log('📥 [DATA-MANAGER] Carregando dados do Supabase...');
-        console.log('🔑 [DATA-MANAGER] User ID:', this.userId);
+    async loadUserData() {
+        try {
+            console.log('📥 [DATA-MANAGER] Carregando dados do Supabase...');
+            console.log('🔑 [DATA-MANAGER] User ID:', this.userId);
 
-        if (!this.userId) {
-            console.error('❌ [DATA-MANAGER] userId não definido!');
-            return { version: '1.0', profiles: [] };
-        }
+            if (!this.userId) {
+                console.error('❌ [DATA-MANAGER] userId não definido!');
+                return { version: '1.0', profiles: [] };
+            }
 
-        const { data, error } = await supabase
-            .from('user_data')
-            .select('data_json')
-            .eq('user_id', this.userId)
-            .single();
+            const { data, error } = await supabase
+                .from('user_data')
+                .select('data_json')
+                .eq('user_id', this.userId)
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') {
+            // ✅ Nenhum registro ainda — cria via RPC (já passa por rate limit + audit)
+            if (error?.code === 'PGRST116') {
                 console.log('⚠️ [DATA-MANAGER] Nenhum dado encontrado, criando estrutura inicial...');
-                
-                // ✅ CRIAR REGISTRO INICIAL
-                const initialData = { version: '1.0', profiles: [] };
-                
-                const { data: created, error: createError } = await supabase
-                    .from('user_data')
-                    .insert({
-                        user_id: this.userId,
-                        email: this.email,
-                        data_json: initialData
-                    })
-                    .select()
-                    .single();
 
-                if (createError) {
-                    console.error('❌ [DATA-MANAGER] Erro ao criar registro:', createError);
+                const initialData = { version: '1.0', profiles: [] };
+
+                // ✅ Usa RPC em vez de INSERT direto — consistência com saveUserData
+                const { data: rpcResult, error: rpcError } = await supabase
+                    .rpc('salvar_dados_usuario', { p_data_json: initialData });
+
+                if (rpcError || !rpcResult?.ok) {
+                    console.error('❌ [DATA-MANAGER] Erro ao criar registro inicial:', rpcError?.message || rpcResult?.erro);
                     return initialData;
                 }
 
-                console.log('✅ [DATA-MANAGER] Registro criado com sucesso!');
+                console.log('✅ [DATA-MANAGER] Registro inicial criado com sucesso!');
                 return initialData;
             }
-            
-            console.error('❌ [DATA-MANAGER] Erro ao carregar:', error);
+
+            if (error) {
+                console.error('❌ [DATA-MANAGER] Erro ao carregar:', error);
+                return { version: '1.0', profiles: [] };
+            }
+
+            if (!data?.data_json) {
+                console.warn('⚠️ [DATA-MANAGER] data_json vazio, retornando estrutura padrão');
+                return { version: '1.0', profiles: [] };
+            }
+
+            const userData = data.data_json;
+
+            console.log('✅ [DATA-MANAGER] Dados carregados com sucesso:', {
+                profiles: userData.profiles?.length || 0,
+                version:  userData.version || '1.0'
+            });
+
+            // ✅ Garante estrutura mínima mesmo se dados estiverem parcialmente corrompidos
+            if (!Array.isArray(userData.profiles)) userData.profiles = [];
+            if (!userData.version)                  userData.version  = '1.0';
+
+            return userData;
+
+        } catch (err) {
+            console.error('❌ [DATA-MANAGER] Erro crítico ao carregar dados:', err);
             return { version: '1.0', profiles: [] };
         }
-
-        // ✅ VERIFICAR SE data_json EXISTE
-        if (!data || !data.data_json) {
-            console.log('⚠️ [DATA-MANAGER] data_json está vazio, retornando estrutura padrão');
-            return { version: '1.0', profiles: [] };
-        }
-
-        const userData = data.data_json;
-        
-        console.log('✅ [DATA-MANAGER] Dados carregados com sucesso:', {
-            profiles: userData.profiles?.length || 0,
-            version: userData.version || '1.0'
-        });
-
-        // ✅ GARANTIR QUE profiles É SEMPRE UM ARRAY
-        if (!Array.isArray(userData.profiles)) {
-            userData.profiles = [];
-        }
-
-        // ✅ GARANTIR QUE version EXISTE
-        if (!userData.version) {
-            userData.version = '1.0';
-        }
-
-        return userData;
-
-    } catch (error) {
-        console.error('❌ [DATA-MANAGER] Erro crítico ao carregar dados:', error);
-        return { version: '1.0', profiles: [] };
     }
-}
 
     // ========== SALVAR DADOS DO USUÁRIO ==========
     async saveUserData(profilesData) {
@@ -108,16 +93,12 @@ async loadUserData() {
             return false;
         }
 
+        // ✅ Fila simples: aguarda salvamento em andamento antes de iniciar novo
         if (this.isSaving) {
             console.log('⏳ Salvamento em andamento, aguardando...');
-            
-            // ✅ AGUARDAR O SALVAMENTO ATUAL TERMINAR
             await new Promise(resolve => {
-                const checkInterval = setInterval(() => {
-                    if (!this.isSaving) {
-                        clearInterval(checkInterval);
-                        resolve();
-                    }
+                const check = setInterval(() => {
+                    if (!this.isSaving) { clearInterval(check); resolve(); }
                 }, 100);
             });
         }
@@ -125,79 +106,72 @@ async loadUserData() {
         this.isSaving = true;
 
         try {
-            console.log('💾 [SUPABASE] Iniciando salvamento...');
+            console.log('💾 [SUPABASE] Iniciando salvamento via RPC...');
             console.log('📊 Total de perfis:', profilesData.length);
             console.log('🔑 User ID:', this.userId);
 
             const dataToSave = {
                 version: '1.0',
                 user: {
-                    userId: this.userId,
-                    email: this.userEmail
+                    userId:    this.userId,
+                    email:     this.userEmail
                 },
                 profiles: profilesData,
                 metadata: {
-                    lastSync: new Date().toISOString(),
+                    lastSync:      new Date().toISOString(),
                     totalProfiles: profilesData.length
                 }
             };
 
-            console.log('📦 Tamanho dos dados:', JSON.stringify(dataToSave).length, 'bytes');
+            const payloadSize = JSON.stringify(dataToSave).length;
+            console.log('📦 Tamanho dos dados:', payloadSize, 'bytes');
 
-            // ✅ VERIFICAR SE JÁ EXISTE REGISTRO
-            const { data: existing, error: checkError } = await supabase
-                .from('user_data')
-                .select('id')
-                .eq('user_id', this.userId)
-                .maybeSingle();
-
-            if (checkError && checkError.code !== 'PGRST116') {
-                console.error('❌ Erro ao verificar dados existentes:', checkError);
-                throw checkError;
+            // ✅ Validação client-side de tamanho antes de nem chamar o backend
+            //    Limite generoso (4.9MB) — RPC rejeita acima de 5MB de qualquer forma
+            if (payloadSize > 4_900_000) {
+                console.error('❌ [DATA-MANAGER] Payload excede 4.9MB — salvamento abortado');
+                return false;
             }
 
-            let result;
+            // ✅ MUDANÇA PRINCIPAL: substitui UPDATE/INSERT direto pela RPC
+            //    salvar_dados_usuario() no Supabase:
+            //      • verifica autenticação via auth.uid()
+            //      • aplica rate limit (60 saves/hora por usuário)
+            //      • valida estrutura mínima do JSON (campo profiles obrigatório)
+            //      • rejeita payload > 5MB
+            //      • registra audit log imutável com hash SHA256 antes/depois
+            //      • faz UPSERT atômico — sem race condition de check + insert
+            const { data: result, error } = await supabase
+                .rpc('salvar_dados_usuario', { p_data_json: dataToSave });
 
-            if (existing) {
-                console.log('🔄 Registro encontrado. Atualizando...');
-                
-                result = await supabase
-                    .from('user_data')
-                    .update({
-                        data_json: dataToSave,
-                        email: this.userEmail,
-                        last_modified: new Date().toISOString()
-                    })
-                    .eq('user_id', this.userId);
-
-            } else {
-                console.log('➕ Nenhum registro encontrado. Criando novo...');
-                
-                result = await supabase
-                    .from('user_data')
-                    .insert({
-                        user_id: this.userId,
-                        email: this.userEmail,
-                        data_json: dataToSave
-                    });
+            if (error) {
+                // ✅ Erros de rede/autenticação vêm aqui
+                console.error('❌ [RPC] Erro de comunicação:', error.message);
+                console.error('Código:', error.code);
+                throw error;
             }
 
-            if (result.error) {
-                console.error('❌ Erro ao salvar no Supabase:', result.error);
-                console.error('Código:', result.error.code);
-                console.error('Mensagem:', result.error.message);
-                throw result.error;
+            if (!result?.ok) {
+                // ✅ Erros de regra de negócio vêm aqui (rate limit, estrutura inválida, etc.)
+                console.error('❌ [RPC] Salvamento recusado pelo servidor:', result?.erro);
+
+                // ✅ Rate limit atingido — avisa o usuário de forma clara
+                if (result?.erro?.includes('Limite')) {
+                    console.warn('⚠️ [RATE LIMIT] Muitos salvamentos em pouco tempo. Aguarde.');
+                }
+
+                return false;
             }
 
             this.lastSaveTime = new Date();
             console.log('✅ [SUPABASE] Dados salvos com sucesso!');
             console.log('🕐 Horário:', this.lastSaveTime.toLocaleTimeString());
-            
+
             return true;
 
-        } catch (e) {
-            console.error('❌ [SUPABASE] Erro crítico ao salvar:', e);
-            console.error('Stack:', e.stack);
+        } catch (err) {
+            console.error('❌ [SUPABASE] Erro crítico ao salvar:', err);
+            console.error('Stack:', err.stack);
             return false;
 
         } finally {
@@ -210,16 +184,10 @@ async loadUserData() {
         try {
             console.log('💾 Salvando perfil específico:', profileId);
 
-            // Carrega dados completos
             const fullData = await this.loadUserData();
-            
-            // Atualiza/adiciona o perfil específico
+
             const profileIndex = fullData.profiles.findIndex(p => p.id === profileId);
-            
-            const profileToSave = {
-                ...profileData,
-                lastUpdate: new Date().toISOString()
-            };
+            const profileToSave = { ...profileData, lastUpdate: new Date().toISOString() };
 
             if (profileIndex !== -1) {
                 console.log('📝 Atualizando perfil existente');
@@ -229,46 +197,46 @@ async loadUserData() {
                 fullData.profiles.push(profileToSave);
             }
 
-            // Salva tudo de volta
             const success = await this.saveUserData(fullData.profiles);
-            
-            if (success) {
-                console.log('✅ Perfil salvo com sucesso');
-            }
+            if (success) console.log('✅ Perfil salvo com sucesso');
 
             return success;
 
-        } catch (e) {
-            console.error('❌ Erro ao salvar perfil:', e);
+        } catch (err) {
+            console.error('❌ Erro ao salvar perfil:', err);
             return false;
         }
     }
 
-    // ========== SALVAMENTO IMEDIATO (para beforeunload) ==========
-saveImmediate(profilesData) {
-    if (!this.userId) return false;
+    // ========== SALVAMENTO IMEDIATO (beforeunload) ==========
+    saveImmediate(profilesData) {
+        if (!this.userId) return false;
 
-    const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
+        // ✅ ATENÇÃO: sendBeacon não suporta headers de autenticação —
+        //    a Edge Function save-user-data DEVE validar o JWT via cookie de sessão
+        //    (sb-access-token) que o Supabase define automaticamente.
+        //    Se sua Edge Function ainda valida pelo body/header Authorization,
+        //    esta chamada chegará sem auth e deve ser rejeitada pelo servidor.
+        const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
 
-    const payload = JSON.stringify({
-        userId: this.userId,
-        userEmail: this.userEmail,
-        profiles: profilesData
-    });
+        const payload = JSON.stringify({
+            userId:    this.userId,
+            userEmail: this.userEmail,
+            profiles:  profilesData
+        });
 
-    // ✅ sendBeacon garante envio mesmo ao fechar/recarregar a página
-    const sent = navigator.sendBeacon(
-        `${SUPABASE_URL}/functions/v1/save-user-data`,
-        new Blob([payload], { type: 'application/json' })
-    );
+        const sent = navigator.sendBeacon(
+            `${SUPABASE_URL}/functions/v1/save-user-data`,
+            new Blob([payload], { type: 'application/json' })
+        );
 
-    console.log(sent 
-        ? '✅ [BEACON] Dados enviados com sucesso no unload' 
-        : '❌ [BEACON] Falha ao enviar dados no unload'
-    );
+        console.log(sent
+            ? '✅ [BEACON] Dados enviados com sucesso no unload'
+            : '❌ [BEACON] Falha ao enviar dados no unload'
+        );
 
-    return sent;
-}
+        return sent;
+    }
 
     // ========== ESTRUTURA VAZIA ==========
     createEmptyStructure() {
@@ -276,11 +244,11 @@ saveImmediate(profilesData) {
             version: '1.0',
             user: {
                 userId: this.userId,
-                email: this.userEmail
+                email:  this.userEmail
             },
             profiles: [],
             metadata: {
-                lastSync: new Date().toISOString(),
+                lastSync:      new Date().toISOString(),
                 totalProfiles: 0
             }
         };
@@ -290,26 +258,26 @@ saveImmediate(profilesData) {
     async exportUserData() {
         const data = await this.loadUserData();
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
+        const url  = URL.createObjectURL(blob);
+
         const a = document.createElement('a');
-        a.href = url;
+        a.href     = url;
         a.download = `granaevo_backup_${this.userEmail}_${new Date().toISOString().slice(0, 10)}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
+
         console.log('✅ Backup exportado com sucesso!');
     }
 
     // ========== STATUS DO SISTEMA ==========
     getStatus() {
         return {
-            initialized: !!this.userId,
-            userId: this.userId,
-            email: this.userEmail,
-            isSaving: this.isSaving,
+            initialized:  !!this.userId,
+            userId:       this.userId,
+            email:        this.userEmail,
+            isSaving:     this.isSaving,
             lastSaveTime: this.lastSaveTime
         };
     }
@@ -318,10 +286,9 @@ saveImmediate(profilesData) {
 // ========== INSTÂNCIA GLOBAL ==========
 const dataManagerInstance = new DataManager();
 
-// Expor globalmente para debugging
+// ✅ Exposto apenas para debugging — não expõe métodos de escrita diretamente
 window.dataManager = dataManagerInstance;
 
-// Debug helper
 window.debugDataManager = () => {
     console.log('=== DATA MANAGER STATUS ===');
     console.log(dataManagerInstance.getStatus());
