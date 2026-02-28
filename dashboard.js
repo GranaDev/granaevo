@@ -46,9 +46,9 @@ const _throttledSave = (() => {
     };
 })();
 
-// ✅ FUNÇÃO AUXILIAR GLOBAL — adicione uma única vez no topo do arquivo JS
-// Escapa caracteres especiais para evitar XSS em qualquer ponto do sistema
-function escapeHTML(str) {
+// ========== FUNÇÕES UTILITÁRIAS DE SEGURANÇA (RELATÓRIOS) ==========
+
+function sanitizeHTML(str) {
     if (str === null || str === undefined) return '';
     return String(str)
         .replace(/\x00/g, '')
@@ -60,6 +60,38 @@ function escapeHTML(str) {
         .replace(/\//g, '&#x2F;')
         .replace(/`/g, '&#x60;');
 }
+
+function sanitizeNumber(value, min = 0, max = 999999999) {
+    const n = parseFloat(value);
+    if (!isFinite(n)) return 0;
+    if (n < min) return min;
+    if (n > max) return max;
+    return n;
+}
+
+function sanitizeDate(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (y < 2000 || y > 2100) return null;
+    if (m < 1 || m > 12) return null;
+    if (d < 1 || d > 31) return null;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return null;
+    return dateStr;
+}
+
+function safeCategorias() {
+    return Object.create(null);
+}
+
+function validarUserData(userData) {
+    if (!userData || typeof userData !== 'object') return false;
+    if (!Array.isArray(userData.profiles)) return false;
+    return true;
+}
+
+// ========== FIM DAS FUNÇÕES UTILITÁRIAS ==========
 
 // ✅ Define __GE__ e __GE_save__ como não-reescritáveis UMA única vez no carregamento
 (function _inicializarGE() {
