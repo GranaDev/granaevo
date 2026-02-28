@@ -131,12 +131,15 @@ function atualizarReferenciasGlobais() {
         contasFixas:    Object.freeze([...contasFixas]),
         cartoesCredito: Object.freeze([...cartoesCredito]),
     });
-}
 
-    // ✅ Expõe referências necessárias para graficos.js e outros módulos externos
-    window.perfilAtivo  = perfilAtivo;
-    window.transacoes   = transacoes;
+    // ✅ Expõe para graficos.js e outros módulos externos
+    window.perfilAtivo   = perfilAtivo;
+    window.transacoes    = transacoes;
     window.usuarioLogado = usuarioLogado;
+    window.metas         = metas;
+    window.contasFixas   = contasFixas;
+    window.cartoesCredito = cartoesCredito;
+}
 
 
 // Limites por plano
@@ -4026,16 +4029,33 @@ function abrirCartaoForm(editId = null) {
 
 // ========== GRÁFICOS - ÁREA VAZIA PARA RECONSTRUÇÃO ==========
 
+// ========== GRÁFICOS - DELEGA PARA graficos.js ==========
+
 function inicializarGraficos() {
-    console.log('📊 Menu de gráficos inicializado (vazio)');
+    // Sincroniza variáveis antes de qualquer acesso pelo módulo de gráficos
+    window.perfilAtivo    = perfilAtivo;
+    window.transacoes     = transacoes;
+    window.usuarioLogado  = usuarioLogado;
+    window.metas          = metas;
+    window.contasFixas    = contasFixas;
+    window.cartoesCredito = cartoesCredito;
+
+    // Delega a montagem dos filtros e controles para graficos.js
+    if (typeof configurarFiltros    === 'function') configurarFiltros();
+    if (typeof configurarViewButtons === 'function') configurarViewButtons();
+    if (typeof configurarComparacao  === 'function') configurarComparacao();
 }
 
 function atualizarGraficos() {
-    console.log('📊 Função atualizarGraficos() - Aguardando reconstrução');
+    if (typeof gerarGraficos === 'function') {
+        gerarGraficos();
+    } else {
+        mostrarNotificacao('Módulo de gráficos não carregado.', 'error');
+    }
 }
 
 function exportarGraficos() {
-    mostrarNotificacao('Função de exportação será reconstruída', 'info');
+    mostrarNotificacao('Use o botão de exportar dentro de cada gráfico.', 'info');
 }
 
 // ========== RELATÓRIOS ==========
