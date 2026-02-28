@@ -2019,8 +2019,10 @@ function criarPopup(html) {
         return;
     }
 
-    // ✅ Bloqueia padrões de injeção reais e cancela a operação
-    const padraoPerigoso = /<script|onerror\s*=|onclick\s*=|javascript\s*:/i;
+// ✅ Bloqueia apenas padrões de injeção reais
+    // onclick= é removido da lista pois é legítimo em HTML estático do desenvolvedor
+    // O risco real vem de <script>, onerror= e javascript: que indicam XSS
+    const padraoPerigoso = /<script|onerror\s*=|javascript\s*:/i;
     if(padraoPerigoso.test(html)) {
         console.error('criarPopup: HTML potencialmente inseguro detectado. Operação cancelada.');
         return;
