@@ -2677,8 +2677,12 @@ function abrirMetaForm(editId = null) {
             const objetivo = parseFloat(parseFloat(objStr).toFixed(2));
             if (!Number.isFinite(objetivo) || objetivo <= 0)                        return alert('Digite objetivo válido.');
 
-            // ✅ Sem id — banco gera via gen_random_uuid()
-            metas.push({ descricao: desc, objetivo, saved: 0, monthly: {} });
+            // ✅ CORREÇÃO: gera id local para que editar e remover funcionem corretamente
+            const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+            metas.push({ id: novoId, descricao: desc, objetivo, saved: 0, monthly: {} });
             salvarDados();
             renderMetasList();
             atualizarTudo();
@@ -2697,7 +2701,6 @@ function abrirMetaForm(editId = null) {
             <button class="btn-cancelar" id="cancelarMeta">Cancelar</button>
         `);
 
-        // ✅ Preenchimento seguro via propriedade .value — nunca via atributo HTML
         document.getElementById('metaDesc').value = meta.descricao;
         document.getElementById('metaObj').value  = meta.objetivo;
 
@@ -2711,12 +2714,12 @@ function abrirMetaForm(editId = null) {
             return alert('Digite descrição da meta.');
             if (desc.length > 200)
             return alert('Descrição muito longa (máx. 200 caracteres).');
-            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0) 
+            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0)
             return alert('Digite objetivo válido.');
 
             meta.descricao = desc;
             meta.objetivo  = parseFloat(parseFloat(objStr).toFixed(2));
-            if (!Number.isFinite(meta.objetivo) || meta.objetivo <= 0)              
+            if (!Number.isFinite(meta.objetivo) || meta.objetivo <= 0)
             return alert('Digite objetivo válido.');
 
             salvarDados();
