@@ -1980,135 +1980,133 @@ function pagarContaFixa(id, valorPago) {
         snapshotCartoes     = structuredClone(cartoesCredito);
 
         function avancarMes(vencimentoISO) {
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
-                const fallback = new Date();
-                fallback.setMonth(fallback.getMonth() + 1);
-                return fallback.toISOString().slice(0, 10);
-            }
-            let [y, m, d] = vencimentoISO.split('-').map(Number);
-            m++;
-            if (m > 12) { m = 1; y++; }
-            return [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
-        }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
+        const fallback = new Date();
+        fallback.setMonth(fallback.getMonth() + 1);
+        return fallback.toISOString().slice(0, 10);
+    }
+    let [y, m, d] = vencimentoISO.split('-').map(Number);
+    m++;
+    if (m > 12) { m = 1; y++; }
+    return [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
+}
 
-        const dh = agoraDataHora();
-        const idTrans = nextTransId++;
-        const descricaoSegura = String(conta.descricao || '').slice(0, 100);
+const dh = agoraDataHora();
+// ✅ nextTransId++ removido — banco gera ID via gen_random_uuid()
+const descricaoSegura = String(conta.descricao || '').slice(0, 100);
 
-        transacoes.push({
-            id: idTrans,
-            categoria: 'saida',
-            tipo: 'Conta Fixa',
-            descricao: `${descricaoSegura} (pagamento mensal)`,
-            valor: parseFloat(valorSeguro.toFixed(2)),
-            data: dh.data,
-            hora: dh.hora,
-            contaFixaId: parseInt(id, 10)
-        });
+transacoes.push({
+    // ✅ Sem campo id — banco gera automaticamente ao persistir
+    categoria:   'saida',
+    tipo:        'Conta Fixa',
+    descricao:   `${descricaoSegura} (pagamento mensal)`,
+    valor:       parseFloat(valorSeguro.toFixed(2)),
+    data:        dh.data,
+    hora:        dh.hora,
+    contaFixaId: id   // ✅ passa direto — compatível com número e UUID string
+});
 
-        // FATURA DE CARTÃO
-        if (conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
-            let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
+// FATURA DE CARTÃO
+if (conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
+    let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
 
-            conta.compras.forEach(compra => {
-                // ✅ FIX #5: Validação completa do objeto compra antes de qualquer operação
-                //    Versão anterior validava só o tipo, mas não range — permitia
-                //    valorParcela negativo que AUMENTAVA o limite do cartão artificialmente
-                if (typeof compra.parcelaAtual  !== 'number' || !isFinite(compra.parcelaAtual))  return;
-                if (typeof compra.totalParcelas !== 'number' || !isFinite(compra.totalParcelas)) return;
-                if (typeof compra.valorParcela  !== 'number' || !isFinite(compra.valorParcela))  return;
-                if (compra.parcelaAtual  < 1)        return; // ✅ sem parcelas negativas
-                if (compra.totalParcelas < 1)        return;
-                if (compra.valorParcela  <= 0)       return; // ✅ bloqueia negativo/zero
-                if (compra.valorParcela  > 9_999_999) return; // ✅ bloqueia valor absurdo
+    conta.compras.forEach(compra => {
+        // ✅ Validação completa do objeto compra antes de qualquer operação
+        //    Impede valorParcela negativo que AUMENTAVA o limite do cartão artificialmente
+        if (typeof compra.parcelaAtual  !== 'number' || !isFinite(compra.parcelaAtual))  return;
+        if (typeof compra.totalParcelas !== 'number' || !isFinite(compra.totalParcelas)) return;
+        if (typeof compra.valorParcela  !== 'number' || !isFinite(compra.valorParcela))  return;
+        if (compra.parcelaAtual  < 1)         return; // ✅ sem parcelas negativas
+        if (compra.totalParcelas < 1)         return;
+        if (compra.valorParcela  <= 0)        return; // ✅ bloqueia negativo/zero
+        if (compra.valorParcela  > 9_999_999) return; // ✅ bloqueia valor absurdo
 
-                if (compra.parcelaAtual <= compra.totalParcelas) {
-                    compra.parcelaAtual++;
-                    if (cartaoRef) {
-                        const parcela = parseFloat(compra.valorParcela);
-                        // ✅ Seguro: parcela já validado como positivo acima
-                        cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
-                        if (cartaoRef.usado < 0) cartaoRef.usado = 0;
-                    }
-                }
-            });
-
-            conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
-
-            if (conta.compras.length === 0) {
-                contasFixas = contasFixas.filter(c => c.id !== id);
-                salvarDados();
-                atualizarTudo();
-                conta._processando = false;
-                alert('✅ Todas as parcelas pagas! Fatura quitada.');
-                return;
-            }
-
-            conta.valor = conta.compras.reduce((sum, c) => {
-                // ✅ FIX #5: valorParcela já validado no forEach acima, mas
-                //    revalidamos aqui por segurança (compras podem ter sido filtradas)
-                const p = parseFloat(c.valorParcela);
-                return sum + (isFinite(p) && p > 0 ? p : 0);
-            }, 0);
-
-            conta.vencimento = avancarMes(conta.vencimento);
-            conta.pago = false;
-
-            salvarDados();
-            atualizarTudo();
-            conta._processando = false;
-            alert(`✅ Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
-            return;
-        }
-
-        // CONTA COM PARCELAS DE CARTÃO
-        if (conta.cartaoId && conta.totalParcelas && conta.parcelaAtual) {
-            let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
+        if (compra.parcelaAtual <= compra.totalParcelas) {
+            compra.parcelaAtual++;
             if (cartaoRef) {
-                cartaoRef.usado = (cartaoRef.usado || 0) - valorSeguro;
+                const parcela = parseFloat(compra.valorParcela);
+                // ✅ Seguro: parcela já validada como positiva acima
+                cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
                 if (cartaoRef.usado < 0) cartaoRef.usado = 0;
             }
-
-            if (conta.parcelaAtual < conta.totalParcelas) {
-                conta.parcelaAtual++;
-                conta.vencimento = avancarMes(conta.vencimento);
-                conta.pago = false;
-            } else {
-                contasFixas = contasFixas.filter(c => c.id !== conta.id);
-            }
-
-            salvarDados();
-            atualizarTudo();
-            conta._processando = false;
-            alert('✅ Parcela paga! O lembrete foi atualizado.');
-            return;
         }
+    });
 
-        // CONTA RECORRENTE (sem parcelas)
-        conta.vencimento = avancarMes(conta.vencimento);
-        conta.pago = false;
+    conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
 
+    if (conta.compras.length === 0) {
+        contasFixas = contasFixas.filter(c => c.id !== id);
         salvarDados();
         atualizarTudo();
         conta._processando = false;
-        alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
-
-    } catch (erro) {
-        console.error('❌ Erro no pagamento, revertendo estado:', erro);
-
-        // ✅ FIX #6: Agora seguro — snapshots são arrays (possivelmente vazios,
-        //    mas nunca undefined), então .forEach nunca crashará aqui
-        rollbackArray(transacoes,     snapshotTransacoes);
-        rollbackArray(contasFixas,    snapshotContasFixas);
-        rollbackArray(cartoesCredito, snapshotCartoes);
-
-        contaOriginal._processando = false;
-
-        alert('❌ Erro ao processar pagamento. Nenhuma alteração foi salva.');
+        alert('✅ Todas as parcelas pagas! Fatura quitada.');
+        return;
     }
+
+    conta.valor = conta.compras.reduce((sum, c) => {
+        // ✅ Revalida valorParcela aqui pois compras podem ter sido filtradas
+        const p = parseFloat(c.valorParcela);
+        return sum + (isFinite(p) && p > 0 ? p : 0);
+    }, 0);
+
+    conta.vencimento = avancarMes(conta.vencimento);
+    conta.pago = false;
+
+    salvarDados();
+    atualizarTudo();
+    conta._processando = false;
+    alert(`✅ Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
+    return;
 }
 
-// ✅ FIX #7: token de versão declarado fora — persiste entre chamadas
+// CONTA COM PARCELAS DE CARTÃO
+if (conta.cartaoId && conta.totalParcelas && conta.parcelaAtual) {
+    let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
+    if (cartaoRef) {
+        cartaoRef.usado = (cartaoRef.usado || 0) - valorSeguro;
+        if (cartaoRef.usado < 0) cartaoRef.usado = 0;
+    }
+
+    if (conta.parcelaAtual < conta.totalParcelas) {
+        conta.parcelaAtual++;
+        conta.vencimento = avancarMes(conta.vencimento);
+        conta.pago = false;
+    } else {
+        contasFixas = contasFixas.filter(c => c.id !== conta.id);
+    }
+
+    salvarDados();
+    atualizarTudo();
+    conta._processando = false;
+    alert('✅ Parcela paga! O lembrete foi atualizado.');
+    return;
+}
+
+// CONTA RECORRENTE (sem parcelas)
+conta.vencimento = avancarMes(conta.vencimento);
+conta.pago = false;
+
+salvarDados();
+atualizarTudo();
+conta._processando = false;
+alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
+
+} catch (erro) {
+    console.error('❌ Erro no pagamento, revertendo estado:', erro);
+
+    // ✅ Snapshots são arrays (possivelmente vazios, nunca undefined)
+    //    então .forEach nunca crashará aqui
+    rollbackArray(transacoes,     snapshotTransacoes);
+    rollbackArray(contasFixas,    snapshotContasFixas);
+    rollbackArray(cartoesCredito, snapshotCartoes);
+
+    contaOriginal._processando = false;
+
+    alert('❌ Erro ao processar pagamento. Nenhuma alteração foi salva.');
+}
+}
+
+// ✅ Token de versão declarado fora — persiste entre chamadas
 //    Incrementado a cada criarPopup(), capturado a cada fecharPopup()
 //    Garante que o setTimeout de um fechamento antigo nunca limpe um popup novo
 let _popupVersaoAtual = 0;
@@ -2303,10 +2301,10 @@ function atualizarCamposCredito() {
 
 function lancarTransacao() {
     const categoria = document.getElementById('selectCategoria').value;
-    const tipo = document.getElementById('selectTipo').value;
+    const tipo      = document.getElementById('selectTipo').value;
     const descricao = document.getElementById('inputDescricao').value.trim();
-    const valorStr = document.getElementById('inputValor').value;
-    
+    const valorStr  = document.getElementById('inputValor').value;
+
     if(!categoria) return alert('Escolha Entrada, Saída ou Reserva.');
     if(categoria === 'reserva' && metas.filter(m => m.id !== 'emergency').length === 0) {
         return alert('Você ainda não criou nenhuma meta ou reserva, crie no menu "Reservas"');
@@ -2314,124 +2312,108 @@ function lancarTransacao() {
     if(!tipo && categoria !== 'saida_credito') return alert('Escolha o tipo.');
     if(!descricao) return alert('Digite a descrição.');
     if(!valorStr || isNaN(valorStr) || Number(valorStr) <= 0) return alert('Digite um valor válido.');
-    
+
     const valor = parseFloat(parseFloat(valorStr).toFixed(2));
-    const dh = agoraDataHora();
-    
+    const dh    = agoraDataHora();
+
     if(categoria === 'saida_credito') {
-    const cartaoSel = document.getElementById('selectCartao').value;
-    const parcelasSel = Number(document.getElementById('selectParcelas').value);
-    
-    if(!cartaoSel) return alert("Selecione o cartão!");
-    if(!parcelasSel) return alert("Selecione a quantidade de parcelas!");
-    
-    const cartao = cartoesCredito.find(c => String(c.id) === String(cartaoSel));
-    if(!cartao) return alert("Cartão não encontrado!");
-    
-    let confirmMsg = `Compra de ${formatBRL(valor)} no cartão ${cartao.nomeBanco}, em ${parcelasSel}x de ${formatBRL(valor/parcelasSel)}.\nProsseguir?`;
-    if(!confirm(confirmMsg)) return;
-    
-    // Calcular data da fatura
-    let hoje = new Date();
-    let anoAtual = hoje.getFullYear();
-    let mesAtual = hoje.getMonth() + 1;
-    let diaHoje = hoje.getDate();
-    let diaFatura = cartao.vencimentoDia;
-    
-    let proxMes, proxAno;
-    if(diaHoje >= diaFatura) {
-        proxMes = mesAtual + 1;
-        proxAno = anoAtual;
-        if(proxMes > 12) { proxMes = 1; proxAno++; }
-    } else {
-        proxMes = mesAtual;
-        proxAno = anoAtual;
-    }
-    
-    let dataFaturaISO = `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaFatura).padStart(2, '0')}`;
-    
-    // Verificar se já existe uma fatura para este cartão neste mês
-    let faturaExistente = contasFixas.find(c => 
-        c.cartaoId === cartao.id && 
-        c.vencimento === dataFaturaISO &&
-        c.tipoContaFixa === 'fatura_cartao'
-    );
-    
-    // Criar objeto da compra
-    const novaCompra = {
-        id: Date.now(), // ID único para a compra
-        tipo: tipo,
-        descricao: descricao,
-        valorTotal: valor,
-        valorParcela: Number((valor/parcelasSel).toFixed(2)),
-        totalParcelas: parcelasSel,
-        parcelaAtual: 1,
-        dataCompra: dh.data
-    };
-    
-    if(faturaExistente) {
-        // Adicionar compra à fatura existente
-        if(!faturaExistente.compras) faturaExistente.compras = [];
-        faturaExistente.compras.push(novaCompra);
-        
-        // Atualizar valor total da fatura
-        faturaExistente.valor = faturaExistente.compras.reduce((sum, compra) => {
-            return sum + compra.valorParcela;
-        }, 0);
-    } else {
-        // Criar nova fatura para o cartão
-        contasFixas.push({
-            id: nextContaFixaId++,
-            descricao: `Fatura ${cartao.nomeBanco}`,
-            valor: Number((valor/parcelasSel).toFixed(2)),
-            vencimento: dataFaturaISO,
-            pago: false,
-            cartaoId: cartao.id,
-            tipoContaFixa: 'fatura_cartao',
-            compras: [novaCompra]
-        });
-    }
-    
-    cartao.usado = (cartao.usado || 0) + valor;
-    
-    salvarDados();
-    atualizarTudo();
-    
-    document.getElementById('selectCategoria').value = '';
-    atualizarTiposDinamicos();
-    document.getElementById('inputDescricao').value = '';
-    document.getElementById('inputValor').value = '';
-    
-    alert("Compra lançada! A fatura do cartão foi atualizada.");
-    return;
-}
-    
-    let showTipo = tipo;
-    let metaId = null;
-    if(categoria === 'reserva') {
-        if(tipo.startsWith('meta_')) {
-            metaId = tipo.split('_')[1];
-            showTipo = 'Reserva';
+        const cartaoSel   = document.getElementById('selectCartao').value;
+        const parcelasSel = Number(document.getElementById('selectParcelas').value);
+
+        if(!cartaoSel)   return alert("Selecione o cartão!");
+        if(!parcelasSel) return alert("Selecione a quantidade de parcelas!");
+
+        const cartao = cartoesCredito.find(c => String(c.id) === String(cartaoSel));
+        if(!cartao) return alert("Cartão não encontrado!");
+
+        if(!confirm(`Compra de ${formatBRL(valor)} no cartão ${cartao.nomeBanco}, em ${parcelasSel}x de ${formatBRL(valor/parcelasSel)}.\nProsseguir?`)) return;
+
+        let hoje     = new Date();
+        let anoAtual = hoje.getFullYear();
+        let mesAtual = hoje.getMonth() + 1;
+        let diaHoje  = hoje.getDate();
+        let diaFatura = cartao.vencimentoDia;
+
+        let proxMes, proxAno;
+        if(diaHoje >= diaFatura) {
+            proxMes = mesAtual + 1;
+            proxAno = anoAtual;
+            if(proxMes > 12) { proxMes = 1; proxAno++; }
+        } else {
+            proxMes = mesAtual;
+            proxAno = anoAtual;
         }
+
+        const dataFaturaISO = `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaFatura).padStart(2, '0')}`;
+
+        const faturaExistente = contasFixas.find(c =>
+            c.cartaoId === cartao.id &&
+            c.vencimento === dataFaturaISO &&
+            c.tipoContaFixa === 'fatura_cartao'
+        );
+
+        const novaCompra = {
+            // ✅ Sem id — banco gera via gen_random_uuid()
+            tipo,
+            descricao,
+            valorTotal:    valor,
+            valorParcela:  Number((valor / parcelasSel).toFixed(2)),
+            totalParcelas: parcelasSel,
+            parcelaAtual:  1,
+            dataCompra:    dh.data
+        };
+
+        if(faturaExistente) {
+            if(!faturaExistente.compras) faturaExistente.compras = [];
+            faturaExistente.compras.push(novaCompra);
+            faturaExistente.valor = faturaExistente.compras.reduce((sum, c) => sum + c.valorParcela, 0);
+        } else {
+            contasFixas.push({
+                // ✅ Sem id — banco gera via gen_random_uuid()
+                descricao:      `Fatura ${cartao.nomeBanco}`,
+                valor:          Number((valor / parcelasSel).toFixed(2)),
+                vencimento:     dataFaturaISO,
+                pago:           false,
+                cartaoId:       cartao.id,
+                tipoContaFixa:  'fatura_cartao',
+                compras:        [novaCompra]
+            });
+        }
+
+        cartao.usado = (cartao.usado || 0) + valor;
+
+        salvarDados();
+        atualizarTudo();
+
+        document.getElementById('selectCategoria').value = '';
+        atualizarTiposDinamicos();
+        document.getElementById('inputDescricao').value = '';
+        document.getElementById('inputValor').value     = '';
+
+        alert("Compra lançada! A fatura do cartão foi atualizada.");
+        return;
     }
-    
-// ✅ HTML 100% estático — sem dados do usuário interpolados
+
+    let showTipo = tipo;
+    if(categoria === 'reserva' && tipo.startsWith('meta_')) {
+        showTipo = 'Reserva';
+    }
+
     criarPopup(`
         <h3>Comprovante</h3>
         <div class="small">Confirme antes de lançar</div>
         <div style="text-align:left; margin:20px 0; color: var(--text-secondary);">
             <div><b>Categoria:</b> <span id="compCategoria"></span></div>
-            <div><b>Tipo:</b> <span id="compTipo"></span></div>
+            <div><b>Tipo:</b>      <span id="compTipo"></span></div>
             <div><b>Descrição:</b> <span id="compDescricao"></span></div>
-            <div><b>Valor:</b> <span id="compValor"></span></div>
-            <div><b>Data:</b> <span id="compData"></span></div>
-            <div><b>Hora:</b> <span id="compHora"></span></div>
+            <div><b>Valor:</b>     <span id="compValor"></span></div>
+            <div><b>Data:</b>      <span id="compData"></span></div>
+            <div><b>Hora:</b>      <span id="compHora"></span></div>
         </div>
         <button class="btn-primary" id="confirmBtn">Confirmar</button>
         <button class="btn-cancelar" id="cancelarComprovante">Cancelar</button>
     `);
 
-    // ✅ Dados do usuário inseridos via textContent — nunca interpretados como HTML
     document.getElementById('compCategoria').textContent = categoria;
     document.getElementById('compTipo').textContent      = showTipo;
     document.getElementById('compDescricao').textContent = descricao;
@@ -2439,34 +2421,31 @@ function lancarTransacao() {
     document.getElementById('compData').textContent      = dh.data;
     document.getElementById('compHora').textContent      = dh.hora;
 
-    // ✅ Cancelar via addEventListener — sem onclick inline
     document.getElementById('cancelarComprovante').addEventListener('click', () => fecharPopup());
 
     document.getElementById('confirmBtn').addEventListener('click', () => {
         let metaIdInner = null;
-        let tipoSalvo = tipo;
-        if(categoria === 'reserva') {
-            if(tipo.startsWith('meta_')) {
-                metaIdInner = tipo.split('_')[1];
-                tipoSalvo = 'Reserva';
-            }
+        let tipoSalvo   = tipo;
+
+        if(categoria === 'reserva' && tipo.startsWith('meta_')) {
+            metaIdInner = tipo.split('_')[1];
+            tipoSalvo   = 'Reserva';
         }
 
-        const id = nextTransId++;
+        // ✅ Sem id — banco gera via gen_random_uuid()
         const t = {
-            id,
             categoria,
-            tipo: tipoSalvo,
+            tipo:    tipoSalvo,
             descricao,
             valor,
-            data: dh.data,
-            hora: dh.hora,
-            metaId: metaIdInner
+            data:    dh.data,
+            hora:    dh.hora,
+            metaId:  metaIdInner
         };
         transacoes.push(t);
 
         if(categoria === 'reserva' && metaIdInner) {
-            let meta = metas.find(m => String(m.id) === String(metaIdInner));
+            const meta = metas.find(m => String(m.id) === String(metaIdInner));
             if(meta) {
                 meta.saved = Number((Number(meta.saved || 0) + Number(valor)).toFixed(2));
                 const ym = yearMonthKey(isoDate());
@@ -2479,10 +2458,10 @@ function lancarTransacao() {
         atualizarTudo();
         fecharPopup();
 
-        document.getElementById('selectCategoria').value = '';
-        document.getElementById('selectTipo').innerHTML = '<option value="">Tipo</option>';
-        document.getElementById('inputDescricao').value = '';
-        document.getElementById('inputValor').value = '';
+        document.getElementById('selectCategoria').value    = '';
+        document.getElementById('selectTipo').innerHTML     = '<option value="">Tipo</option>';
+        document.getElementById('inputDescricao').value     = '';
+        document.getElementById('inputValor').value         = '';
     });
 }
 
@@ -3031,26 +3010,24 @@ function renderMetaVisual() {
 
 function abrirRetiradaForm() {
     if(!metaSelecionadaId) return alert('Selecione uma meta primeiro.');
-    
+
     const meta = metas.find(m => String(m.id) === String(metaSelecionadaId));
     if(!meta) return alert('Meta não encontrada.');
-    
+
     const saldoDisponivel = Number(meta.saved || 0);
     if(saldoDisponivel <= 0) return alert('Não há saldo disponível nesta reserva para retirar.');
-    
+
     criarPopup(`
         <h3>💸 Retirar Dinheiro</h3>
-        <div class="small">Meta: ${meta.descricao}</div>
-        <div style="margin-bottom:12px; color: var(--text-secondary);">
-            Saldo disponível: ${formatBRL(saldoDisponivel)}
-        </div>
-        
+        <div class="small" id="popupMetaNome"></div>
+        <div id="popupSaldoDisponivel" style="margin-bottom:12px; color: var(--text-secondary);"></div>
+
         <label style="display:block; text-align:left; margin-top:12px; margin-bottom:6px; color: var(--text-secondary); font-weight:600;">
             💰 Valor a Retirar:
         </label>
-        <input type="number" id="valorRetirada" class="form-input" 
-               placeholder="Valor a retirar (R$)" step="0.01" min="0.01" max="${saldoDisponivel}"><br>
-        
+        <input type="number" id="valorRetirada" class="form-input"
+               placeholder="Valor a retirar (R$)" step="0.01" min="0.01"><br>
+
         <label style="display:block; text-align:left; margin-top:16px; margin-bottom:6px; color: var(--text-secondary); font-weight:600;">
             📝 Motivo da Retirada: <span style="color: #ff4b4b;">*</span>
         </label>
@@ -3067,26 +3044,35 @@ function abrirRetiradaForm() {
             <option value="Educação">📚 Educação/Curso</option>
             <option value="Outro">📄 Outro Motivo</option>
         </select>
-        
+
         <div id="outroMotivoDiv" style="display:none; margin-top:8px;">
-            <input type="text" id="outroMotivoTexto" class="form-input" 
+            <input type="text" id="outroMotivoTexto" class="form-input"
                    placeholder="Descreva o motivo..." maxlength="100">
         </div>
-        
+
         <div style="background: rgba(255,209,102,0.1); padding: 12px; border-radius: 8px; margin-top: 16px; border-left: 3px solid #ffd166;">
             <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">
                 <strong>💡 Dica:</strong> Registrar o motivo ajuda você a entender seu comportamento financeiro e manter disciplina nas suas metas.
             </div>
         </div>
-        
+
         <button class="btn-primary" id="confirmarRetirada" style="margin-top:16px;">Confirmar Retirada</button>
-        <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+        <button class="btn-cancelar" id="cancelarRetirada">Cancelar</button>
     `);
-    
-    // Listener para mostrar campo "Outro motivo"
-    const selectMotivo = document.getElementById('motivoRetirada');
+
+    // ✅ Dados dinâmicos via textContent — sem interpolação no HTML do popup
+    document.getElementById('popupMetaNome').textContent       = `Meta: ${meta.descricao}`;
+    document.getElementById('popupSaldoDisponivel').textContent = `Saldo disponível: ${formatBRL(saldoDisponivel)}`;
+
+    // ✅ max definido via propriedade — não interpolado no HTML
+    document.getElementById('valorRetirada').max = saldoDisponivel;
+
+    // ✅ Cancelar via addEventListener — sem onclick inline
+    document.getElementById('cancelarRetirada').addEventListener('click', () => fecharPopup());
+
+    const selectMotivo  = document.getElementById('motivoRetirada');
     const outroMotivoDiv = document.getElementById('outroMotivoDiv');
-    
+
     selectMotivo.addEventListener('change', function() {
         if(this.value === 'Outro') {
             outroMotivoDiv.style.display = 'block';
@@ -3096,87 +3082,70 @@ function abrirRetiradaForm() {
             document.getElementById('outroMotivoTexto').value = '';
         }
     });
-    
-    document.getElementById('confirmarRetirada').onclick = () => {
-        const valorStr = document.getElementById('valorRetirada').value;
-        const motivoSelect = document.getElementById('motivoRetirada').value;
+
+    document.getElementById('confirmarRetirada').addEventListener('click', () => {
+        const valorStr        = document.getElementById('valorRetirada').value;
+        const motivoSelect    = document.getElementById('motivoRetirada').value;
         const outroMotivoTexto = document.getElementById('outroMotivoTexto').value.trim();
-        
-        // Validações
+
         if(!valorStr || isNaN(valorStr) || Number(valorStr) <= 0) {
             return alert('Digite um valor válido.');
         }
-        
         if(!motivoSelect) {
             return alert('⚠️ Por favor, selecione o motivo da retirada.');
         }
-        
         if(motivoSelect === 'Outro' && !outroMotivoTexto) {
             return alert('⚠️ Por favor, descreva o motivo da retirada.');
         }
-        
+
         const valorRetirar = parseFloat(parseFloat(valorStr).toFixed(2));
-        
         if(valorRetirar > saldoDisponivel) {
             return alert('Valor maior que o saldo disponível!');
         }
-        
-        // Determinar motivo final
+
         const motivoFinal = motivoSelect === 'Outro' ? outroMotivoTexto : motivoSelect;
-        
-        // Processar retirada
-        const dh = agoraDataHora();
-        const id = nextTransId++;
-        const tipoDesc = `Retirada: ${meta.descricao}`;
-        
-        const t = {
-            id,
-            categoria: 'retirada_reserva',
-            tipo: 'Retirada de Reserva',
-            descricao: tipoDesc,
-            valor: valorRetirar,
-            data: dh.data,
-            hora: dh.hora,
-            metaId: meta.id,
-            motivoRetirada: motivoFinal // ✅ NOVO: Salvar motivo
-        };
-        transacoes.push(t);
-        
+        const dh          = agoraDataHora();
+
+        // ✅ Sem id — banco gera via gen_random_uuid()
+        transacoes.push({
+            categoria:       'retirada_reserva',
+            tipo:            'Retirada de Reserva',
+            descricao:       `Retirada: ${meta.descricao}`,
+            valor:           valorRetirar,
+            data:            dh.data,
+            hora:            dh.hora,
+            metaId:          meta.id,
+            motivoRetirada:  motivoFinal
+        });
+
         meta.saved = Number((Number(meta.saved || 0) - valorRetirar).toFixed(2));
-        
+
         const ym = yearMonthKey(isoDate());
         meta.monthly = meta.monthly || {};
         meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) - valorRetirar).toFixed(2));
         if(meta.monthly[ym] < 0) meta.monthly[ym] = 0;
-        
-        // ✅ NOVO: Registrar estatística de retirada
+
         if(!meta.historicoRetiradas) meta.historicoRetiradas = [];
         meta.historicoRetiradas.push({
-            data: dh.data,
-            valor: valorRetirar,
-            motivo: motivoFinal,
-            saldoAnterior: saldoDisponivel,
+            data:           dh.data,
+            valor:          valorRetirar,
+            motivo:         motivoFinal,
+            saldoAnterior:  saldoDisponivel,
             saldoPosterior: meta.saved
         });
-        
+
         salvarDados();
         atualizarTudo();
         renderMetaVisual();
         fecharPopup();
-        
-        // Mensagem personalizada baseada no motivo
+
         let mensagemFinal = `Retirada de ${formatBRL(valorRetirar)} realizada com sucesso!\nO valor foi devolvido ao seu saldo.`;
-        
-        if(motivoFinal.includes('Emergência')) {
-            mensagemFinal += '\n\n💙 Esperamos que tudo se resolva bem.';
-        } else if(motivoFinal.includes('Investimento')) {
-            mensagemFinal += '\n\n📈 Ótima escolha! Investir é construir seu futuro.';
-        } else if(motivoFinal.includes('Dívida')) {
-            mensagemFinal += '\n\n💪 Parabéns por priorizar a quitação de dívidas!';
-        }
-        
+        if(motivoFinal.includes('Emergência'))  mensagemFinal += '\n\n💙 Esperamos que tudo se resolva bem.';
+        else if(motivoFinal.includes('Investimento')) mensagemFinal += '\n\n📈 Ótima escolha! Investir é construir seu futuro.';
+        else if(motivoFinal.includes('Dívida'))      mensagemFinal += '\n\n💪 Parabéns por priorizar a quitação de dívidas!';
+
         alert(mensagemFinal);
-    };
+    });
 }
 
 // ========== ANÁLISE DE DISCIPLINA FINANCEIRA NAS RETIRADAS ==========
@@ -6599,37 +6568,31 @@ function processarPagamentoCompra(faturaId, compraId, valorPago) {
     
     const cartao = cartoesCredito.find(c => c.id === fatura.cartaoId);
     
-    // Registrar transação de pagamento
     const dh = agoraDataHora();
     transacoes.push({
-        id: nextTransId++,
+        // ✅ Sem id — banco gera via gen_random_uuid()
         categoria: 'saida',
         tipo: 'Pagamento Cartão',
         descricao: `${compra.tipo} - ${compra.descricao} (${compra.parcelaAtual}/${compra.totalParcelas})`,
         valor: valorPago,
         data: dh.data,
         hora: dh.hora,
-        faturaId: faturaId,
-        compraId: compraId
+        faturaId: faturaId,   // ✅ passa direto — compatível com número e UUID
+        compraId: compraId    // ✅ idem
     });
     
-    // Atualizar cartão
     if(cartao) {
         cartao.usado = Math.max(0, (cartao.usado || 0) - valorPago);
     }
     
-    // Atualizar parcela da compra
     compra.parcelaAtual++;
     
-    // Se pagou todas as parcelas, remover compra da fatura
     if(compra.parcelaAtual > compra.totalParcelas) {
         fatura.compras = fatura.compras.filter(c => c.id !== compraId);
     }
     
-    // Recalcular valor total da fatura
     fatura.valor = fatura.compras.reduce((sum, c) => sum + c.valorParcela, 0);
     
-    // Se não há mais compras, remover fatura
     if(fatura.compras.length === 0) {
         contasFixas = contasFixas.filter(c => c.id !== faturaId);
         fecharPopup();
@@ -6639,12 +6602,10 @@ function processarPagamentoCompra(faturaId, compraId, valorPago) {
         return;
     }
     
-    // Salvar e atualizar
     salvarDados();
     atualizarTudo();
     fecharPopup();
     
-    // Reabrir visualização da fatura
     setTimeout(() => {
         abrirVisualizacaoFatura(faturaId);
         mostrarNotificacao(`Parcela paga! ${compra.totalParcelas - compra.parcelaAtual + 1} restante(s)`, 'success');
