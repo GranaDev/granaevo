@@ -5314,160 +5314,14 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
 }
 
 // ========== WIDGET "ONDE FOI MEU DINHEIRO?" ==========
-
-function gerarAnaliseOndeForDinheiro(mes, ano) {
-    const periodoSelecionado = `${ano}-${mes}`;
-    
-    // Filtrar transações do período
-    const transacoesPeriodo = transacoes.filter(t => {
-        const dataISO = dataParaISO(t.data);
-        return dataISO && dataISO.startsWith(periodoSelecionado) && t.categoria === 'saida';
-    });
-    
-    if(transacoesPeriodo.length === 0) {
-        return {
-            temDados: false,
-            mensagem: `Nenhum gasto registrado em ${getMesNome(mes)} de ${ano}.`
-        };
-    }
-    
-    // Agrupar por categoria
-    const porCategoria = {};
-    let totalGastos = 0;
-    
-    transacoesPeriodo.forEach(t => {
-        const tipo = t.tipo || 'Outros';
-        porCategoria[tipo] = (porCategoria[tipo] || 0) + Number(t.valor);
-        totalGastos += Number(t.valor);
-    });
-    
-    // Ordenar categorias por valor
-    const categoriasOrdenadas = Object.entries(porCategoria)
-        .sort((a, b) => b[1] - a[1]);
-    
-    // Top 3 categorias
-    const top3 = categoriasOrdenadas.slice(0, 3);
-    const top1 = top3[0];
-    const top2 = top3[1];
-    const top3Item = top3[2];
-    
-    // Encontrar maior e segundo maior gasto individual
-    const gastosIndividuais = transacoesPeriodo
-        .sort((a, b) => Number(b.valor) - Number(a.valor))
-        .slice(0, 2);
-    
-    const maiorGasto = gastosIndividuais[0];
-    const segundoMaiorGasto = gastosIndividuais[1];
-    
-    // Gerar narrativa
-    let narrativa = `Neste mês, `;
-    
-    if(top1) {
-        const perc1 = ((top1[1] / totalGastos) * 100).toFixed(0);
-        narrativa += `<strong>${perc1}%</strong> do seu dinheiro foi para <strong>${top1[0]}</strong>`;
-    }
-    
-    if(top2) {
-        const perc2 = ((top2[1] / totalGastos) * 100).toFixed(0);
-        narrativa += `, <strong>${perc2}%</strong> para <strong>${top2[0]}</strong>`;
-    }
-    
-    if(top3Item) {
-        const perc3 = ((top3Item[1] / totalGastos) * 100).toFixed(0);
-        narrativa += ` e <strong>${perc3}%</strong> para <strong>${top3Item[0]}</strong>`;
-    }
-    
-    narrativa += `.`;
-    
-    if(maiorGasto) {
-        narrativa += ` Seu <strong>maior gasto</strong> foi <strong>${maiorGasto.descricao}</strong> (<strong>${formatBRL(maiorGasto.valor)}</strong>)`;
-    }
-    
-    if(segundoMaiorGasto) {
-        narrativa += ` e o segundo foi <strong>${segundoMaiorGasto.descricao}</strong> (<strong>${formatBRL(segundoMaiorGasto.valor)}</strong>)`;
-    }
-    
-    narrativa += `.`;
-    
-    return {
-        temDados: true,
-        narrativa: narrativa,
-        totalGastos: totalGastos,
-        categorias: categoriasOrdenadas,
-        top3: top3,
-        maiorGasto: maiorGasto,
-        segundoMaiorGasto: segundoMaiorGasto,
-        totalTransacoes: transacoesPeriodo.length
-    };
-}
-
-function abrirWidgetOndeForDinheiro() {
-    const hoje = new Date();
-    const mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
-    const anoAtual = hoje.getFullYear();
-    
-    criarPopup(`
-        <div style="max-height:70vh; overflow-y:auto; padding-right:10px;">
-            <h3 style="text-align:center; margin-bottom:8px;">💸 Onde Foi Meu Dinheiro?</h3>
-            <p style="text-align:center; color:var(--text-secondary); margin-bottom:24px; font-size:0.9rem;">
-                Análise detalhada dos seus gastos
-            </p>
-            
-            <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:20px;">
-                <div>
-                    <label style="display:block; margin-bottom:6px; font-size:0.9rem; color:var(--text-secondary);">Mês:</label>
-                    <select id="mesAnalise" class="form-input" style="width:100%;">
-                        <option value="01">Janeiro</option>
-                        <option value="02">Fevereiro</option>
-                        <option value="03">Março</option>
-                        <option value="04">Abril</option>
-                        <option value="05">Maio</option>
-                        <option value="06">Junho</option>
-                        <option value="07">Julho</option>
-                        <option value="08">Agosto</option>
-                        <option value="09">Setembro</option>
-                        <option value="10">Outubro</option>
-                        <option value="11">Novembro</option>
-                        <option value="12">Dezembro</option>
-                    </select>
-                </div>
-                
-                <div>
-                    <label style="display:block; margin-bottom:6px; font-size:0.9rem; color:var(--text-secondary);">Ano:</label>
-                    <select id="anoAnalise" class="form-input" style="width:100%;">
-                        <option value="${anoAtual}">${anoAtual}</option>
-                        <option value="${anoAtual - 1}">${anoAtual - 1}</option>
-                        <option value="${anoAtual - 2}">${anoAtual - 2}</option>
-                    </select>
-                </div>
-            </div>
-            
-            <button class="btn-primary" style="width:100%; margin-bottom:20px;" onclick="processarAnaliseOndeForDinheiro()">
-                🔍 Analisar Gastos
-            </button>
-            
-            <div id="resultadoAnalise"></div>
-        </div>
-        
-        <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%; margin-top:16px;">Fechar</button>
-    `);
-    
-    // Selecionar mês e ano atual por padrão
-    document.getElementById('mesAnalise').value = mesAtual;
-    document.getElementById('anoAnalise').value = anoAtual;
-    
-    // Processar automaticamente
-    processarAnaliseOndeForDinheiro();
-}
-
 function processarAnaliseOndeForDinheiro() {
     const mes = document.getElementById('mesAnalise').value;
     const ano = document.getElementById('anoAnalise').value;
     const container = document.getElementById('resultadoAnalise');
-    
+
     const analise = gerarAnaliseOndeForDinheiro(mes, ano);
-    
-    if(!analise.temDados) {
+
+    if (!analise.temDados) {
         container.innerHTML = `
             <div style="text-align:center; padding:40px; background:rgba(255,255,255,0.03); border-radius:12px;">
                 <div style="font-size:3rem; margin-bottom:12px; opacity:0.5;">🔍</div>
@@ -5475,62 +5329,61 @@ function processarAnaliseOndeForDinheiro() {
                     Sem Dados Disponíveis
                 </div>
                 <div style="font-size:0.9rem; color:var(--text-secondary);">
-                    ${analise.mensagem}
+                    ${sanitizeHTML(analise.mensagem)}
                 </div>
             </div>
         `;
         return;
     }
-    
-    // Gerar HTML do resultado
+
     let html = `
         <!-- Narrativa Principal -->
         <div style="background:linear-gradient(135deg, rgba(67,160,71,0.2), rgba(108,99,255,0.2)); padding:24px; border-radius:16px; margin-bottom:24px; border-left:4px solid var(--primary);">
             <div style="font-size:1.1rem; line-height:1.8; color:var(--text-primary);">
-                ${analise.narrativa}
+                ${sanitizeHTML(analise.narrativa)}
             </div>
             <div style="text-align:center; margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
                 <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:8px;">Total Gasto no Período</div>
                 <div style="font-size:2rem; font-weight:700; color:#ff4b4b;">${formatBRL(analise.totalGastos)}</div>
-                <div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">${analise.totalTransacoes} transações registradas</div>
+                <div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">${sanitizeHTML(analise.totalTransacoes)} transações registradas</div>
             </div>
         </div>
-        
+
         <!-- Gráfico de Pizza Interativo -->
         <div style="background:rgba(255,255,255,0.03); padding:24px; border-radius:16px; margin-bottom:24px;">
             <h4 style="margin-bottom:16px; color:var(--text-primary); text-align:center;">📊 Distribuição por Categoria</h4>
             <div style="display:flex; flex-direction:column; gap:12px;">
     `;
-    
+
     const cores = ['#ff4b4b', '#ffd166', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8'];
-    
+
     analise.categorias.forEach(([categoria, valor], i) => {
         const percentual = ((valor / analise.totalGastos) * 100).toFixed(1);
         const cor = cores[i % cores.length];
-        
+
         html += `
             <div style="margin-bottom:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <div style="display:flex; align-items:center; gap:10px;">
-                        <div style="width:16px; height:16px; background:${cor}; border-radius:4px;"></div>
-                        <span style="font-weight:600; color:var(--text-primary);">${categoria}</span>
+                        <div style="width:16px; height:16px; background:${sanitizeHTML(cor)}; border-radius:4px;"></div>
+                        <span style="font-weight:600; color:var(--text-primary);">${sanitizeHTML(categoria)}</span>
                     </div>
                     <div style="text-align:right;">
                         <div style="font-weight:700; color:var(--text-primary);">${formatBRL(valor)}</div>
-                        <div style="font-size:0.85rem; color:var(--text-secondary);">${percentual}%</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">${sanitizeHTML(percentual)}%</div>
                     </div>
                 </div>
                 <div style="width:100%; height:12px; background:rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;">
-                    <div style="width:${percentual}%; height:100%; background:${cor}; border-radius:6px; transition:width 0.5s;"></div>
+                    <div style="width:${sanitizeHTML(percentual)}%; height:100%; background:${sanitizeHTML(cor)}; border-radius:6px; transition:width 0.5s;"></div>
                 </div>
             </div>
         `;
     });
-    
+
     html += `
             </div>
         </div>
-        
+
         <!-- Insights e Recomendações -->
         <div style="background:rgba(108,99,255,0.1); padding:20px; border-radius:16px; border-left:4px solid #6c63ff;">
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
@@ -5539,47 +5392,45 @@ function processarAnaliseOndeForDinheiro() {
             </div>
             <div style="color:var(--text-secondary); line-height:1.6; font-size:0.95rem;">
     `;
-    
-    // Gerar insights personalizados
-    if(analise.top3[0]) {
-        const categoriaTop = analise.top3[0][0];
+
+    if (analise.top3[0]) {
+        const categoriaTop = sanitizeHTML(analise.top3[0][0]);
         const percentualTop = ((analise.top3[0][1] / analise.totalGastos) * 100).toFixed(0);
-        
-        if(percentualTop > 50) {
-            html += `⚠️ <strong>Atenção:</strong> ${percentualTop}% dos seus gastos foram com <strong>${categoriaTop}</strong>. Isso representa mais da metade do seu orçamento! Considere analisar se há oportunidades de redução nesta categoria.<br><br>`;
-        } else if(percentualTop > 30) {
-            html += `📊 A categoria <strong>${categoriaTop}</strong> representa ${percentualTop}% dos seus gastos. Esta é sua principal área de despesa no momento.<br><br>`;
+
+        if (percentualTop > 50) {
+            html += `⚠️ <strong>Atenção:</strong> ${sanitizeHTML(percentualTop)}% dos seus gastos foram com <strong>${categoriaTop}</strong>. Isso representa mais da metade do seu orçamento! Considere analisar se há oportunidades de redução nesta categoria.<br><br>`;
+        } else if (percentualTop > 30) {
+            html += `📊 A categoria <strong>${categoriaTop}</strong> representa ${sanitizeHTML(percentualTop)}% dos seus gastos. Esta é sua principal área de despesa no momento.<br><br>`;
         }
     }
-    
-    // Insight sobre diversificação
-    if(analise.categorias.length <= 3) {
-        html += `🎯 Seus gastos estão concentrados em poucas categorias (${analise.categorias.length}). Isso pode indicar um controle financeiro focado, mas fique atento a gastos ocultos.<br><br>`;
-    } else if(analise.categorias.length > 8) {
-        html += `🌐 Você tem gastos distribuídos em ${analise.categorias.length} categorias diferentes. Considere consolidar categorias similares para melhor análise.<br><br>`;
+
+    if (analise.categorias.length <= 3) {
+        html += `🎯 Seus gastos estão concentrados em poucas categorias (${sanitizeHTML(analise.categorias.length)}). Isso pode indicar um controle financeiro focado, mas fique atento a gastos ocultos.<br><br>`;
+    } else if (analise.categorias.length > 8) {
+        html += `🌐 Você tem gastos distribuídos em ${sanitizeHTML(analise.categorias.length)} categorias diferentes. Considere consolidar categorias similares para melhor análise.<br><br>`;
     }
-    
-    // Comparativo com média
+
     const ticketMedio = analise.totalGastos / analise.totalTransacoes;
     html += `💰 Seu <strong>gasto médio por transação</strong> foi de ${formatBRL(ticketMedio)}. `;
-    
-    if(ticketMedio > 200) {
+
+    if (ticketMedio > 200) {
         html += `Isso indica transações de valores significativos. Certifique-se de que cada gasto esteja alinhado com suas prioridades.`;
     } else {
         html += `Você mantém transações de valores moderados, o que pode indicar um bom controle diário.`;
     }
-    
+
     html += `
             </div>
         </div>
     `;
-    
+
     container.innerHTML = html;
 }
 
-// Expor globalmente
-window.abrirWidgetOndeForDinheiro = abrirWidgetOndeForDinheiro;
 window.processarAnaliseOndeForDinheiro = processarAnaliseOndeForDinheiro;
+
+window.abrirWidgetOndeForDinheiro = abrirWidgetOndeForDinheiro;
+
 
 // Função para configurar eventos dos rankings
 function configurarRankings(dadosPorPerfil, mes, ano) {
@@ -5599,90 +5450,93 @@ function configurarRankings(dadosPorPerfil, mes, ano) {
 // Função para mostrar diferentes tipos de ranking
 function mostrarRanking(tipo, dadosPorPerfil) {
     const container = document.getElementById('rankingContainer');
-    if(!container) return;
-    
+    if (!container) return;
+
     let html = '';
     const emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-    
-    switch(tipo) {
-        case 'gastos':
+
+    switch (tipo) {
+        case 'gastos': {
             const rankingGastos = dadosPorPerfil
-                .map(d => ({nome: d.perfil.nome, valor: d.saidas, foto: d.perfil.foto}))
+                .map(d => ({ nome: d.perfil.nome, valor: d.saidas, foto: d.perfil.foto }))
                 .sort((a, b) => b.valor - a.valor);
-            
+
             const totalGastos = rankingGastos.reduce((sum, r) => sum + r.valor, 0);
-            
+
             html = '<h4 style="margin-bottom:16px; color: var(--text-primary);">💸 Ranking: Quem Gastou Mais</h4>';
-            
+
             rankingGastos.forEach((r, i) => {
                 const percentual = totalGastos > 0 ? ((r.valor / totalGastos) * 100).toFixed(1) : 0;
                 html += `
                     <div class="ranking-item" style="background: rgba(255,75,75,0.1); border-left: 3px solid #ff4b4b;">
-                        <div class="ranking-posicao">${emojis[i] || (i+1)}</div>
+                        <div class="ranking-posicao">${emojis[i] || (i + 1)}</div>
                         <div class="ranking-info">
-                            <div class="ranking-nome">${r.nome}</div>
-                            <div class="ranking-detalhes">${percentual}% do total de gastos</div>
+                            <div class="ranking-nome">${sanitizeHTML(r.nome)}</div>
+                            <div class="ranking-detalhes">${sanitizeHTML(percentual)}% do total de gastos</div>
                         </div>
                         <div class="ranking-valor">${formatBRL(r.valor)}</div>
                     </div>
                 `;
             });
             break;
-            
-        case 'guardou':
+        }
+
+        case 'guardou': {
             const rankingGuardou = dadosPorPerfil
-                .map(d => ({nome: d.perfil.nome, valor: d.reservas, foto: d.perfil.foto}))
+                .map(d => ({ nome: d.perfil.nome, valor: d.reservas, foto: d.perfil.foto }))
                 .sort((a, b) => b.valor - a.valor);
-            
+
             const totalGuardado = rankingGuardou.reduce((sum, r) => sum + r.valor, 0);
-            
+
             html = '<h4 style="margin-bottom:16px; color: var(--text-primary);">💰 Ranking: Quem Guardou Mais</h4>';
-            
+
             rankingGuardou.forEach((r, i) => {
                 const percentual = totalGuardado > 0 ? ((r.valor / totalGuardado) * 100).toFixed(1) : 0;
                 html += `
                     <div class="ranking-item" style="background: rgba(0,255,153,0.1); border-left: 3px solid #00ff99;">
-                        <div class="ranking-posicao">${emojis[i] || (i+1)}</div>
+                        <div class="ranking-posicao">${emojis[i] || (i + 1)}</div>
                         <div class="ranking-info">
-                            <div class="ranking-nome">${r.nome}</div>
-                            <div class="ranking-detalhes">${percentual}% do total guardado</div>
+                            <div class="ranking-nome">${sanitizeHTML(r.nome)}</div>
+                            <div class="ranking-detalhes">${sanitizeHTML(percentual)}% do total guardado</div>
                         </div>
                         <div class="ranking-valor" style="color:#00ff99;">${formatBRL(r.valor)}</div>
                     </div>
                 `;
             });
             break;
-            
-        case 'economia':
+        }
+
+        case 'economia': {
             const rankingEconomia = dadosPorPerfil
                 .map(d => ({
-                    nome: d.perfil.nome, 
-                    taxa: d.taxaEconomia, 
+                    nome: d.perfil.nome,
+                    taxa: d.taxaEconomia,
                     guardado: d.reservas,
                     entradas: d.entradas
                 }))
                 .sort((a, b) => b.taxa - a.taxa);
-            
+
             html = '<h4 style="margin-bottom:16px; color: var(--text-primary);">📊 Ranking: Melhor Taxa de Economia</h4>';
             html += '<p style="font-size:0.9rem; color: var(--text-secondary); margin-bottom:16px;">Quanto % do que ganhou foi guardado</p>';
-            
+
             rankingEconomia.forEach((r, i) => {
                 html += `
                     <div class="ranking-item" style="background: rgba(255,209,102,0.1); border-left: 3px solid #ffd166;">
-                        <div class="ranking-posicao">${emojis[i] || (i+1)}</div>
+                        <div class="ranking-posicao">${emojis[i] || (i + 1)}</div>
                         <div class="ranking-info">
-                            <div class="ranking-nome">${r.nome}</div>
+                            <div class="ranking-nome">${sanitizeHTML(r.nome)}</div>
                             <div class="ranking-detalhes">
                                 Guardou ${formatBRL(r.guardado)} de ${formatBRL(r.entradas)}
                             </div>
                         </div>
-                        <div class="ranking-valor" style="color:#ffd166; font-size:1.5rem;">${r.taxa.toFixed(1)}%</div>
+                        <div class="ranking-valor" style="color:#ffd166; font-size:1.5rem;">${sanitizeHTML(r.taxa.toFixed(1))}%</div>
                     </div>
                 `;
             });
             break;
-            
-        case 'evolucao':
+        }
+
+        case 'evolucao': {
             const rankingEvolucao = dadosPorPerfil
                 .map(d => ({
                     nome: d.perfil.nome,
@@ -5691,32 +5545,33 @@ function mostrarRanking(tipo, dadosPorPerfil) {
                     taxaAnterior: d.taxaEconomiaAnterior
                 }))
                 .sort((a, b) => b.evolucao - a.evolucao);
-            
+
             html = '<h4 style="margin-bottom:16px; color: var(--text-primary);">📈 Ranking: Maior Evolução na Economia</h4>';
             html += '<p style="font-size:0.9rem; color: var(--text-secondary); margin-bottom:16px;">Comparação com o mês anterior</p>';
-            
+
             rankingEvolucao.forEach((r, i) => {
                 const corEvolucao = r.evolucao >= 0 ? '#00ff99' : '#ff4b4b';
                 const simbolo = r.evolucao >= 0 ? '↑' : '↓';
-                
+
                 html += `
                     <div class="ranking-item" style="background: rgba(108,99,255,0.1); border-left: 3px solid ${corEvolucao};">
-                        <div class="ranking-posicao">${emojis[i] || (i+1)}</div>
+                        <div class="ranking-posicao">${emojis[i] || (i + 1)}</div>
                         <div class="ranking-info">
-                            <div class="ranking-nome">${r.nome}</div>
+                            <div class="ranking-nome">${sanitizeHTML(r.nome)}</div>
                             <div class="ranking-detalhes">
-                                ${r.taxaAnterior.toFixed(1)}% → ${r.taxaAtual.toFixed(1)}%
+                                ${sanitizeHTML(r.taxaAnterior.toFixed(1))}% → ${sanitizeHTML(r.taxaAtual.toFixed(1))}%
                             </div>
                         </div>
                         <div class="ranking-valor" style="color:${corEvolucao};">
-                            ${simbolo} ${Math.abs(r.evolucao).toFixed(1)}%
+                            ${simbolo} ${sanitizeHTML(Math.abs(r.evolucao).toFixed(1))}%
                         </div>
                     </div>
                 `;
             });
             break;
+        }
     }
-    
+
     container.innerHTML = html;
 }
 
@@ -5740,30 +5595,29 @@ window.abrirDetalhesPerfilRelatorio = abrirDetalhesPerfilRelatorio;
 // ========== DETALHES DO CARTÃO NO RELATÓRIO ==========
 
 async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
-    // ✅ CORREÇÃO: Buscar dados via dataManager
     const userData = await dataManager.loadUserData();
     const dadosPerfil = userData.profiles.find(p => p.id === perfilId);
-    
+
     const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
     const contasFixasPerfil = dadosPerfil ? dadosPerfil.contasFixas || [] : [];
-    
+
     const cartao = cartoesPerfil.find(c => c.id === cartaoId);
-    if(!cartao) {
-        alert('Cartão não encontrado!');
+    if (!cartao) {
+        mostrarNotificacao('Cartão não encontrado.', 'error');
         return;
     }
-    
+
     const periodoSelecionado = `${ano}-${mes}`;
-    
-    const faturasCartao = contasFixasPerfil.filter(c => 
-        c.cartaoId === cartaoId && 
-        c.vencimento && 
+
+    const faturasCartao = contasFixasPerfil.filter(c =>
+        c.cartaoId === cartaoId &&
+        c.vencimento &&
         c.vencimento.startsWith(periodoSelecionado)
     );
-    
+
     let todasCompras = [];
     faturasCartao.forEach(fatura => {
-        if(fatura.compras && fatura.compras.length > 0) {
+        if (fatura.compras && fatura.compras.length > 0) {
             fatura.compras.forEach(compra => {
                 todasCompras.push({
                     ...compra,
@@ -5773,20 +5627,21 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
             });
         }
     });
-    
+
     const usado = Number(cartao.usado || 0);
     const limite = Number(cartao.limite || 0);
     const disponivel = limite - usado;
     const percUsado = limite > 0 ? ((usado / limite) * 100).toFixed(1) : 0;
-    
+
     const totalCompras = todasCompras.reduce((sum, c) => sum + Number(c.valorParcela || 0), 0);
     const comprasPagas = todasCompras.filter(c => c.parcelaAtual > c.totalParcelas).length;
     const comprasPendentes = todasCompras.length - comprasPagas;
-    
+
     const dica = obterDicaAleatoria();
-    
+
     let htmlCompras = '';
-    if(todasCompras.length === 0) {
+
+    if (todasCompras.length === 0) {
         htmlCompras = `
             <div style="text-align:center; padding:40px; background:rgba(255,255,255,0.03); border-radius:12px;">
                 <div style="font-size:3rem; margin-bottom:12px; opacity:0.5;">🛍️</div>
@@ -5794,30 +5649,38 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
                     Nenhuma Compra Registrada
                 </div>
                 <div style="font-size:0.9rem; color: var(--text-secondary);">
-                    Este cartão não possui compras no período de ${getMesNome(mes)} de ${ano}
+                    Este cartão não possui compras no período de ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}
                 </div>
             </div>
         `;
     } else {
         todasCompras.forEach(compra => {
-            const statusParcela = compra.parcelaAtual > compra.totalParcelas ? 
-                '✅ Paga' : 
-                `🔄 Parcela ${compra.parcelaAtual}/${compra.totalParcelas}`;
-            
+            const statusParcela = compra.parcelaAtual > compra.totalParcelas
+                ? '✅ Paga'
+                : `🔄 Parcela ${sanitizeHTML(compra.parcelaAtual)}/${sanitizeHTML(compra.totalParcelas)}`;
+
             const corBorda = compra.parcelaAtual > compra.totalParcelas ? '#00ff99' : '#ffd166';
-            
+            const corFaltaPagar = compra.parcelaAtual > compra.totalParcelas ? '#00ff99' : '#ff4b4b';
+            const textoFaltaPagar = compra.parcelaAtual > compra.totalParcelas
+                ? '✅ Quitado'
+                : formatBRL(compra.valorParcela * (compra.totalParcelas - compra.parcelaAtual + 1));
+
+            // IDs usados apenas em data-attributes — nunca em onclick inline
+            const safeCompraId  = sanitizeHTML(String(compra.id));
+            const safeFaturaId  = sanitizeHTML(String(compra.faturaId));
+
             htmlCompras += `
                 <div style="background:rgba(255,255,255,0.03); padding:16px; border-radius:12px; margin-bottom:12px; border-left:3px solid ${corBorda};">
                     <div style="display:flex; justify-content:space-between; align-items:start; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
                         <div style="flex:1;">
                             <div style="font-weight:600; color: var(--text-primary); font-size:1rem; margin-bottom:6px;">
-                                ${compra.tipo}
+                                ${sanitizeHTML(compra.tipo)}
                             </div>
                             <div style="color: var(--text-secondary); font-size:0.9rem;">
-                                ${compra.descricao}
+                                ${sanitizeHTML(compra.descricao)}
                             </div>
                             <div style="color: var(--text-muted); font-size:0.85rem; margin-top:6px;">
-                                📅 ${formatarDataBR(compra.dataCompra)}
+                                📅 ${sanitizeHTML(formatarDataBR(compra.dataCompra))}
                             </div>
                         </div>
                         <div style="text-align:right;">
@@ -5836,10 +5699,8 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
                         </div>
                         <div>
                             <div style="font-size:0.75rem; color: var(--text-muted);">Falta Pagar</div>
-                            <div style="font-weight:600; color: ${compra.parcelaAtual > compra.totalParcelas ? '#00ff99' : '#ff4b4b'};">
-                                ${compra.parcelaAtual > compra.totalParcelas ? 
-                                    '✅ Quitado' : 
-                                    formatBRL(compra.valorParcela * (compra.totalParcelas - compra.parcelaAtual + 1))}
+                            <div style="font-weight:600; color: ${corFaltaPagar};">
+                                ${textoFaltaPagar}
                             </div>
                         </div>
                     </div>
@@ -5847,103 +5708,103 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
             `;
         });
     }
-    
-    // Criar pop-up
-criarPopup(`
-    <div style="max-height:80vh; overflow-y:auto; overflow-x:hidden; position:relative; padding-right:10px;">
-        <!-- Botão X no Topo -->
-<button onclick="fecharPopup()" style="position:absolute; top:12px; right:12px; background:#ff4b4b; border:none; color:#ffffff; font-size:1.5rem; width:36px; height:36px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:700; z-index:10; box-shadow:0 2px 8px rgba(255,75,75,0.3);">
-    ✖
-</button>
-        
-        <h3 style="text-align:center; margin-bottom:20px; padding-right:50px;">
-            💳 Análise Detalhada do Cartão
-        </h3>
-        
-        <!-- Cabeçalho do Cartão -->
-        <div style="background:linear-gradient(135deg, var(--primary), var(--secondary)); padding:20px; border-radius:12px; margin-bottom:20px; text-align:center;">
-            <div style="font-size:1.5rem; font-weight:700; color:white; margin-bottom:8px;">
-                ${cartao.nomeBanco}
+
+    criarPopup(`
+        <div style="max-height:80vh; overflow-y:auto; overflow-x:hidden; position:relative; padding-right:10px;">
+            <button id="btnFecharCartaoRelatorio" style="position:absolute; top:12px; right:12px; background:#ff4b4b; border:none; color:#ffffff; font-size:1.5rem; width:36px; height:36px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:700; z-index:10; box-shadow:0 2px 8px rgba(255,75,75,0.3);">
+                ✖
+            </button>
+
+            <h3 style="text-align:center; margin-bottom:20px; padding-right:50px;">
+                💳 Análise Detalhada do Cartão
+            </h3>
+
+            <!-- Cabeçalho do Cartão -->
+            <div style="background:linear-gradient(135deg, var(--primary), var(--secondary)); padding:20px; border-radius:12px; margin-bottom:20px; text-align:center;">
+                <div style="font-size:1.5rem; font-weight:700; color:white; margin-bottom:8px;">
+                    ${sanitizeHTML(cartao.nomeBanco)}
+                </div>
+                <div style="font-size:0.9rem; color:rgba(255,255,255,0.8);">
+                    Período: ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}
+                </div>
             </div>
-            <div style="font-size:0.9rem; color:rgba(255,255,255,0.8);">
-                Período: ${getMesNome(mes)} de ${ano}
+
+            <!-- Estatísticas do Cartão -->
+            <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:20px;">
+                <div style="background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;">
+                    <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">💰 Limite Total</div>
+                    <div style="font-size:1.3rem; font-weight:700; color: var(--text-primary);">${formatBRL(limite)}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;">
+                    <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">💸 Usado</div>
+                    <div style="font-size:1.3rem; font-weight:700; color: #ff4b4b;">${formatBRL(usado)}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;">
+                    <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">✅ Disponível</div>
+                    <div style="font-size:1.3rem; font-weight:700; color: #00ff99;">${formatBRL(disponivel)}</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;">
+                    <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">📊 % Utilizado</div>
+                    <div style="font-size:1.3rem; font-weight:700; color: ${Number(percUsado) > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(percUsado)}%</div>
+                </div>
             </div>
+
+            <!-- Barra de Progresso -->
+            <div style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                    <span style="font-size:0.9rem; color: var(--text-secondary);">Utilização do Limite</span>
+                    <span style="font-weight:700; color: ${Number(percUsado) > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(percUsado)}%</span>
+                </div>
+                <div style="width:100%; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
+                    <div style="width:${sanitizeHTML(percUsado)}%; height:100%; background:${Number(percUsado) > 80 ? '#ff4b4b' : '#00ff99'}; border-radius:10px; transition:width 0.8s;"></div>
+                </div>
+            </div>
+
+            <!-- Resumo de Compras -->
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:20px;">
+                <div style="background:rgba(108,99,255,0.1); padding:12px; border-radius:10px; text-align:center; border-left:3px solid #6c63ff;">
+                    <div style="font-size:0.85rem; color: var(--text-secondary);">🛍️ Total Compras</div>
+                    <div style="font-size:1.4rem; font-weight:700; color: #6c63ff;">${todasCompras.length}</div>
+                </div>
+                <div style="background:rgba(0,255,153,0.1); padding:12px; border-radius:10px; text-align:center; border-left:3px solid #00ff99;">
+                    <div style="font-size:0.85rem; color: var(--text-secondary);">✅ Pagas</div>
+                    <div style="font-size:1.4rem; font-weight:700; color: #00ff99;">${comprasPagas}</div>
+                </div>
+                <div style="background:rgba(255,209,102,0.1); padding:12px; border-radius:10px; text-align:center; border-left:3px solid #ffd166;">
+                    <div style="font-size:0.85rem; color: var(--text-secondary);">⏳ Pendentes</div>
+                    <div style="font-size:1.4rem; font-weight:700; color: #ffd166;">${comprasPendentes}</div>
+                </div>
+            </div>
+
+            <!-- Lista de Compras -->
+            <div style="margin-bottom:20px;">
+                <h4 style="margin-bottom:12px; color: var(--text-primary);">🛒 Compras do Mês</h4>
+                ${htmlCompras}
+            </div>
+
+            <!-- Dica do Dia -->
+            <div style="background:linear-gradient(135deg, rgba(108,99,255,0.2), rgba(76,166,255,0.2)); padding:16px; border-radius:12px; border-left:4px solid var(--primary);">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                    <div style="font-size:2rem;">💡</div>
+                    <div style="font-weight:700; font-size:1.1rem; color: var(--text-primary);">Dica Inteligente</div>
+                </div>
+                <div style="color: var(--text-secondary); line-height:1.6;">
+                    ${dica}
+                </div>
+            </div>
+
+            <button id="btnFecharCartaoRelatorioBottom" class="btn-primary" style="width:100%; margin-top:20px;">
+                ✖️ Fechar
+            </button>
         </div>
-        
-        <!-- Estatísticas do Cartão -->
-        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:20px;">
-            <div style="background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;">
-                <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">💰 Limite Total</div>
-                <div style="font-size:1.3rem; font-weight:700; color: var(--text-primary);">${formatBRL(limite)}</div>
-            </div>
-            
-            <div style="background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;">
-                <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">💸 Usado</div>
-                <div style="font-size:1.3rem; font-weight:700; color: #ff4b4b;">${formatBRL(usado)}</div>
-            </div>
-            
-            <div style="background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;">
-                <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">✅ Disponível</div>
-                <div style="font-size:1.3rem; font-weight:700; color: #00ff99;">${formatBRL(disponivel)}</div>
-            </div>
-            
-            <div style="background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;">
-                <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">📊 % Utilizado</div>
-                <div style="font-size:1.3rem; font-weight:700; color: ${percUsado > 80 ? '#ff4b4b' : '#00ff99'};">${percUsado}%</div>
-            </div>
-        </div>
-        
-        <!-- Barra de Progresso -->
-        <div style="margin-bottom:20px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                <span style="font-size:0.9rem; color: var(--text-secondary);">Utilização do Limite</span>
-                <span style="font-weight:700; color: ${percUsado > 80 ? '#ff4b4b' : '#00ff99'};">${percUsado}%</span>
-            </div>
-            <div style="width:100%; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
-                <div style="width:${percUsado}%; height:100%; background:${percUsado > 80 ? '#ff4b4b' : '#00ff99'}; border-radius:10px; transition:width 0.8s;"></div>
-            </div>
-        </div>
-        
-        <!-- Resumo de Compras -->
-        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:20px;">
-            <div style="background:rgba(108,99,255,0.1); padding:12px; border-radius:10px; text-align:center; border-left:3px solid #6c63ff;">
-                <div style="font-size:0.85rem; color: var(--text-secondary);">🛍️ Total Compras</div>
-                <div style="font-size:1.4rem; font-weight:700; color: #6c63ff;">${todasCompras.length}</div>
-            </div>
-            
-            <div style="background:rgba(0,255,153,0.1); padding:12px; border-radius:10px; text-align:center; border-left:3px solid #00ff99;">
-                <div style="font-size:0.85rem; color: var(--text-secondary);">✅ Pagas</div>
-                <div style="font-size:1.4rem; font-weight:700; color: #00ff99;">${comprasPagas}</div>
-            </div>
-            
-            <div style="background:rgba(255,209,102,0.1); padding:12px; border-radius:10px; text-align:center; border-left:3px solid #ffd166;">
-                <div style="font-size:0.85rem; color: var(--text-secondary);">⏳ Pendentes</div>
-                <div style="font-size:1.4rem; font-weight:700; color: #ffd166;">${comprasPendentes}</div>
-            </div>
-        </div>
-        
-        <!-- Lista de Compras -->
-        <div style="margin-bottom:20px;">
-            <h4 style="margin-bottom:12px; color: var(--text-primary);">🛒 Compras do Mês</h4>
-            ${htmlCompras}
-        </div>
-        
-        <!-- Dica do Dia -->
-        <div style="background:linear-gradient(135deg, rgba(108,99,255,0.2), rgba(76,166,255,0.2)); padding:16px; border-radius:12px; border-left:4px solid var(--primary);">
-            <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
-                <div style="font-size:2rem;">💡</div>
-                <div style="font-weight:700; font-size:1.1rem; color: var(--text-primary);">Dica Inteligente</div>
-            </div>
-            <div style="color: var(--text-secondary); line-height:1.6;">
-                ${dica}
-            </div>
-        </div>
-        
-        <button class="btn-primary" onclick="fecharPopup()" style="width:100%; margin-top:20px;">
-            ✖️ Fechar
-        </button>
-    </div>
-`);
+    `);
+
+    // Vincular eventos via addEventListener — sem onclick inline
+    document.getElementById('btnFecharCartaoRelatorio').addEventListener('click', fecharPopup);
+    document.getElementById('btnFecharCartaoRelatorioBottom').addEventListener('click', fecharPopup);
+}
+
+window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
 
 // ========== BANCO DE DICAS SOBRE CARTÕES ==========
 
@@ -6004,43 +5865,46 @@ function obterDicaAleatoria() {
     const indiceAleatorio = Math.floor(Math.random() * dicas.length);
     return dicas[indiceAleatorio];
 }
-}
 
 // Expor função globalmente
 window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
 
 // ========== CONFIGURAÇÕES ==========
 async function alterarNome() {
-    if(!perfilAtivo) {
-        alert('Erro: Nenhum perfil ativo encontrado.');
+    if (!perfilAtivo) {
+        mostrarNotificacao('Erro: Nenhum perfil ativo encontrado.', 'error');
         return;
     }
-    
+
     criarPopup(`
         <h3>👤 Alterar Nome</h3>
         <div class="small">Digite seu novo nome ou apelido</div>
-        <input type="text" id="novoNome" class="form-input" placeholder="Novo nome" value="${perfilAtivo.nome}">
+        <input type="text" id="novoNome" class="form-input" placeholder="Novo nome" value="${sanitizeHTML(perfilAtivo.nome)}">
         <button class="btn-primary" id="concluirNome">Concluir</button>
-        <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+        <button class="btn-cancelar" id="cancelarNome">Cancelar</button>
     `);
-    
-    document.getElementById('concluirNome').onclick = async () => {
+
+    document.getElementById('cancelarNome').addEventListener('click', fecharPopup);
+
+    document.getElementById('concluirNome').addEventListener('click', async () => {
         const novoNome = document.getElementById('novoNome').value.trim();
-        
-        if(!novoNome) {
-            alert('Por favor, digite um nome válido.');
+
+        if (!novoNome) {
+            mostrarNotificacao('Por favor, digite um nome válido.', 'error');
             return;
         }
-        
-        if(novoNome.length < 2) {
-            alert('O nome deve ter pelo menos 2 caracteres.');
+        if (novoNome.length < 2) {
+            mostrarNotificacao('O nome deve ter pelo menos 2 caracteres.', 'error');
             return;
         }
 
+        const btn = document.getElementById('concluirNome');
+        btn.disabled = true;
+        btn.textContent = '⏳ Salvando...';
+
         try {
-            console.log('🔄 Atualizando nome do perfil no Supabase...');
-            
-            // ✅ ATUALIZAR NO SUPABASE
+            log.info('🔄 Atualizando nome do perfil...');
+
             const { data, error } = await supabase
                 .from('profiles')
                 .update({ name: novoNome })
@@ -6048,39 +5912,36 @@ async function alterarNome() {
                 .select()
                 .single();
 
-            if (error) {
-                console.error('❌ Erro ao atualizar nome no Supabase:', error);
-                throw error;
-            }
+            if (error) throw error;
 
-            console.log('✅ Nome atualizado no Supabase:', data);
+            log.info('✅ Nome atualizado');
 
-            // ✅ ATUALIZAR LOCALMENTE
             perfilAtivo.nome = novoNome;
-            
+
             const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
-            if(idx !== -1) {
+            if (idx !== -1) {
                 usuarioLogado.perfis[idx].nome = novoNome;
             }
 
-            // ✅ ATUALIZAR INTERFACE
             atualizarNomeUsuario();
-            
             await salvarDados();
-            
             fecharPopup();
             mostrarNotificacao('✅ Nome alterado com sucesso!', 'success');
-            
+
         } catch (error) {
-            console.error('❌ Erro ao alterar nome:', error);
-            alert('❌ Erro ao alterar nome. Tente novamente.');
+            log.error('Erro ao alterar nome', error);
+            mostrarNotificacao('Não foi possível alterar o nome. Tente novamente.', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Concluir';
         }
-    };
+    });
 }
+
+window.alterarNome = alterarNome;
+
 
 // ========== GERENCIADOR DE CONVIDADOS ==========
 async function alterarEmail() {
-    // Convidados não podem gerenciar acesso
     if (usuarioLogado.isGuest) {
         criarPopup(`
             <h3>🔒 Função Restrita</h3>
@@ -6088,12 +5949,12 @@ async function alterarEmail() {
                 Apenas o <strong>titular da conta</strong> pode gerenciar convidados.
                 Entre em contato com quem te convidou para alterações.
             </p>
-            <button class="btn-primary" onclick="fecharPopup()">Entendi</button>
+            <button class="btn-primary" id="btnFecharRestrito">Entendi</button>
         `);
+        document.getElementById('btnFecharRestrito').addEventListener('click', fecharPopup);
         return;
     }
 
-    // Carregar membros atuais
     const { data: members, error: membersError } = await supabase
         .from('account_members')
         .select('id, member_email, member_name, joined_at, is_active')
@@ -6103,50 +5964,64 @@ async function alterarEmail() {
     const plano = usuarioLogado.plano;
     const limitesConvidados = { 'Individual': 0, 'Casal': 1, 'Família': 3 };
     const limiteConvidados = limitesConvidados[plano] ?? 0;
-    const totalAllowed = limiteConvidados + 1; // +1 pelo dono
     const memberCount = members?.length ?? 0;
 
-    let membersHtml = '';
-    if (memberCount > 0) {
-        members.forEach(m => {
-            const dataEntrada = m.joined_at ? new Date(m.joined_at).toLocaleDateString('pt-BR') : 'Pendente';
-            membersHtml += `
-                <div style="display:flex; justify-content:space-between; align-items:center; 
-                            padding:12px 16px; background:rgba(255,255,255,0.04); 
+    // Helper interno: constrói HTML dos membros com sanitização completa
+    function renderMembersHtml(lista) {
+        if (!lista || lista.length === 0) {
+            return `<p style="color:var(--text-muted); text-align:center; padding:16px 0;">Nenhum convidado ainda.</p>`;
+        }
+        let html = '';
+        lista.forEach(m => {
+            const dataEntrada = m.joined_at
+                ? new Date(m.joined_at).toLocaleDateString('pt-BR')
+                : 'Pendente';
+
+            const safeName  = sanitizeHTML(m.member_name);
+            const safeEmail = sanitizeHTML(m.member_email);
+            const safeDate  = sanitizeHTML(dataEntrada);
+            const safeId    = sanitizeHTML(String(m.id));
+
+            html += `
+                <div style="display:flex; justify-content:space-between; align-items:center;
+                            padding:12px 16px; background:rgba(255,255,255,0.04);
                             border-radius:10px; margin-bottom:8px; border-left:3px solid #10b981;">
                     <div>
-                        <div style="font-weight:600; color:var(--text-primary);">${m.member_name}</div>
-                        <div style="font-size:0.85rem; color:var(--text-secondary);">${m.member_email}</div>
-                        <div style="font-size:0.78rem; color:var(--text-muted);">Entrou em: ${dataEntrada}</div>
+                        <div style="font-weight:600; color:var(--text-primary);">${safeName}</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">${safeEmail}</div>
+                        <div style="font-size:0.78rem; color:var(--text-muted);">Entrou em: ${safeDate}</div>
                     </div>
-                    <button class="btn-excluir" style="padding:6px 12px; font-size:0.8rem;" 
-                            onclick="removerConvidado('${m.id}', '${m.member_name}')">
+                    <button class="btn-excluir js-remove-member"
+                            data-member-id="${safeId}"
+                            data-member-name="${safeName}"
+                            style="padding:6px 12px; font-size:0.8rem;">
                         🗑️ Remover
                     </button>
                 </div>
             `;
         });
-    } else {
-        membersHtml = `<p style="color:var(--text-muted); text-align:center; padding:16px 0;">Nenhum convidado ainda.</p>`;
+        return html;
     }
 
     if (limiteConvidados === 0) {
         criarPopup(`
             <h3>👥 Convidar Usuário</h3>
-            <div style="background:rgba(255,209,102,0.1); border:1px solid rgba(255,209,102,0.3); 
+            <div style="background:rgba(255,209,102,0.1); border:1px solid rgba(255,209,102,0.3);
                         border-radius:12px; padding:16px; margin:16px 0; text-align:center;">
                 <div style="font-size:2rem; margin-bottom:8px;">🔒</div>
-                <div style="font-weight:600; color:#ffd166; margin-bottom:6px;">Plano ${plano}</div>
+                <div style="font-weight:600; color:#ffd166; margin-bottom:6px;">Plano ${sanitizeHTML(plano)}</div>
                 <div style="font-size:0.9rem; color:var(--text-secondary); line-height:1.6;">
                     Seu plano permite apenas <strong>01 email por conta</strong>.<br>
                     Faça upgrade para o Plano Casal ou Família para convidar pessoas.
                 </div>
             </div>
-            <button class="btn-primary" onclick="irParaAtualizarPlano()" style="width:100%; margin-bottom:10px;">
+            <button class="btn-primary" id="btnUpgradePlano" style="width:100%; margin-bottom:10px;">
                 ⬆️ Fazer Upgrade
             </button>
-            <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">Fechar</button>
+            <button class="btn-cancelar" id="btnFecharUpgrade" style="width:100%;">Fechar</button>
         `);
+        document.getElementById('btnUpgradePlano').addEventListener('click', irParaAtualizarPlano);
+        document.getElementById('btnFecharUpgrade').addEventListener('click', fecharPopup);
         return;
     }
 
@@ -6154,69 +6029,90 @@ async function alterarEmail() {
         <div style="max-height:70vh; overflow-y:auto; padding-right:8px;">
             <h3 style="text-align:center; margin-bottom:6px;">👥 Gerenciar Convidados</h3>
             <p style="text-align:center; font-size:0.85rem; color:var(--text-secondary); margin-bottom:20px;">
-                Plano ${plano} — ${memberCount}/${limiteConvidados} convidado(s)
+                Plano ${sanitizeHTML(plano)} — ${memberCount}/${limiteConvidados} convidado(s)
             </p>
 
-            <!-- Convidados atuais -->
             <div style="margin-bottom:20px;">
-                <div style="font-size:0.8rem; font-weight:700; letter-spacing:2px; text-transform:uppercase; 
+                <div style="font-size:0.8rem; font-weight:700; letter-spacing:2px; text-transform:uppercase;
                             color:var(--text-muted); margin-bottom:10px;">Convidados Ativos</div>
-                ${membersHtml}
+                ${renderMembersHtml(members)}
             </div>
 
-            <!-- Formulário de convite (só se não atingiu limite) -->
             ${memberCount < limiteConvidados ? `
             <div style="border-top:1px solid var(--border); padding-top:20px;">
-                <div style="font-size:0.8rem; font-weight:700; letter-spacing:2px; text-transform:uppercase; 
+                <div style="font-size:0.8rem; font-weight:700; letter-spacing:2px; text-transform:uppercase;
                             color:#10b981; margin-bottom:14px;">+ Novo Convite</div>
-                <input type="text" id="inputNomeConvidado" class="form-input" 
-                       placeholder="Nome do convidado" style="margin-bottom:10px;">
-                <input type="email" id="inputEmailConvidado" class="form-input" 
-                       placeholder="Email do convidado" style="margin-bottom:10px;">
-                <input type="email" id="inputEmailConvidadoConfirm" class="form-input" 
-                       placeholder="Confirme o email" style="margin-bottom:16px;">
+                <input type="text"  id="inputNomeConvidado"         class="form-input" placeholder="Nome do convidado"   style="margin-bottom:10px;">
+                <input type="email" id="inputEmailConvidado"        class="form-input" placeholder="Email do convidado"  style="margin-bottom:10px;">
+                <input type="email" id="inputEmailConvidadoConfirm" class="form-input" placeholder="Confirme o email"    style="margin-bottom:16px;">
                 <button class="btn-primary" id="btnEnviarConvite" style="width:100%;">
                     📨 Enviar Convite
                 </button>
             </div>
             ` : `
-            <div style="background:rgba(255,209,102,0.08); border:1px solid rgba(255,209,102,0.25); 
+            <div style="background:rgba(255,209,102,0.08); border:1px solid rgba(255,209,102,0.25);
                         border-radius:10px; padding:14px; text-align:center; margin-top:8px;">
                 <div style="color:#ffd166; font-weight:600; margin-bottom:4px;">Limite atingido</div>
                 <div style="font-size:0.85rem; color:var(--text-secondary);">
-                    Você já possui ${memberCount}/${limiteConvidados} convidado(s) para o Plano ${plano}.
+                    Você já possui ${memberCount}/${limiteConvidados} convidado(s) para o Plano ${sanitizeHTML(plano)}.
                 </div>
             </div>
             `}
         </div>
-        <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%; margin-top:14px;">Fechar</button>
+        <button class="btn-cancelar" id="btnFecharConvidados" style="width:100%; margin-top:14px;">Fechar</button>
     `);
 
-    // Bind do botão de convite
+    // Vincular remoção via addEventListener — sem onclick inline
+    document.querySelectorAll('.js-remove-member').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id   = btn.dataset.memberId;
+            const nome = btn.dataset.memberName;
+            removerConvidado(id, nome);
+        });
+    });
+
     const btnEnviar = document.getElementById('btnEnviarConvite');
-    if (btnEnviar) {
-        btnEnviar.onclick = () => enviarConvite();
-    }
+    if (btnEnviar) btnEnviar.addEventListener('click', enviarConvite);
+
+    document.getElementById('btnFecharConvidados').addEventListener('click', fecharPopup);
 }
 
+window.alterarEmail = alterarEmail;
+
 async function enviarConvite() {
-    const nome = document.getElementById('inputNomeConvidado')?.value.trim();
+    const nome  = document.getElementById('inputNomeConvidado')?.value.trim();
     const email = document.getElementById('inputEmailConvidado')?.value.trim().toLowerCase();
     const emailConfirm = document.getElementById('inputEmailConvidadoConfirm')?.value.trim().toLowerCase();
 
-    if (!nome || nome.length < 2) return alert('Digite o nome do convidado (mínimo 2 caracteres).');
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert('Digite um email válido.');
-    if (email !== emailConfirm) return alert('Os emails não coincidem.');
+    if (!nome || nome.length < 2) {
+        mostrarNotificacao('Digite o nome do convidado (mínimo 2 caracteres).', 'error');
+        return;
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        mostrarNotificacao('Digite um email válido.', 'error');
+        return;
+    }
+    if (email !== emailConfirm) {
+        mostrarNotificacao('Os emails não coincidem.', 'error');
+        return;
+    }
 
     const btnEnviar = document.getElementById('btnEnviarConvite');
-    if (btnEnviar) { btnEnviar.disabled = true; btnEnviar.textContent = '⏳ Enviando...'; }
+    if (btnEnviar) {
+        btnEnviar.disabled = true;
+        btnEnviar.textContent = '⏳ Enviando...';
+    }
 
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error('Sessão expirada. Faça login novamente.');
 
-        const supabaseUrl = window._supabaseUrl || 'https://SEU_PROJETO.supabase.co'; // ← ajuste aqui
-        const response = await fetch(`${supabaseUrl}/functions/v1/send-guest-invite`, {
+        // URL definida como constante no build — não depende de window.* em runtime
+        if (typeof SUPABASE_URL === 'undefined' || !SUPABASE_URL.startsWith('https://')) {
+            throw new Error('Configuração de servidor inválida. Contate o suporte.');
+        }
+
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/send-guest-invite`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -6229,36 +6125,42 @@ async function enviarConvite() {
 
         if (!result.success) {
             const err = result.error || '';
-            // Tratamentos especiais de erro
+
             if (err.startsWith('PLAN_BLOCK:')) {
-                const [, planName, msg] = err.split(':');
+                const [, planName] = err.split(':');
                 fecharPopup();
-                mostrarPopupLimite(`Seu plano ${planName} não permite convidados. Faça upgrade para continuar.`);
+                mostrarPopupLimite(`Seu plano ${sanitizeHTML(planName)} não permite convidados. Faça upgrade para continuar.`);
                 return;
             }
             if (err.startsWith('LIMIT_REACHED:')) {
-                const parts = err.split(':');
+                const parts    = err.split(':');
                 const planName = parts[1];
-                const total = parts[2];
-                const emails = parts[3] || '';
+                const total    = parts[2];
+                const emails   = parts[3] || '';
                 fecharPopup();
                 criarPopup(`
                     <h3>🔒 Limite do Plano</h3>
                     <p style="margin:16px 0; color:var(--text-secondary); line-height:1.6;">
-                        Você possui o Plano <strong>${planName}</strong>, que permite até 
-                        <strong>${total} email(s)</strong> no total.<br><br>
-                        ${emails ? `Emails cadastrados: <strong>${emails}</strong>` : ''}
+                        Você possui o Plano <strong>${sanitizeHTML(planName)}</strong>, que permite até
+                        <strong>${sanitizeHTML(total)} email(s)</strong> no total.<br><br>
+                        ${emails ? `Emails cadastrados: <strong>${sanitizeHTML(emails)}</strong>` : ''}
                     </p>
-                    <button class="btn-primary" onclick="irParaAtualizarPlano()" style="width:100%; margin-bottom:10px;">⬆️ Fazer Upgrade</button>
-                    <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">Fechar</button>
+                    <button class="btn-primary" id="btnUpgradeLimite" style="width:100%; margin-bottom:10px;">⬆️ Fazer Upgrade</button>
+                    <button class="btn-cancelar" id="btnFecharLimite" style="width:100%;">Fechar</button>
                 `);
+                document.getElementById('btnUpgradeLimite').addEventListener('click', irParaAtualizarPlano);
+                document.getElementById('btnFecharLimite').addEventListener('click', fecharPopup);
                 return;
             }
-            throw new Error(err);
+            throw new Error('Não foi possível enviar o convite. Tente novamente.');
         }
 
-        // ✅ SUCESSO — Mostrar código para o dono
+        // Validar code: deve ter apenas 6 dígitos
         const code = result.code;
+        if (!/^\d{6}$/.test(code)) {
+            throw new Error('Resposta inválida do servidor. Contate o suporte.');
+        }
+
         const expiresAt = new Date(result.expiresAt).toLocaleString('pt-BR');
 
         fecharPopup();
@@ -6267,109 +6169,134 @@ async function enviarConvite() {
                 <div style="font-size:3rem; margin-bottom:12px;">🎉</div>
                 <h3 style="margin-bottom:6px;">Convite Enviado!</h3>
                 <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:24px;">
-                    Email enviado para <strong>${email}</strong>.<br>
-                    Compartilhe o código abaixo com <strong>${nome}</strong>:
+                    Email enviado para <strong>${sanitizeHTML(email)}</strong>.<br>
+                    Compartilhe o código abaixo com <strong>${sanitizeHTML(nome)}</strong>:
                 </p>
 
-                <div style="background:rgba(16,185,129,0.1); border:2px solid rgba(16,185,129,0.4); 
+                <div style="background:rgba(16,185,129,0.1); border:2px solid rgba(16,185,129,0.4);
                             border-radius:16px; padding:24px; margin-bottom:20px;">
                     <div style="font-size:0.8rem; color:#6ee7b7; letter-spacing:2px; margin-bottom:10px;">
                         CÓDIGO DE 6 DÍGITOS
                     </div>
-                    <div id="codigoConvite" style="font-size:3rem; font-weight:900; letter-spacing:12px; 
+                    <div id="codigoConvite" style="font-size:3rem; font-weight:900; letter-spacing:12px;
                                 color:#10b981; font-family:'Courier New',monospace;">
-                        ${code}
+                        <!-- preenchido via textContent abaixo -->
                     </div>
                     <div style="font-size:0.8rem; color:var(--text-muted); margin-top:10px;">
-                        ⏰ Expira em: ${expiresAt}
+                        ⏰ Expira em: ${sanitizeHTML(expiresAt)}
                     </div>
                 </div>
 
-                <button class="btn-primary" onclick="navigator.clipboard.writeText('${code}').then(()=>mostrarNotificacao('Código copiado!','success'))" 
-                        style="width:100%; margin-bottom:10px;">
+                <button id="btnCopiarCodigo" class="btn-primary" style="width:100%; margin-bottom:10px;">
                     📋 Copiar Código
                 </button>
-                <div style="background:rgba(255,209,102,0.1); border:1px solid rgba(255,209,102,0.3); 
+                <div style="background:rgba(255,209,102,0.1); border:1px solid rgba(255,209,102,0.3);
                             border-radius:10px; padding:12px; font-size:0.85rem; color:#ffd166; margin-bottom:14px;">
                     ⚠️ Guarde este código! Ele não será exibido novamente.
                 </div>
-                <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">Fechar</button>
+                <button class="btn-cancelar" id="btnFecharConviteEnviado" style="width:100%;">Fechar</button>
             </div>
         `);
 
+        // textContent é sempre seguro — nunca executa HTML
+        document.getElementById('codigoConvite').textContent = code;
+
+        document.getElementById('btnCopiarCodigo').addEventListener('click', () => {
+            navigator.clipboard.writeText(code)
+                .then(() => mostrarNotificacao('Código copiado!', 'success'))
+                .catch(() => mostrarNotificacao('Não foi possível copiar automaticamente.', 'error'));
+        });
+
+        document.getElementById('btnFecharConviteEnviado').addEventListener('click', fecharPopup);
+
     } catch (err) {
-        console.error('❌ Erro ao enviar convite:', err);
-        alert(`❌ ${err.message}`);
-        if (btnEnviar) { btnEnviar.disabled = false; btnEnviar.textContent = '📨 Enviar Convite'; }
+        log.error('Erro ao enviar convite', err);
+        mostrarNotificacao(err.message || 'Não foi possível enviar o convite. Tente novamente.', 'error');
+        if (btnEnviar) {
+            btnEnviar.disabled = false;
+            btnEnviar.textContent = '📨 Enviar Convite';
+        }
     }
 }
 
 async function removerConvidado(memberId, memberName) {
-    if (!confirm(`Remover o acesso de "${memberName}"? Ele(a) não poderá mais entrar na conta.`)) return;
+    confirmarAcao(`Remover o acesso de "${sanitizeHTML(memberName)}"? Ele(a) não poderá mais entrar na conta.`, async () => {
+        try {
+            const { error } = await supabase
+                .from('account_members')
+                .update({ is_active: false })
+                .eq('id', memberId)
+                .eq('owner_user_id', usuarioLogado.userId);
 
-    try {
-        const { error } = await supabase
-            .from('account_members')
-            .update({ is_active: false })
-            .eq('id', memberId)
-            .eq('owner_user_id', usuarioLogado.userId);
+            if (error) throw error;
 
-        if (error) throw error;
-
-        mostrarNotificacao(`Acesso de ${memberName} removido.`, 'success');
-        fecharPopup();
-        setTimeout(() => alterarEmail(), 200);
-    } catch (err) {
-        console.error('Erro ao remover membro:', err);
-        alert('Erro ao remover convidado. Tente novamente.');
-    }
+            mostrarNotificacao(`Acesso de ${sanitizeHTML(memberName)} removido.`, 'success');
+            fecharPopup();
+            setTimeout(() => alterarEmail(), 200);
+        } catch (err) {
+            log.error('Erro ao remover membro', err);
+            mostrarNotificacao('Não foi possível remover o convidado. Tente novamente.', 'error');
+        }
+    });
 }
 
-// Expor globalmente
 window.removerConvidado = removerConvidado;
 
 function abrirAlterarSenha() {
     criarPopup(`
         <h3>🔒 Alterar Senha</h3>
-        <div class="small">Preencha todos os campos abaixo</div>
-        <input type="password" id="senhaAtual" class="form-input" placeholder="Digite a senha atual">
-        <input type="password" id="novaSenha" class="form-input" placeholder="Nova senha">
+        <div class="small">Preencha os campos abaixo</div>
+        <input type="password" id="novaSenha"          class="form-input" placeholder="Nova senha (mín. 8 caracteres)">
         <input type="password" id="confirmarNovaSenha" class="form-input" placeholder="Confirme a nova senha">
-        <button class="btn-primary" id="concluirSenha">Concluir</button>
-        <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+        <button class="btn-primary"  id="concluirSenha">Concluir</button>
+        <button class="btn-cancelar" id="cancelarSenha">Cancelar</button>
     `);
-    
-    document.getElementById('concluirSenha').onclick = () => {
-        const senhaAtual = document.getElementById('senhaAtual').value;
-        const novaSenha = document.getElementById('novaSenha').value;
+
+    document.getElementById('cancelarSenha').addEventListener('click', fecharPopup);
+
+    document.getElementById('concluirSenha').addEventListener('click', async () => {
+        const novaSenha      = document.getElementById('novaSenha').value;
         const confirmarSenha = document.getElementById('confirmarNovaSenha').value;
-        
-        if(!senhaAtual || !novaSenha || !confirmarSenha) {
-            alert('Por favor, preencha todos os campos.');
+
+        if (!novaSenha || !confirmarSenha) {
+            mostrarNotificacao('Por favor, preencha todos os campos.', 'error');
             return;
         }
-        
-        if(senhaAtual !== usuarioAtual.senha) {
-            alert('Erro: Senha atual incorreta!');
+        if (novaSenha !== confirmarSenha) {
+            mostrarNotificacao('As senhas não coincidem.', 'error');
             return;
         }
-        
-        if(novaSenha !== confirmarSenha) {
-            alert('Erro: As senhas não coincidem!');
+        if (novaSenha.length < 8) {
+            mostrarNotificacao('A nova senha deve ter pelo menos 8 caracteres.', 'error');
             return;
         }
-        
-        if(novaSenha.length < 4) {
-            alert('A nova senha deve ter pelo menos 4 caracteres.');
+        if (!/[A-Z]/.test(novaSenha) || !/[0-9]/.test(novaSenha)) {
+            mostrarNotificacao('A senha deve conter ao menos uma letra maiúscula e um número.', 'error');
             return;
         }
-        
-        usuarioAtual.senha = novaSenha;
-        salvarDados();
-        fecharPopup();
-        alert('✅ Senha alterada com sucesso!');
-    };
+
+        const btn = document.getElementById('concluirSenha');
+        btn.disabled = true;
+        btn.textContent = '⏳ Aguarde...';
+
+        try {
+            // Supabase Auth cuida do hash — a senha nunca é armazenada no cliente
+            const { error } = await supabase.auth.updateUser({ password: novaSenha });
+            if (error) throw error;
+
+            fecharPopup();
+            mostrarNotificacao('✅ Senha alterada com sucesso!', 'success');
+
+        } catch (error) {
+            log.error('Erro ao alterar senha', error);
+            mostrarNotificacao('Não foi possível alterar a senha. Tente novamente.', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Concluir';
+        }
+    });
 }
+
+window.abrirAlterarSenha = abrirAlterarSenha;
 
 function trocarPerfil() {
     salvarDados();
@@ -6599,114 +6526,168 @@ function bindEventos() {
 // ========== VISUALIZAÇÃO DETALHADA DE FATURA DE CARTÃO ==========
 function abrirVisualizacaoFatura(faturaId) {
     const fatura = contasFixas.find(c => c.id === faturaId);
-    if(!fatura || !fatura.compras) return;
-    
-    const cartao = cartoesCredito.find(c => c.id === fatura.cartaoId);
-    const nomeCartao = cartao ? cartao.nomeBanco : 'Cartão';
-    
+    if (!fatura || !fatura.compras) return;
+
+    const cartao    = cartoesCredito.find(c => c.id === fatura.cartaoId);
+    const nomeCartao = cartao ? sanitizeHTML(cartao.nomeBanco) : 'Cartão';
+
     let htmlCompras = '';
-    
+
     fatura.compras.forEach(compra => {
-        const statusParcela = compra.parcelaAtual > compra.totalParcelas ? 
-            '<span style="color: #00ff99;">✓ Paga</span>' : 
-            `<span style="color: #ffd166;">Parcela ${compra.parcelaAtual}/${compra.totalParcelas}</span>`;
-        
+        const statusParcela = compra.parcelaAtual > compra.totalParcelas
+            ? '<span style="color: #00ff99;">✓ Paga</span>'
+            : `<span style="color: #ffd166;">Parcela ${sanitizeHTML(compra.parcelaAtual)}/${sanitizeHTML(compra.totalParcelas)}</span>`;
+
+        // IDs em data-attributes; nunca em onclick inline
+        const safeFaturaId = sanitizeHTML(String(faturaId));
+        const safeCompraId = sanitizeHTML(String(compra.id));
+
         htmlCompras += `
-            <div style="background: rgba(255,255,255,0.03); padding: 16px; border-radius: 12px; margin-bottom: 12px; border-left: 3px solid var(--primary);">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <div style="background: rgba(255,255,255,0.03); padding: 16px; border-radius: 12px;
+                        margin-bottom: 12px; border-left: 3px solid var(--primary);">
+                <div style="display: flex; justify-content: space-between; align-items: start;
+                            margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
                     <div style="flex: 1;">
-                        <div style="font-weight: 600; color: var(--text-primary); font-size: 1rem;">${compra.tipo}</div>
-                        <div style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 4px;">${compra.descricao}</div>
-                        <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">📅 Compra: ${compra.dataCompra}</div>
+                        <div style="font-weight: 600; color: var(--text-primary); font-size: 1rem;">
+                            ${sanitizeHTML(compra.tipo)}
+                        </div>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 4px;">
+                            ${sanitizeHTML(compra.descricao)}
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
+                            📅 Compra: ${sanitizeHTML(compra.dataCompra)}
+                        </div>
                     </div>
                     <div style="text-align: right;">
-                        <div style="font-weight: 700; color: var(--text-primary); font-size: 1.1rem;">${formatBRL(compra.valorParcela)}</div>
+                        <div style="font-weight: 700; color: var(--text-primary); font-size: 1.1rem;">
+                            ${formatBRL(compra.valorParcela)}
+                        </div>
                         <div style="font-size: 0.85rem; margin-top: 4px;">${statusParcela}</div>
                     </div>
                 </div>
                 <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
-                    <button class="btn-primary" style="flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem;" 
-                            onclick="pagarCompraIndividual(${faturaId}, ${compra.id})">
+                    <button class="btn-primary js-pagar-compra"
+                            data-fatura-id="${safeFaturaId}"
+                            data-compra-id="${safeCompraId}"
+                            style="flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem;">
                         💰 Pagar
                     </button>
-                    <button class="btn-primary" style="flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem; background: var(--accent);" 
-                            onclick="editarCompraFatura(${faturaId}, ${compra.id})">
+                    <button class="btn-primary js-editar-compra"
+                            data-fatura-id="${safeFaturaId}"
+                            data-compra-id="${safeCompraId}"
+                            style="flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem; background: var(--accent);">
                         ✏️ Editar
                     </button>
-                    <button class="btn-excluir" style="flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem;" 
-                            onclick="excluirCompraFatura(${faturaId}, ${compra.id})">
+                    <button class="btn-excluir js-excluir-compra"
+                            data-fatura-id="${safeFaturaId}"
+                            data-compra-id="${safeCompraId}"
+                            style="flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem;">
                         🗑️ Excluir
                     </button>
                 </div>
             </div>
         `;
     });
-    
+
     criarPopup(`
         <h3>💳 Detalhes da Fatura</h3>
         <div style="text-align: center; margin-bottom: 20px;">
             <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">${nomeCartao}</div>
-            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px;">Vencimento: ${formatarDataBR(fatura.vencimento)}</div>
+            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px;">
+                Vencimento: ${sanitizeHTML(formatarDataBR(fatura.vencimento))}
+            </div>
             <div style="font-size: 1.4rem; font-weight: 700; color: var(--danger); margin-top: 12px;">
                 Total: ${formatBRL(fatura.valor)}
             </div>
         </div>
-        
+
         <div style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
             <h4 style="margin-bottom: 12px; color: var(--text-primary);">📦 Compras nesta Fatura:</h4>
             ${htmlCompras}
         </div>
-        
-        <button class="btn-primary" onclick="fecharPopup()">Fechar</button>
+
+        <button id="btnFecharFatura" class="btn-primary">Fechar</button>
     `);
+
+    // Delegar todos os eventos após inserção no DOM
+    document.querySelectorAll('.js-pagar-compra').forEach(btn => {
+        btn.addEventListener('click', () =>
+            pagarCompraIndividual(btn.dataset.faturaId, btn.dataset.compraId));
+    });
+    document.querySelectorAll('.js-editar-compra').forEach(btn => {
+        btn.addEventListener('click', () =>
+            editarCompraFatura(btn.dataset.faturaId, btn.dataset.compraId));
+    });
+    document.querySelectorAll('.js-excluir-compra').forEach(btn => {
+        btn.addEventListener('click', () =>
+            excluirCompraFatura(btn.dataset.faturaId, btn.dataset.compraId));
+    });
+    document.getElementById('btnFecharFatura').addEventListener('click', fecharPopup);
 }
+
+window.abrirVisualizacaoFatura = abrirVisualizacaoFatura;
+
 
 // ========== PAGAR COMPRA INDIVIDUAL ==========
 function pagarCompraIndividual(faturaId, compraId) {
     const fatura = contasFixas.find(c => c.id === faturaId);
-    if(!fatura) return;
-    
-    const compra = fatura.compras.find(c => c.id === compraId);
-    if(!compra) return;
-    
+    if (!fatura) return;
+
+    const compra = fatura.compras.find(c => String(c.id) === String(compraId));
+    if (!compra) return;
+
     fecharPopup();
-    
+
     setTimeout(() => {
         criarPopup(`
             <h3>💰 Pagar Parcela</h3>
             <div style="text-align: left; margin: 20px 0; color: var(--text-secondary);">
-                <div style="margin-bottom: 8px;"><strong>Compra:</strong> ${compra.tipo}</div>
-                <div style="margin-bottom: 8px;"><strong>Descrição:</strong> ${compra.descricao}</div>
-                <div style="margin-bottom: 8px;"><strong>Parcela:</strong> ${compra.parcelaAtual}/${compra.totalParcelas}</div>
+                <div style="margin-bottom: 8px;"><strong>Compra:</strong> ${sanitizeHTML(compra.tipo)}</div>
+                <div style="margin-bottom: 8px;"><strong>Descrição:</strong> ${sanitizeHTML(compra.descricao)}</div>
+                <div style="margin-bottom: 8px;"><strong>Parcela:</strong> ${sanitizeHTML(compra.parcelaAtual)}/${sanitizeHTML(compra.totalParcelas)}</div>
                 <div style="margin-bottom: 16px;"><strong>Valor:</strong> ${formatBRL(compra.valorParcela)}</div>
             </div>
             <div style="color: var(--warning); margin-bottom: 16px; font-weight: 600;">⚠️ O valor está correto?</div>
-            <button class="btn-primary" id="simValorCompra">Sim, pagar ${formatBRL(compra.valorParcela)}</button>
-            <button class="btn-warning" id="naoValorCompra">Não, alterar valor</button>
-            <button class="btn-cancelar" onclick="fecharPopup(); abrirVisualizacaoFatura(${faturaId})">Cancelar</button>
+            <button class="btn-primary"  id="simValorCompra">Sim, pagar ${formatBRL(compra.valorParcela)}</button>
+            <button class="btn-warning"  id="naoValorCompra">Não, alterar valor</button>
+            <button class="btn-cancelar" id="cancelarPagamentoCompra">Cancelar</button>
             <div id="ajusteValorCompraDiv" style="display:none; margin-top:14px;">
-                <input type="number" id="novoValorCompra" class="form-input" value="${compra.valorParcela}" step="0.01" min="0"><br>
-                <button class="btn-primary" id="confirmNovoValorCompra" style="margin-top:8px;">Confirmar pagamento</button>
+                <input type="number" id="novoValorCompra" class="form-input"
+                       value="${compra.valorParcela}" step="0.01" min="0">
+                <button class="btn-primary" id="confirmNovoValorCompra" style="margin-top:8px;">
+                    Confirmar pagamento
+                </button>
             </div>
         `);
-        
-        document.getElementById('simValorCompra').onclick = () => {
+
+        document.getElementById('simValorCompra').addEventListener('click', () => {
             processarPagamentoCompra(faturaId, compraId, compra.valorParcela);
-        };
-        
-        document.getElementById('naoValorCompra').onclick = () => {
+        });
+
+        document.getElementById('naoValorCompra').addEventListener('click', () => {
             document.getElementById('ajusteValorCompraDiv').style.display = 'block';
-            document.getElementById('simValorCompra').disabled = true;
-            document.getElementById('naoValorCompra').disabled = true;
-            
-            document.getElementById('confirmNovoValorCompra').onclick = () => {
-                const novoValor = parseFloat(document.getElementById('novoValorCompra').value);
-                if(!novoValor || novoValor <= 0) return alert("Digite um valor válido!");
-                processarPagamentoCompra(faturaId, compraId, novoValor);
-            };
-        };
+            document.getElementById('simValorCompra').disabled  = true;
+            document.getElementById('naoValorCompra').disabled  = true;
+        });
+
+        document.getElementById('cancelarPagamentoCompra').addEventListener('click', () => {
+            fecharPopup();
+            abrirVisualizacaoFatura(faturaId);
+        });
+
+        document.getElementById('confirmNovoValorCompra').addEventListener('click', () => {
+            const novoValor = parseFloat(document.getElementById('novoValorCompra').value);
+            if (!novoValor || novoValor <= 0) {
+                mostrarNotificacao('Digite um valor válido!', 'error');
+                return;
+            }
+            processarPagamentoCompra(faturaId, compraId, novoValor);
+        });
+
     }, 300);
 }
+
+window.pagarCompraIndividual = pagarCompraIndividual;
 
 // ========== PROCESSAR PAGAMENTO DE COMPRA ==========
 function processarPagamentoCompra(faturaId, compraId, valorPago) {
@@ -6765,37 +6746,56 @@ function processarPagamentoCompra(faturaId, compraId, valorPago) {
 // ========== EDITAR COMPRA DA FATURA ==========
 function editarCompraFatura(faturaId, compraId) {
     const fatura = contasFixas.find(c => c.id === faturaId);
-    if(!fatura) return;
-    
-    const compra = fatura.compras.find(c => c.id === compraId);
-    if(!compra) return;
-    
+    if (!fatura) return;
+
+    const compra = fatura.compras.find(c => String(c.id) === String(compraId));
+    if (!compra) return;
+
     fecharPopup();
-    
+
     setTimeout(() => {
         criarPopup(`
             <h3>✏️ Editar Compra</h3>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Tipo:</label>
-            <input type="text" id="editTipoCompra" class="form-input" value="${compra.tipo}"><br>
-            
+            <input type="text" id="editTipoCompra" class="form-input" value="${sanitizeHTML(compra.tipo)}">
+
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Descrição:</label>
-            <input type="text" id="editDescCompra" class="form-input" value="${compra.descricao}"><br>
-            
+            <input type="text" id="editDescCompra" class="form-input" value="${sanitizeHTML(compra.descricao)}">
+
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Valor da Parcela:</label>
-            <input type="number" id="editValorCompra" class="form-input" value="${compra.valorParcela}" step="0.01" min="0"><br>
-            
-            <button class="btn-primary" id="salvarEdicaoCompra">Salvar</button>
-            <button class="btn-cancelar" onclick="fecharPopup(); abrirVisualizacaoFatura(${faturaId})">Cancelar</button>
+            <input type="number" id="editValorCompra" class="form-input"
+                   value="${compra.valorParcela}" step="0.01" min="0">
+
+            <button class="btn-primary"  id="salvarEdicaoCompra">Salvar</button>
+            <button class="btn-cancelar" id="cancelarEdicaoCompra">Cancelar</button>
         `);
-        
-        document.getElementById('salvarEdicaoCompra').onclick = () => {
-            compra.tipo = document.getElementById('editTipoCompra').value.trim();
-            compra.descricao = document.getElementById('editDescCompra').value.trim();
-            compra.valorParcela = parseFloat(document.getElementById('editValorCompra').value);
-            
+
+        document.getElementById('cancelarEdicaoCompra').addEventListener('click', () => {
+            fecharPopup();
+            abrirVisualizacaoFatura(faturaId);
+        });
+
+        document.getElementById('salvarEdicaoCompra').addEventListener('click', () => {
+            const novoTipo  = document.getElementById('editTipoCompra').value.trim();
+            const novaDesc  = document.getElementById('editDescCompra').value.trim();
+            const novoValor = parseFloat(document.getElementById('editValorCompra').value);
+
+            if (!novoTipo) {
+                mostrarNotificacao('O tipo da compra não pode estar vazio.', 'error');
+                return;
+            }
+            if (isNaN(novoValor) || novoValor <= 0) {
+                mostrarNotificacao('Digite um valor válido.', 'error');
+                return;
+            }
+
+            compra.tipo         = novoTipo;
+            compra.descricao    = novaDesc;
+            compra.valorParcela = novoValor;
+
             // Recalcular valor total da fatura
             fatura.valor = fatura.compras.reduce((sum, c) => sum + c.valorParcela, 0);
-            
+
             salvarDados();
             atualizarTudo();
             fecharPopup();
@@ -6803,52 +6803,58 @@ function editarCompraFatura(faturaId, compraId) {
                 abrirVisualizacaoFatura(faturaId);
                 mostrarNotificacao('Compra atualizada com sucesso!', 'success');
             }, 200);
-        };
+        });
+
     }, 300);
 }
 
+window.editarCompraFatura = editarCompraFatura;
+
 // ========== EXCLUIR COMPRA DA FATURA ==========
 function excluirCompraFatura(faturaId, compraId) {
-    if(!confirm('⚠️ Tem certeza que deseja excluir esta compra da fatura?')) return;
-    
-    const fatura = contasFixas.find(c => c.id === faturaId);
-    if(!fatura) return;
-    
-    const compra = fatura.compras.find(c => c.id === compraId);
-    if(!compra) return;
-    
-    const cartao = cartoesCredito.find(c => c.id === fatura.cartaoId);
-    
-    // Atualizar valor usado do cartão
-    if(cartao) {
-        const valorRestante = compra.valorTotal - (compra.valorParcela * (compra.parcelaAtual - 1));
-        cartao.usado = Math.max(0, (cartao.usado || 0) - valorRestante);
-    }
-    
-    // Remover compra
-    fatura.compras = fatura.compras.filter(c => c.id !== compraId);
-    
-    // Recalcular valor da fatura
-    fatura.valor = fatura.compras.reduce((sum, c) => sum + c.valorParcela, 0);
-    
-    // Se não há mais compras, remover fatura
-    if(fatura.compras.length === 0) {
-        contasFixas = contasFixas.filter(c => c.id !== faturaId);
-        fecharPopup();
+    confirmarAcao('Tem certeza que deseja excluir esta compra da fatura?', () => {
+        const fatura = contasFixas.find(c => c.id === faturaId);
+        if (!fatura) return;
+
+        const compra = fatura.compras.find(c => String(c.id) === String(compraId));
+        if (!compra) return;
+
+        const cartao = cartoesCredito.find(c => c.id === fatura.cartaoId);
+
+        // Atualizar valor usado do cartão
+        if (cartao) {
+            const valorRestante = compra.valorTotal - (compra.valorParcela * (compra.parcelaAtual - 1));
+            cartao.usado = Math.max(0, (cartao.usado || 0) - valorRestante);
+        }
+
+        // Remover compra
+        fatura.compras = fatura.compras.filter(c => String(c.id) !== String(compraId));
+
+        // Recalcular valor da fatura
+        fatura.valor = fatura.compras.reduce((sum, c) => sum + c.valorParcela, 0);
+
+        // Se não há mais compras, remover fatura
+        if (fatura.compras.length === 0) {
+            contasFixas = contasFixas.filter(c => c.id !== faturaId);
+            fecharPopup();
+            salvarDados();
+            atualizarTudo();
+            mostrarNotificacao('✅ Fatura excluída — não há mais compras.', 'success');
+            return;
+        }
+
         salvarDados();
         atualizarTudo();
-        alert("✅ Fatura excluída - não há mais compras.");
-        return;
-    }
-    
-    salvarDados();
-    atualizarTudo();
-    fecharPopup();
-    setTimeout(() => {
-        abrirVisualizacaoFatura(faturaId);
-        mostrarNotificacao('Compra excluída com sucesso!', 'success');
-    }, 200);
+        fecharPopup();
+        setTimeout(() => {
+            abrirVisualizacaoFatura(faturaId);
+            mostrarNotificacao('Compra excluída com sucesso!', 'success');
+        }, 200);
+    });
 }
+
+window.excluirCompraFatura = excluirCompraFatura;
+
 
 // ========== FUNÇÕES GLOBAIS EXPOSTAS ==========
 window.abrirContaFixaForm = abrirContaFixaForm;
@@ -7254,64 +7260,52 @@ window.obterEstatisticas = obterEstatisticas;
 
 // ========== CONSOLE DE DEBUG (APENAS DESENVOLVIMENTO) ==========
 
-// Função útil para debugging
-window.debugGranaEvo = () => {
-    console.log('=== DEBUG GRANAEVO ===');
-    console.log('Usuário Atual:', usuarioAtual);
-    console.log('Perfil Ativo:', perfilAtivo);
-    console.log('Transações:', transacoes);
-    console.log('Metas:', metas);
-    console.log('Contas Fixas:', contasFixas);
-    console.log('Cartões:', cartoesCredito);
-    console.log('Estatísticas:', obterEstatisticas());
-    console.log('=====================');
-};
+if (typeof window !== 'undefined' && window._GRANAEVO_DEV === true) {
+    window.debugGranaEvo = () => {
+        console.log('=== DEBUG GRANAEVO (DEV) ===');
+        console.log('Perfil ID:', perfilAtivo?.id);
+        console.log('Total transações:', transacoes?.length);
+        console.log('Total metas:', metas?.length);
+        console.log('Total contas fixas:', contasFixas?.length);
+        console.log('Total cartões:', cartoesCredito?.length);
+        console.log('============================');
+    };
+} else {
+    window.debugGranaEvo = () => {};
+}
 
 // ========== LOG DE SISTEMA ==========
 
-// Sistema de log simples
 const sistemaLog = {
     logs: [],
+    _maxLogs: 50,
+
     adicionar(tipo, mensagem) {
-        const log = {
+        const entry = {
             tipo,
-            mensagem,
-            timestamp: new Date().toISOString(),
-            perfil: perfilAtivo ? perfilAtivo.nome : 'N/A'
+            // Truncar mensagem — nunca armazenar valores financeiros ou PII
+            mensagem: String(mensagem).substring(0, 120),
+            timestamp: new Date().toISOString()
+            // Removido: perfil (era PII)
         };
-        this.logs.push(log);
-        
-        // Mantém apenas os últimos 100 logs
-        if(this.logs.length > 100) {
+        this.logs.push(entry);
+        if (this.logs.length > this._maxLogs) {
             this.logs.shift();
         }
-        
-        // Salva logs no localStorage
-        try {
-            localStorage.setItem('granaevo_logs', JSON.stringify(this.logs));
-        } catch(e) {
-            console.error('Erro ao salvar logs', e);
-        }
+        // Sem localStorage — logs apenas em memória
     },
+
     obter() {
-        return this.logs;
+        return [...this.logs];
     },
+
     limpar() {
         this.logs = [];
-        localStorage.removeItem('granaevo_logs');
+        // Sem localStorage para limpar
     }
 };
 
-// Carrega logs salvos
-try {
-    const logsSalvos = localStorage.getItem('granaevo_logs');
-    if(logsSalvos) {
-        sistemaLog.logs = JSON.parse(logsSalvos);
-    }
-} catch(e) {
-    console.error('Erro ao carregar logs', e);
-}
-
+// Sem carregamento de localStorage — logs sempre começam zerados
 window.sistemaLog = sistemaLog;
 
 // ========== INICIALIZAÇÃO FINAL ==========
