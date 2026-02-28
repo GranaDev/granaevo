@@ -1816,7 +1816,6 @@ function atualizarListaContasFixas() {
 
 function abrirContaFixaForm(editId = null) {
     if(editId === null) {
-        // ✅ Formulário de criação: sem dados do usuário no HTML, sem risco de injeção
         criarPopup(`
             <h3>Nova Conta Fixa</h3>
             <input type="text" id="descContaFixa" class="form-input" placeholder="Descrição"><br>
@@ -1835,16 +1834,18 @@ function abrirContaFixaForm(editId = null) {
             const venc     = document.getElementById('vencContaFixa').value;
 
             if(!desc || !valorStr || !venc) return alert('Preencha todos os campos.');
-
             if(desc.length > 100) return alert('Descrição muito longa (máx. 100 caracteres).');
 
             const valor = parseFloat(parseFloat(valorStr).toFixed(2));
             if(isNaN(valor) || valor <= 0) return alert('Informe um valor válido e positivo.');
-
             if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return alert('Data de vencimento inválida.');
 
-            // ✅ Sem id — banco gera via gen_random_uuid()
-            contasFixas.push({ descricao: desc, valor, vencimento: venc, pago: false });
+            // ✅ CORREÇÃO: gera id local para que editar e excluir funcionem corretamente
+            const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+            contasFixas.push({ id: novoId, descricao: desc, valor, vencimento: venc, pago: false });
             salvarDados();
             atualizarListaContasFixas();
             fecharPopup();
@@ -1854,8 +1855,6 @@ function abrirContaFixaForm(editId = null) {
         const conta = contasFixas.find(c => c.id === editId);
         if(!conta) return;
 
-        // ✅ O HTML do popup NÃO contém dados do usuário — os campos são preenchidos
-        //    via .value depois que o DOM é criado, eliminando injeção de atributo
         criarPopup(`
             <h3>Editar Conta Fixa</h3>
             <input type="text" id="descContaFixa" class="form-input" maxlength="100"><br>
@@ -1866,7 +1865,7 @@ function abrirContaFixaForm(editId = null) {
             <button class="btn-cancelar" id="cancelarContaFixa">Cancelar</button>
         `);
 
-        // ✅ Preenchimento seguro via propriedade .value (nunca via innerHTML/atributo)
+        // ✅ Preenchimento seguro via .value — nunca via innerHTML/atributo
         document.getElementById('descContaFixa').value  = conta.descricao;
         document.getElementById('valorContaFixa').value = conta.valor;
         document.getElementById('vencContaFixa').value  = conta.vencimento;
