@@ -254,71 +254,95 @@ async function gerarGraficos() {
 
             // ========== SELEÇÃO DE PERFIS PARA GRÁFICO CASAL (PLANO FAMÍLIA) ==========
 function abrirSelecaoPerfisCasalGraficos() {
-    const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
-    
+    // ✅ CORREÇÃO: usar window.usuarioLogado em vez de localStorage
+    const perfis = window.usuarioLogado?.perfis || [];
+
+    if (perfis.length === 0) {
+        if (typeof mostrarNotificacao === 'function') {
+            mostrarNotificacao('Nenhum perfil encontrado.', 'error');
+        }
+        return;
+    }
+
     let htmlPerfis = '';
-    
+
     perfis.forEach(perfil => {
+        // ✅ sanitizeHTML disponível via dashboard.js (window global)
+        const idSeguro   = String(perfil.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+        const nomeSeguro = typeof sanitizeHTML === 'function'
+            ? sanitizeHTML(String(perfil.nome || '').slice(0, 100))
+            : String(perfil.nome || '').slice(0, 100);
+
         htmlPerfis += `
             <div style="margin-bottom:12px;">
-                <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; cursor:pointer; transition:all 0.3s;"
-                       onmouseover="this.style.background='rgba(67,160,71,0.1)'" 
-                       onmouseout="this.style.background='rgba(255,255,255,0.05)'">
-                    <input type="checkbox" class="perfil-checkbox-casal-graficos" value="${perfil.id}" 
+                <label style="display:flex; align-items:center; gap:10px; padding:12px;
+                              background:rgba(255,255,255,0.05); border-radius:10px; cursor:pointer;">
+                    <input type="checkbox" class="perfil-checkbox-casal-graficos"
+                           value="${idSeguro}"
                            style="width:20px; height:20px; cursor:pointer; accent-color:var(--primary);">
-                    <span style="font-weight:600; color: var(--text-primary);">${perfil.nome}</span>
+                    <span style="font-weight:600; color:var(--text-primary);">${nomeSeguro}</span>
                 </label>
             </div>
         `;
     });
-    
-    // Usar a função criarPopup do dashboard.js
+
     if (typeof criarPopup === 'function') {
         criarPopup(`
             <h3>👥 Selecione 2 Perfis para Gráfico Casal</h3>
-            <p style="color: var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
+            <p style="color:var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
                 Escolha exatamente 2 perfis para gerar os gráficos conjuntos
             </p>
-            
             <div style="max-height:300px; overflow-y:auto; margin-bottom:20px;">
                 ${htmlPerfis}
             </div>
-            
-            <div id="avisoSelecaoGraficos" style="display:none; background:rgba(255,75,75,0.1); padding:12px; border-radius:8px; margin-bottom:16px; border-left:3px solid #ff4b4b;">
+            <div id="avisoSelecaoGraficos" style="display:none; background:rgba(255,75,75,0.1);
+                 padding:12px; border-radius:8px; margin-bottom:16px; border-left:3px solid #ff4b4b;">
                 <span style="color:#ff4b4b; font-weight:600;">⚠️ Selecione exatamente 2 perfis</span>
             </div>
-            
-            <button class="btn-primary" onclick="confirmarSelecaoPerfisCasalGraficos()" style="width:100%; margin-bottom:10px;">
+            <button class="btn-primary" id="btnConfirmarGraficosCasal" style="width:100%; margin-bottom:10px;">
                 Gerar Gráficos
             </button>
-            <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">
+            <button class="btn-cancelar" id="btnCancelarGraficosCasal" style="width:100%;">
                 Cancelar
             </button>
         `);
+
+        // ✅ addEventListener — sem onclick inline
+        document.getElementById('btnConfirmarGraficosCasal')
+                .addEventListener('click', confirmarSelecaoPerfisCasalGraficos);
+
+        document.getElementById('btnCancelarGraficosCasal')
+                .addEventListener('click', () => {
+                    if (typeof fecharPopup === 'function') fecharPopup();
+                });
     }
 }
 
 function confirmarSelecaoPerfisCasalGraficos() {
     const checkboxes = document.querySelectorAll('.perfil-checkbox-casal-graficos:checked');
-    const avisoEl = document.getElementById('avisoSelecaoGraficos');
-    
+    const avisoEl    = document.getElementById('avisoSelecaoGraficos');
+
     if (checkboxes.length !== 2) {
-        avisoEl.style.display = 'block';
-        setTimeout(() => {
-            avisoEl.style.display = 'none';
-        }, 3000);
+        if (avisoEl) {
+            avisoEl.style.display = 'block';
+            setTimeout(() => { avisoEl.style.display = 'none'; }, 3000);
+        }
         return;
     }
-    
+
     const perfisIds = Array.from(checkboxes).map(cb => cb.value);
-    const perfis = JSON.parse(localStorage.getItem('granaevo_perfis') || '[]');
+
+    // ✅ CORREÇÃO: usar window.usuarioLogado em vez de localStorage
+    const perfis = window.usuarioLogado?.perfis || [];
     const perfisSelecionados = perfis.filter(p => perfisIds.includes(String(p.id)));
-    
-    if (typeof fecharPopup === 'function') {
-        fecharPopup();
+
+    if (perfisSelecionados.length !== 2) {
+        console.error('Perfis selecionados não encontrados em usuarioLogado.perfis');
+        return;
     }
-    
-    // Gerar gráficos com os perfis selecionados
+
+    if (typeof fecharPopup === 'function') fecharPopup();
+
     mostrarLoading();
     setTimeout(() => {
         gerarGraficosCompartilhados(perfisSelecionados);

@@ -133,6 +133,12 @@ function atualizarReferenciasGlobais() {
     });
 }
 
+    // ✅ Expõe referências necessárias para graficos.js e outros módulos externos
+    window.perfilAtivo  = perfilAtivo;
+    window.transacoes   = transacoes;
+    window.usuarioLogado = usuarioLogado;
+
+
 // Limites por plano
 const limitesPlano = {
     "Individual": 1,
