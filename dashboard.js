@@ -4301,36 +4301,7 @@ function confirmarSelecaoPerfisCasal(mes, ano) {
     
     fecharPopup();
     gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds);
-}function confirmarSelecaoPerfisCasal(mes, ano) {
-    // CORREÇÃO: Re-validar mes/ano ao confirmar
-    if (!/^\d{2}$/.test(mes) || !/^\d{4}$/.test(ano)) return;
-
-    const checkboxes = document.querySelectorAll('.perfil-checkbox-casal:checked');
-    const avisoEl = document.getElementById('avisoSelecao');
-    
-    if (checkboxes.length !== 2) {
-        if (avisoEl) {
-            avisoEl.style.display = 'block';
-            setTimeout(() => { avisoEl.style.display = 'none'; }, 3000);
-        }
-        return;
-    }
-    
-    const perfisIds = Array.from(checkboxes).map(cb => cb.value);
-    
-    // CORREÇÃO: Validar que os IDs selecionados realmente existem nos perfis do usuário
-    const idsValidos = perfisIds.every(id =>
-        usuarioLogado?.perfis?.some(p => String(p.id) === String(id))
-    );
-    if (!idsValidos) {
-        console.error('IDs de perfis inválidos detectados');
-        return;
-    }
-    
-    fecharPopup();
-    gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds);
 }
-
 
 // ========== GERAR RELATÓRIO CASAL PERSONALIZADO ==========
 async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
@@ -4488,6 +4459,9 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
     
     renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior);
 }
+
+// Expor globalmente
+window.gerarRelatorioCompartilhadoPersonalizado = gerarRelatorioCompartilhadoPersonalizado;
 
 async function gerarRelatorioIndividual(mes, ano, perfilId) {
     // CORREÇÃO: Validar inputs antes de qualquer processamento
