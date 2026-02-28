@@ -362,36 +362,56 @@ async function salvarDados() {
         return false;
     }
 
+    // ✅ NOVO — Validação estrutural profunda ANTES dos _validators
+    //    Os _validators filtram silenciosamente itens ruins.
+    //    Esta camada DETECTA e LOGA o que foi adulterado/corrompido,
+    //    dando rastreabilidade antes de qualquer descarte.
+    const validacao = validarDadosAntesDeSalvar();
+    if (!validacao.valido) {
+        _log.warn('SAVE_INTEGRIDADE', `${validacao.erros.length} problema(s) detectado(s) antes de salvar:`);
+        validacao.erros.forEach((e, i) => _log.warn(`  [${i + 1}]`, e));
+
+        // ✅ Não aborta — permite que os _validators abaixo limpem os itens ruins
+        //    e salvem apenas o que é válido. Mas o log fica registrado.
+        //    Se quiser abortar completamente em caso de corrupção grave, troque por:
+        //    return false;
+    }
+
     try {
         // ✅ Filtra registros inválidos antes de persistir
-        const transacoesValidas   = transacoes.filter(_validators.transacao);
-        const metasValidas        = metas.filter(_validators.meta);
-        const contasValidas       = contasFixas.filter(_validators.contaFixa);
-        const cartoesValidos      = cartoesCredito.filter(_validators.cartao);
+        const transacoesValidas    = transacoes.filter(_validators.transacao);
+        const metasValidas         = metas.filter(_validators.meta);
+        const contasValidas        = contasFixas.filter(_validators.contaFixa);
+        const cartoesValidos       = cartoesCredito.filter(_validators.cartao);
 
-        // Alerta silencioso se houve itens descartados
-        if (transacoesValidas.length  !== transacoes.length   ||
-            metasValidas.length       !== metas.length         ||
-            contasValidas.length      !== contasFixas.length   ||
-            cartoesValidos.length     !== cartoesCredito.length) {
-            _log.warn('SAVE: itens inválidos descartados antes de persistir');
+        // ✅ Alerta silencioso se houve itens descartados
+        const descartados = {
+            transacoes: transacoes.length    - transacoesValidas.length,
+            metas:      metas.length         - metasValidas.length,
+            contas:     contasFixas.length   - contasValidas.length,
+            cartoes:    cartoesCredito.length - cartoesValidos.length,
+        };
+
+        const totalDescartados = Object.values(descartados).reduce((s, n) => s + n, 0);
+        if (totalDescartados > 0) {
+            _log.warn('SAVE_DESCARTE', `Itens inválidos descartados antes de persistir:`, descartados);
         }
 
         const userData = await dataManager.loadUserData();
 
         const dadosPerfil = {
-            id:             perfilAtivo.id,
-            nome:           _sanitizeText(perfilAtivo.nome),
-            foto:           _sanitizeImgUrl(perfilAtivo.foto) || null,
-            transacoes:     transacoesValidas,
-            metas:          metasValidas,
-            contasFixas:    contasValidas,
-            cartoesCredito: cartoesValidos,
-            nextTransId:    Number.isInteger(nextTransId)    && nextTransId > 0    ? nextTransId    : 1,
-            nextMetaId:     Number.isInteger(nextMetaId)     && nextMetaId > 0     ? nextMetaId     : 1,
-            nextContaFixaId:Number.isInteger(nextContaFixaId)&& nextContaFixaId > 0? nextContaFixaId : 1,
-            nextCartaoId:   Number.isInteger(nextCartaoId)   && nextCartaoId > 0   ? nextCartaoId   : 1,
-            lastUpdate:     new Date().toISOString(),
+            id:              perfilAtivo.id,
+            nome:            _sanitizeText(perfilAtivo.nome),
+            foto:            _sanitizeImgUrl(perfilAtivo.foto) || null,
+            transacoes:      transacoesValidas,
+            metas:           metasValidas,
+            contasFixas:     contasValidas,
+            cartoesCredito:  cartoesValidos,
+            nextTransId:     Number.isInteger(nextTransId)     && nextTransId     > 0 ? nextTransId     : 1,
+            nextMetaId:      Number.isInteger(nextMetaId)      && nextMetaId      > 0 ? nextMetaId      : 1,
+            nextContaFixaId: Number.isInteger(nextContaFixaId) && nextContaFixaId > 0 ? nextContaFixaId : 1,
+            nextCartaoId:    Number.isInteger(nextCartaoId)    && nextCartaoId    > 0 ? nextCartaoId    : 1,
+            lastUpdate:      new Date().toISOString(),
         };
 
         const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
@@ -1218,43 +1238,69 @@ function iniciarRenovacaoFotos() {
 // ========== DASHBOARD - RESUMO E CONTAS FIXAS ==========
 function atualizarDashboardResumo() {
     let totalEntradas = 0, totalSaidas = 0, totalReservas = 0;
+    let corrupcaoDetectada = false;
 
-    // ✅ Função auxiliar: converte para número e rejeita NaN, Infinity e negativos
-    const toValorSeguro = (v) => {
+    // ✅ Função auxiliar: converte para número, rejeita NaN e Infinity
+    //    DIFERENÇA DA VERSÃO ANTERIOR: não rejeita mais negativos silenciosamente —
+    //    valores negativos são logados como corrupção e zerados, mas registrados
+    const toValorSeguro = (v, contexto) => {
         const n = parseFloat(v);
-        return (isFinite(n) && n >= 0) ? n : 0;
+        if (!isFinite(n)) {
+            console.warn(`[DASHBOARD] Valor não-finito detectado em ${contexto}:`, v);
+            corrupcaoDetectada = true;
+            return 0;
+        }
+        if (n < 0) {
+            // ✅ Loga corrupção em vez de mascarar silenciosamente
+            console.warn(`[DASHBOARD] Valor negativo suspeito em ${contexto}:`, n);
+            corrupcaoDetectada = true;
+            return 0;
+        }
+        return n;
     };
 
-    transacoes.forEach(t => {
-        const valor = toValorSeguro(t.valor);
+    transacoes.forEach((t, i) => {
+        const valor = toValorSeguro(t.valor, `transacao[${i}] id=${t.id}`);
 
-        if(t.categoria === 'entrada') {
+        if (t.categoria === 'entrada') {
             totalEntradas += valor;
-        } else if(t.categoria === 'saida') {
+        } else if (t.categoria === 'saida') {
             totalSaidas += valor;
-        } else if(t.categoria === 'reserva') {
+        } else if (t.categoria === 'reserva') {
             totalReservas += valor;
-        } else if(t.categoria === 'retirada_reserva') {
+        } else if (t.categoria === 'retirada_reserva') {
             totalReservas -= valor;
-            // ✅ Impede reservas negativas por dados corrompidos
-            if(totalReservas < 0) totalReservas = 0;
+            if (totalReservas < 0) {
+                console.warn('[DASHBOARD] totalReservas ficou negativo após retirada — possível corrupção.');
+                corrupcaoDetectada = true;
+                totalReservas = 0;
+            }
         }
     });
 
     const saldo = totalEntradas - totalSaidas - totalReservas;
 
-    // ✅ Mesma proteção nas metas
-    const totalReservasCalc = metas.reduce((s, m) => s + toValorSeguro(m.saved), 0);
+    const totalReservasCalc = metas.reduce((s, m, i) => {
+        return s + toValorSeguro(m.saved, `meta[${i}] id=${m.id}`);
+    }, 0);
+
+    // ✅ Se corrupção detectada, exibe aviso na UI (não silencia mais)
+    if (corrupcaoDetectada) {
+        console.error('[DASHBOARD] ⚠️ Dados corrompidos ou manipulados detectados. Verifique o console.');
+        // Opcional: exibir banner de aviso na UI
+        const banner = document.getElementById('bannnerCorrupcao');
+        if (banner) banner.style.display = 'block';
+    }
 
     const entradasEl = document.getElementById('totalEntradas');
     const saidasEl   = document.getElementById('totalSaidas');
     const saldoEl    = document.getElementById('totalSaldo');
     const reservasEl = document.getElementById('totalReservas');
 
-    if(entradasEl) entradasEl.textContent = formatBRL(totalEntradas);
-    if(saidasEl)   saidasEl.textContent   = formatBRL(totalSaidas);
-    if(saldoEl)    saldoEl.textContent    = formatBRL(saldo);
-    if(reservasEl) reservasEl.textContent = formatBRL(totalReservasCalc);
+    if (entradasEl) entradasEl.textContent = formatBRL(totalEntradas);
+    if (saidasEl)   saidasEl.textContent   = formatBRL(totalSaidas);
+    if (saldoEl)    saldoEl.textContent     = formatBRL(saldo);
+    if (reservasEl) reservasEl.textContent  = formatBRL(totalReservasCalc);
 }
 
 // ========== SISTEMA DE NOTIFICAÇÕES DE VENCIMENTO ==========
@@ -1862,10 +1908,10 @@ function rollbackArray(arrayAtual, snapshotObj) {
 
 function pagarContaFixa(id, valorPago) {
     const conta = contasFixas.find(c => c.id === id);
-    if(!conta) return;
+    if (!conta) return;
 
-    // ✅ Lock anti-replay: impede clique duplo ou chamada simultânea
-    if(conta._processando) {
+    // ✅ Lock anti-replay
+    if (conta._processando) {
         alert('Aguarde, pagamento em andamento...');
         return;
     }
@@ -1873,47 +1919,52 @@ function pagarContaFixa(id, valorPago) {
 
     // ✅ Validação de valor: deve ser número positivo e finito
     const valorSeguro = parseFloat(valorPago);
-    if(!isFinite(valorSeguro) || valorSeguro <= 0) {
+    if (!isFinite(valorSeguro) || valorSeguro <= 0) {
         alert('Valor de pagamento inválido.');
         conta._processando = false;
         return;
     }
 
-    // ✅ Validação de divergência: não permite pagar valor muito diferente do real
-    // Tolerância de R$0,05 para cobrir arredondamentos de parcelas
-    if(Math.abs(valorSeguro - conta.valor) > 0.05) {
-        if(!confirm(
-            `⚠️ Valor divergente!\n\n` +
+    // ✅ FIX #8: Remove override por confirmação — divergência bloqueia sem exceção
+    //    Versão anterior permitia pagar R$0,01 com confirmação (fraude trivial)
+    //    Tolerância de R$0,05 apenas para arredondamento de parcelas
+    if (Math.abs(valorSeguro - conta.valor) > 0.05) {
+        alert(
+            `❌ Valor divergente! Pagamento bloqueado.\n\n` +
             `Valor da conta: R$ ${conta.valor.toFixed(2)}\n` +
-            `Valor digitado: R$ ${valorSeguro.toFixed(2)}\n\n` +
-            `Deseja confirmar mesmo assim?`
-        )) {
-            conta._processando = false;
-            return;
-        }
+            `Valor informado: R$ ${valorSeguro.toFixed(2)}\n\n` +
+            `Por segurança, não é permitido pagar valor diferente do registrado.\n` +
+            `Edite a conta para corrigir o valor se necessário.`
+        );
+        conta._processando = false;
+        return;
     }
 
-        // ✅ Guarda referência original ANTES do try
-        const contaOriginal = conta;
+    // ✅ Guarda referência original ANTES do try
+    const contaOriginal = conta;
 
-        // ✅ Snapshots declarados fora para ficarem acessíveis no catch
-        let snapshotTransacoes, snapshotContasFixas, snapshotCartoes;
+    // ✅ FIX #6: Snapshots declarados fora — inicializados com array vazio como fallback
+    //    seguro, evitando crash de undefined.forEach no catch
+    let snapshotTransacoes  = [];
+    let snapshotContasFixas = [];
+    let snapshotCartoes     = [];
 
-        try {
-            // ✅ Dentro do try: se structuredClone falhar, o catch libera o lock corretamente
-            snapshotTransacoes  = structuredClone(transacoes);
-            snapshotContasFixas = structuredClone(contasFixas);
-            snapshotCartoes     = structuredClone(cartoesCredito);
+    try {
+        // ✅ structuredClone dentro do try — se falhar, catch encontra arrays vazios
+        //    mas ainda seguros para .forEach (não crasham)
+        snapshotTransacoes  = structuredClone(transacoes);
+        snapshotContasFixas = structuredClone(contasFixas);
+        snapshotCartoes     = structuredClone(cartoesCredito);
 
-            function avancarMes(vencimentoISO) {
-            if(!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
+        function avancarMes(vencimentoISO) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
                 const fallback = new Date();
                 fallback.setMonth(fallback.getMonth() + 1);
                 return fallback.toISOString().slice(0, 10);
             }
             let [y, m, d] = vencimentoISO.split('-').map(Number);
             m++;
-            if(m > 12) { m = 1; y++; }
+            if (m > 12) { m = 1; y++; }
             return [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
         }
 
@@ -1933,26 +1984,35 @@ function pagarContaFixa(id, valorPago) {
         });
 
         // FATURA DE CARTÃO
-        if(conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
+        if (conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
             let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
 
             conta.compras.forEach(compra => {
-                // ✅ Valida parcelas antes de modificar
-                if(typeof compra.parcelaAtual !== 'number' || typeof compra.totalParcelas !== 'number') return;
+                // ✅ FIX #5: Validação completa do objeto compra antes de qualquer operação
+                //    Versão anterior validava só o tipo, mas não range — permitia
+                //    valorParcela negativo que AUMENTAVA o limite do cartão artificialmente
+                if (typeof compra.parcelaAtual  !== 'number' || !isFinite(compra.parcelaAtual))  return;
+                if (typeof compra.totalParcelas !== 'number' || !isFinite(compra.totalParcelas)) return;
+                if (typeof compra.valorParcela  !== 'number' || !isFinite(compra.valorParcela))  return;
+                if (compra.parcelaAtual  < 1)        return; // ✅ sem parcelas negativas
+                if (compra.totalParcelas < 1)        return;
+                if (compra.valorParcela  <= 0)       return; // ✅ bloqueia negativo/zero
+                if (compra.valorParcela  > 9_999_999) return; // ✅ bloqueia valor absurdo
 
-                if(compra.parcelaAtual <= compra.totalParcelas) {
+                if (compra.parcelaAtual <= compra.totalParcelas) {
                     compra.parcelaAtual++;
-                    if(cartaoRef) {
-                        const parcela = parseFloat(compra.valorParcela) || 0;
+                    if (cartaoRef) {
+                        const parcela = parseFloat(compra.valorParcela);
+                        // ✅ Seguro: parcela já validado como positivo acima
                         cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
-                        if(cartaoRef.usado < 0) cartaoRef.usado = 0;
+                        if (cartaoRef.usado < 0) cartaoRef.usado = 0;
                     }
                 }
             });
 
             conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
 
-            if(conta.compras.length === 0) {
+            if (conta.compras.length === 0) {
                 contasFixas = contasFixas.filter(c => c.id !== id);
                 salvarDados();
                 atualizarTudo();
@@ -1962,8 +2022,10 @@ function pagarContaFixa(id, valorPago) {
             }
 
             conta.valor = conta.compras.reduce((sum, c) => {
-                const p = parseFloat(c.valorParcela) || 0;
-                return sum + p;
+                // ✅ FIX #5: valorParcela já validado no forEach acima, mas
+                //    revalidamos aqui por segurança (compras podem ter sido filtradas)
+                const p = parseFloat(c.valorParcela);
+                return sum + (isFinite(p) && p > 0 ? p : 0);
             }, 0);
 
             conta.vencimento = avancarMes(conta.vencimento);
@@ -1977,14 +2039,14 @@ function pagarContaFixa(id, valorPago) {
         }
 
         // CONTA COM PARCELAS DE CARTÃO
-        if(conta.cartaoId && conta.totalParcelas && conta.parcelaAtual) {
+        if (conta.cartaoId && conta.totalParcelas && conta.parcelaAtual) {
             let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
-            if(cartaoRef) {
+            if (cartaoRef) {
                 cartaoRef.usado = (cartaoRef.usado || 0) - valorSeguro;
-                if(cartaoRef.usado < 0) cartaoRef.usado = 0;
+                if (cartaoRef.usado < 0) cartaoRef.usado = 0;
             }
 
-            if(conta.parcelaAtual < conta.totalParcelas) {
+            if (conta.parcelaAtual < conta.totalParcelas) {
                 conta.parcelaAtual++;
                 conta.vencimento = avancarMes(conta.vencimento);
                 conta.pago = false;
@@ -2008,15 +2070,15 @@ function pagarContaFixa(id, valorPago) {
         conta._processando = false;
         alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
 
-    } catch(erro) {
+    } catch (erro) {
         console.error('❌ Erro no pagamento, revertendo estado:', erro);
 
-        // ✅ Mantém referência dos arrays, troca apenas o conteúdo interno
+        // ✅ FIX #6: Agora seguro — snapshots são arrays (possivelmente vazios,
+        //    mas nunca undefined), então .forEach nunca crashará aqui
         rollbackArray(transacoes,     snapshotTransacoes);
         rollbackArray(contasFixas,    snapshotContasFixas);
         rollbackArray(cartoesCredito, snapshotCartoes);
 
-        // ✅ Usa referência original — segura mesmo após o rollback
         contaOriginal._processando = false;
 
         alert('❌ Erro ao processar pagamento. Nenhuma alteração foi salva.');
@@ -2026,20 +2088,11 @@ function pagarContaFixa(id, valorPago) {
 function criarPopup(html) {
     const overlay   = document.getElementById('modalOverlay');
     const container = document.getElementById('modalContainer');
-    if(!overlay || !container) return;
+    if (!overlay || !container) return;
 
     // ✅ Garante que apenas strings são aceitas
-    if(typeof html !== 'string') {
+    if (typeof html !== 'string') {
         console.error('criarPopup: html deve ser string estática. Dados do usuário devem ser inseridos via textContent após a criação do popup.');
-        return;
-    }
-
-    // ✅ CORREÇÃO: "data:" só é perigoso como esquema de URI (após = ou url().
-    //    O padrão anterior "data\s*:" causava falso positivo no texto "<b>Data:</b>"
-    //    do popup de comprovante, bloqueando transações legítimas.
-    const padraoPerigoso = /<script|on\w+\s*=|javascript\s*:|(?:=|url\()\s*['"]?\s*data\s*:/i;
-    if(padraoPerigoso.test(html)) {
-        console.error('criarPopup: HTML potencialmente inseguro detectado. Operação cancelada.');
         return;
     }
 
@@ -2052,17 +2105,22 @@ function criarPopup(html) {
         /formatBRL\(/,
         /formatarDataBR\(/
     ];
-    if(padroesSuspeitos.some(p => p.test(html))) {
+    if (padroesSuspeitos.some(p => p.test(html))) {
         console.warn('criarPopup: possível dado de usuário detectado no HTML. Use textContent após criarPopup() para inserir dados dinâmicos.');
     }
+
+    // ✅ Sanitiza via DOMParser — muito mais robusto que regex
+    //    Cobre SVG injection, srcdoc, encoded attributes, malformed tags, etc.
+    const htmlSanitizado = sanitizarHTMLPopup(html);
 
     // ✅ Limpa conteúdo anterior
     container.innerHTML = '';
 
-    // ✅ Usa a classe .popup que já existe no dashboard.css
     const box = document.createElement('div');
     box.className = 'popup';
-    box.innerHTML = html;
+
+    // ✅ Usa HTML sanitizado pelo DOMParser, não o original
+    box.innerHTML = htmlSanitizado;
     container.appendChild(box);
 
     // ✅ Ativa o overlay
@@ -2084,6 +2142,49 @@ function fecharPopup() {
     setTimeout(() => {
         container.innerHTML = '';
     }, 300);
+}
+
+// ✅ NOVA FUNÇÃO: Sanitização real via DOMParser
+// Substitui a regex de criarPopup que causava falso positivo em "Data:"
+// e era bypassável via SVG injection, srcdoc, encoded attributes, etc.
+function sanitizarHTMLPopup(html) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    // ✅ Remove elementos estruturalmente perigosos
+    const tagsProibidas = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form'];
+    tagsProibidas.forEach(tag => {
+        doc.querySelectorAll(tag).forEach(el => el.remove());
+    });
+
+    // ✅ Remove atributos perigosos de TODOS os elementos
+    doc.body.querySelectorAll('*').forEach(el => {
+        // Copia para array pois removeAttribute modifica a coleção ao vivo
+        Array.from(el.attributes).forEach(attr => {
+            const nome = attr.name.toLowerCase().trim();
+            const val  = attr.value.toLowerCase().replace(/[\s\r\n\t]/g, '');
+
+            // Bloqueia event handlers (onerror, onload, onclick, etc.)
+            if (nome.startsWith('on')) {
+                el.removeAttribute(attr.name);
+                return;
+            }
+
+            // Bloqueia URIs perigosas em qualquer atributo
+            const esquemasPerigosos = ['javascript:', 'vbscript:', 'data:', 'blob:'];
+            if (esquemasPerigosos.some(s => val.startsWith(s))) {
+                el.removeAttribute(attr.name);
+                return;
+            }
+
+            // Bloqueia srcdoc (executa HTML arbitrário em iframe)
+            if (nome === 'srcdoc' || nome === 'formaction' || nome === 'xlink:href') {
+                el.removeAttribute(attr.name);
+            }
+        });
+    });
+
+    return doc.body.innerHTML;
 }
 
 // ========== TRANSAÇÕES ==========
