@@ -2278,22 +2278,34 @@ function lancarTransacao() {
         }
     }
     
+// ✅ HTML 100% estático — sem dados do usuário interpolados
     criarPopup(`
         <h3>Comprovante</h3>
         <div class="small">Confirme antes de lançar</div>
         <div style="text-align:left; margin:20px 0; color: var(--text-secondary);">
-            <b>Categoria:</b> ${categoria}<br>
-            <b>Tipo:</b> ${showTipo}<br>
-            <b>Descrição:</b> ${descricao}<br>
-            <b>Valor:</b> ${formatBRL(valor)}<br>
-            <b>Data:</b> ${dh.data}<br>
-            <b>Hora:</b> ${dh.hora}
+            <div><b>Categoria:</b> <span id="compCategoria"></span></div>
+            <div><b>Tipo:</b> <span id="compTipo"></span></div>
+            <div><b>Descrição:</b> <span id="compDescricao"></span></div>
+            <div><b>Valor:</b> <span id="compValor"></span></div>
+            <div><b>Data:</b> <span id="compData"></span></div>
+            <div><b>Hora:</b> <span id="compHora"></span></div>
         </div>
         <button class="btn-primary" id="confirmBtn">Confirmar</button>
-        <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+        <button class="btn-cancelar" id="cancelarComprovante">Cancelar</button>
     `);
-    
-    document.getElementById('confirmBtn').onclick = () => {
+
+    // ✅ Dados do usuário inseridos via textContent — nunca interpretados como HTML
+    document.getElementById('compCategoria').textContent = categoria;
+    document.getElementById('compTipo').textContent      = showTipo;
+    document.getElementById('compDescricao').textContent = descricao;
+    document.getElementById('compValor').textContent     = formatBRL(valor);
+    document.getElementById('compData').textContent      = dh.data;
+    document.getElementById('compHora').textContent      = dh.hora;
+
+    // ✅ Cancelar via addEventListener — sem onclick inline
+    document.getElementById('cancelarComprovante').addEventListener('click', () => fecharPopup());
+
+    document.getElementById('confirmBtn').addEventListener('click', () => {
         let metaIdInner = null;
         let tipoSalvo = tipo;
         if(categoria === 'reserva') {
@@ -2302,7 +2314,7 @@ function lancarTransacao() {
                 tipoSalvo = 'Reserva';
             }
         }
-        
+
         const id = nextTransId++;
         const t = {
             id,
@@ -2315,7 +2327,7 @@ function lancarTransacao() {
             metaId: metaIdInner
         };
         transacoes.push(t);
-        
+
         if(categoria === 'reserva' && metaIdInner) {
             let meta = metas.find(m => String(m.id) === String(metaIdInner));
             if(meta) {
@@ -2325,16 +2337,16 @@ function lancarTransacao() {
                 meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + Number(valor)).toFixed(2));
             }
         }
-        
+
         salvarDados();
         atualizarTudo();
         fecharPopup();
-        
+
         document.getElementById('selectCategoria').value = '';
         document.getElementById('selectTipo').innerHTML = '<option value="">Tipo</option>';
         document.getElementById('inputDescricao').value = '';
         document.getElementById('inputValor').value = '';
-    };
+    });
 }
 
 function atualizarMovimentacoesUI() {
