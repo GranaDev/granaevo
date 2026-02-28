@@ -6795,43 +6795,6 @@ function debug(msg, obj) {
 }
 
 
-// ========== SISTEMA DE AUTO-SAVE INTELIGENTE ==========
-
-// ✅ Flag de dados modificados — evita saves desnecessários quando nada mudou
-let _dadosSujos = false;
-
-// ✅ Timers declarados fora — permite cancelamento limpo ao trocar de perfil
-let _autoSaveDebounceTimer  = null;
-let _autoSavePeriodicoTimer = null;
-
-// ✅ Marca dados como modificados
-//    Chame esta função após qualquer alteração de dados (transação, conta, meta, etc.)
-function marcarDadosSujos() {
-    _dadosSujos = true;
-}
-
-// ✅ Save com debounce de 3s
-//    Aguarda 3 segundos de inatividade antes de salvar
-//    Evita salvar a cada tecla ou clique consecutivo
-//    Chame no lugar de salvarDados() nas funções de alteração de dados
-function agendarSave() {
-    marcarDadosSujos();
-
-    if (_autoSaveDebounceTimer) clearTimeout(_autoSaveDebounceTimer);
-
-    _autoSaveDebounceTimer = setTimeout(async () => {
-        if (!_dadosSujos) return;
-        console.log('💾 [DEBOUNCE-SAVE] Salvando após inatividade...');
-        const ok = await salvarDados();
-        if (ok) {
-            _dadosSujos = false;
-            console.log('✅ [DEBOUNCE-SAVE] Salvo com sucesso');
-        } else {
-            console.error('❌ [DEBOUNCE-SAVE] Falha no salvamento');
-        }
-    }, 3_000);
-}
-
 // ✅ Para todos os timers — chame ao trocar de perfil ou fazer logout
 function pararAutoSave() {
     if (_autoSaveDebounceTimer)  { clearTimeout(_autoSaveDebounceTimer);   _autoSaveDebounceTimer  = null; }
