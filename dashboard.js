@@ -386,6 +386,11 @@ const _validators = {
     },
 };
 
+// ✅ Controle interno de debounce do salvarDados
+//    Declarado fora para persistir entre chamadas
+let _saveDebounceTimer   = null;
+let _saveDebounceResolve = null;
+
 async function salvarDados() {
     atualizarReferenciasGlobais();
 
@@ -398,51 +403,68 @@ async function salvarDados() {
         return false;
     }
 
-    try {
-        // ✅ Filtra registros inválidos antes de persistir
-        const transacoesValidas = transacoes.filter(_validators.transacao);
-        const metasValidas      = metas.filter(_validators.meta);
-        const contasValidas     = contasFixas.filter(_validators.contaFixa);
-        const cartoesValidos    = cartoesCredito.filter(_validators.cartao);
+    // ✅ Debounce interno: se houver um save agendado, cancela e reagenda
+    //    Múltiplas chamadas rápidas resultam em apenas 1 save real (após 2s de silêncio)
+    //    O chamador recebe uma Promise que resolve quando o save de fato ocorrer
+    return new Promise((resolve) => {
 
-        if (transacoesValidas.length !== transacoes.length    ||
-            metasValidas.length      !== metas.length          ||
-            contasValidas.length     !== contasFixas.length    ||
-            cartoesValidos.length    !== cartoesCredito.length) {
-            _log.warn('SAVE: itens inválidos descartados antes de persistir');
+        // Cancela timer anterior e notifica o chamador anterior com false
+        // (ele foi substituído por este save mais recente)
+        if (_saveDebounceTimer) {
+            clearTimeout(_saveDebounceTimer);
+            if (_saveDebounceResolve) _saveDebounceResolve(false);
         }
 
-        const userData = await dataManager.loadUserData();
+        _saveDebounceResolve = resolve;
 
-        const dadosPerfil = {
-            id:             perfilAtivo.id,
-            nome:           _sanitizeText(perfilAtivo.nome),
-            foto:           _sanitizeImgUrl(perfilAtivo.foto) || null,
-            transacoes:     transacoesValidas,
-            metas:          metasValidas,
-            contasFixas:    contasValidas,
-            cartoesCredito: cartoesValidos,
-            // ✅ Apenas nextCartaoId persiste — transações, metas e contas
-            //    usam UUID gerado pelo banco e não precisam de contador local
-            nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
-            lastUpdate:     new Date().toISOString(),
-        };
+        _saveDebounceTimer = setTimeout(async () => {
+            _saveDebounceTimer   = null;
+            _saveDebounceResolve = null;
 
-        const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
-        if (perfilIndex !== -1) {
-            userData.profiles[perfilIndex] = dadosPerfil;
-        } else {
-            userData.profiles.push(dadosPerfil);
-        }
+            try {
+                const transacoesValidas = transacoes.filter(_validators.transacao);
+                const metasValidas      = metas.filter(_validators.meta);
+                const contasValidas     = contasFixas.filter(_validators.contaFixa);
+                const cartoesValidos    = cartoesCredito.filter(_validators.cartao);
 
-        const sucesso = await dataManager.saveUserData(userData.profiles);
-        if (!sucesso) _log.error('SAVE_003', 'saveUserData retornou false');
-        return !!sucesso;
+                if (transacoesValidas.length !== transacoes.length   ||
+                    metasValidas.length      !== metas.length         ||
+                    contasValidas.length     !== contasFixas.length   ||
+                    cartoesValidos.length    !== cartoesCredito.length) {
+                    _log.warn('SAVE: itens inválidos descartados antes de persistir');
+                }
 
-    } catch (e) {
-        _log.error('SAVE_004', e);
-        return false;
-    }
+                const userData = await dataManager.loadUserData();
+
+                const dadosPerfil = {
+                    id:             perfilAtivo.id,
+                    nome:           _sanitizeText(perfilAtivo.nome),
+                    foto:           _sanitizeImgUrl(perfilAtivo.foto) || null,
+                    transacoes:     transacoesValidas,
+                    metas:          metasValidas,
+                    contasFixas:    contasValidas,
+                    cartoesCredito: cartoesValidos,
+                    nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
+                    lastUpdate:     new Date().toISOString(),
+                };
+
+                const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
+                if (perfilIndex !== -1) {
+                    userData.profiles[perfilIndex] = dadosPerfil;
+                } else {
+                    userData.profiles.push(dadosPerfil);
+                }
+
+                const sucesso = await dataManager.saveUserData(userData.profiles);
+                if (!sucesso) _log.error('SAVE_003', 'saveUserData retornou false');
+                resolve(!!sucesso);
+
+            } catch (e) {
+                _log.error('SAVE_004', e);
+                resolve(false);
+            }
+        }, 2_000); // ✅ 2s de silêncio antes de salvar de verdade
+    });
 }
 
 // ========== VERIFICAÇÃO DE LOGIN ==========
@@ -6773,35 +6795,75 @@ function debug(msg, obj) {
 }
 
 
-// ========== SISTEMA DE AUTO-SAVE PERIÓDICO ==========
-let autoSaveInterval = null;
+// ========== SISTEMA DE AUTO-SAVE INTELIGENTE ==========
+
+// ✅ Flag de dados modificados — evita saves desnecessários quando nada mudou
+let _dadosSujos = false;
+
+// ✅ Timers declarados fora — permite cancelamento limpo ao trocar de perfil
+let _autoSaveDebounceTimer  = null;
+let _autoSavePeriodicoTimer = null;
+
+// ✅ Marca dados como modificados
+//    Chame esta função após qualquer alteração de dados (transação, conta, meta, etc.)
+function marcarDadosSujos() {
+    _dadosSujos = true;
+}
+
+// ✅ Save com debounce de 3s
+//    Aguarda 3 segundos de inatividade antes de salvar
+//    Evita salvar a cada tecla ou clique consecutivo
+//    Chame no lugar de salvarDados() nas funções de alteração de dados
+function agendarSave() {
+    marcarDadosSujos();
+
+    if (_autoSaveDebounceTimer) clearTimeout(_autoSaveDebounceTimer);
+
+    _autoSaveDebounceTimer = setTimeout(async () => {
+        if (!_dadosSujos) return;
+        console.log('💾 [DEBOUNCE-SAVE] Salvando após inatividade...');
+        const ok = await salvarDados();
+        if (ok) {
+            _dadosSujos = false;
+            console.log('✅ [DEBOUNCE-SAVE] Salvo com sucesso');
+        } else {
+            console.error('❌ [DEBOUNCE-SAVE] Falha no salvamento');
+        }
+    }, 3_000);
+}
+
+// ✅ Para todos os timers — chame ao trocar de perfil ou fazer logout
+function pararAutoSave() {
+    if (_autoSaveDebounceTimer)  { clearTimeout(_autoSaveDebounceTimer);   _autoSaveDebounceTimer  = null; }
+    if (_autoSavePeriodicoTimer) { clearInterval(_autoSavePeriodicoTimer); _autoSavePeriodicoTimer = null; }
+}
 
 function iniciarAutoSave() {
-    // Limpar intervalo anterior (se existir)
-    if (autoSaveInterval) {
-        clearInterval(autoSaveInterval);
-        console.log('🔄 [AUTO-SAVE] Intervalo anterior limpo');
-    }
+    if (!perfilAtivo) return;
 
-    console.log('🔄 [AUTO-SAVE] Sistema iniciado (salvamento a cada 5 segundos)');
-    console.log('👤 [AUTO-SAVE] Perfil ativo:', perfilAtivo?.nome || 'Nenhum');
-    console.log('🔑 [AUTO-SAVE] Perfil ID:', perfilAtivo?.id || 'Nenhum');
+    // ✅ Para timers anteriores — evita múltiplos intervalos rodando em paralelo
+    pararAutoSave();
 
-    // ✅ SALVAR A CADA 5 SEGUNDOS
-    autoSaveInterval = setInterval(async () => {
-        if (perfilAtivo) {
-            console.log('⏰ [AUTO-SAVE PERIÓDICO] Executando salvamento automático...');
-            const sucesso = await salvarDados();
-            
-            if (sucesso) {
-                console.log('✅ [AUTO-SAVE PERIÓDICO] Salvamento concluído com sucesso');
-            } else {
-                console.error('❌ [AUTO-SAVE PERIÓDICO] Falha no salvamento');
-            }
+    console.log('🔄 [AUTO-SAVE] Sistema iniciado');
+    console.log('👤 [AUTO-SAVE] Perfil ativo:', perfilAtivo.nome);
+    console.log('🔑 [AUTO-SAVE] Perfil ID:', perfilAtivo.id);
+
+    // ✅ Fallback periódico a cada 30s
+    //    Só salva se _dadosSujos = true — nunca salva sem necessidade
+    //    Garante persistência mesmo se o debounce não for chamado
+    _autoSavePeriodicoTimer = setInterval(async () => {
+        if (!perfilAtivo || !_dadosSujos) return;
+
+        console.log('⏰ [AUTO-SAVE PERIÓDICO] Dados modificados detectados, salvando...');
+        const ok = await salvarDados();
+
+        if (ok) {
+            _dadosSujos = false;
+            console.log('✅ [AUTO-SAVE PERIÓDICO] Salvo com sucesso');
         } else {
-            console.warn('⚠️ [AUTO-SAVE PERIÓDICO] Nenhum perfil ativo, pulando salvamento');
+            console.error('❌ [AUTO-SAVE PERIÓDICO] Falha no salvamento');
         }
-    }, 5000); // 5 segundos
+    }, 30_000);
 }
 
 function pararAutoSave() {
