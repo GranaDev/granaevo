@@ -3505,7 +3505,6 @@ function analisarDisciplinaRetiradas(metaId) {
     const totalRetiradas = retiradas.length;
     const valorTotalRetirado = retiradas.reduce((sum, r) => sum + Number(r.valor), 0);
     
-    // Contar por tipo de motivo
     const motivosCategorias = {
         emergencia: ['Emergência Médica', 'Emergência Familiar', 'Reparo Urgente', 'Dívida Urgente'],
         planejado: ['Compra Planejada', 'Viagem', 'Educação'],
@@ -3518,7 +3517,9 @@ function analisarDisciplinaRetiradas(metaId) {
     let countOutros = 0;
     
     retiradas.forEach(r => {
-        const motivo = r.motivo;
+        // ✅ CORREÇÃO: type guard — garante que motivo é string antes de chamar .includes()
+        //    Sem isso, r.motivo undefined/null lança TypeError silencioso
+        const motivo = typeof r.motivo === 'string' ? r.motivo : '';
         if(motivosCategorias.emergencia.some(m => motivo.includes(m))) {
             countEmergencia++;
         } else if(motivosCategorias.planejado.some(m => motivo.includes(m))) {
@@ -3530,14 +3531,11 @@ function analisarDisciplinaRetiradas(metaId) {
         }
     });
     
-    
-    // Calcular porcentagens
     const percEmergencia = ((countEmergencia / totalRetiradas) * 100).toFixed(1);
     const percPlanejado = ((countPlanejado / totalRetiradas) * 100).toFixed(1);
     const percInvestimento = ((countInvestimento / totalRetiradas) * 100).toFixed(1);
     const percOutros = ((countOutros / totalRetiradas) * 100).toFixed(1);
     
-    // Análise de disciplina
     let nivelDisciplina = 'Boa';
     let corDisciplina = '#00ff99';
     let mensagemDisciplina = '';
@@ -3593,15 +3591,22 @@ function abrirAnaliseDisciplina(metaId) {
         `);
         return;
     }
+
+    // ✅ CORREÇÃO: escapeHTML em todos os campos de dados do usuário antes de
+    //    inserir no innerHTML — previne XSS caso os dados estejam corrompidos
+    //    ou manipulados. corDisciplina, nivelDisciplina e mensagemDisciplina
+    //    vêm de strings hardcoded internamente, portanto não precisam de escape.
+    const descricaoSegura        = escapeHTML(String(meta.descricao || ''));
+    const ultimaData             = escapeHTML(String(analise.ultimaRetirada.data || ''));
+    const ultimoMotivo           = escapeHTML(String(analise.ultimaRetirada.motivo || ''));
     
     criarPopup(`
         <div style="max-height:70vh; overflow-y:auto; padding-right:10px;">
             <h3 style="text-align:center; margin-bottom:8px;">📊 Análise de Disciplina Financeira</h3>
             <div style="text-align:center; color: var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
-                Meta: ${meta.descricao}
+                Meta: ${descricaoSegura}
             </div>
             
-            <!-- Nível de Disciplina -->
             <div style="background: linear-gradient(135deg, ${analise.corDisciplina}20, ${analise.corDisciplina}10); 
                         padding: 20px; border-radius: 12px; margin-bottom: 20px; 
                         border-left: 4px solid ${analise.corDisciplina}; text-align: center;">
@@ -3614,20 +3619,17 @@ function abrirAnaliseDisciplina(metaId) {
                 </div>
             </div>
             
-            <!-- Estatísticas Gerais -->
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
                 <div style="background: rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; text-align: center;">
                     <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Total de Retiradas</div>
                     <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary);">${analise.totalRetiradas}</div>
                 </div>
-                
                 <div style="background: rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; text-align: center;">
                     <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Valor Total Retirado</div>
                     <div style="font-size: 1.5rem; font-weight: 700; color: #ff4b4b;">${formatBRL(analise.valorTotalRetirado)}</div>
                 </div>
             </div>
             
-            <!-- Distribuição por Motivo -->
             <div style="margin-bottom: 20px;">
                 <h4 style="margin-bottom: 12px; color: var(--text-primary);">📋 Distribuição por Motivo</h4>
                 
@@ -3680,31 +3682,34 @@ function abrirAnaliseDisciplina(metaId) {
                 ` : ''}
             </div>
             
-            <!-- Última Retirada -->
             <div style="background: rgba(108,99,255,0.1); padding: 14px; border-radius: 12px; border-left: 3px solid #6c63ff;">
                 <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">🕐 Última Retirada</div>
                 <div style="display: grid; gap: 6px; font-size: 0.9rem; color: var(--text-secondary);">
-                    <div><strong>Data:</strong> ${analise.ultimaRetirada.data}</div>
+                    <div><strong>Data:</strong> ${ultimaData}</div>
                     <div><strong>Valor:</strong> ${formatBRL(analise.ultimaRetirada.valor)}</div>
-                    <div><strong>Motivo:</strong> ${analise.ultimaRetirada.motivo}</div>
+                    <div><strong>Motivo:</strong> ${ultimoMotivo}</div>
                 </div>
             </div>
             
-            <!-- Histórico Completo de Retiradas -->
             <div style="margin-top: 20px;">
                 <h4 style="margin-bottom: 12px; color: var(--text-primary);">📜 Histórico Completo</h4>
                 <div style="max-height: 200px; overflow-y: auto;">
-                    ${meta.historicoRetiradas.slice().reverse().map(r => `
+                    ${meta.historicoRetiradas.slice().reverse().map(r => {
+                        // ✅ CORREÇÃO: escapeHTML em r.data e r.motivo por serem dados do usuário
+                        const dataSegura   = escapeHTML(String(r.data   || ''));
+                        const motivoSeguro = escapeHTML(String(r.motivo || ''));
+                        return `
                         <div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 2px solid var(--border);">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <span style="font-size: 0.85rem; color: var(--text-secondary);">${r.data}</span>
+                                <span style="font-size: 0.85rem; color: var(--text-secondary);">${dataSegura}</span>
                                 <span style="font-size: 0.9rem; font-weight: 600; color: #ff4b4b;">${formatBRL(r.valor)}</span>
                             </div>
                             <div style="font-size: 0.85rem; color: var(--text-primary);">
-                                <strong>Motivo:</strong> ${r.motivo}
+                                <strong>Motivo:</strong> ${motivoSeguro}
                             </div>
                         </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             </div>
         </div>
@@ -3724,29 +3729,56 @@ function atualizarTelaCartoes() {
     grid.innerHTML = '';
     
     cartoesCredito.forEach(c => {
-        let disponivel = c.limite - (c.usado||0);
+        let disponivel = c.limite - (c.usado || 0);
         let parcelasAtivas = contasFixas.filter(fx => fx.cartaoId === c.id && fx.totalParcelas);
-        let parcelasRestantes = parcelasAtivas.reduce((sum,fx)=> 
+        let parcelasRestantes = parcelasAtivas.reduce((sum, fx) =>
             fx.totalParcelas ? sum + (fx.totalParcelas - fx.parcelaAtual + 1) : sum, 0);
         
         let card = document.createElement('div');
         card.className = 'cartao-cc';
+
+        // ✅ CORREÇÃO: nomeBanco via textContent em elementos criados separadamente
+        //    em vez de injetar via innerHTML — elimina XSS em nome de banco customizado.
+        //    bandeiraImg validada para aceitar apenas URLs https:// de domínios conhecidos
+        //    — bloqueia javascript: URI e URLs arbitrárias.
+        const dominiosPermitidos = ['logospng.org'];
+        let imgHtml = '';
+        if(c.bandeiraImg) {
+            try {
+                const url = new URL(c.bandeiraImg);
+                const dominioPermitido = dominiosPermitidos.some(d => url.hostname === d || url.hostname.endsWith('.' + d));
+                if(url.protocol === 'https:' && dominioPermitido) {
+                    // ✅ URL segura — cria elemento img programaticamente
+                    const img = document.createElement('img');
+                    img.src    = c.bandeiraImg;
+                    img.className = 'cartao-bandeira';
+                    img.alt   = '';  // alt preenchido abaixo via textContent
+                    imgHtml = img.outerHTML;
+                }
+            } catch(_) {
+                // URL inválida — ignora silenciosamente
+            }
+        }
+
+        // ✅ Monta estrutura via DOM para campos de texto do usuário
         card.innerHTML = `
-            ${c.bandeiraImg ? `<img src="${c.bandeiraImg}" class="cartao-bandeira" alt="${c.nomeBanco}">` : ''}
-            <div class="cartao-cc-nome">${c.nomeBanco}</div>
+            ${imgHtml}
+            <div class="cartao-cc-nome"></div>
             <div class="cartao-cc-limite">Limite: ${formatBRL(c.limite)}</div>
             <div class="cartao-cc-disponivel">Disponível: ${formatBRL(disponivel)}</div>
             ${parcelasRestantes > 0 ? `<div class="cartao-cc-parcelas">Parcelas a pagar: ${parcelasRestantes}</div>` : ''}
         `;
+
+        // ✅ textContent para nomeBanco — nunca interpreta HTML
+        card.querySelector('.cartao-cc-nome').textContent = c.nomeBanco || '';
         card.onclick = () => abrirCartaoForm(c.id);
         grid.appendChild(card);
     });
     
-    // Adiciona até 6 slots (cartões + botões adicionar)
     for(let i = cartoesCredito.length; i < 6; i++) {
         let btn = document.createElement('div');
         btn.className = 'cartao-cc-add';
-        btn.innerHTML = '+';
+        btn.textContent = '+'; // ✅ textContent em vez de innerHTML para o '+'
         btn.onclick = () => abrirCartaoForm();
         grid.appendChild(btn);
     }
@@ -3754,15 +3786,15 @@ function atualizarTelaCartoes() {
 
 function abrirCartaoForm(editId = null) {
     const bancos = [
-        {nome: 'Nubank', img: 'https://logospng.org/download/nubank/logo-roxo-nubank-icone.png'},
-        {nome: 'Bradesco', img: 'https://logospng.org/download/bradesco/logo-bradesco-icon-256.png'},
-        {nome: 'Mercado Pago', img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icon.png'},
-        {nome: 'C6 Bank', img: 'https://logospng.org/download/c6-bank/logo-c6-bank-icon.png'},
-        {nome: 'Itaú', img: 'https://logospng.org/download/itau/logo-itau-icon.png'},
-        {nome: 'Santander', img: 'https://logospng.org/download/santander/logo-santander-icon.png'},
+        {nome: 'Nubank',        img: 'https://logospng.org/download/nubank/logo-roxo-nubank-icone.png'},
+        {nome: 'Bradesco',      img: 'https://logospng.org/download/bradesco/logo-bradesco-icon-256.png'},
+        {nome: 'Mercado Pago',  img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icon.png'},
+        {nome: 'C6 Bank',       img: 'https://logospng.org/download/c6-bank/logo-c6-bank-icon.png'},
+        {nome: 'Itaú',          img: 'https://logospng.org/download/itau/logo-itau-icon.png'},
+        {nome: 'Santander',     img: 'https://logospng.org/download/santander/logo-santander-icon.png'},
         {nome: 'Banco do Brasil', img: 'https://logospng.org/download/banco-do-brasil/logo-banco-do-brasil-icon.png'},
-        {nome: 'Caixa', img: 'https://logospng.org/download/caixa/logo-caixa-icon.png'},
-        {nome: 'Outro', img: ''}
+        {nome: 'Caixa',         img: 'https://logospng.org/download/caixa/logo-caixa-icon.png'},
+        {nome: 'Outro',         img: ''}
     ];
     
     let options = bancos.map(b => `<option value="${b.nome}">${b.nome}</option>`).join('');
@@ -3782,20 +3814,19 @@ function abrirCartaoForm(editId = null) {
             <select id="novoBanco" class="form-input">${options}</select><br>
             <div id="campoOutroCartao" style="display:none; margin-top:10px;">
                 <label style="display:block; text-align:left; color: var(--text-secondary);">Nome do Cartão:</label>
-                <input type="text" id="nomeOutroCartao" class="form-input" placeholder="Digite o nome do cartão"><br>
+                <input type="text" id="nomeOutroCartao" class="form-input" placeholder="Digite o nome do cartão" maxlength="50"><br>
             </div>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Limite Total:</label>
-            <input type="number" id="novoLimite" class="form-input" placeholder="Limite (R$)" step="0.01" min="1"><br>
+            <input type="number" id="novoLimite" class="form-input" placeholder="Limite (R$)" step="0.01" min="1" max="9999999"><br>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Dia da Fatura:</label>
             <select id="novoVencimentoDia" class="form-input">${diaOptions()}</select><br>
             <button class="btn-primary" id="salvarNovoCartao">Salvar</button>
             <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
         `);
         
-        // Listener para mostrar/ocultar campo "Outro"
         const selectBanco = document.getElementById('novoBanco');
-        const campoOutro = document.getElementById('campoOutroCartao');
-        const inputOutro = document.getElementById('nomeOutroCartao');
+        const campoOutro  = document.getElementById('campoOutroCartao');
+        const inputOutro  = document.getElementById('nomeOutroCartao');
         
         selectBanco.addEventListener('change', function() {
             if(this.value === 'Outro') {
@@ -3811,19 +3842,24 @@ function abrirCartaoForm(editId = null) {
         
         document.getElementById('salvarNovoCartao').onclick = () => {
             let nomeBanco = document.getElementById('novoBanco').value;
-            const limiteStr = document.getElementById('novoLimite').value;
+            const limiteStr    = document.getElementById('novoLimite').value;
             const vencimentoDia = document.getElementById('novoVencimentoDia').value;
             
-            // Se selecionou "Outro", pega o nome digitado
             if(nomeBanco === 'Outro') {
                 const nomeDigitado = document.getElementById('nomeOutroCartao').value.trim();
                 if(!nomeDigitado) return alert("Digite o nome do cartão!");
+                // ✅ CORREÇÃO: limite de tamanho no nome customizado
+                if(nomeDigitado.length > 50) return alert("Nome do cartão muito longo (máx. 50 caracteres).");
                 nomeBanco = nomeDigitado;
             }
             
             if(!nomeBanco || !limiteStr || !vencimentoDia) return alert("Preencha todos os campos!");
             
-            const limite = parseFloat(limiteStr);
+            const limite = parseFloat(parseFloat(limiteStr).toFixed(2));
+            // ✅ CORREÇÃO: validação de limite — rejeita valores inválidos ou absurdos
+            if(isNaN(limite) || limite <= 0)        return alert("Informe um limite válido e positivo.");
+            if(limite > 9999999)                     return alert("Limite máximo permitido: R$ 9.999.999,00.");
+
             const bandeiraImg = bancos.find(b => b.nome === nomeBanco)?.img || '';
             
             cartoesCredito.push({
@@ -3854,10 +3890,10 @@ function abrirCartaoForm(editId = null) {
             <select id="novoBanco" class="form-input">${options}</select><br>
             <div id="campoOutroCartao" style="display:none; margin-top:10px;">
                 <label style="display:block; text-align:left; color: var(--text-secondary);">Nome do Cartão:</label>
-                <input type="text" id="nomeOutroCartao" class="form-input" placeholder="Digite o nome do cartão"><br>
+                <input type="text" id="nomeOutroCartao" class="form-input" placeholder="Digite o nome do cartão" maxlength="50"><br>
             </div>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Limite Total:</label>
-            <input type="number" id="novoLimite" class="form-input" value="${c.limite}" step="0.01" min="1"><br>
+            <input type="number" id="novoLimite" class="form-input" value="${parseFloat(c.limite)}" step="0.01" min="1" max="9999999"><br>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Dia da Fatura:</label>
             <select id="novoVencimentoDia" class="form-input">${diaOptions(c.vencimentoDia)}</select><br>
             <button class="btn-primary" id="salvarNovoCartao">Salvar</button>
@@ -3865,10 +3901,9 @@ function abrirCartaoForm(editId = null) {
             <button class="btn-excluir" id="excluirCartao">Excluir</button>
         `);
         
-        // Verifica se o cartão atual é customizado
         const selectBanco = document.getElementById('novoBanco');
-        const campoOutro = document.getElementById('campoOutroCartao');
-        const inputOutro = document.getElementById('nomeOutroCartao');
+        const campoOutro  = document.getElementById('campoOutroCartao');
+        const inputOutro  = document.getElementById('nomeOutroCartao');
         
         const bancoExiste = bancos.find(b => b.nome === c.nomeBanco && b.nome !== 'Outro');
         
@@ -3877,6 +3912,7 @@ function abrirCartaoForm(editId = null) {
         } else {
             selectBanco.value = 'Outro';
             campoOutro.style.display = 'block';
+            // ✅ .value em vez de innerHTML — nunca interpreta HTML no campo de edição
             inputOutro.value = c.nomeBanco;
         }
         
@@ -3898,13 +3934,21 @@ function abrirCartaoForm(editId = null) {
             if(nomeBanco === 'Outro') {
                 const nomeDigitado = document.getElementById('nomeOutroCartao').value.trim();
                 if(!nomeDigitado) return alert("Digite o nome do cartão!");
+                // ✅ CORREÇÃO: limite de tamanho no nome customizado (edição)
+                if(nomeDigitado.length > 50) return alert("Nome do cartão muito longo (máx. 50 caracteres).");
                 nomeBanco = nomeDigitado;
             }
             
-            c.nomeBanco = nomeBanco;
-            c.limite = parseFloat(document.getElementById('novoLimite').value);
+            const limiteStr = document.getElementById('novoLimite').value;
+            const limite    = parseFloat(parseFloat(limiteStr).toFixed(2));
+            // ✅ CORREÇÃO: validação de limite na edição também
+            if(isNaN(limite) || limite <= 0) return alert("Informe um limite válido e positivo.");
+            if(limite > 9999999)              return alert("Limite máximo permitido: R$ 9.999.999,00.");
+
+            c.nomeBanco     = nomeBanco;
+            c.limite        = limite;
             c.vencimentoDia = Number(document.getElementById('novoVencimentoDia').value);
-            c.bandeiraImg = bancos.find(b => b.nome === nomeBanco)?.img || '';
+            c.bandeiraImg   = bancos.find(b => b.nome === nomeBanco)?.img || '';
             
             salvarDados();
             atualizarTelaCartoes();
@@ -3919,7 +3963,7 @@ function abrirCartaoForm(editId = null) {
         document.getElementById('excluirCartao').onclick = () => {
             if(confirm("Excluir cartão? Todas as compras futuras vinculadas a ele serão removidas.")) {
                 cartoesCredito = cartoesCredito.filter(x => x.id !== editId);
-                contasFixas = contasFixas.filter(x => x.cartaoId !== editId);
+                contasFixas    = contasFixas.filter(x => x.cartaoId !== editId);
                 salvarDados();
                 atualizarTelaCartoes();
                 atualizarListaContasFixas();
@@ -3948,62 +3992,70 @@ function exportarGraficos() {
     mostrarNotificacao('Função de exportação será reconstruída', 'info');
 }
 
-
 // ========== RELATÓRIOS ==========
 function popularFiltrosRelatorio() {
     const mesSelect = document.getElementById('mesRelatorio');
     const anoSelect = document.getElementById('anoRelatorio');
     const perfilSelect = document.getElementById('selectPerfilRelatorio');
     
-    if(!mesSelect || !anoSelect || !perfilSelect) {
+    if (!mesSelect || !anoSelect || !perfilSelect) {
         console.error('Elementos de filtro não encontrados!');
         return;
     }
     
-    // Limpar selects
     mesSelect.innerHTML = '<option value="">Selecione o mês</option>';
     anoSelect.innerHTML = '<option value="">Selecione o ano</option>';
     perfilSelect.innerHTML = '<option value="">Selecione o perfil</option>';
     
-    // Popula seletor de perfis
+    // CORREÇÃO: Usar textContent em vez de innerHTML para nomes de perfis
+    if (!Array.isArray(usuarioLogado?.perfis)) return;
+
     usuarioLogado.perfis.forEach(perfil => {
         const option = document.createElement('option');
-        option.value = perfil.id;
-        option.textContent = perfil.nome;
-        if(perfilAtivo && perfil.id === perfilAtivo.id) {
+        option.value = sanitizeHTML(String(perfil.id));
+        option.textContent = String(perfil.nome || '').slice(0, 100); // textContent é seguro por natureza
+        if (perfilAtivo && String(perfil.id) === String(perfilAtivo.id)) {
             option.selected = true;
         }
         perfilSelect.appendChild(option);
     });
     
-    // Coleta todos os períodos disponíveis
     const periodosDisponiveis = new Set();
     
-    if(tipoRelatorioAtivo === 'individual') {
-        transacoes.forEach(t => {
-            const dataISO = dataParaISO(t.data);
-            if(dataISO) {
-                const anoMes = dataISO.slice(0, 7);
-                periodosDisponiveis.add(anoMes);
-            }
-        });
+    if (tipoRelatorioAtivo === 'individual') {
+        if (Array.isArray(transacoes)) {
+            transacoes.forEach(t => {
+                const dataISO = sanitizeDate(dataParaISO(t.data));
+                if (dataISO) {
+                    periodosDisponiveis.add(dataISO.slice(0, 7));
+                }
+            });
+        }
     } else {
-        usuarioLogado.perfis.forEach(perfil => {
-            const chave = `granaevo_perfil_${perfil.id}`;
-            const dados = JSON.parse(localStorage.getItem(chave) || 'null');
-            if(dados && dados.transacoes) {
-                dados.transacoes.forEach(t => {
-                    const dataISO = dataParaISO(t.data);
-                    if(dataISO) {
-                        const anoMes = dataISO.slice(0, 7);
-                        periodosDisponiveis.add(anoMes);
-                    }
-                });
-            }
-        });
+        if (Array.isArray(usuarioLogado?.perfis)) {
+            usuarioLogado.perfis.forEach(perfil => {
+                const chave = `granaevo_perfil_${sanitizeHTML(String(perfil.id))}`;
+                try {
+                    const raw = localStorage.getItem(chave);
+                    if (!raw) return;
+                    const dados = JSON.parse(raw);
+                    // CORREÇÃO: Validar estrutura antes de usar
+                    if (!dados || !Array.isArray(dados.transacoes)) return;
+                    dados.transacoes.forEach(t => {
+                        if (!t || typeof t !== 'object') return;
+                        const dataISO = sanitizeDate(dataParaISO(t.data));
+                        if (dataISO) {
+                            periodosDisponiveis.add(dataISO.slice(0, 7));
+                        }
+                    });
+                } catch (e) {
+                    console.warn('Erro ao ler localStorage para perfil:', perfil.id);
+                }
+            });
+        }
     }
     
-    if(periodosDisponiveis.size === 0) {
+    if (periodosDisponiveis.size === 0) {
         const hoje = new Date();
         const anoAtual = hoje.getFullYear();
         const mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
@@ -4014,9 +4066,11 @@ function popularFiltrosRelatorio() {
     const anos = new Set();
     
     periodosDisponiveis.forEach(periodo => {
-        const [ano, mes] = periodo.split('-');
-        meses.add(mes);
-        anos.add(ano);
+        const partes = periodo.split('-');
+        if (partes.length === 2) {
+            meses.add(partes[1]);
+            anos.add(partes[0]);
+        }
     });
     
     const mesesNomes = {
@@ -4026,6 +4080,7 @@ function popularFiltrosRelatorio() {
     };
     
     Array.from(meses).sort().forEach(mes => {
+        if (!mesesNomes[mes]) return; // Ignora mês inválido
         const option = document.createElement('option');
         option.value = mes;
         option.textContent = mesesNomes[mes];
@@ -4033,15 +4088,15 @@ function popularFiltrosRelatorio() {
     });
     
     Array.from(anos).sort().reverse().forEach(ano => {
+        const anoNum = parseInt(ano, 10);
+        if (anoNum < 2000 || anoNum > 2100) return; // Ignora anos absurdos
         const option = document.createElement('option');
         option.value = ano;
         option.textContent = ano;
         anoSelect.appendChild(option);
     });
     
-    // IMPORTANTE: Configurar os botões após popular os filtros
     setupBotoesRelatorio();
-    
     console.log('Filtros de relatório populados. Tipo ativo:', tipoRelatorioAtivo);
 }
 
@@ -4051,12 +4106,11 @@ function setupBotoesRelatorio() {
     const btnFamilia = document.querySelector('.tipo-relatorio-btns [data-tipo="familia"]');
     const perfilSelector = document.getElementById('perfilSelectorDiv');
     
-    if(!btnIndividual || !btnCasal || !btnFamilia || !perfilSelector) {
+    if (!btnIndividual || !btnCasal || !btnFamilia || !perfilSelector) {
         console.error('Botões de relatório não encontrados!');
         return;
     }
     
-    // CORREÇÃO: Remover listeners antigos antes de adicionar novos
     const newBtnIndividual = btnIndividual.cloneNode(true);
     const newBtnCasal = btnCasal.cloneNode(true);
     const newBtnFamilia = btnFamilia.cloneNode(true);
@@ -4065,119 +4119,127 @@ function setupBotoesRelatorio() {
     btnCasal.parentNode.replaceChild(newBtnCasal, btnCasal);
     btnFamilia.parentNode.replaceChild(newBtnFamilia, btnFamilia);
     
-    // Event listener para Individual
-    newBtnIndividual.addEventListener('click', function() {
-        console.log('Botão Individual clicado');
+    newBtnIndividual.addEventListener('click', function () {
         tipoRelatorioAtivo = 'individual';
         newBtnIndividual.classList.add('active');
         newBtnCasal.classList.remove('active');
         newBtnFamilia.classList.remove('active');
         perfilSelector.classList.add('show');
         const resultado = document.getElementById('relatorioResultado');
-        if(resultado) resultado.style.display = 'none';
+        if (resultado) resultado.style.display = 'none';
         popularFiltrosRelatorio();
     });
     
-    // Event listener para Casal
-    newBtnCasal.addEventListener('click', function() {
-        console.log('Botão Casal clicado');
-        
-        // Verificar se há pelo menos 2 perfis
-        if(usuarioLogado.perfis.length < 2) {
+    newBtnCasal.addEventListener('click', function () {
+        if (!Array.isArray(usuarioLogado?.perfis) || usuarioLogado.perfis.length < 2) {
             alert('Você precisa ter pelo menos 2 perfis cadastrados para gerar relatório de casal!');
             return;
         }
-        
         tipoRelatorioAtivo = 'casal';
         newBtnIndividual.classList.remove('active');
         newBtnCasal.classList.add('active');
         newBtnFamilia.classList.remove('active');
         perfilSelector.classList.remove('show');
-        
         const resultado = document.getElementById('relatorioResultado');
-        if(resultado) resultado.style.display = 'none';
-        
+        if (resultado) resultado.style.display = 'none';
         popularFiltrosRelatorio();
     });
     
-    // Event listener para Família
-    newBtnFamilia.addEventListener('click', function() {
-        console.log('Botão Família clicado');
-        
-        // Verificar se há pelo menos 2 perfis
-        if(usuarioLogado.perfis.length < 2) {
+    newBtnFamilia.addEventListener('click', function () {
+        if (!Array.isArray(usuarioLogado?.perfis) || usuarioLogado.perfis.length < 2) {
             alert('Você precisa ter pelo menos 2 perfis para gerar relatório da família!');
             return;
         }
-        
         tipoRelatorioAtivo = 'familia';
         newBtnIndividual.classList.remove('active');
         newBtnCasal.classList.remove('active');
         newBtnFamilia.classList.add('active');
         perfilSelector.classList.remove('show');
-        
         const resultado = document.getElementById('relatorioResultado');
-        if(resultado) resultado.style.display = 'none';
-        
+        if (resultado) resultado.style.display = 'none';
         popularFiltrosRelatorio();
     });
-    
-    console.log('Botões de relatório configurados com sucesso!');
 }
 
+// CORREÇÃO: Flag para evitar cliques duplos / race condition
+let _gerandoRelatorio = false;
+
 async function gerarRelatorio() {
+    if (_gerandoRelatorio) return; // CORREÇÃO: Debounce de segurança
+    
     const mesEl = document.getElementById('mesRelatorio');
     const anoEl = document.getElementById('anoRelatorio');
     
-    if(!mesEl || !anoEl) return;
+    if (!mesEl || !anoEl) return;
     
     const mes = mesEl.value;
     const ano = anoEl.value;
     
-    if(!mes || !ano) {
+    // CORREÇÃO: Validar formato de mês e ano antes de processar
+    if (!mes || !ano) {
         return alert('Por favor, selecione o mês e o ano.');
     }
+    if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) {
+        return alert('Mês inválido.');
+    }
+    if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) {
+        return alert('Ano inválido.');
+    }
     
-    if(tipoRelatorioAtivo === 'individual') {
-        const perfilEl = document.getElementById('selectPerfilRelatorio');
-        if(!perfilEl) return;
-        
-        const perfilId = perfilEl.value;
-        if(!perfilId) {
-            return alert('Por favor, selecione um perfil.');
-        }
-        await gerarRelatorioIndividual(mes, ano, perfilId); // ✅ Adicionado await
-    } 
-    else if(tipoRelatorioAtivo === 'casal') {
-        if(usuarioLogado.plano === 'Família' && usuarioLogado.perfis.length > 2) {
-            abrirSelecaoPerfisCasal(mes, ano);
+    _gerandoRelatorio = true;
+    try {
+        if (tipoRelatorioAtivo === 'individual') {
+            const perfilEl = document.getElementById('selectPerfilRelatorio');
+            if (!perfilEl) return;
+            const perfilId = perfilEl.value;
+            if (!perfilId) return alert('Por favor, selecione um perfil.');
+            // CORREÇÃO: Validar que perfilId realmente existe nos perfis do usuário
+            const perfilExiste = usuarioLogado?.perfis?.some(p => String(p.id) === String(perfilId));
+            if (!perfilExiste) return alert('Perfil inválido.');
+            await gerarRelatorioIndividual(mes, ano, perfilId);
+        } else if (tipoRelatorioAtivo === 'casal') {
+            if (usuarioLogado.plano === 'Família' && usuarioLogado.perfis.length > 2) {
+                abrirSelecaoPerfisCasal(mes, ano);
+            } else {
+                await gerarRelatorioCompartilhado(mes, ano, 2);
+            }
         } else {
-            await gerarRelatorioCompartilhado(mes, ano, 2); // ✅ Adicionado await
+            const numPerfis = Math.min(usuarioLogado?.perfis?.length || 0, 20); // CORREÇÃO: Limite máximo
+            await gerarRelatorioCompartilhado(mes, ano, numPerfis);
         }
-    } 
-    else {
-        await gerarRelatorioCompartilhado(mes, ano, usuarioLogado.perfis.length); // ✅ Adicionado await
+    } finally {
+        _gerandoRelatorio = false;
     }
 }
 
     // ========== SELEÇÃO DE PERFIS PARA RELATÓRIO CASAL (PLANO FAMÍLIA) ==========
 function abrirSelecaoPerfisCasal(mes, ano) {
+    // CORREÇÃO: Validar mes/ano antes de montar HTML
+    if (!/^\d{2}$/.test(mes) || !/^\d{4}$/.test(ano)) return;
+    
     let htmlPerfis = '';
     
+    if (!Array.isArray(usuarioLogado?.perfis)) return;
+
     usuarioLogado.perfis.forEach(perfil => {
+        const idSeguro = sanitizeHTML(String(perfil.id));
+        const nomeSeguro = sanitizeHTML(String(perfil.nome || '').slice(0, 100));
+        
         htmlPerfis += `
             <div style="margin-bottom:12px;">
                 <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; cursor:pointer; transition:all 0.3s;"
                        onmouseover="this.style.background='rgba(67,160,71,0.1)'" 
                        onmouseout="this.style.background='rgba(255,255,255,0.05)'">
-                    <input type="checkbox" class="perfil-checkbox-casal" value="${perfil.id}" 
+                    <input type="checkbox" class="perfil-checkbox-casal" value="${idSeguro}" 
                            style="width:20px; height:20px; cursor:pointer; accent-color:var(--primary);">
-                    <span style="font-weight:600; color: var(--text-primary);">${perfil.nome}</span>
+                    <span style="font-weight:600; color: var(--text-primary);">${nomeSeguro}</span>
                 </label>
             </div>
         `;
     });
     
+    // CORREÇÃO: mes e ano não vão mais para atributos onclick inline;
+    // serão armazenados em data-attributes e lidos no handler
     criarPopup(`
         <h3>👥 Selecione 2 Perfis para Relatório Casal</h3>
         <p style="color: var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
@@ -4192,51 +4254,107 @@ function abrirSelecaoPerfisCasal(mes, ano) {
             <span style="color:#ff4b4b; font-weight:600;">⚠️ Selecione exatamente 2 perfis</span>
         </div>
         
-        <button class="btn-primary" onclick="confirmarSelecaoPerfisCasal('${mes}', '${ano}')" style="width:100%; margin-bottom:10px;">
+        <button class="btn-primary" id="btnConfirmarCasal" data-mes="${sanitizeHTML(mes)}" data-ano="${sanitizeHTML(ano)}" style="width:100%; margin-bottom:10px;">
             Gerar Relatório
         </button>
         <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">
             Cancelar
         </button>
     `);
+    
+    // CORREÇÃO: Event listener em vez de onclick inline com parâmetros
+    const btnConfirmar = document.getElementById('btnConfirmarCasal');
+    if (btnConfirmar) {
+        btnConfirmar.addEventListener('click', function () {
+            const m = this.getAttribute('data-mes');
+            const a = this.getAttribute('data-ano');
+            confirmarSelecaoPerfisCasal(m, a);
+        });
+    }
 }
 
 function confirmarSelecaoPerfisCasal(mes, ano) {
+    // CORREÇÃO: Re-validar mes/ano ao confirmar
+    if (!/^\d{2}$/.test(mes) || !/^\d{4}$/.test(ano)) return;
+
     const checkboxes = document.querySelectorAll('.perfil-checkbox-casal:checked');
     const avisoEl = document.getElementById('avisoSelecao');
     
-    if(checkboxes.length !== 2) {
-        avisoEl.style.display = 'block';
-        setTimeout(() => {
-            avisoEl.style.display = 'none';
-        }, 3000);
+    if (checkboxes.length !== 2) {
+        if (avisoEl) {
+            avisoEl.style.display = 'block';
+            setTimeout(() => { avisoEl.style.display = 'none'; }, 3000);
+        }
         return;
     }
     
     const perfisIds = Array.from(checkboxes).map(cb => cb.value);
-    fecharPopup();
     
-    // Gerar relatório APENAS com os 2 perfis selecionados
+    // CORREÇÃO: Validar que os IDs selecionados realmente existem nos perfis do usuário
+    const idsValidos = perfisIds.every(id =>
+        usuarioLogado?.perfis?.some(p => String(p.id) === String(id))
+    );
+    if (!idsValidos) {
+        console.error('IDs de perfis inválidos detectados');
+        return;
+    }
+    
+    fecharPopup();
+    gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds);
+}function confirmarSelecaoPerfisCasal(mes, ano) {
+    // CORREÇÃO: Re-validar mes/ano ao confirmar
+    if (!/^\d{2}$/.test(mes) || !/^\d{4}$/.test(ano)) return;
+
+    const checkboxes = document.querySelectorAll('.perfil-checkbox-casal:checked');
+    const avisoEl = document.getElementById('avisoSelecao');
+    
+    if (checkboxes.length !== 2) {
+        if (avisoEl) {
+            avisoEl.style.display = 'block';
+            setTimeout(() => { avisoEl.style.display = 'none'; }, 3000);
+        }
+        return;
+    }
+    
+    const perfisIds = Array.from(checkboxes).map(cb => cb.value);
+    
+    // CORREÇÃO: Validar que os IDs selecionados realmente existem nos perfis do usuário
+    const idsValidos = perfisIds.every(id =>
+        usuarioLogado?.perfis?.some(p => String(p.id) === String(id))
+    );
+    if (!idsValidos) {
+        console.error('IDs de perfis inválidos detectados');
+        return;
+    }
+    
+    fecharPopup();
     gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds);
 }
-
 // Expor funções globalmente
 window.abrirSelecaoPerfisCasal = abrirSelecaoPerfisCasal;
 window.confirmarSelecaoPerfisCasal = confirmarSelecaoPerfisCasal;
 
 // ========== GERAR RELATÓRIO CASAL PERSONALIZADO ==========
 async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
+    // CORREÇÃO: Validar todos os inputs
+    if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) return;
+    if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) return;
+    if (!Array.isArray(perfisIds) || perfisIds.length !== 2) return;
+
     const periodoSelecionado = `${ano}-${mes}`;
     
-    const perfisAtivos = usuarioLogado.perfis.filter(p => perfisIds.includes(String(p.id)));
+    // CORREÇÃO: Usar === estrito e validar que IDs existem
+    const perfisAtivos = usuarioLogado.perfis.filter(p =>
+        perfisIds.includes(String(p.id))
+    );
     
-    if(perfisAtivos.length !== 2) {
+    if (perfisAtivos.length !== 2) {
         alert('Erro: É necessário selecionar exatamente 2 perfis.');
         return;
     }
     
     let mesAnterior, anoAnterior;
-    if(mes === '01') {
+    if (mes === '01') {
         mesAnterior = '12';
         anoAnterior = String(Number(ano) - 1);
     } else {
@@ -4245,70 +4363,67 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
     }
     const periodoAnterior = `${anoAnterior}-${mesAnterior}`;
     
-    // ✅ CORREÇÃO: Buscar dados via dataManager
     const userData = await dataManager.loadUserData();
     
+    // CORREÇÃO: Validar estrutura do userData
+    if (!validarUserData(userData)) {
+        console.error('Dados do usuário inválidos ou corrompidos');
+        return;
+    }
+    
     const dadosPorPerfil = perfisAtivos.map(perfil => {
-        // ✅ NOVO: Buscar perfil no JSON
-        const dadosPerfil = userData.profiles.find(p => p.id === perfil.id);
-        const transacoesPerfil = dadosPerfil ? dadosPerfil.transacoes || [] : [];
-        const metasPerfil = dadosPerfil ? dadosPerfil.metas || [] : [];
-        const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
+        // CORREÇÃO: Usar === estrito
+        const dadosPerfil = userData.profiles.find(p => String(p.id) === String(perfil.id));
+        const transacoesPerfil = Array.isArray(dadosPerfil?.transacoes) ? dadosPerfil.transacoes : [];
+        const metasPerfil = Array.isArray(dadosPerfil?.metas) ? dadosPerfil.metas : [];
+        const cartoesPerfil = Array.isArray(dadosPerfil?.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
         
         const transacoesPeriodo = transacoesPerfil.filter(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO) return false;
+            if (!t || typeof t !== 'object') return false;
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            if (!dataISO) return false;
             return dataISO.startsWith(periodoSelecionado);
-        });
-        
-        const transacoesPeriodoAnterior = transacoesPerfil.filter(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO) return false;
-            return dataISO.startsWith(periodoAnterior);
         });
         
         let saldoInicial = 0;
         transacoesPerfil.forEach(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO) return;
+            if (!t || typeof t !== 'object') return;
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            if (!dataISO || dataISO >= periodoSelecionado) return;
             
-            if(dataISO < periodoSelecionado) {
-                if(t.categoria === 'entrada') {
-                    saldoInicial += Number(t.valor);
-                }
-                else if(t.categoria === 'saida') {
-                    saldoInicial -= Number(t.valor);
-                }
-                else if(t.categoria === 'reserva') {
-                    saldoInicial -= Number(t.valor);
-                }
-                else if(t.categoria === 'retirada_reserva') {
-                    saldoInicial += Number(t.valor);
-                }
-            }
+            const valor = sanitizeNumber(t.valor);
+            if (t.categoria === 'entrada') saldoInicial += valor;
+            else if (t.categoria === 'saida') saldoInicial -= valor;
+            else if (t.categoria === 'reserva') saldoInicial -= valor;
+            else if (t.categoria === 'retirada_reserva') saldoInicial += valor;
         });
         
         let entradas = 0, saidas = 0, totalGuardado = 0, totalRetirado = 0;
-        const categorias = {};
+        // CORREÇÃO: Object sem prototype para evitar Prototype Pollution
+        const categorias = safeCategorias();
         
         transacoesPerfil.forEach(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO || !dataISO.startsWith(periodoSelecionado)) return;
+            if (!t || typeof t !== 'object') return;
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            if (!dataISO || !dataISO.startsWith(periodoSelecionado)) return;
             
-            if(t.categoria === 'entrada') {
-                entradas += Number(t.valor);
-            } 
-            else if(t.categoria === 'saida') {
-                saidas += Number(t.valor);
-                categorias[t.tipo] = (categorias[t.tipo] || 0) + Number(t.valor);
-            } 
-            else if(t.categoria === 'reserva') {
-                totalGuardado += Number(t.valor);
-                saidas += Number(t.valor);
-            }
-            else if(t.categoria === 'retirada_reserva') {
-                totalRetirado += Number(t.valor);
-                saidas -= Number(t.valor);
+            const valor = sanitizeNumber(t.valor);
+            
+            if (t.categoria === 'entrada') {
+                entradas += valor;
+            } else if (t.categoria === 'saida') {
+                saidas += valor;
+                // CORREÇÃO: Validar t.tipo antes de usar como chave
+                if (t.tipo && typeof t.tipo === 'string' && t.tipo.length < 100) {
+                    const tipoKey = t.tipo.trim();
+                    categorias[tipoKey] = (categorias[tipoKey] || 0) + valor;
+                }
+            } else if (t.categoria === 'reserva') {
+                totalGuardado += valor;
+                saidas += valor;
+            } else if (t.categoria === 'retirada_reserva') {
+                totalRetirado += valor;
+                saidas -= valor;
             }
         });
         
@@ -4318,19 +4433,15 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
         let entradasAnt = 0, saidasAnt = 0, guardadoAnt = 0, retiradoAnt = 0;
         
         transacoesPerfil.forEach(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO || !dataISO.startsWith(periodoAnterior)) return;
+            if (!t || typeof t !== 'object') return;
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            if (!dataISO || !dataISO.startsWith(periodoAnterior)) return;
             
-            if(t.categoria === 'entrada') entradasAnt += Number(t.valor);
-            else if(t.categoria === 'saida') saidasAnt += Number(t.valor);
-            else if(t.categoria === 'reserva') {
-                guardadoAnt += Number(t.valor);
-                saidasAnt += Number(t.valor);
-            }
-            else if(t.categoria === 'retirada_reserva') {
-                retiradoAnt += Number(t.valor);
-                saidasAnt -= Number(t.valor);
-            }
+            const valor = sanitizeNumber(t.valor);
+            if (t.categoria === 'entrada') entradasAnt += valor;
+            else if (t.categoria === 'saida') saidasAnt += valor;
+            else if (t.categoria === 'reserva') { guardadoAnt += valor; saidasAnt += valor; }
+            else if (t.categoria === 'retirada_reserva') { retiradoAnt += valor; saidasAnt -= valor; }
         });
         
         const reservasLiquido = totalGuardado - totalRetirado;
@@ -4340,50 +4451,36 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
         
         let totalLimiteCartoes = 0, totalUsadoCartoes = 0;
         cartoesPerfil.forEach(c => {
-            totalLimiteCartoes += Number(c.limite || 0);
-            totalUsadoCartoes += Number(c.usado || 0);
+            if (!c || typeof c !== 'object') return;
+            totalLimiteCartoes += sanitizeNumber(c.limite);
+            totalUsadoCartoes += sanitizeNumber(c.usado);
         });
         
         return {
-            perfil: perfil,
-            entradas: entradas,
-            saidas: saidas,
-            reservas: reservasLiquido,
-            totalGuardado: totalGuardado,
-            totalRetirado: totalRetirado,
-            saldoInicial: saldoInicial,
-            saldoDoMes: saldoDoMes,
-            saldo: saldoFinal,
-            categorias: categorias,
-            transacoes: transacoesPeriodo,
-            metas: metasPerfil,
-            cartoes: cartoesPerfil,
-            totalLimiteCartoes: totalLimiteCartoes,
-            totalUsadoCartoes: totalUsadoCartoes,
-            mesAnterior: {
-                entradas: entradasAnt,
-                saidas: saidasAnt,
-                reservas: reservasLiquidoAnt,
-                saldo: entradasAnt - saidasAnt
-            },
-            taxaEconomia: taxaEconomia,
-            taxaEconomiaAnterior: taxaEconomiaAnt,
+            perfil,
+            entradas, saidas, reservas: reservasLiquido,
+            totalGuardado, totalRetirado,
+            saldoInicial, saldoDoMes, saldo: saldoFinal,
+            categorias, transacoes: transacoesPeriodo,
+            metas: metasPerfil, cartoes: cartoesPerfil,
+            totalLimiteCartoes, totalUsadoCartoes,
+            mesAnterior: { entradas: entradasAnt, saidas: saidasAnt, reservas: reservasLiquidoAnt, saldo: entradasAnt - saidasAnt },
+            taxaEconomia, taxaEconomiaAnterior: taxaEconomiaAnt,
             evolucaoEconomia: taxaEconomia - taxaEconomiaAnt
         };
     });
     
     const temDados = dadosPorPerfil.some(d => d.transacoes.length > 0);
-    
     const resultado = document.getElementById('relatorioResultado');
-    if(!resultado) return;
+    if (!resultado) return;
     
-    if(!temDados) {
+    if (!temDados) {
         resultado.innerHTML = `
             <div class="relatorio-vazio">
                 <h3>📊 Nenhum relatório disponível</h3>
-                <p>Não há transações registradas para os perfis selecionados em ${getMesNome(mes)} de ${ano}</p>
+                <p>Não há transações registradas para os perfis selecionados em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</p>
                 <p style="margin-top:12px; color: var(--text-muted);">
-                    Perfis: ${perfisAtivos.map(p => p.nome).join(', ')}
+                    Perfis: ${perfisAtivos.map(p => sanitizeHTML(String(p.nome || ''))).join(', ')}
                 </p>
             </div>
         `;
@@ -4398,16 +4495,28 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
 window.gerarRelatorioCompartilhadoPersonalizado = gerarRelatorioCompartilhadoPersonalizado;
 
 async function gerarRelatorioIndividual(mes, ano, perfilId) {
+    // CORREÇÃO: Validar inputs antes de qualquer processamento
+    if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) return;
+    if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) return;
+    if (!perfilId) return;
+
     console.log(`📊 Gerando relatório individual para perfil ${perfilId}, ${mes}/${ano}`);
     
-    // ✅ BUSCAR DADOS VIA DATAMANAGER
     const userData = await dataManager.loadUserData();
-    const dadosPerfil = userData.profiles.find(p => p.id == perfilId);
+
+    // CORREÇÃO: Validar estrutura do userData
+    if (!validarUserData(userData)) {
+        console.error('❌ Dados do usuário inválidos');
+        return;
+    }
+
+    // CORREÇÃO: Usar === estrito
+    const dadosPerfil = userData.profiles.find(p => String(p.id) === String(perfilId));
     
-    if(!dadosPerfil) {
+    if (!dadosPerfil) {
         console.error('❌ Perfil não encontrado no DataManager');
         const resultado = document.getElementById('relatorioResultado');
-        if(resultado) {
+        if (resultado) {
             resultado.innerHTML = `
                 <div class="relatorio-vazio">
                     <h3>⚠️ Erro ao Carregar Dados</h3>
@@ -4419,650 +4528,499 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         return;
     }
     
-    const transacoesPerfil = dadosPerfil.transacoes || [];
-    const metasPerfil = dadosPerfil.metas || [];
-    const cartoesPerfil = dadosPerfil.cartoesCredito || [];
-    const contasFixasPerfil = dadosPerfil.contasFixas || [];
-    
-    console.log(`✅ Dados carregados: ${transacoesPerfil.length} transações, ${metasPerfil.length} metas`);
+    const transacoesPerfil = Array.isArray(dadosPerfil.transacoes) ? dadosPerfil.transacoes : [];
+    const metasPerfil = Array.isArray(dadosPerfil.metas) ? dadosPerfil.metas : [];
+    const cartoesPerfil = Array.isArray(dadosPerfil.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
+    const contasFixasPerfil = Array.isArray(dadosPerfil.contasFixas) ? dadosPerfil.contasFixas : [];
     
     const periodoSelecionado = `${ano}-${mes}`;
     const hojeISO = new Date().toISOString().slice(0, 10);
     
-    // Filtrar transações do período (excluir retiradas de reserva)
     const transacoesPeriodo = transacoesPerfil.filter(t => {
-        const dataISO = dataParaISO(t.data);
-        if(!dataISO) return false;
-        if(t.categoria === 'retirada_reserva') return false;
+        if (!t || typeof t !== 'object') return false;
+        const dataISO = sanitizeDate(dataParaISO(t.data));
+        if (!dataISO) return false;
+        if (t.categoria === 'retirada_reserva') return false;
         return dataISO.startsWith(periodoSelecionado);
     });
     
-    console.log(`📅 Transações do período: ${transacoesPeriodo.length}`);
-    
-    // ✅ CALCULAR SALDO INICIAL (até o mês anterior)
     let saldoInicial = 0;
     transacoesPerfil.forEach(t => {
-        const dataISO = dataParaISO(t.data);
-        if(!dataISO || dataISO >= periodoSelecionado) return;
+        if (!t || typeof t !== 'object') return;
+        const dataISO = sanitizeDate(dataParaISO(t.data));
+        if (!dataISO || dataISO >= periodoSelecionado) return;
         
-        if(t.categoria === 'entrada') saldoInicial += Number(t.valor);
-        else if(t.categoria === 'saida') saldoInicial -= Number(t.valor);
-        else if(t.categoria === 'reserva') saldoInicial -= Number(t.valor);
-        else if(t.categoria === 'retirada_reserva') saldoInicial += Number(t.valor);
+        const valor = sanitizeNumber(t.valor);
+        if (t.categoria === 'entrada') saldoInicial += valor;
+        else if (t.categoria === 'saida') saldoInicial -= valor;
+        else if (t.categoria === 'reserva') saldoInicial -= valor;
+        else if (t.categoria === 'retirada_reserva') saldoInicial += valor;
     });
     
-    // ✅ CÁLCULOS DO MÊS ATUAL
-    let totalEntradas = 0;
-    let totalSaidas = 0;
-    let totalGuardado = 0;
-    let totalRetirado = 0;
-    const categorias = {};
+    let totalEntradas = 0, totalSaidas = 0, totalGuardado = 0, totalRetirado = 0;
+    // CORREÇÃO: Object sem prototype
+    const categorias = safeCategorias();
     
     transacoesPerfil.forEach(t => {
-        const dataISO = dataParaISO(t.data);
-        if(!dataISO || !dataISO.startsWith(periodoSelecionado)) return;
+        if (!t || typeof t !== 'object') return;
+        const dataISO = sanitizeDate(dataParaISO(t.data));
+        if (!dataISO || !dataISO.startsWith(periodoSelecionado)) return;
         
-        if(t.categoria === 'entrada') {
-            totalEntradas += Number(t.valor);
-        } 
-        else if(t.categoria === 'saida') {
-            totalSaidas += Number(t.valor);
-            categorias[t.tipo] = (categorias[t.tipo] || 0) + Number(t.valor);
-        } 
-        else if(t.categoria === 'reserva') {
-            totalGuardado += Number(t.valor);
-        }
-        else if(t.categoria === 'retirada_reserva') {
-            totalRetirado += Number(t.valor);
+        const valor = sanitizeNumber(t.valor);
+        
+        if (t.categoria === 'entrada') {
+            totalEntradas += valor;
+        } else if (t.categoria === 'saida') {
+            totalSaidas += valor;
+            // CORREÇÃO: Validar t.tipo como chave segura
+            if (t.tipo && typeof t.tipo === 'string' && t.tipo.length < 100) {
+                const tipoKey = t.tipo.trim();
+                categorias[tipoKey] = (categorias[tipoKey] || 0) + valor;
+            }
+        } else if (t.categoria === 'reserva') {
+            totalGuardado += valor;
+        } else if (t.categoria === 'retirada_reserva') {
+            totalRetirado += valor;
         }
     });
     
-    console.log(`💰 Entradas: ${formatBRL(totalEntradas)}, Saídas: ${formatBRL(totalSaidas)}`);
-    
-    // ✅ CALCULAR SALDOS
     const valorReservadoLiquido = totalGuardado - totalRetirado;
     const saldoDoMes = totalEntradas - totalSaidas;
     const saldoFinal = saldoInicial + saldoDoMes - valorReservadoLiquido;
     
-    // ✅ FILTRAR CONTAS FIXAS DO MÊS
     const [anoAtual, mesAtual] = hojeISO.split('-').slice(0, 2);
     const periodoAtualCompleto = `${anoAtual}-${mesAtual}`;
     
     const contasFixasMes = contasFixasPerfil.filter(c => {
-        if(!c.vencimento) return false;
-        
-        // Contas com vencimento no mês selecionado
-        if(c.vencimento.startsWith(periodoSelecionado)) return true;
-        
-        // Contas pagas neste mês
+        if (!c || typeof c !== 'object') return false;
+        if (!c.vencimento) return false;
+        if (c.vencimento.startsWith(periodoSelecionado)) return true;
         const pagamentoNoMes = transacoesPerfil.find(t => {
-            const dataISO = dataParaISO(t.data);
-            return dataISO && 
-                   dataISO.startsWith(periodoSelecionado) && 
-                   t.contaFixaId === c.id &&
-                   t.tipo === 'Conta Fixa';
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            return dataISO &&
+                dataISO.startsWith(periodoSelecionado) &&
+                String(t.contaFixaId) === String(c.id) &&
+                t.tipo === 'Conta Fixa';
         });
-        
-        if(pagamentoNoMes) return true;
-        
-        // Contas vencidas pendentes (se estamos vendo mês atual)
-        if(periodoSelecionado === periodoAtualCompleto && 
-           c.vencimento < periodoSelecionado && !c.pago) {
-            return true;
-        }
-        
+        if (pagamentoNoMes) return true;
+        if (periodoSelecionado === periodoAtualCompleto &&
+            c.vencimento < periodoSelecionado && !c.pago) return true;
         return false;
     });
     
-    console.log(`📋 Contas fixas do mês: ${contasFixasMes.length}`);
-    
-    const taxaEconomia = totalEntradas > 0 ? 
+    const taxaEconomia = totalEntradas > 0 ?
         ((valorReservadoLiquido / totalEntradas) * 100).toFixed(1) : 0;
     
-    const diasNoMes = new Date(ano, mes, 0).getDate();
-    const mediaGastoDiario = totalSaidas / diasNoMes;
+    const diasNoMes = new Date(Number(ano), Number(mes), 0).getDate();
+    const mediaGastoDiario = diasNoMes > 0 ? totalSaidas / diasNoMes : 0;
     
     const resultado = document.getElementById('relatorioResultado');
-    if(!resultado) return;
+    if (!resultado) return;
     
-    const perfilNome = usuarioLogado.perfis.find(p => p.id == perfilId)?.nome || 'Perfil';
+    // CORREÇÃO: Buscar nome do perfil com sanitização
+    const perfilNome = sanitizeHTML(
+        String(usuarioLogado.perfis.find(p => String(p.id) === String(perfilId))?.nome || 'Perfil').slice(0, 100)
+    );
     
-    // ✅ VERIFICAR SE HÁ DADOS
-    if(transacoesPeriodo.length === 0 && contasFixasMes.length === 0) {
-        console.log('⚠️ Nenhum dado encontrado para o período');
+    if (transacoesPeriodo.length === 0 && contasFixasMes.length === 0) {
         resultado.innerHTML = `
             <div class="relatorio-vazio">
                 <h3>📊 Nenhum relatório disponível</h3>
-                <p>Não há transações ou contas registradas para ${perfilNome} em ${getMesNome(mes)} de ${ano}</p>
+                <p>Não há transações ou contas registradas para ${perfilNome} em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</p>
             </div>
         `;
         resultado.style.display = 'block';
         return;
     }
     
-    console.log('✅ Gerando HTML do relatório...');
-    
+    // CORREÇÃO: Todos os valores dinâmicos usam sanitizeHTML ou formatBRL (que é numérico)
     let html = `
     <h2 style="text-align:center; margin-bottom:30px;">
         Relatório Completo de ${perfilNome}<br>
-        <span style="font-size:1.2rem; color: var(--text-secondary);">${getMesNome(mes)} de ${ano}</span>
+        <span style="font-size:1.2rem; color: var(--text-secondary);">${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</span>
     </h2>
     
-    <!-- RESUMO PRINCIPAL COM ESTILO KPI -->
     <div class="relatorio-kpis-container">
         <div class="relatorio-kpis-scroll">
             <div class="relatorio-kpi-card relatorio-kpi-entradas">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">💰</span>
-                    <span class="relatorio-kpi-label">Entradas</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💰</span><span class="relatorio-kpi-label">Entradas</span></div>
                 <div class="relatorio-kpi-value">${formatBRL(totalEntradas)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Total do período</span>
-                </div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Total do período</span></div>
             </div>
-            
             <div class="relatorio-kpi-card relatorio-kpi-saidas">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">💸</span>
-                    <span class="relatorio-kpi-label">Saídas</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💸</span><span class="relatorio-kpi-label">Saídas</span></div>
                 <div class="relatorio-kpi-value">${formatBRL(totalSaidas)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Total do período</span>
-                </div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Total do período</span></div>
             </div>
-            
             <div class="relatorio-kpi-card relatorio-kpi-guardado">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">🎯</span>
-                    <span class="relatorio-kpi-label">Guardado Líquido</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">🎯</span><span class="relatorio-kpi-label">Guardado Líquido</span></div>
                 <div class="relatorio-kpi-value">${formatBRL(valorReservadoLiquido)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period" style="font-size:10px;">
-                        Guardou: ${formatBRL(totalGuardado)} | Retirou: ${formatBRL(totalRetirado)}
-                    </span>
-                </div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period" style="font-size:10px;">Guardou: ${formatBRL(totalGuardado)} | Retirou: ${formatBRL(totalRetirado)}</span></div>
             </div>
-            
             <div class="relatorio-kpi-card relatorio-kpi-saldo">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">📈</span>
-                    <span class="relatorio-kpi-label">Saldo Total</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">📈</span><span class="relatorio-kpi-label">Saldo Total</span></div>
                 <div class="relatorio-kpi-value">${formatBRL(saldoFinal)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period" style="font-size:10px;">
-                        Saldo inicial: ${formatBRL(saldoInicial)} | Saldo do mês: ${formatBRL(saldoDoMes)}
-                    </span>
-                </div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period" style="font-size:10px;">Saldo inicial: ${formatBRL(saldoInicial)} | Saldo do mês: ${formatBRL(saldoDoMes)}</span></div>
             </div>
-            
             <div class="relatorio-kpi-card relatorio-kpi-economia">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">💎</span>
-                    <span class="relatorio-kpi-label">Taxa de Economia</span>
-                </div>
-                <div class="relatorio-kpi-value">${taxaEconomia}%</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Do que ganhou foi guardado</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💎</span><span class="relatorio-kpi-label">Taxa de Economia</span></div>
+                <div class="relatorio-kpi-value">${sanitizeHTML(String(taxaEconomia))}%</div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Do que ganhou foi guardado</span></div>
             </div>
-            
             <div class="relatorio-kpi-card relatorio-kpi-media">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">📅</span>
-                    <span class="relatorio-kpi-label">Gasto Médio/Dia</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">📅</span><span class="relatorio-kpi-label">Gasto Médio/Dia</span></div>
                 <div class="relatorio-kpi-value">${formatBRL(mediaGastoDiario)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Média diária de gastos</span>
-                </div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Média diária de gastos</span></div>
             </div>
         </div>
     </div>
     `;
     
-    // RANKING DE CATEGORIAS
-    if(Object.keys(categorias).length > 0) {
+    if (Object.keys(categorias).length > 0) {
         const categoriasOrdenadas = Object.entries(categorias)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5);
-        
         const totalGastoCategorias = Object.values(categorias).reduce((a, b) => a + b, 0);
-        
-        html += `
-            <div class="section-box" style="margin-top:30px;">
-                <h3 style="margin-bottom:20px; color: var(--text-primary);">🏆 Top 5 Categorias que Mais Gastou</h3>
-                <div style="display:flex; flex-direction:column; gap:12px;">
-        `;
-        
         const coresCategorias = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+        
+        html += `<div class="section-box" style="margin-top:30px;"><h3 style="margin-bottom:20px;">🏆 Top 5 Categorias que Mais Gastou</h3><div style="display:flex; flex-direction:column; gap:12px;">`;
         
         categoriasOrdenadas.forEach(([cat, valor], i) => {
             const percentual = ((valor / totalGastoCategorias) * 100).toFixed(1);
-            const larguraBarra = percentual;
-            
             html += `
                 <div style="margin-bottom:8px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-                        <span style="font-weight:600; color: var(--text-primary);">${i+1}. ${cat}</span>
-                        <span style="color: var(--text-secondary);">${formatBRL(valor)} (${percentual}%)</span>
+                        <span style="font-weight:600;">${sanitizeHTML(cat)}</span>
+                        <span>${formatBRL(valor)} (${sanitizeHTML(String(percentual))}%)</span>
                     </div>
-                    <div style="width:100%; height:12px; background: rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;">
-                        <div style="width:${larguraBarra}%; height:100%; background:${coresCategorias[i]}; border-radius:6px; transition:width 0.5s;"></div>
+                    <div style="width:100%; height:12px; background:rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;">
+                        <div style="width:${sanitizeHTML(String(percentual))}%; height:100%; background:${coresCategorias[i]}; border-radius:6px;"></div>
                     </div>
-                </div>
-            `;
+                </div>`;
         });
-        
         html += `</div></div>`;
     }
     
-    // ANÁLISE DE CARTÕES
-    if(cartoesPerfil.length > 0) {
-        let totalLimiteCartoes = 0;
-        let totalUsadoCartoes = 0;
-        
+    if (cartoesPerfil.length > 0) {
+        let totalLimiteCartoes = 0, totalUsadoCartoes = 0;
         cartoesPerfil.forEach(c => {
-            totalLimiteCartoes += Number(c.limite || 0);
-            totalUsadoCartoes += Number(c.usado || 0);
+            if (!c || typeof c !== 'object') return;
+            totalLimiteCartoes += sanitizeNumber(c.limite);
+            totalUsadoCartoes += sanitizeNumber(c.usado);
         });
-        
         const disponivelCartoes = totalLimiteCartoes - totalUsadoCartoes;
         const percUsado = totalLimiteCartoes > 0 ? ((totalUsadoCartoes / totalLimiteCartoes) * 100).toFixed(1) : 0;
         
         html += `
             <div class="section-box" style="margin-top:30px;">
-                <h3 style="margin-bottom:20px; color: var(--text-primary);">💳 Análise de Cartões de Crédito</h3>
-                
+                <h3 style="margin-bottom:20px;">💳 Análise de Cartões de Crédito</h3>
                 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:20px;">
                     <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
-                        <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">Limite Total</div>
-                        <div style="font-size:1.3rem; font-weight:700; color: var(--text-primary);">${formatBRL(totalLimiteCartoes)}</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">Limite Total</div>
+                        <div style="font-size:1.3rem; font-weight:700;">${formatBRL(totalLimiteCartoes)}</div>
                     </div>
-                    
                     <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
-                        <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">Usado no Mês</div>
-                        <div style="font-size:1.3rem; font-weight:700; color: #ff4b4b;">${formatBRL(totalUsadoCartoes)}</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">Usado no Mês</div>
+                        <div style="font-size:1.3rem; font-weight:700; color:#ff4b4b;">${formatBRL(totalUsadoCartoes)}</div>
                     </div>
-                    
                     <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
-                        <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">Disponível</div>
-                        <div style="font-size:1.3rem; font-weight:700; color: #00ff99;">${formatBRL(disponivelCartoes)}</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">Disponível</div>
+                        <div style="font-size:1.3rem; font-weight:700; color:#00ff99;">${formatBRL(disponivelCartoes)}</div>
                     </div>
-                    
                     <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
-                        <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:6px;">% Utilizado</div>
-                        <div style="font-size:1.3rem; font-weight:700; color: ${percUsado > 80 ? '#ff4b4b' : '#00ff99'};">${percUsado}%</div>
+                        <div style="font-size:0.85rem; color:var(--text-secondary);">% Utilizado</div>
+                        <div style="font-size:1.3rem; font-weight:700; color:${sanitizeHTML(String(percUsado)) > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(String(percUsado))}%</div>
                     </div>
                 </div>
-                
                 <div style="margin-top:16px;">
-                    <div style="font-weight:600; margin-bottom:12px; color: var(--text-primary);">Detalhes por Cartão:</div>
-        `;
+                    <div style="font-weight:600; margin-bottom:12px;">Detalhes por Cartão:</div>
+                    <div id="listaCartoesRelatorio"></div>
+                </div>
+            </div>`;
         
-        cartoesPerfil.forEach(c => {
-            const usado = Number(c.usado || 0);
-            const limite = Number(c.limite || 0);
-            const disponivel = limite - usado;
-            const percCartao = limite > 0 ? ((usado / limite) * 100).toFixed(1) : 0;
-            
-            html += `
-                <div style="background:rgba(255,255,255,0.03); padding:14px; border-radius:10px; margin-bottom:10px; border-left:3px solid ${percCartao > 80 ? '#ff4b4b' : '#00ff99'}; cursor:pointer; transition: all 0.3s;" 
-                    onmouseover="this.style.background='rgba(255,255,255,0.08)'" 
-                    onmouseout="this.style.background='rgba(255,255,255,0.03)'"
-                    onclick="abrirDetalhesCartaoRelatorio(${c.id}, '${mes}', '${ano}', ${perfilId})">
+        // CORREÇÃO: Cartões renderizados via DOM, sem onclick inline com parâmetros
+        resultado.innerHTML = html;
+        resultado.style.display = 'block';
+        
+        const listaCartoes = document.getElementById('listaCartoesRelatorio');
+        if (listaCartoes) {
+            cartoesPerfil.forEach(c => {
+                if (!c || typeof c !== 'object') return;
+                const usado = sanitizeNumber(c.usado);
+                const limite = sanitizeNumber(c.limite);
+                const disponivel = limite - usado;
+                const percCartao = limite > 0 ? ((usado / limite) * 100).toFixed(1) : 0;
+                
+                const div = document.createElement('div');
+                div.style.cssText = `background:rgba(255,255,255,0.03); padding:14px; border-radius:10px; margin-bottom:10px; border-left:3px solid ${percCartao > 80 ? '#ff4b4b' : '#00ff99'}; cursor:pointer; transition:all 0.3s;`;
+                div.innerHTML = `
                     <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;">
                         <div>
-                            <div style="font-weight:600; color: var(--text-primary);">💳 ${c.nomeBanco}</div>
-                            <div style="font-size:0.85rem; color: var(--text-secondary);">Limite: ${formatBRL(limite)}</div>
+                            <div style="font-weight:600;">💳 ${sanitizeHTML(String(c.nomeBanco || ''))}</div>
+                            <div style="font-size:0.85rem; color:var(--text-secondary);">Limite: ${formatBRL(limite)}</div>
                         </div>
                         <div style="text-align:right;">
-                            <div style="font-size:0.85rem; color: var(--text-secondary);">Usado: ${formatBRL(usado)}</div>
-                            <div style="font-size:0.9rem; font-weight:600; color: ${percCartao > 80 ? '#ff4b4b' : '#00ff99'};">${percCartao}% utilizado</div>
+                            <div style="font-size:0.85rem; color:var(--text-secondary);">Usado: ${formatBRL(usado)}</div>
+                            <div style="font-size:0.9rem; font-weight:600; color:${percCartao > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(String(percCartao))}% utilizado</div>
                         </div>
                     </div>
-                    <div style="text-align:center; margin-top:8px; font-size:0.75rem; color: var(--text-muted);">
-                        👆 Clique para ver detalhes
-                    </div>
-                </div>
-            `;
-        });
+                    <div style="text-align:center; margin-top:8px; font-size:0.75rem; color:var(--text-muted);">👆 Clique para ver detalhes</div>
+                `;
+                // CORREÇÃO: Event listener seguro em vez de onclick inline
+                div.addEventListener('click', () => {
+                    abrirDetalhesCartaoRelatorio(c.id, mes, ano, perfilId);
+                });
+                div.addEventListener('mouseover', () => { div.style.background = 'rgba(255,255,255,0.08)'; });
+                div.addEventListener('mouseout', () => { div.style.background = 'rgba(255,255,255,0.03)'; });
+                listaCartoes.appendChild(div);
+            });
+        }
         
-        html += `</div></div>`;
+        // Continuar montando o html para as seções restantes
+        html = ''; // Reset — o conteúdo já foi renderizado acima até este ponto
     }
     
-    // ANÁLISE DE METAS
-    if(metasPerfil.length > 0) {
+    if (metasPerfil.length > 0) {
         html += `
             <div class="section-box" style="margin-top:30px;">
-                <h3 style="margin-bottom:20px; color: var(--text-primary);">🎯 Progresso das Metas</h3>
-                
+                <h3 style="margin-bottom:20px;">🎯 Progresso das Metas</h3>
                 <div style="margin-bottom:16px;">
-                    <label style="display:block; margin-bottom:8px; font-weight:600; color: var(--text-secondary);">Selecione uma meta para ver detalhes:</label>
+                    <label style="display:block; margin-bottom:8px; font-weight:600; color:var(--text-secondary);">Selecione uma meta para ver detalhes:</label>
                     <select id="selectMetaRelatorio" class="form-input" style="max-width:400px;">
                         <option value="">Escolha uma meta...</option>
         `;
-        
         metasPerfil.forEach(m => {
-            html += `<option value="${m.id}">${m.descricao}</option>`;
+            if (!m || typeof m !== 'object') return;
+            html += `<option value="${sanitizeHTML(String(m.id))}">${sanitizeHTML(String(m.descricao || '').slice(0, 100))}</option>`;
         });
-        
-        html += `
-                    </select>
-                </div>
-                
-                <div id="detalhesMetaRelatorio" style="display:none; margin-top:20px;">
-                    <!-- Conteúdo será inserido dinamicamente -->
-                </div>
-            </div>
-        `;
+        html += `</select></div><div id="detalhesMetaRelatorio" style="display:none;"></div></div>`;
     }
     
-    // ✅ CONTAS FIXAS DO MÊS - VERSÃO CORRIGIDA E SEMPRE VISÍVEL
-    // Calcular status de cada conta considerando pagamentos
+    // Contas fixas
     const contasComStatus = contasFixasMes.map(c => {
-        let status = 'Pendente';
-        let corStatus = '#ffd166';
-        let corFundo = 'rgba(255,209,102,0.1)';
-        
-        // Verificar se foi paga NESTE mês (mesmo com vencimento anterior)
+        if (!c || typeof c !== 'object') return null;
+        let status = 'Pendente', corStatus = '#ffd166', corFundo = 'rgba(255,209,102,0.1)';
         const pagamentoNoMes = transacoesPerfil.find(t => {
-            const dataISO = dataParaISO(t.data);
-            return dataISO && 
-                   dataISO.startsWith(periodoSelecionado) && 
-                   t.contaFixaId === c.id &&
-                   t.tipo === 'Conta Fixa';
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            return dataISO && dataISO.startsWith(periodoSelecionado) &&
+                String(t.contaFixaId) === String(c.id) && t.tipo === 'Conta Fixa';
         });
-        
-        if(pagamentoNoMes || c.pago) {
-            status = 'Paga';
-            corStatus = '#00ff99';
-            corFundo = 'rgba(0,255,153,0.1)';
-        } else if(c.vencimento < hojeISO) {
-            status = 'Vencida';
-            corStatus = '#ff4b4b';
-            corFundo = 'rgba(255,75,75,0.1)';
-        }
-        
+        if (pagamentoNoMes || c.pago) { status = 'Paga'; corStatus = '#00ff99'; corFundo = 'rgba(0,255,153,0.1)'; }
+        else if (c.vencimento < hojeISO) { status = 'Vencida'; corStatus = '#ff4b4b'; corFundo = 'rgba(255,75,75,0.1)'; }
         return { ...c, status, corStatus, corFundo };
-    });
-
-    // Contar por status
+    }).filter(Boolean);
+    
     const contasPagas = contasComStatus.filter(c => c.status === 'Paga').length;
     const contasPendentes = contasComStatus.filter(c => c.status === 'Pendente').length;
     const contasVencidas = contasComStatus.filter(c => c.status === 'Vencida').length;
-    const totalContasValor = contasComStatus.reduce((sum, c) => sum + Number(c.valor), 0);
-
-    // ✅ SEMPRE MOSTRAR O PAINEL (mesmo sem contas)
+    const totalContasValor = contasComStatus.reduce((sum, c) => sum + sanitizeNumber(c.valor), 0);
+    
     html += `
         <div class="section-box" style="margin-top:30px;">
-            <h3 style="margin-bottom:20px; color: var(--text-primary);">📋 Contas Fixas do Mês</h3>
-            
+            <h3 style="margin-bottom:20px;">📋 Contas Fixas do Mês</h3>
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px;">
                 <div style="background:rgba(0,255,153,0.1); padding:12px; border-radius:10px; border-left:3px solid #00ff99;">
-                    <div style="font-size:0.85rem; color: var(--text-secondary);">✅ Pagas</div>
-                    <div style="font-size:1.5rem; font-weight:700; color: #00ff99;">${contasPagas}</div>
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">✅ Pagas</div>
+                    <div style="font-size:1.5rem; font-weight:700; color:#00ff99;">${contasPagas}</div>
                 </div>
-                
                 <div style="background:rgba(255,209,102,0.1); padding:12px; border-radius:10px; border-left:3px solid #ffd166;">
-                    <div style="font-size:0.85rem; color: var(--text-secondary);">⏳ Pendentes</div>
-                    <div style="font-size:1.5rem; font-weight:700; color: #ffd166;">${contasPendentes}</div>
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">⏳ Pendentes</div>
+                    <div style="font-size:1.5rem; font-weight:700; color:#ffd166;">${contasPendentes}</div>
                 </div>
-                
                 <div style="background:rgba(255,75,75,0.1); padding:12px; border-radius:10px; border-left:3px solid #ff4b4b;">
-                    <div style="font-size:0.85rem; color: var(--text-secondary);">❌ Vencidas</div>
-                    <div style="font-size:1.5rem; font-weight:700; color: #ff4b4b;">${contasVencidas}</div>
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">❌ Vencidas</div>
+                    <div style="font-size:1.5rem; font-weight:700; color:#ff4b4b;">${contasVencidas}</div>
                 </div>
-                
                 <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:10px;">
-                    <div style="font-size:0.85rem; color: var(--text-secondary);">💰 Valor Total</div>
-                    <div style="font-size:1.5rem; font-weight:700; color: var(--text-primary);">${formatBRL(totalContasValor)}</div>
+                    <div style="font-size:0.85rem; color:var(--text-secondary);">💰 Valor Total</div>
+                    <div style="font-size:1.5rem; font-weight:700;">${formatBRL(totalContasValor)}</div>
                 </div>
             </div>
     `;
-
-// ✅ NOVO: Mostrar contas SEPARADAS por status em colunas
-if(contasComStatus.length > 0) {
-    // Separar contas por status
-    const pagas = contasComStatus.filter(c => c.status === 'Paga');
-    const pendentes = contasComStatus.filter(c => c.status === 'Pendente');
-    const vencidas = contasComStatus.filter(c => c.status === 'Vencida');
     
-    html += `
-        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; align-items:start;">
-            
-            <!-- Coluna PAGAS -->
-            <div style="display:flex; flex-direction:column; gap:12px;">
-                ${pagas.length > 0 ? pagas.map(c => `
-                    <div style="background:${c.corFundo}; padding:14px; border-radius:10px; border-left:3px solid ${c.corStatus};">
-                        <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:8px;">
-                            <div style="font-weight:600; color: var(--text-primary); font-size:0.9rem;">${c.descricao}</div>
-                        </div>
-                        <div style="font-size:0.85rem; color: var(--text-secondary);">
-                            Valor: <span style="font-weight:600; color: var(--text-primary);">${formatBRL(c.valor)}</span><br>
-                            Vencimento: <span style="font-weight:600;">${formatarDataBR(c.vencimento)}</span>
-                        </div>
-                    </div>
-                `).join('') : '<div style="text-align:center; padding:20px; color: var(--text-muted); font-size:0.85rem;">Nenhuma conta paga</div>'}
-            </div>
-            
-            <!-- Coluna PENDENTES -->
-            <div style="display:flex; flex-direction:column; gap:12px;">
-                ${pendentes.length > 0 ? pendentes.map(c => `
-                    <div style="background:${c.corFundo}; padding:14px; border-radius:10px; border-left:3px solid ${c.corStatus};">
-                        <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:8px;">
-                            <div style="font-weight:600; color: var(--text-primary); font-size:0.9rem;">${c.descricao}</div>
-                        </div>
-                        <div style="font-size:0.85rem; color: var(--text-secondary);">
-                            Valor: <span style="font-weight:600; color: var(--text-primary);">${formatBRL(c.valor)}</span><br>
-                            Vencimento: <span style="font-weight:600;">${formatarDataBR(c.vencimento)}</span>
-                        </div>
-                    </div>
-                `).join('') : '<div style="text-align:center; padding:20px; color: var(--text-muted); font-size:0.85rem;">Nenhuma conta pendente</div>'}
-            </div>
-            
-            <!-- Coluna VENCIDAS -->
-            <div style="display:flex; flex-direction:column; gap:12px;">
-                ${vencidas.length > 0 ? vencidas.map(c => `
-                    <div style="background:${c.corFundo}; padding:14px; border-radius:10px; border-left:3px solid ${c.corStatus};">
-                        <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:8px;">
-                            <div style="font-weight:600; color: var(--text-primary); font-size:0.9rem;">${c.descricao}</div>
-                        </div>
-                        <div style="font-size:0.85rem; color: var(--text-secondary);">
-                            Valor: <span style="font-weight:600; color: var(--text-primary);">${formatBRL(c.valor)}</span><br>
-                            Vencimento: <span style="font-weight:600; color: #ff4b4b;">${formatarDataBR(c.vencimento)}</span><br>
-                            <span style="color:#ff4b4b; font-weight:600; font-size:0.8rem;">⚠️ Atenção: Conta vencida!</span>
-                        </div>
-                    </div>
-                `).join('') : '<div style="text-align:center; padding:20px; color: var(--text-muted); font-size:0.85rem;">Nenhuma conta vencida</div>'}
-            </div>
-            
-            <!-- Coluna VAZIA (para manter grid 4 colunas) -->
-            <div></div>
-            
-        </div>
-    `;
-} else {
-    html += `
-        <div style="text-align:center; padding:40px; background:rgba(255,255,255,0.03); border-radius:12px; border:2px dashed var(--border);">
-            <div style="font-size:3rem; margin-bottom:12px; opacity:0.5;">🔭</div>
-            <div style="font-size:1.1rem; font-weight:600; color: var(--text-primary); margin-bottom:8px;">
-                Nenhuma Conta Fixa Registrada
-            </div>
-            <div style="font-size:0.9rem; color: var(--text-secondary);">
-                ${periodoSelecionado === periodoAtualCompleto ? 
-                    'Você não tem contas fixas para este mês. Cadastre no menu Dashboard!' : 
-                    'Não há contas fixas registradas para este período.'}
-            </div>
-        </div>
-    `;
-}
-
-html += `</div>`;
-    
-    // LISTA DE TRANSAÇÕES
-    if(transacoesPeriodo.length > 0) {
+    if (contasComStatus.length > 0) {
+        const pagas = contasComStatus.filter(c => c.status === 'Paga');
+        const pendentes = contasComStatus.filter(c => c.status === 'Pendente');
+        const vencidas = contasComStatus.filter(c => c.status === 'Vencida');
+        
+        const renderConta = (c) => `
+            <div style="background:${c.corFundo}; padding:14px; border-radius:10px; border-left:3px solid ${c.corStatus};">
+                <div style="font-weight:600; font-size:0.9rem;">${sanitizeHTML(String(c.descricao || '').slice(0, 100))}</div>
+                <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:6px;">
+                    Valor: <strong>${formatBRL(sanitizeNumber(c.valor))}</strong><br>
+                    Vencimento: <strong>${sanitizeHTML(formatarDataBR(c.vencimento))}</strong>
+                    ${c.status === 'Vencida' ? '<br><span style="color:#ff4b4b; font-weight:600; font-size:0.8rem;">⚠️ Atenção: Conta vencida!</span>' : ''}
+                </div>
+            </div>`;
+        
+        const col = (items, vazio) => items.length > 0
+            ? items.map(renderConta).join('')
+            : `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:0.85rem;">${vazio}</div>`;
+        
         html += `
-            <div class="relatorio-lista" style="margin-top:30px;">
-                <h3>Todas as Transações (${transacoesPeriodo.length})</h3>
-        `;
+            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; align-items:start;">
+                <div style="display:flex; flex-direction:column; gap:12px;">${col(pagas, 'Nenhuma conta paga')}</div>
+                <div style="display:flex; flex-direction:column; gap:12px;">${col(pendentes, 'Nenhuma conta pendente')}</div>
+                <div style="display:flex; flex-direction:column; gap:12px;">${col(vencidas, 'Nenhuma conta vencida')}</div>
+                <div></div>
+            </div>`;
+    } else {
+        html += `
+            <div style="text-align:center; padding:40px; background:rgba(255,255,255,0.03); border-radius:12px; border:2px dashed var(--border);">
+                <div style="font-size:3rem; margin-bottom:12px; opacity:0.5;">🔭</div>
+                <div style="font-size:1.1rem; font-weight:600; margin-bottom:8px;">Nenhuma Conta Fixa Registrada</div>
+                <div style="font-size:0.9rem; color:var(--text-secondary);">
+                    ${periodoSelecionado === periodoAtualCompleto ?
+                        'Você não tem contas fixas para este mês. Cadastre no menu Dashboard!' :
+                        'Não há contas fixas registradas para este período.'}
+                </div>
+            </div>`;
+    }
+    html += `</div>`;
+    
+    if (transacoesPeriodo.length > 0) {
+        html += `<div class="relatorio-lista" style="margin-top:30px;"><h3>Todas as Transações (${transacoesPeriodo.length})</h3>`;
         
         transacoesPeriodo.sort((a, b) => {
-            const dataHoraA = `${dataParaISO(a.data)} ${a.hora}`;
-            const dataHoraB = `${dataParaISO(b.data)} ${b.hora}`;
+            const dataHoraA = `${sanitizeDate(dataParaISO(a.data)) || ''} ${String(a.hora || '')}`;
+            const dataHoraB = `${sanitizeDate(dataParaISO(b.data)) || ''} ${String(b.hora || '')}`;
             return dataHoraB.localeCompare(dataHoraA);
         });
         
         transacoesPeriodo.forEach(t => {
+            if (!t || typeof t !== 'object') return;
             let styleClass, sinal;
-            
-            if(t.categoria === 'entrada') {
-                styleClass = 'entrada';
-                sinal = '+';
-            } else {
-                styleClass = t.categoria === 'saida' ? 'saida' : 'reserva';
-                sinal = '-';
-            }
+            if (t.categoria === 'entrada') { styleClass = 'entrada'; sinal = '+'; }
+            else { styleClass = t.categoria === 'saida' ? 'saida' : 'reserva'; sinal = '-'; }
             
             html += `
                 <div class="relatorio-item">
                     <div class="relatorio-item-info">
-                        <div class="relatorio-item-tipo">${t.tipo}</div>
-                        <div class="relatorio-item-desc">${t.descricao}</div>
-                        <div class="relatorio-item-data">${t.data} às ${t.hora}</div>
+                        <div class="relatorio-item-tipo">${sanitizeHTML(String(t.tipo || '').slice(0, 100))}</div>
+                        <div class="relatorio-item-desc">${sanitizeHTML(String(t.descricao || '').slice(0, 200))}</div>
+                        <div class="relatorio-item-data">${sanitizeHTML(String(t.data || ''))} às ${sanitizeHTML(String(t.hora || ''))}</div>
                     </div>
                     <div class="${styleClass}" style="font-size:18px; font-weight:bold;">
-                        ${sinal} ${formatBRL(t.valor)}
+                        ${sinal} ${formatBRL(sanitizeNumber(t.valor))}
                     </div>
-                </div>
-            `;
+                </div>`;
         });
-        
         html += `</div>`;
     }
     
-    resultado.innerHTML = html;
+    if (cartoesPerfil.length === 0) {
+        // Se não houve cartões, renderizar tudo de uma vez
+        resultado.innerHTML += html;
+    } else {
+        // Cartões já foram renderizados; apenas adicionar o restante
+        resultado.innerHTML += html;
+    }
     resultado.style.display = 'block';
     
-    // CONFIGURAR SELETOR DE METAS
-    if(metasPerfil.length > 0) {
+    // Configurar seletor de metas via event listener (seguro)
+    if (metasPerfil.length > 0) {
         const selectMeta = document.getElementById('selectMetaRelatorio');
-        if(selectMeta) {
-            selectMeta.addEventListener('change', function() {
+        if (selectMeta) {
+            selectMeta.addEventListener('change', function () {
                 const metaId = this.value;
-                if(!metaId) {
-                    document.getElementById('detalhesMetaRelatorio').style.display = 'none';
-                    return;
-                }
+                const detalhesEl = document.getElementById('detalhesMetaRelatorio');
+                if (!detalhesEl) return;
+                if (!metaId) { detalhesEl.style.display = 'none'; return; }
                 
                 const meta = metasPerfil.find(m => String(m.id) === String(metaId));
-                if(!meta) return;
+                if (!meta) return;
                 
-                const saved = Number(meta.saved || 0);
-                const objetivo = Number(meta.objetivo || 0);
+                const saved = sanitizeNumber(meta.saved);
+                const objetivo = sanitizeNumber(meta.objetivo);
                 const falta = Math.max(0, objetivo - saved);
                 const perc = objetivo > 0 ? Math.min(100, ((saved / objetivo) * 100).toFixed(1)) : 0;
                 
-                // Calcular depósitos do mês
                 const depositosMes = transacoesPerfil.filter(t => {
-                    const dataISO = dataParaISO(t.data);
-                    return dataISO && dataISO.startsWith(periodoSelecionado) && 
-                           t.categoria === 'reserva' && String(t.metaId) === String(metaId);
+                    const dataISO = sanitizeDate(dataParaISO(t.data));
+                    return dataISO && dataISO.startsWith(periodoSelecionado) &&
+                        t.categoria === 'reserva' && String(t.metaId) === String(metaId);
                 });
-
-const totalDepositadoMes = depositosMes.reduce((sum, t) => sum + Number(t.valor), 0);
-
-// Calcular retiradas do mês
-const retiradasMes = transacoesPerfil.filter(t => {
-    const dataISO = dataParaISO(t.data);
-    return dataISO && dataISO.startsWith(periodoSelecionado) && 
-           t.categoria === 'retirada_reserva' && String(t.metaId) === String(metaId);
-});
-
-const totalRetiradoMes = retiradasMes.reduce((sum, t) => sum + Number(t.valor), 0);
-
-let corProgresso = '#ff4b4b';
-if(perc >= 75) corProgresso = '#00ff99';
-else if(perc >= 40) corProgresso = '#ffd166';
-
-let htmlMeta = `
-    <div style="background:rgba(255,255,255,0.05); padding:20px; border-radius:12px; border:1px solid var(--border);">
-        <h4 style="margin-bottom:16px; font-size:1.2rem; color: var(--text-primary);">${meta.descricao}</h4>
-        
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:20px;">
-            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-                <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:4px;">Objetivo</div>
-                <div style="font-size:1.2rem; font-weight:700; color: var(--text-primary);">${formatBRL(objetivo)}</div>
-            </div>
-            
-            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-                <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:4px;">Guardado</div>
-                <div style="font-size:1.2rem; font-weight:700; color: #00ff99;">${formatBRL(saved)}</div>
-            </div>
-            
-            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-                <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:4px;">Falta</div>
-                <div style="font-size:1.2rem; font-weight:700; color: #ff4b4b;">${formatBRL(falta)}</div>
-            </div>
-            
-            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-                <div style="font-size:0.85rem; color: var(--text-secondary); margin-bottom:4px;">Progresso</div>
-                <div style="font-size:1.2rem; font-weight:700; color: ${corProgresso};">${perc}%</div>
-            </div>
-        </div>
-        
-        <div style="margin-bottom:20px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                <span style="font-weight:600; color: var(--text-secondary);">Barra de Progresso</span>
-                <span style="font-weight:700; color: ${corProgresso};">${perc}%</span>
-            </div>
-            <div style="width:100%; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
-                <div style="width:${perc}%; height:100%; background:${corProgresso}; border-radius:10px; transition:width 0.8s; display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:0.85rem;">
-                    ${perc > 10 ? perc + '%' : ''}
-                </div>
-            </div>
-        </div>
-        
-        <!-- DEPÓSITOS DO MÊS -->
-        <div style="background:rgba(255,209,102,0.1); padding:14px; border-radius:10px; border-left:3px solid #ffd166; margin-bottom:12px;">
-            <div style="font-weight:600; color: var(--text-primary); margin-bottom:4px;">💰 Depositado neste mês</div>
-            <div style="font-size:1.3rem; font-weight:700; color: #ffd166;">${formatBRL(totalDepositadoMes)}</div>
-            <div style="font-size:0.85rem; color: var(--text-secondary); margin-top:4px;">${depositosMes.length} depósito(s) realizado(s)</div>
-        </div>
-        
-        <!-- RETIRADAS DO MÊS (só aparece se houver retiradas) -->
-        ${totalRetiradoMes > 0 ? `
-        <div style="background:rgba(255,149,0,0.1); padding:14px; border-radius:10px; border-left:3px solid #ff9500;">
-            <div style="font-weight:600; color: var(--text-primary); margin-bottom:4px;">💸 Retirado neste mês</div>
-            <div style="font-size:1.3rem; font-weight:700; color: #ff9500;">${formatBRL(totalRetiradoMes)}</div>
-            <div style="font-size:0.85rem; color: var(--text-secondary); margin-top:4px;">${retiradasMes.length} retirada(s) realizada(s)</div>
-        </div>
-        ` : ''}
-    </div>
-`;
-
-                document.getElementById('detalhesMetaRelatorio').innerHTML = htmlMeta;
-                document.getElementById('detalhesMetaRelatorio').style.display = 'block';
+                const totalDepositadoMes = depositosMes.reduce((sum, t) => sum + sanitizeNumber(t.valor), 0);
+                
+                const retiradasMes = transacoesPerfil.filter(t => {
+                    const dataISO = sanitizeDate(dataParaISO(t.data));
+                    return dataISO && dataISO.startsWith(periodoSelecionado) &&
+                        t.categoria === 'retirada_reserva' && String(t.metaId) === String(metaId);
+                });
+                const totalRetiradoMes = retiradasMes.reduce((sum, t) => sum + sanitizeNumber(t.valor), 0);
+                
+                let corProgresso = '#ff4b4b';
+                if (perc >= 75) corProgresso = '#00ff99';
+                else if (perc >= 40) corProgresso = '#ffd166';
+                
+                detalhesEl.innerHTML = `
+                    <div style="background:rgba(255,255,255,0.05); padding:20px; border-radius:12px; border:1px solid var(--border);">
+                        <h4 style="margin-bottom:16px; font-size:1.2rem;">${sanitizeHTML(String(meta.descricao || '').slice(0, 100))}</h4>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:20px;">
+                            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
+                                <div style="font-size:0.85rem; color:var(--text-secondary);">Objetivo</div>
+                                <div style="font-size:1.2rem; font-weight:700;">${formatBRL(objetivo)}</div>
+                            </div>
+                            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
+                                <div style="font-size:0.85rem; color:var(--text-secondary);">Guardado</div>
+                                <div style="font-size:1.2rem; font-weight:700; color:#00ff99;">${formatBRL(saved)}</div>
+                            </div>
+                            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
+                                <div style="font-size:0.85rem; color:var(--text-secondary);">Falta</div>
+                                <div style="font-size:1.2rem; font-weight:700; color:#ff4b4b;">${formatBRL(falta)}</div>
+                            </div>
+                            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
+                                <div style="font-size:0.85rem; color:var(--text-secondary);">Progresso</div>
+                                <div style="font-size:1.2rem; font-weight:700; color:${corProgresso};">${sanitizeHTML(String(perc))}%</div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom:20px;">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                                <span style="font-weight:600; color:var(--text-secondary);">Barra de Progresso</span>
+                                <span style="font-weight:700; color:${corProgresso};">${sanitizeHTML(String(perc))}%</span>
+                            </div>
+                            <div style="width:100%; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
+                                <div style="width:${sanitizeHTML(String(perc))}%; height:100%; background:${corProgresso}; border-radius:10px; transition:width 0.8s; display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:0.85rem;">
+                                    ${perc > 10 ? sanitizeHTML(String(perc)) + '%' : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="background:rgba(255,209,102,0.1); padding:14px; border-radius:10px; border-left:3px solid #ffd166; margin-bottom:12px;">
+                            <div style="font-weight:600; margin-bottom:4px;">💰 Depositado neste mês</div>
+                            <div style="font-size:1.3rem; font-weight:700; color:#ffd166;">${formatBRL(totalDepositadoMes)}</div>
+                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px;">${depositosMes.length} depósito(s) realizado(s)</div>
+                        </div>
+                        ${totalRetiradoMes > 0 ? `
+                        <div style="background:rgba(255,149,0,0.1); padding:14px; border-radius:10px; border-left:3px solid #ff9500;">
+                            <div style="font-weight:600; margin-bottom:4px;">💸 Retirado neste mês</div>
+                            <div style="font-size:1.3rem; font-weight:700; color:#ff9500;">${formatBRL(totalRetiradoMes)}</div>
+                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px;">${retiradasMes.length} retirada(s) realizada(s)</div>
+                        </div>` : ''}
+                    </div>`;
+                detalhesEl.style.display = 'block';
             });
         }
     }
 }
 
 async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
-    const periodoSelecionado = `${ano}-${mes}`;
-    const perfisAtivos = usuarioLogado.perfis.slice(0, numPerfis);
+    // CORREÇÃO: Validar inputs
+    if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) return;
+    if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) return;
     
-    if(perfisAtivos.length < 2) {
+    // CORREÇÃO: Limitar numPerfis a um máximo razoável
+    const numPerfisSeguro = Math.min(Math.max(parseInt(numPerfis, 10) || 0, 0), 20);
+    
+    const periodoSelecionado = `${ano}-${mes}`;
+    const perfisAtivos = (usuarioLogado?.perfis || []).slice(0, numPerfisSeguro);
+    
+    if (perfisAtivos.length < 2) {
         const resultado = document.getElementById('relatorioResultado');
-        if(resultado) {
+        if (resultado) {
             resultado.innerHTML = `
                 <div class="relatorio-vazio">
                     <h3>⚠️ Perfis Insuficientes</h3>
                     <p>Você precisa ter pelo menos 2 perfis cadastrados para gerar este tipo de relatório.</p>
-                    <p>Vá em Configurações > Trocar Perfil para adicionar mais usuários.</p>
                 </div>
             `;
             resultado.style.display = 'block';
@@ -5071,7 +5029,7 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
     }
     
     let mesAnterior, anoAnterior;
-    if(mes === '01') {
+    if (mes === '01') {
         mesAnterior = '12';
         anoAnterior = String(Number(ano) - 1);
     } else {
@@ -5080,70 +5038,63 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
     }
     const periodoAnterior = `${anoAnterior}-${mesAnterior}`;
     
-    // ✅ CORREÇÃO: Buscar dados via dataManager
     const userData = await dataManager.loadUserData();
     
+    // CORREÇÃO: Validar estrutura
+    if (!validarUserData(userData)) {
+        console.error('Dados do usuário inválidos ou corrompidos');
+        return;
+    }
+    
     const dadosPorPerfil = perfisAtivos.map(perfil => {
-        // ✅ NOVO: Buscar perfil no JSON
-        const dadosPerfil = userData.profiles.find(p => p.id === perfil.id);
-        const transacoesPerfil = dadosPerfil ? dadosPerfil.transacoes || [] : [];
-        const metasPerfil = dadosPerfil ? dadosPerfil.metas || [] : [];
-        const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
+        // CORREÇÃO: === estrito
+        const dadosPerfil = userData.profiles.find(p => String(p.id) === String(perfil.id));
+        const transacoesPerfil = Array.isArray(dadosPerfil?.transacoes) ? dadosPerfil.transacoes : [];
+        const metasPerfil = Array.isArray(dadosPerfil?.metas) ? dadosPerfil.metas : [];
+        const cartoesPerfil = Array.isArray(dadosPerfil?.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
         
         const transacoesPeriodo = transacoesPerfil.filter(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO) return false;
+            if (!t || typeof t !== 'object') return false;
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            if (!dataISO) return false;
             return dataISO.startsWith(periodoSelecionado);
-        });
-        
-        const transacoesPeriodoAnterior = transacoesPerfil.filter(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO) return false;
-            return dataISO.startsWith(periodoAnterior);
         });
         
         let saldoInicial = 0;
         transacoesPerfil.forEach(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO) return;
-            
-            if(dataISO < periodoSelecionado) {
-                if(t.categoria === 'entrada') {
-                    saldoInicial += Number(t.valor);
-                }
-                else if(t.categoria === 'saida') {
-                    saldoInicial -= Number(t.valor);
-                }
-                else if(t.categoria === 'reserva') {
-                    saldoInicial -= Number(t.valor);
-                }
-                else if(t.categoria === 'retirada_reserva') {
-                    saldoInicial += Number(t.valor);
-                }
-            }
+            if (!t || typeof t !== 'object') return;
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            if (!dataISO || dataISO >= periodoSelecionado) return;
+            const valor = sanitizeNumber(t.valor);
+            if (t.categoria === 'entrada') saldoInicial += valor;
+            else if (t.categoria === 'saida') saldoInicial -= valor;
+            else if (t.categoria === 'reserva') saldoInicial -= valor;
+            else if (t.categoria === 'retirada_reserva') saldoInicial += valor;
         });
         
         let entradas = 0, saidas = 0, totalGuardado = 0, totalRetirado = 0;
-        const categorias = {};
+        // CORREÇÃO: safeCategorias()
+        const categorias = safeCategorias();
         
         transacoesPerfil.forEach(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO || !dataISO.startsWith(periodoSelecionado)) return;
-            
-            if(t.categoria === 'entrada') {
-                entradas += Number(t.valor);
-            } 
-            else if(t.categoria === 'saida') {
-                saidas += Number(t.valor);
-                categorias[t.tipo] = (categorias[t.tipo] || 0) + Number(t.valor);
-            } 
-            else if(t.categoria === 'reserva') {
-                totalGuardado += Number(t.valor);
-                saidas += Number(t.valor);
-            }
-            else if(t.categoria === 'retirada_reserva') {
-                totalRetirado += Number(t.valor);
-                saidas -= Number(t.valor);
+            if (!t || typeof t !== 'object') return;
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            if (!dataISO || !dataISO.startsWith(periodoSelecionado)) return;
+            const valor = sanitizeNumber(t.valor);
+            if (t.categoria === 'entrada') {
+                entradas += valor;
+            } else if (t.categoria === 'saida') {
+                saidas += valor;
+                if (t.tipo && typeof t.tipo === 'string' && t.tipo.length < 100) {
+                    const tipoKey = t.tipo.trim();
+                    categorias[tipoKey] = (categorias[tipoKey] || 0) + valor;
+                }
+            } else if (t.categoria === 'reserva') {
+                totalGuardado += valor;
+                saidas += valor;
+            } else if (t.categoria === 'retirada_reserva') {
+                totalRetirado += valor;
+                saidas -= valor;
             }
         });
         
@@ -5151,21 +5102,15 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
         const saldoFinal = saldoInicial + saldoDoMes;
         
         let entradasAnt = 0, saidasAnt = 0, guardadoAnt = 0, retiradoAnt = 0;
-        
         transacoesPerfil.forEach(t => {
-            const dataISO = dataParaISO(t.data);
-            if(!dataISO || !dataISO.startsWith(periodoAnterior)) return;
-            
-            if(t.categoria === 'entrada') entradasAnt += Number(t.valor);
-            else if(t.categoria === 'saida') saidasAnt += Number(t.valor);
-            else if(t.categoria === 'reserva') {
-                guardadoAnt += Number(t.valor);
-                saidasAnt += Number(t.valor);
-            }
-            else if(t.categoria === 'retirada_reserva') {
-                retiradoAnt += Number(t.valor);
-                saidasAnt -= Number(t.valor);
-            }
+            if (!t || typeof t !== 'object') return;
+            const dataISO = sanitizeDate(dataParaISO(t.data));
+            if (!dataISO || !dataISO.startsWith(periodoAnterior)) return;
+            const valor = sanitizeNumber(t.valor);
+            if (t.categoria === 'entrada') entradasAnt += valor;
+            else if (t.categoria === 'saida') saidasAnt += valor;
+            else if (t.categoria === 'reserva') { guardadoAnt += valor; saidasAnt += valor; }
+            else if (t.categoria === 'retirada_reserva') { retiradoAnt += valor; saidasAnt -= valor; }
         });
         
         const reservasLiquido = totalGuardado - totalRetirado;
@@ -5175,51 +5120,34 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
         
         let totalLimiteCartoes = 0, totalUsadoCartoes = 0;
         cartoesPerfil.forEach(c => {
-            totalLimiteCartoes += Number(c.limite || 0);
-            totalUsadoCartoes += Number(c.usado || 0);
+            if (!c || typeof c !== 'object') return;
+            totalLimiteCartoes += sanitizeNumber(c.limite);
+            totalUsadoCartoes += sanitizeNumber(c.usado);
         });
         
         return {
-            perfil: perfil,
-            entradas: entradas,
-            saidas: saidas,
-            reservas: reservasLiquido,
-            totalGuardado: totalGuardado,
-            totalRetirado: totalRetirado,
-            saldoInicial: saldoInicial,
-            saldoDoMes: saldoDoMes,
-            saldo: saldoFinal,
-            categorias: categorias,
-            transacoes: transacoesPeriodo,
-            metas: metasPerfil,
-            cartoes: cartoesPerfil,
-            totalLimiteCartoes: totalLimiteCartoes,
-            totalUsadoCartoes: totalUsadoCartoes,
-            mesAnterior: {
-                entradas: entradasAnt,
-                saidas: saidasAnt,
-                reservas: reservasLiquidoAnt,
-                saldo: entradasAnt - saidasAnt
-            },
-            taxaEconomia: taxaEconomia,
-            taxaEconomiaAnterior: taxaEconomiaAnt,
+            perfil, entradas, saidas, reservas: reservasLiquido,
+            totalGuardado, totalRetirado, saldoInicial, saldoDoMes, saldo: saldoFinal,
+            categorias, transacoes: transacoesPeriodo, metas: metasPerfil,
+            cartoes: cartoesPerfil, totalLimiteCartoes, totalUsadoCartoes,
+            mesAnterior: { entradas: entradasAnt, saidas: saidasAnt, reservas: reservasLiquidoAnt, saldo: entradasAnt - saidasAnt },
+            taxaEconomia, taxaEconomiaAnterior: taxaEconomiaAnt,
             evolucaoEconomia: taxaEconomia - taxaEconomiaAnt
         };
     });
     
     const temDados = dadosPorPerfil.some(d => d.transacoes.length > 0);
-    
     const resultado = document.getElementById('relatorioResultado');
-    if(!resultado) return;
+    if (!resultado) return;
     
-    if(!temDados) {
+    if (!temDados) {
         const tipoTexto = tipoRelatorioAtivo === 'casal' ? 'do Casal' : 'da Família';
         resultado.innerHTML = `
             <div class="relatorio-vazio">
                 <h3>📊 Nenhum relatório disponível</h3>
-                <p>Não há transações registradas ${tipoTexto} em ${getMesNome(mes)} de ${ano}</p>
-                <p style="margin-top:12px; color: var(--text-muted);">
-                    Perfis verificados: ${perfisAtivos.map(p => p.nome).join(', ')}
+                <p>Não há transações registradas ${sanitizeHTML(tipoTexto)} em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</p>
+                <p style="margin-top:12px; color:var(--text-muted);">
+                    Perfis verificados: ${perfisAtivos.map(p => sanitizeHTML(String(p.nome || ''))).join(', ')}
                 </p>
             </div>
         `;
@@ -5232,277 +5160,178 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
 
 function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior) {
     const resultado = document.getElementById('relatorioResultado');
-    if(!resultado) return;
+    if (!resultado) return;
+    
+    // CORREÇÃO: Validar arrays de entrada
+    if (!Array.isArray(dadosPorPerfil) || dadosPorPerfil.length === 0) return;
     
     const tipoTexto = tipoRelatorioAtivo === 'casal' ? 'do Casal' : 'da Família';
     const icone = tipoRelatorioAtivo === 'casal' ? '💑' : '👨‍👩‍👧‍👦';
     
     let totalGeralEntradas = 0, totalGeralSaidas = 0, totalGeralReservasLiquido = 0;
     let totalGeralGuardado = 0, totalGeralRetirado = 0;
-    const categoriasGerais = {};
+    // CORREÇÃO: safeCategorias()
+    const categoriasGerais = safeCategorias();
     
     dadosPorPerfil.forEach(d => {
-        totalGeralEntradas += d.entradas;
-        totalGeralSaidas += d.saidas;
-        totalGeralReservasLiquido += d.reservas;
-        totalGeralGuardado += d.totalGuardado;
-        totalGeralRetirado += d.totalRetirado;
+        if (!d || typeof d !== 'object') return;
+        totalGeralEntradas += sanitizeNumber(d.entradas);
+        totalGeralSaidas += sanitizeNumber(d.saidas);
+        totalGeralReservasLiquido += sanitizeNumber(d.reservas);
+        totalGeralGuardado += sanitizeNumber(d.totalGuardado);
+        totalGeralRetirado += sanitizeNumber(d.totalRetirado);
         
-        Object.keys(d.categorias).forEach(cat => {
-            categoriasGerais[cat] = (categoriasGerais[cat] || 0) + d.categorias[cat];
-        });
+        if (d.categorias && typeof d.categorias === 'object') {
+            Object.keys(d.categorias).forEach(cat => {
+                if (cat && typeof cat === 'string' && cat.length < 100) {
+                    categoriasGerais[cat] = (categoriasGerais[cat] || 0) + sanitizeNumber(d.categorias[cat]);
+                }
+            });
+        }
     });
     
     const saldoGeral = totalGeralEntradas - totalGeralSaidas;
-    const taxaEconomiaGeral = totalGeralEntradas > 0 ? ((totalGeralReservasLiquido / totalGeralEntradas) * 100).toFixed(1) : 0;
+    const taxaEconomiaGeral = totalGeralEntradas > 0 ?
+        ((totalGeralReservasLiquido / totalGeralEntradas) * 100).toFixed(1) : 0;
     
-    const categoriaTopArr = Object.entries(categoriasGerais).sort((a, b) => b[1] - a[1]);
-    const categoriaTop = categoriaTopArr[0];
-    const saldoInicialGeral = dadosPorPerfil.reduce((sum, d) => sum + (d.saldoInicial || 0), 0);
-    const saldoGeralDoMes = dadosPorPerfil.reduce((sum, d) => sum + (d.saldoDoMes || 0), 0);
+    const saldoInicialGeral = dadosPorPerfil.reduce((sum, d) => sum + sanitizeNumber(d?.saldoInicial), 0);
+    const saldoGeralDoMes = dadosPorPerfil.reduce((sum, d) => sum + sanitizeNumber(d?.saldoDoMes), 0);
     
     let html = `
     <h2 style="text-align:center; margin-bottom:30px;">
-        ${icone} Relatório Completo ${tipoTexto}<br>
-        <span style="font-size:1.2rem; color: var(--text-secondary);">${getMesNome(mes)} de ${ano}</span>
+        ${icone} Relatório Completo ${sanitizeHTML(tipoTexto)}<br>
+        <span style="font-size:1.2rem; color:var(--text-secondary);">${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</span>
     </h2>
     
-    <!-- RESUMO GERAL COM ESTILO KPI -->
     <div class="relatorio-kpis-container">
         <div class="relatorio-kpis-scroll">
             <div class="relatorio-kpi-card relatorio-kpi-entradas">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">💰</span>
-                    <span class="relatorio-kpi-label">Entradas Totais</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💰</span><span class="relatorio-kpi-label">Entradas Totais</span></div>
                 <div class="relatorio-kpi-value">${formatBRL(totalGeralEntradas)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Soma de todos os perfis</span>
-                </div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Soma de todos os perfis</span></div>
             </div>
-            
             <div class="relatorio-kpi-card relatorio-kpi-saidas">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">💸</span>
-                    <span class="relatorio-kpi-label">Saídas Totais</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💸</span><span class="relatorio-kpi-label">Saídas Totais</span></div>
                 <div class="relatorio-kpi-value">${formatBRL(totalGeralSaidas)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Soma de todos os perfis</span>
-                </div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Soma de todos os perfis</span></div>
             </div>
-            
             <div class="relatorio-kpi-card relatorio-kpi-guardado">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">🎯</span>
-                    <span class="relatorio-kpi-label">Guardado Líquido</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">🎯</span><span class="relatorio-kpi-label">Guardado Líquido</span></div>
                 <div class="relatorio-kpi-value">${formatBRL(totalGeralReservasLiquido)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period" style="font-size:10px;">
-                        Guardou: ${formatBRL(totalGeralGuardado)} | Retirou: ${formatBRL(totalGeralRetirado)}
-                    </span>
-                </div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period" style="font-size:10px;">Guardou: ${formatBRL(totalGeralGuardado)} | Retirou: ${formatBRL(totalGeralRetirado)}</span></div>
             </div>
-            
             <div class="relatorio-kpi-card relatorio-kpi-saldo">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">📈</span>
-                    <span class="relatorio-kpi-label">Saldo Total</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">📈</span><span class="relatorio-kpi-label">Saldo Total</span></div>
                 <div class="relatorio-kpi-value">${formatBRL(saldoGeral)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period" style="font-size:10px;">
-                        Saldo inicial: ${formatBRL(saldoInicialGeral)} | Saldo do mês: ${formatBRL(saldoGeralDoMes)}
-                    </span>
-                </div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period" style="font-size:10px;">Saldo inicial: ${formatBRL(saldoInicialGeral)} | Saldo do mês: ${formatBRL(saldoGeralDoMes)}</span></div>
             </div>
-            
             <div class="relatorio-kpi-card relatorio-kpi-economia">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">💎</span>
-                    <span class="relatorio-kpi-label">Taxa de Economia</span>
-                </div>
-                <div class="relatorio-kpi-value">${taxaEconomiaGeral}%</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Média ${tipoTexto.toLowerCase()}</span>
-                </div>
+                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💎</span><span class="relatorio-kpi-label">Taxa de Economia</span></div>
+                <div class="relatorio-kpi-value">${sanitizeHTML(String(taxaEconomiaGeral))}%</div>
+                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Média ${sanitizeHTML(tipoTexto.toLowerCase())}</span></div>
             </div>
         </div>
     </div>
-        
-        <!-- MENU DE SELEÇÃO DE RANKINGS -->
-        <div class="section-box" style="margin-top:30px;">
-            <h3 style="text-align:center; margin-bottom:20px;">🏆 Rankings e Comparativos</h3>
-            
-            <div class="tipo-relatorio-btns" style="margin-bottom:24px;">
-                <button class="tipo-btn ranking-btn active" data-ranking="gastos">
-                    💸 Quem Gastou Mais
-                </button>
-                <button class="tipo-btn ranking-btn" data-ranking="guardou">
-                    💰 Quem Guardou Mais
-                </button>
-                <button class="tipo-btn ranking-btn" data-ranking="economia">
-                    📊 Melhor Taxa de Economia
-                </button>
-                <button class="tipo-btn ranking-btn" data-ranking="evolucao">
-                    📈 Maior Evolução
-                </button>
-            </div>
-            
-            <div id="rankingContainer"></div>
+    
+    <div class="section-box" style="margin-top:30px;">
+        <h3 style="text-align:center; margin-bottom:20px;">🏆 Rankings e Comparativos</h3>
+        <div class="tipo-relatorio-btns" style="margin-bottom:24px;">
+            <button class="tipo-btn ranking-btn active" data-ranking="gastos">💸 Quem Gastou Mais</button>
+            <button class="tipo-btn ranking-btn" data-ranking="guardou">💰 Quem Guardou Mais</button>
+            <button class="tipo-btn ranking-btn" data-ranking="economia">📊 Melhor Taxa de Economia</button>
+            <button class="tipo-btn ranking-btn" data-ranking="evolucao">📈 Maior Evolução</button>
         </div>
-        
-        <!-- COMPARAÇÃO DETALHADA POR PERFIL -->
-        <div class="section-box" style="margin-top:30px;">
-            <h3 style="text-align:center; margin-bottom:20px;">📋 Análise Individual Completa</h3>
-            <div class="comparacao-perfis" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+        <div id="rankingContainer"></div>
+    </div>
+    
+    <div class="section-box" style="margin-top:30px;">
+        <h3 style="text-align:center; margin-bottom:20px;">📋 Análise Individual Completa</h3>
+        <div class="comparacao-perfis" style="grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));">
     `;
     
     dadosPorPerfil.forEach(d => {
-        const diasNoMes = new Date(ano, mes, 0).getDate();
-        const mediaGastoDiario = d.saidas / diasNoMes;
-        const percUsadoCartoes = d.totalLimiteCartoes > 0 ? 
+        if (!d || typeof d !== 'object') return;
+        const diasNoMes = new Date(Number(ano), Number(mes), 0).getDate();
+        const mediaGastoDiario = diasNoMes > 0 ? sanitizeNumber(d.saidas) / diasNoMes : 0;
+        const percUsadoCartoes = d.totalLimiteCartoes > 0 ?
             ((d.totalUsadoCartoes / d.totalLimiteCartoes) * 100).toFixed(1) : 0;
         
-        // Calcular variações em relação ao mês anterior
-        const variacaoEntradas = d.mesAnterior.entradas > 0 ? 
+        const variacaoEntradas = d.mesAnterior?.entradas > 0 ?
             (((d.entradas - d.mesAnterior.entradas) / d.mesAnterior.entradas) * 100).toFixed(1) : 0;
-        const variacaoSaidas = d.mesAnterior.saidas > 0 ? 
+        const variacaoSaidas = d.mesAnterior?.saidas > 0 ?
             (((d.saidas - d.mesAnterior.saidas) / d.mesAnterior.saidas) * 100).toFixed(1) : 0;
-        const variacaoReservas = d.mesAnterior.reservas !== 0 ? 
-            (((d.reservas - d.mesAnterior.reservas) / Math.abs(d.mesAnterior.reservas)) * 100).toFixed(1) : 0;
+        const variacaoReservas = d.mesAnterior?.reservas !== 0 ?
+            (((d.reservas - d.mesAnterior.reservas) / Math.abs(d.mesAnterior.reservas || 1)) * 100).toFixed(1) : 0;
+        
+        const nomePerfilSeguro = sanitizeHTML(String(d.perfil?.nome || '').slice(0, 100));
+        const perfilIdSeguro = sanitizeHTML(String(d.perfil?.id || ''));
         
         html += `
-            <div class="perfil-card-relatorio" style="background: var(--gradient-dark); border: 1px solid var(--border); padding: 20px;">
-                <h4 style="margin-bottom:16px; font-size:1.3rem; color: var(--primary);">${d.perfil.nome}</h4>
-                
-                <!-- Estatísticas Principais -->
+            <div class="perfil-card-relatorio" style="background:var(--gradient-dark); border:1px solid var(--border); padding:20px;">
+                <h4 style="margin-bottom:16px; font-size:1.3rem; color:var(--primary);">${nomePerfilSeguro}</h4>
                 <div class="perfil-stats">
-                    <div class="stat-row">
-                        <span class="stat-label">💰 Entradas</span>
-                        <span class="stat-value entrada">${formatBRL(d.entradas)}</span>
-                    </div>
-                    ${d.mesAnterior.entradas > 0 ? `
-                    <div style="font-size:0.8rem; color: ${variacaoEntradas >= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">
-                        ${variacaoEntradas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoEntradas)}% vs mês anterior
-                    </div>
-                    ` : ''}
-                    
-                    <div class="stat-row">
-                        <span class="stat-label">💸 Saídas</span>
-                        <span class="stat-value saida">${formatBRL(d.saidas)}</span>
-                    </div>
-                    ${d.mesAnterior.saidas > 0 ? `
-                    <div style="font-size:0.8rem; color: ${variacaoSaidas <= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">
-                        ${variacaoSaidas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoSaidas)}% vs mês anterior
-                    </div>
-                    ` : ''}
-                    
-                    <div class="stat-row">
-                        <span class="stat-label">🎯 Guardado Líquido</span>
-                        <span class="stat-value reserva">${formatBRL(d.reservas)}</span>
-                    </div>
-                    ${d.mesAnterior.reservas !== 0 ? `
-                    <div style="font-size:0.8rem; color: ${variacaoReservas >= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">
-                        ${variacaoReservas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoReservas)}% vs mês anterior
-                    </div>
-                    ` : ''}
-                    
-                    <div class="stat-row">
-                        <span class="stat-label">📊 Saldo</span>
-                        <span class="stat-value" style="color:#6c63ff;">${formatBRL(d.saldo)}</span>
-                    </div>
-                    
-                    <div class="stat-row">
-                        <span class="stat-label">💎 Taxa de Economia</span>
-                        <span class="stat-value" style="color:#00ff99;">${d.taxaEconomia.toFixed(1)}%</span>
-                    </div>
-                    ${d.taxaEconomiaAnterior > 0 ? `
-                    <div style="font-size:0.8rem; color: ${d.evolucaoEconomia >= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">
-                        ${d.evolucaoEconomia >= 0 ? '↑' : '↓'} ${Math.abs(d.evolucaoEconomia.toFixed(1))}% vs mês anterior
-                    </div>
-                    ` : ''}
-                    
-                    <div class="stat-row" style="border-top: 1px solid var(--border); padding-top:8px; margin-top:8px;">
-                        <span class="stat-label">📅 Média Diária</span>
-                        <span class="stat-value">${formatBRL(mediaGastoDiario)}</span>
-                    </div>
-                    
-                    <div class="stat-row">
-                        <span class="stat-label">📝 Transações</span>
-                        <span class="stat-value">${d.transacoes.length}</span>
-                    </div>
-                    
-                    ${d.cartoes.length > 0 ? `
-                    <div class="stat-row" style="border-top: 1px solid var(--border); padding-top:8px; margin-top:8px;">
-                        <span class="stat-label">💳 Cartões Usados</span>
-                        <span class="stat-value" style="color: ${percUsadoCartoes > 80 ? '#ff4b4b' : '#00ff99'};">${percUsadoCartoes}%</span>
-                    </div>
-                    ` : ''}
-                    
-                    ${d.metas.length > 0 ? `
-                    <div class="stat-row">
-                        <span class="stat-label">🎯 Metas Ativas</span>
-                        <span class="stat-value">${d.metas.length}</span>
-                    </div>
-                    ` : ''}
+                    <div class="stat-row"><span class="stat-label">💰 Entradas</span><span class="stat-value entrada">${formatBRL(d.entradas)}</span></div>
+                    ${d.mesAnterior?.entradas > 0 ? `<div style="font-size:0.8rem; color:${variacaoEntradas >= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">${variacaoEntradas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoEntradas)}% vs mês anterior</div>` : ''}
+                    <div class="stat-row"><span class="stat-label">💸 Saídas</span><span class="stat-value saida">${formatBRL(d.saidas)}</span></div>
+                    ${d.mesAnterior?.saidas > 0 ? `<div style="font-size:0.8rem; color:${variacaoSaidas <= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">${variacaoSaidas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoSaidas)}% vs mês anterior</div>` : ''}
+                    <div class="stat-row"><span class="stat-label">🎯 Guardado Líquido</span><span class="stat-value reserva">${formatBRL(d.reservas)}</span></div>
+                    ${d.mesAnterior?.reservas !== 0 ? `<div style="font-size:0.8rem; color:${variacaoReservas >= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">${variacaoReservas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoReservas)}% vs mês anterior</div>` : ''}
+                    <div class="stat-row"><span class="stat-label">📊 Saldo</span><span class="stat-value" style="color:#6c63ff;">${formatBRL(d.saldo)}</span></div>
+                    <div class="stat-row"><span class="stat-label">💎 Taxa de Economia</span><span class="stat-value" style="color:#00ff99;">${sanitizeHTML(String(d.taxaEconomia.toFixed(1)))}%</span></div>
+                    ${d.taxaEconomiaAnterior > 0 ? `<div style="font-size:0.8rem; color:${d.evolucaoEconomia >= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">${d.evolucaoEconomia >= 0 ? '↑' : '↓'} ${Math.abs(d.evolucaoEconomia.toFixed(1))}% vs mês anterior</div>` : ''}
+                    <div class="stat-row" style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;"><span class="stat-label">📅 Média Diária</span><span class="stat-value">${formatBRL(mediaGastoDiario)}</span></div>
+                    <div class="stat-row"><span class="stat-label">📝 Transações</span><span class="stat-value">${d.transacoes.length}</span></div>
+                    ${d.cartoes?.length > 0 ? `<div class="stat-row" style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;"><span class="stat-label">💳 Cartões Usados</span><span class="stat-value" style="color:${percUsadoCartoes > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(String(percUsadoCartoes))}%</span></div>` : ''}
+                    ${d.metas?.length > 0 ? `<div class="stat-row"><span class="stat-label">🎯 Metas Ativas</span><span class="stat-value">${d.metas.length}</span></div>` : ''}
                 </div>
-                
-                <!-- Botão para ver mais detalhes -->
-                <button class="btn-primary" style="width:100%; margin-top:16px; padding:10px;" 
-                        onclick="abrirDetalhesPerfilRelatorio('${d.perfil.id}', '${mes}', '${ano}')">
-                    🔍 Ver Detalhes Completos
-                </button>
-            </div>
-        `;
+                <div id="btnDetalhes_${perfilIdSeguro}" style="margin-top:16px;"></div>
+            </div>`;
     });
     
     html += `</div></div>`;
     
-    // GRÁFICO DE DISTRIBUIÇÃO DE GASTOS POR CATEGORIA (GERAL)
-    if(Object.keys(categoriasGerais).length > 0) {
-        const categoriasTop = Object.entries(categoriasGerais)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5);
-        
+    if (Object.keys(categoriasGerais).length > 0) {
+        const categoriasTop = Object.entries(categoriasGerais).sort((a, b) => b[1] - a[1]).slice(0, 5);
         const totalGastoCategorias = Object.values(categoriasGerais).reduce((a, b) => a + b, 0);
-        
-        html += `
-            <div class="section-box" style="margin-top:30px;">
-                <h3 style="margin-bottom:20px; color: var(--text-primary);">🎯 Top 5 Categorias Mais Gastas (Geral)</h3>
-                <div style="display:flex; flex-direction:column; gap:12px;">
-        `;
-        
         const coresCategorias = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
         
+        html += `<div class="section-box" style="margin-top:30px;"><h3 style="margin-bottom:20px;">🎯 Top 5 Categorias Mais Gastas (Geral)</h3><div style="display:flex; flex-direction:column; gap:12px;">`;
         categoriasTop.forEach(([cat, valor], i) => {
             const percentual = ((valor / totalGastoCategorias) * 100).toFixed(1);
-            const larguraBarra = percentual;
-            
             html += `
                 <div style="margin-bottom:8px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
-                        <span style="font-weight:600; color: var(--text-primary);">${i+1}. ${cat}</span>
-                        <span style="color: var(--text-secondary);">${formatBRL(valor)} (${percentual}%)</span>
+                        <span style="font-weight:600;">${sanitizeHTML(cat)}</span>
+                        <span>${formatBRL(valor)} (${sanitizeHTML(String(percentual))}%)</span>
                     </div>
-                    <div style="width:100%; height:12px; background: rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;">
-                        <div style="width:${larguraBarra}%; height:100%; background:${coresCategorias[i]}; border-radius:6px; transition:width 0.5s;"></div>
+                    <div style="width:100%; height:12px; background:rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;">
+                        <div style="width:${sanitizeHTML(String(percentual))}%; height:100%; background:${coresCategorias[i]}; border-radius:6px;"></div>
                     </div>
-                </div>
-            `;
+                </div>`;
         });
-        
         html += `</div></div>`;
     }
     
     resultado.innerHTML = html;
     resultado.style.display = 'block';
     
-    // Configurar eventos dos botões de ranking
-    configurarRankings(dadosPorPerfil, mes, ano);
+    // CORREÇÃO: Botões de detalhes por perfil via event listener (seguro, sem onclick inline)
+    dadosPorPerfil.forEach(d => {
+        if (!d?.perfil?.id) return;
+        const container = document.getElementById(`btnDetalhes_${sanitizeHTML(String(d.perfil.id))}`);
+        if (container) {
+            const btn = document.createElement('button');
+            btn.className = 'btn-primary';
+            btn.style.cssText = 'width:100%; padding:10px;';
+            btn.textContent = '🔍 Ver Detalhes Completos';
+            btn.addEventListener('click', () => {
+                abrirDetalhesPerfilRelatorio(d.perfil.id, mes, ano);
+            });
+            container.appendChild(btn);
+        }
+    });
     
-    // Mostrar ranking inicial (gastos)
+    configurarRankings(dadosPorPerfil, mes, ano);
     mostrarRanking('gastos', dadosPorPerfil);
 }
 
