@@ -1938,6 +1938,41 @@ function pagarContaFixa(id, valorPago) {
     alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
 }
 
+// ========== POPUP / MODAL ==========
+function criarPopup(html) {
+    const overlay   = document.getElementById('modalOverlay');
+    const container = document.getElementById('modalContainer');
+    if(!overlay || !container) return;
+
+    container.innerHTML = '';
+
+    const box = document.createElement('div');
+    box.className = 'popup-box';
+    box.innerHTML = html;
+    container.appendChild(box);
+
+    overlay.classList.add('active');
+    container.classList.add('active');
+
+    overlay.onclick = () => fecharPopup();
+}
+
+function fecharPopup() {
+    const overlay   = document.getElementById('modalOverlay');
+    const container = document.getElementById('modalContainer');
+    if(!overlay || !container) return;
+
+    overlay.classList.remove('active');
+    container.classList.remove('active');
+
+    // Limpa conteúdo após animação CSS
+    setTimeout(() => {
+        container.innerHTML = '';
+        overlay.onclick = null; // ✅ Remove listener para não acumular
+    }, 300);
+}
+
+
 // ========== TRANSAÇÕES ==========
 function atualizarTiposDinamicos() {
     const cat = document.getElementById('selectCategoria').value;
