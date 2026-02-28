@@ -5435,8 +5435,137 @@ function processarAnaliseOndeForDinheiro() {
     container.innerHTML = html;
 }
 
-window.processarAnaliseOndeForDinheiro = processarAnaliseOndeForDinheiro;
+// ========== GERAR ANÁLISE "ONDE FOI MEU DINHEIRO?" ==========
+function gerarAnaliseOndeForDinheiro(mes, ano) {
+    if (!mes || !ano) {
+        return { temDados: false, mensagem: 'Selecione mês e ano para analisar.' };
+    }
 
+    const periodoSelecionado = `${ano}-${mes}`;
+
+    const transacoesPeriodo = transacoes.filter(t => {
+        if (!t || typeof t !== 'object') return false;
+        const dataISO = sanitizeDate(dataParaISO(t.data));
+        if (!dataISO) return false;
+        return dataISO.startsWith(periodoSelecionado) && t.categoria === 'saida';
+    });
+
+    if (transacoesPeriodo.length === 0) {
+        return {
+            temDados: false,
+            mensagem: `Não há gastos registrados em ${getMesNome(mes)} de ${ano}.`
+        };
+    }
+
+    const categorias = safeCategorias();
+    transacoesPeriodo.forEach(t => {
+        if (t.tipo && typeof t.tipo === 'string' && t.tipo.length < 100) {
+            const tipoKey = t.tipo.trim();
+            categorias[tipoKey] = (categorias[tipoKey] || 0) + sanitizeNumber(t.valor);
+        }
+    });
+
+    const totalGastos = Object.values(categorias).reduce((sum, v) => sum + v, 0);
+    const categoriasOrdenadas = Object.entries(categorias).sort((a, b) => b[1] - a[1]);
+    const top3 = categoriasOrdenadas.slice(0, 3);
+
+    let narrativa = `Em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}, você realizou ${transacoesPeriodo.length} transação(ões) de saída. `;
+
+    if (top3[0]) {
+        const percTop = ((top3[0][1] / totalGastos) * 100).toFixed(0);
+        narrativa += `Seu maior gasto foi em <strong>${sanitizeHTML(top3[0][0])}</strong>, representando ${sanitizeHTML(percTop)}% do total. `;
+    }
+    if (top3[1]) {
+        narrativa += `Em segundo lugar, gastos com <strong>${sanitizeHTML(top3[1][0])}</strong>. `;
+    }
+    if (top3[2]) {
+        narrativa += `E em terceiro, <strong>${sanitizeHTML(top3[2][0])}</strong>.`;
+    }
+
+    return {
+        temDados: true,
+        totalGastos,
+        totalTransacoes: transacoesPeriodo.length,
+        categorias: categoriasOrdenadas,
+        top3,
+        narrativa
+    };
+}
+
+// ========== ABRIR WIDGET "ONDE FOI MEU DINHEIRO?" ==========
+function abrirWidgetOndeForDinheiro() {
+    if (!perfilAtivo) {
+        mostrarNotificacao('Selecione um perfil primeiro.', 'error');
+        return;
+    }
+
+    const hoje     = new Date();
+    const anoAtual = hoje.getFullYear();
+    const mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
+
+    const mesesNomes = {
+        '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março',    '04': 'Abril',
+        '05': 'Maio',    '06': 'Junho',     '07': 'Julho',    '08': 'Agosto',
+        '09': 'Setembro','10': 'Outubro',   '11': 'Novembro', '12': 'Dezembro'
+    };
+
+    // ✅ Opções construídas via concatenação de strings estáticas — sem dados do usuário
+    let optsMes = '';
+    Object.entries(mesesNomes).forEach(([val, nome]) => {
+        const selected = val === mesAtual ? ' selected' : '';
+        optsMes += `<option value="${val}"${selected}>${nome}</option>`;
+    });
+
+    let optsAno = '';
+    for (let a = anoAtual; a >= anoAtual - 4; a--) {
+        const selected = a === anoAtual ? ' selected' : '';
+        optsAno += `<option value="${a}"${selected}>${a}</option>`;
+    }
+
+    criarPopup(`
+        <div style="max-height:75vh; overflow-y:auto; padding-right:8px;">
+            <h3 style="text-align:center; margin-bottom:8px;">🔍 Onde Foi Meu Dinheiro?</h3>
+            <p style="color:var(--text-secondary); margin-bottom:20px; font-size:0.9rem; text-align:center;">
+                Veja para onde foram seus gastos em um período específico.
+            </p>
+
+            <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:130px;">
+                    <label style="display:block; margin-bottom:6px; font-size:0.85rem;
+                                  font-weight:600; color:var(--text-secondary);">📅 Mês:</label>
+                    <select id="mesAnalise" class="form-input">${optsMes}</select>
+                </div>
+                <div style="flex:1; min-width:100px;">
+                    <label style="display:block; margin-bottom:6px; font-size:0.85rem;
+                                  font-weight:600; color:var(--text-secondary);">📆 Ano:</label>
+                    <select id="anoAnalise" class="form-input">${optsAno}</select>
+                </div>
+            </div>
+
+            <button class="btn-primary" id="btnAnalisarGastos"
+                    style="width:100%; margin-bottom:20px;">
+                🔍 Analisar Gastos
+            </button>
+
+            <div id="resultadoAnalise"></div>
+        </div>
+
+        <button class="btn-cancelar" id="fecharWidgetAnalise"
+                style="width:100%; margin-top:14px;">Fechar</button>
+    `);
+
+    // ✅ addEventListener — sem onclick inline
+    document.getElementById('btnAnalisarGastos')
+            .addEventListener('click', processarAnaliseOndeForDinheiro);
+
+    document.getElementById('fecharWidgetAnalise')
+            .addEventListener('click', fecharPopup);
+
+    // Executa análise imediatamente com o período padrão
+    processarAnaliseOndeForDinheiro();
+}
+
+window.processarAnaliseOndeForDinheiro = processarAnaliseOndeForDinheiro;
 window.abrirWidgetOndeForDinheiro = abrirWidgetOndeForDinheiro;
 
 
