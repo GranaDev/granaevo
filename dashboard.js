@@ -362,56 +362,36 @@ async function salvarDados() {
         return false;
     }
 
-    // ✅ NOVO — Validação estrutural profunda ANTES dos _validators
-    //    Os _validators filtram silenciosamente itens ruins.
-    //    Esta camada DETECTA e LOGA o que foi adulterado/corrompido,
-    //    dando rastreabilidade antes de qualquer descarte.
-    const validacao = validarDadosAntesDeSalvar();
-    if (!validacao.valido) {
-        _log.warn('SAVE_INTEGRIDADE', `${validacao.erros.length} problema(s) detectado(s) antes de salvar:`);
-        validacao.erros.forEach((e, i) => _log.warn(`  [${i + 1}]`, e));
-
-        // ✅ Não aborta — permite que os _validators abaixo limpem os itens ruins
-        //    e salvem apenas o que é válido. Mas o log fica registrado.
-        //    Se quiser abortar completamente em caso de corrupção grave, troque por:
-        //    return false;
-    }
-
     try {
         // ✅ Filtra registros inválidos antes de persistir
-        const transacoesValidas    = transacoes.filter(_validators.transacao);
-        const metasValidas         = metas.filter(_validators.meta);
-        const contasValidas        = contasFixas.filter(_validators.contaFixa);
-        const cartoesValidos       = cartoesCredito.filter(_validators.cartao);
+        const transacoesValidas   = transacoes.filter(_validators.transacao);
+        const metasValidas        = metas.filter(_validators.meta);
+        const contasValidas       = contasFixas.filter(_validators.contaFixa);
+        const cartoesValidos      = cartoesCredito.filter(_validators.cartao);
 
-        // ✅ Alerta silencioso se houve itens descartados
-        const descartados = {
-            transacoes: transacoes.length    - transacoesValidas.length,
-            metas:      metas.length         - metasValidas.length,
-            contas:     contasFixas.length   - contasValidas.length,
-            cartoes:    cartoesCredito.length - cartoesValidos.length,
-        };
-
-        const totalDescartados = Object.values(descartados).reduce((s, n) => s + n, 0);
-        if (totalDescartados > 0) {
-            _log.warn('SAVE_DESCARTE', `Itens inválidos descartados antes de persistir:`, descartados);
+        // Alerta silencioso se houve itens descartados
+        if (transacoesValidas.length  !== transacoes.length   ||
+            metasValidas.length       !== metas.length         ||
+            contasValidas.length      !== contasFixas.length   ||
+            cartoesValidos.length     !== cartoesCredito.length) {
+            _log.warn('SAVE: itens inválidos descartados antes de persistir');
         }
 
         const userData = await dataManager.loadUserData();
 
         const dadosPerfil = {
-            id:              perfilAtivo.id,
-            nome:            _sanitizeText(perfilAtivo.nome),
-            foto:            _sanitizeImgUrl(perfilAtivo.foto) || null,
-            transacoes:      transacoesValidas,
-            metas:           metasValidas,
-            contasFixas:     contasValidas,
-            cartoesCredito:  cartoesValidos,
-            nextTransId:     Number.isInteger(nextTransId)     && nextTransId     > 0 ? nextTransId     : 1,
-            nextMetaId:      Number.isInteger(nextMetaId)      && nextMetaId      > 0 ? nextMetaId      : 1,
-            nextContaFixaId: Number.isInteger(nextContaFixaId) && nextContaFixaId > 0 ? nextContaFixaId : 1,
-            nextCartaoId:    Number.isInteger(nextCartaoId)    && nextCartaoId    > 0 ? nextCartaoId    : 1,
-            lastUpdate:      new Date().toISOString(),
+            id:             perfilAtivo.id,
+            nome:           _sanitizeText(perfilAtivo.nome),
+            foto:           _sanitizeImgUrl(perfilAtivo.foto) || null,
+            transacoes:     transacoesValidas,
+            metas:          metasValidas,
+            contasFixas:    contasValidas,
+            cartoesCredito: cartoesValidos,
+            nextTransId:    Number.isInteger(nextTransId)    && nextTransId > 0    ? nextTransId    : 1,
+            nextMetaId:     Number.isInteger(nextMetaId)     && nextMetaId > 0     ? nextMetaId     : 1,
+            nextContaFixaId:Number.isInteger(nextContaFixaId)&& nextContaFixaId > 0? nextContaFixaId : 1,
+            nextCartaoId:   Number.isInteger(nextCartaoId)   && nextCartaoId > 0   ? nextCartaoId   : 1,
+            lastUpdate:     new Date().toISOString(),
         };
 
         const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
