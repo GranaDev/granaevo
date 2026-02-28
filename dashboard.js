@@ -467,7 +467,6 @@ async function salvarDados() {
     });
 }
 
-// ========== VERIFICAÇÃO DE LOGIN ==========
 async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
     const protectedContent = document.querySelector('[data-protected-content]');
@@ -498,12 +497,17 @@ async function verificarLogin() {
         let effectiveEmail = session.user.email;
         let isGuest = false;
 
+        // ✅ CORREÇÃO: valida expires_at — rejeita assinaturas expiradas
+        //    OR expires_at IS NULL cobre planos vitalícios sem data de expiração
+        const agora = new Date().toISOString();
+
         const { data: subscription, error: subError } = await supabase
             .from('subscriptions')
             .select('plans(name)')
             .eq('user_id', session.user.id)
             .eq('payment_status', 'approved')
             .eq('is_active', true)
+            .or(`expires_at.is.null,expires_at.gt.${agora}`) // ✅ novo
             .maybeSingle();
 
         if (!subError && subscription) {
@@ -519,6 +523,7 @@ async function verificarLogin() {
                 .eq('user_email', session.user.email)
                 .eq('payment_status', 'approved')
                 .eq('is_active', true)
+                .or(`expires_at.is.null,expires_at.gt.${agora}`) // ✅ novo
                 .maybeSingle();
 
             if (!subEmailError && subByEmail) {
@@ -565,6 +570,7 @@ async function verificarLogin() {
                     .eq('user_id', membership.owner_user_id)
                     .eq('payment_status', 'approved')
                     .eq('is_active', true)
+                    .or(`expires_at.is.null,expires_at.gt.${agora}`) // ✅ novo
                     .maybeSingle();
 
                 if (ownerSubError || !ownerSub) {
