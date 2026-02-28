@@ -2372,7 +2372,7 @@ function lancarTransacao() {
     }
     if(!tipo && categoria !== 'saida_credito') return alert('Escolha o tipo.');
     if(!descricao) return alert('Digite a descrição.');
-    if(!valorStr || isNaN(valorStr) || Number(valorStr) <= 0) return alert('Digite um valor válido.');
+    if(!valorStr || !Number.isFinite(Number(valorStr)) || Number(valorStr) <= 0) return alert('Digite um valor válido.');
 
     const valor = parseFloat(parseFloat(valorStr).toFixed(2));
     const dh    = agoraDataHora();
@@ -2656,7 +2656,6 @@ function abrirDetalhesTransacao(id) {
 // ========== METAS/RESERVAS ==========
 function abrirMetaForm(editId = null) {
     if (editId === null) {
-        // ✅ HTML estático — sem dados do usuário interpolados
         criarPopup(`
             <h3>Adicionar Meta</h3>
             <input id="metaDesc" class="form-input" placeholder="Descrição" maxlength="200"><br>
@@ -2665,18 +2664,18 @@ function abrirMetaForm(editId = null) {
             <button class="btn-cancelar" id="cancelarMeta">Cancelar</button>
         `);
 
-        // ✅ addEventListener — sem onclick inline
         document.getElementById('cancelarMeta').addEventListener('click', () => fecharPopup());
 
         document.getElementById('okMeta').addEventListener('click', () => {
             const desc   = document.getElementById('metaDesc').value.trim();
             const objStr = document.getElementById('metaObj').value;
 
-            if (!desc)                                        return alert('Digite descrição da meta.');
-            if (desc.length > 200)                           return alert('Descrição muito longa (máx. 200 caracteres).');
-            if (!objStr || isNaN(objStr) || Number(objStr) <= 0) return alert('Digite objetivo válido.');
+            if (!desc)                                                              return alert('Digite descrição da meta.');
+            if (desc.length > 200)                                                  return alert('Descrição muito longa (máx. 200 caracteres).');
+            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0) return alert('Digite objetivo válido.');
 
             const objetivo = parseFloat(parseFloat(objStr).toFixed(2));
+            if (!Number.isFinite(objetivo) || objetivo <= 0)                        return alert('Digite objetivo válido.');
 
             // ✅ Sem id — banco gera via gen_random_uuid()
             metas.push({ descricao: desc, objetivo, saved: 0, monthly: {} });
@@ -2690,9 +2689,6 @@ function abrirMetaForm(editId = null) {
         const meta = metas.find(m => m.id === editId);
         if (!meta) return;
 
-        // ✅ HTML estático — value NÃO interpolado no HTML
-        //    meta.descricao e meta.objetivo são injetados via .value após criação do DOM
-        //    Impede quebra de atributo: value="foo" onmouseover="xss()" type="text
         criarPopup(`
             <h3>Editar Meta</h3>
             <input id="metaDesc" class="form-input" maxlength="200"><br>
@@ -2705,19 +2701,24 @@ function abrirMetaForm(editId = null) {
         document.getElementById('metaDesc').value = meta.descricao;
         document.getElementById('metaObj').value  = meta.objetivo;
 
-        // ✅ addEventListener — sem onclick inline
         document.getElementById('cancelarMeta').addEventListener('click', () => fecharPopup());
 
         document.getElementById('okMeta').addEventListener('click', () => {
             const desc   = document.getElementById('metaDesc').value.trim();
             const objStr = document.getElementById('metaObj').value;
 
-            if (!desc)                                        return alert('Digite descrição da meta.');
-            if (desc.length > 200)                           return alert('Descrição muito longa (máx. 200 caracteres).');
-            if (!objStr || isNaN(objStr) || Number(objStr) <= 0) return alert('Digite objetivo válido.');
+            if (!desc)
+            return alert('Digite descrição da meta.');
+            if (desc.length > 200)
+            return alert('Descrição muito longa (máx. 200 caracteres).');
+            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0) 
+            return alert('Digite objetivo válido.');
 
             meta.descricao = desc;
             meta.objetivo  = parseFloat(parseFloat(objStr).toFixed(2));
+            if (!Number.isFinite(meta.objetivo) || meta.objetivo <= 0)              
+            return alert('Digite objetivo válido.');
+
             salvarDados();
             renderMetasList();
             atualizarTudo();
@@ -3419,8 +3420,8 @@ function abrirRetiradaForm() {
         const motivoSelect    = document.getElementById('motivoRetirada').value;
         const outroMotivoTexto = document.getElementById('outroMotivoTexto').value.trim();
 
-        if(!valorStr || isNaN(valorStr) || Number(valorStr) <= 0) {
-            return alert('Digite um valor válido.');
+        if(!valorStr || !Number.isFinite(Number(valorStr)) || Number(valorStr) <= 0) {
+        return alert('Digite um valor válido.');
         }
         if(!motivoSelect) {
             return alert('⚠️ Por favor, selecione o motivo da retirada.');
@@ -3430,6 +3431,9 @@ function abrirRetiradaForm() {
         }
 
         const valorRetirar = parseFloat(parseFloat(valorStr).toFixed(2));
+        if(!Number.isFinite(valorRetirar) || valorRetirar <= 0) {
+            return alert('Valor inválido após processamento.');
+        }
         if(valorRetirar > saldoDisponivel) {
             return alert('Valor maior que o saldo disponível!');
         }
