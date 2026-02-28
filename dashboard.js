@@ -4330,9 +4330,7 @@ function confirmarSelecaoPerfisCasal(mes, ano) {
     fecharPopup();
     gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds);
 }
-// Expor funções globalmente
-window.abrirSelecaoPerfisCasal = abrirSelecaoPerfisCasal;
-window.confirmarSelecaoPerfisCasal = confirmarSelecaoPerfisCasal;
+
 
 // ========== GERAR RELATÓRIO CASAL PERSONALIZADO ==========
 async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
@@ -4490,9 +4488,6 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
     
     renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior);
 }
-
-// Expor globalmente
-window.gerarRelatorioCompartilhadoPersonalizado = gerarRelatorioCompartilhadoPersonalizado;
 
 async function gerarRelatorioIndividual(mes, ano, perfilId) {
     // CORREÇÃO: Validar inputs antes de qualquer processamento
