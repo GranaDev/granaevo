@@ -1839,6 +1839,13 @@ function abrirPopupPagarContaFixa(id) {
     };
 }
 
+// ✅ Rollback seguro: limpa e repopula sem substituir a referência do array
+// Evita que componentes externos fiquem com referências para objetos mortos
+function rollbackArray(arrayAtual, snapshotObj) {
+    arrayAtual.length = 0;
+    snapshotObj.forEach(item => arrayAtual.push(item));
+}
+
 function pagarContaFixa(id, valorPago) {
     const conta = contasFixas.find(c => c.id === id);
     if(!conta) return;
@@ -1872,10 +1879,14 @@ function pagarContaFixa(id, valorPago) {
         }
     }
 
-    // ✅ Wrapper transacional com try/catch e rollback
-    const snapshotTransacoes   = JSON.stringify(transacoes);
-    const snapshotContasFixas  = JSON.stringify(contasFixas);
-    const snapshotCartoes      = JSON.stringify(cartoesCredito);
+    // ✅ structuredClone: mais rápido que JSON, preserva tipos complexos (Date, etc.)
+        const snapshotTransacoes   = structuredClone(transacoes);
+        const snapshotContasFixas  = structuredClone(contasFixas);
+        const snapshotCartoes      = structuredClone(cartoesCredito);
+
+        // ✅ Guarda referência original ANTES do try
+        // Garante que _processando = false no catch funcione mesmo após rollback
+        const contaOriginal = conta;
 
     try {
         // ✅ Função interna: avança vencimento um mês com validação de formato
@@ -1983,12 +1994,16 @@ function pagarContaFixa(id, valorPago) {
         alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
 
     } catch(erro) {
-        // ✅ Rollback: restaura estado anterior em caso de erro
         console.error('❌ Erro no pagamento, revertendo estado:', erro);
-        transacoes   = JSON.parse(snapshotTransacoes);
-        contasFixas  = JSON.parse(snapshotContasFixas);
-        cartoesCredito = JSON.parse(snapshotCartoes);
-        conta._processando = false;
+
+        // ✅ Mantém referência dos arrays, troca apenas o conteúdo interno
+        rollbackArray(transacoes,     snapshotTransacoes);
+        rollbackArray(contasFixas,    snapshotContasFixas);
+        rollbackArray(cartoesCredito, snapshotCartoes);
+
+        // ✅ Usa referência original — segura mesmo após o rollback
+        contaOriginal._processando = false;
+
         alert('❌ Erro ao processar pagamento. Nenhuma alteração foi salva.');
     }
 }
@@ -1998,11 +2013,36 @@ function criarPopup(html) {
     const container = document.getElementById('modalContainer');
     if(!overlay || !container) return;
 
+    // ✅ Garante que apenas strings são aceitas
+    if(typeof html !== 'string') {
+        console.error('criarPopup: html deve ser string estática. Dados do usuário devem ser inseridos via textContent após a criação do popup.');
+        return;
+    }
+
+    // ✅ Bloqueia padrões de injeção reais e cancela a operação
+    const padraoPerigoso = /<script|onerror\s*=|onclick\s*=|javascript\s*:/i;
+    if(padraoPerigoso.test(html)) {
+        console.error('criarPopup: HTML potencialmente inseguro detectado. Operação cancelada.');
+        return;
+    }
+
+    // ✅ Avisa o desenvolvedor se detectar interpolação acidental de dados do usuário
+    const padroesSuspeitos = [
+        /conta\./,
+        /\.descricao/,
+        /\.valor/,
+        /\.vencimento/,
+        /formatBRL\(/,
+        /formatarDataBR\(/
+    ];
+    if(padroesSuspeitos.some(p => p.test(html))) {
+        console.warn('criarPopup: possível dado de usuário detectado no HTML. Use textContent após criarPopup() para inserir dados dinâmicos.');
+    }
+
     // ✅ Limpa conteúdo anterior
     container.innerHTML = '';
 
     // ✅ Usa a classe .popup que já existe no dashboard.css
-    // Ela já tem: position fixed, top 50%, left 50%, transform, z-index, etc.
     const box = document.createElement('div');
     box.className = 'popup';
     box.innerHTML = html;
