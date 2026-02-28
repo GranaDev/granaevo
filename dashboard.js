@@ -46,6 +46,19 @@ const _throttledSave = (() => {
     };
 })();
 
+// ✅ FUNÇÃO AUXILIAR GLOBAL — adicione uma única vez no topo do arquivo JS
+// Escapa caracteres especiais para evitar XSS em qualquer ponto do sistema
+function escapeHTML(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;')
+        .replace(/\//g, '&#x2F;');
+}
+
 // ✅ Define __GE__ e __GE_save__ como não-reescritáveis UMA única vez no carregamento
 //    - __GE__ usa getter → sempre retorna o snapshot mais recente via _GE_snapshot_atual
 //    - Tentativa de window.__GE__ = x é bloqueada silenciosamente (setter no-op)
@@ -1203,39 +1216,42 @@ function iniciarRenovacaoFotos() {
 // ========== DASHBOARD - RESUMO E CONTAS FIXAS ==========
 function atualizarDashboardResumo() {
     let totalEntradas = 0, totalSaidas = 0, totalReservas = 0;
-    
+
+    // ✅ Função auxiliar: converte para número e rejeita NaN, Infinity e negativos
+    const toValorSeguro = (v) => {
+        const n = parseFloat(v);
+        return (isFinite(n) && n >= 0) ? n : 0;
+    };
+
     transacoes.forEach(t => {
+        const valor = toValorSeguro(t.valor);
+
         if(t.categoria === 'entrada') {
-            totalEntradas += Number(t.valor);
-        }
-        else if(t.categoria === 'saida') {
-            totalSaidas += Number(t.valor);
-        }
-        else if(t.categoria === 'reserva') {
-            // ✅ CORREÇÃO: Reserva APENAS remove do saldo, NÃO conta como saída
-            totalReservas += Number(t.valor);
-        }
-        else if(t.categoria === 'retirada_reserva') {
-            // ✅ Retirada DEVOLVE o dinheiro ao saldo
-            totalReservas -= Number(t.valor);
+            totalEntradas += valor;
+        } else if(t.categoria === 'saida') {
+            totalSaidas += valor;
+        } else if(t.categoria === 'reserva') {
+            totalReservas += valor;
+        } else if(t.categoria === 'retirada_reserva') {
+            totalReservas -= valor;
+            // ✅ Impede reservas negativas por dados corrompidos
+            if(totalReservas < 0) totalReservas = 0;
         }
     });
-    
-    // ✅ Cálculo correto:
-    // Saldo = Entradas - Saídas - Reservas (porque reserva tira do saldo disponível)
+
     const saldo = totalEntradas - totalSaidas - totalReservas;
-    
-    // ✅ Total de reservas acumulado (das metas)
-    const totalReservasCalc = metas.reduce((s, m) => s + Number(m.saved || 0), 0);
-    
+
+    // ✅ Mesma proteção nas metas
+    const totalReservasCalc = metas.reduce((s, m) => s + toValorSeguro(m.saved), 0);
+
     const entradasEl = document.getElementById('totalEntradas');
-    const saidasEl = document.getElementById('totalSaidas');
-    const saldoEl = document.getElementById('totalSaldo');
+    const saidasEl   = document.getElementById('totalSaidas');
+    const saldoEl    = document.getElementById('totalSaldo');
     const reservasEl = document.getElementById('totalReservas');
-    
+
     if(entradasEl) entradasEl.textContent = formatBRL(totalEntradas);
-    if(saidasEl) saidasEl.textContent = formatBRL(totalSaidas);
-    if(saldoEl) saldoEl.textContent = formatBRL(saldo);
+    if(saidasEl)   saidasEl.textContent   = formatBRL(totalSaidas);
+    if(saldoEl)    saldoEl.textContent    = formatBRL(saldo);
     if(reservasEl) reservasEl.textContent = formatBRL(totalReservasCalc);
 }
 
@@ -1348,58 +1364,73 @@ function atualizarBadgeVencimentos() {
 function renderizarPainelAlertas() {
     const alertas = verificarVencimentos();
     if(!alertas || alertas.total === 0) return '';
-    
+
+    // ✅ Valores lógicos (length, diasVencidos) são numéricos — não precisam escape
+    // ✅ Dados do usuário (descricao, vencimento, valor) são escapados com escapeHTML()
     let html = `
         <div class="alertas-vencimento">
             <div class="alertas-header">
                 <div class="alertas-icon">${alertas.vencidas.length > 0 ? '🚨' : '⚠️'}</div>
                 <div class="alertas-title-group">
                     <h3>${alertas.vencidas.length > 0 ? 'Atenção! Contas Vencidas' : 'Contas Próximas do Vencimento'}</h3>
-                    <p>${alertas.vencidas.length > 0 
-                        ? `Você tem ${alertas.vencidas.length} conta(s) vencida(s)` 
+                    <p>${alertas.vencidas.length > 0
+                        ? `Você tem ${alertas.vencidas.length} conta(s) vencida(s)`
                         : `${alertas.aVencer.length} conta(s) vencem nos próximos 5 dias`}
                     </p>
                 </div>
             </div>
-            
+
             <div class="alertas-grid">
     `;
-    
+
     // Contas vencidas
     alertas.vencidas.forEach(conta => {
+        // ✅ id é número inteiro interno — seguro para uso em atributo onclick
+        const idSeguro = parseInt(conta.id, 10);
+        // ✅ diasVencidos é cálculo numérico interno — seguro
         const diasVencidos = Math.floor((new Date() - new Date(conta.vencimento)) / (1000 * 60 * 60 * 24));
+        // ✅ descricao, valor e vencimento vêm do usuário — escapados
+        const descricaoSegura = escapeHTML(conta.descricao);
+        const valorSeguro     = escapeHTML(formatBRL(conta.valor));
+        const vencSeguro      = escapeHTML(formatarDataBR(conta.vencimento));
+
         html += `
-            <div class="alerta-card" onclick="abrirPopupPagarContaFixa(${conta.id})">
+            <div class="alerta-card" data-id="${idSeguro}" data-acao="pagar">
                 <div class="alerta-header">
-                    <div class="alerta-title">${conta.descricao}</div>
+                    <div class="alerta-title">${descricaoSegura}</div>
                     <span class="alerta-status vencido">❌ Vencida</span>
                 </div>
                 <div class="alerta-info">
-                    <div><strong>Valor:</strong> ${formatBRL(conta.valor)}</div>
-                    <div><strong>Vencimento:</strong> ${formatarDataBR(conta.vencimento)}</div>
+                    <div><strong>Valor:</strong> ${valorSeguro}</div>
+                    <div><strong>Vencimento:</strong> ${vencSeguro}</div>
                     <div style="color: #ff4b4b; font-weight: 600; margin-top: 6px;">
                         ⏰ Vencida há ${diasVencidos} dia(s)
                     </div>
                 </div>
-                <button class="alerta-btn" onclick="event.stopPropagation(); abrirPopupPagarContaFixa(${conta.id})">
+                <button class="alerta-btn" data-id="${idSeguro}" data-acao="pagar-btn">
                     💰 Pagar Agora
                 </button>
             </div>
         `;
     });
-    
+
     // Contas a vencer
     alertas.aVencer.forEach(conta => {
+        const idSeguro = parseInt(conta.id, 10);
         const diasRestantes = Math.floor((new Date(conta.vencimento) - new Date()) / (1000 * 60 * 60 * 24));
+        const descricaoSegura = escapeHTML(conta.descricao);
+        const valorSeguro     = escapeHTML(formatBRL(conta.valor));
+        const vencSeguro      = escapeHTML(formatarDataBR(conta.vencimento));
+
         html += `
-            <div class="alerta-card pendente" onclick="abrirContaFixaForm(${conta.id})">
+            <div class="alerta-card pendente" data-id="${idSeguro}" data-acao="editar">
                 <div class="alerta-header">
-                    <div class="alerta-title">${conta.descricao}</div>
+                    <div class="alerta-title">${descricaoSegura}</div>
                     <span class="alerta-status a-vencer">⏳ A Vencer</span>
                 </div>
                 <div class="alerta-info">
-                    <div><strong>Valor:</strong> ${formatBRL(conta.valor)}</div>
-                    <div><strong>Vencimento:</strong> ${formatarDataBR(conta.vencimento)}</div>
+                    <div><strong>Valor:</strong> ${valorSeguro}</div>
+                    <div><strong>Vencimento:</strong> ${vencSeguro}</div>
                     <div style="color: #ffd166; font-weight: 600; margin-top: 6px;">
                         ⏰ Vence em ${diasRestantes} dia(s)
                     </div>
@@ -1407,12 +1438,12 @@ function renderizarPainelAlertas() {
             </div>
         `;
     });
-    
+
     html += `
             </div>
         </div>
     `;
-    
+
     return html;
 }
 
@@ -1459,27 +1490,55 @@ document.head.appendChild(styleAlertas);
 function atualizarListaContasFixas() {
     const lista = document.getElementById('listaContasFixas');
     if(!lista) return;
-    
-    // Adicionar painel de alertas ANTES da lista
+
+    // ✅ Limpa o container de forma segura antes de reconstruir
+    lista.innerHTML = '';
+
+    // ✅ Painel de alertas via innerHTML é seguro pois renderizarPainelAlertas()
+    //    agora usa escapeHTML() em todos os dados do usuário
     const painelAlertas = renderizarPainelAlertas();
-    
-    lista.innerHTML = painelAlertas;
-    
+    if(painelAlertas) {
+        const painelWrapper = document.createElement('div');
+        painelWrapper.innerHTML = painelAlertas;
+
+        // ✅ Registra os eventos do painel de alertas via delegação (sem onclick inline)
+        painelWrapper.addEventListener('click', (e) => {
+            const card = e.target.closest('[data-acao]');
+            if(!card) return;
+
+            const id = parseInt(card.dataset.id, 10);
+            if(isNaN(id)) return;
+
+            const acao = card.dataset.acao;
+
+            if(acao === 'pagar' || acao === 'pagar-btn') {
+                e.stopPropagation();
+                abrirPopupPagarContaFixa(id);
+            } else if(acao === 'editar') {
+                abrirContaFixaForm(id);
+            }
+        });
+
+        lista.appendChild(painelWrapper);
+    }
+
     if(contasFixas.length === 0) {
-        lista.innerHTML += '<p class="empty-state">Nenhuma conta fixa cadastrada.</p>';
+        const empty = document.createElement('p');
+        empty.className = 'empty-state';
+        empty.textContent = 'Nenhuma conta fixa cadastrada.';
+        lista.appendChild(empty);
         return;
     }
-    
+
     const hojeISO = new Date().toISOString().slice(0, 10);
-    
-    // Container para as contas
+
     const containerContas = document.createElement('div');
     containerContas.className = 'contas-grid';
-    
+
     contasFixas.forEach(c => {
         let status = 'Pendente';
         let statusClass = 'status-pendente';
-        
+
         if(c.pago) {
             status = 'Pago';
             statusClass = 'status-pago';
@@ -1487,131 +1546,131 @@ function atualizarListaContasFixas() {
             status = 'Vencido';
             statusClass = 'status-vencido';
         }
-        
+
         const div = document.createElement('div');
         div.className = 'conta-card';
-        
-        // ✅ CRIAR ELEMENTOS PROGRAMATICAMENTE EM VEZ DE innerHTML
-        
-        // Header
+
         const header = document.createElement('div');
         header.className = 'conta-header';
-        
+
         const title = document.createElement('div');
         title.className = 'conta-title';
-        
+
         const statusSpan = document.createElement('span');
         statusSpan.className = `conta-status ${statusClass}`;
         statusSpan.textContent = status;
-        
-        // Info
+
         const info = document.createElement('div');
         info.className = 'conta-info';
-        
-        // Verificar se é fatura de cartão
+
         if(c.tipoContaFixa === 'fatura_cartao' && c.compras && c.compras.length > 0) {
             const totalCompras = c.compras.length;
-            
-            title.innerHTML = `💳 ${c.descricao}`;
-            
-            info.innerHTML = `
-                <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">Valor: ${formatBRL(c.valor)}</div>
-                <div>Vencimento: ${formatarDataBR(c.vencimento)}</div>
-                <div style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 6px;">
-                    📦 ${totalCompras} compra${totalCompras > 1 ? 's' : ''} nesta fatura
-                </div>
-            `;
-            
+
+            // ✅ Emoji estático + textContent separados evitam XSS
+            title.textContent = `💳 ${c.descricao}`;
+
+            // ✅ Construção programática — nenhum dado do usuário vai para innerHTML
+            const divValor = document.createElement('div');
+            divValor.style.cssText = 'font-weight: 600; font-size: 1.1rem; color: var(--text-primary);';
+            divValor.textContent = `Valor: ${formatBRL(c.valor)}`;
+
+            const divVenc = document.createElement('div');
+            divVenc.textContent = `Vencimento: ${formatarDataBR(c.vencimento)}`;
+
+            const divCompras = document.createElement('div');
+            divCompras.style.cssText = 'color: var(--text-secondary); font-size: 0.85rem; margin-top: 6px;';
+            divCompras.textContent = `📦 ${totalCompras} compra${totalCompras > 1 ? 's' : ''} nesta fatura`;
+
+            info.appendChild(divValor);
+            info.appendChild(divVenc);
+            info.appendChild(divCompras);
+
+            div.appendChild(header);
+            div.appendChild(info);
+
             if(status !== 'Pago') {
                 const actions = document.createElement('div');
                 actions.className = 'conta-actions';
-                
+
                 const btnPagar = document.createElement('button');
                 btnPagar.className = 'conta-btn';
                 btnPagar.textContent = 'Pagar Fatura';
-                
-                // ✅ ARMAZENAR O ID NO CLOSURE
+
                 btnPagar.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    console.log('🔍 Clicado em Pagar Fatura - ID:', c.id);
                     abrirPopupPagarContaFixa(c.id);
                 });
-                
+
                 actions.appendChild(btnPagar);
-                div.appendChild(header);
-                div.appendChild(info);
                 div.appendChild(actions);
-            } else {
-                div.appendChild(header);
-                div.appendChild(info);
             }
-            
+
         } else {
-            // Conta fixa normal
+            // ✅ textContent é 100% seguro contra XSS
             title.textContent = c.descricao;
-            
-            let infoHTML = `
-                <div>Valor: ${formatBRL(c.valor)}</div>
-                <div>Vencimento: ${formatarDataBR(c.vencimento)}</div>
-            `;
-            
+
+            const divValor = document.createElement('div');
+            divValor.textContent = `Valor: ${formatBRL(c.valor)}`;
+
+            const divVenc = document.createElement('div');
+            divVenc.textContent = `Vencimento: ${formatarDataBR(c.vencimento)}`;
+
+            info.appendChild(divValor);
+            info.appendChild(divVenc);
+
+            // ✅ Parcelas também via textContent
             if(c.totalParcelas && c.parcelaAtual) {
-                infoHTML += `<div style="color: var(--warning); font-size: 0.85rem; margin-top: 4px;">Parcela: ${c.parcelaAtual}/${c.totalParcelas}</div>`;
+                const divParcela = document.createElement('div');
+                divParcela.style.cssText = 'color: var(--warning); font-size: 0.85rem; margin-top: 4px;';
+                divParcela.textContent = `Parcela: ${c.parcelaAtual}/${c.totalParcelas}`;
+                info.appendChild(divParcela);
             }
-            
-            info.innerHTML = infoHTML;
-            
+
+            div.appendChild(header);
+            div.appendChild(info);
+
             if(status !== 'Pago') {
                 const actions = document.createElement('div');
                 actions.className = 'conta-actions';
-                
+
                 const btnPagar = document.createElement('button');
                 btnPagar.className = 'conta-btn';
                 btnPagar.textContent = 'Pagar';
-                
-                // ✅ ARMAZENAR O ID NO CLOSURE
-                const contaId = c.id; // Guardar em variável local
+
+                const contaId = parseInt(c.id, 10); // ✅ Garante que é número
+
                 btnPagar.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    console.log('🔍 Clicado em Pagar - ID:', contaId, 'Conta:', c.descricao);
                     abrirPopupPagarContaFixa(contaId);
                 });
-                
+
                 actions.appendChild(btnPagar);
-                div.appendChild(header);
-                div.appendChild(info);
                 div.appendChild(actions);
-            } else {
-                div.appendChild(header);
-                div.appendChild(info);
             }
         }
-        
+
         header.appendChild(title);
         header.appendChild(statusSpan);
-        
-        // ✅ Evento de clique no card (para editar)
+
         div.addEventListener('click', (e) => {
-            // Não fazer nada se clicou em um botão
             if(e.target.tagName === 'BUTTON') return;
-            
-            console.log('🔍 Clicado no card - ID:', c.id, 'Conta:', c.descricao);
-            
+
             if(c.tipoContaFixa === 'fatura_cartao') {
                 abrirVisualizacaoFatura(c.id);
             } else {
                 abrirContaFixaForm(c.id);
             }
         });
-        
+
         containerContas.appendChild(div);
     });
-    
+
     lista.appendChild(containerContas);
 }
 
 function abrirContaFixaForm(editId = null) {
     if(editId === null) {
+        // ✅ Formulário de criação: sem dados do usuário no HTML, sem risco de injeção
         criarPopup(`
             <h3>Nova Conta Fixa</h3>
             <input type="text" id="descContaFixa" class="form-input" placeholder="Descrição"><br>
@@ -1619,55 +1678,80 @@ function abrirContaFixaForm(editId = null) {
             <label style="display:block; text-align:left; margin-top:10px; margin-bottom:6px; color: var(--text-secondary); font-weight:600;">📅 Data de Vencimento:</label>
             <input type="date" id="vencContaFixa" class="form-input"><br>
             <button class="btn-primary" id="okContaFixa">Salvar</button>
-            <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+            <button class="btn-cancelar" id="cancelarContaFixa">Cancelar</button>
         `);
-        
+
+        document.getElementById('cancelarContaFixa').onclick = () => fecharPopup();
+
         document.getElementById('okContaFixa').onclick = () => {
-            const desc = document.getElementById('descContaFixa').value.trim();
+            const desc     = document.getElementById('descContaFixa').value.trim();
             const valorStr = document.getElementById('valorContaFixa').value;
-            const venc = document.getElementById('vencContaFixa').value;
-            
+            const venc     = document.getElementById('vencContaFixa').value;
+
             if(!desc || !valorStr || !venc) return alert('Preencha todos os campos.');
-            
+
+            // ✅ Validação de comprimento máximo (evita payloads gigantes)
+            if(desc.length > 100) return alert('Descrição muito longa (máx. 100 caracteres).');
+
+            // ✅ Validação de valor: deve ser número positivo
             const valor = parseFloat(parseFloat(valorStr).toFixed(2));
+            if(isNaN(valor) || valor <= 0) return alert('Informe um valor válido e positivo.');
+
+            // ✅ Validação de data: formato YYYY-MM-DD
+            if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return alert('Data de vencimento inválida.');
+
             const id = nextContaFixaId++;
-            
             contasFixas.push({ id, descricao: desc, valor, vencimento: venc, pago: false });
             salvarDados();
             atualizarListaContasFixas();
             fecharPopup();
         };
+
     } else {
         const conta = contasFixas.find(c => c.id === editId);
         if(!conta) return;
-        
+
+        // ✅ O HTML do popup NÃO contém dados do usuário — os campos são preenchidos
+        //    via .value depois que o DOM é criado, eliminando injeção de atributo
         criarPopup(`
             <h3>Editar Conta Fixa</h3>
-            <input type="text" id="descContaFixa" class="form-input" value="${conta.descricao}"><br>
-            <input type="number" id="valorContaFixa" class="form-input" value="${conta.valor}" step="0.01" min="0"><br>
-            <input type="date" id="vencContaFixa" class="form-input" value="${conta.vencimento}"><br>
+            <input type="text" id="descContaFixa" class="form-input" maxlength="100"><br>
+            <input type="number" id="valorContaFixa" class="form-input" step="0.01" min="0"><br>
+            <input type="date" id="vencContaFixa" class="form-input"><br>
             <button class="btn-primary" id="salvarEditContaFixa">Salvar</button>
             <button class="btn-excluir" id="excluirContaFixa">Excluir</button>
-            <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+            <button class="btn-cancelar" id="cancelarContaFixa">Cancelar</button>
         `);
-        
+
+        // ✅ Preenchimento seguro via propriedade .value (nunca via innerHTML/atributo)
+        document.getElementById('descContaFixa').value  = conta.descricao;
+        document.getElementById('valorContaFixa').value = conta.valor;
+        document.getElementById('vencContaFixa').value  = conta.vencimento;
+
+        document.getElementById('cancelarContaFixa').onclick = () => fecharPopup();
+
         document.getElementById('salvarEditContaFixa').onclick = () => {
-            const desc = document.getElementById('descContaFixa').value.trim();
+            const desc     = document.getElementById('descContaFixa').value.trim();
             const valorStr = document.getElementById('valorContaFixa').value;
-            const venc = document.getElementById('vencContaFixa').value;
-            
+            const venc     = document.getElementById('vencContaFixa').value;
+
             if(!desc || !valorStr || !venc) return alert('Preencha todos os campos.');
-            
-            conta.descricao = desc;
-            conta.valor = parseFloat(parseFloat(valorStr).toFixed(2));
+            if(desc.length > 100) return alert('Descrição muito longa (máx. 100 caracteres).');
+
+            const valor = parseFloat(parseFloat(valorStr).toFixed(2));
+            if(isNaN(valor) || valor <= 0) return alert('Informe um valor válido e positivo.');
+            if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return alert('Data de vencimento inválida.');
+
+            conta.descricao  = desc;
+            conta.valor      = valor;
             conta.vencimento = venc;
             salvarDados();
             atualizarListaContasFixas();
             fecharPopup();
         };
-        
+
         document.getElementById('excluirContaFixa').onclick = () => {
-            if(confirm("Tem certeza que deseja excluir esta conta fixa?")) {
+            if(confirm('Tem certeza que deseja excluir esta conta fixa?')) {
                 contasFixas = contasFixas.filter(c => c.id !== editId);
                 salvarDados();
                 atualizarListaContasFixas();
@@ -1680,39 +1764,57 @@ function abrirContaFixaForm(editId = null) {
 function abrirPopupPagarContaFixa(id) {
     const conta = contasFixas.find(c => c.id === id);
     if(!conta) return;
-    
+
     let valorDigitado = conta.valor;
-    
+
+    // ✅ O HTML do popup não contém NENHUM dado do usuário
+    //    Os textos são injetados via textContent após o DOM ser criado
     criarPopup(`
         <h3>Pagar Conta Fixa</h3>
-        <div style="color: var(--text-secondary);">${conta.descricao}</div>
-        <div style="margin-bottom:12px;">Valor: ${formatBRL(conta.valor)}</div>
-        <div style="margin-bottom:12px;">Vencimento: ${formatarDataBR(conta.vencimento)}</div>
+        <div id="popupDescricao" style="color: var(--text-secondary);"></div>
+        <div id="popupValor" style="margin-bottom:12px;"></div>
+        <div id="popupVencimento" style="margin-bottom:12px;"></div>
         <div style="color: var(--warning); margin-bottom:8px;">O valor está correto?</div>
         <button class="btn-primary" id="simValorCorreto">Sim</button>
         <button class="btn-warning" id="naoValorCorreto">Não</button>
-        <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+        <button class="btn-cancelar" id="cancelarPagamento">Cancelar</button>
         <div id="ajusteValorDiv" style="display:none; margin-top:14px;">
-            <input type="number" id="novoValorContaFixa" class="form-input" value="${conta.valor}" step="0.01" min="0"><br>
+            <input type="number" id="novoValorContaFixa" class="form-input" step="0.01" min="0"><br>
             <button class="btn-primary" id="confirmNovoValor" style="margin-top:8px;">Confirmar novo valor</button>
         </div>
     `);
-    
+
+    // ✅ Preenchimento seguro — textContent nunca interpreta HTML
+    document.getElementById('popupDescricao').textContent  = conta.descricao;
+    document.getElementById('popupValor').textContent      = `Valor: ${formatBRL(conta.valor)}`;
+    document.getElementById('popupVencimento').textContent = `Vencimento: ${formatarDataBR(conta.vencimento)}`;
+
+    // ✅ Campo numérico preenchido via .value
+    document.getElementById('novoValorContaFixa').value = conta.valor;
+
+    document.getElementById('cancelarPagamento').onclick = () => fecharPopup();
+
     document.getElementById('simValorCorreto').onclick = () => {
         pagarContaFixa(id, conta.valor);
         fecharPopup();
     };
-    
+
     document.getElementById('naoValorCorreto').onclick = () => {
         document.getElementById('ajusteValorDiv').style.display = 'block';
         document.getElementById('simValorCorreto').disabled = true;
         document.getElementById('naoValorCorreto').disabled = true;
-        
+
         document.getElementById('confirmNovoValor').onclick = () => {
             const valStr = document.getElementById('novoValorContaFixa').value;
-            if(!valStr || isNaN(valStr) || Number(valStr) <= 0) return alert("Digite um valor válido!");
-            valorDigitado = parseFloat(parseFloat(valStr).toFixed(2));
-            
+
+            // ✅ Validação reforçada: número, positivo e com máximo razoável
+            const novoValor = parseFloat(valStr);
+            if(!valStr || isNaN(novoValor) || novoValor <= 0 || novoValor > 9999999) {
+                return alert('Digite um valor válido!');
+            }
+
+            valorDigitado = parseFloat(novoValor.toFixed(2));
+
             if(confirm(`Confirma o pagamento de ${formatBRL(valorDigitado)}?`)) {
                 pagarContaFixa(id, valorDigitado);
                 fecharPopup();
@@ -1724,101 +1826,116 @@ function abrirPopupPagarContaFixa(id) {
 function pagarContaFixa(id, valorPago) {
     const conta = contasFixas.find(c => c.id === id);
     if(!conta) return;
-    
+
+    // ✅ Validação de valorPago: deve ser número positivo e finito
+    const valorSeguro = parseFloat(valorPago);
+    if(!isFinite(valorSeguro) || valorSeguro <= 0) {
+        alert('Valor de pagamento inválido.');
+        return;
+    }
+
+    // ✅ Função interna: avança vencimento um mês com validação de formato
+    function avancarMes(vencimentoISO) {
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
+            // Data corrompida: retorna hoje + 1 mês como fallback seguro
+            const fallback = new Date();
+            fallback.setMonth(fallback.getMonth() + 1);
+            return fallback.toISOString().slice(0, 10);
+        }
+        let [y, m, d] = vencimentoISO.split('-').map(Number);
+        m++;
+        if(m > 12) { m = 1; y++; }
+        return [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
+    }
+
     const dh = agoraDataHora();
     const idTrans = nextTransId++;
-    
+
+    // ✅ descricao é truncada para evitar payloads gigantes no histórico
+    const descricaoSegura = String(conta.descricao || '').slice(0, 100);
+
     transacoes.push({
         id: idTrans,
         categoria: 'saida',
         tipo: 'Conta Fixa',
-        descricao: `${conta.descricao} (pagamento mensal)`,
-        valor: valorPago,
+        descricao: `${descricaoSegura} (pagamento mensal)`,
+        valor: parseFloat(valorSeguro.toFixed(2)),
         data: dh.data,
         hora: dh.hora,
-        contaFixaId: id
+        contaFixaId: parseInt(id, 10)
     });
-    
-    // ✅ VERIFICAR SE É FATURA DE CARTÃO
+
+    // VERIFICAR SE É FATURA DE CARTÃO
     if(conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
         let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
-        
-        // ✅ ATUALIZAR PARCELAS DE TODAS AS COMPRAS DA FATURA
+
         conta.compras.forEach(compra => {
             if(compra.parcelaAtual <= compra.totalParcelas) {
                 compra.parcelaAtual++;
-                
-                // ✅ REDUZIR VALOR USADO DO CARTÃO
+
                 if(cartaoRef) {
-                    cartaoRef.usado = (cartaoRef.usado || 0) - compra.valorParcela;
+                    // ✅ valorParcela validado antes de subtrair
+                    const parcela = parseFloat(compra.valorParcela) || 0;
+                    cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
                     if(cartaoRef.usado < 0) cartaoRef.usado = 0;
                 }
             }
         });
-        
-        // ✅ REMOVER COMPRAS QUE JÁ FORAM TOTALMENTE PAGAS
+
         conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
-        
-        // ✅ SE NÃO HÁ MAIS COMPRAS, REMOVER FATURA
+
         if(conta.compras.length === 0) {
             contasFixas = contasFixas.filter(c => c.id !== id);
             salvarDados();
             atualizarTudo();
-            alert("✅ Todas as parcelas pagas! Fatura quitada.");
+            alert('✅ Todas as parcelas pagas! Fatura quitada.');
             return;
         }
-        
-        // ✅ RECALCULAR VALOR TOTAL DA PRÓXIMA FATURA
-        conta.valor = conta.compras.reduce((sum, c) => sum + c.valorParcela, 0);
-        
-        // ✅ ATUALIZAR VENCIMENTO PARA PRÓXIMO MÊS
-        let [y, m, d] = conta.vencimento.split('-').map(Number);
-        m++;
-        if(m > 12) { m = 1; y++; }
-        conta.vencimento = [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
+
+        // ✅ Recalcula valor com proteção contra NaN
+        conta.valor = conta.compras.reduce((sum, c) => {
+            const p = parseFloat(c.valorParcela) || 0;
+            return sum + p;
+        }, 0);
+
+        conta.vencimento = avancarMes(conta.vencimento);
         conta.pago = false;
-        
+
         salvarDados();
         atualizarTudo();
         alert(`✅ Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
         return;
     }
-    
-    // ✅ CONTA FIXA NORMAL (NÃO É FATURA DE CARTÃO)
+
+    // CONTA FIXA NORMAL COM PARCELAS (cartão parcelado)
     if(conta.cartaoId && conta.totalParcelas && conta.parcelaAtual) {
         let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
         if(cartaoRef) {
-            cartaoRef.usado = (cartaoRef.usado || 0) - valorPago;
+            cartaoRef.usado = (cartaoRef.usado || 0) - valorSeguro;
             if(cartaoRef.usado < 0) cartaoRef.usado = 0;
         }
-        
+
         if(conta.parcelaAtual < conta.totalParcelas) {
             conta.parcelaAtual++;
-            let [y, m, d] = conta.vencimento.split('-').map(Number);
-            m++;
-            if(m > 12) { m = 1; y++; }
-            conta.vencimento = [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
+            conta.vencimento = avancarMes(conta.vencimento);
             conta.pago = false;
         } else {
             contasFixas = contasFixas.filter(c => c.id !== conta.id);
         }
-        
+
         salvarDados();
         atualizarTudo();
-        alert("✅ Parcela paga! O lembrete foi atualizado.");
+        alert('✅ Parcela paga! O lembrete foi atualizado.');
         return;
     }
-    
-    // ✅ CONTA FIXA RECORRENTE (SEM PARCELAS)
-let [y, m, d] = conta.vencimento.split('-').map(Number);
-m++;
-if(m > 12) { m = 1; y++; }
-conta.vencimento = [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
-conta.pago = false; // ❌ PROBLEMA: sempre marca como não pago
 
-salvarDados();
-atualizarTudo();
-alert("✅ Pagamento realizado e vencimento atualizado para o próximo mês!");
+    // CONTA FIXA RECORRENTE (sem parcelas)
+    conta.vencimento = avancarMes(conta.vencimento);
+    conta.pago = false;
+
+    salvarDados();
+    atualizarTudo();
+    alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
 }
 
 // ========== TRANSAÇÕES ==========
