@@ -435,13 +435,8 @@ async function salvarDados() {
         return false;
     }
 
-    // ✅ Debounce interno: se houver um save agendado, cancela e reagenda
-    //    Múltiplas chamadas rápidas resultam em apenas 1 save real (após 2s de silêncio)
-    //    O chamador recebe uma Promise que resolve quando o save de fato ocorrer
     return new Promise((resolve) => {
 
-        // Cancela timer anterior e notifica o chamador anterior com false
-        // (ele foi substituído por este save mais recente)
         if (_saveDebounceTimer) {
             clearTimeout(_saveDebounceTimer);
             if (_saveDebounceResolve) _saveDebounceResolve(false);
@@ -456,12 +451,22 @@ async function salvarDados() {
             try {
                 const transacoesValidas = transacoes.filter(_validators.transacao);
                 const metasValidas      = metas.filter(_validators.meta);
-                const contasValidas     = contasFixas.filter(_validators.contaFixa);
                 const cartoesValidos    = cartoesCredito.filter(_validators.cartao);
+
+                // ✅ CORREÇÃO: remove a flag _processando antes de persistir.
+                //    Essa flag é apenas um lock de runtime para evitar cliques duplos.
+                //    Se salva no banco com _processando: true, o pagamento fica
+                //    permanentemente bloqueado em todas as sessões futuras.
+                const contasValidas = contasFixas
+                    .filter(_validators.contaFixa)
+                    .map(c => {
+                        const { _processando, ...rest } = c;
+                        return rest;
+                    });
 
                 if (transacoesValidas.length !== transacoes.length   ||
                     metasValidas.length      !== metas.length         ||
-                    contasValidas.length     !== contasFixas.length   ||
+                    contasFixas.filter(_validators.contaFixa).length !== contasFixas.length ||
                     cartoesValidos.length    !== cartoesCredito.length) {
                     _log.warn('SAVE: itens inválidos descartados antes de persistir');
                 }
@@ -495,7 +500,7 @@ async function salvarDados() {
                 _log.error('SAVE_004', e);
                 resolve(false);
             }
-        }, 2_000); // ✅ 2s de silêncio antes de salvar de verdade
+        }, 2_000);
     });
 }
 
@@ -3818,28 +3823,28 @@ function atualizarTelaCartoes() {
 
 function abrirCartaoForm(editId = null) {
     const bancos = [
-        {nome: 'Nubank',        img: 'https://logospng.org/download/nubank/logo-roxo-nubank-icone.png'},
-        {nome: 'Bradesco',      img: 'https://logospng.org/download/bradesco/logo-bradesco-icon-256.png'},
-        {nome: 'Mercado Pago',  img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icon.png'},
-        {nome: 'C6 Bank',       img: 'https://logospng.org/download/c6-bank/logo-c6-bank-icon.png'},
-        {nome: 'Itaú',          img: 'https://logospng.org/download/itau/logo-itau-icon.png'},
-        {nome: 'Santander',     img: 'https://logospng.org/download/santander/logo-santander-icon.png'},
+        {nome: 'Nubank',          img: 'https://logospng.org/download/nubank/logo-roxo-nubank-icone.png'},
+        {nome: 'Bradesco',        img: 'https://logospng.org/download/bradesco/logo-bradesco-icon-256.png'},
+        {nome: 'Mercado Pago',    img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icon.png'},
+        {nome: 'C6 Bank',         img: 'https://logospng.org/download/c6-bank/logo-c6-bank-icon.png'},
+        {nome: 'Itaú',            img: 'https://logospng.org/download/itau/logo-itau-icon.png'},
+        {nome: 'Santander',       img: 'https://logospng.org/download/santander/logo-santander-icon.png'},
         {nome: 'Banco do Brasil', img: 'https://logospng.org/download/banco-do-brasil/logo-banco-do-brasil-icon.png'},
-        {nome: 'Caixa',         img: 'https://logospng.org/download/caixa/logo-caixa-icon.png'},
-        {nome: 'Outro',         img: ''}
+        {nome: 'Caixa',           img: 'https://logospng.org/download/caixa/logo-caixa-icon.png'},
+        {nome: 'Outro',           img: ''}
     ];
-    
+
     let options = bancos.map(b => `<option value="${b.nome}">${b.nome}</option>`).join('');
-    
+
     function diaOptions(selected) {
         let opts = '<option value="">Selecione o dia</option>';
-        for(let i = 1; i <= 28; i++) {
+        for (let i = 1; i <= 28; i++) {
             opts += `<option value="${i}" ${selected == i ? 'selected' : ''}>${i.toString().padStart(2, '0')}</option>`;
         }
         return opts;
     }
-    
-    if(!editId) {
+
+    if (!editId) {
         criarPopup(`
             <h3>Novo Cartão</h3>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Banco:</label>
@@ -3853,15 +3858,19 @@ function abrirCartaoForm(editId = null) {
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Dia da Fatura:</label>
             <select id="novoVencimentoDia" class="form-input">${diaOptions()}</select><br>
             <button class="btn-primary" id="salvarNovoCartao">Salvar</button>
-            <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+            <button class="btn-cancelar" id="cancelarNovoCartao">Cancelar</button>
         `);
-        
+
+        // ✅ CORREÇÃO: addEventListener após criação do DOM — o onclick inline
+        //    seria removido por sanitizarHTMLPopup por iniciar com 'on'
+        document.getElementById('cancelarNovoCartao').addEventListener('click', fecharPopup);
+
         const selectBanco = document.getElementById('novoBanco');
         const campoOutro  = document.getElementById('campoOutroCartao');
         const inputOutro  = document.getElementById('nomeOutroCartao');
-        
-        selectBanco.addEventListener('change', function() {
-            if(this.value === 'Outro') {
+
+        selectBanco.addEventListener('change', function () {
+            if (this.value === 'Outro') {
                 campoOutro.style.display = 'block';
                 inputOutro.required = true;
                 inputOutro.focus();
@@ -3871,29 +3880,27 @@ function abrirCartaoForm(editId = null) {
                 inputOutro.value = '';
             }
         });
-        
-        document.getElementById('salvarNovoCartao').onclick = () => {
+
+        document.getElementById('salvarNovoCartao').addEventListener('click', () => {
             let nomeBanco = document.getElementById('novoBanco').value;
-            const limiteStr    = document.getElementById('novoLimite').value;
+            const limiteStr     = document.getElementById('novoLimite').value;
             const vencimentoDia = document.getElementById('novoVencimentoDia').value;
-            
-            if(nomeBanco === 'Outro') {
+
+            if (nomeBanco === 'Outro') {
                 const nomeDigitado = document.getElementById('nomeOutroCartao').value.trim();
-                if(!nomeDigitado) return alert("Digite o nome do cartão!");
-                // ✅ CORREÇÃO: limite de tamanho no nome customizado
-                if(nomeDigitado.length > 50) return alert("Nome do cartão muito longo (máx. 50 caracteres).");
+                if (!nomeDigitado) return alert("Digite o nome do cartão!");
+                if (nomeDigitado.length > 50) return alert("Nome do cartão muito longo (máx. 50 caracteres).");
                 nomeBanco = nomeDigitado;
             }
-            
-            if(!nomeBanco || !limiteStr || !vencimentoDia) return alert("Preencha todos os campos!");
-            
+
+            if (!nomeBanco || !limiteStr || !vencimentoDia) return alert("Preencha todos os campos!");
+
             const limite = parseFloat(parseFloat(limiteStr).toFixed(2));
-            // ✅ CORREÇÃO: validação de limite — rejeita valores inválidos ou absurdos
-            if(isNaN(limite) || limite <= 0)        return alert("Informe um limite válido e positivo.");
-            if(limite > 9999999)                     return alert("Limite máximo permitido: R$ 9.999.999,00.");
+            if (isNaN(limite) || limite <= 0) return alert("Informe um limite válido e positivo.");
+            if (limite > 9999999)              return alert("Limite máximo permitido: R$ 9.999.999,00.");
 
             const bandeiraImg = bancos.find(b => b.nome === nomeBanco)?.img || '';
-            
+
             cartoesCredito.push({
                 id: nextCartaoId++,
                 nomeBanco,
@@ -3902,20 +3909,21 @@ function abrirCartaoForm(editId = null) {
                 bandeiraImg,
                 usado: 0
             });
-            
+
             salvarDados();
             atualizarTelaCartoes();
             fecharPopup();
-            if(typeof mostrarNotificacao === 'function') {
+            if (typeof mostrarNotificacao === 'function') {
                 mostrarNotificacao('Cartão cadastrado com sucesso!', 'success');
             } else {
                 alert('Cartão cadastrado com sucesso!');
             }
-        };
+        });
+
     } else {
         const c = cartoesCredito.find(x => x.id === editId);
-        if(!c) return;
-        
+        if (!c) return;
+
         criarPopup(`
             <h3>Editar Cartão</h3>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Banco:</label>
@@ -3929,84 +3937,84 @@ function abrirCartaoForm(editId = null) {
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Dia da Fatura:</label>
             <select id="novoVencimentoDia" class="form-input">${diaOptions(c.vencimentoDia)}</select><br>
             <button class="btn-primary" id="salvarNovoCartao">Salvar</button>
-            <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+            <button class="btn-cancelar" id="cancelarEditarCartao">Cancelar</button>
             <button class="btn-excluir" id="excluirCartao">Excluir</button>
         `);
-        
+
+        // ✅ CORREÇÃO: addEventListener após criação do DOM
+        document.getElementById('cancelarEditarCartao').addEventListener('click', fecharPopup);
+
         const selectBanco = document.getElementById('novoBanco');
         const campoOutro  = document.getElementById('campoOutroCartao');
         const inputOutro  = document.getElementById('nomeOutroCartao');
-        
+
         const bancoExiste = bancos.find(b => b.nome === c.nomeBanco && b.nome !== 'Outro');
-        
-        if(bancoExiste) {
+
+        if (bancoExiste) {
             selectBanco.value = c.nomeBanco;
         } else {
             selectBanco.value = 'Outro';
             campoOutro.style.display = 'block';
-            // ✅ .value em vez de innerHTML — nunca interpreta HTML no campo de edição
             inputOutro.value = c.nomeBanco;
         }
-        
-        selectBanco.addEventListener('change', function() {
-            if(this.value === 'Outro') {
+
+        selectBanco.addEventListener('change', function () {
+            if (this.value === 'Outro') {
                 campoOutro.style.display = 'block';
                 inputOutro.required = true;
-                if(!inputOutro.value) inputOutro.focus();
+                if (!inputOutro.value) inputOutro.focus();
             } else {
                 campoOutro.style.display = 'none';
                 inputOutro.required = false;
                 inputOutro.value = '';
             }
         });
-        
-        document.getElementById('salvarNovoCartao').onclick = () => {
+
+        document.getElementById('salvarNovoCartao').addEventListener('click', () => {
             let nomeBanco = document.getElementById('novoBanco').value;
-            
-            if(nomeBanco === 'Outro') {
+
+            if (nomeBanco === 'Outro') {
                 const nomeDigitado = document.getElementById('nomeOutroCartao').value.trim();
-                if(!nomeDigitado) return alert("Digite o nome do cartão!");
-                // ✅ CORREÇÃO: limite de tamanho no nome customizado (edição)
-                if(nomeDigitado.length > 50) return alert("Nome do cartão muito longo (máx. 50 caracteres).");
+                if (!nomeDigitado) return alert("Digite o nome do cartão!");
+                if (nomeDigitado.length > 50) return alert("Nome do cartão muito longo (máx. 50 caracteres).");
                 nomeBanco = nomeDigitado;
             }
-            
+
             const limiteStr = document.getElementById('novoLimite').value;
             const limite    = parseFloat(parseFloat(limiteStr).toFixed(2));
-            // ✅ CORREÇÃO: validação de limite na edição também
-            if(isNaN(limite) || limite <= 0) return alert("Informe um limite válido e positivo.");
-            if(limite > 9999999)              return alert("Limite máximo permitido: R$ 9.999.999,00.");
+            if (isNaN(limite) || limite <= 0) return alert("Informe um limite válido e positivo.");
+            if (limite > 9999999)              return alert("Limite máximo permitido: R$ 9.999.999,00.");
 
             c.nomeBanco     = nomeBanco;
             c.limite        = limite;
             c.vencimentoDia = Number(document.getElementById('novoVencimentoDia').value);
             c.bandeiraImg   = bancos.find(b => b.nome === nomeBanco)?.img || '';
-            
+
             salvarDados();
             atualizarTelaCartoes();
             fecharPopup();
-            if(typeof mostrarNotificacao === 'function') {
+            if (typeof mostrarNotificacao === 'function') {
                 mostrarNotificacao('Cartão atualizado com sucesso!', 'success');
             } else {
                 alert('Cartão atualizado com sucesso!');
             }
-        };
-        
-        document.getElementById('excluirCartao').onclick = () => {
-            if(confirm("Excluir cartão? Todas as compras futuras vinculadas a ele serão removidas.")) {
+        });
+
+        document.getElementById('excluirCartao').addEventListener('click', () => {
+            if (confirm("Excluir cartão? Todas as compras futuras vinculadas a ele serão removidas.")) {
                 cartoesCredito = cartoesCredito.filter(x => x.id !== editId);
                 contasFixas    = contasFixas.filter(x => x.cartaoId !== editId);
                 salvarDados();
                 atualizarTelaCartoes();
                 atualizarListaContasFixas();
                 fecharPopup();
-                if(typeof mostrarNotificacao === 'function') {
+                if (typeof mostrarNotificacao === 'function') {
                     mostrarNotificacao('Cartão excluído com sucesso!', 'success');
                 } else {
                     alert('Cartão excluído com sucesso!');
                 }
             }
-        };
+        });
     }
 }
 
@@ -5876,13 +5884,19 @@ async function alterarNome() {
         return;
     }
 
+    // ✅ CORREÇÃO: HTML do popup sem dados do usuário interpolados.
+    //    O value do input é preenchido via .value após a criação do DOM,
+    //    evitando qualquer risco residual de injeção via atributo HTML.
     criarPopup(`
         <h3>👤 Alterar Nome</h3>
         <div class="small">Digite seu novo nome ou apelido</div>
-        <input type="text" id="novoNome" class="form-input" placeholder="Novo nome" value="${sanitizeHTML(perfilAtivo.nome)}">
+        <input type="text" id="novoNome" class="form-input" placeholder="Novo nome" maxlength="50">
         <button class="btn-primary" id="concluirNome">Concluir</button>
         <button class="btn-cancelar" id="cancelarNome">Cancelar</button>
     `);
+
+    // ✅ Preenchimento seguro via .value — nunca via atributo HTML
+    document.getElementById('novoNome').value = perfilAtivo.nome;
 
     document.getElementById('cancelarNome').addEventListener('click', fecharPopup);
 
@@ -5903,7 +5917,8 @@ async function alterarNome() {
         btn.textContent = '⏳ Salvando...';
 
         try {
-            log.info('🔄 Atualizando nome do perfil...');
+            // ✅ CORREÇÃO: usa _log (o logger definido neste arquivo) em vez de log
+            _log.info('🔄 Atualizando nome do perfil...');
 
             const { data, error } = await supabase
                 .from('profiles')
@@ -5914,7 +5929,7 @@ async function alterarNome() {
 
             if (error) throw error;
 
-            log.info('✅ Nome atualizado');
+            _log.info('✅ Nome atualizado');
 
             perfilAtivo.nome = novoNome;
 
@@ -5929,7 +5944,8 @@ async function alterarNome() {
             mostrarNotificacao('✅ Nome alterado com sucesso!', 'success');
 
         } catch (error) {
-            log.error('Erro ao alterar nome', error);
+            // ✅ CORREÇÃO: _log.error em vez de log.error
+            _log.error('NOME_001', error);
             mostrarNotificacao('Não foi possível alterar o nome. Tente novamente.', 'error');
             btn.disabled = false;
             btn.textContent = 'Concluir';
@@ -6079,6 +6095,10 @@ async function alterarEmail() {
 
 window.alterarEmail = alterarEmail;
 
+// ✅ Hostname do Supabase definido como constante imutável no topo do módulo.
+//    Nunca usar window.SUPABASE_URL ou variáveis mutáveis em runtime.
+const _SUPABASE_ALLOWED_HOSTNAME = 'fvrhqqeofqedmhadzzqw.supabase.co';
+
 async function enviarConvite() {
     const nome  = document.getElementById('inputNomeConvidado')?.value.trim();
     const email = document.getElementById('inputEmailConvidado')?.value.trim().toLowerCase();
@@ -6107,12 +6127,25 @@ async function enviarConvite() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error('Sessão expirada. Faça login novamente.');
 
-        // URL definida como constante no build — não depende de window.* em runtime
-        if (typeof SUPABASE_URL === 'undefined' || !SUPABASE_URL.startsWith('https://')) {
+        if (typeof SUPABASE_URL === 'undefined') {
+            throw new Error('Configuração de servidor inválida. Contate o suporte.');
+        }
+        let _parsedSupabaseUrl;
+        try {
+            _parsedSupabaseUrl = new URL(SUPABASE_URL);
+        } catch {
+            throw new Error('Configuração de servidor inválida. Contate o suporte.');
+        }
+        if (
+            _parsedSupabaseUrl.protocol !== 'https:' ||
+            _parsedSupabaseUrl.hostname !== _SUPABASE_ALLOWED_HOSTNAME
+        ) {
             throw new Error('Configuração de servidor inválida. Contate o suporte.');
         }
 
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/send-guest-invite`, {
+        const endpointUrl = `https://${_SUPABASE_ALLOWED_HOSTNAME}/functions/v1/send-guest-invite`;
+
+        const response = await fetch(endpointUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -6155,7 +6188,6 @@ async function enviarConvite() {
             throw new Error('Não foi possível enviar o convite. Tente novamente.');
         }
 
-        // Validar code: deve ter apenas 6 dígitos
         const code = result.code;
         if (!/^\d{6}$/.test(code)) {
             throw new Error('Resposta inválida do servidor. Contate o suporte.');
@@ -6172,7 +6204,6 @@ async function enviarConvite() {
                     Email enviado para <strong>${sanitizeHTML(email)}</strong>.<br>
                     Compartilhe o código abaixo com <strong>${sanitizeHTML(nome)}</strong>:
                 </p>
-
                 <div style="background:rgba(16,185,129,0.1); border:2px solid rgba(16,185,129,0.4);
                             border-radius:16px; padding:24px; margin-bottom:20px;">
                     <div style="font-size:0.8rem; color:#6ee7b7; letter-spacing:2px; margin-bottom:10px;">
@@ -6180,13 +6211,11 @@ async function enviarConvite() {
                     </div>
                     <div id="codigoConvite" style="font-size:3rem; font-weight:900; letter-spacing:12px;
                                 color:#10b981; font-family:'Courier New',monospace;">
-                        <!-- preenchido via textContent abaixo -->
                     </div>
                     <div style="font-size:0.8rem; color:var(--text-muted); margin-top:10px;">
                         ⏰ Expira em: ${sanitizeHTML(expiresAt)}
                     </div>
                 </div>
-
                 <button id="btnCopiarCodigo" class="btn-primary" style="width:100%; margin-bottom:10px;">
                     📋 Copiar Código
                 </button>
@@ -6198,7 +6227,6 @@ async function enviarConvite() {
             </div>
         `);
 
-        // textContent é sempre seguro — nunca executa HTML
         document.getElementById('codigoConvite').textContent = code;
 
         document.getElementById('btnCopiarCodigo').addEventListener('click', () => {
@@ -6210,7 +6238,8 @@ async function enviarConvite() {
         document.getElementById('btnFecharConviteEnviado').addEventListener('click', fecharPopup);
 
     } catch (err) {
-        log.error('Erro ao enviar convite', err);
+        // ✅ CORREÇÃO (vuln 3): _log.error em vez de log.error
+        _log.error('CONVITE_001', err);
         mostrarNotificacao(err.message || 'Não foi possível enviar o convite. Tente novamente.', 'error');
         if (btnEnviar) {
             btnEnviar.disabled = false;
@@ -6234,7 +6263,8 @@ async function removerConvidado(memberId, memberName) {
             fecharPopup();
             setTimeout(() => alterarEmail(), 200);
         } catch (err) {
-            log.error('Erro ao remover membro', err);
+            // ✅ CORREÇÃO: _log.error em vez de log.error
+            _log.error('MEMBRO_001', err);
             mostrarNotificacao('Não foi possível remover o convidado. Tente novamente.', 'error');
         }
     });
@@ -6288,14 +6318,14 @@ function abrirAlterarSenha() {
             mostrarNotificacao('✅ Senha alterada com sucesso!', 'success');
 
         } catch (error) {
-            log.error('Erro ao alterar senha', error);
+            // ✅ CORREÇÃO: _log.error em vez de log.error
+            _log.error('SENHA_001', error);
             mostrarNotificacao('Não foi possível alterar a senha. Tente novamente.', 'error');
             btn.disabled = false;
             btn.textContent = 'Concluir';
         }
     });
 }
-
 window.abrirAlterarSenha = abrirAlterarSenha;
 
 function trocarPerfil() {
@@ -7259,8 +7289,12 @@ function obterEstatisticas() {
 window.obterEstatisticas = obterEstatisticas;
 
 // ========== CONSOLE DE DEBUG (APENAS DESENVOLVIMENTO) ==========
+const _IS_DEV_BUILD = (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+);
 
-if (typeof window !== 'undefined' && window._GRANAEVO_DEV === true) {
+if (_IS_DEV_BUILD) {
     window.debugGranaEvo = () => {
         console.log('=== DEBUG GRANAEVO (DEV) ===');
         console.log('Perfil ID:', perfilAtivo?.id);
@@ -7544,22 +7578,40 @@ window.addEventListener('beforeunload', () => {
 
         atualizarReferenciasGlobais();
 
+        // ✅ Aplica os mesmos _validators usados em salvarDados()
+        //    Garante que dados corrompidos ou injetados via console
+        //    não bypassem a validação ao fechar a aba
+        const transacoesValidas  = transacoes.filter(_validators.transacao);
+        const metasValidas       = metas.filter(_validators.meta);
+        const contasValidas      = contasFixas.filter(_validators.contaFixa);
+        const cartoesValidos     = cartoesCredito.filter(_validators.cartao);
+
+        // ✅ Remove _processando antes de persistir — flag temporária de runtime,
+        //    nunca deve ser salva no banco (ver Vulnerabilidade 2)
+        const contasSemLock = contasValidas.map(c => {
+            const { _processando, ...rest } = c;
+            return rest;
+        });
+
+        if (transacoesValidas.length !== transacoes.length   ||
+            metasValidas.length      !== metas.length         ||
+            contasValidas.length     !== contasFixas.length   ||
+            cartoesValidos.length    !== cartoesCredito.length) {
+            _log.warn('BEFOREUNLOAD: itens inválidos descartados antes de persistir via beacon');
+        }
+
         const profilesAtual = [{
-            id: perfilAtivo.id,
-            nome: perfilAtivo.nome,
-            foto: perfilAtivo.foto,
-            transacoes,
-            metas,
-            contasFixas,
-            cartoesCredito,
-            nextTransId,
-            nextMetaId,
-            nextContaFixaId,
-            nextCartaoId,
-            lastUpdate: new Date().toISOString()
+            id:             perfilAtivo.id,
+            nome:           _sanitizeText(perfilAtivo.nome),
+            foto:           _sanitizeImgUrl(perfilAtivo.foto) || null,
+            transacoes:     transacoesValidas,
+            metas:          metasValidas,
+            contasFixas:    contasSemLock,
+            cartoesCredito: cartoesValidos,
+            nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
+            lastUpdate:     new Date().toISOString()
         }];
 
-        // ✅ sendBeacon — garante envio mesmo em F5/fechar aba
         dataManager.saveImmediate(profilesAtual);
     }
 });
