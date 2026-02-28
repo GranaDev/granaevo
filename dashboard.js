@@ -1938,22 +1938,25 @@ function pagarContaFixa(id, valorPago) {
     alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
 }
 
-// ========== POPUP / MODAL ==========
 function criarPopup(html) {
     const overlay   = document.getElementById('modalOverlay');
     const container = document.getElementById('modalContainer');
     if(!overlay || !container) return;
 
+    // ✅ Limpa conteúdo anterior
     container.innerHTML = '';
 
+    // ✅ Usa a classe .popup que já existe no dashboard.css
+    // Ela já tem: position fixed, top 50%, left 50%, transform, z-index, etc.
     const box = document.createElement('div');
-    box.className = 'popup-box';
+    box.className = 'popup';
     box.innerHTML = html;
     container.appendChild(box);
 
+    // ✅ Ativa o overlay — .modal-overlay.active { display: block } já no CSS
     overlay.classList.add('active');
-    container.classList.add('active');
 
+    // ✅ Fechar ao clicar no overlay
     overlay.onclick = () => fecharPopup();
 }
 
@@ -1963,12 +1966,11 @@ function fecharPopup() {
     if(!overlay || !container) return;
 
     overlay.classList.remove('active');
-    container.classList.remove('active');
+    overlay.onclick = null;
 
-    // Limpa conteúdo após animação CSS
+    // ✅ Limpa o conteúdo após a animação CSS (fadeInScale 0.3s já definida no CSS)
     setTimeout(() => {
         container.innerHTML = '';
-        overlay.onclick = null; // ✅ Remove listener para não acumular
     }, 300);
 }
 
