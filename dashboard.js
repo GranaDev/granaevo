@@ -2034,10 +2034,10 @@ function criarPopup(html) {
         return;
     }
 
-// ✅ Bloqueia script, qualquer event handler (on\w+=), javascript: e data:
-    // on\w+= cobre onerror, onload, onmouseover, onclick, etc.
-    // Seguro pois todo HTML passado ao criarPopup usa addEventListener, não inline handlers
-    const padraoPerigoso = /<script|on\w+\s*=|javascript\s*:|data\s*:/i;
+    // ✅ CORREÇÃO: "data:" só é perigoso como esquema de URI (após = ou url().
+    //    O padrão anterior "data\s*:" causava falso positivo no texto "<b>Data:</b>"
+    //    do popup de comprovante, bloqueando transações legítimas.
+    const padraoPerigoso = /<script|on\w+\s*=|javascript\s*:|(?:=|url\()\s*['"]?\s*data\s*:/i;
     if(padraoPerigoso.test(html)) {
         console.error('criarPopup: HTML potencialmente inseguro detectado. Operação cancelada.');
         return;
@@ -2065,7 +2065,7 @@ function criarPopup(html) {
     box.innerHTML = html;
     container.appendChild(box);
 
-    // ✅ Ativa o overlay — .modal-overlay.active { display: block } já no CSS
+    // ✅ Ativa o overlay
     overlay.classList.add('active');
 
     // ✅ Fechar ao clicar no overlay
