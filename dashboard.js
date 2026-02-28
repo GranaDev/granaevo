@@ -2313,29 +2313,46 @@ function atualizarTiposDinamicos() {
 }
 
 function atualizarCamposCredito() {
-    const creditDiv = document.getElementById('creditoFields');
+    const creditDiv      = document.getElementById('creditoFields');
     const parcelasSelect = document.getElementById('selectParcelas');
-    const cartaoSelect = document.getElementById('selectCartao');
-    const catVal = document.getElementById('selectCategoria').value;
-    
-    if(parcelasSelect) {
+    const cartaoSelect   = document.getElementById('selectCartao');
+    const catVal         = document.getElementById('selectCategoria').value;
+
+    if (parcelasSelect) {
         parcelasSelect.innerHTML = '';
-        for(let i = 1; i <= 24; i++) {
+        for (let i = 1; i <= 24; i++) {
             const opt = document.createElement('option');
-            opt.value = i;
+            opt.value       = i;
             opt.textContent = `${String(i).padStart(2, '0')}x`;
             parcelasSelect.appendChild(opt);
         }
     }
-    
-    if(catVal === 'saida_credito') {
+
+    if (catVal === 'saida_credito') {
         creditDiv.style.display = 'flex';
-        if(cartoesCredito.length === 0) {
-            cartaoSelect.innerHTML = '<option value="">Cadastre um cartão no menu "Cartões"</option>';
+        cartaoSelect.innerHTML  = '';
+
+        if (cartoesCredito.length === 0) {
+            const opt       = document.createElement('option');
+            opt.value       = '';
+            opt.textContent = 'Cadastre um cartão no menu "Cartões"';
+            cartaoSelect.appendChild(opt);
             cartaoSelect.disabled = true;
         } else {
-            cartaoSelect.innerHTML = '<option value="">Selecione o cartão</option>' +
-                cartoesCredito.map(c => `<option value="${c.id}">${c.nomeBanco}</option>`).join('');
+            // ✅ Opção placeholder
+            const placeholder       = document.createElement('option');
+            placeholder.value       = '';
+            placeholder.textContent = 'Selecione o cartão';
+            cartaoSelect.appendChild(placeholder);
+
+            // ✅ Cada cartão via DOM — nomeBanco e id nunca passam por innerHTML
+            cartoesCredito.forEach(c => {
+                const opt       = document.createElement('option');
+                opt.value       = String(c.id);          // ✅ atribuição direta — não interpolado
+                opt.textContent = _sanitizeText(c.nomeBanco); // ✅ sanitizado via textContent
+                cartaoSelect.appendChild(opt);
+            });
+
             cartaoSelect.disabled = false;
         }
     } else {
@@ -2511,220 +2528,337 @@ function lancarTransacao() {
 
 function atualizarMovimentacoesUI() {
     const lista = document.getElementById('listaMovimentacoes');
-    if(!lista) return;
-    
+    if (!lista) return;
+
     lista.innerHTML = '';
-    
-    if(transacoes.length === 0) {
-        lista.innerHTML = '<p class="empty-state">Nenhuma movimentação registrada.</p>';
+
+    if (transacoes.length === 0) {
+        const p       = document.createElement('p');
+        p.className   = 'empty-state';
+        p.textContent = 'Nenhuma movimentação registrada.';
+        lista.appendChild(p);
         return;
     }
-    
+
     const arr = transacoes.slice().reverse();
-    
+
     arr.forEach(t => {
-        const div = document.createElement('div');
-        div.className = 'mov-item';
-        
-        const left = document.createElement('div');
-        left.className = 'mov-left';
-        
-        const styleClass = 
-            t.categoria === 'entrada' ? 'entrada' : 
-            t.categoria === 'saida' ? 'saida' : 
-            t.categoria === 'reserva' ? 'reserva' : 
-            'retirada_reserva'; // nova categoria
-        
-        left.innerHTML = `
-            <div class="mov-tipo">${t.tipo}</div>
-            <div class="mov-desc">${t.descricao}</div>
-            <div class="mov-data">${t.data} ${t.hora}</div>
-        `;
-        
-        const right = document.createElement('div');
+        const div       = document.createElement('div');
+        div.className   = 'mov-item';
+
+        // ── Lado esquerdo
+        const left      = document.createElement('div');
+        left.className  = 'mov-left';
+
+        // ✅ textContent — nunca innerHTML com dados do usuário
+        const divTipo       = document.createElement('div');
+        divTipo.className   = 'mov-tipo';
+        divTipo.textContent = _sanitizeText(t.tipo);
+
+        const divDesc       = document.createElement('div');
+        divDesc.className   = 'mov-desc';
+        divDesc.textContent = _sanitizeText(t.descricao);
+
+        const divData       = document.createElement('div');
+        divData.className   = 'mov-data';
+        divData.textContent = `${_sanitizeText(t.data)} ${_sanitizeText(t.hora)}`;
+
+        left.appendChild(divTipo);
+        left.appendChild(divDesc);
+        left.appendChild(divData);
+
+        // ── Lado direito
+        const right     = document.createElement('div');
         right.className = 'mov-right';
-        right.innerHTML = `<div class="${styleClass}">${
-            t.categoria === 'entrada' ? '+' : 
-            t.categoria === 'retirada_reserva' ? '+' : 
-            '-'
-        } ${formatBRL(t.valor)}</div>`;
-        
+
+        // ✅ className atribuído por lookup — nunca interpolado com dado do usuário
+        const categoriasPermitidas = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
+        const styleClass = categoriasPermitidas.includes(t.categoria) ? t.categoria : 'saida';
+
+        const divValor       = document.createElement('div');
+        divValor.className   = styleClass;
+        // ✅ sinal determinado por lógica — nunca vem de dado do usuário
+        const sinal = (t.categoria === 'entrada' || t.categoria === 'retirada_reserva') ? '+' : '-';
+        divValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
+
+        right.appendChild(divValor);
+
         div.appendChild(left);
         div.appendChild(right);
-        div.onclick = () => abrirDetalhesTransacao(t.id);
-        
+
+        // ✅ addEventListener — sem onclick inline
+        div.addEventListener('click', () => abrirDetalhesTransacao(t.id));
+
         lista.appendChild(div);
     });
 }
 
 function abrirDetalhesTransacao(id) {
     const t = transacoes.find(x => x.id === id);
-    if(!t) return;
-    
+    if (!t) return;
+
+    // ✅ HTML estático — zero dados do usuário interpolados
     criarPopup(`
         <h3>Detalhes da Transação</h3>
-        <div class="small">ID: ${t.id}</div>
+        <div class="small" id="detTransId"></div>
         <div style="text-align:left; margin:20px 0; color: var(--text-secondary);">
-            <b>Categoria:</b> ${t.categoria}<br>
-            <b>Tipo:</b> ${t.tipo}<br>
-            <b>Descrição:</b> ${t.descricao}<br>
-            <b>Valor:</b> ${formatBRL(t.valor)}<br>
-            <b>Data:</b> ${t.data}<br>
-            <b>Hora:</b> ${t.hora}
+            <b>Categoria:</b> <span id="detCategoria"></span><br>
+            <b>Tipo:</b>      <span id="detTipo"></span><br>
+            <b>Descrição:</b> <span id="detDescricao"></span><br>
+            <b>Valor:</b>     <span id="detValor"></span><br>
+            <b>Data:</b>      <span id="detData"></span><br>
+            <b>Hora:</b>      <span id="detHora"></span>
         </div>
         <button class="btn-excluir" id="delTransBtn">Excluir</button>
-        <button class="btn-primary" onclick="fecharPopup()">Fechar</button>
+        <button class="btn-primary" id="fecharDetalhesBtn">Fechar</button>
     `);
-    
-     document.getElementById('delTransBtn').onclick = () => {
+
+    // ✅ Preenchimento via textContent — nunca innerHTML com dados do usuário
+    document.getElementById('detTransId').textContent  = t.id ? `ID: ${String(t.id).slice(0, 40)}` : '';
+    document.getElementById('detCategoria').textContent = _sanitizeText(t.categoria);
+    document.getElementById('detTipo').textContent      = _sanitizeText(t.tipo);
+    document.getElementById('detDescricao').textContent = _sanitizeText(t.descricao);
+    document.getElementById('detValor').textContent     = formatBRL(t.valor);
+    document.getElementById('detData').textContent      = _sanitizeText(t.data);
+    document.getElementById('detHora').textContent      = _sanitizeText(t.hora);
+
+    // ✅ addEventListener — sem onclick inline
+    document.getElementById('fecharDetalhesBtn').addEventListener('click', () => fecharPopup());
+
+    document.getElementById('delTransBtn').addEventListener('click', () => {
         transacoes = transacoes.filter(x => x.id !== t.id);
-        
-        if(t.categoria === 'reserva' && t.metaId) {
+
+        if (t.categoria === 'reserva' && t.metaId) {
             const meta = metas.find(m => String(m.id) === String(t.metaId));
-            if(meta) {
+            if (meta) {
                 meta.saved = Number((Number(meta.saved || 0) - Number(t.valor)).toFixed(2));
                 const ym = yearMonthKey(t.data);
-                if(meta.monthly && meta.monthly[ym]) {
+                if (meta.monthly && meta.monthly[ym]) {
                     meta.monthly[ym] = Number((Number(meta.monthly[ym]) - Number(t.valor)).toFixed(2));
                 }
             }
-        } else if(t.categoria === 'retirada_reserva' && t.metaId) {
+        } else if (t.categoria === 'retirada_reserva' && t.metaId) {
             const meta = metas.find(m => String(m.id) === String(t.metaId));
-            if(meta) {
+            if (meta) {
                 meta.saved = Number((Number(meta.saved || 0) + Number(t.valor)).toFixed(2));
                 const ym = yearMonthKey(t.data);
-                if(meta.monthly && meta.monthly[ym]) {
+                if (meta.monthly && meta.monthly[ym]) {
                     meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + Number(t.valor)).toFixed(2));
                 }
             }
         }
-        
+
         salvarDados();
         atualizarTudo();
         fecharPopup();
-    };
+    });
 }
-
 // ========== METAS/RESERVAS ==========
 function abrirMetaForm(editId = null) {
-    if(editId === null) {
+    if (editId === null) {
+        // ✅ HTML estático — sem dados do usuário interpolados
         criarPopup(`
             <h3>Adicionar Meta</h3>
-            <input id="metaDesc" class="form-input" placeholder="Descrição"><br>
+            <input id="metaDesc" class="form-input" placeholder="Descrição" maxlength="200"><br>
             <input id="metaObj" class="form-input" placeholder="Valor objetivo (R$)" type="number" step="0.01" min="0"><br>
             <button class="btn-primary" id="okMeta">Concluir</button>
-            <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+            <button class="btn-cancelar" id="cancelarMeta">Cancelar</button>
         `);
-        
-        document.getElementById('okMeta').onclick = () => {
-            const desc = document.getElementById('metaDesc').value.trim();
+
+        // ✅ addEventListener — sem onclick inline
+        document.getElementById('cancelarMeta').addEventListener('click', () => fecharPopup());
+
+        document.getElementById('okMeta').addEventListener('click', () => {
+            const desc   = document.getElementById('metaDesc').value.trim();
             const objStr = document.getElementById('metaObj').value;
-            if(!desc) return alert('Digite descrição da meta.');
-            if(!objStr || isNaN(objStr) || Number(objStr) <= 0) return alert('Digite objetivo válido.');
-            
+
+            if (!desc)                                        return alert('Digite descrição da meta.');
+            if (desc.length > 200)                           return alert('Descrição muito longa (máx. 200 caracteres).');
+            if (!objStr || isNaN(objStr) || Number(objStr) <= 0) return alert('Digite objetivo válido.');
+
             const objetivo = parseFloat(parseFloat(objStr).toFixed(2));
-            const id = nextMetaId++;
-            metas.push({ id, descricao: desc, objetivo, saved: 0, monthly: {} });
+
+            // ✅ Sem id — banco gera via gen_random_uuid()
+            metas.push({ descricao: desc, objetivo, saved: 0, monthly: {} });
             salvarDados();
             renderMetasList();
             atualizarTudo();
             fecharPopup();
-        };
+        });
+
     } else {
         const meta = metas.find(m => m.id === editId);
-        if(!meta) return;
-        
+        if (!meta) return;
+
+        // ✅ HTML estático — value NÃO interpolado no HTML
+        //    meta.descricao e meta.objetivo são injetados via .value após criação do DOM
+        //    Impede quebra de atributo: value="foo" onmouseover="xss()" type="text
         criarPopup(`
             <h3>Editar Meta</h3>
-            <input id="metaDesc" class="form-input" value="${meta.descricao}"><br>
-            <input id="metaObj" class="form-input" value="${meta.objetivo}" type="number" step="0.01" min="0"><br>
+            <input id="metaDesc" class="form-input" maxlength="200"><br>
+            <input id="metaObj" class="form-input" type="number" step="0.01" min="0"><br>
             <button class="btn-primary" id="okMeta">Salvar</button>
-            <button class="btn-cancelar" onclick="fecharPopup()">Cancelar</button>
+            <button class="btn-cancelar" id="cancelarMeta">Cancelar</button>
         `);
-        
-        document.getElementById('okMeta').onclick = () => {
-            const desc = document.getElementById('metaDesc').value.trim();
+
+        // ✅ Preenchimento seguro via propriedade .value — nunca via atributo HTML
+        document.getElementById('metaDesc').value = meta.descricao;
+        document.getElementById('metaObj').value  = meta.objetivo;
+
+        // ✅ addEventListener — sem onclick inline
+        document.getElementById('cancelarMeta').addEventListener('click', () => fecharPopup());
+
+        document.getElementById('okMeta').addEventListener('click', () => {
+            const desc   = document.getElementById('metaDesc').value.trim();
             const objStr = document.getElementById('metaObj').value;
-            if(!desc) return alert('Digite descrição da meta.');
-            if(!objStr || isNaN(objStr) || Number(objStr) <= 0) return alert('Digite objetivo válido.');
-            
+
+            if (!desc)                                        return alert('Digite descrição da meta.');
+            if (desc.length > 200)                           return alert('Descrição muito longa (máx. 200 caracteres).');
+            if (!objStr || isNaN(objStr) || Number(objStr) <= 0) return alert('Digite objetivo válido.');
+
             meta.descricao = desc;
-            meta.objetivo = parseFloat(parseFloat(objStr).toFixed(2));
+            meta.objetivo  = parseFloat(parseFloat(objStr).toFixed(2));
             salvarDados();
             renderMetasList();
             atualizarTudo();
             fecharPopup();
-        };
+        });
     }
 }
 
 function renderMetasList() {
     const cont = document.getElementById('listaMetas');
-    if(!cont) return;
-    
+    if (!cont) return;
+
     cont.innerHTML = '';
-    
-    if(metas.length === 0) {
-        cont.innerHTML = '<p class="empty-state">Nenhuma reserva criada.</p>';
+
+    if (metas.length === 0) {
+        const p       = document.createElement('p');
+        p.className   = 'empty-state';
+        p.textContent = 'Nenhuma reserva criada.';
+        cont.appendChild(p);
         return;
     }
-    
+
     metas.forEach(m => {
-    const div = document.createElement('div');
-    div.className = 'meta-item';
-    div.dataset.id = m.id;
-    
-    // Calcular progresso
-    const saved = Number(m.saved || 0);
-    const objetivo = Number(m.objetivo || 0);
-    const percentual = objetivo > 0 ? Math.min(100, ((saved / objetivo) * 100).toFixed(1)) : 0;
-    
-    // Definir cor baseada no progresso
-    let corProgresso = '#ff4b4b'; // Vermelho (0-30%)
-    if(percentual >= 70) corProgresso = '#00ff99'; // Verde (70-100%)
-    else if(percentual >= 40) corProgresso = '#ffd166'; // Amarelo (40-70%)
-    
-    div.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
-            <div style="flex:1;">
-                <strong>${m.descricao}</strong>
-                <div style="font-size:12px; color: var(--text-muted); margin-top:4px;">
-                    ${formatBRL(saved)} de ${formatBRL(objetivo)}
-                </div>
-            </div>
-            <div style="background:rgba(${percentual >= 70 ? '0,255,153' : percentual >= 40 ? '255,209,102' : '255,75,75'},0.2); 
-                        padding:6px 12px; border-radius:20px; font-size:0.85rem; font-weight:700; 
-                        color:${corProgresso}; white-space:nowrap;">
-                ${percentual}%
-            </div>
-        </div>
-        
-        <!-- Barra de progresso inline -->
-        <div style="width:100%; height:6px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; margin-bottom:12px;">
-            <div style="width:${percentual}%; height:100%; background:${corProgresso}; border-radius:10px; 
-                        transition:width 0.5s ease; box-shadow:0 0 10px ${corProgresso};"></div>
-        </div>
-        
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-                <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                    <button class="btn-primary" style="padding:6px 12px; font-size:0.85rem;" 
-                            onclick="abrirMetaForm(${m.id}); event.stopPropagation();">✏️ Editar</button>
-                    ${m.historicoRetiradas && m.historicoRetiradas.length > 0 ? `
-                        <button class="btn-primary" style="padding:6px 12px; font-size:0.85rem; background: var(--accent);" 
-                                onclick="abrirAnaliseDisciplina(${m.id}); event.stopPropagation();">📊 Análise</button>
-                    ` : ''}
-                    <button class="btn-excluir" style="padding:6px 12px; font-size:0.85rem;" 
-                            onclick="removerMeta(${m.id}); event.stopPropagation();">🗑️ Excluir</button>
-                </div>
-            </div>
-        `;
-        
-        div.onclick = () => {
+        const div         = document.createElement('div');
+        div.className     = 'meta-item';
+        div.dataset.id    = String(m.id);
+
+        const saved     = Number(m.saved    || 0);
+        const objetivo  = Number(m.objetivo || 0);
+        const percentual = objetivo > 0
+            ? Math.min(100, parseFloat(((saved / objetivo) * 100).toFixed(1)))
+            : 0;
+
+        // ✅ Cor determinada por lógica — nunca vem de dado do usuário
+        let corProgresso = '#ff4b4b';
+        if      (percentual >= 70) corProgresso = '#00ff99';
+        else if (percentual >= 40) corProgresso = '#ffd166';
+
+        // ── Linha superior: descrição + percentual
+        const rowTop = document.createElement('div');
+        rowTop.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;';
+
+        const colInfo = document.createElement('div');
+        colInfo.style.flex = '1';
+
+        const strongDesc       = document.createElement('strong');
+        strongDesc.textContent = _sanitizeText(m.descricao); // ✅ textContent
+
+        const divValores           = document.createElement('div');
+        divValores.style.cssText   = 'font-size:12px; color: var(--text-muted); margin-top:4px;';
+        divValores.textContent     = `${formatBRL(saved)} de ${formatBRL(objetivo)}`; // ✅ textContent
+
+        colInfo.appendChild(strongDesc);
+        colInfo.appendChild(divValores);
+
+        const divPerc = document.createElement('div');
+        // ✅ Atribuição direta de propriedades — sem cssText com dados do usuário
+        divPerc.style.background    = `rgba(${percentual >= 70 ? '0,255,153' : percentual >= 40 ? '255,209,102' : '255,75,75'},0.2)`;
+        divPerc.style.padding       = '6px 12px';
+        divPerc.style.borderRadius  = '20px';
+        divPerc.style.fontSize      = '0.85rem';
+        divPerc.style.fontWeight    = '700';
+        divPerc.style.color         = corProgresso; // ✅ valor interno — não vem do usuário
+        divPerc.style.whiteSpace    = 'nowrap';
+        divPerc.textContent         = `${percentual}%`; // ✅ textContent
+
+        rowTop.appendChild(colInfo);
+        rowTop.appendChild(divPerc);
+
+        // ── Barra de progresso
+        const barraContainer = document.createElement('div');
+        barraContainer.style.cssText = 'width:100%; height:6px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; margin-bottom:12px;';
+
+        const barraFill = document.createElement('div');
+        // ✅ Atribuição direta — percentual e corProgresso são valores internos calculados
+        barraFill.style.width        = `${percentual}%`;
+        barraFill.style.height       = '100%';
+        barraFill.style.background   = corProgresso;
+        barraFill.style.borderRadius = '10px';
+        barraFill.style.transition   = 'width 0.5s ease';
+        barraFill.style.boxShadow    = `0 0 10px ${corProgresso}`;
+
+        barraContainer.appendChild(barraFill);
+
+        // ── Botões de ação
+        const rowBotoes = document.createElement('div');
+        rowBotoes.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:12px;';
+
+        const colBotoes = document.createElement('div');
+        colBotoes.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap;';
+
+        // ✅ Botão Editar — addEventListener em vez de onclick inline com m.id interpolado
+        const btnEditar         = document.createElement('button');
+        btnEditar.className     = 'btn-primary';
+        btnEditar.style.cssText = 'padding:6px 12px; font-size:0.85rem;';
+        btnEditar.textContent   = '✏️ Editar';
+        btnEditar.addEventListener('click', (e) => {
+            e.stopPropagation();
+            abrirMetaForm(m.id);
+        });
+
+        colBotoes.appendChild(btnEditar);
+
+        // ✅ Botão Análise — só aparece se há histórico, sem interpolação de ID
+        if (m.historicoRetiradas && m.historicoRetiradas.length > 0) {
+            const btnAnalise         = document.createElement('button');
+            btnAnalise.className     = 'btn-primary';
+            btnAnalise.style.cssText = 'padding:6px 12px; font-size:0.85rem; background: var(--accent);';
+            btnAnalise.textContent   = '📊 Análise';
+            btnAnalise.addEventListener('click', (e) => {
+                e.stopPropagation();
+                abrirAnaliseDisciplina(m.id);
+            });
+            colBotoes.appendChild(btnAnalise);
+        }
+
+        // ✅ Botão Excluir — addEventListener em vez de onclick inline
+        const btnExcluir         = document.createElement('button');
+        btnExcluir.className     = 'btn-excluir';
+        btnExcluir.style.cssText = 'padding:6px 12px; font-size:0.85rem;';
+        btnExcluir.textContent   = '🗑️ Excluir';
+        btnExcluir.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removerMeta(m.id);
+        });
+
+        colBotoes.appendChild(btnExcluir);
+        rowBotoes.appendChild(colBotoes);
+
+        // ── Monta card
+        div.appendChild(rowTop);
+        div.appendChild(barraContainer);
+        div.appendChild(rowBotoes);
+
+        // ✅ Click no card via addEventListener
+        div.addEventListener('click', () => {
             document.querySelectorAll('.meta-item').forEach(x => x.classList.remove('selected'));
             div.classList.add('selected');
             selecionarMeta(m.id);
-        };
-        
+        });
+
         cont.appendChild(div);
     });
 }
@@ -2973,68 +3107,221 @@ function renderMetaVisual() {
     });
     
     // ✅ NOVO: Exibir detalhes com projeção
-    details.innerHTML = `
-        <div><strong>${meta.descricao}</strong></div>
-        <div style="color: var(--text-secondary); margin-top:8px;">
-            Objetivo: ${formatBRL(meta.objetivo)} • 
-            Guardado: ${formatBRL(meta.saved)} • 
-            Falta: ${formatBRL(Math.max(0, meta.objetivo - meta.saved))}
-        </div>
-        
-        ${projecao.temHistorico ? `
-            <div style="background: rgba(108,99,255,0.1); padding: 14px; border-radius: 12px; margin-top: 16px; border-left: 3px solid #6c63ff;">
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                    <div style="font-size: 1.8rem;">📊</div>
-                    <div>
-                        <div style="font-weight: 700; color: var(--text-primary); font-size: 1rem;">Projeção de Conclusão</div>
-                        <div style="font-size: 0.85rem; color: var(--text-secondary);">Baseado no seu histórico de ${projecao.mesesComDados} ${projecao.mesesComDados === 1 ? 'mês' : 'meses'}</div>
-                    </div>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px;">
-                    <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; text-align: center;">
-                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Média Mensal</div>
-                        <div style="font-size: 1.1rem; font-weight: 700; color: #00ff99;">${formatBRL(projecao.mediaMensal)}</div>
-                    </div>
-                    
-                    <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; text-align: center;">
-                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">Meses Restantes</div>
-                        <div style="font-size: 1.1rem; font-weight: 700; color: #ffd166;">${projecao.mesesRestantes}</div>
-                    </div>
-                </div>
-                
-                <div style="background: rgba(108,99,255,0.2); padding: 12px; border-radius: 10px; margin-top: 12px; text-align: center;">
-                    <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">🎯 Data Estimada de Conclusão</div>
-                    <div style="font-size: 1.3rem; font-weight: 700; color: #6c63ff;">${projecao.dataEstimada}</div>
-                    ${projecao.avisoAjuste ? `
-                        <div style="font-size: 0.8rem; color: #ffd166; margin-top: 8px; padding: 8px; background: rgba(255,209,102,0.1); border-radius: 6px;">
-                            ⚠️ ${projecao.avisoAjuste}
-                        </div>
-                    ` : ''}
-                </div>
-                
-                ${projecao.sugestao ? `
-                    <div style="margin-top: 12px; padding: 10px; background: rgba(0,255,153,0.1); border-radius: 8px; border-left: 3px solid #00ff99;">
-                        <div style="font-size: 0.85rem; color: var(--text-primary);">
-                            <strong>💡 Sugestão:</strong> ${projecao.sugestao}
-                        </div>
-                    </div>
-                ` : ''}
-            </div>
-        ` : `
-            <div style="background: rgba(255,209,102,0.1); padding: 14px; border-radius: 12px; margin-top: 16px; border-left: 3px solid #ffd166;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="font-size: 1.5rem;">📊</div>
-                    <div>
-                        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Histórico Insuficiente</div>
-                        <div style="font-size: 0.85rem; color: var(--text-secondary);">
-                            Continue guardando por mais alguns meses para calcular a projeção de conclusão.
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `}
-    `;
+    // ✅ Reconstrói details via DOM — zero dados do usuário em innerHTML
+    details.innerHTML = '';
+
+    // ── Cabeçalho: nome da meta
+    const divNome       = document.createElement('div');
+    const strong        = document.createElement('strong');
+    strong.textContent  = _sanitizeText(meta.descricao); // ✅ textContent
+    divNome.appendChild(strong);
+
+    // ── Linha de valores
+    const divValores           = document.createElement('div');
+    divValores.style.color     = 'var(--text-secondary)';
+    divValores.style.marginTop = '8px';
+    // ✅ formatBRL retorna string numérica — seguro via textContent
+    divValores.textContent = `Objetivo: ${formatBRL(meta.objetivo)} • Guardado: ${formatBRL(meta.saved)} • Falta: ${formatBRL(Math.max(0, meta.objetivo - meta.saved))}`;
+
+    details.appendChild(divNome);
+    details.appendChild(divValores);
+
+    if (projecao.temHistorico) {
+        // ── Card de projeção
+        const cardProjecao             = document.createElement('div');
+        cardProjecao.style.background  = 'rgba(108,99,255,0.1)';
+        cardProjecao.style.padding     = '14px';
+        cardProjecao.style.borderRadius = '12px';
+        cardProjecao.style.marginTop   = '16px';
+        cardProjecao.style.borderLeft  = '3px solid #6c63ff';
+
+        // ── Header do card
+        const headerCard             = document.createElement('div');
+        headerCard.style.display     = 'flex';
+        headerCard.style.alignItems  = 'center';
+        headerCard.style.gap         = '10px';
+        headerCard.style.marginBottom = '10px';
+
+        const iconProjecao           = document.createElement('div');
+        iconProjecao.style.fontSize  = '1.8rem';
+        iconProjecao.textContent     = '📊';
+
+        const colHeader = document.createElement('div');
+
+        const tituloProjecao           = document.createElement('div');
+        tituloProjecao.style.fontWeight = '700';
+        tituloProjecao.style.color      = 'var(--text-primary)';
+        tituloProjecao.style.fontSize   = '1rem';
+        tituloProjecao.textContent      = 'Projeção de Conclusão'; // ✅ texto estático
+
+        const subTituloProjecao         = document.createElement('div');
+        subTituloProjecao.style.fontSize = '0.85rem';
+        subTituloProjecao.style.color    = 'var(--text-secondary)';
+        // ✅ mesesComDados é número calculado internamente — seguro
+        subTituloProjecao.textContent    = `Baseado no seu histórico de ${projecao.mesesComDados} ${projecao.mesesComDados === 1 ? 'mês' : 'meses'}`;
+
+        colHeader.appendChild(tituloProjecao);
+        colHeader.appendChild(subTituloProjecao);
+        headerCard.appendChild(iconProjecao);
+        headerCard.appendChild(colHeader);
+
+        // ── Grid média/meses
+        const grid               = document.createElement('div');
+        grid.style.display       = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        grid.style.gap           = '12px';
+        grid.style.marginTop     = '12px';
+
+        const celulaMedia             = document.createElement('div');
+        celulaMedia.style.background  = 'rgba(255,255,255,0.05)';
+        celulaMedia.style.padding     = '10px';
+        celulaMedia.style.borderRadius = '8px';
+        celulaMedia.style.textAlign   = 'center';
+
+        const labelMedia           = document.createElement('div');
+        labelMedia.style.fontSize  = '0.75rem';
+        labelMedia.style.color     = 'var(--text-muted)';
+        labelMedia.style.marginBottom = '4px';
+        labelMedia.textContent     = 'Média Mensal'; // ✅ texto estático
+
+        const valorMedia           = document.createElement('div');
+        valorMedia.style.fontSize  = '1.1rem';
+        valorMedia.style.fontWeight = '700';
+        valorMedia.style.color     = '#00ff99';
+        valorMedia.textContent     = formatBRL(projecao.mediaMensal); // ✅ número calculado internamente
+
+        celulaMedia.appendChild(labelMedia);
+        celulaMedia.appendChild(valorMedia);
+
+        const celulaMeses             = document.createElement('div');
+        celulaMeses.style.background  = 'rgba(255,255,255,0.05)';
+        celulaMeses.style.padding     = '10px';
+        celulaMeses.style.borderRadius = '8px';
+        celulaMeses.style.textAlign   = 'center';
+
+        const labelMeses           = document.createElement('div');
+        labelMeses.style.fontSize  = '0.75rem';
+        labelMeses.style.color     = 'var(--text-muted)';
+        labelMeses.style.marginBottom = '4px';
+        labelMeses.textContent     = 'Meses Restantes'; // ✅ texto estático
+
+        const valorMeses            = document.createElement('div');
+        valorMeses.style.fontSize   = '1.1rem';
+        valorMeses.style.fontWeight = '700';
+        valorMeses.style.color      = '#ffd166';
+        valorMeses.textContent      = String(projecao.mesesRestantes); // ✅ número calculado internamente
+
+        celulaMeses.appendChild(labelMeses);
+        celulaMeses.appendChild(valorMeses);
+
+        grid.appendChild(celulaMedia);
+        grid.appendChild(celulaMeses);
+
+        // ── Data estimada
+        const cardData               = document.createElement('div');
+        cardData.style.background    = 'rgba(108,99,255,0.2)';
+        cardData.style.padding       = '12px';
+        cardData.style.borderRadius  = '10px';
+        cardData.style.marginTop     = '12px';
+        cardData.style.textAlign     = 'center';
+
+        const labelData              = document.createElement('div');
+        labelData.style.fontSize     = '0.85rem';
+        labelData.style.color        = 'var(--text-secondary)';
+        labelData.style.marginBottom = '6px';
+        labelData.textContent        = '🎯 Data Estimada de Conclusão'; // ✅ texto estático
+
+        const valorData             = document.createElement('div');
+        valorData.style.fontSize    = '1.3rem';
+        valorData.style.fontWeight  = '700';
+        valorData.style.color       = '#6c63ff';
+        // ✅ dataEstimada vem de Date.toLocaleDateString — dado do sistema, não do usuário
+        //    mas sanitizamos por precaução
+        valorData.textContent       = _sanitizeText(String(projecao.dataEstimada));
+
+        cardData.appendChild(labelData);
+        cardData.appendChild(valorData);
+
+        // ── Aviso de ajuste (opcional)
+        if (projecao.avisoAjuste) {
+            const divAviso              = document.createElement('div');
+            divAviso.style.fontSize     = '0.8rem';
+            divAviso.style.color        = '#ffd166';
+            divAviso.style.marginTop    = '8px';
+            divAviso.style.padding      = '8px';
+            divAviso.style.background   = 'rgba(255,209,102,0.1)';
+            divAviso.style.borderRadius = '6px';
+            // ✅ avisoAjuste é string interna calculada em calcularProjecaoConclusao — textContent por precaução
+            divAviso.textContent        = `⚠️ ${_sanitizeText(String(projecao.avisoAjuste))}`;
+            cardData.appendChild(divAviso);
+        }
+
+        // ── Sugestão (opcional)
+        if (projecao.sugestao) {
+            const divSugestao              = document.createElement('div');
+            divSugestao.style.marginTop    = '12px';
+            divSugestao.style.padding      = '10px';
+            divSugestao.style.background   = 'rgba(0,255,153,0.1)';
+            divSugestao.style.borderRadius = '8px';
+            divSugestao.style.borderLeft   = '3px solid #00ff99';
+            divSugestao.style.fontSize     = '0.85rem';
+            divSugestao.style.color        = 'var(--text-primary)';
+
+            const strongSug       = document.createElement('strong');
+            strongSug.textContent = '💡 Sugestão: ';
+
+            const spanSug       = document.createElement('span');
+            // ✅ sugestao é string interna calculada — textContent por precaução
+            spanSug.textContent = _sanitizeText(String(projecao.sugestao));
+
+            divSugestao.appendChild(strongSug);
+            divSugestao.appendChild(spanSug);
+            cardData.appendChild(divSugestao);
+        }
+
+        cardProjecao.appendChild(headerCard);
+        cardProjecao.appendChild(grid);
+        cardProjecao.appendChild(cardData);
+        details.appendChild(cardProjecao);
+
+    } else {
+        // ── Card de histórico insuficiente
+        const cardInsuf               = document.createElement('div');
+        cardInsuf.style.background    = 'rgba(255,209,102,0.1)';
+        cardInsuf.style.padding       = '14px';
+        cardInsuf.style.borderRadius  = '12px';
+        cardInsuf.style.marginTop     = '16px';
+        cardInsuf.style.borderLeft    = '3px solid #ffd166';
+
+        const rowInsuf             = document.createElement('div');
+        rowInsuf.style.display     = 'flex';
+        rowInsuf.style.alignItems  = 'center';
+        rowInsuf.style.gap         = '10px';
+
+        const iconInsuf           = document.createElement('div');
+        iconInsuf.style.fontSize  = '1.5rem';
+        iconInsuf.textContent     = '📊';
+
+        const colInsuf = document.createElement('div');
+
+        const tituloInsuf              = document.createElement('div');
+        tituloInsuf.style.fontWeight   = '600';
+        tituloInsuf.style.color        = 'var(--text-primary)';
+        tituloInsuf.style.marginBottom = '4px';
+        tituloInsuf.textContent        = 'Histórico Insuficiente'; // ✅ texto estático
+
+        const subInsuf            = document.createElement('div');
+        subInsuf.style.fontSize   = '0.85rem';
+        subInsuf.style.color      = 'var(--text-secondary)';
+        subInsuf.textContent      = 'Continue guardando por mais alguns meses para calcular a projeção de conclusão.'; // ✅ texto estático
+
+        colInsuf.appendChild(tituloInsuf);
+        colInsuf.appendChild(subInsuf);
+        rowInsuf.appendChild(iconInsuf);
+        rowInsuf.appendChild(colInsuf);
+        cardInsuf.appendChild(rowInsuf);
+        details.appendChild(cardInsuf);
+    }
     
     line.onclick = function(ev){
         const rect = line.getBoundingClientRect();
