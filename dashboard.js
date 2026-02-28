@@ -1387,11 +1387,13 @@ function renderizarPainelAlertas() {
 
     // Contas vencidas
     alertas.vencidas.forEach(conta => {
-        // ✅ id é número inteiro interno — seguro para uso em atributo onclick
         const idSeguro = parseInt(conta.id, 10);
-        // ✅ diasVencidos é cálculo numérico interno — seguro
-        const diasVencidos = Math.floor((new Date() - new Date(conta.vencimento)) / (1000 * 60 * 60 * 24));
-        // ✅ descricao, valor e vencimento vêm do usuário — escapados
+        // ✅ Ponto 3: ignora conta com ID inválido
+        if(!Number.isInteger(idSeguro)) return;
+        // ✅ Ponto 6: valida formato da data antes de usar — evita NaN nos cálculos
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+
+        const diasVencidos    = Math.floor((new Date() - new Date(conta.vencimento)) / (1000 * 60 * 60 * 24));
         const descricaoSegura = escapeHTML(conta.descricao);
         const valorSeguro     = escapeHTML(formatBRL(conta.valor));
         const vencSeguro      = escapeHTML(formatarDataBR(conta.vencimento));
@@ -1419,7 +1421,12 @@ function renderizarPainelAlertas() {
     // Contas a vencer
     alertas.aVencer.forEach(conta => {
         const idSeguro = parseInt(conta.id, 10);
-        const diasRestantes = Math.floor((new Date(conta.vencimento) - new Date()) / (1000 * 60 * 60 * 24));
+        // ✅ Ponto 3: ignora conta com ID inválido
+        if(!Number.isInteger(idSeguro)) return;
+        // ✅ Ponto 6: valida formato da data antes de usar — evita NaN nos cálculos
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+
+        const diasRestantes   = Math.floor((new Date(conta.vencimento) - new Date()) / (1000 * 60 * 60 * 24));
         const descricaoSegura = escapeHTML(conta.descricao);
         const valorSeguro     = escapeHTML(formatBRL(conta.valor));
         const vencSeguro      = escapeHTML(formatarDataBR(conta.vencimento));
@@ -1452,8 +1459,9 @@ function renderizarPainelAlertas() {
 // Verificação automática e notificação
 // ✅ Controle de última notificação enviada — persiste entre chamadas
 const _notificacaoControl = {
-    ultimaEnviada: 0,
-    intervaloMinimo: 60 * 60 * 1000 // 1 hora em ms — ajuste conforme necessário
+    // ✅ Persiste entre recarregamentos — evita spam ao reabrir o app
+    ultimaEnviada: parseInt(localStorage.getItem('granaevo_ultimaNotificacao') || '0', 10),
+    intervaloMinimo: 60 * 60 * 1000 // 1 hora em ms
 };
 
 function verificacaoAutomaticaVencimentos() {
@@ -1476,6 +1484,8 @@ function verificacaoAutomaticaVencimentos() {
             'urgente'
         );
         _notificacaoControl.ultimaEnviada = agora;
+        // ✅ Persiste no localStorage para sobreviver a recarregamentos
+        localStorage.setItem('granaevo_ultimaNotificacao', String(agora));
 
     } else if(alertas.aVencer.length > 0) {
         enviarNotificacaoNativa(
@@ -1484,6 +1494,8 @@ function verificacaoAutomaticaVencimentos() {
             'alerta'
         );
         _notificacaoControl.ultimaEnviada = agora;
+        // ✅ Persiste no localStorage
+        localStorage.setItem('granaevo_ultimaNotificacao', String(agora));
     }
 }
 
@@ -1653,7 +1665,9 @@ function atualizarListaContasFixas() {
                 btnPagar.className = 'conta-btn';
                 btnPagar.textContent = 'Pagar';
 
-                const contaId = parseInt(c.id, 10); // ✅ Garante que é número
+                const contaId = parseInt(c.id, 10);
+                // ✅ Ignora conta com ID inválido — evita pagamento da conta errada
+                if(!Number.isInteger(contaId)) return;
 
                 btnPagar.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -1879,18 +1893,19 @@ function pagarContaFixa(id, valorPago) {
         }
     }
 
-    // ✅ structuredClone: mais rápido que JSON, preserva tipos complexos (Date, etc.)
-        const snapshotTransacoes   = structuredClone(transacoes);
-        const snapshotContasFixas  = structuredClone(contasFixas);
-        const snapshotCartoes      = structuredClone(cartoesCredito);
-
         // ✅ Guarda referência original ANTES do try
-        // Garante que _processando = false no catch funcione mesmo após rollback
         const contaOriginal = conta;
 
-    try {
-        // ✅ Função interna: avança vencimento um mês com validação de formato
-        function avancarMes(vencimentoISO) {
+        // ✅ Snapshots declarados fora para ficarem acessíveis no catch
+        let snapshotTransacoes, snapshotContasFixas, snapshotCartoes;
+
+        try {
+            // ✅ Dentro do try: se structuredClone falhar, o catch libera o lock corretamente
+            snapshotTransacoes  = structuredClone(transacoes);
+            snapshotContasFixas = structuredClone(contasFixas);
+            snapshotCartoes     = structuredClone(cartoesCredito);
+
+            function avancarMes(vencimentoISO) {
             if(!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
                 const fallback = new Date();
                 fallback.setMonth(fallback.getMonth() + 1);
@@ -2019,10 +2034,10 @@ function criarPopup(html) {
         return;
     }
 
-// ✅ Bloqueia apenas padrões de injeção reais
-    // onclick= é removido da lista pois é legítimo em HTML estático do desenvolvedor
-    // O risco real vem de <script>, onerror= e javascript: que indicam XSS
-    const padraoPerigoso = /<script|onerror\s*=|javascript\s*:/i;
+// ✅ Bloqueia script, qualquer event handler (on\w+=), javascript: e data:
+    // on\w+= cobre onerror, onload, onmouseover, onclick, etc.
+    // Seguro pois todo HTML passado ao criarPopup usa addEventListener, não inline handlers
+    const padraoPerigoso = /<script|on\w+\s*=|javascript\s*:|data\s*:/i;
     if(padraoPerigoso.test(html)) {
         console.error('criarPopup: HTML potencialmente inseguro detectado. Operação cancelada.');
         return;
