@@ -6794,10 +6794,13 @@ function debug(msg, obj) {
     console.log(`[GranaEvo Debug] ${msg}`, obj || '');
 }
 
+// ✅ Variável única — usada por iniciarAutoSave e pararAutoSave
+let autoSaveInterval = null;
+
 function iniciarAutoSave() {
     if (!perfilAtivo) return;
 
-    // ✅ Para timers anteriores — evita múltiplos intervalos rodando em paralelo
+    // ✅ Para intervalo anterior — evita múltiplos rodando em paralelo
     pararAutoSave();
 
     console.log('🔄 [AUTO-SAVE] Sistema iniciado');
@@ -6805,20 +6808,11 @@ function iniciarAutoSave() {
     console.log('🔑 [AUTO-SAVE] Perfil ID:', perfilAtivo.id);
 
     // ✅ Fallback periódico a cada 30s
-    //    Só salva se _dadosSujos = true — nunca salva sem necessidade
-    //    Garante persistência mesmo se o debounce não for chamado
-    _autoSavePeriodicoTimer = setInterval(async () => {
-        if (!perfilAtivo || !_dadosSujos) return;
-
-        console.log('⏰ [AUTO-SAVE PERIÓDICO] Dados modificados detectados, salvando...');
-        const ok = await salvarDados();
-
-        if (ok) {
-            _dadosSujos = false;
-            console.log('✅ [AUTO-SAVE PERIÓDICO] Salvo com sucesso');
-        } else {
-            console.error('❌ [AUTO-SAVE PERIÓDICO] Falha no salvamento');
-        }
+    //    salvarDados() já tem debounce interno — múltiplas chamadas não geram flood
+    autoSaveInterval = setInterval(async () => {
+        if (!perfilAtivo) return;
+        console.log('⏰ [AUTO-SAVE PERIÓDICO] Executando...');
+        await salvarDados();
     }, 30_000);
 }
 
