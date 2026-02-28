@@ -6350,13 +6350,6 @@ function excluirCompraFatura(faturaId, compraId) {
     }, 200);
 }
 
-// ========== INICIALIZAÇÃO ==========
-document.addEventListener('DOMContentLoaded', () => {
-    verificarLogin();
-    bindEventos();
-    setupSidebarToggle();
-});
-
 // ========== FUNÇÕES GLOBAIS EXPOSTAS ==========
 window.abrirContaFixaForm = abrirContaFixaForm;
 window.abrirPopupPagarContaFixa = abrirPopupPagarContaFixa;
@@ -7060,11 +7053,6 @@ function desenharTopGastos(dados, label) {
     ctx.textAlign
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await verificarLogin();
-});
-
-// ========== SALVAMENTO ANTES DE SAIR (VERSÃO CORRIGIDA) ==========
 // ========== SALVAMENTO GARANTIDO AO SAIR ==========
 window.addEventListener('beforeunload', () => {
     if (perfilAtivo && dataManager.userId) {
@@ -7124,7 +7112,10 @@ window.addEventListener('blur', () => {
     }
 });
 
+// ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Dashboard carregado, iniciando verificação de login...');
     verificarLogin();
+    bindEventos();
+    setupSidebarToggle();
 });
