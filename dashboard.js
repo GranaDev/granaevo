@@ -56,7 +56,9 @@ function escapeHTML(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#x27;')
-        .replace(/\//g, '&#x2F;');
+        .replace(/\//g, '&#x2F;')
+        .replace(/`/g, '&#x60;')
+        .replace(/=/g, '&#x3D;');
 }
 
 // ✅ Define __GE__ e __GE_save__ como não-reescritáveis UMA única vez no carregamento
@@ -1448,26 +1450,40 @@ function renderizarPainelAlertas() {
 }
 
 // Verificação automática e notificação
+// ✅ Controle de última notificação enviada — persiste entre chamadas
+const _notificacaoControl = {
+    ultimaEnviada: 0,
+    intervaloMinimo: 60 * 60 * 1000 // 1 hora em ms — ajuste conforme necessário
+};
+
 function verificacaoAutomaticaVencimentos() {
     const alertas = verificarVencimentos();
     if(!alertas) return;
-    
-    // Atualizar badge
+
+    // ✅ Sempre atualiza o badge (leve, sem side-effects)
     atualizarBadgeVencimentos();
-    
-    // Enviar notificações se houver contas
+
+    // ✅ Notificação nativa: só envia se passou o intervalo mínimo
+    const agora = Date.now();
+    const tempoDesdeUltima = agora - _notificacaoControl.ultimaEnviada;
+
+    if(tempoDesdeUltima < _notificacaoControl.intervaloMinimo) return;
+
     if(alertas.vencidas.length > 0) {
         enviarNotificacaoNativa(
             `${alertas.vencidas.length} Conta(s) Vencida(s)!`,
             `Você tem contas vencidas que precisam de atenção urgente.`,
             'urgente'
         );
+        _notificacaoControl.ultimaEnviada = agora;
+
     } else if(alertas.aVencer.length > 0) {
         enviarNotificacaoNativa(
             `${alertas.aVencer.length} Conta(s) Vencendo em Breve`,
             `Algumas contas vencem nos próximos 5 dias. Prepare-se!`,
             'alerta'
         );
+        _notificacaoControl.ultimaEnviada = agora;
     }
 }
 
@@ -1827,115 +1843,154 @@ function pagarContaFixa(id, valorPago) {
     const conta = contasFixas.find(c => c.id === id);
     if(!conta) return;
 
-    // ✅ Validação de valorPago: deve ser número positivo e finito
+    // ✅ Lock anti-replay: impede clique duplo ou chamada simultânea
+    if(conta._processando) {
+        alert('Aguarde, pagamento em andamento...');
+        return;
+    }
+    conta._processando = true;
+
+    // ✅ Validação de valor: deve ser número positivo e finito
     const valorSeguro = parseFloat(valorPago);
     if(!isFinite(valorSeguro) || valorSeguro <= 0) {
         alert('Valor de pagamento inválido.');
+        conta._processando = false;
         return;
     }
 
-    // ✅ Função interna: avança vencimento um mês com validação de formato
-    function avancarMes(vencimentoISO) {
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
-            // Data corrompida: retorna hoje + 1 mês como fallback seguro
-            const fallback = new Date();
-            fallback.setMonth(fallback.getMonth() + 1);
-            return fallback.toISOString().slice(0, 10);
+    // ✅ Validação de divergência: não permite pagar valor muito diferente do real
+    // Tolerância de R$0,05 para cobrir arredondamentos de parcelas
+    if(Math.abs(valorSeguro - conta.valor) > 0.05) {
+        if(!confirm(
+            `⚠️ Valor divergente!\n\n` +
+            `Valor da conta: R$ ${conta.valor.toFixed(2)}\n` +
+            `Valor digitado: R$ ${valorSeguro.toFixed(2)}\n\n` +
+            `Deseja confirmar mesmo assim?`
+        )) {
+            conta._processando = false;
+            return;
         }
-        let [y, m, d] = vencimentoISO.split('-').map(Number);
-        m++;
-        if(m > 12) { m = 1; y++; }
-        return [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
     }
 
-    const dh = agoraDataHora();
-    const idTrans = nextTransId++;
+    // ✅ Wrapper transacional com try/catch e rollback
+    const snapshotTransacoes   = JSON.stringify(transacoes);
+    const snapshotContasFixas  = JSON.stringify(contasFixas);
+    const snapshotCartoes      = JSON.stringify(cartoesCredito);
 
-    // ✅ descricao é truncada para evitar payloads gigantes no histórico
-    const descricaoSegura = String(conta.descricao || '').slice(0, 100);
-
-    transacoes.push({
-        id: idTrans,
-        categoria: 'saida',
-        tipo: 'Conta Fixa',
-        descricao: `${descricaoSegura} (pagamento mensal)`,
-        valor: parseFloat(valorSeguro.toFixed(2)),
-        data: dh.data,
-        hora: dh.hora,
-        contaFixaId: parseInt(id, 10)
-    });
-
-    // VERIFICAR SE É FATURA DE CARTÃO
-    if(conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
-        let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
-
-        conta.compras.forEach(compra => {
-            if(compra.parcelaAtual <= compra.totalParcelas) {
-                compra.parcelaAtual++;
-
-                if(cartaoRef) {
-                    // ✅ valorParcela validado antes de subtrair
-                    const parcela = parseFloat(compra.valorParcela) || 0;
-                    cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
-                    if(cartaoRef.usado < 0) cartaoRef.usado = 0;
-                }
+    try {
+        // ✅ Função interna: avança vencimento um mês com validação de formato
+        function avancarMes(vencimentoISO) {
+            if(!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
+                const fallback = new Date();
+                fallback.setMonth(fallback.getMonth() + 1);
+                return fallback.toISOString().slice(0, 10);
             }
+            let [y, m, d] = vencimentoISO.split('-').map(Number);
+            m++;
+            if(m > 12) { m = 1; y++; }
+            return [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
+        }
+
+        const dh = agoraDataHora();
+        const idTrans = nextTransId++;
+        const descricaoSegura = String(conta.descricao || '').slice(0, 100);
+
+        transacoes.push({
+            id: idTrans,
+            categoria: 'saida',
+            tipo: 'Conta Fixa',
+            descricao: `${descricaoSegura} (pagamento mensal)`,
+            valor: parseFloat(valorSeguro.toFixed(2)),
+            data: dh.data,
+            hora: dh.hora,
+            contaFixaId: parseInt(id, 10)
         });
 
-        conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
+        // FATURA DE CARTÃO
+        if(conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
+            let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
 
-        if(conta.compras.length === 0) {
-            contasFixas = contasFixas.filter(c => c.id !== id);
+            conta.compras.forEach(compra => {
+                // ✅ Valida parcelas antes de modificar
+                if(typeof compra.parcelaAtual !== 'number' || typeof compra.totalParcelas !== 'number') return;
+
+                if(compra.parcelaAtual <= compra.totalParcelas) {
+                    compra.parcelaAtual++;
+                    if(cartaoRef) {
+                        const parcela = parseFloat(compra.valorParcela) || 0;
+                        cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
+                        if(cartaoRef.usado < 0) cartaoRef.usado = 0;
+                    }
+                }
+            });
+
+            conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
+
+            if(conta.compras.length === 0) {
+                contasFixas = contasFixas.filter(c => c.id !== id);
+                salvarDados();
+                atualizarTudo();
+                conta._processando = false;
+                alert('✅ Todas as parcelas pagas! Fatura quitada.');
+                return;
+            }
+
+            conta.valor = conta.compras.reduce((sum, c) => {
+                const p = parseFloat(c.valorParcela) || 0;
+                return sum + p;
+            }, 0);
+
+            conta.vencimento = avancarMes(conta.vencimento);
+            conta.pago = false;
+
             salvarDados();
             atualizarTudo();
-            alert('✅ Todas as parcelas pagas! Fatura quitada.');
+            conta._processando = false;
+            alert(`✅ Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
             return;
         }
 
-        // ✅ Recalcula valor com proteção contra NaN
-        conta.valor = conta.compras.reduce((sum, c) => {
-            const p = parseFloat(c.valorParcela) || 0;
-            return sum + p;
-        }, 0);
+        // CONTA COM PARCELAS DE CARTÃO
+        if(conta.cartaoId && conta.totalParcelas && conta.parcelaAtual) {
+            let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
+            if(cartaoRef) {
+                cartaoRef.usado = (cartaoRef.usado || 0) - valorSeguro;
+                if(cartaoRef.usado < 0) cartaoRef.usado = 0;
+            }
 
+            if(conta.parcelaAtual < conta.totalParcelas) {
+                conta.parcelaAtual++;
+                conta.vencimento = avancarMes(conta.vencimento);
+                conta.pago = false;
+            } else {
+                contasFixas = contasFixas.filter(c => c.id !== conta.id);
+            }
+
+            salvarDados();
+            atualizarTudo();
+            conta._processando = false;
+            alert('✅ Parcela paga! O lembrete foi atualizado.');
+            return;
+        }
+
+        // CONTA RECORRENTE (sem parcelas)
         conta.vencimento = avancarMes(conta.vencimento);
         conta.pago = false;
 
         salvarDados();
         atualizarTudo();
-        alert(`✅ Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
-        return;
+        conta._processando = false;
+        alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
+
+    } catch(erro) {
+        // ✅ Rollback: restaura estado anterior em caso de erro
+        console.error('❌ Erro no pagamento, revertendo estado:', erro);
+        transacoes   = JSON.parse(snapshotTransacoes);
+        contasFixas  = JSON.parse(snapshotContasFixas);
+        cartoesCredito = JSON.parse(snapshotCartoes);
+        conta._processando = false;
+        alert('❌ Erro ao processar pagamento. Nenhuma alteração foi salva.');
     }
-
-    // CONTA FIXA NORMAL COM PARCELAS (cartão parcelado)
-    if(conta.cartaoId && conta.totalParcelas && conta.parcelaAtual) {
-        let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
-        if(cartaoRef) {
-            cartaoRef.usado = (cartaoRef.usado || 0) - valorSeguro;
-            if(cartaoRef.usado < 0) cartaoRef.usado = 0;
-        }
-
-        if(conta.parcelaAtual < conta.totalParcelas) {
-            conta.parcelaAtual++;
-            conta.vencimento = avancarMes(conta.vencimento);
-            conta.pago = false;
-        } else {
-            contasFixas = contasFixas.filter(c => c.id !== conta.id);
-        }
-
-        salvarDados();
-        atualizarTudo();
-        alert('✅ Parcela paga! O lembrete foi atualizado.');
-        return;
-    }
-
-    // CONTA FIXA RECORRENTE (sem parcelas)
-    conta.vencimento = avancarMes(conta.vencimento);
-    conta.pago = false;
-
-    salvarDados();
-    atualizarTudo();
-    alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
 }
 
 function criarPopup(html) {
@@ -1973,7 +2028,6 @@ function fecharPopup() {
         container.innerHTML = '';
     }, 300);
 }
-
 
 // ========== TRANSAÇÕES ==========
 function atualizarTiposDinamicos() {
