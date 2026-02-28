@@ -922,30 +922,52 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
 function mostrarPopupLimite(msgCustom) {
     let msg = msgCustom || "";
-    if(!msg) {
-        if(usuarioLogado.plano === "Individual") 
+    if (!msg) {
+        if (usuarioLogado.plano === "Individual")
             msg = "Infelizmente seu plano é Individual e só permite um perfil. Atualize seu plano para adicionar mais perfis.";
-        else if(usuarioLogado.plano === "Casal") 
+        else if (usuarioLogado.plano === "Casal")
             msg = "Seu plano Casal permite apenas dois perfis. Atualize seu plano para adicionar mais perfis.";
-        else 
+        else
             msg = "Você atingiu a quantidade máxima de usuários do seu plano.";
     }
-    
-    criarPopup(`
-        <h3>🔒 Limite do Plano</h3>
-        <p style="margin-bottom:24px; color: var(--text-secondary); line-height:1.6;">${msg}</p>
-        
-        <div style="display:flex; gap:12px; flex-wrap:wrap;">
-            <button class="btn-primary" onclick="irParaAtualizarPlano()" style="flex:1; min-width:150px; background:linear-gradient(135deg, #6c63ff, #5a52d5); box-shadow: 0 4px 15px rgba(108,99,255,0.4);">
-                <span style="display:flex; align-items:center; justify-content:center; gap:8px;">
-                    ⬆️ Atualizar Plano
-                </span>
-            </button>
-            <button class="btn-cancelar" onclick="fecharPopup()" style="flex:1; min-width:120px;">
-                Fechar
-            </button>
-        </div>
-    `);
+
+    criarPopupDOM((popup) => {
+        const titulo = document.createElement('h3');
+        titulo.textContent = '🔒 Limite do Plano';
+
+        const texto = document.createElement('p');
+        texto.textContent = msg; // ✅ textContent — nunca innerHTML com variável
+        texto.style.cssText = 'margin-bottom:24px; color: var(--text-secondary); line-height:1.6;';
+
+        const botoes = document.createElement('div');
+        botoes.style.cssText = 'display:flex; gap:12px; flex-wrap:wrap;';
+
+        const btnUpgrade = document.createElement('button');
+        btnUpgrade.className = 'btn-primary';
+        btnUpgrade.type = 'button';
+        btnUpgrade.style.cssText = 'flex:1; min-width:150px; background:linear-gradient(135deg, #6c63ff, #5a52d5); box-shadow: 0 4px 15px rgba(108,99,255,0.4);';
+
+        const spanUpgrade = document.createElement('span');
+        spanUpgrade.style.cssText = 'display:flex; align-items:center; justify-content:center; gap:8px;';
+        spanUpgrade.textContent = '⬆️ Atualizar Plano';
+
+        btnUpgrade.appendChild(spanUpgrade);
+        btnUpgrade.addEventListener('click', irParaAtualizarPlano);
+
+        const btnFechar = document.createElement('button');
+        btnFechar.className = 'btn-cancelar';
+        btnFechar.type = 'button';
+        btnFechar.style.cssText = 'flex:1; min-width:120px;';
+        btnFechar.textContent = 'Fechar';
+        btnFechar.addEventListener('click', fecharPopup);
+
+        botoes.appendChild(btnUpgrade);
+        botoes.appendChild(btnFechar);
+
+        popup.appendChild(titulo);
+        popup.appendChild(texto);
+        popup.appendChild(botoes);
+    });
 }
 
 // ✅ NOVA FUNÇÃO: Redireciona para página de upgrade
@@ -956,53 +978,6 @@ function irParaAtualizarPlano() {
 
 // Expor globalmente
 window.irParaAtualizarPlano = irParaAtualizarPlano;
-
-// ========== FUNÇÕES DE POPUP ==========
-// ✅ criarPopup (legado) — mantida para compatibilidade com chamadas existentes que
-//    passam HTML estático controlado (sem dados do usuário), ex: mostrarPopupLimite.
-//    NÃO usar para qualquer popup que receba input do usuário — use criarPopupDOM().
-function criarPopup(html) {
-    const overlay   = document.getElementById('modalOverlay');
-    const container = document.getElementById('modalContainer');
-    if (!overlay || !container) return null;
-
-    overlay.classList.add('active');
-
-    // ✅ Continua usando innerHTML aqui porque o conteúdo é 100% hardcoded no código
-    //    (strings literais de template, nunca variáveis do usuário).
-    //    TODO: migrar todos os callers para criarPopupDOM() futuramente.
-    container.innerHTML = `<div class="popup">${html}</div>`;
-
-    return container;
-}
-
-function criarPopupDOM(builderFn) {
-    const overlay   = document.getElementById('modalOverlay');
-    const container = document.getElementById('modalContainer');
-    if (!overlay || !container) return null;
-
-    while (container.firstChild) container.removeChild(container.firstChild);
-
-    const popup = document.createElement('div');
-    popup.className = 'popup';
-
-    builderFn(popup);
-
-    container.appendChild(popup);
-    overlay.classList.add('active');
-
-    return container;
-}
-
-function fecharPopup() {
-    const overlay   = document.getElementById('modalOverlay');
-    const container = document.getElementById('modalContainer');
-    if (!overlay || !container) return;
-
-    overlay.classList.remove('active');
-
-    while (container.firstChild) container.removeChild(container.firstChild);
-}
 
 // ========== NAVEGAÇÃO ENTRE TELAS ==========
 function mostrarTela(tela) {
