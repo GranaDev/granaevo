@@ -6794,13 +6794,6 @@ function debug(msg, obj) {
     console.log(`[GranaEvo Debug] ${msg}`, obj || '');
 }
 
-
-// ✅ Para todos os timers — chame ao trocar de perfil ou fazer logout
-function pararAutoSave() {
-    if (_autoSaveDebounceTimer)  { clearTimeout(_autoSaveDebounceTimer);   _autoSaveDebounceTimer  = null; }
-    if (_autoSavePeriodicoTimer) { clearInterval(_autoSavePeriodicoTimer); _autoSavePeriodicoTimer = null; }
-}
-
 function iniciarAutoSave() {
     if (!perfilAtivo) return;
 
