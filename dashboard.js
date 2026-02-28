@@ -1307,27 +1307,37 @@ function solicitarPermissaoNotificacoes() {
 
 // Enviar notificação nativa
 function enviarNotificacaoNativa(titulo, mensagem, tipo = 'info') {
-    if ("Notification" in window && Notification.permission === "granted") {
-        const icone = tipo === 'urgente' ? '🚨' : tipo === 'alerta' ? '⚠️' : '💰';
-        
-        const notification = new Notification(`${icone} ${titulo}`, {
-            body: mensagem,
-            icon: 'https://cdn-icons-png.flaticon.com/512/4256/4256888.png',
-            badge: 'https://cdn-icons-png.flaticon.com/512/4256/4256888.png',
-            vibrate: [200, 100, 200],
-            requireInteraction: tipo === 'urgente',
-            tag: 'granaevo-' + Date.now()
-        });
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
 
-        notification.onclick = () => {
-            window.focus();
-            mostrarTela('dashboard');
-            notification.close();
-        };
+    // ✅ FIX #8: sanitiza título e mensagem antes de passar para a Notification API
+    //    A API não interpreta HTML, mas sanitizar garante que dados de usuário
+    //    (ex: conta.descricao passada futuramente) não vazem conteúdo inesperado
+    const tiposPermitidos = ['urgente', 'alerta', 'info'];
+    const tipoSeguro  = tiposPermitidos.includes(tipo) ? tipo : 'info';
+    const icone       = tipoSeguro === 'urgente' ? '🚨' : tipoSeguro === 'alerta' ? '⚠️' : '💰';
 
-        // Fecha automaticamente após 10 segundos
-        setTimeout(() => notification.close(), 10000);
-    }
+    // ✅ Trunca e remove null bytes — evita títulos gigantes ou caracteres invisíveis
+    const tituloSeguro  = String(titulo  || '').replace(/\x00/g, '').trim().slice(0, 100);
+    const mensagemSegura = String(mensagem || '').replace(/\x00/g, '').trim().slice(0, 250);
+
+    if(!tituloSeguro) return; // ✅ Não dispara notificação sem título
+
+    const notification = new Notification(`${icone} ${tituloSeguro}`, {
+        body: mensagemSegura,
+        icon: 'https://cdn-icons-png.flaticon.com/512/4256/4256888.png',
+        badge: 'https://cdn-icons-png.flaticon.com/512/4256/4256888.png',
+        vibrate: [200, 100, 200],
+        requireInteraction: tipoSeguro === 'urgente',
+        tag: 'granaevo-' + Date.now()
+    });
+
+    notification.onclick = () => {
+        window.focus();
+        mostrarTela('dashboard');
+        notification.close();
+    };
+
+    setTimeout(() => notification.close(), 10000);
 }
 
 // Verificar contas a vencer e vencidas
@@ -1337,7 +1347,6 @@ function verificarVencimentos() {
     const hoje = new Date();
     const hojeISO = hoje.toISOString().slice(0, 10);
     
-    // Data daqui a 5 dias
     const em5Dias = new Date();
     em5Dias.setDate(hoje.getDate() + 5);
     const em5DiasISO = em5Dias.toISOString().slice(0, 10);
@@ -1346,7 +1355,18 @@ function verificarVencimentos() {
     let contasAVencer = [];
     
     contasFixas.forEach(conta => {
-        if(conta.pago) return; // Ignora contas já pagas
+        if(conta.pago) return;
+
+        // ✅ FIX #5: Rejeita vencimento nulo, vazio ou com formato inválido
+        //    Antes: null < "2025-..." retornava true → conta aparecia como vencida sem data
+        //    Agora: contas sem data válida são silenciosamente ignoradas
+        if(typeof conta.vencimento !== 'string') return;
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+
+        // ✅ FIX #5: Valida que os valores numéricos da data são reais
+        //    Regex aceita "2025-13-45", mas Date detecta como inválido
+        const dataVenc = new Date(conta.vencimento);
+        if(isNaN(dataVenc.getTime())) return;
         
         if(conta.vencimento < hojeISO) {
             contasVencidas.push(conta);
@@ -1367,11 +1387,9 @@ function atualizarBadgeVencimentos() {
     const alertas = verificarVencimentos();
     if(!alertas) return;
     
-    // Criar ou atualizar badge no botão de dashboard
     const dashboardBtn = document.querySelector('[data-page="dashboard"]');
     if(!dashboardBtn) return;
     
-    // Remove badge existente
     const badgeExistente = dashboardBtn.querySelector('.badge-alerta');
     if(badgeExistente) badgeExistente.remove();
     
@@ -1379,19 +1397,22 @@ function atualizarBadgeVencimentos() {
         const badge = document.createElement('span');
         badge.className = 'badge-alerta';
         badge.textContent = alertas.total;
-        badge.style.cssText = `
-            position: absolute;
-            top: 13px;
-            right: 22px;
-            background: ${alertas.vencidas.length > 0 ? '#ff4b4b' : '#ffd166'};
-            color: white;
-            font-size: 0.7rem;
-            font-weight: 700;
-            padding: 2px 6px;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            animation: pulseAlert 2s infinite;
-        `;
+
+        // ✅ FIX #6: atribuição direta de propriedades em vez de cssText com template
+        //    cssText com interpolação é vetor de CSS injection se dado de usuário
+        //    for inserido no futuro — atribuição direta é imune por design
+        badge.style.position    = 'absolute';
+        badge.style.top         = '13px';
+        badge.style.right       = '22px';
+        badge.style.background  = alertas.vencidas.length > 0 ? '#ff4b4b' : '#ffd166';
+        badge.style.color       = 'white';
+        badge.style.fontSize    = '0.7rem';
+        badge.style.fontWeight  = '700';
+        badge.style.padding     = '2px 6px';
+        badge.style.borderRadius = '10px';
+        badge.style.boxShadow   = '0 2px 8px rgba(0,0,0,0.3)';
+        badge.style.animation   = 'pulseAlert 2s infinite';
+
         dashboardBtn.style.position = 'relative';
         dashboardBtn.appendChild(badge);
     }
@@ -1402,8 +1423,6 @@ function renderizarPainelAlertas() {
     const alertas = verificarVencimentos();
     if(!alertas || alertas.total === 0) return '';
 
-    // ✅ Valores lógicos (length, diasVencidos) são numéricos — não precisam escape
-    // ✅ Dados do usuário (descricao, vencimento, valor) são escapados com escapeHTML()
     let html = `
         <div class="alertas-vencimento">
             <div class="alertas-header">
@@ -1416,25 +1435,29 @@ function renderizarPainelAlertas() {
                     </p>
                 </div>
             </div>
-
             <div class="alertas-grid">
     `;
 
-    // Contas vencidas
     alertas.vencidas.forEach(conta => {
-        const idSeguro = parseInt(conta.id, 10);
-        // ✅ Ponto 3: ignora conta com ID inválido
-        if(!Number.isInteger(idSeguro)) return;
-        // ✅ Ponto 6: valida formato da data antes de usar — evita NaN nos cálculos
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+        // ✅ FIX #1: ID compatível com número e UUID string
+        const idRaw    = conta.id;
+        const idNum    = parseInt(idRaw, 10);
+        const idSeguro = Number.isInteger(idNum) && String(idNum) === String(idRaw) ? idNum : idRaw;
+        if(idSeguro === null || idSeguro === undefined || idSeguro === '') return;
 
-        const diasVencidos    = Math.floor((new Date() - new Date(conta.vencimento)) / (1000 * 60 * 60 * 24));
+        // ✅ FIX #4: Valida formato E valores numéricos reais da data
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+        const dataVenc = new Date(conta.vencimento);
+        if(isNaN(dataVenc.getTime())) return;
+
+        // ✅ FIX #4: diasVencidos nunca será NaN pois dataVenc já foi validado acima
+        const diasVencidos    = Math.max(0, Math.floor((new Date() - dataVenc) / (1000 * 60 * 60 * 24)));
         const descricaoSegura = escapeHTML(conta.descricao);
         const valorSeguro     = escapeHTML(formatBRL(conta.valor));
         const vencSeguro      = escapeHTML(formatarDataBR(conta.vencimento));
 
         html += `
-            <div class="alerta-card" data-id="${idSeguro}" data-acao="pagar">
+            <div class="alerta-card" data-id="${escapeHTML(String(idSeguro))}" data-acao="pagar">
                 <div class="alerta-header">
                     <div class="alerta-title">${descricaoSegura}</div>
                     <span class="alerta-status vencido">❌ Vencida</span>
@@ -1446,28 +1469,33 @@ function renderizarPainelAlertas() {
                         ⏰ Vencida há ${diasVencidos} dia(s)
                     </div>
                 </div>
-                <button class="alerta-btn" data-id="${idSeguro}" data-acao="pagar-btn">
+                <button class="alerta-btn" data-id="${escapeHTML(String(idSeguro))}" data-acao="pagar-btn">
                     💰 Pagar Agora
                 </button>
             </div>
         `;
     });
 
-    // Contas a vencer
     alertas.aVencer.forEach(conta => {
-        const idSeguro = parseInt(conta.id, 10);
-        // ✅ Ponto 3: ignora conta com ID inválido
-        if(!Number.isInteger(idSeguro)) return;
-        // ✅ Ponto 6: valida formato da data antes de usar — evita NaN nos cálculos
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+        // ✅ FIX #1: mesmo padrão de ID flexível
+        const idRaw    = conta.id;
+        const idNum    = parseInt(idRaw, 10);
+        const idSeguro = Number.isInteger(idNum) && String(idNum) === String(idRaw) ? idNum : idRaw;
+        if(idSeguro === null || idSeguro === undefined || idSeguro === '') return;
 
-        const diasRestantes   = Math.floor((new Date(conta.vencimento) - new Date()) / (1000 * 60 * 60 * 24));
+        // ✅ FIX #4: mesma validação de data real
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+        const dataVenc = new Date(conta.vencimento);
+        if(isNaN(dataVenc.getTime())) return;
+
+        // ✅ FIX #4: diasRestantes nunca será NaN, e Math.max(0,...) evita negativo
+        const diasRestantes   = Math.max(0, Math.floor((dataVenc - new Date()) / (1000 * 60 * 60 * 24)));
         const descricaoSegura = escapeHTML(conta.descricao);
         const valorSeguro     = escapeHTML(formatBRL(conta.valor));
         const vencSeguro      = escapeHTML(formatarDataBR(conta.vencimento));
 
         html += `
-            <div class="alerta-card pendente" data-id="${idSeguro}" data-acao="editar">
+            <div class="alerta-card pendente" data-id="${escapeHTML(String(idSeguro))}" data-acao="editar">
                 <div class="alerta-header">
                     <div class="alerta-title">${descricaoSegura}</div>
                     <span class="alerta-status a-vencer">⏳ A Vencer</span>
@@ -1483,11 +1511,7 @@ function renderizarPainelAlertas() {
         `;
     });
 
-    html += `
-            </div>
-        </div>
-    `;
-
+    html += `</div></div>`;
     return html;
 }
 
@@ -1554,23 +1578,25 @@ function atualizarListaContasFixas() {
     const lista = document.getElementById('listaContasFixas');
     if(!lista) return;
 
-    // ✅ Limpa o container de forma segura antes de reconstruir
     lista.innerHTML = '';
 
-    // ✅ Painel de alertas via innerHTML é seguro pois renderizarPainelAlertas()
-    //    agora usa escapeHTML() em todos os dados do usuário
     const painelAlertas = renderizarPainelAlertas();
     if(painelAlertas) {
         const painelWrapper = document.createElement('div');
         painelWrapper.innerHTML = painelAlertas;
 
-        // ✅ Registra os eventos do painel de alertas via delegação (sem onclick inline)
         painelWrapper.addEventListener('click', (e) => {
             const card = e.target.closest('[data-acao]');
             if(!card) return;
 
-            const id = parseInt(card.dataset.id, 10);
-            if(isNaN(id)) return;
+            // ✅ FIX #1: Suporta ID numérico (atual) e UUID string (futuro fix #4)
+            //    Tenta número primeiro; se falhar, usa string bruta do dataset
+            const idRaw  = card.dataset.id;
+            const idNum  = parseInt(idRaw, 10);
+            const id     = Number.isInteger(idNum) && String(idNum) === idRaw ? idNum : idRaw;
+
+            // ✅ Rejeita se ID for vazio, undefined ou NaN puro
+            if(id === null || id === undefined || id === '' || id !== id) return;
 
             const acao = card.dataset.acao;
 
@@ -1599,13 +1625,16 @@ function atualizarListaContasFixas() {
     containerContas.className = 'contas-grid';
 
     contasFixas.forEach(c => {
+        // ✅ FIX #5 (reflexo): ignora contas sem vencimento válido antes de comparar
+        const vencimentoValido = typeof c.vencimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.vencimento);
+
         let status = 'Pendente';
         let statusClass = 'status-pendente';
 
         if(c.pago) {
             status = 'Pago';
             statusClass = 'status-pago';
-        } else if(c.vencimento < hojeISO) {
+        } else if(vencimentoValido && c.vencimento < hojeISO) {
             status = 'Vencido';
             statusClass = 'status-vencido';
         }
@@ -1629,19 +1658,23 @@ function atualizarListaContasFixas() {
         if(c.tipoContaFixa === 'fatura_cartao' && c.compras && c.compras.length > 0) {
             const totalCompras = c.compras.length;
 
-            // ✅ Emoji estático + textContent separados evitam XSS
             title.textContent = `💳 ${c.descricao}`;
 
-            // ✅ Construção programática — nenhum dado do usuário vai para innerHTML
             const divValor = document.createElement('div');
-            divValor.style.cssText = 'font-weight: 600; font-size: 1.1rem; color: var(--text-primary);';
+            // ✅ FIX #6: atribuição direta de propriedade em vez de cssText com template
+            divValor.style.fontWeight = '600';
+            divValor.style.fontSize   = '1.1rem';
+            divValor.style.color      = 'var(--text-primary)';
             divValor.textContent = `Valor: ${formatBRL(c.valor)}`;
 
             const divVenc = document.createElement('div');
             divVenc.textContent = `Vencimento: ${formatarDataBR(c.vencimento)}`;
 
             const divCompras = document.createElement('div');
-            divCompras.style.cssText = 'color: var(--text-secondary); font-size: 0.85rem; margin-top: 6px;';
+            // ✅ FIX #6: mesmo padrão — sem cssText com interpolação
+            divCompras.style.color    = 'var(--text-secondary)';
+            divCompras.style.fontSize = '0.85rem';
+            divCompras.style.marginTop = '6px';
             divCompras.textContent = `📦 ${totalCompras} compra${totalCompras > 1 ? 's' : ''} nesta fatura`;
 
             info.appendChild(divValor);
@@ -1669,7 +1702,6 @@ function atualizarListaContasFixas() {
             }
 
         } else {
-            // ✅ textContent é 100% seguro contra XSS
             title.textContent = c.descricao;
 
             const divValor = document.createElement('div');
@@ -1681,10 +1713,12 @@ function atualizarListaContasFixas() {
             info.appendChild(divValor);
             info.appendChild(divVenc);
 
-            // ✅ Parcelas também via textContent
             if(c.totalParcelas && c.parcelaAtual) {
                 const divParcela = document.createElement('div');
-                divParcela.style.cssText = 'color: var(--warning); font-size: 0.85rem; margin-top: 4px;';
+                // ✅ FIX #6: atribuição direta
+                divParcela.style.color     = 'var(--warning)';
+                divParcela.style.fontSize  = '0.85rem';
+                divParcela.style.marginTop = '4px';
                 divParcela.textContent = `Parcela: ${c.parcelaAtual}/${c.totalParcelas}`;
                 info.appendChild(divParcela);
             }
@@ -1700,9 +1734,9 @@ function atualizarListaContasFixas() {
                 btnPagar.className = 'conta-btn';
                 btnPagar.textContent = 'Pagar';
 
-                const contaId = parseInt(c.id, 10);
-                // ✅ Ignora conta com ID inválido — evita pagamento da conta errada
-                if(!Number.isInteger(contaId)) return;
+                // ✅ FIX #1: usa c.id diretamente — compatível com número e UUID
+                const contaId = c.id;
+                if(contaId === null || contaId === undefined || contaId === '') return;
 
                 btnPagar.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -2074,6 +2108,11 @@ function pagarContaFixa(id, valorPago) {
     }
 }
 
+// ✅ FIX #7: token de versão declarado fora — persiste entre chamadas
+//    Incrementado a cada criarPopup(), capturado a cada fecharPopup()
+//    Garante que o setTimeout de um fechamento antigo nunca limpe um popup novo
+let _popupVersaoAtual = 0;
+
 function criarPopup(html) {
     const overlay   = document.getElementById('modalOverlay');
     const container = document.getElementById('modalContainer');
@@ -2098,24 +2137,21 @@ function criarPopup(html) {
         console.warn('criarPopup: possível dado de usuário detectado no HTML. Use textContent após criarPopup() para inserir dados dinâmicos.');
     }
 
-    // ✅ Sanitiza via DOMParser — muito mais robusto que regex
-    //    Cobre SVG injection, srcdoc, encoded attributes, malformed tags, etc.
+    // ✅ FIX #7: incrementa versão a cada abertura
+    //    Qualquer setTimeout de fecharPopup anterior com versão menor será ignorado
+    _popupVersaoAtual++;
+
+    // ✅ Sanitiza via DOMParser
     const htmlSanitizado = sanitizarHTMLPopup(html);
 
-    // ✅ Limpa conteúdo anterior
     container.innerHTML = '';
 
     const box = document.createElement('div');
     box.className = 'popup';
-
-    // ✅ Usa HTML sanitizado pelo DOMParser, não o original
     box.innerHTML = htmlSanitizado;
     container.appendChild(box);
 
-    // ✅ Ativa o overlay
     overlay.classList.add('active');
-
-    // ✅ Fechar ao clicar no overlay
     overlay.onclick = () => fecharPopup();
 }
 
@@ -2124,51 +2160,62 @@ function fecharPopup() {
     const container = document.getElementById('modalContainer');
     if(!overlay || !container) return;
 
+    // ✅ FIX #7: captura a versão do popup que está sendo fechado agora
+    //    Se um novo popup abrir durante os 300ms, _popupVersaoAtual será diferente
+    //    e o setTimeout abaixo não limpará o novo conteúdo
+    const versaoFechando = _popupVersaoAtual;
+
     overlay.classList.remove('active');
     overlay.onclick = null;
 
-    // ✅ Limpa o conteúdo após a animação CSS (fadeInScale 0.3s já definida no CSS)
     setTimeout(() => {
-        container.innerHTML = '';
+        // ✅ Só limpa se nenhum novo popup foi aberto durante a animação de 300ms
+        if (_popupVersaoAtual === versaoFechando) {
+            container.innerHTML = '';
+        }
     }, 300);
 }
 
-// ✅ NOVA FUNÇÃO: Sanitização real via DOMParser
-// Substitui a regex de criarPopup que causava falso positivo em "Data:"
-// e era bypassável via SVG injection, srcdoc, encoded attributes, etc.
 function sanitizarHTMLPopup(html) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
 
-    // ✅ Remove elementos estruturalmente perigosos
-    const tagsProibidas = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form'];
+    // ✅ SVG incluído — suporta handlers como onload/onbegin no elemento raiz
+    //    e em filhos como <animate>, <set>, <use> via namespace próprio
+    const tagsProibidas = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form', 'svg'];
     tagsProibidas.forEach(tag => {
         doc.querySelectorAll(tag).forEach(el => el.remove());
     });
 
-    // ✅ Remove atributos perigosos de TODOS os elementos
     doc.body.querySelectorAll('*').forEach(el => {
-        // Copia para array pois removeAttribute modifica a coleção ao vivo
-        Array.from(el.attributes).forEach(attr => {
-            const nome = attr.name.toLowerCase().trim();
-            const val  = attr.value.toLowerCase().replace(/[\s\r\n\t]/g, '');
+        // ✅ getAttributeNames() é namespace-aware — captura atributos SVG
+        //    que el.attributes pode retornar com nomes qualificados em alguns browsers
+        const nomesAtributos = typeof el.getAttributeNames === 'function'
+            ? el.getAttributeNames()
+            : Array.from(el.attributes).map(a => a.name);
 
-            // Bloqueia event handlers (onerror, onload, onclick, etc.)
+        nomesAtributos.forEach(nomeOriginal => {
+            const nome = nomeOriginal.toLowerCase().trim();
+            const val  = (el.getAttribute(nomeOriginal) || '').toLowerCase().replace(/[\s\r\n\t]/g, '');
+
+            // ✅ Bloqueia event handlers — inclui handlers SVG como onbegin, onend, onrepeat
             if (nome.startsWith('on')) {
-                el.removeAttribute(attr.name);
+                el.removeAttribute(nomeOriginal);
                 return;
             }
 
-            // Bloqueia URIs perigosas em qualquer atributo
+            // ✅ Bloqueia URIs perigosas em qualquer atributo
             const esquemasPerigosos = ['javascript:', 'vbscript:', 'data:', 'blob:'];
             if (esquemasPerigosos.some(s => val.startsWith(s))) {
-                el.removeAttribute(attr.name);
+                el.removeAttribute(nomeOriginal);
                 return;
             }
 
-            // Bloqueia srcdoc (executa HTML arbitrário em iframe)
-            if (nome === 'srcdoc' || nome === 'formaction' || nome === 'xlink:href') {
-                el.removeAttribute(attr.name);
+            // ✅ Remove atributos estruturalmente perigosos
+            //    href é permitido se não contiver URI perigosa (já checado acima)
+            const atributosProibidos = ['srcdoc', 'formaction', 'xlink:href', 'action'];
+            if (atributosProibidos.includes(nome)) {
+                el.removeAttribute(nomeOriginal);
             }
         });
     });
