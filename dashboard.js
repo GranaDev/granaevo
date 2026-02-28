@@ -58,8 +58,7 @@ function escapeHTML(str) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#x27;')
         .replace(/\//g, '&#x2F;')
-        .replace(/`/g, '&#x60;')
-        .replace(/=/g, '&#x3D;');
+        .replace(/`/g, '&#x60;');
 }
 
 // ✅ Define __GE__ e __GE_save__ como não-reescritáveis UMA única vez no carregamento
@@ -259,62 +258,61 @@ async function carregarDadosPerfil(perfilId) {
     try {
         console.log(`📦 Carregando dados do perfil ID: ${perfilId}`);
 
-        // ✅ CARREGAR JSON COMPLETO DO DATAMANAGER
         const userData = await dataManager.loadUserData();
-        
+
         console.log('📊 Dados recebidos:', {
             totalProfiles: userData.profiles?.length || 0,
             version: userData.version
         });
 
-        // ✅ BUSCAR PERFIL ESPECÍFICO
         const perfilData = userData.profiles.find(p => p.id === perfilId);
 
         if (!perfilData) {
             console.log('ℹ️ Perfil sem dados salvos. Criando estrutura vazia.');
-            transacoes = [];
-            metas = [];
-            contasFixas = [];
+            transacoes    = [];
+            metas         = [];
+            contasFixas   = [];
             cartoesCredito = [];
-            
-            // ✅ RESETAR IDs
-            nextTransId = 1;
-            nextMetaId = 1;
-            nextContaFixaId = 1;
+
+            // ✅ nextIds mantidos apenas para cartões — cartão ainda usa ID local
+            //    transações, metas e contas fixas não precisam mais de nextId
+            //    pois o banco gera via gen_random_uuid()
             nextCartaoId = 1;
-            
+
             atualizarReferenciasGlobais();
             return;
         }
 
-        // ✅ MAPEAR DADOS DO JSON PARA VARIÁVEIS GLOBAIS
-        transacoes = Array.isArray(perfilData.transacoes) ? perfilData.transacoes : [];
-        metas = Array.isArray(perfilData.metas) ? perfilData.metas : [];
-        contasFixas = Array.isArray(perfilData.contasFixas) ? perfilData.contasFixas : [];
+        transacoes     = Array.isArray(perfilData.transacoes)     ? perfilData.transacoes     : [];
+        metas          = Array.isArray(perfilData.metas)          ? perfilData.metas          : [];
+        contasFixas    = Array.isArray(perfilData.contasFixas)    ? perfilData.contasFixas    : [];
         cartoesCredito = Array.isArray(perfilData.cartoesCredito) ? perfilData.cartoesCredito : [];
 
-        // ✅ RESTAURAR IDs INCREMENTAIS
-        nextTransId = perfilData.nextTransId || (transacoes.length > 0 ? Math.max(...transacoes.map(t => t.id)) + 1 : 1);
-        nextMetaId = perfilData.nextMetaId || (metas.length > 0 ? Math.max(...metas.map(m => m.id)) + 1 : 1);
-        nextContaFixaId = perfilData.nextContaFixaId || (contasFixas.length > 0 ? Math.max(...contasFixas.map(c => c.id)) + 1 : 1);
-        nextCartaoId = perfilData.nextCartaoId || (cartoesCredito.length > 0 ? Math.max(...cartoesCredito.map(c => c.id)) + 1 : 1);
+        // ✅ Apenas nextCartaoId é restaurado — os demais foram migrados para UUID
+        //    Tenta perfilData primeiro; se não existir, recalcula a partir dos dados
+        //    Math.max com IDs numéricos legados — UUIDs são ignorados pelo parseInt
+        const idsCartoesNumericos = cartoesCredito
+            .map(c => typeof c.id === 'number' ? c.id : parseInt(c.id, 10))
+            .filter(n => Number.isInteger(n) && n > 0);
+
+        nextCartaoId = perfilData.nextCartaoId
+            || (idsCartoesNumericos.length > 0 ? Math.max(...idsCartoesNumericos) + 1 : 1);
 
         console.log('✅ Dados do perfil carregados:', {
-            transacoes: transacoes.length,
-            metas: metas.length,
-            contas: contasFixas.length,
-            cartoes: cartoesCredito.length,
-            nextIds: { nextTransId, nextMetaId, nextContaFixaId, nextCartaoId }
+            transacoes:  transacoes.length,
+            metas:       metas.length,
+            contas:      contasFixas.length,
+            cartoes:     cartoesCredito.length,
+            nextCartaoId
         });
-        
-        // ✅ ATUALIZAR REFERÊNCIAS GLOBAIS
+
         atualizarReferenciasGlobais();
-        
+
     } catch(e) {
         console.error('❌ Erro ao carregar dados do perfil:', e);
-        transacoes = [];
-        metas = [];
-        contasFixas = [];
+        transacoes     = [];
+        metas          = [];
+        contasFixas    = [];
         cartoesCredito = [];
         atualizarReferenciasGlobais();
     }
@@ -326,35 +324,64 @@ const _validators = {
     transacao(t) {
         if (!t || typeof t !== 'object') return false;
         const cats = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
-        if (!Number.isInteger(t.id) || t.id <= 0)          return false;
-        if (!cats.includes(t.categoria))                    return false;
-        if (typeof t.descricao !== 'string' || t.descricao.length > 300) return false;
-        if (typeof t.valor !== 'number' || t.valor < 0 || t.valor > 99999999) return false;
+
+        // ✅ ID agora é opcional — banco gera via gen_random_uuid()
+        //    Se existir, aceita inteiro positivo (legado) OU string UUID não-vazia (novo)
+        if (t.id !== undefined && t.id !== null) {
+            const isIntId  = Number.isInteger(t.id) && t.id > 0;
+            const isUuidId = typeof t.id === 'string' && t.id.length > 0;
+            if (!isIntId && !isUuidId) return false;
+        }
+
+        if (!cats.includes(t.categoria))                                          return false;
+        if (typeof t.descricao !== 'string' || t.descricao.length > 300)          return false;
+        if (typeof t.valor !== 'number' || t.valor < 0 || t.valor > 99999999)     return false;
         if (typeof t.data !== 'string' || !/^\d{2}\/\d{2}\/\d{4}$/.test(t.data)) return false;
         return true;
     },
     meta(m) {
-        if (!m || typeof m !== 'object')  return false;
-        if (!Number.isInteger(m.id) || m.id <= 0) return false;
-        if (typeof m.descricao !== 'string' || m.descricao.length > 200) return false;
+        if (!m || typeof m !== 'object') return false;
+
+        // ✅ ID agora é opcional — aceita inteiro positivo (legado) ou string não-vazia (novo)
+        if (m.id !== undefined && m.id !== null) {
+            const isIntId  = Number.isInteger(m.id) && m.id > 0;
+            const isUuidId = typeof m.id === 'string' && m.id.length > 0;
+            if (!isIntId && !isUuidId) return false;
+        }
+
+        if (typeof m.descricao !== 'string' || m.descricao.length > 200)      return false;
         if (typeof m.objetivo !== 'number' || m.objetivo < 0 || m.objetivo > 99999999) return false;
-        if (typeof m.saved !== 'number'   || m.saved < 0)    return false;
+        if (typeof m.saved !== 'number' || m.saved < 0)                        return false;
         return true;
     },
     contaFixa(c) {
-        if (!c || typeof c !== 'object')  return false;
-        if (!Number.isInteger(c.id) || c.id <= 0) return false;
-        if (typeof c.descricao !== 'string' || c.descricao.length > 200) return false;
-        if (typeof c.valor !== 'number' || c.valor < 0 || c.valor > 99999999) return false;
+        if (!c || typeof c !== 'object') return false;
+
+        // ✅ ID agora é opcional — aceita inteiro positivo (legado) ou string não-vazia (novo)
+        if (c.id !== undefined && c.id !== null) {
+            const isIntId  = Number.isInteger(c.id) && c.id > 0;
+            const isUuidId = typeof c.id === 'string' && c.id.length > 0;
+            if (!isIntId && !isUuidId) return false;
+        }
+
+        if (typeof c.descricao !== 'string' || c.descricao.length > 200)                    return false;
+        if (typeof c.valor !== 'number' || c.valor < 0 || c.valor > 99999999)               return false;
         if (typeof c.vencimento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(c.vencimento)) return false;
         return true;
     },
     cartao(c) {
-        if (!c || typeof c !== 'object')  return false;
-        if (!Number.isInteger(c.id) || c.id <= 0) return false;
-        if (typeof c.nomeBanco !== 'string' || c.nomeBanco.length > 100) return false;
-        if (typeof c.limite !== 'number' || c.limite <= 0 || c.limite > 9999999) return false;
-        if (!Number.isInteger(c.vencimentoDia) || c.vencimentoDia < 1 || c.vencimentoDia > 28) return false;
+        if (!c || typeof c !== 'object') return false;
+
+        // ✅ ID agora é opcional — aceita inteiro positivo (legado) ou string não-vazia (novo)
+        if (c.id !== undefined && c.id !== null) {
+            const isIntId  = Number.isInteger(c.id) && c.id > 0;
+            const isUuidId = typeof c.id === 'string' && c.id.length > 0;
+            if (!isIntId && !isUuidId) return false;
+        }
+
+        if (typeof c.nomeBanco !== 'string' || c.nomeBanco.length > 100)                              return false;
+        if (typeof c.limite !== 'number' || c.limite <= 0 || c.limite > 9999999)                      return false;
+        if (!Number.isInteger(c.vencimentoDia) || c.vencimentoDia < 1 || c.vencimentoDia > 28)        return false;
         return true;
     },
 };
@@ -373,16 +400,15 @@ async function salvarDados() {
 
     try {
         // ✅ Filtra registros inválidos antes de persistir
-        const transacoesValidas   = transacoes.filter(_validators.transacao);
-        const metasValidas        = metas.filter(_validators.meta);
-        const contasValidas       = contasFixas.filter(_validators.contaFixa);
-        const cartoesValidos      = cartoesCredito.filter(_validators.cartao);
+        const transacoesValidas = transacoes.filter(_validators.transacao);
+        const metasValidas      = metas.filter(_validators.meta);
+        const contasValidas     = contasFixas.filter(_validators.contaFixa);
+        const cartoesValidos    = cartoesCredito.filter(_validators.cartao);
 
-        // Alerta silencioso se houve itens descartados
-        if (transacoesValidas.length  !== transacoes.length   ||
-            metasValidas.length       !== metas.length         ||
-            contasValidas.length      !== contasFixas.length   ||
-            cartoesValidos.length     !== cartoesCredito.length) {
+        if (transacoesValidas.length !== transacoes.length    ||
+            metasValidas.length      !== metas.length          ||
+            contasValidas.length     !== contasFixas.length    ||
+            cartoesValidos.length    !== cartoesCredito.length) {
             _log.warn('SAVE: itens inválidos descartados antes de persistir');
         }
 
@@ -396,10 +422,9 @@ async function salvarDados() {
             metas:          metasValidas,
             contasFixas:    contasValidas,
             cartoesCredito: cartoesValidos,
-            nextTransId:    Number.isInteger(nextTransId)    && nextTransId > 0    ? nextTransId    : 1,
-            nextMetaId:     Number.isInteger(nextMetaId)     && nextMetaId > 0     ? nextMetaId     : 1,
-            nextContaFixaId:Number.isInteger(nextContaFixaId)&& nextContaFixaId > 0? nextContaFixaId : 1,
-            nextCartaoId:   Number.isInteger(nextCartaoId)   && nextCartaoId > 0   ? nextCartaoId   : 1,
+            // ✅ Apenas nextCartaoId persiste — transações, metas e contas
+            //    usam UUID gerado pelo banco e não precisam de contador local
+            nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
             lastUpdate:     new Date().toISOString(),
         };
 
@@ -1789,18 +1814,15 @@ function abrirContaFixaForm(editId = null) {
 
             if(!desc || !valorStr || !venc) return alert('Preencha todos os campos.');
 
-            // ✅ Validação de comprimento máximo (evita payloads gigantes)
             if(desc.length > 100) return alert('Descrição muito longa (máx. 100 caracteres).');
 
-            // ✅ Validação de valor: deve ser número positivo
             const valor = parseFloat(parseFloat(valorStr).toFixed(2));
             if(isNaN(valor) || valor <= 0) return alert('Informe um valor válido e positivo.');
 
-            // ✅ Validação de data: formato YYYY-MM-DD
             if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return alert('Data de vencimento inválida.');
 
-            const id = nextContaFixaId++;
-            contasFixas.push({ id, descricao: desc, valor, vencimento: venc, pago: false });
+            // ✅ Sem id — banco gera via gen_random_uuid()
+            contasFixas.push({ descricao: desc, valor, vencimento: venc, pago: false });
             salvarDados();
             atualizarListaContasFixas();
             fecharPopup();
