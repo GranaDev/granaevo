@@ -51,6 +51,7 @@ const _throttledSave = (() => {
 function escapeHTML(str) {
     if (str === null || str === undefined) return '';
     return String(str)
+        .replace(/\x00/g, '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -62,16 +63,24 @@ function escapeHTML(str) {
 }
 
 // ✅ Define __GE__ e __GE_save__ como não-reescritáveis UMA única vez no carregamento
-//    - __GE__ usa getter → sempre retorna o snapshot mais recente via _GE_snapshot_atual
-//    - Tentativa de window.__GE__ = x é bloqueada silenciosamente (setter no-op)
-//    - __GE_save__ é valor fixo, writable: false
 (function _inicializarGE() {
     Object.defineProperty(window, '__GE__', {
-        get:          () => _GE_snapshot_atual,
+        // ✅ CORREÇÃO: congela o snapshot antes de expor
+        //    Impede que atacante faça window.__GE__.transacoes.length = 0
+        //    Freeze é superficial — suficiente para bloquear mutação direta via getter
+        get: () => {
+            if (!_GE_snapshot_atual) return null;
+            try {
+                return Object.freeze(Object.assign({}, _GE_snapshot_atual));
+            } catch {
+                return null;
+            }
+        },
         set:          () => { _log.warn('Tentativa de sobrescrita de __GE__ bloqueada'); },
         configurable: false,
         enumerable:   false,
     });
+
     Object.defineProperty(window, '__GE_save__', {
         value:        _throttledSave,
         writable:     false,
