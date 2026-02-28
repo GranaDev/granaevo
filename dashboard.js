@@ -4213,47 +4213,41 @@ async function gerarRelatorio() {
 }
 
     // ========== SELEÇÃO DE PERFIS PARA RELATÓRIO CASAL (PLANO FAMÍLIA) ==========
-function abrirSelecaoPerfisCasal(mes, ano) {
-    // CORREÇÃO: Validar mes/ano antes de montar HTML
+window.abrirSelecaoPerfisCasal = function abrirSelecaoPerfisCasal(mes, ano) {
     if (!/^\d{2}$/.test(mes) || !/^\d{4}$/.test(ano)) return;
-    
+
     let htmlPerfis = '';
-    
+
     if (!Array.isArray(usuarioLogado?.perfis)) return;
 
     usuarioLogado.perfis.forEach(perfil => {
         const idSeguro = sanitizeHTML(String(perfil.id));
         const nomeSeguro = sanitizeHTML(String(perfil.nome || '').slice(0, 100));
-        
+
         htmlPerfis += `
             <div style="margin-bottom:12px;">
                 <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; cursor:pointer; transition:all 0.3s;"
-                       onmouseover="this.style.background='rgba(67,160,71,0.1)'" 
+                       onmouseover="this.style.background='rgba(67,160,71,0.1)'"
                        onmouseout="this.style.background='rgba(255,255,255,0.05)'">
-                    <input type="checkbox" class="perfil-checkbox-casal" value="${idSeguro}" 
+                    <input type="checkbox" class="perfil-checkbox-casal" value="${idSeguro}"
                            style="width:20px; height:20px; cursor:pointer; accent-color:var(--primary);">
                     <span style="font-weight:600; color: var(--text-primary);">${nomeSeguro}</span>
                 </label>
             </div>
         `;
     });
-    
-    // CORREÇÃO: mes e ano não vão mais para atributos onclick inline;
-    // serão armazenados em data-attributes e lidos no handler
+
     criarPopup(`
         <h3>👥 Selecione 2 Perfis para Relatório Casal</h3>
         <p style="color: var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
             Escolha exatamente 2 perfis para gerar o relatório conjunto
         </p>
-        
         <div style="max-height:300px; overflow-y:auto; margin-bottom:20px;">
             ${htmlPerfis}
         </div>
-        
         <div id="avisoSelecao" style="display:none; background:rgba(255,75,75,0.1); padding:12px; border-radius:8px; margin-bottom:16px; border-left:3px solid #ff4b4b;">
             <span style="color:#ff4b4b; font-weight:600;">⚠️ Selecione exatamente 2 perfis</span>
         </div>
-        
         <button class="btn-primary" id="btnConfirmarCasal" data-mes="${sanitizeHTML(mes)}" data-ano="${sanitizeHTML(ano)}" style="width:100%; margin-bottom:10px;">
             Gerar Relatório
         </button>
@@ -4261,25 +4255,23 @@ function abrirSelecaoPerfisCasal(mes, ano) {
             Cancelar
         </button>
     `);
-    
-    // CORREÇÃO: Event listener em vez de onclick inline com parâmetros
+
     const btnConfirmar = document.getElementById('btnConfirmarCasal');
     if (btnConfirmar) {
         btnConfirmar.addEventListener('click', function () {
             const m = this.getAttribute('data-mes');
             const a = this.getAttribute('data-ano');
-            confirmarSelecaoPerfisCasal(m, a);
+            window.confirmarSelecaoPerfisCasal(m, a);
         });
     }
-}
+};
 
-function confirmarSelecaoPerfisCasal(mes, ano) {
-    // CORREÇÃO: Re-validar mes/ano ao confirmar
+window.confirmarSelecaoPerfisCasal = function confirmarSelecaoPerfisCasal(mes, ano) {
     if (!/^\d{2}$/.test(mes) || !/^\d{4}$/.test(ano)) return;
 
     const checkboxes = document.querySelectorAll('.perfil-checkbox-casal:checked');
     const avisoEl = document.getElementById('avisoSelecao');
-    
+
     if (checkboxes.length !== 2) {
         if (avisoEl) {
             avisoEl.style.display = 'block';
@@ -4287,10 +4279,9 @@ function confirmarSelecaoPerfisCasal(mes, ano) {
         }
         return;
     }
-    
+
     const perfisIds = Array.from(checkboxes).map(cb => cb.value);
-    
-    // CORREÇÃO: Validar que os IDs selecionados realmente existem nos perfis do usuário
+
     const idsValidos = perfisIds.every(id =>
         usuarioLogado?.perfis?.some(p => String(p.id) === String(id))
     );
@@ -4298,30 +4289,28 @@ function confirmarSelecaoPerfisCasal(mes, ano) {
         console.error('IDs de perfis inválidos detectados');
         return;
     }
-    
+
     fecharPopup();
-    gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds);
-}
+    window.gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds);
+};
 
 // ========== GERAR RELATÓRIO CASAL PERSONALIZADO ==========
-async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
-    // CORREÇÃO: Validar todos os inputs
+window.gerarRelatorioCompartilhadoPersonalizado = async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
     if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) return;
     if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) return;
     if (!Array.isArray(perfisIds) || perfisIds.length !== 2) return;
 
     const periodoSelecionado = `${ano}-${mes}`;
-    
-    // CORREÇÃO: Usar === estrito e validar que IDs existem
+
     const perfisAtivos = usuarioLogado.perfis.filter(p =>
         perfisIds.includes(String(p.id))
     );
-    
+
     if (perfisAtivos.length !== 2) {
         alert('Erro: É necessário selecionar exatamente 2 perfis.');
         return;
     }
-    
+
     let mesAnterior, anoAnterior;
     if (mes === '01') {
         mesAnterior = '12';
@@ -4331,58 +4320,51 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
         anoAnterior = ano;
     }
     const periodoAnterior = `${anoAnterior}-${mesAnterior}`;
-    
+
     const userData = await dataManager.loadUserData();
-    
-    // CORREÇÃO: Validar estrutura do userData
+
     if (!validarUserData(userData)) {
         console.error('Dados do usuário inválidos ou corrompidos');
         return;
     }
-    
+
     const dadosPorPerfil = perfisAtivos.map(perfil => {
-        // CORREÇÃO: Usar === estrito
         const dadosPerfil = userData.profiles.find(p => String(p.id) === String(perfil.id));
         const transacoesPerfil = Array.isArray(dadosPerfil?.transacoes) ? dadosPerfil.transacoes : [];
         const metasPerfil = Array.isArray(dadosPerfil?.metas) ? dadosPerfil.metas : [];
         const cartoesPerfil = Array.isArray(dadosPerfil?.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
-        
+
         const transacoesPeriodo = transacoesPerfil.filter(t => {
             if (!t || typeof t !== 'object') return false;
             const dataISO = sanitizeDate(dataParaISO(t.data));
             if (!dataISO) return false;
             return dataISO.startsWith(periodoSelecionado);
         });
-        
+
         let saldoInicial = 0;
         transacoesPerfil.forEach(t => {
             if (!t || typeof t !== 'object') return;
             const dataISO = sanitizeDate(dataParaISO(t.data));
             if (!dataISO || dataISO >= periodoSelecionado) return;
-            
             const valor = sanitizeNumber(t.valor);
             if (t.categoria === 'entrada') saldoInicial += valor;
             else if (t.categoria === 'saida') saldoInicial -= valor;
             else if (t.categoria === 'reserva') saldoInicial -= valor;
             else if (t.categoria === 'retirada_reserva') saldoInicial += valor;
         });
-        
+
         let entradas = 0, saidas = 0, totalGuardado = 0, totalRetirado = 0;
-        // CORREÇÃO: Object sem prototype para evitar Prototype Pollution
         const categorias = safeCategorias();
-        
+
         transacoesPerfil.forEach(t => {
             if (!t || typeof t !== 'object') return;
             const dataISO = sanitizeDate(dataParaISO(t.data));
             if (!dataISO || !dataISO.startsWith(periodoSelecionado)) return;
-            
             const valor = sanitizeNumber(t.valor);
-            
             if (t.categoria === 'entrada') {
                 entradas += valor;
             } else if (t.categoria === 'saida') {
                 saidas += valor;
-                // CORREÇÃO: Validar t.tipo antes de usar como chave
                 if (t.tipo && typeof t.tipo === 'string' && t.tipo.length < 100) {
                     const tipoKey = t.tipo.trim();
                     categorias[tipoKey] = (categorias[tipoKey] || 0) + valor;
@@ -4395,36 +4377,34 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
                 saidas -= valor;
             }
         });
-        
+
         const saldoDoMes = entradas - saidas;
         const saldoFinal = saldoInicial + saldoDoMes;
-        
+
         let entradasAnt = 0, saidasAnt = 0, guardadoAnt = 0, retiradoAnt = 0;
-        
         transacoesPerfil.forEach(t => {
             if (!t || typeof t !== 'object') return;
             const dataISO = sanitizeDate(dataParaISO(t.data));
             if (!dataISO || !dataISO.startsWith(periodoAnterior)) return;
-            
             const valor = sanitizeNumber(t.valor);
             if (t.categoria === 'entrada') entradasAnt += valor;
             else if (t.categoria === 'saida') saidasAnt += valor;
             else if (t.categoria === 'reserva') { guardadoAnt += valor; saidasAnt += valor; }
             else if (t.categoria === 'retirada_reserva') { retiradoAnt += valor; saidasAnt -= valor; }
         });
-        
+
         const reservasLiquido = totalGuardado - totalRetirado;
         const reservasLiquidoAnt = guardadoAnt - retiradoAnt;
         const taxaEconomia = entradas > 0 ? ((reservasLiquido / entradas) * 100) : 0;
         const taxaEconomiaAnt = entradasAnt > 0 ? ((reservasLiquidoAnt / entradasAnt) * 100) : 0;
-        
+
         let totalLimiteCartoes = 0, totalUsadoCartoes = 0;
         cartoesPerfil.forEach(c => {
             if (!c || typeof c !== 'object') return;
             totalLimiteCartoes += sanitizeNumber(c.limite);
             totalUsadoCartoes += sanitizeNumber(c.usado);
         });
-        
+
         return {
             perfil,
             entradas, saidas, reservas: reservasLiquido,
@@ -4438,11 +4418,11 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
             evolucaoEconomia: taxaEconomia - taxaEconomiaAnt
         };
     });
-    
+
     const temDados = dadosPorPerfil.some(d => d.transacoes.length > 0);
     const resultado = document.getElementById('relatorioResultado');
     if (!resultado) return;
-    
+
     if (!temDados) {
         resultado.innerHTML = `
             <div class="relatorio-vazio">
@@ -4456,12 +4436,9 @@ async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
         resultado.style.display = 'block';
         return;
     }
-    
-    renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior);
-}
 
-// Expor globalmente
-window.gerarRelatorioCompartilhadoPersonalizado = gerarRelatorioCompartilhadoPersonalizado;
+    renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior);
+};
 
 async function gerarRelatorioIndividual(mes, ano, perfilId) {
     // CORREÇÃO: Validar inputs antes de qualquer processamento
