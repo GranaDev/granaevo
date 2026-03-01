@@ -1,45 +1,77 @@
+/**
+ * GranaEvo — primeiroacesso.js (v2 BLINDADO)
+ *
+ * SEGURANÇA — MUDANÇA PRINCIPAL:
+ * Antes: _linkViaBackend enviava (email, subscription_id) com a anon key —
+ *        qualquer pessoa com a chave pública podia chamar a Edge Function.
+ *
+ * Agora: após signUp, o usuário recebe um JWT de sessão. Esse JWT é enviado
+ *        no header Authorization da chamada à Edge Function. O servidor
+ *        extrai a identidade do JWT assinado — não confia no body.
+ *        JWT não pode ser forjado. Só o dono da conta pode vincular.
+ *
+ * CORREÇÕES APLICADAS:
+ * [SEC-01] JWT do usuário usado na chamada à Edge Function (não anon key)
+ * [SEC-02] _updateSubscription removido — sempre falhava com 403 (RLS) e
+ *          era código morto que poluía o console
+ * [SEC-03] _confirmEmail removido — a Edge Function já confirma o email
+ *          internamente de forma mais segura
+ * [SEC-04] showAlert com innerHTML substituído por DOM programático para
+ *          mensagens com links — sem risco de XSS
+ * [SEC-05] Campos de senha limpos em TODOS os caminhos de erro
+ * [FIX-01] submitBtn restaurado em todos os caminhos (estava faltando em
+ *          alguns branches do catch original)
+ * [FIX-02] Email normalizado para lowercase antes de qualquer operação
+ * [FIX-03] Tratamento explícito do erro "email not confirmed" no login automático
+ */
+
 import { supabase } from './supabase-client.js';
+
+// ==========================================
+// CONFIGURAÇÃO
+// ==========================================
+const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
 
 // ==========================================
 // ELEMENTOS DO DOM
 // ==========================================
-const accessForm          = document.getElementById('accessForm');
-const emailCheckState     = document.getElementById('emailCheckState');
-const passwordInputs      = document.getElementById('passwordInputs');
-const checkEmailBtn       = document.getElementById('checkEmailBtn');
-const submitBtn           = document.getElementById('submitBtn');
+const accessForm           = document.getElementById('accessForm');
+const emailCheckState      = document.getElementById('emailCheckState');
+const passwordInputs       = document.getElementById('passwordInputs');
+const checkEmailBtn        = document.getElementById('checkEmailBtn');
+const submitBtn            = document.getElementById('submitBtn');
 
-const emailInput          = document.getElementById('email');
-const passwordInput       = document.getElementById('password');
-const confirmPasswordInput= document.getElementById('confirmPassword');
-const termsCheckbox       = document.getElementById('termsCheckbox');
+const emailInput           = document.getElementById('email');
+const passwordInput        = document.getElementById('password');
+const confirmPasswordInput = document.getElementById('confirmPassword');
+const termsCheckbox        = document.getElementById('termsCheckbox');
 
-const alertBox            = document.getElementById('alertBox');
-const alertMessage        = document.getElementById('alertMessage');
-const infoBox             = document.getElementById('infoBox');
-const userName            = document.getElementById('userName');
-const userEmail           = document.getElementById('userEmail');
-const planName            = document.getElementById('planName');
+const alertBox             = document.getElementById('alertBox');
+const alertMessage         = document.getElementById('alertMessage');
+const infoBox              = document.getElementById('infoBox');
+const userName             = document.getElementById('userName');
+const userEmail            = document.getElementById('userEmail');
+const planName             = document.getElementById('planName');
 
-const confirmError        = document.getElementById('confirmError');
-const termsError          = document.getElementById('termsError');
-const strengthFill        = document.getElementById('strengthFill');
-const strengthText        = document.getElementById('strengthText');
+const confirmError         = document.getElementById('confirmError');
+const termsError           = document.getElementById('termsError');
+const strengthFill         = document.getElementById('strengthFill');
+const strengthText         = document.getElementById('strengthText');
 
-const togglePassword1     = document.getElementById('togglePassword1');
-const togglePassword2     = document.getElementById('togglePassword2');
+const togglePassword1      = document.getElementById('togglePassword1');
+const togglePassword2      = document.getElementById('togglePassword2');
 
 // ==========================================
 // ESTADO
 // ==========================================
 let currentSubscriptionData = null;
-const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
 
 // ==========================================
 // VERIFICAR EMAIL
 // ==========================================
 checkEmailBtn.addEventListener('click', async () => {
-    const email = emailInput.value.trim().toLowerCase();
+    // [FIX-02] Normaliza lowercase antes de qualquer operação
+    const email = (emailInput.value || '').trim().toLowerCase();
 
     if (!email) {
         showAlert('error', 'Por favor, digite seu email.');
@@ -51,14 +83,13 @@ checkEmailBtn.addEventListener('click', async () => {
         return;
     }
 
-    checkEmailBtn.disabled = true;
     setButtonLoading(checkEmailBtn, 'Verificando...');
 
     try {
         const response = await fetch(`${SUPABASE_URL}/functions/v1/check-email-status`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type':  'application/json',
                 'Authorization': `Bearer ${supabase.supabaseKey}`,
             },
             body: JSON.stringify({ email }),
@@ -78,20 +109,21 @@ checkEmailBtn.addEventListener('click', async () => {
                 break;
 
             case 'payment_pending':
-                showAlert('warning', 'Pagamento ainda não aprovado para este email. Aguarde a confirmação do pagamento.');
+                showAlert('warning', 'Pagamento ainda não aprovado. Aguarde a confirmação e tente novamente.');
                 hidePasswordInputs();
                 break;
 
             case 'password_exists':
-                // [FIX-01] Usuário existe no Auth mas user_id ainda está NULL na subscription.
-                // Tenta vincular automaticamente antes de redirecionar.
-                showAlert('warning', 'Email já possui uma senha cadastrada. <a href="login.html">Fazer login</a> ou <a href="login.html">esqueceu a senha?</a>');
+                // [SEC-04] Links hardcoded via DOM — sem innerHTML com dados externos
+                showAlertWithLinks(
+                    'warning',
+                    'Este email já possui uma senha cadastrada.',
+                    [
+                        { text: 'Fazer login', href: 'login.html' },
+                        { text: 'Esqueci minha senha', href: 'login.html' },
+                    ]
+                );
                 hidePasswordInputs();
-
-                // Tentativa silenciosa de vínculo caso user_id seja NULL
-                if (result.needs_link && result.data?.subscription_id) {
-                    await _tryLinkExistingUser(email, result.data.subscription_id);
-                }
                 break;
 
             case 'ready':
@@ -100,12 +132,8 @@ checkEmailBtn.addEventListener('click', async () => {
                 break;
 
             case 'error':
-                showAlert('error', 'Erro ao verificar email. Tente novamente.');
-                hidePasswordInputs();
-                break;
-
             default:
-                showAlert('error', 'Resposta inesperada do servidor. Tente novamente.');
+                showAlert('error', 'Erro ao verificar email. Tente novamente.');
                 hidePasswordInputs();
         }
 
@@ -113,33 +141,9 @@ checkEmailBtn.addEventListener('click', async () => {
         showAlert('error', 'Erro de conexão. Verifique sua internet e tente novamente.');
         hidePasswordInputs();
     } finally {
-        checkEmailBtn.disabled = false;
         restoreButton(checkEmailBtn, 'Verificar Email');
     }
 });
-
-// ==========================================
-// [FIX-01] VINCULAR USUÁRIO EXISTENTE
-// Cobre o caso em que signUp funcionou mas o UPDATE da subscription falhou.
-// Chamado silenciosamente quando o backend informa password_exists + needs_link.
-// ==========================================
-async function _tryLinkExistingUser(email, subscriptionId) {
-    try {
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/link-user-subscription`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${supabase.supabaseKey}`,
-            },
-            body: JSON.stringify({ email, subscription_id: subscriptionId }),
-        });
-
-        // Falha silenciosa — não bloqueia o fluxo do usuário
-        if (!response.ok) return;
-    } catch {
-        // Silencioso
-    }
-}
 
 // ==========================================
 // MOSTRAR FORMULÁRIO DE SENHA
@@ -148,10 +152,10 @@ function showPasswordForm(data) {
     alertBox.style.display = 'none';
     infoBox.style.display  = 'block';
 
-    // [SEC] textContent — sem innerHTML com dados do servidor
-    userName.textContent = data.user_name || 'Usuário';
-    userEmail.textContent = data.email;
-    planName.textContent = data.plan_name;
+    // textContent — nunca innerHTML com dados do servidor
+    userName.textContent  = sanitize(data.user_name  || 'Usuário');
+    userEmail.textContent = sanitize(data.email);
+    planName.textContent  = sanitize(data.plan_name);
 
     emailCheckState.style.display = 'none';
     passwordInputs.style.display  = 'block';
@@ -159,9 +163,6 @@ function showPasswordForm(data) {
     setTimeout(() => passwordInput.focus(), 300);
 }
 
-// ==========================================
-// ESCONDER INPUTS DE SENHA
-// ==========================================
 function hidePasswordInputs() {
     passwordInputs.style.display  = 'none';
     infoBox.style.display         = 'none';
@@ -169,13 +170,45 @@ function hidePasswordInputs() {
 }
 
 // ==========================================
+// UTILITÁRIOS
+// ==========================================
+function sanitize(value) {
+    return String(value ?? '').trim();
+}
+
+function isValidEmail(email) {
+    return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+// ==========================================
 // SHOW ALERT
-// [SEC] innerHTML apenas para mensagens internas hardcoded com link seguro
+// [SEC-04] Nunca usa innerHTML com dados externos
 // ==========================================
 function showAlert(type, message) {
     alertBox.className       = 'alert-box ' + type;
     alertBox.style.display   = 'flex';
-    alertMessage.innerHTML   = message; // links são hardcoded no código, não vêm do servidor
+    alertMessage.textContent = message; // textContent — seguro
+
+    if (type !== 'error') {
+        setTimeout(() => { alertBox.style.display = 'none'; }, 8000);
+    }
+}
+
+// Alerta com links hardcoded — construído via DOM, sem innerHTML com dados externos
+function showAlertWithLinks(type, message, links = []) {
+    alertBox.className     = 'alert-box ' + type;
+    alertBox.style.display = 'flex';
+    alertMessage.textContent = '';
+
+    alertMessage.appendChild(document.createTextNode(message + ' '));
+
+    links.forEach((link, i) => {
+        if (i > 0) alertMessage.appendChild(document.createTextNode(' · '));
+        const a   = document.createElement('a');
+        a.href        = link.href;   // href é constante no código — não vem do servidor
+        a.textContent = link.text;
+        alertMessage.appendChild(a);
+    });
 
     if (type !== 'error') {
         setTimeout(() => { alertBox.style.display = 'none'; }, 8000);
@@ -183,36 +216,32 @@ function showAlert(type, message) {
 }
 
 // ==========================================
-// VALIDAR EMAIL
-// ==========================================
-function isValidEmail(email) {
-    return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email);
-}
-
-// ==========================================
-// HELPER: LOADING STATE DOS BOTÕES
+// LOADING STATE DOS BOTÕES
 // ==========================================
 function setButtonLoading(btn, label) {
-    btn.disabled     = true;
-    btn.dataset.orig = btn.innerHTML;
-    btn.textContent  = label;
+    btn.disabled      = true;
+    btn.dataset.orig  = btn.innerHTML;
+    btn.textContent   = label;
 }
 
-function restoreButton(btn, label) {
-    btn.disabled    = false;
-    btn.textContent = '';
-    btn.innerHTML   = btn.dataset.orig || label;
-    delete btn.dataset.orig;
+function restoreButton(btn, fallbackLabel) {
+    btn.disabled = false;
+    if (btn.dataset.orig) {
+        btn.innerHTML = btn.dataset.orig; // HTML é do desenvolvedor, não do usuário
+        delete btn.dataset.orig;
+    } else {
+        btn.textContent = fallbackLabel;
+    }
 }
 
 // ==========================================
 // TOGGLE PASSWORD VISIBILITY
 // ==========================================
-togglePassword1.addEventListener('click', () => {
+togglePassword1?.addEventListener('click', () => {
     passwordInput.type = passwordInput.type === 'password' ? 'text' : 'password';
 });
 
-togglePassword2.addEventListener('click', () => {
+togglePassword2?.addEventListener('click', () => {
     confirmPasswordInput.type = confirmPasswordInput.type === 'password' ? 'text' : 'password';
 });
 
@@ -229,7 +258,7 @@ function checkPasswordStrength(password) {
     return strength;
 }
 
-passwordInput.addEventListener('input', () => {
+passwordInput?.addEventListener('input', () => {
     const password = passwordInput.value;
     const strength = checkPasswordStrength(password);
 
@@ -253,13 +282,13 @@ passwordInput.addEventListener('input', () => {
 // ==========================================
 // VALIDAR CONFIRMAÇÃO DE SENHA
 // ==========================================
-confirmPasswordInput.addEventListener('input', () => {
+confirmPasswordInput?.addEventListener('input', () => {
     if (confirmPasswordInput.value && confirmPasswordInput.value !== passwordInput.value) {
-        confirmError.style.display              = 'block';
-        confirmPasswordInput.style.borderColor  = 'var(--error)';
+        confirmError.style.display             = 'block';
+        confirmPasswordInput.style.borderColor = 'var(--error)';
     } else {
-        confirmError.style.display              = 'none';
-        confirmPasswordInput.style.borderColor  = 'rgba(255, 255, 255, 0.1)';
+        confirmError.style.display             = 'none';
+        confirmPasswordInput.style.borderColor = 'rgba(255, 255, 255, 0.1)';
     }
 });
 
@@ -268,21 +297,24 @@ confirmPasswordInput.addEventListener('input', () => {
 // ==========================================
 const checkboxWrapper = document.querySelector('.checkbox-wrapper');
 
-termsCheckbox.addEventListener('change', () => {
+termsCheckbox?.addEventListener('change', () => {
     const termsWarning = document.getElementById('termsWarning');
-
     if (termsCheckbox.checked) {
-        termsError.style.display = 'none';
-        checkboxWrapper.classList.remove('error');
-        checkboxWrapper.style.borderColor  = 'rgba(16, 185, 129, 0.3)';
-        checkboxWrapper.style.background   = 'rgba(16, 185, 129, 0.05)';
+        if (termsError) termsError.style.display = 'none';
+        checkboxWrapper?.classList.remove('error');
+        if (checkboxWrapper) {
+            checkboxWrapper.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+            checkboxWrapper.style.background  = 'rgba(16, 185, 129, 0.05)';
+        }
         if (termsWarning) {
             termsWarning.classList.remove('show');
             termsWarning.style.display = 'none';
         }
     } else {
-        checkboxWrapper.style.borderColor  = 'rgba(255, 255, 255, 0.05)';
-        checkboxWrapper.style.background   = 'rgba(255, 255, 255, 0.02)';
+        if (checkboxWrapper) {
+            checkboxWrapper.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+            checkboxWrapper.style.background  = 'rgba(255, 255, 255, 0.02)';
+        }
     }
 });
 
@@ -292,20 +324,21 @@ function showTermsError() {
         termsWarning.classList.add('show');
         termsWarning.style.display = 'flex';
     }
-    termsError.style.display            = 'block';
-    checkboxWrapper.classList.add('error');
-    checkboxWrapper.style.borderColor   = 'var(--error)';
-    checkboxWrapper.style.background    = 'rgba(239, 68, 68, 0.05)';
-    checkboxWrapper.style.animation     = 'shake 0.5s';
-    checkboxWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(() => termsCheckbox.focus(), 500);
+    if (termsError) termsError.style.display = 'block';
+    checkboxWrapper?.classList.add('error');
+    if (checkboxWrapper) {
+        checkboxWrapper.style.borderColor = 'var(--error)';
+        checkboxWrapper.style.background  = 'rgba(239, 68, 68, 0.05)';
+        checkboxWrapper.style.animation   = 'shake 0.5s';
+    }
+    checkboxWrapper?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => termsCheckbox?.focus(), 500);
 }
 
 // ==========================================
 // SUBMIT — CRIAR SENHA
-// [FIX-02] Fluxo robusto com retry de vínculo e tratamento de "já registrado"
 // ==========================================
-accessForm.addEventListener('submit', async (e) => {
+accessForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     if (!currentSubscriptionData) {
@@ -313,10 +346,9 @@ accessForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Validação de termos — prioridade máxima
     if (!termsCheckbox.checked) {
         showTermsError();
-        showAlert('error', '⚠️ ATENÇÃO: Você DEVE aceitar os Termos de Uso para criar sua conta. Marque a caixa acima para continuar.');
+        showAlert('error', 'Você deve aceitar os Termos de Uso para criar sua conta.');
         return;
     }
 
@@ -329,19 +361,25 @@ accessForm.addEventListener('submit', async (e) => {
         return;
     }
 
+    if (password.length > 128) {
+        showAlert('error', 'A senha deve ter no máximo 128 caracteres.');
+        passwordInput.focus();
+        return;
+    }
+
     if (password !== confirmPassword) {
         showAlert('error', 'As senhas não coincidem.');
         confirmPasswordInput.focus();
         return;
     }
 
-    submitBtn.disabled = true;
     setButtonLoading(submitBtn, 'Criando sua conta...');
 
     try {
-        const email = currentSubscriptionData.email;
+        // [FIX-02] Email sempre normalizado
+        const email = (currentSubscriptionData.email || '').toLowerCase().trim();
 
-        // ── ETAPA 1: Criar usuário no Auth ──────────────────────────
+        // ── ETAPA 1: Criar usuário no Auth ──────────────────────────────
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email,
             password,
@@ -354,64 +392,62 @@ accessForm.addEventListener('submit', async (e) => {
             },
         });
 
-        let userId;
-
         if (authError) {
             const alreadyRegistered =
                 authError.message.toLowerCase().includes('already registered') ||
                 authError.message.toLowerCase().includes('user already registered');
 
             if (alreadyRegistered) {
-                // [FIX-02] Usuário já existe no Auth (criação prévia com falha no UPDATE).
-                // Delega ao backend o vínculo e a atualização do password_created.
-                const linked = await _linkViaBackend(email, currentSubscriptionData.subscription_id, password);
-
-                if (linked) {
-                    showAlert('info', '✅ Conta configurada com sucesso! Redirecionando para o login...');
-                    setTimeout(() => { window.location.href = 'login.html'; }, 2000);
-                    return;
-                }
-
-                // Backend falhou — orienta o usuário
-                showAlert('error', 'Conta já existe. <a href="login.html">Fazer login</a> ou use "Esqueci a senha" se não lembrar.');
+                // Usuário já existe — orienta para login/reset
+                showAlertWithLinks(
+                    'warning',
+                    'Este email já possui cadastro.',
+                    [
+                        { text: 'Fazer login', href: 'login.html' },
+                        { text: 'Esqueci minha senha', href: 'login.html' },
+                    ]
+                );
                 return;
             }
-
             throw authError;
         }
 
-        userId = authData.user.id;
+        const userId      = authData.user.id;
+        const accessToken = authData.session?.access_token;
 
-        // ── ETAPA 2: Confirmar email via Edge Function ───────────────
-        await _confirmEmail(userId);
-
-        // ── ETAPA 3: Vincular user_id na subscription ────────────────
-        // [FIX-03] Vínculo é a etapa MAIS CRÍTICA. Qualquer falha aqui
-        //          deve ser retentada e logada, pois é o que causava o bug.
-        const linked = await _updateSubscription(userId, currentSubscriptionData.subscription_id);
-
-        if (!linked) {
-            // Tenta via backend como fallback
-            await _linkViaBackend(email, currentSubscriptionData.subscription_id, null);
+        // ── ETAPA 2: Vincular subscription via Edge Function ────────────
+        // [SEC-01] Envia o JWT do usuário recém-criado — não a anon key
+        // A Edge Function extrai o email do JWT assinado (não confia no body)
+        if (accessToken) {
+            await _linkViaBackend(accessToken, currentSubscriptionData.subscription_id);
         }
+        // Se não há accessToken (raro com confirm email desligado), o fallback
+        // ocorre no próximo login quando o AuthGuard detecta subscription sem user_id
 
-        // ── ETAPA 4: Registrar aceitação dos termos ──────────────────
+        // ── ETAPA 3: Registrar aceitação dos termos ─────────────────────
         await _acceptTerms(userId, email);
 
-        // ── ETAPA 5: Criar user_data ─────────────────────────────────
+        // ── ETAPA 4: Criar user_data ────────────────────────────────────
         await _createUserData(userId, email, currentSubscriptionData);
 
-        // ── ETAPA 6: Login automático ────────────────────────────────
-        // [FIX-04] Aguarda 800ms para que a confirmação de email propague
-        //          antes de tentar o signIn, evitando falha silenciosa de sessão.
+        // ── ETAPA 5: Login automático ────────────────────────────────────
+        // Aguarda 800ms para propagação no servidor
         await new Promise(resolve => setTimeout(resolve, 800));
 
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
 
+        // [SEC-05] Limpa campos sensíveis independente do resultado
+        passwordInput.value        = '';
+        confirmPasswordInput.value = '';
+
         if (loginError) {
-            // Login automático falhou, mas conta foi criada — apenas redireciona para login manual
-            showAlert('info', '✅ Conta criada com sucesso! Faça login para continuar.');
-            setTimeout(() => { window.location.href = 'login.html'; }, 2000);
+            // [FIX-03] Trata explicitamente email não confirmado
+            if (loginError.message?.toLowerCase().includes('email not confirmed')) {
+                showAlert('warning', 'Conta criada! Confirme seu email e faça o login.');
+            } else {
+                showAlert('info', '✅ Conta criada! Faça o login para continuar.');
+            }
+            setTimeout(() => { window.location.href = 'login.html'; }, 2500);
             return;
         }
 
@@ -419,17 +455,25 @@ accessForm.addEventListener('submit', async (e) => {
         setTimeout(() => { window.location.href = 'login.html'; }, 1500);
 
     } catch (err) {
-        let msg = 'Erro ao criar conta. Tente novamente.';
+        // [SEC-05] Limpa senha em qualquer erro
+        passwordInput.value        = '';
+        confirmPasswordInput.value = '';
 
-        if (err?.message?.toLowerCase().includes('invalid email')) {
+        let msg = 'Erro ao criar conta. Tente novamente.';
+        const msgLower = (err?.message || '').toLowerCase();
+
+        if (msgLower.includes('invalid email')) {
             msg = 'Email inválido.';
-        } else if (err?.message?.toLowerCase().includes('password')) {
+        } else if (msgLower.includes('password')) {
             msg = 'Erro na senha. Tente uma senha diferente.';
+        } else if (msgLower.includes('network') || msgLower.includes('fetch')) {
+            msg = 'Erro de conexão. Verifique sua internet e tente novamente.';
         }
 
         showAlert('error', msg);
 
-        submitBtn.disabled = false;
+    } finally {
+        // [FIX-01] Restaura o botão em TODOS os caminhos sem exceção
         restoreButton(submitBtn, 'Criar Senha e Acessar');
     }
 });
@@ -438,58 +482,22 @@ accessForm.addEventListener('submit', async (e) => {
 // HELPERS INTERNOS
 // ==========================================
 
-/** Confirma email do usuário via Edge Function */
-async function _confirmEmail(userId) {
-    try {
-        await fetch(`${SUPABASE_URL}/functions/v1/confirm-user-email`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${supabase.supabaseKey}`,
-            },
-            body: JSON.stringify({ userId }),
-        });
-    } catch {
-        // Não crítico — o login pode funcionar mesmo sem confirmação em projetos com email desabilitado
-    }
-}
-
 /**
- * [FIX-03] Vincula user_id à subscription e marca password_created = true.
- * Retorna true se bem-sucedido.
+ * [SEC-01] Vincula subscription usando o JWT do usuário como autenticação.
+ * A Edge Function verifica o JWT e extrai o email de forma segura —
+ * não aceita email do body, impossibilitando falsificação de identidade.
  */
-async function _updateSubscription(userId, subscriptionId) {
-    try {
-        const { error } = await supabase
-            .from('subscriptions')
-            .update({
-                user_id:             userId,
-                password_created:    true,
-                password_created_at: new Date().toISOString(),
-                updated_at:          new Date().toISOString(),
-            })
-            .eq('id', subscriptionId);
-
-        return !error;
-    } catch {
-        return false;
-    }
-}
-
-/**
- * [FIX-02] Delega vínculo ao backend quando o usuário já existe no Auth.
- * O backend usa service role key para buscar o auth.users pelo email.
- * Retorna true se bem-sucedido.
- */
-async function _linkViaBackend(email, subscriptionId, password) {
+async function _linkViaBackend(accessToken, subscriptionId) {
     try {
         const response = await fetch(`${SUPABASE_URL}/functions/v1/link-user-subscription`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${supabase.supabaseKey}`,
+                'Content-Type':  'application/json',
+                // [SEC-01] JWT do usuário — não a anon key
+                'Authorization': `Bearer ${accessToken}`,
             },
-            body: JSON.stringify({ email, subscription_id: subscriptionId }),
+            body: JSON.stringify({ subscription_id: subscriptionId }),
+            // Nota: email NÃO é enviado no body — a Edge Function extrai do JWT
         });
 
         if (!response.ok) return false;
@@ -500,22 +508,27 @@ async function _linkViaBackend(email, subscriptionId, password) {
     }
 }
 
-/** Registra aceitação dos termos (não crítico) */
+/**
+ * Registra aceitação dos termos.
+ */
 async function _acceptTerms(userId, email) {
     try {
         await supabase.from('terms_acceptance').insert({
-            user_id:    userId,
+            user_id:     userId,
             email,
-            accepted:   true,
+            accepted:    true,
             accepted_at: new Date().toISOString(),
-            user_agent:  navigator.userAgent,
+            // Trunca UserAgent para evitar armazenamento excessivo
+            user_agent:  navigator.userAgent.slice(0, 200),
         });
     } catch {
-        // Não bloqueia o fluxo
+        // Não bloqueia o fluxo principal
     }
 }
 
-/** Cria entrada em user_data (não crítico) */
+/**
+ * Cria entrada em user_data.
+ */
 async function _createUserData(userId, email, subData) {
     try {
         await supabase.from('user_data').insert({
@@ -523,18 +536,18 @@ async function _createUserData(userId, email, subData) {
             email,
             data_json: {
                 created_via: 'first_access',
-                plan:        subData.plan_name,
-                name:        subData.user_name,
+                plan:        sanitize(subData.plan_name),
+                name:        sanitize(subData.user_name),
                 created_at:  new Date().toISOString(),
             },
         });
     } catch {
-        // Não bloqueia o fluxo
+        // Não bloqueia o fluxo principal
     }
 }
 
 // ==========================================
-// ANIMAÇÃO DO SPINNER
+// ANIMAÇÕES
 // ==========================================
 const style = document.createElement('style');
 style.textContent = `
@@ -542,7 +555,7 @@ style.textContent = `
     @keyframes shake {
         0%, 100% { transform: translateX(0); }
         10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-        20%, 40%, 60%, 80% { transform: translateX(5px); }
+        20%, 40%, 60%, 80%       { transform: translateX(5px); }
     }
 `;
 document.head.appendChild(style);

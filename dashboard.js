@@ -2316,6 +2316,75 @@ function sanitizarHTMLPopup(html) {
     return doc.body.innerHTML;
 }
 
+// ========== POPUP VIA DOM (SEM innerHTML COM DADOS DO USUÁRIO) ==========
+// ✅ Inserir APÓS a função sanitizarHTMLPopup
+//    e ANTES do bloco // ========== TRANSAÇÕES ==========
+//
+// Por que aqui? Todas as funções utilitárias de modal ficam agrupadas:
+//   criarPopup → fecharPopup → sanitizarHTMLPopup → criarPopupDOM
+//
+// Diferença de uso:
+//   criarPopup(htmlString)    → HTML estático, sanitizado pelo sanitizarHTMLPopup
+//   criarPopupDOM(callback)   → Constrói 100% via DOM API, dado do usuário
+//                               nunca vira HTML — textContent direto no elemento
+//
+// Usado atualmente por:
+//   - adicionarNovoPerfil()
+//   - mostrarPopupLimite()
+
+/**
+ * Abre o modal e entrega o elemento .popup VAZIO para o caller construir via DOM.
+ *
+ * @param {function(HTMLDivElement): void} builderCallback
+
+ *
+  @returns {HTMLElement|null} 
+
+ */
+function criarPopupDOM(builderCallback) {
+    const overlay   = document.getElementById('modalOverlay');
+    const container = document.getElementById('modalContainer');
+
+    if (!overlay || !container) {
+        _log.error('POPUP_DOM_001', 'Elementos #modalOverlay ou #modalContainer não encontrados');
+        return null;
+    }
+
+    if (typeof builderCallback !== 'function') {
+        _log.error('POPUP_DOM_002', 'builderCallback deve ser uma função');
+        return null;
+    }
+
+    // ✅ Mesmo mecanismo de versão do criarPopup
+    //    Garante que fecharPopup com setTimeout não limpe um popup mais novo
+    _popupVersaoAtual++;
+
+    // ✅ Limpa container antes de montar o novo popup
+    container.innerHTML = '';
+
+    const box = document.createElement('div');
+    box.className = 'popup';
+
+    // ✅ Entrega o box VAZIO ao caller
+    //    Se o callback lançar erro, desfaz tudo e não deixa modal corrompido
+    try {
+        builderCallback(box);
+    } catch (e) {
+        _log.error('POPUP_DOM_003', e);
+        container.innerHTML = '';
+        overlay.classList.remove('active');
+        return null;
+    }
+
+    container.appendChild(box);
+    overlay.classList.add('active');
+
+    // ✅ Reutiliza fecharPopup existente — já tem controle de _popupVersaoAtual
+    overlay.onclick = () => fecharPopup();
+
+    return container;
+}
+
 // ========== TRANSAÇÕES ==========
 function atualizarTiposDinamicos() {
     const cat = document.getElementById('selectCategoria').value;
