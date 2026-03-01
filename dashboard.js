@@ -61,6 +61,8 @@ function sanitizeHTML(str) {
         .replace(/`/g, '&#x60;');
 }
 
+const escapeHTML = sanitizeHTML;
+
 function sanitizeNumber(value, min = 0, max = 999999999) {
     const n = parseFloat(value);
     if (!isFinite(n)) return 0;
