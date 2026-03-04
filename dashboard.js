@@ -3993,13 +3993,14 @@ function abrirCartaoForm(editId = null) {
 
     let options = bancos.map(b => `<option value="${b.nome}">${b.nome}</option>`).join('');
 
-    function diaOptions(selected) {
-        let opts = '<option value="">Selecione o dia</option>';
-        for (let i = 1; i <= 28; i++) {
-            opts += `<option value="${i}" ${selected == i ? 'selected' : ''}>${i.toString().padStart(2, '0')}</option>`;
-        }
-        return opts;
+function diaOptions(selected) {
+    const diaSelected = Number(selected);
+    let opts = '<option value="">Selecione o dia</option>';
+    for (let i = 1; i <= 28; i++) {
+        opts += `<option value="${i}" ${diaSelected === i ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`;
     }
+    return opts;
+}
 
     if (!editId) {
         criarPopup(`
@@ -5086,12 +5087,13 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         html += `</div>`;
     }
     
-    if (cartoesPerfil.length === 0) {
-        // Se não houve cartões, renderizar tudo de uma vez
-        resultado.innerHTML += html;
-    } else {
-        // Cartões já foram renderizados; apenas adicionar o restante
-        resultado.innerHTML += html;
+// ✅ insertAdjacentHTML em vez de innerHTML +=
+    //    innerHTML += re-serializa TODO o DOM existente e recria os nós do zero,
+    //    destruindo todos os addEventListener já anexados (ex: cliques nos cartões).
+    //    insertAdjacentHTML apenas faz parse do novo fragmento e o appenda,
+    //    sem tocar nos nós já existentes nem em seus listeners.
+    if (html) {
+        resultado.insertAdjacentHTML('beforeend', html);
     }
     resultado.style.display = 'block';
     
@@ -5907,19 +5909,27 @@ function mostrarRanking(tipo, dadosPorPerfil) {
 
 // Função para abrir detalhes completos de um perfil específico
 function abrirDetalhesPerfilRelatorio(perfilId, mes, ano) {
+    // ✅ HTML estático sem onclick inline — sanitizarHTMLPopup remove atributos on*,
+    //    por isso o botão ficava morto. Substituído por addEventListener após criação.
     criarPopup(`
         <h3>🔍 Detalhes Completos</h3>
-        <div class="small">Carregando dados detalhados...</div>
-        <button class="btn-primary" onclick="fecharPopup()">Fechar</button>
+        <div class="small">Carregando dados detalhados do período...</div>
+        <button class="btn-primary" id="btnFecharDetalhesRelatorio">Fechar</button>
     `);
-    
+
+    // ✅ addEventListener — funciona independente do sanitizador
+    const btnFechar = document.getElementById('btnFecharDetalhesRelatorio');
+    if (btnFechar) {
+        btnFechar.addEventListener('click', fecharPopup);
+    }
+
     setTimeout(() => {
         gerarRelatorioIndividual(mes, ano, perfilId);
         fecharPopup();
     }, 500);
 }
 
-// Expor função globalmente
+// Expor globalmente
 window.abrirDetalhesPerfilRelatorio = abrirDetalhesPerfilRelatorio;
 
 // ========== DETALHES DO CARTÃO NO RELATÓRIO ==========
@@ -6139,61 +6149,67 @@ window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
 // ========== BANCO DE DICAS SOBRE CARTÕES ==========
 
 function obterDicaAleatoria() {
+    // ✅ Dicas separadas em {titulo, texto} — dados controlados mas nunca misturados
+    //    com variáveis de usuário. O HTML é montado aqui de forma explícita e
+    //    ambas as partes passam por escapeHTML antes de serem inseridas no template.
+    //    Isso elimina o risco de alguém adicionar dados do usuário nesta função no futuro.
     const dicas = [
-        "💳 <strong>Pagamento em dia:</strong> Sempre pague sua fatura no vencimento para evitar juros altíssimos e manter seu score de crédito saudável.",
-        "📊 <strong>Controle de gastos:</strong> Utilize no máximo 30% do limite do seu cartão para manter um bom histórico de crédito.",
-        "🎯 <strong>Organize suas compras:</strong> Faça compras grandes logo após o fechamento da fatura para ter mais tempo de pagamento.",
-        "💰 <strong>Cashback inteligente:</strong> Priorize cartões com cashback em categorias que você mais gasta, como supermercado e combustível.",
-        "🔒 <strong>Segurança em primeiro lugar:</strong> Nunca compartilhe sua senha ou CVV com terceiros, mesmo que pareçam ser do banco.",
-        "📱 <strong>App do banco:</strong> Ative notificações de compras no app do banco para detectar fraudes rapidamente.",
-        "🛡️ <strong>Cartão virtual:</strong> Use cartões virtuais para compras online - eles podem ser bloqueados sem afetar o cartão físico.",
-        "💸 <strong>Evite o rotativo:</strong> Nunca pague apenas o valor mínimo - os juros do rotativo podem chegar a 400% ao ano!",
-        "🎁 <strong>Programas de pontos:</strong> Acumule pontos e milhas em um único programa para maximizar benefícios e trocas.",
-        "📆 <strong>Data de vencimento:</strong> Escolha a melhor data de vencimento de acordo com o dia que recebe seu salário.",
-        "🏦 <strong>Anuidade zero:</strong> Negocie isenção de anuidade com seu banco ou opte por cartões sem taxa.",
-        "🔄 <strong>Parcelamento consciente:</strong> Parcele apenas compras essenciais e evite acumular muitas parcelas simultâneas.",
-        "💡 <strong>Limite adequado:</strong> Mantenha um limite compatível com sua renda para não cair na tentação de gastar demais.",
-        "📉 <strong>Taxa de juros:</strong> Conheça as taxas do seu cartão e compare com outros bancos - você pode estar pagando mais.",
-        "🚫 <strong>Compras por impulso:</strong> Espere 24 horas antes de fazer compras grandes no cartão - isso evita arrependimentos.",
-        "💳 <strong>Múltiplos cartões:</strong> Ter mais de um cartão pode ser útil, mas só se você conseguir controlar todos.",
-        "🎯 <strong>Planejamento financeiro:</strong> Reserve parte da sua renda mensal para pagar a fatura completa todo mês.",
-        "🔍 <strong>Revise sua fatura:</strong> Confira todas as compras mensalmente para identificar cobranças indevidas.",
-        "💰 <strong>Emergências:</strong> Não use o cartão como reserva de emergência - crie uma poupança separada para isso.",
-        "📊 <strong>Controle de parcelas:</strong> Anote todas as parcelas e seus vencimentos para não perder o controle financeiro.",
-        "🛒 <strong>Compare preços:</strong> Compras parceladas sem juros podem ser mais caras que à vista - sempre compare.",
-        "💸 <strong>Antecipação de parcelas:</strong> Se possível, quite parcelas antecipadamente para reduzir o comprometimento futuro.",
-        "🎁 <strong>Benefícios exclusivos:</strong> Use benefícios como seguros, descontos e acesso a salas VIP em aeroportos.",
-        "📱 <strong>Pagamentos digitais:</strong> Carteiras digitais como Apple Pay e Google Pay adicionam uma camada extra de segurança.",
-        "🔒 <strong>Bloqueio temporário:</strong> Bloqueie seu cartão temporariamente quando não estiver usando para evitar fraudes.",
-        "💰 <strong>Negociação de dívidas:</strong> Se estiver endividado, negocie diretamente com o banco - eles têm programas especiais.",
-        "📆 <strong>Fechamento da fatura:</strong> Conheça a data de fechamento para planejar melhor suas compras mensais.",
-        "🎯 <strong>Metas de gastos:</strong> Estabeleça um limite mensal de gastos no cartão e respeite-o rigorosamente.",
-        "💡 <strong>Educação financeira:</strong> Invista tempo aprendendo sobre finanças - isso vale mais que qualquer benefício de cartão.",
-        "🏦 <strong>Portabilidade:</strong> Se encontrar melhores condições em outro banco, considere fazer a portabilidade da dívida.",
-        "🔄 <strong>Refinanciamento:</strong> Evite refinanciar dívidas de cartão - as taxas são abusivas e prolongam o endividamento.",
-        "💸 <strong>Saque no cartão:</strong> NUNCA faça saque no cartão de crédito - as taxas são extremamente altas.",
-        "📊 <strong>Análise mensal:</strong> Reserve um tempo todo mês para analisar seus gastos e identificar padrões.",
-        "🎁 <strong>Descontos exclusivos:</strong> Muitos cartões oferecem descontos em estabelecimentos parceiros - aproveite!",
-        "🛡️ <strong>Seguro de compras:</strong> Verifique se seu cartão oferece seguro para compras - pode ser muito útil.",
-        "💰 <strong>Programa de fidelidade:</strong> Participe de programas de fidelidade para ganhar benefícios extras.",
-        "📱 <strong>Token digital:</strong> Use a função de token digital para compras online mais seguras.",
-        "🔒 <strong>Autenticação de dois fatores:</strong> Sempre que possível, ative a autenticação de dois fatores.",
-        "💡 <strong>Limite pré-aprovado:</strong> Não aceite aumentos de limite automáticos - avalie se realmente precisa.",
-        "🎯 <strong>Categoria de gastos:</strong> Use cartões específicos para categorias diferentes e maximize benefícios.",
-        "📆 <strong>Calendário financeiro:</strong> Crie um calendário com todas as datas de vencimento dos seus cartões.",
-        "💸 <strong>Compras internacionais:</strong> Prefira cartões sem IOF para compras no exterior - economiza bastante.",
-        "🛒 <strong>Black Friday consciente:</strong> Não compre apenas porque está em promoção - avalie se realmente precisa.",
-        "💰 <strong>Reserva de emergência:</strong> Tenha pelo menos 3 meses de despesas guardadas antes de usar crédito.",
-        "📊 <strong>Relatórios mensais:</strong> Use aplicativos como o GranaEvo para acompanhar seus gastos em tempo real.",
-        "🎁 <strong>Programas de desconto:</strong> Cadastre-se em programas de desconto vinculados ao seu cartão.",
-        "🔍 <strong>Leitura do contrato:</strong> Leia sempre o contrato do cartão para conhecer todas as taxas e condições.",
-        "💡 <strong>Educação dos filhos:</strong> Ensine seus filhos sobre uso responsável de cartão desde cedo.",
-        "🏦 <strong>Relacionamento bancário:</strong> Mantenha um bom relacionamento com seu banco para conseguir melhores condições.",
-        "💸 <strong>Evite empréstimos:</strong> Prefira economizar e comprar à vista do que parcelar tudo no cartão."
+        { titulo: 'Pagamento em dia',        texto: 'Sempre pague sua fatura no vencimento para evitar juros altíssimos e manter seu score de crédito saudável.' },
+        { titulo: 'Controle de gastos',      texto: 'Utilize no máximo 30% do limite do seu cartão para manter um bom histórico de crédito.' },
+        { titulo: 'Organize suas compras',   texto: 'Faça compras grandes logo após o fechamento da fatura para ter mais tempo de pagamento.' },
+        { titulo: 'Cashback inteligente',    texto: 'Priorize cartões com cashback em categorias que você mais gasta, como supermercado e combustível.' },
+        { titulo: 'Segurança em primeiro lugar', texto: 'Nunca compartilhe sua senha ou CVV com terceiros, mesmo que pareçam ser do banco.' },
+        { titulo: 'App do banco',            texto: 'Ative notificações de compras no app do banco para detectar fraudes rapidamente.' },
+        { titulo: 'Cartão virtual',          texto: 'Use cartões virtuais para compras online — eles podem ser bloqueados sem afetar o cartão físico.' },
+        { titulo: 'Evite o rotativo',        texto: 'Nunca pague apenas o valor mínimo — os juros do rotativo podem chegar a 400% ao ano!' },
+        { titulo: 'Programas de pontos',     texto: 'Acumule pontos e milhas em um único programa para maximizar benefícios e trocas.' },
+        { titulo: 'Data de vencimento',      texto: 'Escolha a melhor data de vencimento de acordo com o dia que recebe seu salário.' },
+        { titulo: 'Anuidade zero',           texto: 'Negocie isenção de anuidade com seu banco ou opte por cartões sem taxa.' },
+        { titulo: 'Parcelamento consciente', texto: 'Parcele apenas compras essenciais e evite acumular muitas parcelas simultâneas.' },
+        { titulo: 'Limite adequado',         texto: 'Mantenha um limite compatível com sua renda para não cair na tentação de gastar demais.' },
+        { titulo: 'Taxa de juros',           texto: 'Conheça as taxas do seu cartão e compare com outros bancos — você pode estar pagando mais.' },
+        { titulo: 'Compras por impulso',     texto: 'Espere 24 horas antes de fazer compras grandes no cartão — isso evita arrependimentos.' },
+        { titulo: 'Múltiplos cartões',       texto: 'Ter mais de um cartão pode ser útil, mas só se você conseguir controlar todos.' },
+        { titulo: 'Planejamento financeiro', texto: 'Reserve parte da sua renda mensal para pagar a fatura completa todo mês.' },
+        { titulo: 'Revise sua fatura',       texto: 'Confira todas as compras mensalmente para identificar cobranças indevidas.' },
+        { titulo: 'Emergências',             texto: 'Não use o cartão como reserva de emergência — crie uma poupança separada para isso.' },
+        { titulo: 'Controle de parcelas',    texto: 'Anote todas as parcelas e seus vencimentos para não perder o controle financeiro.' },
+        { titulo: 'Compare preços',          texto: 'Compras parceladas sem juros podem ser mais caras que à vista — sempre compare.' },
+        { titulo: 'Antecipação de parcelas', texto: 'Se possível, quite parcelas antecipadamente para reduzir o comprometimento futuro.' },
+        { titulo: 'Benefícios exclusivos',   texto: 'Use benefícios como seguros, descontos e acesso a salas VIP em aeroportos.' },
+        { titulo: 'Pagamentos digitais',     texto: 'Carteiras digitais como Apple Pay e Google Pay adicionam uma camada extra de segurança.' },
+        { titulo: 'Bloqueio temporário',     texto: 'Bloqueie seu cartão temporariamente quando não estiver usando para evitar fraudes.' },
+        { titulo: 'Negociação de dívidas',   texto: 'Se estiver endividado, negocie diretamente com o banco — eles têm programas especiais.' },
+        { titulo: 'Fechamento da fatura',    texto: 'Conheça a data de fechamento para planejar melhor suas compras mensais.' },
+        { titulo: 'Metas de gastos',         texto: 'Estabeleça um limite mensal de gastos no cartão e respeite-o rigorosamente.' },
+        { titulo: 'Educação financeira',     texto: 'Invista tempo aprendendo sobre finanças — isso vale mais que qualquer benefício de cartão.' },
+        { titulo: 'Portabilidade',           texto: 'Se encontrar melhores condições em outro banco, considere fazer a portabilidade da dívida.' },
+        { titulo: 'Refinanciamento',         texto: 'Evite refinanciar dívidas de cartão — as taxas são abusivas e prolongam o endividamento.' },
+        { titulo: 'Saque no cartão',         texto: 'NUNCA faça saque no cartão de crédito — as taxas são extremamente altas.' },
+        { titulo: 'Análise mensal',          texto: 'Reserve um tempo todo mês para analisar seus gastos e identificar padrões.' },
+        { titulo: 'Descontos exclusivos',    texto: 'Muitos cartões oferecem descontos em estabelecimentos parceiros — aproveite!' },
+        { titulo: 'Seguro de compras',       texto: 'Verifique se seu cartão oferece seguro para compras — pode ser muito útil.' },
+        { titulo: 'Programa de fidelidade',  texto: 'Participe de programas de fidelidade para ganhar benefícios extras.' },
+        { titulo: 'Token digital',           texto: 'Use a função de token digital para compras online mais seguras.' },
+        { titulo: 'Autenticação de dois fatores', texto: 'Sempre que possível, ative a autenticação de dois fatores.' },
+        { titulo: 'Limite pré-aprovado',     texto: 'Não aceite aumentos de limite automáticos — avalie se realmente precisa.' },
+        { titulo: 'Categoria de gastos',     texto: 'Use cartões específicos para categorias diferentes e maximize benefícios.' },
+        { titulo: 'Calendário financeiro',   texto: 'Crie um calendário com todas as datas de vencimento dos seus cartões.' },
+        { titulo: 'Compras internacionais',  texto: 'Prefira cartões sem IOF para compras no exterior — economiza bastante.' },
+        { titulo: 'Black Friday consciente', texto: 'Não compre apenas porque está em promoção — avalie se realmente precisa.' },
+        { titulo: 'Reserva de emergência',   texto: 'Tenha pelo menos 3 meses de despesas guardadas antes de usar crédito.' },
+        { titulo: 'Relatórios mensais',      texto: 'Use aplicativos como o GranaEvo para acompanhar seus gastos em tempo real.' },
+        { titulo: 'Programas de desconto',   texto: 'Cadastre-se em programas de desconto vinculados ao seu cartão.' },
+        { titulo: 'Leitura do contrato',     texto: 'Leia sempre o contrato do cartão para conhecer todas as taxas e condições.' },
+        { titulo: 'Educação dos filhos',     texto: 'Ensine seus filhos sobre uso responsável de cartão desde cedo.' },
+        { titulo: 'Relacionamento bancário', texto: 'Mantenha um bom relacionamento com seu banco para conseguir melhores condições.' },
+        { titulo: 'Evite empréstimos',       texto: 'Prefira economizar e comprar à vista do que parcelar tudo no cartão.' },
     ];
 
-    const indiceAleatorio = Math.floor(Math.random() * dicas.length);
-    return dicas[indiceAleatorio];
+    const d = dicas[Math.floor(Math.random() * dicas.length)];
+
+    // ✅ escapeHTML em ambas as partes — nunca dados brutos interpolados
+    return `💳 <strong>${escapeHTML(d.titulo)}:</strong> ${escapeHTML(d.texto)}`;
 }
 
 // Expor função globalmente
@@ -6660,6 +6676,7 @@ function comoUsar() {
 }
 
 // ========== CONFIRMAR LOGOUT (VERSÃO FINAL CORRIGIDA) ==========
+// ========== CONFIRMAR LOGOUT (VERSÃO FINAL CORRIGIDA) ==========
 async function confirmarLogout_seguro() {
     criarPopup(`
         <h3>Confirmar Saída</h3>
@@ -6668,9 +6685,6 @@ async function confirmarLogout_seguro() {
         <button class="btn-cancelar" id="naoLogout">Não</button>
     `);
 
-    // ✅ CORREÇÃO: addEventListener em vez de onclick inline
-    //    O atributo onclick="fecharPopup()" é removido pelo sanitizarHTMLPopup
-    //    O botão "Não" ficava completamente morto — usuário não conseguia cancelar
     document.getElementById('naoLogout').addEventListener('click', fecharPopup);
 
     document.getElementById('simLogout').addEventListener('click', async () => {
@@ -6705,7 +6719,6 @@ async function confirmarLogout_seguro() {
     });
 }
 
-// Sobrescreve a versão original
 window.confirmarLogout = confirmarLogout_seguro;
 
 // ========== ATUALIZAR TUDO ==========
@@ -7256,33 +7269,65 @@ window.excluirCompraFatura = excluirCompraFatura;
 
 
 // ========== FUNÇÕES GLOBAIS EXPOSTAS ==========
-window.abrirContaFixaForm = abrirContaFixaForm;
-window.abrirPopupPagarContaFixa = abrirPopupPagarContaFixa;
-window.pagarContaFixa = pagarContaFixa;
-window.abrirMetaForm = abrirMetaForm;
-window.removerMeta = removerMeta;
-window.selecionarMeta = selecionarMeta;
-window.abrirRetiradaForm = abrirRetiradaForm;
-window.abrirCartaoForm = abrirCartaoForm;
-window.fecharPopup = fecharPopup;
-window.atualizarGraficos = atualizarGraficos;
-window.gerarRelatorio = gerarRelatorio;
-window.alterarNome = alterarNome;
-window.alterarEmail = alterarEmail;
-window.abrirAlterarSenha = abrirAlterarSenha;
-window.trocarPerfil = trocarPerfil;
-window.comoUsar = comoUsar;
-window.confirmarLogout = confirmarLogout;
-window.mostrarTela = mostrarTela;
-window.lancarTransacao = lancarTransacao;
-window.abrirDetalhesTransacao = abrirDetalhesTransacao;
-window.abrirVisualizacaoFatura = abrirVisualizacaoFatura;
-window.pagarCompraIndividual = pagarCompraIndividual;
-window.editarCompraFatura = editarCompraFatura;
-window.excluirCompraFatura = excluirCompraFatura;
-window.criarPopup = criarPopup;
-window.fecharPopup = fecharPopup;
-window.formatBRL = formatBRL;
+
+// ✅ Guard: bloqueia qualquer chamada externa sem perfil ativo e sem sessão válida.
+//    Extensões maliciosas, scripts injetados ou chamadas via console são bloqueadas aqui.
+function _requerPerfilAtivo(fn) {
+    return function(...args) {
+        if (!perfilAtivo || !dataManager?.userId) {
+            _log.warn('[SEGURANÇA] Chamada de função protegida bloqueada — sem perfil ativo ou sessão inválida.');
+            return;
+        }
+        return fn.apply(this, args);
+    };
+}
+
+// ── Utilitários sem risco de mutação financeira (podem ser públicos)
+window.fecharPopup         = fecharPopup;
+window.criarPopup          = criarPopup;
+window.mostrarTela         = mostrarTela;
+window.formatBRL           = formatBRL;
+window.mostrarNotificacao  = mostrarNotificacao;
+window.confirmarAcao       = confirmarAcao;
+window.sistemaLog          = sistemaLog;
+
+// ── Navegação e sessão
+window.trocarPerfil        = trocarPerfil;
+window.confirmarLogout     = confirmarLogout_seguro;   // ✅ corrigido (era confirmarLogout → undefined)
+window.comoUsar            = comoUsar;
+window.irParaAtualizarPlano = irParaAtualizarPlano;
+
+// ── Relatórios e gráficos (chamados por botões HTML)
+window.atualizarGraficos   = atualizarGraficos;
+window.gerarRelatorio      = gerarRelatorio;
+
+// ── Configurações (chamados por botões HTML de settings)
+window.alterarNome         = alterarNome;
+window.alterarEmail        = alterarEmail;
+window.abrirAlterarSenha   = abrirAlterarSenha;
+window.removerConvidado    = removerConvidado;
+
+// ── Funções que abrem UI — protegidas com guard de perfil ativo
+//    Necessárias para graficos.js / chat-assistant.js mas não executam mutação direta
+window.abrirContaFixaForm              = _requerPerfilAtivo(abrirContaFixaForm);
+window.abrirCartaoForm                 = _requerPerfilAtivo(abrirCartaoForm);
+window.abrirMetaForm                   = _requerPerfilAtivo(abrirMetaForm);
+window.abrirRetiradaForm               = _requerPerfilAtivo(abrirRetiradaForm);
+window.abrirVisualizacaoFatura         = _requerPerfilAtivo(abrirVisualizacaoFatura);
+window.abrirAnaliseDisciplina          = _requerPerfilAtivo(abrirAnaliseDisciplina);
+window.abrirDetalhesPerfilRelatorio    = _requerPerfilAtivo(abrirDetalhesPerfilRelatorio);
+window.abrirDetalhesCartaoRelatorio    = _requerPerfilAtivo(abrirDetalhesCartaoRelatorio);
+window.abrirWidgetOndeForDinheiro      = _requerPerfilAtivo(abrirWidgetOndeForDinheiro);
+window.abrirSelecaoPerfisCasal         = _requerPerfilAtivo(window.abrirSelecaoPerfisCasal || function(){});
+window.confirmarSelecaoPerfisCasal     = _requerPerfilAtivo(window.confirmarSelecaoPerfisCasal || function(){});
+window.gerarRelatorioCompartilhadoPersonalizado = _requerPerfilAtivo(window.gerarRelatorioCompartilhadoPersonalizado || function(){});
+window.processarAnaliseOndeForDinheiro = _requerPerfilAtivo(processarAnaliseOndeForDinheiro);
+
+// ── Analytics somente leitura
+window.obterEstatisticas   = obterEstatisticas;
+window.exportarDadosJSON   = exportarDadosJSON;
+window.exportarDadosCSV    = exportarDadosCSV;
+
 
 // ========== UTILITÁRIOS ADICIONAIS ==========
 
@@ -7298,11 +7343,6 @@ function preencherSelectParcelas() {
         opt.textContent = `${String(i).padStart(2, '0')}x`;
         select.appendChild(opt);
     }
-}
-
-// Função auxiliar para debug (pode remover em produção)
-function debug(msg, obj) {
-    console.log(`[GranaEvo Debug] ${msg}`, obj || '');
 }
 
 // ✅ Variável única — usada por iniciarAutoSave e pararAutoSave
@@ -7420,68 +7460,91 @@ function numeroParaExtenso(numero) {
 
 // ========== EXPORTAÇÃO DE DADOS ==========
 
-// Exporta dados para JSON
 function exportarDadosJSON() {
-    if(!perfilAtivo) {
-        alert('Nenhum perfil ativo!');
+    if (!perfilAtivo) {
+        mostrarNotificacao('Nenhum perfil ativo!', 'error');
         return;
     }
-    
-    const dados = {
-        perfil: perfilAtivo.nome,
-        dataExportacao: new Date().toISOString(),
-        transacoes: transacoes,
-        metas: metas,
-        contasFixas: contasFixas,
-        cartoesCredito: cartoesCredito
-    };
-    
-    const dataStr = JSON.stringify(dados, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `granaevo_${perfilAtivo.nome}_${isoDate()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    alert('Dados exportados com sucesso!');
+
+    // ✅ Confirmação explícita obrigatória antes de exportar dados financeiros completos.
+    //    Bloqueia exportação silenciosa por extensões ou chamadas via console.
+    confirmarAcao(
+        `⚠️ Você está prestes a exportar TODOS os dados financeiros do perfil "${_sanitizeText(perfilAtivo.nome)}" — transações, metas, contas e cartões — para um arquivo local. Confirma?`,
+        () => {
+            // ✅ Remove flag de runtime _processando antes de exportar
+            const contasSemLock = contasFixas.map(({ _processando, ...rest }) => rest);
+
+            const dados = {
+                perfil:          _sanitizeText(perfilAtivo.nome),
+                dataExportacao:  new Date().toISOString(),
+                transacoes:      transacoes.filter(_validators.transacao),
+                metas:           metas.filter(_validators.meta),
+                contasFixas:     contasSemLock.filter(_validators.contaFixa),
+                cartoesCredito:  cartoesCredito.filter(_validators.cartao),
+            };
+
+            const dataStr = JSON.stringify(dados, null, 2);
+            const blob    = new Blob([dataStr], { type: 'application/json' });
+            const url     = URL.createObjectURL(blob);
+            const a       = document.createElement('a');
+            a.href        = url;
+            // ✅ Nome do arquivo sanitizado — sem dados brutos do usuário no atributo
+            a.download    = `granaevo_${_sanitizeText(perfilAtivo.nome).replace(/\s+/g, '_')}_${isoDate()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            mostrarNotificacao('Dados exportados com sucesso!', 'success');
+        }
+    );
 }
 
-// Exporta dados para CSV
 function exportarDadosCSV() {
-    if(!perfilAtivo) {
-        alert('Nenhum perfil ativo!');
+    if (!perfilAtivo) {
+        mostrarNotificacao('Nenhum perfil ativo!', 'error');
         return;
     }
-    
-    let csv = 'Data,Hora,Categoria,Tipo,Descrição,Valor\n';
-    
-    transacoes.forEach(t => {
-        const linha = [
-            t.data,
-            t.hora,
-            t.categoria,
-            t.tipo,
-            `"${t.descricao}"`,
-            t.valor
-        ].join(',');
-        csv += linha + '\n';
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `granaevo_transacoes_${perfilAtivo.nome}_${isoDate()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    alert('Transações exportadas com sucesso!');
+
+    // ✅ Confirmação explícita antes de exportar
+    confirmarAcao(
+        `⚠️ Exportar as transações do perfil "${_sanitizeText(perfilAtivo.nome)}" para CSV? O arquivo ficará salvo no seu dispositivo.`,
+        () => {
+            // ✅ Escape de CSV (CSV Injection): campos que iniciam com = + - @ são prefixados
+            //    com aspas e tab para evitar execução de fórmulas em Excel/Sheets.
+            const escaparCSV = (str) => {
+                const s = String(str || '').replace(/"/g, '""').replace(/[\r\n]/g, ' ');
+                // Bloqueia fórmulas (=, +, -, @, TAB, CR no início)
+                if (/^[=+\-@\t\r]/.test(s)) return `"\t${s}"`;
+                return `"${s}"`;
+            };
+
+            let csv = 'Data,Hora,Categoria,Tipo,Descrição,Valor\n';
+
+            transacoes.filter(_validators.transacao).forEach(t => {
+                const linha = [
+                    escaparCSV(t.data),
+                    escaparCSV(t.hora),
+                    escaparCSV(t.categoria),
+                    escaparCSV(t.tipo),
+                    escaparCSV(t.descricao),
+                    // ✅ Valor numérico sem aspas — não interpretável como fórmula
+                    String(Number(t.valor).toFixed(2)),
+                ].join(',');
+                csv += linha + '\n';
+            });
+
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }); // ✅ BOM para Excel
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = `granaevo_transacoes_${_sanitizeText(perfilAtivo.nome).replace(/\s+/g, '_')}_${isoDate()}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            mostrarNotificacao('Transações exportadas com sucesso!', 'success');
+        }
+    );
 }
 
 // Expõe funções de exportação
@@ -7732,43 +7795,116 @@ setTimeout(() => {
 // ========== SISTEMA DE PARTÍCULAS OTIMIZADO (APENAS DESKTOP) ==========
 class ParticleSystem {
     constructor() {
-        // ⚡ Bloqueia partículas em mobile
-        if(window.innerWidth <= 768) {
-            console.log('Partículas desativadas no mobile para melhor performance');
-            return;
-        }
-        
+        // ⚡ Desativado em mobile
+        if (window.innerWidth <= 768) return;
+
         this.canvas = document.getElementById('particles-canvas');
         if (!this.canvas) return;
-        
-        this.ctx = this.canvas.getContext('2d');
-        this.particles = [];
-        this.maxParticles = 50; // ⚡ REDUZIDO de 80 para 50
-        this.mouse = { x: null, y: null, radius: 150 };
-        
+
+        this.ctx          = this.canvas.getContext('2d');
+        this.particles    = [];
+        this.maxParticles = 50;
+        this.mouse        = { x: null, y: null, radius: 150 };
+        this._animFrameId = null;
+        this._destroyed   = false;
+
+        // ✅ Handlers nomeados para poder remover depois (sem memory leak)
+        this._onResize    = () => this._handleResize();
+        this._onMouseMove = (e) => this.handleMouse(e);
+
         this.resize();
         this.init();
         this.animate();
-        
-        window.addEventListener('resize', () => {
-            // ⚡ Desativa se redimensionar para mobile
-            if(window.innerWidth <= 768) {
-                this.particles = [];
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                return;
-            }
-            this.resize();
-        });
-        
-        window.addEventListener('mousemove', (e) => this.handleMouse(e));
+
+        window.addEventListener('resize',    this._onResize);
+        window.addEventListener('mousemove', this._onMouseMove);
     }
-    
-    // ... resto do código permanece igual
+
+    _handleResize() {
+        if (window.innerWidth <= 768) {
+            this.particles = [];
+            if (this.ctx && this.canvas) {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+            return;
+        }
+        this.resize();
+    }
+
+    resize() {
+        if (!this.canvas) return;
+        this.canvas.width  = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+    }
+
+    init() {
+        this.particles = [];
+        for (let i = 0; i < this.maxParticles; i++) {
+            this.particles.push(this._criarParticula());
+        }
+    }
+
+    _criarParticula() {
+        const w = this.canvas?.width  || window.innerWidth;
+        const h = this.canvas?.height || window.innerHeight;
+        return {
+            x:      Math.random() * w,
+            y:      Math.random() * h,
+            vx:     (Math.random() - 0.5) * 0.5,
+            vy:     (Math.random() - 0.5) * 0.5,
+            radius: Math.random() * 2 + 1,
+            alpha:  Math.random() * 0.4 + 0.1,
+        };
+    }
+
+    handleMouse(e) {
+        this.mouse.x = e.clientX;
+        this.mouse.y = e.clientY;
+    }
+
+    _update() {
+        if (!this.canvas) return;
+        this.particles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            if (p.x < 0 || p.x > this.canvas.width)  p.vx *= -1;
+            if (p.y < 0 || p.y > this.canvas.height)  p.vy *= -1;
+        });
+    }
+
+    _draw() {
+        if (!this.canvas || !this.ctx) return;
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.particles.forEach(p => {
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            this.ctx.fillStyle = `rgba(108, 99, 255, ${p.alpha})`;
+            this.ctx.fill();
+        });
+    }
+
+    animate() {
+        if (this._destroyed) return;
+        this._update();
+        this._draw();
+        this._animFrameId = requestAnimationFrame(() => this.animate());
+    }
+
+    // ✅ Método de cleanup — evita memory leak se o sistema for destruído
+    destroy() {
+        this._destroyed = true;
+        if (this._animFrameId) {
+            cancelAnimationFrame(this._animFrameId);
+            this._animFrameId = null;
+        }
+        window.removeEventListener('resize',    this._onResize);
+        window.removeEventListener('mousemove', this._onMouseMove);
+    }
 }
 
 // ⚡ Inicializa APENAS em desktop
 document.addEventListener('DOMContentLoaded', () => {
-    if(window.innerWidth > 768) {
+    if (window.innerWidth > 768) {
         setTimeout(() => {
             new ParticleSystem();
         }, 500);
@@ -7901,15 +8037,14 @@ function desenharTopGastos(dados, label) {
         return;
     }
     
-    const padding = 40;
-    const w = canvas.width - padding * 2 - 100;
-    const h = canvas.height - padding * 2;
+    const padding   = 40;
+    const w         = canvas.width - padding * 2 - 100;
+    const h         = canvas.height - padding * 2;
     const barHeight = h / dados.top5.length - 10;
-    
-    const maxValor = Math.max(...dados.top5.map(g => g.valor));
+    const maxValor  = Math.max(...dados.top5.map(g => g.valor));
     
     dados.top5.forEach((gasto, i) => {
-        const y = padding + i * (barHeight + 10);
+        const y      = padding + i * (barHeight + 10);
         const largura = (gasto.valor / maxValor) * w;
         
         const gradient = ctx.createLinearGradient(padding + 100, 0, padding + 100 + largura, 0);
@@ -7920,20 +8055,36 @@ function desenharTopGastos(dados, label) {
         ctx.fillRect(padding + 100, y, largura, barHeight);
         
         ctx.strokeStyle = '#ff4b4b';
-        ctx.lineWidth = 2;
+        ctx.lineWidth   = 2;
         ctx.strokeRect(padding + 100, y, largura, barHeight);
         
+        // ── Label da categoria (lado esquerdo)
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 11px sans-serif';
+        ctx.font      = 'bold 11px sans-serif';
         ctx.textAlign = 'right';
-        ctx.fillText(gasto.tipo, padding + 95, y + barHeight/2 + 4);
+        // ✅ sanitizeHTML antes de renderizar no canvas (defesa em profundidade)
+        ctx.fillText(
+            String(gasto.tipo || '').slice(0, 20),
+            padding + 95,
+            y + barHeight / 2 + 4
+        );
         
+        // ── Valor (lado direito da barra)
         ctx.textAlign = 'left';
-        ctx.fillText(formatBRL(gasto.valor), padding + 105 + largura, y + barHeight/2 + 4);
+        ctx.fillText(
+            formatBRL(gasto.valor),
+            padding + 105 + largura,
+            y + barHeight / 2 + 4
+        );
     });
+
+    // ── Rótulo do gráfico (rodapé)
     ctx.fillStyle = '#ccc';
-    ctx.font = '12px sans-serif';
-    ctx.textAlign
+    ctx.font      = '12px sans-serif';
+    ctx.textAlign = 'center'; // ✅ linha que estava incompleta — corrigida
+    if (label) {
+        ctx.fillText(String(label).slice(0, 50), canvas.width / 2, canvas.height - 8);
+    }
 }
 
 // ========== SALVAMENTO GARANTIDO AO SAIR ==========
