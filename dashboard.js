@@ -384,8 +384,6 @@ const _validators = {
         if (!t || typeof t !== 'object') return false;
         const cats = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
 
-        // ✅ ID agora é opcional — banco gera via gen_random_uuid()
-        //    Se existir, aceita inteiro positivo (legado) OU string UUID não-vazia (novo)
         if (t.id !== undefined && t.id !== null) {
             const isIntId  = Number.isInteger(t.id) && t.id > 0;
             const isUuidId = typeof t.id === 'string' && t.id.length > 0;
@@ -401,22 +399,20 @@ const _validators = {
     meta(m) {
         if (!m || typeof m !== 'object') return false;
 
-        // ✅ ID agora é opcional — aceita inteiro positivo (legado) ou string não-vazia (novo)
         if (m.id !== undefined && m.id !== null) {
             const isIntId  = Number.isInteger(m.id) && m.id > 0;
             const isUuidId = typeof m.id === 'string' && m.id.length > 0;
             if (!isIntId && !isUuidId) return false;
         }
 
-        if (typeof m.descricao !== 'string' || m.descricao.length > 200)      return false;
+        if (typeof m.descricao !== 'string' || m.descricao.length > 200)               return false;
         if (typeof m.objetivo !== 'number' || m.objetivo < 0 || m.objetivo > 99999999) return false;
-        if (typeof m.saved !== 'number' || m.saved < 0)                        return false;
+        if (typeof m.saved !== 'number' || m.saved < 0)                                return false;
         return true;
     },
     contaFixa(c) {
         if (!c || typeof c !== 'object') return false;
 
-        // ✅ ID agora é opcional — aceita inteiro positivo (legado) ou string não-vazia (novo)
         if (c.id !== undefined && c.id !== null) {
             const isIntId  = Number.isInteger(c.id) && c.id > 0;
             const isUuidId = typeof c.id === 'string' && c.id.length > 0;
@@ -431,16 +427,22 @@ const _validators = {
     cartao(c) {
         if (!c || typeof c !== 'object') return false;
 
-        // ✅ ID agora é opcional — aceita inteiro positivo (legado) ou string não-vazia (novo)
         if (c.id !== undefined && c.id !== null) {
             const isIntId  = Number.isInteger(c.id) && c.id > 0;
             const isUuidId = typeof c.id === 'string' && c.id.length > 0;
             if (!isIntId && !isUuidId) return false;
         }
 
-        if (typeof c.nomeBanco !== 'string' || c.nomeBanco.length > 100)                              return false;
-        if (typeof c.limite !== 'number' || c.limite <= 0 || c.limite > 9999999)                      return false;
-        if (!Number.isInteger(c.vencimentoDia) || c.vencimentoDia < 1 || c.vencimentoDia > 28)        return false;
+        if (typeof c.nomeBanco !== 'string' || c.nomeBanco.length > 100)                        return false;
+        if (typeof c.limite !== 'number' || c.limite <= 0 || c.limite > 9999999)                return false;
+        if (!Number.isInteger(c.vencimentoDia) || c.vencimentoDia < 1 || c.vencimentoDia > 28) return false;
+
+        // ✅ CORREÇÃO: valida `usado` — impede valor negativo que inflaria o limite disponível
+        //    Um atacante que zerasse `usado` artificialmente veria limite disponível = limite total
+        if (c.usado !== undefined && c.usado !== null) {
+            if (typeof c.usado !== 'number' || !isFinite(c.usado) || c.usado < 0 || c.usado > 9999999) return false;
+        }
+
         return true;
     },
 };
@@ -2408,6 +2410,57 @@ function criarPopupDOM(builderCallback) {
     return container;
 }
 
+function confirmarAcao(mensagem, callbackConfirmar) {
+    if (typeof callbackConfirmar !== 'function') {
+        _log.error('CONFIRMAR_ACAO_001', 'callbackConfirmar deve ser uma função');
+        return;
+    }
+
+    criarPopupDOM((popup) => {
+        const titulo = document.createElement('h3');
+        titulo.textContent = 'Confirmar Ação';
+
+        const texto = document.createElement('p');
+        texto.style.cssText = 'margin: 16px 0; color: var(--text-secondary); line-height: 1.6;';
+        texto.textContent = typeof mensagem === 'string' ? mensagem.slice(0, 300) : 'Confirmar esta ação?';
+
+        const divBotoes = document.createElement('div');
+        divBotoes.style.cssText = 'display: flex; gap: 12px; margin-top: 8px;';
+
+        const btnSim = document.createElement('button');
+        btnSim.className = 'btn-excluir';
+        btnSim.type = 'button';
+        btnSim.style.flex = '1';
+        btnSim.textContent = 'Sim, confirmar';
+
+        const btnNao = document.createElement('button');
+        btnNao.className = 'btn-cancelar';
+        btnNao.type = 'button';
+        btnNao.style.flex = '1';
+        btnNao.textContent = 'Cancelar';
+
+        btnSim.addEventListener('click', () => {
+            fecharPopup();
+            try {
+                callbackConfirmar();
+            } catch (e) {
+                _log.error('CONFIRMAR_ACAO_002', e);
+            }
+        });
+
+        btnNao.addEventListener('click', fecharPopup);
+
+        divBotoes.appendChild(btnSim);
+        divBotoes.appendChild(btnNao);
+
+        popup.appendChild(titulo);
+        popup.appendChild(texto);
+        popup.appendChild(divBotoes);
+    });
+}
+
+window.confirmarAcao = confirmarAcao;
+
 // ========== TRANSAÇÕES ==========
 function atualizarTiposDinamicos() {
     const cat = document.getElementById('selectCategoria').value;
@@ -3714,39 +3767,39 @@ function analisarDisciplinaRetiradas(metaId) {
 // ========== POPUP DE ANÁLISE DE DISCIPLINA ==========
 function abrirAnaliseDisciplina(metaId) {
     const meta = metas.find(m => String(m.id) === String(metaId));
-    if(!meta) return;
-    
+    if (!meta) return;
+
     const analise = analisarDisciplinaRetiradas(metaId);
-    
-    if(!analise.temDados) {
+
+    if (!analise.temDados) {
+        // ✅ CORREÇÃO: id no botão + addEventListener após criarPopup
+        //    onclick="fecharPopup()" era removido pelo sanitizarHTMLPopup — botão ficava morto
         criarPopup(`
             <h3>📊 Análise de Disciplina</h3>
             <div style="text-align:center; padding:40px;">
                 <div style="font-size:3rem; margin-bottom:12px; opacity:0.5;">📭</div>
-                <div style="color: var(--text-secondary);">${analise.mensagem}</div>
+                <div style="color: var(--text-secondary);" id="textoSemDados"></div>
             </div>
-            <button class="btn-primary" onclick="fecharPopup()">Fechar</button>
+            <button class="btn-primary" id="btnFecharSemDados">Fechar</button>
         `);
+        document.getElementById('textoSemDados').textContent = analise.mensagem;
+        document.getElementById('btnFecharSemDados').addEventListener('click', fecharPopup);
         return;
     }
 
-    // ✅ CORREÇÃO: escapeHTML em todos os campos de dados do usuário antes de
-    //    inserir no innerHTML — previne XSS caso os dados estejam corrompidos
-    //    ou manipulados. corDisciplina, nivelDisciplina e mensagemDisciplina
-    //    vêm de strings hardcoded internamente, portanto não precisam de escape.
-    const descricaoSegura        = escapeHTML(String(meta.descricao || ''));
-    const ultimaData             = escapeHTML(String(analise.ultimaRetirada.data || ''));
-    const ultimoMotivo           = escapeHTML(String(analise.ultimaRetirada.motivo || ''));
-    
+    const descricaoSegura = escapeHTML(String(meta.descricao || ''));
+    const ultimaData      = escapeHTML(String(analise.ultimaRetirada.data   || ''));
+    const ultimoMotivo    = escapeHTML(String(analise.ultimaRetirada.motivo || ''));
+
     criarPopup(`
         <div style="max-height:70vh; overflow-y:auto; padding-right:10px;">
             <h3 style="text-align:center; margin-bottom:8px;">📊 Análise de Disciplina Financeira</h3>
             <div style="text-align:center; color: var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
                 Meta: ${descricaoSegura}
             </div>
-            
-            <div style="background: linear-gradient(135deg, ${analise.corDisciplina}20, ${analise.corDisciplina}10); 
-                        padding: 20px; border-radius: 12px; margin-bottom: 20px; 
+
+            <div style="background: linear-gradient(135deg, ${analise.corDisciplina}20, ${analise.corDisciplina}10);
+                        padding: 20px; border-radius: 12px; margin-bottom: 20px;
                         border-left: 4px solid ${analise.corDisciplina}; text-align: center;">
                 <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">Nível de Disciplina</div>
                 <div style="font-size: 1.8rem; font-weight: 700; color: ${analise.corDisciplina}; margin-bottom: 12px;">
@@ -3756,7 +3809,7 @@ function abrirAnaliseDisciplina(metaId) {
                     ${analise.mensagemDisciplina}
                 </div>
             </div>
-            
+
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
                 <div style="background: rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; text-align: center;">
                     <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Total de Retiradas</div>
@@ -3767,10 +3820,10 @@ function abrirAnaliseDisciplina(metaId) {
                     <div style="font-size: 1.5rem; font-weight: 700; color: #ff4b4b;">${formatBRL(analise.valorTotalRetirado)}</div>
                 </div>
             </div>
-            
+
             <div style="margin-bottom: 20px;">
                 <h4 style="margin-bottom: 12px; color: var(--text-primary);">📋 Distribuição por Motivo</h4>
-                
+
                 ${analise.distribuicao.emergencia.count > 0 ? `
                 <div style="margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
@@ -3782,7 +3835,7 @@ function abrirAnaliseDisciplina(metaId) {
                     </div>
                 </div>
                 ` : ''}
-                
+
                 ${analise.distribuicao.planejado.count > 0 ? `
                 <div style="margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
@@ -3794,7 +3847,7 @@ function abrirAnaliseDisciplina(metaId) {
                     </div>
                 </div>
                 ` : ''}
-                
+
                 ${analise.distribuicao.investimento.count > 0 ? `
                 <div style="margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
@@ -3806,7 +3859,7 @@ function abrirAnaliseDisciplina(metaId) {
                     </div>
                 </div>
                 ` : ''}
-                
+
                 ${analise.distribuicao.outros.count > 0 ? `
                 <div style="margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
@@ -3819,7 +3872,7 @@ function abrirAnaliseDisciplina(metaId) {
                 </div>
                 ` : ''}
             </div>
-            
+
             <div style="background: rgba(108,99,255,0.1); padding: 14px; border-radius: 12px; border-left: 3px solid #6c63ff;">
                 <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">🕐 Última Retirada</div>
                 <div style="display: grid; gap: 6px; font-size: 0.9rem; color: var(--text-secondary);">
@@ -3828,12 +3881,11 @@ function abrirAnaliseDisciplina(metaId) {
                     <div><strong>Motivo:</strong> ${ultimoMotivo}</div>
                 </div>
             </div>
-            
+
             <div style="margin-top: 20px;">
                 <h4 style="margin-bottom: 12px; color: var(--text-primary);">📜 Histórico Completo</h4>
                 <div style="max-height: 200px; overflow-y: auto;">
                     ${meta.historicoRetiradas.slice().reverse().map(r => {
-                        // ✅ CORREÇÃO: escapeHTML em r.data e r.motivo por serem dados do usuário
                         const dataSegura   = escapeHTML(String(r.data   || ''));
                         const motivoSeguro = escapeHTML(String(r.motivo || ''));
                         return `
@@ -3851,9 +3903,13 @@ function abrirAnaliseDisciplina(metaId) {
                 </div>
             </div>
         </div>
-        
-        <button class="btn-primary" onclick="fecharPopup()" style="width:100%; margin-top:16px;">Fechar</button>
+
+        <button class="btn-primary" id="btnFecharAnalise" style="width:100%; margin-top:16px;">Fechar</button>
     `);
+
+    // ✅ CORREÇÃO: addEventListener no botão Fechar em vez de onclick inline
+    //    onclick="fecharPopup()" era removido pelo sanitizarHTMLPopup — botão ficava morto
+    document.getElementById('btnFecharAnalise').addEventListener('click', fecharPopup);
 }
 
 // Expor função globalmente
@@ -3862,43 +3918,42 @@ window.abrirAnaliseDisciplina = abrirAnaliseDisciplina;
 // ========== CARTÕES DE CRÉDITO ==========
 function atualizarTelaCartoes() {
     const grid = document.getElementById('cartoesGrid');
-    if(!grid) return;
-    
+    if (!grid) return;
+
     grid.innerHTML = '';
-    
+
     cartoesCredito.forEach(c => {
-        let disponivel = c.limite - (c.usado || 0);
-        let parcelasAtivas = contasFixas.filter(fx => fx.cartaoId === c.id && fx.totalParcelas);
-        let parcelasRestantes = parcelasAtivas.reduce((sum, fx) =>
+        const disponivel       = c.limite - (c.usado || 0);
+        const parcelasAtivas   = contasFixas.filter(fx => fx.cartaoId === c.id && fx.totalParcelas);
+        const parcelasRestantes = parcelasAtivas.reduce((sum, fx) =>
             fx.totalParcelas ? sum + (fx.totalParcelas - fx.parcelaAtual + 1) : sum, 0);
-        
-        let card = document.createElement('div');
+
+        const card = document.createElement('div');
         card.className = 'cartao-cc';
 
-        // ✅ CORREÇÃO: nomeBanco via textContent em elementos criados separadamente
-        //    em vez de injetar via innerHTML — elimina XSS em nome de banco customizado.
-        //    bandeiraImg validada para aceitar apenas URLs https:// de domínios conhecidos
-        //    — bloqueia javascript: URI e URLs arbitrárias.
+        // ✅ CORREÇÃO: comparação exata de hostname — remove o endsWith('.' + d)
+        //    endsWith('.logospng.org') permitia evil.logospng.org passar na validação
+        //    A mesma correção já existe em _sanitizeImgUrl mas estava ausente aqui
         const dominiosPermitidos = ['logospng.org'];
         let imgHtml = '';
-        if(c.bandeiraImg) {
+
+        if (c.bandeiraImg) {
             try {
                 const url = new URL(c.bandeiraImg);
-                const dominioPermitido = dominiosPermitidos.some(d => url.hostname === d || url.hostname.endsWith('.' + d));
-                if(url.protocol === 'https:' && dominioPermitido) {
-                    // ✅ URL segura — cria elemento img programaticamente
-                    const img = document.createElement('img');
-                    img.src    = c.bandeiraImg;
+                // ✅ CORREÇÃO: url.hostname === d (exato) em vez de endsWith('.' + d)
+                const dominioPermitido = dominiosPermitidos.some(d => url.hostname === d);
+                if (url.protocol === 'https:' && dominioPermitido) {
+                    const img     = document.createElement('img');
+                    img.src       = c.bandeiraImg;
                     img.className = 'cartao-bandeira';
-                    img.alt   = '';  // alt preenchido abaixo via textContent
-                    imgHtml = img.outerHTML;
+                    img.alt       = '';
+                    imgHtml       = img.outerHTML;
                 }
-            } catch(_) {
+            } catch (_) {
                 // URL inválida — ignora silenciosamente
             }
         }
 
-        // ✅ Monta estrutura via DOM para campos de texto do usuário
         card.innerHTML = `
             ${imgHtml}
             <div class="cartao-cc-nome"></div>
@@ -3907,17 +3962,18 @@ function atualizarTelaCartoes() {
             ${parcelasRestantes > 0 ? `<div class="cartao-cc-parcelas">Parcelas a pagar: ${parcelasRestantes}</div>` : ''}
         `;
 
-        // ✅ textContent para nomeBanco — nunca interpreta HTML
+        // ✅ textContent — nunca innerHTML para dados do usuário
         card.querySelector('.cartao-cc-nome').textContent = c.nomeBanco || '';
-        card.onclick = () => abrirCartaoForm(c.id);
+
+        card.addEventListener('click', () => abrirCartaoForm(c.id));
         grid.appendChild(card);
     });
-    
-    for(let i = cartoesCredito.length; i < 6; i++) {
-        let btn = document.createElement('div');
-        btn.className = 'cartao-cc-add';
-        btn.textContent = '+'; // ✅ textContent em vez de innerHTML para o '+'
-        btn.onclick = () => abrirCartaoForm();
+
+    for (let i = cartoesCredito.length; i < 6; i++) {
+        const btn = document.createElement('div');
+        btn.className   = 'cartao-cc-add';
+        btn.textContent = '+';
+        btn.addEventListener('click', () => abrirCartaoForm());
         grid.appendChild(btn);
     }
 }
@@ -4379,19 +4435,19 @@ async function gerarRelatorio() {
 window.abrirSelecaoPerfisCasal = function abrirSelecaoPerfisCasal(mes, ano) {
     if (!/^\d{2}$/.test(mes) || !/^\d{4}$/.test(ano)) return;
 
-    let htmlPerfis = '';
-
     if (!Array.isArray(usuarioLogado?.perfis)) return;
 
+    let htmlPerfis = '';
+
     usuarioLogado.perfis.forEach(perfil => {
-        const idSeguro = sanitizeHTML(String(perfil.id));
+        const idSeguro   = sanitizeHTML(String(perfil.id));
         const nomeSeguro = sanitizeHTML(String(perfil.nome || '').slice(0, 100));
 
+        // ✅ CORREÇÃO: onmouseover/onmouseout removidos pelo sanitizarHTMLPopup
+        //    Substituídos por classes CSS ou event delegation após criação do popup
         htmlPerfis += `
             <div style="margin-bottom:12px;">
-                <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; cursor:pointer; transition:all 0.3s;"
-                       onmouseover="this.style.background='rgba(67,160,71,0.1)'"
-                       onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                <label class="perfil-label-casal" style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; cursor:pointer; transition:background 0.3s;">
                     <input type="checkbox" class="perfil-checkbox-casal" value="${idSeguro}"
                            style="width:20px; height:20px; cursor:pointer; accent-color:var(--primary);">
                     <span style="font-weight:600; color: var(--text-primary);">${nomeSeguro}</span>
@@ -4414,10 +4470,17 @@ window.abrirSelecaoPerfisCasal = function abrirSelecaoPerfisCasal(mes, ano) {
         <button class="btn-primary" id="btnConfirmarCasal" data-mes="${sanitizeHTML(mes)}" data-ano="${sanitizeHTML(ano)}" style="width:100%; margin-bottom:10px;">
             Gerar Relatório
         </button>
-        <button class="btn-cancelar" onclick="fecharPopup()" style="width:100%;">
+        <button class="btn-cancelar" id="btnCancelarCasal" style="width:100%;">
             Cancelar
         </button>
     `);
+
+    // ✅ CORREÇÃO: addEventListener no botão Cancelar em vez de onclick inline
+    //    onclick="fecharPopup()" é removido pelo sanitizarHTMLPopup — botão ficava morto
+    const btnCancelar = document.getElementById('btnCancelarCasal');
+    if (btnCancelar) {
+        btnCancelar.addEventListener('click', fecharPopup);
+    }
 
     const btnConfirmar = document.getElementById('btnConfirmarCasal');
     if (btnConfirmar) {
@@ -4427,6 +4490,12 @@ window.abrirSelecaoPerfisCasal = function abrirSelecaoPerfisCasal(mes, ano) {
             window.confirmarSelecaoPerfisCasal(m, a);
         });
     }
+
+    // ✅ CORREÇÃO: hover nos labels via JavaScript em vez de onmouseover/onmouseout inline
+    document.querySelectorAll('.perfil-label-casal').forEach(label => {
+        label.addEventListener('mouseover', () => { label.style.background = 'rgba(67,160,71,0.1)'; });
+        label.addEventListener('mouseout',  () => { label.style.background = 'rgba(255,255,255,0.05)'; });
+    });
 };
 
 window.confirmarSelecaoPerfisCasal = function confirmarSelecaoPerfisCasal(mes, ano) {
@@ -5832,7 +5901,8 @@ function mostrarRanking(tipo, dadosPorPerfil) {
         }
     }
 
-    container.innerHTML = html;
+    // ✅ CORREÇÃO: passa pelo DOMParser sanitizer antes de injetar no DOM
+    container.innerHTML = sanitizarHTMLPopup(html);
 }
 
 // Função para abrir detalhes completos de um perfil específico
@@ -6595,10 +6665,15 @@ async function confirmarLogout_seguro() {
         <h3>Confirmar Saída</h3>
         <div style="margin: 20px 0; color: var(--text-secondary);">Quer mesmo sair?</div>
         <button class="btn-primary" id="simLogout">Sim</button>
-        <button class="btn-cancelar" onclick="fecharPopup()">Não</button>
+        <button class="btn-cancelar" id="naoLogout">Não</button>
     `);
 
-    document.getElementById('simLogout').onclick = async () => {
+    // ✅ CORREÇÃO: addEventListener em vez de onclick inline
+    //    O atributo onclick="fecharPopup()" é removido pelo sanitizarHTMLPopup
+    //    O botão "Não" ficava completamente morto — usuário não conseguia cancelar
+    document.getElementById('naoLogout').addEventListener('click', fecharPopup);
+
+    document.getElementById('simLogout').addEventListener('click', async () => {
         try {
             pararAutoSave();
 
@@ -6621,14 +6696,13 @@ async function confirmarLogout_seguro() {
                 await new Promise(r => setTimeout(r, 400));
             }
 
-            // AuthGuard cuida de: limpar storage, signOut e redirect
             await AuthGuard.logout('logout_voluntario');
 
         } catch (e) {
-            console.error('Erro no logout:', e);
+            _log.error('LOGOUT_001', e);
             AuthGuard.forceLogout('logout_com_erro');
         }
-    };
+    });
 }
 
 // Sobrescreve a versão original
@@ -6974,55 +7048,98 @@ window.pagarCompraIndividual = pagarCompraIndividual;
 // ========== PROCESSAR PAGAMENTO DE COMPRA ==========
 function processarPagamentoCompra(faturaId, compraId, valorPago) {
     const fatura = contasFixas.find(c => c.id === faturaId);
-    if(!fatura) return;
-    
-    const compra = fatura.compras.find(c => c.id === compraId);
-    if(!compra) return;
-    
-    const cartao = cartoesCredito.find(c => c.id === fatura.cartaoId);
-    
-    const dh = agoraDataHora();
-    transacoes.push({
-        // ✅ Sem id — banco gera via gen_random_uuid()
-        categoria: 'saida',
-        tipo: 'Pagamento Cartão',
-        descricao: `${compra.tipo} - ${compra.descricao} (${compra.parcelaAtual}/${compra.totalParcelas})`,
-        valor: valorPago,
-        data: dh.data,
-        hora: dh.hora,
-        faturaId: faturaId,   // ✅ passa direto — compatível com número e UUID
-        compraId: compraId    // ✅ idem
-    });
-    
-    if(cartao) {
-        cartao.usado = Math.max(0, (cartao.usado || 0) - valorPago);
-    }
-    
-    compra.parcelaAtual++;
-    
-    if(compra.parcelaAtual > compra.totalParcelas) {
-        fatura.compras = fatura.compras.filter(c => c.id !== compraId);
-    }
-    
-    fatura.valor = fatura.compras.reduce((sum, c) => sum + c.valorParcela, 0);
-    
-    if(fatura.compras.length === 0) {
-        contasFixas = contasFixas.filter(c => c.id !== faturaId);
-        fecharPopup();
-        salvarDados();
-        atualizarTudo();
-        alert("✅ Última parcela paga! Fatura quitada.");
+    if (!fatura) return;
+
+    const compra = fatura.compras.find(c => String(c.id) === String(compraId));
+    if (!compra) return;
+
+    // ✅ CORREÇÃO: Anti-replay lock — impede pagamento duplo por cliques rápidos
+    if (compra._processando) {
+        mostrarNotificacao('Aguarde, pagamento em andamento...', 'warning');
         return;
     }
-    
-    salvarDados();
-    atualizarTudo();
-    fecharPopup();
-    
-    setTimeout(() => {
-        abrirVisualizacaoFatura(faturaId);
-        mostrarNotificacao(`Parcela paga! ${compra.totalParcelas - compra.parcelaAtual + 1} restante(s)`, 'success');
-    }, 200);
+    compra._processando = true;
+
+    // ✅ CORREÇÃO: Validação do valor pago antes de qualquer operação
+    const valorSeguro = parseFloat(valorPago);
+    if (!isFinite(valorSeguro) || valorSeguro <= 0 || valorSeguro > 9_999_999) {
+        mostrarNotificacao('Valor de pagamento inválido.', 'error');
+        compra._processando = false;
+        return;
+    }
+
+    const cartao = cartoesCredito.find(c => c.id === fatura.cartaoId);
+
+    // ✅ CORREÇÃO: Snapshots para rollback em caso de erro
+    let snapshotTransacoes  = [];
+    let snapshotContasFixas = [];
+    let snapshotCartoes     = [];
+
+    try {
+        snapshotTransacoes  = structuredClone(transacoes);
+        snapshotContasFixas = structuredClone(contasFixas);
+        snapshotCartoes     = structuredClone(cartoesCredito);
+
+        const dh = agoraDataHora();
+        const descricaoSegura = `${String(compra.tipo || '').slice(0, 100)} - ${String(compra.descricao || '').slice(0, 100)} (${compra.parcelaAtual}/${compra.totalParcelas})`;
+
+        transacoes.push({
+            categoria:  'saida',
+            tipo:       'Pagamento Cartão',
+            descricao:  descricaoSegura,
+            valor:      parseFloat(valorSeguro.toFixed(2)),
+            data:       dh.data,
+            hora:       dh.hora,
+            faturaId:   faturaId,
+            compraId:   compraId
+        });
+
+        if (cartao) {
+            cartao.usado = Math.max(0, (cartao.usado || 0) - valorSeguro);
+        }
+
+        compra.parcelaAtual++;
+
+        if (compra.parcelaAtual > compra.totalParcelas) {
+            fatura.compras = fatura.compras.filter(c => String(c.id) !== String(compraId));
+        }
+
+        fatura.valor = fatura.compras.reduce((sum, c) => {
+            const p = parseFloat(c.valorParcela);
+            return sum + (isFinite(p) && p > 0 ? p : 0);
+        }, 0);
+
+        if (fatura.compras.length === 0) {
+            contasFixas = contasFixas.filter(c => c.id !== faturaId);
+            compra._processando = false;
+            fecharPopup();
+            salvarDados();
+            atualizarTudo();
+            alert('✅ Última parcela paga! Fatura quitada.');
+            return;
+        }
+
+        compra._processando = false;
+        salvarDados();
+        atualizarTudo();
+        fecharPopup();
+
+        setTimeout(() => {
+            abrirVisualizacaoFatura(faturaId);
+            const restantes = compra.totalParcelas - compra.parcelaAtual + 1;
+            mostrarNotificacao(`Parcela paga! ${restantes} restante(s)`, 'success');
+        }, 200);
+
+    } catch (erro) {
+        _log.error('PAG_COMPRA_001', erro);
+
+        rollbackArray(transacoes,     snapshotTransacoes);
+        rollbackArray(contasFixas,    snapshotContasFixas);
+        rollbackArray(cartoesCredito, snapshotCartoes);
+
+        compra._processando = false;
+        mostrarNotificacao('Erro ao processar pagamento. Nenhuma alteração foi salva.', 'error');
+    }
 }
 
 // ========== EDITAR COMPRA DA FATURA ==========
