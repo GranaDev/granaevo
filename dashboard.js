@@ -7289,8 +7289,6 @@ window.mostrarTela         = mostrarTela;
 window.formatBRL           = formatBRL;
 window.mostrarNotificacao  = mostrarNotificacao;
 window.confirmarAcao       = confirmarAcao;
-window.sistemaLog          = sistemaLog;
-
 // ── Navegação e sessão
 window.trocarPerfil        = trocarPerfil;
 window.confirmarLogout     = confirmarLogout_seguro;   // ✅ corrigido (era confirmarLogout → undefined)
