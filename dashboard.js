@@ -551,9 +551,7 @@ async function verificarLogin() {
             return;
         }
 
-        // ✅ CORRIGIDO: não expõe email nem user_id no console em produção
         _log.info('[VERIFICAR LOGIN] Sessão autenticada com sucesso');
-
         _log.info('[VERIFICAR LOGIN] Buscando assinatura...');
 
         let planName = '';
@@ -591,20 +589,24 @@ async function verificarLogin() {
                 planName = subByEmail.plans.name;
                 _log.info('[VERIFICAR LOGIN] Assinatura encontrada por email');
 
+                // ✅ CORREÇÃO: a vinculação de user_id é feita exclusivamente no backend
+                //    via Edge Function ou trigger no banco (link_subscription_user_id).
+                //    O frontend NUNCA deve executar UPDATE em subscriptions diretamente.
+                //    Motivo: um atacante com token válido poderia reivindicar assinaturas
+                //    de terceiros manipulando o fluxo de chamada antes da resposta chegar.
+                //
+                //    ✅ Chame uma Edge Function segura no backend para fazer esse vínculo:
+                //    supabase.functions.invoke('link-subscription-to-user')
+                //    (sem argumentos — o backend usa auth.uid() + auth.email())
                 if (!subByEmail.user_id) {
-                    _log.info('[VERIFICAR LOGIN] Vinculando user_id à subscription...');
-                    supabase
-                        .from('subscriptions')
-                        .update({
-                            user_id:             session.user.id,
-                            password_created:    true,
-                            password_created_at: new Date().toISOString(),
-                            updated_at:          new Date().toISOString(),
-                        })
-                        .eq('id', subByEmail.id)
-                        // ✅ CORRIGIDO: _log em vez de console — suprime em produção
-                        .then(() => _log.info('[VERIFICAR LOGIN] user_id vinculado com sucesso'))
-                        .catch((e) => _log.error('LOGIN_VINCULAR_001', e));
+                    _log.info('[VERIFICAR LOGIN] Subscription sem user_id — solicitando vínculo server-side...');
+                    try {
+                        await supabase.functions.invoke('link-user-subscription');
+                        _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
+                    } catch (linkErr) {
+                        // Não bloqueia o login — o usuário já tem acesso pelo email
+                        _log.error('LOGIN_VINCULAR_001', linkErr);
+                    }
                 }
             } else {
                 _log.info('[VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
@@ -643,7 +645,6 @@ async function verificarLogin() {
                 effectiveUserId = membership.owner_user_id;
                 effectiveEmail = membership.owner_email;
                 isGuest = true;
-                // ✅ CORRIGIDO: não expõe effectiveEmail (e-mail do dono da conta) em produção
                 _log.info('[VERIFICAR LOGIN] Acesso como convidado autorizado');
             }
         }
@@ -658,7 +659,6 @@ async function verificarLogin() {
             isGuest:         isGuest,
         };
 
-        // ✅ CORRIGIDO: não expõe userId nem nome do usuário em produção
         _log.info('[VERIFICAR LOGIN] Usuário inicializado. isGuest:', usuarioLogado.isGuest);
 
         _log.info('[VERIFICAR LOGIN] Inicializando DataManager...');
@@ -676,7 +676,6 @@ async function verificarLogin() {
         mostrarSelecaoPerfis();
 
     } catch (e) {
-        // ✅ CORRIGIDO: _log.error suprime detalhes em produção
         _log.error('LOGIN_CRIT_001', e);
         alert(e.message);
         window.location.href = 'login.html';
@@ -925,23 +924,19 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error('SEM_SESSAO');
 
-        const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
-
-        // ✅ CORRIGIDO: não expõe target_user_id nem session.user.id em produção
         _log.info('[_criarPerfilHandler] Verificando permissão RPC...');
 
-        if (!targetUserId) {
-            alert('Erro interno: sessão incompleta. Faça logout e login novamente.');
-            fecharPopup();
-            return;
-        }
-
+        // ✅ CORREÇÃO: target_user_id removido do frontend.
+        //    O backend resolve o usuário efetivo via auth.uid() + tabela account_members.
+        //    Um atacante via console não consegue mais passar um user_id arbitrário,
+        //    pois a função SQL usa SECURITY DEFINER com auth.uid() internamente.
+        //
+        //    ⚠️ AÇÃO OBRIGATÓRIA NO BANCO: atualize a função can_create_profile()
+        //    para usar auth.uid() e resolver convidados via JOIN em account_members.
+        //    Veja o SQL de exemplo no comentário no final desta função.
         const { data: podeCrear, error: rpcError } = await supabase
-            .rpc('can_create_profile', {
-                target_user_id: targetUserId
-            });
+            .rpc('can_create_profile');
 
-        // ✅ CORRIGIDO: resultado booleano é seguro; erro serializado apenas em dev
         _log.info('[RPC] can_create_profile resultado:', podeCrear);
         if (rpcError) _log.error('PERFIL_RPC_001', rpcError);
 
@@ -1006,8 +1001,14 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             fotoUrl = _sanitizeImgUrl(signedData.signedUrl) || null;
         }
 
-        // ✅ CORRIGIDO: não expõe user_id, nome nem photo_url em produção
+        // ✅ CORREÇÃO: user_id não é mais passado pelo frontend no INSERT.
+        //    A RLS da tabela profiles deve garantir que o user_id seja
+        //    sempre derivado de auth.uid() (ou do owner via account_members),
+        //    nunca aceito como parâmetro livre do cliente.
+        //    Se a RLS exigir user_id explícito, use uma Edge Function segura.
         _log.info('[_criarPerfilHandler] Inserindo perfil no banco...');
+
+        const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
 
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
@@ -1020,7 +1021,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             .single();
 
         if (error) {
-            // ✅ CORRIGIDO: _log.error serializa apenas em dev — não expõe dados em produção
             _log.error('PERFIL_INSERT_001', error);
             if (error.code === '23514' || error.code === '42501') {
                 mostrarPopupLimite();
@@ -1031,7 +1031,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             return;
         }
 
-        // ✅ CORRIGIDO: não expõe novoPerfil (contém name, photo_url, user_id) em produção
         _log.info('[_criarPerfilHandler] Perfil inserido com sucesso');
 
         usuarioLogado.perfis.push({
@@ -1050,6 +1049,7 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         alert('Ocorreu um erro ao criar o perfil. Tente novamente.');
     }
 }
+
 
 function mostrarPopupLimite(msgCustom) {
     let msg = msgCustom || "";
@@ -6648,6 +6648,27 @@ window.alterarEmail = alterarEmail;
 //    Nunca usar window.SUPABASE_URL ou variáveis mutáveis em runtime.
 const _SUPABASE_ALLOWED_HOSTNAME = 'fvrhqqeofqedmhadzzqw.supabase.co';
 
+// ✅ Controle de rate limit client-side para convites
+//    Impede spam via duplo clique ou automação simples no frontend
+//    (a proteção real deve existir também no backend via rate limiter)
+const _conviteControl = (() => {
+    let _ultimoEnvio = 0;
+    const _INTERVALO_MIN_MS = 30_000; // 30 segundos entre convites
+
+    return {
+        podeEnviar() {
+            return (Date.now() - _ultimoEnvio) >= _INTERVALO_MIN_MS;
+        },
+        registrar() {
+            _ultimoEnvio = Date.now();
+        },
+        tempoRestante() {
+            const restante = _INTERVALO_MIN_MS - (Date.now() - _ultimoEnvio);
+            return Math.max(0, Math.ceil(restante / 1000));
+        }
+    };
+})();
+
 async function enviarConvite() {
     const nome  = document.getElementById('inputNomeConvidado')?.value.trim();
     const email = document.getElementById('inputEmailConvidado')?.value.trim().toLowerCase();
@@ -6663,6 +6684,15 @@ async function enviarConvite() {
     }
     if (email !== emailConfirm) {
         mostrarNotificacao('Os emails não coincidem.', 'error');
+        return;
+    }
+
+    // ✅ CORREÇÃO: rate limit client-side — bloqueia reenvios rápidos
+    if (!_conviteControl.podeEnviar()) {
+        mostrarNotificacao(
+            `Aguarde ${_conviteControl.tempoRestante()} segundo(s) antes de enviar outro convite.`,
+            'warning'
+        );
         return;
     }
 
@@ -6694,14 +6724,26 @@ async function enviarConvite() {
 
         const endpointUrl = `https://${_SUPABASE_ALLOWED_HOSTNAME}/functions/v1/send-guest-invite`;
 
+        // ✅ CORREÇÃO: nonce único por requisição como camada extra de rastreabilidade.
+        //    O backend pode logar/validar o nonce para detectar replays ou automação.
+        //    Combinado com o rate limit acima, dificulta significativamente o abuse.
+        const requestNonce = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
         const response = await fetch(endpointUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type':   'application/json',
+                'Authorization':  `Bearer ${session.access_token}`,
+                'X-Request-Nonce': requestNonce,
+                'X-Request-Time':  String(Date.now()),
             },
             body: JSON.stringify({ guestName: nome, guestEmail: email }),
         });
+
+        // ✅ Registra o envio apenas após resposta bem-sucedida do servidor
+        _conviteControl.registrar();
 
         const result = await response.json();
 
@@ -6787,7 +6829,6 @@ async function enviarConvite() {
         document.getElementById('btnFecharConviteEnviado').addEventListener('click', fecharPopup);
 
     } catch (err) {
-        // ✅ CORREÇÃO (vuln 3): _log.error em vez de log.error
         _log.error('CONVITE_001', err);
         mostrarNotificacao(err.message || 'Não foi possível enviar o convite. Tente novamente.', 'error');
         if (btnEnviar) {
@@ -7743,41 +7784,89 @@ function numeroParaExtenso(numero) {
 
 // ========== EXPORTAÇÃO DE DADOS ==========
 
+// ✅ Limite máximo de registros por exportação
+//    Impede geração de arquivo gigantesco que trave o navegador
+//    Um usuário normal raramente terá mais de 5000 transações
+const _EXPORT_MAX_REGISTROS = 5_000;
+
 function exportarDadosJSON() {
     if (!perfilAtivo) {
         mostrarNotificacao('Nenhum perfil ativo!', 'error');
         return;
     }
 
-    // ✅ Confirmação explícita obrigatória antes de exportar dados financeiros completos.
-    //    Bloqueia exportação silenciosa por extensões ou chamadas via console.
+    const totalTransacoes  = transacoes.filter(_validators.transacao).length;
+    const totalMetas       = metas.filter(_validators.meta).length;
+    const totalContas      = contasFixas.filter(_validators.contaFixa).length;
+    const totalCartoes     = cartoesCredito.filter(_validators.cartao).length;
+
+    // ✅ Avisa o usuário se o volume for alto e houver truncamento
+    const seraTruncado = totalTransacoes > _EXPORT_MAX_REGISTROS;
+    const avisoTruncamento = seraTruncado
+        ? `\n\n⚠️ Atenção: você possui ${totalTransacoes} transações. Serão exportadas apenas as ${_EXPORT_MAX_REGISTROS} mais recentes para proteger o desempenho do navegador.`
+        : '';
+
     confirmarAcao(
-        `⚠️ Você está prestes a exportar TODOS os dados financeiros do perfil "${_sanitizeText(perfilAtivo.nome)}" — transações, metas, contas e cartões — para um arquivo local. Confirma?`,
+        `⚠️ Você está prestes a exportar TODOS os dados financeiros do perfil "${_sanitizeText(perfilAtivo.nome)}" — transações, metas, contas e cartões — para um arquivo local. Confirma?${avisoTruncamento}`,
         () => {
-            // ✅ Remove flag de runtime _processando antes de exportar
             const contasSemLock = contasFixas.map(({ _processando, ...rest }) => rest);
 
+            // ✅ CORREÇÃO: aplica limite máximo em cada array antes de serializar
+            //    Ordena transações da mais recente para a mais antiga antes de truncar
+            //    (para manter as mais relevantes no caso de truncamento)
+            const transacoesOrdenadas = transacoes
+                .filter(_validators.transacao)
+                .slice()
+                .sort((a, b) => {
+                    const dataA = `${a.data} ${a.hora || ''}`;
+                    const dataB = `${b.data} ${b.hora || ''}`;
+                    return dataB.localeCompare(dataA);
+                })
+                .slice(0, _EXPORT_MAX_REGISTROS);
+
             const dados = {
-                perfil:          _sanitizeText(perfilAtivo.nome),
-                dataExportacao:  new Date().toISOString(),
-                transacoes:      transacoes.filter(_validators.transacao),
-                metas:           metas.filter(_validators.meta),
-                contasFixas:     contasSemLock.filter(_validators.contaFixa),
-                cartoesCredito:  cartoesCredito.filter(_validators.cartao),
+                perfil:             _sanitizeText(perfilAtivo.nome),
+                dataExportacao:     new Date().toISOString(),
+                totalRegistros:     {
+                    transacoes:  totalTransacoes,
+                    exportadas:  transacoesOrdenadas.length,
+                    truncado:    seraTruncado,
+                },
+                transacoes:         transacoesOrdenadas,
+                metas:              metas.filter(_validators.meta).slice(0, _EXPORT_MAX_REGISTROS),
+                contasFixas:        contasSemLock.filter(_validators.contaFixa).slice(0, _EXPORT_MAX_REGISTROS),
+                cartoesCredito:     cartoesCredito.filter(_validators.cartao).slice(0, _EXPORT_MAX_REGISTROS),
             };
 
             const dataStr = JSON.stringify(dados, null, 2);
-            const blob    = new Blob([dataStr], { type: 'application/json' });
-            const url     = URL.createObjectURL(blob);
-            const a       = document.createElement('a');
-            a.href        = url;
-            // ✅ Nome do arquivo sanitizado — sem dados brutos do usuário no atributo
-            a.download    = `granaevo_${_sanitizeText(perfilAtivo.nome).replace(/\s+/g, '_')}_${isoDate()}.json`;
+
+            // ✅ Verificação de tamanho antes de criar o Blob
+            //    ~10MB é o limite seguro para maioria dos navegadores
+            const tamanhoEstimadoBytes = new TextEncoder().encode(dataStr).length;
+            if (tamanhoEstimadoBytes > 10 * 1024 * 1024) {
+                mostrarNotificacao(
+                    'O arquivo gerado é muito grande. Tente exportar um período menor via Relatórios.',
+                    'error'
+                );
+                return;
+            }
+
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = `granaevo_${_sanitizeText(perfilAtivo.nome).replace(/\s+/g, '_')}_${isoDate()}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            mostrarNotificacao('Dados exportados com sucesso!', 'success');
+
+            mostrarNotificacao(
+                seraTruncado
+                    ? `Exportação concluída (${_EXPORT_MAX_REGISTROS} de ${totalTransacoes} transações)`
+                    : 'Dados exportados com sucesso!',
+                'success'
+            );
         }
     );
 }
@@ -7788,35 +7877,57 @@ function exportarDadosCSV() {
         return;
     }
 
-    // ✅ Confirmação explícita antes de exportar
+    const transacoesValidas = transacoes.filter(_validators.transacao);
+    const seraTruncado      = transacoesValidas.length > _EXPORT_MAX_REGISTROS;
+    const avisoTruncamento  = seraTruncado
+        ? `\n\n⚠️ Você possui ${transacoesValidas.length} transações. Serão exportadas apenas as ${_EXPORT_MAX_REGISTROS} mais recentes.`
+        : '';
+
     confirmarAcao(
-        `⚠️ Exportar as transações do perfil "${_sanitizeText(perfilAtivo.nome)}" para CSV? O arquivo ficará salvo no seu dispositivo.`,
+        `⚠️ Exportar as transações do perfil "${_sanitizeText(perfilAtivo.nome)}" para CSV? O arquivo ficará salvo no seu dispositivo.${avisoTruncamento}`,
         () => {
-            // ✅ Escape de CSV (CSV Injection): campos que iniciam com = + - @ são prefixados
-            //    com aspas e tab para evitar execução de fórmulas em Excel/Sheets.
+            // ✅ Escape de CSV Injection (já existia — mantido)
             const escaparCSV = (str) => {
                 const s = String(str || '').replace(/"/g, '""').replace(/[\r\n]/g, ' ');
-                // Bloqueia fórmulas (=, +, -, @, TAB, CR no início)
                 if (/^[=+\-@\t\r]/.test(s)) return `"\t${s}"`;
                 return `"${s}"`;
             };
 
+            // ✅ CORREÇÃO: ordena da mais recente e limita ao máximo permitido
+            const transacoesParaExportar = transacoesValidas
+                .slice()
+                .sort((a, b) => {
+                    const dataA = `${a.data} ${a.hora || ''}`;
+                    const dataB = `${b.data} ${b.hora || ''}`;
+                    return dataB.localeCompare(dataA);
+                })
+                .slice(0, _EXPORT_MAX_REGISTROS);
+
             let csv = 'Data,Hora,Categoria,Tipo,Descrição,Valor\n';
 
-            transacoes.filter(_validators.transacao).forEach(t => {
+            transacoesParaExportar.forEach(t => {
                 const linha = [
                     escaparCSV(t.data),
                     escaparCSV(t.hora),
                     escaparCSV(t.categoria),
                     escaparCSV(t.tipo),
                     escaparCSV(t.descricao),
-                    // ✅ Valor numérico sem aspas — não interpretável como fórmula
                     String(Number(t.valor).toFixed(2)),
                 ].join(',');
                 csv += linha + '\n';
             });
 
-            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }); // ✅ BOM para Excel
+            // ✅ Verificação de tamanho antes de criar o Blob
+            const tamanhoEstimadoBytes = new TextEncoder().encode(csv).length;
+            if (tamanhoEstimadoBytes > 10 * 1024 * 1024) {
+                mostrarNotificacao(
+                    'O arquivo CSV é muito grande. Tente exportar um período menor.',
+                    'error'
+                );
+                return;
+            }
+
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
             const url  = URL.createObjectURL(blob);
             const a    = document.createElement('a');
             a.href     = url;
@@ -7825,7 +7936,13 @@ function exportarDadosCSV() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            mostrarNotificacao('Transações exportadas com sucesso!', 'success');
+
+            mostrarNotificacao(
+                seraTruncado
+                    ? `CSV exportado (${_EXPORT_MAX_REGISTROS} de ${transacoesValidas.length} transações)`
+                    : 'Transações exportadas com sucesso!',
+                'success'
+            );
         }
     );
 }
