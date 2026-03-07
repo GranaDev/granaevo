@@ -139,16 +139,41 @@ function validarUserData(userData) {
         }
     };
 
-    // ✅ Retorna cópias congeladas em dois níveis:
-    //    1. Array congelado (push/pop/splice bloqueados)
-    //    2. Objetos internos congelados (window.transacoes[0].valor = X bloqueado)
-    //    Getter é re-executado a cada acesso — sempre reflete o estado atual do módulo
-    _def('perfilAtivo',    () => perfilAtivo    ? Object.freeze(Object.assign({}, perfilAtivo))                      : null);
-    _def('transacoes',     () => Object.freeze(transacoes.map(t     => Object.freeze(Object.assign({}, t)))));
-    _def('usuarioLogado',  () =>                  Object.freeze(Object.assign({}, usuarioLogado)));
-    _def('metas',          () => Object.freeze(metas.map(m           => Object.freeze(Object.assign({}, m)))));
-    _def('contasFixas',    () => Object.freeze(contasFixas.map(c     => Object.freeze(Object.assign({}, c)))));
-    _def('cartoesCredito', () => Object.freeze(cartoesCredito.map(c  => Object.freeze(Object.assign({}, c)))));
+    // ✅ REMOVIDO: window.usuarioLogado
+    //    Continha email, plano, userId, isGuest — PII não deve ficar acessível
+    //    via console ou extensões. Nenhum módulo externo depende diretamente deste getter.
+
+    // ✅ REMOVIDO: window.cartoesCredito
+    //    Continha limite, usado, bandeira — dado financeiro sensível.
+    //    graficos.js deve usar window.__GE__.cartoesCredito se precisar.
+
+    // ✅ MANTIDOS apenas os arrays consumidos por graficos.js
+    //    Migração recomendada: graficos.js passar a usar window.__GE__.*
+    //    e estas linhas serem removidas em versão futura.
+    _def('perfilAtivo',    () => perfilAtivo
+        ? Object.freeze({ id: perfilAtivo.id, nome: perfilAtivo.nome }) // ✅ expõe apenas id e nome — sem foto/storagePath
+        : null
+    );
+    _def('transacoes',     () => Object.freeze(transacoes.map(t  => Object.freeze(Object.assign({}, t)))));
+    _def('metas',          () => Object.freeze(metas.map(m        => Object.freeze(Object.assign({}, m)))));
+    _def('contasFixas',    () => Object.freeze(contasFixas.map(c  => Object.freeze(Object.assign({}, c)))));
+
+    // ✅ __GE_API__: ponto de entrada público para módulos externos legítimos
+    //    Extensões e scripts de terceiros não têm acesso ao _sessionNonce
+    //    e não podem chamar as funções de alto risco via window.*
+    Object.defineProperty(window, '__GE_API__', {
+        value: Object.freeze({
+            // Apenas leitura de metadados não-sensíveis
+            obterPerfilResumido: () => perfilAtivo
+                ? Object.freeze({ id: perfilAtivo.id, nome: perfilAtivo.nome })
+                : null,
+            // Trigger de save com throttle — sem acesso aos dados brutos
+            salvar: _throttledSave,
+        }),
+        writable:     false,
+        configurable: false,
+        enumerable:   false,
+    });
 })();
 
 function atualizarReferenciasGlobais() {
@@ -1226,7 +1251,6 @@ async function alterarFoto(event) {
         return;
     }
 
-    // ✅ Validações em cascata — retorno imediato a cada falha
     if (file.size > 2 * 1024 * 1024) {
         alert('A foto deve ter no máximo 2MB.');
         return;
@@ -1248,11 +1272,14 @@ async function alterarFoto(event) {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !session) throw new Error('SEM_SESSAO');
 
-        const ext         = file.type === 'image/jpeg' ? 'jpg'
-                          : file.type === 'image/png'  ? 'png'
-                          :                              'webp';
-        // ✅ Usa session.user.id real — não manipulável via DevTools
-        const storagePath = `${session.user.id}/${Date.now()}.${ext}`;
+        const ext = file.type === 'image/jpeg' ? 'jpg'
+                  : file.type === 'image/png'  ? 'png'
+                  :                              'webp';
+
+        // ✅ CORRIGIDO: crypto.randomUUID() em vez de Date.now()
+        //    Consistente com _criarPerfilHandler — nome de arquivo imprevisível
+        //    mesmo que o bucket seja mal configurado futuramente
+        const storagePath = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
 
         const { error: uploadError } = await supabase.storage
             .from('profile-photos')
@@ -1268,20 +1295,15 @@ async function alterarFoto(event) {
             return;
         }
 
-        // ✅ Signed URL em vez de URL pública — não enumerável, expira em 1h
         const urlSegura = await _gerarSignedUrl(storagePath);
         if (!urlSegura) {
             alert('Erro interno ao processar a foto. Tente novamente.');
             return;
         }
 
-        // ✅ Salva o storagePath no banco, não a URL —
-        //    permite renovar a signed URL futuramente sem depender de URL hardcoded.
-        //    IMPORTANTE: ajustar coluna photo_url para aceitar path relativo OU
-        //    manter URL e renovar periodicamente (ver _renovarFotosExpiradas abaixo)
         const { error: updateError } = await supabase
             .from('profiles')
-            .update({ photo_url: storagePath }) // ✅ salva path, não URL assinada
+            .update({ photo_url: storagePath })
             .eq('id', perfilAtivo.id)
             .select()
             .single();
@@ -1292,14 +1314,12 @@ async function alterarFoto(event) {
             return;
         }
 
-        // ✅ Estado local usa URL assinada para exibição imediata,
-        //    mas o banco tem o path permanente para renovação futura
-        perfilAtivo.foto = urlSegura;
-        perfilAtivo._storagePath = storagePath; // path permanente em memória
+        perfilAtivo.foto         = urlSegura;
+        perfilAtivo._storagePath = storagePath;
 
         const idx = usuarioLogado.perfis.findIndex(p => p.id === perfilAtivo.id);
         if (idx !== -1) {
-            usuarioLogado.perfis[idx].foto = urlSegura;
+            usuarioLogado.perfis[idx].foto         = urlSegura;
             usuarioLogado.perfis[idx]._storagePath = storagePath;
         }
 
@@ -1541,98 +1561,179 @@ function atualizarBadgeVencimentos() {
 // Mostrar painel de alertas na dashboard
 function renderizarPainelAlertas() {
     const alertas = verificarVencimentos();
-    if(!alertas || alertas.total === 0) return '';
+    if (!alertas || alertas.total === 0) return null;
 
-    let html = `
-        <div class="alertas-vencimento">
-            <div class="alertas-header">
-                <div class="alertas-icon">${alertas.vencidas.length > 0 ? '🚨' : '⚠️'}</div>
-                <div class="alertas-title-group">
-                    <h3>${alertas.vencidas.length > 0 ? 'Atenção! Contas Vencidas' : 'Contas Próximas do Vencimento'}</h3>
-                    <p>${alertas.vencidas.length > 0
-                        ? `Você tem ${alertas.vencidas.length} conta(s) vencida(s)`
-                        : `${alertas.aVencer.length} conta(s) vencem nos próximos 5 dias`}
-                    </p>
-                </div>
-            </div>
-            <div class="alertas-grid">
-    `;
+    // ── Container principal
+    const painelDiv = document.createElement('div');
+    painelDiv.className = 'alertas-vencimento';
 
+    // ── Header
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'alertas-header';
+
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'alertas-icon';
+    iconDiv.textContent = alertas.vencidas.length > 0 ? '🚨' : '⚠️';
+
+    const titleGroupDiv = document.createElement('div');
+    titleGroupDiv.className = 'alertas-title-group';
+
+    const h3 = document.createElement('h3');
+    h3.textContent = alertas.vencidas.length > 0
+        ? 'Atenção! Contas Vencidas'
+        : 'Contas Próximas do Vencimento';
+
+    const pDesc = document.createElement('p');
+    pDesc.textContent = alertas.vencidas.length > 0
+        ? `Você tem ${alertas.vencidas.length} conta(s) vencida(s)`
+        : `${alertas.aVencer.length} conta(s) vencem nos próximos 5 dias`;
+
+    titleGroupDiv.appendChild(h3);
+    titleGroupDiv.appendChild(pDesc);
+    headerDiv.appendChild(iconDiv);
+    headerDiv.appendChild(titleGroupDiv);
+    painelDiv.appendChild(headerDiv);
+
+    // ── Grid de cards
+    const gridDiv = document.createElement('div');
+    gridDiv.className = 'alertas-grid';
+
+    // ── Cards de contas VENCIDAS
     alertas.vencidas.forEach(conta => {
-        // ✅ FIX #1: ID compatível com número e UUID string
         const idRaw    = conta.id;
         const idNum    = parseInt(idRaw, 10);
         const idSeguro = Number.isInteger(idNum) && String(idNum) === String(idRaw) ? idNum : idRaw;
-        if(idSeguro === null || idSeguro === undefined || idSeguro === '') return;
+        if (idSeguro === null || idSeguro === undefined || idSeguro === '') return;
 
-        // ✅ FIX #4: Valida formato E valores numéricos reais da data
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
         const dataVenc = new Date(conta.vencimento);
-        if(isNaN(dataVenc.getTime())) return;
+        if (isNaN(dataVenc.getTime())) return;
 
-        // ✅ FIX #4: diasVencidos nunca será NaN pois dataVenc já foi validado acima
-        const diasVencidos    = Math.max(0, Math.floor((new Date() - dataVenc) / (1000 * 60 * 60 * 24)));
-        const descricaoSegura = escapeHTML(conta.descricao);
-        const valorSeguro     = escapeHTML(formatBRL(conta.valor));
-        const vencSeguro      = escapeHTML(formatarDataBR(conta.vencimento));
+        const diasVencidos = Math.max(0, Math.floor((new Date() - dataVenc) / (1000 * 60 * 60 * 24)));
 
-        html += `
-            <div class="alerta-card" data-id="${escapeHTML(String(idSeguro))}" data-acao="pagar">
-                <div class="alerta-header">
-                    <div class="alerta-title">${descricaoSegura}</div>
-                    <span class="alerta-status vencido">❌ Vencida</span>
-                </div>
-                <div class="alerta-info">
-                    <div><strong>Valor:</strong> ${valorSeguro}</div>
-                    <div><strong>Vencimento:</strong> ${vencSeguro}</div>
-                    <div style="color: #ff4b4b; font-weight: 600; margin-top: 6px;">
-                        ⏰ Vencida há ${diasVencidos} dia(s)
-                    </div>
-                </div>
-                <button class="alerta-btn" data-id="${escapeHTML(String(idSeguro))}" data-acao="pagar-btn">
-                    💰 Pagar Agora
-                </button>
-            </div>
-        `;
+        const card = document.createElement('div');
+        card.className = 'alerta-card';
+        card.dataset.id   = String(idSeguro);
+        card.dataset.acao = 'pagar';
+
+        // Card header
+        const cardHeader = document.createElement('div');
+        cardHeader.className = 'alerta-header';
+
+        const titleDiv = document.createElement('div');
+        titleDiv.className   = 'alerta-title';
+        titleDiv.textContent = conta.descricao; // ✅ textContent
+
+        const statusSpan = document.createElement('span');
+        statusSpan.className   = 'alerta-status vencido';
+        statusSpan.textContent = '❌ Vencida';
+
+        cardHeader.appendChild(titleDiv);
+        cardHeader.appendChild(statusSpan);
+
+        // Card info
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'alerta-info';
+
+        const valorDiv = document.createElement('div');
+        const valorStrong = document.createElement('strong');
+        valorStrong.textContent = 'Valor: ';
+        valorDiv.appendChild(valorStrong);
+        valorDiv.appendChild(document.createTextNode(formatBRL(conta.valor)));
+
+        const vencDiv = document.createElement('div');
+        const vencStrong = document.createElement('strong');
+        vencStrong.textContent = 'Vencimento: ';
+        vencDiv.appendChild(vencStrong);
+        vencDiv.appendChild(document.createTextNode(formatarDataBR(conta.vencimento)));
+
+        const diasDiv = document.createElement('div');
+        diasDiv.style.color      = '#ff4b4b';
+        diasDiv.style.fontWeight = '600';
+        diasDiv.style.marginTop  = '6px';
+        diasDiv.textContent = `⏰ Vencida há ${diasVencidos} dia(s)`;
+
+        infoDiv.appendChild(valorDiv);
+        infoDiv.appendChild(vencDiv);
+        infoDiv.appendChild(diasDiv);
+
+        // Botão pagar
+        const btnPagar = document.createElement('button');
+        btnPagar.className   = 'alerta-btn';
+        btnPagar.dataset.id   = String(idSeguro);
+        btnPagar.dataset.acao = 'pagar-btn';
+        btnPagar.textContent  = '💰 Pagar Agora';
+
+        card.appendChild(cardHeader);
+        card.appendChild(infoDiv);
+        card.appendChild(btnPagar);
+        gridDiv.appendChild(card);
     });
 
+    // ── Cards de contas A VENCER
     alertas.aVencer.forEach(conta => {
-        // ✅ FIX #1: mesmo padrão de ID flexível
         const idRaw    = conta.id;
         const idNum    = parseInt(idRaw, 10);
         const idSeguro = Number.isInteger(idNum) && String(idNum) === String(idRaw) ? idNum : idRaw;
-        if(idSeguro === null || idSeguro === undefined || idSeguro === '') return;
+        if (idSeguro === null || idSeguro === undefined || idSeguro === '') return;
 
-        // ✅ FIX #4: mesma validação de data real
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
         const dataVenc = new Date(conta.vencimento);
-        if(isNaN(dataVenc.getTime())) return;
+        if (isNaN(dataVenc.getTime())) return;
 
-        // ✅ FIX #4: diasRestantes nunca será NaN, e Math.max(0,...) evita negativo
-        const diasRestantes   = Math.max(0, Math.floor((dataVenc - new Date()) / (1000 * 60 * 60 * 24)));
-        const descricaoSegura = escapeHTML(conta.descricao);
-        const valorSeguro     = escapeHTML(formatBRL(conta.valor));
-        const vencSeguro      = escapeHTML(formatarDataBR(conta.vencimento));
+        const diasRestantes = Math.max(0, Math.floor((dataVenc - new Date()) / (1000 * 60 * 60 * 24)));
 
-        html += `
-            <div class="alerta-card pendente" data-id="${escapeHTML(String(idSeguro))}" data-acao="editar">
-                <div class="alerta-header">
-                    <div class="alerta-title">${descricaoSegura}</div>
-                    <span class="alerta-status a-vencer">⏳ A Vencer</span>
-                </div>
-                <div class="alerta-info">
-                    <div><strong>Valor:</strong> ${valorSeguro}</div>
-                    <div><strong>Vencimento:</strong> ${vencSeguro}</div>
-                    <div style="color: #ffd166; font-weight: 600; margin-top: 6px;">
-                        ⏰ Vence em ${diasRestantes} dia(s)
-                    </div>
-                </div>
-            </div>
-        `;
+        const card = document.createElement('div');
+        card.className    = 'alerta-card pendente';
+        card.dataset.id   = String(idSeguro);
+        card.dataset.acao = 'editar';
+
+        const cardHeader = document.createElement('div');
+        cardHeader.className = 'alerta-header';
+
+        const titleDiv = document.createElement('div');
+        titleDiv.className   = 'alerta-title';
+        titleDiv.textContent = conta.descricao; // ✅ textContent
+
+        const statusSpan = document.createElement('span');
+        statusSpan.className   = 'alerta-status a-vencer';
+        statusSpan.textContent = '⏳ A Vencer';
+
+        cardHeader.appendChild(titleDiv);
+        cardHeader.appendChild(statusSpan);
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'alerta-info';
+
+        const valorDiv = document.createElement('div');
+        const valorStrong = document.createElement('strong');
+        valorStrong.textContent = 'Valor: ';
+        valorDiv.appendChild(valorStrong);
+        valorDiv.appendChild(document.createTextNode(formatBRL(conta.valor)));
+
+        const vencDiv = document.createElement('div');
+        const vencStrong = document.createElement('strong');
+        vencStrong.textContent = 'Vencimento: ';
+        vencDiv.appendChild(vencStrong);
+        vencDiv.appendChild(document.createTextNode(formatarDataBR(conta.vencimento)));
+
+        const diasDiv = document.createElement('div');
+        diasDiv.style.color      = '#ffd166';
+        diasDiv.style.fontWeight = '600';
+        diasDiv.style.marginTop  = '6px';
+        diasDiv.textContent = `⏰ Vence em ${diasRestantes} dia(s)`;
+
+        infoDiv.appendChild(valorDiv);
+        infoDiv.appendChild(vencDiv);
+        infoDiv.appendChild(diasDiv);
+
+        card.appendChild(cardHeader);
+        card.appendChild(infoDiv);
+        gridDiv.appendChild(card);
     });
 
-    html += `</div></div>`;
-    return html;
+    painelDiv.appendChild(gridDiv);
+    return painelDiv;
 }
 
 // Verificação automática e notificação
@@ -1696,44 +1797,39 @@ document.head.appendChild(styleAlertas);
 
 function atualizarListaContasFixas() {
     const lista = document.getElementById('listaContasFixas');
-    if(!lista) return;
+    if (!lista) return;
 
     lista.innerHTML = '';
 
-    const painelAlertas = renderizarPainelAlertas();
-    if(painelAlertas) {
-        const painelWrapper = document.createElement('div');
-        painelWrapper.innerHTML = painelAlertas;
-
-        painelWrapper.addEventListener('click', (e) => {
+    // ✅ renderizarPainelAlertas agora retorna elemento DOM ou null — sem innerHTML
+    const painelAlertasEl = renderizarPainelAlertas();
+    if (painelAlertasEl) {
+        painelAlertasEl.addEventListener('click', (e) => {
             const card = e.target.closest('[data-acao]');
-            if(!card) return;
+            if (!card) return;
 
-            // ✅ FIX #1: Suporta ID numérico (atual) e UUID string (futuro fix #4)
-            //    Tenta número primeiro; se falhar, usa string bruta do dataset
-            const idRaw  = card.dataset.id;
-            const idNum  = parseInt(idRaw, 10);
-            const id     = Number.isInteger(idNum) && String(idNum) === idRaw ? idNum : idRaw;
+            const idRaw = card.dataset.id;
+            const idNum = parseInt(idRaw, 10);
+            const id    = Number.isInteger(idNum) && String(idNum) === idRaw ? idNum : idRaw;
 
-            // ✅ Rejeita se ID for vazio, undefined ou NaN puro
-            if(id === null || id === undefined || id === '' || id !== id) return;
+            if (id === null || id === undefined || id === '' || id !== id) return;
 
             const acao = card.dataset.acao;
 
-            if(acao === 'pagar' || acao === 'pagar-btn') {
+            if (acao === 'pagar' || acao === 'pagar-btn') {
                 e.stopPropagation();
                 abrirPopupPagarContaFixa(id);
-            } else if(acao === 'editar') {
+            } else if (acao === 'editar') {
                 abrirContaFixaForm(id);
             }
         });
 
-        lista.appendChild(painelWrapper);
+        lista.appendChild(painelAlertasEl); // ✅ appendChild direto — elemento DOM puro
     }
 
-    if(contasFixas.length === 0) {
+    if (contasFixas.length === 0) {
         const empty = document.createElement('p');
-        empty.className = 'empty-state';
+        empty.className   = 'empty-state';
         empty.textContent = 'Nenhuma conta fixa cadastrada.';
         lista.appendChild(empty);
         return;
@@ -1745,17 +1841,16 @@ function atualizarListaContasFixas() {
     containerContas.className = 'contas-grid';
 
     contasFixas.forEach(c => {
-        // ✅ FIX #5 (reflexo): ignora contas sem vencimento válido antes de comparar
         const vencimentoValido = typeof c.vencimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.vencimento);
 
-        let status = 'Pendente';
+        let status      = 'Pendente';
         let statusClass = 'status-pendente';
 
-        if(c.pago) {
-            status = 'Pago';
+        if (c.pago) {
+            status      = 'Pago';
             statusClass = 'status-pago';
-        } else if(vencimentoValido && c.vencimento < hojeISO) {
-            status = 'Vencido';
+        } else if (vencimentoValido && c.vencimento < hojeISO) {
+            status      = 'Vencido';
             statusClass = 'status-vencido';
         }
 
@@ -1769,19 +1864,18 @@ function atualizarListaContasFixas() {
         title.className = 'conta-title';
 
         const statusSpan = document.createElement('span');
-        statusSpan.className = `conta-status ${statusClass}`;
+        statusSpan.className   = `conta-status ${statusClass}`;
         statusSpan.textContent = status;
 
         const info = document.createElement('div');
         info.className = 'conta-info';
 
-        if(c.tipoContaFixa === 'fatura_cartao' && c.compras && c.compras.length > 0) {
+        if (c.tipoContaFixa === 'fatura_cartao' && c.compras && c.compras.length > 0) {
             const totalCompras = c.compras.length;
 
             title.textContent = `💳 ${c.descricao}`;
 
             const divValor = document.createElement('div');
-            // ✅ FIX #6: atribuição direta de propriedade em vez de cssText com template
             divValor.style.fontWeight = '600';
             divValor.style.fontSize   = '1.1rem';
             divValor.style.color      = 'var(--text-primary)';
@@ -1791,9 +1885,8 @@ function atualizarListaContasFixas() {
             divVenc.textContent = `Vencimento: ${formatarDataBR(c.vencimento)}`;
 
             const divCompras = document.createElement('div');
-            // ✅ FIX #6: mesmo padrão — sem cssText com interpolação
-            divCompras.style.color    = 'var(--text-secondary)';
-            divCompras.style.fontSize = '0.85rem';
+            divCompras.style.color     = 'var(--text-secondary)';
+            divCompras.style.fontSize  = '0.85rem';
             divCompras.style.marginTop = '6px';
             divCompras.textContent = `📦 ${totalCompras} compra${totalCompras > 1 ? 's' : ''} nesta fatura`;
 
@@ -1804,12 +1897,12 @@ function atualizarListaContasFixas() {
             div.appendChild(header);
             div.appendChild(info);
 
-            if(status !== 'Pago') {
-                const actions = document.createElement('div');
+            if (status !== 'Pago') {
+                const actions  = document.createElement('div');
                 actions.className = 'conta-actions';
 
                 const btnPagar = document.createElement('button');
-                btnPagar.className = 'conta-btn';
+                btnPagar.className   = 'conta-btn';
                 btnPagar.textContent = 'Pagar Fatura';
 
                 btnPagar.addEventListener('click', (e) => {
@@ -1833,9 +1926,8 @@ function atualizarListaContasFixas() {
             info.appendChild(divValor);
             info.appendChild(divVenc);
 
-            if(c.totalParcelas && c.parcelaAtual) {
+            if (c.totalParcelas && c.parcelaAtual) {
                 const divParcela = document.createElement('div');
-                // ✅ FIX #6: atribuição direta
                 divParcela.style.color     = 'var(--warning)';
                 divParcela.style.fontSize  = '0.85rem';
                 divParcela.style.marginTop = '4px';
@@ -1846,17 +1938,16 @@ function atualizarListaContasFixas() {
             div.appendChild(header);
             div.appendChild(info);
 
-            if(status !== 'Pago') {
-                const actions = document.createElement('div');
+            if (status !== 'Pago') {
+                const actions  = document.createElement('div');
                 actions.className = 'conta-actions';
 
                 const btnPagar = document.createElement('button');
-                btnPagar.className = 'conta-btn';
+                btnPagar.className   = 'conta-btn';
                 btnPagar.textContent = 'Pagar';
 
-                // ✅ FIX #1: usa c.id diretamente — compatível com número e UUID
                 const contaId = c.id;
-                if(contaId === null || contaId === undefined || contaId === '') return;
+                if (contaId === null || contaId === undefined || contaId === '') return;
 
                 btnPagar.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -1872,9 +1963,9 @@ function atualizarListaContasFixas() {
         header.appendChild(statusSpan);
 
         div.addEventListener('click', (e) => {
-            if(e.target.tagName === 'BUTTON') return;
+            if (e.target.tagName === 'BUTTON') return;
 
-            if(c.tipoContaFixa === 'fatura_cartao') {
+            if (c.tipoContaFixa === 'fatura_cartao') {
                 abrirVisualizacaoFatura(c.id);
             } else {
                 abrirContaFixaForm(c.id);
@@ -7165,6 +7256,19 @@ function bindEventos() {
     if (btnExportarCSV) {
         btnExportarCSV.addEventListener('click', exportarDadosCSV);
     }
+}
+
+const widgetOndeFoi = document.getElementById('widgetOndeFoiDinheiro');
+if (widgetOndeFoi) {
+    widgetOndeFoi.addEventListener('click', abrirWidgetOndeForDinheiro);
+    widgetOndeFoi.addEventListener('mouseover', () => {
+        widgetOndeFoi.style.transform = 'translateY(-4px)';
+        widgetOndeFoi.style.boxShadow = '0 8px 24px rgba(67,160,71,0.3)';
+    });
+    widgetOndeFoi.addEventListener('mouseout', () => {
+        widgetOndeFoi.style.transform = 'translateY(0)';
+        widgetOndeFoi.style.boxShadow = 'var(--shadow-sm)';
+    });
 }
 
 // ========== VISUALIZAÇÃO DETALHADA DE FATURA DE CARTÃO ==========

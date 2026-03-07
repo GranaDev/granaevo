@@ -43,7 +43,13 @@ function inicializarGraficos() {
     configurarFiltros();
     configurarViewButtons();
     configurarComparacao();
+
+    const btnGraficos = document.getElementById('btnGerarGraficos');
+    if (btnGraficos) {
+        btnGraficos.addEventListener('click', gerarGraficos);
+    }
 }
+
 
 // ========== CONFIGURAÇÃO DE FILTROS ==========
 function configurarFiltros() {

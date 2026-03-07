@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - GranaEvo</title>
+
+    <!-- ✅ FINDING 5 — Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' https://cdn.jsdelivr.net;
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
+        font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
+        img-src 'self' data: https://fvrhqqeofqedmhadzzqw.supabase.co https://cdn-icons-png.flaticon.com https://logospng.org;
+        connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co;
+        base-uri 'self';
+        form-action 'self';
+    ">
+
     <link rel="stylesheet" href="dashboard.css">
     <link rel="stylesheet" href="graficos.css">
     <link rel="stylesheet" href="chat-assistant.css">
@@ -198,20 +211,17 @@
                     </div>
                 </div>
 
-                <!-- ADICIONAR APÓS A SEÇÃO DE CONTAS FIXAS -->
-            <div class="section-box" style="margin-top:32px; text-align:center; cursor:pointer; transition:all 0.3s;" 
-                onclick="abrirWidgetOndeForDinheiro()"
-                onmouseover="this.style.transform='translateY(-4px)'; this.style.boxShadow='0 8px 24px rgba(67,160,71,0.3)';"
-                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='var(--shadow-sm)';">
-                <div style="font-size:3rem; margin-bottom:12px;">💸</div>
-                <h3 style="margin-bottom:8px; color:var(--text-primary);">Onde Foi Meu Dinheiro?</h3>
-                <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:16px;">
-                    Descubra para onde seus gastos estão indo com análise inteligente
-                </p>
-                <button class="btn-primary" style="pointer-events:none;">
-                    🔍 Analisar Agora
-                </button>
-            </div>
+                <!-- ✅ INLINE HANDLERS REMOVIDOS — eventos gerenciados via dashboard.js -->
+                <div class="section-box" id="widgetOndeFoiDinheiro" style="margin-top:32px; text-align:center; cursor:pointer; transition:all 0.3s;">
+                    <div style="font-size:3rem; margin-bottom:12px;">💸</div>
+                    <h3 style="margin-bottom:8px; color:var(--text-primary);">Onde Foi Meu Dinheiro?</h3>
+                    <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:16px;">
+                        Descubra para onde seus gastos estão indo com análise inteligente
+                    </p>
+                    <button class="btn-primary" style="pointer-events:none;">
+                        🔍 Analisar Agora
+                    </button>
+                </div>
             </section>
 
             <!-- TRANSAÇÕES -->
@@ -235,10 +245,10 @@
                 <div class="transaction-form">
                     <select id="selectCategoria" class="form-input">
                         <option value="">Selecione a categoria</option>
-                        <option value="entrada"><i class="fas fa-arrow-up"></i> Entrada</option>
-                        <option value="saida"><i class="fas fa-arrow-down"></i> Saída</option>
-                        <option value="reserva"><i class="fas fa-bullseye"></i> Reserva</option>
-                        <option value="saida_credito"><i class="fas fa-credit-card"></i> Saída no Crédito</option>
+                        <option value="entrada">Entrada</option>
+                        <option value="saida">Saída</option>
+                        <option value="reserva">Reserva</option>
+                        <option value="saida_credito">Saída no Crédito</option>
                     </select>
 
                     <select id="selectTipo" class="form-input">
@@ -419,8 +429,8 @@
                         </div>
                     </div>
                     
-                    <!-- Botão Gerar Gráficos -->
-                    <button class="btn-primary btn-large" onclick="gerarGraficos()" style="margin-top: 20px;">
+                    <!-- ✅ onclick removido — evento gerenciado via graficos.js -->
+                    <button class="btn-primary btn-large" id="btnGerarGraficos" style="margin-top: 20px;">
                         <i class="fas fa-chart-area"></i> Gerar Gráficos
                     </button>
                 </div>
