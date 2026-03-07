@@ -575,25 +575,17 @@ async function verificarLogin() {
                 planName = subByEmail.plans.name;
                 _log.info('[VERIFICAR LOGIN] Assinatura encontrada por email');
 
-                // ✅ CORREÇÃO: a vinculação de user_id é feita exclusivamente no backend
-                //    via Edge Function ou trigger no banco (link_subscription_user_id).
-                //    O frontend NUNCA deve executar UPDATE em subscriptions diretamente.
-                //    Motivo: um atacante com token válido poderia reivindicar assinaturas
-                //    de terceiros manipulando o fluxo de chamada antes da resposta chegar.
-                //
-                //    ✅ Chame uma Edge Function segura no backend para fazer esse vínculo:
-                //    supabase.functions.invoke('link-subscription-to-user')
-                //    (sem argumentos — o backend usa auth.uid() + auth.email())
                 if (!subByEmail.user_id) {
-                    _log.info('[VERIFICAR LOGIN] Subscription sem user_id — solicitando vínculo server-side...');
-                    try {
-                        await supabase.functions.invoke('link-user-subscription');
-                        _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
-                    } catch (linkErr) {
-                        // Não bloqueia o login — o usuário já tem acesso pelo email
-                        _log.error('LOGIN_VINCULAR_001', linkErr);
-                    }
+                _log.info('[VERIFICAR LOGIN] Subscription sem user_id — solicitando vínculo server-side...');
+                try {
+                    await supabase.functions.invoke('link-user-subscription', {
+                        body: { subscription_id: subByEmail.id }
+                    });
+                    _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
+                } catch (linkErr) {
+                    _log.error('LOGIN_VINCULAR_001', linkErr);
                 }
+            }
             } else {
                 _log.info('[VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
 
