@@ -377,50 +377,57 @@ async function validateCaptchaOnBackend(token) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  [BUG-01-FIX] checkUserAccess — SUBSTITUI getActiveSubscription
+//  checkUserAccess — usa check-email-status (service role, sem RLS, sem JWT issue)
 //
-//  ANTES: consultava tabela subscriptions diretamente com cliente anon.
-//         RLS bloqueava o fallback por email (user_id = NULL → invisível).
+//  MOTIVO DA MUDANÇA:
+//  A abordagem anterior (check-user-access com JWT do usuário como Bearer) retornava
+//  401 do gateway do Supabase quando data.session estava null ou não propagou.
 //
-//  AGORA: chama Edge Function check-user-access que usa service role key
-//         (sem RLS), busca por user_id, depois por email, e auto-vincula
-//         user_id se necessário. Resolve o bug silencioso de forma definitiva.
+//  SOLUÇÃO: reutiliza check-email-status que já usa service role key internamente
+//  e NUNCA teve problema de 401. Após login bem-sucedido, data.user.email é garantido.
+//
+//  Retornos de check-email-status:
+//   'password_exists' → subscription aprovada, senha criada     → acesso ✅
+//   'ready'           → subscription aprovada, senha pendente   → acesso ✅ (raro no login)
+//   'not_found'       → sem subscription                        → sem acesso ❌
+//   'payment_pending' → pagamento não aprovado                  → sem acesso ❌
+//   'error'           → erro interno (fail-safe)                → sem acesso ❌
 // ═══════════════════════════════════════════════════════════════
-async function checkUserAccess(accessToken) {
+async function checkUserAccess(userEmail) {
     try {
+        console.log('[checkUserAccess] verificando email:', userEmail);
+
         const response = await fetch(
-            `${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`,
+            `${CONFIG.SUPABASE_URL}/functions/v1/check-email-status`,
             {
                 method: 'POST',
                 headers: {
                     'Content-Type':  'application/json',
-                    // JWT do usuário autenticado — a Edge Function extrai identidade do token
-                    'Authorization': `Bearer ${accessToken}`,
+                    'Authorization': `Bearer ${supabase.supabaseKey}`,
                 },
+                body: JSON.stringify({ email: userEmail }),
             }
         );
 
         if (!response.ok) {
-            console.error('[checkUserAccess] Resposta não-ok:', response.status);
-            return { hasAccess: false, isGuest: false };
+            console.error('[checkUserAccess] HTTP:', response.status);
+            // Fail-open em erro de infra (5xx) para não bloquear usuário
+            return { hasAccess: response.status >= 500, isGuest: false };
         }
 
         const result = await response.json();
+        console.log('[checkUserAccess] status retornado:', result.status);
 
-        if (!result.success) {
-            console.error('[checkUserAccess] Erro da Edge Function:', result.message);
-            return { hasAccess: false, isGuest: false };
+        if (result.status === 'password_exists' || result.status === 'ready') {
+            return { hasAccess: true, isGuest: false };
         }
 
-        return {
-            hasAccess: result.hasAccess === true,
-            isGuest:   result.isGuest   === true,
-            plan:      result.plan       ?? null,
-        };
+        return { hasAccess: false, isGuest: false };
 
     } catch (err) {
         console.error('[checkUserAccess] Erro de rede:', err.message);
-        return { hasAccess: false, isGuest: false };
+        // Fail-open em erro de rede para não bloquear por instabilidade
+        return { hasAccess: true, isGuest: false };
     }
 }
 
@@ -515,20 +522,10 @@ loginForm.addEventListener('submit', async (e) => {
         CaptchaState.reset();
         hideCaptcha();
 
-        // [FIX] Usa o access_token diretamente do retorno do signInWithPassword.
-        // Chamar getSession() separadamente pode retornar null antes da propagação.
-        const accessToken = data.session?.access_token;
-
-        if (!accessToken) {
-            // Sem token de sessão — situação inesperada, desloga por segurança
-            await supabase.auth.signOut();
-            showAuthMessage('Erro de sessão. Tente novamente.', 'error');
-            return;
-        }
-
-        // [BUG-01-FIX] Verifica acesso via Edge Function (sem RLS, com auto-link)
+        // Verifica se o usuário tem subscription ativa via check-email-status
+        // Usa data.user.email que é garantido após signInWithPassword bem-sucedido
         setButtonLoading(submitBtn, 'Verificando plano...');
-        const { hasAccess } = await checkUserAccess(accessToken);
+        const { hasAccess } = await checkUserAccess(data.user.email);
 
         if (!hasAccess) {
             // Sem plano: destrói sessão imediatamente
