@@ -1,26 +1,23 @@
 /**
- * GranaEvo — primeiroacesso.js (v2 BLINDADO)
+ * GranaEvo — primeiroacesso.js (v3)
  *
- * SEGURANÇA — MUDANÇA PRINCIPAL:
- * Antes: _linkViaBackend enviava (email, subscription_id) com a anon key —
- *        qualquer pessoa com a chave pública podia chamar a Edge Function.
+ * CORREÇÕES v3:
+ * [BUG-03-FIX] _linkViaBackend agora tenta até 3 vezes com backoff exponencial.
+ *              Antes, uma falha de rede silenciosa deixava user_id = NULL na
+ *              subscription, quebrando todos os logins futuros.
+ *              Agora, se ainda falhar após retries, logamos o erro claramente
+ *              e o check-user-access.ts se encarrega de auto-vincular no próximo login.
  *
- * Agora: após signUp, o usuário recebe um JWT de sessão. Esse JWT é enviado
- *        no header Authorization da chamada à Edge Function. O servidor
- *        extrai a identidade do JWT assinado — não confia no body.
- *        JWT não pode ser forjado. Só o dono da conta pode vincular.
+ * [BUG-04-FIX] signUp sem session (email confirmation habilitado no Supabase):
+ *              Se authData.session for null, significa que o Supabase está exigindo
+ *              confirmação de email. Antes o código seguia em silêncio sem chamar
+ *              _linkViaBackend. Agora detecta e orienta o usuário corretamente.
  *
- * CORREÇÕES APLICADAS:
+ * CORREÇÕES ANTERIORES MANTIDAS:
  * [SEC-01] JWT do usuário usado na chamada à Edge Function (não anon key)
- * [SEC-02] _updateSubscription removido — sempre falhava com 403 (RLS) e
- *          era código morto que poluía o console
- * [SEC-03] _confirmEmail removido — a Edge Function já confirma o email
- *          internamente de forma mais segura
- * [SEC-04] showAlert com innerHTML substituído por DOM programático para
- *          mensagens com links — sem risco de XSS
+ * [SEC-04] showAlert com innerHTML substituído por DOM programático
  * [SEC-05] Campos de senha limpos em TODOS os caminhos de erro
- * [FIX-01] submitBtn restaurado em todos os caminhos (estava faltando em
- *          alguns branches do catch original)
+ * [FIX-01] submitBtn restaurado em todos os caminhos
  * [FIX-02] Email normalizado para lowercase antes de qualquer operação
  * [FIX-03] Tratamento explícito do erro "email not confirmed" no login automático
  */
@@ -204,8 +201,8 @@ function showAlertWithLinks(type, message, links = []) {
 
     links.forEach((link, i) => {
         if (i > 0) alertMessage.appendChild(document.createTextNode(' · '));
-        const a   = document.createElement('a');
-        a.href        = link.href;   // href é constante no código — não vem do servidor
+        const a       = document.createElement('a');
+        a.href        = link.href;
         a.textContent = link.text;
         alertMessage.appendChild(a);
     });
@@ -227,7 +224,7 @@ function setButtonLoading(btn, label) {
 function restoreButton(btn, fallbackLabel) {
     btn.disabled = false;
     if (btn.dataset.orig) {
-        btn.innerHTML = btn.dataset.orig; // HTML é do desenvolvedor, não do usuário
+        btn.innerHTML = btn.dataset.orig;
         delete btn.dataset.orig;
     } else {
         btn.textContent = fallbackLabel;
@@ -398,7 +395,6 @@ accessForm?.addEventListener('submit', async (e) => {
                 authError.message.toLowerCase().includes('user already registered');
 
             if (alreadyRegistered) {
-                // Usuário já existe — orienta para login/reset
                 showAlertWithLinks(
                     'warning',
                     'Este email já possui cadastro.',
@@ -412,27 +408,53 @@ accessForm?.addEventListener('submit', async (e) => {
             throw authError;
         }
 
-        const userId      = authData.user.id;
+        const userId      = authData.user?.id;
         const accessToken = authData.session?.access_token;
 
-        // ── ETAPA 2: Vincular subscription via Edge Function ────────────
-        // [SEC-01] Envia o JWT do usuário recém-criado — não a anon key
-        // A Edge Function extrai o email do JWT assinado (não confia no body)
-        if (accessToken) {
-            await _linkViaBackend(accessToken, currentSubscriptionData.subscription_id);
+        // ── ETAPA 2: Verificação de confirmação de email ────────────────
+        // [BUG-04-FIX] Se o Supabase exige confirmação de email, não há session.
+        // Nesse caso o _linkViaBackend não pode ser chamado (sem JWT).
+        // Orientamos o usuário e deixamos o check-user-access auto-vincular depois.
+        if (!accessToken) {
+            // Limpa senha imediatamente
+            passwordInput.value        = '';
+            confirmPasswordInput.value = '';
+
+            showAlert(
+                'warning',
+                '✅ Conta criada! Confirme seu email na sua caixa de entrada para ativar o acesso, depois faça login.'
+            );
+            setTimeout(() => { window.location.href = 'login.html'; }, 4000);
+            return;
         }
-        // Se não há accessToken (raro com confirm email desligado), o fallback
-        // ocorre no próximo login quando o AuthGuard detecta subscription sem user_id
 
-        // ── ETAPA 3: Registrar aceitação dos termos ─────────────────────
-        await _acceptTerms(userId, email);
+        // ── ETAPA 3: Vincular subscription via Edge Function ────────────
+        // [BUG-03-FIX] Retry com backoff exponencial (até 3 tentativas)
+        // Se ainda falhar, o check-user-access auto-vincula no primeiro login.
+        const linkSuccess = await _linkViaBackendWithRetry(
+            accessToken,
+            currentSubscriptionData.subscription_id
+        );
 
-        // ── ETAPA 4: Criar user_data ────────────────────────────────────
-        await _createUserData(userId, email, currentSubscriptionData);
+        if (!linkSuccess) {
+            // Falha não-crítica: log para debug, mas NÃO bloqueia o cadastro.
+            // A Edge Function check-user-access garante o vínculo no próximo login.
+            console.warn('[primeiroacesso] _linkViaBackend falhou após retries — será corrigido no próximo login via check-user-access.');
+        }
 
-        // ── ETAPA 5: Login automático ────────────────────────────────────
-        // Aguarda 800ms para propagação no servidor
-        await new Promise(resolve => setTimeout(resolve, 800));
+        // ── ETAPA 4: Registrar aceitação dos termos ─────────────────────
+        if (userId) {
+            await _acceptTerms(userId, email);
+        }
+
+        // ── ETAPA 5: Criar user_data ────────────────────────────────────
+        if (userId) {
+            await _createUserData(userId, email, currentSubscriptionData);
+        }
+
+        // ── ETAPA 6: Login automático ────────────────────────────────────
+        // Aguarda propagação no servidor
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -443,9 +465,9 @@ accessForm?.addEventListener('submit', async (e) => {
         if (loginError) {
             // [FIX-03] Trata explicitamente email não confirmado
             if (loginError.message?.toLowerCase().includes('email not confirmed')) {
-                showAlert('warning', 'Conta criada! Confirme seu email e faça o login.');
+                showAlert('warning', '✅ Conta criada! Confirme seu email e faça o login.');
             } else {
-                showAlert('info', '✅ Conta criada! Faça o login para continuar.');
+                showAlert('info', '✅ Conta criada com sucesso! Faça o login para continuar.');
             }
             setTimeout(() => { window.location.href = 'login.html'; }, 2500);
             return;
@@ -483,9 +505,29 @@ accessForm?.addEventListener('submit', async (e) => {
 // ==========================================
 
 /**
+ * [BUG-03-FIX] _linkViaBackendWithRetry
+ * Tenta vincular até `maxRetries` vezes com backoff exponencial.
+ * Isso cobre falhas de rede transitórias que antes quebravam o vínculo
+ * silenciosamente, deixando user_id = NULL na subscription.
+ */
+async function _linkViaBackendWithRetry(accessToken, subscriptionId, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const success = await _linkViaBackend(accessToken, subscriptionId);
+        if (success) return true;
+
+        if (attempt < maxRetries) {
+            // Backoff exponencial: 500ms, 1000ms
+            const delay = 500 * attempt;
+            console.warn(`[primeiroacesso] _linkViaBackend tentativa ${attempt} falhou. Retry em ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+    return false;
+}
+
+/**
  * [SEC-01] Vincula subscription usando o JWT do usuário como autenticação.
- * A Edge Function verifica o JWT e extrai o email de forma segura —
- * não aceita email do body, impossibilitando falsificação de identidade.
+ * A Edge Function verifica o JWT e extrai o email de forma segura.
  */
 async function _linkViaBackend(accessToken, subscriptionId) {
     try {
@@ -497,13 +539,16 @@ async function _linkViaBackend(accessToken, subscriptionId) {
                 'Authorization': `Bearer ${accessToken}`,
             },
             body: JSON.stringify({ subscription_id: subscriptionId }),
-            // Nota: email NÃO é enviado no body — a Edge Function extrai do JWT
         });
 
-        if (!response.ok) return false;
+        if (!response.ok) {
+            console.error(`[primeiroacesso] _linkViaBackend HTTP ${response.status}`);
+            return false;
+        }
         const result = await response.json();
         return result?.success === true;
-    } catch {
+    } catch (err) {
+        console.error('[primeiroacesso] _linkViaBackend erro de rede:', err?.message);
         return false;
     }
 }
@@ -518,7 +563,6 @@ async function _acceptTerms(userId, email) {
             email,
             accepted:    true,
             accepted_at: new Date().toISOString(),
-            // Trunca UserAgent para evitar armazenamento excessivo
             user_agent:  navigator.userAgent.slice(0, 200),
         });
     } catch {
