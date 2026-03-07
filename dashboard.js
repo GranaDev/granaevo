@@ -27,12 +27,10 @@ let nextContaFixaId = 1;
 let metaSelecionadaId = null;
 let tipoRelatorioAtivo = 'individual';
 
-// ========== REFERÊNCIAS GLOBAIS PROTEGIDAS ==========
+// ========== REFERÊNCIAS GLOBAIS ==========
 
-// ✅ Referência interna mutável — o getter de __GE__ sempre aponta para cá
 let _GE_snapshot_atual = null;
 
-// ✅ Throttle de save exposto via __GE_save__ (declarado antes de _inicializarGE)
 const _throttledSave = (() => {
     let _ultimaChamada = 0;
     return async function() {
@@ -92,15 +90,10 @@ function validarUserData(userData) {
     if (!Array.isArray(userData.profiles)) return false;
     return true;
 }
-
 // ========== FIM DAS FUNÇÕES UTILITÁRIAS ==========
 
-// ✅ Define __GE__ e __GE_save__ como não-reescritáveis UMA única vez no carregamento
 (function _inicializarGE() {
     Object.defineProperty(window, '__GE__', {
-        // ✅ CORREÇÃO: congela o snapshot antes de expor
-        //    Impede que atacante faça window.__GE__.transacoes.length = 0
-        //    Freeze é superficial — suficiente para bloquear mutação direta via getter
         get: () => {
             if (!_GE_snapshot_atual) return null;
             try {
@@ -122,9 +115,6 @@ function validarUserData(userData) {
     });
 })();
 
-// ✅ Define window.* financeiros como somente-leitura — impede manipulação via console
-// Bloqueia: window.transacoes = [...], window.transacoes.push(...), window.transacoes[0].valor = X
-// graficos.js: use [...window.transacoes].sort(...) em vez de window.transacoes.sort(...)
 (function _inicializarWindowRefs() {
     const _def = (prop, getter) => {
         try {
@@ -135,45 +125,21 @@ function validarUserData(userData) {
                 enumerable:   false,
             });
         } catch (_) {
-            // Propriedade já definida anteriormente — sem ação necessária
-        }
-    };
 
-    // ✅ REMOVIDO: window.usuarioLogado
-    //    Continha email, plano, userId, isGuest — PII não deve ficar acessível
-    //    via console ou extensões. Nenhum módulo externo depende diretamente deste getter.
+    }
+};
 
-    // ✅ REMOVIDO: window.cartoesCredito
-    //    Continha limite, usado, bandeira — dado financeiro sensível.
-    //    graficos.js deve usar window.__GE__.cartoesCredito se precisar.
-
-    // ✅ MANTIDOS apenas os arrays consumidos por graficos.js
-    //    Migração recomendada: graficos.js passar a usar window.__GE__.*
-    //    e estas linhas serem removidas em versão futura.
-    _def('perfilAtivo',    () => perfilAtivo
-        ? Object.freeze({ id: perfilAtivo.id, nome: perfilAtivo.nome }) // ✅ expõe apenas id e nome — sem foto/storagePath
+    _def('perfilAtivo', () => perfilAtivo
+        ? Object.freeze({ id: perfilAtivo.id, nome: perfilAtivo.nome })
         : null
     );
-    _def('transacoes',     () => Object.freeze(transacoes.map(t  => Object.freeze(Object.assign({}, t)))));
-    _def('metas',          () => Object.freeze(metas.map(m        => Object.freeze(Object.assign({}, m)))));
-    _def('contasFixas',    () => Object.freeze(contasFixas.map(c  => Object.freeze(Object.assign({}, c)))));
 
-    // ✅ __GE_API__: ponto de entrada público para módulos externos legítimos
-    //    Extensões e scripts de terceiros não têm acesso ao _sessionNonce
-    //    e não podem chamar as funções de alto risco via window.*
-    Object.defineProperty(window, '__GE_API__', {
-        value: Object.freeze({
-            // Apenas leitura de metadados não-sensíveis
-            obterPerfilResumido: () => perfilAtivo
-                ? Object.freeze({ id: perfilAtivo.id, nome: perfilAtivo.nome })
-                : null,
-            // Trigger de save com throttle — sem acesso aos dados brutos
-            salvar: _throttledSave,
-        }),
-        writable:     false,
-        configurable: false,
-        enumerable:   false,
-    });
+    if (window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1') {
+        _def('_dev_transacoes',  () => Object.freeze(transacoes.map(t => Object.freeze(Object.assign({}, t)))));
+        _def('_dev_metas',       () => Object.freeze(metas.map(m => Object.freeze(Object.assign({}, m)))));
+        _def('_dev_contasFixas', () => Object.freeze(contasFixas.map(c => Object.freeze(Object.assign({}, c)))));
+    }
 })();
 
 function atualizarReferenciasGlobais() {
@@ -185,10 +151,6 @@ function atualizarReferenciasGlobais() {
         contasFixas:    Object.freeze([...contasFixas]),
         cartoesCredito: Object.freeze([...cartoesCredito]),
     });
-
-    // ✅ window.* são getters read-only definidos em _inicializarWindowRefs
-    // Reatribuição removida — é bloqueada pelo setter e os getters já refletem
-    // automaticamente o estado atual das variáveis do módulo
 }
 
 // Limites por plano
@@ -250,7 +212,6 @@ function getMesNome(mes) {
 }
 
 // ========== CARREGAR E SALVAR DADOS ==========
-// ── Logger interno: em produção, suprime dados sensíveis
 const _log = (() => {
     const IS_DEV = window.location.hostname === 'localhost' ||
                    window.location.hostname === '127.0.0.1';
@@ -7276,101 +7237,170 @@ function abrirVisualizacaoFatura(faturaId) {
     const fatura = contasFixas.find(c => c.id === faturaId);
     if (!fatura || !fatura.compras) return;
 
-    const cartao    = cartoesCredito.find(c => c.id === fatura.cartaoId);
-    const nomeCartao = cartao ? sanitizeHTML(cartao.nomeBanco) : 'Cartão';
+    const cartao     = cartoesCredito.find(c => c.id === fatura.cartaoId);
+    const nomeCartao = cartao ? _sanitizeText(cartao.nomeBanco) : 'Cartão';
 
-    let htmlCompras = '';
+    // ── Monta o popup com estrutura estática (zero dados do usuário no HTML)
+    criarPopupDOM((popup) => {
 
-    fatura.compras.forEach(compra => {
-        const statusParcela = compra.parcelaAtual > compra.totalParcelas
-            ? '<span style="color: #00ff99;">✓ Paga</span>'
-            : `<span style="color: #ffd166;">Parcela ${sanitizeHTML(compra.parcelaAtual)}/${sanitizeHTML(compra.totalParcelas)}</span>`;
+        // ── Título
+        const titulo = document.createElement('h3');
+        titulo.textContent = '💳 Detalhes da Fatura';
 
-        // IDs em data-attributes; nunca em onclick inline
-        const safeFaturaId = sanitizeHTML(String(faturaId));
-        const safeCompraId = sanitizeHTML(String(compra.id));
+        // ── Cabeçalho: nome do cartão, vencimento, total
+        const cabecalho = document.createElement('div');
+        cabecalho.style.cssText = 'text-align: center; margin-bottom: 20px;';
 
-        htmlCompras += `
-            <div style="background: rgba(255,255,255,0.03); padding: 16px; border-radius: 12px;
-                        margin-bottom: 12px; border-left: 3px solid var(--primary);">
-                <div style="display: flex; justify-content: space-between; align-items: start;
-                            margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-                    <div style="flex: 1;">
-                        <div style="font-weight: 600; color: var(--text-primary); font-size: 1rem;">
-                            ${sanitizeHTML(compra.tipo)}
-                        </div>
-                        <div style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 4px;">
-                            ${sanitizeHTML(compra.descricao)}
-                        </div>
-                        <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
-                            📅 Compra: ${sanitizeHTML(compra.dataCompra)}
-                        </div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-weight: 700; color: var(--text-primary); font-size: 1.1rem;">
-                            ${formatBRL(compra.valorParcela)}
-                        </div>
-                        <div style="font-size: 0.85rem; margin-top: 4px;">${statusParcela}</div>
-                    </div>
-                </div>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
-                    <button class="btn-primary js-pagar-compra"
-                            data-fatura-id="${safeFaturaId}"
-                            data-compra-id="${safeCompraId}"
-                            style="flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem;">
-                        💰 Pagar
-                    </button>
-                    <button class="btn-primary js-editar-compra"
-                            data-fatura-id="${safeFaturaId}"
-                            data-compra-id="${safeCompraId}"
-                            style="flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem; background: var(--accent);">
-                        ✏️ Editar
-                    </button>
-                    <button class="btn-excluir js-excluir-compra"
-                            data-fatura-id="${safeFaturaId}"
-                            data-compra-id="${safeCompraId}"
-                            style="flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem;">
-                        🗑️ Excluir
-                    </button>
-                </div>
-            </div>
-        `;
+        const nomeEl = document.createElement('div');
+        nomeEl.style.cssText = 'font-size: 1.1rem; font-weight: 600; color: var(--text-primary);';
+        nomeEl.textContent = nomeCartao; // ✅ textContent
+
+        const vencEl = document.createElement('div');
+        vencEl.style.cssText = 'font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px;';
+        vencEl.textContent = `Vencimento: ${formatarDataBR(fatura.vencimento)}`; // ✅ textContent
+
+        const totalEl = document.createElement('div');
+        totalEl.style.cssText = 'font-size: 1.4rem; font-weight: 700; color: var(--danger); margin-top: 12px;';
+        totalEl.textContent = `Total: ${formatBRL(fatura.valor)}`; // ✅ textContent
+
+        cabecalho.appendChild(nomeEl);
+        cabecalho.appendChild(vencEl);
+        cabecalho.appendChild(totalEl);
+
+        // ── Seção de compras
+        const secaoCompras = document.createElement('div');
+        secaoCompras.style.cssText = 'max-height: 400px; overflow-y: auto; margin-bottom: 20px;';
+
+        const tituloCompras = document.createElement('h4');
+        tituloCompras.style.cssText = 'margin-bottom: 12px; color: var(--text-primary);';
+        tituloCompras.textContent = '📦 Compras nesta Fatura:';
+        secaoCompras.appendChild(tituloCompras);
+
+        if (fatura.compras.length === 0) {
+            const vazio = document.createElement('p');
+            vazio.style.cssText = 'text-align: center; color: var(--text-muted); padding: 20px 0;';
+            vazio.textContent = 'Nenhuma compra registrada nesta fatura.';
+            secaoCompras.appendChild(vazio);
+        }
+
+        fatura.compras.forEach(compra => {
+            // ── Validações de segurança antes de renderizar
+            if (!compra || typeof compra !== 'object') return;
+
+            const parcelaAtual   = Number(compra.parcelaAtual);
+            const totalParcelas  = Number(compra.totalParcelas);
+            const valorParcela   = Number(compra.valorParcela);
+            const valorTotal     = Number(compra.valorTotal);
+
+            if (!isFinite(parcelaAtual) || !isFinite(totalParcelas) ||
+                !isFinite(valorParcela) || valorParcela <= 0) return;
+
+            const isPaga = parcelaAtual > totalParcelas;
+
+            // ── Card da compra
+            const card = document.createElement('div');
+            card.style.cssText = `
+                background: rgba(255,255,255,0.03);
+                padding: 16px;
+                border-radius: 12px;
+                margin-bottom: 12px;
+                border-left: 3px solid var(--primary);
+            `;
+
+            // ── Linha superior: info + valor
+            const rowTop = document.createElement('div');
+            rowTop.style.cssText = `
+                display: flex;
+                justify-content: space-between;
+                align-items: start;
+                margin-bottom: 10px;
+                flex-wrap: wrap;
+                gap: 8px;
+            `;
+
+            // Coluna esquerda: tipo, descrição, data
+            const colEsquerda = document.createElement('div');
+            colEsquerda.style.flex = '1';
+
+            const divTipo = document.createElement('div');
+            divTipo.style.cssText = 'font-weight: 600; color: var(--text-primary); font-size: 1rem;';
+            divTipo.textContent = String(compra.tipo || ''); // ✅ textContent
+
+            const divDesc = document.createElement('div');
+            divDesc.style.cssText = 'color: var(--text-secondary); font-size: 0.9rem; margin-top: 4px;';
+            divDesc.textContent = String(compra.descricao || ''); // ✅ textContent
+
+            const divData = document.createElement('div');
+            divData.style.cssText = 'color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;';
+            divData.textContent = `📅 Compra: ${String(compra.dataCompra || '')}`; // ✅ textContent
+
+            colEsquerda.appendChild(divTipo);
+            colEsquerda.appendChild(divDesc);
+            colEsquerda.appendChild(divData);
+
+            // Coluna direita: valor + status
+            const colDireita = document.createElement('div');
+            colDireita.style.textAlign = 'right';
+
+            const divValor = document.createElement('div');
+            divValor.style.cssText = 'font-weight: 700; color: var(--text-primary); font-size: 1.1rem;';
+            divValor.textContent = formatBRL(valorParcela); // ✅ textContent — formatBRL retorna string numérica
+
+            const divStatus = document.createElement('div');
+            divStatus.style.cssText = `font-size: 0.85rem; margin-top: 4px; font-weight: 600; color: ${isPaga ? '#00ff99' : '#ffd166'};`;
+            divStatus.textContent = isPaga
+                ? '✓ Paga'
+                : `Parcela ${parcelaAtual}/${totalParcelas}`; // ✅ textContent — valores numéricos internos
+
+            colDireita.appendChild(divValor);
+            colDireita.appendChild(divStatus);
+
+            rowTop.appendChild(colEsquerda);
+            rowTop.appendChild(colDireita);
+
+            // ── Botões de ação
+            const rowBotoes = document.createElement('div');
+            rowBotoes.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;';
+
+            const btnPagar = document.createElement('button');
+            btnPagar.className = 'btn-primary';
+            btnPagar.style.cssText = 'flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem;';
+            btnPagar.textContent = '💰 Pagar';
+            // ✅ IDs capturados em closure — nunca passam por atributo HTML
+            btnPagar.addEventListener('click', () => pagarCompraIndividual(faturaId, compra.id));
+
+            const btnEditar = document.createElement('button');
+            btnEditar.className = 'btn-primary';
+            btnEditar.style.cssText = 'flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem; background: var(--accent);';
+            btnEditar.textContent = '✏️ Editar';
+            btnEditar.addEventListener('click', () => editarCompraFatura(faturaId, compra.id));
+
+            const btnExcluir = document.createElement('button');
+            btnExcluir.className = 'btn-excluir';
+            btnExcluir.style.cssText = 'flex: 1; min-width: 80px; padding: 8px 12px; font-size: 0.85rem;';
+            btnExcluir.textContent = '🗑️ Excluir';
+            btnExcluir.addEventListener('click', () => excluirCompraFatura(faturaId, compra.id));
+
+            rowBotoes.appendChild(btnPagar);
+            rowBotoes.appendChild(btnEditar);
+            rowBotoes.appendChild(btnExcluir);
+
+            card.appendChild(rowTop);
+            card.appendChild(rowBotoes);
+            secaoCompras.appendChild(card);
+        });
+
+        // ── Botão fechar
+        const btnFechar = document.createElement('button');
+        btnFechar.className = 'btn-primary';
+        btnFechar.textContent = 'Fechar';
+        btnFechar.addEventListener('click', fecharPopup);
+
+        popup.appendChild(titulo);
+        popup.appendChild(cabecalho);
+        popup.appendChild(secaoCompras);
+        popup.appendChild(btnFechar);
     });
-
-    criarPopup(`
-        <h3>💳 Detalhes da Fatura</h3>
-        <div style="text-align: center; margin-bottom: 20px;">
-            <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary);">${nomeCartao}</div>
-            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px;">
-                Vencimento: ${sanitizeHTML(formatarDataBR(fatura.vencimento))}
-            </div>
-            <div style="font-size: 1.4rem; font-weight: 700; color: var(--danger); margin-top: 12px;">
-                Total: ${formatBRL(fatura.valor)}
-            </div>
-        </div>
-
-        <div style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
-            <h4 style="margin-bottom: 12px; color: var(--text-primary);">📦 Compras nesta Fatura:</h4>
-            ${htmlCompras}
-        </div>
-
-        <button id="btnFecharFatura" class="btn-primary">Fechar</button>
-    `);
-
-    // Delegar todos os eventos após inserção no DOM
-    document.querySelectorAll('.js-pagar-compra').forEach(btn => {
-        btn.addEventListener('click', () =>
-            pagarCompraIndividual(btn.dataset.faturaId, btn.dataset.compraId));
-    });
-    document.querySelectorAll('.js-editar-compra').forEach(btn => {
-        btn.addEventListener('click', () =>
-            editarCompraFatura(btn.dataset.faturaId, btn.dataset.compraId));
-    });
-    document.querySelectorAll('.js-excluir-compra').forEach(btn => {
-        btn.addEventListener('click', () =>
-            excluirCompraFatura(btn.dataset.faturaId, btn.dataset.compraId));
-    });
-    document.getElementById('btnFecharFatura').addEventListener('click', fecharPopup);
 }
 
 window.abrirVisualizacaoFatura = abrirVisualizacaoFatura;

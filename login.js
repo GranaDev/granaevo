@@ -18,6 +18,15 @@
  * [SEC-13] Cooldowns de envio de código persistem em sessionStorage (anti-flood)
  * [SEC-14] is_guest_member removido do sessionStorage — lógica de autorização real fica no AuthGuard
  * [SEC-15] supabase.supabaseKey NÃO é usado diretamente nas chamadas de Edge Function (use a anon key configurada)
+ *
+ * CORREÇÕES DE BUG (v2):
+ * [BUG-01-FIX] getActiveSubscription substituída por checkUserAccess() que chama
+ *              a Edge Function check-user-access via service role key — sem RLS bloqueando.
+ *              CAUSA DO "Você precisa de um plano ativo": RLS bloqueava o fallback por
+ *              email quando user_id = NULL na subscription. O cliente anon com JWT do
+ *              usuário só vê linhas onde user_id = auth.uid() — email nunca funcionava.
+ * [BUG-02-FIX] A Edge Function auto-vincula user_id caso esteja NULL, corrigindo
+ *              o estado inconsistente deixado por falha silenciosa do _linkViaBackend.
  */
 
 import { supabase } from './supabase-client.js';
@@ -57,7 +66,6 @@ const CaptchaState = (() => {
     let _token    = null;
     let _resolved = false;
 
-    // Registra callbacks globais que o reCAPTCHA v2 exige
     window.onCaptchaResolved = (token) => {
         if (typeof token === 'string' && token.length > 20) {
             _token    = token;
@@ -116,8 +124,7 @@ const Cooldown = {
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: RATE LIMITER DE SUBMISSÃO (frontend)
-//  [SEC-08] Impede flood de requests no período de tempo configurado
-//  NOTA: Rate limiting real DEVE estar no backend (Edge Function / RLS)
+//  [SEC-08]
 // ═══════════════════════════════════════════════════════════════
 const SubmitRateLimiter = {
     isAllowed() {
@@ -131,7 +138,6 @@ const SubmitRateLimiter = {
             log = [];
         }
 
-        // Remove entradas fora da janela
         log = log.filter(ts => ts > windowStart);
 
         if (log.length >= CONFIG.RATE_LIMIT_MAX) return false;
@@ -147,27 +153,16 @@ const SubmitRateLimiter = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  UTILITÁRIO: SANITIZAÇÃO DE TEXTO (XSS)
-//  [SEC-06] Toda saída para o DOM usa este helper ou textContent direto
+//  UTILITÁRIOS
 // ═══════════════════════════════════════════════════════════════
 function sanitizeText(value) {
-    // Retorna string segura para inserção via textContent
     return String(value ?? '').trim();
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  UTILITÁRIO: VALIDAÇÃO DE EMAIL
-//  [SEC-12] Valida formato antes de enviar ao servidor
-// ═══════════════════════════════════════════════════════════════
 function isValidEmail(email) {
-    // RFC 5322 simplificado — validação definitiva ocorre no backend
     return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  UTILITÁRIO: CRIAR SPINNER SEM innerHTML
-//  [SEC-07] Evita injeção via innerHTML ao criar elementos de loading
-// ═══════════════════════════════════════════════════════════════
 function createSpinnerElement(labelText) {
     const wrapper = document.createDocumentFragment();
 
@@ -193,21 +188,15 @@ function createSpinnerElement(labelText) {
     path.setAttribute('fill', 'none');
     svg.appendChild(path);
 
-    const text = document.createTextNode(' ' + sanitizeText(labelText));
-
     wrapper.appendChild(svg);
-    wrapper.appendChild(text);
+    wrapper.appendChild(document.createTextNode(' ' + sanitizeText(labelText)));
 
     return wrapper;
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  UTILITÁRIO: ESTADO DO BOTÃO DE LOADING
-//  Salva/restaura conteúdo do botão sem usar innerHTML com dados externos
-// ═══════════════════════════════════════════════════════════════
 function setButtonLoading(btn, loadingText) {
     btn.disabled = true;
-    btn.dataset.originalHtml = btn.innerHTML; // salva HTML seguro (apenas template interno)
+    btn.dataset.originalHtml = btn.innerHTML;
     btn.textContent = '';
     btn.appendChild(createSpinnerElement(loadingText));
 }
@@ -215,8 +204,6 @@ function setButtonLoading(btn, loadingText) {
 function restoreButton(btn) {
     btn.disabled = false;
     if (btn.dataset.originalHtml) {
-        // O conteúdo original foi gerado pelo desenvolvedor (não por input do usuário)
-        // eslint-disable-next-line no-unsanitized/property
         btn.innerHTML = btn.dataset.originalHtml;
         delete btn.dataset.originalHtml;
     }
@@ -247,11 +234,11 @@ const buttons = Object.freeze({
 });
 
 const inputs = Object.freeze({
-    loginEmail:    document.getElementById('loginEmail'),
-    loginPassword: document.getElementById('loginPassword'),
-    recoveryEmail: document.getElementById('recoveryEmail'),
-    codeInputs:    document.querySelectorAll('.code-input'),
-    newPassword:   document.getElementById('newPassword'),
+    loginEmail:      document.getElementById('loginEmail'),
+    loginPassword:   document.getElementById('loginPassword'),
+    recoveryEmail:   document.getElementById('recoveryEmail'),
+    codeInputs:      document.querySelectorAll('.code-input'),
+    newPassword:     document.getElementById('newPassword'),
     confirmPassword: document.getElementById('confirmPassword'),
 });
 
@@ -261,14 +248,12 @@ const togglePassword = document.getElementById('togglePassword');
 
 // ═══════════════════════════════════════════════════════════════
 //  ESTADO DE RECUPERAÇÃO DE SENHA
-//  Mantido em closure — não exposto globalmente
 // ═══════════════════════════════════════════════════════════════
 let _recoveryEmail = '';
 let _verifiedCode  = '';
 
 // ═══════════════════════════════════════════════════════════════
 //  FUNÇÕES DE MENSAGEM
-//  [SEC-06] Usa textContent — nunca innerHTML com input do usuário
 // ═══════════════════════════════════════════════════════════════
 let _messageTimer = null;
 
@@ -276,13 +261,11 @@ function showAuthMessage(message, type) {
     const messageDiv = document.getElementById('authErrorMessage');
     if (!messageDiv) return;
 
-    // Cancela timer anterior para evitar race condition de hide
     if (_messageTimer) {
         clearTimeout(_messageTimer);
         _messageTimer = null;
     }
 
-    // [SEC-06] textContent — nunca innerHTML com dados externos
     messageDiv.textContent = sanitizeText(message);
     messageDiv.className   = `auth-message ${type} show`;
     messageDiv.style.display = 'flex';
@@ -309,7 +292,7 @@ function hideError() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  EFEITOS VISUAIS: SHAKE E INPUT
+//  EFEITOS VISUAIS
 // ═══════════════════════════════════════════════════════════════
 function shakeInput(input) {
     if (!input) return;
@@ -325,7 +308,6 @@ function shakeInput(input) {
 //  INICIALIZAÇÃO
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
-    // Verifica sessão ativa antes de qualquer coisa
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
@@ -333,10 +315,9 @@ window.addEventListener('DOMContentLoaded', async () => {
             return;
         }
     } catch {
-        // Não há sessão ou erro de rede — continua para o login
+        // Sem sessão — continua para o login
     }
 
-    // Exibe reCAPTCHA imediatamente se já havia tentativas acima do limite
     if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         showCaptcha();
     }
@@ -344,17 +325,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     createMoneyParticles();
     createAnimatedCharts();
 
-    // Exibe erro de autenticação vindo de outra página (ex: AuthGuard)
     const authError = sessionStorage.getItem('auth_error');
     if (authError) {
-        // [SEC-06] Usa sanitizeText antes de exibir
         showAuthMessage(sanitizeText(authError), 'error');
         sessionStorage.removeItem('auth_error');
     }
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA: EXIBIR / OCULTAR
+//  CAPTCHA
 // ═══════════════════════════════════════════════════════════════
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
@@ -372,8 +351,7 @@ function hideCaptcha() {
 
 // ═══════════════════════════════════════════════════════════════
 //  VALIDAÇÃO DO CAPTCHA NO BACKEND
-//  [SEC-03] Token validado APENAS no servidor — frontend só repassa
-//  [SEC-15] Usa a anon key pública do Supabase (configurada no client)
+//  [SEC-03]
 // ═══════════════════════════════════════════════════════════════
 async function validateCaptchaOnBackend(token) {
     if (!token || typeof token !== 'string' || token.trim().length < 20) {
@@ -381,20 +359,16 @@ async function validateCaptchaOnBackend(token) {
     }
 
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-
         const response = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/verify-recaptcha`, {
             method:  'POST',
             headers: {
                 'Content-Type':  'application/json',
-                // Usa a anon key pública — nunca a service role key
                 'Authorization': `Bearer ${supabase.supabaseKey}`,
             },
             body: JSON.stringify({ token: token.trim() }),
         });
 
         if (!response.ok) return false;
-
         const result = await response.json();
         return result?.success === true;
     } catch {
@@ -403,88 +377,50 @@ async function validateCaptchaOnBackend(token) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SUBSCRIPTION: VERIFICAÇÃO PÓS-LOGIN
+//  [BUG-01-FIX] checkUserAccess — SUBSTITUI getActiveSubscription
+//
+//  ANTES: consultava tabela subscriptions diretamente com cliente anon.
+//         RLS bloqueava o fallback por email (user_id = NULL → invisível).
+//
+//  AGORA: chama Edge Function check-user-access que usa service role key
+//         (sem RLS), busca por user_id, depois por email, e auto-vincula
+//         user_id se necessário. Resolve o bug silencioso de forma definitiva.
 // ═══════════════════════════════════════════════════════════════
-async function getActiveSubscription(userId, userEmail) {
+async function checkUserAccess(accessToken) {
     try {
-        // 1. Tenta buscar por user_id (caminho normal)
-        const { data: ownSub, error: ownErr } = await supabase
-            .from('subscriptions')
-            .select('id, plans(name), is_active, payment_status, expires_at')
-            .eq('user_id', userId)
-            .eq('payment_status', 'approved')
-            .eq('is_active', true)
-            .maybeSingle();
-
-        if (!ownErr && ownSub) {
-            if (ownSub.expires_at && new Date(ownSub.expires_at) < new Date()) {
-                return { subscription: null, isGuest: false };
+        const response = await fetch(
+            `${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type':  'application/json',
+                    // JWT do usuário autenticado — a Edge Function extrai identidade do token
+                    'Authorization': `Bearer ${accessToken}`,
+                },
             }
-            return { subscription: ownSub, isGuest: false };
+        );
+
+        if (!response.ok) {
+            console.error('[checkUserAccess] Resposta não-ok:', response.status);
+            return { hasAccess: false, isGuest: false };
         }
 
-        // 2. FALLBACK: busca por email (cobre usuários com user_id = NULL)
-        if (userEmail) {
-            const { data: emailSub, error: emailErr } = await supabase
-                .from('subscriptions')
-                .select('id, plans(name), is_active, payment_status, expires_at, user_id')
-                .eq('user_email', userEmail)
-                .eq('payment_status', 'approved')
-                .eq('is_active', true)
-                .maybeSingle();
+        const result = await response.json();
 
-            if (!emailErr && emailSub) {
-                if (emailSub.expires_at && new Date(emailSub.expires_at) < new Date()) {
-                    return { subscription: null, isGuest: false };
-                }
-
-                // Vincula o user_id automaticamente se ainda estiver NULL
-                if (!emailSub.user_id) {
-                    supabase
-                        .from('subscriptions')
-                        .update({
-                            user_id:             userId,
-                            password_created:    true,
-                            password_created_at: new Date().toISOString(),
-                            updated_at:          new Date().toISOString(),
-                        })
-                        .eq('id', emailSub.id)
-                        .then(() => {})
-                        .catch(() => {});
-                }
-
-                return { subscription: emailSub, isGuest: false };
-            }
+        if (!result.success) {
+            console.error('[checkUserAccess] Erro da Edge Function:', result.message);
+            return { hasAccess: false, isGuest: false };
         }
 
-        // 3. Verifica se é convidado com dono de plano ativo
-        const { data: membership, error: memErr } = await supabase
-            .from('account_members')
-            .select('owner_user_id')
-            .eq('member_user_id', userId)
-            .eq('is_active', true)
-            .maybeSingle();
+        return {
+            hasAccess: result.hasAccess === true,
+            isGuest:   result.isGuest   === true,
+            plan:      result.plan       ?? null,
+        };
 
-        if (memErr || !membership) return { subscription: null, isGuest: false };
-
-        const { data: ownerSub, error: ownerErr } = await supabase
-            .from('subscriptions')
-            .select('id, plans(name), is_active, payment_status, expires_at')
-            .eq('user_id', membership.owner_user_id)
-            .eq('payment_status', 'approved')
-            .eq('is_active', true)
-            .maybeSingle();
-
-        if (ownerErr || !ownerSub) return { subscription: null, isGuest: false };
-
-        if (ownerSub.expires_at && new Date(ownerSub.expires_at) < new Date()) {
-            return { subscription: null, isGuest: false };
-        }
-
-        return { subscription: ownerSub, isGuest: true };
-
-    } catch {
-        return { subscription: null, isGuest: false };
+    } catch (err) {
+        console.error('[checkUserAccess] Erro de rede:', err.message);
+        return { hasAccess: false, isGuest: false };
     }
 }
 
@@ -494,16 +430,14 @@ async function getActiveSubscription(userId, userEmail) {
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    // [SEC-08] Rate limit de submissão no frontend
     if (!SubmitRateLimiter.isAllowed()) {
         showAuthMessage('Muitas tentativas em pouco tempo. Aguarde um momento.', 'error');
         return;
     }
 
     const email    = sanitizeText(inputs.loginEmail.value);
-    const password = inputs.loginPassword.value; // senha não é trimada
+    const password = inputs.loginPassword.value;
 
-    // Validações básicas
     if (!email || !password) {
         showAuthMessage('Por favor, preencha todos os campos.', 'error');
         return;
@@ -523,7 +457,6 @@ loginForm.addEventListener('submit', async (e) => {
 
     const currentAttempts = LoginAttempts.get();
 
-    // ── Verificação do reCAPTCHA ──────────────────────────────
     if (currentAttempts >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         if (!CaptchaState.isResolved()) {
             showAuthMessage('Por favor, resolva a verificação de segurança.', 'error');
@@ -531,7 +464,6 @@ loginForm.addEventListener('submit', async (e) => {
             return;
         }
 
-        // [SEC-03] Validação do token no backend
         showAuthMessage('Verificando segurança...', 'info');
         const captchaValid = await validateCaptchaOnBackend(CaptchaState.getToken());
 
@@ -542,7 +474,7 @@ loginForm.addEventListener('submit', async (e) => {
         }
     }
 
-    // [SEC-05] Desabilita o botão ANTES do await para evitar double-submit
+    // [SEC-05] Desabilita o botão ANTES do await
     const submitBtn = buttons.loginSubmit;
     setButtonLoading(submitBtn, 'Verificando...');
 
@@ -556,17 +488,16 @@ loginForm.addEventListener('submit', async (e) => {
             LoginAttempts.inc();
             CaptchaState.reset();
 
-            const attempts = LoginAttempts.get();
+            const attempts  = LoginAttempts.get();
+            const remaining = CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA - attempts;
 
             if (attempts >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
                 showCaptcha();
-                // [SEC-04] Mensagem genérica — não revela se email existe
                 showAuthMessage(
                     'Credenciais inválidas. Complete a verificação de segurança para continuar.',
                     'error'
                 );
             } else {
-                const remaining = CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA - attempts;
                 // [SEC-04] Não diferencia "email não encontrado" de "senha errada"
                 showAuthMessage(
                     `Credenciais inválidas. ${remaining} tentativa${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}.`,
@@ -579,40 +510,43 @@ loginForm.addEventListener('submit', async (e) => {
             return;
         }
 
-        // ✅ Login bem-sucedido
+        // ✅ Login bem-sucedido — verifica acesso via Edge Function
         LoginAttempts.reset();
         CaptchaState.reset();
         hideCaptcha();
 
-        // [SEC-14] NÃO grava is_guest_member no sessionStorage
-        // A autorização real é verificada pelo AuthGuard no dashboard
+        // Obtém o access token da sessão recém-criada
+        const { data: { session } } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
 
-        try {
-            const { subscription } = await getActiveSubscription(data.user.id, data.user.email);
-
-            if (!subscription) {
-                // Sem plano: destrói sessão imediatamente
-                await supabase.auth.signOut();
-                showAuthMessage('Você precisa de um plano ativo para acessar o sistema.', 'error');
-                setTimeout(() => {
-                    window.location.replace('planos.html');
-                }, 2500);
-                return;
-            }
-
-            // Nome vem dos metadados — sanitizado antes de exibir
-            const userName = sanitizeText(data.user.user_metadata?.name || 'Usuário');
-            showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
-
-            setTimeout(() => {
-                window.location.replace('dashboard.html');
-            }, 1500);
-
-        } catch {
-            // Erro ao verificar plano APÓS login — destrói sessão por segurança
-            await supabase.auth.signOut().catch(() => {});
-            showAuthMessage('Erro ao verificar seu plano. Tente novamente.', 'error');
+        if (!accessToken) {
+            // Sem token de sessão — situação inesperada, desloga por segurança
+            await supabase.auth.signOut();
+            showAuthMessage('Erro de sessão. Tente novamente.', 'error');
+            return;
         }
+
+        // [BUG-01-FIX] Verifica acesso via Edge Function (sem RLS, com auto-link)
+        setButtonLoading(submitBtn, 'Verificando plano...');
+        const { hasAccess } = await checkUserAccess(accessToken);
+
+        if (!hasAccess) {
+            // Sem plano: destrói sessão imediatamente
+            await supabase.auth.signOut();
+            showAuthMessage('Você precisa de um plano ativo para acessar o sistema.', 'error');
+            setTimeout(() => {
+                window.location.replace('planos.html');
+            }, 2500);
+            return;
+        }
+
+        // Nome vem dos metadados — sanitizado antes de exibir
+        const userName = sanitizeText(data.user.user_metadata?.name || 'Usuário');
+        showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
+
+        setTimeout(() => {
+            window.location.replace('dashboard.html');
+        }, 1500);
 
     } catch {
         showAuthMessage('Erro de conexão. Verifique sua internet e tente novamente.', 'error');
@@ -634,7 +568,7 @@ if (togglePassword && inputs.loginPassword) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  HIGHLIGHT DO CAPTCHA (sem border inline desnecessária)
+//  HIGHLIGHT DO CAPTCHA
 // ═══════════════════════════════════════════════════════════════
 function highlightCaptcha() {
     const el = document.getElementById('captchaContainer');
@@ -647,7 +581,6 @@ function highlightCaptcha() {
 //  NAVEGAÇÃO ENTRE TELAS
 // ═══════════════════════════════════════════════════════════════
 function switchScreen(currentScreen, nextScreen) {
-    // Desativa todas as telas
     Object.values(screens).forEach(s => {
         s.classList.remove('active', 'exit-left');
         s.setAttribute('aria-hidden', 'true');
@@ -666,7 +599,6 @@ function switchScreen(currentScreen, nextScreen) {
     }
 }
 
-// ─── Navegação: Esqueceu senha ────────────────────────────────
 if (buttons.forgotPassword) {
     buttons.forgotPassword.addEventListener('click', (e) => {
         e.preventDefault();
@@ -675,7 +607,6 @@ if (buttons.forgotPassword) {
     });
 }
 
-// ─── Navegação: Voltar para login ────────────────────────────
 if (buttons.backToLogin) {
     buttons.backToLogin.addEventListener('click', () => {
         if (inputs.recoveryEmail) inputs.recoveryEmail.value = '';
@@ -685,7 +616,7 @@ if (buttons.backToLogin) {
 
 // ═══════════════════════════════════════════════════════════════
 //  ENVIAR CÓDIGO DE RECUPERAÇÃO
-//  [SEC-13] Cooldown persistente anti-flood
+//  [SEC-13]
 // ═══════════════════════════════════════════════════════════════
 if (buttons.sendCode) {
     buttons.sendCode.addEventListener('click', async () => {
@@ -735,7 +666,7 @@ if (buttons.sendCode) {
                 setTimeout(() => inputs.codeInputs[0]?.focus(), 520);
 
             } else if (result.status === 'not_found' || result.status === 'payment_not_approved') {
-                // [SEC-04] Mensagem genérica para não revelar se o email existe
+                // [SEC-04] Mensagem genérica
                 showAuthMessage('Se o email estiver cadastrado com plano ativo, você receberá o código.', 'info');
 
             } else {
@@ -750,7 +681,6 @@ if (buttons.sendCode) {
     });
 }
 
-// ─── Navegação: Voltar para email ────────────────────────────
 if (buttons.backToEmail) {
     buttons.backToEmail.addEventListener('click', () => {
         resetCodeInputs();
@@ -776,11 +706,10 @@ if (buttons.verifyCode) {
     });
 }
 
-// ─── Navegação: Voltar para código ───────────────────────────
 if (buttons.backToCode) {
     buttons.backToCode.addEventListener('click', () => {
         hideError();
-        if (inputs.newPassword)    inputs.newPassword.value    = '';
+        if (inputs.newPassword)     inputs.newPassword.value     = '';
         if (inputs.confirmPassword) inputs.confirmPassword.value = '';
         switchScreen(screens.newPassword, screens.code);
     });
@@ -813,8 +742,8 @@ if (buttons.changePassword) {
 
         if (newPass !== confirmPass) {
             showError('As senhas não coincidem.');
-            if (inputs.newPassword)     { inputs.newPassword.style.borderColor     = 'var(--error-red)'; }
-            if (inputs.confirmPassword) { inputs.confirmPassword.style.borderColor = 'var(--error-red)'; }
+            if (inputs.newPassword)     inputs.newPassword.style.borderColor     = 'var(--error-red)';
+            if (inputs.confirmPassword) inputs.confirmPassword.style.borderColor = 'var(--error-red)';
             setTimeout(() => {
                 if (inputs.newPassword)     inputs.newPassword.style.borderColor     = '';
                 if (inputs.confirmPassword) inputs.confirmPassword.style.borderColor = '';
@@ -858,14 +787,13 @@ if (buttons.changePassword) {
             const result = await response.json();
 
             if (result.status === 'success') {
-                // Limpa dados sensíveis da memória imediatamente
                 _verifiedCode  = '';
                 _recoveryEmail = '';
                 switchScreen(screens.newPassword, screens.success);
 
             } else if (result.status === 'invalid_code') {
                 showError('Código inválido, expirado ou já utilizado.');
-                _verifiedCode = ''; // Força nova solicitação de código
+                _verifiedCode = '';
 
             } else {
                 showError('Não foi possível alterar a senha. Tente novamente.');
@@ -879,7 +807,6 @@ if (buttons.changePassword) {
     });
 }
 
-// ─── Navegação: Sucesso → Login ───────────────────────────────
 if (buttons.backToLoginFinal) {
     buttons.backToLoginFinal.addEventListener('click', () => {
         _clearRecoveryState();
@@ -889,7 +816,7 @@ if (buttons.backToLoginFinal) {
 
 // ═══════════════════════════════════════════════════════════════
 //  REENVIAR CÓDIGO
-//  [SEC-13] Cooldown independente e persistente
+//  [SEC-13]
 // ═══════════════════════════════════════════════════════════════
 if (buttons.resendCode) {
     buttons.resendCode.addEventListener('click', async (e) => {
@@ -905,10 +832,10 @@ if (buttons.resendCode) {
             return;
         }
 
-        const btn         = buttons.resendCode;
+        const btn          = buttons.resendCode;
         const originalText = sanitizeText(btn.textContent);
-        btn.disabled      = true;
-        btn.textContent   = 'Enviando...';
+        btn.disabled       = true;
+        btn.textContent    = 'Enviando...';
 
         try {
             const response = await fetch(
@@ -963,11 +890,10 @@ function _clearRecoveryState() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  INPUTS DE CÓDIGO — COMPORTAMENTO
+//  INPUTS DE CÓDIGO
 // ═══════════════════════════════════════════════════════════════
 inputs.codeInputs.forEach((input, index) => {
     input.addEventListener('input', (e) => {
-        // Filtra para apenas dígitos
         const value = e.target.value.replace(/[^0-9]/g, '');
         e.target.value = value;
 
@@ -992,16 +918,13 @@ inputs.codeInputs.forEach((input, index) => {
             prev.value = '';
             prev.classList.remove('filled');
         }
-        if (e.key === 'Enter') {
-            buttons.verifyCode?.click();
-        }
+        if (e.key === 'Enter') buttons.verifyCode?.click();
     });
 
     input.addEventListener('keypress', (e) => {
         if (!/[0-9]/.test(e.key)) e.preventDefault();
     });
 
-    // Suporte a colar código completo
     input.addEventListener('paste', (e) => {
         e.preventDefault();
         const pasted = e.clipboardData
@@ -1021,9 +944,6 @@ inputs.codeInputs.forEach((input, index) => {
     });
 });
 
-// ═══════════════════════════════════════════════════════════════
-//  AUXILIAR: RESET DOS INPUTS DE CÓDIGO
-// ═══════════════════════════════════════════════════════════════
 function resetCodeInputs() {
     inputs.codeInputs.forEach(input => {
         input.value = '';
@@ -1043,15 +963,14 @@ function createMoneyParticles() {
     for (let i = 0; i < CONFIG.moneyParticleCount; i++) {
         const particle = document.createElement('div');
         particle.classList.add('money-particle');
-        // [SEC-06] textContent para inserir símbolo
         particle.textContent = symbols[Math.floor(Math.random() * symbols.length)];
 
-        particle.style.left            = `${Math.random() * 100}%`;
-        particle.style.top             = `${Math.random() * 100}%`;
-        particle.style.fontSize        = `${Math.random() * 12 + 18}px`;
+        particle.style.left               = `${Math.random() * 100}%`;
+        particle.style.top                = `${Math.random() * 100}%`;
+        particle.style.fontSize           = `${Math.random() * 12 + 18}px`;
         particle.style.animationDuration  = `${Math.random() * 10 + 15}s`;
-        particle.style.animationDelay    = `${Math.random() * 5}s`;
-        particle.style.color           = `rgba(16, 185, 129, ${Math.random() * 0.4 + 0.3})`;
+        particle.style.animationDelay     = `${Math.random() * 5}s`;
+        particle.style.color              = `rgba(16, 185, 129, ${Math.random() * 0.4 + 0.3})`;
 
         container.appendChild(particle);
     }
@@ -1160,7 +1079,6 @@ document.querySelectorAll('.btn-submit').forEach(button => {
             'animation:ripple 0.6s ease-out forwards',
         ].join(';');
 
-        // Garante overflow hidden para o efeito funcionar
         this.style.position = 'relative';
         this.style.overflow = 'hidden';
         this.appendChild(ripple);
@@ -1170,7 +1088,7 @@ document.querySelectorAll('.btn-submit').forEach(button => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  ESTILOS DE ANIMAÇÃO INJETADOS (apenas keyframes — sem dados externos)
+//  ESTILOS DE ANIMAÇÃO
 // ═══════════════════════════════════════════════════════════════
 const animStyle = document.createElement('style');
 animStyle.textContent = `
@@ -1192,7 +1110,7 @@ animStyle.textContent = `
 document.head.appendChild(animStyle);
 
 // ═══════════════════════════════════════════════════════════════
-//  EFEITO NOS INPUTS (focus/blur)
+//  EFEITO NOS INPUTS
 // ═══════════════════════════════════════════════════════════════
 document.querySelectorAll('.form-input').forEach(input => {
     input.addEventListener('focus', () => {
