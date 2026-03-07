@@ -926,14 +926,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         _log.info('[_criarPerfilHandler] Verificando permissão RPC...');
 
-        // ✅ CORREÇÃO: target_user_id removido do frontend.
-        //    O backend resolve o usuário efetivo via auth.uid() + tabela account_members.
-        //    Um atacante via console não consegue mais passar um user_id arbitrário,
-        //    pois a função SQL usa SECURITY DEFINER com auth.uid() internamente.
-        //
-        //    ⚠️ AÇÃO OBRIGATÓRIA NO BANCO: atualize a função can_create_profile()
-        //    para usar auth.uid() e resolver convidados via JOIN em account_members.
-        //    Veja o SQL de exemplo no comentário no final desta função.
         const { data: podeCrear, error: rpcError } = await supabase
             .rpc('can_create_profile');
 
@@ -972,11 +964,37 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 return;
             }
 
+            // ✅ CORREÇÃO [Ponto 5]: valida dimensão máxima da imagem
+            //    Impede que imagens gigantes (ex: 20000x20000) travem o browser
+            //    ao renderizar, mesmo que o arquivo passe no limite de 2MB
+            const _MAX_DIMENSAO_PX = 4000;
+            const dimensaoValida = await new Promise((resolve) => {
+                const img = new Image();
+                const objUrl = URL.createObjectURL(arquivo);
+                img.onload = () => {
+                    URL.revokeObjectURL(objUrl);
+                    resolve(img.naturalWidth <= _MAX_DIMENSAO_PX && img.naturalHeight <= _MAX_DIMENSAO_PX);
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(objUrl);
+                    resolve(false);
+                };
+                img.src = objUrl;
+            });
+
+            if (!dimensaoValida) {
+                alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`);
+                return;
+            }
+
             const ext = arquivo.type === 'image/jpeg' ? 'jpg'
                       : arquivo.type === 'image/png'  ? 'png'
                       :                                 'webp';
 
-            const nomeArquivo = `${session.user.id}/${Date.now()}.${ext}`;
+            // ✅ MELHORIA [Ponto 3]: crypto.randomUUID() em vez de Date.now()
+            //    Elimina qualquer previsibilidade no nome do arquivo,
+            //    mesmo que o bucket seja privado e use signed URLs
+            const nomeArquivo = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
 
             const { error: uploadError } = await supabase.storage
                 .from('profile-photos')
@@ -1001,11 +1019,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             fotoUrl = _sanitizeImgUrl(signedData.signedUrl) || null;
         }
 
-        // ✅ CORREÇÃO: user_id não é mais passado pelo frontend no INSERT.
-        //    A RLS da tabela profiles deve garantir que o user_id seja
-        //    sempre derivado de auth.uid() (ou do owner via account_members),
-        //    nunca aceito como parâmetro livre do cliente.
-        //    Se a RLS exigir user_id explícito, use uma Edge Function segura.
         _log.info('[_criarPerfilHandler] Inserindo perfil no banco...');
 
         const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
