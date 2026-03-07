@@ -955,18 +955,19 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             //    ao renderizar, mesmo que o arquivo passe no limite de 2MB
             const _MAX_DIMENSAO_PX = 4000;
             const dimensaoValida = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
                 const img = new Image();
-                const objUrl = URL.createObjectURL(arquivo);
-                img.onload = () => {
-                    URL.revokeObjectURL(objUrl);
-                    resolve(img.naturalWidth <= _MAX_DIMENSAO_PX && img.naturalHeight <= _MAX_DIMENSAO_PX);
-                };
-                img.onerror = () => {
-                    URL.revokeObjectURL(objUrl);
-                    resolve(false);
-                };
-                img.src = objUrl;
-            });
+                img.onload = () => resolve(
+                    img.naturalWidth  <= _MAX_DIMENSAO_PX &&
+                    img.naturalHeight <= _MAX_DIMENSAO_PX
+                );
+                img.onerror = () => resolve(false);
+                img.src = e.target.result; // data: em vez de blob:
+            };
+            reader.onerror = () => resolve(false);
+            reader.readAsDataURL(arquivo);
+        });
 
             if (!dimensaoValida) {
                 alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`);
