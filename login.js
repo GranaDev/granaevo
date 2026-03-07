@@ -515,9 +515,9 @@ loginForm.addEventListener('submit', async (e) => {
         CaptchaState.reset();
         hideCaptcha();
 
-        // Obtém o access token da sessão recém-criada
-        const { data: { session } } = await supabase.auth.getSession();
-        const accessToken = session?.access_token;
+        // [FIX] Usa o access_token diretamente do retorno do signInWithPassword.
+        // Chamar getSession() separadamente pode retornar null antes da propagação.
+        const accessToken = data.session?.access_token;
 
         if (!accessToken) {
             // Sem token de sessão — situação inesperada, desloga por segurança
