@@ -81,6 +81,71 @@ function sanitizeDate(dateStr) {
     return dateStr;
 }
 
+async function _sanitizeImageFile(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    // ✅ Limita dimensão máxima a 1200px preservando aspect ratio
+                    //    Reduz tamanho final sem perda visual perceptível para fotos de perfil
+                    const MAX_DIM = 1200;
+                    let { naturalWidth: w, naturalHeight: h } = img;
+                    if (w > MAX_DIM || h > MAX_DIM) {
+                        if (w >= h) { h = Math.round((h / w) * MAX_DIM); w = MAX_DIM; }
+                        else        { w = Math.round((w / h) * MAX_DIM); h = MAX_DIM; }
+                    }
+                    canvas.width  = w;
+                    canvas.height = h;
+
+                    const ctx = canvas.getContext('2d');
+                    // ✅ Preenche fundo branco para imagens com transparência (PNG → webp)
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, w, h);
+                    ctx.drawImage(img, 0, 0, w, h);
+
+                    // ✅ Exporta sempre como webp — formato moderno + sem suporte a EXIF
+                    //    Qualidade 0.92 é imperceptível para fotos de perfil
+                    canvas.toBlob(
+                        (blob) => {
+                            if (blob) {
+                                // ✅ Cria novo File com nome seguro e tipo correto
+                                const sanitized = new File(
+                                    [blob],
+                                    'profile.webp',
+                                    { type: 'image/webp', lastModified: Date.now() }
+                                );
+                                resolve(sanitized);
+                            } else {
+                                // Canvas falhou — retorna original como fallback seguro
+                                _log.warn('SANITIZE_IMG_001', 'canvas.toBlob retornou null — usando arquivo original');
+                                resolve(file);
+                            }
+                        },
+                        'image/webp',
+                        0.92
+                    );
+                } catch (err) {
+                    _log.error('SANITIZE_IMG_002', err);
+                    resolve(file); // fallback seguro
+                }
+            };
+            img.onerror = () => {
+                _log.error('SANITIZE_IMG_003', 'Falha ao carregar imagem para sanitização');
+                resolve(file); // fallback seguro
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = () => {
+            _log.error('SANITIZE_IMG_004', 'FileReader falhou na sanitização');
+            resolve(file); // fallback seguro
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
 function safeCategorias() {
     return Object.create(null);
 }
@@ -93,28 +158,31 @@ function validarUserData(userData) {
 // ========== FIM DAS FUNÇÕES UTILITÁRIAS ==========
 
 (function _inicializarGE() {
-    // 🔒 window.__GE__ expõe apenas dados não-sensíveis de UI
-    //    Dados financeiros (transacoes, metas, contasFixas, cartoesCredito)
-    //    são removidos do snapshot público.
-    //    Módulos internos (graficos.js, chat-assistant.js) que precisem dos dados
-    //    devem usar as variáveis de módulo diretamente via importação, não via window.
+    const _IS_DEV = (
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1'
+    );
+
+    // ✅ CORREÇÃO: em produção __GE__ não existe — getter retorna undefined
+    //    Extensões maliciosas, XSS e scripts de terceiros não conseguem
+    //    enumerar userId, plano ou estado da sessão via window.__GE__
+    //    Em DEV mantém apenas perfilAtivo (id/nome) para debug — sem userId
     Object.defineProperty(window, '__GE__', {
         get: () => {
+            if (!_IS_DEV) return undefined;
             if (!_GE_snapshot_atual) return null;
             try {
-                // ✅ Apenas dados de sessão/UI — zero dados financeiros
+                // ✅ DEV only: expõe apenas dados de UI não-sensíveis
+                //    userId e plano removidos mesmo em DEV — use DevTools/Network para isso
                 return Object.freeze({
-                    perfilAtivo:  _GE_snapshot_atual.perfilAtivo
+                    perfilAtivo: _GE_snapshot_atual.perfilAtivo
                         ? Object.freeze({
                             id:   _GE_snapshot_atual.perfilAtivo.id,
                             nome: _GE_snapshot_atual.perfilAtivo.nome,
                           })
                         : null,
-                    usuarioLogado: Object.freeze({
-                        userId:  _GE_snapshot_atual.usuarioLogado?.userId  ?? null,
-                        plano:   _GE_snapshot_atual.usuarioLogado?.plano   ?? '',
-                        isGuest: _GE_snapshot_atual.usuarioLogado?.isGuest ?? false,
-                    }),
+                    // ✅ isGuest mantido para facilitar debug de fluxo de convidados
+                    isGuest: _GE_snapshot_atual.usuarioLogado?.isGuest ?? false,
                 });
             } catch {
                 return null;
@@ -125,9 +193,8 @@ function validarUserData(userData) {
         enumerable:   false,
     });
 
-    // ✅ __GE_save__ mantido apenas em dev — sem alteração
-    if (window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1') {
+    // ✅ __GE_save__ mantido apenas em DEV — sem alteração
+    if (_IS_DEV) {
         Object.defineProperty(window, '__GE_save__', {
             value:        _throttledSave,
             writable:     false,
@@ -737,15 +804,8 @@ function _sanitizeImgUrl(url) {
     if (!url || typeof url !== 'string') return null;
     try {
         const parsed = new URL(url);
-        // ✅ CORRIGIDO: comparação exata de hostname em vez de endsWith()
-        //    endsWith('.' + d) permitia subdomínios maliciosos:
-        //    evil.logospng.org → endsWith('.logospng.org') → true (BYPASS!)
-        //    evil.supabase.co  → endsWith('.supabase.co')  → true (BYPASS!)
-        //    Agora só os hostnames exatos listados são aceitos
         const allowed = [
             'fvrhqqeofqedmhadzzqw.supabase.co',
-            'cdn-icons-png.flaticon.com',
-            'logospng.org',
         ];
         if (parsed.protocol !== 'https:') return null;
         if (!allowed.includes(parsed.hostname)) return null;
@@ -925,104 +985,81 @@ function adicionarNovoPerfil() {
 async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
     const nome = inputNome.value.trim();
 
-    if (!nome) {
-        alert('Digite o nome do usuário!');
-        return;
-    }
-    if (nome.length < 2) {
-        alert('O nome deve ter pelo menos 2 caracteres.');
-        return;
-    }
-    if (usuarioLogado.perfis.length >= limitePerfis) {
-        mostrarPopupLimite();
-        fecharPopup();
-        return;
-    }
+    if (!nome) { alert('Digite o nome do usuário!'); return; }
+    if (nome.length < 2) { alert('O nome deve ter pelo menos 2 caracteres.'); return; }
+    if (usuarioLogado.perfis.length >= limitePerfis) { mostrarPopupLimite(); fecharPopup(); return; }
 
     try {
-        // 🔒 Obtém sessão do JWT — única fonte confiável de identidade
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !session || !session.user || !session.user.id) {
-            throw new Error('SEM_SESSAO_VALIDA');
-        }
+        if (sessionError || !session || !session.user || !session.user.id) throw new Error('SEM_SESSAO_VALIDA');
 
         _log.info('[_criarPerfilHandler] Verificando permissão RPC...');
 
-        const { data: podeCrear, error: rpcError } = await supabase
-            .rpc('can_create_profile');
-
+        const { data: podeCrear, error: rpcError } = await supabase.rpc('can_create_profile');
         if (rpcError) {
             _log.error('PERFIL_RPC_001', rpcError);
             alert('Não foi possível validar permissões. Tente novamente.');
             fecharPopup();
             return;
         }
-
-        if (!podeCrear) {
-            mostrarPopupLimite();
-            fecharPopup();
-            return;
-        }
+        if (!podeCrear) { mostrarPopupLimite(); fecharPopup(); return; }
 
         let fotoUrl = null;
 
         if (inputFoto.files && inputFoto.files[0]) {
-            const arquivo = inputFoto.files[0];
+            const arquivoOriginal = inputFoto.files[0];
 
-            if (arquivo.size > 2 * 1024 * 1024) {
-                alert('A foto deve ter no máximo 2MB.');
-                return;
-            }
+            // ✅ Validações client-side: camada UX apenas — feedback imediato ao usuário
+            //    A validação real de conteúdo (magic bytes server-side) ocorre na Edge Function
+            if (arquivoOriginal.size > 2 * 1024 * 1024) { alert('A foto deve ter no máximo 2MB.'); return; }
 
             const mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
-            if (!mimesPermitidos.includes(arquivo.type)) {
-                alert('Tipo de arquivo inválido. Use JPG, PNG ou WebP.');
-                return;
-            }
+            if (!mimesPermitidos.includes(arquivoOriginal.type)) { alert('Tipo de arquivo inválido. Use JPG, PNG ou WebP.'); return; }
 
-            const magicValido = await _validarMagicBytes(arquivo);
-            if (!magicValido) {
-                alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.');
-                return;
-            }
+            const magicValido = await _validarMagicBytes(arquivoOriginal);
+            if (!magicValido) { alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.'); return; }
 
             const _MAX_DIMENSAO_PX = 4000;
             const dimensaoValida = await new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const img = new Image();
-                    img.onload = () => resolve(
-                        img.naturalWidth  <= _MAX_DIMENSAO_PX &&
-                        img.naturalHeight <= _MAX_DIMENSAO_PX
-                    );
+                    img.onload = () => resolve(img.naturalWidth <= _MAX_DIMENSAO_PX && img.naturalHeight <= _MAX_DIMENSAO_PX);
                     img.onerror = () => resolve(false);
                     img.src = e.target.result;
                 };
                 reader.onerror = () => resolve(false);
-                reader.readAsDataURL(arquivo);
+                reader.readAsDataURL(arquivoOriginal);
             });
 
-            if (!dimensaoValida) {
-                alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`);
+            if (!dimensaoValida) { alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`); return; }
+
+            // ✅ Re-render via canvas — remove EXIF, metadados e payloads polyglot
+            //    Executado antes do envio para a Edge Function
+            const arquivo = await _sanitizeImageFile(arquivoOriginal);
+
+            // ✅ Upload via Edge Function — valida magic bytes server-side com service_role
+            //    O cliente não acessa o bucket diretamente
+            const formData = new FormData();
+            formData.append('file', arquivo);
+
+            const uploadResp = await fetch(
+                `${SUPABASE_URL}/functions/v1/upload-profile-photo`,
+                {
+                    method:  'POST',
+                    headers: { 'Authorization': `Bearer ${session.access_token}` },
+                    body:    formData,
+                }
+            );
+
+            if (!uploadResp.ok) {
+                const { error: uploadMsg } = await uploadResp.json().catch(() => ({}));
+                _log.error('PERFIL_FOTO_001', { status: uploadResp.status, msg: uploadMsg });
+                alert(uploadMsg ?? 'Erro ao fazer upload da foto. Tente novamente.');
                 return;
             }
 
-            const ext = arquivo.type === 'image/jpeg' ? 'jpg'
-                      : arquivo.type === 'image/png'  ? 'png'
-                      :                                 'webp';
-
-            // 🔒 Usa session.user.id do JWT — nunca de variável mutável
-            const nomeArquivo = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('profile-photos')
-                .upload(nomeArquivo, arquivo, { contentType: arquivo.type });
-
-            if (uploadError) {
-                _log.error('PERFIL_FOTO_001', uploadError);
-                alert('Erro ao fazer upload da foto. Tente novamente.');
-                return;
-            }
+            const { path: nomeArquivo } = await uploadResp.json();
 
             const { data: signedData, error: signedError } = await supabase.storage
                 .from('profile-photos')
@@ -1039,16 +1076,13 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         _log.info('[_criarPerfilHandler] Inserindo perfil no banco...');
 
-        // 🔒 FIX VULN 1: user_id REMOVIDO do INSERT.
-        //    O trigger trg_set_profile_user_id injeta auth.uid() automaticamente no backend.
-        //    Nenhuma variável do cliente (effectiveUserId ou qualquer outra) pode influenciar
-        //    qual user_id é gravado — a decisão é 100% do servidor.
+        // ✅ CORREÇÃO V1: user_id enviado explicitamente a partir do JWT verificado.
+        //    Defesa em profundidade: mesmo se o RLS for editado incorretamente no futuro,
+        //    o perfil ainda será vinculado ao usuário correto.
+        //    session.user.id vem do token verificado pelo Supabase Auth — não do estado global.
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
-            .insert({
-                name:      nome,
-                photo_url: fotoUrl
-            })
+            .insert({ name: nome, photo_url: fotoUrl, user_id: session.user.id })
             .select()
             .single();
 
@@ -1236,81 +1270,64 @@ async function _gerarSignedUrl(storagePath) {
 }
 
 async function alterarFoto(event) {
-    const file = event.target.files[0];
+    const fileOriginal = event.target.files[0];
+    if (!fileOriginal) return;
+    if (!perfilAtivo) { alert('Erro: Nenhum perfil ativo encontrado.'); return; }
 
-    if (!file) return;
-
-    if (!perfilAtivo) {
-        alert('Erro: Nenhum perfil ativo encontrado.');
-        return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-        alert('A foto deve ter no máximo 2MB.');
-        return;
-    }
+    // ✅ Validações client-side: camada UX apenas — feedback imediato ao usuário
+    //    A validação real de conteúdo (magic bytes server-side) ocorre na Edge Function
+    if (fileOriginal.size > 2 * 1024 * 1024) { alert('A foto deve ter no máximo 2MB.'); return; }
 
     const mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!mimesPermitidos.includes(file.type)) {
-        alert('Tipo de arquivo inválido. Use JPG, PNG ou WebP.');
-        return;
-    }
+    if (!mimesPermitidos.includes(fileOriginal.type)) { alert('Tipo de arquivo inválido. Use JPG, PNG ou WebP.'); return; }
 
-    const magicValido = await _validarMagicBytes(file);
-    if (!magicValido) {
-        alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.');
-        return;
-    }
+    const magicValido = await _validarMagicBytes(fileOriginal);
+    if (!magicValido) { alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.'); return; }
 
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !session || !session.user || !session.user.id) {
-            throw new Error('SEM_SESSAO_VALIDA');
-        }
+        if (sessionError || !session || !session.user || !session.user.id) throw new Error('SEM_SESSAO_VALIDA');
 
-        const ext = file.type === 'image/jpeg' ? 'jpg'
-                  : file.type === 'image/png'  ? 'png'
-                  :                              'webp';
+        // ✅ Re-render via canvas — remove EXIF, metadados e payloads polyglot
+        //    Executado antes do envio para a Edge Function
+        const file = await _sanitizeImageFile(fileOriginal);
 
-        const storagePath = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
+        // ✅ Upload via Edge Function — valida magic bytes server-side com service_role
+        //    O cliente não acessa o bucket diretamente
+        const formData = new FormData();
+        formData.append('file', file);
 
-        const { error: uploadError } = await supabase.storage
-            .from('profile-photos')
-            .upload(storagePath, file, {
-                cacheControl: '3600',
-                upsert: false,
-                contentType: file.type,
-            });
+        const uploadResp = await fetch(
+            `${SUPABASE_URL}/functions/v1/upload-profile-photo`,
+            {
+                method:  'POST',
+                headers: { 'Authorization': `Bearer ${session.access_token}` },
+                body:    formData,
+            }
+        );
 
-        if (uploadError) {
-            _log.error('FOTO_001', uploadError);
-            alert('Erro ao fazer upload. Tente novamente.');
+        if (!uploadResp.ok) {
+            const { error: uploadMsg } = await uploadResp.json().catch(() => ({}));
+            _log.error('FOTO_001', { status: uploadResp.status, msg: uploadMsg });
+            alert(uploadMsg ?? 'Erro ao fazer upload. Tente novamente.');
             return;
         }
+
+        const { path: storagePath } = await uploadResp.json();
 
         const urlSegura = await _gerarSignedUrl(storagePath);
-        if (!urlSegura) {
-            alert('Erro interno ao processar a foto. Tente novamente.');
-            return;
-        }
+        if (!urlSegura) { alert('Erro interno ao processar a foto. Tente novamente.'); return; }
 
-        // 🔒 FIX VULN 2: adicionado .eq('user_id', session.user.id) como segunda condição.
-        //    Mesmo que perfilAtivo.id seja manipulado no console (ex: perfilAtivo.id = 999),
-        //    a query só executa se esse perfil pertencer ao usuário autenticado pelo JWT.
-        //    Defesa em profundidade além da RLS já existente.
+        // 🔒 .eq('user_id', session.user.id) — âncora no JWT
         const { error: updateError } = await supabase
             .from('profiles')
             .update({ photo_url: storagePath })
             .eq('id', perfilAtivo.id)
-            .eq('user_id', session.user.id)   // 🔒 âncora no JWT — não no estado cliente
+            .eq('user_id', session.user.id)
             .select()
             .single();
 
-        if (updateError) {
-            _log.error('FOTO_003', updateError);
-            alert('Erro ao salvar a foto. Tente novamente.');
-            return;
-        }
+        if (updateError) { _log.error('FOTO_003', updateError); alert('Erro ao salvar a foto. Tente novamente.'); return; }
 
         perfilAtivo.foto         = urlSegura;
         perfilAtivo._storagePath = storagePath;
@@ -1327,7 +1344,6 @@ async function alterarFoto(event) {
         await salvarDados();
         atualizarTelaPerfis();
         atualizarReferenciasGlobais();
-
         mostrarNotificacao('Foto alterada com sucesso!', 'success');
 
     } catch (error) {
@@ -1447,23 +1463,19 @@ function solicitarPermissaoNotificacoes() {
 function enviarNotificacaoNativa(titulo, mensagem, tipo = 'info') {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
 
-    // ✅ FIX #8: sanitiza título e mensagem antes de passar para a Notification API
-    //    A API não interpreta HTML, mas sanitizar garante que dados de usuário
-    //    (ex: conta.descricao passada futuramente) não vazem conteúdo inesperado
     const tiposPermitidos = ['urgente', 'alerta', 'info'];
     const tipoSeguro  = tiposPermitidos.includes(tipo) ? tipo : 'info';
     const icone       = tipoSeguro === 'urgente' ? '🚨' : tipoSeguro === 'alerta' ? '⚠️' : '💰';
 
-    // ✅ Trunca e remove null bytes — evita títulos gigantes ou caracteres invisíveis
-    const tituloSeguro  = String(titulo  || '').replace(/\x00/g, '').trim().slice(0, 100);
+    const tituloSeguro   = String(titulo   || '').replace(/\x00/g, '').trim().slice(0, 100);
     const mensagemSegura = String(mensagem || '').replace(/\x00/g, '').trim().slice(0, 250);
 
-    if(!tituloSeguro) return; // ✅ Não dispara notificação sem título
+    if(!tituloSeguro) return;
 
     const notification = new Notification(`${icone} ${tituloSeguro}`, {
         body: mensagemSegura,
-        icon: 'https://cdn-icons-png.flaticon.com/512/4256/4256888.png',
-        badge: 'https://cdn-icons-png.flaticon.com/512/4256/4256888.png',
+        icon:  '/favicon.ico',
+        badge: '/favicon.ico',
         vibrate: [200, 100, 200],
         requireInteraction: tipoSeguro === 'urgente',
         tag: 'granaevo-' + Date.now()
@@ -5680,26 +5692,27 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
 function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior) {
     const resultado = document.getElementById('relatorioResultado');
     if (!resultado) return;
-    
-    // CORREÇÃO: Validar arrays de entrada
+
     if (!Array.isArray(dadosPorPerfil) || dadosPorPerfil.length === 0) return;
-    
+
     const tipoTexto = tipoRelatorioAtivo === 'casal' ? 'do Casal' : 'da Família';
-    const icone = tipoRelatorioAtivo === 'casal' ? '💑' : '👨‍👩‍👧‍👦';
-    
-    let totalGeralEntradas = 0, totalGeralSaidas = 0, totalGeralReservasLiquido = 0;
-    let totalGeralGuardado = 0, totalGeralRetirado = 0;
-    // CORREÇÃO: safeCategorias()
-    const categoriasGerais = safeCategorias();
-    
+    const icone     = tipoRelatorioAtivo === 'casal' ? '💑' : '👨‍👩‍👧‍👦';
+
+    let totalGeralEntradas          = 0;
+    let totalGeralSaidas            = 0;
+    let totalGeralReservasLiquido   = 0;
+    let totalGeralGuardado          = 0;
+    let totalGeralRetirado          = 0;
+    const categoriasGerais          = safeCategorias();
+
     dadosPorPerfil.forEach(d => {
         if (!d || typeof d !== 'object') return;
-        totalGeralEntradas += sanitizeNumber(d.entradas);
-        totalGeralSaidas += sanitizeNumber(d.saidas);
+        totalGeralEntradas        += sanitizeNumber(d.entradas);
+        totalGeralSaidas          += sanitizeNumber(d.saidas);
         totalGeralReservasLiquido += sanitizeNumber(d.reservas);
-        totalGeralGuardado += sanitizeNumber(d.totalGuardado);
-        totalGeralRetirado += sanitizeNumber(d.totalRetirado);
-        
+        totalGeralGuardado        += sanitizeNumber(d.totalGuardado);
+        totalGeralRetirado        += sanitizeNumber(d.totalRetirado);
+
         if (d.categorias && typeof d.categorias === 'object') {
             Object.keys(d.categorias).forEach(cat => {
                 if (cat && typeof cat === 'string' && cat.length < 100) {
@@ -5708,50 +5721,86 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
             });
         }
     });
-    
-    const saldoGeral = totalGeralEntradas - totalGeralSaidas;
-    const taxaEconomiaGeral = totalGeralEntradas > 0 ?
-        ((totalGeralReservasLiquido / totalGeralEntradas) * 100).toFixed(1) : 0;
-    
+
+    const saldoGeral        = totalGeralEntradas - totalGeralSaidas;
+    const taxaEconomiaGeral = totalGeralEntradas > 0
+        ? ((totalGeralReservasLiquido / totalGeralEntradas) * 100).toFixed(1)
+        : 0;
     const saldoInicialGeral = dadosPorPerfil.reduce((sum, d) => sum + sanitizeNumber(d?.saldoInicial), 0);
-    const saldoGeralDoMes = dadosPorPerfil.reduce((sum, d) => sum + sanitizeNumber(d?.saldoDoMes), 0);
-    
+    const saldoGeralDoMes   = dadosPorPerfil.reduce((sum, d) => sum + sanitizeNumber(d?.saldoDoMes), 0);
+
+    // ✅ CORREÇÃO PRINCIPAL: todo o bloco de HTML estático ainda usa template string,
+    //    mas passa obrigatoriamente por _sanitizarHTMLRelatorio (DOMParser + whitelist CSS)
+    //    antes de qualquer atribuição a innerHTML.
+    //    Dados de usuário (nomes, categorias) continuam sanitizados via sanitizeHTML()
+    //    E recebem uma segunda camada pelo DOMParser — defesa em profundidade real.
     let html = `
     <h2 style="text-align:center; margin-bottom:30px;">
         ${icone} Relatório Completo ${sanitizeHTML(tipoTexto)}<br>
-        <span style="font-size:1.2rem; color:var(--text-secondary);">${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</span>
+        <span style="font-size:1.2rem; color:var(--text-secondary);">
+            ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}
+        </span>
     </h2>
-    
+
     <div class="relatorio-kpis-container">
         <div class="relatorio-kpis-scroll">
             <div class="relatorio-kpi-card relatorio-kpi-entradas">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💰</span><span class="relatorio-kpi-label">Entradas Totais</span></div>
+                <div class="relatorio-kpi-header">
+                    <span class="relatorio-kpi-icon">💰</span>
+                    <span class="relatorio-kpi-label">Entradas Totais</span>
+                </div>
                 <div class="relatorio-kpi-value">${formatBRL(totalGeralEntradas)}</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Soma de todos os perfis</span></div>
+                <div class="relatorio-kpi-footer">
+                    <span class="relatorio-kpi-period">Soma de todos os perfis</span>
+                </div>
             </div>
             <div class="relatorio-kpi-card relatorio-kpi-saidas">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💸</span><span class="relatorio-kpi-label">Saídas Totais</span></div>
+                <div class="relatorio-kpi-header">
+                    <span class="relatorio-kpi-icon">💸</span>
+                    <span class="relatorio-kpi-label">Saídas Totais</span>
+                </div>
                 <div class="relatorio-kpi-value">${formatBRL(totalGeralSaidas)}</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Soma de todos os perfis</span></div>
+                <div class="relatorio-kpi-footer">
+                    <span class="relatorio-kpi-period">Soma de todos os perfis</span>
+                </div>
             </div>
             <div class="relatorio-kpi-card relatorio-kpi-guardado">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">🎯</span><span class="relatorio-kpi-label">Guardado Líquido</span></div>
+                <div class="relatorio-kpi-header">
+                    <span class="relatorio-kpi-icon">🎯</span>
+                    <span class="relatorio-kpi-label">Guardado Líquido</span>
+                </div>
                 <div class="relatorio-kpi-value">${formatBRL(totalGeralReservasLiquido)}</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period" style="font-size:10px;">Guardou: ${formatBRL(totalGeralGuardado)} | Retirou: ${formatBRL(totalGeralRetirado)}</span></div>
+                <div class="relatorio-kpi-footer">
+                    <span class="relatorio-kpi-period" style="font-size:10px;">
+                        Guardou: ${formatBRL(totalGeralGuardado)} | Retirou: ${formatBRL(totalGeralRetirado)}
+                    </span>
+                </div>
             </div>
             <div class="relatorio-kpi-card relatorio-kpi-saldo">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">📈</span><span class="relatorio-kpi-label">Saldo Total</span></div>
+                <div class="relatorio-kpi-header">
+                    <span class="relatorio-kpi-icon">📈</span>
+                    <span class="relatorio-kpi-label">Saldo Total</span>
+                </div>
                 <div class="relatorio-kpi-value">${formatBRL(saldoGeral)}</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period" style="font-size:10px;">Saldo inicial: ${formatBRL(saldoInicialGeral)} | Saldo do mês: ${formatBRL(saldoGeralDoMes)}</span></div>
+                <div class="relatorio-kpi-footer">
+                    <span class="relatorio-kpi-period" style="font-size:10px;">
+                        Saldo inicial: ${formatBRL(saldoInicialGeral)} | Saldo do mês: ${formatBRL(saldoGeralDoMes)}
+                    </span>
+                </div>
             </div>
             <div class="relatorio-kpi-card relatorio-kpi-economia">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💎</span><span class="relatorio-kpi-label">Taxa de Economia</span></div>
+                <div class="relatorio-kpi-header">
+                    <span class="relatorio-kpi-icon">💎</span>
+                    <span class="relatorio-kpi-label">Taxa de Economia</span>
+                </div>
                 <div class="relatorio-kpi-value">${sanitizeHTML(String(taxaEconomiaGeral))}%</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Média ${sanitizeHTML(tipoTexto.toLowerCase())}</span></div>
+                <div class="relatorio-kpi-footer">
+                    <span class="relatorio-kpi-period">Média ${sanitizeHTML(tipoTexto.toLowerCase())}</span>
+                </div>
             </div>
         </div>
     </div>
-    
+
     <div class="section-box" style="margin-top:30px;">
         <h3 style="text-align:center; margin-bottom:20px;">🏆 Rankings e Comparativos</h3>
         <div class="tipo-relatorio-btns" style="margin-bottom:24px;">
@@ -5762,94 +5811,169 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
         </div>
         <div id="rankingContainer"></div>
     </div>
-    
+
     <div class="section-box" style="margin-top:30px;">
         <h3 style="text-align:center; margin-bottom:20px;">📋 Análise Individual Completa</h3>
         <div class="comparacao-perfis" style="grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));">
     `;
-    
+
     dadosPorPerfil.forEach(d => {
         if (!d || typeof d !== 'object') return;
-        const diasNoMes = new Date(Number(ano), Number(mes), 0).getDate();
+
+        const diasNoMes        = new Date(Number(ano), Number(mes), 0).getDate();
         const mediaGastoDiario = diasNoMes > 0 ? sanitizeNumber(d.saidas) / diasNoMes : 0;
-        const percUsadoCartoes = d.totalLimiteCartoes > 0 ?
-            ((d.totalUsadoCartoes / d.totalLimiteCartoes) * 100).toFixed(1) : 0;
-        
-        const variacaoEntradas = d.mesAnterior?.entradas > 0 ?
-            (((d.entradas - d.mesAnterior.entradas) / d.mesAnterior.entradas) * 100).toFixed(1) : 0;
-        const variacaoSaidas = d.mesAnterior?.saidas > 0 ?
-            (((d.saidas - d.mesAnterior.saidas) / d.mesAnterior.saidas) * 100).toFixed(1) : 0;
-        const variacaoReservas = d.mesAnterior?.reservas !== 0 ?
-            (((d.reservas - d.mesAnterior.reservas) / Math.abs(d.mesAnterior.reservas || 1)) * 100).toFixed(1) : 0;
-        
+        const percUsadoCartoes = d.totalLimiteCartoes > 0
+            ? ((d.totalUsadoCartoes / d.totalLimiteCartoes) * 100).toFixed(1)
+            : 0;
+
+        const variacaoEntradas  = d.mesAnterior?.entradas > 0
+            ? (((d.entradas  - d.mesAnterior.entradas)  / d.mesAnterior.entradas)  * 100).toFixed(1) : 0;
+        const variacaoSaidas    = d.mesAnterior?.saidas > 0
+            ? (((d.saidas    - d.mesAnterior.saidas)    / d.mesAnterior.saidas)    * 100).toFixed(1) : 0;
+        const variacaoReservas  = d.mesAnterior?.reservas !== 0
+            ? (((d.reservas  - d.mesAnterior.reservas)  / Math.abs(d.mesAnterior.reservas || 1)) * 100).toFixed(1) : 0;
+
         const nomePerfilSeguro = sanitizeHTML(String(d.perfil?.nome || '').slice(0, 100));
-        const perfilIdSeguro = sanitizeHTML(String(d.perfil?.id || ''));
-        
+        const perfilIdSeguro   = sanitizeHTML(String(d.perfil?.id   || ''));
+
         html += `
-            <div class="perfil-card-relatorio" style="background:var(--gradient-dark); border:1px solid var(--border); padding:20px;">
-                <h4 style="margin-bottom:16px; font-size:1.3rem; color:var(--primary);">${nomePerfilSeguro}</h4>
+            <div class="perfil-card-relatorio"
+                 style="background:var(--gradient-dark); border:1px solid var(--border); padding:20px;">
+                <h4 style="margin-bottom:16px; font-size:1.3rem; color:var(--primary);">
+                    ${nomePerfilSeguro}
+                </h4>
                 <div class="perfil-stats">
-                    <div class="stat-row"><span class="stat-label">💰 Entradas</span><span class="stat-value entrada">${formatBRL(d.entradas)}</span></div>
-                    ${d.mesAnterior?.entradas > 0 ? `<div style="font-size:0.8rem; color:${variacaoEntradas >= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">${variacaoEntradas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoEntradas)}% vs mês anterior</div>` : ''}
-                    <div class="stat-row"><span class="stat-label">💸 Saídas</span><span class="stat-value saida">${formatBRL(d.saidas)}</span></div>
-                    ${d.mesAnterior?.saidas > 0 ? `<div style="font-size:0.8rem; color:${variacaoSaidas <= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">${variacaoSaidas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoSaidas)}% vs mês anterior</div>` : ''}
-                    <div class="stat-row"><span class="stat-label">🎯 Guardado Líquido</span><span class="stat-value reserva">${formatBRL(d.reservas)}</span></div>
-                    ${d.mesAnterior?.reservas !== 0 ? `<div style="font-size:0.8rem; color:${variacaoReservas >= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">${variacaoReservas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoReservas)}% vs mês anterior</div>` : ''}
-                    <div class="stat-row"><span class="stat-label">📊 Saldo</span><span class="stat-value" style="color:#6c63ff;">${formatBRL(d.saldo)}</span></div>
-                    <div class="stat-row"><span class="stat-label">💎 Taxa de Economia</span><span class="stat-value" style="color:#00ff99;">${sanitizeHTML(String(d.taxaEconomia.toFixed(1)))}%</span></div>
-                    ${d.taxaEconomiaAnterior > 0 ? `<div style="font-size:0.8rem; color:${d.evolucaoEconomia >= 0 ? '#00ff99' : '#ff4b4b'}; text-align:right; margin-top:-8px; margin-bottom:8px;">${d.evolucaoEconomia >= 0 ? '↑' : '↓'} ${Math.abs(d.evolucaoEconomia.toFixed(1))}% vs mês anterior</div>` : ''}
-                    <div class="stat-row" style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;"><span class="stat-label">📅 Média Diária</span><span class="stat-value">${formatBRL(mediaGastoDiario)}</span></div>
-                    <div class="stat-row"><span class="stat-label">📝 Transações</span><span class="stat-value">${d.transacoes.length}</span></div>
-                    ${d.cartoes?.length > 0 ? `<div class="stat-row" style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;"><span class="stat-label">💳 Cartões Usados</span><span class="stat-value" style="color:${percUsadoCartoes > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(String(percUsadoCartoes))}%</span></div>` : ''}
-                    ${d.metas?.length > 0 ? `<div class="stat-row"><span class="stat-label">🎯 Metas Ativas</span><span class="stat-value">${d.metas.length}</span></div>` : ''}
+                    <div class="stat-row">
+                        <span class="stat-label">💰 Entradas</span>
+                        <span class="stat-value entrada">${formatBRL(d.entradas)}</span>
+                    </div>
+                    ${d.mesAnterior?.entradas > 0 ? `
+                    <div style="font-size:0.8rem;
+                                color:${variacaoEntradas >= 0 ? '#00ff99' : '#ff4b4b'};
+                                text-align:right; margin-top:-8px; margin-bottom:8px;">
+                        ${variacaoEntradas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoEntradas)}% vs mês anterior
+                    </div>` : ''}
+                    <div class="stat-row">
+                        <span class="stat-label">💸 Saídas</span>
+                        <span class="stat-value saida">${formatBRL(d.saidas)}</span>
+                    </div>
+                    ${d.mesAnterior?.saidas > 0 ? `
+                    <div style="font-size:0.8rem;
+                                color:${variacaoSaidas <= 0 ? '#00ff99' : '#ff4b4b'};
+                                text-align:right; margin-top:-8px; margin-bottom:8px;">
+                        ${variacaoSaidas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoSaidas)}% vs mês anterior
+                    </div>` : ''}
+                    <div class="stat-row">
+                        <span class="stat-label">🎯 Guardado Líquido</span>
+                        <span class="stat-value reserva">${formatBRL(d.reservas)}</span>
+                    </div>
+                    ${d.mesAnterior?.reservas !== 0 ? `
+                    <div style="font-size:0.8rem;
+                                color:${variacaoReservas >= 0 ? '#00ff99' : '#ff4b4b'};
+                                text-align:right; margin-top:-8px; margin-bottom:8px;">
+                        ${variacaoReservas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoReservas)}% vs mês anterior
+                    </div>` : ''}
+                    <div class="stat-row">
+                        <span class="stat-label">📊 Saldo</span>
+                        <span class="stat-value" style="color:#6c63ff;">${formatBRL(d.saldo)}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">💎 Taxa de Economia</span>
+                        <span class="stat-value" style="color:#00ff99;">
+                            ${sanitizeHTML(String(d.taxaEconomia.toFixed(1)))}%
+                        </span>
+                    </div>
+                    ${d.taxaEconomiaAnterior > 0 ? `
+                    <div style="font-size:0.8rem;
+                                color:${d.evolucaoEconomia >= 0 ? '#00ff99' : '#ff4b4b'};
+                                text-align:right; margin-top:-8px; margin-bottom:8px;">
+                        ${d.evolucaoEconomia >= 0 ? '↑' : '↓'} ${Math.abs(d.evolucaoEconomia.toFixed(1))}% vs mês anterior
+                    </div>` : ''}
+                    <div class="stat-row"
+                         style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;">
+                        <span class="stat-label">📅 Média Diária</span>
+                        <span class="stat-value">${formatBRL(mediaGastoDiario)}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">📝 Transações</span>
+                        <span class="stat-value">${d.transacoes.length}</span>
+                    </div>
+                    ${d.cartoes?.length > 0 ? `
+                    <div class="stat-row"
+                         style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;">
+                        <span class="stat-label">💳 Cartões Usados</span>
+                        <span class="stat-value"
+                              style="color:${percUsadoCartoes > 80 ? '#ff4b4b' : '#00ff99'};">
+                            ${sanitizeHTML(String(percUsadoCartoes))}%
+                        </span>
+                    </div>` : ''}
+                    ${d.metas?.length > 0 ? `
+                    <div class="stat-row">
+                        <span class="stat-label">🎯 Metas Ativas</span>
+                        <span class="stat-value">${d.metas.length}</span>
+                    </div>` : ''}
                 </div>
                 <div id="btnDetalhes_${perfilIdSeguro}" style="margin-top:16px;"></div>
             </div>`;
     });
-    
+
     html += `</div></div>`;
-    
+
     if (Object.keys(categoriasGerais).length > 0) {
-        const categoriasTop = Object.entries(categoriasGerais).sort((a, b) => b[1] - a[1]).slice(0, 5);
-        const totalGastoCategorias = Object.values(categoriasGerais).reduce((a, b) => a + b, 0);
-        const coresCategorias = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
-        
-        html += `<div class="section-box" style="margin-top:30px;"><h3 style="margin-bottom:20px;">🎯 Top 5 Categorias Mais Gastas (Geral)</h3><div style="display:flex; flex-direction:column; gap:12px;">`;
+        const categoriasTop         = Object.entries(categoriasGerais).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const totalGastoCategorias  = Object.values(categoriasGerais).reduce((a, b) => a + b, 0);
+        const coresCategorias       = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+
+        html += `
+        <div class="section-box" style="margin-top:30px;">
+            <h3 style="margin-bottom:20px;">🎯 Top 5 Categorias Mais Gastas (Geral)</h3>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+        `;
+
         categoriasTop.forEach(([cat, valor], i) => {
             const percentual = ((valor / totalGastoCategorias) * 100).toFixed(1);
             html += `
                 <div style="margin-bottom:8px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
+                    <div style="display:flex; justify-content:space-between;
+                                margin-bottom:6px; flex-wrap:wrap; gap:8px;">
                         <span style="font-weight:600;">${sanitizeHTML(cat)}</span>
                         <span>${formatBRL(valor)} (${sanitizeHTML(String(percentual))}%)</span>
                     </div>
-                    <div style="width:100%; height:12px; background:rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;">
-                        <div style="width:${sanitizeHTML(String(percentual))}%; height:100%; background:${coresCategorias[i]}; border-radius:6px;"></div>
+                    <div style="width:100%; height:12px; background:rgba(255,255,255,0.1);
+                                border-radius:6px; overflow:hidden;">
+                        <div style="width:${sanitizeHTML(String(percentual))}%; height:100%;
+                                    background:${coresCategorias[i]}; border-radius:6px;"></div>
                     </div>
                 </div>`;
         });
+
         html += `</div></div>`;
     }
-    
-    resultado.innerHTML = html;
+
+    // ✅ CORREÇÃO: _sanitizarHTMLRelatorio aplicado antes de resultado.innerHTML
+    //    Antes: resultado.innerHTML = html  ← sem DOMParser, innerHTML direto
+    //    Agora: passa pelo DOMParser com whitelist CSS, remoção de on*, tags perigosas
+    //           e bloqueio de esquemas javascript:/vbscript:/data: em atributos
+    resultado.innerHTML = _sanitizarHTMLRelatorio(html);
     resultado.style.display = 'block';
-    
-    // CORREÇÃO: Botões de detalhes por perfil via event listener (seguro, sem onclick inline)
+
     dadosPorPerfil.forEach(d => {
         if (!d?.perfil?.id) return;
-        const container = document.getElementById(`btnDetalhes_${sanitizeHTML(String(d.perfil.id))}`);
-        if (container) {
-            const btn = document.createElement('button');
-            btn.className = 'btn-primary';
+        const btnContainer = document.getElementById(
+            `btnDetalhes_${sanitizeHTML(String(d.perfil.id))}`
+        );
+        if (btnContainer) {
+            const btn         = document.createElement('button');
+            btn.className     = 'btn-primary';
             btn.style.cssText = 'width:100%; padding:10px;';
-            btn.textContent = '🔍 Ver Detalhes Completos';
+            btn.textContent   = '🔍 Ver Detalhes Completos';
             btn.addEventListener('click', () => {
                 abrirDetalhesPerfilRelatorio(d.perfil.id, mes, ano);
             });
-            container.appendChild(btn);
+            btnContainer.appendChild(btn);
         }
     });
-    
+
     configurarRankings(dadosPorPerfil, mes, ano);
     mostrarRanking('gastos', dadosPorPerfil);
 }
@@ -6116,59 +6240,105 @@ function abrirWidgetOndeForDinheiro() {
         '09': 'Setembro','10': 'Outubro',   '11': 'Novembro', '12': 'Dezembro'
     };
 
-    // ✅ Opções construídas via concatenação de strings estáticas — sem dados do usuário
-    let optsMes = '';
-    Object.entries(mesesNomes).forEach(([val, nome]) => {
-        const selected = val === mesAtual ? ' selected' : '';
-        optsMes += `<option value="${val}"${selected}>${nome}</option>`;
+    criarPopupDOM((popup) => {
+        // ── Wrapper scroll
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'max-height:75vh; overflow-y:auto; padding-right:8px;';
+
+        // ── Título
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'text-align:center; margin-bottom:8px;';
+        titulo.textContent = '🔍 Onde Foi Meu Dinheiro?';
+
+        // ── Subtítulo
+        const subtitulo = document.createElement('p');
+        subtitulo.style.cssText = 'color:var(--text-secondary); margin-bottom:20px; font-size:0.9rem; text-align:center;';
+        subtitulo.textContent = 'Veja para onde foram seus gastos em um período específico.';
+
+        // ── Row de filtros
+        const rowFiltros = document.createElement('div');
+        rowFiltros.style.cssText = 'display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;';
+
+        // ── Coluna Mês
+        const colMes = document.createElement('div');
+        colMes.style.cssText = 'flex:1; min-width:130px;';
+
+        const labelMes = document.createElement('label');
+        labelMes.style.cssText = 'display:block; margin-bottom:6px; font-size:0.85rem; font-weight:600; color:var(--text-secondary);';
+        labelMes.textContent = '📅 Mês:';
+
+        const selectMes = document.createElement('select');
+        selectMes.id        = 'mesAnalise';
+        selectMes.className = 'form-input';
+
+        Object.entries(mesesNomes).forEach(([val, nome]) => {
+            const opt       = document.createElement('option');
+            opt.value       = val;           // ✅ .value — não interpolado
+            opt.textContent = nome;          // ✅ textContent — não innerHTML
+            if (val === mesAtual) opt.selected = true;
+            selectMes.appendChild(opt);
+        });
+
+        colMes.appendChild(labelMes);
+        colMes.appendChild(selectMes);
+
+        // ── Coluna Ano
+        const colAno = document.createElement('div');
+        colAno.style.cssText = 'flex:1; min-width:100px;';
+
+        const labelAno = document.createElement('label');
+        labelAno.style.cssText = 'display:block; margin-bottom:6px; font-size:0.85rem; font-weight:600; color:var(--text-secondary);';
+        labelAno.textContent = '📆 Ano:';
+
+        const selectAno = document.createElement('select');
+        selectAno.id        = 'anoAnalise';
+        selectAno.className = 'form-input';
+
+        for (let a = anoAtual; a >= anoAtual - 4; a--) {
+            const opt       = document.createElement('option');
+            opt.value       = String(a);
+            opt.textContent = String(a);
+            if (a === anoAtual) opt.selected = true;
+            selectAno.appendChild(opt);
+        }
+
+        colAno.appendChild(labelAno);
+        colAno.appendChild(selectAno);
+
+        rowFiltros.appendChild(colMes);
+        rowFiltros.appendChild(colAno);
+
+        // ── Botão analisar
+        const btnAnalisar = document.createElement('button');
+        btnAnalisar.id        = 'btnAnalisarGastos';
+        btnAnalisar.className = 'btn-primary';
+        btnAnalisar.style.cssText = 'width:100%; margin-bottom:20px;';
+        btnAnalisar.textContent = '🔍 Analisar Gastos';
+        btnAnalisar.addEventListener('click', processarAnaliseOndeForDinheiro);
+
+        // ── Container resultado
+        const resultadoDiv = document.createElement('div');
+        resultadoDiv.id = 'resultadoAnalise';
+
+        wrapper.appendChild(titulo);
+        wrapper.appendChild(subtitulo);
+        wrapper.appendChild(rowFiltros);
+        wrapper.appendChild(btnAnalisar);
+        wrapper.appendChild(resultadoDiv);
+
+        // ── Botão fechar (fora do wrapper scroll)
+        const btnFechar = document.createElement('button');
+        btnFechar.id        = 'fecharWidgetAnalise';
+        btnFechar.className = 'btn-cancelar';
+        btnFechar.style.cssText = 'width:100%; margin-top:14px;';
+        btnFechar.textContent = 'Fechar';
+        btnFechar.addEventListener('click', fecharPopup);
+
+        popup.appendChild(wrapper);
+        popup.appendChild(btnFechar);
     });
 
-    let optsAno = '';
-    for (let a = anoAtual; a >= anoAtual - 4; a--) {
-        const selected = a === anoAtual ? ' selected' : '';
-        optsAno += `<option value="${a}"${selected}>${a}</option>`;
-    }
-
-    criarPopup(`
-        <div style="max-height:75vh; overflow-y:auto; padding-right:8px;">
-            <h3 style="text-align:center; margin-bottom:8px;">🔍 Onde Foi Meu Dinheiro?</h3>
-            <p style="color:var(--text-secondary); margin-bottom:20px; font-size:0.9rem; text-align:center;">
-                Veja para onde foram seus gastos em um período específico.
-            </p>
-
-            <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
-                <div style="flex:1; min-width:130px;">
-                    <label style="display:block; margin-bottom:6px; font-size:0.85rem;
-                                  font-weight:600; color:var(--text-secondary);">📅 Mês:</label>
-                    <select id="mesAnalise" class="form-input">${optsMes}</select>
-                </div>
-                <div style="flex:1; min-width:100px;">
-                    <label style="display:block; margin-bottom:6px; font-size:0.85rem;
-                                  font-weight:600; color:var(--text-secondary);">📆 Ano:</label>
-                    <select id="anoAnalise" class="form-input">${optsAno}</select>
-                </div>
-            </div>
-
-            <button class="btn-primary" id="btnAnalisarGastos"
-                    style="width:100%; margin-bottom:20px;">
-                🔍 Analisar Gastos
-            </button>
-
-            <div id="resultadoAnalise"></div>
-        </div>
-
-        <button class="btn-cancelar" id="fecharWidgetAnalise"
-                style="width:100%; margin-top:14px;">Fechar</button>
-    `);
-
-    // ✅ addEventListener — sem onclick inline
-    document.getElementById('btnAnalisarGastos')
-            .addEventListener('click', processarAnaliseOndeForDinheiro);
-
-    document.getElementById('fecharWidgetAnalise')
-            .addEventListener('click', fecharPopup);
-
-    // Executa análise imediatamente com o período padrão
+    // Executa análise com o período padrão imediatamente
     processarAnaliseOndeForDinheiro();
 }
 
@@ -6196,128 +6366,195 @@ function mostrarRanking(tipo, dadosPorPerfil) {
     const container = document.getElementById('rankingContainer');
     if (!container) return;
 
-    let html = '';
+    // ✅ Limpa via DOM — sem innerHTML vazio como surface
+    container.innerHTML = '';
+
     const emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
 
+    function _criarItemRanking({
+        corFundo,
+        corBorda,
+        posicaoTxt,
+        nomeTxt,
+        detalhesTxt,
+        valorTxt,
+        corValor = null,
+        fontSizeValor = null,
+    }) {
+        const item = document.createElement('div');
+        item.className        = 'ranking-item';
+        item.style.background = corFundo; // ✅ cor interna — não vem do usuário
+        item.style.borderLeft = `3px solid ${corBorda}`; // ✅ idem
+
+        const posicao           = document.createElement('div');
+        posicao.className       = 'ranking-posicao';
+        posicao.textContent     = posicaoTxt; // ✅ emoji ou número — valor interno
+
+        const info              = document.createElement('div');
+        info.className          = 'ranking-info';
+
+        const nomeEl            = document.createElement('div');
+        nomeEl.className        = 'ranking-nome';
+        nomeEl.textContent      = _sanitizeText(String(nomeTxt || '')); // ✅ textContent — dado do usuário
+
+        const detalhesEl        = document.createElement('div');
+        detalhesEl.className    = 'ranking-detalhes';
+        detalhesEl.textContent  = String(detalhesTxt || ''); // ✅ textContent — formatBRL retorna string numérica
+
+        info.appendChild(nomeEl);
+        info.appendChild(detalhesEl);
+
+        const valorEl           = document.createElement('div');
+        valorEl.className       = 'ranking-valor';
+        valorEl.textContent     = String(valorTxt || ''); // ✅ textContent — formatBRL ou percentual numérico
+        if (corValor)     valorEl.style.color    = corValor;    // ✅ cor interna
+        if (fontSizeValor) valorEl.style.fontSize = fontSizeValor; // ✅ valor interno
+
+        item.appendChild(posicao);
+        item.appendChild(info);
+        item.appendChild(valorEl);
+
+        return item;
+    }
+
+    function _criarTitulo(texto) {
+        const h4 = document.createElement('h4');
+        h4.style.cssText = 'margin-bottom:16px; color: var(--text-primary);';
+        h4.textContent   = texto; // ✅ texto estático — sem dado do usuário
+        return h4;
+    }
+
+    function _criarSubtitulo(texto) {
+        const p = document.createElement('p');
+        p.style.cssText = 'font-size:0.9rem; color: var(--text-secondary); margin-bottom:16px;';
+        p.textContent   = texto; // ✅ texto estático
+        return p;
+    }
+
     switch (tipo) {
+
+        // ── GASTOS ────────────────────────────────────────────────────────────
         case 'gastos': {
             const rankingGastos = dadosPorPerfil
-                .map(d => ({ nome: d.perfil.nome, valor: d.saidas, foto: d.perfil.foto }))
+                .map(d => ({ nome: d.perfil.nome, valor: d.saidas }))
                 .sort((a, b) => b.valor - a.valor);
 
             const totalGastos = rankingGastos.reduce((sum, r) => sum + r.valor, 0);
 
-            html = '<h4 style="margin-bottom:16px; color: var(--text-primary);">💸 Ranking: Quem Gastou Mais</h4>';
+            container.appendChild(_criarTitulo('💸 Ranking: Quem Gastou Mais'));
 
             rankingGastos.forEach((r, i) => {
-                const percentual = totalGastos > 0 ? ((r.valor / totalGastos) * 100).toFixed(1) : 0;
-                html += `
-                    <div class="ranking-item" style="background: rgba(255,75,75,0.1); border-left: 3px solid #ff4b4b;">
-                        <div class="ranking-posicao">${emojis[i] || (i + 1)}</div>
-                        <div class="ranking-info">
-                            <div class="ranking-nome">${sanitizeHTML(r.nome)}</div>
-                            <div class="ranking-detalhes">${sanitizeHTML(percentual)}% do total de gastos</div>
-                        </div>
-                        <div class="ranking-valor">${formatBRL(r.valor)}</div>
-                    </div>
-                `;
+                const percentual = totalGastos > 0
+                    ? ((r.valor / totalGastos) * 100).toFixed(1)
+                    : '0.0';
+
+                container.appendChild(_criarItemRanking({
+                    corFundo:    'rgba(255,75,75,0.1)',
+                    corBorda:    '#ff4b4b',
+                    posicaoTxt:  emojis[i] || String(i + 1),
+                    nomeTxt:     r.nome,
+                    detalhesTxt: `${percentual}% do total de gastos`,
+                    valorTxt:    formatBRL(r.valor),
+                }));
             });
             break;
         }
 
+        // ── GUARDOU ───────────────────────────────────────────────────────────
         case 'guardou': {
             const rankingGuardou = dadosPorPerfil
-                .map(d => ({ nome: d.perfil.nome, valor: d.reservas, foto: d.perfil.foto }))
+                .map(d => ({ nome: d.perfil.nome, valor: d.reservas }))
                 .sort((a, b) => b.valor - a.valor);
 
             const totalGuardado = rankingGuardou.reduce((sum, r) => sum + r.valor, 0);
 
-            html = '<h4 style="margin-bottom:16px; color: var(--text-primary);">💰 Ranking: Quem Guardou Mais</h4>';
+            container.appendChild(_criarTitulo('💰 Ranking: Quem Guardou Mais'));
 
             rankingGuardou.forEach((r, i) => {
-                const percentual = totalGuardado > 0 ? ((r.valor / totalGuardado) * 100).toFixed(1) : 0;
-                html += `
-                    <div class="ranking-item" style="background: rgba(0,255,153,0.1); border-left: 3px solid #00ff99;">
-                        <div class="ranking-posicao">${emojis[i] || (i + 1)}</div>
-                        <div class="ranking-info">
-                            <div class="ranking-nome">${sanitizeHTML(r.nome)}</div>
-                            <div class="ranking-detalhes">${sanitizeHTML(percentual)}% do total guardado</div>
-                        </div>
-                        <div class="ranking-valor" style="color:#00ff99;">${formatBRL(r.valor)}</div>
-                    </div>
-                `;
+                const percentual = totalGuardado > 0
+                    ? ((r.valor / totalGuardado) * 100).toFixed(1)
+                    : '0.0';
+
+                container.appendChild(_criarItemRanking({
+                    corFundo:    'rgba(0,255,153,0.1)',
+                    corBorda:    '#00ff99',
+                    posicaoTxt:  emojis[i] || String(i + 1),
+                    nomeTxt:     r.nome,
+                    detalhesTxt: `${percentual}% do total guardado`,
+                    valorTxt:    formatBRL(r.valor),
+                    corValor:    '#00ff99',
+                }));
             });
             break;
         }
 
+        // ── ECONOMIA ──────────────────────────────────────────────────────────
         case 'economia': {
             const rankingEconomia = dadosPorPerfil
                 .map(d => ({
-                    nome: d.perfil.nome,
-                    taxa: d.taxaEconomia,
-                    guardado: d.reservas,
-                    entradas: d.entradas
+                    nome:      d.perfil.nome,
+                    taxa:      d.taxaEconomia,
+                    guardado:  d.reservas,
+                    entradas:  d.entradas,
                 }))
                 .sort((a, b) => b.taxa - a.taxa);
 
-            html = '<h4 style="margin-bottom:16px; color: var(--text-primary);">📊 Ranking: Melhor Taxa de Economia</h4>';
-            html += '<p style="font-size:0.9rem; color: var(--text-secondary); margin-bottom:16px;">Quanto % do que ganhou foi guardado</p>';
+            container.appendChild(_criarTitulo('📊 Ranking: Melhor Taxa de Economia'));
+            container.appendChild(_criarSubtitulo('Quanto % do que ganhou foi guardado'));
 
             rankingEconomia.forEach((r, i) => {
-                html += `
-                    <div class="ranking-item" style="background: rgba(255,209,102,0.1); border-left: 3px solid #ffd166;">
-                        <div class="ranking-posicao">${emojis[i] || (i + 1)}</div>
-                        <div class="ranking-info">
-                            <div class="ranking-nome">${sanitizeHTML(r.nome)}</div>
-                            <div class="ranking-detalhes">
-                                Guardou ${formatBRL(r.guardado)} de ${formatBRL(r.entradas)}
-                            </div>
-                        </div>
-                        <div class="ranking-valor" style="color:#ffd166; font-size:1.5rem;">${sanitizeHTML(r.taxa.toFixed(1))}%</div>
-                    </div>
-                `;
+                container.appendChild(_criarItemRanking({
+                    corFundo:      'rgba(255,209,102,0.1)',
+                    corBorda:      '#ffd166',
+                    posicaoTxt:    emojis[i] || String(i + 1),
+                    nomeTxt:       r.nome,
+                    // ✅ formatBRL retorna string numérica formatada — textContent seguro
+                    detalhesTxt:   `Guardou ${formatBRL(r.guardado)} de ${formatBRL(r.entradas)}`,
+                    valorTxt:      `${r.taxa.toFixed(1)}%`,
+                    corValor:      '#ffd166',
+                    fontSizeValor: '1.5rem',
+                }));
             });
             break;
         }
 
+        // ── EVOLUÇÃO ──────────────────────────────────────────────────────────
         case 'evolucao': {
             const rankingEvolucao = dadosPorPerfil
                 .map(d => ({
-                    nome: d.perfil.nome,
-                    evolucao: d.evolucaoEconomia,
-                    taxaAtual: d.taxaEconomia,
-                    taxaAnterior: d.taxaEconomiaAnterior
+                    nome:         d.perfil.nome,
+                    evolucao:     d.evolucaoEconomia,
+                    taxaAtual:    d.taxaEconomia,
+                    taxaAnterior: d.taxaEconomiaAnterior,
                 }))
                 .sort((a, b) => b.evolucao - a.evolucao);
 
-            html = '<h4 style="margin-bottom:16px; color: var(--text-primary);">📈 Ranking: Maior Evolução na Economia</h4>';
-            html += '<p style="font-size:0.9rem; color: var(--text-secondary); margin-bottom:16px;">Comparação com o mês anterior</p>';
+            container.appendChild(_criarTitulo('📈 Ranking: Maior Evolução na Economia'));
+            container.appendChild(_criarSubtitulo('Comparação com o mês anterior'));
 
             rankingEvolucao.forEach((r, i) => {
+                // ✅ corEvolucao e simbolo determinados por lógica interna — não vêm do usuário
                 const corEvolucao = r.evolucao >= 0 ? '#00ff99' : '#ff4b4b';
-                const simbolo = r.evolucao >= 0 ? '↑' : '↓';
+                const simbolo     = r.evolucao >= 0 ? '↑' : '↓';
 
-                html += `
-                    <div class="ranking-item" style="background: rgba(108,99,255,0.1); border-left: 3px solid ${corEvolucao};">
-                        <div class="ranking-posicao">${emojis[i] || (i + 1)}</div>
-                        <div class="ranking-info">
-                            <div class="ranking-nome">${sanitizeHTML(r.nome)}</div>
-                            <div class="ranking-detalhes">
-                                ${sanitizeHTML(r.taxaAnterior.toFixed(1))}% → ${sanitizeHTML(r.taxaAtual.toFixed(1))}%
-                            </div>
-                        </div>
-                        <div class="ranking-valor" style="color:${corEvolucao};">
-                            ${simbolo} ${sanitizeHTML(Math.abs(r.evolucao).toFixed(1))}%
-                        </div>
-                    </div>
-                `;
+                container.appendChild(_criarItemRanking({
+                    corFundo:    'rgba(108,99,255,0.1)',
+                    corBorda:    corEvolucao,
+                    posicaoTxt:  emojis[i] || String(i + 1),
+                    nomeTxt:     r.nome,
+                    detalhesTxt: `${r.taxaAnterior.toFixed(1)}% → ${r.taxaAtual.toFixed(1)}%`,
+                    valorTxt:    `${simbolo} ${Math.abs(r.evolucao).toFixed(1)}%`,
+                    corValor:    corEvolucao,
+                }));
             });
             break;
         }
-    }
 
-    // ✅ CORREÇÃO: passa pelo DOMParser sanitizer antes de injetar no DOM
-    container.innerHTML = sanitizarHTMLPopup(html);
+        // ── TIPO DESCONHECIDO ─────────────────────────────────────────────────
+        default:
+            _log.warn('[mostrarRanking] Tipo de ranking desconhecido:', tipo);
+            break;
+    }
 }
 
 // Função para abrir detalhes completos de um perfil específico
