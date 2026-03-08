@@ -5,7 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Atualizar Plano - GranaEvo</title>
     <meta name="description" content="Faça upgrade do seu plano e desbloqueie mais recursos">
-    
+    <meta http-equiv="Content-Security-Policy"
+          content="
+            default-src 'self';
+            script-src  'self';
+            style-src   'self' 'unsafe-inline' https://fonts.googleapis.com;
+            font-src    'self' https://fonts.gstatic.com;
+            img-src     'self' data:;
+            connect-src 'self';
+            object-src  'none';
+            base-uri    'self';
+            frame-ancestors 'none';
+          ">
+
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,21 +34,21 @@
 <body>
     
     <!-- Loading Screen -->
-    <div class="loading-screen" id="loadingScreen">
+    <div class="loading-screen" id="loadingScreen" role="status" aria-live="polite" aria-label="Carregando página">
         <div class="loader">
-            <div class="loader-icon">
+            <div class="loader-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </div>
-            <div class="loader-bar"></div>
+            <div class="loader-bar" aria-hidden="true"></div>
         </div>
     </div>
 
-    <!-- Animated Background -->
-    <div class="animated-bg">
+    <!-- Animated Background — aria-hidden: decorativo, irrelevante para leitores de tela -->
+    <div class="animated-bg" aria-hidden="true">
         <div class="grid-overlay"></div>
         <canvas id="particlesCanvas"></canvas>
         <div class="glow-orb glow-orb-1"></div>
@@ -41,9 +58,9 @@
 
     <!-- Header -->
     <header class="header" id="header">
-        <nav class="nav-container">
-            <a href="dashboard.html" class="logo">
-                <div class="logo-icon">
+        <nav class="nav-container" role="navigation" aria-label="Navegação principal">
+            <a href="dashboard.html" class="logo" aria-label="GranaEvo — ir para o início">
+                <div class="logo-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -60,69 +77,68 @@
     </header>
 
     <!-- Hero Section -->
-    <section class="hero-upgrade">
+    <section class="hero-upgrade" aria-labelledby="heroTitle">
         <div class="container">
             <div class="hero-content">
-                <div class="badge">
-                    <span class="pulse-dot"></span>
+                <div class="badge" role="note">
+                    <span class="pulse-dot" aria-hidden="true"></span>
                     <span>Upgrade Instantâneo • Sem Burocracia</span>
                 </div>
                 
-                <h1 class="hero-title">
+                <h1 class="hero-title" id="heroTitle">
                     Evolua Seu Plano e
                     <span class="gradient-text">Desbloqueie Mais Recursos</span>
                 </h1>
                 
                 <p class="hero-description">
-                    Seu plano atual: <strong id="planoAtualDisplay">Carregando...</strong><br>
+                    Seu plano atual: <strong id="planoAtualDisplay" aria-live="polite">Carregando...</strong><br>
                     Pague apenas a diferença e aproveite recursos adicionais imediatamente.
                 </p>
 
-                <div class="current-plan-card" id="currentPlanCard">
-                    <!-- Preenchido via JS -->
+                <div class="current-plan-card" id="currentPlanCard" aria-live="polite" aria-label="Detalhes do plano atual">
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Plans Section -->
-    <section class="upgrade-plans-section">
+    <section class="upgrade-plans-section" aria-labelledby="planosTitle">
         <div class="container">
-            <h2 class="section-title">📈 Planos Disponíveis para Upgrade</h2>
+            <h2 class="section-title" id="planosTitle">📈 Planos Disponíveis para Upgrade</h2>
             <p class="section-subtitle">Pague apenas a diferença entre os planos</p>
-            
-            <div class="plans-grid" id="upgradeCardsGrid">
+
+            <div class="plans-grid" id="upgradeCardsGrid" role="list" aria-label="Planos disponíveis para upgrade">
                 <!-- Cards serão gerados via JS -->
             </div>
         </div>
     </section>
 
     <!-- Benefits Section -->
-    <section class="benefits-section">
+    <section class="benefits-section" aria-labelledby="beneficiosTitle">
         <div class="container">
-            <h2 class="section-title">✨ Vantagens do Upgrade</h2>
+            <h2 class="section-title" id="beneficiosTitle">✨ Vantagens do Upgrade</h2>
             
-            <div class="benefits-grid">
-                <div class="benefit-card">
-                    <div class="benefit-icon">👥</div>
+            <div class="benefits-grid" role="list">
+                <div class="benefit-card" role="listitem">
+                    <div class="benefit-icon" aria-hidden="true">👥</div>
                     <h3>Mais Perfis</h3>
                     <p>Adicione membros da família e compartilhe o controle financeiro</p>
                 </div>
                 
-                <div class="benefit-card">
-                    <div class="benefit-icon">📊</div>
+                <div class="benefit-card" role="listitem">
+                    <div class="benefit-icon" aria-hidden="true">📊</div>
                     <h3>Relatórios Avançados</h3>
                     <p>Análises comparativas entre todos os perfis da família</p>
                 </div>
                 
-                <div class="benefit-card">
-                    <div class="benefit-icon">🎯</div>
+                <div class="benefit-card" role="listitem">
+                    <div class="benefit-icon" aria-hidden="true">🎯</div>
                     <h3>Metas Compartilhadas</h3>
                     <p>Economize em conjunto para objetivos comuns</p>
                 </div>
                 
-                <div class="benefit-card">
-                    <div class="benefit-icon">⚡</div>
+                <div class="benefit-card" role="listitem">
+                    <div class="benefit-icon" aria-hidden="true">⚡</div>
                     <h3>Upgrade Instantâneo</h3>
                     <p>Novos recursos liberados imediatamente após pagamento</p>
                 </div>
@@ -131,69 +147,115 @@
     </section>
 
     <!-- FAQ Section -->
-    <section class="faq-section">
+    <section class="faq-section" aria-labelledby="faqTitle">
         <div class="container">
-            <h2 class="section-title">❓ Perguntas Frequentes</h2>
+            <h2 class="section-title" id="faqTitle">❓ Perguntas Frequentes</h2>
             
-            <div class="faq-grid">
-                <div class="faq-item">
+            <div class="faq-grid" role="list">
+
+                <div class="faq-item" role="listitem">
                     <div class="faq-question">
-                        <h3>Como funciona o upgrade?</h3>
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
+                        <button
+                            type="button"
+                            class="faq-question-btn"
+                            aria-expanded="false"
+                            aria-controls="faq-answer-1"
+                            id="faq-btn-1">
+                            <h3>Como funciona o upgrade?</h3>
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
                     </div>
-                    <div class="faq-answer">
+                    <div class="faq-answer"
+                         id="faq-answer-1"
+                         role="region"
+                         aria-labelledby="faq-btn-1"
+                         hidden>
                         <p>Você paga apenas a diferença entre seu plano atual e o novo plano. Por exemplo, se você tem o Individual (R$ 19,99) e quer o Casal (R$ 29,99), pagará apenas R$ 10,00.</p>
                     </div>
                 </div>
 
-                <div class="faq-item">
+                <div class="faq-item" role="listitem">
                     <div class="faq-question">
-                        <h3>Meus dados são mantidos?</h3>
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
+                        <button
+                            type="button"
+                            class="faq-question-btn"
+                            aria-expanded="false"
+                            aria-controls="faq-answer-2"
+                            id="faq-btn-2">
+                            <h3>Meus dados são mantidos?</h3>
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
                     </div>
-                    <div class="faq-answer">
+                    <div class="faq-answer"
+                         id="faq-answer-2"
+                         role="region"
+                         aria-labelledby="faq-btn-2"
+                         hidden>
                         <p>Sim! Todas as suas transações, metas e configurações são preservadas. Você apenas ganha acesso a mais recursos.</p>
                     </div>
                 </div>
 
-                <div class="faq-item">
+                <div class="faq-item" role="listitem">
                     <div class="faq-question">
-                        <h3>Posso fazer downgrade depois?</h3>
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
+                        <button
+                            type="button"
+                            class="faq-question-btn"
+                            aria-expanded="false"
+                            aria-controls="faq-answer-3"
+                            id="faq-btn-3">
+                            <h3>Posso fazer downgrade depois?</h3>
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
                     </div>
-                    <div class="faq-answer">
+                    <div class="faq-answer"
+                         id="faq-answer-3"
+                         role="region"
+                         aria-labelledby="faq-btn-3"
+                         hidden>
                         <p>Como todos os planos são vitalícios e de pagamento único, não fazemos downgrade. Mas você sempre pode remover perfis extras se necessário.</p>
                     </div>
                 </div>
 
-                <div class="faq-item">
+                <div class="faq-item" role="listitem">
                     <div class="faq-question">
-                        <h3>O upgrade é instantâneo?</h3>
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
+                        <button
+                            type="button"
+                            class="faq-question-btn"
+                            aria-expanded="false"
+                            aria-controls="faq-answer-4"
+                            id="faq-btn-4">
+                            <h3>O upgrade é instantâneo?</h3>
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
                     </div>
-                    <div class="faq-answer">
+                    <div class="faq-answer"
+                         id="faq-answer-4"
+                         role="region"
+                         aria-labelledby="faq-btn-4"
+                         hidden>
                         <p>Sim! Após a confirmação do pagamento, seu plano é atualizado automaticamente e você já pode adicionar novos perfis.</p>
                     </div>
                 </div>
+
             </div>
         </div>
     </section>
 
     <!-- Footer -->
-    <footer class="footer">
+    <footer class="footer" role="contentinfo">
         <div class="container">
             <div class="footer-content">
                 <div class="footer-brand">
-                    <a href="dashboard.html" class="logo">
-                        <div class="logo-icon">
+                    <a href="dashboard.html" class="logo" aria-label="GranaEvo — página inicial">
+                        <div class="logo-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -205,24 +267,39 @@
                     <p>Sua evolução financeira começa aqui</p>
                 </div>
                 
-                <div class="footer-links">
+                <nav class="footer-links" aria-label="Links do produto">
                     <h4>Produto</h4>
                     <a href="dashboard.html">Dashboard</a>
                     <a href="planos.html">Planos</a>
-                </div>
+                </nav>
                 
-                <div class="footer-links">
+                <nav class="footer-links" aria-label="Links de suporte">
                     <h4>Suporte</h4>
-                    <a href="#">Contato</a>
-                </div>
+                    <!--
+                        ✅ SEGURANÇA: Links externos devem ter rel="noopener noreferrer"
+                        para evitar que a página destino acesse window.opener.
+                        Exemplo aplicado abaixo.
+                    -->
+                    <a href="#" rel="noopener noreferrer">Contato</a>
+                </nav>
             </div>
             
             <div class="footer-bottom">
-                <p>&copy; 2025 GranaEvo. Todos os direitos reservados.</p>
+                <p>
+                    <!-- ✅ Ano dinâmico via JS seguro — sem innerHTML, apenas textContent -->
+                    &copy; <span id="footerYear"></span> GranaEvo. Todos os direitos reservados.
+                </p>
             </div>
         </div>
     </footer>
-    
+
     <script type="module" src="atualizarplano.js"></script>
+
+    <script>
+        // Único trecho inline permitido — apenas data estática, sem entrada de usuário
+        const _yearEl = document.getElementById('footerYear');
+        if (_yearEl) _yearEl.textContent = new Date().getFullYear();
+    </script>
+
 </body>
 </html>

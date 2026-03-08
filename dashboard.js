@@ -89,8 +89,6 @@ async function _sanitizeImageFile(file) {
             img.onload = () => {
                 try {
                     const canvas = document.createElement('canvas');
-                    // ✅ Limita dimensão máxima a 1200px preservando aspect ratio
-                    //    Reduz tamanho final sem perda visual perceptível para fotos de perfil
                     const MAX_DIM = 1200;
                     let { naturalWidth: w, naturalHeight: h } = img;
                     if (w > MAX_DIM || h > MAX_DIM) {
@@ -101,46 +99,46 @@ async function _sanitizeImageFile(file) {
                     canvas.height = h;
 
                     const ctx = canvas.getContext('2d');
-                    // ✅ Preenche fundo branco para imagens com transparência (PNG → webp)
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, w, h);
                     ctx.drawImage(img, 0, 0, w, h);
 
-                    // ✅ Exporta sempre como webp — formato moderno + sem suporte a EXIF
-                    //    Qualidade 0.92 é imperceptível para fotos de perfil
                     canvas.toBlob(
                         (blob) => {
-                            if (blob) {
-                                // ✅ Cria novo File com nome seguro e tipo correto
-                                const sanitized = new File(
-                                    [blob],
-                                    'profile.webp',
-                                    { type: 'image/webp', lastModified: Date.now() }
-                                );
-                                resolve(sanitized);
-                            } else {
-                                // Canvas falhou — retorna original como fallback seguro
-                                _log.warn('SANITIZE_IMG_001', 'canvas.toBlob retornou null — usando arquivo original');
-                                resolve(file);
+                            if (!blob) {
+                                // ✅ CORRIGIDO: nunca retorna arquivo original.
+                                //    Retorna null — caller deve rejeitar o upload.
+                                _log.error('SANITIZE_IMG_001', 'canvas.toBlob retornou null — upload bloqueado');
+                                resolve(null);
+                                return;
                             }
+                            const sanitized = new File(
+                                [blob],
+                                'profile.webp',
+                                { type: 'image/webp', lastModified: Date.now() }
+                            );
+                            resolve(sanitized);
                         },
                         'image/webp',
                         0.92
                     );
                 } catch (err) {
+                    // ✅ CORRIGIDO: erro no canvas → null, não arquivo original
                     _log.error('SANITIZE_IMG_002', err);
-                    resolve(file); // fallback seguro
+                    resolve(null);
                 }
             };
             img.onerror = () => {
-                _log.error('SANITIZE_IMG_003', 'Falha ao carregar imagem para sanitização');
-                resolve(file); // fallback seguro
+                // ✅ CORRIGIDO: falha ao decodificar → null, não arquivo original
+                _log.error('SANITIZE_IMG_003', 'Falha ao carregar imagem para sanitização — upload bloqueado');
+                resolve(null);
             };
             img.src = e.target.result;
         };
         reader.onerror = () => {
-            _log.error('SANITIZE_IMG_004', 'FileReader falhou na sanitização');
-            resolve(file); // fallback seguro
+            // ✅ CORRIGIDO: falha de leitura → null, não arquivo original
+            _log.error('SANITIZE_IMG_004', 'FileReader falhou na sanitização — upload bloqueado');
+            resolve(null);
         };
         reader.readAsDataURL(file);
     });
@@ -237,24 +235,23 @@ function validarUserData(userData) {
 })();
 
 function atualizarReferenciasGlobais() {
-    // ✅ _GE_snapshot_atual continua armazenando o estado completo internamente
-    //    para uso pelos módulos do próprio sistema (graficos.js acessa via window.perfilAtivo,
-    //    os dados financeiros devem ser passados via parâmetro ou import, nunca via window.__GE__)
     _GE_snapshot_atual = Object.freeze({
-        perfilAtivo:    perfilAtivo ? Object.freeze({ ...perfilAtivo })   : null,
-        usuarioLogado:  Object.freeze({
+        perfilAtivo: perfilAtivo
+            ? Object.freeze({
+                id:   perfilAtivo.id,
+                nome: perfilAtivo.nome,
+            })
+            : null,
+        usuarioLogado: Object.freeze({
+            // ✅ userId mantido pois é necessário para verificações internas de sessão
             userId:  usuarioLogado.userId,
             plano:   usuarioLogado.plano,
             isGuest: usuarioLogado.isGuest,
-            // ✅ perfis mantidos para uso interno mas sem expor via window.__GE__
-            perfis:  Object.freeze([...usuarioLogado.perfis]),
+            // ✅ perfis mantidos apenas com id e nome — sem foto ou outros metadados
+            perfis:  Object.freeze(
+                usuarioLogado.perfis.map(p => Object.freeze({ id: p.id, nome: p.nome }))
+            ),
         }),
-        // ✅ Dados financeiros mantidos em _GE_snapshot_atual para uso interno
-        //    mas NÃO expostos via window.__GE__ (ver getter acima)
-        transacoes:     Object.freeze([...transacoes]),
-        metas:          Object.freeze([...metas]),
-        contasFixas:    Object.freeze([...contasFixas]),
-        cartoesCredito: Object.freeze([...cartoesCredito]),
     });
 }
 
@@ -527,7 +524,6 @@ const _validators = {
         if (!Number.isInteger(c.vencimentoDia) || c.vencimentoDia < 1 || c.vencimentoDia > 28) return false;
 
         // ✅ CORREÇÃO: valida `usado` — impede valor negativo que inflaria o limite disponível
-        //    Um atacante que zerasse `usado` artificialmente veria limite disponível = limite total
         if (c.usado !== undefined && c.usado !== null) {
             if (typeof c.usado !== 'number' || !isFinite(c.usado) || c.usado < 0 || c.usado > 9999999) return false;
         }
@@ -535,6 +531,54 @@ const _validators = {
         return true;
     },
 };
+
+// ── NOVO (Ponto 1 — Anti Prototype Pollution):
+//    Retorna objeto puro contendo APENAS as chaves da whitelist.
+//    Object.create(null) elimina prototype chain — __proto__ injetado é descartado.
+//    Impede que campos extras (injetados via console ou extensão) cheguem ao banco.
+function _sanitizeObject(obj, allowedKeys) {
+    const clean = Object.create(null);
+    for (const key of allowedKeys) {
+        if (Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined) {
+            clean[key] = obj[key];
+        }
+    }
+    return clean;
+}
+
+// ── NOVO (Ponto 5 — Limite de payload):
+//    Teto de registros por tipo de array.
+//    Bloqueia saves abusivos antes de serializar qualquer dado.
+const _SAVE_LIMITS = Object.freeze({
+    transacoes:    10_000,
+    metas:            500,
+    contasFixas:    1_000,
+    cartoesCredito:    50,
+});
+
+// ── NOVO (Ponto 1 — Whitelist de chaves por entidade):
+//    Define EXATAMENTE quais campos chegam ao banco.
+//    Campos de runtime (_processando, _storagePath, etc.) nunca passam.
+const _ALLOWED_KEYS = Object.freeze({
+    transacao: Object.freeze([
+        'id', 'categoria', 'tipo', 'descricao', 'valor',
+        'data', 'hora', 'metaId', 'contaFixaId',
+        'faturaId', 'compraId', 'motivoRetirada',
+    ]),
+    meta: Object.freeze([
+        'id', 'descricao', 'objetivo', 'saved',
+        'monthly', 'historicoRetiradas',
+    ]),
+    contaFixa: Object.freeze([
+        'id', 'descricao', 'valor', 'vencimento', 'pago',
+        'cartaoId', 'tipoContaFixa', 'compras',
+        'totalParcelas', 'parcelaAtual',
+    ]),
+    cartao: Object.freeze([
+        'id', 'nomeBanco', 'limite', 'vencimentoDia',
+        'bandeiraImg', 'usado',
+    ]),
+});
 
 // ✅ Controle interno de debounce do salvarDados
 //    Declarado fora para persistir entre chamadas
@@ -567,11 +611,12 @@ async function salvarDados() {
             _saveDebounceResolve = null;
 
             try {
+                // ── 1. Filtrar itens inválidos pelo schema ──────────────────
                 const transacoesValidas = transacoes.filter(_validators.transacao);
                 const metasValidas      = metas.filter(_validators.meta);
                 const cartoesValidos    = cartoesCredito.filter(_validators.cartao);
 
-                // ✅ CORREÇÃO: remove a flag _processando antes de persistir.
+                // ✅ Remove a flag _processando antes de persistir.
                 //    Essa flag é apenas um lock de runtime para evitar cliques duplos.
                 //    Se salva no banco com _processando: true, o pagamento fica
                 //    permanentemente bloqueado em todas as sessões futuras.
@@ -589,14 +634,60 @@ async function salvarDados() {
                     _log.warn('SAVE: itens inválidos descartados antes de persistir');
                 }
 
+                // ── 2. Verificar limites de payload (Ponto 5) ───────────────
+                //    Falha rápido antes de construir dadosPerfil.
+                //    Impede que arrays gigantes (injetados ou corrompidos) travem
+                //    o banco ou gerem custo excessivo de armazenamento.
+                if (transacoesValidas.length > _SAVE_LIMITS.transacoes) {
+                    _log.error('SAVE_LIMIT_001',
+                        `Transações excedem o limite (${transacoesValidas.length} > ${_SAVE_LIMITS.transacoes})`);
+                    resolve(false);
+                    return;
+                }
+                if (metasValidas.length > _SAVE_LIMITS.metas) {
+                    _log.error('SAVE_LIMIT_002',
+                        `Metas excedem o limite (${metasValidas.length} > ${_SAVE_LIMITS.metas})`);
+                    resolve(false);
+                    return;
+                }
+                if (contasValidas.length > _SAVE_LIMITS.contasFixas) {
+                    _log.error('SAVE_LIMIT_003',
+                        `Contas fixas excedem o limite (${contasValidas.length} > ${_SAVE_LIMITS.contasFixas})`);
+                    resolve(false);
+                    return;
+                }
+                if (cartoesValidos.length > _SAVE_LIMITS.cartoesCredito) {
+                    _log.error('SAVE_LIMIT_004',
+                        `Cartões excedem o limite (${cartoesValidos.length} > ${_SAVE_LIMITS.cartoesCredito})`);
+                    resolve(false);
+                    return;
+                }
+
+                // ── 3. Sanitizar estrutura — whitelist de chaves (Ponto 1) ──
+                //    _sanitizeObject garante que apenas campos conhecidos chegam
+                //    ao banco. Campos extras, __proto__ injetado e flags de runtime
+                //    são silenciosamente descartados aqui antes do spread no backend.
+                const transacoesSanitizadas = transacoesValidas.map(t =>
+                    _sanitizeObject(t, _ALLOWED_KEYS.transacao)
+                );
+                const metasSanitizadas = metasValidas.map(m =>
+                    _sanitizeObject(m, _ALLOWED_KEYS.meta)
+                );
+                const contasSanitizadas = contasValidas.map(c =>
+                    _sanitizeObject(c, _ALLOWED_KEYS.contaFixa)
+                );
+                const cartoesSanitizados = cartoesValidos.map(c =>
+                    _sanitizeObject(c, _ALLOWED_KEYS.cartao)
+                );
+
                 const dadosPerfil = {
                     id:             perfilAtivo.id,
                     nome:           _sanitizeText(perfilAtivo.nome),
                     foto:           _sanitizeImgUrl(perfilAtivo.foto) || null,
-                    transacoes:     transacoesValidas,
-                    metas:          metasValidas,
-                    contasFixas:    contasValidas,
-                    cartoesCredito: cartoesValidos,
+                    transacoes:     transacoesSanitizadas,
+                    metas:          metasSanitizadas,
+                    contasFixas:    contasSanitizadas,
+                    cartoesCredito: cartoesSanitizados,
                     nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
                     lastUpdate:     new Date().toISOString(),
                 };
@@ -1009,8 +1100,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         if (inputFoto.files && inputFoto.files[0]) {
             const arquivoOriginal = inputFoto.files[0];
 
-            // ✅ Validações client-side: camada UX apenas — feedback imediato ao usuário
-            //    A validação real de conteúdo (magic bytes server-side) ocorre na Edge Function
             if (arquivoOriginal.size > 2 * 1024 * 1024) { alert('A foto deve ter no máximo 2MB.'); return; }
 
             const mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
@@ -1020,46 +1109,47 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             if (!magicValido) { alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.'); return; }
 
             const _MAX_DIMENSAO_PX = 4000;
-            const dimensaoValida = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => resolve(img.naturalWidth <= _MAX_DIMENSAO_PX && img.naturalHeight <= _MAX_DIMENSAO_PX);
-                    img.onerror = () => resolve(false);
-                    img.src = e.target.result;
-                };
-                reader.onerror = () => resolve(false);
-                reader.readAsDataURL(arquivoOriginal);
-            });
+            let dimensaoValida = false;
+            try {
+                const bitmap = await createImageBitmap(arquivoOriginal);
+                dimensaoValida = bitmap.width <= _MAX_DIMENSAO_PX && bitmap.height <= _MAX_DIMENSAO_PX;
+                bitmap.close();
+            } catch (_) {
+                dimensaoValida = false;
+            }
 
             if (!dimensaoValida) { alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`); return; }
 
-            // ✅ Re-render via canvas — remove EXIF, metadados e payloads polyglot
-            //    Executado antes do envio para a Edge Function
             const arquivo = await _sanitizeImageFile(arquivoOriginal);
 
-            // ✅ Upload via Edge Function — valida magic bytes server-side com service_role
-            //    O cliente não acessa o bucket diretamente
-            const formData = new FormData();
-            formData.append('file', arquivo);
-
-            const uploadResp = await fetch(
-                `${SUPABASE_URL}/functions/v1/upload-profile-photo`,
-                {
-                    method:  'POST',
-                    headers: { 'Authorization': `Bearer ${session.access_token}` },
-                    body:    formData,
-                }
-            );
-
-            if (!uploadResp.ok) {
-                const { error: uploadMsg } = await uploadResp.json().catch(() => ({}));
-                _log.error('PERFIL_FOTO_001', { status: uploadResp.status, msg: uploadMsg });
-                alert(uploadMsg ?? 'Erro ao fazer upload da foto. Tente novamente.');
+            if (!arquivo) {
+                alert('Não foi possível processar a imagem. Tente com outro arquivo.');
                 return;
             }
 
-            const { path: nomeArquivo } = await uploadResp.json();
+            const formData = new FormData();
+            formData.append('file', arquivo);
+
+            // ✅ CORRIGIDO: usa supabase.functions.invoke em vez de fetch manual.
+            //    O SDK injeta o token automaticamente, trata refresh e reduz
+            //    o manuseio explícito do access_token no código de usuário.
+            const { data: uploadData, error: uploadError } = await supabase.functions.invoke(
+                'upload-profile-photo',
+                { body: formData }
+            );
+
+            if (uploadError) {
+                _log.error('PERFIL_FOTO_001', uploadError);
+                alert(uploadError.message ?? 'Erro ao fazer upload da foto. Tente novamente.');
+                return;
+            }
+
+            const nomeArquivo = uploadData?.path;
+            if (!nomeArquivo) {
+                _log.error('PERFIL_FOTO_001B', 'path ausente na resposta da edge function');
+                alert('Erro ao processar a foto. Tente novamente.');
+                return;
+            }
 
             const { data: signedData, error: signedError } = await supabase.storage
                 .from('profile-photos')
@@ -1076,10 +1166,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         _log.info('[_criarPerfilHandler] Inserindo perfil no banco...');
 
-        // ✅ CORREÇÃO V1: user_id enviado explicitamente a partir do JWT verificado.
-        //    Defesa em profundidade: mesmo se o RLS for editado incorretamente no futuro,
-        //    o perfil ainda será vinculado ao usuário correto.
-        //    session.user.id vem do token verificado pelo Supabase Auth — não do estado global.
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
             .insert({ name: nome, photo_url: fotoUrl, user_id: session.user.id })
@@ -1274,8 +1360,6 @@ async function alterarFoto(event) {
     if (!fileOriginal) return;
     if (!perfilAtivo) { alert('Erro: Nenhum perfil ativo encontrado.'); return; }
 
-    // ✅ Validações client-side: camada UX apenas — feedback imediato ao usuário
-    //    A validação real de conteúdo (magic bytes server-side) ocorre na Edge Function
     if (fileOriginal.size > 2 * 1024 * 1024) { alert('A foto deve ter no máximo 2MB.'); return; }
 
     const mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
@@ -1284,41 +1368,59 @@ async function alterarFoto(event) {
     const magicValido = await _validarMagicBytes(fileOriginal);
     if (!magicValido) { alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.'); return; }
 
+    const _MAX_DIMENSAO_PX = 4000;
+    let dimensaoValida = false;
+    try {
+        const bitmap = await createImageBitmap(fileOriginal);
+        dimensaoValida = bitmap.width <= _MAX_DIMENSAO_PX && bitmap.height <= _MAX_DIMENSAO_PX;
+        bitmap.close();
+    } catch (_) {
+        dimensaoValida = false;
+    }
+
+    if (!dimensaoValida) {
+        alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`);
+        return;
+    }
+
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !session || !session.user || !session.user.id) throw new Error('SEM_SESSAO_VALIDA');
 
-        // ✅ Re-render via canvas — remove EXIF, metadados e payloads polyglot
-        //    Executado antes do envio para a Edge Function
         const file = await _sanitizeImageFile(fileOriginal);
 
-        // ✅ Upload via Edge Function — valida magic bytes server-side com service_role
-        //    O cliente não acessa o bucket diretamente
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const uploadResp = await fetch(
-            `${SUPABASE_URL}/functions/v1/upload-profile-photo`,
-            {
-                method:  'POST',
-                headers: { 'Authorization': `Bearer ${session.access_token}` },
-                body:    formData,
-            }
-        );
-
-        if (!uploadResp.ok) {
-            const { error: uploadMsg } = await uploadResp.json().catch(() => ({}));
-            _log.error('FOTO_001', { status: uploadResp.status, msg: uploadMsg });
-            alert(uploadMsg ?? 'Erro ao fazer upload. Tente novamente.');
+        if (!file) {
+            alert('Não foi possível processar a imagem. Tente com outro arquivo.');
             return;
         }
 
-        const { path: storagePath } = await uploadResp.json();
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // ✅ CORRIGIDO: usa supabase.functions.invoke em vez de fetch manual.
+        //    O SDK injeta o token automaticamente — session.access_token não é
+        //    mais manuseado diretamente no código de usuário.
+        const { data: uploadData, error: uploadError } = await supabase.functions.invoke(
+            'upload-profile-photo',
+            { body: formData }
+        );
+
+        if (uploadError) {
+            _log.error('FOTO_001', uploadError);
+            alert(uploadError.message ?? 'Erro ao fazer upload. Tente novamente.');
+            return;
+        }
+
+        const storagePath = uploadData?.path;
+        if (!storagePath) {
+            _log.error('FOTO_001B', 'path ausente na resposta da edge function');
+            alert('Erro ao processar a foto. Tente novamente.');
+            return;
+        }
 
         const urlSegura = await _gerarSignedUrl(storagePath);
         if (!urlSegura) { alert('Erro interno ao processar a foto. Tente novamente.'); return; }
 
-        // 🔒 .eq('user_id', session.user.id) — âncora no JWT
         const { error: updateError } = await supabase
             .from('profiles')
             .update({ photo_url: storagePath })
@@ -4532,9 +4634,20 @@ function popularFiltrosRelatorio() {
         return;
     }
 
-    mesSelect.innerHTML    = '<option value="">Selecione o mês</option>';
-    anoSelect.innerHTML    = '<option value="">Selecione o ano</option>';
-    perfilSelect.innerHTML = '<option value="">Selecione o perfil</option>';
+    function _criarPlaceholder(texto) {
+        const opt = document.createElement('option');
+        opt.value       = '';
+        opt.textContent = texto;
+        return opt;
+    }
+
+    while (mesSelect.firstChild)    mesSelect.removeChild(mesSelect.firstChild);
+    while (anoSelect.firstChild)    anoSelect.removeChild(anoSelect.firstChild);
+    while (perfilSelect.firstChild) perfilSelect.removeChild(perfilSelect.firstChild);
+
+    mesSelect.appendChild(_criarPlaceholder('Selecione o mês'));
+    anoSelect.appendChild(_criarPlaceholder('Selecione o ano'));
+    perfilSelect.appendChild(_criarPlaceholder('Selecione o perfil'));
 
     if (!Array.isArray(usuarioLogado?.perfis)) return;
 
@@ -7971,21 +8084,38 @@ function editarCompraFatura(faturaId, compraId) {
     fecharPopup();
 
     setTimeout(() => {
+        // ✅ CORREÇÃO: HTML do popup com campos VAZIOS
+        //    Dados do usuário (tipo, descricao, valorParcela) são inseridos
+        //    exclusivamente via .value após criação do DOM — nunca via atributo HTML
         criarPopup(`
             <h3>✏️ Editar Compra</h3>
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Tipo:</label>
-            <input type="text" id="editTipoCompra" class="form-input" value="${sanitizeHTML(compra.tipo)}">
+            <input type="text" id="editTipoCompra" class="form-input" maxlength="100">
 
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Descrição:</label>
-            <input type="text" id="editDescCompra" class="form-input" value="${sanitizeHTML(compra.descricao)}">
+            <input type="text" id="editDescCompra" class="form-input" maxlength="200">
 
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Valor da Parcela:</label>
-            <input type="number" id="editValorCompra" class="form-input"
-                   value="${compra.valorParcela}" step="0.01" min="0">
+            <input type="number" id="editValorCompra" class="form-input" step="0.01" min="0.01" max="9999999">
 
             <button class="btn-primary"  id="salvarEdicaoCompra">Salvar</button>
             <button class="btn-cancelar" id="cancelarEdicaoCompra">Cancelar</button>
         `);
+
+        // ✅ CORREÇÃO: preenchimento seguro via .value — padrão consistente com
+        //    abrirContaFixaForm, abrirMetaForm e todos os outros formulários de edição
+        //    Nenhum dado do usuário passa por innerHTML ou atributo HTML
+        const inputTipo  = document.getElementById('editTipoCompra');
+        const inputDesc  = document.getElementById('editDescCompra');
+        const inputValor = document.getElementById('editValorCompra');
+
+        if (inputTipo)  inputTipo.value  = String(compra.tipo      || '');
+        if (inputDesc)  inputDesc.value  = String(compra.descricao || '');
+        if (inputValor) {
+            // ✅ parseFloat garante que valorParcela é número antes de atribuir ao input
+            const vp = parseFloat(compra.valorParcela);
+            inputValor.value = isFinite(vp) && vp > 0 ? vp : '';
+        }
 
         document.getElementById('cancelarEdicaoCompra').addEventListener('click', () => {
             fecharPopup();
@@ -8001,17 +8131,30 @@ function editarCompraFatura(faturaId, compraId) {
                 mostrarNotificacao('O tipo da compra não pode estar vazio.', 'error');
                 return;
             }
-            if (isNaN(novoValor) || novoValor <= 0) {
-                mostrarNotificacao('Digite um valor válido.', 'error');
+            if (novoTipo.length > 100) {
+                mostrarNotificacao('Tipo muito longo (máx. 100 caracteres).', 'error');
+                return;
+            }
+            if (novaDesc.length > 200) {
+                mostrarNotificacao('Descrição muito longa (máx. 200 caracteres).', 'error');
+                return;
+            }
+            if (isNaN(novoValor) || novoValor <= 0 || novoValor > 9_999_999) {
+                mostrarNotificacao('Digite um valor válido (entre R$ 0,01 e R$ 9.999.999).', 'error');
                 return;
             }
 
             compra.tipo         = novoTipo;
             compra.descricao    = novaDesc;
-            compra.valorParcela = novoValor;
+            compra.valorParcela = parseFloat(novoValor.toFixed(2));
 
-            // Recalcular valor total da fatura
-            fatura.valor = fatura.compras.reduce((sum, c) => sum + c.valorParcela, 0);
+            // ✅ Recalcular com parseFloat para evitar acúmulo de imprecisão de ponto flutuante
+            fatura.valor = parseFloat(
+                fatura.compras.reduce((sum, c) => {
+                    const p = parseFloat(c.valorParcela);
+                    return sum + (isFinite(p) && p > 0 ? p : 0);
+                }, 0).toFixed(2)
+            );
 
             salvarDados();
             atualizarTudo();
