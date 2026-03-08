@@ -182,33 +182,60 @@ class DataManager {
     }
 
     // ========== SALVAR PERFIL ESPECÍFICO ==========
-    async saveProfile(profileId, profileData) {
-        try {
-            console.log('💾 Salvando perfil específico:', profileId);
+    // ========== SALVAR PERFIL ESPECÍFICO (substitui saveProfile) ==========
+async saveProfileData(dadosPerfil) {
+    if (!this.userId) {
+        console.error('❌ Não é possível salvar: UserID não definido');
+        return false;
+    }
 
-            const fullData = await this.loadUserData();
+    if (this.isSaving) {
+        console.log('⏳ Salvamento em andamento, aguardando...');
+        await new Promise(resolve => {
+            const check = setInterval(() => {
+                if (!this.isSaving) { clearInterval(check); resolve(); }
+            }, 100);
+        });
+    }
 
-            const profileIndex = fullData.profiles.findIndex(p => p.id === profileId);
-            const profileToSave = { ...profileData, lastUpdate: new Date().toISOString() };
+    this.isSaving = true;
 
-            if (profileIndex !== -1) {
-                console.log('📝 Atualizando perfil existente');
-                fullData.profiles[profileIndex] = profileToSave;
-            } else {
-                console.log('➕ Adicionando novo perfil');
-                fullData.profiles.push(profileToSave);
-            }
+    try {
+        console.log('💾 [SUPABASE] Salvando perfil via RPC cirúrgica...');
+        console.log('🆔 Profile ID:', dadosPerfil.id);
 
-            const success = await this.saveUserData(fullData.profiles);
-            if (success) console.log('✅ Perfil salvo com sucesso');
+        // ✅ Nunca envia o array completo — apenas o perfil ativo
+        // ✅ userId vem do token de sessão server-side (auth.uid()), não daqui
+        const { data: result, error } = await supabase
+            .rpc('salvar_perfil_usuario', {
+                p_profile_id:   dadosPerfil.id,
+                p_profile_data: dadosPerfil
+            });
 
-            return success;
+        if (error) {
+            console.error('❌ [RPC] Erro de comunicação:', error.message);
+            throw error;
+        }
 
-        } catch (err) {
-            console.error('❌ Erro ao salvar perfil:', err);
+        if (!result?.ok) {
+            console.error('❌ [RPC] Salvamento recusado:', result?.erro);
             return false;
         }
+
+        this.lastSaveTime = new Date();
+        console.log('✅ [SUPABASE] Perfil salvo com sucesso!');
+        console.log('🕐 Horário:', this.lastSaveTime.toLocaleTimeString());
+
+        return true;
+
+    } catch (err) {
+        console.error('❌ [SUPABASE] Erro crítico ao salvar perfil:', err);
+        return false;
+
+    } finally {
+        this.isSaving = false;
     }
+}
 
     // ========== SALVAMENTO IMEDIATO (beforeunload) ==========
     saveImmediate(profilesData) {

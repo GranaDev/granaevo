@@ -522,8 +522,6 @@ async function salvarDados() {
                     _log.warn('SAVE: itens inválidos descartados antes de persistir');
                 }
 
-                const userData = await dataManager.loadUserData();
-
                 const dadosPerfil = {
                     id:             perfilAtivo.id,
                     nome:           _sanitizeText(perfilAtivo.nome),
@@ -536,15 +534,17 @@ async function salvarDados() {
                     lastUpdate:     new Date().toISOString(),
                 };
 
-                const perfilIndex = userData.profiles.findIndex(p => p.id === perfilAtivo.id);
-                if (perfilIndex !== -1) {
-                    userData.profiles[perfilIndex] = dadosPerfil;
-                } else {
-                    userData.profiles.push(dadosPerfil);
-                }
-
-                const sucesso = await dataManager.saveUserData(userData.profiles);
-                if (!sucesso) _log.error('SAVE_003', 'saveUserData retornou false');
+                // ✅ CORREÇÃO PONTO 2 (Mass Assignment):
+                //    Antes: loadUserData() → modifica array em memória → saveUserData(array completo)
+                //    Janela de ataque: extensão maliciosa podia adulterar outros perfis entre o
+                //    load e o save, já que o array completo transitava pelo cliente.
+                //
+                //    Agora: saveProfileData() envia apenas o perfil ativo para a RPC
+                //    salvar_perfil_usuario(), que faz um jsonb_set() cirúrgico no banco.
+                //    Os outros perfis nunca saem do servidor — janela de ataque eliminada.
+                //    O userId é validado via auth.uid() server-side; o cliente não envia nenhum.
+                const sucesso = await dataManager.saveProfileData(dadosPerfil);
+                if (!sucesso) _log.error('SAVE_003', 'saveProfileData retornou false');
                 resolve(!!sucesso);
 
             } catch (e) {
@@ -598,11 +598,6 @@ async function verificarLogin() {
         } else {
             _log.info('[VERIFICAR LOGIN] Sem assinatura por user_id. Tentando fallback por email...');
 
-            // ✅ CORREÇÃO Ponto 4: select reduzido ao mínimo necessário.
-            //    Não trazemos `user_id` da subscription por email para não expor
-            //    dados de outro usuário no cliente. O vínculo é feito server-side.
-            //    A proteção definitiva contra enumeração deve ser a RLS policy
-            //    na tabela subscriptions (user_email = auth.email()).
             const { data: subByEmail, error: subEmailError } = await supabase
                 .from('subscriptions')
                 .select('id, plans(name)')
@@ -616,8 +611,6 @@ async function verificarLogin() {
                 planName = subByEmail.plans.name;
                 _log.info('[VERIFICAR LOGIN] Assinatura encontrada por email');
 
-                // ✅ Vínculo sempre solicitado server-side — o backend verifica
-                //    se já existe user_id antes de atualizar.
                 _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
                 try {
                     await supabase.functions.invoke('link-user-subscription', {
@@ -663,32 +656,30 @@ async function verificarLogin() {
 
                 planName = ownerSub.plans.name;
                 effectiveUserId = membership.owner_user_id;
-                effectiveEmail = membership.owner_email;
+                effectiveEmail  = membership.owner_email;
                 isGuest = true;
                 _log.info('[VERIFICAR LOGIN] Acesso como convidado autorizado');
             }
         }
 
+        // ✅ CORREÇÃO: effectiveUserId REMOVIDO do objeto usuarioLogado.
+        //    Ele já foi capturado em variável local acima e é usado diretamente
+        //    em dataManager.initialize() logo abaixo — antes de qualquer possível
+        //    manipulação via console. Armazená-lo em usuarioLogado seria expô-lo
+        //    desnecessariamente em um objeto mutável e acessível externamente.
         usuarioLogado = {
-            userId:          session.user.id,
-            effectiveUserId: effectiveUserId,
-            nome:            session.user.user_metadata?.name || session.user.email.split('@')[0],
-            email:           session.user.email,
-            plano:           planName,
-            perfis:          [],
-            isGuest:         isGuest,
+            userId:  session.user.id,
+            nome:    session.user.user_metadata?.name || session.user.email.split('@')[0],
+            email:   session.user.email,
+            plano:   planName,
+            perfis:  [],
+            isGuest: isGuest,
         };
 
         _log.info('[VERIFICAR LOGIN] Usuário inicializado. isGuest:', usuarioLogado.isGuest);
 
-        // ✅ CORREÇÃO Ponto 3: usa a variável local `effectiveUserId` em vez de
-        //    `usuarioLogado.effectiveUserId`. A variável local vem diretamente das
-        //    respostas do servidor (JWT-verificadas) e não é acessível externamente.
-        //    `usuarioLogado` é um objeto de módulo — em scripts clássicos (não ES module)
-        //    pode ser acessado via console e ter effectiveUserId substituído por
-        //    um UUID arbitrário antes que dataManager.initialize seja chamado.
-        //    Usar a variável local fecha essa janela de ataque sem alterar a
-        //    interface do dataManager.
+        // ✅ effectiveUserId vem da variável local (JWT-verificada), não do objeto mutável.
+        //    Chamado imediatamente, sem janela de ataque entre atribuição e uso.
         _log.info('[VERIFICAR LOGIN] Inicializando DataManager...');
         await dataManager.initialize(effectiveUserId, effectiveEmail);
         _log.info('[VERIFICAR LOGIN] DataManager inicializado');
