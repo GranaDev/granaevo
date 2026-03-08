@@ -14,9 +14,11 @@ class DataManager {
         this.userId    = userId;
         this.userEmail = userEmail;
 
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         console.log('📦 DataManager inicializado');
-        console.log('👤 UserID:', userId);
-        console.log('📧 Email:', userEmail);
+        console.log('👤 UserID:', this.userId);
+        console.log('📧 Email:', this.userEmail);
+    }
 
         return true;
     }

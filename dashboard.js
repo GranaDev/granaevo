@@ -93,11 +93,29 @@ function validarUserData(userData) {
 // ========== FIM DAS FUNÇÕES UTILITÁRIAS ==========
 
 (function _inicializarGE() {
+    // 🔒 window.__GE__ expõe apenas dados não-sensíveis de UI
+    //    Dados financeiros (transacoes, metas, contasFixas, cartoesCredito)
+    //    são removidos do snapshot público.
+    //    Módulos internos (graficos.js, chat-assistant.js) que precisem dos dados
+    //    devem usar as variáveis de módulo diretamente via importação, não via window.
     Object.defineProperty(window, '__GE__', {
         get: () => {
             if (!_GE_snapshot_atual) return null;
             try {
-                return Object.freeze(Object.assign({}, _GE_snapshot_atual));
+                // ✅ Apenas dados de sessão/UI — zero dados financeiros
+                return Object.freeze({
+                    perfilAtivo:  _GE_snapshot_atual.perfilAtivo
+                        ? Object.freeze({
+                            id:   _GE_snapshot_atual.perfilAtivo.id,
+                            nome: _GE_snapshot_atual.perfilAtivo.nome,
+                          })
+                        : null,
+                    usuarioLogado: Object.freeze({
+                        userId:  _GE_snapshot_atual.usuarioLogado?.userId  ?? null,
+                        plano:   _GE_snapshot_atual.usuarioLogado?.plano   ?? '',
+                        isGuest: _GE_snapshot_atual.usuarioLogado?.isGuest ?? false,
+                    }),
+                });
             } catch {
                 return null;
             }
@@ -107,6 +125,7 @@ function validarUserData(userData) {
         enumerable:   false,
     });
 
+    // ✅ __GE_save__ mantido apenas em dev — sem alteração
     if (window.location.hostname === 'localhost' ||
         window.location.hostname === '127.0.0.1') {
         Object.defineProperty(window, '__GE_save__', {
@@ -132,10 +151,15 @@ function validarUserData(userData) {
     }
 };
 
+    if (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+) {
     _def('perfilAtivo', () => perfilAtivo
         ? Object.freeze({ id: perfilAtivo.id, nome: perfilAtivo.nome })
         : null
     );
+}
 
     if (window.location.hostname === 'localhost' ||
         window.location.hostname === '127.0.0.1') {
@@ -146,9 +170,20 @@ function validarUserData(userData) {
 })();
 
 function atualizarReferenciasGlobais() {
+    // ✅ _GE_snapshot_atual continua armazenando o estado completo internamente
+    //    para uso pelos módulos do próprio sistema (graficos.js acessa via window.perfilAtivo,
+    //    os dados financeiros devem ser passados via parâmetro ou import, nunca via window.__GE__)
     _GE_snapshot_atual = Object.freeze({
-        perfilAtivo:    Object.freeze({ ...perfilAtivo }),
-        usuarioLogado:  Object.freeze({ ...usuarioLogado, perfis: Object.freeze([...usuarioLogado.perfis]) }),
+        perfilAtivo:    perfilAtivo ? Object.freeze({ ...perfilAtivo })   : null,
+        usuarioLogado:  Object.freeze({
+            userId:  usuarioLogado.userId,
+            plano:   usuarioLogado.plano,
+            isGuest: usuarioLogado.isGuest,
+            // ✅ perfis mantidos para uso interno mas sem expor via window.__GE__
+            perfis:  Object.freeze([...usuarioLogado.perfis]),
+        }),
+        // ✅ Dados financeiros mantidos em _GE_snapshot_atual para uso interno
+        //    mas NÃO expostos via window.__GE__ (ver getter acima)
         transacoes:     Object.freeze([...transacoes]),
         metas:          Object.freeze([...metas]),
         contasFixas:    Object.freeze([...contasFixas]),
@@ -260,40 +295,38 @@ async function _resolverFotoPerfil(photo_url) {
 
 async function carregarPerfis() {
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('SEM_SESSAO');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
+        if (sessionError || !session || !session.user || !session.user.id) {
+            throw new Error('SEM_SESSAO_VALIDA');
+        }
+
+        // 🔒 Sempre usa o ID vindo do token JWT — nunca do estado global mutável
+        const userIdSeguro = session.user.id;
 
         const { data: perfis, error } = await supabase
             .from('profiles')
             .select('id, name, photo_url')
-            .eq('user_id', targetUserId)
+            .eq('user_id', userIdSeguro)
             .order('id', { ascending: true });
 
         if (error) throw error;
 
         if (perfis && perfis.length > 0) {
-            // ✅ Resolve fotos em paralelo — _resolverFotoPerfil é async
-            //    (gerar signed URLs requer chamada ao Supabase Storage)
             const perfisResolvidos = await Promise.all(
                 perfis.map(async (p) => {
                     const { url, storagePath } = await _resolverFotoPerfil(p.photo_url);
                     return {
                         id:           p.id,
                         nome:         _sanitizeText(p.name),
-                        foto:         url,          // signed URL pronta para uso no <img>
-                        _storagePath: storagePath,  // path permanente para renovação futura
+                        foto:         url,
+                        _storagePath: storagePath,
                     };
                 })
             );
 
             usuarioLogado.perfis = perfisResolvidos;
-
-            // ✅ Inicia renovação automática de signed URLs (50 min)
-            //    Só inicia se ainda não estava rodando
             iniciarRenovacaoFotos();
-
             return { sucesso: true, perfisEncontrados: true };
         }
 
@@ -916,8 +949,11 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
     }
 
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error('SEM_SESSAO');
+        // 🔒 Obtém sessão do JWT — única fonte confiável de identidade
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session || !session.user || !session.user.id) {
+            throw new Error('SEM_SESSAO_VALIDA');
+        }
 
         _log.info('[_criarPerfilHandler] Verificando permissão RPC...');
 
@@ -925,8 +961,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             .rpc('can_create_profile');
 
         if (rpcError) {
-            // ✅ CORREÇÃO: erro na RPC é tratado separadamente de "sem permissão".
-            //    Antes, qualquer erro (rede, timeout) exibia o popup de limite — confuso para o usuário.
             _log.error('PERFIL_RPC_001', rpcError);
             alert('Não foi possível validar permissões. Tente novamente.');
             fecharPopup();
@@ -986,6 +1020,7 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                       : arquivo.type === 'image/png'  ? 'png'
                       :                                 'webp';
 
+            // 🔒 Usa session.user.id do JWT — nunca de variável mutável
             const nomeArquivo = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
 
             const { error: uploadError } = await supabase.storage
@@ -1013,12 +1048,13 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         _log.info('[_criarPerfilHandler] Inserindo perfil no banco...');
 
-        const targetUserId = usuarioLogado.effectiveUserId || session.user.id;
-
+        // 🔒 FIX VULN 1: user_id REMOVIDO do INSERT.
+        //    O trigger trg_set_profile_user_id injeta auth.uid() automaticamente no backend.
+        //    Nenhuma variável do cliente (effectiveUserId ou qualquer outra) pode influenciar
+        //    qual user_id é gravado — a decisão é 100% do servidor.
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
             .insert({
-                user_id:   targetUserId,
                 name:      nome,
                 photo_url: fotoUrl
             })
@@ -1027,13 +1063,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         if (error) {
             _log.error('PERFIL_INSERT_001', error);
-
-            // ✅ CORREÇÃO: adicionado código 23505 (UNIQUE constraint).
-            //    Cobre o cenário de race condition onde dois requests simultâneos
-            //    passam pela RPC mas apenas um pode ser inserido.
-            //    23514 = CHECK constraint (ex: limite de perfis por plano)
-            //    23505 = UNIQUE constraint (duplicata ou limite via constraint única)
-            //    42501 = insufficient_privilege (RLS bloqueou a inserção)
             if (error.code === '23505' || error.code === '23514' || error.code === '42501') {
                 mostrarPopupLimite();
             } else {
@@ -1244,15 +1273,14 @@ async function alterarFoto(event) {
 
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !session) throw new Error('SEM_SESSAO');
+        if (sessionError || !session || !session.user || !session.user.id) {
+            throw new Error('SEM_SESSAO_VALIDA');
+        }
 
         const ext = file.type === 'image/jpeg' ? 'jpg'
                   : file.type === 'image/png'  ? 'png'
                   :                              'webp';
 
-        // ✅ CORRIGIDO: crypto.randomUUID() em vez de Date.now()
-        //    Consistente com _criarPerfilHandler — nome de arquivo imprevisível
-        //    mesmo que o bucket seja mal configurado futuramente
         const storagePath = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
 
         const { error: uploadError } = await supabase.storage
@@ -1275,10 +1303,15 @@ async function alterarFoto(event) {
             return;
         }
 
+        // 🔒 FIX VULN 2: adicionado .eq('user_id', session.user.id) como segunda condição.
+        //    Mesmo que perfilAtivo.id seja manipulado no console (ex: perfilAtivo.id = 999),
+        //    a query só executa se esse perfil pertencer ao usuário autenticado pelo JWT.
+        //    Defesa em profundidade além da RLS já existente.
         const { error: updateError } = await supabase
             .from('profiles')
             .update({ photo_url: storagePath })
             .eq('id', perfilAtivo.id)
+            .eq('user_id', session.user.id)   // 🔒 âncora no JWT — não no estado cliente
             .select()
             .single();
 
@@ -4162,201 +4195,301 @@ function atualizarTelaCartoes() {
 
 function abrirCartaoForm(editId = null) {
     const bancos = [
-        {nome: 'Nubank',          img: 'https://logospng.org/download/nubank/logo-roxo-nubank-icone.png'},
-        {nome: 'Bradesco',        img: 'https://logospng.org/download/bradesco/logo-bradesco-icon-256.png'},
-        {nome: 'Mercado Pago',    img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icon.png'},
-        {nome: 'C6 Bank',         img: 'https://logospng.org/download/c6-bank/logo-c6-bank-icon.png'},
-        {nome: 'Itaú',            img: 'https://logospng.org/download/itau/logo-itau-icon.png'},
-        {nome: 'Santander',       img: 'https://logospng.org/download/santander/logo-santander-icon.png'},
-        {nome: 'Banco do Brasil', img: 'https://logospng.org/download/banco-do-brasil/logo-banco-do-brasil-icon.png'},
-        {nome: 'Caixa',           img: 'https://logospng.org/download/caixa/logo-caixa-icon.png'},
-        {nome: 'Outro',           img: ''}
+        { nome: 'Nubank',          img: 'https://logospng.org/download/nubank/logo-roxo-nubank-icone.png' },
+        { nome: 'Bradesco',        img: 'https://logospng.org/download/bradesco/logo-bradesco-icon-256.png' },
+        { nome: 'Mercado Pago',    img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icon.png' },
+        { nome: 'C6 Bank',         img: 'https://logospng.org/download/c6-bank/logo-c6-bank-icon.png' },
+        { nome: 'Itaú',            img: 'https://logospng.org/download/itau/logo-itau-icon.png' },
+        { nome: 'Santander',       img: 'https://logospng.org/download/santander/logo-santander-icon.png' },
+        { nome: 'Banco do Brasil', img: 'https://logospng.org/download/banco-do-brasil/logo-banco-do-brasil-icon.png' },
+        { nome: 'Caixa',           img: 'https://logospng.org/download/caixa/logo-caixa-icon.png' },
+        { nome: 'Outro',           img: '' },
     ];
 
-    const options = bancos.map(b => `<option value="${b.nome}">${b.nome}</option>`).join('');
+    // ✅ Constrói o <select> de bancos via DOM — nunca interpolação de string
+    function _criarSelectBancos(idSelect, valorSelecionado) {
+        const select = document.createElement('select');
+        select.id        = idSelect;
+        select.className = 'form-input';
 
-    function diaOptions(selected) {
-        const diaSelected = Number(selected);
-        let opts = '<option value="">Selecione o dia</option>';
-        for (let i = 1; i <= 28; i++) {
-            opts += `<option value="${i}" ${diaSelected === i ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`;
-        }
-        return opts;
+        bancos.forEach(b => {
+            const opt = document.createElement('option');
+            opt.value       = b.nome;          // ✅ atribuição direta — não interpolado
+            opt.textContent = b.nome;          // ✅ textContent — nunca innerHTML
+            if (b.nome === valorSelecionado) opt.selected = true;
+            select.appendChild(opt);
+        });
+        return select;
     }
 
-    // ✅ Função auxiliar interna para configurar o listener do select de banco
-    //    Evita duplicação e garante que só há um listener registrado
+    // ✅ Constrói o <select> de dias via DOM
+    function _criarSelectDias(idSelect, valorSelecionado) {
+        const select = document.createElement('select');
+        select.id        = idSelect;
+        select.className = 'form-input';
+
+        const placeholder       = document.createElement('option');
+        placeholder.value       = '';
+        placeholder.textContent = 'Selecione o dia';
+        select.appendChild(placeholder);
+
+        for (let i = 1; i <= 28; i++) {
+            const opt = document.createElement('option');
+            opt.value       = String(i);
+            opt.textContent = String(i).padStart(2, '0');
+            if (Number(valorSelecionado) === i) opt.selected = true;
+            select.appendChild(opt);
+        }
+        return select;
+    }
+
+    // ✅ Configura listener do select de banco (sem duplicação)
     function _configurarSelectBanco(selectBanco, campoOutro, inputOutro) {
         selectBanco.addEventListener('change', function () {
             if (this.value === 'Outro') {
                 campoOutro.style.display = 'block';
-                inputOutro.required = true;
+                inputOutro.required      = true;
                 if (!inputOutro.value) inputOutro.focus();
             } else {
                 campoOutro.style.display = 'none';
-                inputOutro.required = false;
-                inputOutro.value = '';
+                inputOutro.required      = false;
+                inputOutro.value         = '';
             }
         });
     }
 
-    if (!editId) {
-        // ── NOVO CARTÃO ────────────────────────────────────────────────────
-        criarPopup(`
-            <h3>Novo Cartão</h3>
-            <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Banco:</label>
-            <select id="novoBanco" class="form-input">${options}</select><br>
-            <div id="campoOutroCartao" style="display:none; margin-top:10px;">
-                <label style="display:block; text-align:left; color: var(--text-secondary);">Nome do Cartão:</label>
-                <input type="text" id="nomeOutroCartao" class="form-input" placeholder="Digite o nome do cartão" maxlength="50"><br>
-            </div>
-            <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Limite Total:</label>
-            <input type="number" id="novoLimite" class="form-input" placeholder="Limite (R$)" step="0.01" min="1" max="9999999"><br>
-            <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Dia da Fatura:</label>
-            <select id="novoVencimentoDia" class="form-input">${diaOptions()}</select><br>
-            <button class="btn-primary" id="salvarNovoCartao">Salvar</button>
-            <button class="btn-cancelar" id="cancelarNovoCartao">Cancelar</button>
-        `);
+    // ── Lógica de salvar/editar compartilhada entre os dois modos
+    function _executarSalvar(selectBanco, inputOutro, inputLimite, selectDia, cartaoExistente) {
+        let nomeBanco = selectBanco.value;
 
-        document.getElementById('cancelarNovoCartao').addEventListener('click', fecharPopup);
+        if (nomeBanco === 'Outro') {
+            const nomeDigitado = inputOutro.value.trim();
+            if (!nomeDigitado)           { alert('Digite o nome do cartão!'); return; }
+            if (nomeDigitado.length > 50) { alert('Nome do cartão muito longo (máx. 50 caracteres).'); return; }
+            nomeBanco = nomeDigitado;
+        }
 
-        const selectBanco = document.getElementById('novoBanco');
-        const campoOutro  = document.getElementById('campoOutroCartao');
-        const inputOutro  = document.getElementById('nomeOutroCartao');
+        const limiteStr     = inputLimite.value;
+        const vencimentoDia = selectDia.value;
 
-        // ✅ Um único registro de listener via função auxiliar
-        _configurarSelectBanco(selectBanco, campoOutro, inputOutro);
+        if (!nomeBanco || !limiteStr || !vencimentoDia) { alert('Preencha todos os campos!'); return; }
 
-        document.getElementById('salvarNovoCartao').addEventListener('click', () => {
-            let nomeBanco       = document.getElementById('novoBanco').value;
-            const limiteStr     = document.getElementById('novoLimite').value;
-            const vencimentoDia = document.getElementById('novoVencimentoDia').value;
+        const limite = parseFloat(parseFloat(limiteStr).toFixed(2));
+        if (isNaN(limite) || limite <= 0) { alert('Informe um limite válido e positivo.'); return; }
+        if (limite > 9999999)              { alert('Limite máximo permitido: R$ 9.999.999,00.'); return; }
 
-            if (nomeBanco === 'Outro') {
-                const nomeDigitado = document.getElementById('nomeOutroCartao').value.trim();
-                if (!nomeDigitado) return alert("Digite o nome do cartão!");
-                if (nomeDigitado.length > 50) return alert("Nome do cartão muito longo (máx. 50 caracteres).");
-                nomeBanco = nomeDigitado;
-            }
+        const bandeiraImg = bancos.find(b => b.nome === nomeBanco)?.img || '';
 
-            if (!nomeBanco || !limiteStr || !vencimentoDia) return alert("Preencha todos os campos!");
-
-            const limite = parseFloat(parseFloat(limiteStr).toFixed(2));
-            if (isNaN(limite) || limite <= 0) return alert("Informe um limite válido e positivo.");
-            if (limite > 9999999)              return alert("Limite máximo permitido: R$ 9.999.999,00.");
-
-            const bandeiraImg = bancos.find(b => b.nome === nomeBanco)?.img || '';
-
+        if (cartaoExistente) {
+            // Modo edição
+            cartaoExistente.nomeBanco     = nomeBanco;
+            cartaoExistente.limite        = limite;
+            cartaoExistente.vencimentoDia = Number(vencimentoDia);
+            cartaoExistente.bandeiraImg   = bandeiraImg;
+        } else {
+            // Modo criação
             cartoesCredito.push({
                 id:            nextCartaoId++,
                 nomeBanco,
                 limite,
                 vencimentoDia: Number(vencimentoDia),
                 bandeiraImg,
-                usado:         0
+                usado:         0,
             });
+        }
 
-            salvarDados();
-            atualizarTelaCartoes();
-            fecharPopup();
-            if (typeof mostrarNotificacao === 'function') {
-                mostrarNotificacao('Cartão cadastrado com sucesso!', 'success');
-            } else {
-                alert('Cartão cadastrado com sucesso!');
-            }
+        salvarDados();
+        atualizarTelaCartoes();
+        fecharPopup();
+        mostrarNotificacao(
+            cartaoExistente ? 'Cartão atualizado com sucesso!' : 'Cartão cadastrado com sucesso!',
+            'success'
+        );
+    }
+
+    if (!editId) {
+        // ── MODO: NOVO CARTÃO ─────────────────────────────────────────────
+        criarPopupDOM((popup) => {
+            const titulo = document.createElement('h3');
+            titulo.textContent = 'Novo Cartão';
+
+            // Label + Select banco
+            const labelBanco       = document.createElement('label');
+            labelBanco.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+            labelBanco.textContent = 'Banco:';
+
+            const selectBanco = _criarSelectBancos('novoBanco', '');
+
+            // Campo "Outro" (oculto por padrão)
+            const campoOutro       = document.createElement('div');
+            campoOutro.id          = 'campoOutroCartao';
+            campoOutro.style.cssText = 'display:none; margin-top:10px;';
+
+            const labelOutro       = document.createElement('label');
+            labelOutro.style.cssText = 'display:block; text-align:left; color: var(--text-secondary);';
+            labelOutro.textContent = 'Nome do Cartão:';
+
+            const inputOutro       = document.createElement('input');
+            inputOutro.type        = 'text';
+            inputOutro.id          = 'nomeOutroCartao';
+            inputOutro.className   = 'form-input';
+            inputOutro.placeholder = 'Digite o nome do cartão';
+            inputOutro.maxLength   = 50;
+
+            campoOutro.appendChild(labelOutro);
+            campoOutro.appendChild(inputOutro);
+
+            // Label + Input limite
+            const labelLimite       = document.createElement('label');
+            labelLimite.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+            labelLimite.textContent = 'Limite Total:';
+
+            const inputLimite       = document.createElement('input');
+            inputLimite.type        = 'number';
+            inputLimite.id          = 'novoLimite';
+            inputLimite.className   = 'form-input';
+            inputLimite.placeholder = 'Limite (R$)';
+            inputLimite.step        = '0.01';
+            inputLimite.min         = '1';
+            inputLimite.max         = '9999999';
+
+            // Label + Select dia
+            const labelDia       = document.createElement('label');
+            labelDia.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+            labelDia.textContent = 'Dia da Fatura:';
+
+            const selectDia = _criarSelectDias('novoVencimentoDia', '');
+
+            // Botões
+            const btnSalvar     = document.createElement('button');
+            btnSalvar.className = 'btn-primary';
+            btnSalvar.type      = 'button';
+            btnSalvar.textContent = 'Salvar';
+
+            const btnCancelar     = document.createElement('button');
+            btnCancelar.className = 'btn-cancelar';
+            btnCancelar.type      = 'button';
+            btnCancelar.textContent = 'Cancelar';
+
+            btnCancelar.addEventListener('click', fecharPopup);
+            btnSalvar.addEventListener('click', () => _executarSalvar(selectBanco, inputOutro, inputLimite, selectDia, null));
+
+            _configurarSelectBanco(selectBanco, campoOutro, inputOutro);
+
+            popup.appendChild(titulo);
+            popup.appendChild(labelBanco);
+            popup.appendChild(selectBanco);
+            popup.appendChild(campoOutro);
+            popup.appendChild(labelLimite);
+            popup.appendChild(inputLimite);
+            popup.appendChild(labelDia);
+            popup.appendChild(selectDia);
+            popup.appendChild(btnSalvar);
+            popup.appendChild(btnCancelar);
         });
 
     } else {
-        // ── EDITAR CARTÃO ─────────────────────────────────────────────────
+        // ── MODO: EDITAR CARTÃO ───────────────────────────────────────────
         const c = cartoesCredito.find(x => x.id === editId);
         if (!c) return;
 
-        criarPopup(`
-            <h3>Editar Cartão</h3>
-            <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Banco:</label>
-            <select id="novoBanco" class="form-input">${options}</select><br>
-            <div id="campoOutroCartao" style="display:none; margin-top:10px;">
-                <label style="display:block; text-align:left; color: var(--text-secondary);">Nome do Cartão:</label>
-                <input type="text" id="nomeOutroCartao" class="form-input" placeholder="Digite o nome do cartão" maxlength="50"><br>
-            </div>
-            <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Limite Total:</label>
-            <input type="number" id="novoLimite" class="form-input" step="0.01" min="1" max="9999999"><br>
-            <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Dia da Fatura:</label>
-            <select id="novoVencimentoDia" class="form-input">${diaOptions()}</select><br>
-            <button class="btn-primary" id="salvarNovoCartao">Salvar</button>
-            <button class="btn-cancelar" id="cancelarEditarCartao">Cancelar</button>
-            <button class="btn-excluir" id="excluirCartao">Excluir</button>
-        `);
+        criarPopupDOM((popup) => {
+            const titulo = document.createElement('h3');
+            titulo.textContent = 'Editar Cartão';
 
-        // ✅ Preenchimento via propriedades JS — nunca via atributo HTML
-        const inputLimite      = document.getElementById('novoLimite');
-        const selectVencimento = document.getElementById('novoVencimentoDia');
-        if (inputLimite)       inputLimite.value     = parseFloat(c.limite);
-        if (selectVencimento)  selectVencimento.value = String(c.vencimentoDia);
+            // Label + Select banco (pré-selecionado)
+            const labelBanco       = document.createElement('label');
+            labelBanco.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+            labelBanco.textContent = 'Banco:';
 
-        document.getElementById('cancelarEditarCartao').addEventListener('click', fecharPopup);
+            const bancoExisteNaLista = bancos.find(b => b.nome === c.nomeBanco && b.nome !== 'Outro');
+            const selectBanco = _criarSelectBancos('novoBanco', bancoExisteNaLista ? c.nomeBanco : 'Outro');
 
-        const selectBanco = document.getElementById('novoBanco');
-        const campoOutro  = document.getElementById('campoOutroCartao');
-        const inputOutro  = document.getElementById('nomeOutroCartao');
+            // Campo "Outro"
+            const campoOutro       = document.createElement('div');
+            campoOutro.id          = 'campoOutroCartao';
+            campoOutro.style.cssText = bancoExisteNaLista ? 'display:none; margin-top:10px;' : 'display:block; margin-top:10px;';
 
-        // ✅ Pré-seleciona o banco correto via JS após criação do popup
-        const bancoExiste = bancos.find(b => b.nome === c.nomeBanco && b.nome !== 'Outro');
-        if (bancoExiste) {
-            selectBanco.value = c.nomeBanco;
-        } else {
-            selectBanco.value        = 'Outro';
-            campoOutro.style.display = 'block';
-            inputOutro.value         = c.nomeBanco;
-        }
+            const labelOutro       = document.createElement('label');
+            labelOutro.style.cssText = 'display:block; text-align:left; color: var(--text-secondary);';
+            labelOutro.textContent = 'Nome do Cartão:';
 
-        // ✅ Um único registro de listener via função auxiliar
-        _configurarSelectBanco(selectBanco, campoOutro, inputOutro);
+            const inputOutro       = document.createElement('input');
+            inputOutro.type        = 'text';
+            inputOutro.id          = 'nomeOutroCartao';
+            inputOutro.className   = 'form-input';
+            inputOutro.placeholder = 'Digite o nome do cartão';
+            inputOutro.maxLength   = 50;
+            // ✅ Pré-preenche via .value — nunca via atributo HTML
+            if (!bancoExisteNaLista) inputOutro.value = c.nomeBanco;
 
-        document.getElementById('salvarNovoCartao').addEventListener('click', () => {
-            let nomeBanco = document.getElementById('novoBanco').value;
+            campoOutro.appendChild(labelOutro);
+            campoOutro.appendChild(inputOutro);
 
-            if (nomeBanco === 'Outro') {
-                const nomeDigitado = document.getElementById('nomeOutroCartao').value.trim();
-                if (!nomeDigitado) return alert("Digite o nome do cartão!");
-                if (nomeDigitado.length > 50) return alert("Nome do cartão muito longo (máx. 50 caracteres).");
-                nomeBanco = nomeDigitado;
-            }
+            // Label + Input limite
+            const labelLimite       = document.createElement('label');
+            labelLimite.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+            labelLimite.textContent = 'Limite Total:';
 
-            const limiteStr = document.getElementById('novoLimite').value;
-            const limite    = parseFloat(parseFloat(limiteStr).toFixed(2));
-            if (isNaN(limite) || limite <= 0) return alert("Informe um limite válido e positivo.");
-            if (limite > 9999999)              return alert("Limite máximo permitido: R$ 9.999.999,00.");
+            const inputLimite       = document.createElement('input');
+            inputLimite.type        = 'number';
+            inputLimite.id          = 'novoLimite';
+            inputLimite.className   = 'form-input';
+            inputLimite.step        = '0.01';
+            inputLimite.min         = '1';
+            inputLimite.max         = '9999999';
+            inputLimite.value       = parseFloat(c.limite); // ✅ .value — não atributo HTML
 
-            c.nomeBanco     = nomeBanco;
-            c.limite        = limite;
-            c.vencimentoDia = Number(document.getElementById('novoVencimentoDia').value);
-            c.bandeiraImg   = bancos.find(b => b.nome === nomeBanco)?.img || '';
+            // Label + Select dia (pré-selecionado)
+            const labelDia       = document.createElement('label');
+            labelDia.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+            labelDia.textContent = 'Dia da Fatura:';
 
-            salvarDados();
-            atualizarTelaCartoes();
-            fecharPopup();
-            if (typeof mostrarNotificacao === 'function') {
-                mostrarNotificacao('Cartão atualizado com sucesso!', 'success');
-            } else {
-                alert('Cartão atualizado com sucesso!');
-            }
-        });
+            const selectDia = _criarSelectDias('novoVencimentoDia', c.vencimentoDia);
 
-        document.getElementById('excluirCartao').addEventListener('click', () => {
-            if (confirm("Excluir cartão? Todas as compras futuras vinculadas a ele serão removidas.")) {
-                cartoesCredito = cartoesCredito.filter(x => x.id !== editId);
-                contasFixas    = contasFixas.filter(x => x.cartaoId !== editId);
-                salvarDados();
-                atualizarTelaCartoes();
-                atualizarListaContasFixas();
-                fecharPopup();
-                if (typeof mostrarNotificacao === 'function') {
+            // Botões
+            const btnSalvar     = document.createElement('button');
+            btnSalvar.className = 'btn-primary';
+            btnSalvar.type      = 'button';
+            btnSalvar.textContent = 'Salvar';
+
+            const btnCancelar     = document.createElement('button');
+            btnCancelar.className = 'btn-cancelar';
+            btnCancelar.type      = 'button';
+            btnCancelar.textContent = 'Cancelar';
+
+            const btnExcluir     = document.createElement('button');
+            btnExcluir.className = 'btn-excluir';
+            btnExcluir.type      = 'button';
+            btnExcluir.textContent = 'Excluir';
+
+            btnCancelar.addEventListener('click', fecharPopup);
+            btnSalvar.addEventListener('click', () => _executarSalvar(selectBanco, inputOutro, inputLimite, selectDia, c));
+            btnExcluir.addEventListener('click', () => {
+                if (confirm('Excluir cartão? Todas as compras futuras vinculadas a ele serão removidas.')) {
+                    cartoesCredito = cartoesCredito.filter(x => x.id !== editId);
+                    contasFixas    = contasFixas.filter(x => x.cartaoId !== editId);
+                    salvarDados();
+                    atualizarTelaCartoes();
+                    atualizarListaContasFixas();
+                    fecharPopup();
                     mostrarNotificacao('Cartão excluído com sucesso!', 'success');
-                } else {
-                    alert('Cartão excluído com sucesso!');
                 }
-            }
+            });
+
+            _configurarSelectBanco(selectBanco, campoOutro, inputOutro);
+
+            popup.appendChild(titulo);
+            popup.appendChild(labelBanco);
+            popup.appendChild(selectBanco);
+            popup.appendChild(campoOutro);
+            popup.appendChild(labelLimite);
+            popup.appendChild(inputLimite);
+            popup.appendChild(labelDia);
+            popup.appendChild(selectDia);
+            popup.appendChild(btnSalvar);
+            popup.appendChild(btnCancelar);
+            popup.appendChild(btnExcluir);
         });
     }
 }
