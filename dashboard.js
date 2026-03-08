@@ -107,12 +107,15 @@ function validarUserData(userData) {
         enumerable:   false,
     });
 
-    Object.defineProperty(window, '__GE_save__', {
-        value:        _throttledSave,
-        writable:     false,
-        configurable: false,
-        enumerable:   false,
-    });
+    if (window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1') {
+        Object.defineProperty(window, '__GE_save__', {
+            value:        _throttledSave,
+            writable:     false,
+            configurable: false,
+            enumerable:   false,
+        });
+    }
 })();
 
 (function _inicializarWindowRefs() {
@@ -562,9 +565,14 @@ async function verificarLogin() {
         } else {
             _log.info('[VERIFICAR LOGIN] Sem assinatura por user_id. Tentando fallback por email...');
 
+            // ✅ CORREÇÃO Ponto 4: select reduzido ao mínimo necessário.
+            //    Não trazemos `user_id` da subscription por email para não expor
+            //    dados de outro usuário no cliente. O vínculo é feito server-side.
+            //    A proteção definitiva contra enumeração deve ser a RLS policy
+            //    na tabela subscriptions (user_email = auth.email()).
             const { data: subByEmail, error: subEmailError } = await supabase
                 .from('subscriptions')
-                .select('id, plans(name), user_id')
+                .select('id, plans(name)')
                 .eq('user_email', session.user.email)
                 .eq('payment_status', 'approved')
                 .eq('is_active', true)
@@ -575,8 +583,9 @@ async function verificarLogin() {
                 planName = subByEmail.plans.name;
                 _log.info('[VERIFICAR LOGIN] Assinatura encontrada por email');
 
-                if (!subByEmail.user_id) {
-                _log.info('[VERIFICAR LOGIN] Subscription sem user_id — solicitando vínculo server-side...');
+                // ✅ Vínculo sempre solicitado server-side — o backend verifica
+                //    se já existe user_id antes de atualizar.
+                _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
                 try {
                     await supabase.functions.invoke('link-user-subscription', {
                         body: { subscription_id: subByEmail.id }
@@ -585,7 +594,7 @@ async function verificarLogin() {
                 } catch (linkErr) {
                     _log.error('LOGIN_VINCULAR_001', linkErr);
                 }
-            }
+
             } else {
                 _log.info('[VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
 
@@ -639,8 +648,16 @@ async function verificarLogin() {
 
         _log.info('[VERIFICAR LOGIN] Usuário inicializado. isGuest:', usuarioLogado.isGuest);
 
+        // ✅ CORREÇÃO Ponto 3: usa a variável local `effectiveUserId` em vez de
+        //    `usuarioLogado.effectiveUserId`. A variável local vem diretamente das
+        //    respostas do servidor (JWT-verificadas) e não é acessível externamente.
+        //    `usuarioLogado` é um objeto de módulo — em scripts clássicos (não ES module)
+        //    pode ser acessado via console e ter effectiveUserId substituído por
+        //    um UUID arbitrário antes que dataManager.initialize seja chamado.
+        //    Usar a variável local fecha essa janela de ataque sem alterar a
+        //    interface do dataManager.
         _log.info('[VERIFICAR LOGIN] Inicializando DataManager...');
-        await dataManager.initialize(usuarioLogado.effectiveUserId, effectiveEmail);
+        await dataManager.initialize(effectiveUserId, effectiveEmail);
         _log.info('[VERIFICAR LOGIN] DataManager inicializado');
 
         _log.info('[VERIFICAR LOGIN] Carregando perfis...');
@@ -907,15 +924,17 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         const { data: podeCrear, error: rpcError } = await supabase
             .rpc('can_create_profile');
 
-        _log.info('[RPC] can_create_profile resultado:', podeCrear);
-        if (rpcError) _log.error('PERFIL_RPC_001', rpcError);
+        if (rpcError) {
+            // ✅ CORREÇÃO: erro na RPC é tratado separadamente de "sem permissão".
+            //    Antes, qualquer erro (rede, timeout) exibia o popup de limite — confuso para o usuário.
+            _log.error('PERFIL_RPC_001', rpcError);
+            alert('Não foi possível validar permissões. Tente novamente.');
+            fecharPopup();
+            return;
+        }
 
-        if (rpcError || !podeCrear) {
-            if (!rpcError && !podeCrear) {
-                mostrarPopupLimite();
-            } else {
-                alert('Não foi possível criar o perfil. Tente novamente.');
-            }
+        if (!podeCrear) {
+            mostrarPopupLimite();
             fecharPopup();
             return;
         }
@@ -942,24 +961,21 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 return;
             }
 
-            // ✅ CORREÇÃO [Ponto 5]: valida dimensão máxima da imagem
-            //    Impede que imagens gigantes (ex: 20000x20000) travem o browser
-            //    ao renderizar, mesmo que o arquivo passe no limite de 2MB
             const _MAX_DIMENSAO_PX = 4000;
             const dimensaoValida = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => resolve(
-                    img.naturalWidth  <= _MAX_DIMENSAO_PX &&
-                    img.naturalHeight <= _MAX_DIMENSAO_PX
-                );
-                img.onerror = () => resolve(false);
-                img.src = e.target.result; // data: em vez de blob:
-            };
-            reader.onerror = () => resolve(false);
-            reader.readAsDataURL(arquivo);
-        });
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => resolve(
+                        img.naturalWidth  <= _MAX_DIMENSAO_PX &&
+                        img.naturalHeight <= _MAX_DIMENSAO_PX
+                    );
+                    img.onerror = () => resolve(false);
+                    img.src = e.target.result;
+                };
+                reader.onerror = () => resolve(false);
+                reader.readAsDataURL(arquivo);
+            });
 
             if (!dimensaoValida) {
                 alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`);
@@ -970,9 +986,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                       : arquivo.type === 'image/png'  ? 'png'
                       :                                 'webp';
 
-            // ✅ MELHORIA [Ponto 3]: crypto.randomUUID() em vez de Date.now()
-            //    Elimina qualquer previsibilidade no nome do arquivo,
-            //    mesmo que o bucket seja privado e use signed URLs
             const nomeArquivo = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
 
             const { error: uploadError } = await supabase.storage
@@ -1014,7 +1027,14 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         if (error) {
             _log.error('PERFIL_INSERT_001', error);
-            if (error.code === '23514' || error.code === '42501') {
+
+            // ✅ CORREÇÃO: adicionado código 23505 (UNIQUE constraint).
+            //    Cobre o cenário de race condition onde dois requests simultâneos
+            //    passam pela RPC mas apenas um pode ser inserido.
+            //    23514 = CHECK constraint (ex: limite de perfis por plano)
+            //    23505 = UNIQUE constraint (duplicata ou limite via constraint única)
+            //    42501 = insufficient_privilege (RLS bloqueou a inserção)
+            if (error.code === '23505' || error.code === '23514' || error.code === '42501') {
                 mostrarPopupLimite();
             } else {
                 alert('Erro ao criar perfil. Tente novamente.');
