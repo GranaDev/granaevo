@@ -62,32 +62,21 @@ const PLANOS_CONFIG = {
     }
 };
 
+// ========== ESTADO GLOBAL ==========
+// Declarado como let para permitir a atribuição inicial via Object.freeze().
+// Após o login, o objeto é congelado — nenhuma propriedade pode ser alterada
+// pelo console ou por código externo (Relatório — Ponto 3).
 let usuarioAtual = null;
 
-// ========== RATE LIMIT VISUAL (Relatório — Ponto 4) ==========
-//
-// Impede spam de requisições ao endpoint de pagamento pelo frontend.
-// O backend DEVE ter seu próprio rate limit — este é apenas uma
-// primeira barreira de UX que reduz ruído nos logs do servidor.
-//
-// Funcionamento: após um clique em "Confirmar Upgrade", um cooldown
-// de 8 segundos é ativado globalmente. Qualquer tentativa de abrir
-// um novo popup nesse intervalo é silenciosamente ignorada.
-//
-// Por que 8s? Tempo suficiente para o fetch /api/criar-sessao-upgrade
-// completar (mesmo em conexões lentas) sem travar o usuário por tempo
-// excessivo caso a requisição falhe e ele queira tentar novamente.
-
+// ========== RATE LIMIT VISUAL ==========
+// Primeira barreira contra spam de requisições ao endpoint de pagamento.
+// O backend DEVE ter seu próprio rate limit — este é apenas UX + redução de ruído.
 let _upgradeCooldownAtivo = false;
 const _UPGRADE_COOLDOWN_MS = 8000;
 
-/**
- * Verifica e ativa o cooldown de upgrade.
- * Retorna true se pode prosseguir, false se está em cooldown.
- */
 function _verificarEAtivarCooldown() {
     if (_upgradeCooldownAtivo) {
-        _mostrarErro('⏳ Aguarde alguns segundos antes de tentar novamente.');
+        _mostrarErro('⏳ Aguarde alguns segundos antes de tentar novamente.', 'aviso');
         return false;
     }
     _upgradeCooldownAtivo = true;
@@ -95,11 +84,27 @@ function _verificarEAtivarCooldown() {
     return true;
 }
 
+// ========== STYLE TAG ÚNICA PARA ANIMAÇÕES (Relatório — Ponto 4) ==========
+// Criada uma única vez na inicialização do módulo — evita acúmulo de <style>
+// no <head> a cada abertura de popup (memory leak de DOM nodes).
+(function _injetarAnimacoes() {
+    if (document.getElementById('_granaevo-popup-styles')) return;
+    const style = document.createElement('style');
+    style.id = '_granaevo-popup-styles';
+    style.textContent = `
+        @keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }
+        @keyframes slideUp { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
+        #btnCancelarUpgrade:hover  { background:rgba(255,255,255,0.05) !important; border-color:rgba(255,255,255,0.2) !important; }
+        #btnConfirmarUpgrade:hover { transform:translateY(-2px) !important; box-shadow:0 6px 20px rgba(108,99,255,0.6) !important; }
+    `;
+    document.head.appendChild(style);
+})();
+
 // ========== UTILITÁRIOS DE SEGURANÇA ==========
 
 /**
- * Sanitiza texto removendo tags HTML para evitar XSS.
- * Usar sempre que innerHTML for inevitável com dados externos.
+ * Sanitiza texto removendo caracteres especiais HTML.
+ * Usar quando innerHTML for inevitável com dados externos.
  */
 function _sanitizeText(str) {
     if (typeof str !== 'string') return '';
@@ -115,37 +120,22 @@ function _sanitizeText(str) {
 /**
  * Exibe mensagem de feedback ao usuário via toast não-bloqueante.
  * Usa textContent — nunca innerHTML.
- *
- * @param {string} mensagem  - Texto a exibir
- * @param {'erro'|'aviso'}  tipo - Controla a cor do toast
  */
 function _mostrarErro(mensagem, tipo = 'erro') {
-    const corFundo = tipo === 'aviso' ? '#f59e0b' : '#ef4444';
-    const corSombra = tipo === 'aviso'
-        ? 'rgba(245,158,11,0.4)'
-        : 'rgba(239,68,68,0.4)';
+    const corFundo  = tipo === 'aviso' ? '#f59e0b' : '#ef4444';
+    const corSombra = tipo === 'aviso' ? 'rgba(245,158,11,0.4)' : 'rgba(239,68,68,0.4)';
 
     const toast = document.createElement('div');
     toast.setAttribute('role', 'alert');
     toast.setAttribute('aria-live', 'assertive');
     toast.style.cssText = `
-        position: fixed;
-        bottom: 32px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: ${corFundo};
-        color: white;
-        padding: 14px 28px;
-        border-radius: 12px;
-        font-weight: 600;
-        font-size: 0.95rem;
-        z-index: 99999;
-        box-shadow: 0 8px 24px ${corSombra};
-        animation: fadeIn 0.3s ease-out;
-        max-width: 90vw;
-        text-align: center;
+        position:fixed; bottom:32px; left:50%; transform:translateX(-50%);
+        background:${corFundo}; color:white; padding:14px 28px;
+        border-radius:12px; font-weight:600; font-size:0.95rem;
+        z-index:99999; box-shadow:0 8px 24px ${corSombra};
+        max-width:90vw; text-align:center;
     `;
-    toast.textContent = mensagem; // textContent — nunca innerHTML
+    toast.textContent = mensagem;
     document.body.appendChild(toast);
     setTimeout(() => {
         toast.style.opacity = '0';
@@ -156,50 +146,59 @@ function _mostrarErro(mensagem, tipo = 'erro') {
     }, 4000);
 }
 
-// ========== SANITIZAÇÃO DE SVG (Relatório — Ponto 3) ==========
+// ========== SANITIZAÇÃO DE SVG — BLINDAGEM COMPLETA (Relatório — Ponto 1) ==========
 //
-// Mesmo que config.icon seja hardcoded no fonte hoje, uma futura
-// migração para ícones vindos do banco/CMS tornaria isso um vetor
-// de XSS. A sanitização aqui é uma defesa em profundidade que
-// não tem custo de performance perceptível.
+// Versão anterior removia apenas atributos perigosos (on*, href javascript:).
+// Esta versão também remove ELEMENTOS inteiros que podem conter HTML arbitrário:
 //
-// Lista de atributos removidos: todos os event handlers (on*),
-// href com protocolo javascript:, e o atributo src potencialmente perigoso.
-// Aplicado recursivamente em todos os elementos filhos do SVG.
+//   <foreignObject> — permite embedar HTML dentro do SVG (vetor XSS clássico)
+//   <script>        — execução de JS direta
+//   <iframe>        — carregamento de página externa
+//   <embed>         — conteúdo externo
+//   <object>        — idem
+//   <link>          — importação de CSS externo / preload
+//   <meta>          — redefinição de charset, refresh etc.
+//   <use>           — pode referenciar recursos externos via xlink:href
+//
+// Remoção feita ANTES da varredura de atributos, em ordem reversa (folha → raiz)
+// para não deixar órfãos ao remover um pai antes dos filhos.
 
-/** Lista de atributos de evento perigosos removidos de SVGs */
-const _SVG_ATTRS_PERIGOSOS = [
-    'onload', 'onclick', 'onerror', 'onmouseover', 'onmouseout',
-    'onmousemove', 'onfocus', 'onblur', 'onkeydown', 'onkeyup',
-    'onkeypress', 'onchange', 'oninput', 'onsubmit', 'onreset',
-    'onscroll', 'onresize', 'ondblclick', 'oncontextmenu',
-    'onpointerdown', 'onpointerup', 'onpointermove',
-    'ontouchstart', 'ontouchend', 'ontouchmove',
-    'onanimationstart', 'onanimationend', 'ontransitionend',
-    'xlink:href', // vetor clássico de XSS em SVG legado
-];
+/** Tags cujos elementos são removidos completamente do SVG */
+const _SVG_TAGS_PROIBIDAS = new Set([
+    'script', 'foreignobject', 'iframe', 'embed',
+    'object', 'link', 'meta', 'use',
+]);
 
 /**
- * Remove atributos perigosos de um elemento SVG e todos os seus filhos.
- * Também bloqueia href com protocolo javascript:.
+ * Remove elementos proibidos e atributos perigosos de um SVG já parseado.
+ * Opera in-place — retorna o mesmo elemento limpo.
  *
- * @param {Element} svgEl - Elemento SVG já parseado via <template>
+ * @param {SVGElement} svgEl
+ * @returns {SVGElement}
  */
 function _sanitizarSVG(svgEl) {
-    // Percorre o SVG e todos os seus descendentes
-    const elementos = [svgEl, ...svgEl.querySelectorAll('*')];
+    // 1ª passagem: remove tags proibidas (reversed para remover folhas antes de pais)
+    Array.from(svgEl.querySelectorAll('*')).reverse().forEach(el => {
+        if (_SVG_TAGS_PROIBIDAS.has(el.tagName.toLowerCase())) el.remove();
+    });
 
-    elementos.forEach(el => {
-        // Remove todos os atributos de evento (on*)
-        _SVG_ATTRS_PERIGOSOS.forEach(attr => el.removeAttribute(attr));
+    // 2ª passagem: remove atributos perigosos do SVG raiz e filhos restantes
+    [svgEl, ...svgEl.querySelectorAll('*')].forEach(el => {
+        // Converte para array — NamedNodeMap é live, skip ao remover sem conversão
+        [...el.attributes].forEach(attr => {
+            const nome  = attr.name.toLowerCase();
+            const valor = attr.value.trim().toLowerCase();
 
-        // Bloqueia href e src com protocolo javascript: ou data:
-        ['href', 'src', 'action'].forEach(attr => {
-            const valor = el.getAttribute(attr);
-            if (valor) {
-                const protocolo = valor.trim().toLowerCase();
-                if (protocolo.startsWith('javascript:') || protocolo.startsWith('data:')) {
-                    el.removeAttribute(attr);
+            // Qualquer atributo de evento (on*)
+            if (nome.startsWith('on')) {
+                el.removeAttribute(attr.name);
+                return;
+            }
+
+            // Atributos que aceitam URLs — bloqueia protocolos perigosos
+            if (['href', 'src', 'action', 'xlink:href', 'data'].includes(nome)) {
+                if (valor.startsWith('javascript:') || valor.startsWith('data:')) {
+                    el.removeAttribute(attr.name);
                 }
             }
         });
@@ -209,21 +208,20 @@ function _sanitizarSVG(svgEl) {
 }
 
 /**
- * Parseia uma string SVG hardcoded, sanitiza e retorna o elemento DOM.
+ * Parseia uma string SVG, valida a tag raiz, sanitiza e retorna o elemento DOM.
  * Retorna null se a string não for um SVG válido.
  *
- * @param {string} svgString - String SVG (ex: config.icon)
+ * @param {string} svgString
  * @returns {SVGElement|null}
  */
 function _parsearESanitizarSVG(svgString) {
     if (typeof svgString !== 'string' || !svgString.trim()) return null;
 
     const template = document.createElement('template');
-    template.innerHTML = svgString; // parsing seguro via template (inerte)
+    template.innerHTML = svgString; // parsing via template (inerte — não executa scripts)
 
     const svgEl = template.content.firstElementChild;
 
-    // Garante que o elemento raiz é realmente um <svg>
     if (!svgEl || svgEl.tagName.toLowerCase() !== 'svg') {
         console.warn('[SEGURANÇA] SVG inválido ou elemento raiz inesperado:', svgEl?.tagName);
         return null;
@@ -234,19 +232,22 @@ function _parsearESanitizarSVG(svgString) {
 
 // ========== VALIDAÇÃO DE URL DE PAGAMENTO (Relatório — Ponto 2) ==========
 //
-// Usa a API URL() do browser, que normaliza e parseia corretamente
-// a URL — mais robusta que startsWith('https://') porque:
+// Versão anterior verificava apenas parsed.protocol === 'https:'.
+// Esta versão também verifica o hostname contra uma whitelist de domínios
+// autorizados — impede redirecionamento para domínios maliciosos mesmo que
+// usem HTTPS (https://evil-payments.com passaria na versão anterior).
 //
-//   ✅ Detecta "HTTPS://" (maiúsculas)
-//   ✅ Detecta "https:// evil.com" (espaço no início após parse)
-//   ✅ Rejeita "javascript:", "data:", "ftp:" etc.
-//   ✅ Garante que a URL é estruturalmente válida
-//
-// Se new URL() lançar exceção, a URL é malformada e rejeitamos.
+// ⚠️  CONFIGURE: adicione aqui o domínio exato do seu gateway de pagamento.
+//     Exemplos: "checkout.stripe.com", "pay.mercadopago.com"
+
+const _DOMINIOS_PAGAMENTO_PERMITIDOS = new Set([
+    'checkout.stripe.com',
+    'pay.granaevo.com',
+    // Adicione aqui outros domínios autorizados do seu gateway de pagamento
+]);
 
 /**
- * Valida se uma URL de checkout é segura para redirecionar.
- * Retorna true apenas se a URL for HTTPS válida.
+ * Valida se uma URL de checkout é segura: exige HTTPS + hostname na whitelist.
  *
  * @param {string} url
  * @returns {boolean}
@@ -255,9 +256,20 @@ function _validarUrlPagamento(url) {
     if (!url || typeof url !== 'string') return false;
     try {
         const parsed = new URL(url);
-        return parsed.protocol === 'https:';
+
+        if (parsed.protocol !== 'https:') {
+            console.warn('[SEGURANÇA] URL de pagamento não usa HTTPS:', parsed.protocol);
+            return false;
+        }
+
+        if (!_DOMINIOS_PAGAMENTO_PERMITIDOS.has(parsed.hostname)) {
+            console.warn('[SEGURANÇA] Domínio de pagamento não permitido:', parsed.hostname);
+            return false;
+        }
+
+        return true;
     } catch {
-        // URL malformada — new URL() lançou SyntaxError
+        console.warn('[SEGURANÇA] URL de pagamento malformada:', url);
         return false;
     }
 }
@@ -274,14 +286,21 @@ async function verificarLogin() {
         redirectOnFail:   true,
 
         onSuccess: async (user) => {
-            usuarioAtual = {
+
+            // ── Object.freeze() (Relatório — Ponto 3) ──────────────────────
+            // Congela o objeto após a atribuição inicial.
+            // Tentativas de alterar via console (usuarioAtual.planoAtual = "X")
+            // falham silenciosamente em modo normal e lançam TypeError em strict.
+            // O backend continua sendo a barreira definitiva, mas isso impede
+            // manipulação de UI sem nenhum custo de performance.
+            usuarioAtual = Object.freeze({
                 nome:       user.nome,
                 planoAtual: user.plano,
                 userId:     user.userId,
                 email:      user.email,
                 isGuest:    user.isGuest,
                 ownerEmail: user.ownerEmail || null,
-            };
+            });
 
             if (authLoading) {
                 setTimeout(() => authLoading.classList.add('hidden'), 800);
@@ -311,22 +330,15 @@ function _exibirAvisoConvidado(user) {
 
     const aviso = document.createElement('div');
     aviso.style.cssText = `
-        max-width: 520px;
-        margin: 80px auto;
-        padding: 40px;
-        background: linear-gradient(135deg, #1a1d3a, #0d0f1f);
-        border: 1px solid rgba(255,209,102,0.3);
-        border-radius: 20px;
-        text-align: center;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        max-width:520px; margin:80px auto; padding:40px;
+        background:linear-gradient(135deg, #1a1d3a, #0d0f1f);
+        border:1px solid rgba(255,209,102,0.3); border-radius:20px;
+        text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.5);
     `;
 
-    // Estrutura HTML sem dados dinâmicos — inseridos via textContent depois
     aviso.innerHTML = `
         <div style="font-size:3rem; margin-bottom:16px;" aria-hidden="true">🔒</div>
-        <h2 style="color:#ffd166; font-size:1.6rem; margin-bottom:12px;">
-            Acesso Restrito
-        </h2>
+        <h2 style="color:#ffd166; font-size:1.6rem; margin-bottom:12px;">Acesso Restrito</h2>
         <p style="color:#9ca3af; line-height:1.7; margin-bottom:24px;">
             Você acessa o GranaEvo como <strong style="color:white;">convidado</strong>
             da conta de <strong id="_avisoOwnerEmail" style="color:#6c63ff;"></strong>.
@@ -334,8 +346,7 @@ function _exibirAvisoConvidado(user) {
             Apenas o <strong style="color:white;">titular da conta</strong> pode
             gerenciar e atualizar o plano.
         </p>
-        <button id="_btnVoltarDashboard"
-                type="button"
+        <button id="_btnVoltarDashboard" type="button"
                 style="padding:14px 32px; background:linear-gradient(135deg,#6c63ff,#4a42cc);
                        border:none; border-radius:12px; color:white; font-size:1rem;
                        font-weight:700; cursor:pointer; box-shadow:0 4px 16px rgba(108,99,255,0.4);">
@@ -343,7 +354,6 @@ function _exibirAvisoConvidado(user) {
         </button>
     `;
 
-    // Dado externo via textContent — nunca via innerHTML
     aviso.querySelector('#_avisoOwnerEmail').textContent =
         user.ownerEmail || 'outro usuário';
 
@@ -365,33 +375,30 @@ function inicializarPagina() {
 // ========== EXIBIR PLANO ATUAL ==========
 function exibirPlanoAtual() {
     const planoAtual = usuarioAtual.planoAtual;
-    const config = PLANOS_CONFIG[planoAtual];
+    const config     = PLANOS_CONFIG[planoAtual];
 
     if (!config) {
         console.error('[UPGRADE] Plano não encontrado:', planoAtual);
         return;
     }
 
-    // ── planoAtualDisplay: SVG sanitizado + nome via textContent ──
+    // ── #planoAtualDisplay ──
     const planoDisplay = document.getElementById('planoAtualDisplay');
     if (planoDisplay) {
-        planoDisplay.innerHTML = ''; // limpa antes de inserir
-
+        planoDisplay.innerHTML = '';
         const wrapper = document.createElement('strong');
-        const span = document.createElement('span');
+        const span    = document.createElement('span');
         span.style.cssText = 'display:inline-flex; align-items:center; gap:8px; vertical-align:middle;';
-
         const svgEl = _parsearESanitizarSVG(config.icon);
         if (svgEl) span.appendChild(svgEl);
-
         const nomeSpan = document.createElement('span');
-        nomeSpan.textContent = config.nome; // textContent — nunca innerHTML
+        nomeSpan.textContent = config.nome;
         span.appendChild(nomeSpan);
         wrapper.appendChild(span);
         planoDisplay.appendChild(wrapper);
     }
 
-    // ── currentPlanCard: estrutura estática + dados via textContent ──
+    // ── #currentPlanCard ──
     const currentPlanCard = document.getElementById('currentPlanCard');
     if (currentPlanCard) {
         currentPlanCard.innerHTML = `
@@ -404,8 +411,7 @@ function exibirPlanoAtual() {
             </div>
         `;
 
-        // Ícone SVG sanitizado no nome do plano
-        const cardNome = currentPlanCard.querySelector('#_cardPlanNome');
+        const cardNome    = currentPlanCard.querySelector('#_cardPlanNome');
         const svgIconCard = _parsearESanitizarSVG(config.icon);
         if (svgIconCard) {
             const iconWrapper = document.createElement('span');
@@ -413,31 +419,26 @@ function exibirPlanoAtual() {
             iconWrapper.appendChild(svgIconCard);
             cardNome.appendChild(iconWrapper);
         }
-        const nomeTextNode = document.createElement('span');
-        nomeTextNode.textContent = config.nome;
-        cardNome.appendChild(nomeTextNode);
+        const nomeNode = document.createElement('span');
+        nomeNode.textContent = config.nome;
+        cardNome.appendChild(nomeNode);
 
-        // Badges com dados numéricos — textContent seguro
-        const perfisEl = currentPlanCard.querySelector('#_cardPlanPerfis');
-        perfisEl.textContent = `${config.perfis} ${config.perfis === 1 ? 'perfil' : 'perfis'}`;
+        currentPlanCard.querySelector('#_cardPlanPerfis').textContent =
+            `${config.perfis} ${config.perfis === 1 ? 'perfil' : 'perfis'}`;
 
-        const precoEl = currentPlanCard.querySelector('#_cardPlanPreco');
-        precoEl.textContent = `💰 R$ ${config.preco.toFixed(2)}`;
+        currentPlanCard.querySelector('#_cardPlanPreco').textContent =
+            `💰 R$ ${config.preco.toFixed(2)}`;
     }
 }
 
 // ========== TABELA DE UPGRADES VÁLIDOS ==========
-// Fonte da verdade no cliente — o backend DEVE revalidar esses valores.
+// Fonte da verdade no cliente — backend DEVE revalidar esses valores.
 const UPGRADES_VALIDOS = {
     "Individual→Casal":   { de: "Individual", para: "Casal",   valor: 10.00 },
     "Individual→Família": { de: "Individual", para: "Família", valor: 30.00 },
     "Casal→Família":      { de: "Casal",      para: "Família", valor: 20.00 },
 };
 
-/**
- * Retorna informações do upgrade ou null se não for válido.
- * Nunca confia em cálculos dinâmicos — usa tabela fixa.
- */
 function obterUpgradeValido(planoAtual, novoPlano) {
     const chave = `${planoAtual}→${novoPlano}`;
     return UPGRADES_VALIDOS[chave] || null;
@@ -446,7 +447,7 @@ function obterUpgradeValido(planoAtual, novoPlano) {
 // ========== RENDERIZAR CARDS DE UPGRADE ==========
 function renderizarCardsUpgrade() {
     const planoAtual = usuarioAtual.planoAtual;
-    const grid = document.getElementById('upgradeCardsGrid');
+    const grid       = document.getElementById('upgradeCardsGrid');
 
     if (!grid) return;
 
@@ -456,24 +457,14 @@ function renderizarCardsUpgrade() {
     }
 
     grid.innerHTML = '';
-
     const ordenacao = ["Individual", "Casal", "Família"];
 
     ordenacao.forEach(nomePlano => {
-        const config = PLANOS_CONFIG[nomePlano];
-
+        const config           = PLANOS_CONFIG[nomePlano];
         const upgradeInfo      = obterUpgradeValido(planoAtual, nomePlano);
         const isUpgrade        = upgradeInfo !== null;
         const isCurrentOrLower = !isUpgrade;
         const valorUpgrade     = isUpgrade ? upgradeInfo.valor : 0;
-
-        const card = document.createElement('div');
-        card.className = 'upgrade-card';
-        card.setAttribute('role', 'listitem');
-
-        if (isUpgrade && valorUpgrade <= 20) {
-            card.classList.add('recommended');
-        }
 
         const precoNovoConfig = config.preco;
         const economiaExibida = (precoNovoConfig - valorUpgrade).toFixed(2);
@@ -483,23 +474,30 @@ function renderizarCardsUpgrade() {
             ? (nomePlano === planoAtual ? 'Seu plano atual' : 'Plano inferior')
             : `Adicione ${perfisDiferenca} perfil${perfisDiferenca > 1 ? 's' : ''} extra${perfisDiferenca > 1 ? 's' : ''}`;
 
-        // ── HTML estrutural estático — zero interpolação de dados externos ──
+        const card = document.createElement('div');
+        card.className = 'upgrade-card';
+        card.setAttribute('role', 'listitem');
+        if (isUpgrade && valorUpgrade <= 20) card.classList.add('recommended');
+
+        // Slug seguro para IDs internos
+        const idSlug = nomePlano.replace(/[^a-zA-Z0-9]/g, '_');
+
+        // HTML estrutural estático — zero interpolação de dados externos
         card.innerHTML = `
             <div class="upgrade-header">
-                <div class="upgrade-icon" id="_icon_${nomePlano.replace(/\s/g, '_')}"></div>
-                <div class="upgrade-name"   id="_nome_${nomePlano.replace(/\s/g, '_')}"></div>
-                <div class="upgrade-subtitle" id="_sub_${nomePlano.replace(/\s/g, '_')}"></div>
+                <div class="upgrade-icon"     id="_icon_${idSlug}"></div>
+                <div class="upgrade-name"     id="_nome_${idSlug}"></div>
+                <div class="upgrade-subtitle" id="_sub_${idSlug}"></div>
             </div>
-            <div class="upgrade-pricing" id="_pricing_${nomePlano.replace(/\s/g, '_')}"></div>
-            <ul class="upgrade-features"  id="_feats_${nomePlano.replace(/\s/g, '_')}"></ul>
+            <div class="upgrade-pricing"  id="_pricing_${idSlug}"></div>
+            <ul  class="upgrade-features" id="_feats_${idSlug}"></ul>
             <button class="btn-upgrade ${isCurrentOrLower ? 'disabled' : ''}"
                     type="button"
                     ${isCurrentOrLower ? 'disabled aria-disabled="true"' : ''}
-                    id="_btn_${nomePlano.replace(/\s/g, '_')}">
+                    id="_btn_${idSlug}">
             </button>
         `;
 
-        // Badge "Recomendado" — texto estático, sem dado externo
         if (isUpgrade && valorUpgrade <= 20) {
             const badge = document.createElement('div');
             badge.className = 'upgrade-badge';
@@ -507,18 +505,16 @@ function renderizarCardsUpgrade() {
             card.insertBefore(badge, card.firstChild);
         }
 
-        const idSlug = nomePlano.replace(/\s/g, '_');
-
-        // ── Ícone SVG: parseado e sanitizado (Relatório — Ponto 3) ──
+        // Ícone SVG sanitizado (tags + atributos perigosos removidos)
         const iconSlot = card.querySelector(`#_icon_${idSlug}`);
-        const svgEl = _parsearESanitizarSVG(config.icon);
+        const svgEl    = _parsearESanitizarSVG(config.icon);
         if (svgEl && iconSlot) iconSlot.appendChild(svgEl);
 
-        // ── Textos via textContent ──
+        // Textos via textContent
         card.querySelector(`#_nome_${idSlug}`).textContent = config.nome;
         card.querySelector(`#_sub_${idSlug}`).textContent  = subtituloTexto;
 
-        // ── Pricing: valores numéricos — textContent ──
+        // Pricing via createElement + textContent
         const pricingSlot = card.querySelector(`#_pricing_${idSlug}`);
         if (isUpgrade) {
             const originalEl = document.createElement('div');
@@ -554,36 +550,31 @@ function renderizarCardsUpgrade() {
             pricingSlot.appendChild(statusEl);
         }
 
-        // ── Features: textContent em cada <li> ──
+        // Features: cada <li> via createElement + textContent
         const featsSlot = card.querySelector(`#_feats_${idSlug}`);
         config.features.forEach(feature => {
             const li = document.createElement('li');
-
             const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             checkSvg.setAttribute('viewBox', '0 0 24 24');
             checkSvg.setAttribute('fill', 'none');
             checkSvg.setAttribute('aria-hidden', 'true');
-            const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-            polyline.setAttribute('points', '20 6 9 17 4 12');
-            polyline.setAttribute('stroke', 'currentColor');
-            polyline.setAttribute('stroke-width', '2');
-            polyline.setAttribute('stroke-linecap', 'round');
-            checkSvg.appendChild(polyline);
-
-            const featureText = document.createTextNode(feature); // textContent puro
-
+            const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+            poly.setAttribute('points', '20 6 9 17 4 12');
+            poly.setAttribute('stroke', 'currentColor');
+            poly.setAttribute('stroke-width', '2');
+            poly.setAttribute('stroke-linecap', 'round');
+            checkSvg.appendChild(poly);
             li.appendChild(checkSvg);
-            li.appendChild(featureText);
+            li.appendChild(document.createTextNode(feature));
             featsSlot.appendChild(li);
         });
 
-        // ── Botão: texto via textContent ──
+        // Botão: textContent
         const btn = card.querySelector(`#_btn_${idSlug}`);
         btn.textContent = isCurrentOrLower
             ? (nomePlano === planoAtual ? '✅ Plano Atual' : '⬇️ Downgrade Indisponível')
             : `⬆️ Fazer Upgrade por R$ ${valorUpgrade.toFixed(2)}`;
 
-        // Listener via addEventListener — nunca onclick inline (bloqueado pelo CSP)
         if (isUpgrade) {
             btn.addEventListener('click', () => processarUpgrade(nomePlano));
         }
@@ -593,15 +584,13 @@ function renderizarCardsUpgrade() {
 }
 
 // ========== PROCESSAR UPGRADE ==========
-// Apenas valida e abre o popup — sem nenhuma lógica financeira aqui.
 function processarUpgrade(novoPlano) {
-    // Rate limit visual (Relatório — Ponto 4): bloqueia spam de cliques
     if (!_verificarEAtivarCooldown()) return;
 
     const config = PLANOS_CONFIG[novoPlano];
     if (!config) {
         _mostrarErro('❌ Plano não encontrado.');
-        _upgradeCooldownAtivo = false; // libera cooldown em falha de validação
+        _upgradeCooldownAtivo = false;
         return;
     }
 
@@ -618,7 +607,6 @@ function processarUpgrade(novoPlano) {
 // ========== POPUP DE UPGRADE ==========
 function criarPopupUpgrade(novoPlano, config) {
 
-    // Revalida o upgrade antes de exibir qualquer UI
     const upgradeConfirmado = obterUpgradeValido(usuarioAtual.planoAtual, novoPlano);
     if (!upgradeConfirmado) {
         _mostrarErro('❌ Upgrade inválido. Recarregue a página.');
@@ -626,61 +614,48 @@ function criarPopupUpgrade(novoPlano, config) {
         return;
     }
 
-    // Valor sempre da tabela fixa — nunca de parâmetro externo
     const valorSeguro     = upgradeConfirmado.valor;
     const perfisDiferenca = config.perfis - PLANOS_CONFIG[usuarioAtual.planoAtual].perfis;
 
-    // ── Overlay ──
     const overlay = document.createElement('div');
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-labelledby', '_popupTitulo');
     overlay.style.cssText = `
-        position: fixed;
-        top: 0; left: 0;
-        width: 100%; height: 100%;
-        background: rgba(0, 0, 0, 0.8);
-        backdrop-filter: blur(10px);
-        z-index: 10000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: fadeIn 0.3s ease-out;
+        position:fixed; top:0; left:0; width:100%; height:100%;
+        background:rgba(0,0,0,0.8); backdrop-filter:blur(10px);
+        z-index:10000; display:flex; align-items:center; justify-content:center;
+        animation:fadeIn 0.3s ease-out;
     `;
 
     const popup = document.createElement('div');
+    popup.setAttribute('tabindex', '-1');
     popup.style.cssText = `
-        background: linear-gradient(135deg, #1a1d3a 0%, #0d0f1f 100%);
-        border-radius: 24px;
-        padding: 40px;
-        max-width: 500px;
-        width: 90%;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-        border: 1px solid rgba(108, 99, 255, 0.3);
-        animation: slideUp 0.4s ease-out;
-        position: relative;
+        background:linear-gradient(135deg, #1a1d3a 0%, #0d0f1f 100%);
+        border-radius:24px; padding:40px; max-width:500px; width:90%;
+        box-shadow:0 20px 60px rgba(0,0,0,0.5);
+        border:1px solid rgba(108,99,255,0.3);
+        animation:slideUp 0.4s ease-out; position:relative;
     `;
 
-    // ── Ícone SVG: sanitizado (Relatório — Ponto 3) ──
+    // Ícone SVG sanitizado
     const iconContainer = document.createElement('div');
+    iconContainer.setAttribute('aria-hidden', 'true');
     iconContainer.style.cssText = `
         width:80px; height:80px; margin:0 auto 20px;
         background:linear-gradient(135deg,var(--primary),var(--accent));
         border-radius:50%; display:flex; align-items:center;
         justify-content:center; box-shadow:0 8px 24px rgba(108,99,255,0.4);
     `;
-    iconContainer.setAttribute('aria-hidden', 'true');
-
     const svgEl = _parsearESanitizarSVG(config.icon);
     if (svgEl) iconContainer.appendChild(svgEl);
 
-    // ── HTML estrutural estático — zero dados dinâmicos interpolados ──
+    // HTML estrutural estático — zero dados dinâmicos interpolados
     popup.innerHTML = `
-        <div style="text-align: center;">
+        <div style="text-align:center;">
             <div id="_popupIconSlot"></div>
             <h2 id="_popupTitulo" style="font-size:1.8rem; font-weight:800; color:white; margin-bottom:12px;">🚀 Confirmar Upgrade</h2>
             <p style="color:#9ca3af; font-size:1rem; margin-bottom:32px;">Você está prestes a evoluir seu plano</p>
-
             <div style="background:rgba(255,255,255,0.05); border-radius:16px; padding:24px; margin-bottom:32px; text-align:left;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                     <div>
@@ -699,7 +674,6 @@ function criarPopupUpgrade(novoPlano, config) {
                     <div style="font-size:0.9rem; color:#10b981; margin-top:8px;">✅ Pagamento único • Acesso vitalício</div>
                 </div>
             </div>
-
             <div style="background:rgba(108,99,255,0.1); border-radius:12px; padding:16px; margin-bottom:32px; text-align:left;">
                 <div style="font-size:0.9rem; color:#9ca3af; margin-bottom:12px; text-align:center;">✨ O que você ganha:</div>
                 <ul style="list-style:none; padding:0; margin:0;">
@@ -717,26 +691,28 @@ function criarPopupUpgrade(novoPlano, config) {
                     </li>
                 </ul>
             </div>
-
             <div style="display:flex; gap:12px;">
-                <button id="btnCancelarUpgrade"
-                        type="button"
-                        style="flex:1; padding:16px; border-radius:12px; border:2px solid rgba(255,255,255,0.1); background:transparent; color:#9ca3af; font-size:1rem; font-weight:600; cursor:pointer; transition:all 0.3s;">
+                <button id="btnCancelarUpgrade" type="button"
+                        style="flex:1; padding:16px; border-radius:12px;
+                               border:2px solid rgba(255,255,255,0.1);
+                               background:transparent; color:#9ca3af; font-size:1rem;
+                               font-weight:600; cursor:pointer; transition:all 0.3s;">
                     Cancelar
                 </button>
-                <button id="btnConfirmarUpgrade"
-                        type="button"
-                        style="flex:1; padding:16px; border-radius:12px; border:none; background:linear-gradient(135deg,var(--primary),var(--accent)); color:white; font-size:1rem; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(108,99,255,0.4); transition:all 0.3s;">
+                <button id="btnConfirmarUpgrade" type="button"
+                        style="flex:1; padding:16px; border-radius:12px; border:none;
+                               background:linear-gradient(135deg,var(--primary),var(--accent));
+                               color:white; font-size:1rem; font-weight:700; cursor:pointer;
+                               box-shadow:0 4px 12px rgba(108,99,255,0.4); transition:all 0.3s;">
                     Prosseguir para Pagamento
                 </button>
             </div>
         </div>
     `;
 
-    // ── Insere o ícone no slot reservado ──
     popup.querySelector('#_popupIconSlot').appendChild(iconContainer);
 
-    // ── Dados dinâmicos via textContent — zero risco de XSS ──
+    // Dados dinâmicos via textContent — zero XSS
     popup.querySelector('#_popupPlanoAtual').textContent  = usuarioAtual.planoAtual;
     popup.querySelector('#_popupNovoPlano').textContent   = novoPlano;
     popup.querySelector('#_popupValor').textContent       = `R$ ${valorSeguro.toFixed(2)}`;
@@ -745,24 +721,12 @@ function criarPopupUpgrade(novoPlano, config) {
     overlay.appendChild(popup);
     document.body.appendChild(overlay);
 
-    // Animações do popup
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }
-        @keyframes slideUp { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
-        #btnCancelarUpgrade:hover  { background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.2); }
-        #btnConfirmarUpgrade:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(108,99,255,0.6); }
-    `;
-    document.head.appendChild(style);
-
-    // Foca o popup para acessibilidade (trap focus básico)
-    popup.setAttribute('tabindex', '-1');
     requestAnimationFrame(() => popup.focus());
 
-    // ── Fechar overlay ──
     const fecharOverlay = () => {
         overlay.style.opacity = '0';
         overlay.style.transition = 'opacity 0.3s ease-out';
+        document.removeEventListener('keydown', onKeyDown);
         setTimeout(() => {
             if (document.body.contains(overlay)) document.body.removeChild(overlay);
         }, 300);
@@ -771,20 +735,12 @@ function criarPopupUpgrade(novoPlano, config) {
     popup.querySelector('#btnCancelarUpgrade').addEventListener('click', fecharOverlay);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) fecharOverlay(); });
 
-    // Fecha com Escape (acessibilidade)
-    const onKeyDown = (e) => {
-        if (e.key === 'Escape') {
-            fecharOverlay();
-            document.removeEventListener('keydown', onKeyDown);
-        }
-    };
+    const onKeyDown = (e) => { if (e.key === 'Escape') fecharOverlay(); };
     document.addEventListener('keydown', onKeyDown);
 
-    // ── Confirmar upgrade ──
     popup.querySelector('#btnConfirmarUpgrade').addEventListener('click', async () => {
         const btnConfirmar = popup.querySelector('#btnConfirmarUpgrade');
 
-        // Proteção contra duplo clique no botão do popup
         if (btnConfirmar.dataset.processando === 'true') return;
         btnConfirmar.dataset.processando = 'true';
         btnConfirmar.textContent = 'Aguarde...';
@@ -792,7 +748,6 @@ function criarPopupUpgrade(novoPlano, config) {
         btnConfirmar.setAttribute('aria-busy', 'true');
 
         try {
-            // Revalida no exato momento do clique — defesa em profundidade
             const upgradeNoClique = obterUpgradeValido(usuarioAtual.planoAtual, novoPlano);
             if (!upgradeNoClique) {
                 _mostrarErro('❌ Sessão inválida. Recarregue a página.');
@@ -800,19 +755,12 @@ function criarPopupUpgrade(novoPlano, config) {
                 return;
             }
 
-            // ── Requisição ao backend (Relatório — Ponto 1) ──
-            // Frontend envia APENAS o nome do plano desejado.
-            // Backend valida: sessão do usuário, plano atual, valor correto,
-            // e cria a sessão de pagamento — frontend não toca em nada financeiro.
+            // Frontend envia APENAS o nome do plano — backend decide tudo mais
             const response = await fetch('/api/criar-sessao-upgrade', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include', // envia cookie de sessão Supabase — sem userId no body
-                body: JSON.stringify({
-                    novoPlano: upgradeNoClique.para
-                    // ✅ Sem valorPagar, sem userId, sem checksum
-                    // O backend obtém o usuário via JWT/cookie e decide o preço
-                })
+                credentials: 'include',
+                body: JSON.stringify({ novoPlano: upgradeNoClique.para })
             });
 
             if (!response.ok) {
@@ -822,11 +770,9 @@ function criarPopupUpgrade(novoPlano, config) {
 
             const data = await response.json();
 
-            // ── Validação robusta da URL de checkout (Relatório — Ponto 2) ──
-            // Usa new URL() que normaliza e parseia corretamente,
-            // rejeitando javascript:, data:, ftp: e URLs malformadas.
+            // Valida HTTPS + hostname na whitelist (Relatório — Ponto 2)
             if (!_validarUrlPagamento(data.checkoutUrl)) {
-                throw new Error('URL de pagamento inválida ou insegura recebida do servidor');
+                throw new Error('URL de pagamento inválida ou domínio não autorizado');
             }
 
             if (document.body.contains(overlay)) document.body.removeChild(overlay);
@@ -837,8 +783,6 @@ function criarPopupUpgrade(novoPlano, config) {
         } catch (error) {
             console.error('[UPGRADE] Erro ao iniciar pagamento:', error);
             _mostrarErro('❌ Não foi possível iniciar o pagamento. Tente novamente.');
-
-            // Restaura o botão e libera cooldown para nova tentativa
             btnConfirmar.dataset.processando = 'false';
             btnConfirmar.textContent = 'Prosseguir para Pagamento';
             btnConfirmar.style.opacity = '1';
@@ -849,7 +793,6 @@ function criarPopupUpgrade(novoPlano, config) {
 }
 
 // ========== FAQ ACCORDION ==========
-// Compatível com o HTML atualizado que usa <button> + aria-expanded + aria-controls
 function configurarFAQ() {
     const faqBtns = document.querySelectorAll('.faq-question-btn');
 
@@ -861,7 +804,6 @@ function configurarFAQ() {
         btn.addEventListener('click', () => {
             const isActive = btn.getAttribute('aria-expanded') === 'true';
 
-            // Fecha todos os outros
             faqBtns.forEach(otherBtn => {
                 const otherId  = otherBtn.getAttribute('aria-controls');
                 const otherAns = document.getElementById(otherId);
@@ -873,7 +815,6 @@ function configurarFAQ() {
                 }
             });
 
-            // Abre o clicado se estava fechado
             if (!isActive) {
                 btn.setAttribute('aria-expanded', 'true');
                 btn.closest('.faq-item')?.classList.add('active');
