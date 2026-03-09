@@ -62,17 +62,9 @@ const PLANOS_CONFIG = {
     }
 };
 
-// ========== TABELA DE UPGRADES VÁLIDOS (Relatório — Ponto 3) ==========
-//
-// Object.freeze() duplo: freeze externo congela as chaves do objeto,
-// freeze interno congela cada entrada individualmente.
-// Sem o freeze interno, UPGRADES_VALIDOS["Individual→Casal"].valor = 0.01
-// ainda funcionaria mesmo com o freeze externo.
-//
-// Resultado: tabela completamente imutável — qualquer tentativa de alteração
-// via console falha silenciosamente (normal) ou lança TypeError (strict).
-// O backend DEVE revalidar esses valores — esta é apenas defesa em profundidade.
-
+// ========== TABELA DE UPGRADES VÁLIDOS ==========
+// Object.freeze() duplo: externo congela as chaves, interno congela cada entrada.
+// Backend DEVE revalidar — esta tabela é apenas referência de UX.
 const UPGRADES_VALIDOS = Object.freeze({
     "Individual→Casal":   Object.freeze({ de: "Individual", para: "Casal",   valor: 10.00 }),
     "Individual→Família": Object.freeze({ de: "Individual", para: "Família", valor: 30.00 }),
@@ -84,12 +76,55 @@ function obterUpgradeValido(planoAtual, novoPlano) {
     return UPGRADES_VALIDOS[chave] || null;
 }
 
-// ========== ESTADO GLOBAL ==========
-// Congelado via Object.freeze() após o login — nenhuma propriedade
-// pode ser alterada pelo console ou código externo.
-let usuarioAtual = null;
+// ========== SESSÃO DO USUÁRIO — CLOSURE PROTEGIDA (Relatório — Ponto 3) ==========
+//
+// Problema anterior: `let usuarioAtual = null` permitia que um atacante
+// sobrescrevesse a variável inteira via console:
+//   usuarioAtual = { planoAtual: "Família", isGuest: false }
+//
+// Object.freeze() no objeto não protege a *referência* da variável —
+// apenas impede mutação das propriedades internas.
+//
+// Solução: closure com getter/setter controlados.
+// - set() só funciona uma vez — tentativas subsequentes são ignoradas silenciosamente.
+// - get() retorna o objeto congelado.
+// - A variável _usuario é inacessível externamente (escopo léxico da IIFE).
+// - No console: UsuarioSessao.set({...}) é ignorado se já foi chamado.
+//   UsuarioSessao._usuario não existe no escopo externo.
+
+const UsuarioSessao = (() => {
+    let _usuario = null;
+
+    return Object.freeze({
+        /**
+         * Define o usuário da sessão. Só pode ser chamado uma vez.
+         * Chamadas subsequentes são ignoradas silenciosamente.
+         * @param {object} user
+         */
+        set(user) {
+            if (_usuario !== null) return; // imutável após primeira atribuição
+            _usuario = Object.freeze({
+                nome:       user.nome,
+                planoAtual: user.plano,
+                userId:     user.userId,
+                email:      user.email,
+                isGuest:    user.isGuest,
+                ownerEmail: user.ownerEmail || null,
+            });
+        },
+
+        /**
+         * Retorna o objeto de sessão congelado ou null se não autenticado.
+         * @returns {object|null}
+         */
+        get() {
+            return _usuario;
+        },
+    });
+})();
 
 // ========== RATE LIMIT VISUAL ==========
+// Barreira de UX contra spam — o backend DEVE ter rate limit próprio.
 let _upgradeCooldownAtivo = false;
 const _UPGRADE_COOLDOWN_MS = 8000;
 
@@ -103,8 +138,28 @@ function _verificarEAtivarCooldown() {
     return true;
 }
 
+// ========== PROTEÇÃO ANTI-CLICKJACKING (Relatório — Ponto 5) ==========
+//
+// Terceira camada de proteção contra clickjacking (além do X-Frame-Options
+// e frame-ancestors 'none' no CSP do HTML).
+// Se a página for carregada dentro de um iframe, redireciona o frame pai
+// para a URL atual — forçando a página a sair do contexto embutido.
+//
+// Executado imediatamente na inicialização do módulo, antes de qualquer
+// interação do usuário.
+
+(function _protegerContraClickjacking() {
+    try {
+        if (window.top !== window.self) {
+            window.top.location.replace(window.self.location.href);
+        }
+    } catch {
+        // Se window.top não for acessível (iframe cross-origin),
+        // o próprio navegador bloqueará — nada a fazer aqui.
+    }
+})();
+
 // ========== STYLE TAG ÚNICA — sem memory leak ==========
-// Criada uma única vez na inicialização do módulo.
 (function _injetarAnimacoes() {
     if (document.getElementById('_granaevo-popup-styles')) return;
     const style = document.createElement('style');
@@ -131,10 +186,6 @@ function _sanitizeText(str) {
         .replace(/\//g, '&#x2F;');
 }
 
-/**
- * Exibe mensagem de feedback via toast não-bloqueante.
- * textContent — nunca innerHTML.
- */
 function _mostrarFeedback(mensagem, tipo = 'erro') {
     const corFundo  = tipo === 'aviso' ? '#f59e0b' : '#ef4444';
     const corSombra = tipo === 'aviso' ? 'rgba(245,158,11,0.4)' : 'rgba(239,68,68,0.4)';
@@ -160,23 +211,41 @@ function _mostrarFeedback(mensagem, tipo = 'erro') {
     }, 4000);
 }
 
-// ========== SANITIZAÇÃO DE SVG — BLINDAGEM COMPLETA ==========
+// ========== SANITIZAÇÃO DE SVG (Relatório — Ponto 4 atualizado) ==========
 //
-// Duas passagens:
-// 1ª — remove elementos inteiros perigosos (script, foreignObject, iframe, etc.)
-//      em ordem reversa (folha → raiz) para evitar órfãos no DOM.
-// 2ª — remove atributos on* e URLs com protocolo javascript:/data:.
+// Lista expandida de tags proibidas:
+//
+//   animate / set   — animações que podem disparar eventos on* ou carregar recursos
+//   image           — carrega imagem externa (data exfiltration via URL)
+//   pattern         — pode referenciar recursos externos via xlink:href
+//   feImage         — filtro SVG que carrega imagem externa
+//
+// Todas as tags anteriores mantidas + as novas adicionadas.
 
 const _SVG_TAGS_PROIBIDAS = new Set([
-    'script', 'foreignobject', 'iframe', 'embed',
-    'object', 'link', 'meta', 'use',
+    'script',
+    'foreignobject',
+    'iframe',
+    'embed',
+    'object',
+    'link',
+    'meta',
+    'use',
+    // Adicionadas no Relatório — Ponto 4
+    'animate',
+    'set',
+    'image',
+    'pattern',
+    'feimage',
 ]);
 
 function _sanitizarSVG(svgEl) {
+    // 1ª passagem: remove tags proibidas (reversed: folha → raiz, evita órfãos)
     Array.from(svgEl.querySelectorAll('*')).reverse().forEach(el => {
         if (_SVG_TAGS_PROIBIDAS.has(el.tagName.toLowerCase())) el.remove();
     });
 
+    // 2ª passagem: remove atributos on* e URLs com protocolo javascript:/data:
     [svgEl, ...svgEl.querySelectorAll('*')].forEach(el => {
         [...el.attributes].forEach(attr => {
             const nome  = attr.name.toLowerCase();
@@ -202,7 +271,7 @@ function _parsearESanitizarSVG(svgString) {
     if (typeof svgString !== 'string' || !svgString.trim()) return null;
 
     const template = document.createElement('template');
-    template.innerHTML = svgString;
+    template.innerHTML = svgString; // parsing via template (inerte)
 
     const svgEl = template.content.firstElementChild;
     if (!svgEl || svgEl.tagName.toLowerCase() !== 'svg') {
@@ -214,8 +283,7 @@ function _parsearESanitizarSVG(svgString) {
 }
 
 // ========== VALIDAÇÃO DE URL DE PAGAMENTO ==========
-// HTTPS + whitelist de hostname.
-
+// HTTPS obrigatório + whitelist de hostname.
 const _DOMINIOS_PAGAMENTO_PERMITIDOS = new Set([
     'checkout.stripe.com',
     'pay.granaevo.com',
@@ -241,70 +309,44 @@ function _validarUrlPagamento(url) {
     }
 }
 
-// ========== VERIFICAÇÃO DE SAME-ORIGIN (Relatório — Ponto 2) ==========
+// ========== LEITURA DO CSRF TOKEN (Relatório — Ponto 2) ==========
 //
-// Proteção contra reutilização do script em domínio clonado/falso.
+// Substitui a função _verificarSameOrigin() que era falsa segurança:
+//   - scripts executados via console ignoram verificações de origem
+//   - requisições via curl/postman ignoram window.location
+//   - bots ignoram o frontend completamente
 //
-// Por que não usar .includes('granaevo') como o relatório sugeria?
-// Porque "fake-granaevo.evil.com" passaria nessa checagem.
-// Comparação estrita de origin é a única forma correta.
+// CSRF token real é gerado pelo servidor, armazenado em meta tag,
+// e enviado como header em toda requisição sensível.
+// O servidor valida que o token corresponde à sessão — sem token válido,
+// a requisição é rejeitada mesmo que venha de outro domínio ou ferramenta.
 //
-// ⚠️  CONFIGURE: substitua pela origin exata de produção.
-//     Desenvolvimento local: 'http://localhost:5173' (ou a porta do seu dev server).
-//     Adicione quantos origins legítimos forem necessários ao Set.
+// ⚠️  CONFIGURE NO BACKEND: gere o token na renderização da página
+//     e adicione ao HTML:
+//     <meta name="csrf-token" content="TOKEN_GERADO_PELO_SERVIDOR">
+//
+//     Se usar Supabase Edge Functions, você pode gerar via:
+//     const token = crypto.randomUUID(); // e salvar na sessão do usuário
+//
+// Se o token não estiver presente, a requisição ainda é enviada mas
+// sem proteção CSRF — o backend rejeitará por ausência do header.
 
-const _ORIGINS_PERMITIDAS = new Set([
-    'https://granaevo.com',
-    'https://www.granaevo.com',
-    'https://app.granaevo.com',
-    // 'http://localhost:5173', // descomente apenas em desenvolvimento local
-]);
-
-/**
- * Lança um erro se a página não estiver rodando em uma origin autorizada.
- * Impede que o script seja reutilizado em domínios clonados.
- */
-function _verificarSameOrigin() {
-    const originAtual = window.location.origin;
-    if (!_ORIGINS_PERMITIDAS.has(originAtual)) {
-        // Não expõe detalhes no console — dificulta reconhecimento pelo atacante
-        throw new Error('Origem da aplicação não autorizada');
-    }
+function _lerCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content ?? null;
 }
 
-// ========== FETCH COM TIMEOUT (Relatório — Ponto 4) ==========
-//
-// Sem timeout, um fetch preso mantém o botão desabilitado indefinidamente,
-// o cooldown ativo e o usuário sem feedback.
-//
-// AbortController cancela a requisição após `timeout` ms.
-// O clearTimeout garante que o timer não vaza caso o fetch complete antes.
-//
-// O erro lançado pelo abort tem error.name === 'AbortError' —
-// tratado especificamente no catch do chamador para mensagem amigável.
+// ========== FETCH COM TIMEOUT ==========
+// AbortController cancela após timeout ms. clearTimeout no finally garante
+// que o timer não vaza se o fetch completar/falhar antes do timeout.
+const _FETCH_TIMEOUT_MS = 10000;
 
-const _FETCH_TIMEOUT_MS = 10000; // 10 segundos
-
-/**
- * Wrapper do fetch com timeout automático via AbortController.
- *
- * @param {string} url
- * @param {RequestInit} options
- * @param {number} timeout - ms antes de abortar (padrão: 10000)
- * @returns {Promise<Response>}
- */
 async function _fetchComTimeout(url, options = {}, timeout = _FETCH_TIMEOUT_MS) {
     const controller = new AbortController();
     const timerId    = setTimeout(() => controller.abort(), timeout);
-
     try {
-        const response = await fetch(url, {
-            ...options,
-            signal: controller.signal,
-        });
+        const response = await fetch(url, { ...options, signal: controller.signal });
         return response;
     } finally {
-        // Garante limpeza do timer mesmo se fetch lançar exceção
         clearTimeout(timerId);
     }
 }
@@ -321,24 +363,16 @@ async function verificarLogin() {
         redirectOnFail:   true,
 
         onSuccess: async (user) => {
-            // Object.freeze() — congela o objeto de sessão após login.
-            // Tentativas de alterar via console falham silenciosamente (normal)
-            // ou lançam TypeError (strict mode).
-            usuarioAtual = Object.freeze({
-                nome:       user.nome,
-                planoAtual: user.plano,
-                userId:     user.userId,
-                email:      user.email,
-                isGuest:    user.isGuest,
-                ownerEmail: user.ownerEmail || null,
-            });
+            // UsuarioSessao.set() congela o objeto e bloqueia sobrescrita
+            // da referência — proteção contra manipulação via console.
+            UsuarioSessao.set(user);
 
             if (authLoading) {
                 setTimeout(() => authLoading.classList.add('hidden'), 800);
             }
 
-            if (user.isGuest) {
-                _exibirAvisoConvidado(user);
+            if (UsuarioSessao.get().isGuest) {
+                _exibirAvisoConvidado(UsuarioSessao.get());
                 return;
             }
 
@@ -357,7 +391,6 @@ function _exibirAvisoConvidado(user) {
                       document.querySelector('main') ||
                       document.body;
 
-    // ── Monta com createElement — sem innerHTML com dados externos ──
     const aviso = document.createElement('div');
     aviso.style.cssText = `
         max-width:520px; margin:80px auto; padding:40px;
@@ -378,27 +411,27 @@ function _exibirAvisoConvidado(user) {
     const paragrafo = document.createElement('p');
     paragrafo.style.cssText = 'color:#9ca3af; line-height:1.7; margin-bottom:24px;';
 
-    const linha1 = document.createTextNode('Você acessa o GranaEvo como ');
-    const negrito1 = document.createElement('strong');
+    const linha1     = document.createTextNode('Você acessa o GranaEvo como ');
+    const negrito1   = document.createElement('strong');
     negrito1.style.color = 'white';
     negrito1.textContent = 'convidado';
-    const linha2 = document.createTextNode(' da conta de ');
-    const negritoEmail = document.createElement('strong');
-    negritoEmail.style.color = '#6c63ff';
-    negritoEmail.textContent = user.ownerEmail || 'outro usuário'; // textContent — seguro
-    const linha3 = document.createTextNode('.');
-    const quebra = document.createElement('br');
-    const quebra2 = document.createElement('br');
-    const linha4 = document.createTextNode('Apenas o ');
-    const negrito2 = document.createElement('strong');
+    const linha2     = document.createTextNode(' da conta de ');
+    const emailEl    = document.createElement('strong');
+    emailEl.style.color = '#6c63ff';
+    emailEl.textContent = user.ownerEmail || 'outro usuário'; // textContent — seguro
+    const linha3     = document.createTextNode('.');
+    const quebra     = document.createElement('br');
+    const quebra2    = document.createElement('br');
+    const linha4     = document.createTextNode('Apenas o ');
+    const negrito2   = document.createElement('strong');
     negrito2.style.color = 'white';
     negrito2.textContent = 'titular da conta';
-    const linha5 = document.createTextNode(' pode gerenciar e atualizar o plano.');
+    const linha5     = document.createTextNode(' pode gerenciar e atualizar o plano.');
 
     paragrafo.appendChild(linha1);
     paragrafo.appendChild(negrito1);
     paragrafo.appendChild(linha2);
-    paragrafo.appendChild(negritoEmail);
+    paragrafo.appendChild(emailEl);
     paragrafo.appendChild(linha3);
     paragrafo.appendChild(quebra);
     paragrafo.appendChild(quebra2);
@@ -436,7 +469,8 @@ function inicializarPagina() {
 
 // ========== EXIBIR PLANO ATUAL ==========
 function exibirPlanoAtual() {
-    const planoAtual = usuarioAtual.planoAtual;
+    const usuario    = UsuarioSessao.get();
+    const planoAtual = usuario.planoAtual;
     const config     = PLANOS_CONFIG[planoAtual];
 
     if (!config) {
@@ -444,18 +478,14 @@ function exibirPlanoAtual() {
         return;
     }
 
-    // ── #planoAtualDisplay ──
     const planoDisplay = document.getElementById('planoAtualDisplay');
     if (planoDisplay) {
         planoDisplay.innerHTML = '';
-
         const wrapper = document.createElement('strong');
         const span    = document.createElement('span');
         span.style.cssText = 'display:inline-flex; align-items:center; gap:8px; vertical-align:middle;';
-
         const svgEl = _parsearESanitizarSVG(config.icon);
         if (svgEl) span.appendChild(svgEl);
-
         const nomeSpan = document.createElement('span');
         nomeSpan.textContent = config.nome;
         span.appendChild(nomeSpan);
@@ -463,7 +493,6 @@ function exibirPlanoAtual() {
         planoDisplay.appendChild(wrapper);
     }
 
-    // ── #currentPlanCard — 100% createElement, zero innerHTML (Relatório — Ponto 1) ──
     const currentPlanCard = document.getElementById('currentPlanCard');
     if (currentPlanCard) {
         currentPlanCard.innerHTML = '';
@@ -513,7 +542,8 @@ function exibirPlanoAtual() {
 
 // ========== RENDERIZAR CARDS DE UPGRADE ==========
 function renderizarCardsUpgrade() {
-    const planoAtual = usuarioAtual.planoAtual;
+    const usuario    = UsuarioSessao.get();
+    const planoAtual = usuario.planoAtual;
     const grid       = document.getElementById('upgradeCardsGrid');
 
     if (!grid) return;
@@ -541,13 +571,11 @@ function renderizarCardsUpgrade() {
             ? (nomePlano === planoAtual ? 'Seu plano atual' : 'Plano inferior')
             : `Adicione ${perfisDiferenca} perfil${perfisDiferenca > 1 ? 's' : ''} extra${perfisDiferenca > 1 ? 's' : ''}`;
 
-        // ── Card — 100% createElement, zero innerHTML (Relatório — Ponto 1) ──
         const card = document.createElement('div');
         card.className = 'upgrade-card';
         card.setAttribute('role', 'listitem');
         if (isUpgrade && valorUpgrade <= 20) card.classList.add('recommended');
 
-        // Badge recomendado
         if (isUpgrade && valorUpgrade <= 20) {
             const badge = document.createElement('div');
             badge.className = 'upgrade-badge';
@@ -555,7 +583,6 @@ function renderizarCardsUpgrade() {
             card.appendChild(badge);
         }
 
-        // Header
         const header = document.createElement('div');
         header.className = 'upgrade-header';
 
@@ -577,7 +604,6 @@ function renderizarCardsUpgrade() {
         header.appendChild(subDiv);
         card.appendChild(header);
 
-        // Pricing
         const pricingDiv = document.createElement('div');
         pricingDiv.className = 'upgrade-pricing';
 
@@ -610,37 +636,31 @@ function renderizarCardsUpgrade() {
         } else {
             const statusRow = document.createElement('div');
             statusRow.className = 'upgrade-price';
-
             const statusEl = document.createElement('span');
             statusEl.className = 'price-amount';
             statusEl.style.cssText = 'font-size:1.5rem; color:var(--gray);';
             statusEl.textContent = nomePlano === planoAtual ? '✅ Ativo' : '❌ Indisponível';
-
             statusRow.appendChild(statusEl);
             pricingDiv.appendChild(statusRow);
         }
 
         card.appendChild(pricingDiv);
 
-        // Features
         const featuresList = document.createElement('ul');
         featuresList.className = 'upgrade-features';
 
         config.features.forEach(feature => {
             const li = document.createElement('li');
-
             const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             checkSvg.setAttribute('viewBox', '0 0 24 24');
             checkSvg.setAttribute('fill', 'none');
             checkSvg.setAttribute('aria-hidden', 'true');
-
             const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
             poly.setAttribute('points', '20 6 9 17 4 12');
             poly.setAttribute('stroke', 'currentColor');
             poly.setAttribute('stroke-width', '2');
             poly.setAttribute('stroke-linecap', 'round');
             checkSvg.appendChild(poly);
-
             li.appendChild(checkSvg);
             li.appendChild(document.createTextNode(feature));
             featuresList.appendChild(li);
@@ -648,7 +668,6 @@ function renderizarCardsUpgrade() {
 
         card.appendChild(featuresList);
 
-        // Botão
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `btn-upgrade${isCurrentOrLower ? ' disabled' : ''}`;
@@ -673,14 +692,16 @@ function renderizarCardsUpgrade() {
 function processarUpgrade(novoPlano) {
     if (!_verificarEAtivarCooldown()) return;
 
-    const config = PLANOS_CONFIG[novoPlano];
+    const usuario = UsuarioSessao.get();
+    const config  = PLANOS_CONFIG[novoPlano];
+
     if (!config) {
         _mostrarFeedback('❌ Plano não encontrado.');
         _upgradeCooldownAtivo = false;
         return;
     }
 
-    const upgradeInfo = obterUpgradeValido(usuarioAtual.planoAtual, novoPlano);
+    const upgradeInfo = obterUpgradeValido(usuario.planoAtual, novoPlano);
     if (!upgradeInfo) {
         _mostrarFeedback('❌ Este upgrade não está disponível para seu plano atual.');
         _upgradeCooldownAtivo = false;
@@ -691,10 +712,10 @@ function processarUpgrade(novoPlano) {
 }
 
 // ========== POPUP DE UPGRADE ==========
-// 100% createElement — zero innerHTML com dados externos (Relatório — Ponto 1)
 function criarPopupUpgrade(novoPlano, config) {
+    const usuario           = UsuarioSessao.get();
+    const upgradeConfirmado = obterUpgradeValido(usuario.planoAtual, novoPlano);
 
-    const upgradeConfirmado = obterUpgradeValido(usuarioAtual.planoAtual, novoPlano);
     if (!upgradeConfirmado) {
         _mostrarFeedback('❌ Upgrade inválido. Recarregue a página.');
         _upgradeCooldownAtivo = false;
@@ -702,9 +723,8 @@ function criarPopupUpgrade(novoPlano, config) {
     }
 
     const valorSeguro     = upgradeConfirmado.valor;
-    const perfisDiferenca = config.perfis - PLANOS_CONFIG[usuarioAtual.planoAtual].perfis;
+    const perfisDiferenca = config.perfis - PLANOS_CONFIG[usuario.planoAtual].perfis;
 
-    // ── Overlay ──
     const overlay = document.createElement('div');
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
@@ -716,7 +736,6 @@ function criarPopupUpgrade(novoPlano, config) {
         animation:fadeIn 0.3s ease-out;
     `;
 
-    // ── Popup container ──
     const popup = document.createElement('div');
     popup.setAttribute('tabindex', '-1');
     popup.style.cssText = `
@@ -750,13 +769,12 @@ function criarPopupUpgrade(novoPlano, config) {
     titulo.textContent = '🚀 Confirmar Upgrade';
     innerDiv.appendChild(titulo);
 
-    // Subtítulo
     const subtitulo = document.createElement('p');
     subtitulo.style.cssText = 'color:#9ca3af; font-size:1rem; margin-bottom:32px;';
     subtitulo.textContent = 'Você está prestes a evoluir seu plano';
     innerDiv.appendChild(subtitulo);
 
-    // Card de comparação de planos
+    // Comparação de planos
     const compCard = document.createElement('div');
     compCard.style.cssText = `
         background:rgba(255,255,255,0.05); border-radius:16px;
@@ -766,40 +784,36 @@ function criarPopupUpgrade(novoPlano, config) {
     const compRow = document.createElement('div');
     compRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;';
 
-    // Coluna plano atual
     const colAtual = document.createElement('div');
     const labelAtual = document.createElement('div');
     labelAtual.style.cssText = 'font-size:0.85rem; color:#9ca3af; margin-bottom:6px;';
     labelAtual.textContent = 'Plano Atual';
-    const valorAtual = document.createElement('div');
-    valorAtual.style.cssText = 'font-size:1.2rem; font-weight:700; color:white;';
-    valorAtual.textContent = usuarioAtual.planoAtual; // textContent — seguro
+    const valorAtualEl = document.createElement('div');
+    valorAtualEl.style.cssText = 'font-size:1.2rem; font-weight:700; color:white;';
+    valorAtualEl.textContent = usuario.planoAtual;
     colAtual.appendChild(labelAtual);
-    colAtual.appendChild(valorAtual);
+    colAtual.appendChild(valorAtualEl);
 
-    // Seta
     const seta = document.createElement('div');
     seta.setAttribute('aria-hidden', 'true');
     seta.style.cssText = 'font-size:2rem; color:var(--primary);';
     seta.textContent = '→';
 
-    // Coluna novo plano
     const colNovo = document.createElement('div');
     const labelNovo = document.createElement('div');
     labelNovo.style.cssText = 'font-size:0.85rem; color:#9ca3af; margin-bottom:6px;';
     labelNovo.textContent = 'Novo Plano';
-    const valorNovo = document.createElement('div');
-    valorNovo.style.cssText = 'font-size:1.2rem; font-weight:700; color:var(--primary);';
-    valorNovo.textContent = novoPlano; // textContent — seguro
+    const valorNovoEl = document.createElement('div');
+    valorNovoEl.style.cssText = 'font-size:1.2rem; font-weight:700; color:var(--primary);';
+    valorNovoEl.textContent = novoPlano;
     colNovo.appendChild(labelNovo);
-    colNovo.appendChild(valorNovo);
+    colNovo.appendChild(valorNovoEl);
 
     compRow.appendChild(colAtual);
     compRow.appendChild(seta);
     compRow.appendChild(colNovo);
     compCard.appendChild(compRow);
 
-    // Valor do upgrade
     const valorDiv = document.createElement('div');
     valorDiv.style.cssText = 'border-top:1px solid rgba(255,255,255,0.1); padding-top:16px; text-align:center;';
 
@@ -813,7 +827,7 @@ function criarPopupUpgrade(novoPlano, config) {
         background:linear-gradient(135deg,var(--primary),var(--accent));
         -webkit-background-clip:text; -webkit-text-fill-color:transparent;
     `;
-    valorNumero.textContent = `R$ ${valorSeguro.toFixed(2)}`; // textContent — seguro
+    valorNumero.textContent = `R$ ${valorSeguro.toFixed(2)}`;
 
     const pagamentoInfo = document.createElement('div');
     pagamentoInfo.style.cssText = 'font-size:0.9rem; color:#10b981; margin-top:8px;';
@@ -825,7 +839,7 @@ function criarPopupUpgrade(novoPlano, config) {
     compCard.appendChild(valorDiv);
     innerDiv.appendChild(compCard);
 
-    // Card de benefícios
+    // Benefícios
     const benefitsCard = document.createElement('div');
     benefitsCard.style.cssText = `
         background:rgba(108,99,255,0.1); border-radius:12px;
@@ -841,8 +855,7 @@ function criarPopupUpgrade(novoPlano, config) {
     benefitsList.style.cssText = 'list-style:none; padding:0; margin:0;';
 
     const liStyle = 'display:flex; align-items:center; gap:12px; color:white; font-size:0.95rem;';
-
-    const itens = [
+    const itens   = [
         `+${perfisDiferenca} perfil(is) extra(s)`,
         'Todos os seus dados preservados',
         'Ativação instantânea',
@@ -851,15 +864,12 @@ function criarPopupUpgrade(novoPlano, config) {
     itens.forEach((texto, i) => {
         const li = document.createElement('li');
         li.style.cssText = liStyle + (i < itens.length - 1 ? ' margin-bottom:10px;' : '');
-
         const check = document.createElement('span');
         check.setAttribute('aria-hidden', 'true');
         check.style.color = '#10b981';
         check.textContent = '✓';
-
         const textoSpan = document.createElement('span');
-        textoSpan.textContent = texto; // textContent — seguro
-
+        textoSpan.textContent = texto;
         li.appendChild(check);
         li.appendChild(textoSpan);
         benefitsList.appendChild(li);
@@ -904,7 +914,6 @@ function criarPopupUpgrade(novoPlano, config) {
 
     requestAnimationFrame(() => popup.focus());
 
-    // ── Fechar overlay ──
     const fecharOverlay = () => {
         overlay.style.opacity = '0';
         overlay.style.transition = 'opacity 0.3s ease-out';
@@ -929,8 +938,8 @@ function criarPopupUpgrade(novoPlano, config) {
         btnConfirmar.setAttribute('aria-busy', 'true');
 
         try {
-            // Verifica same-origin antes de qualquer requisição (Relatório — Ponto 2)
-            _verificarSameOrigin();
+            // Lê sessão via closure — imune a sobrescrita de variável global
+            const usuarioAtual = UsuarioSessao.get();
 
             const upgradeNoClique = obterUpgradeValido(usuarioAtual.planoAtual, novoPlano);
             if (!upgradeNoClique) {
@@ -939,17 +948,30 @@ function criarPopupUpgrade(novoPlano, config) {
                 return;
             }
 
-            // Fetch com timeout de 10s (Relatório — Ponto 4)
-            // credentials: 'same-origin' — mais restritivo que 'include'
-            // X-Requested-With — header anti-CSRF reconhecido por muitos frameworks
+            // ── CSRF Token (Relatório — Ponto 2) ──────────────────────────
+            // Substitui _verificarSameOrigin() que era falsa segurança.
+            // O token é gerado pelo servidor e lido da meta tag — bots e
+            // ferramentas externas não têm acesso ao DOM da página autenticada.
+            const csrfToken = _lerCsrfToken();
+
+            // ── Body do fetch (Relatório — Ponto 1) ───────────────────────
+            // Envia planoAtual para que o backend possa validar a transição.
+            // NÃO envia userId (backend usa cookie de sessão) nem valorEsperado
+            // (backend calcula o valor — nunca confia em valores do cliente).
             const response = await _fetchComTimeout('/api/criar-sessao-upgrade', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type':    'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
+                    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
                 },
                 credentials: 'same-origin',
-                body: JSON.stringify({ novoPlano: upgradeNoClique.para }),
+                body: JSON.stringify({
+                    planoAtual: usuarioAtual.planoAtual,   // para validação no backend
+                    novoPlano:  upgradeNoClique.para,       // plano desejado
+                    // ✅ SEM userId  — backend obtém via cookie de sessão
+                    // ✅ SEM valor   — backend calcula com base nos planos
+                }),
             });
 
             if (!response.ok) {
@@ -967,7 +989,6 @@ function criarPopupUpgrade(novoPlano, config) {
             window.location.href = data.checkoutUrl;
 
         } catch (error) {
-            // Mensagem amigável para timeout (AbortError)
             const msgErro = error.name === 'AbortError'
                 ? '⏱️ A requisição demorou muito. Verifique sua conexão e tente novamente.'
                 : '❌ Não foi possível iniciar o pagamento. Tente novamente.';

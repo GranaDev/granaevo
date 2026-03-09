@@ -4066,161 +4066,270 @@ function abrirAnaliseDisciplina(metaId) {
         return;
     }
 
-    // ✅ CORREÇÃO: todos os valores computados passam por escapeHTML
-    //    mesmo sendo gerados por lógica interna.
-    //    Defesa em profundidade: protege contra refatorações futuras
-    //    que possam inadvertidamente injetar dados do usuário nestes campos.
-    const descricaoSegura      = escapeHTML(String(meta.descricao              || ''));
-    const ultimaData           = escapeHTML(String(analise.ultimaRetirada.data  || ''));
-    const ultimoMotivo         = escapeHTML(String(analise.ultimaRetirada.motivo || ''));
-    const nivelSanitizado      = escapeHTML(String(analise.nivelDisciplina      || ''));
-    const mensagemSanitizada   = escapeHTML(String(analise.mensagemDisciplina   || ''));
-    const totalRetiradaSanit   = escapeHTML(String(Number(analise.totalRetiradas) || 0));
-    const valorTotalSanit      = formatBRL(analise.valorTotalRetirado);
-
-    // ✅ CORREÇÃO: corDisciplina validada contra whitelist de cores hexadecimais seguras
-    //    Impede injeção de CSS arbitrário via interpolação de cor em atributo style.
-    //    Se a cor não passar na validação, cai para a cor padrão segura.
+    // ✅ Todos os valores numéricos calculados internamente — sem dado do usuário
     const CORES_PERMITIDAS_DISCIPLINA = new Set(['#ff4b4b', '#00ff99', '#ffd166']);
     const corSegura = CORES_PERMITIDAS_DISCIPLINA.has(analise.corDisciplina)
         ? analise.corDisciplina
         : '#ffd166';
 
-    // ✅ CORREÇÃO: distribuições sanitizadas individualmente
-    const distEmergCount  = escapeHTML(String(Number(analise.distribuicao.emergencia.count)   || 0));
-    const distEmergPerc   = escapeHTML(String(Number(analise.distribuicao.emergencia.perc)    || 0));
-    const distPlanCount   = escapeHTML(String(Number(analise.distribuicao.planejado.count)    || 0));
-    const distPlanPerc    = escapeHTML(String(Number(analise.distribuicao.planejado.perc)     || 0));
-    const distInvCount    = escapeHTML(String(Number(analise.distribuicao.investimento.count) || 0));
-    const distInvPerc     = escapeHTML(String(Number(analise.distribuicao.investimento.perc)  || 0));
-    const distOutCount    = escapeHTML(String(Number(analise.distribuicao.outros.count)       || 0));
-    const distOutPerc     = escapeHTML(String(Number(analise.distribuicao.outros.perc)        || 0));
+    const distEmergPerc  = Number(analise.distribuicao.emergencia.perc)    || 0;
+    const distPlanPerc   = Number(analise.distribuicao.planejado.perc)     || 0;
+    const distInvPerc    = Number(analise.distribuicao.investimento.perc)  || 0;
+    const distOutPerc    = Number(analise.distribuicao.outros.perc)        || 0;
 
-    // ✅ CORREÇÃO: histórico de retiradas sanitizado item a item
-    const historicoHTML = meta.historicoRetiradas
-        .slice()
-        .reverse()
-        .map(r => {
-            const dataSegura   = escapeHTML(String(r.data   || ''));
-            const motivoSeguro = escapeHTML(String(r.motivo || ''));
-            const valorSeguro  = formatBRL(Number(r.valor) || 0);
-            return `
-            <div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 2px solid var(--border);">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                    <span style="font-size: 0.85rem; color: var(--text-secondary);">${dataSegura}</span>
-                    <span style="font-size: 0.9rem; font-weight: 600; color: #ff4b4b;">${valorSeguro}</span>
-                </div>
-                <div style="font-size: 0.85rem; color: var(--text-primary);">
-                    <strong>Motivo:</strong> ${motivoSeguro}
-                </div>
-            </div>
-            `;
-        })
-        .join('');
+    // ✅ Estrutura estática — zero dados do usuário no HTML do criarPopup
+    criarPopupDOM((popup) => {
 
-    criarPopup(`
-        <div style="max-height:70vh; overflow-y:auto; padding-right:10px;">
-            <h3 style="text-align:center; margin-bottom:8px;">📊 Análise de Disciplina Financeira</h3>
-            <div style="text-align:center; color: var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
-                Meta: ${descricaoSegura}
-            </div>
+        // ── Wrapper scroll
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'max-height:70vh; overflow-y:auto; padding-right:10px;';
 
-            <div style="background: linear-gradient(135deg, ${corSegura}20, ${corSegura}10);
-                        padding: 20px; border-radius: 12px; margin-bottom: 20px;
-                        border-left: 4px solid ${corSegura}; text-align: center;">
-                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">Nível de Disciplina</div>
-                <div style="font-size: 1.8rem; font-weight: 700; color: ${corSegura}; margin-bottom: 12px;">
-                    ${nivelSanitizado}
-                </div>
-                <div style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
-                    ${mensagemSanitizada}
-                </div>
-            </div>
+        // ── Título
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'text-align:center; margin-bottom:8px;';
+        titulo.textContent = '📊 Análise de Disciplina Financeira';
 
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;">
-                <div style="background: rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; text-align: center;">
-                    <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Total de Retiradas</div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary);">${totalRetiradaSanit}</div>
-                </div>
-                <div style="background: rgba(255,255,255,0.05); padding: 14px; border-radius: 10px; text-align: center;">
-                    <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 6px;">Valor Total Retirado</div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: #ff4b4b;">${valorTotalSanit}</div>
-                </div>
-            </div>
+        // ── Subtítulo com nome da meta
+        const subtitulo = document.createElement('div');
+        subtitulo.style.cssText = 'text-align:center; color:var(--text-secondary); margin-bottom:20px; font-size:0.9rem;';
+        const subtituloLabel = document.createElement('span');
+        subtituloLabel.textContent = 'Meta: ';
+        const subtituloValor = document.createElement('strong');
+        subtituloValor.textContent = String(meta.descricao || ''); // ✅ textContent
+        subtitulo.appendChild(subtituloLabel);
+        subtitulo.appendChild(subtituloValor);
 
-            <div style="margin-bottom: 20px;">
-                <h4 style="margin-bottom: 12px; color: var(--text-primary);">📋 Distribuição por Motivo</h4>
+        // ── Card de nível de disciplina
+        const cardNivel = document.createElement('div');
+        cardNivel.style.background    = `linear-gradient(135deg, ${corSegura}20, ${corSegura}10)`;
+        cardNivel.style.padding       = '20px';
+        cardNivel.style.borderRadius  = '12px';
+        cardNivel.style.marginBottom  = '20px';
+        cardNivel.style.borderLeft    = `4px solid ${corSegura}`;
+        cardNivel.style.textAlign     = 'center';
 
-                ${analise.distribuicao.emergencia.count > 0 ? `
-                <div style="margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="color: var(--text-primary);">🚨 Emergências</span>
-                        <span style="color: var(--text-secondary);">${distEmergCount} (${distEmergPerc}%)</span>
-                    </div>
-                    <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden;">
-                        <div style="width: ${distEmergPerc}%; height: 100%; background: #ff4b4b; transition: width 0.5s;"></div>
-                    </div>
-                </div>
-                ` : ''}
+        const labelNivel = document.createElement('div');
+        labelNivel.style.cssText = 'font-size:0.85rem; color:var(--text-secondary); margin-bottom:8px;';
+        labelNivel.textContent = 'Nível de Disciplina';
 
-                ${analise.distribuicao.planejado.count > 0 ? `
-                <div style="margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="color: var(--text-primary);">🎯 Compras Planejadas</span>
-                        <span style="color: var(--text-secondary);">${distPlanCount} (${distPlanPerc}%)</span>
-                    </div>
-                    <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden;">
-                        <div style="width: ${distPlanPerc}%; height: 100%; background: #00ff99; transition: width 0.5s;"></div>
-                    </div>
-                </div>
-                ` : ''}
+        const valorNivel = document.createElement('div');
+        valorNivel.style.cssText = `font-size:1.8rem; font-weight:700; color:${corSegura}; margin-bottom:12px;`;
+        valorNivel.textContent = String(analise.nivelDisciplina || ''); // ✅ textContent — valor interno calculado
 
-                ${analise.distribuicao.investimento.count > 0 ? `
-                <div style="margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="color: var(--text-primary);">📈 Investimentos</span>
-                        <span style="color: var(--text-secondary);">${distInvCount} (${distInvPerc}%)</span>
-                    </div>
-                    <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden;">
-                        <div style="width: ${distInvPerc}%; height: 100%; background: #6c63ff; transition: width 0.5s;"></div>
-                    </div>
-                </div>
-                ` : ''}
+        const mensagemNivel = document.createElement('div');
+        mensagemNivel.style.cssText = 'font-size:0.9rem; color:var(--text-secondary); line-height:1.5;';
+        mensagemNivel.textContent = String(analise.mensagemDisciplina || ''); // ✅ textContent — valor interno calculado
 
-                ${analise.distribuicao.outros.count > 0 ? `
-                <div style="margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="color: var(--text-primary);">📄 Outros</span>
-                        <span style="color: var(--text-secondary);">${distOutCount} (${distOutPerc}%)</span>
-                    </div>
-                    <div style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden;">
-                        <div style="width: ${distOutPerc}%; height: 100%; background: #ffd166; transition: width 0.5s;"></div>
-                    </div>
-                </div>
-                ` : ''}
-            </div>
+        cardNivel.appendChild(labelNivel);
+        cardNivel.appendChild(valorNivel);
+        cardNivel.appendChild(mensagemNivel);
 
-            <div style="background: rgba(108,99,255,0.1); padding: 14px; border-radius: 12px; border-left: 3px solid #6c63ff;">
-                <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">🕐 Última Retirada</div>
-                <div style="display: grid; gap: 6px; font-size: 0.9rem; color: var(--text-secondary);">
-                    <div><strong>Data:</strong> ${ultimaData}</div>
-                    <div><strong>Valor:</strong> ${formatBRL(analise.ultimaRetirada.valor)}</div>
-                    <div><strong>Motivo:</strong> ${ultimoMotivo}</div>
-                </div>
-            </div>
+        // ── Grid totais
+        const gridTotais = document.createElement('div');
+        gridTotais.style.cssText = 'display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:20px;';
 
-            <div style="margin-top: 20px;">
-                <h4 style="margin-bottom: 12px; color: var(--text-primary);">📜 Histórico Completo</h4>
-                <div style="max-height: 200px; overflow-y: auto;">
-                    ${historicoHTML}
-                </div>
-            </div>
-        </div>
+        const celulaRetiradas = document.createElement('div');
+        celulaRetiradas.style.cssText = 'background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;';
+        const labelRet = document.createElement('div');
+        labelRet.style.cssText = 'font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;';
+        labelRet.textContent = 'Total de Retiradas';
+        const valorRet = document.createElement('div');
+        valorRet.style.cssText = 'font-size:1.5rem; font-weight:700; color:var(--text-primary);';
+        valorRet.textContent = String(Number(analise.totalRetiradas) || 0); // ✅ textContent — numérico
+        celulaRetiradas.appendChild(labelRet);
+        celulaRetiradas.appendChild(valorRet);
 
-        <button class="btn-primary" id="btnFecharAnalise" style="width:100%; margin-top:16px;">Fechar</button>
-    `);
+        const celulaValor = document.createElement('div');
+        celulaValor.style.cssText = 'background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;';
+        const labelVal = document.createElement('div');
+        labelVal.style.cssText = 'font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;';
+        labelVal.textContent = 'Valor Total Retirado';
+        const valorVal = document.createElement('div');
+        valorVal.style.cssText = 'font-size:1.5rem; font-weight:700; color:#ff4b4b;';
+        valorVal.textContent = formatBRL(analise.valorTotalRetirado); // ✅ textContent — formatBRL retorna numérico formatado
+        celulaValor.appendChild(labelVal);
+        celulaValor.appendChild(valorVal);
 
-    document.getElementById('btnFecharAnalise').addEventListener('click', fecharPopup);
+        gridTotais.appendChild(celulaRetiradas);
+        gridTotais.appendChild(celulaValor);
+
+        // ── Distribuição por motivo
+        const secaoDistribuicao = document.createElement('div');
+        secaoDistribuicao.style.marginBottom = '20px';
+
+        const tituloDistribuicao = document.createElement('h4');
+        tituloDistribuicao.style.cssText = 'margin-bottom:12px; color:var(--text-primary);';
+        tituloDistribuicao.textContent = '📋 Distribuição por Motivo';
+        secaoDistribuicao.appendChild(tituloDistribuicao);
+
+        // ✅ Helper interno para criar barra de distribuição — zero dado do usuário
+        function _criarBarraDistribuicao(rotulo, count, perc, cor) {
+            if (count <= 0) return null;
+            const container = document.createElement('div');
+            container.style.marginBottom = '12px';
+
+            const rowLabel = document.createElement('div');
+            rowLabel.style.cssText = 'display:flex; justify-content:space-between; margin-bottom:6px;';
+
+            const spanRotulo = document.createElement('span');
+            spanRotulo.style.color = 'var(--text-primary)';
+            spanRotulo.textContent = rotulo; // ✅ texto estático — nunca dado do usuário
+
+            const spanCount = document.createElement('span');
+            spanCount.style.color = 'var(--text-secondary)';
+            spanCount.textContent = `${count} (${perc}%)`; // ✅ valores numéricos internos
+
+            rowLabel.appendChild(spanRotulo);
+            rowLabel.appendChild(spanCount);
+
+            const barContainer = document.createElement('div');
+            barContainer.style.cssText = 'width:100%; height:10px; background:rgba(255,255,255,0.1); border-radius:5px; overflow:hidden;';
+
+            const barFill = document.createElement('div');
+            barFill.style.width      = `${perc}%`;
+            barFill.style.height     = '100%';
+            barFill.style.background = cor;
+            barFill.style.transition = 'width 0.5s';
+
+            barContainer.appendChild(barFill);
+            container.appendChild(rowLabel);
+            container.appendChild(barContainer);
+            return container;
+        }
+
+        const barEmerg = _criarBarraDistribuicao(
+            '🚨 Emergências',
+            analise.distribuicao.emergencia.count,
+            distEmergPerc,
+            '#ff4b4b'
+        );
+        if (barEmerg) secaoDistribuicao.appendChild(barEmerg);
+
+        const barPlan = _criarBarraDistribuicao(
+            '🎯 Compras Planejadas',
+            analise.distribuicao.planejado.count,
+            distPlanPerc,
+            '#00ff99'
+        );
+        if (barPlan) secaoDistribuicao.appendChild(barPlan);
+
+        const barInv = _criarBarraDistribuicao(
+            '📈 Investimentos',
+            analise.distribuicao.investimento.count,
+            distInvPerc,
+            '#6c63ff'
+        );
+        if (barInv) secaoDistribuicao.appendChild(barInv);
+
+        const barOut = _criarBarraDistribuicao(
+            '📄 Outros',
+            analise.distribuicao.outros.count,
+            distOutPerc,
+            '#ffd166'
+        );
+        if (barOut) secaoDistribuicao.appendChild(barOut);
+
+        // ── Card última retirada
+        const cardUltima = document.createElement('div');
+        cardUltima.style.cssText = 'background:rgba(108,99,255,0.1); padding:14px; border-radius:12px; border-left:3px solid #6c63ff;';
+
+        const tituloUltima = document.createElement('div');
+        tituloUltima.style.cssText = 'font-weight:600; color:var(--text-primary); margin-bottom:8px;';
+        tituloUltima.textContent = '🕐 Última Retirada';
+
+        const gridUltima = document.createElement('div');
+        gridUltima.style.cssText = 'display:grid; gap:6px; font-size:0.9rem; color:var(--text-secondary);';
+
+        function _criarLinhaDetalhe(rotulo, valor) {
+            const div = document.createElement('div');
+            const strong = document.createElement('strong');
+            strong.textContent = rotulo; // ✅ texto estático
+            div.appendChild(strong);
+            div.appendChild(document.createTextNode(String(valor || ''))); // ✅ createTextNode — nunca innerHTML
+            return div;
+        }
+
+        gridUltima.appendChild(_criarLinhaDetalhe('Data: ', analise.ultimaRetirada.data));
+        gridUltima.appendChild(_criarLinhaDetalhe('Valor: ', formatBRL(analise.ultimaRetirada.valor)));
+        gridUltima.appendChild(_criarLinhaDetalhe('Motivo: ', analise.ultimaRetirada.motivo)); // ✅ createTextNode
+
+        cardUltima.appendChild(tituloUltima);
+        cardUltima.appendChild(gridUltima);
+
+        // ── Histórico completo — 100% via DOM, zero innerHTML com dados do usuário
+        const secaoHistorico = document.createElement('div');
+        secaoHistorico.style.marginTop = '20px';
+
+        const tituloHistorico = document.createElement('h4');
+        tituloHistorico.style.cssText = 'margin-bottom:12px; color:var(--text-primary);';
+        tituloHistorico.textContent = '📜 Histórico Completo';
+
+        const listaHistorico = document.createElement('div');
+        listaHistorico.style.cssText = 'max-height:200px; overflow-y:auto;';
+
+        meta.historicoRetiradas
+            .slice()
+            .reverse()
+            .forEach(r => {
+                // ✅ Validação defensiva de cada item antes de renderizar
+                if (!r || typeof r !== 'object') return;
+
+                const item = document.createElement('div');
+                item.style.cssText = 'background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; margin-bottom:8px; border-left:2px solid var(--border);';
+
+                const rowTopo = document.createElement('div');
+                rowTopo.style.cssText = 'display:flex; justify-content:space-between; margin-bottom:4px;';
+
+                const spanData = document.createElement('span');
+                spanData.style.cssText = 'font-size:0.85rem; color:var(--text-secondary);';
+                spanData.textContent = String(r.data || ''); // ✅ textContent
+
+                const spanValor = document.createElement('span');
+                spanValor.style.cssText = 'font-size:0.9rem; font-weight:600; color:#ff4b4b;';
+                spanValor.textContent = formatBRL(Number(r.valor) || 0); // ✅ textContent
+
+                rowTopo.appendChild(spanData);
+                rowTopo.appendChild(spanValor);
+
+                const rowMotivo = document.createElement('div');
+                rowMotivo.style.cssText = 'font-size:0.85rem; color:var(--text-primary);';
+
+                const strongMotivo = document.createElement('strong');
+                strongMotivo.textContent = 'Motivo: '; // ✅ texto estático
+
+                const spanMotivo = document.createElement('span');
+                spanMotivo.textContent = String(r.motivo || ''); // ✅ textContent — DADO DO USUÁRIO, nunca innerHTML
+
+                rowMotivo.appendChild(strongMotivo);
+                rowMotivo.appendChild(spanMotivo);
+
+                item.appendChild(rowTopo);
+                item.appendChild(rowMotivo);
+                listaHistorico.appendChild(item);
+            });
+
+        secaoHistorico.appendChild(tituloHistorico);
+        secaoHistorico.appendChild(listaHistorico);
+
+        // ── Botão fechar
+        const btnFechar = document.createElement('button');
+        btnFechar.className   = 'btn-primary';
+        btnFechar.style.cssText = 'width:100%; margin-top:16px;';
+        btnFechar.textContent = 'Fechar';
+        btnFechar.addEventListener('click', fecharPopup);
+
+        // ── Montagem final
+        wrapper.appendChild(titulo);
+        wrapper.appendChild(subtitulo);
+        wrapper.appendChild(cardNivel);
+        wrapper.appendChild(gridTotais);
+        wrapper.appendChild(secaoDistribuicao);
+        wrapper.appendChild(cardUltima);
+        wrapper.appendChild(secaoHistorico);
+
+        popup.appendChild(wrapper);
+        popup.appendChild(btnFechar);
+    });
 }
 
 // Expor função globalmente
@@ -6740,6 +6849,7 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
     const comprasPagas = todasCompras.filter(c => c.parcelaAtual > c.totalParcelas).length;
     const comprasPendentes = todasCompras.length - comprasPagas;
 
+    // ✅ obterDicaAleatoria() agora retorna {titulo, texto} — nunca HTML
     const dica = obterDicaAleatoria();
 
     let htmlCompras = '';
@@ -6768,7 +6878,6 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
                 ? '✅ Quitado'
                 : formatBRL(compra.valorParcela * (compra.totalParcelas - compra.parcelaAtual + 1));
 
-            // IDs usados apenas em data-attributes — nunca em onclick inline
             const safeCompraId  = sanitizeHTML(String(compra.id));
             const safeFaturaId  = sanitizeHTML(String(compra.faturaId));
 
@@ -6886,14 +6995,13 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
             </div>
 
             <!-- Dica do Dia -->
+            <!-- ✅ Container vazio com ID — dica montada via DOM abaixo, nunca via innerHTML -->
             <div style="background:linear-gradient(135deg, rgba(108,99,255,0.2), rgba(76,166,255,0.2)); padding:16px; border-radius:12px; border-left:4px solid var(--primary);">
                 <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
                     <div style="font-size:2rem;">💡</div>
                     <div style="font-weight:700; font-size:1.1rem; color: var(--text-primary);">Dica Inteligente</div>
                 </div>
-                <div style="color: var(--text-secondary); line-height:1.6;">
-                    ${dica}
-                </div>
+                <div id="dicaCartaoTexto" style="color: var(--text-secondary); line-height:1.6;"></div>
             </div>
 
             <button id="btnFecharCartaoRelatorioBottom" class="btn-primary" style="width:100%; margin-top:20px;">
@@ -6902,9 +7010,19 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
         </div>
     `);
 
-    // Vincular eventos via addEventListener — sem onclick inline
     document.getElementById('btnFecharCartaoRelatorio').addEventListener('click', fecharPopup);
     document.getElementById('btnFecharCartaoRelatorioBottom').addEventListener('click', fecharPopup);
+
+    const dicaContainer = document.getElementById('dicaCartaoTexto');
+    if (dicaContainer) {
+        const icon   = document.createTextNode('💳 ');
+        const strong = document.createElement('strong');
+        strong.textContent = dica.titulo + ': ';
+        const texto  = document.createTextNode(dica.texto); 
+        dicaContainer.appendChild(icon);
+        dicaContainer.appendChild(strong);
+        dicaContainer.appendChild(texto);
+    }
 }
 
 window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
@@ -6912,10 +7030,6 @@ window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
 // ========== BANCO DE DICAS SOBRE CARTÕES ==========
 
 function obterDicaAleatoria() {
-    // ✅ Dicas separadas em {titulo, texto} — dados controlados mas nunca misturados
-    //    com variáveis de usuário. O HTML é montado aqui de forma explícita e
-    //    ambas as partes passam por escapeHTML antes de serem inseridas no template.
-    //    Isso elimina o risco de alguém adicionar dados do usuário nesta função no futuro.
     const dicas = [
         { titulo: 'Pagamento em dia',        texto: 'Sempre pague sua fatura no vencimento para evitar juros altíssimos e manter seu score de crédito saudável.' },
         { titulo: 'Controle de gastos',      texto: 'Utilize no máximo 30% do limite do seu cartão para manter um bom histórico de crédito.' },
@@ -6970,9 +7084,7 @@ function obterDicaAleatoria() {
     ];
 
     const d = dicas[Math.floor(Math.random() * dicas.length)];
-
-    // ✅ escapeHTML em ambas as partes — nunca dados brutos interpolados
-    return `💳 <strong>${escapeHTML(d.titulo)}:</strong> ${escapeHTML(d.texto)}`;
+    return { titulo: d.titulo, texto: d.texto };
 }
 
 // Expor função globalmente
