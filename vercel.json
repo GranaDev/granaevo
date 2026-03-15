@@ -39,14 +39,14 @@
     },
 
     {
-      "source": "/landingpage.html",
-      "headers": [
-        {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'sha256-+bKQFgEuYVoBJiIVKw/deWgC0Kx0EobOPldmbUS+dg8=' https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content;"
-        }
-      ]
-    },
+    "source": "/landingpage.html",
+    "headers": [
+      {
+        "key": "Content-Security-Policy",
+        "value": "default-src 'self'; script-src 'self' 'sha256-1PH1LjJXYny7ws3P8XxQGxFfEgCPPNXNGnWN3qr7wbY=' https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content;"
+      }
+    ]
+  },
     {
       "source": "/planos.html",
       "headers": [
