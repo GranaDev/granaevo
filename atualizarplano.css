@@ -819,7 +819,7 @@ button {
     width: 40px;
     height: 40px;
     border-radius: 10px;
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    background: linear-gradient(135deg, var(--primary), var(--accent));
     padding: 8px;
 }
 
@@ -836,7 +836,7 @@ button {
     align-items: center;
     justify-content: center;
     border-radius: 12px;
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    background: linear-gradient(135deg, var(--primary), var(--accent));
     margin: 0 auto 16px;
 }
 
@@ -844,4 +844,34 @@ button {
     width: 32px;
     height: 32px;
     stroke: white;
+}
+
+/* ========== ANIMAÇÕES DO POPUP (migradas do JS — Ponto 1 do Relatório) ========== */
+/* Estas regras foram movidas do JS (_injetarAnimacoes) para cá,                    */
+/* eliminando a injeção dinâmica de <style> e permitindo remover unsafe-inline.     */
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#btnCancelarUpgrade:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+#btnConfirmarUpgrade:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(108, 99, 255, 0.6) !important;
 }

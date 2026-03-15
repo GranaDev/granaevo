@@ -1,7 +1,7 @@
 /* ==========================================
-   GRANAEVO PLANOS - CSS ULTRA OTIMIZADO
+   GRANAEVO PLANOS — planos.css
    Mobile First & Ultra Responsivo
-   ✅ VERSÃO CORRIGIDA - MENU MOBILE FUNCIONAL
+   ✅ VERSÃO CORRIGIDA — MENU MOBILE FUNCIONAL
    ========================================== */
 
 /* ==========================================
@@ -9,35 +9,35 @@
    ========================================== */
 :root {
     /* Cores */
-    --primary: #10b981;
-    --primary-dark: #059669;
+    --primary:       #10b981;
+    --primary-dark:  #059669;
     --primary-light: #34d399;
-    --neon-green: #6ee7b7;
-    --dark: #0a0b14;
-    --dark-card: #13141f;
-    --dark-soft: #1a1b2e;
-    --gray: #6b7280;
-    --gray-light: #9ca3af;
-    --white: #ffffff;
-    
+    --neon-green:    #6ee7b7;
+    --dark:          #0a0b14;
+    --dark-card:     #13141f;
+    --dark-soft:     #1a1b2e;
+    --gray:          #6b7280;
+    --gray-light:    #9ca3af;
+    --white:         #ffffff;
+
     /* Sombras */
-    --neon-glow: 0 0 20px rgba(16, 185, 129, 0.4);
+    --neon-glow:        0 0 20px rgba(16, 185, 129, 0.4);
     --neon-glow-strong: 0 0 40px rgba(16, 185, 129, 0.6);
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.3);
-    
+    --shadow-sm:        0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-md:        0 4px 16px rgba(0, 0, 0, 0.2);
+    --shadow-lg:        0 8px 32px rgba(0, 0, 0, 0.3);
+
     /* Transições */
-    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition:        0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-smooth: 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-    
+
     /* Espaçamentos */
     --spacing-xs: 0.5rem;
     --spacing-sm: 1rem;
     --spacing-md: 1.5rem;
     --spacing-lg: 2rem;
     --spacing-xl: 3rem;
-    
+
     /* Border Radius */
     --radius-sm: 8px;
     --radius-md: 12px;
@@ -136,12 +136,8 @@ button {
 }
 
 @keyframes logoFloat {
-    0%, 100% { 
-        transform: translateY(0);
-    }
-    50% { 
-        transform: translateY(-10px);
-    }
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-10px); }
 }
 
 .loader-bar {
@@ -176,18 +172,9 @@ button {
 }
 
 @keyframes loading {
-    0% { 
-        width: 0%;
-        opacity: 0.6;
-    }
-    50% {
-        width: 100%;
-        opacity: 1;
-    }
-    100% { 
-        width: 100%;
-        opacity: 0.6;
-    }
+    0%   { width: 0%;   opacity: 0.6; }
+    50%  { width: 100%; opacity: 1;   }
+    100% { width: 100%; opacity: 0.6; }
 }
 
 /* ==========================================
@@ -219,7 +206,7 @@ button {
 .grid-overlay {
     position: absolute;
     inset: 0;
-    background-image: 
+    background-image:
         linear-gradient(rgba(16, 185, 129, 0.02) 1px, transparent 1px),
         linear-gradient(90deg, rgba(16, 185, 129, 0.02) 1px, transparent 1px);
     background-size: 40px 40px;
@@ -227,7 +214,7 @@ button {
 }
 
 @keyframes gridMove {
-    0% { transform: translate(0, 0); }
+    0%   { transform: translate(0, 0); }
     100% { transform: translate(40px, 40px); }
 }
 
@@ -274,8 +261,8 @@ button {
 
 @keyframes float {
     0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(50px, -50px) scale(1.1); }
-    66% { transform: translate(-40px, 40px) scale(0.9); }
+    33%       { transform: translate(50px, -50px) scale(1.1); }
+    66%       { transform: translate(-40px, 40px) scale(0.9); }
 }
 
 /* ==========================================
@@ -289,7 +276,7 @@ button {
 }
 
 /* ==========================================
-   HEADER - ✅ CORRIGIDO
+   HEADER — ✅ CORRIGIDO
    ========================================== */
 .header {
     position: fixed;
@@ -355,7 +342,7 @@ button {
     background-clip: text;
 }
 
-/* Nav Links - ✅ CORRIGIDO */
+/* Nav Links */
 .nav-links {
     display: none;
 }
@@ -372,9 +359,12 @@ button {
     color: var(--primary);
 }
 
+/* ✅ FIX EXTRA #8 — Bug CSS corrigido: "color: var #ffffff" era sintaxe inválida.
+   O browser ignorava a regra silenciosamente, deixando o texto sem cor definida.
+   Corrigido para color: var(--dark) que é a cor escura adequada sobre o botão verde. */
 .btn-nav {
     background: var(--primary);
-    color: var #ffffff;
+    color: var(--dark);
     padding: 0.625rem 1.25rem;
     border-radius: var(--radius-sm);
     font-weight: 700;
@@ -392,7 +382,7 @@ button {
     transform: translateY(0);
 }
 
-/* Mobile Toggle - ✅ CORRIGIDO */
+/* Mobile Toggle */
 .mobile-toggle {
     display: flex;
     flex-direction: column;
@@ -437,7 +427,7 @@ button {
     transform: rotate(-45deg) translate(7px, -7px);
 }
 
-/* Mobile Menu - ✅ CORRIGIDO */
+/* Mobile Menu */
 .nav-links.active {
     display: flex !important;
     flex-direction: column;
@@ -458,26 +448,17 @@ button {
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     z-index: 999;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 .nav-links.active::-webkit-scrollbar {
     display: none;
 }
 
-.nav-links.active {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
-
 @keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .nav-links.active a {
@@ -614,14 +595,8 @@ button {
 }
 
 @keyframes pulse {
-    0%, 100% { 
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% { 
-        opacity: 0.6;
-        transform: scale(1.2);
-    }
+    0%, 100% { opacity: 1; transform: scale(1);   }
+    50%       { opacity: 0.6; transform: scale(1.2); }
 }
 
 .hero-title {
@@ -674,14 +649,8 @@ button {
 }
 
 @keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ==========================================
@@ -1028,7 +997,7 @@ button {
 }
 
 @keyframes shimmer {
-    0% { transform: translateX(-100%); }
+    0%   { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
 }
 
@@ -1350,24 +1319,24 @@ button {
 }
 
 /* ==========================================
-   RESPONSIVE - TABLET (768px+) - ✅ CORRIGIDO
+   RESPONSIVE — TABLET (768px+) — ✅ CORRIGIDO
    ========================================== */
 @media (min-width: 768px) {
     .container {
         padding: 0 2rem;
     }
-    
-    /* ✅ Menu Desktop */
+
+    /* Menu Desktop */
     .mobile-toggle {
         display: none;
     }
-    
+
     .nav-links {
         display: flex;
         gap: 2rem;
         align-items: center;
     }
-    
+
     /* Resetar estilos mobile */
     .nav-links a {
         background: none !important;
@@ -1378,77 +1347,77 @@ button {
         display: inline !important;
         border-radius: 0 !important;
     }
-    
+
     .nav-links a:hover {
         transform: none !important;
     }
-    
+
     .nav-links .btn-nav {
         background: var(--primary) !important;
         padding: 0.625rem 1.25rem !important;
         border-radius: var(--radius-sm) !important;
         display: inline-flex !important;
     }
-    
+
     .hero-plans {
         padding: 8rem 0 4rem;
     }
-    
+
     .hero-title {
         font-size: 3rem;
     }
-    
+
     .hero-description {
         font-size: 1.125rem;
     }
-    
+
     .mobile-only {
         display: none;
     }
-    
+
     .plans-track {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 1.5rem;
     }
-    
+
     .plan-card {
         min-width: auto;
         padding: 1.75rem 1.5rem;
     }
-    
+
     .plan-card:hover {
         transform: translateY(-8px) scale(1.02);
         box-shadow: 0 16px 40px rgba(16, 185, 129, 0.2);
     }
-    
+
     .plan-card.featured {
         transform: scale(1.05);
     }
-    
+
     .plan-card.featured:hover {
         transform: scale(1.08) translateY(-8px);
     }
-    
+
     .benefits-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 1.5rem;
     }
-    
+
     .footer-content {
         grid-template-columns: 2fr 1fr 1fr 1fr;
         gap: 2rem;
     }
-    
+
     .footer-brand,
     .footer-links {
         text-align: left;
     }
-    
+
     .footer-brand .logo {
         justify-content: flex-start;
     }
-    
+
     .purchase-notification {
         left: 2rem;
         right: auto;
@@ -1457,37 +1426,37 @@ button {
 }
 
 /* ==========================================
-   RESPONSIVE - DESKTOP (1024px+)
+   RESPONSIVE — DESKTOP (1024px+)
    ========================================== */
 @media (min-width: 1024px) {
     .container {
         padding: 0 3rem;
     }
-    
+
     .hero-plans {
         padding: 10rem 0 5rem;
     }
-    
+
     .hero-title {
         font-size: 3.5rem;
     }
-    
+
     .plans-track {
         gap: 2rem;
     }
-    
+
     .plan-card {
         padding: 2rem 1.75rem;
     }
-    
+
     .benefits-grid {
         grid-template-columns: repeat(4, 1fr);
     }
-    
+
     .section-title {
         font-size: 2.75rem;
     }
-    
+
     .cta-content h2 {
         font-size: 2.75rem;
     }
@@ -1504,23 +1473,10 @@ button {
 /* ==========================================
    SCROLLBAR
    ========================================== */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: var(--dark);
-}
-
-::-webkit-scrollbar-thumb {
-    background: var(--primary);
-    border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--primary-light);
-}
+::-webkit-scrollbar       { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--dark); }
+::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--primary-light); }
 
 /* ==========================================
    SELECTION
@@ -1560,5 +1516,27 @@ button, a {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
+    }
+}
+
+/* --- Ripple Effect --- */
+.btn-plan,
+.btn-primary,
+.btn-nav {
+    position: relative;
+    overflow: hidden;
+}
+.btn-ripple-effect {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+    animation: ripple 0.6s ease-out forwards;
+    transform: scale(0);
+}
+@keyframes ripple {
+    to {
+        transform: scale(2.5);
+        opacity: 0;
     }
 }

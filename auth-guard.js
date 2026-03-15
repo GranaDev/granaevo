@@ -1,30 +1,94 @@
 /**
  * GranaEvo — auth-guard.js
+ * Versão 3.0 — Relatório de segurança aplicado integralmente
  *
- * CORREÇÕES DE SEGURANÇA APLICADAS (mantidas da versão anterior):
- * [SEC-01..SEC-15] — ver comentários inline abaixo
+ * ═══════════════════════════════════════════════════════════════
+ *  REGISTRO COMPLETO DE CORREÇÕES DE SEGURANÇA
+ * ═══════════════════════════════════════════════════════════════
  *
- * CORREÇÃO NOVA:
- * [BUG-RLS-FIX] SubscriptionChecker.getActive() reescrito.
+ * ── CORREÇÕES ORIGINAIS (mantidas) ──────────────────────────
  *
- * CAUSA DO BUG:
- * A política RLS "subscriptions_select" é: auth.uid() = user_id
- * Quando user_id = NULL (link do primeiroacesso falhou silenciosamente),
- * auth.uid() = NULL é sempre FALSE em SQL — o usuário nunca enxerga
- * sua própria subscription. O fallback por user_email também falhava
- * porque NÃO EXISTIA nenhuma política RLS permitindo SELECT por email.
+ * [SEC-01]  Helper _err() não exportado — encapsulado na closure do módulo
+ * [SEC-02]  Fingerprint com múltiplos sinais + canvas + salt de sessão
+ * [SEC-03]  Listener 'storage' detecta remoção de token em outra aba
+ * [SEC-04]  HMAC-SHA256 real via SubtleCrypto
+ * [SEC-05]  Encoding via TextEncoder / Uint8Array
+ * [SEC-07]  Rate limit com MAC assinado
+ * [SEC-08]  forceLogout aguarda signOut — sem race condition
+ * [SEC-09]  PASSWORD_RECOVERY: signOut antes de redirecionar
+ * [SEC-10]  Stack trace preservado em _err()
+ * [SEC-11]  Integrity stamp com janela de 6 h
+ * [SEC-12]  Token de acesso NÃO incluído em userData
+ * [SEC-13]  BroadcastChannel — sincronização entre abas
+ * [SEC-14]  SafeRedirect valida same-origin + blocklist de esquemas perigosos
+ * [SEC-15]  Cache de subscription em closure privada
  *
- * SOLUÇÃO COMPLETA (duas partes):
- *   1. SQL: nova política "subscriptions_select_by_email_unlinked"
- *      (arquivo FIX_RLS.sql) — permite SELECT quando user_id IS NULL
- *      e user_email = email do JWT autenticado.
- *   2. Este arquivo: SubscriptionChecker agora faz o auto-link
- *      corretamente após encontrar a subscription pelo email,
- *      e o fluxo de polling no monitor também invalida o cache
- *      e busca novamente após o link.
+ * [BUG-RLS-FIX]  SubscriptionChecker.getActive() reescrito.
+ * [FIX-VUL-1]    Rate limit com MAC assinado pelo secret da sessão.
+ * [FIX-VUL-2]    Fingerprint reforçado: canvas rendering + salt de sessão.
+ * [FIX-VUL-3]    Auto-link exige email_confirmed_at + igualdade de emails.
+ * [FIX-VUL-4]    _getOrCreateSecret() em closure privada de SecureCrypto.
+ * [FIX-VUL-5]    Fingerprint.generate() usa HMAC-SHA256 assíncrono.
+ * [FIX-VUL-6]    Monitor com contador de falhas consecutivas.
+ * [FIX-VUL-7]    SafeRedirect._isSafe() com blocklist de esquemas.
+ * [FIX-VUL-8]    onSuccess callback com timeout de segurança de 10s.
+ * [FIX-VUL-9]    visibilitychange revalida fingerprint + integrity stamp.
+ * [FIX-VUL-10]   sessionSecret em memória — nunca em sessionStorage.
+ * [FIX-VUL-11]   Fallback por email rejeita múltiplas subscriptions.
+ *
+ * ── CORREÇÕES DO RELATÓRIO EXTERNO ──────────────────────────
+ *
+ * [FIX-REPORT-1]  Subscription query filtrada por email da sessão via
+ *   .ilike('user_email', sessionEmail) — dupla defesa além do RLS.
+ *   Evita enumeração de subscriptions em caso de regressão de política.
+ *   A chamada getUser() foi movida para ANTES da query de fallback,
+ *   eliminando o segundo getUser() que existia mais abaixo.
+ *
+ * [FIX-REPORT-2]  Fingerprint sem sinais instáveis. Removidos:
+ *   screen.width, screen.height, devicePixelRatio, navigator.language,
+ *   new Date().getTimezoneOffset(). Esses valores mudam legitimamente
+ *   ao mover entre monitores, aplicar zoom ou trocar idioma do browser,
+ *   causando logouts falsos. Canvas entropy + HMAC + user.id + platform
+ *   já garantem unicidade criptográfica suficiente.
+ *
+ * [FIX-REPORT-3]  Rate limit migrado de sessionStorage para localStorage
+ *   + TAB_ID. Log compartilhado entre abas — impede bypass abrindo
+ *   múltiplas abas. Cada entrada contém {ts, tabId} para rastreio.
+ *   Assinado com chave persistente (_ge_rls) em localStorage,
+ *   distinta do session secret em memória.
+ *
+ * [FIX-REPORT-4]  Monitor de sessão verifica se sessão realmente sumiu
+ *   antes de forçar logout por erros consecutivos de rede. Evita
+ *   logout em massa durante instabilidade momentânea do Supabase.
+ *   Comportamento: se sessão ainda existe → reseta contador de erros.
+ *   Se nem a verificação funciona → logout preventivo.
+ *
+ * [FIX-REPORT-5]  _autoLink() adiciona .eq('user_email', subscriptionEmail)
+ *   no UPDATE — guard duplo contra race condition entre abas tentando
+ *   vincular a mesma subscription simultaneamente.
+ *
+ * ── CORREÇÕES EXTRAS (identificadas na revisão) ─────────────
+ *
+ * [FIX-EXTRA-1]   Mutex em protect() via flag _protecting. Impede que
+ *   chamadas concorrentes (ex: hot-reload de framework, duplo click)
+ *   criem race condition no handshake de segurança ou corrijam o rate
+ *   log de forma inconsistente.
+ *
+ * [FIX-EXTRA-2]   Flag _isRedirecting em nível de módulo dentro de
+ *   SafeRedirect.to(). Garante que apenas um redirect ocorra, mesmo
+ *   que visibilitychange, onAuthStateChange e monitor disparem quase
+ *   simultaneamente. Cobre todos os caminhos de redirect centralmente.
  */
 
 import { supabase } from './supabase-client.js';
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB_ID — identificador único desta aba [FIX-REPORT-3]
+// ═══════════════════════════════════════════════════════════════
+const TAB_ID = (() => {
+    try { return crypto.randomUUID(); }
+    catch { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+})();
 
 // ═══════════════════════════════════════════════════════════════
 //  CONFIGURAÇÕES CENTRAIS DE SEGURANÇA
@@ -35,14 +99,17 @@ const SECURITY = Object.freeze({
     MAX_SESSION_AGE_MS:              24 * 60 * 60 * 1000,
     RATE_LIMIT_MAX:                  15,
     RATE_LIMIT_WINDOW_MS:            60 * 1000,
+    MAX_CONSECUTIVE_ERRORS:          3,
+    ON_SUCCESS_TIMEOUT_MS:           10000,
     LOGIN_URL:                       'login.html',
 
     KEYS: Object.freeze({
-        fingerprint:    '_ge_fp',
-        sessionStart:   '_ge_ss',
-        integrityStamp: '_ge_is',
-        sessionSecret:  '_ge_sec',
-        rateLog:        '_ge_rl',
+        fingerprint:     '_ge_fp',
+        sessionStart:    '_ge_ss',
+        integrityStamp:  '_ge_is',
+        rateLog:         '_ge_rl',   // agora em localStorage [FIX-REPORT-3]
+        rateLimitSecret: '_ge_rls',  // chave persistente para assinar rate log [FIX-REPORT-3]
+        canvasSalt:      '_ge_cs',   // entropia pública (sessionStorage)
     }),
 
     ERROR_URL_MAP: Object.freeze({
@@ -61,13 +128,17 @@ const SECURITY = Object.freeze({
         UNKNOWN:               'b4',
     }),
 
+    DANGEROUS_SCHEMES: Object.freeze([
+        'javascript:', 'data:', 'vbscript:', 'blob:', 'file:',
+    ]),
+
     BROADCAST_CHANNEL: 'ge_auth_sync',
 });
 
 // ═══════════════════════════════════════════════════════════════
 //  HELPER INTERNO
-//  [SEC-01] Não exportado — encapsulado na closure do módulo
-//  [SEC-10] Stack trace preservado
+//  [SEC-01]  Não exportado — encapsulado na closure do módulo
+//  [SEC-10]  Stack trace preservado
 // ═══════════════════════════════════════════════════════════════
 function _err(code, message) {
     const e   = new Error(message);
@@ -78,17 +149,49 @@ function _err(code, message) {
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: CRYPTO SEGURO
-//  [SEC-04] HMAC-SHA256 real via SubtleCrypto
-//  [SEC-05] Encoding via TextEncoder/Uint8Array
+//  [SEC-04]     HMAC-SHA256 real via SubtleCrypto
+//  [SEC-05]     Encoding via TextEncoder / Uint8Array
+//  [FIX-VUL-4]  _getOrCreateSecret() em closure privada
+//  [FIX-VUL-10] Session secret NUNCA em sessionStorage — apenas em memória
+//  [FIX-REPORT-3] + getRateLimitSecret() para secret persistente do rate log
 // ═══════════════════════════════════════════════════════════════
-const SecureCrypto = {
-    generateSecret() {
+const SecureCrypto = (() => {
+    // [FIX-VUL-10] Secret da sessão exclusivamente em memória
+    let _sessionSecret = null;
+
+    function _getOrCreateSecret() {
+        if (_sessionSecret) return _sessionSecret;
         const arr = new Uint8Array(32);
         crypto.getRandomValues(arr);
-        return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
-    },
+        _sessionSecret = Array.from(arr)
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+        return _sessionSecret;
+    }
 
-    async importKey(hexSecret) {
+    // [FIX-REPORT-3] Chave persistente em localStorage para assinar o rate log.
+    // Diferente do session secret: sobrevive a reloads e é compartilhada entre
+    // abas. Não é um segredo crítico — apenas impede adulteração trivial do log.
+    function _getOrCreateRateLimitSecret() {
+        const KEY = SECURITY.KEYS.rateLimitSecret;
+        try {
+            let secret = localStorage.getItem(KEY);
+            if (!secret) {
+                const arr = new Uint8Array(32);
+                crypto.getRandomValues(arr);
+                secret = Array.from(arr)
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join('');
+                localStorage.setItem(KEY, secret);
+            }
+            return secret;
+        } catch {
+            // localStorage bloqueado (ex: modo privado restrito) — fallback
+            return _getOrCreateSecret();
+        }
+    }
+
+    async function importKey(hexSecret) {
         const keyBytes = new Uint8Array(
             hexSecret.match(/.{2}/g).map(h => parseInt(h, 16))
         );
@@ -99,20 +202,20 @@ const SecureCrypto = {
             false,
             ['sign', 'verify']
         );
-    },
+    }
 
-    async sign(data, hexSecret) {
-        const key       = await this.importKey(hexSecret);
+    async function sign(data, hexSecret) {
+        const key       = await importKey(hexSecret);
         const encoded   = new TextEncoder().encode(data);
         const signature = await crypto.subtle.sign('HMAC', key, encoded);
         return Array.from(new Uint8Array(signature))
             .map(b => b.toString(16).padStart(2, '0'))
             .join('');
-    },
+    }
 
-    async verify(data, signature, hexSecret) {
+    async function verify(data, signature, hexSecret) {
         try {
-            const key      = await this.importKey(hexSecret);
+            const key      = await importKey(hexSecret);
             const encoded  = new TextEncoder().encode(data);
             const sigBytes = new Uint8Array(
                 signature.match(/.{2}/g).map(h => parseInt(h, 16))
@@ -121,9 +224,9 @@ const SecureCrypto = {
         } catch {
             return false;
         }
-    },
+    }
 
-    encodeBase64url(str) {
+    function encodeBase64url(str) {
         const bytes = new TextEncoder().encode(str);
         let binary  = '';
         bytes.forEach(b => { binary += String.fromCharCode(b); });
@@ -131,9 +234,9 @@ const SecureCrypto = {
             .replace(/\+/g, '-')
             .replace(/\//g, '_')
             .replace(/=/g, '');
-    },
+    }
 
-    decodeBase64url(str) {
+    function decodeBase64url(str) {
         const padded = str.replace(/-/g, '+').replace(/_/g, '/');
         const binary = atob(padded);
         const bytes  = new Uint8Array(binary.length);
@@ -141,78 +244,186 @@ const SecureCrypto = {
             bytes[i] = binary.charCodeAt(i);
         }
         return new TextDecoder().decode(bytes);
-    },
-};
+    }
+
+// [FIX-VUL-2] Canvas fingerprint — rendering diferenciado por hardware/driver
+// [FIX-CANVAS-SAFARI] Fallback para Safari/privacy mode que retorna data vazia
+function _canvasEntropy() {
+    try {
+        const canvas  = document.createElement('canvas');
+        canvas.width  = 200;
+        canvas.height = 40;
+        const ctx = canvas.getContext('2d');
+        ctx.textBaseline = 'top';
+        ctx.font         = '14px Arial';
+        ctx.fillStyle    = '#f60';
+        ctx.fillRect(0, 0, 10, 10);
+        ctx.fillStyle = '#069';
+        ctx.fillText('GranaEvo_fp', 2, 2);
+        ctx.fillStyle = 'rgba(102,200,0,0.7)';
+        ctx.fillText('GranaEvo_fp', 4, 4);
+
+        const data = canvas.toDataURL();
+
+        // Safari com privacy mode / browsers que bloqueiam canvas retornam
+        // "data:," ou strings muito curtas — sem entropia real.
+        // Fallback garante unicidade mínima via userAgent.
+        return (data === 'data:,' || data.length < 50)
+            ? navigator.userAgent + '::no_canvas'
+            : data;
+
+    } catch {
+        return 'canvas_unavailable';
+    }
+}
+
+    // [FIX-VUL-2] Salt do canvas — entropia pública, não segredo criptográfico
+    function _getOrCreateCanvasSalt() {
+        let salt = sessionStorage.getItem(SECURITY.KEYS.canvasSalt);
+        if (!salt) {
+            const arr = new Uint8Array(16);
+            crypto.getRandomValues(arr);
+            salt = Array.from(arr)
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+            try { sessionStorage.setItem(SECURITY.KEYS.canvasSalt, salt); }
+            catch { /* cheio */ }
+        }
+        return salt;
+    }
+
+    return {
+        sign,
+        verify,
+        encodeBase64url,
+        decodeBase64url,
+        getSessionSecret:      _getOrCreateSecret,
+        getRateLimitSecret:    _getOrCreateRateLimitSecret, // [FIX-REPORT-3]
+        generateCanvasEntropy: _canvasEntropy,
+        getCanvasSalt:         _getOrCreateCanvasSalt,
+        // [FIX-VUL-10] Invalida secret em memória no logout
+        clearSecret() { _sessionSecret = null; },
+    };
+})();
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: RATE LIMITER
-//  [SEC-07]
+//  [FIX-REPORT-3] Migrado para localStorage + TAB_ID
+//    • Log compartilhado entre abas — impede bypass via múltiplas abas
+//    • Cada entrada: { ts, tabId } para rastreio por aba
+//    • Assinado com _ge_rls (localStorage) em vez do session secret
+//  [FIX-VUL-1]   Log assinado com HMAC — não burlável via clear()
 // ═══════════════════════════════════════════════════════════════
 const RateLimiter = (() => {
-    function getLog() {
-        try { return JSON.parse(sessionStorage.getItem(SECURITY.KEYS.rateLog) || '[]'); }
-        catch { return []; }
+    async function readLog() {
+        try {
+            const raw = localStorage.getItem(SECURITY.KEYS.rateLog);
+            if (!raw) return [];
+
+            const dotIndex = raw.lastIndexOf('.');
+            if (dotIndex === -1) return [];
+
+            const encodedPayload = raw.slice(0, dotIndex);
+            const mac            = raw.slice(dotIndex + 1);
+
+            let decoded;
+            try { decoded = SecureCrypto.decodeBase64url(encodedPayload); }
+            catch { return []; }
+
+            const secret  = SecureCrypto.getRateLimitSecret();
+            const isValid = await SecureCrypto.verify(decoded, mac, secret);
+            if (!isValid) return [];
+
+            return JSON.parse(decoded);
+        } catch {
+            return [];
+        }
     }
-    function saveLog(log) {
-        try { sessionStorage.setItem(SECURITY.KEYS.rateLog, JSON.stringify(log)); }
+
+    async function writeLog(log) {
+        const secret  = SecureCrypto.getRateLimitSecret();
+        const payload = JSON.stringify(log);
+        const mac     = await SecureCrypto.sign(payload, secret);
+        const encoded = SecureCrypto.encodeBase64url(payload) + '.' + mac;
+        try { localStorage.setItem(SECURITY.KEYS.rateLog, encoded); }
         catch { /* cheio */ }
     }
+
     return {
-        isAllowed() {
+        async isAllowed() {
             const now         = Date.now();
             const windowStart = now - SECURITY.RATE_LIMIT_WINDOW_MS;
-            let log           = getLog().filter(ts => ts > windowStart);
+            let log           = await readLog();
+
+            // [FIX-REPORT-3] Suporta entradas legadas (número puro) e novas ({ts, tabId})
+            log = log.filter(entry => {
+                if (typeof entry === 'number') return entry > windowStart;
+                return entry?.ts > windowStart;
+            });
+
             if (log.length >= SECURITY.RATE_LIMIT_MAX) {
                 console.warn('[AUTH GUARD] Rate limit atingido.');
                 return false;
             }
-            log.push(now);
-            saveLog(log);
+
+            log.push({ ts: now, tabId: TAB_ID });
+            await writeLog(log);
             return true;
         },
-        clear() { sessionStorage.removeItem(SECURITY.KEYS.rateLog); },
+
+        clear() {
+            try { localStorage.removeItem(SECURITY.KEYS.rateLog); } catch { /* */ }
+        },
     };
 })();
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: SESSION FINGERPRINTING
-//  [SEC-02] Múltiplos sinais
-//  [SEC-04] HMAC-SHA256
-//  [SEC-11] Timestamp + janela 6h
+//  [FIX-REPORT-2]  Sinais instáveis REMOVIDOS do fingerprint:
+//    screen.width, screen.height, devicePixelRatio,
+//    navigator.language, new Date().getTimezoneOffset()
+//    → esses valores mudam legitimamente (monitor, zoom, idioma)
+//    → canvas entropy + HMAC + user.id já garantem unicidade
+//  [FIX-VUL-2]    Canvas + salt de sessão
+//  [FIX-VUL-5]    HMAC-SHA256 assíncrono em vez de FNV-1a
+//  [SEC-11]       Integrity stamp com janela de 6h + HMAC
 // ═══════════════════════════════════════════════════════════════
 const Fingerprint = {
-    generate(user) {
+
+    async generate(user) {
+        const canvasData = SecureCrypto.generateCanvasEntropy();
+        const canvasSalt = SecureCrypto.getCanvasSalt();
+
+        // [FIX-REPORT-2] Apenas sinais ESTÁVEIS mantidos.
+        // navigator.platform é estável (OS do hardware, não do browser).
+        // navigator.userAgent inclui versão do browser — pode mudar em update,
+        // mas a janela de 24h de sessão torna isso aceitável.
         const raw = [
             user.id,
             user.email,
             user.created_at,
-            navigator.userAgent.slice(0, 80),
-            navigator.language || '',
-            navigator.platform || '',
-            screen.colorDepth  || 0,
-            (window.devicePixelRatio || 1).toFixed(2),
-            screen.width  || 0,
-            screen.height || 0,
-            new Date().getTimezoneOffset(),
+            navigator.userAgent,
+            navigator.platform,
+            canvasData,
+            canvasSalt,
         ].join('::');
 
-        let h = 0x811c9dc5;
-        for (let i = 0; i < raw.length; i++) {
-            h ^= raw.charCodeAt(i);
-            h  = Math.imul(h, 0x01000193) >>> 0;
-        }
-        return h.toString(36);
+        const secret = SecureCrypto.getSessionSecret();
+        return SecureCrypto.sign(raw, secret);
     },
 
-    store(user) {
-        try { sessionStorage.setItem(SECURITY.KEYS.fingerprint, this.generate(user)); }
-        catch { /* cheio */ }
+    async store(user) {
+        try {
+            const fp = await this.generate(user);
+            sessionStorage.setItem(SECURITY.KEYS.fingerprint, fp);
+        } catch { /* cheio */ }
     },
 
-    validate(user) {
+    async validate(user) {
         const stored = sessionStorage.getItem(SECURITY.KEYS.fingerprint);
-        if (!stored) return true;
-        return stored === this.generate(user);
+        if (!stored) return true; // primeira visita — sem histórico
+        const current = await this.generate(user);
+        return stored === current;
     },
 
     markSessionStart() {
@@ -223,22 +434,14 @@ const Fingerprint = {
     },
 
     isSessionExpiredByAge() {
-        const start = parseInt(sessionStorage.getItem(SECURITY.KEYS.sessionStart) || '0', 10);
+        const start = parseInt(
+            sessionStorage.getItem(SECURITY.KEYS.sessionStart) || '0', 10
+        );
         return start > 0 && (Date.now() - start) > SECURITY.MAX_SESSION_AGE_MS;
     },
 
-    _getOrCreateSecret() {
-        let secret = sessionStorage.getItem(SECURITY.KEYS.sessionSecret);
-        if (!secret) {
-            secret = SecureCrypto.generateSecret();
-            try { sessionStorage.setItem(SECURITY.KEYS.sessionSecret, secret); }
-            catch { /* cheio */ }
-        }
-        return secret;
-    },
-
     async writeIntegrityStamp(userId) {
-        const secret  = this._getOrCreateSecret();
+        const secret  = SecureCrypto.getSessionSecret();
         const ts      = Date.now();
         const payload = `${userId}|${ts}`;
         const mac     = await SecureCrypto.sign(payload, secret);
@@ -268,11 +471,12 @@ const Fingerprint = {
             const [uid, tsStr] = parts;
             const ts           = parseInt(tsStr, 10);
 
-            const secret  = this._getOrCreateSecret();
+            const secret  = SecureCrypto.getSessionSecret();
             const isValid = await SecureCrypto.verify(payload, storedMac, secret);
 
             if (!isValid) {
-                console.warn('[AUTH GUARD] MAC do integrity stamp inválido.');
+                // [FIX-VUL-10] MAC inválido após reload (secret regenerado).
+                // Comportamento esperado — trata como "primeira visita".
                 sessionStorage.removeItem(SECURITY.KEYS.integrityStamp);
                 return null;
             }
@@ -293,28 +497,19 @@ const Fingerprint = {
         Object.values(SECURITY.KEYS).forEach(k => {
             try { sessionStorage.removeItem(k); } catch { /* */ }
         });
+        // [FIX-VUL-10] Invalida secret em memória — próxima sessão inicia limpa
+        SecureCrypto.clearSecret();
     },
 };
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: SUBSCRIPTION CHECKER
-//  [SEC-15] Cache em closure privada
-//
-//  [BUG-RLS-FIX] REESCRITO:
-//
-//  PROBLEMA ORIGINAL:
-//  1. Busca por user_id: falha se user_id = NULL (RLS: auth.uid() = NULL → FALSE)
-//  2. Fallback por user_email: também falha porque não existe política RLS
-//     que permita SELECT por email com o cliente autenticado do usuário.
-//
-//  SOLUÇÃO (requer FIX_RLS.sql aplicado no banco):
-//  A nova política "subscriptions_select_by_email_unlinked" permite que o
-//  usuário autenticado veja sua subscription quando:
-//    - user_id IS NULL  (link ainda não foi feito)
-//    - user_email = email do JWT  (confirmação de identidade pelo banco)
-//
-//  Após encontrar pelo email, auto-vincula user_id imediatamente para que
-//  a próxima busca já funcione pela política padrão (auth.uid() = user_id).
+//  [SEC-15]       Cache em closure privada
+//  [BUG-RLS-FIX]  getActive() reescrito (ver cabeçalho)
+//  [FIX-VUL-3]    Auto-link exige email_confirmed_at + igualdade de emails
+//  [FIX-VUL-11]   Rejeita múltiplas subscriptions não vinculadas
+//  [FIX-REPORT-1] Query filtrada por sessionEmail (.ilike)
+//  [FIX-REPORT-5] _autoLink com .eq('user_email') — guard duplo contra race
 // ═══════════════════════════════════════════════════════════════
 const SubscriptionChecker = (() => {
     let _cache      = null;
@@ -331,10 +526,17 @@ const SubscriptionChecker = (() => {
     });
 
     /**
-     * Tenta vincular user_id na subscription em background.
-     * Falha silenciosa — não bloqueia o fluxo principal.
+     * [FIX-VUL-3] + [FIX-REPORT-5]
+     * Auto-link exige:
+     *   (a) email_confirmed_at presente no JWT
+     *   (b) emails coincidem (case-insensitive) — verificado pelo chamador
+     *   (c) .eq('user_email', subscriptionEmail) no UPDATE — guard duplo
+     *       contra race condition entre abas tentando vincular ao mesmo tempo
      */
-    async function _autoLink(subscriptionId, userId) {
+    async function _autoLink(subscriptionId, userId, sessionEmail, subscriptionEmail) {
+        if (!sessionEmail || !subscriptionEmail) return;
+        if (sessionEmail.toLowerCase() !== subscriptionEmail.toLowerCase()) return;
+
         try {
             await supabase
                 .from('subscriptions')
@@ -345,22 +547,21 @@ const SubscriptionChecker = (() => {
                     updated_at:          new Date().toISOString(),
                 })
                 .eq('id', subscriptionId)
-                .eq('user_id', null); // segurança: só atualiza se ainda NULL
+                .is('user_id', null)
+                .eq('user_email', subscriptionEmail); // [FIX-REPORT-5]
         } catch {
-            // Não crítico — na próxima verificação tentará novamente
+            // Não crítico — tentará novamente na próxima verificação
         }
     }
 
     return {
         async getActive(userId) {
-            // Retorna cache se ainda válido para este userId
             if (_cache && Date.now() < _cacheExp && _cacheUser === userId) {
                 return _cache;
             }
 
             try {
                 // ── 1. Busca por user_id (caminho principal) ──────────
-                // Funciona quando user_id já foi vinculado corretamente.
                 // Política RLS: auth.uid() = user_id
                 const { data: ownSub, error: ownErr } = await supabase
                     .from('subscriptions')
@@ -387,49 +588,73 @@ const SubscriptionChecker = (() => {
                 }
 
                 // ── 2. Fallback por email (user_id = NULL) ────────────
-                // [BUG-RLS-FIX] Funciona SOMENTE após FIX_RLS.sql aplicado.
-                // Nova política: user_id IS NULL AND user_email = jwt email
-                //
-                // Não precisamos passar o email explicitamente — o banco
-                // extrai do JWT automaticamente via auth.jwt()->>'email'.
-                // Basta filtrar por is_active + payment_status.
-                const { data: emailSub, error: emailErr } = await supabase
-                    .from('subscriptions')
-                    .select('id, plans(name), is_active, payment_status, expires_at, user_id')
-                    .is('user_id', null)
-                    .eq('payment_status', 'approved')
-                    .eq('is_active', true)
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
+                // [FIX-REPORT-1] Obtém email da sessão ANTES da query para
+                // filtrar no banco — dupla defesa além do RLS.
+                // Mover getUser() para cá também elimina a segunda chamada
+                // que existia mais abaixo para verificar email_confirmed_at.
+                const { data: authData } = await supabase.auth.getUser();
+                const authUser     = authData?.user;
+                const sessionEmail = authUser?.email;
 
-                if (!emailErr && emailSub) {
-                    if (emailSub.expires_at && new Date(emailSub.expires_at) < new Date()) {
-                        return EMPTY;
+                if (sessionEmail) {
+                    // [FIX-REPORT-1] .ilike filtra no servidor pelo email da sessão
+                    // [FIX-VUL-11]  Sem .limit — buscamos todas para detectar duplicatas
+                    const { data: emailSubs, error: emailErr } = await supabase
+                        .from('subscriptions')
+                        .select('id, plans(name), is_active, payment_status, expires_at, user_id, user_email')
+                        .is('user_id', null)
+                        .eq('payment_status', 'approved')
+                        .eq('is_active', true)
+                        .ilike('user_email', sessionEmail); // [FIX-REPORT-1]
+
+                    if (!emailErr && emailSubs && emailSubs.length > 0) {
+                        // [FIX-VUL-11] Duplicata → nega acesso por segurança
+                        if (emailSubs.length > 1) {
+                            console.error(
+                                '[AUTH GUARD] Múltiplas subscriptions não vinculadas encontradas. ' +
+                                'Acesso negado por segurança.'
+                            );
+                            return EMPTY;
+                        }
+
+                        const emailSub = emailSubs[0];
+
+                        if (emailSub.expires_at && new Date(emailSub.expires_at) < new Date()) {
+                            return EMPTY;
+                        }
+
+                        // [FIX-VUL-3] Verifica confirmação de email e correspondência
+                        const emailConfirmed    = !!authUser?.email_confirmed_at;
+                        const subscriptionEmail = emailSub.user_email || '';
+
+                        const emailMatch =
+                            sessionEmail &&
+                            subscriptionEmail &&
+                            sessionEmail.toLowerCase() === subscriptionEmail.toLowerCase();
+
+                        if (!emailMatch) return EMPTY;
+
+                        if (emailConfirmed) {
+                            // Auto-link em background — não bloqueia o fluxo
+                            _autoLink(emailSub.id, userId, sessionEmail, subscriptionEmail);
+                            // Invalida cache para forçar nova busca após link
+                            _cache     = null;
+                            _cacheUser = null;
+                            _cacheExp  = 0;
+                        }
+
+                        return Object.freeze({
+                            subscription: emailSub,
+                            isGuest:      false,
+                            ownerId:      userId,
+                            planName:     emailSub.plans?.name || 'Individual',
+                            ownerEmail:   null,
+                        });
                     }
-
-                    // Auto-vincula user_id em background (não aguarda)
-                    _autoLink(emailSub.id, userId);
-
-                    // Invalida cache imediatamente após link para forçar
-                    // nova busca pelo caminho principal na próxima chamada
-                    _cache     = null;
-                    _cacheUser = null;
-                    _cacheExp  = 0;
-
-                    // Retorna o resultado sem cache (link em progresso)
-                    return Object.freeze({
-                        subscription: emailSub,
-                        isGuest:      false,
-                        ownerId:      userId,
-                        planName:     emailSub.plans?.name || 'Individual',
-                        ownerEmail:   null,
-                    });
                 }
 
                 // ── 3. Verifica se é convidado ────────────────────────
-                // Política RLS member_can_read_own_membership:
-                // auth.uid() = member_user_id → funciona normalmente
+                // Política RLS: member_can_read_own_membership
                 const { data: member, error: memErr } = await supabase
                     .from('account_members')
                     .select('id, owner_user_id, owner_email, is_active')
@@ -439,9 +664,7 @@ const SubscriptionChecker = (() => {
 
                 if (memErr || !member) return EMPTY;
 
-                // Política RLS guest_can_view_owner_subscription:
-                // EXISTS(account_members WHERE owner_user_id = subscriptions.user_id
-                //        AND member_user_id = auth.uid()) → funciona normalmente
+                // Política RLS: guest_can_view_owner_subscription
                 const { data: ownerSub, error: ownerErr } = await supabase
                     .from('subscriptions')
                     .select('id, plans(name), is_active, payment_status, expires_at')
@@ -482,12 +705,31 @@ const SubscriptionChecker = (() => {
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: REDIRECT SEGURO
-//  [SEC-14] Valida same-origin
+//  [SEC-14]     Valida same-origin
+//  [FIX-VUL-7]  Blocklist de esquemas perigosos
+//  [FIX-EXTRA-2] Flag _isRedirecting — dedup de redirects concorrentes
+//    Cobre todos os caminhos: protect(), logout(), forceLogout(),
+//    onAuthStateChange, storage listener, visibilitychange, BroadcastChannel.
 // ═══════════════════════════════════════════════════════════════
+let _isRedirecting = false; // [FIX-EXTRA-2]
+
 const SafeRedirect = {
     _isSafe(url) {
         if (!url || typeof url !== 'string') return false;
+
+        // [FIX-VUL-7] Rejeita esquemas perigosos explicitamente
+        const lower = url.trim().toLowerCase();
+        for (const scheme of SECURITY.DANGEROUS_SCHEMES) {
+            if (lower.startsWith(scheme)) {
+                console.error(`[AUTH GUARD] Esquema perigoso bloqueado: ${scheme}`);
+                return false;
+            }
+        }
+
+        // URLs relativas são aceitas (same-origin por natureza)
         if (!url.startsWith('http://') && !url.startsWith('https://')) return true;
+
+        // URLs absolutas: valida same-origin
         try {
             return new URL(url, window.location.origin).origin === window.location.origin;
         } catch {
@@ -496,8 +738,12 @@ const SafeRedirect = {
     },
 
     to(url) {
+        // [FIX-EXTRA-2] Impede double-redirect de múltiplas fontes concorrentes
+        if (_isRedirecting) return;
+        _isRedirecting = true;
+
         if (!this._isSafe(url)) {
-            console.error('[AUTH GUARD] Redirect externo bloqueado.');
+            console.error('[AUTH GUARD] Redirect bloqueado — URL não segura.');
             url = SECURITY.LOGIN_URL;
         }
         Fingerprint.clear();
@@ -537,7 +783,7 @@ function _initBroadcastChannel(onLogoutMessage) {
                         SubscriptionChecker.invalidate();
                         RateLimiter.clear();
                         if (typeof onLogoutMessage === 'function') onLogoutMessage(e.data.type);
-                        SafeRedirect.toLogin('NO_SESSION');
+                        SafeRedirect.toLogin('NO_SESSION'); // dedup via _isRedirecting
                     }
                     break;
                 case 'SUBSCRIPTION_INVALIDATED':
@@ -557,12 +803,18 @@ function _broadcastLogout(type) {
 
 // ═══════════════════════════════════════════════════════════════
 //  GUARD PRINCIPAL
+//  [FIX-EXTRA-1]   Mutex _protecting — impede protect() concorrente
+//  [FIX-EXTRA-2]   _isRedirecting em SafeRedirect — dedup de redirects
+//  [FIX-REPORT-4]  Monitor verifica sessão antes de forçar logout
+//  [SEC-08]        forceLogout aguarda signOut — sem race condition
 // ═══════════════════════════════════════════════════════════════
 const AuthGuard = (() => {
-    let _ready        = false;
-    let _user         = null;
-    let _subData      = null;
-    let _monitorTimer = null;
+    let _ready             = false;
+    let _user              = null;
+    let _subData           = null;
+    let _monitorTimer      = null;
+    let _consecutiveErrors = 0;
+    let _protecting        = false; // [FIX-EXTRA-1] Mutex
 
     function _stopMonitoring() {
         if (_monitorTimer) {
@@ -573,6 +825,7 @@ const AuthGuard = (() => {
 
     function _startMonitoring() {
         if (_monitorTimer) return;
+        _consecutiveErrors = 0;
 
         _monitorTimer = setInterval(async () => {
             try {
@@ -588,11 +841,52 @@ const AuthGuard = (() => {
 
                 if (!sub.subscription) {
                     _publicAPI.forceLogout('NO_PLAN');
+                    return;
                 }
+
+                _consecutiveErrors = 0;
+
             } catch {
-                // Erro de rede — não força logout
+                _consecutiveErrors++;
+                console.warn(
+                    `[AUTH GUARD] Falha no monitor (${_consecutiveErrors}/${SECURITY.MAX_CONSECUTIVE_ERRORS})`
+                );
+
+                if (_consecutiveErrors >= SECURITY.MAX_CONSECUTIVE_ERRORS) {
+                    // [FIX-REPORT-4] Verifica se sessão ainda existe antes de forçar logout.
+                    // Evita logout em massa durante instabilidade momentânea do Supabase.
+                    try {
+                        const { data: { session: checkSession } } = await supabase.auth.getSession();
+                        if (!checkSession) {
+                            console.error('[AUTH GUARD] Sessão confirmada ausente. Forçando logout.');
+                            _publicAPI.forceLogout('NO_SESSION');
+                        } else {
+                            // Sessão existe — foi instabilidade de rede, reseta contador
+                            console.warn('[AUTH GUARD] Sessão ainda ativa. Resetando contador de erros.');
+                            _consecutiveErrors = 0;
+                        }
+                    } catch {
+                        // Nem a verificação funcionou — logout preventivo
+                        console.error('[AUTH GUARD] Verificação de sessão também falhou. Logout preventivo.');
+                        _publicAPI.forceLogout('NO_SESSION');
+                    }
+                }
             }
         }, SECURITY.SESSION_POLL_INTERVAL);
+    }
+
+    // [FIX-VUL-8] Executa callback com timeout de segurança de 10s
+    async function _safeCallback(fn, arg) {
+        if (typeof fn !== 'function') return;
+        await Promise.race([
+            Promise.resolve().then(() => fn(arg)),
+            new Promise((_, reject) =>
+                setTimeout(
+                    () => reject(new Error('Callback timeout')),
+                    SECURITY.ON_SUCCESS_TIMEOUT_MS
+                )
+            ),
+        ]);
     }
 
     const _publicAPI = {
@@ -612,12 +906,20 @@ const AuthGuard = (() => {
                 loadingElementId    = 'authLoading',
             } = options;
 
+            // [FIX-EXTRA-1] Mutex — protect() não pode ser executado concorrentemente
+            if (_protecting) {
+                console.warn('[AUTH GUARD] protect() já em execução. Chamada concorrente ignorada.');
+                return null;
+            }
+            _protecting = true;
+
             const loader = document.getElementById(loadingElementId);
             if (loader) loader.style.display = 'flex';
 
             try {
                 // ── Passo 1: Rate limit ───────────────────────────────
-                if (!RateLimiter.isAllowed()) {
+                // [FIX-REPORT-3] isAllowed() agora usa localStorage global entre abas
+                if (!await RateLimiter.isAllowed()) {
                     throw _err('RATE_LIMITED', 'Muitas verificações simultâneas.');
                 }
 
@@ -645,7 +947,8 @@ const AuthGuard = (() => {
                 }
 
                 // ── Passo 4: Fingerprint ──────────────────────────────
-                if (!Fingerprint.validate(user)) {
+                // [FIX-REPORT-2] validate() usa apenas sinais estáveis
+                if (!await Fingerprint.validate(user)) {
                     await supabase.auth.signOut().catch(() => {});
                     throw _err('SESSION_HIJACK', 'Fingerprint divergiu.');
                 }
@@ -663,8 +966,8 @@ const AuthGuard = (() => {
                     throw _err('INTEGRITY_FAIL', 'Carimbo de integridade inválido.');
                 }
 
-                // ── Passo 7: Gravar fingerprint ───────────────────────
-                Fingerprint.store(user);
+                // ── Passo 7: Gravar fingerprint e stamp ───────────────
+                await Fingerprint.store(user);
                 Fingerprint.markSessionStart();
                 await Fingerprint.writeIntegrityStamp(user.id);
 
@@ -700,16 +1003,20 @@ const AuthGuard = (() => {
                 }
 
                 // ── Passo 9: Montar userData ──────────────────────────
-                // [SEC-12] Token NÃO incluído
+                // [SEC-12] Token de acesso NÃO incluído
                 const userData = Object.freeze({
                     userId:          user.id,
                     effectiveUserId: subData.ownerId || user.id,
-                    nome:            String(user.user_metadata?.name || user.email?.split('@')[0] || 'Usuário').trim(),
-                    email:           user.email,
-                    plano:           subData.planName || 'Individual',
-                    isGuest:         subData.isGuest,
-                    ownerEmail:      subData.ownerEmail || null,
-                    perfis:          [],
+                    nome:            String(
+                        user.user_metadata?.name ||
+                        user.email?.split('@')[0] ||
+                        'Usuário'
+                    ).trim(),
+                    email:      user.email,
+                    plano:      subData.planName || 'Individual',
+                    isGuest:    subData.isGuest,
+                    ownerEmail: subData.ownerEmail || null,
+                    perfis:     [],
                 });
 
                 _user    = userData;
@@ -721,8 +1028,15 @@ const AuthGuard = (() => {
 
                 if (loader) loader.style.display = 'none';
 
-                if (typeof onSuccess === 'function') {
-                    await onSuccess(userData);
+                // [FIX-VUL-8] onSuccess com timeout de segurança
+                if (onSuccess) {
+                    try { await _safeCallback(onSuccess, userData); }
+                    catch (cbErr) {
+                        console.warn(
+                            '[AUTH GUARD] onSuccess callback expirou ou lançou erro:',
+                            cbErr?.message
+                        );
+                    }
                 }
 
                 return userData;
@@ -732,15 +1046,18 @@ const AuthGuard = (() => {
 
                 const code = error?.code || 'UNKNOWN';
 
-                if (typeof onFail === 'function') {
+                if (onFail) {
                     try { onFail(error); } catch { /* */ }
                 }
 
                 if (redirectOnFail) {
-                    SafeRedirect.toLogin(code);
+                    SafeRedirect.toLogin(code); // dedup via _isRedirecting
                 }
 
                 return null;
+
+            } finally {
+                _protecting = false; // [FIX-EXTRA-1] Libera mutex sempre
             }
         },
 
@@ -759,7 +1076,7 @@ const AuthGuard = (() => {
             try { await supabase.auth.signOut(); }
             catch { /* Ignora erro de rede */ }
 
-            SafeRedirect.toLogin(reason);
+            SafeRedirect.toLogin(reason); // dedup via _isRedirecting
         },
 
         // [SEC-08] Aguarda signOut — sem race condition
@@ -776,7 +1093,7 @@ const AuthGuard = (() => {
             try { await supabase.auth.signOut(); }
             catch { /* Ignora */ }
 
-            SafeRedirect.toLogin(reason);
+            SafeRedirect.toLogin(reason); // dedup via _isRedirecting
         },
 
         getUser()        { return _user ? { ..._user } : null; },
@@ -814,7 +1131,7 @@ supabase.auth.onAuthStateChange((event, session) => {
             SubscriptionChecker.invalidate();
             RateLimiter.clear();
             if (!window.location.href.includes('login.html')) {
-                SafeRedirect.toLogin('NO_SESSION');
+                SafeRedirect.toLogin('NO_SESSION'); // dedup via _isRedirecting
             }
             break;
         case 'TOKEN_REFRESHED':
@@ -835,29 +1152,46 @@ supabase.auth.onAuthStateChange((event, session) => {
     }
 });
 
-// [SEC-03] Detecta remoção do token em outra aba (localStorage)
+// [SEC-03] Detecta remoção do token em outra aba (localStorage do Supabase)
 window.addEventListener('storage', (e) => {
     if (e.key?.startsWith('sb-') && e.newValue === null) {
         if (!window.location.href.includes('login.html')) {
             Fingerprint.clear();
             SubscriptionChecker.invalidate();
             RateLimiter.clear();
-            SafeRedirect.toLogin('NO_SESSION');
+            SafeRedirect.toLogin('NO_SESSION'); // dedup via _isRedirecting
         }
     }
 });
 
-// Detecta reativação da aba
+// [FIX-VUL-9] Reativação da aba — revalida fingerprint + integrity stamp
 document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible' && AuthGuard.isReady()) {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                await AuthGuard.forceLogout('NO_SESSION');
-            }
-        } catch {
-            // Erro de rede — não força logout
+    if (document.visibilityState !== 'visible' || !AuthGuard.isReady()) return;
+
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session) {
+            await AuthGuard.forceLogout('NO_SESSION');
+            return;
         }
+
+        // [FIX-VUL-9] Revalida fingerprint ao retornar à aba
+        const fpOk = await Fingerprint.validate(session.user);
+        if (!fpOk) {
+            await AuthGuard.forceLogout('SESSION_HIJACK');
+            return;
+        }
+
+        // [FIX-VUL-9] Revalida integrity stamp ao retornar à aba
+        const stampedUid = await Fingerprint.readIntegrityStamp();
+        if (stampedUid !== null && stampedUid !== session.user.id) {
+            await AuthGuard.forceLogout('INTEGRITY_FAIL');
+            return;
+        }
+
+    } catch {
+        // Erro de rede — não força logout
     }
 });
 

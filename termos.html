@@ -5,12 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Termos de Uso e Condições Gerais - GranaEvo</title>
     <meta name="description" content="Termos de Uso e Condições Gerais do GranaEvo">
-    
+
+    <!-- Security: Referrer Policy -->
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <!-- Security: Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self';
+        style-src 'self' https://fonts.googleapis.com;
+        font-src https://fonts.gstatic.com;
+        img-src 'self' data:;
+        connect-src 'self';
+        frame-ancestors 'none';
+        base-uri 'self';
+        form-action 'self';
+    ">
+
+    <!-- Security: Prevent MIME sniffing -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+
+    <!-- Security: Prevent Clickjacking -->
+    <meta http-equiv="X-Frame-Options" content="DENY">
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    
+
     <!-- CSS -->
     <link rel="stylesheet" href="termos.css">
 </head>
@@ -39,9 +61,9 @@
                 <div class="logo-icon">G</div>
                 <span class="logo-text">GranaEvo</span>
             </a>
-            
+
             <a href="index.html" class="btn-back">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path d="M13 7L7 13M7 7L13 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
                 Voltar
@@ -300,8 +322,8 @@
                 <div class="contact-box">
                     <h3>Dúvidas sobre os Termos?</h3>
                     <p>Entre em contato conosco para esclarecimentos</p>
-                    <a href="mailto:suporte@granaevo.com" class="btn-contact">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <a href="mailto:suporte@granaevo.com" class="btn-contact" rel="noopener noreferrer">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                             <rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
                             <path d="M2 6L10 11L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
@@ -326,95 +348,7 @@
         </div>
     </footer>
 
-    <!-- Scripts -->
-    <script>
-        // Loading Screen
-        window.addEventListener('load', () => {
-            const loadingScreen = document.getElementById('loadingScreen');
-            setTimeout(() => {
-                loadingScreen.classList.add('hidden');
-            }, 1000);
-        });
-
-        // Particles Canvas
-        const canvas = document.getElementById('particlesCanvas');
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            let particles = [];
-
-            function resizeCanvas() {
-                canvas.width = window.innerWidth;
-                canvas.height = document.documentElement.scrollHeight;
-            }
-
-            class Particle {
-                constructor() {
-                    this.x = Math.random() * canvas.width;
-                    this.y = Math.random() * canvas.height;
-                    this.size = Math.random() * 2 + 1;
-                    this.speedX = (Math.random() - 0.5) * 0.5;
-                    this.speedY = (Math.random() - 0.5) * 0.5;
-                    this.opacity = Math.random() * 0.5 + 0.2;
-                }
-
-                update() {
-                    this.x += this.speedX;
-                    this.y += this.speedY;
-
-                    if (this.x > canvas.width) this.x = 0;
-                    if (this.x < 0) this.x = canvas.width;
-                    if (this.y > canvas.height) this.y = 0;
-                    if (this.y < 0) this.y = canvas.height;
-                }
-
-                draw() {
-                    ctx.fillStyle = `rgba(16, 185, 129, ${this.opacity})`;
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
-
-            function init() {
-                particles = [];
-                const particleCount = window.innerWidth < 768 ? 30 : 60;
-                
-                for (let i = 0; i < particleCount; i++) {
-                    particles.push(new Particle());
-                }
-            }
-
-            function animate() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                particles.forEach(particle => {
-                    particle.update();
-                    particle.draw();
-                });
-
-                requestAnimationFrame(animate);
-            }
-
-            resizeCanvas();
-            init();
-            animate();
-
-            window.addEventListener('resize', () => {
-                resizeCanvas();
-                init();
-            });
-        }
-
-        // Smooth scroll for anchor links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            });
-        });
-    </script>
+    <!-- FIX: Script externo com defer — permite CSP sem 'unsafe-inline' -->
+    <script src="termos.js" defer></script>
 </body>
 </html>

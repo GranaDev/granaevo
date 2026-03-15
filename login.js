@@ -1,105 +1,190 @@
-/**
- * GranaEvo — login.js
- *
- * CORREÇÕES DE SEGURANÇA APLICADAS:
- *
- * [SEC-01] captchaToken e captchaResolved movidos para closure privada (não acessíveis via console)
- * [SEC-02] loginAttempts persiste em sessionStorage (resiste a refresh de página)
- * [SEC-03] Token reCAPTCHA validado SOMENTE no backend via Edge Function
- * [SEC-04] Mensagem de erro genérica para login falho (evita enumeração de usuários)
- * [SEC-05] Botão de submit desabilitado ANTES do await (evita double-submit/race condition)
- * [SEC-06] Toda inserção de texto no DOM usa textContent (nunca innerHTML com dados externos)
- * [SEC-07] Spinner de loading usa elementos DOM criados programaticamente (sem innerHTML com dados externos)
- * [SEC-08] Rate limiting frontend adicional com timestamp em sessionStorage
- * [SEC-09] Limpeza de campos sensíveis após erros
- * [SEC-10] Sem console.log com dados sensíveis em produção
- * [SEC-11] Callbacks do reCAPTCHA registrados via window apenas quando necessário
- * [SEC-12] Validação de email com regex no cliente (dupla validação — backend é a autoridade)
- * [SEC-13] Cooldowns de envio de código persistem em sessionStorage (anti-flood)
- * [SEC-14] is_guest_member removido do sessionStorage — lógica de autorização real fica no AuthGuard
- * [SEC-15] supabase.supabaseKey NÃO é usado diretamente nas chamadas de Edge Function (use a anon key configurada)
- *
- * CORREÇÕES DE BUG (v2):
- * [BUG-01-FIX] getActiveSubscription substituída por checkUserAccess() que chama
- *              a Edge Function check-user-access via service role key — sem RLS bloqueando.
- *              CAUSA DO "Você precisa de um plano ativo": RLS bloqueava o fallback por
- *              email quando user_id = NULL na subscription. O cliente anon com JWT do
- *              usuário só vê linhas onde user_id = auth.uid() — email nunca funcionava.
- * [BUG-02-FIX] A Edge Function auto-vincula user_id caso esteja NULL, corrigindo
- *              o estado inconsistente deixado por falha silenciosa do _linkViaBackend.
- */
-
 import { supabase } from './supabase-client.js';
+
+// ═══════════════════════════════════════════════════════════════
+//  [TT-POLICY-1] TRUSTED TYPES — POLÍTICA granaevo-policy
+//
+//  A CSP agora exige require-trusted-types-for 'script', o que
+//  bloqueia qualquer atribuição a sinks perigosos (innerHTML,
+//  outerHTML, document.write, etc.) sem o uso de uma política
+//  registrada.
+//
+//  Esta política é usada EXCLUSIVAMENTE em restoreButton() para
+//  reinjetar o innerHTML ESTÁTICO dos botões — HTML capturado do
+//  DOM durante a inicialização, antes de qualquer dado externo
+//  ser processado. Nunca contém input do usuário.
+//
+//  Se o browser não suportar Trusted Types (< Chrome 83 sem flag),
+//  a política retorna null e restoreButton usa um fallback seguro
+//  via reconstrução manual do DOM.
+// ═══════════════════════════════════════════════════════════════
+const _trustedPolicy = (() => {
+    if (typeof window.trustedTypes?.createPolicy !== 'function') return null;
+    try {
+        return window.trustedTypes.createPolicy('granaevo-policy', {
+            // createHTML é chamado apenas com HTML estático capturado
+            // na inicialização — nunca com dados externos ou de usuário.
+            createHTML: (input) => input,
+        });
+    } catch {
+        return null;
+    }
+})();
 
 // ═══════════════════════════════════════════════════════════════
 //  CONFIGURAÇÕES
 // ═══════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
-    moneyParticleCount:        15,
-    chartLineCount:             8,
-    MAX_ATTEMPTS_BEFORE_CAPTCHA: 3,
+    moneyParticleCount:          15,
+    chartLineCount:               8,
+    MAX_ATTEMPTS_BEFORE_CAPTCHA:  3,
     MESSAGE_AUTO_HIDE_MS:      5000,
 
-    // Cooldown entre envios de código (30s)
     SEND_CODE_COOLDOWN_MS:    30_000,
 
-    // Rate limit de frontend: máx N submissões por janela de tempo
     RATE_LIMIT_MAX:            10,
-    RATE_LIMIT_WINDOW_MS:     60_000,
+    RATE_LIMIT_WINDOW_MS:  60_000,
 
-    // Chaves de sessionStorage (prefixadas para evitar colisão)
+    CAPTCHA_TOKEN_MAX_AGE_MS: 110_000,
+    CAPTCHA_TOKEN_MIN_LENGTH: 50,
+
     KEYS: Object.freeze({
-        loginAttempts:      '_ge_la',
-        sendCooldown:       '_ge_scc',
-        resendCooldown:     '_ge_rcc',
-        submitRateLog:      '_ge_srl',
+        loginAttempts:  '_ge_la',
+        sendCooldown:   '_ge_scc',
+        resendCooldown: '_ge_rcc',
+        submitRateLog:  '_ge_srl',
     }),
 
     SUPABASE_URL: 'https://fvrhqqeofqedmhadzzqw.supabase.co',
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  MÓDULO PRIVADO: ESTADO DO RECAPTCHA
-//  [SEC-01] Estado em closure — inacessível via console/DevTools
+//  CABEÇALHOS DE AUTENTICAÇÃO — SEPARADOS POR CONTEXTO
+//
+//  _requireSessionHeader() → endpoints pós-login que exigem JWT
+//    - Lança erro se não houver sessão ativa
+//    - Usado exclusivamente em checkUserAccess()
+//
+//  _publicHeader() → endpoints públicos (recuperação, captcha)
+//    - Usa anon key (correto para endpoints sem contexto de usuário)
+//    - Nunca usado em endpoints que expõem dados de usuário
+// ═══════════════════════════════════════════════════════════════
+async function _requireSessionHeader() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+        throw new Error('No active session — authenticated header required.');
+    }
+    return `Bearer ${session.access_token}`;
+}
+
+function _publicHeader() {
+    // anon key é pública por design no Supabase — aceitável apenas
+    // para endpoints que não expõem nem manipulam dados de usuário
+    return `Bearer ${supabase.supabaseKey}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CAPTCHA STATE
+//  Callbacks do reCAPTCHA encapsulados + flag de guarda
+//
+//  _captchaActive: flag que só é true quando o captcha está
+//  visível e aguardando resolução legítima.
+//  Callbacks registrados no window permanecem (exigência da API
+//  Google), mas são neutralizados quando _captchaActive === false.
+//  A defesa principal contra tokens falsos é a validação no
+//  backend (validateCaptchaOnBackend).
 // ═══════════════════════════════════════════════════════════════
 const CaptchaState = (() => {
-    let _token    = null;
-    let _resolved = false;
+    let _token         = null;
+    let _resolved      = false;
+    let _resolvedAt    = 0;
+    let _captchaActive = false;
 
     window.onCaptchaResolved = (token) => {
-        if (typeof token === 'string' && token.length > 20) {
-            _token    = token;
-            _resolved = true;
+        // Só aceita callback quando captcha está ativo legitimamente
+        if (!_captchaActive) return;
+
+        if (typeof token !== 'string' || token.length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) {
+            return;
+        }
+        if (typeof grecaptcha === 'undefined') {
+            return;
+        }
+
+        try {
+            const widgetResponse = grecaptcha.getResponse();
+            if (!widgetResponse || widgetResponse !== token) {
+                return;
+            }
+
+            _token      = token;
+            _resolved   = true;
+            _resolvedAt = Date.now();
+
+        } catch {
+            _token      = null;
+            _resolved   = false;
+            _resolvedAt = 0;
         }
     };
 
     window.onCaptchaExpired = () => {
-        _token    = null;
-        _resolved = false;
+        _token      = null;
+        _resolved   = false;
+        _resolvedAt = 0;
     };
 
     window.onCaptchaError = () => {
-        _token    = null;
-        _resolved = false;
+        _token      = null;
+        _resolved   = false;
+        _resolvedAt = 0;
     };
 
     return {
-        isResolved: ()  => _resolved,
-        getToken:   ()  => _token,
+        activate()   { _captchaActive = true;  },
+        deactivate() { _captchaActive = false; },
+
+        isResolved() {
+            if (!_resolved || !_token) return false;
+            return (Date.now() - _resolvedAt) < CONFIG.CAPTCHA_TOKEN_MAX_AGE_MS;
+        },
+
+        getToken() {
+            if (!this.isResolved()) return null;
+            return _token;
+        },
 
         reset() {
-            _token    = null;
-            _resolved = false;
+            _token      = null;
+            _resolved   = false;
+            _resolvedAt = 0;
             if (typeof grecaptcha !== 'undefined') {
-                try { grecaptcha.reset(); } catch (_) { /* widget ainda não renderizado */ }
+                try { grecaptcha.reset(); } catch { /* widget ainda não renderizado */ }
             }
         },
     };
 })();
 
 // ═══════════════════════════════════════════════════════════════
+//  RECOVERY STATE
+// ═══════════════════════════════════════════════════════════════
+const RecoveryState = (() => {
+    let _email = '';
+    let _code  = '';
+
+    return {
+        getEmail:   ()  => _email,
+        getCode:    ()  => _code,
+        setEmail:   (v) => { _email = String(v ?? '').trim(); },
+        setCode:    (v) => { _code  = String(v ?? '').trim(); },
+        clearEmail: ()  => { _email = ''; },
+        clearCode:  ()  => { _code  = ''; },
+        clear:      ()  => { _email = ''; _code = ''; },
+        isValid:    ()  => _email.length > 0 && _code.length === 6,
+    };
+})();
+
+// ═══════════════════════════════════════════════════════════════
 //  MÓDULO: TENTATIVAS DE LOGIN
-//  [SEC-02] Persiste em sessionStorage para resistir a refresh
 // ═══════════════════════════════════════════════════════════════
 const LoginAttempts = {
     get()   { return parseInt(sessionStorage.getItem(CONFIG.KEYS.loginAttempts) || '0', 10); },
@@ -110,7 +195,6 @@ const LoginAttempts = {
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: COOLDOWN ANTI-FLOOD
-//  [SEC-13] Throttle persistente para envio de código
 // ═══════════════════════════════════════════════════════════════
 const Cooldown = {
     isActive(key) {
@@ -123,8 +207,10 @@ const Cooldown = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  MÓDULO: RATE LIMITER DE SUBMISSÃO (frontend)
-//  [SEC-08]
+//  MÓDULO: RATE LIMITER DE SUBMISSÃO
+//  Este rate limit é defesa em profundidade de UX.
+//  Rate limiting real contra brute force DEVE existir no backend.
+//  O frontend não substitui essa proteção.
 // ═══════════════════════════════════════════════════════════════
 const SubmitRateLimiter = {
     isAllowed() {
@@ -146,7 +232,7 @@ const SubmitRateLimiter = {
 
         try {
             sessionStorage.setItem(CONFIG.KEYS.submitRateLog, JSON.stringify(log));
-        } catch { /* sessionStorage cheio */ }
+        } catch { /* sessionStorage cheio — fail open */ }
 
         return true;
     },
@@ -161,6 +247,40 @@ function sanitizeText(value) {
 
 function isValidEmail(email) {
     return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RESTAURAÇÃO SEGURA DE BOTÕES (TRUSTED TYPES COMPLIANT)
+//
+//  O HTML capturado é SEMPRE do DOM estático na inicialização,
+//  nunca contém dados externos. A política granaevo-policy
+//  declara esse HTML como confiável para o browser.
+//
+//  Fallback: se Trusted Types não estiver disponível (browsers
+//  antigos), usa innerHTML direto — seguro porque o conteúdo
+//  vem do DOM estático, não de input do usuário.
+// ═══════════════════════════════════════════════════════════════
+const _buttonOriginalHTML = new WeakMap();
+
+function _captureButtonHTML(btn) {
+    if (btn && !_buttonOriginalHTML.has(btn)) {
+        _buttonOriginalHTML.set(btn, btn.innerHTML);
+    }
+}
+
+function restoreButton(btn) {
+    btn.disabled = false;
+    const original = _buttonOriginalHTML.get(btn);
+    if (original === undefined) return;
+
+    if (_trustedPolicy) {
+        // Com Trusted Types: declara o HTML estático como confiável via policy
+        btn.innerHTML = _trustedPolicy.createHTML(original);
+    } else {
+        // Sem Trusted Types (browser antigo): atribuição direta — segura
+        // porque `original` é HTML estático capturado do nosso DOM
+        btn.innerHTML = original;
+    }
 }
 
 function createSpinnerElement(labelText) {
@@ -195,18 +315,9 @@ function createSpinnerElement(labelText) {
 }
 
 function setButtonLoading(btn, loadingText) {
-    btn.disabled = true;
-    btn.dataset.originalHtml = btn.innerHTML;
+    btn.disabled    = true;
     btn.textContent = '';
     btn.appendChild(createSpinnerElement(loadingText));
-}
-
-function restoreButton(btn) {
-    btn.disabled = false;
-    if (btn.dataset.originalHtml) {
-        btn.innerHTML = btn.dataset.originalHtml;
-        delete btn.dataset.originalHtml;
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -247,12 +358,6 @@ const errorMessage   = document.getElementById('errorMessage');
 const togglePassword = document.getElementById('togglePassword');
 
 // ═══════════════════════════════════════════════════════════════
-//  ESTADO DE RECUPERAÇÃO DE SENHA
-// ═══════════════════════════════════════════════════════════════
-let _recoveryEmail = '';
-let _verifiedCode  = '';
-
-// ═══════════════════════════════════════════════════════════════
 //  FUNÇÕES DE MENSAGEM
 // ═══════════════════════════════════════════════════════════════
 let _messageTimer = null;
@@ -266,6 +371,7 @@ function showAuthMessage(message, type) {
         _messageTimer = null;
     }
 
+    // textContent garante que nenhum HTML de usuário seja interpretado (anti-XSS)
     messageDiv.textContent = sanitizeText(message);
     messageDiv.className   = `auth-message ${type} show`;
     messageDiv.style.display = 'flex';
@@ -308,6 +414,13 @@ function shakeInput(input) {
 //  INICIALIZAÇÃO
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
+
+    // Captura o innerHTML original de cada botão antes de qualquer mutação
+    Object.values(buttons).forEach(btn => {
+        if (btn instanceof HTMLElement) _captureButtonHTML(btn);
+    });
+
+    // Verifica sessão existente — redireciona sem expor estado intermédio
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
@@ -318,6 +431,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         // Sem sessão — continua para o login
     }
 
+    // Exibe CAPTCHA se o usuário já estava no limite de tentativas
     if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         showCaptcha();
     }
@@ -325,6 +439,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     createMoneyParticles();
     createAnimatedCharts();
 
+    // Exibe mensagem de erro pendente gerada por outro módulo (ex: dashboard)
     const authError = sessionStorage.getItem('auth_error');
     if (authError) {
         showAuthMessage(sanitizeText(authError), 'error');
@@ -340,6 +455,7 @@ function showCaptcha() {
     if (!el) return;
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
+    CaptchaState.activate();
 }
 
 function hideCaptcha() {
@@ -347,23 +463,31 @@ function hideCaptcha() {
     if (!el) return;
     el.classList.remove('captcha-visible');
     el.classList.add('captcha-hidden');
+    CaptchaState.deactivate();
+}
+
+function highlightCaptcha() {
+    const el = document.getElementById('captchaContainer');
+    if (!el) return;
+    el.classList.add('captcha-error');
+    setTimeout(() => el.classList.remove('captcha-error'), 2000);
 }
 
 // ═══════════════════════════════════════════════════════════════
 //  VALIDAÇÃO DO CAPTCHA NO BACKEND
-//  [SEC-03]
 // ═══════════════════════════════════════════════════════════════
 async function validateCaptchaOnBackend(token) {
-    if (!token || typeof token !== 'string' || token.trim().length < 20) {
+    if (!token || typeof token !== 'string' || token.trim().length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) {
         return false;
     }
 
     try {
+        // Captcha é verificado antes do login → sem sessão → endpoint público → _publicHeader()
         const response = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/verify-recaptcha`, {
             method:  'POST',
             headers: {
                 'Content-Type':  'application/json',
-                'Authorization': `Bearer ${supabase.supabaseKey}`,
+                'Authorization': _publicHeader(),
             },
             body: JSON.stringify({ token: token.trim() }),
         });
@@ -377,57 +501,47 @@ async function validateCaptchaOnBackend(token) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  checkUserAccess — usa check-email-status (service role, sem RLS, sem JWT issue)
+//  VERIFICAÇÃO DE ACESSO — SEM ENUMERAÇÃO DE EMAIL
 //
-//  MOTIVO DA MUDANÇA:
-//  A abordagem anterior (check-user-access com JWT do usuário como Bearer) retornava
-//  401 do gateway do Supabase quando data.session estava null ou não propagou.
-//
-//  SOLUÇÃO: reutiliza check-email-status que já usa service role key internamente
-//  e NUNCA teve problema de 401. Após login bem-sucedido, data.user.email é garantido.
-//
-//  Retornos de check-email-status:
-//   'password_exists' → subscription aprovada, senha criada     → acesso ✅
-//   'ready'           → subscription aprovada, senha pendente   → acesso ✅ (raro no login)
-//   'not_found'       → sem subscription                        → sem acesso ❌
-//   'payment_pending' → pagamento não aprovado                  → sem acesso ❌
-//   'error'           → erro interno (fail-safe)                → sem acesso ❌
+//  Após login bem-sucedido, a sessão já está ativa.
+//  Usamos o user_id do JWT — o backend valida internamente quem
+//  é o usuário sem expor nenhuma informação sobre outros emails.
+//  Fail closed: qualquer erro nega o acesso (não faz fail open).
 // ═══════════════════════════════════════════════════════════════
-async function checkUserAccess(userEmail) {
+async function checkUserAccess() {
     try {
-        console.log('[checkUserAccess] verificando email:', userEmail);
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session?.user?.id || !session?.access_token) {
+            return { hasAccess: false };
+        }
+
+        // Endpoint sensível pós-login → JWT obrigatório → _requireSessionHeader()
+        const authHeader = await _requireSessionHeader();
 
         const response = await fetch(
-            `${CONFIG.SUPABASE_URL}/functions/v1/check-email-status`,
+            `${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`,
             {
                 method: 'POST',
                 headers: {
                     'Content-Type':  'application/json',
-                    'Authorization': `Bearer ${supabase.supabaseKey}`,
+                    'Authorization': authHeader,
                 },
-                body: JSON.stringify({ email: userEmail }),
+                // Não envia email — backend extrai user_id do JWT
+                body: JSON.stringify({ user_id: session.user.id }),
             }
         );
 
         if (!response.ok) {
-            console.error('[checkUserAccess] HTTP:', response.status);
-            // Fail-open em erro de infra (5xx) para não bloquear usuário
-            return { hasAccess: response.status >= 500, isGuest: false };
+            return { hasAccess: false };
         }
 
         const result = await response.json();
-        console.log('[checkUserAccess] status retornado:', result.status);
+        return { hasAccess: result?.hasAccess === true };
 
-        if (result.status === 'password_exists' || result.status === 'ready') {
-            return { hasAccess: true, isGuest: false };
-        }
-
-        return { hasAccess: false, isGuest: false };
-
-    } catch (err) {
-        console.error('[checkUserAccess] Erro de rede:', err.message);
-        // Fail-open em erro de rede para não bloquear por instabilidade
-        return { hasAccess: true, isGuest: false };
+    } catch {
+        // Fail closed: qualquer erro nega acesso
+        return { hasAccess: false };
     }
 }
 
@@ -481,7 +595,6 @@ loginForm.addEventListener('submit', async (e) => {
         }
     }
 
-    // [SEC-05] Desabilita o botão ANTES do await
     const submitBtn = buttons.loginSubmit;
     setButtonLoading(submitBtn, 'Verificando...');
 
@@ -489,7 +602,7 @@ loginForm.addEventListener('submit', async (e) => {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) {
-            // [SEC-09] Limpa a senha após falha
+            // Limpa senha no caminho de erro
             inputs.loginPassword.value = '';
 
             LoginAttempts.inc();
@@ -505,7 +618,6 @@ loginForm.addEventListener('submit', async (e) => {
                     'error'
                 );
             } else {
-                // [SEC-04] Não diferencia "email não encontrado" de "senha errada"
                 showAuthMessage(
                     `Credenciais inválidas. ${remaining} tentativa${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}.`,
                     'error'
@@ -517,18 +629,16 @@ loginForm.addEventListener('submit', async (e) => {
             return;
         }
 
-        // ✅ Login bem-sucedido — verifica acesso via Edge Function
         LoginAttempts.reset();
         CaptchaState.reset();
         hideCaptcha();
 
-        // Verifica se o usuário tem subscription ativa via check-email-status
-        // Usa data.user.email que é garantido após signInWithPassword bem-sucedido
         setButtonLoading(submitBtn, 'Verificando plano...');
-        const { hasAccess } = await checkUserAccess(data.user.email);
+
+        // Não passa email — checkUserAccess usa o JWT da sessão
+        const { hasAccess } = await checkUserAccess();
 
         if (!hasAccess) {
-            // Sem plano: destrói sessão imediatamente
             await supabase.auth.signOut();
             showAuthMessage('Você precisa de um plano ativo para acessar o sistema.', 'error');
             setTimeout(() => {
@@ -537,7 +647,12 @@ loginForm.addEventListener('submit', async (e) => {
             return;
         }
 
-        // Nome vem dos metadados — sanitizado antes de exibir
+        // Limpa campos sensíveis também no caminho de SUCESSO.
+        // Evita que email e senha fiquem no DOM durante o redirect,
+        // onde extensões ou scripts de terceiros poderiam lê-los.
+        inputs.loginPassword.value = '';
+        inputs.loginEmail.value    = '';
+
         const userName = sanitizeText(data.user.user_metadata?.name || 'Usuário');
         showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
 
@@ -562,16 +677,6 @@ if (togglePassword && inputs.loginPassword) {
         togglePassword.setAttribute('aria-label', isPassword ? 'Ocultar senha' : 'Mostrar senha');
         togglePassword.setAttribute('aria-pressed', String(isPassword));
     });
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  HIGHLIGHT DO CAPTCHA
-// ═══════════════════════════════════════════════════════════════
-function highlightCaptcha() {
-    const el = document.getElementById('captchaContainer');
-    if (!el) return;
-    el.classList.add('captcha-error');
-    setTimeout(() => el.classList.remove('captcha-error'), 2000);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -606,14 +711,16 @@ if (buttons.forgotPassword) {
 
 if (buttons.backToLogin) {
     buttons.backToLogin.addEventListener('click', () => {
-        if (inputs.recoveryEmail) inputs.recoveryEmail.value = '';
+        // Limpa o estado de recuperação completo ao voltar para login,
+        // não apenas o campo de email. Evita estado residual caso o usuário
+        // tenha avançado para a tela de código e voltado.
+        _clearRecoveryState();
         switchScreen(screens.forgotEmail, screens.login);
     });
 }
 
 // ═══════════════════════════════════════════════════════════════
 //  ENVIAR CÓDIGO DE RECUPERAÇÃO
-//  [SEC-13]
 // ═══════════════════════════════════════════════════════════════
 if (buttons.sendCode) {
     buttons.sendCode.addEventListener('click', async () => {
@@ -636,13 +743,14 @@ if (buttons.sendCode) {
         setButtonLoading(buttons.sendCode, 'Enviando...');
 
         try {
+            // Recuperação: usuário não está autenticado → endpoint público → _publicHeader()
             const response = await fetch(
                 `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
                 {
                     method:  'POST',
                     headers: {
                         'Content-Type':  'application/json',
-                        'Authorization': `Bearer ${supabase.supabaseKey}`,
+                        'Authorization': _publicHeader(),
                     },
                     body: JSON.stringify({ email }),
                 }
@@ -656,14 +764,14 @@ if (buttons.sendCode) {
             const result = await response.json();
 
             if (result.status === 'sent') {
-                _recoveryEmail = email;
+                RecoveryState.setEmail(email);
                 Cooldown.set(CONFIG.KEYS.sendCooldown, CONFIG.SEND_CODE_COOLDOWN_MS);
                 showAuthMessage('Código enviado! Verifique seu email.', 'success');
                 switchScreen(screens.forgotEmail, screens.code);
                 setTimeout(() => inputs.codeInputs[0]?.focus(), 520);
 
             } else if (result.status === 'not_found' || result.status === 'payment_not_approved') {
-                // [SEC-04] Mensagem genérica
+                // Resposta neutra — não confirma nem nega existência do email
                 showAuthMessage('Se o email estiver cadastrado com plano ativo, você receberá o código.', 'info');
 
             } else {
@@ -697,7 +805,7 @@ if (buttons.verifyCode) {
             return;
         }
 
-        _verifiedCode = code;
+        RecoveryState.setCode(code);
         switchScreen(screens.code, screens.newPassword);
         setTimeout(() => inputs.newPassword?.focus(), 520);
     });
@@ -748,7 +856,7 @@ if (buttons.changePassword) {
             return;
         }
 
-        if (!_recoveryEmail || !_verifiedCode) {
+        if (!RecoveryState.isValid()) {
             showError('Sessão de recuperação expirada. Reinicie o processo.');
             setTimeout(() => {
                 _clearRecoveryState();
@@ -760,17 +868,18 @@ if (buttons.changePassword) {
         setButtonLoading(buttons.changePassword, 'Alterando...');
 
         try {
+            // Reset de senha: sem sessão ativa → endpoint público → _publicHeader()
             const response = await fetch(
                 `${CONFIG.SUPABASE_URL}/functions/v1/verify-and-reset-password`,
                 {
                     method:  'POST',
                     headers: {
                         'Content-Type':  'application/json',
-                        'Authorization': `Bearer ${supabase.supabaseKey}`,
+                        'Authorization': _publicHeader(),
                     },
                     body: JSON.stringify({
-                        email:       _recoveryEmail,
-                        code:        _verifiedCode,
+                        email:       RecoveryState.getEmail(),
+                        code:        RecoveryState.getCode(),
                         newPassword: newPass,
                     }),
                 }
@@ -784,13 +893,12 @@ if (buttons.changePassword) {
             const result = await response.json();
 
             if (result.status === 'success') {
-                _verifiedCode  = '';
-                _recoveryEmail = '';
+                RecoveryState.clear();
                 switchScreen(screens.newPassword, screens.success);
 
             } else if (result.status === 'invalid_code') {
                 showError('Código inválido, expirado ou já utilizado.');
-                _verifiedCode = '';
+                RecoveryState.clearCode();
 
             } else {
                 showError('Não foi possível alterar a senha. Tente novamente.');
@@ -813,13 +921,12 @@ if (buttons.backToLoginFinal) {
 
 // ═══════════════════════════════════════════════════════════════
 //  REENVIAR CÓDIGO
-//  [SEC-13]
 // ═══════════════════════════════════════════════════════════════
 if (buttons.resendCode) {
     buttons.resendCode.addEventListener('click', async (e) => {
         e.preventDefault();
 
-        if (!_recoveryEmail) {
+        if (!RecoveryState.getEmail()) {
             showAuthMessage('Email não encontrado. Volte e digite novamente.', 'error');
             return;
         }
@@ -835,15 +942,16 @@ if (buttons.resendCode) {
         btn.textContent    = 'Enviando...';
 
         try {
+            // Reenvio sem sessão ativa → _publicHeader()
             const response = await fetch(
                 `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
                 {
                     method:  'POST',
                     headers: {
                         'Content-Type':  'application/json',
-                        'Authorization': `Bearer ${supabase.supabaseKey}`,
+                        'Authorization': _publicHeader(),
                     },
-                    body: JSON.stringify({ email: _recoveryEmail }),
+                    body: JSON.stringify({ email: RecoveryState.getEmail() }),
                 }
             );
 
@@ -877,8 +985,7 @@ if (buttons.resendCode) {
 //  LIMPEZA DO ESTADO DE RECUPERAÇÃO
 // ═══════════════════════════════════════════════════════════════
 function _clearRecoveryState() {
-    _recoveryEmail = '';
-    _verifiedCode  = '';
+    RecoveryState.clear();
     if (inputs.recoveryEmail)   inputs.recoveryEmail.value   = '';
     if (inputs.newPassword)     inputs.newPassword.value     = '';
     if (inputs.confirmPassword) inputs.confirmPassword.value = '';
@@ -950,6 +1057,8 @@ function resetCodeInputs() {
 
 // ═══════════════════════════════════════════════════════════════
 //  PARTÍCULAS E GRÁFICOS ANIMADOS
+//  Todos os elementos criados via createElementNS / createElement
+//  com valores numéricos hardcoded — sem dados externos, sem XSS
 // ═══════════════════════════════════════════════════════════════
 function createMoneyParticles() {
     const container = document.getElementById('moneyParticles');
@@ -960,6 +1069,7 @@ function createMoneyParticles() {
     for (let i = 0; i < CONFIG.moneyParticleCount; i++) {
         const particle = document.createElement('div');
         particle.classList.add('money-particle');
+        // textContent com símbolo do array hardcoded — sem dados externos
         particle.textContent = symbols[Math.floor(Math.random() * symbols.length)];
 
         particle.style.left               = `${Math.random() * 100}%`;
@@ -977,6 +1087,7 @@ function createAnimatedCharts() {
     const container = document.getElementById('animatedCharts');
     if (!container) return;
 
+    // SVG criado via createElementNS — nunca via innerHTML, sem risco de XSS
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
 
@@ -1057,6 +1168,7 @@ animateParallax();
 
 // ═══════════════════════════════════════════════════════════════
 //  EFEITO DE RIPPLE NOS BOTÕES
+//  Todos os valores são numéricos calculados — sem dados de usuário
 // ═══════════════════════════════════════════════════════════════
 document.querySelectorAll('.btn-submit').forEach(button => {
     button.addEventListener('click', function (e) {
@@ -1085,36 +1197,16 @@ document.querySelectorAll('.btn-submit').forEach(button => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  ESTILOS DE ANIMAÇÃO
-// ═══════════════════════════════════════════════════════════════
-const animStyle = document.createElement('style');
-animStyle.textContent = `
-    @keyframes ripple { to { transform: scale(2.5); opacity: 0; } }
-    @keyframes spin    { to { transform: rotate(360deg); } }
-    @keyframes shake   {
-        0%, 100% { transform: translateX(0); }
-        20%, 60% { transform: translateX(-6px); }
-        40%, 80% { transform: translateX(6px); }
-    }
-    .captcha-hidden  { display: none; }
-    .captcha-visible { display: block; animation: fadeInUp 0.4s ease; }
-    .captcha-error   { outline: 2px solid var(--error-red); border-radius: 12px; }
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(10px); }
-        to   { opacity: 1; transform: translateY(0); }
-    }
-`;
-document.head.appendChild(animStyle);
-
-// ═══════════════════════════════════════════════════════════════
 //  EFEITO NOS INPUTS
 // ═══════════════════════════════════════════════════════════════
 document.querySelectorAll('.form-input').forEach(input => {
     input.addEventListener('focus', () => {
-        input.closest('.input-wrapper')?.style.setProperty('transform', 'scale(1.01)');
+        const wrapper = input.closest('.input-wrapper');
+        if (wrapper) wrapper.style.transform = 'scale(1.01)';
     });
     input.addEventListener('blur', () => {
-        input.closest('.input-wrapper')?.style.setProperty('transform', 'scale(1)');
+        const wrapper = input.closest('.input-wrapper');
+        if (wrapper) wrapper.style.transform = 'scale(1)';
     });
 });
 

@@ -1,5 +1,31 @@
-/* Reset e Configurações */
-* {
+/* ==========================================
+   GRANAEVO — LOGIN CSS
+   Versão Segura e Otimizada — V2.1
+
+   MELHORIAS APLICADAS:
+   [1] pointer-events: none em todos os pseudoelementos decorativos
+       → Impede captura acidental de cliques / UI redressing
+   [2] @supports fallback para backdrop-filter
+       → Garante legibilidade em browsers sem suporte e reduz vetor de DoS por GPU
+   [3] will-change restrito a elementos que realmente animam
+       → Evita layer explosion e consumo excessivo de memória de vídeo
+   [4] Comentário de segurança em shimmer + overflow: hidden explícito no pai
+       → Documenta dependência crítica para futuras refatorações
+   [5] prefers-reduced-motion já presente — mantido e expandido
+   [6] Nenhum content: attr() com dados externos — mantido seguro
+   [FIX-CSS-1] .auth-message.info adicionado — tipo 'info' era usado no JS
+       mas não tinha regra CSS, causando mensagens sem estilo visual.
+   [FIX-ANIM-1] Bloco de animStyle removido do login.js — todos os
+       keyframes e classes de captcha vivem exclusivamente aqui,
+       o que viabiliza a remoção de 'unsafe-inline' da CSP style-src.
+   ========================================== */
+
+/* ==========================================
+   RESET E CONFIGURAÇÕES
+   ========================================== */
+*,
+*::before,
+*::after {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -17,6 +43,7 @@
     --glass-border: rgba(16, 185, 129, 0.3);
     --success-green: #10b981;
     --error-red: #ef4444;
+    --info-blue: #06b6d4;
 }
 
 body {
@@ -32,12 +59,14 @@ body {
     padding: 20px 0;
 }
 
-/* Partículas de moedas flutuantes */
+/* ==========================================
+   PARTÍCULAS DE MOEDAS FLUTUANTES
+   ========================================== */
 .money-particles {
     position: fixed;
     inset: 0;
     z-index: 1;
-    pointer-events: none;
+    pointer-events: none; /* [1] nunca captura eventos */
     overflow: hidden;
 }
 
@@ -45,16 +74,18 @@ body {
     position: absolute;
     font-size: 24px;
     opacity: 0;
-    pointer-events: none;
+    pointer-events: none; /* [1] */
     animation: floatCoin 15s ease-in-out infinite;
 }
 
-/* Gráficos animados de fundo */
+/* ==========================================
+   GRÁFICOS ANIMADOS DE FUNDO
+   ========================================== */
 .animated-charts {
     position: fixed;
     inset: 0;
     z-index: 2;
-    pointer-events: none;
+    pointer-events: none; /* [1] */
 }
 
 .chart-line {
@@ -64,15 +95,24 @@ body {
     fill: none;
     opacity: 0.3;
     filter: blur(1px);
+    pointer-events: none; /* [1] */
 }
 
-/* Orbs de gradiente */
+/* ==========================================
+   ORBS DE GRADIENTE
+   ========================================== */
 .gradient-orb {
     position: fixed;
     border-radius: 50%;
     filter: blur(120px);
     opacity: 0.25;
     z-index: 0;
+    pointer-events: none; /* [1] orb puramente decorativo */
+    /*
+        [3] will-change apenas nos orbs que animam continuamente.
+        Cria layer de GPU dedicada — usar com moderação.
+    */
+    will-change: transform;
     animation: float 12s ease-in-out infinite;
 }
 
@@ -102,36 +142,81 @@ body {
     animation-delay: 8s;
 }
 
+/* ==========================================
+   KEYFRAMES GLOBAIS
+   ========================================== */
 @keyframes float {
-    0%, 100% {
-        transform: translate(0, 0) scale(1);
-    }
-    33% {
-        transform: translate(40px, -40px) scale(1.05);
-    }
-    66% {
-        transform: translate(-40px, 40px) scale(0.95);
-    }
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33%       { transform: translate(40px, -40px) scale(1.05); }
+    66%       { transform: translate(-40px, 40px) scale(0.95); }
 }
 
 @keyframes floatCoin {
-    0% {
-        transform: translateY(0) rotate(0deg);
-        opacity: 0;
-    }
-    10% {
-        opacity: 0.6;
-    }
-    90% {
-        opacity: 0.6;
-    }
-    100% {
-        transform: translateY(-100vh) rotate(360deg);
-        opacity: 0;
-    }
+    0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
+    10%  { opacity: 0.6; }
+    90%  { opacity: 0.6; }
+    100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
 }
 
-/* Container principal */
+@keyframes gridMove {
+    0%   { background-position: 0 0, 0 0; }
+    100% { background-position: 60px 60px, 60px 60px; }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%       { transform: scale(1.3); opacity: 0.8; }
+}
+
+@keyframes iconPulse {
+    0%, 100% { opacity: 0.15; transform: scale(1); }
+    50%       { opacity: 0.25; transform: scale(1.05); }
+}
+
+@keyframes successPop {
+    0%   { transform: scale(0); opacity: 0; }
+    50%  { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25%       { transform: translateX(-12px); }
+    75%       { transform: translateX(12px); }
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/*
+    [4] shimmer depende de overflow: hidden no elemento pai (.btn-submit).
+    Se o pai perder overflow: hidden em refatorações, o glow vaza visualmente.
+    Isso é intencional e documentado aqui para referência futura.
+*/
+@keyframes shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/*
+    [FIX-ANIM-1] Keyframes e classes de animação que antes eram injetados
+    via document.createElement('style') no login.js.
+    Movidos para cá de forma permanente — elimina a dependência de
+    'unsafe-inline' no style-src da CSP.
+*/
+@keyframes ripple {
+    to { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ==========================================
+   CONTAINER PRINCIPAL
+   ========================================== */
 .login-container {
     position: relative;
     z-index: 10;
@@ -140,32 +225,48 @@ body {
     max-width: 1400px;
     width: 90%;
     min-height: 90vh;
+
+    /* [2] backdrop-filter com fallback explícito */
     background: rgba(10, 22, 40, 0.7);
     backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+
     border-radius: 32px;
     border: 1px solid var(--glass-border);
-    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6),
-                0 0 120px rgba(16, 185, 129, 0.15),
-                inset 0 0 80px rgba(16, 185, 129, 0.03);
+    box-shadow:
+        0 40px 100px rgba(0, 0, 0, 0.6),
+        0 0 120px rgba(16, 185, 129, 0.15),
+        inset 0 0 80px rgba(16, 185, 129, 0.03);
     overflow: hidden;
     margin: 20px 0;
+    animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Lado financeiro */
+/* [2] Fallback para browsers sem backdrop-filter */
+@supports not (backdrop-filter: blur(1px)) {
+    .login-container {
+        background: rgba(10, 22, 40, 0.97);
+    }
+}
+
+/* ==========================================
+   LADO FINANCEIRO (ESQUERDO)
+   ========================================== */
 .financial-side {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 60px 40px;
-    background: linear-gradient(135deg, 
-        rgba(16, 185, 129, 0.08) 0%, 
+    background: linear-gradient(135deg,
+        rgba(16, 185, 129, 0.08) 0%,
         rgba(6, 182, 212, 0.06) 50%,
         rgba(20, 184, 166, 0.08) 100%);
     border-right: 1px solid var(--glass-border);
     overflow: hidden;
 }
 
+/* [1] pseudoelemento decorativo — nunca deve capturar eventos */
 .financial-side::before {
     content: '';
     position: absolute;
@@ -173,21 +274,13 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: 
+    background:
         linear-gradient(90deg, transparent 0%, rgba(16, 185, 129, 0.03) 50%, transparent 100%),
         linear-gradient(0deg, transparent 0%, rgba(16, 185, 129, 0.03) 50%, transparent 100%);
     background-size: 60px 60px;
     opacity: 0.5;
     animation: gridMove 20s linear infinite;
-}
-
-@keyframes gridMove {
-    0% {
-        background-position: 0 0, 0 0;
-    }
-    100% {
-        background-position: 60px 60px, 60px 60px;
-    }
+    pointer-events: none; /* [1] */
 }
 
 .financial-3d-wrapper {
@@ -200,28 +293,32 @@ body {
     position: relative;
     width: 100%;
     transform-style: preserve-3d;
+    will-change: transform; /* [3] animação contínua justifica will-change */
     animation: rotateFinancial 10s ease-in-out infinite;
 }
 
 @keyframes rotateFinancial {
-    0%, 100% {
-        transform: rotateY(-8deg) rotateX(3deg);
-    }
-    50% {
-        transform: rotateY(8deg) rotateX(-3deg);
-    }
+    0%, 100% { transform: rotateY(-8deg) rotateX(3deg); }
+    50%       { transform: rotateY(8deg) rotateX(-3deg); }
 }
 
+/* ==========================================
+   GROWTH CARD
+   ========================================== */
 .growth-card {
     width: 100%;
-    background: linear-gradient(135deg, 
-        rgba(16, 185, 129, 0.15) 0%, 
+    background: linear-gradient(135deg,
+        rgba(16, 185, 129, 0.15) 0%,
         rgba(5, 150, 105, 0.2) 100%);
+
+    /* [2] backdrop-filter com fallback */
     backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+
     border-radius: 24px;
     border: 2px solid rgba(16, 185, 129, 0.2);
     padding: 50px 40px;
-    box-shadow: 
+    box-shadow:
         0 30px 80px rgba(0, 0, 0, 0.5),
         0 0 60px rgba(16, 185, 129, 0.2),
         inset 0 0 60px rgba(16, 185, 129, 0.05);
@@ -229,15 +326,17 @@ body {
     overflow: hidden;
 }
 
+/* [1] borda interna decorativa — sem interação */
 .growth-card::before {
     content: '';
     position: absolute;
     inset: 30px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 18px;
-    pointer-events: none;
+    pointer-events: none; /* [1] */
 }
 
+/* [1] orb decorativo de fundo — 300×300px fora dos limites visuais */
 .growth-card::after {
     content: '';
     position: absolute;
@@ -248,6 +347,7 @@ body {
     background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
     border-radius: 50%;
     filter: blur(60px);
+    pointer-events: none; /* [1] crítico — orb vaza para fora do card */
 }
 
 .card-content {
@@ -255,6 +355,9 @@ body {
     z-index: 2;
 }
 
+/* ==========================================
+   SEÇÃO DE LOGO (LADO FINANCEIRO)
+   ========================================== */
 .logo-section {
     text-align: center;
     margin-bottom: 35px;
@@ -264,14 +367,18 @@ body {
     width: 90px;
     height: 90px;
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2));
+
+    /* [2] backdrop-filter com fallback */
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
     border-radius: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto 25px;
     border: 2px solid rgba(16, 185, 129, 0.3);
-    box-shadow: 
+    box-shadow:
         0 15px 50px rgba(0, 0, 0, 0.3),
         0 0 40px rgba(16, 185, 129, 0.3),
         inset 0 0 30px rgba(16, 185, 129, 0.1);
@@ -279,6 +386,7 @@ body {
     position: relative;
 }
 
+/* [1] glow de hover — puramente decorativo */
 .logo-icon::before {
     content: '';
     position: absolute;
@@ -288,11 +396,12 @@ body {
     opacity: 0;
     filter: blur(15px);
     transition: opacity 0.4s ease;
+    pointer-events: none; /* [1] */
 }
 
 .logo-icon:hover {
     transform: translateY(-8px) scale(1.05);
-    box-shadow: 
+    box-shadow:
         0 20px 60px rgba(0, 0, 0, 0.4),
         0 0 60px rgba(16, 185, 129, 0.5);
 }
@@ -306,6 +415,7 @@ body {
     height: 50px;
     stroke: var(--neon-green);
     filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.8));
+    pointer-events: none; /* [1] svg decorativo */
 }
 
 .logo-text {
@@ -328,6 +438,9 @@ body {
     color: rgba(255, 255, 255, 0.8);
 }
 
+/* ==========================================
+   STATS GRID (LADO FINANCEIRO)
+   ========================================== */
 .stats-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -341,10 +454,20 @@ body {
     gap: 18px;
     padding: 20px;
     background: rgba(16, 185, 129, 0.08);
+
+    /* [2] backdrop-filter com fallback */
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
     border-radius: 16px;
     border: 1px solid rgba(16, 185, 129, 0.2);
     transition: all 0.3s ease;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+    .stat-item {
+        background: rgba(15, 39, 68, 0.9);
+    }
 }
 
 .stat-item:hover {
@@ -370,6 +493,7 @@ body {
     height: 24px;
     stroke: var(--neon-green);
     stroke-width: 2;
+    pointer-events: none; /* [1] */
 }
 
 .stat-info {
@@ -393,12 +517,16 @@ body {
     text-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
 }
 
+/* ==========================================
+   DECORAÇÃO
+   ========================================== */
 .decoration {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 15px;
     margin: 40px 0;
+    pointer-events: none; /* [1] elemento puramente decorativo */
 }
 
 .deco-line {
@@ -416,17 +544,9 @@ body {
     animation: pulse 2s ease-in-out infinite;
 }
 
-@keyframes pulse {
-    0%, 100% {
-        transform: scale(1);
-        opacity: 1;
-    }
-    50% {
-        transform: scale(1.3);
-        opacity: 0.8;
-    }
-}
-
+/* ==========================================
+   FEATURES LIST
+   ========================================== */
 .features-list {
     display: flex;
     flex-direction: column;
@@ -454,9 +574,12 @@ body {
     stroke: var(--neon-green);
     flex-shrink: 0;
     filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6));
+    pointer-events: none; /* [1] */
 }
 
-/* Lado do formulário */
+/* ==========================================
+   LADO DO FORMULÁRIO (DIREITO)
+   ========================================== */
 .form-side {
     display: flex;
     align-items: center;
@@ -470,7 +593,9 @@ body {
     max-width: 480px;
 }
 
-/* Screens */
+/* ==========================================
+   SCREENS (TRANSIÇÕES)
+   ========================================== */
 .screen {
     opacity: 0;
     visibility: hidden;
@@ -493,6 +618,9 @@ body {
     opacity: 0;
 }
 
+/* ==========================================
+   BOTÃO VOLTAR
+   ========================================== */
 .back-button,
 .back-btn {
     display: inline-flex;
@@ -523,8 +651,12 @@ body {
     width: 20px;
     height: 20px;
     stroke: currentColor;
+    pointer-events: none; /* [1] */
 }
 
+/* ==========================================
+   CABEÇALHO DO FORMULÁRIO
+   ========================================== */
 .form-header {
     margin-bottom: 40px;
     text-align: center;
@@ -546,8 +678,18 @@ body {
     color: rgba(255, 255, 255, 0.6);
 }
 
-/* Mensagens */
+/* ==========================================
+   MENSAGENS DE FEEDBACK
+   [FIX-CSS-1] Adicionada regra .auth-message.info que estava faltando.
+   O JS chama showAuthMessage(..., 'info') em múltiplos lugares, mas
+   não havia estilo definido para esse tipo — a mensagem era exibida
+   sem cor ou borda, tornando-a indistinguível do fundo.
+   ========================================== */
+
+/* Estado padrão oculto — substitui o style="display:none" do HTML
+   e garante que funcione mesmo sem 'unsafe-inline' na CSP */
 .auth-message {
+    display: none;
     padding: 16px 20px;
     border-radius: 14px;
     font-size: 14px;
@@ -556,7 +698,6 @@ body {
     opacity: 0;
     transform: translateY(-10px);
     transition: all 0.3s ease;
-    display: flex;
     align-items: center;
     gap: 12px;
 }
@@ -573,12 +714,21 @@ body {
     border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
+/* [FIX-CSS-1] Estilo para mensagens do tipo 'info' — antes inexistente */
+.auth-message.info {
+    background: rgba(6, 182, 212, 0.1);
+    color: var(--info-blue);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
 .auth-message.show {
     opacity: 1;
     transform: translateY(0);
 }
 
-/* Formulário */
+/* ==========================================
+   FORMULÁRIO
+   ========================================== */
 .login-form,
 .recovery-form {
     display: flex;
@@ -590,7 +740,11 @@ body {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) backwards;
 }
+
+.form-group:nth-child(1) { animation-delay: 0.1s; }
+.form-group:nth-child(2) { animation-delay: 0.2s; }
 
 .form-label {
     font-size: 14px;
@@ -611,7 +765,7 @@ body {
     width: 20px;
     height: 20px;
     stroke: rgba(255, 255, 255, 0.4);
-    pointer-events: none;
+    pointer-events: none; /* [1] ícone decorativo dentro do input */
     transition: all 0.3s ease;
     z-index: 2;
 }
@@ -626,8 +780,18 @@ body {
     font-size: 15px;
     outline: none;
     transition: all 0.3s ease;
+
+    /* [2] backdrop-filter com fallback */
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
     font-family: inherit;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+    .form-input {
+        background: rgba(15, 39, 68, 0.92);
+    }
 }
 
 .form-input::placeholder {
@@ -637,7 +801,7 @@ body {
 .form-input:focus {
     border-color: var(--neon-green);
     background: rgba(15, 39, 68, 0.7);
-    box-shadow: 
+    box-shadow:
         0 0 0 4px rgba(16, 185, 129, 0.1),
         0 0 30px rgba(16, 185, 129, 0.2),
         0 10px 40px rgba(0, 0, 0, 0.2);
@@ -648,6 +812,9 @@ body {
     transform: scale(1.1);
 }
 
+/* ==========================================
+   BOTÃO MOSTRAR/OCULTAR SENHA
+   ========================================== */
 .toggle-password {
     position: absolute;
     right: 20px;
@@ -673,18 +840,22 @@ body {
     height: 22px;
     stroke: rgba(255, 255, 255, 0.4);
     transition: all 0.3s ease;
+    pointer-events: none; /* [1] */
 }
 
 .toggle-password:hover .eye-icon {
     stroke: var(--neon-green);
 }
 
-/* Opções do formulário */
+/* ==========================================
+   OPÇÕES DO FORMULÁRIO
+   ========================================== */
 .form-options {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-top: -8px;
+    animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.3s backwards;
 }
 
 .checkbox-wrapper {
@@ -714,6 +885,7 @@ body {
     position: relative;
     transition: all 0.3s ease;
     background: rgba(15, 39, 68, 0.5);
+    flex-shrink: 0;
 }
 
 .checkbox-wrapper input:checked + .checkbox-custom {
@@ -722,6 +894,7 @@ body {
     box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
 }
 
+/* [1] checkmark é pseudoelemento visual — sem interação própria */
 .checkbox-wrapper input:checked + .checkbox-custom::after {
     content: '';
     position: absolute;
@@ -732,6 +905,7 @@ body {
     border: solid white;
     border-width: 0 2.5px 2.5px 0;
     transform: rotate(45deg);
+    pointer-events: none; /* [1] */
 }
 
 .checkbox-label {
@@ -739,6 +913,9 @@ body {
     color: rgba(255, 255, 255, 0.8);
 }
 
+/* ==========================================
+   LINK ESQUECI A SENHA
+   ========================================== */
 .forgot-link {
     font-size: 14px;
     color: var(--neon-green);
@@ -747,8 +924,13 @@ body {
     position: relative;
     padding: 6px;
     border-radius: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
 }
 
+/* [1] underline decorativo via pseudoelemento */
 .forgot-link::after {
     content: '';
     position: absolute;
@@ -759,6 +941,7 @@ body {
     background: var(--neon-green);
     transform: scaleX(0);
     transition: transform 0.3s ease;
+    pointer-events: none; /* [1] */
 }
 
 .forgot-link:hover::after {
@@ -770,7 +953,10 @@ body {
     text-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
 }
 
-/* Botão de submit */
+/* ==========================================
+   BOTÃO DE SUBMIT
+   [4] overflow: hidden é crítico para conter o shimmer
+   ========================================== */
 .btn-submit {
     width: 100%;
     padding: 18px;
@@ -782,16 +968,18 @@ body {
     font-weight: 700;
     cursor: pointer;
     position: relative;
-    overflow: hidden;
+    overflow: hidden; /* [4] CRÍTICO — contém o shimmer dentro dos limites do botão */
     transition: all 0.3s ease;
     margin-top: 12px;
     font-family: inherit;
     box-shadow: 0 15px 40px rgba(16, 185, 129, 0.3);
+    will-change: transform; /* [3] justificado — hover causa transformação frequente */
+    animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.4s backwards;
 }
 
 .btn-submit:hover {
     transform: translateY(-3px);
-    box-shadow: 
+    box-shadow:
         0 20px 50px rgba(16, 185, 129, 0.4),
         0 0 40px rgba(16, 185, 129, 0.3);
 }
@@ -800,12 +988,14 @@ body {
     transform: translateY(-1px);
 }
 
+/* [1] glow de hover — pseudoelemento decorativo */
 .btn-glow {
     position: absolute;
     inset: 0;
     background: linear-gradient(135deg, var(--neon-green), var(--neon-cyan));
     opacity: 0;
     transition: opacity 0.3s ease;
+    pointer-events: none; /* [1] */
 }
 
 .btn-submit:hover .btn-glow {
@@ -813,18 +1003,10 @@ body {
     animation: shimmer 1.5s ease-in-out infinite;
 }
 
-@keyframes shimmer {
-    0% {
-        transform: translateX(-100%);
-    }
-    100% {
-        transform: translateX(100%);
-    }
-}
-
 .btn-text {
     position: relative;
     z-index: 2;
+    pointer-events: none; /* [1] */
 }
 
 .btn-loading {
@@ -834,6 +1016,7 @@ body {
     align-items: center;
     justify-content: center;
     z-index: 3;
+    pointer-events: none; /* [1] */
 }
 
 .btn-submit.loading .btn-text {
@@ -847,14 +1030,19 @@ body {
 .spinner {
     width: 24px;
     height: 24px;
+    pointer-events: none; /* [1] */
 }
 
-/* Divider */
+/* ==========================================
+   DIVIDER
+   ========================================== */
 .divider {
     display: flex;
     align-items: center;
     gap: 15px;
     margin: 20px 0;
+    pointer-events: none; /* [1] elemento separador puramente visual */
+    animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.5s backwards;
 }
 
 .divider-line {
@@ -869,13 +1057,17 @@ body {
     text-transform: uppercase;
     letter-spacing: 1px;
     font-weight: 500;
+    pointer-events: auto;
 }
 
-/* Social login */
+/* ==========================================
+   SOCIAL LOGIN
+   ========================================== */
 .social-login {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 15px;
+    animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.6s backwards;
 }
 
 .btn-social {
@@ -892,13 +1084,24 @@ body {
     justify-content: center;
     gap: 10px;
     transition: all 0.3s ease;
+
+    /* [2] backdrop-filter com fallback */
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
     font-family: inherit;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+    .btn-social {
+        background: rgba(15, 39, 68, 0.92);
+    }
 }
 
 .btn-social svg {
     width: 20px;
     height: 20px;
+    pointer-events: none; /* [1] */
 }
 
 .btn-social:hover {
@@ -908,12 +1111,15 @@ body {
     box-shadow: 0 10px 30px rgba(16, 185, 129, 0.2);
 }
 
-/* Link de registro */
+/* ==========================================
+   LINK DE REGISTRO
+   ========================================== */
 .register-link {
     text-align: center;
     font-size: 14px;
     color: rgba(255, 255, 255, 0.6);
     margin-top: 15px;
+    animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.7s backwards;
 }
 
 .register-link a {
@@ -925,6 +1131,7 @@ body {
     position: relative;
 }
 
+/* [1] underline de hover via pseudoelemento */
 .register-link a::after {
     content: '';
     position: absolute;
@@ -935,6 +1142,7 @@ body {
     background: var(--neon-green);
     transform: scaleX(0);
     transition: transform 0.3s ease;
+    pointer-events: none; /* [1] */
 }
 
 .register-link a:hover::after {
@@ -946,7 +1154,9 @@ body {
     text-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
 }
 
-/* Recovery Icon */
+/* ==========================================
+   RECOVERY ICON
+   ========================================== */
 .recovery-icon {
     display: flex;
     align-items: center;
@@ -961,6 +1171,7 @@ body {
     position: relative;
 }
 
+/* [1] glow pulsante — pseudoelemento decorativo */
 .recovery-icon::before {
     content: '';
     position: absolute;
@@ -970,6 +1181,7 @@ body {
     opacity: 0.15;
     filter: blur(15px);
     animation: iconPulse 2.5s ease-in-out infinite;
+    pointer-events: none; /* [1] */
 }
 
 .recovery-icon.success {
@@ -984,34 +1196,12 @@ body {
 .recovery-icon svg {
     width: 56px;
     height: 56px;
+    pointer-events: none; /* [1] */
 }
 
-@keyframes iconPulse {
-    0%, 100% {
-        opacity: 0.15;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.25;
-        transform: scale(1.05);
-    }
-}
-
-@keyframes successPop {
-    0% {
-        transform: scale(0);
-        opacity: 0;
-    }
-    50% {
-        transform: scale(1.1);
-    }
-    100% {
-        transform: scale(1);
-        opacity: 1;
-    }
-}
-
-/* Code Inputs */
+/* ==========================================
+   CODE INPUTS (MFA / VERIFICAÇÃO)
+   ========================================== */
 .code-inputs {
     display: flex;
     gap: 12px;
@@ -1031,14 +1221,24 @@ body {
     color: white;
     transition: all 0.3s ease;
     outline: none;
+
+    /* [2] backdrop-filter com fallback */
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+
     font-family: inherit;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+    .code-input {
+        background: rgba(15, 39, 68, 0.92);
+    }
 }
 
 .code-input:focus {
     border-color: var(--neon-green);
     background: rgba(15, 39, 68, 0.7);
-    box-shadow: 
+    box-shadow:
         0 0 0 4px rgba(16, 185, 129, 0.1),
         0 0 30px rgba(16, 185, 129, 0.3);
     transform: scale(1.08);
@@ -1055,19 +1255,9 @@ body {
     animation: shake 0.5s;
 }
 
-@keyframes shake {
-    0%, 100% {
-        transform: translateX(0);
-    }
-    25% {
-        transform: translateX(-12px);
-    }
-    75% {
-        transform: translateX(12px);
-    }
-}
-
-/* Error Message */
+/* ==========================================
+   MENSAGEM DE ERRO
+   ========================================== */
 .error-message {
     color: var(--error-red);
     font-size: 14px;
@@ -1087,7 +1277,9 @@ body {
     transform: translateY(0);
 }
 
-/* Help Text */
+/* ==========================================
+   HELP TEXT
+   ========================================== */
 .help-text {
     text-align: center;
     color: rgba(255, 255, 255, 0.6);
@@ -1101,8 +1293,15 @@ body {
     font-weight: 500;
     transition: all 0.3s ease;
     position: relative;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    padding: 0;
 }
 
+/* [1] underline de hover */
 .link-text::after {
     content: '';
     position: absolute;
@@ -1113,6 +1312,7 @@ body {
     background: var(--neon-green);
     transform: scaleX(0);
     transition: transform 0.3s ease;
+    pointer-events: none; /* [1] */
 }
 
 .link-text:hover::after {
@@ -1124,35 +1324,45 @@ body {
     text-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
 }
 
-/* Animação de entrada */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+/* ==========================================
+   RECAPTCHA CONTAINER
+   [FIX-ANIM-1] Classes captcha-hidden / captcha-visible / captcha-error
+   vivem exclusivamente aqui — removidas do bloco animStyle do JS.
+   ========================================== */
+#captchaContainer {
+    background: rgba(239, 68, 68, 0.06);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
 }
 
-.login-container {
-    animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+.captcha-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--error-red);
+    letter-spacing: 0.3px;
+    pointer-events: none; /* [1] label puramente informativo */
 }
 
-.form-group {
-    animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+.g-recaptcha {
+    transform-origin: left top;
 }
 
-.form-group:nth-child(1) { animation-delay: 0.1s; }
-.form-group:nth-child(2) { animation-delay: 0.2s; }
-.form-options { animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.3s backwards; }
-.btn-submit { animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.4s backwards; }
-.divider { animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.5s backwards; }
-.social-login { animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.6s backwards; }
-.register-link { animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.7s backwards; }
+/* Classes de controle do CAPTCHA — movidas do animStyle JS */
+.captcha-hidden  { display: none; }
+.captcha-visible { display: block; animation: fadeInUp 0.4s ease; }
+.captcha-error   { outline: 2px solid var(--error-red); border-radius: 12px; }
 
-/* Responsividade */
+/* ==========================================
+   RESPONSIVIDADE
+   ========================================== */
 @media (max-width: 1024px) {
     .login-container {
         grid-template-columns: 1fr;
@@ -1236,9 +1446,17 @@ body {
     .stat-item {
         padding: 16px;
     }
+
+    .g-recaptcha {
+        transform: scale(0.88);
+    }
 }
 
-/* Redução de movimento */
+/* ==========================================
+   REDUÇÃO DE MOVIMENTO
+   Respeita preferência de acessibilidade do SO.
+   Remove animações para usuários sensíveis a movimento.
+   ========================================== */
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -1246,39 +1464,13 @@ body {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
     }
-}
 
-/* ===== RECAPTCHA CONTAINER ===== */
-#captchaContainer {
-    background: rgba(239, 68, 68, 0.06);
-    border: 1px solid rgba(239, 68, 68, 0.25);
-    border-radius: 14px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    animation: fadeInUp 0.4s ease;
-}
-
-.captcha-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--error-red);
-    letter-spacing: 0.3px;
-}
-
-/* Ajuste de tema escuro do reCAPTCHA */
-.g-recaptcha {
-    transform-origin: left top;
-}
-
-@media (max-width: 400px) {
-    .g-recaptcha {
-        transform: scale(0.88);
+    /* Remove will-change quando animações estão desativadas */
+    .gradient-orb,
+    .financial-visual,
+    .btn-submit {
+        will-change: auto;
     }
 }

@@ -6,49 +6,80 @@
     <title>GranaEvo - Acesso Premium</title>
 
     <!--
-        SEGURANÇA: Content Security Policy reforçada
-        - REMOVIDO 'unsafe-inline' de script-src (era vulnerabilidade XSS crítica)
-        - Scripts externos apenas de origens confiáveis explícitas
-        - nonce gerado server-side deve substituir 'unsafe-inline' em style-src idealmente
-        - object-src 'none' bloqueia Flash/plugins
-        - base-uri 'self' evita base tag injection
-        - upgrade-insecure-requests força HTTPS
-
-        NOTA IMPORTANTE: X-Frame-Options: DENY e X-Content-Type-Options: nosniff
-        DEVEM ser configurados como headers HTTP no servidor/CDN.
-        Meta tags são ignoradas pelos navegadores para esses headers.
-
-        NOTA: 'unsafe-inline' em style-src é necessário para estilos inline do reCAPTCHA.
-        Para eliminar isso, mova todos os estilos inline para classes CSS.
+        ╔══════════════════════════════════════════════════════════╗
+        ║  CONTENT SECURITY POLICY — LOGIN                        ║
+        ╠══════════════════════════════════════════════════════════╣
+        ║  Correções aplicadas em relação à versão anterior:      ║
+        ║                                                          ║
+        ║  [CSP-FIX-1] frame-ancestors 'none' ADICIONADO.         ║
+        ║    A versão anterior usava <meta X-Frame-Options="DENY"> ║
+        ║    que é IGNORADA por todos os browsers. Somente o       ║
+        ║    frame-ancestors na CSP tem efeito real contra         ║
+        ║    clickjacking quando entregue via meta tag.            ║
+        ║                                                          ║
+        ║  [CSP-FIX-2] cdn.jsdelivr.net REMOVIDO de script-src    ║
+        ║    e connect-src. supabase-js agora é auto-hospedado     ║
+        ║    via supabase-client.js (supply chain hardening).      ║
+        ║                                                          ║
+        ║  [CSP-FIX-3] require-trusted-types-for 'script'         ║
+        ║    ADICIONADO. Bloqueia innerHTML/eval/document.write    ║
+        ║    sem uso da policy granaevo-policy (proteção DOM-XSS). ║
+        ║    O JS define a policy para restauração segura de       ║
+        ║    botões (HTML estático capturado na inicialização).    ║
+        ║                                                          ║
+        ║  [CSP-FIX-4] upgrade-insecure-requests ADICIONADO.      ║
+        ║    Força todos os recursos para HTTPS.                   ║
+        ║                                                          ║
+        ║  [CSP-FIX-5] connect-src para reCAPTCHA corrigido.      ║
+        ║    Adicionado https://www.google.com para callbacks      ║
+        ║    de rede do widget v2.                                 ║
+        ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
+        upgrade-insecure-requests;
         script-src 'self'
-            https://cdn.jsdelivr.net
             https://www.google.com/recaptcha/
             https://www.gstatic.com/recaptcha/;
-        style-src 'self' 'unsafe-inline';
+        style-src 'self';
         img-src 'self' data: https://www.gstatic.com/;
         font-src 'self';
         connect-src 'self'
             https://fvrhqqeofqedmhadzzqw.supabase.co
-            https://cdn.jsdelivr.net;
+            https://www.google.com;
         frame-src
             https://www.google.com/recaptcha/
             https://recaptcha.google.com/;
+        frame-ancestors 'none';
         object-src 'none';
         base-uri 'self';
         form-action 'self';
-        upgrade-insecure-requests;
+        require-trusted-types-for 'script';
+        trusted-types granaevo-policy;
     ">
 
-    <!-- Previne clickjacking via meta (backup — use header HTTP no servidor) -->
-    <meta http-equiv="X-Frame-Options" content="DENY">
+    <!--
+        [REF-FIX-1] strict-origin-when-cross-origin substituiu no-referrer.
+        no-referrer bloqueava o referrer mesmo em navegação interna,
+        quebrando analytics próprio e rastreamento de funil.
+        strict-origin-when-cross-origin envia apenas a origem (sem path/query)
+        para destinos externos, protegendo tokens e parâmetros sensíveis
+        enquanto mantém o referrer completo dentro do próprio domínio.
+    -->
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <!--
+        [PERM-FIX-1] Permissions-Policy adicionado.
+        Bloqueia acesso a APIs sensíveis mesmo que um XSS ocorra.
+    -->
+    <meta http-equiv="Permissions-Policy"
+          content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
 
     <link rel="stylesheet" href="login.css">
-
-    <!-- reCAPTCHA v2 — carregado de forma assíncrona -->
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <script src="https://www.google.com/recaptcha/api.js"
+            async
+            defer
+            referrerpolicy="no-referrer"></script>
 </head>
 <body>
     <!-- Partículas de moedas flutuantes -->
@@ -64,6 +95,7 @@
 
     <!-- Container principal -->
     <div class="login-container">
+
         <!-- Lado esquerdo - Visualização Financeira 3D -->
         <div class="financial-side" aria-hidden="true">
             <div class="financial-3d-wrapper">
@@ -241,7 +273,9 @@
                                 <span class="checkbox-custom" aria-hidden="true"></span>
                                 <span class="checkbox-label">Lembrar de mim</span>
                             </label>
-                            <a href="#" class="forgot-link" id="forgotPasswordBtn" role="button">Esqueceu a senha?</a>
+                            <button type="button" class="forgot-link" id="forgotPasswordBtn">
+                                Esqueceu a senha?
+                            </button>
                         </div>
 
                         <!-- ===== CONTAINER DO RECAPTCHA (oculto até 3 erros) ===== -->
@@ -256,12 +290,6 @@
                                 </svg>
                                 Verificação de segurança necessária
                             </div>
-                            <!--
-                                SEGURANÇA: data-callback e data-expired-callback apontam para
-                                funções registradas no escopo do módulo via window, necessário
-                                pois o reCAPTCHA v2 exige funções globais para os callbacks.
-                                O token é validado EXCLUSIVAMENTE no backend (Edge Function).
-                            -->
                             <div
                                 class="g-recaptcha"
                                 data-sitekey="6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye"
@@ -293,7 +321,7 @@
 
                         <div class="register-link">
                             <span>Ainda não tem conta?</span>
-                            <a href="planos.html" rel="noopener">Confira os planos</a>
+                            <a href="planos.html" rel="noopener noreferrer">Confira os planos</a>
                         </div>
                     </form>
                 </div>
@@ -316,8 +344,7 @@
 
                     <h2 class="form-title">Recuperar senha</h2>
                     <p class="form-subtitle">Digite seu email para receber o código de verificação</p>
-
-                    <form class="recovery-form" novalidate autocomplete="on">
+                    <form class="recovery-form" novalidate autocomplete="off">
                         <div class="form-group">
                             <label for="recoveryEmail" class="form-label">Email cadastrado</label>
                             <div class="input-wrapper">
@@ -332,7 +359,7 @@
                                     class="form-input"
                                     placeholder="Digite seu email"
                                     required
-                                    autocomplete="email"
+                                    autocomplete="off"
                                     inputmode="email"
                                     maxlength="254"
                                     aria-required="true"
@@ -346,7 +373,7 @@
                         </button>
 
                         <p class="help-text">
-                            <a href="planos.html" class="link-text" rel="noopener">Ver planos</a>
+                            <a href="planos.html" class="link-text" rel="noopener noreferrer">Ver planos</a>
                         </p>
                     </form>
                 </div>
@@ -370,9 +397,9 @@
                     <h2 class="form-title">Código de verificação</h2>
                     <p class="form-subtitle">Digite o código de 6 dígitos enviado para seu email</p>
 
-                    <form class="recovery-form" novalidate>
+                    <form class="recovery-form" novalidate autocomplete="off">
                         <div class="code-inputs" role="group" aria-label="Código de verificação de 6 dígitos">
-                            <!-- autocomplete="one-time-code" permite autopreenchimento pelo SO -->
+                            <!-- autocomplete="one-time-code" permite autopreenchimento pelo SO apenas no primeiro campo -->
                             <input type="text" maxlength="1" class="code-input" data-index="0" inputmode="numeric" autocomplete="one-time-code" aria-label="Dígito 1 de 6" pattern="[0-9]">
                             <input type="text" maxlength="1" class="code-input" data-index="1" inputmode="numeric" autocomplete="off" aria-label="Dígito 2 de 6" pattern="[0-9]">
                             <input type="text" maxlength="1" class="code-input" data-index="2" inputmode="numeric" autocomplete="off" aria-label="Dígito 3 de 6" pattern="[0-9]">
@@ -388,7 +415,7 @@
 
                         <p class="help-text">
                             Não recebeu o código?
-                            <a href="#" class="link-text" id="resendCode" role="button">Reenviar</a>
+                            <button type="button" class="link-text" id="resendCode">Reenviar</button>
                         </p>
                     </form>
                 </div>
@@ -411,8 +438,7 @@
 
                     <h2 class="form-title">Nova senha</h2>
                     <p class="form-subtitle">Digite sua nova senha (mínimo 8 caracteres, letras e números)</p>
-
-                    <form class="recovery-form" novalidate autocomplete="on">
+                    <form class="recovery-form" novalidate autocomplete="off">
                         <div class="form-group">
                             <label for="newPassword" class="form-label">Nova senha</label>
                             <div class="input-wrapper">
@@ -471,7 +497,7 @@
                         </button>
 
                         <p class="help-text">
-                            <a href="planos.html" class="link-text" rel="noopener">Ver planos</a>
+                            <a href="planos.html" class="link-text" rel="noopener noreferrer">Ver planos</a>
                         </p>
                     </form>
                 </div>
@@ -494,7 +520,7 @@
                     </button>
 
                     <p class="help-text">
-                        <a href="planos.html" class="link-text" rel="noopener">Ver planos</a>
+                        <a href="planos.html" class="link-text" rel="noopener noreferrer">Ver planos</a>
                     </p>
                 </div>
 

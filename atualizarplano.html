@@ -5,34 +5,124 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Atualizar Plano - GranaEvo</title>
     <meta name="description" content="Faça upgrade do seu plano e desbloqueie mais recursos">
-    <meta http-equiv="Content-Security-Policy"
-          content="
-            default-src 'self';
-            script-src  'self';
-            style-src   'self' 'unsafe-inline' https://fonts.googleapis.com;
-            font-src    'self' https://fonts.gstatic.com;
-            img-src     'self' data:;
-            connect-src 'self';
-            object-src  'none';
-            base-uri    'self';
-            frame-ancestors 'none';
-          ">
 
-    <meta http-equiv="X-Frame-Options" content="DENY">
-    <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <!--
+    ╔══════════════════════════════════════════════════════════════════╗
+    ║  SEGURANÇA — CSP v2.1                                           ║
+    ╠══════════════════════════════════════════════════════════════════╣
+    ║  [R1]  nonce — gerado pelo servidor, diferente em cada request  ║
+    ║  [F1]  trusted-types — apenas a policy 'granaevo-policy' aceita ║
+    ║  [F2]  require-trusted-types-for 'script'                       ║
+    ║                                                                  ║
+    ║  ⚠️  NOTA CRÍTICA — meta vs. HTTP header:                       ║
+    ║  Esta meta tag é um ponto de partida seguro, MAS em produção    ║
+    ║  mova a CSP para HTTP header. Motivo: se houver HTML injection   ║
+    ║  ANTES desta meta tag, a proteção não se aplica.                ║
+    ║  HTTP headers são aplicados antes do HTML ser parseado.         ║
+    ║                                                                  ║
+    ║  Exemplo Node/Express:                                          ║
+    ║    const nonce = crypto.randomBytes(16).toString('base64');     ║
+    ║    res.set('Content-Security-Policy',                           ║
+    ║      `script-src 'self' 'nonce-${nonce}'; ...`);               ║
+    ║    res.locals.cspNonce = nonce;                                 ║
+    ║                                                                  ║
+    ║  [NOVO v2.1] report-to adicionado para monitoramento de         ║
+    ║  violações em produção. Configure o endpoint /csp-report        ║
+    ║  no backend para receber e logar violações.                     ║
+    ║                                                                  ║
+    ║  AÇÃO OBRIGATÓRIA NO BACKEND:                                   ║
+    ║  Substitua NONCE_GERADO_PELO_SERVIDOR em TRÊS lugares:          ║
+    ║    1. meta http-equiv (abaixo)                                  ║
+    ║    2. meta name="csp-nonce" (abaixo)                            ║
+    ║    3. atributo nonce= do <script> (no final do body)            ║
+    ╚══════════════════════════════════════════════════════════════════╝
+    -->
+    <meta http-equiv="Content-Security-Policy"
+        content="
+            default-src   'self';
+            script-src    'self' 'nonce-NONCE_GERADO_PELO_SERVIDOR';
+            style-src     'self' https://fonts.googleapis.com;
+            font-src      'self' https://fonts.gstatic.com;
+            img-src       'self' https://*.stripe.com;
+            connect-src   'self' https://*.supabase.co https://api.stripe.com https://checkout.stripe.com;
+            object-src    'none';
+            base-uri      'self';
+            frame-ancestors 'none';
+            require-trusted-types-for 'script';
+            trusted-types granaevo-policy;
+            report-uri /csp-report;
+        ">
+
+    <!--
+    CSRF token gerado pelo servidor — lido pelo JS via _lerCsrfToken().
+    Sem ele o fetch sensível é bloqueado no cliente (não enviado).
+    Substitua TOKEN_GERADO_PELO_SERVIDOR pelo valor real em runtime.
+    -->
+    <meta name="csrf-token" content="TOKEN_GERADO_PELO_SERVIDOR">
+
+    <!--
+    ╔══════════════════════════════════════════════════════════════════╗
+    ║  ⚠️  AVISO IMPORTANTE — meta http-equiv X-Frame-Options         ║
+    ║  e X-Content-Type-Options NÃO FUNCIONAM como meta tags.         ║
+    ║                                                                  ║
+    ║  Browsers IGNORAM estas diretivas quando vêm de <meta>.         ║
+    ║  Elas SÓ são respeitadas como HTTP response headers.            ║
+    ║                                                                  ║
+    ║  X-Frame-Options já está coberto pelo CSP frame-ancestors acima ║
+    ║  (que é mais moderno e confiável).                              ║
+    ║                                                                  ║
+    ║  X-Content-Type-Options DEVE ser definido pelo servidor:        ║
+    ║    Express: res.set('X-Content-Type-Options', 'nosniff');       ║
+    ║    Vercel: em vercel.json headers config                        ║
+    ║    Nginx:  add_header X-Content-Type-Options "nosniff";         ║
+    ║                                                                  ║
+    ║  As meta tags foram REMOVIDAS para evitar falsa sensação de      ║
+    ║  segurança — elas não protegem nada e enganam desenvolvedores.  ║
+    ╚══════════════════════════════════════════════════════════════════╝
+
+    Permissions-Policy — restringe acesso a APIs do navegador.
+    Mesmo sem usar câmera/mic/geo, declarar explicitamente negado
+    protege caso um script de terceiro tente acessar.
+    ⚠️  Também deve estar como HTTP header em produção.
+    -->
+    <meta http-equiv="Permissions-Policy"
+        content="
+            camera=(),
+            microphone=(),
+            geolocation=(),
+            payment=(),
+            usb=(),
+            bluetooth=(),
+            accelerometer=(),
+            gyroscope=()
+        ">
+
     <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <!--
+    [F2] SRI — Subresource Integrity
+    O hash abaixo é o sha384 do atualizarplano.js atual.
+    Se o arquivo for modificado (supply chain attack, CDN comprometida,
+    deploy corrompido), o browser recusa o carregamento automaticamente.
+
+    ⚠️  REGENERE o hash após qualquer alteração no arquivo JS:
+        openssl dgst -sha384 -binary atualizarplano.js | openssl base64 -A
+        → prefixe com "sha384-"
+
+    Automatize no CI/CD (GitHub Actions, Vercel build hook, etc.)
+    para que o hash seja recalculado a cada deploy.
+    -->
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    
+
     <!-- CSS -->
     <link rel="stylesheet" href="atualizarplano.css">
 </head>
 <body>
-    
+
     <!-- Loading Screen -->
     <div class="loading-screen" id="loadingScreen" role="status" aria-live="polite" aria-label="Carregando página">
         <div class="loader">
@@ -47,7 +137,7 @@
         </div>
     </div>
 
-    <!-- Animated Background — aria-hidden: decorativo, irrelevante para leitores de tela -->
+    <!-- Animated Background — aria-hidden: decorativo -->
     <div class="animated-bg" aria-hidden="true">
         <div class="grid-overlay"></div>
         <canvas id="particlesCanvas"></canvas>
@@ -69,7 +159,7 @@
                 </div>
                 <span class="logo-text">GranaEvo</span>
             </a>
-            
+
             <div class="nav-links">
                 <a href="dashboard.html" class="btn-nav">← Voltar ao Dashboard</a>
             </div>
@@ -84,12 +174,12 @@
                     <span class="pulse-dot" aria-hidden="true"></span>
                     <span>Upgrade Instantâneo • Sem Burocracia</span>
                 </div>
-                
+
                 <h1 class="hero-title" id="heroTitle">
                     Evolua Seu Plano e
                     <span class="gradient-text">Desbloqueie Mais Recursos</span>
                 </h1>
-                
+
                 <p class="hero-description">
                     Seu plano atual: <strong id="planoAtualDisplay" aria-live="polite">Carregando...</strong><br>
                     Pague apenas a diferença e aproveite recursos adicionais imediatamente.
@@ -108,7 +198,7 @@
             <p class="section-subtitle">Pague apenas a diferença entre os planos</p>
 
             <div class="plans-grid" id="upgradeCardsGrid" role="list" aria-label="Planos disponíveis para upgrade">
-                <!-- Cards serão gerados via JS -->
+                <!-- Cards gerados via JS -->
             </div>
         </div>
     </section>
@@ -117,26 +207,26 @@
     <section class="benefits-section" aria-labelledby="beneficiosTitle">
         <div class="container">
             <h2 class="section-title" id="beneficiosTitle">✨ Vantagens do Upgrade</h2>
-            
+
             <div class="benefits-grid" role="list">
                 <div class="benefit-card" role="listitem">
                     <div class="benefit-icon" aria-hidden="true">👥</div>
                     <h3>Mais Perfis</h3>
                     <p>Adicione membros da família e compartilhe o controle financeiro</p>
                 </div>
-                
+
                 <div class="benefit-card" role="listitem">
                     <div class="benefit-icon" aria-hidden="true">📊</div>
                     <h3>Relatórios Avançados</h3>
                     <p>Análises comparativas entre todos os perfis da família</p>
                 </div>
-                
+
                 <div class="benefit-card" role="listitem">
                     <div class="benefit-icon" aria-hidden="true">🎯</div>
                     <h3>Metas Compartilhadas</h3>
                     <p>Economize em conjunto para objetivos comuns</p>
                 </div>
-                
+
                 <div class="benefit-card" role="listitem">
                     <div class="benefit-icon" aria-hidden="true">⚡</div>
                     <h3>Upgrade Instantâneo</h3>
@@ -150,97 +240,65 @@
     <section class="faq-section" aria-labelledby="faqTitle">
         <div class="container">
             <h2 class="section-title" id="faqTitle">❓ Perguntas Frequentes</h2>
-            
+
             <div class="faq-grid" role="list">
 
                 <div class="faq-item" role="listitem">
                     <div class="faq-question">
-                        <button
-                            type="button"
-                            class="faq-question-btn"
-                            aria-expanded="false"
-                            aria-controls="faq-answer-1"
-                            id="faq-btn-1">
+                        <button type="button" class="faq-question-btn"
+                                aria-expanded="false" aria-controls="faq-answer-1" id="faq-btn-1">
                             <h3>Como funciona o upgrade?</h3>
                             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
                                 <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
                         </button>
                     </div>
-                    <div class="faq-answer"
-                         id="faq-answer-1"
-                         role="region"
-                         aria-labelledby="faq-btn-1"
-                         hidden>
+                    <div class="faq-answer" id="faq-answer-1" role="region" aria-labelledby="faq-btn-1" hidden>
                         <p>Você paga apenas a diferença entre seu plano atual e o novo plano. Por exemplo, se você tem o Individual (R$ 19,99) e quer o Casal (R$ 29,99), pagará apenas R$ 10,00.</p>
                     </div>
                 </div>
 
                 <div class="faq-item" role="listitem">
                     <div class="faq-question">
-                        <button
-                            type="button"
-                            class="faq-question-btn"
-                            aria-expanded="false"
-                            aria-controls="faq-answer-2"
-                            id="faq-btn-2">
+                        <button type="button" class="faq-question-btn"
+                                aria-expanded="false" aria-controls="faq-answer-2" id="faq-btn-2">
                             <h3>Meus dados são mantidos?</h3>
                             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
                                 <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
                         </button>
                     </div>
-                    <div class="faq-answer"
-                         id="faq-answer-2"
-                         role="region"
-                         aria-labelledby="faq-btn-2"
-                         hidden>
+                    <div class="faq-answer" id="faq-answer-2" role="region" aria-labelledby="faq-btn-2" hidden>
                         <p>Sim! Todas as suas transações, metas e configurações são preservadas. Você apenas ganha acesso a mais recursos.</p>
                     </div>
                 </div>
 
                 <div class="faq-item" role="listitem">
                     <div class="faq-question">
-                        <button
-                            type="button"
-                            class="faq-question-btn"
-                            aria-expanded="false"
-                            aria-controls="faq-answer-3"
-                            id="faq-btn-3">
+                        <button type="button" class="faq-question-btn"
+                                aria-expanded="false" aria-controls="faq-answer-3" id="faq-btn-3">
                             <h3>Posso fazer downgrade depois?</h3>
                             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
                                 <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
                         </button>
                     </div>
-                    <div class="faq-answer"
-                         id="faq-answer-3"
-                         role="region"
-                         aria-labelledby="faq-btn-3"
-                         hidden>
+                    <div class="faq-answer" id="faq-answer-3" role="region" aria-labelledby="faq-btn-3" hidden>
                         <p>Como todos os planos são vitalícios e de pagamento único, não fazemos downgrade. Mas você sempre pode remover perfis extras se necessário.</p>
                     </div>
                 </div>
 
                 <div class="faq-item" role="listitem">
                     <div class="faq-question">
-                        <button
-                            type="button"
-                            class="faq-question-btn"
-                            aria-expanded="false"
-                            aria-controls="faq-answer-4"
-                            id="faq-btn-4">
+                        <button type="button" class="faq-question-btn"
+                                aria-expanded="false" aria-controls="faq-answer-4" id="faq-btn-4">
                             <h3>O upgrade é instantâneo?</h3>
                             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
                                 <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
                         </button>
                     </div>
-                    <div class="faq-answer"
-                         id="faq-answer-4"
-                         role="region"
-                         aria-labelledby="faq-btn-4"
-                         hidden>
+                    <div class="faq-answer" id="faq-answer-4" role="region" aria-labelledby="faq-btn-4" hidden>
                         <p>Sim! Após a confirmação do pagamento, seu plano é atualizado automaticamente e você já pode adicionar novos perfis.</p>
                     </div>
                 </div>
@@ -266,39 +324,45 @@
                     </a>
                     <p>Sua evolução financeira começa aqui</p>
                 </div>
-                
+
                 <nav class="footer-links" aria-label="Links do produto">
                     <h4>Produto</h4>
                     <a href="dashboard.html">Dashboard</a>
                     <a href="planos.html">Planos</a>
                 </nav>
-                
+
                 <nav class="footer-links" aria-label="Links de suporte">
                     <h4>Suporte</h4>
-                    <!--
-                        ✅ SEGURANÇA: Links externos devem ter rel="noopener noreferrer"
-                        para evitar que a página destino acesse window.opener.
-                        Exemplo aplicado abaixo.
-                    -->
                     <a href="#" rel="noopener noreferrer">Contato</a>
                 </nav>
             </div>
-            
+
             <div class="footer-bottom">
                 <p>
-                    <!-- ✅ Ano dinâmico via JS seguro — sem innerHTML, apenas textContent -->
                     &copy; <span id="footerYear"></span> GranaEvo. Todos os direitos reservados.
                 </p>
             </div>
         </div>
     </footer>
 
-    <script type="module" src="atualizarplano.js"></script>
+    <!--
+    [F2] SRI — integrity contém o hash sha384 do atualizarplano.js.
+         Se o arquivo for adulterado, o browser recusa o carregamento.
+         crossorigin="anonymous" é obrigatório para que o browser
+         execute a verificação de integridade mesmo em same-origin.
 
-    <script>
-        // Único trecho inline permitido — apenas data estática, sem entrada de usuário
-        const _yearEl = document.getElementById('footerYear');
-        if (_yearEl) _yearEl.textContent = new Date().getFullYear();
+    [R1] nonce deve ser IDÊNTICO ao injetado na CSP acima.
+         Substitua NONCE_GERADO_PELO_SERVIDOR pelo valor real.
+
+    ⚠️  Regenere o hash após qualquer alteração no JS:
+        openssl dgst -sha384 -binary atualizarplano.js | openssl base64 -A
+    -->
+    <script
+        type="module"
+        src="atualizarplano.js"
+        integrity="sha384-REGENERE_ESTE_HASH_APOS_QUALQUER_ALTERACAO_NO_JS"
+        crossorigin="anonymous"
+        nonce="NONCE_GERADO_PELO_SERVIDOR">
     </script>
 
 </body>

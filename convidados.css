@@ -2,17 +2,17 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-    --primary: #10b981;
-    --primary-dark: #059669;
-    --bg: #060810;
-    --surface: #0d1117;
-    --surface2: #111827;
-    --border: rgba(255, 255, 255, 0.08);
-    --text-primary: #f1f5f9;
+    --primary:        #10b981;
+    --primary-dark:   #059669;
+    --bg:             #060810;
+    --surface:        #0d1117;
+    --surface2:       #111827;
+    --border:         rgba(255, 255, 255, 0.08);
+    --text-primary:   #f1f5f9;
     --text-secondary: #94a3b8;
-    --text-muted: #475569;
-    --danger: #ff4b4b;
-    --warning: #ffd166;
+    --text-muted:     #475569;
+    --danger:         #ff4b4b;
+    --warning:        #ffd166;
 }
 
 body {
@@ -72,7 +72,7 @@ body {
 
 @keyframes logoPulse {
     0%, 100% { opacity: 0.4; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.05); }
+    50%       { opacity: 1;   transform: scale(1.05); }
 }
 
 .logo-img {
@@ -118,7 +118,7 @@ body {
 
 @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(16px); }
-    to { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .step-icon {
@@ -200,6 +200,17 @@ body {
     margin-top: 6px;
 }
 
+/* ========== COOLDOWN MESSAGE [FIX-⚠️5] ========== */
+/* [FIX-REL-1] Visibilidade controlada por .is-hidden — sem style inline */
+#cooldownMsg {
+    font-size: 12px;
+    color: var(--warning);
+    margin-top: 8px;
+    text-align: center;
+    min-height: 18px;
+    transition: opacity 0.3s;
+}
+
 /* ========== PASSWORD ========== */
 .password-wrapper {
     position: relative;
@@ -221,9 +232,15 @@ body {
     font-size: 16px;
     padding: 4px;
     transition: color 0.2s;
+    /* [FIX-⚠️13] Área de clique acessível sem border/outline visível estranho */
+    line-height: 1;
 }
 
-.toggle-pwd:hover { color: var(--primary); }
+.toggle-pwd:hover  { color: var(--primary); }
+.toggle-pwd:focus-visible {
+    outline: 2px solid var(--primary);
+    border-radius: 4px;
+}
 
 .password-strength {
     height: 4px;
@@ -232,6 +249,8 @@ body {
     background: rgba(255, 255, 255, 0.08);
     transition: all 0.3s;
     position: relative;
+    /* Largura base — classes abaixo sobrescrevem */
+    width: 0%;
 }
 
 .password-strength::after {
@@ -243,11 +262,12 @@ body {
     color: var(--text-muted);
 }
 
+/* [FIX-⚠️10] Rótulos alinhados com novo mínimo de 10 chars */
 .password-strength.muito-fraca { background: #ff4b4b; width: 20%; }
-.password-strength.fraca { background: #ff7a7a; width: 40%; }
-.password-strength.razoavel { background: var(--warning); width: 60%; }
-.password-strength.boa { background: #4ecdc4; width: 80%; }
-.password-strength.forte { background: var(--primary); width: 100%; }
+.password-strength.fraca       { background: #ff7a7a; width: 40%; }
+.password-strength.razoavel    { background: var(--warning); width: 60%; }
+.password-strength.boa         { background: #4ecdc4; width: 80%; }
+.password-strength.forte       { background: var(--primary); width: 100%; }
 
 /* ========== TERMS ========== */
 .terms-box {
@@ -281,6 +301,7 @@ body {
     transition: all 0.2s;
     background: transparent;
     margin-top: 1px;
+    flex-shrink: 0;
 }
 
 .terms-check:checked + .terms-custom-check {
@@ -319,6 +340,7 @@ body {
     box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
     display: block;
     text-align: center;
+    text-decoration: none; /* para casos de <a> herdando a classe */
 }
 
 .inv-btn:hover:not(:disabled) {
@@ -330,6 +352,11 @@ body {
     opacity: 0.6;
     cursor: not-allowed;
     transform: none;
+}
+
+.inv-btn:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
 }
 
 .inv-btn-ghost {
@@ -349,6 +376,11 @@ body {
 .inv-btn-ghost:hover {
     border-color: rgba(255, 255, 255, 0.2);
     color: var(--text-secondary);
+}
+
+.inv-btn-ghost:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
 }
 
 /* ========== WELCOME BOX ========== */
@@ -374,6 +406,9 @@ body {
     font-size: 22px;
     font-weight: 800;
     color: var(--primary);
+    /* Limita overflow para nomes muito longos */
+    word-break: break-word;
+    max-width: 100%;
 }
 
 /* ========== SUCCESS BOX ========== */
@@ -391,8 +426,8 @@ body {
 }
 
 @keyframes successPulse {
-    0% { transform: scale(0); opacity: 0; }
-    70% { transform: scale(1.2); }
+    0%   { transform: scale(0); opacity: 0; }
+    70%  { transform: scale(1.2); }
     100% { transform: scale(1); opacity: 1; }
 }
 
@@ -406,6 +441,8 @@ body {
     color: #ff7a7a;
     margin-bottom: 16px;
     line-height: 1.5;
+    /* Evita overflow de mensagens longas */
+    word-break: break-word;
 }
 
 /* ========== FOOTER ========== */
@@ -426,7 +463,42 @@ body {
 
 /* ========== MOBILE ========== */
 @media (max-width: 520px) {
-    .step { padding: 32px 24px; }
-    .step-title { font-size: 22px; }
-    .code-input { font-size: 1.5rem; letter-spacing: 6px; }
+    .step        { padding: 32px 24px; }
+    .step-title  { font-size: 22px; }
+    .code-input  { font-size: 1.5rem; letter-spacing: 6px; }
+}
+
+/* ========== ACESSIBILIDADE ========== */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ========== UTILITÁRIOS ========== */
+/*
+    [FIX-REL-1] .is-hidden substitui todos os style="display:none" inline
+    no HTML — necessário para remover 'unsafe-inline' do style-src da CSP.
+    Usado pelo JS via classList.add/remove('is-hidden').
+*/
+.is-hidden { display: none !important; }
+
+/* ========== ÍCONE E TEXTO DO SUCCESS BOX ========== */
+/* Substitui style inline removidos do HTML */
+.success-icon {
+    font-size: 2rem;
+    color: var(--primary);
+    margin-bottom: 12px;
+    display: block;
+}
+
+.success-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+
+.text-highlight {
+    color: #e2e8f0;
 }

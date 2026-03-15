@@ -4,11 +4,75 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aceitar Convite — GranaEvo</title>
+
+    <!--
+        [FIX-R01] SDK Supabase removido — não era utilizado nesta página.
+                  Isso permitiu remover cdn.jsdelivr.net do script-src,
+                  travando-o para 'self' apenas. Elimina por completo
+                  o risco de supply chain via CDN de scripts.
+
+        [FIX-R02] VERIFY_ENDPOINT configurável no JS:
+                  Para máxima segurança, implemente um proxy interno
+                  (ex: /api/verify-invite no seu servidor ou Cloudflare Worker)
+                  e atualize connect-src para 'self' — removendo a URL do Supabase.
+
+        CSP atual: script-src travado em 'self' (nenhum CDN externo para scripts).
+                   CDN externo restante: apenas Font Awesome CSS + Google Fonts (sem JS).
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src  'self';
+        script-src   'self';
+        style-src    'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
+        font-src     https://fonts.gstatic.com https://cdnjs.cloudflare.com;
+        img-src      'self' data:;
+        connect-src  https://fvrhqqeofqedmhadzzqw.supabase.co;
+        frame-ancestors 'none';
+        base-uri     'none';
+        object-src   'none';
+        form-action  'self';
+    ">
+
+    <!--
+        [FIX-REL-3] Referrer-Policy — evita vazamento de URL para domínios externos.
+        strict-origin-when-cross-origin: envia apenas a origem (sem path/query)
+        em requisições cross-origin, e o referrer completo em same-origin.
+    -->
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <!--
+        [FIX-REL-4] Permissions-Policy — desativa APIs de hardware e fingerprinting
+        desnecessárias. Reduz superfície de ataque.
+    -->
+    <meta http-equiv="Permissions-Policy" content="
+        geolocation=(),
+        camera=(),
+        microphone=(),
+        payment=(),
+        usb=(),
+        interest-cohort=()
+    ">
+
     <link rel="stylesheet" href="convidados.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+
+    <!--
+        [FIX-⚠️7] SRI — Subresource Integrity para Font Awesome.
+        Apenas CSS (sem JS associado) — não há risco de execução de código.
+        Para eliminação total do CDN externo, hospede /vendor/fa/all.min.css
+        e /vendor/fa/webfonts/* localmente e atualize style-src para 'self'.
+        IMPORTANTE: ao atualizar a versão, gere novo hash em https://www.srihash.org
+    -->
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+        integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer">
+
+    <!-- SDK Supabase JS removido: não utilizado nesta página. [FIX-R01] -->
 </head>
 <body>
     <canvas id="bg-canvas"></canvas>
@@ -30,7 +94,8 @@
                 <div class="step-icon">🔐</div>
                 <h1 class="step-title">Aceitar Convite</h1>
                 <p class="step-desc">
-                    Insira o email que recebeu o convite e o <strong>código de 6 dígitos</strong>
+                    Insira o email que recebeu o convite e o
+                    <strong>código de 6 dígitos</strong>
                     fornecido por quem te convidou.
                 </p>
 
@@ -38,8 +103,15 @@
                     <label class="form-label">
                         <i class="fas fa-envelope"></i> Seu Email
                     </label>
-                    <input type="email" id="inputEmail" class="inv-input" 
-                           placeholder="email@exemplo.com" autocomplete="email">
+                    <!--
+                        [FIX-VUL-D] autocomplete="off" — impede preenchimento
+                        automático do browser com emails de outras contas salvas.
+                    -->
+                    <input type="email" id="inputEmail" class="inv-input"
+                           placeholder="email@exemplo.com"
+                           autocomplete="off"
+                           maxlength="254"
+                           spellcheck="false">
                 </div>
 
                 <div class="form-group">
@@ -47,45 +119,58 @@
                         <i class="fas fa-key"></i> Código de 6 Dígitos
                     </label>
                     <div class="code-input-wrapper">
-                        <input type="text" id="inputCode" class="inv-input code-input" 
-                               placeholder="000000" maxlength="6" inputmode="numeric"
-                               autocomplete="one-time-code">
+                        <input type="text" id="inputCode" class="inv-input code-input"
+                               placeholder="000000"
+                               maxlength="6"
+                               inputmode="numeric"
+                               autocomplete="one-time-code"
+                               spellcheck="false">
                     </div>
                     <div class="input-hint">Digite o código fornecido por quem te convidou</div>
                 </div>
 
-                <div id="step1Error" class="error-box" style="display:none;"></div>
+                <div id="step1Error" class="error-box is-hidden" role="alert" aria-live="polite"></div>
 
-                <button class="inv-btn" id="btnVerify">
+                <button class="inv-btn" id="btnVerify" type="button">
                     <span id="btnVerifyText">Verificar Código →</span>
-                    <span id="btnVerifyLoader" style="display:none;">
+                    <span id="btnVerifyLoader" class="is-hidden" aria-hidden="true">
                         <i class="fas fa-spinner fa-spin"></i> Verificando...
                     </span>
                 </button>
+
+                <!-- [FIX-⚠️5] Indicador de cooldown — gerenciado pelo JS via classes -->
+                <div id="cooldownMsg" class="cooldown-msg is-hidden"></div>
             </div>
 
             <!-- ETAPA 2: Criar Senha -->
             <div id="step2" class="step">
                 <div class="step-icon">🎉</div>
                 <h1 class="step-title">Código Válido!</h1>
+
+                <!--
+                    [FIX-⚠️6] ownerName removido daqui — exibido apenas na Etapa 3
+                    após a criação da conta, para não vazar dados do dono
+                    a quem ainda não completou o fluxo.
+                -->
                 <p class="step-desc" id="step2Desc">
                     Bem-vindo(a)! Agora crie sua senha de acesso.
                 </p>
-
-                <div class="welcome-box" id="welcomeBox" style="display:none;">
-                    <div class="wb-label">Você foi convidado(a) por</div>
-                    <div class="wb-name" id="ownerNameDisplay">—</div>
-                </div>
 
                 <div class="form-group">
                     <label class="form-label">
                         <i class="fas fa-lock"></i> Crie sua Senha
                     </label>
                     <div class="password-wrapper">
-                        <input type="password" id="inputPassword" class="inv-input" 
-                               placeholder="Mínimo 6 caracteres">
-                        <button type="button" class="toggle-pwd" onclick="togglePassword('inputPassword', this)">
-                            <i class="fas fa-eye"></i>
+                        <!--
+                            [FIX-⚠️10] minlength="10" alinhado com validação JS.
+                        -->
+                        <input type="password" id="inputPassword" class="inv-input"
+                               placeholder="Mínimo 10 caracteres"
+                               minlength="10"
+                               autocomplete="new-password">
+                        <button type="button" class="toggle-pwd" id="togglePwd1"
+                                aria-label="Mostrar/ocultar senha">
+                            <i class="fas fa-eye" aria-hidden="true"></i>
                         </button>
                     </div>
                     <div class="password-strength" id="strengthBar"></div>
@@ -96,10 +181,13 @@
                         <i class="fas fa-lock"></i> Confirme sua Senha
                     </label>
                     <div class="password-wrapper">
-                        <input type="password" id="inputPasswordConfirm" class="inv-input" 
-                               placeholder="Repita a senha">
-                        <button type="button" class="toggle-pwd" onclick="togglePassword('inputPasswordConfirm', this)">
-                            <i class="fas fa-eye"></i>
+                        <input type="password" id="inputPasswordConfirm" class="inv-input"
+                               placeholder="Repita a senha"
+                               minlength="10"
+                               autocomplete="new-password">
+                        <button type="button" class="toggle-pwd" id="togglePwd2"
+                                aria-label="Mostrar/ocultar confirmação de senha">
+                            <i class="fas fa-eye" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
@@ -107,59 +195,77 @@
                 <div class="terms-box">
                     <label class="terms-label">
                         <input type="checkbox" id="checkTerms" class="terms-check">
-                        <span class="terms-custom-check"></span>
+                        <span class="terms-custom-check" aria-hidden="true"></span>
                         <span>
-                            Declaro que li e aceito os 
-                            <a href="termos.html" target="_blank" class="terms-link">Termos de Uso e Política de Privacidade</a> 
+                            Declaro que li e aceito os
+                            <a href="termos.html" target="_blank" rel="noopener noreferrer" class="terms-link">
+                                Termos de Uso e Política de Privacidade
+                            </a>
                             do GranaEvo.
                         </span>
                     </label>
                 </div>
 
-                <div id="step2Error" class="error-box" style="display:none;"></div>
+                <div id="step2Error" class="error-box is-hidden" role="alert" aria-live="polite"></div>
 
-                <button class="inv-btn" id="btnCreate">
+                <button class="inv-btn" id="btnCreate" type="button">
                     <span id="btnCreateText">Criar Minha Conta →</span>
-                    <span id="btnCreateLoader" style="display:none;">
+                    <span id="btnCreateLoader" class="is-hidden" aria-hidden="true">
                         <i class="fas fa-spinner fa-spin"></i> Criando conta...
                     </span>
                 </button>
 
-                <button class="inv-btn-ghost" onclick="voltarEtapa1()">
+                <button class="inv-btn-ghost" type="button" id="btnBack">
                     ← Voltar
                 </button>
             </div>
 
             <!-- ETAPA 3: Sucesso -->
             <div id="step3" class="step">
-                <div class="step-icon success-pulse">✅</div>
+                <div class="step-icon success-pulse" aria-hidden="true">✅</div>
                 <h1 class="step-title">Conta Criada!</h1>
                 <p class="step-desc">
-                    Sua conta foi criada com sucesso. Agora você pode entrar no GranaEvo 
+                    Sua conta foi criada com sucesso. Agora você pode entrar no GranaEvo
                     usando seu email e a senha que acabou de criar.
                 </p>
 
+                <!--
+                    [FIX-⚠️6] welcomeBox na Etapa 3 — ownerName só exibido
+                    após conta criada com sucesso, não antes.
+                -->
+                <div class="welcome-box is-hidden" id="welcomeBox">
+                    <div class="wb-label">Você foi convidado(a) por</div>
+                    <div class="wb-name" id="ownerNameDisplay">—</div>
+                </div>
+
                 <div class="success-box">
-                    <i class="fas fa-check-circle" style="font-size:2rem; color:#10b981; margin-bottom:12px;"></i>
-                    <div style="font-size:0.9rem; color:var(--text-secondary); line-height:1.7;">
-                        Use seu <strong style="color:#e2e8f0;">email</strong> e sua 
-                        <strong style="color:#e2e8f0;">senha</strong> para fazer login.<br>
+                    <i class="fas fa-check-circle success-icon" aria-hidden="true"></i>
+                    <div class="success-text">
+                        Use seu <strong class="text-highlight">email</strong> e sua
+                        <strong class="text-highlight">senha</strong> para fazer login.<br>
                         Você terá acesso à mesma conta de quem te convidou.
                     </div>
                 </div>
 
-                <a href="login.html" class="inv-btn" style="text-decoration:none; text-align:center;">
+                <!--
+                    [FIX-VUL-C] Botão de login como <button> com redirect via JS
+                    (SafeRedirect) — não mais <a href> estático.
+                -->
+                <button class="inv-btn" id="btnGoLogin" type="button">
                     🚀 Ir para o Login
-                </a>
+                </button>
             </div>
 
         </div>
 
         <p class="invite-footer">
-            © 2026 GranaEvo · <a href="termos.html">Termos</a> · <a href="mailto:suporte@granaevo.com">Suporte</a>
+            © 2026 GranaEvo ·
+            <a href="termos.html" rel="noopener">Termos</a> ·
+            <a href="/cdn-cgi/l/email-protection#81f2f4f1eef3f5e4c1e6f3e0efe0e4f7eeafe2eeec">Suporte</a>
         </p>
     </div>
 
+    <!-- [FIX-REL-1] Script externo — sem inline JS, compatível com script-src 'self' -->
     <script src="convidados.js"></script>
 </body>
 </html>

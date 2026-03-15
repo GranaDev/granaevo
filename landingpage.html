@@ -5,25 +5,139 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <meta name="description" content="Controle suas finanças com inteligência. O GranaEvo é o app que transforma sua relação com o dinheiro.">
     <meta name="theme-color" content="#10b981">
+
+    <!--
+        ============================================================
+        SECURITY HEADERS (meta equivalents — camada extra de defesa)
+
+        LIMITAÇÕES IMPORTANTES DO META CSP:
+        ─────────────────────────────────────────────────────────────
+        [A] frame-ancestors 'none'  → IGNORADO via <meta>. Só funciona
+            via HTTP header. O vercel.json já aplica isso corretamente.
+        [B] require-trusted-types-for → suporte via meta é parcial.
+            O vercel.json aplica no HTTP header para garantia máxima.
+        [C] Um script injetado antes do parser processar este <meta>
+            pode rodar antes da CSP estar ativa. O vercel.json é a
+            proteção real — este <meta> é apenas defesa em profundidade.
+
+        SOBRE 'strict-dynamic':
+        ─────────────────────────────────────────────────────────────
+        'strict-dynamic' SÓ funciona se houver nonce ou hash:
+            script-src 'nonce-RANDOM' 'strict-dynamic'
+        Sem nonce/hash a diretiva é ignorada pelos browsers.
+        Como este é um site estático (sem SSR), não há como gerar
+        nonces por request. Por isso foi REMOVIDA daqui.
+        O vercel.json aplica a CSP via HTTP header com 'self',
+        que é a proteção correta para sites estáticos.
+
+        SOBRE GOOGLE FONTS (supply chain risk):
+        ─────────────────────────────────────────────────────────────
+        O risco é real, porém baixo. A mitigação ideal é servir
+        as fontes localmente (sem CDN externo). Para fazer isso:
+        1. Baixe em: https://fonts.google.com/specimen/Inter
+        2. Coloque os arquivos .woff2 na pasta /fonts/
+        3. Substitua o <link> abaixo por @font-face no CSS local
+        4. Remova style-src e font-src externos da CSP
+        ============================================================
+    -->
+
+    <!--
+        META CSP: camada extra de defesa (não substitui o HTTP header).
+        A CSP real e completa está no vercel.json.
+        'strict-dynamic' removida — ineficaz sem nonce em site estático.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self';
+        style-src 'self' https://fonts.googleapis.com;
+        font-src https://fonts.gstatic.com;
+        img-src 'self' data:;
+        connect-src 'self';
+        frame-src 'none';
+        frame-ancestors 'none';
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+        upgrade-insecure-requests;
+        require-trusted-types-for 'script';
+    ">
+
+    <!--
+        TRUSTED TYPES: bloqueia DOM XSS via innerHTML, document.write,
+        etc. Se você usar bibliotecas de terceiros que usam innerHTML,
+        será necessário criar uma policy explícita com createPolicy().
+        Exemplo:
+            const policy = trustedTypes.createPolicy('default', {
+                createHTML: str => str
+            });
+    -->
+
+    <!-- Anti-MIME-Sniffing -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+
+    <!-- Referrer Policy -->
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <!-- Permissions Policy — desabilita câmera, microfone, geolocalização e APIs modernas sensíveis -->
+    <meta http-equiv="Permissions-Policy" content="
+        camera=(),
+        microphone=(),
+        geolocation=(),
+        payment=(),
+        usb=(),
+        interest-cohort=(),
+        browsing-topics=(),
+        join-ad-interest-group=(),
+        run-ad-auction=()
+    ">
+
+    <!--
+        X-Frame-Options via meta é FALLBACK — não é suportado por todos os browsers.
+        A proteção real vem do header HTTP. Este meta serve apenas para browsers
+        que o implementam como fallback.
+    -->
+    <meta http-equiv="X-Frame-Options" content="DENY">
+
     <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
-    
-    <!-- Preconnect -->
+
+    <!--
+        Google Fonts: preconnect com crossorigin correto.
+        NOTA: SRI (integrity) não é viável para a CSS do Google Fonts
+        porque o conteúdo é gerado dinamicamente por user-agent.
+        Para máxima segurança, baixe e sirva as fontes localmente.
+    -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    
-    <!-- CSS -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+        rel="stylesheet"
+        referrerpolicy="no-referrer"
+        crossorigin="anonymous"
+    >
+
+    <!-- CSS local -->
     <link rel="stylesheet" href="landingpage.css">
 </head>
+
 <body>
-    
+
     <!-- Loading Screen com Logo -->
-    <div class="loading-screen" id="loadingScreen">
+    <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando página">
         <div class="loader">
             <div class="loader-logo">
-                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader">
+                <!--
+                    crossorigin="anonymous": evita leaks via canvas fingerprinting.
+                    Requer que o servidor envie CORS headers para a imagem.
+                    Se a imagem for local (same-origin), funciona sem configuração extra.
+                -->
+                <img
+                    src="icon/granaevo-logo.jpg"
+                    alt="GranaEvo"
+                    class="logo-img-loader"
+                    crossorigin="anonymous"
+                    loading="eager"
+                >
             </div>
             <div class="loader-bar">
                 <div class="loader-progress"></div>
@@ -33,10 +147,18 @@
     </div>
 
     <!-- Scroll Progress -->
-    <div class="scroll-progress" id="scrollProgress"></div>
+    <div
+        class="scroll-progress"
+        id="scrollProgress"
+        role="progressbar"
+        aria-label="Progresso de leitura"
+        aria-valuenow="0"
+        aria-valuemin="0"
+        aria-valuemax="100"
+    ></div>
 
-    <!-- Animated Background -->
-    <div class="animated-bg">
+    <!-- Animated Background (puramente decorativo — aria-hidden) -->
+    <div class="animated-bg" aria-hidden="true">
         <div class="grid-overlay"></div>
         <canvas id="particlesCanvas"></canvas>
         <div class="glow-orb glow-orb-1"></div>
@@ -46,21 +168,43 @@
 
     <!-- Header -->
     <header class="header" id="header">
-        <nav class="nav-container">
-            <a href="#" class="logo">
-                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
+        <nav class="nav-container" role="navigation" aria-label="Navegação principal">
+            <a href="#" class="logo" aria-label="GranaEvo — página inicial">
+                <img
+                    src="icon/granaevo-logo.jpg"
+                    alt="GranaEvo"
+                    class="logo-img"
+                    crossorigin="anonymous"
+                    loading="eager"
+                >
                 <span class="logo-text">GranaEvo</span>
             </a>
-            
-            <div class="nav-links" id="navLinks">
-                <a href="#recursos" class="nav-link">Recursos</a>
-                <a href="#como-funciona" class="nav-link">Como Funciona</a>
-                <a href="#depoimentos" class="nav-link">Depoimentos</a>
-                <a href="login.html" class="nav-link">Login</a>
-                <a href="planos.html" class="btn-nav">Começar Agora</a>
+
+            <div class="nav-links" id="navLinks" role="menubar">
+                <a href="#recursos" class="nav-link" role="menuitem">Recursos</a>
+                <a href="#como-funciona" class="nav-link" role="menuitem">Como Funciona</a>
+                <a href="#depoimentos" class="nav-link" role="menuitem">Depoimentos</a>
+                <!--
+                    Links internos: rel="noopener noreferrer" não é necessário aqui pois
+                    não usam target="_blank". Aplicado apenas em links externos abertos
+                    em nova aba — veja o comentário abaixo sobre tabnabbing.
+
+                    REGRA: qualquer link com target="_blank" DEVE ter:
+                    rel="noopener noreferrer"
+                    para prevenir tabnabbing attack.
+                -->
+                <a href="login.html" class="nav-link" role="menuitem">Login</a>
+                <a href="planos.html" class="btn-nav" role="menuitem">Começar Agora</a>
             </div>
-            
-            <button class="mobile-toggle" id="mobileToggle" aria-label="Menu" aria-expanded="false">
+
+            <button
+                class="mobile-toggle"
+                id="mobileToggle"
+                aria-label="Abrir menu de navegação"
+                aria-expanded="false"
+                aria-controls="navLinks"
+                type="button"
+            >
                 <span class="hamburger-line"></span>
                 <span class="hamburger-line"></span>
                 <span class="hamburger-line"></span>
@@ -69,70 +213,77 @@
     </header>
 
     <!-- Mobile CTA Floating -->
-    <div class="mobile-cta-float" id="mobileCTA">
-        <a href="planos.html" class="btn-float">
+    <div class="mobile-cta-float" id="mobileCTA" aria-hidden="true">
+        <a
+            href="planos.html"
+            class="btn-float"
+            tabindex="-1"
+            aria-label="Começar Agora — acesso rápido"
+        >
             <span>Começar Agora</span>
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
         </a>
     </div>
 
-    <!-- Hero Section -->
-    <section class="hero" id="hero">
+    <!-- ================================================
+         HERO SECTION
+    ================================================ -->
+    <section class="hero" id="hero" aria-labelledby="hero-title">
         <div class="container">
             <div class="hero-content">
                 <div class="hero-text" data-parallax="0.1">
-                    <div class="badge">
-                        <span class="pulse-dot"></span>
+                    <div class="badge" role="note">
+                        <span class="pulse-dot" aria-hidden="true"></span>
                         <span>Revolucionando o Controle Financeiro</span>
                     </div>
-                    
-                    <h1 class="hero-title">
+
+                    <h1 class="hero-title" id="hero-title">
                         Domine Suas Finanças<br>
                         <span class="gradient-text">Com Inteligência</span>
                     </h1>
-                    
+
                     <p class="hero-description">
-                        Controle total de gastos, metas inteligentes e análises em tempo real. 
+                        Controle total de gastos, metas inteligentes e análises em tempo real.
                         Transforme seus hábitos financeiros em 30 dias.
                     </p>
-                    
+
                     <div class="hero-buttons">
                         <a href="planos.html" class="btn-primary">
                             <span>Começar AGORA!</span>
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
                         </a>
                         <a href="login.html" class="btn-secondary">
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                                 <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/>
                                 <path d="M8 7L13 10L8 13V7Z" fill="currentColor"/>
                             </svg>
                             <span>Login</span>
                         </a>
                     </div>
-                    
-                    <div class="hero-stats">
+
+                    <div class="hero-stats" aria-label="Estatísticas do GranaEvo">
                         <div class="stat-item">
-                            <div class="stat-value" data-count="4.9">0</div>
+                            <div class="stat-value" data-count="4.9" aria-label="Avaliação 4.9 estrelas">0</div>
                             <div class="stat-label">Avaliação ★</div>
                         </div>
-                        <div class="stat-divider"></div>
+                        <div class="stat-divider" aria-hidden="true"></div>
                         <div class="stat-item">
-                            <div class="stat-value" data-count="10000">0</div>
+                            <div class="stat-value" data-count="10000" aria-label="10 mil usuários ativos">0</div>
                             <div class="stat-label">Usuários Ativos</div>
                         </div>
-                        <div class="stat-divider"></div>
+                        <div class="stat-divider" aria-hidden="true"></div>
                         <div class="stat-item">
-                            <div class="stat-value" data-count="120">0</div>
+                            <div class="stat-value" data-count="120" aria-label="120 milhões economizados">0</div>
                             <div class="stat-label">Milhões Economizados</div>
                         </div>
                     </div>
                 </div>
 
-                <div class="hero-visual" data-parallax="0.05">
+                <div class="hero-visual" data-parallax="0.05" aria-hidden="true">
                     <div class="dashboard-mockup" data-tilt>
                         <div class="mockup-glow"></div>
                         <div class="mockup-card">
@@ -145,22 +296,22 @@
                                 <span class="mockup-title">Painel Financeiro</span>
                                 <span class="mockup-badge">Fev 2026</span>
                             </div>
-                            
+
                             <div class="balance-card">
                                 <div class="balance-label">Saldo Previsto</div>
                                 <div class="balance-amount">R$ 5.240</div>
                                 <div class="balance-trend">
-                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
                                         <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                                     </svg>
                                     <span>+23% este mês</span>
                                 </div>
                             </div>
-                            
+
                             <div class="mockup-stats">
                                 <div class="stat-box stat-income">
                                     <div class="stat-icon">
-                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                                             <path d="M10 4V16M10 4L6 8M10 4L14 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                                         </svg>
                                     </div>
@@ -169,10 +320,10 @@
                                         <span class="stat-value">R$ 8.500</span>
                                     </div>
                                 </div>
-                                
+
                                 <div class="stat-box stat-expense">
                                     <div class="stat-icon">
-                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                                             <path d="M10 16V4M10 16L6 12M10 16L14 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                                         </svg>
                                     </div>
@@ -182,9 +333,9 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="mockup-chart">
-                                <canvas id="miniChart"></canvas>
+                                <canvas id="miniChart" aria-label="Gráfico de evolução financeira"></canvas>
                             </div>
                         </div>
                     </div>
@@ -193,18 +344,20 @@
         </div>
     </section>
 
-    <!-- Problem Section -->
-    <section class="problem-section" id="problema">
+    <!-- ================================================
+         PROBLEM SECTION
+    ================================================ -->
+    <section class="problem-section" id="problema" aria-labelledby="problem-title">
         <div class="container">
             <div class="section-header">
                 <span class="section-badge">O Problema</span>
-                <h2 class="section-title">Você está cansado disso?</h2>
+                <h2 class="section-title" id="problem-title">Você está cansado disso?</h2>
                 <p class="section-subtitle">Esses são os desafios que impedem você de ter controle financeiro</p>
             </div>
-            
+
             <div class="problem-grid">
                 <div class="problem-card" data-tilt>
-                    <div class="problem-icon">
+                    <div class="problem-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
                             <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -213,9 +366,9 @@
                     <h3>Dinheiro Desaparece</h3>
                     <p>Você recebe o salário mas não sabe para onde ele foi até o fim do mês</p>
                 </div>
-                
+
                 <div class="problem-card" data-tilt>
-                    <div class="problem-icon">
+                    <div class="problem-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
                             <path d="M3 10H21" stroke="currentColor" stroke-width="2"/>
@@ -225,9 +378,9 @@
                     <h3>Fatura Surpresa</h3>
                     <p>O cartão sempre vem maior do que você esperava e você não sabe o porquê</p>
                 </div>
-                
+
                 <div class="problem-card" data-tilt>
-                    <div class="problem-icon">
+                    <div class="problem-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
                             <path d="M12 7V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -237,9 +390,9 @@
                     <h3>Metas Impossíveis</h3>
                     <p>Quer economizar mas nunca sobra dinheiro no final do mês</p>
                 </div>
-                
+
                 <div class="problem-card" data-tilt>
-                    <div class="problem-icon">
+                    <div class="problem-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <path d="M3 3V18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             <path d="M7 14L10 10L14 14L20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -249,9 +402,9 @@
                     <p>Não tem ideia de quanto gasta em cada categoria ou onde cortar custos</p>
                 </div>
             </div>
-            
-            <div class="solution-box">
-                <div class="solution-icon">
+
+            <div class="solution-box" role="note">
+                <div class="solution-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none">
                         <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     </svg>
@@ -264,18 +417,20 @@
         </div>
     </section>
 
-    <!-- Features Section -->
-    <section class="features-section" id="recursos">
+    <!-- ================================================
+         FEATURES SECTION
+    ================================================ -->
+    <section class="features-section" id="recursos" aria-labelledby="features-title">
         <div class="container">
             <div class="section-header">
                 <span class="section-badge">Recursos</span>
-                <h2 class="section-title">Tudo que você precisa</h2>
+                <h2 class="section-title" id="features-title">Tudo que você precisa</h2>
                 <p class="section-subtitle">Ferramentas poderosas para organizar sua vida financeira</p>
             </div>
-            
+
             <div class="features-grid">
                 <div class="feature-card" data-tilt>
-                    <div class="feature-icon">
+                    <div class="feature-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <path d="M3 3V18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             <path d="M18 9L13 14L10 11L7 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -284,9 +439,9 @@
                     <h3>Dashboard Completo</h3>
                     <p>Visualize todas suas finanças de forma clara. Entradas, saídas, saldo e reservas em tempo real.</p>
                 </div>
-                
+
                 <div class="feature-card" data-tilt>
-                    <div class="feature-icon">
+                    <div class="feature-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
                             <path d="M3 10H21" stroke="currentColor" stroke-width="2"/>
@@ -296,9 +451,9 @@
                     <h3>Controle de Cartões</h3>
                     <p>Nunca mais seja pego de surpresa. Acompanhe todos os gastos e parcelas do seu cartão.</p>
                 </div>
-                
+
                 <div class="feature-card" data-tilt>
-                    <div class="feature-icon">
+                    <div class="feature-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
                             <path d="M12 6V12L16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -307,9 +462,9 @@
                     <h3>Metas e Reservas</h3>
                     <p>Crie objetivos financeiros e acompanhe seu progresso com gráficos intuitivos.</p>
                 </div>
-                
+
                 <div class="feature-card" data-tilt>
-                    <div class="feature-icon">
+                    <div class="feature-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
                             <circle cx="16" cy="17" r="3" stroke="currentColor" stroke-width="2"/>
@@ -319,9 +474,9 @@
                     <h3>Múltiplos Perfis</h3>
                     <p>Perfeito para casais e famílias. Cada um com seu controle individual ou compartilhado.</p>
                 </div>
-                
+
                 <div class="feature-card" data-tilt>
-                    <div class="feature-icon">
+                    <div class="feature-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
                             <path d="M7 11V7C7 4.79086 8.79086 3 11 3H13C15.2091 3 17 4.79086 17 7V11" stroke="currentColor" stroke-width="2"/>
@@ -330,9 +485,9 @@
                     <h3>100% Seguro</h3>
                     <p>Seus dados são criptografados e nunca compartilhados com terceiros.</p>
                 </div>
-                
+
                 <div class="feature-card" data-tilt>
-                    <div class="feature-icon">
+                    <div class="feature-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
@@ -344,34 +499,36 @@
         </div>
     </section>
 
-    <!-- How It Works -->
-    <section class="how-section" id="como-funciona">
+    <!-- ================================================
+         HOW IT WORKS
+    ================================================ -->
+    <section class="how-section" id="como-funciona" aria-labelledby="how-title">
         <div class="container">
             <div class="section-header">
                 <span class="section-badge">Como Funciona</span>
-                <h2 class="section-title">Simples como deve ser</h2>
+                <h2 class="section-title" id="how-title">Simples como deve ser</h2>
                 <p class="section-subtitle">Comece em minutos e veja resultados em dias</p>
             </div>
-            
-            <div class="timeline">
-                <div class="timeline-item">
-                    <div class="timeline-dot">1</div>
+
+            <div class="timeline" role="list">
+                <div class="timeline-item" role="listitem">
+                    <div class="timeline-dot" aria-hidden="true">1</div>
                     <div class="timeline-content">
                         <h3>Selecione um Plano</h3>
                         <p>Escolha o plano ideal para você. Em poucos minutos, o acesso é liberado!</p>
                     </div>
                 </div>
-                
-                <div class="timeline-item">
-                    <div class="timeline-dot">2</div>
+
+                <div class="timeline-item" role="listitem">
+                    <div class="timeline-dot" aria-hidden="true">2</div>
                     <div class="timeline-content">
                         <h3>Registre Transações</h3>
                         <p>Adicione suas entradas e saídas de forma simples e rápida.</p>
                     </div>
                 </div>
-                
-                <div class="timeline-item">
-                    <div class="timeline-dot">3</div>
+
+                <div class="timeline-item" role="listitem">
+                    <div class="timeline-dot" aria-hidden="true">3</div>
                     <div class="timeline-content">
                         <h3>Acompanhe e Evolua</h3>
                         <p>Veja relatórios, estabeleça metas e tome decisões inteligentes.</p>
@@ -381,33 +538,40 @@
         </div>
     </section>
 
-    <!-- Testimonials -->
-    <section class="testimonials-section" id="depoimentos">
+    <!-- ================================================
+         TESTIMONIALS
+    ================================================ -->
+    <section class="testimonials-section" id="depoimentos" aria-labelledby="testimonials-title">
         <div class="container">
             <div class="section-header">
                 <span class="section-badge">Depoimentos</span>
-                <h2 class="section-title">Quem usa, aprova</h2>
+                <h2 class="section-title" id="testimonials-title">Quem usa, aprova</h2>
                 <p class="section-subtitle">Veja o que nossos usuários dizem</p>
             </div>
         </div>
-        
-        <div class="testimonials-carousel">
-            <div class="testimonials-track" id="testimonialsTrack">
-                <!-- Will be populated by JS -->
-            </div>
+
+        <div class="testimonials-carousel" aria-label="Carrossel de depoimentos" role="region">
+            <!--
+                Preenchido via JS com createElement/textContent (sem innerHTML).
+                Nenhum dado vem de input externo — dados são hardcoded e tipados.
+                Trusted Types compatível — nenhuma atribuição de HTML string.
+            -->
+            <div class="testimonials-track" id="testimonialsTrack" aria-live="off"></div>
         </div>
     </section>
 
-    <!-- CTA Section -->
-    <section class="cta-section">
+    <!-- ================================================
+         CTA SECTION
+    ================================================ -->
+    <section class="cta-section" aria-labelledby="cta-title">
         <div class="container">
             <div class="cta-box">
                 <div class="cta-content">
-                    <h2>Pronto para transformar suas finanças?</h2>
+                    <h2 id="cta-title">Pronto para transformar suas finanças?</h2>
                     <p>Junte-se a milhares de pessoas que já organizaram sua vida financeira</p>
                     <a href="planos.html" class="btn-primary btn-large">
                         <span>Começar Agora!!</span>
-                        <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
+                        <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                             <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </a>
@@ -417,46 +581,66 @@
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="footer">
+    <!-- ================================================
+         FOOTER
+    ================================================ -->
+    <footer class="footer" role="contentinfo">
         <div class="container">
             <div class="footer-content">
                 <div class="footer-brand">
-                    <a href="#" class="logo">
-                        <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
+                    <a href="#" class="logo" aria-label="GranaEvo — início">
+                        <img
+                            src="icon/granaevo-logo.jpg"
+                            alt="GranaEvo"
+                            class="logo-img"
+                            crossorigin="anonymous"
+                            loading="lazy"
+                        >
                         <span class="logo-text">GranaEvo</span>
                     </a>
                     <p>Sua evolução financeira começa aqui</p>
                 </div>
-                
+
                 <div class="footer-links">
                     <h4>Produto</h4>
                     <a href="#recursos">Recursos</a>
                     <a href="planos.html">Planos</a>
                     <a href="#como-funciona">Como Funciona</a>
                 </div>
-                
+
                 <div class="footer-links">
                     <h4>Suporte</h4>
+                    <!--
+                        NOTA: Links externos com target="_blank" DEVEM conter
+                        rel="noopener noreferrer" para prevenir tabnabbing.
+                        Exemplo:
+                        <a href="https://externo.com" target="_blank" rel="noopener noreferrer">Link</a>
+                    -->
                     <a href="#">Contato</a>
                     <a href="#">FAQ</a>
                 </div>
-                
+
                 <div class="footer-links">
                     <h4>Legal</h4>
                     <a href="termos.html">Termos de Uso</a>
                     <a href="#">Privacidade</a>
                 </div>
             </div>
-            
+
             <div class="footer-bottom">
                 <p>&copy; 2026 GranaEvo. Todos os direitos reservados.</p>
             </div>
         </div>
     </footer>
 
-    <!-- Scripts -->
+    <!--
+        type="module":
+        - Isola escopo (sem poluição do window)
+        - Ativa strict mode automaticamente
+        - Defer implícito (não bloqueia renderização)
+        - Confiável via script-src 'self' no vercel.json
+    -->
     <script type="module" src="script.js"></script>
-    
+
 </body>
 </html>

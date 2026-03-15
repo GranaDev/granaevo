@@ -4,24 +4,101 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <meta name="theme-color" content="#10b981">
+
+    <!--
+    ============================================================
+    CONTENT SECURITY POLICY — GranaEvo Planos v2
+    ============================================================
+    ✅ upgrade-insecure-requests  — força qualquer HTTP → HTTPS automaticamente
+    ✅ img-src inclui https:      — suporta CDN/pixel futuros sem precisar alterar CSP
+    ✅ require-trusted-types-for  — bloqueia sinks DOM perigosos (innerHTML, eval via script)
+    ✅ trusted-types granaevo-policy — somente a política nomeada no JS é permitida
+    ✅ frame-ancestors 'none'     — FIX: bloqueia clickjacking / embedding desta página em iframes
+    ✅ unsafe-inline REMOVIDO     — FIX: style-src não tem mais unsafe-inline
+        Para isso funcionar, o @keyframes ripple e as classes .btn-ripple-effect,
+        position:relative e overflow:hidden dos botões DEVEM estar em planos.css.
+        Veja o comentário no planos.js (seção BUTTON RIPPLE EFFECT) para o CSS exato.
+    ============================================================
+    HEADERS DE SEGURANÇA — configure no seu servidor/CDN:
+        X-Frame-Options: DENY
+        X-Content-Type-Options: nosniff
+        Referrer-Policy: strict-origin-when-cross-origin
+        Permissions-Policy: camera=(), microphone=(), geolocation=()
+    Ao adicionar novos serviços:
+        Novo analytics JS   → adicione o domínio em script-src
+        Nova API / fetch    → adicione o domínio em connect-src
+        Imagens externas    → img-src já cobre https: globalmente
+    ============================================================
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        upgrade-insecure-requests;
+        script-src 'self' https://www.googletagmanager.com https://connect.facebook.net;
+        style-src 'self' https://fonts.googleapis.com;
+        font-src https://fonts.gstatic.com;
+        img-src 'self' data: https:;
+        connect-src 'self' https://*.supabase.co https://pay.cakto.com.br;
+        frame-src https://pay.cakto.com.br;
+        frame-ancestors 'none';
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+        require-trusted-types-for 'script';
+        trusted-types granaevo-policy;
+    ">
+
+    <!--
+    ✅ FIX — Referrer-Policy via meta tag.
+    Garante que o referer enviado a domínios externos (como pay.cakto.com.br)
+    contenha apenas a origem, sem path ou query string.
+    Equivalente ao header HTTP: Referrer-Policy: strict-origin-when-cross-origin
+    -->
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <!--
+    ✅ FIX — Permissions-Policy via meta tag.
+    Desativa câmera, microfone e geolocalização nesta página.
+    Reduz superfície de ataque em caso de XSS futuro ou iframe não autorizado.
+    Para cobertura completa, replique também como header HTTP no servidor.
+    -->
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
+
     <title>Planos - GranaEvo | Transforme Suas Finanças</title>
     <meta name="description" content="Escolha o plano ideal e comece sua evolução financeira hoje. Acesso vitalício, dashboard completo e controle total de suas finanças.">
-    
+
     <!-- Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    
+
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    
-    <!-- Supabase SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
+
+    <!--
+    ✅ FIX #1 — Self-host do Supabase (elimina risco de supply chain via CDN externo)
+    ============================================================
+    COMO FAZER (recomendado):
+      1. Acesse: https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js
+      2. Salve em /libs/supabase-js.min.js no seu servidor
+      3. Descomente a linha abaixo
+    <script src="/libs/supabase-js.min.js"></script>
+    ============================================================
+    ALTERNATIVA — CDN com hash SRI:
+    Gere o hash e substitua HASH_AQUI:
+      curl -s https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js \
+        | openssl dgst -sha384 -binary | openssl base64 -A
+    <script
+        src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"
+        integrity="sha384-HASH_AQUI"
+        crossorigin="anonymous">
+    </script>
+    ============================================================
+    -->
+
     <!-- CSS -->
     <link rel="stylesheet" href="planos.css">
 </head>
 <body>
-    
+
     <!-- Loading Screen com Logo -->
     <div class="loading-screen" id="loadingScreen">
         <div class="loader">
@@ -54,14 +131,14 @@
                 <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
                 <span class="logo-text">GranaEvo</span>
             </a>
-            
+
             <div class="nav-links" id="navLinks">
                 <a href="landingpage.html#recursos" class="nav-link">Recursos</a>
                 <a href="landingpage.html#como-funciona" class="nav-link">Como Funciona</a>
                 <a href="landingpage.html#depoimentos" class="nav-link">Depoimentos</a>
                 <a href="login.html" class="btn-nav">Fazer Login</a>
             </div>
-            
+
             <button class="mobile-toggle" id="mobileToggle" aria-label="Menu" aria-expanded="false">
                 <span class="hamburger-line"></span>
                 <span class="hamburger-line"></span>
@@ -94,12 +171,12 @@
                     <span class="pulse-dot"></span>
                     <span>Investimento Único • Acesso Vitalício</span>
                 </div>
-                
+
                 <h1 class="hero-title">
                     Escolha o Plano Ideal Para
                     <span class="gradient-text">Sua Evolução Financeira</span>
                 </h1>
-                
+
                 <p class="hero-description">
                     Pagamento único. Sem mensalidades. Sem surpresas.<br>
                     Controle total das suas finanças para sempre.
@@ -151,7 +228,7 @@
 
             <div class="plans-carousel" id="plansCarousel">
                 <div class="plans-track" id="plansTrack">
-                
+
                     <!-- Plano Individual -->
                     <div class="plan-card" data-plan="individual">
                         <div class="plan-header">
@@ -214,7 +291,7 @@
                             </li>
                         </ul>
 
-                        <button class="btn-plan" onclick="iniciarCheckout('Individual')">
+                        <button class="btn-plan" data-plan="individual">
                             <span class="btn-text">Começar Agora</span>
                             <svg viewBox="0 0 20 20" fill="none">
                                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -300,7 +377,7 @@
                             </li>
                         </ul>
 
-                        <button class="btn-plan" onclick="iniciarCheckout('Casal')">
+                        <button class="btn-plan" data-plan="casal">
                             <span class="btn-text">Começar Agora</span>
                             <svg viewBox="0 0 20 20" fill="none">
                                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -381,7 +458,7 @@
                             </li>
                         </ul>
 
-                        <button class="btn-plan" onclick="iniciarCheckout('Família')">
+                        <button class="btn-plan" data-plan="familia">
                             <span class="btn-text">Começar Agora</span>
                             <svg viewBox="0 0 20 20" fill="none">
                                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -549,35 +626,35 @@
                     </a>
                     <p>Sua evolução financeira começa aqui</p>
                 </div>
-                
+
                 <div class="footer-links">
                     <h4>Produto</h4>
                     <a href="landingpage.html#recursos">Recursos</a>
                     <a href="planos.html">Planos</a>
                     <a href="landingpage.html#como-funciona">Como Funciona</a>
                 </div>
-                
+
                 <div class="footer-links">
                     <h4>Suporte</h4>
                     <a href="#">Contato</a>
                     <a href="#">FAQ</a>
                 </div>
-                
+
                 <div class="footer-links">
                     <h4>Legal</h4>
                     <a href="#">Termos de Uso</a>
                     <a href="#">Privacidade</a>
                 </div>
             </div>
-            
+
             <div class="footer-bottom">
                 <p>&copy; 2025 GranaEvo. Todos os direitos reservados.</p>
             </div>
         </div>
     </footer>
 
-    <!-- Scripts -->
+    <!-- ✅ type="module" — escopo completamente isolado, nada vaza para window -->
     <script type="module" src="planos.js"></script>
-    
+
 </body>
 </html>

@@ -5770,12 +5770,17 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
     if (perfisAtivos.length < 2) {
         const resultado = document.getElementById('relatorioResultado');
         if (resultado) {
-            resultado.innerHTML = `
+            // ✅ CORREÇÃO VULN #3: _sanitizarHTMLRelatorio adicionado — segunda camada DOMParser.
+            //    Antes: innerHTML direto, sem DOMParser, sem whitelist CSS.
+            //    Agora: consistente com todos os outros caminhos do relatório.
+            //    Mesmo sendo HTML estático, a cobertura uniforme elimina o risco
+            //    de regressão caso futuramente dados do usuário sejam adicionados aqui.
+            resultado.innerHTML = _sanitizarHTMLRelatorio(`
                 <div class="relatorio-vazio">
                     <h3>⚠️ Perfis Insuficientes</h3>
                     <p>Você precisa ter pelo menos 2 perfis cadastrados para gerar este tipo de relatório.</p>
                 </div>
-            `;
+            `);
             resultado.style.display = 'block';
         }
         return;
@@ -5895,7 +5900,12 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
     
     if (!temDados) {
         const tipoTexto = tipoRelatorioAtivo === 'casal' ? 'do Casal' : 'da Família';
-        resultado.innerHTML = `
+        // ✅ CORREÇÃO VULN #3: _sanitizarHTMLRelatorio adicionado.
+        //    tipoTexto é valor interno (ternário), mas os nomes de perfil (p.nome)
+        //    são dados do usuário — passam por sanitizeHTML() E agora também
+        //    pelo DOMParser, garantindo defesa em profundidade real.
+        //    Padrão agora é 100% consistente com o caminho renderizarRelatorioCompartilhado.
+        resultado.innerHTML = _sanitizarHTMLRelatorio(`
             <div class="relatorio-vazio">
                 <h3>📊 Nenhum relatório disponível</h3>
                 <p>Não há transações registradas ${sanitizeHTML(tipoTexto)} em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</p>
@@ -5903,7 +5913,7 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
                     Perfis verificados: ${perfisAtivos.map(p => sanitizeHTML(String(p.nome || ''))).join(', ')}
                 </p>
             </div>
-        `;
+        `);
         resultado.style.display = 'block';
         return;
     }
@@ -8894,17 +8904,20 @@ const _IS_DEV_BUILD = (
 );
 
 if (_IS_DEV_BUILD) {
-    window.debugGranaEvo = () => {
-        console.log('=== DEBUG GRANAEVO (DEV) ===');
-        console.log('Perfil ID:', perfilAtivo?.id);
-        console.log('Total transações:', transacoes?.length);
-        console.log('Total metas:', metas?.length);
-        console.log('Total contas fixas:', contasFixas?.length);
-        console.log('Total cartões:', cartoesCredito?.length);
-        console.log('============================');
-    };
-} else {
-    window.debugGranaEvo = () => {};
+    Object.defineProperty(window, 'debugGranaEvo', {
+        value: () => {
+            console.log('=== DEBUG GRANAEVO (DEV) ===');
+            console.log('Perfil ID:', perfilAtivo?.id);
+            console.log('Total transações:', transacoes?.length);
+            console.log('Total metas:', metas?.length);
+            console.log('Total contas fixas:', contasFixas?.length);
+            console.log('Total cartões:', cartoesCredito?.length);
+            console.log('============================');
+        },
+        writable:     false,
+        configurable: false,
+        enumerable:   false,
+    });
 }
 
 // ========== LOG DE SISTEMA ==========
@@ -8949,8 +8962,8 @@ const sistemaLog = (() => {
 // Log de inicialização
 sistemaLog.adicionar('INFO', 'Sistema GranaEvo inicializado');
 
-console.log('%c🚀 GranaEvo carregado com sucesso!', 'color: #43a047; font-size: 16px; font-weight: bold;');
-console.log('%c💡 Use window.debugGranaEvo() para ver informações do sistema', 'color: #6c63ff; font-size: 12px;');
+console.log('%c🚀 GranaEvo (DEV) carregado!', 'color: #43a047; font-size: 16px; font-weight: bold;');
+console.log('%c💡 Use window.debugGranaEvo() para ver estado interno', 'color: #6c63ff; font-size: 12px;');
 
 // Verificação automática de vencimentos a cada 30 minutos
 setInterval(() => {
