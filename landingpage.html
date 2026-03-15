@@ -5,70 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <meta name="description" content="Controle suas finanças com inteligência. O GranaEvo é o app que transforma sua relação com o dinheiro.">
     <meta name="theme-color" content="#10b981">
-
-    <!--
-        ============================================================
-        SECURITY HEADERS (meta equivalents — camada extra de defesa)
-
-        LIMITAÇÕES IMPORTANTES DO META CSP:
-        ─────────────────────────────────────────────────────────────
-        [A] frame-ancestors 'none'  → IGNORADO via <meta>. REMOVIDO
-            daqui. O vercel.json já aplica isso corretamente via
-            HTTP header Content-Security-Policy e X-Frame-Options.
-
-        [B] X-Frame-Options via <meta> → IGNORADO por todos os
-            browsers modernos. REMOVIDO daqui. O vercel.json já
-            aplica isso via HTTP header.
-
-        [C] require-trusted-types-for → suporte via meta é parcial.
-            O vercel.json aplica no HTTP header para garantia máxima.
-
-        [D] Um script injetado antes do parser processar este <meta>
-            pode rodar antes da CSP estar ativa. O vercel.json é a
-            proteção real — este <meta> é apenas defesa em profundidade.
-
-        SOBRE 'strict-dynamic':
-        ─────────────────────────────────────────────────────────────
-        'strict-dynamic' SÓ funciona se houver nonce ou hash:
-            script-src 'nonce-RANDOM' 'strict-dynamic'
-        Sem nonce/hash a diretiva é ignorada pelos browsers.
-        Como este é um site estático (sem SSR), não há como gerar
-        nonces por request. Por isso foi REMOVIDA daqui.
-        O vercel.json aplica a CSP via HTTP header com 'self',
-        que é a proteção correta para sites estáticos.
-
-        SOBRE GOOGLE FONTS (supply chain risk):
-        ─────────────────────────────────────────────────────────────
-        O risco é real, porém baixo. A mitigação ideal é servir
-        as fontes localmente (sem CDN externo). Para fazer isso:
-        1. Baixe em: https://fonts.google.com/specimen/Inter
-        2. Coloque os arquivos .woff2 na pasta /fonts/
-        3. Substitua o <link> abaixo por @font-face no CSS local
-        4. Remova style-src e font-src externos da CSP
-
-        SOBRE CLOUDFLARE BEACON:
-        ─────────────────────────────────────────────────────────────
-        O Cloudflare injeta automaticamente o beacon.min.js via proxy.
-        Por isso static.cloudflareinsights.com está liberado no
-        script-src e cloudflareinsights.com no connect-src,
-        tanto aqui quanto no vercel.json.
-        ============================================================
-    -->
-
-    <!--
-        META CSP: camada extra de defesa (não substitui o HTTP header).
-        A CSP real e completa está no vercel.json.
-
-        ALTERAÇÕES em relação à versão anterior:
-        - REMOVIDO: frame-ancestors 'none' → inválido via <meta>, gera
-          aviso no console. Protegido via HTTP header no vercel.json.
-        - ADICIONADO: https://static.cloudflareinsights.com no script-src
-        - ADICIONADO: 'self' no font-src (estava faltando)
-        - ADICIONADO: https://cloudflareinsights.com no connect-src
-    -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' https://static.cloudflareinsights.com;
+        script-src 'self' 'sha256-+bKQFgEuYVoBJiIVKw/deWgC0Kx0EobOPldmbUS+dg8=' https://static.cloudflareinsights.com;
         style-src 'self' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com;
         img-src 'self' data:;
