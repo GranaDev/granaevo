@@ -12,11 +12,18 @@
 
         LIMITAÇÕES IMPORTANTES DO META CSP:
         ─────────────────────────────────────────────────────────────
-        [A] frame-ancestors 'none'  → IGNORADO via <meta>. Só funciona
-            via HTTP header. O vercel.json já aplica isso corretamente.
-        [B] require-trusted-types-for → suporte via meta é parcial.
+        [A] frame-ancestors 'none'  → IGNORADO via <meta>. REMOVIDO
+            daqui. O vercel.json já aplica isso corretamente via
+            HTTP header Content-Security-Policy e X-Frame-Options.
+
+        [B] X-Frame-Options via <meta> → IGNORADO por todos os
+            browsers modernos. REMOVIDO daqui. O vercel.json já
+            aplica isso via HTTP header.
+
+        [C] require-trusted-types-for → suporte via meta é parcial.
             O vercel.json aplica no HTTP header para garantia máxima.
-        [C] Um script injetado antes do parser processar este <meta>
+
+        [D] Um script injetado antes do parser processar este <meta>
             pode rodar antes da CSP estar ativa. O vercel.json é a
             proteção real — este <meta> é apenas defesa em profundidade.
 
@@ -38,23 +45,35 @@
         2. Coloque os arquivos .woff2 na pasta /fonts/
         3. Substitua o <link> abaixo por @font-face no CSS local
         4. Remova style-src e font-src externos da CSP
+
+        SOBRE CLOUDFLARE BEACON:
+        ─────────────────────────────────────────────────────────────
+        O Cloudflare injeta automaticamente o beacon.min.js via proxy.
+        Por isso static.cloudflareinsights.com está liberado no
+        script-src e cloudflareinsights.com no connect-src,
+        tanto aqui quanto no vercel.json.
         ============================================================
     -->
 
     <!--
         META CSP: camada extra de defesa (não substitui o HTTP header).
         A CSP real e completa está no vercel.json.
-        'strict-dynamic' removida — ineficaz sem nonce em site estático.
+
+        ALTERAÇÕES em relação à versão anterior:
+        - REMOVIDO: frame-ancestors 'none' → inválido via <meta>, gera
+          aviso no console. Protegido via HTTP header no vercel.json.
+        - ADICIONADO: https://static.cloudflareinsights.com no script-src
+        - ADICIONADO: 'self' no font-src (estava faltando)
+        - ADICIONADO: https://cloudflareinsights.com no connect-src
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self';
+        script-src 'self' https://static.cloudflareinsights.com;
         style-src 'self' https://fonts.googleapis.com;
-        font-src https://fonts.gstatic.com;
+        font-src 'self' https://fonts.gstatic.com;
         img-src 'self' data:;
-        connect-src 'self';
+        connect-src 'self' https://cloudflareinsights.com;
         frame-src 'none';
-        frame-ancestors 'none';
         object-src 'none';
         base-uri 'self';
         form-action 'self';
@@ -92,11 +111,12 @@
     ">
 
     <!--
-        X-Frame-Options via meta é FALLBACK — não é suportado por todos os browsers.
-        A proteção real vem do header HTTP. Este meta serve apenas para browsers
-        que o implementam como fallback.
+        X-Frame-Options via <meta> NÃO é suportado por nenhum browser
+        moderno e gera aviso no console. REMOVIDO.
+        A proteção real vem do HTTP header no vercel.json:
+            "key": "X-Frame-Options", "value": "DENY"
+        e da CSP com frame-ancestors 'none' no vercel.json.
     -->
-    <meta http-equiv="X-Frame-Options" content="DENY">
 
     <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
 
