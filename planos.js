@@ -1,6 +1,6 @@
 // ==========================================
 // GRANAEVO PLANOS — planos.js
-// Versão Segura v3 | Trusted Types Fix
+// Versão Segura v4 | Carousel Fix + Trusted Types
 // ==========================================
 
 // ==========================================
@@ -13,21 +13,17 @@ const CONFIG = {
         duration:    5000
     },
     names: [
-        'Maria Silva',    'João Santos',      'Ana Costa',        'Carlos Pereira',
-        'Patricia Oliveira', 'Roberto Lima',  'Juliana Martins',  'Fernando Souza',
-        'Camila Rocha',   'Ricardo Alves',    'Beatriz Fernandes','Thiago Mendes',
-        'Lucas Ribeiro',  'Amanda Costa',     'Rafael Santos',    'Larissa Oliveira'
+        'Maria Silva',       'João Santos',       'Ana Costa',         'Carlos Pereira',
+        'Patricia Oliveira', 'Roberto Lima',      'Juliana Martins',   'Fernando Souza',
+        'Camila Rocha',      'Ricardo Alves',     'Beatriz Fernandes', 'Thiago Mendes',
+        'Lucas Ribeiro',     'Amanda Costa',      'Rafael Santos',     'Larissa Oliveira'
     ],
     plans: ['Individual', 'Casal', 'Família'],
 
-    // ✅ FIX #4 — Domínios permitidos para redirecionamento (whitelist).
-    // Qualquer URL fora desta lista é bloqueada em safeRedirect(),
-    // prevenindo Open Redirect e phishing mesmo em cenários de XSS futuro.
+    // Domínios permitidos para redirecionamento (whitelist)
     allowedRedirectDomains: ['pay.cakto.com.br'],
 
-    // ✅ FIX EXTRA #5 — Normalização de data-plan → chave canônica.
-    // O HTML usa data-plan em lowercase ("individual", "casal", "familia").
-    // O checkoutUrls usa as chaves com acentuação e capitalização corretas.
+    // Normalização de data-plan → chave canônica
     planNameMap: {
         'individual': 'Individual',
         'casal':      'Casal',
@@ -38,23 +34,14 @@ const CONFIG = {
 // ==========================================
 // CHECKOUT — REDIRECIONAMENTO SEGURO
 // ==========================================
-
-// URLs fixas e imutáveis. Nunca construa esta URL a partir de input do usuário.
-// Object.freeze() impede que qualquer outro script modifique as chaves/valores em runtime.
 const CHECKOUT_URLS = Object.freeze({
     'Individual': 'https://pay.cakto.com.br/figw38w_731973',
     'Casal':      'https://pay.cakto.com.br/rmq8b33_731974',
     'Família':    'https://pay.cakto.com.br/4x7ii5i_731976'
 });
 
-// ✅ FIX NOVO #10 — Debounce de checkout.
-// Impede que um bot ou clique rápido repetido dispare múltiplos
-// redirecionamentos / eventos de analytics em sequência.
-// O lock é liberado após 2 segundos, protegendo sem prejudicar UX.
 let checkoutLock = false;
 
-// ✅ FIX #4 — Safe Redirect:
-// Valida domínio e protocolo antes de qualquer redirecionamento.
 function safeRedirect(url) {
     let parsed;
     try {
@@ -63,53 +50,34 @@ function safeRedirect(url) {
         console.error('[GranaEvo] URL inválida bloqueada:', url);
         return;
     }
-
     if (!CONFIG.allowedRedirectDomains.includes(parsed.hostname)) {
         console.error('[GranaEvo] Redirecionamento bloqueado — domínio não autorizado:', parsed.hostname);
         return;
     }
-
     if (parsed.protocol !== 'https:') {
         console.error('[GranaEvo] Redirecionamento bloqueado — protocolo não é HTTPS:', parsed.protocol);
         return;
     }
-
     window.location.href = url;
 }
 
-// ✅ FIX #2 — Função estritamente interna ao módulo ES (type="module").
-// Não existe mais window.iniciarCheckout.
-// ✅ FIX EXTRA #5 — Normaliza o nome do plano antes de qualquer validação.
-// ✅ FIX #4 — Usa safeRedirect em vez de window.location.href direto.
-// ✅ FIX NOVO #10 — Protegido por checkoutLock para evitar flood de cliques.
 function iniciarCheckout(rawPlanName) {
-    // Debounce — rejeita chamadas repetidas dentro de 2 segundos
     if (checkoutLock) {
         console.warn('[GranaEvo] Checkout bloqueado — aguarde antes de tentar novamente.');
         return;
     }
-
-    // Normaliza: "individual" → "Individual", "familia" → "Família", etc.
     const normalized = CONFIG.planNameMap[rawPlanName?.toLowerCase()] ?? rawPlanName;
-
-    // Whitelist explícita — rejeita qualquer valor não mapeado
     if (!Object.prototype.hasOwnProperty.call(CHECKOUT_URLS, normalized)) {
         console.error('[GranaEvo] Plano desconhecido bloqueado:', rawPlanName);
         return;
     }
-
     const checkoutUrl = CHECKOUT_URLS[normalized];
-
-    // Ativa lock antes do redirect — libera após 2s caso o redirect falhe
     checkoutLock = true;
     setTimeout(() => { checkoutLock = false; }, 2000);
-
     trackEvent('Plan', 'checkout_click', normalized);
-
     safeRedirect(checkoutUrl);
 }
 
-// ✅ FIX #2 — Bind via event listeners (sem onclick inline no HTML).
 function bindCheckoutButtons() {
     document.querySelectorAll('.btn-plan[data-plan]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -140,7 +108,6 @@ function updateScrollProgress() {
     const documentHeight = document.documentElement.scrollHeight - windowHeight;
     const scrolled       = window.scrollY;
     const progress       = documentHeight > 0 ? (scrolled / documentHeight) * 100 : 0;
-
     if (scrollProgress) {
         scrollProgress.style.width = `${Math.min(progress, 100)}%`;
     }
@@ -178,7 +145,6 @@ if (mobileToggle && navLinks) {
         mobileToggle.setAttribute('aria-expanded', String(isActive));
     });
 
-    // Fechar menu ao clicar em um link
     navLinks.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', () => {
             mobileToggle.classList.remove('active');
@@ -188,7 +154,6 @@ if (mobileToggle && navLinks) {
         });
     });
 
-    // Fechar menu ao clicar fora
     document.addEventListener('click', (e) => {
         if (!navLinks.contains(e.target) && !mobileToggle.contains(e.target)) {
             mobileToggle.classList.remove('active');
@@ -200,12 +165,20 @@ if (mobileToggle && navLinks) {
 }
 
 // ==========================================
-// CAROUSEL DE PLANOS — OTIMIZADO
+// CAROUSEL DE PLANOS
 // ==========================================
-let currentSlide     = 1; // Começa no plano Casal (featured)
-const planCardsArray = Array.from(document.querySelectorAll('.plan-card'));
-const totalSlides    = planCardsArray.length;
-let isTransitioning  = false;
+// FIX v4:
+// - planCardsArray e totalSlides inicializados no DOMContentLoaded
+// - initCarousel() chamado dentro do DOMContentLoaded (sem race condition)
+// - goToSlide usa translateX(-N * 100%) sem gap, pois o CSS do track
+//   mobile não tem gap (gap: 0), tornando o cálculo exato
+// - Cards do carousel são tornados visíveis forçosamente (override do
+//   IntersectionObserver que causava opacity: 0 em cards fora da viewport)
+
+let currentSlide    = 1; // Começa no Casal (featured)
+let isTransitioning = false;
+let planCardsArray  = [];
+let totalSlides     = 0;
 
 function initCarousel() {
     const track      = document.getElementById('plansTrack');
@@ -215,33 +188,40 @@ function initCarousel() {
 
     if (!track || window.innerWidth >= 768) return;
 
-    // ✅ FIX v3 — Trusted Types: substituído indicators.innerHTML = ''
-    // por remoção manual de nós filhos via removeChild.
-    // A atribuição innerHTML = '' (mesmo string vazia) viola a diretiva
-    // require-trusted-types-for 'script' da CSP, lançando TypeError e
-    // travando TODA a função — impedindo o bind dos botões prev/next.
-    // Sem essa correção os arrows e o swipe nunca funcionam no mobile.
+    // Trusted Types: nunca usar innerHTML — usar removeChild + createElement
     if (indicators) {
         while (indicators.firstChild) {
             indicators.removeChild(indicators.firstChild);
         }
-
         for (let i = 0; i < totalSlides; i++) {
             const dot = document.createElement('button');
             dot.className = 'indicator-dot';
             dot.setAttribute('aria-label', `Ir para plano ${i + 1}`);
+            dot.setAttribute('type', 'button');
             if (i === currentSlide) dot.classList.add('active');
             dot.addEventListener('click', () => goToSlide(i));
             indicators.appendChild(dot);
         }
     }
 
-    // Navegar para o slide inicial
+    // FIX v4: garantir visibilidade de todos os cards do carousel.
+    // IntersectionObserver não detecta cards deslocados via transform,
+    // então cards 2 e 3 ficariam com opacity: 0 ao deslizar.
+    planCardsArray.forEach(card => {
+        card.style.opacity         = '1';
+        card.style.transform       = '';
+        card.style.transition      = '';
+        card.style.transitionDelay = '';
+    });
+
+    // Navega para slide inicial sem animação
     goToSlide(currentSlide, false);
 
-    // Event listeners dos botões
+    // Limpar e reatribuir event listeners (evita duplicatas em resize)
     if (prevBtn) {
-        prevBtn.addEventListener('click', () => {
+        const newPrev = prevBtn.cloneNode(true);
+        prevBtn.parentNode.replaceChild(newPrev, prevBtn);
+        newPrev.addEventListener('click', () => {
             if (isTransitioning) return;
             currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
             goToSlide(currentSlide);
@@ -249,51 +229,67 @@ function initCarousel() {
     }
 
     if (nextBtn) {
-        nextBtn.addEventListener('click', () => {
+        const newNext = nextBtn.cloneNode(true);
+        nextBtn.parentNode.replaceChild(newNext, nextBtn);
+        newNext.addEventListener('click', () => {
             if (isTransitioning) return;
             currentSlide = (currentSlide + 1) % totalSlides;
             goToSlide(currentSlide);
         });
     }
 
-    // Touch/Swipe support
+    // Touch / Swipe support
     let touchStartX = 0;
-    let touchEndX   = 0;
     let touchStartY = 0;
-    let touchEndY   = 0;
-    let isDragging  = false;
+    let touchStartTime = 0;
+    let isDragging    = false;
 
-    track.addEventListener('touchstart', (e) => {
-        touchStartX = e.changedTouches[0].screenX;
-        touchStartY = e.changedTouches[0].screenY;
-        isDragging  = true;
+    // Remove listeners anteriores clonando o elemento
+    const newTrack = track.cloneNode(true);
+    track.parentNode.replaceChild(newTrack, track);
+
+    // Rebind checkout buttons pois o track foi clonado (os filhos também)
+    bindCheckoutButtons();
+
+    const activeTrack = document.getElementById('plansTrack');
+
+    activeTrack.addEventListener('touchstart', (e) => {
+        touchStartX    = e.changedTouches[0].clientX;
+        touchStartY    = e.changedTouches[0].clientY;
+        touchStartTime = Date.now();
+        isDragging     = true;
     }, { passive: true });
 
-    track.addEventListener('touchmove', (e) => {
+    activeTrack.addEventListener('touchmove', (e) => {
         if (!isDragging) return;
-        touchEndX = e.changedTouches[0].screenX;
-        touchEndY = e.changedTouches[0].screenY;
-        const deltaX = touchStartX - touchEndX;
-        const deltaY = touchStartY - touchEndY;
-        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        const deltaX = touchStartX - e.changedTouches[0].clientX;
+        const deltaY = touchStartY - e.changedTouches[0].clientY;
+        // Previne scroll vertical apenas quando movimento é predominantemente horizontal
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 8) {
             e.preventDefault();
         }
     }, { passive: false });
 
-    track.addEventListener('touchend', (e) => {
+    activeTrack.addEventListener('touchend', (e) => {
         if (!isDragging) return;
-        touchEndX = e.changedTouches[0].screenX;
-        touchEndY = e.changedTouches[0].screenY;
-        handleSwipe();
+        const touchEndX    = e.changedTouches[0].clientX;
+        const touchEndY    = e.changedTouches[0].clientY;
+        const touchEndTime = Date.now();
+        handleSwipe(touchEndX, touchEndY, touchEndTime);
         isDragging = false;
     }, { passive: true });
 
-    function handleSwipe() {
-        const swipeThreshold = 50;
-        const deltaX = touchStartX - touchEndX;
-        const deltaY = touchStartY - touchEndY;
+    function handleSwipe(endX, endY, endTime) {
+        const swipeThreshold = 40;
+        const timeThreshold  = 400; // ms — swipes rápidos são mais sensíveis
+        const deltaX         = touchStartX - endX;
+        const deltaY         = touchStartY - endY;
+        const elapsed        = endTime - touchStartTime;
 
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > swipeThreshold) {
+        // Velocidade do swipe: swipes rápidos têm threshold reduzido
+        const dynamicThreshold = elapsed < timeThreshold ? swipeThreshold * 0.6 : swipeThreshold;
+
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > dynamicThreshold) {
             if (isTransitioning) return;
             currentSlide = deltaX > 0
                 ? (currentSlide + 1) % totalSlides
@@ -302,10 +298,9 @@ function initCarousel() {
         }
     }
 
-    // Keyboard navigation
+    // Keyboard navigation (mobile)
     document.addEventListener('keydown', (e) => {
         if (window.innerWidth >= 768 || isTransitioning) return;
-
         if (e.key === 'ArrowLeft') {
             currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
             goToSlide(currentSlide);
@@ -320,18 +315,20 @@ function goToSlide(index, animate = true) {
     const track      = document.getElementById('plansTrack');
     const indicators = document.querySelectorAll('.indicator-dot');
 
+    // FIX v4: no desktop o carousel não existe — retorna imediatamente
     if (!track || window.innerWidth >= 768) return;
 
     isTransitioning = true;
     currentSlide    = index;
 
+    // FIX v4: gap: 0 no CSS mobile → translateX(-N * 100%) é matematicamente exato
     if (!animate) {
         track.style.transition = 'none';
-    }
-    track.style.transform = `translateX(${-index * 100}%)`;
-
-    if (!animate) {
-        setTimeout(() => { track.style.transition = ''; }, 50);
+        track.style.transform  = `translateX(${-index * 100}%)`;
+        void track.offsetWidth; // força reflow para "congelar" posição
+        track.style.transition = '';
+    } else {
+        track.style.transform = `translateX(${-index * 100}%)`;
     }
 
     indicators.forEach((dot, i) => {
@@ -345,22 +342,24 @@ function goToSlide(index, animate = true) {
     setTimeout(() => { isTransitioning = false; }, 500);
 }
 
-// Inicializar carousel
-if (window.innerWidth < 768) {
-    initCarousel();
-}
-
 // Reinicializar no resize
 let resizeTimer;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+        const track = document.getElementById('plansTrack');
         if (window.innerWidth < 768) {
             initCarousel();
         } else {
-            const track = document.getElementById('plansTrack');
-            if (track) track.style.transform = 'translateX(0)';
-            planCardsArray.forEach(card => card.classList.remove('active-slide'));
+            if (track) {
+                track.style.transform  = '';
+                track.style.transition = '';
+            }
+            planCardsArray.forEach(card => {
+                card.classList.remove('active-slide');
+                card.style.transform  = '';
+                card.style.transition = '';
+            });
         }
     }, 250);
 });
@@ -368,29 +367,16 @@ window.addEventListener('resize', () => {
 // ==========================================
 // SMOOTH SCROLL
 // ==========================================
-// ✅ FIX NOVO — Validação estrita do seletor CSS antes de querySelector.
-// O relatório apontou document.querySelector(href) como ponto de atenção.
-// Mesmo com href iniciando em '#', seletores inválidos como "#a:not(b" ou
-// "#foo, body" poderiam lançar exceção ou selecionar elementos não-intencionais.
-// A regex /^#[a-zA-Z0-9_-]+$/ garante que apenas IDs simples e seguros são aceitos.
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         const href = this.getAttribute('href');
-
-        // Rejeita hrefs vazios, somente '#', ou seletores CSS complexos/inválidos
         if (!href || !/^#[a-zA-Z0-9_-]+$/.test(href)) return;
-
         e.preventDefault();
         const target = document.querySelector(href);
-
         if (target && header) {
             const headerHeight   = header.offsetHeight;
-            const targetPosition = target.offsetTop - headerHeight - 20;
-
-            window.scrollTo({
-                top:      targetPosition,
-                behavior: 'smooth'
-            });
+            const targetPosition = target.getBoundingClientRect().top + window.scrollY - headerHeight - 20;
+            window.scrollTo({ top: targetPosition, behavior: 'smooth' });
         }
     });
 });
@@ -408,30 +394,28 @@ if (canvas) {
     }
 
     resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('resize', resizeCanvas, { passive: true });
 
-    const particleCount = window.innerWidth < 768 ? 30 : 50;
+    const particleCount = window.innerWidth < 768 ? 25 : 50;
     const particles     = [];
 
     class Particle {
         constructor() {
             this.x       = Math.random() * canvas.width;
             this.y       = Math.random() * canvas.height;
-            this.size    = Math.random() * 2 + 1;
-            this.speedX  = Math.random() * 0.5 - 0.25;
-            this.speedY  = Math.random() * 0.5 - 0.25;
-            this.opacity = Math.random() * 0.5 + 0.2;
+            this.size    = Math.random() * 1.5 + 0.5;
+            this.speedX  = (Math.random() - 0.5) * 0.4;
+            this.speedY  = (Math.random() - 0.5) * 0.4;
+            this.opacity = Math.random() * 0.4 + 0.1;
         }
-
         update() {
             this.x += this.speedX;
             this.y += this.speedY;
-            if (this.x > canvas.width)  this.x = 0;
-            if (this.x < 0)             this.x = canvas.width;
-            if (this.y > canvas.height) this.y = 0;
-            if (this.y < 0)             this.y = canvas.height;
+            if (this.x > canvas.width + 5)  this.x = -5;
+            if (this.x < -5)                this.x = canvas.width + 5;
+            if (this.y > canvas.height + 5) this.y = -5;
+            if (this.y < -5)                this.y = canvas.height + 5;
         }
-
         draw() {
             ctx.fillStyle = `rgba(16, 185, 129, ${this.opacity})`;
             ctx.beginPath();
@@ -472,7 +456,7 @@ function showPurchaseNotification() {
     const nameElement   = purchaseNotification.querySelector('.notification-name');
     const actionElement = purchaseNotification.querySelector('.notification-action strong');
 
-    // ✅ textContent — sem risco de XSS via innerHTML
+    // textContent — sem risco de XSS
     if (nameElement)   nameElement.textContent   = randomName;
     if (actionElement) actionElement.textContent = `Plano ${randomPlan}`;
 
@@ -508,26 +492,16 @@ if (window.innerWidth >= 768) {
 // ==========================================
 // BUTTON RIPPLE EFFECT
 // ==========================================
-// ✅ FIX #1 — Remoção do document.createElement('style') com @keyframes ripple.
-// Criar um elemento <style> via JS exigia 'unsafe-inline' em style-src na CSP,
-// o que abria vetor para CSS injection e bypass parcial de CSP.
-//
-// O CSS do ripple está em planos.css (seção final do arquivo).
-// Com este CSS no arquivo externo, o JS abaixo define apenas os valores dinâmicos
-// (tamanho e posição do clique), que são propriedades de elemento — não <style>.
-// Propriedades de elemento definidas por JS NÃO são cobertas por style-src,
-// portanto 'unsafe-inline' pode ser removido da CSP com segurança.
-
 document.querySelectorAll('.btn-plan, .btn-primary, .btn-nav').forEach(button => {
     button.addEventListener('click', function (e) {
+        this.querySelectorAll('.btn-ripple-effect').forEach(r => r.remove());
+
         const ripple = document.createElement('span');
         const rect   = this.getBoundingClientRect();
         const size   = Math.max(rect.width, rect.height);
         const x      = e.clientX - rect.left - size / 2;
         const y      = e.clientY - rect.top  - size / 2;
 
-        // Apenas valores dinâmicos (tamanho/posição) são definidos inline via JS.
-        // A animação, border-radius e background vêm da classe CSS.
         ripple.className    = 'btn-ripple-effect';
         ripple.style.width  = `${size}px`;
         ripple.style.height = `${size}px`;
@@ -535,7 +509,7 @@ document.querySelectorAll('.btn-plan, .btn-primary, .btn-nav').forEach(button =>
         ripple.style.top    = `${y}px`;
 
         this.appendChild(ripple);
-        setTimeout(() => ripple.remove(), 600);
+        setTimeout(() => ripple.remove(), 650);
     });
 });
 
@@ -552,7 +526,6 @@ document.querySelectorAll('.faq-item').forEach(item => {
     question.addEventListener('click', () => {
         const isActive = item.classList.contains('active');
 
-        // Fechar todos os outros
         document.querySelectorAll('.faq-item').forEach(other => {
             if (other !== item) {
                 other.classList.remove('active');
@@ -563,7 +536,6 @@ document.querySelectorAll('.faq-item').forEach(item => {
             }
         });
 
-        // Toggle o atual
         if (!isActive) {
             item.classList.add('active');
             answer.style.maxHeight = `${answer.scrollHeight}px`;
@@ -593,18 +565,29 @@ const fadeObserver = new IntersectionObserver((entries) => {
     });
 }, observerOptions);
 
+// FIX v4: plan-cards no mobile NÃO recebem opacity:0 do observer.
+// No mobile, o IntersectionObserver não detecta cards fora da viewport
+// que foram deslocados por CSS transform — eles ficariam invisíveis ao
+// deslizar. A visibilidade dos cards é gerenciada pelo initCarousel().
 document.querySelectorAll('.plan-card, .benefit-card, .faq-item').forEach((el, index) => {
+    const isPlanCardMobile = el.classList.contains('plan-card') && window.innerWidth < 768;
+
+    if (isPlanCardMobile) {
+        el.style.opacity   = '1';
+        el.style.transform = '';
+        return; // Não aplica fade-in no carousel mobile
+    }
+
     el.style.opacity         = '0';
     el.style.transform       = 'translateY(20px)';
     el.style.transition      = 'opacity 0.6s ease, transform 0.6s ease';
-    el.style.transitionDelay = `${index * 0.1}s`;
+    el.style.transitionDelay = `${index * 0.08}s`;
     fadeObserver.observe(el);
 });
 
 // ==========================================
-// TRACK INTERACTIONS
+// TRACK INTERACTIONS — ANALYTICS
 // ==========================================
-// ✅ FIX EXTRA #6 — console.log removido de produção.
 function trackEvent(category, action, label) {
     if (window.gtag) {
         window.gtag('event', action, {
@@ -612,30 +595,24 @@ function trackEvent(category, action, label) {
             event_label:    label
         });
     }
-
     if (window.fbq) {
         window.fbq('track', action, { category, label });
     }
 }
 
-// Track cliques nos botões de plano
 document.querySelectorAll('.btn-plan').forEach(btn => {
     btn.addEventListener('click', (e) => {
         const planCard = e.target.closest('.plan-card');
         const planName = planCard?.dataset.plan;
-        if (planName) {
-            trackEvent('Plan', 'click', planName);
-        }
+        if (planName) trackEvent('Plan', 'click', planName);
     });
 });
 
 // ==========================================
 // PERFORMANCE MONITORING
 // ==========================================
-// ✅ FIX EXTRA #7 — PerformanceNavigationTiming (substitui window.performance.timing depreciado)
 window.addEventListener('load', () => {
     if (!window.performance) return;
-
     const [navEntry] = performance.getEntriesByType('navigation');
     if (navEntry) {
         const pageLoadTime = Math.round(navEntry.duration);
@@ -648,12 +625,8 @@ window.addEventListener('load', () => {
 // ==========================================
 // ONLINE / OFFLINE STATUS
 // ==========================================
-window.addEventListener('online',  () => {
-    // Reconectar lógica aqui se necessário
-});
-window.addEventListener('offline', () => {
-    // Notificar o usuário se necessário
-});
+window.addEventListener('online',  () => {});
+window.addEventListener('offline', () => {});
 
 // ==========================================
 // SCROLL RESTORATION
@@ -687,10 +660,19 @@ document.addEventListener('keydown', (e) => {
 // INITIALIZATION
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // ✅ FIX #2 — Bind dos botões de checkout sem onclick inline e sem global
+    // FIX v4: arrays inicializados aqui, após DOM pronto
+    planCardsArray = Array.from(document.querySelectorAll('.plan-card'));
+    totalSlides    = planCardsArray.length;
+
+    // Bind dos botões de checkout (sem onclick inline, sem window global)
     bindCheckoutButtons();
 
-    // Animação inicial suave
+    // FIX v4: initCarousel() consolidado aqui dentro do DOMContentLoaded
+    // Elimina race condition e garante que o DOM esteja 100% pronto
+    if (window.innerWidth < 768) {
+        initCarousel();
+    }
+
     setTimeout(() => {
         document.body.style.opacity = '1';
     }, 100);
@@ -701,10 +683,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==========================================
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        // Descomentar quando tiver service worker configurado
-        // Atenção: implementar cache validation para evitar cache poisoning
+        // Descomentar quando sw.js estiver configurado com cache validation
         // navigator.serviceWorker.register('/sw.js')
-        //     .then(reg => console.log('[GranaEvo] Service Worker registrado'))
-        //     .catch(err => console.error('[GranaEvo] Service Worker erro:', err));
+        //     .then(() => {})
+        //     .catch(err => console.error('[GranaEvo] SW erro:', err));
     });
 }
