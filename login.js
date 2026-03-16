@@ -444,9 +444,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
-    // Limpa inline style antes de aplicar classe — inline style
-    // tem maior prioridade que qualquer classe CSS e travaria o display.
-    el.style.display = '';
+    el.style.display = 'flex';
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
     CaptchaState.activate();
@@ -556,15 +554,11 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Valida apenas o limite máximo para evitar DoS com payload gigante.
-    // Mínimo de caracteres NÃO é validado aqui — senhas erradas devem
-    // chegar ao Supabase para serem contadas como tentativa de login
-    // e ativar o captcha corretamente após 3 erros.
-    if (password.length > 128) {
-        showAuthMessage('Senha inválida.', 'error');
-        shakeInput(inputs.loginPassword);
-        return;
-    }
+    // Nenhuma validação de formato de senha no login.
+    // Qualquer senha (exceto vazia) chega ao Supabase e é contada
+    // como tentativa — ativa captcha após 3 erros corretamente.
+    // Mensagem genérica em todos os erros: nunca revela se o email
+    // está cadastrado ou não (anti-enumeração).
 
     const currentAttempts = LoginAttempts.get();
 
@@ -603,16 +597,9 @@ loginForm.addEventListener('submit', async (e) => {
 
             if (attempts >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
                 showCaptcha();
-                showAuthMessage(
-                    'Credenciais inválidas. Complete a verificação de segurança para continuar.',
-                    'error'
-                );
-            } else {
-                showAuthMessage(
-                    `Credenciais inválidas. ${remaining} tentativa${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}.`,
-                    'error'
-                );
             }
+            // Mensagem sempre genérica — nunca revela se o email existe
+            showAuthMessage('Email ou senha inválidos.', 'error');
 
             shakeInput(inputs.loginEmail);
             shakeInput(inputs.loginPassword);
