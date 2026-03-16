@@ -1,511 +1,533 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GranaEvo — Acesso</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GranaEvo - Acesso Premium</title>
 
-  <!--
-    ╔══════════════════════════════════════════════╗
-    ║  CONTENT SECURITY POLICY — LOGIN v3.0        ║
-    ║  • script-src: sem unsafe-inline, sem eval   ║
-    ║  • style-src: unsafe-inline (necessário para ║
-    ║    Google Fonts e animações dinâmicas CSS)    ║
-    ║  • Trusted Types: implementado no JS         ║
-    ╚══════════════════════════════════════════════╝
-  -->
-  <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    upgrade-insecure-requests;
-    script-src 'self'
-      https://cdn.jsdelivr.net
-      https://www.google.com/recaptcha/
-      https://www.gstatic.com/recaptcha/
-      https://www.recaptcha.net/recaptcha/;
-    style-src 'self' 'unsafe-inline'
-      https://fonts.googleapis.com;
-    font-src 'self'
-      https://fonts.gstatic.com;
-    img-src 'self' data:
-      https://www.gstatic.com/;
-    connect-src 'self'
-      https://fvrhqqeofqedmhadzzqw.supabase.co
-      https://cdn.jsdelivr.net
-      https://www.google.com
-      https://www.recaptcha.net
-      https://recaptcha.google.com
-      https://www.gstatic.com;
-    frame-src
-      https://www.google.com/recaptcha/
-      https://www.recaptcha.net/recaptcha/
-      https://recaptcha.google.com/;
-    object-src 'none';
-    base-uri 'self';
-    form-action 'self';
-  ">
+    <!--
+        ╔══════════════════════════════════════════════════════════╗
+        ║  CONTENT SECURITY POLICY — LOGIN                        ║
+        ╠══════════════════════════════════════════════════════════╣
+        ║  Correções aplicadas em relação à versão anterior:      ║
+        ║                                                          ║
+        ║  [CSP-FIX-1] frame-ancestors 'none' ADICIONADO.         ║
+        ║    A versão anterior usava <meta X-Frame-Options="DENY"> ║
+        ║    que é IGNORADA por todos os browsers. Somente o       ║
+        ║    frame-ancestors na CSP tem efeito real contra         ║
+        ║    clickjacking quando entregue via meta tag.            ║
+        ║                                                          ║
+        ║  [CSP-FIX-2] cdn.jsdelivr.net REMOVIDO de script-src    ║
+        ║    e connect-src. supabase-js agora é auto-hospedado     ║
+        ║    via supabase-client.js (supply chain hardening).      ║
+        ║                                                          ║
+        ║  [CSP-FIX-3] require-trusted-types-for 'script'         ║
+        ║    ADICIONADO. Bloqueia innerHTML/eval/document.write    ║
+        ║    sem uso da policy granaevo-policy (proteção DOM-XSS). ║
+        ║    O JS define a policy para restauração segura de       ║
+        ║    botões (HTML estático capturado na inicialização).    ║
+        ║                                                          ║
+        ║  [CSP-FIX-4] upgrade-insecure-requests ADICIONADO.      ║
+        ║    Força todos os recursos para HTTPS.                   ║
+        ║                                                          ║
+        ║  [CSP-FIX-5] connect-src para reCAPTCHA corrigido.      ║
+        ║    Adicionado https://www.google.com para callbacks      ║
+        ║    de rede do widget v2.                                 ║
+        ╚══════════════════════════════════════════════════════════╝
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        upgrade-insecure-requests;
+        script-src 'self'
+            https://www.google.com/recaptcha/
+            https://www.gstatic.com/recaptcha/;
+        style-src 'self';
+        img-src 'self' data: https://www.gstatic.com/;
+        font-src 'self';
+        connect-src 'self'
+            https://fvrhqqeofqedmhadzzqw.supabase.co
+            https://www.google.com;
+        frame-src
+            https://www.google.com/recaptcha/
+            https://recaptcha.google.com/;
+        frame-ancestors 'none';
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+        require-trusted-types-for 'script';
+        trusted-types granaevo-policy;
+    ">
 
-  <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta http-equiv="Permissions-Policy"
-        content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
+    <!--
+        [REF-FIX-1] strict-origin-when-cross-origin substituiu no-referrer.
+        no-referrer bloqueava o referrer mesmo em navegação interna,
+        quebrando analytics próprio e rastreamento de funil.
+        strict-origin-when-cross-origin envia apenas a origem (sem path/query)
+        para destinos externos, protegendo tokens e parâmetros sensíveis
+        enquanto mantém o referrer completo dentro do próprio domínio.
+    -->
+    <meta name="referrer" content="strict-origin-when-cross-origin">
 
-  <!-- Fonts: Oxanium (display/brand) + Outfit (body) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@600;700;800&family=Outfit:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
+    <!--
+        [PERM-FIX-1] Permissions-Policy adicionado.
+        Bloqueia acesso a APIs sensíveis mesmo que um XSS ocorra.
+    -->
+    <meta http-equiv="Permissions-Policy"
+          content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
 
-  <link rel="stylesheet" href="login.css">
-
-  <!-- reCAPTCHA v2 — auto-render via data-* attributes no widget -->
-  <script src="https://www.google.com/recaptcha/api.js"
-          async defer referrerpolicy="no-referrer"></script>
+    <link rel="stylesheet" href="login.css">
+    <script src="https://www.google.com/recaptcha/api.js"
+            async
+            defer
+            referrerpolicy="no-referrer"></script>
 </head>
 <body>
+    <!-- Partículas de moedas flutuantes -->
+    <div class="money-particles" id="moneyParticles" aria-hidden="true"></div>
 
-  <!-- ── Canvas de partículas (z-index 0, fixed) ── -->
-  <canvas id="bgCanvas" aria-hidden="true"></canvas>
+    <!-- Gráficos animados de fundo -->
+    <div class="animated-charts" id="animatedCharts" aria-hidden="true"></div>
 
-  <!-- ── Blobs de glow ambiente ── -->
-  <div class="glow glow-1" aria-hidden="true"></div>
-  <div class="glow glow-2" aria-hidden="true"></div>
+    <!-- Orbs de gradiente verde -->
+    <div class="gradient-orb orb-1" aria-hidden="true"></div>
+    <div class="gradient-orb orb-2" aria-hidden="true"></div>
+    <div class="gradient-orb orb-3" aria-hidden="true"></div>
 
-  <!-- ── Layout raiz ── -->
-  <div class="layout">
+    <!-- Container principal -->
+    <div class="login-container">
 
-    <!-- ════════════════════════════════
-         PAINEL DA MARCA (esquerda)
-         ════════════════════════════════ -->
-    <aside class="brand-panel" aria-hidden="true">
+        <!-- Lado esquerdo - Visualização Financeira 3D -->
+        <div class="financial-side" aria-hidden="true">
+            <div class="financial-3d-wrapper">
+                <div class="financial-visual">
+                    <div class="growth-card">
+                        <div class="card-content">
+                            <div class="logo-section">
+                                <div class="logo-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+                                <h1 class="logo-text">GranaEvo</h1>
+                            </div>
 
-      <div class="brand-body">
+                            <p class="tagline">Evolua suas finanças com inteligência</p>
 
-        <!-- Logo com anel animado -->
-        <div class="logo-stack">
-          <div class="logo-ring">
-            <div class="logo-frame">
-              <img src="icon/granaevo-logo.jpeg" alt="" class="logo-img">
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <div class="stat-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                            <line x1="12" y1="1" x2="12" y2="23" stroke-width="2" stroke-linecap="round"/>
+                                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Controle Total</span>
+                                        <span class="stat-value">100%</span>
+                                    </div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Análises</span>
+                                        <span class="stat-value">Real-time</span>
+                                    </div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                            <circle cx="12" cy="12" r="10" stroke-width="2"/>
+                                            <polyline points="12 6 12 12 16 14" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Metas</span>
+                                        <span class="stat-value">Inteligentes</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="decoration">
+                                <div class="deco-line"></div>
+                                <div class="deco-dot"></div>
+                                <div class="deco-line"></div>
+                            </div>
+
+                            <div class="features-list">
+                                <div class="feature-item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                        <polyline points="20 6 9 17 4 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>Dashboard inteligente e intuitivo</span>
+                                </div>
+                                <div class="feature-item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                        <polyline points="20 6 9 17 4 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>Relatórios detalhados automáticos</span>
+                                </div>
+                                <div class="feature-item">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                        <polyline points="20 6 9 17 4 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>Segurança bancária avançada</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-          <div class="logo-halo"></div>
         </div>
 
-        <h1 class="brand-name">GranaEvo</h1>
-        <p class="brand-tagline">Evolua suas finanças<br>com inteligência</p>
+        <!-- Lado direito - Formulário -->
+        <div class="form-side">
+            <div class="form-wrapper">
 
-        <hr class="brand-sep" aria-hidden="true">
+                <!-- ===== TELA DE LOGIN ===== -->
+                <div class="screen active" id="loginScreen">
+                    <a href="landingpage.html" class="back-button" rel="noopener noreferrer">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                            <path d="M19 12H5M12 19l-7-7 7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Voltar</span>
+                    </a>
 
-        <ul class="feat-list" aria-label="Funcionalidades">
-          <li class="feat-item">
-            <span class="feat-pip" aria-hidden="true"></span>
-            Dashboard inteligente e intuitivo
-          </li>
-          <li class="feat-item">
-            <span class="feat-pip" aria-hidden="true"></span>
-            Relatórios detalhados automáticos
-          </li>
-          <li class="feat-item">
-            <span class="feat-pip" aria-hidden="true"></span>
-            Segurança bancária avançada
-          </li>
-        </ul>
+                    <div class="form-header">
+                        <h2 class="form-title">Bem-vindo de volta!</h2>
+                        <p class="form-subtitle">Acesse sua conta para continuar evoluindo</p>
+                    </div>
 
-        <div class="kpi-row">
-          <div class="kpi">
-            <span class="kpi-val">100%</span>
-            <span class="kpi-key">Controle</span>
-          </div>
-          <span class="kpi-sep" aria-hidden="true"></span>
-          <div class="kpi">
-            <span class="kpi-val">Real-time</span>
-            <span class="kpi-key">Análises</span>
-          </div>
-          <span class="kpi-sep" aria-hidden="true"></span>
-          <div class="kpi">
-            <span class="kpi-val">Smart</span>
-            <span class="kpi-key">Metas</span>
-          </div>
+                    <!-- Área de mensagens de status — usa textContent para evitar XSS -->
+                    <div id="authErrorMessage"
+                         class="auth-message"
+                         style="display: none;"
+                         role="alert"
+                         aria-live="polite"
+                         aria-atomic="true">
+                    </div>
+
+                    <form class="login-form" id="loginForm" novalidate autocomplete="on">
+                        <div class="form-group">
+                            <label for="loginEmail" class="form-label">Email</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke-width="2"/>
+                                    <path d="M22 6l-10 7L2 6" stroke-width="2"/>
+                                </svg>
+                                <input
+                                    type="email"
+                                    id="loginEmail"
+                                    name="email"
+                                    class="form-input"
+                                    placeholder="seu@email.com"
+                                    required
+                                    autocomplete="email"
+                                    inputmode="email"
+                                    maxlength="254"
+                                    aria-required="true"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="loginPassword" class="form-label">Senha</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
+                                </svg>
+                                <input
+                                    type="password"
+                                    id="loginPassword"
+                                    name="password"
+                                    class="form-input"
+                                    placeholder="••••••••"
+                                    required
+                                    autocomplete="current-password"
+                                    maxlength="128"
+                                    aria-required="true"
+                                >
+                                <!-- Botão de toggle — tipo button para não submeter o form -->
+                                <button type="button"
+                                        class="toggle-password"
+                                        id="togglePassword"
+                                        aria-label="Mostrar senha"
+                                        aria-pressed="false">
+                                    <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke-width="2"/>
+                                        <circle cx="12" cy="12" r="3" stroke-width="2"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-options">
+                            <label class="checkbox-wrapper">
+                                <input type="checkbox" id="remember" name="remember">
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-label">Lembrar de mim</span>
+                            </label>
+                            <button type="button" class="forgot-link" id="forgotPasswordBtn">
+                                Esqueceu a senha?
+                            </button>
+                        </div>
+
+                        <!-- ===== CONTAINER DO RECAPTCHA (oculto até 3 erros) ===== -->
+                        <div id="captchaContainer"
+                             class="captcha-hidden"
+                             role="region"
+                             aria-label="Verificação de segurança"
+                             aria-live="polite">
+                            <div class="captcha-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" style="width:16px;height:16px;stroke:var(--error-red);flex-shrink:0;">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Verificação de segurança necessária
+                            </div>
+                            <div
+                                class="g-recaptcha"
+                                data-sitekey="6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye"
+                                data-callback="onCaptchaResolved"
+                                data-expired-callback="onCaptchaExpired"
+                                data-error-callback="onCaptchaError"
+                                data-theme="dark"
+                            ></div>
+                        </div>
+                        <!-- ===== FIM DO CONTAINER DO RECAPTCHA ===== -->
+
+                        <button type="submit" class="btn-submit" id="loginSubmitBtn">
+                            <span class="btn-text">Entrar</span>
+                            <span class="btn-loading" aria-hidden="true">
+                                <svg class="spinner" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="32" stroke-dashoffset="32">
+                                        <animate attributeName="stroke-dashoffset" dur="1s" from="32" to="0" repeatCount="indefinite"/>
+                                    </circle>
+                                </svg>
+                            </span>
+                            <div class="btn-glow" aria-hidden="true"></div>
+                        </button>
+
+                        <div class="divider" aria-hidden="true">
+                            <span class="divider-line"></span>
+                            <span class="divider-text">É novo por aqui?</span>
+                            <span class="divider-line"></span>
+                        </div>
+
+                        <div class="register-link">
+                            <span>Ainda não tem conta?</span>
+                            <a href="planos.html" rel="noopener noreferrer">Confira os planos</a>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- ===== TELA DE RECUPERAÇÃO - Email ===== -->
+                <div class="screen" id="forgotEmailScreen" aria-hidden="true">
+                    <button class="back-btn" id="backToLogin" type="button" aria-label="Voltar para login">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Voltar
+                    </button>
+
+                    <div class="recovery-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 16v-4M12 8h.01"/>
+                        </svg>
+                    </div>
+
+                    <h2 class="form-title">Recuperar senha</h2>
+                    <p class="form-subtitle">Digite seu email para receber o código de verificação</p>
+                    <form class="recovery-form" novalidate autocomplete="off">
+                        <div class="form-group">
+                            <label for="recoveryEmail" class="form-label">Email cadastrado</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke-width="2"/>
+                                    <path d="M22 6l-10 7L2 6" stroke-width="2"/>
+                                </svg>
+                                <input
+                                    type="email"
+                                    id="recoveryEmail"
+                                    name="recoveryEmail"
+                                    class="form-input"
+                                    placeholder="Digite seu email"
+                                    required
+                                    autocomplete="off"
+                                    inputmode="email"
+                                    maxlength="254"
+                                    aria-required="true"
+                                >
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn-submit" id="sendCodeBtn">
+                            <span class="btn-text">Enviar código</span>
+                            <div class="btn-glow" aria-hidden="true"></div>
+                        </button>
+
+                        <p class="help-text">
+                            <a href="planos.html" class="link-text" rel="noopener noreferrer">Ver planos</a>
+                        </p>
+                    </form>
+                </div>
+
+                <!-- ===== TELA DE CÓDIGO DE VERIFICAÇÃO ===== -->
+                <div class="screen" id="codeScreen" aria-hidden="true">
+                    <button class="back-btn" id="backToEmail" type="button" aria-label="Voltar para inserção de email">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Voltar
+                    </button>
+
+                    <div class="recovery-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                    </div>
+
+                    <h2 class="form-title">Código de verificação</h2>
+                    <p class="form-subtitle">Digite o código de 6 dígitos enviado para seu email</p>
+
+                    <form class="recovery-form" novalidate autocomplete="off">
+                        <div class="code-inputs" role="group" aria-label="Código de verificação de 6 dígitos">
+                            <!-- autocomplete="one-time-code" permite autopreenchimento pelo SO apenas no primeiro campo -->
+                            <input type="text" maxlength="1" class="code-input" data-index="0" inputmode="numeric" autocomplete="one-time-code" aria-label="Dígito 1 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="1" inputmode="numeric" autocomplete="off" aria-label="Dígito 2 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="2" inputmode="numeric" autocomplete="off" aria-label="Dígito 3 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="3" inputmode="numeric" autocomplete="off" aria-label="Dígito 4 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="4" inputmode="numeric" autocomplete="off" aria-label="Dígito 5 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="5" inputmode="numeric" autocomplete="off" aria-label="Dígito 6 de 6" pattern="[0-9]">
+                        </div>
+
+                        <button type="button" class="btn-submit" id="verifyCodeBtn">
+                            <span class="btn-text">Confirmar código</span>
+                            <div class="btn-glow" aria-hidden="true"></div>
+                        </button>
+
+                        <p class="help-text">
+                            Não recebeu o código?
+                            <button type="button" class="link-text" id="resendCode">Reenviar</button>
+                        </p>
+                    </form>
+                </div>
+
+                <!-- ===== TELA DE NOVA SENHA ===== -->
+                <div class="screen" id="newPasswordScreen" aria-hidden="true">
+                    <button class="back-btn" id="backToCode" type="button" aria-label="Voltar para código de verificação">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Voltar
+                    </button>
+
+                    <div class="recovery-icon success" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </div>
+
+                    <h2 class="form-title">Nova senha</h2>
+                    <p class="form-subtitle">Digite sua nova senha (mínimo 8 caracteres, letras e números)</p>
+                    <form class="recovery-form" novalidate autocomplete="off">
+                        <div class="form-group">
+                            <label for="newPassword" class="form-label">Nova senha</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
+                                </svg>
+                                <input
+                                    type="password"
+                                    id="newPassword"
+                                    name="newPassword"
+                                    class="form-input"
+                                    placeholder="Nova senha"
+                                    required
+                                    autocomplete="new-password"
+                                    minlength="8"
+                                    maxlength="128"
+                                    aria-required="true"
+                                    aria-describedby="passwordRequirements"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="confirmPassword" class="form-label">Confirmar senha</label>
+                            <div class="input-wrapper">
+                                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
+                                </svg>
+                                <input
+                                    type="password"
+                                    id="confirmPassword"
+                                    name="confirmPassword"
+                                    class="form-input"
+                                    placeholder="Confirme sua senha"
+                                    required
+                                    autocomplete="new-password"
+                                    minlength="8"
+                                    maxlength="128"
+                                    aria-required="true"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="error-message"
+                             id="errorMessage"
+                             role="alert"
+                             aria-live="polite"
+                             aria-atomic="true">
+                        </div>
+
+                        <button type="button" class="btn-submit" id="changePasswordBtn">
+                            <span class="btn-text">Alterar senha</span>
+                            <div class="btn-glow" aria-hidden="true"></div>
+                        </button>
+
+                        <p class="help-text">
+                            <a href="planos.html" class="link-text" rel="noopener noreferrer">Ver planos</a>
+                        </p>
+                    </form>
+                </div>
+
+                <!-- ===== TELA DE SUCESSO ===== -->
+                <div class="screen" id="successScreen" aria-hidden="true">
+                    <div class="recovery-icon success animated" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </div>
+
+                    <h2 class="form-title">Senha alterada!</h2>
+                    <p class="form-subtitle">Sua senha foi alterada com sucesso</p>
+
+                    <button type="button" class="btn-submit" id="backToLoginFinal">
+                        <span class="btn-text">Fazer login</span>
+                        <div class="btn-glow" aria-hidden="true"></div>
+                    </button>
+
+                    <p class="help-text">
+                        <a href="planos.html" class="link-text" rel="noopener noreferrer">Ver planos</a>
+                    </p>
+                </div>
+
+            </div>
         </div>
+    </div>
 
-      </div>
-
-      <!-- Borda ondulada (direita do painel) -->
-      <div class="brand-edge" aria-hidden="true">
-        <svg viewBox="0 0 64 900" preserveAspectRatio="none"
-             fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M64 0 C22 180 22 360 54 450 C86 540 22 720 0 900 L64 900 Z"
-                fill="var(--bg)"/>
-        </svg>
-      </div>
-
-    </aside>
-
-    <!-- ════════════════════════════════
-         PAINEL DO FORMULÁRIO (direita)
-         ════════════════════════════════ -->
-    <main class="form-panel">
-
-      <!-- Marca mobile (oculta no desktop) -->
-      <div class="mobile-brand" aria-hidden="true">
-        <div class="mobile-ring">
-          <img src="icon/granaevo-logo.jpeg" alt="" class="mobile-logo">
-        </div>
-        <span class="mobile-name">GranaEvo</span>
-      </div>
-
-      <!-- Alerta global (fora das telas para sempre aparecer) -->
-      <div id="authMsg"
-           class="flash"
-           role="alert"
-           aria-live="polite"
-           aria-atomic="true"></div>
-
-      <!-- Container de telas -->
-      <div class="screens">
-
-        <!-- ─────────────────────────────
-             TELA 1: LOGIN
-             ───────────────────────────── -->
-        <section class="screen active" id="s-login">
-          <header class="sh">
-            <h2 class="sh-title">Bem-vindo de volta</h2>
-            <p class="sh-sub">Acesse sua conta para continuar evoluindo</p>
-          </header>
-
-          <form id="loginForm" method="POST" novalidate autocomplete="on">
-
-            <!-- Email -->
-            <div class="field">
-              <label for="loginEmail" class="flabel">Email</label>
-              <div class="finput-wrap">
-                <svg class="ficon" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" aria-hidden="true">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4
-                           c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke-width="1.5"/>
-                  <path d="M22 6l-10 7L2 6" stroke-width="1.5"/>
-                </svg>
-                <input type="email" id="loginEmail" name="email"
-                       class="finput"
-                       placeholder="seu@email.com"
-                       required autocomplete="email"
-                       inputmode="email" maxlength="254"
-                       aria-required="true">
-              </div>
-            </div>
-
-            <!-- Senha -->
-            <div class="field">
-              <label for="loginPassword" class="flabel">Senha</label>
-              <div class="finput-wrap">
-                <svg class="ficon" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" aria-hidden="true">
-                  <rect x="3" y="11" width="18" height="11" rx="2"
-                        stroke-width="1.5"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="1.5"/>
-                </svg>
-                <input type="password" id="loginPassword" name="password"
-                       class="finput"
-                       placeholder="••••••••"
-                       required autocomplete="current-password"
-                       maxlength="128" aria-required="true">
-                <button type="button" id="togglePw" class="pw-toggle"
-                        aria-label="Mostrar senha" aria-pressed="false">
-                  <svg class="pw-eye" viewBox="0 0 24 24" fill="none"
-                       stroke="currentColor" aria-hidden="true">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-                          stroke-width="1.5"/>
-                    <circle cx="12" cy="12" r="3" stroke-width="1.5"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <!-- Lembrar + Esqueci -->
-            <div class="form-row">
-              <label class="chk-wrap">
-                <input type="checkbox" id="remember" name="remember"
-                       class="chk-native">
-                <span class="chk-box" aria-hidden="true"></span>
-                <span class="chk-label">Lembrar de mim</span>
-              </label>
-              <button type="button" id="forgotBtn" class="ghost-btn">
-                Esqueceu a senha?
-              </button>
-            </div>
-
-            <!-- reCAPTCHA — visível apenas após 3 tentativas falhadas -->
-            <div id="captchaWrap"
-                 class="captcha-wrap captcha-hidden"
-                 role="region"
-                 aria-label="Verificação de segurança"
-                 aria-live="polite">
-              <div class="captcha-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     aria-hidden="true">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
-                        stroke-width="1.5"/>
-                </svg>
-                Verificação de segurança necessária
-              </div>
-              <div class="g-recaptcha"
-                   data-sitekey="6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye"
-                   data-callback="onCaptchaResolved"
-                   data-expired-callback="onCaptchaExpired"
-                   data-error-callback="onCaptchaError"
-                   data-theme="dark"></div>
-            </div>
-
-            <!-- Botão de submit -->
-            <button type="submit" id="loginBtn" class="btn">
-              <span class="btn-txt">Entrar</span>
-              <span class="btn-shine" aria-hidden="true"></span>
-            </button>
-
-            <p class="form-foot">
-              É novo por aqui?
-              <a href="planos.html" class="flink" rel="noopener noreferrer">
-                Confira os planos
-              </a>
-            </p>
-
-          </form>
-        </section>
-
-        <!-- ─────────────────────────────
-             TELA 2: RECUPERAR SENHA (Email)
-             ───────────────────────────── -->
-        <section class="screen" id="s-forgot" aria-hidden="true">
-          <button type="button" id="backToLogin" class="back-btn"
-                  aria-label="Voltar para login">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 aria-hidden="true">
-              <path d="M19 12H5M12 19l-7-7 7-7"
-                    stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            Voltar
-          </button>
-
-          <div class="screen-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" stroke-width="1.5"/>
-              <path d="M12 16v-4M12 8h.01"
-                    stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </div>
-
-          <header class="sh">
-            <h2 class="sh-title">Recuperar senha</h2>
-            <p class="sh-sub">Informe seu email para receber o código</p>
-          </header>
-
-          <form novalidate autocomplete="off">
-            <div class="field">
-              <label for="recoveryEmail" class="flabel">Email cadastrado</label>
-              <div class="finput-wrap">
-                <svg class="ficon" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" aria-hidden="true">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4
-                           c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke-width="1.5"/>
-                  <path d="M22 6l-10 7L2 6" stroke-width="1.5"/>
-                </svg>
-                <input type="email" id="recoveryEmail" name="recoveryEmail"
-                       class="finput"
-                       placeholder="seu@email.com"
-                       required autocomplete="off"
-                       inputmode="email" maxlength="254"
-                       aria-required="true">
-              </div>
-            </div>
-
-            <button type="button" id="sendCodeBtn" class="btn">
-              <span class="btn-txt">Enviar código</span>
-              <span class="btn-shine" aria-hidden="true"></span>
-            </button>
-
-            <p class="form-foot">
-              <a href="planos.html" class="flink" rel="noopener noreferrer">
-                Ver planos
-              </a>
-            </p>
-          </form>
-        </section>
-
-        <!-- ─────────────────────────────
-             TELA 3: CÓDIGO DE VERIFICAÇÃO
-             ───────────────────────────── -->
-        <section class="screen" id="s-code" aria-hidden="true">
-          <button type="button" id="backToEmail" class="back-btn"
-                  aria-label="Voltar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 aria-hidden="true">
-              <path d="M19 12H5M12 19l-7-7 7-7"
-                    stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            Voltar
-          </button>
-
-          <div class="screen-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="3" y="11" width="18" height="11" rx="2"
-                    stroke-width="1.5"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="1.5"/>
-            </svg>
-          </div>
-
-          <header class="sh">
-            <h2 class="sh-title">Código de verificação</h2>
-            <p class="sh-sub">Digite o código de 6 dígitos enviado por email</p>
-          </header>
-
-          <form novalidate autocomplete="off">
-            <div class="code-row"
-                 role="group"
-                 aria-label="Código de verificação de 6 dígitos">
-              <input type="text" maxlength="1" class="code-box"
-                     inputmode="numeric" autocomplete="one-time-code"
-                     aria-label="Dígito 1 de 6" pattern="[0-9]">
-              <input type="text" maxlength="1" class="code-box"
-                     inputmode="numeric" autocomplete="off"
-                     aria-label="Dígito 2 de 6" pattern="[0-9]">
-              <input type="text" maxlength="1" class="code-box"
-                     inputmode="numeric" autocomplete="off"
-                     aria-label="Dígito 3 de 6" pattern="[0-9]">
-              <input type="text" maxlength="1" class="code-box"
-                     inputmode="numeric" autocomplete="off"
-                     aria-label="Dígito 4 de 6" pattern="[0-9]">
-              <input type="text" maxlength="1" class="code-box"
-                     inputmode="numeric" autocomplete="off"
-                     aria-label="Dígito 5 de 6" pattern="[0-9]">
-              <input type="text" maxlength="1" class="code-box"
-                     inputmode="numeric" autocomplete="off"
-                     aria-label="Dígito 6 de 6" pattern="[0-9]">
-            </div>
-
-            <button type="button" id="verifyCodeBtn" class="btn">
-              <span class="btn-txt">Confirmar código</span>
-              <span class="btn-shine" aria-hidden="true"></span>
-            </button>
-
-            <p class="form-foot">
-              Não recebeu?
-              <button type="button" id="resendBtn" class="ghost-btn">
-                Reenviar
-              </button>
-            </p>
-          </form>
-        </section>
-
-        <!-- ─────────────────────────────
-             TELA 4: NOVA SENHA
-             ───────────────────────────── -->
-        <section class="screen" id="s-newpw" aria-hidden="true">
-          <button type="button" id="backToCode" class="back-btn"
-                  aria-label="Voltar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 aria-hidden="true">
-              <path d="M19 12H5M12 19l-7-7 7-7"
-                    stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            Voltar
-          </button>
-
-          <div class="screen-ico screen-ico--ok" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"
-                    stroke-width="1.5" stroke-linecap="round"/>
-              <polyline points="22 4 12 14.01 9 11.01"
-                        stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </div>
-
-          <header class="sh">
-            <h2 class="sh-title">Nova senha</h2>
-            <p class="sh-sub">Mínimo 8 caracteres com letras e números</p>
-          </header>
-
-          <form novalidate autocomplete="off">
-            <div class="field">
-              <label for="newPassword" class="flabel">Nova senha</label>
-              <div class="finput-wrap">
-                <svg class="ficon" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" aria-hidden="true">
-                  <rect x="3" y="11" width="18" height="11" rx="2"
-                        stroke-width="1.5"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="1.5"/>
-                </svg>
-                <input type="password" id="newPassword" class="finput"
-                       placeholder="Nova senha" required
-                       autocomplete="new-password"
-                       minlength="8" maxlength="128"
-                       aria-required="true">
-              </div>
-            </div>
-
-            <div class="field">
-              <label for="confirmPassword" class="flabel">Confirmar senha</label>
-              <div class="finput-wrap">
-                <svg class="ficon" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" aria-hidden="true">
-                  <rect x="3" y="11" width="18" height="11" rx="2"
-                        stroke-width="1.5"/>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="1.5"/>
-                </svg>
-                <input type="password" id="confirmPassword" class="finput"
-                       placeholder="Confirme a nova senha" required
-                       autocomplete="new-password"
-                       minlength="8" maxlength="128"
-                       aria-required="true">
-              </div>
-            </div>
-
-            <div id="pwError"
-                 class="inline-error"
-                 role="alert"
-                 aria-live="polite"
-                 aria-atomic="true"></div>
-
-            <button type="button" id="changePwBtn" class="btn">
-              <span class="btn-txt">Alterar senha</span>
-              <span class="btn-shine" aria-hidden="true"></span>
-            </button>
-          </form>
-        </section>
-
-        <!-- ─────────────────────────────
-             TELA 5: SUCESSO
-             ───────────────────────────── -->
-        <section class="screen" id="s-ok" aria-hidden="true">
-          <div class="screen-ico screen-ico--ok screen-ico--pop"
-               aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"
-                    stroke-width="1.5" stroke-linecap="round"/>
-              <polyline points="22 4 12 14.01 9 11.01"
-                        stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </div>
-
-          <header class="sh">
-            <h2 class="sh-title">Senha alterada!</h2>
-            <p class="sh-sub">Tudo certo — agora é só entrar</p>
-          </header>
-
-          <button type="button" id="goLoginBtn" class="btn">
-            <span class="btn-txt">Fazer login</span>
-            <span class="btn-shine" aria-hidden="true"></span>
-          </button>
-
-          <p class="form-foot">
-            <a href="planos.html" class="flink" rel="noopener noreferrer">
-              Ver planos
-            </a>
-          </p>
-        </section>
-
-      </div><!-- /screens -->
-    </main>
-
-  </div><!-- /layout -->
-
-  <script type="module" src="login.js"></script>
+    <script type="module" src="login.js"></script>
 </body>
 </html>
