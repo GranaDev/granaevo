@@ -1,6 +1,5 @@
 // ==========================================
-// GRANAEVO PLANOS — planos.js
-// Versão Segura v4 | Carousel Fix + Trusted Types
+// GRANAEVO PLANOS — planos.js  v5
 // ==========================================
 
 // ==========================================
@@ -10,24 +9,20 @@ const CONFIG = {
     purchaseNotification: {
         minInterval: 15000,
         maxInterval: 90000,
-        duration:    5000
+        duration: 5000
     },
     names: [
-        'Maria Silva',       'João Santos',       'Ana Costa',         'Carlos Pereira',
-        'Patricia Oliveira', 'Roberto Lima',      'Juliana Martins',   'Fernando Souza',
-        'Camila Rocha',      'Ricardo Alves',     'Beatriz Fernandes', 'Thiago Mendes',
-        'Lucas Ribeiro',     'Amanda Costa',      'Rafael Santos',     'Larissa Oliveira'
+        'Maria Silva', 'João Santos', 'Ana Costa', 'Carlos Pereira',
+        'Patricia Oliveira', 'Roberto Lima', 'Juliana Martins', 'Fernando Souza',
+        'Camila Rocha', 'Ricardo Alves', 'Beatriz Fernandes', 'Thiago Mendes',
+        'Lucas Ribeiro', 'Amanda Costa', 'Rafael Santos', 'Larissa Oliveira'
     ],
     plans: ['Individual', 'Casal', 'Família'],
-
-    // Domínios permitidos para redirecionamento (whitelist)
     allowedRedirectDomains: ['pay.cakto.com.br'],
-
-    // Normalização de data-plan → chave canônica
     planNameMap: {
         'individual': 'Individual',
-        'casal':      'Casal',
-        'familia':    'Família'
+        'casal': 'Casal',
+        'familia': 'Família'
     }
 };
 
@@ -44,45 +39,33 @@ let checkoutLock = false;
 
 function safeRedirect(url) {
     let parsed;
-    try {
-        parsed = new URL(url);
-    } catch {
-        console.error('[GranaEvo] URL inválida bloqueada:', url);
-        return;
+    try { parsed = new URL(url); } catch {
+        console.error('[GranaEvo] URL inválida:', url); return;
     }
     if (!CONFIG.allowedRedirectDomains.includes(parsed.hostname)) {
-        console.error('[GranaEvo] Redirecionamento bloqueado — domínio não autorizado:', parsed.hostname);
-        return;
+        console.error('[GranaEvo] Domínio bloqueado:', parsed.hostname); return;
     }
     if (parsed.protocol !== 'https:') {
-        console.error('[GranaEvo] Redirecionamento bloqueado — protocolo não é HTTPS:', parsed.protocol);
-        return;
+        console.error('[GranaEvo] Protocolo bloqueado:', parsed.protocol); return;
     }
     window.location.href = url;
 }
 
 function iniciarCheckout(rawPlanName) {
-    if (checkoutLock) {
-        console.warn('[GranaEvo] Checkout bloqueado — aguarde antes de tentar novamente.');
-        return;
-    }
+    if (checkoutLock) return;
     const normalized = CONFIG.planNameMap[rawPlanName?.toLowerCase()] ?? rawPlanName;
     if (!Object.prototype.hasOwnProperty.call(CHECKOUT_URLS, normalized)) {
-        console.error('[GranaEvo] Plano desconhecido bloqueado:', rawPlanName);
-        return;
+        console.error('[GranaEvo] Plano desconhecido:', rawPlanName); return;
     }
-    const checkoutUrl = CHECKOUT_URLS[normalized];
     checkoutLock = true;
     setTimeout(() => { checkoutLock = false; }, 2000);
     trackEvent('Plan', 'checkout_click', normalized);
-    safeRedirect(checkoutUrl);
+    safeRedirect(CHECKOUT_URLS[normalized]);
 }
 
 function bindCheckoutButtons() {
     document.querySelectorAll('.btn-plan[data-plan]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            iniciarCheckout(btn.dataset.plan);
-        });
+        btn.addEventListener('click', () => iniciarCheckout(btn.dataset.plan));
     });
 }
 
@@ -90,12 +73,8 @@ function bindCheckoutButtons() {
 // LOADING SCREEN
 // ==========================================
 window.addEventListener('load', () => {
-    const loadingScreen = document.getElementById('loadingScreen');
-    if (loadingScreen) {
-        setTimeout(() => {
-            loadingScreen.classList.add('hidden');
-        }, 1200);
-    }
+    const el = document.getElementById('loadingScreen');
+    if (el) setTimeout(() => el.classList.add('hidden'), 1200);
 });
 
 // ==========================================
@@ -104,38 +83,30 @@ window.addEventListener('load', () => {
 const scrollProgress = document.getElementById('scrollProgress');
 
 function updateScrollProgress() {
-    const windowHeight   = window.innerHeight;
-    const documentHeight = document.documentElement.scrollHeight - windowHeight;
-    const scrolled       = window.scrollY;
-    const progress       = documentHeight > 0 ? (scrolled / documentHeight) * 100 : 0;
-    if (scrollProgress) {
-        scrollProgress.style.width = `${Math.min(progress, 100)}%`;
-    }
+    if (!scrollProgress) return;
+    const total = document.documentElement.scrollHeight - window.innerHeight;
+    scrollProgress.style.width = total > 0
+        ? `${Math.min((window.scrollY / total) * 100, 100)}%`
+        : '0%';
 }
 
 window.addEventListener('scroll', updateScrollProgress, { passive: true });
 
 // ==========================================
-// HEADER SCROLL EFFECT
+// HEADER SCROLL
 // ==========================================
 const header = document.getElementById('header');
 
-function handleHeaderScroll() {
+window.addEventListener('scroll', () => {
     if (!header) return;
-    if (window.scrollY > 100) {
-        header.classList.add('scrolled');
-    } else {
-        header.classList.remove('scrolled');
-    }
-}
-
-window.addEventListener('scroll', handleHeaderScroll, { passive: true });
+    header.classList.toggle('scrolled', window.scrollY > 100);
+}, { passive: true });
 
 // ==========================================
-// MOBILE MENU TOGGLE
+// MOBILE MENU
 // ==========================================
 const mobileToggle = document.getElementById('mobileToggle');
-const navLinks     = document.getElementById('navLinks');
+const navLinks = document.getElementById('navLinks');
 
 if (mobileToggle && navLinks) {
     mobileToggle.addEventListener('click', () => {
@@ -146,67 +117,109 @@ if (mobileToggle && navLinks) {
     });
 
     navLinks.querySelectorAll('a').forEach(link => {
-        link.addEventListener('click', () => {
-            mobileToggle.classList.remove('active');
-            navLinks.classList.remove('active');
-            document.body.style.overflow = '';
-            mobileToggle.setAttribute('aria-expanded', 'false');
-        });
+        link.addEventListener('click', closeMobileMenu);
     });
 
     document.addEventListener('click', (e) => {
-        if (!navLinks.contains(e.target) && !mobileToggle.contains(e.target)) {
-            mobileToggle.classList.remove('active');
-            navLinks.classList.remove('active');
-            document.body.style.overflow = '';
-            mobileToggle.setAttribute('aria-expanded', 'false');
+        if (navLinks.classList.contains('active') &&
+            !navLinks.contains(e.target) &&
+            !mobileToggle.contains(e.target)) {
+            closeMobileMenu();
         }
     });
 }
 
-// ==========================================
-// CAROUSEL DE PLANOS
-// ==========================================
-// FIX v4:
-// - planCardsArray e totalSlides inicializados no DOMContentLoaded
-// - initCarousel() chamado dentro do DOMContentLoaded (sem race condition)
-// - goToSlide usa translateX(-N * 100%) sem gap, pois o CSS do track
-//   mobile não tem gap (gap: 0), tornando o cálculo exato
-// - Cards do carousel são tornados visíveis forçosamente (override do
-//   IntersectionObserver que causava opacity: 0 em cards fora da viewport)
+function closeMobileMenu() {
+    mobileToggle?.classList.remove('active');
+    navLinks?.classList.remove('active');
+    document.body.style.overflow = '';
+    mobileToggle?.setAttribute('aria-expanded', 'false');
+}
 
-let currentSlide    = 1; // Começa no Casal (featured)
-let isTransitioning = false;
-let planCardsArray  = [];
-let totalSlides     = 0;
+// ==========================================
+// CAROUSEL
+//
+// Arquitectura v5 — 3 princípios:
+//
+// 1. ZERO innerHTML / cloneNode — Trusted Types compliant.
+//    Indicators criados via createElement + appendChild.
+//
+// 2. Event listeners adicionados UMA única vez via flag
+//    `carouselInitialized`. Resize apenas reposiciona o slide,
+//    não re-registra listeners (evita duplicatas).
+//
+// 3. Touch/swipe no #plansCarousel (wrapper com overflow:hidden),
+//    NÃO no #plansTrack (que se move com translateX).
+//    Tocar no track em movimento causa falsos touchstart/end.
+// ==========================================
+let currentSlide      = 1;  // Casal (featured) começa selecionado
+let isTransitioning   = false;
+let planCardsArray    = [];
+let totalSlides       = 0;
+let carouselReady     = false; // garante que listeners são adicionados 1x
 
-function initCarousel() {
-    const track      = document.getElementById('plansTrack');
+function buildIndicators() {
     const indicators = document.getElementById('carouselIndicators');
-    const prevBtn    = document.getElementById('prevBtn');
-    const nextBtn    = document.getElementById('nextBtn');
+    if (!indicators) return;
 
-    if (!track || window.innerWidth >= 768) return;
-
-    // Trusted Types: nunca usar innerHTML — usar removeChild + createElement
-    if (indicators) {
-        while (indicators.firstChild) {
-            indicators.removeChild(indicators.firstChild);
-        }
-        for (let i = 0; i < totalSlides; i++) {
-            const dot = document.createElement('button');
-            dot.className = 'indicator-dot';
-            dot.setAttribute('aria-label', `Ir para plano ${i + 1}`);
-            dot.setAttribute('type', 'button');
-            if (i === currentSlide) dot.classList.add('active');
-            dot.addEventListener('click', () => goToSlide(i));
-            indicators.appendChild(dot);
-        }
+    // Remove filhos existentes SEM innerHTML (Trusted Types)
+    while (indicators.firstChild) {
+        indicators.removeChild(indicators.firstChild);
     }
 
-    // FIX v4: garantir visibilidade de todos os cards do carousel.
-    // IntersectionObserver não detecta cards deslocados via transform,
-    // então cards 2 e 3 ficariam com opacity: 0 ao deslizar.
+    for (let i = 0; i < totalSlides; i++) {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'indicator-dot' + (i === currentSlide ? ' active' : '');
+        dot.setAttribute('aria-label', `Ir para plano ${i + 1}`);
+        dot.addEventListener('click', () => goToSlide(i));
+        indicators.appendChild(dot);
+    }
+}
+
+function goToSlide(index, animate = true) {
+    const track = document.getElementById('plansTrack');
+    if (!track || window.innerWidth >= 768) return;
+
+    isTransitioning = true;
+    currentSlide    = index;
+
+    if (!animate) {
+        // Desativa transição, posiciona, re-ativa transição após reflow
+        track.style.transition = 'none';
+        track.style.transform  = `translateX(${-index * 100}%)`;
+        void track.offsetWidth;          // força reflow
+        track.style.transition = '';
+    } else {
+        track.style.transform = `translateX(${-index * 100}%)`;
+    }
+
+    // Atualiza dots
+    document.querySelectorAll('.indicator-dot').forEach((dot, i) => {
+        dot.classList.toggle('active', i === index);
+    });
+
+    // Marca card ativo
+    planCardsArray.forEach((card, i) => {
+        card.classList.toggle('active-slide', i === index);
+    });
+
+    setTimeout(() => { isTransitioning = false; }, 500);
+}
+
+function initCarousel() {
+    if (window.innerWidth >= 768) return;
+
+    const track    = document.getElementById('plansTrack');
+    const carousel = document.getElementById('plansCarousel');
+
+    if (!track || !carousel) return;
+
+    // Reconstrói indicators (pode ser chamado no resize)
+    buildIndicators();
+
+    // Garante que todos os cards estão visíveis
+    // (IntersectionObserver pode ter colocado opacity:0 em cards fora da viewport)
     planCardsArray.forEach(card => {
         card.style.opacity         = '1';
         card.style.transform       = '';
@@ -214,91 +227,69 @@ function initCarousel() {
         card.style.transitionDelay = '';
     });
 
-    // Navega para slide inicial sem animação
+    // Posiciona no slide inicial sem animação
     goToSlide(currentSlide, false);
 
-    // Limpar e reatribuir event listeners (evita duplicatas em resize)
+    // ── Listeners: registrados apenas 1 vez ──────────────────────────
+    if (carouselReady) return;
+    carouselReady = true;
+
+    // Botão prev
+    const prevBtn = document.getElementById('prevBtn');
     if (prevBtn) {
-        const newPrev = prevBtn.cloneNode(true);
-        prevBtn.parentNode.replaceChild(newPrev, prevBtn);
-        newPrev.addEventListener('click', () => {
-            if (isTransitioning) return;
+        prevBtn.addEventListener('click', () => {
+            if (isTransitioning || window.innerWidth >= 768) return;
             currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
             goToSlide(currentSlide);
         });
     }
 
+    // Botão next
+    const nextBtn = document.getElementById('nextBtn');
     if (nextBtn) {
-        const newNext = nextBtn.cloneNode(true);
-        nextBtn.parentNode.replaceChild(newNext, nextBtn);
-        newNext.addEventListener('click', () => {
-            if (isTransitioning) return;
+        nextBtn.addEventListener('click', () => {
+            if (isTransitioning || window.innerWidth >= 768) return;
             currentSlide = (currentSlide + 1) % totalSlides;
             goToSlide(currentSlide);
         });
     }
 
-    // Touch / Swipe support
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let touchStartTime = 0;
-    let isDragging    = false;
+    // ── Touch/Swipe no CAROUSEL WRAPPER (não no track) ───────────────
+    // Motivo: o track se move com translateX; registrar eventos nele
+    // gera touchstart/end incorretos durante a animação.
+    let tx = 0, ty = 0, dragging = false;
 
-    // Remove listeners anteriores clonando o elemento
-    const newTrack = track.cloneNode(true);
-    track.parentNode.replaceChild(newTrack, track);
-
-    // Rebind checkout buttons pois o track foi clonado (os filhos também)
-    bindCheckoutButtons();
-
-    const activeTrack = document.getElementById('plansTrack');
-
-    activeTrack.addEventListener('touchstart', (e) => {
-        touchStartX    = e.changedTouches[0].clientX;
-        touchStartY    = e.changedTouches[0].clientY;
-        touchStartTime = Date.now();
-        isDragging     = true;
+    carousel.addEventListener('touchstart', (e) => {
+        tx       = e.changedTouches[0].clientX;
+        ty       = e.changedTouches[0].clientY;
+        dragging = true;
     }, { passive: true });
 
-    activeTrack.addEventListener('touchmove', (e) => {
-        if (!isDragging) return;
-        const deltaX = touchStartX - e.changedTouches[0].clientX;
-        const deltaY = touchStartY - e.changedTouches[0].clientY;
-        // Previne scroll vertical apenas quando movimento é predominantemente horizontal
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 8) {
-            e.preventDefault();
-        }
+    carousel.addEventListener('touchmove', (e) => {
+        if (!dragging) return;
+        const dx = Math.abs(tx - e.changedTouches[0].clientX);
+        const dy = Math.abs(ty - e.changedTouches[0].clientY);
+        // Bloqueia scroll vertical apenas quando movimento é horizontal
+        if (dx > dy && dx > 8) e.preventDefault();
     }, { passive: false });
 
-    activeTrack.addEventListener('touchend', (e) => {
-        if (!isDragging) return;
-        const touchEndX    = e.changedTouches[0].clientX;
-        const touchEndY    = e.changedTouches[0].clientY;
-        const touchEndTime = Date.now();
-        handleSwipe(touchEndX, touchEndY, touchEndTime);
-        isDragging = false;
-    }, { passive: true });
+    carousel.addEventListener('touchend', (e) => {
+        if (!dragging) return;
+        dragging = false;
+        if (isTransitioning || window.innerWidth >= 768) return;
 
-    function handleSwipe(endX, endY, endTime) {
-        const swipeThreshold = 40;
-        const timeThreshold  = 400; // ms — swipes rápidos são mais sensíveis
-        const deltaX         = touchStartX - endX;
-        const deltaY         = touchStartY - endY;
-        const elapsed        = endTime - touchStartTime;
+        const dx = tx - e.changedTouches[0].clientX;
+        const dy = ty - e.changedTouches[0].clientY;
 
-        // Velocidade do swipe: swipes rápidos têm threshold reduzido
-        const dynamicThreshold = elapsed < timeThreshold ? swipeThreshold * 0.6 : swipeThreshold;
-
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > dynamicThreshold) {
-            if (isTransitioning) return;
-            currentSlide = deltaX > 0
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+            currentSlide = dx > 0
                 ? (currentSlide + 1) % totalSlides
                 : (currentSlide - 1 + totalSlides) % totalSlides;
             goToSlide(currentSlide);
         }
-    }
+    }, { passive: true });
 
-    // Keyboard navigation (mobile)
+    // Teclado
     document.addEventListener('keydown', (e) => {
         if (window.innerWidth >= 768 || isTransitioning) return;
         if (e.key === 'ArrowLeft') {
@@ -311,55 +302,33 @@ function initCarousel() {
     });
 }
 
-function goToSlide(index, animate = true) {
-    const track      = document.getElementById('plansTrack');
-    const indicators = document.querySelectorAll('.indicator-dot');
-
-    // FIX v4: no desktop o carousel não existe — retorna imediatamente
-    if (!track || window.innerWidth >= 768) return;
-
-    isTransitioning = true;
-    currentSlide    = index;
-
-    // FIX v4: gap: 0 no CSS mobile → translateX(-N * 100%) é matematicamente exato
-    if (!animate) {
-        track.style.transition = 'none';
-        track.style.transform  = `translateX(${-index * 100}%)`;
-        void track.offsetWidth; // força reflow para "congelar" posição
-        track.style.transition = '';
-    } else {
-        track.style.transform = `translateX(${-index * 100}%)`;
-    }
-
-    indicators.forEach((dot, i) => {
-        dot.classList.toggle('active', i === index);
-    });
-
-    planCardsArray.forEach((card, i) => {
-        card.classList.toggle('active-slide', i === index);
-    });
-
-    setTimeout(() => { isTransitioning = false; }, 500);
-}
-
-// Reinicializar no resize
+// Resize: apenas reposiciona, não re-registra listeners
 let resizeTimer;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
         const track = document.getElementById('plansTrack');
-        if (window.innerWidth < 768) {
-            initCarousel();
-        } else {
+        if (window.innerWidth >= 768) {
+            // Desktop: remove transform inline
             if (track) {
                 track.style.transform  = '';
                 track.style.transition = '';
             }
             planCardsArray.forEach(card => {
                 card.classList.remove('active-slide');
-                card.style.transform  = '';
-                card.style.transition = '';
+                card.style.opacity   = '';
+                card.style.transform = '';
             });
+        } else {
+            // Mobile: reconstrói indicators e reposiciona
+            buildIndicators();
+            const t = document.getElementById('plansTrack');
+            if (t) {
+                t.style.transition = 'none';
+                t.style.transform  = `translateX(${-currentSlide * 100}%)`;
+                void t.offsetWidth;
+                t.style.transition = '';
+            }
         }
     }, 250);
 });
@@ -374,9 +343,8 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         e.preventDefault();
         const target = document.querySelector(href);
         if (target && header) {
-            const headerHeight   = header.offsetHeight;
-            const targetPosition = target.getBoundingClientRect().top + window.scrollY - headerHeight - 20;
-            window.scrollTo({ top: targetPosition, behavior: 'smooth' });
+            const top = target.getBoundingClientRect().top + window.scrollY - header.offsetHeight - 20;
+            window.scrollTo({ top, behavior: 'smooth' });
         }
     });
 });
@@ -388,53 +356,38 @@ const canvas = document.getElementById('particlesCanvas');
 if (canvas) {
     const ctx = canvas.getContext('2d');
 
-    function resizeCanvas() {
+    const resize = () => {
         canvas.width  = window.innerWidth;
         canvas.height = window.innerHeight;
-    }
+    };
+    resize();
+    window.addEventListener('resize', resize, { passive: true });
 
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas, { passive: true });
+    const count = window.innerWidth < 768 ? 25 : 50;
+    const pts   = Array.from({ length: count }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.5 + 0.5,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
+        a: Math.random() * 0.35 + 0.1
+    }));
 
-    const particleCount = window.innerWidth < 768 ? 25 : 50;
-    const particles     = [];
-
-    class Particle {
-        constructor() {
-            this.x       = Math.random() * canvas.width;
-            this.y       = Math.random() * canvas.height;
-            this.size    = Math.random() * 1.5 + 0.5;
-            this.speedX  = (Math.random() - 0.5) * 0.4;
-            this.speedY  = (Math.random() - 0.5) * 0.4;
-            this.opacity = Math.random() * 0.4 + 0.1;
-        }
-        update() {
-            this.x += this.speedX;
-            this.y += this.speedY;
-            if (this.x > canvas.width + 5)  this.x = -5;
-            if (this.x < -5)                this.x = canvas.width + 5;
-            if (this.y > canvas.height + 5) this.y = -5;
-            if (this.y < -5)                this.y = canvas.height + 5;
-        }
-        draw() {
-            ctx.fillStyle = `rgba(16, 185, 129, ${this.opacity})`;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-
-    for (let i = 0; i < particleCount; i++) {
-        particles.push(new Particle());
-    }
-
-    function animateParticles() {
+    (function loop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        particles.forEach(p => { p.update(); p.draw(); });
-        requestAnimationFrame(animateParticles);
-    }
-
-    animateParticles();
+        pts.forEach(p => {
+            p.x += p.vx; p.y += p.vy;
+            if (p.x > canvas.width + 4)  p.x = -4;
+            if (p.x < -4)                p.x = canvas.width + 4;
+            if (p.y > canvas.height + 4) p.y = -4;
+            if (p.y < -4)                p.y = canvas.height + 4;
+            ctx.fillStyle = `rgba(16,185,129,${p.a})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        requestAnimationFrame(loop);
+    })();
 }
 
 // ==========================================
@@ -442,72 +395,60 @@ if (canvas) {
 // ==========================================
 const purchaseNotification = document.getElementById('purchaseNotification');
 
-function getRandomInterval() {
-    const { minInterval, maxInterval } = CONFIG.purchaseNotification;
-    return Math.floor(Math.random() * (maxInterval - minInterval) + minInterval);
-}
-
 function showPurchaseNotification() {
     if (!purchaseNotification) return;
+    const name = CONFIG.names[Math.floor(Math.random() * CONFIG.names.length)];
+    const plan = CONFIG.plans[Math.floor(Math.random() * CONFIG.plans.length)];
 
-    const randomName = CONFIG.names[Math.floor(Math.random() * CONFIG.names.length)];
-    const randomPlan = CONFIG.plans[Math.floor(Math.random() * CONFIG.plans.length)];
-
-    const nameElement   = purchaseNotification.querySelector('.notification-name');
-    const actionElement = purchaseNotification.querySelector('.notification-action strong');
-
-    // textContent — sem risco de XSS
-    if (nameElement)   nameElement.textContent   = randomName;
-    if (actionElement) actionElement.textContent = `Plano ${randomPlan}`;
+    const nameEl   = purchaseNotification.querySelector('.notification-name');
+    const actionEl = purchaseNotification.querySelector('.notification-action strong');
+    if (nameEl)   nameEl.textContent   = name;
+    if (actionEl) actionEl.textContent = `Plano ${plan}`;
 
     purchaseNotification.classList.add('show');
+    setTimeout(() => purchaseNotification.classList.remove('show'), CONFIG.purchaseNotification.duration);
 
-    setTimeout(() => {
-        purchaseNotification.classList.remove('show');
-    }, CONFIG.purchaseNotification.duration);
-
-    setTimeout(showPurchaseNotification, getRandomInterval() + CONFIG.purchaseNotification.duration);
+    const next = Math.floor(Math.random() *
+        (CONFIG.purchaseNotification.maxInterval - CONFIG.purchaseNotification.minInterval) +
+        CONFIG.purchaseNotification.minInterval);
+    setTimeout(showPurchaseNotification, next + CONFIG.purchaseNotification.duration);
 }
 
-setTimeout(showPurchaseNotification, getRandomInterval());
+setTimeout(showPurchaseNotification,
+    Math.floor(Math.random() *
+        (CONFIG.purchaseNotification.maxInterval - CONFIG.purchaseNotification.minInterval) +
+        CONFIG.purchaseNotification.minInterval));
 
 // ==========================================
-// PLAN CARDS HOVER EFFECT (DESKTOP)
+// HOVER EFFECT — DESKTOP
 // ==========================================
 if (window.innerWidth >= 768) {
     document.querySelectorAll('.plan-card').forEach(card => {
         card.addEventListener('mouseenter', function () {
-            if (!this.classList.contains('featured')) {
+            if (!this.classList.contains('featured'))
                 this.style.transform = 'translateY(-8px) scale(1.02)';
-            }
         });
         card.addEventListener('mouseleave', function () {
-            if (!this.classList.contains('featured')) {
+            if (!this.classList.contains('featured'))
                 this.style.transform = '';
-            }
         });
     });
 }
 
 // ==========================================
-// BUTTON RIPPLE EFFECT
+// RIPPLE EFFECT
 // ==========================================
-document.querySelectorAll('.btn-plan, .btn-primary, .btn-nav').forEach(button => {
-    button.addEventListener('click', function (e) {
+document.querySelectorAll('.btn-plan, .btn-primary, .btn-nav').forEach(btn => {
+    btn.addEventListener('click', function (e) {
         this.querySelectorAll('.btn-ripple-effect').forEach(r => r.remove());
-
-        const ripple = document.createElement('span');
         const rect   = this.getBoundingClientRect();
         const size   = Math.max(rect.width, rect.height);
-        const x      = e.clientX - rect.left - size / 2;
-        const y      = e.clientY - rect.top  - size / 2;
-
+        const ripple = document.createElement('span');
         ripple.className    = 'btn-ripple-effect';
         ripple.style.width  = `${size}px`;
         ripple.style.height = `${size}px`;
-        ripple.style.left   = `${x}px`;
-        ripple.style.top    = `${y}px`;
-
+        ripple.style.left   = `${e.clientX - rect.left - size / 2}px`;
+        ripple.style.top    = `${e.clientY - rect.top  - size / 2}px`;
         this.appendChild(ripple);
         setTimeout(() => ripple.remove(), 650);
     });
@@ -517,33 +458,26 @@ document.querySelectorAll('.btn-plan, .btn-primary, .btn-nav').forEach(button =>
 // FAQ ACCORDION
 // ==========================================
 document.querySelectorAll('.faq-item').forEach(item => {
-    const question = item.querySelector('.faq-question');
-    const answer   = item.querySelector('.faq-answer');
-    const icon     = question?.querySelector('svg');
+    const q    = item.querySelector('.faq-question');
+    const ans  = item.querySelector('.faq-answer');
+    const icon = q?.querySelector('svg');
+    if (!q || !ans) return;
 
-    if (!question || !answer) return;
+    q.addEventListener('click', () => {
+        const wasActive = item.classList.contains('active');
 
-    question.addEventListener('click', () => {
-        const isActive = item.classList.contains('active');
-
-        document.querySelectorAll('.faq-item').forEach(other => {
-            if (other !== item) {
-                other.classList.remove('active');
-                const otherAnswer = other.querySelector('.faq-answer');
-                const otherIcon   = other.querySelector('.faq-question svg');
-                if (otherAnswer) otherAnswer.style.maxHeight = null;
-                if (otherIcon)   otherIcon.style.transform   = 'rotate(0deg)';
-            }
+        document.querySelectorAll('.faq-item.active').forEach(other => {
+            other.classList.remove('active');
+            const a = other.querySelector('.faq-answer');
+            const i = other.querySelector('.faq-question svg');
+            if (a) a.style.maxHeight = null;
+            if (i) i.style.transform = '';
         });
 
-        if (!isActive) {
+        if (!wasActive) {
             item.classList.add('active');
-            answer.style.maxHeight = `${answer.scrollHeight}px`;
+            ans.style.maxHeight  = `${ans.scrollHeight}px`;
             if (icon) icon.style.transform = 'rotate(180deg)';
-        } else {
-            item.classList.remove('active');
-            answer.style.maxHeight = null;
-            if (icon) icon.style.transform = 'rotate(0deg)';
         }
     });
 });
@@ -551,141 +485,79 @@ document.querySelectorAll('.faq-item').forEach(item => {
 // ==========================================
 // INTERSECTION OBSERVER — FADE IN
 // ==========================================
-const observerOptions = {
-    threshold:  0.1,
-    rootMargin: '0px 0px -50px 0px'
-};
-
-const fadeObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
-            fadeObserver.unobserve(entry.target);
+const fadeObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+        if (e.isIntersecting) {
+            e.target.classList.add('visible');
+            fadeObs.unobserve(e.target);
         }
     });
-}, observerOptions);
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
 
-// FIX v4: plan-cards no mobile NÃO recebem opacity:0 do observer.
-// No mobile, o IntersectionObserver não detecta cards fora da viewport
-// que foram deslocados por CSS transform — eles ficariam invisíveis ao
-// deslizar. A visibilidade dos cards é gerenciada pelo initCarousel().
-document.querySelectorAll('.plan-card, .benefit-card, .faq-item').forEach((el, index) => {
-    const isPlanCardMobile = el.classList.contains('plan-card') && window.innerWidth < 768;
-
-    if (isPlanCardMobile) {
-        el.style.opacity   = '1';
-        el.style.transform = '';
-        return; // Não aplica fade-in no carousel mobile
+document.querySelectorAll('.plan-card, .benefit-card, .faq-item').forEach((el, i) => {
+    // Nunca aplica fade nos plan-cards no mobile —
+    // o IntersectionObserver não detecta elementos deslocados por
+    // CSS transform, então cards 2 e 3 ficariam opacity:0 ao deslizar.
+    if (el.classList.contains('plan-card') && window.innerWidth < 768) {
+        el.style.opacity = '1';
+        return;
     }
-
     el.style.opacity         = '0';
     el.style.transform       = 'translateY(20px)';
     el.style.transition      = 'opacity 0.6s ease, transform 0.6s ease';
-    el.style.transitionDelay = `${index * 0.08}s`;
-    fadeObserver.observe(el);
+    el.style.transitionDelay = `${i * 0.08}s`;
+    fadeObs.observe(el);
 });
 
 // ==========================================
-// TRACK INTERACTIONS — ANALYTICS
+// ANALYTICS
 // ==========================================
 function trackEvent(category, action, label) {
-    if (window.gtag) {
-        window.gtag('event', action, {
-            event_category: category,
-            event_label:    label
-        });
-    }
-    if (window.fbq) {
-        window.fbq('track', action, { category, label });
-    }
+    if (window.gtag) window.gtag('event', action, { event_category: category, event_label: label });
+    if (window.fbq)  window.fbq('track', action, { category, label });
 }
 
 document.querySelectorAll('.btn-plan').forEach(btn => {
     btn.addEventListener('click', (e) => {
-        const planCard = e.target.closest('.plan-card');
-        const planName = planCard?.dataset.plan;
-        if (planName) trackEvent('Plan', 'click', planName);
+        const name = e.target.closest('.plan-card')?.dataset.plan;
+        if (name) trackEvent('Plan', 'click', name);
     });
 });
 
 // ==========================================
-// PERFORMANCE MONITORING
+// PERFORMANCE
 // ==========================================
 window.addEventListener('load', () => {
-    if (!window.performance) return;
-    const [navEntry] = performance.getEntriesByType('navigation');
-    if (navEntry) {
-        const pageLoadTime = Math.round(navEntry.duration);
-        if (pageLoadTime > 3000) {
-            console.warn(`[GranaEvo] Tempo de carregamento alto: ${pageLoadTime}ms`);
-        }
-    }
+    const [nav] = performance?.getEntriesByType?.('navigation') ?? [];
+    if (nav && Math.round(nav.duration) > 3000)
+        console.warn(`[GranaEvo] Carregamento alto: ${Math.round(nav.duration)}ms`);
 });
 
 // ==========================================
-// ONLINE / OFFLINE STATUS
+// MISC
 // ==========================================
-window.addEventListener('online',  () => {});
-window.addEventListener('offline', () => {});
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
-// ==========================================
-// SCROLL RESTORATION
-// ==========================================
-if ('scrollRestoration' in history) {
-    history.scrollRestoration = 'manual';
-}
-
-// ==========================================
-// ACCESSIBILITY
-// ==========================================
 if (mobileToggle) {
-    mobileToggle.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            mobileToggle.click();
-        }
+    mobileToggle.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); mobileToggle.click(); }
     });
 }
 
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && navLinks?.classList.contains('active')) {
-        mobileToggle?.classList.remove('active');
-        navLinks.classList.remove('active');
-        document.body.style.overflow = '';
-        mobileToggle?.setAttribute('aria-expanded', 'false');
-    }
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeMobileMenu();
 });
 
 // ==========================================
-// INITIALIZATION
+// INIT — tudo dentro de DOMContentLoaded
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // FIX v4: arrays inicializados aqui, após DOM pronto
     planCardsArray = Array.from(document.querySelectorAll('.plan-card'));
     totalSlides    = planCardsArray.length;
 
-    // Bind dos botões de checkout (sem onclick inline, sem window global)
     bindCheckoutButtons();
 
-    // FIX v4: initCarousel() consolidado aqui dentro do DOMContentLoaded
-    // Elimina race condition e garante que o DOM esteja 100% pronto
-    if (window.innerWidth < 768) {
-        initCarousel();
-    }
+    if (window.innerWidth < 768) initCarousel();
 
-    setTimeout(() => {
-        document.body.style.opacity = '1';
-    }, 100);
+    setTimeout(() => { document.body.style.opacity = '1'; }, 100);
 });
-
-// ==========================================
-// SERVICE WORKER (OPCIONAL)
-// ==========================================
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        // Descomentar quando sw.js estiver configurado com cache validation
-        // navigator.serviceWorker.register('/sw.js')
-        //     .then(() => {})
-        //     .catch(err => console.error('[GranaEvo] SW erro:', err));
-    });
-}
