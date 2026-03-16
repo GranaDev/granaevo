@@ -7,41 +7,32 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN v2.2                   ║
+        ║  CONTENT SECURITY POLICY — LOGIN v2.3                   ║
         ╠══════════════════════════════════════════════════════════╣
-        ║  Correções aplicadas sobre v2.1:                         ║
+        ║  Correções aplicadas sobre v2.2:                         ║
         ║                                                          ║
-        ║  [CSP-FIX-1..5] mantidos da versão anterior.            ║
+        ║  [CSP-FIX-1..9] mantidos da versão anterior.            ║
         ║                                                          ║
-        ║  [CSP-FIX-6] frame-ancestors REMOVIDO da meta tag.      ║
-        ║    A diretiva frame-ancestors É IGNORADA por todos os    ║
-        ║    browsers quando entregue via <meta> (per spec CSP     ║
-        ║    Level 3, seção 6.1). Para proteção real contra        ║
-        ║    clickjacking configure o HTTP response header:        ║
-        ║    Content-Security-Policy: frame-ancestors 'none'       ║
-        ║    (ou no servidor: Nginx, Apache, Vercel, Netlify…)     ║
-        ║                                                          ║
-        ║  [CSP-FIX-7] style-src agora inclui 'unsafe-inline'.    ║
-        ║    Necessário para o posicionamento dinâmico de          ║
-        ║    partículas animadas, parallax e ripple — valores       ║
-        ║    calculados em runtime (left/top/transform aleatórios) ║
-        ║    que não podem ser expressos via classes CSS estáticas. ║
-        ║    A proteção crítica contra XSS permanece intacta via:  ║
-        ║      • script-src 'self' (sem unsafe-inline em scripts)  ║
-        ║      • require-trusted-types-for 'script'                ║
-        ║    CSS injection tem impacto muito menor que script XSS. ║
-        ║                                                          ║
-        ║  [CSP-FIX-8] cdn.jsdelivr.net READICIONADO a            ║
-        ║    script-src enquanto supabase-client.js importa o SDK  ║
-        ║    via CDN. Recomendado: migrar para bundle self-hosted   ║
-        ║    (npm run build) e remover esta entrada.               ║
-        ║                                                          ║
-        ║  [CSP-FIX-9] trusted-types agora inclui 'goog#html'.    ║
-        ║    Política interna usada pelo reCAPTCHA v2 para criar   ║
-        ║    TrustedScriptURL e TrustedHTML internamente.          ║
-        ║    Sem esta entrada o widget falha com:                  ║
-        ║    "Policy 'goog#html' disallowed" e                     ║
+        ║  [CSP-FIX-10] trusted-types: adicionados 'goog' e       ║
+        ║    'allow-duplicates'.                                   ║
+        ║    O reCAPTCHA api.js injeta sub-scripts dinamicamente   ║
+        ║    e para isso cria uma TrustedScriptURL interna via a   ║
+        ║    policy 'goog'. Sem esta entrada o browser bloqueia    ║
+        ║    o .src = '...' no HTMLScriptElement com o erro:       ║
         ║    "Requires TrustedScriptURL assignment".               ║
+        ║    'allow-duplicates' permite que a mesma policy seja    ║
+        ║    recriada em diferentes contextos do widget (iframes   ║
+        ║    e workers do reCAPTCHA chamam createPolicy duas       ║
+        ║    vezes com o mesmo nome — sem esta flag lançaria erro). ║
+        ║                                                          ║
+        ║  [CSP-FIX-11] connect-src: adicionados domínios do      ║
+        ║    reCAPTCHA v2 em runtime:                              ║
+        ║    • https://www.recaptcha.net  — fallback de rede       ║
+        ║    • https://recaptcha.google.com — verificação          ║
+        ║    • https://www.gstatic.com    — assets do widget       ║
+        ║    Sem estes domínios o browser bloqueava todas as       ║
+        ║    conexões de verificação do widget com erros            ║
+        ║    "Connecting to '<URL>' violates connect-src".         ║
         ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
@@ -56,7 +47,10 @@
         font-src 'self';
         connect-src 'self'
             https://fvrhqqeofqedmhadzzqw.supabase.co
-            https://www.google.com;
+            https://www.google.com
+            https://www.recaptcha.net
+            https://recaptcha.google.com
+            https://www.gstatic.com;
         frame-src
             https://www.google.com/recaptcha/
             https://recaptcha.google.com/;
@@ -64,7 +58,7 @@
         base-uri 'self';
         form-action 'self';
         require-trusted-types-for 'script';
-        trusted-types granaevo-policy goog#html;
+        trusted-types granaevo-policy goog#html goog 'allow-duplicates';
     ">
 
     <!--
