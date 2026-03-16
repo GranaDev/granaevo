@@ -1548,3 +1548,15 @@ body {
         will-change: auto;
     }
 }
+
+/* [FIX-JS-CODE-1] Substitui buttons.verifyCode.style.transform inline */
+.btn-pulse {
+    transform: scale(1.02);
+    transition: transform 0.2s ease;
+}
+
+/* [FIX-JS-CB-1] Substitui custom.style.transform inline no checkbox */
+.checkbox-custom-bounce {
+    transform: scale(1.15);
+    transition: transform 0.2s ease;
+}
