@@ -5,14 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GranaEvo - Acesso Premium</title>
 
+    <!--
+        ╔══════════════════════════════════════════════════════════╗
+        ║  CONTENT SECURITY POLICY — LOGIN v3.0                   ║
+        ╠══════════════════════════════════════════════════════════╣
+        ║  [CSP-FIX-1..13] mantidos das versões anteriores.       ║
+        ║                                                          ║
+        ║  [CSP-FIX-14] script-src: adicionado                    ║
+        ║    https://www.recaptcha.net/recaptcha/ para cobrir      ║
+        ║    sub-recursos carregados pelo reCAPTCHA em algumas     ║
+        ║    regiões onde www.google.com é inacessível.            ║
+        ║                                                          ║
+        ║  [HTML-FIX-1] style="display:none" removido do          ║
+        ║    #captchaContainer — JS controla via classList.        ║
+        ║                                                          ║
+        ║  [HTML-FIX-2] Inline style do SVG do captcha-label      ║
+        ║    substituído pela classe .captcha-label-icon no CSS.   ║
+        ║                                                          ║
+        ║  [HTML-FIX-3] reCAPTCHA carregado com                   ║
+        ║    ?render=explicit&onload=_grOnLoad                     ║
+        ║    O parâmetro onload garante que window._grOnLoad()     ║
+        ║    é chamado quando a lib está 100% pronta — elimina a   ║
+        ║    race condition entre async/defer do script e a        ║
+        ║    avaliação do módulo login.js.                         ║
+        ╚══════════════════════════════════════════════════════════╝
+    -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         upgrade-insecure-requests;
-        script-src 'self' 'unsafe-inline'
+        script-src 'self'
+            'unsafe-eval' /* Necessário para o reCAPTCHA */
+            'sha256-Qy9mS7bEqlEUxON8uHeSqpSpAVwmaih+kA/AVLUIKwA='
             https://cdn.jsdelivr.net
             https://www.google.com/recaptcha/
             https://www.recaptcha.net/recaptcha/
             https://www.gstatic.com/recaptcha/;
+        report-uri /csp-report-endpoint; /* Substitua pelo seu endpoint de relatório de CSP */
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: https://www.gstatic.com/;
         font-src 'self';
@@ -27,6 +55,7 @@
             https://www.google.com/recaptcha/
             https://www.recaptcha.net/recaptcha/
             https://recaptcha.google.com/;
+        report-uri /csp-report-endpoint; /* Substitua pelo seu endpoint de relatório de CSP */
         object-src 'none';
         base-uri 'self';
         form-action 'self';
@@ -39,11 +68,31 @@
     <link rel="stylesheet" href="login.css">
 
     <!--
-        render=explicit: impede que o reCAPTCHA auto-renderize elementos na página.
-        SEM onload callback — o login.js detecta grecaptcha via poll interno.
-        Isso evita qualquer race condition entre async/module.
+        SOLUÇÃO DEFINITIVA PARA O RECAPTCHA INVISÍVEL
+
+        Problema raiz: login.js usa type="module" (sempre deferido pelo browser).
+        O reCAPTCHA usa "async" e pode chamar window._grOnLoad ANTES do módulo
+        ser avaliado — _grOnLoad não existia, causando o erro no console.
+
+        Solução: script INLINE SÍNCRONO define _grOnLoad durante o parse do HTML.
+        Sem arquivo externo, sem risco de 404, sem problema de MIME type.
+        O login.js lê as flags __grCaptchaReady / __grPendingRender.
     -->
-    <script src="https://www.google.com/recaptcha/api.js?render=explicit"
+    <script>
+    (function () {
+        window.__grCaptchaReady  = false;
+        window.__grPendingRender = null;
+        window._grOnLoad = function () {
+            window.__grCaptchaReady = true;
+            if (typeof window.__grPendingRender === 'function') {
+                var fn = window.__grPendingRender;
+                window.__grPendingRender = null;
+                fn();
+            }
+        };
+    }());
+    </script>
+    <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=_grOnLoad"
             async
             defer
             referrerpolicy="no-referrer"></script>
@@ -59,7 +108,9 @@
 
     <div class="login-container">
 
-        <!-- LADO ESQUERDO — Visual Financeiro -->
+        <!-- ══════════════════════════════════
+             LADO ESQUERDO — Visual Financeiro
+             ══════════════════════════════════ -->
         <div class="financial-side" aria-hidden="true">
             <div class="financial-3d-wrapper">
                 <div class="financial-visual">
@@ -68,7 +119,7 @@
 
                             <div class="logo-section">
                                 <div class="logo-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                                         <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                         <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                         <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -150,13 +201,15 @@
             </div>
         </div>
 
-        <!-- LADO DIREITO — Formulário -->
+        <!-- ══════════════════════════════════
+             LADO DIREITO — Formulário
+             ══════════════════════════════════ -->
         <div class="form-side">
             <div class="form-wrapper">
 
-                <!-- TELA DE LOGIN -->
+                <!-- ===== TELA DE LOGIN ===== -->
                 <div class="screen active" id="loginScreen">
-                    <a href="landingpage.html" class="back-button" rel="noopener noreferrer">
+                    <a href="#" class="back-btn" aria-label="Voltar para a página inicial">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                             <path d="M19 12H5M12 19l-7-7 7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
@@ -175,11 +228,7 @@
                          aria-atomic="true">
                     </div>
 
-                    <!--
-                        novalidate: desativa TODA validação nativa do browser.
-                        Sem minlength no campo senha — qualquer senha não-vazia
-                        vai direto ao Supabase e conta como tentativa.
-                    -->
+                    <!-- novalidate desabilita toda validação nativa do browser -->
                     <form class="login-form" id="loginForm" novalidate autocomplete="on">
 
                         <div class="form-group">
@@ -195,6 +244,7 @@
                                     name="email"
                                     class="form-input"
                                     placeholder="seu@email.com"
+                                    required
                                     autocomplete="email"
                                     inputmode="email"
                                     maxlength="254"
@@ -211,9 +261,9 @@
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
                                 </svg>
                                 <!--
-                                    SEM minlength — propositalmente.
-                                    Qualquer senha não-vazia é enviada ao Supabase.
-                                    Validação de tamanho SOMENTE na tela de nova senha.
+                                    [HTML-FIX-4] minlength REMOVIDO — sem restrição de tamanho
+                                    no campo de login. Qualquer senha não-vazia é enviada ao
+                                    Supabase e contabilizada como tentativa (ativa captcha).
                                 -->
                                 <input
                                     type="password"
@@ -221,6 +271,7 @@
                                     name="password"
                                     class="form-input"
                                     placeholder="••••••••"
+                                    required
                                     autocomplete="current-password"
                                     maxlength="128"
                                     aria-required="true"
@@ -249,11 +300,10 @@
                             </button>
                         </div>
 
-                        <!--
-                            captchaContainer: começa oculto via .captcha-hidden.
-                            JS chama showCaptcha() após 3 tentativas erradas.
-                            O widget reCAPTCHA é renderizado via grecaptcha.render()
-                            com poll interno — sem depender de callback onload.
+                        <!-- ===== CONTAINER DO RECAPTCHA =====
+                             [HTML-FIX-1] style="display:none" removido.
+                             Display controlado via classList pelo JS.
+                             [HTML-FIX-2] SVG usa .captcha-label-icon em vez de inline style.
                         -->
                         <div id="captchaContainer"
                              class="captcha-hidden"
@@ -262,7 +312,8 @@
                              aria-live="polite">
                             <div class="captcha-label">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                     aria-hidden="true" class="captcha-label-icon">
+                                     aria-hidden="true"
+                                     class="captcha-label-icon">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
                                 Verificação de segurança necessária
@@ -288,7 +339,7 @@
                     </form>
                 </div>
 
-                <!-- TELA DE RECUPERAÇÃO — Email -->
+                <!-- ===== TELA DE RECUPERAÇÃO — Email ===== -->
                 <div class="screen" id="forgotEmailScreen" aria-hidden="true">
                     <button class="back-btn" id="backToLogin" type="button" aria-label="Voltar para login">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -296,14 +347,17 @@
                         </svg>
                         Voltar
                     </button>
+
                     <div class="recovery-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <circle cx="12" cy="12" r="10"/>
                             <path d="M12 16v-4M12 8h.01"/>
                         </svg>
                     </div>
+
                     <h2 class="form-title">Recuperar senha</h2>
                     <p class="form-subtitle">Digite seu email para receber o código de verificação</p>
+
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="form-group">
                             <label for="recoveryEmail" class="form-label">Email cadastrado</label>
@@ -312,50 +366,66 @@
                                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke-width="2"/>
                                     <path d="M22 6l-10 7L2 6" stroke-width="2"/>
                                 </svg>
-                                <input type="email" id="recoveryEmail" name="recoveryEmail"
-                                    class="form-input" placeholder="Digite seu email"
-                                    autocomplete="off" inputmode="email" maxlength="254" aria-required="true">
+                                <input
+                                    type="email"
+                                    id="recoveryEmail"
+                                    name="recoveryEmail"
+                                    class="form-input"
+                                    placeholder="Digite seu email"
+                                    required
+                                    autocomplete="off"
+                                    inputmode="email"
+                                    maxlength="254"
+                                    aria-required="true"
+                                >
                             </div>
                         </div>
+
                         <button type="button" class="btn-submit" id="sendCodeBtn">
                             <span class="btn-text">Enviar código</span>
                             <div class="btn-glow" aria-hidden="true"></div>
                         </button>
+
                         <p class="help-text">
                             <a href="planos.html" class="link-text" rel="noopener noreferrer">Ver planos</a>
                         </p>
                     </form>
                 </div>
 
-                <!-- TELA DE CÓDIGO DE VERIFICAÇÃO -->
+                <!-- ===== TELA DE CÓDIGO DE VERIFICAÇÃO ===== -->
                 <div class="screen" id="codeScreen" aria-hidden="true">
-                    <button class="back-btn" id="backToEmail" type="button" aria-label="Voltar para email">
+                    <button class="back-btn" id="backToEmail" type="button" aria-label="Voltar para inserção de email">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <path d="M19 12H5M12 19l-7-7 7-7"/>
                         </svg>
                         Voltar
                     </button>
+
                     <div class="recovery-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>
                     </div>
+
                     <h2 class="form-title">Código de verificação</h2>
                     <p class="form-subtitle">Digite o código de 6 dígitos enviado para seu email</p>
+
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="code-inputs" role="group" aria-label="Código de verificação de 6 dígitos">
                             <input type="text" maxlength="1" class="code-input" data-index="0" inputmode="numeric" autocomplete="one-time-code" aria-label="Dígito 1 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="1" inputmode="numeric" autocomplete="off" aria-label="Dígito 2 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="2" inputmode="numeric" autocomplete="off" aria-label="Dígito 3 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="3" inputmode="numeric" autocomplete="off" aria-label="Dígito 4 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="4" inputmode="numeric" autocomplete="off" aria-label="Dígito 5 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="5" inputmode="numeric" autocomplete="off" aria-label="Dígito 6 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="1" inputmode="numeric" autocomplete="off"          aria-label="Dígito 2 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="2" inputmode="numeric" autocomplete="off"          aria-label="Dígito 3 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="3" inputmode="numeric" autocomplete="off"          aria-label="Dígito 4 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="4" inputmode="numeric" autocomplete="off"          aria-label="Dígito 5 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="5" inputmode="numeric" autocomplete="off"          aria-label="Dígito 6 de 6" pattern="[0-9]">
                         </div>
+
                         <button type="button" class="btn-submit" id="verifyCodeBtn">
                             <span class="btn-text">Confirmar código</span>
                             <div class="btn-glow" aria-hidden="true"></div>
                         </button>
+
                         <p class="help-text">
                             Não recebeu o código?
                             <button type="button" class="link-text" id="resendCode">Reenviar</button>
@@ -363,22 +433,25 @@
                     </form>
                 </div>
 
-                <!-- TELA DE NOVA SENHA -->
+                <!-- ===== TELA DE NOVA SENHA ===== -->
                 <div class="screen" id="newPasswordScreen" aria-hidden="true">
-                    <button class="back-btn" id="backToCode" type="button" aria-label="Voltar para código">
+                    <button class="back-btn" id="backToCode" type="button" aria-label="Voltar para código de verificação">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <path d="M19 12H5M12 19l-7-7 7-7"/>
                         </svg>
                         Voltar
                     </button>
+
                     <div class="recovery-icon success" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                             <polyline points="22 4 12 14.01 9 11.01"/>
                         </svg>
                     </div>
+
                     <h2 class="form-title">Nova senha</h2>
-                    <p class="form-subtitle">Mínimo 8 caracteres, com letras e números</p>
+                    <p class="form-subtitle">Digite sua nova senha (mínimo 8 caracteres, letras e números)</p>
+
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="form-group">
                             <label for="newPassword" class="form-label">Nova senha</label>
@@ -387,11 +460,23 @@
                                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
                                 </svg>
-                                <input type="password" id="newPassword" name="newPassword"
-                                    class="form-input" placeholder="Nova senha"
-                                    autocomplete="new-password" minlength="8" maxlength="128" aria-required="true">
+                                <input
+                                    type="password"
+                                    id="newPassword"
+                                    name="newPassword"
+                                    class="form-input"
+                                    placeholder="Nova senha"
+                                    required
+                                    autocomplete="new-password"
+                                    minlength="8"
+                                    maxlength="128"
+                                    pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,128}$"
+                                    aria-required="true"
+                                    aria-describedby="passwordRequirements"
+                                >
                             </div>
                         </div>
+
                         <div class="form-group">
                             <label for="confirmPassword" class="form-label">Confirmar senha</label>
                             <div class="input-wrapper">
@@ -399,20 +484,41 @@
                                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
                                 </svg>
-                                <input type="password" id="confirmPassword" name="confirmPassword"
-                                    class="form-input" placeholder="Confirme sua senha"
-                                    autocomplete="new-password" minlength="8" maxlength="128" aria-required="true">
+                                <input
+                                    type="password"
+                                    id="confirmPassword"
+                                    name="confirmPassword"
+                                    class="form-input"
+                                    placeholder="Confirme sua senha"
+                                    required
+                                    autocomplete="new-password"
+                                    minlength="8"
+                                    maxlength="128"
+                                    pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,128}$"
+                                    aria-required="true"
+                                >
                             </div>
                         </div>
-                        <div class="error-message" id="errorMessage" role="alert" aria-live="polite" aria-atomic="true"></div>
+
+                        <div class="error-message"
+                             id="errorMessage"
+                             role="alert"
+                             aria-live="polite"
+                             aria-atomic="true">
+                        </div>
+
                         <button type="button" class="btn-submit" id="changePasswordBtn">
                             <span class="btn-text">Alterar senha</span>
                             <div class="btn-glow" aria-hidden="true"></div>
                         </button>
+
+                        <p class="help-text">
+                            <a href="planos.html" class="link-text" rel="noopener noreferrer">Ver planos</a>
+                        </p>
                     </form>
                 </div>
 
-                <!-- TELA DE SUCESSO -->
+                <!-- ===== TELA DE SUCESSO ===== -->
                 <div class="screen" id="successScreen" aria-hidden="true">
                     <div class="recovery-icon success animated" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -420,12 +526,15 @@
                             <polyline points="22 4 12 14.01 9 11.01"/>
                         </svg>
                     </div>
+
                     <h2 class="form-title">Senha alterada!</h2>
                     <p class="form-subtitle">Sua senha foi alterada com sucesso</p>
+
                     <button type="button" class="btn-submit" id="backToLoginFinal">
                         <span class="btn-text">Fazer login</span>
                         <div class="btn-glow" aria-hidden="true"></div>
                     </button>
+
                     <p class="help-text">
                         <a href="planos.html" class="link-text" rel="noopener noreferrer">Ver planos</a>
                     </p>
