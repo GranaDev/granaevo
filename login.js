@@ -27,10 +27,10 @@ const CONFIG = Object.freeze({
     MAX_ATTEMPTS_BEFORE_CAPTCHA:  3,
     MESSAGE_AUTO_HIDE_MS:      5000,
     SEND_CODE_COOLDOWN_MS:    30_000,
-    RATE_LIMIT_MAX:            10,
-    RATE_LIMIT_WINDOW_MS:  60_000,
+    RATE_LIMIT_MAX:               10,
+    RATE_LIMIT_WINDOW_MS:     60_000,
     CAPTCHA_TOKEN_MAX_AGE_MS: 110_000,
-    CAPTCHA_TOKEN_MIN_LENGTH: 50,
+    CAPTCHA_TOKEN_MIN_LENGTH:     50,
     CAPTCHA_SITE_KEY: '6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye',
     KEYS: Object.freeze({
         loginAttempts:  '_ge_la',
@@ -43,10 +43,12 @@ const CONFIG = Object.freeze({
 
 // ═══════════════════════════════════════════════════════════════
 //  MENSAGEM DE ERRO PADRÃO DE LOGIN
-//  Única mensagem usada para qualquer falha de autenticação
-//  — nunca revela se o email existe ou não (anti-enumeração).
+//
+//  [FIX-LOGIN-MSG] Mensagem única para TODA falha de autenticação.
+//  Nunca revela se o email existe ou não (anti-enumeração).
+//  Nunca menciona tamanho, formato ou qualquer detalhe da senha.
 // ═══════════════════════════════════════════════════════════════
-const LOGIN_ERROR_MSG = 'Tentativa inválida: email ou senha incorretos.';
+const LOGIN_ERROR_MSG = 'Erro: Email ou senha inválido.';
 
 // ═══════════════════════════════════════════════════════════════
 //  CABEÇALHOS DE AUTENTICAÇÃO
@@ -64,11 +66,48 @@ function _publicHeader() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  CAPTCHA — CARREGAMENTO CONFIÁVEL
+//
+//  [FIX-CAPTCHA-FINAL] Solução definitiva para o reCAPTCHA invisível.
+//
+//  Problema raiz: o script reCAPTCHA com "async" pode carregar e
+//  disparar o callback "onload" ANTES de login.js (type="module",
+//  sempre deferido) terminar de ser avaliado. Resultado: o callback
+//  era chamado em window._grOnLoad inexistente, nada renderizava.
+//
+//  Solução em três camadas:
+//
+//  1. window._grOnLoad definido NO TOPO do módulo (fora de
+//     DOMContentLoaded) — garante que está disponível tão cedo
+//     quanto possível, antes mesmo da DOM estar pronta.
+//
+//  2. Verificação na inicialização (DOMContentLoaded): se grecaptcha
+//     já estava pronto quando o módulo foi avaliado (race condition
+//     inversa), marca _captchaReadyFired = true diretamente.
+//
+//  3. Poll de fallback em showCaptcha(): se nenhum dos dois acima
+//     capturou a prontidão, o poll detecta grecaptcha em até 15s.
+//     Cobre adblockers que interceptam o script e re-injetam tarde.
+//
+//  _pendingCaptchaShow: true se showCaptcha() foi chamado antes de
+//  grecaptcha estar pronto. O onload / poll renderiza ao ficar pronto.
+// ═══════════════════════════════════════════════════════════════
+let _captchaWidgetId    = null;  // null = não renderizado, 0+ = ID do widget
+let _captchaReadyFired  = false; // true após grecaptcha estar 100% pronto
+let _pendingCaptchaShow = false; // true se showCaptcha chamou antes de ready
+
+// CAMADA 1: definido no topo do módulo — antes do DOMContentLoaded
+window._grOnLoad = function () {
+    _captchaReadyFired = true;
+    if (_pendingCaptchaShow) {
+        _pendingCaptchaShow = false;
+        _renderCaptchaWidget();
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════
 //  CAPTCHA STATE
 // ═══════════════════════════════════════════════════════════════
-let _captchaWidgetId  = null;
-let _captchaRendering = false; // flag para evitar renders duplos concorrentes
-
 const CaptchaState = (() => {
     let _token         = null;
     let _resolved      = false;
@@ -86,19 +125,12 @@ const CaptchaState = (() => {
             _resolved   = true;
             _resolvedAt = Date.now();
         } catch {
-            _token      = null;
-            _resolved   = false;
-            _resolvedAt = 0;
+            _token = null; _resolved = false; _resolvedAt = 0;
         }
     };
 
-    window.onCaptchaExpired = () => {
-        _token = null; _resolved = false; _resolvedAt = 0;
-    };
-
-    window.onCaptchaError = () => {
-        _token = null; _resolved = false; _resolvedAt = 0;
-    };
+    window.onCaptchaExpired = () => { _token = null; _resolved = false; _resolvedAt = 0; };
+    window.onCaptchaError   = () => { _token = null; _resolved = false; _resolvedAt = 0; };
 
     return {
         activate()   { _captchaActive = true;  },
@@ -109,9 +141,7 @@ const CaptchaState = (() => {
             return (Date.now() - _resolvedAt) < CONFIG.CAPTCHA_TOKEN_MAX_AGE_MS;
         },
 
-        getToken() {
-            return this.isResolved() ? _token : null;
-        },
+        getToken() { return this.isResolved() ? _token : null; },
 
         reset() {
             _token = null; _resolved = false; _resolvedAt = 0;
@@ -133,7 +163,6 @@ const CaptchaState = (() => {
 const RecoveryState = (() => {
     let _email = '';
     let _code  = '';
-
     return {
         getEmail:   ()  => _email,
         getCode:    ()  => _code,
@@ -226,8 +255,7 @@ function restoreButton(btn) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SPINNER DO BOTÃO
-//  Usa classe CSS .loading-svg — sem inline style.
+//  SPINNER DO BOTÃO — usa .loading-svg do CSS (sem inline style)
 // ═══════════════════════════════════════════════════════════════
 function createSpinnerElement(labelText) {
     const wrapper = document.createDocumentFragment();
@@ -304,8 +332,7 @@ const togglePassword = document.getElementById('togglePassword');
 
 // ═══════════════════════════════════════════════════════════════
 //  FUNÇÕES DE MENSAGEM
-//  Visibilidade controlada exclusivamente via classes CSS
-//  (.visible / .show) — sem inline style.
+//  Visibilidade via classList (.visible / .show) — sem inline style.
 // ═══════════════════════════════════════════════════════════════
 let _messageTimer = null;
 
@@ -313,13 +340,9 @@ function showAuthMessage(message, type) {
     const messageDiv = document.getElementById('authErrorMessage');
     if (!messageDiv) return;
 
-    if (_messageTimer) {
-        clearTimeout(_messageTimer);
-        _messageTimer = null;
-    }
+    if (_messageTimer) { clearTimeout(_messageTimer); _messageTimer = null; }
 
-    // textContent garante que nenhum HTML externo seja interpretado (anti-XSS)
-    messageDiv.textContent = sanitizeText(message);
+    messageDiv.textContent = sanitizeText(message); // textContent = anti-XSS
     messageDiv.className   = `auth-message ${type} visible show`;
 
     _messageTimer = setTimeout(() => {
@@ -344,8 +367,7 @@ function hideError() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  EFEITO SHAKE
-//  Usa classe CSS .input-shake — sem inline style.
+//  EFEITO SHAKE — usa .input-shake do CSS (sem inline style)
 // ═══════════════════════════════════════════════════════════════
 function shakeInput(input) {
     if (!input) return;
@@ -358,7 +380,12 @@ function shakeInput(input) {
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
 
-    // Garante que o captcha começa SEMPRE oculto
+    // CAMADA 2: verifica se grecaptcha já carregou antes deste handler
+    if (typeof grecaptcha !== 'undefined' && typeof grecaptcha.render === 'function') {
+        _captchaReadyFired = true;
+    }
+
+    // Garante estado inicial correto do captcha container
     const captchaEl = document.getElementById('captchaContainer');
     if (captchaEl) {
         captchaEl.style.display = 'none';
@@ -366,7 +393,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         captchaEl.classList.remove('captcha-visible');
     }
 
-    // Captura o innerHTML original de cada botão antes de qualquer mutação
+    // Captura innerHTML original de cada botão antes de qualquer mutação
     Object.values(buttons).forEach(btn => {
         if (btn instanceof HTMLElement) _captureButtonHTML(btn);
     });
@@ -379,10 +406,10 @@ window.addEventListener('DOMContentLoaded', async () => {
             return;
         }
     } catch {
-        // Sem sessão — continua para o login
+        // Sem sessão — continua para login
     }
 
-    // Exibe CAPTCHA se o usuário já estava no limite de tentativas
+    // Exibe captcha se o usuário já atingiu o limite de tentativas
     if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         showCaptcha();
     }
@@ -390,7 +417,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     createMoneyParticles();
     createAnimatedCharts();
 
-    // Exibe mensagem de erro pendente gerada por outro módulo (ex: dashboard)
+    // Exibe erro pendente de outro módulo (ex: dashboard.html)
     const authError = sessionStorage.getItem('auth_error');
     if (authError) {
         showAuthMessage(sanitizeText(authError), 'error');
@@ -399,89 +426,75 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA
+//  CAPTCHA — RENDER INTERNO
 //
-//  [FIX-CAPTCHA-1] Substituída a recursão de showCaptcha() por
-//  grecaptcha.ready() com polling seguro.
-//
-//  Problema anterior: setTimeout(showCaptcha, 500) re-executava
-//  showCaptcha() inteiro (incluindo display:flex, classList, etc.)
-//  e podia entrar em loop se grecaptcha nunca ficasse pronto.
-//
-//  Solução: separa exibição do container (imediata) de renderização
-//  do widget (adiada via grecaptcha.ready). O polling para após
-//  15 segundos para evitar loop infinito caso a API do Google
-//  falhe em carregar.
+//  Chamado apenas quando _captchaReadyFired = true.
+//  Renderiza uma única vez; idempotente após renderização.
+// ═══════════════════════════════════════════════════════════════
+function _renderCaptchaWidget() {
+    if (_captchaWidgetId !== null) return; // já renderizado
+
+    const el        = document.getElementById('captchaContainer');
+    const container = el?.querySelector('.g-recaptcha');
+    if (!container) return;
+
+    // Limpa filhos de forma segura — evita bloqueio por Trusted Types
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+
+    try {
+        _captchaWidgetId = grecaptcha.render(container, {
+            sitekey:              CONFIG.CAPTCHA_SITE_KEY,
+            callback:             'onCaptchaResolved',
+            'expired-callback':   'onCaptchaExpired',
+            'error-callback':     'onCaptchaError',
+            theme:                'dark',
+        });
+    } catch {
+        // Verifica se widget foi criado antes do throw
+        const existing = container.querySelector('iframe');
+        _captchaWidgetId = existing ? 0 : null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CAPTCHA — EXIBIR
 // ═══════════════════════════════════════════════════════════════
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
 
-    // Torna o container visível
     el.style.display = 'flex';
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
     CaptchaState.activate();
 
-    // Renderiza o widget apenas uma vez
-    if (_captchaWidgetId !== null || _captchaRendering) return;
-    _captchaRendering = true;
+    if (_captchaWidgetId !== null) return; // widget já existe
 
-    const doRender = () => {
-        const container = el.querySelector('.g-recaptcha');
-        if (!container) { _captchaRendering = false; return; }
-
-        // [FIX-CAPTCHA-2] Limpa filhos via removeChild — seguro com Trusted Types.
-        // container.innerHTML = '' era bloqueado pela política Trusted Types,
-        // caía no catch, setava _captchaWidgetId = 0 (falso positivo) e
-        // impedia qualquer render subsequente.
-        while (container.firstChild) {
-            container.removeChild(container.firstChild);
-        }
-
-        try {
-            _captchaWidgetId = grecaptcha.render(container, {
-                sitekey:              CONFIG.CAPTCHA_SITE_KEY,
-                callback:             'onCaptchaResolved',
-                'expired-callback':   'onCaptchaExpired',
-                'error-callback':     'onCaptchaError',
-                theme:                'dark',
-            });
-        } catch {
-            // Render falhou — verifica se um widget já existe no container
-            // (pode ocorrer se grecaptcha.render() for chamado duas vezes).
-            try {
-                const existing = container.querySelector('iframe');
-                if (existing) {
-                    // Widget já estava lá — ID 0 é válido para o primeiro widget
-                    _captchaWidgetId = 0;
-                } else {
-                    // Falha real — libera para tentar novamente
-                    _captchaWidgetId = null;
-                }
-            } catch {
-                _captchaWidgetId = null;
-            }
-        } finally {
-            _captchaRendering = false;
-        }
-    };
-
-    if (typeof grecaptcha !== 'undefined' && typeof grecaptcha.ready === 'function') {
-        // API já carregada — agenda via ready() para garantir prontidão interna
-        grecaptcha.ready(doRender);
+    if (_captchaReadyFired) {
+        _renderCaptchaWidget();
     } else {
-        // API ainda não carregou — polling a cada 200ms, timeout em 15s
+        _pendingCaptchaShow = true;
+
+        // CAMADA 3: poll de fallback (cobre adblockers / carregamentos tardios)
         const deadline = Date.now() + 15_000;
         const poll = setInterval(() => {
-            if (typeof grecaptcha !== 'undefined' && typeof grecaptcha.ready === 'function') {
+            if (_captchaWidgetId !== null) {
                 clearInterval(poll);
-                grecaptcha.ready(doRender);
+                return;
+            }
+            if (_captchaReadyFired ||
+                (typeof grecaptcha !== 'undefined' && typeof grecaptcha.render === 'function')) {
+                clearInterval(poll);
+                _captchaReadyFired  = true;
+                _pendingCaptchaShow = false;
+                _renderCaptchaWidget();
             } else if (Date.now() >= deadline) {
                 clearInterval(poll);
-                _captchaRendering = false;
+                _pendingCaptchaShow = false;
             }
-        }, 200);
+        }, 250);
     }
 }
 
@@ -511,10 +524,7 @@ async function validateCaptchaOnBackend(token) {
     try {
         const response = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/verify-recaptcha`, {
             method:  'POST',
-            headers: {
-                'Content-Type':  'application/json',
-                'Authorization': _publicHeader(),
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
             body: JSON.stringify({ token: token.trim() }),
         });
         if (!response.ok) return false;
@@ -538,10 +548,7 @@ async function checkUserAccess() {
             `${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`,
             {
                 method: 'POST',
-                headers: {
-                    'Content-Type':  'application/json',
-                    'Authorization': authHeader,
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
                 body: JSON.stringify({ user_id: session.user.id }),
             }
         );
@@ -556,15 +563,19 @@ async function checkUserAccess() {
 // ═══════════════════════════════════════════════════════════════
 //  FORMULÁRIO DE LOGIN
 //
-//  [FIX-LOGIN-1] NENHUMA validação de formato/tamanho de senha
-//  é feita no login. Qualquer tentativa com senha não-vazia
-//  é enviada ao Supabase e contabilizada como tentativa.
-//  Isso garante que o reCAPTCHA aparece após exatamente 3 erros,
-//  independentemente do tamanho da senha digitada.
+//  [FIX-LOGIN-FINAL] Regras de validação na tela de LOGIN:
 //
-//  [FIX-LOGIN-2] Mensagem de erro padronizada como LOGIN_ERROR_MSG
-//  para todos os casos de falha de autenticação — nunca revela
-//  se o email existe, se a senha é muito curta, etc.
+//  Permitido: email vazio, email mal-formatado, senha vazia.
+//
+//  PROIBIDO: tamanho mínimo/máximo da senha, força da senha,
+//  formato da senha. Qualquer senha não-vazia — de 1 a 128
+//  caracteres — é enviada ao Supabase e contabilizada como
+//  tentativa, ativando o captcha após 3 erros.
+//
+//  Motivo: validar tamanho antes do Supabase faz o browser mostrar
+//  erros de "entre X e Y caracteres" sem contabilizar a tentativa,
+//  quebrando o mecanismo de captcha. Também revela informação ao
+//  atacante (anti-enumeração de senhas).
 // ═══════════════════════════════════════════════════════════════
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -575,9 +586,8 @@ loginForm.addEventListener('submit', async (e) => {
     }
 
     const email    = sanitizeText(inputs.loginEmail.value);
-    const password = inputs.loginPassword.value; // não aparar — espaços podem ser parte da senha
+    const password = inputs.loginPassword.value; // NÃO aparar — espaços podem ser senha válida
 
-    // Validações mínimas de presença — sem validação de formato de senha
     if (!email) {
         showAuthMessage('Por favor, preencha o email.', 'error');
         shakeInput(inputs.loginEmail);
@@ -590,17 +600,16 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    // [FIX-LOGIN-1] Senha vazia é o único bloqueio local.
-    // Qualquer senha não-vazia — independente do tamanho — segue
-    // para o Supabase e é contabilizada como tentativa de login.
+    // Senha vazia = único bloqueio local sem contabilizar tentativa
     if (!password) {
         showAuthMessage('Por favor, preencha a senha.', 'error');
         shakeInput(inputs.loginPassword);
         return;
     }
 
-    const currentAttempts = LoginAttempts.get();
+    // Nenhuma outra validação de senha aqui — veja comentário acima
 
+    const currentAttempts = LoginAttempts.get();
     if (currentAttempts >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         if (!CaptchaState.isResolved()) {
             showAuthMessage('Por favor, resolva a verificação de segurança.', 'error');
@@ -610,7 +619,6 @@ loginForm.addEventListener('submit', async (e) => {
 
         showAuthMessage('Verificando segurança...', 'info');
         const captchaValid = await validateCaptchaOnBackend(CaptchaState.getToken());
-
         if (!captchaValid) {
             showAuthMessage('Falha na verificação de segurança. Tente novamente.', 'error');
             CaptchaState.reset();
@@ -625,10 +633,9 @@ loginForm.addEventListener('submit', async (e) => {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) {
-            // Limpa senha imediatamente no caminho de erro
-            inputs.loginPassword.value = '';
+            inputs.loginPassword.value = ''; // limpa imediatamente no erro
 
-            // [FIX-LOGIN-1] Contabiliza a tentativa independentemente do motivo
+            // Contabiliza tentativa independente do motivo do erro
             LoginAttempts.inc();
             CaptchaState.reset();
 
@@ -636,20 +643,19 @@ loginForm.addEventListener('submit', async (e) => {
                 showCaptcha();
             }
 
-            // [FIX-LOGIN-2] Mensagem genérica — nunca revela detalhes do erro
+            // Mensagem genérica — nunca revela detalhes do erro
             showAuthMessage(LOGIN_ERROR_MSG, 'error');
             shakeInput(inputs.loginEmail);
             shakeInput(inputs.loginPassword);
             return;
         }
 
-        // Login bem-sucedido
+        // ── Login bem-sucedido ──
         LoginAttempts.reset();
         CaptchaState.reset();
         hideCaptcha();
 
         setButtonLoading(submitBtn, 'Verificando plano...');
-
         const { hasAccess } = await checkUserAccess();
 
         if (!hasAccess) {
@@ -664,7 +670,6 @@ loginForm.addEventListener('submit', async (e) => {
 
         const userName = sanitizeText(data.user.user_metadata?.name || 'Usuário');
         showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
-
         setTimeout(() => window.location.replace('dashboard.html'), 1500);
 
     } catch {
@@ -725,17 +730,14 @@ if (buttons.backToLogin) {
 
 // ═══════════════════════════════════════════════════════════════
 //  ENVIAR CÓDIGO DE RECUPERAÇÃO
-//  Usa classe CSS .input-error-border — sem inline style.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.sendCode) {
     buttons.sendCode.addEventListener('click', async () => {
         const email = sanitizeText(inputs.recoveryEmail?.value || '');
 
         if (!email || !isValidEmail(email)) {
-            if (inputs.recoveryEmail) {
-                inputs.recoveryEmail.classList.add('input-error-border');
-                setTimeout(() => inputs.recoveryEmail.classList.remove('input-error-border'), 2000);
-            }
+            inputs.recoveryEmail?.classList.add('input-error-border');
+            setTimeout(() => inputs.recoveryEmail?.classList.remove('input-error-border'), 2000);
             showAuthMessage('Digite um email válido.', 'error');
             return;
         }
@@ -752,18 +754,12 @@ if (buttons.sendCode) {
                 `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
                 {
                     method:  'POST',
-                    headers: {
-                        'Content-Type':  'application/json',
-                        'Authorization': _publicHeader(),
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
                     body: JSON.stringify({ email }),
                 }
             );
 
-            if (!response.ok) {
-                showAuthMessage('Erro de conexão. Tente novamente.', 'error');
-                return;
-            }
+            if (!response.ok) { showAuthMessage('Erro de conexão. Tente novamente.', 'error'); return; }
 
             const result = await response.json();
 
@@ -773,15 +769,11 @@ if (buttons.sendCode) {
                 showAuthMessage('Código enviado! Verifique seu email.', 'success');
                 switchScreen(screens.forgotEmail, screens.code);
                 setTimeout(() => inputs.codeInputs[0]?.focus(), 520);
-
             } else if (result.status === 'not_found' || result.status === 'payment_not_approved') {
-                // Anti-enumeração: mesma mensagem mesmo que o email não exista
                 showAuthMessage('Se o email estiver cadastrado com plano ativo, você receberá o código.', 'info');
-
             } else {
                 showAuthMessage('Não foi possível enviar o código. Tente novamente.', 'error');
             }
-
         } catch {
             showAuthMessage('Erro de conexão. Tente novamente.', 'error');
         } finally {
@@ -825,8 +817,7 @@ if (buttons.backToCode) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ALTERAR SENHA
-//  Usa classe CSS .input-error-border — sem inline style.
+//  ALTERAR SENHA (tela de recuperação — validações permitidas aqui)
 // ═══════════════════════════════════════════════════════════════
 if (buttons.changePassword) {
     buttons.changePassword.addEventListener('click', async () => {
@@ -835,10 +826,7 @@ if (buttons.changePassword) {
 
         hideError();
 
-        if (!newPass || !confirmPass) {
-            showError('Por favor, preencha todos os campos.');
-            return;
-        }
+        if (!newPass || !confirmPass) { showError('Por favor, preencha todos os campos.'); return; }
 
         if (newPass.length < 8 || newPass.length > 128) {
             showError('A senha deve ter entre 8 e 128 caracteres.');
@@ -863,10 +851,7 @@ if (buttons.changePassword) {
 
         if (!RecoveryState.isValid()) {
             showError('Sessão de recuperação expirada. Reinicie o processo.');
-            setTimeout(() => {
-                _clearRecoveryState();
-                switchScreen(screens.newPassword, screens.login);
-            }, 2000);
+            setTimeout(() => { _clearRecoveryState(); switchScreen(screens.newPassword, screens.login); }, 2000);
             return;
         }
 
@@ -877,10 +862,7 @@ if (buttons.changePassword) {
                 `${CONFIG.SUPABASE_URL}/functions/v1/verify-and-reset-password`,
                 {
                     method:  'POST',
-                    headers: {
-                        'Content-Type':  'application/json',
-                        'Authorization': _publicHeader(),
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
                     body: JSON.stringify({
                         email:       RecoveryState.getEmail(),
                         code:        RecoveryState.getCode(),
@@ -889,10 +871,7 @@ if (buttons.changePassword) {
                 }
             );
 
-            if (!response.ok) {
-                showError('Erro de conexão. Tente novamente.');
-                return;
-            }
+            if (!response.ok) { showError('Erro de conexão. Tente novamente.'); return; }
 
             const result = await response.json();
 
@@ -905,7 +884,6 @@ if (buttons.changePassword) {
             } else {
                 showError('Não foi possível alterar a senha. Tente novamente.');
             }
-
         } catch {
             showError('Erro de conexão. Tente novamente.');
         } finally {
@@ -948,18 +926,12 @@ if (buttons.resendCode) {
                 `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
                 {
                     method:  'POST',
-                    headers: {
-                        'Content-Type':  'application/json',
-                        'Authorization': _publicHeader(),
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
                     body: JSON.stringify({ email: RecoveryState.getEmail() }),
                 }
             );
 
-            if (!response.ok) {
-                showAuthMessage('Erro de conexão. Tente novamente.', 'error');
-                return;
-            }
+            if (!response.ok) { showAuthMessage('Erro de conexão. Tente novamente.', 'error'); return; }
 
             const result = await response.json();
 
@@ -973,7 +945,6 @@ if (buttons.resendCode) {
             } else {
                 showAuthMessage('Erro ao reenviar o código.', 'error');
             }
-
         } catch {
             showAuthMessage('Erro de conexão.', 'error');
         } finally {
@@ -995,10 +966,7 @@ function _clearRecoveryState() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  INPUTS DE CÓDIGO
-//
-//  [FIX-JS-CODE-1] buttons.verifyCode.style.transform removido.
-//  Substituído por classe CSS .btn-pulse via classList.
+//  INPUTS DE CÓDIGO DE VERIFICAÇÃO
 // ═══════════════════════════════════════════════════════════════
 inputs.codeInputs.forEach((input, index) => {
     input.addEventListener('input', (e) => {
@@ -1014,7 +982,6 @@ inputs.codeInputs.forEach((input, index) => {
 
         const allFilled = Array.from(inputs.codeInputs).every(i => i.value.length === 1);
         if (allFilled && buttons.verifyCode) {
-            // [FIX-JS-CODE-1] Usa classe CSS em vez de inline style
             buttons.verifyCode.classList.add('btn-pulse');
             setTimeout(() => buttons.verifyCode.classList.remove('btn-pulse'), 200);
         }
@@ -1036,18 +1003,13 @@ inputs.codeInputs.forEach((input, index) => {
 
     input.addEventListener('paste', (e) => {
         e.preventDefault();
-        const pasted = e.clipboardData
-            .getData('text')
-            .replace(/[^0-9]/g, '')
-            .slice(0, 6);
-
+        const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
         pasted.split('').forEach((char, i) => {
             if (inputs.codeInputs[i]) {
                 inputs.codeInputs[i].value = char;
                 inputs.codeInputs[i].classList.add('filled');
             }
         });
-
         const lastIdx = Math.min(pasted.length - 1, 5);
         if (lastIdx >= 0) inputs.codeInputs[lastIdx].focus();
     });
@@ -1062,28 +1024,22 @@ function resetCodeInputs() {
 
 // ═══════════════════════════════════════════════════════════════
 //  PARTÍCULAS E GRÁFICOS ANIMADOS
-//  Inline styles permitidos aqui pois são valores numéricos
-//  gerados em runtime (posições aleatórias) — não podem ser
-//  expressos como classes CSS estáticas.
+//  Inline styles: valores numéricos gerados em runtime.
 // ═══════════════════════════════════════════════════════════════
 function createMoneyParticles() {
     const container = document.getElementById('moneyParticles');
     if (!container) return;
-
     const symbols = ['$', '€', '£', '¥', '₿'];
-
     for (let i = 0; i < CONFIG.moneyParticleCount; i++) {
         const particle = document.createElement('div');
         particle.classList.add('money-particle');
-        particle.textContent = symbols[Math.floor(Math.random() * symbols.length)];
-
+        particle.textContent              = symbols[Math.floor(Math.random() * symbols.length)];
         particle.style.left               = `${Math.random() * 100}%`;
         particle.style.top                = `${Math.random() * 100}%`;
         particle.style.fontSize           = `${Math.random() * 12 + 18}px`;
         particle.style.animationDuration  = `${Math.random() * 10 + 15}s`;
         particle.style.animationDelay     = `${Math.random() * 5}s`;
         particle.style.color              = `rgba(16, 185, 129, ${Math.random() * 0.4 + 0.3})`;
-
         container.appendChild(particle);
     }
 }
@@ -1091,28 +1047,21 @@ function createMoneyParticles() {
 function createAnimatedCharts() {
     const container = document.getElementById('animatedCharts');
     if (!container) return;
-
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
-
     for (let i = 0; i < CONFIG.chartLineCount; i++) {
-        const path     = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        const segments = 12;
-        const points   = [];
-
-        for (let j = 0; j <= segments; j++) {
-            points.push(`${(j / segments) * 100},${20 + Math.random() * 60}`);
+        const path   = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const points = [];
+        for (let j = 0; j <= 12; j++) {
+            points.push(`${(j / 12) * 100},${20 + Math.random() * 60}`);
         }
-
         path.classList.add('chart-line');
         path.setAttribute('d', `M ${points.join(' L ')}`);
         path.style.opacity           = String(Math.random() * 0.2 + 0.1);
         path.style.animationDelay    = `${Math.random() * 3}s`;
         path.style.animationDuration = `${Math.random() * 5 + 8}s`;
-
         svg.appendChild(path);
     }
-
     container.appendChild(svg);
 }
 
@@ -1126,22 +1075,12 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-inputs.newPassword?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') inputs.confirmPassword?.focus();
-});
-
-inputs.confirmPassword?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') buttons.changePassword?.click();
-});
-
-inputs.recoveryEmail?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') buttons.sendCode?.click();
-});
+inputs.newPassword?.addEventListener('keypress',     (e) => { if (e.key === 'Enter') inputs.confirmPassword?.focus(); });
+inputs.confirmPassword?.addEventListener('keypress', (e) => { if (e.key === 'Enter') buttons.changePassword?.click(); });
+inputs.recoveryEmail?.addEventListener('keypress',   (e) => { if (e.key === 'Enter') buttons.sendCode?.click(); });
 
 // ═══════════════════════════════════════════════════════════════
-//  PARALLAX DO MOUSE
-//  Valores de transform calculados em tempo real — inline style
-//  necessário (valores dinâmicos de posição/rotação).
+//  PARALLAX DO MOUSE — inline style necessário (valores dinâmicos)
 // ═══════════════════════════════════════════════════════════════
 let mouseX = 0, mouseY = 0, currentX = 0, currentY = 0;
 
@@ -1156,10 +1095,7 @@ function animateParallax() {
 
     const visual = document.querySelector('.financial-visual');
     if (visual) {
-        visual.style.transform = `
-            rotateY(${-8 + currentX * 8}deg)
-            rotateX(${3 + currentY * 5}deg)
-        `;
+        visual.style.transform = `rotateY(${-8 + currentX * 8}deg) rotateX(${3 + currentY * 5}deg)`;
     }
 
     document.querySelectorAll('.gradient-orb').forEach((orb, i) => {
@@ -1173,9 +1109,7 @@ function animateParallax() {
 animateParallax();
 
 // ═══════════════════════════════════════════════════════════════
-//  EFEITO DE RIPPLE NOS BOTÕES
-//  Posicionamento calculado a partir das coordenadas do clique —
-//  inline style necessário (valores dinâmicos por natureza).
+//  EFEITO DE RIPPLE NOS BOTÕES — inline style necessário (coords)
 // ═══════════════════════════════════════════════════════════════
 document.querySelectorAll('.btn-submit').forEach(button => {
     button.addEventListener('click', function (e) {
@@ -1188,7 +1122,7 @@ document.querySelectorAll('.btn-submit').forEach(button => {
             `width:${size}px`,
             `height:${size}px`,
             'border-radius:50%',
-            'background:rgba(255,255,255,0.35)',
+            'background:rgba(255,255,255,0.25)',
             `left:${e.clientX - rect.left - size / 2}px`,
             `top:${e.clientY - rect.top  - size / 2}px`,
             'pointer-events:none',
@@ -1198,20 +1132,16 @@ document.querySelectorAll('.btn-submit').forEach(button => {
         this.style.position = 'relative';
         this.style.overflow = 'hidden';
         this.appendChild(ripple);
-
         setTimeout(() => ripple.remove(), 600);
     });
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  FEEDBACK VISUAL NO CHECKBOX
-//  [FIX-JS-CB-1] custom.style.transform substituído por
-//  classe CSS .checkbox-custom-bounce para evitar inline style.
+//  FEEDBACK VISUAL NO CHECKBOX — usa .checkbox-custom-bounce (CSS)
 // ═══════════════════════════════════════════════════════════════
 document.querySelector('.checkbox-wrapper')?.addEventListener('click', () => {
     const custom = document.querySelector('.checkbox-custom');
     if (!custom) return;
-    // [FIX-JS-CB-1] Usa classe CSS em vez de inline style
     custom.classList.add('checkbox-custom-bounce');
     setTimeout(() => custom.classList.remove('checkbox-custom-bounce'), 200);
 });

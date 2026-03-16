@@ -7,43 +7,27 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN v2.4                   ║
+        ║  CONTENT SECURITY POLICY — LOGIN v3.0                   ║
         ╠══════════════════════════════════════════════════════════╣
-        ║  Correções aplicadas sobre v2.3:                         ║
+        ║  [CSP-FIX-1..13] mantidos das versões anteriores.       ║
         ║                                                          ║
-        ║  [CSP-FIX-1..11] mantidos da versão anterior.           ║
+        ║  [CSP-FIX-14] script-src: adicionado                    ║
+        ║    https://www.recaptcha.net/recaptcha/ para cobrir      ║
+        ║    sub-recursos carregados pelo reCAPTCHA em algumas     ║
+        ║    regiões onde www.google.com é inacessível.            ║
         ║                                                          ║
-        ║  [CSP-FIX-12] require-trusted-types-for 'script' e      ║
-        ║    trusted-types REMOVIDOS.                              ║
+        ║  [HTML-FIX-1] style="display:none" removido do          ║
+        ║    #captchaContainer — JS controla via classList.        ║
         ║                                                          ║
-        ║    Motivo: o reCAPTCHA v2 (api.js) injeta sub-scripts   ║
-        ║    dinamicamente via .src em HTMLScriptElement usando    ║
-        ║    uma policy interna chamada 'goog#resourceLoader'.     ║
-        ║    Essa policy é criada pelo próprio código do Google    ║
-        ║    sem nome público documentado — não pode ser listada   ║
-        ║    numa CSP de meta tag. Resultado: o browser bloqueia   ║
-        ║    toda injeção de script do widget com:                 ║
-        ║    "Requires TrustedScriptURL assignment".               ║
-        ║    Tentativas de whitelisting (goog, goog#html,          ║
-        ║    allow-duplicates) não cobrem a policy de URL.         ║
+        ║  [HTML-FIX-2] Inline style do SVG do captcha-label      ║
+        ║    substituído pela classe .captcha-label-icon no CSS.   ║
         ║                                                          ║
-        ║    Impacto na segurança: ZERO degradação prática.        ║
-        ║    A diretiva require-trusted-types-for 'script' é uma   ║
-        ║    defesa em profundidade contra DOM-XSS via script      ║
-        ║    injection. A proteção primária e real contra isso      ║
-        ║    já está garantida por:                                ║
-        ║      • script-src whitelist explícito (sem unsafe-inline ║
-        ║        em scripts) — impede carregar scripts não         ║
-        ║        autorizados, independente de como o src é setado  ║
-        ║      • Nenhuma entrada de dados do usuário é usada em    ║
-        ║        innerHTML, script.src ou eval no nosso código     ║
-        ║    Trusted Types seria apenas uma segunda barreira para  ║
-        ║    um vetor já bloqueado pelo script-src.                ║
-        ║                                                          ║
-        ║  [CSP-FIX-13] connect-src: adicionado cdn.jsdelivr.net. ║
-        ║    O SDK do Supabase carregado via ESM no jsdelivr       ║
-        ║    requisita source maps (.map) em devtools — esses      ║
-        ║    pedidos também saem pelo connect-src.                 ║
+        ║  [HTML-FIX-3] reCAPTCHA carregado com                   ║
+        ║    ?render=explicit&onload=_grOnLoad                     ║
+        ║    O parâmetro onload garante que window._grOnLoad()     ║
+        ║    é chamado quando a lib está 100% pronta — elimina a   ║
+        ║    race condition entre async/defer do script e a        ║
+        ║    avaliação do módulo login.js.                         ║
         ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
@@ -52,6 +36,7 @@
         script-src 'self'
             https://cdn.jsdelivr.net
             https://www.google.com/recaptcha/
+            https://www.recaptcha.net/recaptcha/
             https://www.gstatic.com/recaptcha/;
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: https://www.gstatic.com/;
@@ -65,56 +50,50 @@
             https://www.gstatic.com;
         frame-src
             https://www.google.com/recaptcha/
+            https://www.recaptcha.net/recaptcha/
             https://recaptcha.google.com/;
         object-src 'none';
         base-uri 'self';
         form-action 'self';
     ">
 
-    <!--
-        [REF-FIX-1] strict-origin-when-cross-origin substituiu no-referrer.
-        no-referrer bloqueava o referrer mesmo em navegação interna,
-        quebrando analytics próprio e rastreamento de funil.
-        strict-origin-when-cross-origin envia apenas a origem (sem path/query)
-        para destinos externos, protegendo tokens e parâmetros sensíveis
-        enquanto mantém o referrer completo dentro do próprio domínio.
-    -->
     <meta name="referrer" content="strict-origin-when-cross-origin">
-
-    <!--
-        [PERM-FIX-1] Permissions-Policy adicionado.
-        Bloqueia acesso a APIs sensíveis mesmo que um XSS ocorra.
-    -->
     <meta http-equiv="Permissions-Policy"
           content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
 
     <link rel="stylesheet" href="login.css">
-    <script src="https://www.google.com/recaptcha/api.js?render=explicit"
-        async
-        defer
-        referrerpolicy="no-referrer"></script>
+
+    <!--
+        [HTML-FIX-3] ?render=explicit impede auto-render.
+        &onload=_grOnLoad chama window._grOnLoad() quando a lib
+        está completamente carregada — solução canônica do Google
+        para renderização explícita confiável.
+    -->
+    <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=_grOnLoad"
+            async
+            defer
+            referrerpolicy="no-referrer"></script>
 </head>
 <body>
-    <!-- Partículas de moedas flutuantes -->
+
     <div class="money-particles" id="moneyParticles" aria-hidden="true"></div>
+    <div class="animated-charts"  id="animatedCharts"  aria-hidden="true"></div>
 
-    <!-- Gráficos animados de fundo -->
-    <div class="animated-charts" id="animatedCharts" aria-hidden="true"></div>
-
-    <!-- Orbs de gradiente verde -->
     <div class="gradient-orb orb-1" aria-hidden="true"></div>
     <div class="gradient-orb orb-2" aria-hidden="true"></div>
     <div class="gradient-orb orb-3" aria-hidden="true"></div>
 
-    <!-- Container principal -->
     <div class="login-container">
 
-        <!-- Lado esquerdo - Visualização Financeira 3D -->
+        <!-- ══════════════════════════════════
+             LADO ESQUERDO — Visual Financeiro
+             ══════════════════════════════════ -->
         <div class="financial-side" aria-hidden="true">
             <div class="financial-3d-wrapper">
                 <div class="financial-visual">
                     <div class="growth-card">
                         <div class="card-content">
+
                             <div class="logo-section">
                                 <div class="logo-icon">
                                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -192,13 +171,16 @@
                                     <span>Segurança bancária avançada</span>
                                 </div>
                             </div>
+
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Lado direito - Formulário -->
+        <!-- ══════════════════════════════════
+             LADO DIREITO — Formulário
+             ══════════════════════════════════ -->
         <div class="form-side">
             <div class="form-wrapper">
 
@@ -216,11 +198,6 @@
                         <p class="form-subtitle">Acesse sua conta para continuar evoluindo</p>
                     </div>
 
-                    <!--
-                        [FIX-HTML-1] style="display:none" removido.
-                        O atributo style inline também é bloqueado por style-src 'self'.
-                        Visibilidade agora controlada exclusivamente via classe .visible no JS.
-                    -->
                     <div id="authErrorMessage"
                          class="auth-message"
                          role="alert"
@@ -228,7 +205,9 @@
                          aria-atomic="true">
                     </div>
 
+                    <!-- novalidate desabilita toda validação nativa do browser -->
                     <form class="login-form" id="loginForm" novalidate autocomplete="on">
+
                         <div class="form-group">
                             <label for="loginEmail" class="form-label">Email</label>
                             <div class="input-wrapper">
@@ -258,6 +237,11 @@
                                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
                                 </svg>
+                                <!--
+                                    [HTML-FIX-4] minlength REMOVIDO — sem restrição de tamanho
+                                    no campo de login. Qualquer senha não-vazia é enviada ao
+                                    Supabase e contabilizada como tentativa (ativa captcha).
+                                -->
                                 <input
                                     type="password"
                                     id="loginPassword"
@@ -269,7 +253,6 @@
                                     maxlength="128"
                                     aria-required="true"
                                 >
-                                <!-- Botão de toggle — tipo button para não submeter o form -->
                                 <button type="button"
                                         class="toggle-password"
                                         id="togglePassword"
@@ -294,24 +277,26 @@
                             </button>
                         </div>
 
-                        <!-- ===== CONTAINER DO RECAPTCHA (oculto até 3 erros) ===== -->
+                        <!-- ===== CONTAINER DO RECAPTCHA =====
+                             [HTML-FIX-1] style="display:none" removido.
+                             Display controlado via classList pelo JS.
+                             [HTML-FIX-2] SVG usa .captcha-label-icon em vez de inline style.
+                        -->
                         <div id="captchaContainer"
                              class="captcha-hidden"
-                             style="display:none"
                              role="region"
                              aria-label="Verificação de segurança"
                              aria-live="polite">
                             <div class="captcha-label">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" style="width:16px;height:16px;stroke:var(--error-red);flex-shrink:0;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     aria-hidden="true"
+                                     class="captcha-label-icon">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
                                 Verificação de segurança necessária
                             </div>
-                            <!-- Widget renderizado via grecaptcha.render() em showCaptcha()
-                                 pois grecaptcha não renderiza em elementos display:none -->
                             <div class="g-recaptcha"></div>
                         </div>
-                        <!-- ===== FIM DO CONTAINER DO RECAPTCHA ===== -->
 
                         <button type="submit" class="btn-submit" id="loginSubmitBtn">
                             <span class="btn-text">Entrar</span>
@@ -331,7 +316,7 @@
                     </form>
                 </div>
 
-                <!-- ===== TELA DE RECUPERAÇÃO - Email ===== -->
+                <!-- ===== TELA DE RECUPERAÇÃO — Email ===== -->
                 <div class="screen" id="forgotEmailScreen" aria-hidden="true">
                     <button class="back-btn" id="backToLogin" type="button" aria-label="Voltar para login">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -349,6 +334,7 @@
 
                     <h2 class="form-title">Recuperar senha</h2>
                     <p class="form-subtitle">Digite seu email para receber o código de verificação</p>
+
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="form-group">
                             <label for="recoveryEmail" class="form-label">Email cadastrado</label>
@@ -404,13 +390,12 @@
 
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="code-inputs" role="group" aria-label="Código de verificação de 6 dígitos">
-                            <!-- autocomplete="one-time-code" permite autopreenchimento pelo SO apenas no primeiro campo -->
                             <input type="text" maxlength="1" class="code-input" data-index="0" inputmode="numeric" autocomplete="one-time-code" aria-label="Dígito 1 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="1" inputmode="numeric" autocomplete="off" aria-label="Dígito 2 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="2" inputmode="numeric" autocomplete="off" aria-label="Dígito 3 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="3" inputmode="numeric" autocomplete="off" aria-label="Dígito 4 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="4" inputmode="numeric" autocomplete="off" aria-label="Dígito 5 de 6" pattern="[0-9]">
-                            <input type="text" maxlength="1" class="code-input" data-index="5" inputmode="numeric" autocomplete="off" aria-label="Dígito 6 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="1" inputmode="numeric" autocomplete="off"          aria-label="Dígito 2 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="2" inputmode="numeric" autocomplete="off"          aria-label="Dígito 3 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="3" inputmode="numeric" autocomplete="off"          aria-label="Dígito 4 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="4" inputmode="numeric" autocomplete="off"          aria-label="Dígito 5 de 6" pattern="[0-9]">
+                            <input type="text" maxlength="1" class="code-input" data-index="5" inputmode="numeric" autocomplete="off"          aria-label="Dígito 6 de 6" pattern="[0-9]">
                         </div>
 
                         <button type="button" class="btn-submit" id="verifyCodeBtn">
@@ -443,6 +428,7 @@
 
                     <h2 class="form-title">Nova senha</h2>
                     <p class="form-subtitle">Digite sua nova senha (mínimo 8 caracteres, letras e números)</p>
+
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="form-group">
                             <label for="newPassword" class="form-label">Nova senha</label>
@@ -531,6 +517,7 @@
 
             </div>
         </div>
+
     </div>
 
     <script type="module" src="login.js"></script>
