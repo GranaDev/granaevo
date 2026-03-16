@@ -1391,11 +1391,13 @@ body {
    vivem exclusivamente aqui — removidas do bloco animStyle do JS.
    ========================================== */
 #captchaContainer {
+    /* [FIX-CSS-8] display removido daqui — controlado pelas classes
+       .captcha-hidden e .captcha-visible. Sem display aqui, não há
+       conflito de especificidade ID vs classe. */
     background: rgba(239, 68, 68, 0.06);
     border: 1px solid rgba(239, 68, 68, 0.25);
     border-radius: 14px;
     padding: 16px;
-    display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
@@ -1416,13 +1418,11 @@ body {
     transform-origin: left top;
 }
 
-/* Classes de controle do CAPTCHA — movidas do animStyle JS.
-   [FIX-CSS-7] .captcha-hidden usa !important para vencer o
-   display:flex declarado em #captchaContainer (ID tem
-   especificidade maior que classe — sem !important o captcha
-   ficava visível na tela mesmo antes de qualquer erro de login).
-   .captcha-visible usa display:flex para manter o layout interno. */
-.captcha-hidden  { display: none !important; }
+/* [FIX-CSS-7/8] Classes de controle do CAPTCHA.
+   display controlado EXCLUSIVAMENTE aqui — o seletor #captchaContainer
+   não declara display, eliminando o conflito de especificidade
+   que fazia o captcha aparecer mesmo com .captcha-hidden aplicado. */
+.captcha-hidden  { display: none; }
 .captcha-visible { display: flex; animation: fadeInUp 0.4s ease; }
 .captcha-error   { outline: 2px solid var(--error-red); border-radius: 12px; }
 
