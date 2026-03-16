@@ -1416,6 +1416,13 @@ body {
 
 .g-recaptcha {
     transform-origin: left top;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* Iframe interno do reCAPTCHA — garante que não vaza do container */
+.g-recaptcha iframe {
+    max-width: 100%;
 }
 
 /* [FIX-CSS-7/8] Classes de controle do CAPTCHA.
@@ -1514,7 +1521,8 @@ body {
     }
 
     .g-recaptcha {
-        transform: scale(0.88);
+        transform: scale(0.82);
+        transform-origin: left top;
     }
 }
 
