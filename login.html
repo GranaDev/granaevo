@@ -307,14 +307,9 @@
                                 </svg>
                                 Verificação de segurança necessária
                             </div>
-                            <div
-                                class="g-recaptcha"
-                                data-sitekey="6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye"
-                                data-callback="onCaptchaResolved"
-                                data-expired-callback="onCaptchaExpired"
-                                data-error-callback="onCaptchaError"
-                                data-theme="dark"
-                            ></div>
+                            <!-- Widget renderizado via grecaptcha.render() em showCaptcha()
+                                 pois grecaptcha não renderiza em elementos display:none -->
+                            <div class="g-recaptcha"></div>
                         </div>
                         <!-- ===== FIM DO CONTAINER DO RECAPTCHA ===== -->
 

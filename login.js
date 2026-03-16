@@ -75,6 +75,11 @@ function _publicHeader() {
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA STATE
 // ═══════════════════════════════════════════════════════════════
+// ID do widget reCAPTCHA — necessário para render explícito
+// O widget só é renderizado quando o captcha é exibido pela primeira vez,
+// pois grecaptcha não renderiza em elementos com display:none.
+let _captchaWidgetId = null;
+
 const CaptchaState = (() => {
     let _token         = null;
     let _resolved      = false;
@@ -139,7 +144,14 @@ const CaptchaState = (() => {
             _resolved   = false;
             _resolvedAt = 0;
             if (typeof grecaptcha !== 'undefined') {
-                try { grecaptcha.reset(); } catch { /* widget ainda não renderizado */ }
+                try {
+                    // Usa o widget ID específico se disponível
+                    if (_captchaWidgetId !== null) {
+                        grecaptcha.reset(_captchaWidgetId);
+                    } else {
+                        grecaptcha.reset();
+                    }
+                } catch { /* widget ainda não renderizado */ }
             }
         },
     };
@@ -444,10 +456,32 @@ window.addEventListener('DOMContentLoaded', async () => {
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
+
     el.style.display = 'flex';
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
     CaptchaState.activate();
+
+    // Renderização explícita do widget reCAPTCHA.
+    // O grecaptcha NÃO renderiza automaticamente em elementos ocultos —
+    // o widget deve ser criado programaticamente na primeira exibição.
+    if (_captchaWidgetId === null && typeof grecaptcha !== 'undefined') {
+        try {
+            const container = el.querySelector('.g-recaptcha');
+            if (container) {
+                _captchaWidgetId = grecaptcha.render(container, {
+                    sitekey:          '6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye',
+                    callback:         window.onCaptchaResolved,
+                    'expired-callback': window.onCaptchaExpired,
+                    'error-callback':   window.onCaptchaError,
+                    theme:            'dark',
+                });
+            }
+        } catch (e) {
+            // grecaptcha ainda não carregou — tenta novamente em 500ms
+            setTimeout(showCaptcha, 500);
+        }
+    }
 }
 
 function hideCaptcha() {
