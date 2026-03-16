@@ -417,10 +417,7 @@ function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
 
-    // Torna o container visível imediatamente
-    el.style.display = 'none'; // força reflow antes de flex
-    // eslint-disable-next-line no-unused-expressions
-    el.offsetHeight;           // reflow
+    // Torna o container visível
     el.style.display = 'flex';
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
@@ -434,8 +431,13 @@ function showCaptcha() {
         const container = el.querySelector('.g-recaptcha');
         if (!container) { _captchaRendering = false; return; }
 
-        // Limpa filhos residuais de tentativas anteriores
-        container.innerHTML = '';
+        // [FIX-CAPTCHA-2] Limpa filhos via removeChild — seguro com Trusted Types.
+        // container.innerHTML = '' era bloqueado pela política Trusted Types,
+        // caía no catch, setava _captchaWidgetId = 0 (falso positivo) e
+        // impedia qualquer render subsequente.
+        while (container.firstChild) {
+            container.removeChild(container.firstChild);
+        }
 
         try {
             _captchaWidgetId = grecaptcha.render(container, {
@@ -446,8 +448,20 @@ function showCaptcha() {
                 theme:                'dark',
             });
         } catch {
-            // render falhou (ex: container já tinha widget) — considera OK
-            _captchaWidgetId = 0;
+            // Render falhou — verifica se um widget já existe no container
+            // (pode ocorrer se grecaptcha.render() for chamado duas vezes).
+            try {
+                const existing = container.querySelector('iframe');
+                if (existing) {
+                    // Widget já estava lá — ID 0 é válido para o primeiro widget
+                    _captchaWidgetId = 0;
+                } else {
+                    // Falha real — libera para tentar novamente
+                    _captchaWidgetId = null;
+                }
+            } catch {
+                _captchaWidgetId = null;
+            }
         } finally {
             _captchaRendering = false;
         }
