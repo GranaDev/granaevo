@@ -1416,9 +1416,14 @@ body {
     transform-origin: left top;
 }
 
-/* Classes de controle do CAPTCHA — movidas do animStyle JS */
-.captcha-hidden  { display: none; }
-.captcha-visible { display: block; animation: fadeInUp 0.4s ease; }
+/* Classes de controle do CAPTCHA — movidas do animStyle JS.
+   [FIX-CSS-7] .captcha-hidden usa !important para vencer o
+   display:flex declarado em #captchaContainer (ID tem
+   especificidade maior que classe — sem !important o captcha
+   ficava visível na tela mesmo antes de qualquer erro de login).
+   .captcha-visible usa display:flex para manter o layout interno. */
+.captcha-hidden  { display: none !important; }
+.captcha-visible { display: flex; animation: fadeInUp 0.4s ease; }
 .captcha-error   { outline: 2px solid var(--error-red); border-radius: 12px; }
 
 /* ==========================================
