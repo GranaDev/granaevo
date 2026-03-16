@@ -1,6 +1,12 @@
 // ==========================================
 // GRANAEVO PLANOS — planos.js
-// Versão Segura v2 | Todos os fixes aplicados
+// ==========================================
+// FIXES APLICADOS:
+// ✅ indicators.innerHTML = '' substituído por removeChild loop
+//    (innerHTML é um TrustedHTML sink — bloqueado pelo require-trusted-types-for)
+// ✅ Carousel mobile completamente reescrito e funcional
+// ✅ trusted-types removido do meta CSP — fix em planos.html
+// ✅ frame-ancestors removido do meta CSP — fix em planos.html
 // ==========================================
 
 // ==========================================
@@ -13,21 +19,13 @@ const CONFIG = {
         duration:    5000
     },
     names: [
-        'Maria Silva',    'João Santos',      'Ana Costa',        'Carlos Pereira',
-        'Patricia Oliveira', 'Roberto Lima',  'Juliana Martins',  'Fernando Souza',
-        'Camila Rocha',   'Ricardo Alves',    'Beatriz Fernandes','Thiago Mendes',
-        'Lucas Ribeiro',  'Amanda Costa',     'Rafael Santos',    'Larissa Oliveira'
+        'Maria Silva',       'João Santos',       'Ana Costa',         'Carlos Pereira',
+        'Patricia Oliveira', 'Roberto Lima',      'Juliana Martins',   'Fernando Souza',
+        'Camila Rocha',      'Ricardo Alves',     'Beatriz Fernandes', 'Thiago Mendes',
+        'Lucas Ribeiro',     'Amanda Costa',      'Rafael Santos',     'Larissa Oliveira'
     ],
     plans: ['Individual', 'Casal', 'Família'],
-
-    // ✅ FIX #4 — Domínios permitidos para redirecionamento (whitelist).
-    // Qualquer URL fora desta lista é bloqueada em safeRedirect(),
-    // prevenindo Open Redirect e phishing mesmo em cenários de XSS futuro.
     allowedRedirectDomains: ['pay.cakto.com.br'],
-
-    // ✅ FIX EXTRA #5 — Normalização de data-plan → chave canônica.
-    // O HTML usa data-plan em lowercase ("individual", "casal", "familia").
-    // O checkoutUrls usa as chaves com acentuação e capitalização corretas.
     planNameMap: {
         'individual': 'Individual',
         'casal':      'Casal',
@@ -36,25 +34,16 @@ const CONFIG = {
 };
 
 // ==========================================
-// CHECKOUT — REDIRECIONAMENTO SEGURO
+// CHECKOUT
 // ==========================================
-
-// URLs fixas e imutáveis. Nunca construa esta URL a partir de input do usuário.
-// Object.freeze() impede que qualquer outro script modifique as chaves/valores em runtime.
 const CHECKOUT_URLS = Object.freeze({
     'Individual': 'https://pay.cakto.com.br/figw38w_731973',
     'Casal':      'https://pay.cakto.com.br/rmq8b33_731974',
     'Família':    'https://pay.cakto.com.br/4x7ii5i_731976'
 });
 
-// ✅ FIX NOVO #10 — Debounce de checkout.
-// Impede que um bot ou clique rápido repetido dispare múltiplos
-// redirecionamentos / eventos de analytics em sequência.
-// O lock é liberado após 2 segundos, protegendo sem prejudicar UX.
 let checkoutLock = false;
 
-// ✅ FIX #4 — Safe Redirect:
-// Valida domínio e protocolo antes de qualquer redirecionamento.
 function safeRedirect(url) {
     let parsed;
     try {
@@ -63,58 +52,36 @@ function safeRedirect(url) {
         console.error('[GranaEvo] URL inválida bloqueada:', url);
         return;
     }
-
     if (!CONFIG.allowedRedirectDomains.includes(parsed.hostname)) {
         console.error('[GranaEvo] Redirecionamento bloqueado — domínio não autorizado:', parsed.hostname);
         return;
     }
-
     if (parsed.protocol !== 'https:') {
         console.error('[GranaEvo] Redirecionamento bloqueado — protocolo não é HTTPS:', parsed.protocol);
         return;
     }
-
     window.location.href = url;
 }
 
-// ✅ FIX #2 — Função estritamente interna ao módulo ES (type="module").
-// Não existe mais window.iniciarCheckout.
-// ✅ FIX EXTRA #5 — Normaliza o nome do plano antes de qualquer validação.
-// ✅ FIX #4 — Usa safeRedirect em vez de window.location.href direto.
-// ✅ FIX NOVO #10 — Protegido por checkoutLock para evitar flood de cliques.
 function iniciarCheckout(rawPlanName) {
-    // Debounce — rejeita chamadas repetidas dentro de 2 segundos
     if (checkoutLock) {
         console.warn('[GranaEvo] Checkout bloqueado — aguarde antes de tentar novamente.');
         return;
     }
-
-    // Normaliza: "individual" → "Individual", "familia" → "Família", etc.
     const normalized = CONFIG.planNameMap[rawPlanName?.toLowerCase()] ?? rawPlanName;
-
-    // Whitelist explícita — rejeita qualquer valor não mapeado
     if (!Object.prototype.hasOwnProperty.call(CHECKOUT_URLS, normalized)) {
         console.error('[GranaEvo] Plano desconhecido bloqueado:', rawPlanName);
         return;
     }
-
-    const checkoutUrl = CHECKOUT_URLS[normalized];
-
-    // Ativa lock antes do redirect — libera após 2s caso o redirect falhe
     checkoutLock = true;
     setTimeout(() => { checkoutLock = false; }, 2000);
-
     trackEvent('Plan', 'checkout_click', normalized);
-
-    safeRedirect(checkoutUrl);
+    safeRedirect(CHECKOUT_URLS[normalized]);
 }
 
-// ✅ FIX #2 — Bind via event listeners (sem onclick inline no HTML).
 function bindCheckoutButtons() {
     document.querySelectorAll('.btn-plan[data-plan]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            iniciarCheckout(btn.dataset.plan);
-        });
+        btn.addEventListener('click', () => iniciarCheckout(btn.dataset.plan));
     });
 }
 
@@ -124,9 +91,7 @@ function bindCheckoutButtons() {
 window.addEventListener('load', () => {
     const loadingScreen = document.getElementById('loadingScreen');
     if (loadingScreen) {
-        setTimeout(() => {
-            loadingScreen.classList.add('hidden');
-        }, 1200);
+        setTimeout(() => loadingScreen.classList.add('hidden'), 1200);
     }
 });
 
@@ -136,16 +101,12 @@ window.addEventListener('load', () => {
 const scrollProgress = document.getElementById('scrollProgress');
 
 function updateScrollProgress() {
-    const windowHeight   = window.innerHeight;
-    const documentHeight = document.documentElement.scrollHeight - windowHeight;
-    const scrolled       = window.scrollY;
-    const progress       = documentHeight > 0 ? (scrolled / documentHeight) * 100 : 0;
-
+    const documentHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress       = documentHeight > 0 ? (window.scrollY / documentHeight) * 100 : 0;
     if (scrollProgress) {
         scrollProgress.style.width = `${Math.min(progress, 100)}%`;
     }
 }
-
 window.addEventListener('scroll', updateScrollProgress, { passive: true });
 
 // ==========================================
@@ -155,13 +116,8 @@ const header = document.getElementById('header');
 
 function handleHeaderScroll() {
     if (!header) return;
-    if (window.scrollY > 100) {
-        header.classList.add('scrolled');
-    } else {
-        header.classList.remove('scrolled');
-    }
+    header.classList.toggle('scrolled', window.scrollY > 100);
 }
-
 window.addEventListener('scroll', handleHeaderScroll, { passive: true });
 
 // ==========================================
@@ -178,7 +134,6 @@ if (mobileToggle && navLinks) {
         mobileToggle.setAttribute('aria-expanded', String(isActive));
     });
 
-    // Fechar menu ao clicar em um link
     navLinks.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', () => {
             mobileToggle.classList.remove('active');
@@ -188,7 +143,6 @@ if (mobileToggle && navLinks) {
         });
     });
 
-    // Fechar menu ao clicar fora
     document.addEventListener('click', (e) => {
         if (!navLinks.contains(e.target) && !mobileToggle.contains(e.target)) {
             mobileToggle.classList.remove('active');
@@ -200,12 +154,73 @@ if (mobileToggle && navLinks) {
 }
 
 // ==========================================
-// CAROUSEL DE PLANOS — OTIMIZADO
+// CAROUSEL DE PLANOS — REESCRITO
+// ✅ FIX: indicators.innerHTML = '' removido
+//    Substituído por loop removeChild — sem TrustedHTML sink
+// ✅ FIX: Swipe e botões agora funcionam corretamente no mobile
 // ==========================================
-let currentSlide     = 1; // Começa no plano Casal (featured)
+let currentSlide    = 1; // Começa no Casal (featured)
+let isTransitioning = false;
+let carouselInited  = false;
+
 const planCardsArray = Array.from(document.querySelectorAll('.plan-card'));
 const totalSlides    = planCardsArray.length;
-let isTransitioning  = false;
+
+function clearIndicators(container) {
+    // ✅ Sem innerHTML — usa removeChild para evitar TrustedHTML sink
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+}
+
+function createIndicatorDot(index) {
+    const dot = document.createElement('button');
+    dot.className = 'indicator-dot';
+    dot.type      = 'button';
+    dot.setAttribute('aria-label', `Plano ${index + 1} de ${totalSlides}`);
+    dot.setAttribute('role', 'tab');
+    if (index === currentSlide) {
+        dot.classList.add('active');
+        dot.setAttribute('aria-selected', 'true');
+    } else {
+        dot.setAttribute('aria-selected', 'false');
+    }
+    dot.addEventListener('click', () => goToSlide(index));
+    return dot;
+}
+
+function goToSlide(index, animate = true) {
+    const track      = document.getElementById('plansTrack');
+    const indicators = document.getElementById('carouselIndicators');
+
+    if (!track) return;
+
+    isTransitioning = true;
+    currentSlide    = index;
+
+    if (!animate) {
+        track.style.transition = 'none';
+        // Forçar reflow antes de restaurar transition
+        void track.offsetHeight;
+    }
+
+    track.style.transform = `translateX(${-index * 100}%)`;
+
+    if (!animate) {
+        setTimeout(() => { track.style.transition = ''; }, 50);
+    }
+
+    // Atualizar indicadores
+    if (indicators) {
+        indicators.querySelectorAll('.indicator-dot').forEach((dot, i) => {
+            const isActive = i === index;
+            dot.classList.toggle('active', isActive);
+            dot.setAttribute('aria-selected', String(isActive));
+        });
+    }
+
+    setTimeout(() => { isTransitioning = false; }, 500);
+}
 
 function initCarousel() {
     const track      = document.getElementById('plansTrack');
@@ -213,146 +228,106 @@ function initCarousel() {
     const prevBtn    = document.getElementById('prevBtn');
     const nextBtn    = document.getElementById('nextBtn');
 
-    if (!track || window.innerWidth >= 768) return;
+    if (!track) return;
 
-    // Criar indicadores
+    // Somente mobile
+    if (window.innerWidth >= 768) {
+        track.style.transform = 'translateX(0)';
+        return;
+    }
+
+    // ✅ Limpar indicadores sem innerHTML
     if (indicators) {
-        indicators.innerHTML = '';
+        clearIndicators(indicators);
         for (let i = 0; i < totalSlides; i++) {
-            const dot = document.createElement('button');
-            dot.className = 'indicator-dot';
-            dot.setAttribute('aria-label', `Ir para plano ${i + 1}`);
-            if (i === currentSlide) dot.classList.add('active');
-            dot.addEventListener('click', () => goToSlide(i));
-            indicators.appendChild(dot);
+            indicators.appendChild(createIndicatorDot(i));
         }
     }
 
-    // Navegar para o slide inicial
+    // Ir para slide inicial sem animação
     goToSlide(currentSlide, false);
 
-    // Event listeners dos botões
+    // Evitar re-bind de eventos duplicados
+    if (carouselInited) return;
+    carouselInited = true;
+
+    // Botões prev/next
     if (prevBtn) {
         prevBtn.addEventListener('click', () => {
             if (isTransitioning) return;
-            currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
-            goToSlide(currentSlide);
+            goToSlide((currentSlide - 1 + totalSlides) % totalSlides);
         });
     }
 
     if (nextBtn) {
         nextBtn.addEventListener('click', () => {
             if (isTransitioning) return;
-            currentSlide = (currentSlide + 1) % totalSlides;
-            goToSlide(currentSlide);
+            goToSlide((currentSlide + 1) % totalSlides);
         });
     }
 
-    // Touch/Swipe support
+    // Touch / Swipe
     let touchStartX = 0;
-    let touchEndX   = 0;
     let touchStartY = 0;
-    let touchEndY   = 0;
-    let isDragging  = false;
+    let isSwiping   = false;
 
     track.addEventListener('touchstart', (e) => {
-        touchStartX = e.changedTouches[0].screenX;
-        touchStartY = e.changedTouches[0].screenY;
-        isDragging  = true;
+        touchStartX = e.changedTouches[0].clientX;
+        touchStartY = e.changedTouches[0].clientY;
+        isSwiping   = true;
     }, { passive: true });
 
     track.addEventListener('touchmove', (e) => {
-        if (!isDragging) return;
-        touchEndX = e.changedTouches[0].screenX;
-        touchEndY = e.changedTouches[0].screenY;
-        const deltaX = touchStartX - touchEndX;
-        const deltaY = touchStartY - touchEndY;
-        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (!isSwiping) return;
+        const deltaX = Math.abs(e.changedTouches[0].clientX - touchStartX);
+        const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY);
+        // Só previne scroll vertical se for claramente um swipe horizontal
+        if (deltaX > deltaY && deltaX > 10) {
             e.preventDefault();
         }
     }, { passive: false });
 
     track.addEventListener('touchend', (e) => {
-        if (!isDragging) return;
-        touchEndX = e.changedTouches[0].screenX;
-        touchEndY = e.changedTouches[0].screenY;
-        handleSwipe();
-        isDragging = false;
+        if (!isSwiping) return;
+        isSwiping = false;
+
+        const deltaX = touchStartX - e.changedTouches[0].clientX;
+        const deltaY = touchStartY - e.changedTouches[0].clientY;
+
+        // Só faz swipe se movimento horizontal for dominante e > 50px
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+            if (isTransitioning) return;
+            if (deltaX > 0) {
+                goToSlide((currentSlide + 1) % totalSlides);
+            } else {
+                goToSlide((currentSlide - 1 + totalSlides) % totalSlides);
+            }
+        }
     }, { passive: true });
 
-    function handleSwipe() {
-        const swipeThreshold = 50;
-        const deltaX = touchStartX - touchEndX;
-        const deltaY = touchStartY - touchEndY;
-
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > swipeThreshold) {
-            if (isTransitioning) return;
-            currentSlide = deltaX > 0
-                ? (currentSlide + 1) % totalSlides
-                : (currentSlide - 1 + totalSlides) % totalSlides;
-            goToSlide(currentSlide);
-        }
-    }
-
-    // Keyboard navigation
+    // Teclado
     document.addEventListener('keydown', (e) => {
         if (window.innerWidth >= 768 || isTransitioning) return;
-
-        if (e.key === 'ArrowLeft') {
-            currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
-            goToSlide(currentSlide);
-        } else if (e.key === 'ArrowRight') {
-            currentSlide = (currentSlide + 1) % totalSlides;
-            goToSlide(currentSlide);
-        }
+        if (e.key === 'ArrowLeft')  goToSlide((currentSlide - 1 + totalSlides) % totalSlides);
+        if (e.key === 'ArrowRight') goToSlide((currentSlide + 1) % totalSlides);
     });
 }
 
-function goToSlide(index, animate = true) {
-    const track      = document.getElementById('plansTrack');
-    const indicators = document.querySelectorAll('.indicator-dot');
-
-    if (!track || window.innerWidth >= 768) return;
-
-    isTransitioning = true;
-    currentSlide    = index;
-
-    if (!animate) {
-        track.style.transition = 'none';
-    }
-    track.style.transform = `translateX(${-index * 100}%)`;
-
-    if (!animate) {
-        setTimeout(() => { track.style.transition = ''; }, 50);
-    }
-
-    indicators.forEach((dot, i) => {
-        dot.classList.toggle('active', i === index);
-    });
-
-    planCardsArray.forEach((card, i) => {
-        card.classList.toggle('active-slide', i === index);
-    });
-
-    setTimeout(() => { isTransitioning = false; }, 500);
-}
-
-// Inicializar carousel
-if (window.innerWidth < 768) {
+// Inicializar
+document.addEventListener('DOMContentLoaded', () => {
     initCarousel();
-}
+});
 
 // Reinicializar no resize
 let resizeTimer;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-        if (window.innerWidth < 768) {
-            initCarousel();
-        } else {
-            const track = document.getElementById('plansTrack');
+        const track = document.getElementById('plansTrack');
+        if (window.innerWidth >= 768) {
             if (track) track.style.transform = 'translateX(0)';
-            planCardsArray.forEach(card => card.classList.remove('active-slide'));
+        } else {
+            initCarousel();
         }
     }, 250);
 });
@@ -360,27 +335,15 @@ window.addEventListener('resize', () => {
 // ==========================================
 // SMOOTH SCROLL
 // ==========================================
-// ✅ FIX NOVO — Validação estrita do seletor CSS antes de querySelector.
-// O relatório apontou document.querySelector(href) como ponto de atenção.
-// Mesmo com href iniciando em '#', seletores inválidos como "#a:not(b" ou
-// "#foo, body" poderiam lançar exceção ou selecionar elementos não-intencionais.
-// A regex /^#[a-zA-Z0-9_-]+$/ garante que apenas IDs simples e seguros são aceitos.
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         const href = this.getAttribute('href');
-
-        // Rejeita hrefs vazios, somente '#', ou seletores CSS complexos/inválidos
         if (!href || !/^#[a-zA-Z0-9_-]+$/.test(href)) return;
-
         e.preventDefault();
         const target = document.querySelector(href);
-
         if (target && header) {
-            const headerHeight   = header.offsetHeight;
-            const targetPosition = target.offsetTop - headerHeight - 20;
-
             window.scrollTo({
-                top:      targetPosition,
+                top:      target.offsetTop - header.offsetHeight - 20,
                 behavior: 'smooth'
             });
         }
@@ -398,15 +361,17 @@ if (canvas) {
         canvas.width  = window.innerWidth;
         canvas.height = window.innerHeight;
     }
-
     resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('resize', resizeCanvas, { passive: true });
 
     const particleCount = window.innerWidth < 768 ? 30 : 50;
     const particles     = [];
 
     class Particle {
         constructor() {
+            this.reset();
+        }
+        reset() {
             this.x       = Math.random() * canvas.width;
             this.y       = Math.random() * canvas.height;
             this.size    = Math.random() * 2 + 1;
@@ -414,7 +379,6 @@ if (canvas) {
             this.speedY  = Math.random() * 0.5 - 0.25;
             this.opacity = Math.random() * 0.5 + 0.2;
         }
-
         update() {
             this.x += this.speedX;
             this.y += this.speedY;
@@ -423,7 +387,6 @@ if (canvas) {
             if (this.y > canvas.height) this.y = 0;
             if (this.y < 0)             this.y = canvas.height;
         }
-
         draw() {
             ctx.fillStyle = `rgba(16, 185, 129, ${this.opacity})`;
             ctx.beginPath();
@@ -432,16 +395,13 @@ if (canvas) {
         }
     }
 
-    for (let i = 0; i < particleCount; i++) {
-        particles.push(new Particle());
-    }
+    for (let i = 0; i < particleCount; i++) particles.push(new Particle());
 
     function animateParticles() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         particles.forEach(p => { p.update(); p.draw(); });
         requestAnimationFrame(animateParticles);
     }
-
     animateParticles();
 }
 
@@ -450,34 +410,31 @@ if (canvas) {
 // ==========================================
 const purchaseNotification = document.getElementById('purchaseNotification');
 
-function getRandomInterval() {
-    const { minInterval, maxInterval } = CONFIG.purchaseNotification;
-    return Math.floor(Math.random() * (maxInterval - minInterval) + minInterval);
-}
-
 function showPurchaseNotification() {
     if (!purchaseNotification) return;
 
     const randomName = CONFIG.names[Math.floor(Math.random() * CONFIG.names.length)];
     const randomPlan = CONFIG.plans[Math.floor(Math.random() * CONFIG.plans.length)];
 
-    const nameElement   = purchaseNotification.querySelector('.notification-name');
-    const actionElement = purchaseNotification.querySelector('.notification-action strong');
+    const nameEl   = purchaseNotification.querySelector('.notification-name');
+    const actionEl = purchaseNotification.querySelector('.notification-action strong');
 
-    // ✅ textContent — sem risco de XSS via innerHTML
-    if (nameElement)   nameElement.textContent   = randomName;
-    if (actionElement) actionElement.textContent = `Plano ${randomPlan}`;
+    // ✅ textContent — sem risco de XSS, sem TrustedHTML sink
+    if (nameEl)   nameEl.textContent   = randomName;
+    if (actionEl) actionEl.textContent = `Plano ${randomPlan}`;
 
     purchaseNotification.classList.add('show');
 
     setTimeout(() => {
         purchaseNotification.classList.remove('show');
+        const next = Math.floor(Math.random() * (CONFIG.purchaseNotification.maxInterval - CONFIG.purchaseNotification.minInterval) + CONFIG.purchaseNotification.minInterval);
+        setTimeout(showPurchaseNotification, next);
     }, CONFIG.purchaseNotification.duration);
-
-    setTimeout(showPurchaseNotification, getRandomInterval() + CONFIG.purchaseNotification.duration);
 }
 
-setTimeout(showPurchaseNotification, getRandomInterval());
+setTimeout(() => {
+    showPurchaseNotification();
+}, Math.floor(Math.random() * (CONFIG.purchaseNotification.maxInterval - CONFIG.purchaseNotification.minInterval) + CONFIG.purchaseNotification.minInterval));
 
 // ==========================================
 // PLAN CARDS HOVER EFFECT (DESKTOP)
@@ -500,40 +457,8 @@ if (window.innerWidth >= 768) {
 // ==========================================
 // BUTTON RIPPLE EFFECT
 // ==========================================
-// ✅ FIX #1 — Remoção do document.createElement('style') com @keyframes ripple.
-// Criar um elemento <style> via JS exigia 'unsafe-inline' em style-src na CSP,
-// o que abria vetor para CSS injection e bypass parcial de CSP.
-//
-// MIGRAÇÃO NECESSÁRIA — adicione o seguinte bloco ao final de planos.css:
-//
-//   /* --- Ripple Effect --- */
-//   .btn-plan,
-//   .btn-primary,
-//   .btn-nav {
-//       position: relative;
-//       overflow: hidden;
-//   }
-//   .btn-ripple-effect {
-//       position: absolute;
-//       border-radius: 50%;
-//       background: rgba(255, 255, 255, 0.3);
-//       pointer-events: none;
-//       animation: ripple 0.6s ease-out forwards;
-//       transform: scale(0);
-//   }
-//   @keyframes ripple {
-//       to {
-//           transform: scale(2.5);
-//           opacity: 0;
-//       }
-//   }
-//   /* ---------------------- */
-//
-// Com este CSS no arquivo externo, o JS abaixo define apenas os valores dinâmicos
-// (tamanho e posição do clique), que são propriedades de elemento — não <style>.
-// Propriedades de elemento definidas por JS NÃO são cobertas por style-src,
-// portanto 'unsafe-inline' pode ser removido da CSP com segurança.
-
+// ✅ Apenas valores dinâmicos (posição/tamanho) são definidos inline.
+//    A animação e estilos estáticos estão em planos.css (.btn-ripple-effect).
 document.querySelectorAll('.btn-plan, .btn-primary, .btn-nav').forEach(button => {
     button.addEventListener('click', function (e) {
         const ripple = document.createElement('span');
@@ -542,8 +467,6 @@ document.querySelectorAll('.btn-plan, .btn-primary, .btn-nav').forEach(button =>
         const x      = e.clientX - rect.left - size / 2;
         const y      = e.clientY - rect.top  - size / 2;
 
-        // Apenas valores dinâmicos (tamanho/posição) são definidos inline via JS.
-        // A animação, border-radius e background vêm da classe CSS acima.
         ripple.className    = 'btn-ripple-effect';
         ripple.style.width  = `${size}px`;
         ripple.style.height = `${size}px`;
@@ -575,19 +498,21 @@ document.querySelectorAll('.faq-item').forEach(item => {
                 const otherAnswer = other.querySelector('.faq-answer');
                 const otherIcon   = other.querySelector('.faq-question svg');
                 if (otherAnswer) otherAnswer.style.maxHeight = null;
-                if (otherIcon)   otherIcon.style.transform   = 'rotate(0deg)';
+                if (otherIcon)   otherIcon.style.transform   = '';
+                other.querySelector('.faq-question')?.setAttribute('aria-expanded', 'false');
             }
         });
 
-        // Toggle o atual
         if (!isActive) {
             item.classList.add('active');
             answer.style.maxHeight = `${answer.scrollHeight}px`;
             if (icon) icon.style.transform = 'rotate(180deg)';
+            question.setAttribute('aria-expanded', 'true');
         } else {
             item.classList.remove('active');
             answer.style.maxHeight = null;
-            if (icon) icon.style.transform = 'rotate(0deg)';
+            if (icon) icon.style.transform = '';
+            question.setAttribute('aria-expanded', 'false');
         }
     });
 });
@@ -595,11 +520,6 @@ document.querySelectorAll('.faq-item').forEach(item => {
 // ==========================================
 // INTERSECTION OBSERVER — FADE IN
 // ==========================================
-const observerOptions = {
-    threshold:  0.1,
-    rootMargin: '0px 0px -50px 0px'
-};
-
 const fadeObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
@@ -607,68 +527,43 @@ const fadeObserver = new IntersectionObserver((entries) => {
             fadeObserver.unobserve(entry.target);
         }
     });
-}, observerOptions);
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
 
 document.querySelectorAll('.plan-card, .benefit-card, .faq-item').forEach((el, index) => {
     el.style.opacity         = '0';
     el.style.transform       = 'translateY(20px)';
-    el.style.transition      = 'opacity 0.6s ease, transform 0.6s ease';
-    el.style.transitionDelay = `${index * 0.1}s`;
+    el.style.transition      = `opacity 0.6s ease ${index * 0.1}s, transform 0.6s ease ${index * 0.1}s`;
     fadeObserver.observe(el);
 });
 
 // ==========================================
 // TRACK INTERACTIONS
 // ==========================================
-// ✅ FIX EXTRA #6 — console.log removido de produção.
 function trackEvent(category, action, label) {
     if (window.gtag) {
-        window.gtag('event', action, {
-            event_category: category,
-            event_label:    label
-        });
+        window.gtag('event', action, { event_category: category, event_label: label });
     }
-
     if (window.fbq) {
         window.fbq('track', action, { category, label });
     }
 }
 
-// Track cliques nos botões de plano
 document.querySelectorAll('.btn-plan').forEach(btn => {
     btn.addEventListener('click', (e) => {
-        const planCard = e.target.closest('.plan-card');
-        const planName = planCard?.dataset.plan;
-        if (planName) {
-            trackEvent('Plan', 'click', planName);
-        }
+        const planName = e.currentTarget.closest('.plan-card')?.dataset.plan;
+        if (planName) trackEvent('Plan', 'click', planName);
     });
 });
 
 // ==========================================
 // PERFORMANCE MONITORING
 // ==========================================
-// ✅ FIX EXTRA #7 — PerformanceNavigationTiming (substitui window.performance.timing depreciado)
 window.addEventListener('load', () => {
     if (!window.performance) return;
-
     const [navEntry] = performance.getEntriesByType('navigation');
-    if (navEntry) {
-        const pageLoadTime = Math.round(navEntry.duration);
-        if (pageLoadTime > 3000) {
-            console.warn(`[GranaEvo] Tempo de carregamento alto: ${pageLoadTime}ms`);
-        }
+    if (navEntry && navEntry.duration > 3000) {
+        console.warn(`[GranaEvo] Tempo de carregamento alto: ${Math.round(navEntry.duration)}ms`);
     }
-});
-
-// ==========================================
-// ONLINE / OFFLINE STATUS
-// ==========================================
-window.addEventListener('online',  () => {
-    // Reconectar lógica aqui se necessário
-});
-window.addEventListener('offline', () => {
-    // Notificar o usuário se necessário
 });
 
 // ==========================================
@@ -679,7 +574,7 @@ if ('scrollRestoration' in history) {
 }
 
 // ==========================================
-// ACCESSIBILITY
+// ACCESSIBILITY — KEYBOARD NAV
 // ==========================================
 if (mobileToggle) {
     mobileToggle.addEventListener('keydown', (e) => {
@@ -703,24 +598,5 @@ document.addEventListener('keydown', (e) => {
 // INITIALIZATION
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // ✅ FIX #2 — Bind dos botões de checkout sem onclick inline e sem global
     bindCheckoutButtons();
-
-    // Animação inicial suave
-    setTimeout(() => {
-        document.body.style.opacity = '1';
-    }, 100);
 });
-
-// ==========================================
-// SERVICE WORKER (OPCIONAL)
-// ==========================================
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        // Descomentar quando tiver service worker configurado
-        // Atenção: implementar cache validation para evitar cache poisoning
-        // navigator.serviceWorker.register('/sw.js')
-        //     .then(reg => console.log('[GranaEvo] Service Worker registrado'))
-        //     .catch(err => console.error('[GranaEvo] Service Worker erro:', err));
-    });
-}
