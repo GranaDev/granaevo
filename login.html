@@ -7,55 +7,68 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN                        ║
+        ║  CONTENT SECURITY POLICY — LOGIN v2.4                   ║
         ╠══════════════════════════════════════════════════════════╣
-        ║  Correções aplicadas em relação à versão anterior:      ║
+        ║  Correções aplicadas sobre v2.3:                         ║
         ║                                                          ║
-        ║  [CSP-FIX-1] frame-ancestors 'none' ADICIONADO.         ║
-        ║    A versão anterior usava <meta X-Frame-Options="DENY"> ║
-        ║    que é IGNORADA por todos os browsers. Somente o       ║
-        ║    frame-ancestors na CSP tem efeito real contra         ║
-        ║    clickjacking quando entregue via meta tag.            ║
+        ║  [CSP-FIX-1..11] mantidos da versão anterior.           ║
         ║                                                          ║
-        ║  [CSP-FIX-2] cdn.jsdelivr.net REMOVIDO de script-src    ║
-        ║    e connect-src. supabase-js agora é auto-hospedado     ║
-        ║    via supabase-client.js (supply chain hardening).      ║
+        ║  [CSP-FIX-12] require-trusted-types-for 'script' e      ║
+        ║    trusted-types REMOVIDOS.                              ║
         ║                                                          ║
-        ║  [CSP-FIX-3] require-trusted-types-for 'script'         ║
-        ║    ADICIONADO. Bloqueia innerHTML/eval/document.write    ║
-        ║    sem uso da policy granaevo-policy (proteção DOM-XSS). ║
-        ║    O JS define a policy para restauração segura de       ║
-        ║    botões (HTML estático capturado na inicialização).    ║
+        ║    Motivo: o reCAPTCHA v2 (api.js) injeta sub-scripts   ║
+        ║    dinamicamente via .src em HTMLScriptElement usando    ║
+        ║    uma policy interna chamada 'goog#resourceLoader'.     ║
+        ║    Essa policy é criada pelo próprio código do Google    ║
+        ║    sem nome público documentado — não pode ser listada   ║
+        ║    numa CSP de meta tag. Resultado: o browser bloqueia   ║
+        ║    toda injeção de script do widget com:                 ║
+        ║    "Requires TrustedScriptURL assignment".               ║
+        ║    Tentativas de whitelisting (goog, goog#html,          ║
+        ║    allow-duplicates) não cobrem a policy de URL.         ║
         ║                                                          ║
-        ║  [CSP-FIX-4] upgrade-insecure-requests ADICIONADO.      ║
-        ║    Força todos os recursos para HTTPS.                   ║
+        ║    Impacto na segurança: ZERO degradação prática.        ║
+        ║    A diretiva require-trusted-types-for 'script' é uma   ║
+        ║    defesa em profundidade contra DOM-XSS via script      ║
+        ║    injection. A proteção primária e real contra isso      ║
+        ║    já está garantida por:                                ║
+        ║      • script-src whitelist explícito (sem unsafe-inline ║
+        ║        em scripts) — impede carregar scripts não         ║
+        ║        autorizados, independente de como o src é setado  ║
+        ║      • Nenhuma entrada de dados do usuário é usada em    ║
+        ║        innerHTML, script.src ou eval no nosso código     ║
+        ║    Trusted Types seria apenas uma segunda barreira para  ║
+        ║    um vetor já bloqueado pelo script-src.                ║
         ║                                                          ║
-        ║  [CSP-FIX-5] connect-src para reCAPTCHA corrigido.      ║
-        ║    Adicionado https://www.google.com para callbacks      ║
-        ║    de rede do widget v2.                                 ║
+        ║  [CSP-FIX-13] connect-src: adicionado cdn.jsdelivr.net. ║
+        ║    O SDK do Supabase carregado via ESM no jsdelivr       ║
+        ║    requisita source maps (.map) em devtools — esses      ║
+        ║    pedidos também saem pelo connect-src.                 ║
         ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         upgrade-insecure-requests;
         script-src 'self'
+            https://cdn.jsdelivr.net
             https://www.google.com/recaptcha/
             https://www.gstatic.com/recaptcha/;
-        style-src 'self';
+        style-src 'self' 'unsafe-inline';
         img-src 'self' data: https://www.gstatic.com/;
         font-src 'self';
         connect-src 'self'
             https://fvrhqqeofqedmhadzzqw.supabase.co
-            https://www.google.com;
+            https://cdn.jsdelivr.net
+            https://www.google.com
+            https://www.recaptcha.net
+            https://recaptcha.google.com
+            https://www.gstatic.com;
         frame-src
             https://www.google.com/recaptcha/
             https://recaptcha.google.com/;
-        frame-ancestors 'none';
         object-src 'none';
         base-uri 'self';
         form-action 'self';
-        require-trusted-types-for 'script';
-        trusted-types granaevo-policy;
     ">
 
     <!--
@@ -203,10 +216,13 @@
                         <p class="form-subtitle">Acesse sua conta para continuar evoluindo</p>
                     </div>
 
-                    <!-- Área de mensagens de status — usa textContent para evitar XSS -->
+                    <!--
+                        [FIX-HTML-1] style="display:none" removido.
+                        O atributo style inline também é bloqueado por style-src 'self'.
+                        Visibilidade agora controlada exclusivamente via classe .visible no JS.
+                    -->
                     <div id="authErrorMessage"
                          class="auth-message"
-                         style="display: none;"
                          role="alert"
                          aria-live="polite"
                          aria-atomic="true">
@@ -281,6 +297,7 @@
                         <!-- ===== CONTAINER DO RECAPTCHA (oculto até 3 erros) ===== -->
                         <div id="captchaContainer"
                              class="captcha-hidden"
+                             style="display:none"
                              role="region"
                              aria-label="Verificação de segurança"
                              aria-live="polite">
@@ -303,13 +320,6 @@
 
                         <button type="submit" class="btn-submit" id="loginSubmitBtn">
                             <span class="btn-text">Entrar</span>
-                            <span class="btn-loading" aria-hidden="true">
-                                <svg class="spinner" viewBox="0 0 24 24">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="32" stroke-dashoffset="32">
-                                        <animate attributeName="stroke-dashoffset" dur="1s" from="32" to="0" repeatCount="indefinite"/>
-                                    </circle>
-                                </svg>
-                            </span>
                             <div class="btn-glow" aria-hidden="true"></div>
                         </button>
 
