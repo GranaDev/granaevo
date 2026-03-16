@@ -6,41 +6,29 @@
     <title>GranaEvo - Acesso Premium</title>
 
     <!--
-        ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN v3.0                   ║
-        ╠══════════════════════════════════════════════════════════╣
-        ║  [CSP-FIX-1..13] mantidos das versões anteriores.       ║
-        ║                                                          ║
-        ║  [CSP-FIX-14] script-src: adicionado                    ║
-        ║    https://www.recaptcha.net/recaptcha/ para cobrir      ║
-        ║    sub-recursos carregados pelo reCAPTCHA em algumas     ║
-        ║    regiões onde www.google.com é inacessível.            ║
-        ║                                                          ║
-        ║  [HTML-FIX-1] style="display:none" removido do          ║
-        ║    #captchaContainer — JS controla via classList.        ║
-        ║                                                          ║
-        ║  [HTML-FIX-2] Inline style do SVG do captcha-label      ║
-        ║    substituído pela classe .captcha-label-icon no CSS.   ║
-        ║                                                          ║
-        ║  [HTML-FIX-3] reCAPTCHA carregado com                   ║
-        ║    ?render=explicit&onload=_grOnLoad                     ║
-        ║    O parâmetro onload garante que window._grOnLoad()     ║
-        ║    é chamado quando a lib está 100% pronta — elimina a   ║
-        ║    race condition entre async/defer do script e a        ║
-        ║    avaliação do módulo login.js.                         ║
-        ╚══════════════════════════════════════════════════════════╝
+        CONTENT SECURITY POLICY — LOGIN v3.1
+        CORREÇÕES v3.1:
+        [CSP-FIX-15] Removidos comentários /* ... */ de dentro do atributo content.
+                     O browser interpreta /* como nome de diretiva inválida, quebrando
+                     todo o CSP e fazendo scripts externos e inline serem bloqueados.
+        [CSP-FIX-16] Removidas as diretivas report-uri. Elas são silenciosamente
+                     ignoradas quando o CSP é entregue via <meta> (só funcionam em
+                     header HTTP), e geravam erros no console.
+        [CSP-FIX-17] Mantido o hash sha256 do script inline do bridge do reCAPTCHA.
+                     O hash deve corresponder exatamente ao conteúdo do script abaixo.
+                     Se o conteúdo do script for alterado, recalcule o hash com:
+                     echo -n '<conteudo>' | openssl dgst -sha256 -binary | base64
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         upgrade-insecure-requests;
         script-src 'self'
-            'unsafe-eval' /* Necessário para o reCAPTCHA */
+            'unsafe-eval'
             'sha256-Qy9mS7bEqlEUxON8uHeSqpSpAVwmaih+kA/AVLUIKwA='
             https://cdn.jsdelivr.net
             https://www.google.com/recaptcha/
             https://www.recaptcha.net/recaptcha/
             https://www.gstatic.com/recaptcha/;
-        report-uri /csp-report-endpoint; /* Substitua pelo seu endpoint de relatório de CSP */
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: https://www.gstatic.com/;
         font-src 'self';
@@ -55,7 +43,6 @@
             https://www.google.com/recaptcha/
             https://www.recaptcha.net/recaptcha/
             https://recaptcha.google.com/;
-        report-uri /csp-report-endpoint; /* Substitua pelo seu endpoint de relatório de CSP */
         object-src 'none';
         base-uri 'self';
         form-action 'self';
@@ -68,15 +55,11 @@
     <link rel="stylesheet" href="login.css">
 
     <!--
-        SOLUÇÃO DEFINITIVA PARA O RECAPTCHA INVISÍVEL
-
-        Problema raiz: login.js usa type="module" (sempre deferido pelo browser).
-        O reCAPTCHA usa "async" e pode chamar window._grOnLoad ANTES do módulo
-        ser avaliado — _grOnLoad não existia, causando o erro no console.
-
-        Solução: script INLINE SÍNCRONO define _grOnLoad durante o parse do HTML.
-        Sem arquivo externo, sem risco de 404, sem problema de MIME type.
-        O login.js lê as flags __grCaptchaReady / __grPendingRender.
+        BRIDGE DO RECAPTCHA
+        Script inline síncrono — define window._grOnLoad durante o parse do HTML,
+        antes que o reCAPTCHA (async/defer) possa chamá-lo.
+        O hash sha256 no CSP acima autoriza exatamente este bloco.
+        NÃO altere o conteúdo sem recalcular o hash.
     -->
     <script>
     (function () {
@@ -228,7 +211,6 @@
                          aria-atomic="true">
                     </div>
 
-                    <!-- novalidate desabilita toda validação nativa do browser -->
                     <form class="login-form" id="loginForm" novalidate autocomplete="on">
 
                         <div class="form-group">
@@ -260,11 +242,6 @@
                                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke-width="2"/>
                                 </svg>
-                                <!--
-                                    [HTML-FIX-4] minlength REMOVIDO — sem restrição de tamanho
-                                    no campo de login. Qualquer senha não-vazia é enviada ao
-                                    Supabase e contabilizada como tentativa (ativa captcha).
-                                -->
                                 <input
                                     type="password"
                                     id="loginPassword"
@@ -300,11 +277,6 @@
                             </button>
                         </div>
 
-                        <!-- ===== CONTAINER DO RECAPTCHA =====
-                             [HTML-FIX-1] style="display:none" removido.
-                             Display controlado via classList pelo JS.
-                             [HTML-FIX-2] SVG usa .captcha-label-icon em vez de inline style.
-                        -->
                         <div id="captchaContainer"
                              class="captcha-hidden"
                              role="region"
@@ -470,7 +442,6 @@
                                     autocomplete="new-password"
                                     minlength="8"
                                     maxlength="128"
-                                    pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,128}$"
                                     aria-required="true"
                                     aria-describedby="passwordRequirements"
                                 >
@@ -494,7 +465,6 @@
                                     autocomplete="new-password"
                                     minlength="8"
                                     maxlength="128"
-                                    pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,128}$"
                                     aria-required="true"
                                 >
                             </div>
