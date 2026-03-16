@@ -396,6 +396,16 @@ function shakeInput(input) {
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
 
+    // [FIX-JS-7] Garante que o captcha começa SEMPRE oculto via JS,
+    // independente do CSS. Evita flash de captcha visível causado por
+    // conflito de especificidade CSS ou cache do arquivo CSS no servidor.
+    const captchaEl = document.getElementById('captchaContainer');
+    if (captchaEl) {
+        captchaEl.style.display = 'none';
+        captchaEl.classList.add('captcha-hidden');
+        captchaEl.classList.remove('captcha-visible');
+    }
+
     // Captura o innerHTML original de cada botão antes de qualquer mutação
     Object.values(buttons).forEach(btn => {
         if (btn instanceof HTMLElement) _captureButtonHTML(btn);
