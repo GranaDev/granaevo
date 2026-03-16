@@ -64,11 +64,27 @@
     <link rel="stylesheet" href="login.css">
 
     <!--
-        [HTML-FIX-3] ?render=explicit impede auto-render.
-        &onload=_grOnLoad chama window._grOnLoad() quando a lib
-        está completamente carregada — solução canônica do Google
-        para renderização explícita confiável.
+        [HTML-FIX-3] SOLUÇÃO DEFINITIVA PARA O RECAPTCHA INVISÍVEL
+
+        O problema raiz: login.js usa type="module" — módulos são SEMPRE
+        deferidos pelo browser (executam após o parse do HTML completo).
+        O reCAPTCHA usa "async" e pode carregar e chamar window._grOnLoad
+        ANTES do módulo login.js ser avaliado, então _grOnLoad não existe.
+
+        Solução em duas partes:
+
+        PARTE 1 — recaptcha-bridge.js:
+          Script SÍNCRONO (sem async/defer/module) carregado ANTES do
+          reCAPTCHA. Define window._grOnLoad imediatamente, na hora que
+          o browser encontra a tag. Garante que o callback existe quando
+          o reCAPTCHA precisar chamá-lo.
+
+        PARTE 2 — reCAPTCHA api.js com ?render=explicit&onload=_grOnLoad:
+          render=explicit impede auto-render de elementos .g-recaptcha.
+          onload=_grOnLoad chama a função definida pelo bridge quando a
+          lib do Google estiver 100% pronta para uso.
     -->
+    <script src="recaptcha-bridge.js"></script>
     <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=_grOnLoad"
             async
             defer

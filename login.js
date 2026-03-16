@@ -68,42 +68,29 @@ function _publicHeader() {
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — CARREGAMENTO CONFIÁVEL
 //
-//  [FIX-CAPTCHA-FINAL] Solução definitiva para o reCAPTCHA invisível.
+//  [FIX-CAPTCHA-BRIDGE] Solução definitiva — usa recaptcha-bridge.js.
 //
-//  Problema raiz: o script reCAPTCHA com "async" pode carregar e
-//  disparar o callback "onload" ANTES de login.js (type="module",
-//  sempre deferido) terminar de ser avaliado. Resultado: o callback
-//  era chamado em window._grOnLoad inexistente, nada renderizava.
+//  Problema raiz: login.js usa type="module" → SEMPRE deferido pelo
+//  browser. O reCAPTCHA usa async e pode chamar window._grOnLoad
+//  ANTES do módulo ser avaliado — _grOnLoad não existia.
 //
-//  Solução em três camadas:
+//  Solução: recaptcha-bridge.js é carregado como script SÍNCRONO
+//  (sem async/defer/module) ANTES do reCAPTCHA no HTML.
+//  Define window._grOnLoad durante o parse do HTML, garantindo
+//  que o callback existe quando o Google precisar chamá-lo.
 //
-//  1. window._grOnLoad definido NO TOPO do módulo (fora de
-//     DOMContentLoaded) — garante que está disponível tão cedo
-//     quanto possível, antes mesmo da DOM estar pronta.
+//  Este módulo NÃO redefine _grOnLoad — apenas registra o render
+//  via window.__grPendingRender e lê window.__grCaptchaReady
+//  (ambas gerenciadas pelo bridge).
 //
-//  2. Verificação na inicialização (DOMContentLoaded): se grecaptcha
-//     já estava pronto quando o módulo foi avaliado (race condition
-//     inversa), marca _captchaReadyFired = true diretamente.
-//
-//  3. Poll de fallback em showCaptcha(): se nenhum dos dois acima
-//     capturou a prontidão, o poll detecta grecaptcha em até 15s.
-//     Cobre adblockers que interceptam o script e re-injetam tarde.
-//
-//  _pendingCaptchaShow: true se showCaptcha() foi chamado antes de
-//  grecaptcha estar pronto. O onload / poll renderiza ao ficar pronto.
+//  Fallback poll: cobre CDN lento / adblocker / cache inválido.
 // ═══════════════════════════════════════════════════════════════
-let _captchaWidgetId    = null;  // null = não renderizado, 0+ = ID do widget
-let _captchaReadyFired  = false; // true após grecaptcha estar 100% pronto
-let _pendingCaptchaShow = false; // true se showCaptcha chamou antes de ready
+let _captchaWidgetId = null; // null = não renderizado, 0+ = ID do widget
 
-// CAMADA 1: definido no topo do módulo — antes do DOMContentLoaded
-window._grOnLoad = function () {
-    _captchaReadyFired = true;
-    if (_pendingCaptchaShow) {
-        _pendingCaptchaShow = false;
-        _renderCaptchaWidget();
-    }
-};
+function _isCaptchaReady() {
+    return window.__grCaptchaReady === true ||
+           (typeof grecaptcha !== 'undefined' && typeof grecaptcha.render === 'function');
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA STATE
@@ -380,11 +367,6 @@ function shakeInput(input) {
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
 
-    // CAMADA 2: verifica se grecaptcha já carregou antes deste handler
-    if (typeof grecaptcha !== 'undefined' && typeof grecaptcha.render === 'function') {
-        _captchaReadyFired = true;
-    }
-
     // Garante estado inicial correto do captcha container
     const captchaEl = document.getElementById('captchaContainer');
     if (captchaEl) {
@@ -428,8 +410,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — RENDER INTERNO
 //
-//  Chamado apenas quando _captchaReadyFired = true.
-//  Renderiza uma única vez; idempotente após renderização.
+//  Chamado quando _isCaptchaReady() === true.
+//  Idempotente — renderiza uma única vez.
 // ═══════════════════════════════════════════════════════════════
 function _renderCaptchaWidget() {
     if (_captchaWidgetId !== null) return; // já renderizado
@@ -472,27 +454,30 @@ function showCaptcha() {
 
     if (_captchaWidgetId !== null) return; // widget já existe
 
-    if (_captchaReadyFired) {
+    if (_isCaptchaReady()) {
+        // grecaptcha já está pronto (bridge disparou antes deste módulo carregar)
         _renderCaptchaWidget();
     } else {
-        _pendingCaptchaShow = true;
+        // Registra o render como pendente no bridge — ele chamará quando pronto
+        window.__grPendingRender = _renderCaptchaWidget;
 
-        // CAMADA 3: poll de fallback (cobre adblockers / carregamentos tardios)
+        // Poll de fallback: cobre CDN lento, adblocker, cache inválido
+        // Interrompe quando widget renderizado ou timeout de 15s
         const deadline = Date.now() + 15_000;
         const poll = setInterval(() => {
             if (_captchaWidgetId !== null) {
                 clearInterval(poll);
+                window.__grPendingRender = null;
                 return;
             }
-            if (_captchaReadyFired ||
-                (typeof grecaptcha !== 'undefined' && typeof grecaptcha.render === 'function')) {
+            if (_isCaptchaReady()) {
                 clearInterval(poll);
-                _captchaReadyFired  = true;
-                _pendingCaptchaShow = false;
+                window.__grCaptchaReady  = true;
+                window.__grPendingRender = null;
                 _renderCaptchaWidget();
             } else if (Date.now() >= deadline) {
                 clearInterval(poll);
-                _pendingCaptchaShow = false;
+                window.__grPendingRender = null;
             }
         }, 250);
     }
