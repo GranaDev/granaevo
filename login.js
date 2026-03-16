@@ -1,36 +1,30 @@
 import { supabase } from './supabase-client.js';
 
 // ═══════════════════════════════════════════════════════════════
-//  [TT-POLICY-1] TRUSTED TYPES — POLÍTICA granaevo-policy
-//
-//  Usada EXCLUSIVAMENTE em restoreButton() para reinjetar o
-//  innerHTML ESTÁTICO dos botões capturado na inicialização.
+//  TRUSTED TYPES — granaevo-policy
+//  Usada exclusivamente em restoreButton() para innerHTML estático.
 //  Nunca contém input do usuário.
 // ═══════════════════════════════════════════════════════════════
 const _trustedPolicy = (() => {
     if (typeof window.trustedTypes?.createPolicy !== 'function') return null;
     try {
         return window.trustedTypes.createPolicy('granaevo-policy', {
-            createHTML: (input) => input,
+            createHTML: (s) => s,
         });
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 })();
 
 // ═══════════════════════════════════════════════════════════════
 //  CONFIGURAÇÕES
 // ═══════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
-    moneyParticleCount:          15,
-    chartLineCount:               8,
-    MAX_ATTEMPTS_BEFORE_CAPTCHA:  3,
-    MESSAGE_AUTO_HIDE_MS:      5000,
-    SEND_CODE_COOLDOWN_MS:    30_000,
-    RATE_LIMIT_MAX:               10,
-    RATE_LIMIT_WINDOW_MS:     60_000,
+    MAX_ATTEMPTS_BEFORE_CAPTCHA: 3,
+    MESSAGE_AUTO_HIDE_MS:     5000,
+    SEND_CODE_COOLDOWN_MS:   30_000,
+    RATE_LIMIT_MAX:              10,
+    RATE_LIMIT_WINDOW_MS:    60_000,
     CAPTCHA_TOKEN_MAX_AGE_MS: 110_000,
-    CAPTCHA_TOKEN_MIN_LENGTH:     50,
+    CAPTCHA_TOKEN_MIN_LENGTH:    50,
     CAPTCHA_SITE_KEY: '6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye',
     KEYS: Object.freeze({
         loginAttempts:  '_ge_la',
@@ -42,55 +36,27 @@ const CONFIG = Object.freeze({
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  MENSAGEM DE ERRO PADRÃO DE LOGIN
-//
-//  [FIX-MSG] Mensagem única para TODA falha de autenticação,
-//  incluindo email vazio, email inválido, senha vazia, senha
-//  errada, usuário inexistente e qualquer outro erro do Supabase.
-//  Nunca revela detalhes (anti-enumeração de email/senha).
+//  MENSAGEM DE ERRO PADRÃO
+//  Única mensagem para qualquer falha de autenticação.
+//  Anti-enumeração: nunca revela se é email ou senha o problema.
 // ═══════════════════════════════════════════════════════════════
 const LOGIN_ERROR_MSG = 'Tentativa inválida: email ou senha incorreto';
 
 // ═══════════════════════════════════════════════════════════════
-//  CABEÇALHOS DE AUTENTICAÇÃO
+//  CABEÇALHOS
 // ═══════════════════════════════════════════════════════════════
 async function _requireSessionHeader() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-        throw new Error('No active session — authenticated header required.');
-    }
+    if (!session?.access_token) throw new Error('No active session.');
     return `Bearer ${session.access_token}`;
 }
-
-function _publicHeader() {
-    return `Bearer ${supabase.supabaseKey}`;
-}
+function _publicHeader() { return `Bearer ${supabase.supabaseKey}`; }
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — CARREGAMENTO CONFIÁVEL
-//
-//  [FIX-CAPTCHA-DISPLAY] Causa raiz do captcha invisível:
-//
-//  O código anterior misturava dois mecanismos de controle de
-//  visibilidade ao mesmo tempo:
-//    1) el.style.display = 'none' / 'flex'  (inline style)
-//    2) classList.add/remove 'captcha-hidden' / 'captcha-visible'
-//
-//  O CSS usa:
-//    .captcha-hidden  { display: none !important; }
-//    .captcha-visible { display: flex; }
-//
-//  O problema: quando showCaptcha() definia el.style.display='flex'
-//  e depois adicionava 'captcha-visible', o inline style restante
-//  de chamadas anteriores a hideCaptcha() podia conflitar.
-//  Além disso, em alguns browsers o '!important' no CSS sobrescrevia
-//  o inline style em ordem inesperada durante a remoção da classe.
-//
-//  SOLUÇÃO: remover completamente o uso de el.style.display.
-//  Todo controle de visibilidade é feito APENAS via classList.
-//  Qualquer inline style residual é limpo (el.style.display = '').
+//  reCAPTCHA — ID DO WIDGET
+//  null = não renderizado, 0+ = ID do widget
 // ═══════════════════════════════════════════════════════════════
-let _captchaWidgetId = null; // null = não renderizado, 0+ = ID do widget
+let _captchaWidgetId = null;
 
 function _isCaptchaReady() {
     return window.__grCaptchaReady === true ||
@@ -101,50 +67,37 @@ function _isCaptchaReady() {
 //  CAPTCHA STATE
 // ═══════════════════════════════════════════════════════════════
 const CaptchaState = (() => {
-    let _token         = null;
-    let _resolved      = false;
-    let _resolvedAt    = 0;
-    let _captchaActive = false;
+    let _token = null, _resolved = false, _resolvedAt = 0, _active = false;
 
     window.onCaptchaResolved = (token) => {
-        if (!_captchaActive) return;
+        if (!_active) return;
         if (typeof token !== 'string' || token.length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) return;
         if (typeof grecaptcha === 'undefined') return;
         try {
-            const widgetResponse = grecaptcha.getResponse(_captchaWidgetId ?? undefined);
-            if (!widgetResponse || widgetResponse !== token) return;
-            _token      = token;
-            _resolved   = true;
-            _resolvedAt = Date.now();
-        } catch {
-            _token = null; _resolved = false; _resolvedAt = 0;
-        }
+            const resp = grecaptcha.getResponse(_captchaWidgetId ?? undefined);
+            if (!resp || resp !== token) return;
+            _token = token; _resolved = true; _resolvedAt = Date.now();
+        } catch { _token = null; _resolved = false; _resolvedAt = 0; }
     };
-
     window.onCaptchaExpired = () => { _token = null; _resolved = false; _resolvedAt = 0; };
     window.onCaptchaError   = () => { _token = null; _resolved = false; _resolvedAt = 0; };
 
     return {
-        activate()   { _captchaActive = true;  },
-        deactivate() { _captchaActive = false; },
-
+        activate()   { _active = true;  },
+        deactivate() { _active = false; },
         isResolved() {
             if (!_resolved || !_token) return false;
             return (Date.now() - _resolvedAt) < CONFIG.CAPTCHA_TOKEN_MAX_AGE_MS;
         },
-
         getToken() { return this.isResolved() ? _token : null; },
-
         reset() {
             _token = null; _resolved = false; _resolvedAt = 0;
             if (typeof grecaptcha === 'undefined') return;
             try {
-                if (_captchaWidgetId !== null) {
-                    grecaptcha.reset(_captchaWidgetId);
-                } else {
-                    grecaptcha.reset();
-                }
-            } catch { /* widget ainda não renderizado */ }
+                _captchaWidgetId !== null
+                    ? grecaptcha.reset(_captchaWidgetId)
+                    : grecaptcha.reset();
+            } catch { /* not yet rendered */ }
         },
     };
 })();
@@ -153,22 +106,21 @@ const CaptchaState = (() => {
 //  RECOVERY STATE
 // ═══════════════════════════════════════════════════════════════
 const RecoveryState = (() => {
-    let _email = '';
-    let _code  = '';
+    let _email = '', _code = '';
     return {
-        getEmail:   ()  => _email,
-        getCode:    ()  => _code,
-        setEmail:   (v) => { _email = String(v ?? '').trim(); },
-        setCode:    (v) => { _code  = String(v ?? '').trim(); },
-        clearEmail: ()  => { _email = ''; },
-        clearCode:  ()  => { _code  = ''; },
-        clear:      ()  => { _email = ''; _code = ''; },
-        isValid:    ()  => _email.length > 0 && _code.length === 6,
+        getEmail: () => _email,
+        getCode:  () => _code,
+        setEmail: (v) => { _email = String(v ?? '').trim(); },
+        setCode:  (v) => { _code  = String(v ?? '').trim(); },
+        clearEmail: () => { _email = ''; },
+        clearCode:  () => { _code  = ''; },
+        clear:      () => { _email = ''; _code = ''; },
+        isValid:    () => _email.length > 0 && _code.length === 6,
     };
 })();
 
 // ═══════════════════════════════════════════════════════════════
-//  MÓDULO: TENTATIVAS DE LOGIN
+//  LOGIN ATTEMPTS
 // ═══════════════════════════════════════════════════════════════
 const LoginAttempts = {
     get()   { return parseInt(sessionStorage.getItem(CONFIG.KEYS.loginAttempts) || '0', 10); },
@@ -178,12 +130,11 @@ const LoginAttempts = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  MÓDULO: COOLDOWN ANTI-FLOOD
+//  COOLDOWN
 // ═══════════════════════════════════════════════════════════════
 const Cooldown = {
     isActive(key) {
-        const until = parseInt(sessionStorage.getItem(key) || '0', 10);
-        return Date.now() < until;
+        return Date.now() < parseInt(sessionStorage.getItem(key) || '0', 10);
     },
     set(key, ms) {
         sessionStorage.setItem(key, String(Date.now() + ms));
@@ -191,24 +142,18 @@ const Cooldown = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  MÓDULO: RATE LIMITER DE SUBMISSÃO (client-side)
+//  RATE LIMITER (client-side)
 // ═══════════════════════════════════════════════════════════════
 const SubmitRateLimiter = {
     isAllowed() {
-        const now         = Date.now();
-        const windowStart = now - CONFIG.RATE_LIMIT_WINDOW_MS;
+        const now = Date.now();
         let log;
-        try {
-            log = JSON.parse(sessionStorage.getItem(CONFIG.KEYS.submitRateLog) || '[]');
-        } catch {
-            log = [];
-        }
-        log = log.filter(ts => ts > windowStart);
+        try { log = JSON.parse(sessionStorage.getItem(CONFIG.KEYS.submitRateLog) || '[]'); }
+        catch { log = []; }
+        log = log.filter(ts => ts > now - CONFIG.RATE_LIMIT_WINDOW_MS);
         if (log.length >= CONFIG.RATE_LIMIT_MAX) return false;
         log.push(now);
-        try {
-            sessionStorage.setItem(CONFIG.KEYS.submitRateLog, JSON.stringify(log));
-        } catch { /* sessionStorage cheio — fail open */ }
+        try { sessionStorage.setItem(CONFIG.KEYS.submitRateLog, JSON.stringify(log)); } catch { /* full */ }
         return true;
     },
 };
@@ -216,77 +161,58 @@ const SubmitRateLimiter = {
 // ═══════════════════════════════════════════════════════════════
 //  UTILITÁRIOS
 // ═══════════════════════════════════════════════════════════════
-function sanitizeText(value) {
-    return String(value ?? '').trim();
-}
-
-function isValidEmail(email) {
-    return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email);
-}
+const sanitize  = (v) => String(v ?? '').trim();
+const validEmail = (e) => /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(e);
 
 // ═══════════════════════════════════════════════════════════════
-//  RESTAURAÇÃO SEGURA DE BOTÕES (TRUSTED TYPES COMPLIANT)
+//  BOTÕES — captura e restauração (Trusted Types compliant)
 // ═══════════════════════════════════════════════════════════════
-const _buttonOriginalHTML = new WeakMap();
+const _btnHTML = new WeakMap();
 
-function _captureButtonHTML(btn) {
-    if (btn && !_buttonOriginalHTML.has(btn)) {
-        _buttonOriginalHTML.set(btn, btn.innerHTML);
-    }
+function _captureBtn(btn) {
+    if (btn && !_btnHTML.has(btn)) _btnHTML.set(btn, btn.innerHTML);
 }
 
 function restoreButton(btn) {
     btn.disabled = false;
-    const original = _buttonOriginalHTML.get(btn);
-    if (original === undefined) return;
-    if (_trustedPolicy) {
-        btn.innerHTML = _trustedPolicy.createHTML(original);
-    } else {
-        btn.innerHTML = original;
-    }
+    const orig = _btnHTML.get(btn);
+    if (orig === undefined) return;
+    if (_trustedPolicy) { btn.innerHTML = _trustedPolicy.createHTML(orig); }
+    else { btn.innerHTML = orig; }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SPINNER DO BOTÃO — usa .loading-svg do CSS (sem inline style)
+//  SPINNER
 // ═══════════════════════════════════════════════════════════════
-function createSpinnerElement(labelText) {
-    const wrapper = document.createDocumentFragment();
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+function _makeSpinner(label) {
+    const frag = document.createDocumentFragment();
+    const svg  = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('aria-hidden', 'true');
     svg.classList.add('loading-svg');
-
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', '12');
-    circle.setAttribute('cy', '12');
-    circle.setAttribute('r', '10');
-    circle.setAttribute('stroke', 'currentColor');
-    circle.setAttribute('stroke-width', '4');
-    circle.setAttribute('fill', 'none');
+    circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12');
+    circle.setAttribute('r', '10');  circle.setAttribute('stroke', 'currentColor');
+    circle.setAttribute('stroke-width', '4'); circle.setAttribute('fill', 'none');
     circle.setAttribute('opacity', '0.25');
-    svg.appendChild(circle);
-
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', 'M12 2a10 10 0 0 1 10 10');
     path.setAttribute('stroke', 'currentColor');
-    path.setAttribute('stroke-width', '4');
-    path.setAttribute('fill', 'none');
-    svg.appendChild(path);
-
-    wrapper.appendChild(svg);
-    wrapper.appendChild(document.createTextNode(' ' + sanitizeText(labelText)));
-    return wrapper;
+    path.setAttribute('stroke-width', '4'); path.setAttribute('fill', 'none');
+    svg.appendChild(circle); svg.appendChild(path);
+    frag.appendChild(svg);
+    frag.appendChild(document.createTextNode(' ' + sanitize(label)));
+    return frag;
 }
 
-function setButtonLoading(btn, loadingText) {
-    btn.disabled    = true;
+function setLoading(btn, text) {
+    btn.disabled = true;
     btn.textContent = '';
-    btn.appendChild(createSpinnerElement(loadingText));
+    btn.appendChild(_makeSpinner(text));
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SELEÇÃO DE ELEMENTOS DO DOM
+//  DOM REFS
 // ═══════════════════════════════════════════════════════════════
 const screens = Object.freeze({
     login:       document.getElementById('loginScreen'),
@@ -313,191 +239,102 @@ const inputs = Object.freeze({
     loginEmail:      document.getElementById('loginEmail'),
     loginPassword:   document.getElementById('loginPassword'),
     recoveryEmail:   document.getElementById('recoveryEmail'),
-    codeInputs:      document.querySelectorAll('.code-input'),
+    codeBoxes:       document.querySelectorAll('.code-box'),
     newPassword:     document.getElementById('newPassword'),
     confirmPassword: document.getElementById('confirmPassword'),
 });
 
-const loginForm      = document.getElementById('loginForm');
-const errorMessage   = document.getElementById('errorMessage');
-const togglePassword = document.getElementById('togglePassword');
+const loginForm    = document.getElementById('loginForm');
+const errorMessage = document.getElementById('errorMessage');
+const togglePwBtn  = document.getElementById('togglePassword');
 
 // ═══════════════════════════════════════════════════════════════
-//  FUNÇÕES DE MENSAGEM
-//  Visibilidade via classList (.visible / .show) — sem inline style.
+//  MENSAGENS
 // ═══════════════════════════════════════════════════════════════
-let _messageTimer = null;
+let _msgTimer = null;
 
-function showAuthMessage(message, type) {
-    const messageDiv = document.getElementById('authErrorMessage');
-    if (!messageDiv) return;
-
-    if (_messageTimer) { clearTimeout(_messageTimer); _messageTimer = null; }
-
-    messageDiv.textContent = sanitizeText(message); // textContent = anti-XSS
-    messageDiv.className   = `auth-message ${type} visible show`;
-
-    _messageTimer = setTimeout(() => {
-        messageDiv.classList.remove('show');
-        setTimeout(() => {
-            messageDiv.classList.remove('visible');
-            messageDiv.textContent = '';
-        }, 300);
+function showAuthMessage(msg, type) {
+    const el = document.getElementById('authErrorMessage');
+    if (!el) return;
+    if (_msgTimer) { clearTimeout(_msgTimer); _msgTimer = null; }
+    el.textContent = sanitize(msg);
+    el.className = `auth-msg ${type} visible show`;
+    _msgTimer = setTimeout(() => {
+        el.classList.remove('show');
+        setTimeout(() => { el.classList.remove('visible'); el.textContent = ''; }, 300);
     }, CONFIG.MESSAGE_AUTO_HIDE_MS);
 }
 
-function showError(message) {
+function showError(msg) {
     if (!errorMessage) return;
-    errorMessage.textContent = sanitizeText(message);
+    errorMessage.textContent = sanitize(msg);
     errorMessage.classList.add('show');
 }
-
 function hideError() {
     if (!errorMessage) return;
     errorMessage.classList.remove('show');
-    setTimeout(() => { errorMessage.textContent = ''; }, 300);
+    setTimeout(() => { errorMessage.textContent = ''; }, 280);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  EFEITO SHAKE — usa .input-shake do CSS (sem inline style)
+//  SHAKE INPUT
 // ═══════════════════════════════════════════════════════════════
-function shakeInput(input) {
-    if (!input) return;
-    input.classList.add('input-shake');
-    setTimeout(() => input.classList.remove('input-shake'), 500);
+function shakeInput(inp) {
+    if (!inp) return;
+    inp.classList.add('input-shake');
+    setTimeout(() => inp.classList.remove('input-shake'), 450);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  INICIALIZAÇÃO
-// ═══════════════════════════════════════════════════════════════
-window.addEventListener('DOMContentLoaded', async () => {
-
-    // [FIX-CAPTCHA-DISPLAY] Garante estado inicial via classList APENAS.
-    // NUNCA usar el.style.display aqui — conflita com as classes CSS
-    // .captcha-hidden { display:none !important } e .captcha-visible { display:flex }.
-    const captchaEl = document.getElementById('captchaContainer');
-    if (captchaEl) {
-        captchaEl.style.display = ''; // limpa qualquer inline style residual
-        captchaEl.classList.add('captcha-hidden');
-        captchaEl.classList.remove('captcha-visible');
-    }
-
-    // Captura innerHTML original de cada botão antes de qualquer mutação
-    Object.values(buttons).forEach(btn => {
-        if (btn instanceof HTMLElement) _captureButtonHTML(btn);
-    });
-
-    // Verifica sessão existente — redireciona sem expor estado intermediário
-    try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-            window.location.replace('dashboard.html');
-            return;
-        }
-    } catch {
-        // Sem sessão — continua para login
-    }
-
-    // Exibe captcha se o usuário já atingiu o limite de tentativas
-    if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
-        showCaptcha();
-    }
-
-    createMoneyParticles();
-    createAnimatedCharts();
-
-    // Exibe erro pendente de outro módulo (ex: dashboard.html)
-    const authError = sessionStorage.getItem('auth_error');
-    if (authError) {
-        showAuthMessage(sanitizeText(authError), 'error');
-        sessionStorage.removeItem('auth_error');
-    }
-});
-
-// ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — RENDER INTERNO
-//
-//  Chamado quando _isCaptchaReady() === true.
-//  Idempotente — renderiza uma única vez.
+//  CAPTCHA — RENDER INTERNO (idempotente)
 // ═══════════════════════════════════════════════════════════════
 function _renderCaptchaWidget() {
-    if (_captchaWidgetId !== null) return; // já renderizado
-
+    if (_captchaWidgetId !== null) return;
     const el        = document.getElementById('captchaContainer');
     const container = el?.querySelector('.g-recaptcha');
     if (!container) return;
-
-    // Limpa filhos de forma segura — evita bloqueio por Trusted Types
-    while (container.firstChild) {
-        container.removeChild(container.firstChild);
-    }
-
+    while (container.firstChild) container.removeChild(container.firstChild);
     try {
         _captchaWidgetId = grecaptcha.render(container, {
-            sitekey:              CONFIG.CAPTCHA_SITE_KEY,
-            callback:             'onCaptchaResolved',
-            'expired-callback':   'onCaptchaExpired',
-            'error-callback':     'onCaptchaError',
-            theme:                'dark',
+            sitekey:            CONFIG.CAPTCHA_SITE_KEY,
+            callback:           'onCaptchaResolved',
+            'expired-callback': 'onCaptchaExpired',
+            'error-callback':   'onCaptchaError',
+            theme:              'dark',
         });
     } catch {
-        // Verifica se widget foi criado antes do throw
-        const existing = container.querySelector('iframe');
-        _captchaWidgetId = existing ? 0 : null;
+        const iframe = container.querySelector('iframe');
+        _captchaWidgetId = iframe ? 0 : null;
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — EXIBIR
-//
-//  [FIX-CAPTCHA-DISPLAY] Controle de visibilidade EXCLUSIVAMENTE
-//  via classList. Inline style (el.style.display) removido por
-//  completo para evitar conflito com as regras CSS:
-//    .captcha-hidden  { display: none !important; }
-//    .captcha-visible { display: flex; }
-//  O inline style tem especificidade maior que classes normais,
-//  mas não maior que !important — isso causava comportamento
-//  inconsistente entre browsers durante as transições de classe.
-//  Limpar el.style.display = '' antes de manipular classList
-//  garante que as classes CSS têm controle total e previsível.
+//  CAPTCHA — SHOW / HIDE
+//  Controle EXCLUSIVAMENTE via classList.
+//  el.style.display = '' limpa inline style residual para que
+//  .captcha-hidden { display:none !important } funcione sempre.
 // ═══════════════════════════════════════════════════════════════
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
-
-    // Limpa qualquer inline style residual antes de mudar as classes
     el.style.display = '';
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
     CaptchaState.activate();
-
-    if (_captchaWidgetId !== null) return; // widget já existe
+    if (_captchaWidgetId !== null) return;
 
     if (_isCaptchaReady()) {
-        // grecaptcha já está pronto — renderiza imediatamente
         _renderCaptchaWidget();
     } else {
-        // Registra o render como pendente no bridge — ele chamará quando pronto
         window.__grPendingRender = _renderCaptchaWidget;
-
-        // Poll de fallback: cobre CDN lento, adblocker, cache inválido
-        // Interrompe quando widget renderizado ou timeout de 15s
         const deadline = Date.now() + 15_000;
         const poll = setInterval(() => {
-            if (_captchaWidgetId !== null) {
-                clearInterval(poll);
-                window.__grPendingRender = null;
-                return;
-            }
+            if (_captchaWidgetId !== null) { clearInterval(poll); window.__grPendingRender = null; return; }
             if (_isCaptchaReady()) {
                 clearInterval(poll);
-                window.__grCaptchaReady  = true;
-                window.__grPendingRender = null;
+                window.__grCaptchaReady = true; window.__grPendingRender = null;
                 _renderCaptchaWidget();
-            } else if (Date.now() >= deadline) {
-                clearInterval(poll);
-                window.__grPendingRender = null;
-            }
+            } else if (Date.now() >= deadline) { clearInterval(poll); window.__grPendingRender = null; }
         }, 250);
     }
 }
@@ -505,7 +342,6 @@ function showCaptcha() {
 function hideCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
-    // [FIX-CAPTCHA-DISPLAY] Mesmo padrão: limpa inline style antes das classes
     el.style.display = '';
     el.classList.remove('captcha-visible');
     el.classList.add('captcha-hidden');
@@ -523,105 +359,184 @@ function highlightCaptcha() {
 //  VALIDAÇÃO DO CAPTCHA NO BACKEND
 // ═══════════════════════════════════════════════════════════════
 async function validateCaptchaOnBackend(token) {
-    if (!token || typeof token !== 'string' || token.trim().length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) {
-        return false;
-    }
+    if (!token || typeof token !== 'string' || token.trim().length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) return false;
     try {
-        const response = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/verify-recaptcha`, {
-            method:  'POST',
+        const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/verify-recaptcha`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
             body: JSON.stringify({ token: token.trim() }),
         });
-        if (!response.ok) return false;
-        const result = await response.json();
-        return result?.success === true;
-    } catch {
-        return false;
-    }
+        if (!res.ok) return false;
+        const data = await res.json();
+        return data?.success === true;
+    } catch { return false; }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  VERIFICAÇÃO DE ACESSO — SEM ENUMERAÇÃO DE EMAIL
+//  VERIFICAÇÃO DE ACESSO
 // ═══════════════════════════════════════════════════════════════
 async function checkUserAccess() {
     try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.user?.id || !session?.access_token) return { hasAccess: false };
-
         const authHeader = await _requireSessionHeader();
-        const response   = await fetch(
-            `${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
-                body: JSON.stringify({ user_id: session.user.id }),
-            }
-        );
-        if (!response.ok) return { hasAccess: false };
-        const result = await response.json();
-        return { hasAccess: result?.hasAccess === true };
-    } catch {
-        return { hasAccess: false };
+        const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+            body: JSON.stringify({ user_id: session.user.id }),
+        });
+        if (!res.ok) return { hasAccess: false };
+        const data = await res.json();
+        return { hasAccess: data?.hasAccess === true };
+    } catch { return { hasAccess: false }; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HELPER: registra tentativa falha e mostra captcha se necessário
+// ═══════════════════════════════════════════════════════════════
+function _registerFailedAttempt() {
+    LoginAttempts.inc();
+    if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) showCaptcha();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INICIALIZAÇÃO
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+
+    // Estado inicial do captcha — limpeza de inline style residual
+    const captchaEl = document.getElementById('captchaContainer');
+    if (captchaEl) {
+        captchaEl.style.display = '';
+        captchaEl.classList.add('captcha-hidden');
+        captchaEl.classList.remove('captcha-visible');
+    }
+
+    // Captura HTML original de cada botão
+    Object.values(buttons).forEach(btn => {
+        if (btn instanceof HTMLElement) _captureBtn(btn);
+    });
+
+    // Verifica sessão existente
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) { window.location.replace('dashboard.html'); return; }
+    } catch { /* sem sessão */ }
+
+    // Exibe captcha se já atingiu o limite em sessão anterior
+    if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) showCaptcha();
+
+    // Inicia partículas canvas
+    _initParticles();
+
+    // Erro pendente de outro módulo (ex: dashboard)
+    const authError = sessionStorage.getItem('auth_error');
+    if (authError) {
+        showAuthMessage(sanitize(authError), 'error');
+        sessionStorage.removeItem('auth_error');
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  PARTÍCULAS CANVAS (performático — sem texto, só pontos)
+// ═══════════════════════════════════════════════════════════════
+function _initParticles() {
+    const canvas = document.getElementById('particleCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const COUNT = 38;
+    let W = 0, H = 0;
+
+    const resize = () => {
+        W = canvas.width  = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize, { passive: true });
+
+    const particles = Array.from({ length: COUNT }, () => ({
+        x:    Math.random() * window.innerWidth,
+        y:    Math.random() * window.innerHeight,
+        r:    Math.random() * 1.8 + 0.6,
+        dx:   (Math.random() - 0.5) * 0.25,
+        dy:   -(Math.random() * 0.25 + 0.08),
+        a:    Math.random() * 0.38 + 0.08,
+    }));
+
+    let raf;
+    function draw() {
+        ctx.clearRect(0, 0, W, H);
+        for (const p of particles) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(0,232,122,${p.a})`;
+            ctx.shadowBlur  = 5;
+            ctx.shadowColor = 'rgba(0,232,122,0.5)';
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            p.x += p.dx;
+            p.y += p.dy;
+            if (p.y < -6) { p.y = H + 6; p.x = Math.random() * W; }
+            if (p.x < -6) p.x = W + 6;
+            if (p.x > W + 6) p.x = -6;
+        }
+        raf = requestAnimationFrame(draw);
+    }
+    draw();
+
+    // Parar quando a aba fica em background (economia de bateria)
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) cancelAnimationFrame(raf);
+        else draw();
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  NAVEGAÇÃO ENTRE TELAS
+// ═══════════════════════════════════════════════════════════════
+function switchScreen(from, to) {
+    Object.values(screens).forEach(s => {
+        s.classList.remove('active', 'exit-left');
+        s.setAttribute('aria-hidden', 'true');
+    });
+    if (from) {
+        from.classList.add('exit-left');
+        setTimeout(() => {
+            from.classList.remove('active', 'exit-left');
+            to.classList.add('active');
+            to.setAttribute('aria-hidden', 'false');
+        }, 380);
+    } else {
+        to.classList.add('active');
+        to.setAttribute('aria-hidden', 'false');
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
 //  FORMULÁRIO DE LOGIN
 //
-//  [FIX-ATTEMPTS] Regra central corrigida:
-//
-//  ANTES (bugado):
-//    — email vazio         → return sem contar tentativa
-//    — email mal-formatado → return sem contar tentativa
-//    — senha vazia         → return sem contar tentativa
-//    — senha < 8 chars     → return sem contar tentativa (via minlength nativo)
-//    — senha > 128 chars   → return sem contar tentativa
-//
-//  Resultado: o captcha nunca aparecia nesses casos e o atacante
-//  podia tentar infinitamente com senhas inválidas.
-//
-//  AGORA (corrigido):
-//    — QUALQUER falha de validação local → conta tentativa
-//                                        → mostra LOGIN_ERROR_MSG
-//                                        → ativa captcha se >= 3 tentativas
-//    — Nenhuma validação de tamanho/formato de senha no login.
-//      Qualquer senha não-vazia é enviada ao Supabase.
-//      Motivo: validar tamanho localmente revela ao atacante
-//      informações sobre a senha (anti-enumeração de senhas)
-//      e quebra o mecanismo de captcha.
-//
-//  Fluxo garantido:
-//    Tentativa 1 → LOGIN_ERROR_MSG
-//    Tentativa 2 → LOGIN_ERROR_MSG
-//    Tentativa 3 → LOGIN_ERROR_MSG + captcha aparece
-//    Tentativa 4+ → captcha obrigatório antes de submeter
+//  Regras:
+//  • Qualquer falha (email vazio, inválido, senha vazia, erro Supabase)
+//    conta como tentativa e ativa captcha após 3 erros.
+//  • Sem validação de tamanho de senha no login (anti-enumeração).
+//  • Mensagem sempre genérica: LOGIN_ERROR_MSG.
 // ═══════════════════════════════════════════════════════════════
-
-// Helper interno: contabiliza tentativa, exibe mensagem e mostra captcha se necessário.
-// Evita repetição de código nas validações locais e no bloco de erro do Supabase.
-function _registerFailedAttempt() {
-    LoginAttempts.inc();
-    if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
-        showCaptcha();
-    }
-}
-
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    // Proteção contra flood de submissões (10 por minuto)
     if (!SubmitRateLimiter.isAllowed()) {
-        showAuthMessage('Muitas tentativas em pouco tempo. Aguarde um momento.', 'error');
+        showAuthMessage('Muitas tentativas em pouco tempo. Aguarde.', 'error');
         return;
     }
 
-    const email    = sanitizeText(inputs.loginEmail.value);
-    const password = inputs.loginPassword.value; // NÃO aparar — espaços podem ser senha válida
+    const email    = sanitize(inputs.loginEmail.value);
+    const password = inputs.loginPassword.value; // nunca aparar — espaços podem ser senha válida
 
-    // ── [FIX-ATTEMPTS] Email vazio ou inválido conta como tentativa ──
-    // Nunca indicar que o email é o problema (anti-enumeração).
-    if (!email || !isValidEmail(email)) {
-        inputs.loginPassword.value = ''; // limpa senha imediatamente
+    // Email vazio ou inválido → conta tentativa (anti-enumeração)
+    if (!email || !validEmail(email)) {
+        inputs.loginPassword.value = '';
         _registerFailedAttempt();
         showAuthMessage(LOGIN_ERROR_MSG, 'error');
         shakeInput(inputs.loginEmail);
@@ -629,7 +544,7 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    // ── [FIX-ATTEMPTS] Senha vazia conta como tentativa ──
+    // Senha vazia → conta tentativa
     if (!password) {
         _registerFailedAttempt();
         showAuthMessage(LOGIN_ERROR_MSG, 'error');
@@ -637,463 +552,324 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Nenhuma outra validação de senha (tamanho, força, formato).
-    // Qualquer senha não-vazia é enviada ao Supabase e conta como tentativa se errar.
-
-    // ── Verifica captcha se limite de tentativas atingido ──
-    const currentAttempts = LoginAttempts.get();
-    if (currentAttempts >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
+    // Captcha obrigatório após limite de tentativas
+    if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         if (!CaptchaState.isResolved()) {
             showAuthMessage('Por favor, resolva a verificação de segurança.', 'error');
             highlightCaptcha();
             return;
         }
-
         showAuthMessage('Verificando segurança...', 'info');
-        const captchaValid = await validateCaptchaOnBackend(CaptchaState.getToken());
-        if (!captchaValid) {
+        const ok = await validateCaptchaOnBackend(CaptchaState.getToken());
+        if (!ok) {
             showAuthMessage('Falha na verificação de segurança. Tente novamente.', 'error');
             CaptchaState.reset();
             return;
         }
     }
 
-    const submitBtn = buttons.loginSubmit;
-    setButtonLoading(submitBtn, 'Verificando...');
+    const btn = buttons.loginSubmit;
+    setLoading(btn, 'Verificando...');
 
     try {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) {
-            inputs.loginPassword.value = ''; // limpa imediatamente no erro
-
-            // [FIX-ATTEMPTS] Contabiliza tentativa para qualquer erro do Supabase
-            // (credenciais erradas, usuário inexistente, conta bloqueada, etc.)
+            inputs.loginPassword.value = '';
             CaptchaState.reset();
             _registerFailedAttempt();
-
-            // Mensagem genérica — nunca revela detalhes do erro do Supabase
             showAuthMessage(LOGIN_ERROR_MSG, 'error');
             shakeInput(inputs.loginEmail);
             shakeInput(inputs.loginPassword);
             return;
         }
 
-        // ── Login bem-sucedido ──
+        // Sucesso
         LoginAttempts.reset();
         CaptchaState.reset();
         hideCaptcha();
 
-        setButtonLoading(submitBtn, 'Verificando plano...');
+        setLoading(btn, 'Verificando plano...');
         const { hasAccess } = await checkUserAccess();
 
         if (!hasAccess) {
             await supabase.auth.signOut();
-            showAuthMessage('Você precisa de um plano ativo para acessar o sistema.', 'error');
+            showAuthMessage('Você precisa de um plano ativo para acessar.', 'error');
             setTimeout(() => window.location.replace('planos.html'), 2500);
             return;
         }
 
         inputs.loginPassword.value = '';
         inputs.loginEmail.value    = '';
-
-        const userName = sanitizeText(data.user.user_metadata?.name || 'Usuário');
-        showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
-        setTimeout(() => window.location.replace('dashboard.html'), 1500);
+        const name = sanitize(data.user.user_metadata?.name || 'Usuário');
+        showAuthMessage(`Bem-vindo de volta, ${name}!`, 'success');
+        setTimeout(() => window.location.replace('dashboard.html'), 1400);
 
     } catch {
-        showAuthMessage('Erro de conexão. Verifique sua internet e tente novamente.', 'error');
+        showAuthMessage('Erro de conexão. Verifique sua internet.', 'error');
     } finally {
-        restoreButton(submitBtn);
+        restoreButton(btn);
     }
 });
 
 // ═══════════════════════════════════════════════════════════════
 //  TOGGLE DE SENHA
 // ═══════════════════════════════════════════════════════════════
-if (togglePassword && inputs.loginPassword) {
-    togglePassword.addEventListener('click', () => {
-        const isPassword = inputs.loginPassword.type === 'password';
-        inputs.loginPassword.type = isPassword ? 'text' : 'password';
-        togglePassword.setAttribute('aria-label',   isPassword ? 'Ocultar senha' : 'Mostrar senha');
-        togglePassword.setAttribute('aria-pressed', String(isPassword));
+if (togglePwBtn && inputs.loginPassword) {
+    togglePwBtn.addEventListener('click', () => {
+        const isPw = inputs.loginPassword.type === 'password';
+        inputs.loginPassword.type = isPw ? 'text' : 'password';
+        togglePwBtn.setAttribute('aria-label',   isPw ? 'Ocultar senha' : 'Mostrar senha');
+        togglePwBtn.setAttribute('aria-pressed', String(isPw));
+        const svg = togglePwBtn.querySelector('svg');
+        if (!svg) return;
+        if (isPw) {
+            svg.innerHTML = `
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" stroke-width="1.5" stroke="currentColor" fill="none"/>
+                <line x1="1" y1="1" x2="23" y2="23" stroke-width="1.5" stroke="currentColor"/>`;
+        } else {
+            svg.innerHTML = `
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke-width="1.5" stroke="currentColor" fill="none"/>
+                <circle cx="12" cy="12" r="3" stroke-width="1.5" stroke="currentColor" fill="none"/>`;
+        }
     });
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  NAVEGAÇÃO ENTRE TELAS
+//  NAVEGAÇÃO — RECUPERAÇÃO
 // ═══════════════════════════════════════════════════════════════
-function switchScreen(currentScreen, nextScreen) {
-    Object.values(screens).forEach(s => {
-        s.classList.remove('active', 'exit-left');
-        s.setAttribute('aria-hidden', 'true');
-    });
+buttons.forgotPassword?.addEventListener('click', (e) => {
+    e.preventDefault();
+    switchScreen(screens.login, screens.forgotEmail);
+    setTimeout(() => inputs.recoveryEmail?.focus(), 400);
+});
 
-    if (currentScreen) {
-        currentScreen.classList.add('exit-left');
-        setTimeout(() => {
-            currentScreen.classList.remove('active', 'exit-left');
-            nextScreen.classList.add('active');
-            nextScreen.setAttribute('aria-hidden', 'false');
-        }, 500);
-    } else {
-        nextScreen.classList.add('active');
-        nextScreen.setAttribute('aria-hidden', 'false');
-    }
-}
-
-if (buttons.forgotPassword) {
-    buttons.forgotPassword.addEventListener('click', (e) => {
-        e.preventDefault();
-        switchScreen(screens.login, screens.forgotEmail);
-        setTimeout(() => inputs.recoveryEmail?.focus(), 520);
-    });
-}
-
-if (buttons.backToLogin) {
-    buttons.backToLogin.addEventListener('click', () => {
-        _clearRecoveryState();
-        switchScreen(screens.forgotEmail, screens.login);
-    });
-}
+buttons.backToLogin?.addEventListener('click', () => {
+    _clearRecovery();
+    switchScreen(screens.forgotEmail, screens.login);
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  ENVIAR CÓDIGO DE RECUPERAÇÃO
 // ═══════════════════════════════════════════════════════════════
-if (buttons.sendCode) {
-    buttons.sendCode.addEventListener('click', async () => {
-        const email = sanitizeText(inputs.recoveryEmail?.value || '');
+buttons.sendCode?.addEventListener('click', async () => {
+    const email = sanitize(inputs.recoveryEmail?.value || '');
 
-        if (!email || !isValidEmail(email)) {
-            inputs.recoveryEmail?.classList.add('input-error-border');
-            setTimeout(() => inputs.recoveryEmail?.classList.remove('input-error-border'), 2000);
-            showAuthMessage('Digite um email válido.', 'error');
-            return;
+    if (!email || !validEmail(email)) {
+        inputs.recoveryEmail?.classList.add('input-error-border');
+        setTimeout(() => inputs.recoveryEmail?.classList.remove('input-error-border'), 2000);
+        showAuthMessage('Digite um email válido.', 'error');
+        return;
+    }
+
+    if (Cooldown.isActive(CONFIG.KEYS.sendCooldown)) {
+        showAuthMessage('Aguarde antes de solicitar um novo código.', 'error');
+        return;
+    }
+
+    setLoading(buttons.sendCode, 'Enviando...');
+    try {
+        const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+            body: JSON.stringify({ email }),
+        });
+        if (!res.ok) { showAuthMessage('Erro de conexão. Tente novamente.', 'error'); return; }
+        const data = await res.json();
+
+        if (data.status === 'sent') {
+            RecoveryState.setEmail(email);
+            Cooldown.set(CONFIG.KEYS.sendCooldown, CONFIG.SEND_CODE_COOLDOWN_MS);
+            showAuthMessage('Código enviado! Verifique seu email.', 'success');
+            switchScreen(screens.forgotEmail, screens.code);
+            setTimeout(() => inputs.codeBoxes[0]?.focus(), 400);
+        } else if (data.status === 'not_found' || data.status === 'payment_not_approved') {
+            showAuthMessage('Se o email estiver cadastrado com plano ativo, você receberá o código.', 'info');
+        } else {
+            showAuthMessage('Não foi possível enviar o código. Tente novamente.', 'error');
         }
+    } catch { showAuthMessage('Erro de conexão. Tente novamente.', 'error'); }
+    finally   { restoreButton(buttons.sendCode); }
+});
 
-        if (Cooldown.isActive(CONFIG.KEYS.sendCooldown)) {
-            showAuthMessage('Aguarde antes de solicitar um novo código.', 'error');
-            return;
-        }
-
-        setButtonLoading(buttons.sendCode, 'Enviando...');
-
-        try {
-            const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
-                {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
-                    body: JSON.stringify({ email }),
-                }
-            );
-
-            if (!response.ok) { showAuthMessage('Erro de conexão. Tente novamente.', 'error'); return; }
-
-            const result = await response.json();
-
-            if (result.status === 'sent') {
-                RecoveryState.setEmail(email);
-                Cooldown.set(CONFIG.KEYS.sendCooldown, CONFIG.SEND_CODE_COOLDOWN_MS);
-                showAuthMessage('Código enviado! Verifique seu email.', 'success');
-                switchScreen(screens.forgotEmail, screens.code);
-                setTimeout(() => inputs.codeInputs[0]?.focus(), 520);
-            } else if (result.status === 'not_found' || result.status === 'payment_not_approved') {
-                showAuthMessage('Se o email estiver cadastrado com plano ativo, você receberá o código.', 'info');
-            } else {
-                showAuthMessage('Não foi possível enviar o código. Tente novamente.', 'error');
-            }
-        } catch {
-            showAuthMessage('Erro de conexão. Tente novamente.', 'error');
-        } finally {
-            restoreButton(buttons.sendCode);
-        }
-    });
-}
-
-if (buttons.backToEmail) {
-    buttons.backToEmail.addEventListener('click', () => {
-        resetCodeInputs();
-        switchScreen(screens.code, screens.forgotEmail);
-    });
-}
+buttons.backToEmail?.addEventListener('click', () => {
+    _resetCodeBoxes();
+    switchScreen(screens.code, screens.forgotEmail);
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  VERIFICAR CÓDIGO
 // ═══════════════════════════════════════════════════════════════
-if (buttons.verifyCode) {
-    buttons.verifyCode.addEventListener('click', () => {
-        const code = Array.from(inputs.codeInputs).map(i => i.value).join('');
+buttons.verifyCode?.addEventListener('click', () => {
+    const code = Array.from(inputs.codeBoxes).map(i => i.value).join('');
+    if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+        showAuthMessage('Digite o código completo de 6 dígitos.', 'error');
+        return;
+    }
+    RecoveryState.setCode(code);
+    switchScreen(screens.code, screens.newPassword);
+    setTimeout(() => inputs.newPassword?.focus(), 400);
+});
 
-        if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-            showAuthMessage('Digite o código completo de 6 dígitos.', 'error');
-            return;
-        }
-
-        RecoveryState.setCode(code);
-        switchScreen(screens.code, screens.newPassword);
-        setTimeout(() => inputs.newPassword?.focus(), 520);
-    });
-}
-
-if (buttons.backToCode) {
-    buttons.backToCode.addEventListener('click', () => {
-        hideError();
-        if (inputs.newPassword)     inputs.newPassword.value     = '';
-        if (inputs.confirmPassword) inputs.confirmPassword.value = '';
-        switchScreen(screens.newPassword, screens.code);
-    });
-}
+buttons.backToCode?.addEventListener('click', () => {
+    hideError();
+    if (inputs.newPassword)     inputs.newPassword.value     = '';
+    if (inputs.confirmPassword) inputs.confirmPassword.value = '';
+    switchScreen(screens.newPassword, screens.code);
+});
 
 // ═══════════════════════════════════════════════════════════════
-//  ALTERAR SENHA (tela de recuperação — validações permitidas aqui)
-//  Nota: validações de tamanho/força são CORRETAS nesta tela
-//  porque é o usuário definindo uma nova senha, não tentando login.
+//  ALTERAR SENHA
+//  Validações de tamanho/força são CORRETAS aqui:
+//  o usuário está CRIANDO uma nova senha, não tentando login.
 // ═══════════════════════════════════════════════════════════════
-if (buttons.changePassword) {
-    buttons.changePassword.addEventListener('click', async () => {
-        const newPass     = inputs.newPassword?.value     || '';
-        const confirmPass = inputs.confirmPassword?.value || '';
+buttons.changePassword?.addEventListener('click', async () => {
+    const newPw   = inputs.newPassword?.value     || '';
+    const confirm = inputs.confirmPassword?.value || '';
+    hideError();
 
-        hideError();
+    if (!newPw || !confirm) { showError('Por favor, preencha todos os campos.'); return; }
+    if (newPw.length < 8 || newPw.length > 128) { showError('A senha deve ter entre 8 e 128 caracteres.'); return; }
+    if (!/[A-Za-z]/.test(newPw) || !/[0-9]/.test(newPw)) { showError('A senha deve conter letras e números.'); return; }
+    if (newPw !== confirm) {
+        showError('As senhas não coincidem.');
+        inputs.newPassword?.classList.add('input-error-border');
+        inputs.confirmPassword?.classList.add('input-error-border');
+        setTimeout(() => {
+            inputs.newPassword?.classList.remove('input-error-border');
+            inputs.confirmPassword?.classList.remove('input-error-border');
+        }, 2000);
+        return;
+    }
+    if (!RecoveryState.isValid()) {
+        showError('Sessão de recuperação expirada. Reinicie o processo.');
+        setTimeout(() => { _clearRecovery(); switchScreen(screens.newPassword, screens.login); }, 2000);
+        return;
+    }
 
-        if (!newPass || !confirmPass) { showError('Por favor, preencha todos os campos.'); return; }
+    setLoading(buttons.changePassword, 'Alterando...');
+    try {
+        const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/verify-and-reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+            body: JSON.stringify({
+                email:       RecoveryState.getEmail(),
+                code:        RecoveryState.getCode(),
+                newPassword: newPw,
+            }),
+        });
+        if (!res.ok) { showError('Erro de conexão. Tente novamente.'); return; }
+        const data = await res.json();
 
-        if (newPass.length < 8 || newPass.length > 128) {
-            showError('A senha deve ter entre 8 e 128 caracteres.');
-            return;
+        if (data.status === 'success') {
+            RecoveryState.clear();
+            switchScreen(screens.newPassword, screens.success);
+        } else if (data.status === 'invalid_code') {
+            showError('Código inválido, expirado ou já utilizado.');
+            RecoveryState.clearCode();
+        } else {
+            showError('Não foi possível alterar a senha. Tente novamente.');
         }
+    } catch { showError('Erro de conexão. Tente novamente.'); }
+    finally   { restoreButton(buttons.changePassword); }
+});
 
-        if (!/[A-Za-z]/.test(newPass) || !/[0-9]/.test(newPass)) {
-            showError('A senha deve conter letras e números.');
-            return;
-        }
-
-        if (newPass !== confirmPass) {
-            showError('As senhas não coincidem.');
-            inputs.newPassword?.classList.add('input-error-border');
-            inputs.confirmPassword?.classList.add('input-error-border');
-            setTimeout(() => {
-                inputs.newPassword?.classList.remove('input-error-border');
-                inputs.confirmPassword?.classList.remove('input-error-border');
-            }, 2000);
-            return;
-        }
-
-        if (!RecoveryState.isValid()) {
-            showError('Sessão de recuperação expirada. Reinicie o processo.');
-            setTimeout(() => { _clearRecoveryState(); switchScreen(screens.newPassword, screens.login); }, 2000);
-            return;
-        }
-
-        setButtonLoading(buttons.changePassword, 'Alterando...');
-
-        try {
-            const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/functions/v1/verify-and-reset-password`,
-                {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
-                    body: JSON.stringify({
-                        email:       RecoveryState.getEmail(),
-                        code:        RecoveryState.getCode(),
-                        newPassword: newPass,
-                    }),
-                }
-            );
-
-            if (!response.ok) { showError('Erro de conexão. Tente novamente.'); return; }
-
-            const result = await response.json();
-
-            if (result.status === 'success') {
-                RecoveryState.clear();
-                switchScreen(screens.newPassword, screens.success);
-            } else if (result.status === 'invalid_code') {
-                showError('Código inválido, expirado ou já utilizado.');
-                RecoveryState.clearCode();
-            } else {
-                showError('Não foi possível alterar a senha. Tente novamente.');
-            }
-        } catch {
-            showError('Erro de conexão. Tente novamente.');
-        } finally {
-            restoreButton(buttons.changePassword);
-        }
-    });
-}
-
-if (buttons.backToLoginFinal) {
-    buttons.backToLoginFinal.addEventListener('click', () => {
-        _clearRecoveryState();
-        switchScreen(screens.success, screens.login);
-    });
-}
+buttons.backToLoginFinal?.addEventListener('click', () => {
+    _clearRecovery();
+    switchScreen(screens.success, screens.login);
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  REENVIAR CÓDIGO
 // ═══════════════════════════════════════════════════════════════
-if (buttons.resendCode) {
-    buttons.resendCode.addEventListener('click', async (e) => {
-        e.preventDefault();
+buttons.resendCode?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!RecoveryState.getEmail()) {
+        showAuthMessage('Email não encontrado. Volte e tente novamente.', 'error');
+        return;
+    }
+    if (Cooldown.isActive(CONFIG.KEYS.resendCooldown)) {
+        showAuthMessage('Aguarde antes de reenviar o código.', 'error');
+        return;
+    }
+    const btn = buttons.resendCode;
+    const orig = sanitize(btn.textContent);
+    btn.disabled = true; btn.textContent = 'Enviando...';
 
-        if (!RecoveryState.getEmail()) {
-            showAuthMessage('Email não encontrado. Volte e digite novamente.', 'error');
-            return;
+    try {
+        const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+            body: JSON.stringify({ email: RecoveryState.getEmail() }),
+        });
+        if (!res.ok) { showAuthMessage('Erro de conexão. Tente novamente.', 'error'); return; }
+        const data = await res.json();
+
+        if (data.status === 'sent') {
+            Cooldown.set(CONFIG.KEYS.resendCooldown, CONFIG.SEND_CODE_COOLDOWN_MS);
+            showAuthMessage('Novo código enviado!', 'success');
+            btn.textContent = 'Código enviado!';
+            _resetCodeBoxes();
+            inputs.codeBoxes[0]?.focus();
+            setTimeout(() => { btn.textContent = orig; }, 3000);
+        } else {
+            showAuthMessage('Erro ao reenviar o código.', 'error');
         }
-
-        if (Cooldown.isActive(CONFIG.KEYS.resendCooldown)) {
-            showAuthMessage('Aguarde antes de reenviar o código.', 'error');
-            return;
-        }
-
-        const btn          = buttons.resendCode;
-        const originalText = sanitizeText(btn.textContent);
-        btn.disabled       = true;
-        btn.textContent    = 'Enviando...';
-
-        try {
-            const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
-                {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
-                    body: JSON.stringify({ email: RecoveryState.getEmail() }),
-                }
-            );
-
-            if (!response.ok) { showAuthMessage('Erro de conexão. Tente novamente.', 'error'); return; }
-
-            const result = await response.json();
-
-            if (result.status === 'sent') {
-                Cooldown.set(CONFIG.KEYS.resendCooldown, CONFIG.SEND_CODE_COOLDOWN_MS);
-                showAuthMessage('Novo código enviado!', 'success');
-                btn.textContent = 'Código enviado!';
-                resetCodeInputs();
-                inputs.codeInputs[0]?.focus();
-                setTimeout(() => { btn.textContent = originalText; }, 3000);
-            } else {
-                showAuthMessage('Erro ao reenviar o código.', 'error');
-            }
-        } catch {
-            showAuthMessage('Erro de conexão.', 'error');
-        } finally {
-            btn.disabled = false;
-        }
-    });
-}
+    } catch { showAuthMessage('Erro de conexão.', 'error'); }
+    finally   { btn.disabled = false; }
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  LIMPEZA DO ESTADO DE RECUPERAÇÃO
 // ═══════════════════════════════════════════════════════════════
-function _clearRecoveryState() {
+function _clearRecovery() {
     RecoveryState.clear();
     if (inputs.recoveryEmail)   inputs.recoveryEmail.value   = '';
     if (inputs.newPassword)     inputs.newPassword.value     = '';
     if (inputs.confirmPassword) inputs.confirmPassword.value = '';
-    resetCodeInputs();
+    _resetCodeBoxes();
     hideError();
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  INPUTS DE CÓDIGO DE VERIFICAÇÃO
+//  INPUTS DE CÓDIGO
 // ═══════════════════════════════════════════════════════════════
-inputs.codeInputs.forEach((input, index) => {
-    input.addEventListener('input', (e) => {
-        const value = e.target.value.replace(/[^0-9]/g, '');
-        e.target.value = value;
+inputs.codeBoxes.forEach((box, i) => {
+    box.addEventListener('input', (e) => {
+        const v = e.target.value.replace(/[^0-9]/g, '');
+        e.target.value = v;
+        if (v.length === 1) {
+            box.classList.add('filled');
+            inputs.codeBoxes[i + 1]?.focus();
+        } else { box.classList.remove('filled'); }
 
-        if (value.length === 1) {
-            input.classList.add('filled');
-            inputs.codeInputs[index + 1]?.focus();
-        } else {
-            input.classList.remove('filled');
-        }
-
-        const allFilled = Array.from(inputs.codeInputs).every(i => i.value.length === 1);
-        if (allFilled && buttons.verifyCode) {
-            buttons.verifyCode.classList.add('btn-pulse');
-            setTimeout(() => buttons.verifyCode.classList.remove('btn-pulse'), 200);
+        const full = Array.from(inputs.codeBoxes).every(b => b.value.length === 1);
+        if (full) {
+            buttons.verifyCode?.classList.add('pulse');
+            setTimeout(() => buttons.verifyCode?.classList.remove('pulse'), 200);
         }
     });
-
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !input.value && index > 0) {
-            const prev = inputs.codeInputs[index - 1];
-            prev.focus();
-            prev.value = '';
-            prev.classList.remove('filled');
+    box.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !box.value && i > 0) {
+            const prev = inputs.codeBoxes[i - 1];
+            prev.focus(); prev.value = ''; prev.classList.remove('filled');
         }
         if (e.key === 'Enter') buttons.verifyCode?.click();
     });
-
-    input.addEventListener('keypress', (e) => {
-        if (!/[0-9]/.test(e.key)) e.preventDefault();
-    });
-
-    input.addEventListener('paste', (e) => {
+    box.addEventListener('keypress', (e) => { if (!/[0-9]/.test(e.key)) e.preventDefault(); });
+    box.addEventListener('paste', (e) => {
         e.preventDefault();
         const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-        pasted.split('').forEach((char, i) => {
-            if (inputs.codeInputs[i]) {
-                inputs.codeInputs[i].value = char;
-                inputs.codeInputs[i].classList.add('filled');
-            }
+        pasted.split('').forEach((ch, j) => {
+            if (inputs.codeBoxes[j]) { inputs.codeBoxes[j].value = ch; inputs.codeBoxes[j].classList.add('filled'); }
         });
-        const lastIdx = Math.min(pasted.length - 1, 5);
-        if (lastIdx >= 0) inputs.codeInputs[lastIdx].focus();
+        const last = Math.min(pasted.length - 1, 5);
+        if (last >= 0) inputs.codeBoxes[last].focus();
     });
 });
 
-function resetCodeInputs() {
-    inputs.codeInputs.forEach(input => {
-        input.value = '';
-        input.classList.remove('filled', 'error');
-    });
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  PARTÍCULAS E GRÁFICOS ANIMADOS
-//  Inline styles: valores numéricos gerados em runtime.
-// ═══════════════════════════════════════════════════════════════
-function createMoneyParticles() {
-    const container = document.getElementById('moneyParticles');
-    if (!container) return;
-    const symbols = ['$', '€', '£', '¥', '₿'];
-    for (let i = 0; i < CONFIG.moneyParticleCount; i++) {
-        const particle = document.createElement('div');
-        particle.classList.add('money-particle');
-        particle.textContent              = symbols[Math.floor(Math.random() * symbols.length)];
-        particle.style.left               = `${Math.random() * 100}%`;
-        particle.style.top                = `${Math.random() * 100}%`;
-        particle.style.fontSize           = `${Math.random() * 12 + 18}px`;
-        particle.style.animationDuration  = `${Math.random() * 10 + 15}s`;
-        particle.style.animationDelay     = `${Math.random() * 5}s`;
-        particle.style.color              = `rgba(16, 185, 129, ${Math.random() * 0.4 + 0.3})`;
-        container.appendChild(particle);
-    }
-}
-
-function createAnimatedCharts() {
-    const container = document.getElementById('animatedCharts');
-    if (!container) return;
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
-    for (let i = 0; i < CONFIG.chartLineCount; i++) {
-        const path   = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        const points = [];
-        for (let j = 0; j <= 12; j++) {
-            points.push(`${(j / 12) * 100},${20 + Math.random() * 60}`);
-        }
-        path.classList.add('chart-line');
-        path.setAttribute('d', `M ${points.join(' L ')}`);
-        path.style.opacity           = String(Math.random() * 0.2 + 0.1);
-        path.style.animationDelay    = `${Math.random() * 3}s`;
-        path.style.animationDuration = `${Math.random() * 5 + 8}s`;
-        svg.appendChild(path);
-    }
-    container.appendChild(svg);
+function _resetCodeBoxes() {
+    inputs.codeBoxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1105,74 +881,31 @@ document.addEventListener('keydown', (e) => {
         inputs.loginPassword?.focus();
     }
 });
-
 inputs.newPassword?.addEventListener('keypress',     (e) => { if (e.key === 'Enter') inputs.confirmPassword?.focus(); });
 inputs.confirmPassword?.addEventListener('keypress', (e) => { if (e.key === 'Enter') buttons.changePassword?.click(); });
 inputs.recoveryEmail?.addEventListener('keypress',   (e) => { if (e.key === 'Enter') buttons.sendCode?.click(); });
 
 // ═══════════════════════════════════════════════════════════════
-//  PARALLAX DO MOUSE — inline style necessário (valores dinâmicos)
+//  RIPPLE NOS BOTÕES
 // ═══════════════════════════════════════════════════════════════
-let mouseX = 0, mouseY = 0, currentX = 0, currentY = 0;
-
-document.addEventListener('mousemove', (e) => {
-    mouseX = (e.clientX / window.innerWidth  - 0.5) * 2;
-    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
-});
-
-function animateParallax() {
-    currentX += (mouseX - currentX) * 0.08;
-    currentY += (mouseY - currentY) * 0.08;
-
-    const visual = document.querySelector('.financial-visual');
-    if (visual) {
-        visual.style.transform = `rotateY(${-8 + currentX * 8}deg) rotateX(${3 + currentY * 5}deg)`;
-    }
-
-    document.querySelectorAll('.gradient-orb').forEach((orb, i) => {
-        const speed = (i + 1) * 0.4;
-        orb.style.transform = `translate(${currentX * speed * 25}px, ${currentY * speed * 25}px)`;
-    });
-
-    requestAnimationFrame(animateParallax);
-}
-
-animateParallax();
-
-// ═══════════════════════════════════════════════════════════════
-//  EFEITO DE RIPPLE NOS BOTÕES — inline style necessário (coords)
-// ═══════════════════════════════════════════════════════════════
-document.querySelectorAll('.btn-submit').forEach(button => {
-    button.addEventListener('click', function (e) {
-        const ripple = document.createElement('span');
-        const rect   = this.getBoundingClientRect();
-        const size   = Math.max(rect.width, rect.height);
-
-        ripple.style.cssText = [
+document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        const r    = document.createElement('span');
+        const rect = this.getBoundingClientRect();
+        const sz   = Math.max(rect.width, rect.height);
+        r.style.cssText = [
             'position:absolute',
-            `width:${size}px`,
-            `height:${size}px`,
+            `width:${sz}px`, `height:${sz}px`,
             'border-radius:50%',
-            'background:rgba(255,255,255,0.25)',
-            `left:${e.clientX - rect.left - size / 2}px`,
-            `top:${e.clientY - rect.top  - size / 2}px`,
+            'background:rgba(0,0,0,0.18)',
+            `left:${e.clientX - rect.left - sz / 2}px`,
+            `top:${e.clientY - rect.top  - sz / 2}px`,
             'pointer-events:none',
-            'animation:ripple 0.6s ease-out forwards',
+            'animation:ripple 0.55s ease-out forwards',
         ].join(';');
-
         this.style.position = 'relative';
         this.style.overflow = 'hidden';
-        this.appendChild(ripple);
-        setTimeout(() => ripple.remove(), 600);
+        this.appendChild(r);
+        setTimeout(() => r.remove(), 560);
     });
-});
-
-// ═══════════════════════════════════════════════════════════════
-//  FEEDBACK VISUAL NO CHECKBOX — usa .checkbox-custom-bounce (CSS)
-// ═══════════════════════════════════════════════════════════════
-document.querySelector('.checkbox-wrapper')?.addEventListener('click', () => {
-    const custom = document.querySelector('.checkbox-custom');
-    if (!custom) return;
-    custom.classList.add('checkbox-custom-bounce');
-    setTimeout(() => custom.classList.remove('checkbox-custom-bounce'), 200);
 });
