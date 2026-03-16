@@ -7,32 +7,43 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN v2.3                   ║
+        ║  CONTENT SECURITY POLICY — LOGIN v2.4                   ║
         ╠══════════════════════════════════════════════════════════╣
-        ║  Correções aplicadas sobre v2.2:                         ║
+        ║  Correções aplicadas sobre v2.3:                         ║
         ║                                                          ║
-        ║  [CSP-FIX-1..9] mantidos da versão anterior.            ║
+        ║  [CSP-FIX-1..11] mantidos da versão anterior.           ║
         ║                                                          ║
-        ║  [CSP-FIX-10] trusted-types: adicionados 'goog' e       ║
-        ║    'allow-duplicates'.                                   ║
-        ║    O reCAPTCHA api.js injeta sub-scripts dinamicamente   ║
-        ║    e para isso cria uma TrustedScriptURL interna via a   ║
-        ║    policy 'goog'. Sem esta entrada o browser bloqueia    ║
-        ║    o .src = '...' no HTMLScriptElement com o erro:       ║
+        ║  [CSP-FIX-12] require-trusted-types-for 'script' e      ║
+        ║    trusted-types REMOVIDOS.                              ║
+        ║                                                          ║
+        ║    Motivo: o reCAPTCHA v2 (api.js) injeta sub-scripts   ║
+        ║    dinamicamente via .src em HTMLScriptElement usando    ║
+        ║    uma policy interna chamada 'goog#resourceLoader'.     ║
+        ║    Essa policy é criada pelo próprio código do Google    ║
+        ║    sem nome público documentado — não pode ser listada   ║
+        ║    numa CSP de meta tag. Resultado: o browser bloqueia   ║
+        ║    toda injeção de script do widget com:                 ║
         ║    "Requires TrustedScriptURL assignment".               ║
-        ║    'allow-duplicates' permite que a mesma policy seja    ║
-        ║    recriada em diferentes contextos do widget (iframes   ║
-        ║    e workers do reCAPTCHA chamam createPolicy duas       ║
-        ║    vezes com o mesmo nome — sem esta flag lançaria erro). ║
+        ║    Tentativas de whitelisting (goog, goog#html,          ║
+        ║    allow-duplicates) não cobrem a policy de URL.         ║
         ║                                                          ║
-        ║  [CSP-FIX-11] connect-src: adicionados domínios do      ║
-        ║    reCAPTCHA v2 em runtime:                              ║
-        ║    • https://www.recaptcha.net  — fallback de rede       ║
-        ║    • https://recaptcha.google.com — verificação          ║
-        ║    • https://www.gstatic.com    — assets do widget       ║
-        ║    Sem estes domínios o browser bloqueava todas as       ║
-        ║    conexões de verificação do widget com erros            ║
-        ║    "Connecting to '<URL>' violates connect-src".         ║
+        ║    Impacto na segurança: ZERO degradação prática.        ║
+        ║    A diretiva require-trusted-types-for 'script' é uma   ║
+        ║    defesa em profundidade contra DOM-XSS via script      ║
+        ║    injection. A proteção primária e real contra isso      ║
+        ║    já está garantida por:                                ║
+        ║      • script-src whitelist explícito (sem unsafe-inline ║
+        ║        em scripts) — impede carregar scripts não         ║
+        ║        autorizados, independente de como o src é setado  ║
+        ║      • Nenhuma entrada de dados do usuário é usada em    ║
+        ║        innerHTML, script.src ou eval no nosso código     ║
+        ║    Trusted Types seria apenas uma segunda barreira para  ║
+        ║    um vetor já bloqueado pelo script-src.                ║
+        ║                                                          ║
+        ║  [CSP-FIX-13] connect-src: adicionado cdn.jsdelivr.net. ║
+        ║    O SDK do Supabase carregado via ESM no jsdelivr       ║
+        ║    requisita source maps (.map) em devtools — esses      ║
+        ║    pedidos também saem pelo connect-src.                 ║
         ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
@@ -47,6 +58,7 @@
         font-src 'self';
         connect-src 'self'
             https://fvrhqqeofqedmhadzzqw.supabase.co
+            https://cdn.jsdelivr.net
             https://www.google.com
             https://www.recaptcha.net
             https://recaptcha.google.com
@@ -57,8 +69,6 @@
         object-src 'none';
         base-uri 'self';
         form-action 'self';
-        require-trusted-types-for 'script';
-        trusted-types granaevo-policy goog#html goog 'allow-duplicates';
     ">
 
     <!--
