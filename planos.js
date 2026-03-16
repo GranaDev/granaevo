@@ -1,6 +1,6 @@
 // ==========================================
 // GRANAEVO PLANOS — planos.js
-// Versão Segura v2 | Todos os fixes aplicados
+// Versão Segura v3 | Trusted Types Fix
 // ==========================================
 
 // ==========================================
@@ -215,9 +215,17 @@ function initCarousel() {
 
     if (!track || window.innerWidth >= 768) return;
 
-    // Criar indicadores
+    // ✅ FIX v3 — Trusted Types: substituído indicators.innerHTML = ''
+    // por remoção manual de nós filhos via removeChild.
+    // A atribuição innerHTML = '' (mesmo string vazia) viola a diretiva
+    // require-trusted-types-for 'script' da CSP, lançando TypeError e
+    // travando TODA a função — impedindo o bind dos botões prev/next.
+    // Sem essa correção os arrows e o swipe nunca funcionam no mobile.
     if (indicators) {
-        indicators.innerHTML = '';
+        while (indicators.firstChild) {
+            indicators.removeChild(indicators.firstChild);
+        }
+
         for (let i = 0; i < totalSlides; i++) {
             const dot = document.createElement('button');
             dot.className = 'indicator-dot';
@@ -504,31 +512,7 @@ if (window.innerWidth >= 768) {
 // Criar um elemento <style> via JS exigia 'unsafe-inline' em style-src na CSP,
 // o que abria vetor para CSS injection e bypass parcial de CSP.
 //
-// MIGRAÇÃO NECESSÁRIA — adicione o seguinte bloco ao final de planos.css:
-//
-//   /* --- Ripple Effect --- */
-//   .btn-plan,
-//   .btn-primary,
-//   .btn-nav {
-//       position: relative;
-//       overflow: hidden;
-//   }
-//   .btn-ripple-effect {
-//       position: absolute;
-//       border-radius: 50%;
-//       background: rgba(255, 255, 255, 0.3);
-//       pointer-events: none;
-//       animation: ripple 0.6s ease-out forwards;
-//       transform: scale(0);
-//   }
-//   @keyframes ripple {
-//       to {
-//           transform: scale(2.5);
-//           opacity: 0;
-//       }
-//   }
-//   /* ---------------------- */
-//
+// O CSS do ripple está em planos.css (seção final do arquivo).
 // Com este CSS no arquivo externo, o JS abaixo define apenas os valores dinâmicos
 // (tamanho e posição do clique), que são propriedades de elemento — não <style>.
 // Propriedades de elemento definidas por JS NÃO são cobertas por style-src,
@@ -543,7 +527,7 @@ document.querySelectorAll('.btn-plan, .btn-primary, .btn-nav').forEach(button =>
         const y      = e.clientY - rect.top  - size / 2;
 
         // Apenas valores dinâmicos (tamanho/posição) são definidos inline via JS.
-        // A animação, border-radius e background vêm da classe CSS acima.
+        // A animação, border-radius e background vêm da classe CSS.
         ripple.className    = 'btn-ripple-effect';
         ripple.style.width  = `${size}px`;
         ripple.style.height = `${size}px`;

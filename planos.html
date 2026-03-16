@@ -7,19 +7,24 @@
 
     <!--
     ============================================================
-    CONTENT SECURITY POLICY — GranaEvo Planos v2
+    CONTENT SECURITY POLICY — GranaEvo Planos v3
     ============================================================
     ✅ upgrade-insecure-requests  — força qualquer HTTP → HTTPS automaticamente
     ✅ img-src inclui https:      — suporta CDN/pixel futuros sem precisar alterar CSP
     ✅ require-trusted-types-for  — bloqueia sinks DOM perigosos (innerHTML, eval via script)
-    ✅ trusted-types granaevo-policy — somente a política nomeada no JS é permitida
-    ✅ frame-ancestors 'none'     — FIX: bloqueia clickjacking / embedding desta página em iframes
-    ✅ unsafe-inline REMOVIDO     — FIX: style-src não tem mais unsafe-inline
-        Para isso funcionar, o @keyframes ripple e as classes .btn-ripple-effect,
-        position:relative e overflow:hidden dos botões DEVEM estar em planos.css.
-        Veja o comentário no planos.js (seção BUTTON RIPPLE EFFECT) para o CSS exato.
+    ✅ trusted-types granaevo-policy goog#html — permite a policy do Google Tag Manager/Analytics.
+       A ausência de "goog#html" bloqueava o GTM com erro no console e impedia o analytics.
+    ✅ unsafe-inline REMOVIDO     — style-src não tem mais unsafe-inline
+
+    ⚠️  frame-ancestors REMOVIDO desta meta tag — a diretiva frame-ancestors é
+        IGNORADA silenciosamente quando entregue via <meta> (comportamento definido
+        na spec W3C). Para bloquear clickjacking/iframe embedding, configure o
+        header HTTP no servidor/CDN:
+            Content-Security-Policy: frame-ancestors 'none'
+        (veja seção HEADERS abaixo)
     ============================================================
     HEADERS DE SEGURANÇA — configure no seu servidor/CDN:
+        Content-Security-Policy: frame-ancestors 'none'
         X-Frame-Options: DENY
         X-Content-Type-Options: nosniff
         Referrer-Policy: strict-origin-when-cross-origin
@@ -39,12 +44,11 @@
         img-src 'self' data: https:;
         connect-src 'self' https://*.supabase.co https://pay.cakto.com.br;
         frame-src https://pay.cakto.com.br;
-        frame-ancestors 'none';
         object-src 'none';
         base-uri 'self';
         form-action 'self';
         require-trusted-types-for 'script';
-        trusted-types granaevo-policy;
+        trusted-types granaevo-policy goog#html;
     ">
 
     <!--
