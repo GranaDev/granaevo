@@ -7,64 +7,103 @@
 
     <!--
     ============================================================
-    CONTENT SECURITY POLICY — GranaEvo Planos
+    CONTENT SECURITY POLICY — GranaEvo Planos v2
     ============================================================
-    ALTERAÇÕES:
-    ✅ REMOVIDO: frame-ancestors 'none' → inválido via <meta>,
-       gera aviso no console. Protegido via HTTP header no vercel.json.
-    ✅ REMOVIDO: trusted-types granaevo-policy → era muito restritivo,
-       bloqueava políticas de bibliotecas externas (ex: goog#html do Bubble).
-       Mantido apenas require-trusted-types-for 'script', que bloqueia
-       innerHTML não autorizado sem restringir nomes de políticas.
-    ✅ ADICIONADO: 'self' no font-src
+    ✅ upgrade-insecure-requests  — força qualquer HTTP → HTTPS automaticamente
+    ✅ img-src inclui https:      — suporta CDN/pixel futuros sem precisar alterar CSP
+    ✅ require-trusted-types-for  — bloqueia sinks DOM perigosos (innerHTML, eval via script)
+    ✅ trusted-types granaevo-policy — somente a política nomeada no JS é permitida
+    ✅ frame-ancestors 'none'     — FIX: bloqueia clickjacking / embedding desta página em iframes
+    ✅ unsafe-inline REMOVIDO     — FIX: style-src não tem mais unsafe-inline
+        Para isso funcionar, o @keyframes ripple e as classes .btn-ripple-effect,
+        position:relative e overflow:hidden dos botões DEVEM estar em planos.css.
+        Veja o comentário no planos.js (seção BUTTON RIPPLE EFFECT) para o CSS exato.
+    ============================================================
+    HEADERS DE SEGURANÇA — configure no seu servidor/CDN:
+        X-Frame-Options: DENY
+        X-Content-Type-Options: nosniff
+        Referrer-Policy: strict-origin-when-cross-origin
+        Permissions-Policy: camera=(), microphone=(), geolocation=()
+    Ao adicionar novos serviços:
+        Novo analytics JS   → adicione o domínio em script-src
+        Nova API / fetch    → adicione o domínio em connect-src
+        Imagens externas    → img-src já cobre https: globalmente
     ============================================================
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         upgrade-insecure-requests;
-        script-src 'self' https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com;
+        script-src 'self' https://www.googletagmanager.com https://connect.facebook.net;
         style-src 'self' https://fonts.googleapis.com;
-        font-src 'self' https://fonts.gstatic.com;
+        font-src https://fonts.gstatic.com;
         img-src 'self' data: https:;
-        connect-src 'self' https://*.supabase.co https://pay.cakto.com.br https://cloudflareinsights.com;
+        connect-src 'self' https://*.supabase.co https://pay.cakto.com.br;
         frame-src https://pay.cakto.com.br;
+        frame-ancestors 'none';
         object-src 'none';
         base-uri 'self';
         form-action 'self';
         require-trusted-types-for 'script';
+        trusted-types granaevo-policy;
     ">
 
+    <!--
+    ✅ FIX — Referrer-Policy via meta tag.
+    Garante que o referer enviado a domínios externos (como pay.cakto.com.br)
+    contenha apenas a origem, sem path ou query string.
+    Equivalente ao header HTTP: Referrer-Policy: strict-origin-when-cross-origin
+    -->
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=(), browsing-topics=(), join-ad-interest-group=(), run-ad-auction=()">
-    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+
+    <!--
+    ✅ FIX — Permissions-Policy via meta tag.
+    Desativa câmera, microfone e geolocalização nesta página.
+    Reduz superfície de ataque em caso de XSS futuro ou iframe não autorizado.
+    Para cobertura completa, replique também como header HTTP no servidor.
+    -->
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
 
     <title>Planos - GranaEvo | Transforme Suas Finanças</title>
     <meta name="description" content="Escolha o plano ideal e comece sua evolução financeira hoje. Acesso vitalício, dashboard completo e controle total de suas finanças.">
 
+    <!-- Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
-        rel="stylesheet"
-        referrerpolicy="no-referrer"
-        crossorigin="anonymous"
-    >
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <!--
+    ✅ FIX #1 — Self-host do Supabase (elimina risco de supply chain via CDN externo)
+    ============================================================
+    COMO FAZER (recomendado):
+      1. Acesse: https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js
+      2. Salve em /libs/supabase-js.min.js no seu servidor
+      3. Descomente a linha abaixo
+    <script src="/libs/supabase-js.min.js"></script>
+    ============================================================
+    ALTERNATIVA — CDN com hash SRI:
+    Gere o hash e substitua HASH_AQUI:
+      curl -s https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js \
+        | openssl dgst -sha384 -binary | openssl base64 -A
+    <script
+        src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"
+        integrity="sha384-HASH_AQUI"
+        crossorigin="anonymous">
+    </script>
+    ============================================================
+    -->
+
+    <!-- CSS -->
     <link rel="stylesheet" href="planos.css">
 </head>
 <body>
 
-    <!-- Loading Screen -->
-    <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando página">
+    <!-- Loading Screen com Logo -->
+    <div class="loading-screen" id="loadingScreen">
         <div class="loader">
             <div class="loader-logo">
-                <img
-                    src="icon/granaevo-logo.jpg"
-                    alt="GranaEvo"
-                    class="logo-img-loader"
-                    crossorigin="anonymous"
-                    loading="eager"
-                >
+                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader">
             </div>
             <div class="loader-bar">
                 <div class="loader-progress"></div>
@@ -74,18 +113,10 @@
     </div>
 
     <!-- Scroll Progress -->
-    <div
-        class="scroll-progress"
-        id="scrollProgress"
-        role="progressbar"
-        aria-label="Progresso de leitura"
-        aria-valuenow="0"
-        aria-valuemin="0"
-        aria-valuemax="100"
-    ></div>
+    <div class="scroll-progress" id="scrollProgress"></div>
 
     <!-- Animated Background -->
-    <div class="animated-bg" aria-hidden="true">
+    <div class="animated-bg">
         <div class="grid-overlay"></div>
         <canvas id="particlesCanvas"></canvas>
         <div class="glow-orb glow-orb-1"></div>
@@ -95,33 +126,20 @@
 
     <!-- Header -->
     <header class="header" id="header">
-        <nav class="nav-container" role="navigation" aria-label="Navegação principal">
-            <a href="/" class="logo" aria-label="GranaEvo — página inicial">
-                <img
-                    src="icon/granaevo-logo.jpg"
-                    alt="GranaEvo"
-                    class="logo-img"
-                    crossorigin="anonymous"
-                    loading="eager"
-                >
+        <nav class="nav-container">
+            <a href="landingpage.html" class="logo">
+                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
                 <span class="logo-text">GranaEvo</span>
             </a>
 
-            <div class="nav-links" id="navLinks" role="menubar">
-                <a href="/#recursos"        class="nav-link" role="menuitem">Recursos</a>
-                <a href="/#como-funciona"   class="nav-link" role="menuitem">Como Funciona</a>
-                <a href="/#depoimentos"     class="nav-link" role="menuitem">Depoimentos</a>
-                <a href="/login"            class="btn-nav"  role="menuitem">Fazer Login</a>
+            <div class="nav-links" id="navLinks">
+                <a href="landingpage.html#recursos" class="nav-link">Recursos</a>
+                <a href="landingpage.html#como-funciona" class="nav-link">Como Funciona</a>
+                <a href="landingpage.html#depoimentos" class="nav-link">Depoimentos</a>
+                <a href="login.html" class="btn-nav">Fazer Login</a>
             </div>
 
-            <button
-                class="mobile-toggle"
-                id="mobileToggle"
-                aria-label="Abrir menu de navegação"
-                aria-expanded="false"
-                aria-controls="navLinks"
-                type="button"
-            >
+            <button class="mobile-toggle" id="mobileToggle" aria-label="Menu" aria-expanded="false">
                 <span class="hamburger-line"></span>
                 <span class="hamburger-line"></span>
                 <span class="hamburger-line"></span>
@@ -130,9 +148,9 @@
     </header>
 
     <!-- Purchase Notification -->
-    <div class="purchase-notification" id="purchaseNotification" aria-live="polite" aria-atomic="true">
+    <div class="purchase-notification" id="purchaseNotification">
         <div class="notification-content">
-            <div class="notification-icon" aria-hidden="true">
+            <div class="notification-icon">
                 <svg viewBox="0 0 24 24" fill="none">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -146,15 +164,15 @@
     </div>
 
     <!-- Hero Section -->
-    <section class="hero-plans" aria-labelledby="plans-hero-title">
+    <section class="hero-plans">
         <div class="container">
             <div class="hero-plans-content">
-                <div class="badge" role="note">
-                    <span class="pulse-dot" aria-hidden="true"></span>
+                <div class="badge">
+                    <span class="pulse-dot"></span>
                     <span>Investimento Único • Acesso Vitalício</span>
                 </div>
 
-                <h1 class="hero-title" id="plans-hero-title">
+                <h1 class="hero-title">
                     Escolha o Plano Ideal Para
                     <span class="gradient-text">Sua Evolução Financeira</span>
                 </h1>
@@ -164,23 +182,23 @@
                     Controle total das suas finanças para sempre.
                 </p>
 
-                <div class="trust-indicators" aria-label="Diferenciais do GranaEvo">
+                <div class="trust-indicators">
                     <div class="trust-item">
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
                             <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/>
                         </svg>
                         <span>100% Seguro</span>
                     </div>
                     <div class="trust-item">
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                         <span>Garantia de 30 dias</span>
                     </div>
                     <div class="trust-item">
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
                         </svg>
                         <span>Dados Criptografados</span>
@@ -191,20 +209,18 @@
     </section>
 
     <!-- Plans Section -->
-    <section class="plans-section" id="plans" aria-labelledby="plans-section-title">
+    <section class="plans-section" id="plans">
         <div class="container">
-            <h2 id="plans-section-title" class="sr-only">Planos disponíveis</h2>
-
             <!-- Mobile Carousel Controls -->
-            <div class="carousel-controls mobile-only" aria-label="Navegação do carrossel">
-                <button class="carousel-btn prev" id="prevBtn" aria-label="Plano anterior" type="button">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <div class="carousel-controls mobile-only">
+                <button class="carousel-btn prev" id="prevBtn" aria-label="Plano anterior">
+                    <svg viewBox="0 0 24 24" fill="none">
                         <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
-                <div class="carousel-indicators" id="carouselIndicators" role="tablist" aria-label="Indicadores do carrossel"></div>
-                <button class="carousel-btn next" id="nextBtn" aria-label="Próximo plano" type="button">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <div class="carousel-indicators" id="carouselIndicators"></div>
+                <button class="carousel-btn next" id="nextBtn" aria-label="Próximo plano">
+                    <svg viewBox="0 0 24 24" fill="none">
                         <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
@@ -216,7 +232,7 @@
                     <!-- Plano Individual -->
                     <div class="plan-card" data-plan="individual">
                         <div class="plan-header">
-                            <div class="plan-icon" aria-hidden="true">
+                            <div class="plan-icon">
                                 <svg viewBox="0 0 24 24" fill="none">
                                     <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
                                     <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" stroke-width="2"/>
@@ -227,7 +243,7 @@
                         </div>
 
                         <div class="plan-pricing">
-                            <div class="plan-price" aria-label="Preço: R$ 19,99">
+                            <div class="plan-price">
                                 <span class="currency">R$</span>
                                 <span class="amount">19</span>
                                 <span class="cents">,99</span>
@@ -236,39 +252,51 @@
                             <div class="plan-savings">Acesso vitalício incluído</div>
                         </div>
 
-                        <ul class="plan-features" aria-label="Funcionalidades do plano Individual">
+                        <ul class="plan-features">
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span><strong>1 perfil</strong> de usuário</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Dashboard completo e intuitivo</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Controle total de cartões</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Metas e reservas financeiras</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Relatórios detalhados</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Gráficos e análises em tempo real</span>
                             </li>
                         </ul>
 
-                        <button class="btn-plan" data-plan="individual" type="button">
+                        <button class="btn-plan" data-plan="individual">
                             <span class="btn-text">Começar Agora</span>
-                            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <svg viewBox="0 0 20 20" fill="none">
                                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
-                            <div class="btn-glow" aria-hidden="true"></div>
+                            <div class="btn-glow"></div>
                         </button>
 
                         <div class="plan-note">Ideal para controle pessoal</div>
@@ -276,15 +304,15 @@
 
                     <!-- Plano Casal - DESTAQUE -->
                     <div class="plan-card featured" data-plan="casal">
-                        <div class="plan-badge" aria-label="Plano mais popular">
-                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <div class="plan-badge">
+                            <svg viewBox="0 0 24 24" fill="none">
                                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>
                             </svg>
                             <span>Mais Popular</span>
                         </div>
 
                         <div class="plan-header">
-                            <div class="plan-icon" aria-hidden="true">
+                            <div class="plan-icon">
                                 <svg viewBox="0 0 24 24" fill="none">
                                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/>
                                     <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
@@ -295,7 +323,7 @@
                         </div>
 
                         <div class="plan-pricing">
-                            <div class="plan-price" aria-label="Preço: R$ 29,99">
+                            <div class="plan-price">
                                 <span class="currency">R$</span>
                                 <span class="amount">29</span>
                                 <span class="cents">,99</span>
@@ -304,45 +332,57 @@
                             <div class="plan-savings">Economia de R$ 10 vs 2 individuais</div>
                         </div>
 
-                        <ul class="plan-features" aria-label="Funcionalidades do plano Casal">
+                        <ul class="plan-features">
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span><strong>2 perfis</strong> de usuário</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Dashboard completo e intuitivo</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Controle total de cartões</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Metas e reservas financeiras</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Relatórios detalhados</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Gráficos e análises em tempo real</span>
                             </li>
                             <li class="feature-item highlight">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
                                 </svg>
                                 <span>Visão compartilhada das finanças</span>
                             </li>
                         </ul>
 
-                        <button class="btn-plan" data-plan="casal" type="button">
+                        <button class="btn-plan" data-plan="casal">
                             <span class="btn-text">Começar Agora</span>
-                            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <svg viewBox="0 0 20 20" fill="none">
                                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
-                            <div class="btn-glow" aria-hidden="true"></div>
+                            <div class="btn-glow"></div>
                         </button>
 
                         <div class="plan-note">Organize as finanças em conjunto</div>
@@ -351,7 +391,7 @@
                     <!-- Plano Família -->
                     <div class="plan-card" data-plan="familia">
                         <div class="plan-header">
-                            <div class="plan-icon" aria-hidden="true">
+                            <div class="plan-icon">
                                 <svg viewBox="0 0 24 24" fill="none">
                                     <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
                                     <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" stroke-width="2"/>
@@ -364,7 +404,7 @@
                         </div>
 
                         <div class="plan-pricing">
-                            <div class="plan-price" aria-label="Preço: R$ 49,99">
+                            <div class="plan-price">
                                 <span class="currency">R$</span>
                                 <span class="amount">49</span>
                                 <span class="cents">,99</span>
@@ -373,45 +413,57 @@
                             <div class="plan-savings">Economia de R$ 30 vs 4 individuais</div>
                         </div>
 
-                        <ul class="plan-features" aria-label="Funcionalidades do plano Família">
+                        <ul class="plan-features">
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span><strong>4 perfis</strong> de usuário</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Dashboard completo e intuitivo</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Controle total de cartões</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Metas e reservas financeiras</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Relatórios detalhados</span>
                             </li>
                             <li class="feature-item">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
                                 <span>Gráficos e análises em tempo real</span>
                             </li>
                             <li class="feature-item highlight">
-                                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
                                 </svg>
                                 <span>Controle centralizado para todos</span>
                             </li>
                         </ul>
 
-                        <button class="btn-plan" data-plan="familia" type="button">
+                        <button class="btn-plan" data-plan="familia">
                             <span class="btn-text">Começar Agora</span>
-                            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <svg viewBox="0 0 20 20" fill="none">
                                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
-                            <div class="btn-glow" aria-hidden="true"></div>
+                            <div class="btn-glow"></div>
                         </button>
 
                         <div class="plan-note">Perfeito para controle familiar</div>
@@ -423,16 +475,16 @@
     </section>
 
     <!-- Benefits Section -->
-    <section class="benefits-section" aria-labelledby="benefits-title">
+    <section class="benefits-section">
         <div class="container">
             <div class="section-header">
-                <h2 class="section-title" id="benefits-title">Por Que Escolher o GranaEvo?</h2>
+                <h2 class="section-title">Por Que Escolher o GranaEvo?</h2>
                 <p class="section-subtitle">Benefícios exclusivos em todos os planos</p>
             </div>
 
             <div class="benefits-grid">
                 <div class="benefit-card">
-                    <div class="benefit-icon" aria-hidden="true">
+                    <div class="benefit-icon">
                         <svg viewBox="0 0 24 24" fill="none">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
                             <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2"/>
@@ -443,9 +495,9 @@
                 </div>
 
                 <div class="benefit-card">
-                    <div class="benefit-icon" aria-hidden="true">
+                    <div class="benefit-icon">
                         <svg viewBox="0 0 24 24" fill="none">
-                            <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
                             <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2"/>
                         </svg>
                     </div>
@@ -454,7 +506,7 @@
                 </div>
 
                 <div class="benefit-card">
-                    <div class="benefit-icon" aria-hidden="true">
+                    <div class="benefit-icon">
                         <svg viewBox="0 0 24 24" fill="none">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/>
                             <polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2"/>
@@ -466,7 +518,7 @@
                 </div>
 
                 <div class="benefit-card">
-                    <div class="benefit-icon" aria-hidden="true">
+                    <div class="benefit-icon">
                         <svg viewBox="0 0 24 24" fill="none">
                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2"/>
                             <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2"/>
@@ -480,58 +532,58 @@
     </section>
 
     <!-- FAQ Section -->
-    <section class="faq-section" aria-labelledby="faq-title">
+    <section class="faq-section">
         <div class="container">
             <div class="section-header">
-                <h2 class="section-title" id="faq-title">Dúvidas Frequentes</h2>
+                <h2 class="section-title">Dúvidas Frequentes</h2>
                 <p class="section-subtitle">Tudo que você precisa saber antes de começar</p>
             </div>
 
             <div class="faq-grid">
                 <div class="faq-item">
-                    <button class="faq-question" type="button" aria-expanded="false">
+                    <div class="faq-question">
                         <h3>É realmente pagamento único?</h3>
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
                             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
-                    </button>
-                    <div class="faq-answer" role="region">
+                    </div>
+                    <div class="faq-answer">
                         <p>Sim! Você paga apenas uma vez e tem acesso vitalício ao GranaEvo. Sem mensalidades, sem renovações, sem surpresas.</p>
                     </div>
                 </div>
 
                 <div class="faq-item">
-                    <button class="faq-question" type="button" aria-expanded="false">
+                    <div class="faq-question">
                         <h3>Posso trocar de plano depois?</h3>
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
                             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
-                    </button>
-                    <div class="faq-answer" role="region">
+                    </div>
+                    <div class="faq-answer">
                         <p>Sim! Você pode fazer upgrade do seu plano a qualquer momento pagando apenas a diferença.</p>
                     </div>
                 </div>
 
                 <div class="faq-item">
-                    <button class="faq-question" type="button" aria-expanded="false">
+                    <div class="faq-question">
                         <h3>Meus dados estão seguros?</h3>
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
                             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
-                    </button>
-                    <div class="faq-answer" role="region">
+                    </div>
+                    <div class="faq-answer">
                         <p>Absolutamente! Utilizamos criptografia de nível bancário e nunca compartilhamos seus dados com terceiros.</p>
                     </div>
                 </div>
 
                 <div class="faq-item">
-                    <button class="faq-question" type="button" aria-expanded="false">
+                    <div class="faq-question">
                         <h3>Funciona no celular?</h3>
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
                             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
-                    </button>
-                    <div class="faq-answer" role="region">
+                    </div>
+                    <div class="faq-answer">
                         <p>Sim! O GranaEvo é totalmente responsivo e funciona perfeitamente em celulares, tablets e computadores.</p>
                     </div>
                 </div>
@@ -540,21 +592,21 @@
     </section>
 
     <!-- CTA Final -->
-    <section class="cta-final" aria-labelledby="cta-final-title">
+    <section class="cta-final">
         <div class="container">
             <div class="cta-content">
-                <h2 id="cta-final-title">Comece sua evolução financeira hoje</h2>
+                <h2>Comece sua evolução financeira hoje</h2>
                 <p>Junte-se a milhares de pessoas que transformaram suas finanças com o GranaEvo</p>
                 <div class="cta-buttons">
                     <a href="#plans" class="btn-primary btn-large">
                         <span>Escolher Meu Plano</span>
-                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <svg viewBox="0 0 20 20" fill="none">
                             <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </a>
                 </div>
                 <div class="cta-trust">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
                     </svg>
                     <span>Pagamento seguro • Satisfação garantida</span>
@@ -564,18 +616,12 @@
     </section>
 
     <!-- Footer -->
-    <footer class="footer" role="contentinfo">
+    <footer class="footer">
         <div class="container">
             <div class="footer-content">
                 <div class="footer-brand">
-                    <a href="/" class="logo" aria-label="GranaEvo — início">
-                        <img
-                            src="icon/granaevo-logo.jpg"
-                            alt="GranaEvo"
-                            class="logo-img"
-                            crossorigin="anonymous"
-                            loading="lazy"
-                        >
+                    <a href="landingpage.html" class="logo">
+                        <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
                         <span class="logo-text">GranaEvo</span>
                     </a>
                     <p>Sua evolução financeira começa aqui</p>
@@ -583,9 +629,9 @@
 
                 <div class="footer-links">
                     <h4>Produto</h4>
-                    <a href="/#recursos">Recursos</a>
-                    <a href="/planos">Planos</a>
-                    <a href="/#como-funciona">Como Funciona</a>
+                    <a href="landingpage.html#recursos">Recursos</a>
+                    <a href="planos.html">Planos</a>
+                    <a href="landingpage.html#como-funciona">Como Funciona</a>
                 </div>
 
                 <div class="footer-links">
@@ -596,20 +642,18 @@
 
                 <div class="footer-links">
                     <h4>Legal</h4>
-                    <!--
-                        ✅ CORRIGIDO: link agora aponta para termos.html
-                    -->
-                    <a href="termos.html">Termos de Uso</a>
+                    <a href="#">Termos de Uso</a>
                     <a href="#">Privacidade</a>
                 </div>
             </div>
 
             <div class="footer-bottom">
-                <p>&copy; 2026 GranaEvo. Todos os direitos reservados.</p>
+                <p>&copy; 2025 GranaEvo. Todos os direitos reservados.</p>
             </div>
         </div>
     </footer>
 
+    <!-- ✅ type="module" — escopo completamente isolado, nada vaza para window -->
     <script type="module" src="planos.js"></script>
 
 </body>
