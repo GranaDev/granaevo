@@ -444,6 +444,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
+    // Limpa inline style antes de aplicar classe — inline style
+    // tem maior prioridade que qualquer classe CSS e travaria o display.
+    el.style.display = '';
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
     CaptchaState.activate();
@@ -452,6 +455,7 @@ function showCaptcha() {
 function hideCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
+    el.style.display = 'none';
     el.classList.remove('captcha-visible');
     el.classList.add('captcha-hidden');
     CaptchaState.deactivate();
