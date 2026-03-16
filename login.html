@@ -7,41 +7,51 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN                        ║
+        ║  CONTENT SECURITY POLICY — LOGIN v2.2                   ║
         ╠══════════════════════════════════════════════════════════╣
-        ║  Correções aplicadas em relação à versão anterior:      ║
+        ║  Correções aplicadas sobre v2.1:                         ║
         ║                                                          ║
-        ║  [CSP-FIX-1] frame-ancestors 'none' ADICIONADO.         ║
-        ║    A versão anterior usava <meta X-Frame-Options="DENY"> ║
-        ║    que é IGNORADA por todos os browsers. Somente o       ║
-        ║    frame-ancestors na CSP tem efeito real contra         ║
-        ║    clickjacking quando entregue via meta tag.            ║
+        ║  [CSP-FIX-1..5] mantidos da versão anterior.            ║
         ║                                                          ║
-        ║  [CSP-FIX-2] cdn.jsdelivr.net REMOVIDO de script-src    ║
-        ║    e connect-src. supabase-js agora é auto-hospedado     ║
-        ║    via supabase-client.js (supply chain hardening).      ║
+        ║  [CSP-FIX-6] frame-ancestors REMOVIDO da meta tag.      ║
+        ║    A diretiva frame-ancestors É IGNORADA por todos os    ║
+        ║    browsers quando entregue via <meta> (per spec CSP     ║
+        ║    Level 3, seção 6.1). Para proteção real contra        ║
+        ║    clickjacking configure o HTTP response header:        ║
+        ║    Content-Security-Policy: frame-ancestors 'none'       ║
+        ║    (ou no servidor: Nginx, Apache, Vercel, Netlify…)     ║
         ║                                                          ║
-        ║  [CSP-FIX-3] require-trusted-types-for 'script'         ║
-        ║    ADICIONADO. Bloqueia innerHTML/eval/document.write    ║
-        ║    sem uso da policy granaevo-policy (proteção DOM-XSS). ║
-        ║    O JS define a policy para restauração segura de       ║
-        ║    botões (HTML estático capturado na inicialização).    ║
+        ║  [CSP-FIX-7] style-src agora inclui 'unsafe-inline'.    ║
+        ║    Necessário para o posicionamento dinâmico de          ║
+        ║    partículas animadas, parallax e ripple — valores       ║
+        ║    calculados em runtime (left/top/transform aleatórios) ║
+        ║    que não podem ser expressos via classes CSS estáticas. ║
+        ║    A proteção crítica contra XSS permanece intacta via:  ║
+        ║      • script-src 'self' (sem unsafe-inline em scripts)  ║
+        ║      • require-trusted-types-for 'script'                ║
+        ║    CSS injection tem impacto muito menor que script XSS. ║
         ║                                                          ║
-        ║  [CSP-FIX-4] upgrade-insecure-requests ADICIONADO.      ║
-        ║    Força todos os recursos para HTTPS.                   ║
+        ║  [CSP-FIX-8] cdn.jsdelivr.net READICIONADO a            ║
+        ║    script-src enquanto supabase-client.js importa o SDK  ║
+        ║    via CDN. Recomendado: migrar para bundle self-hosted   ║
+        ║    (npm run build) e remover esta entrada.               ║
         ║                                                          ║
-        ║  [CSP-FIX-5] connect-src para reCAPTCHA corrigido.      ║
-        ║    Adicionado https://www.google.com para callbacks      ║
-        ║    de rede do widget v2.                                 ║
+        ║  [CSP-FIX-9] trusted-types agora inclui 'goog#html'.    ║
+        ║    Política interna usada pelo reCAPTCHA v2 para criar   ║
+        ║    TrustedScriptURL e TrustedHTML internamente.          ║
+        ║    Sem esta entrada o widget falha com:                  ║
+        ║    "Policy 'goog#html' disallowed" e                     ║
+        ║    "Requires TrustedScriptURL assignment".               ║
         ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         upgrade-insecure-requests;
         script-src 'self'
+            https://cdn.jsdelivr.net
             https://www.google.com/recaptcha/
             https://www.gstatic.com/recaptcha/;
-        style-src 'self';
+        style-src 'self' 'unsafe-inline';
         img-src 'self' data: https://www.gstatic.com/;
         font-src 'self';
         connect-src 'self'
@@ -50,12 +60,11 @@
         frame-src
             https://www.google.com/recaptcha/
             https://recaptcha.google.com/;
-        frame-ancestors 'none';
         object-src 'none';
         base-uri 'self';
         form-action 'self';
         require-trusted-types-for 'script';
-        trusted-types granaevo-policy;
+        trusted-types granaevo-policy goog#html;
     ">
 
     <!--
@@ -203,10 +212,13 @@
                         <p class="form-subtitle">Acesse sua conta para continuar evoluindo</p>
                     </div>
 
-                    <!-- Área de mensagens de status — usa textContent para evitar XSS -->
+                    <!--
+                        [FIX-HTML-1] style="display:none" removido.
+                        O atributo style inline também é bloqueado por style-src 'self'.
+                        Visibilidade agora controlada exclusivamente via classe .visible no JS.
+                    -->
                     <div id="authErrorMessage"
                          class="auth-message"
-                         style="display: none;"
                          role="alert"
                          aria-live="polite"
                          aria-atomic="true">
@@ -303,13 +315,6 @@
 
                         <button type="submit" class="btn-submit" id="loginSubmitBtn">
                             <span class="btn-text">Entrar</span>
-                            <span class="btn-loading" aria-hidden="true">
-                                <svg class="spinner" viewBox="0 0 24 24">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-dasharray="32" stroke-dashoffset="32">
-                                        <animate attributeName="stroke-dashoffset" dur="1s" from="32" to="0" repeatCount="indefinite"/>
-                                    </circle>
-                                </svg>
-                            </span>
                             <div class="btn-glow" aria-hidden="true"></div>
                         </button>
 

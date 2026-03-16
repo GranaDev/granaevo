@@ -59,14 +59,6 @@ const CONFIG = Object.freeze({
 
 // ═══════════════════════════════════════════════════════════════
 //  CABEÇALHOS DE AUTENTICAÇÃO — SEPARADOS POR CONTEXTO
-//
-//  _requireSessionHeader() → endpoints pós-login que exigem JWT
-//    - Lança erro se não houver sessão ativa
-//    - Usado exclusivamente em checkUserAccess()
-//
-//  _publicHeader() → endpoints públicos (recuperação, captcha)
-//    - Usa anon key (correto para endpoints sem contexto de usuário)
-//    - Nunca usado em endpoints que expõem dados de usuário
 // ═══════════════════════════════════════════════════════════════
 async function _requireSessionHeader() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -77,21 +69,11 @@ async function _requireSessionHeader() {
 }
 
 function _publicHeader() {
-    // anon key é pública por design no Supabase — aceitável apenas
-    // para endpoints que não expõem nem manipulam dados de usuário
     return `Bearer ${supabase.supabaseKey}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA STATE
-//  Callbacks do reCAPTCHA encapsulados + flag de guarda
-//
-//  _captchaActive: flag que só é true quando o captcha está
-//  visível e aguardando resolução legítima.
-//  Callbacks registrados no window permanecem (exigência da API
-//  Google), mas são neutralizados quando _captchaActive === false.
-//  A defesa principal contra tokens falsos é a validação no
-//  backend (validateCaptchaOnBackend).
 // ═══════════════════════════════════════════════════════════════
 const CaptchaState = (() => {
     let _token         = null;
@@ -100,7 +82,6 @@ const CaptchaState = (() => {
     let _captchaActive = false;
 
     window.onCaptchaResolved = (token) => {
-        // Só aceita callback quando captcha está ativo legitimamente
         if (!_captchaActive) return;
 
         if (typeof token !== 'string' || token.length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) {
@@ -208,9 +189,6 @@ const Cooldown = {
 
 // ═══════════════════════════════════════════════════════════════
 //  MÓDULO: RATE LIMITER DE SUBMISSÃO
-//  Este rate limit é defesa em profundidade de UX.
-//  Rate limiting real contra brute force DEVE existir no backend.
-//  O frontend não substitui essa proteção.
 // ═══════════════════════════════════════════════════════════════
 const SubmitRateLimiter = {
     isAllowed() {
@@ -251,14 +229,6 @@ function isValidEmail(email) {
 
 // ═══════════════════════════════════════════════════════════════
 //  RESTAURAÇÃO SEGURA DE BOTÕES (TRUSTED TYPES COMPLIANT)
-//
-//  O HTML capturado é SEMPRE do DOM estático na inicialização,
-//  nunca contém dados externos. A política granaevo-policy
-//  declara esse HTML como confiável para o browser.
-//
-//  Fallback: se Trusted Types não estiver disponível (browsers
-//  antigos), usa innerHTML direto — seguro porque o conteúdo
-//  vem do DOM estático, não de input do usuário.
 // ═══════════════════════════════════════════════════════════════
 const _buttonOriginalHTML = new WeakMap();
 
@@ -274,22 +244,26 @@ function restoreButton(btn) {
     if (original === undefined) return;
 
     if (_trustedPolicy) {
-        // Com Trusted Types: declara o HTML estático como confiável via policy
         btn.innerHTML = _trustedPolicy.createHTML(original);
     } else {
-        // Sem Trusted Types (browser antigo): atribuição direta — segura
-        // porque `original` é HTML estático capturado do nosso DOM
         btn.innerHTML = original;
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  SPINNER DO BOTÃO
+//  [FIX-JS-1] svg.style.cssText removido — usa classe .loading-svg
+//  definida no CSS para width, height e animação spin.
+//  Sem inline style — compatível com style-src 'self'.
+// ═══════════════════════════════════════════════════════════════
 function createSpinnerElement(labelText) {
     const wrapper = document.createDocumentFragment();
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('aria-hidden', 'true');
-    svg.style.cssText = 'width:20px;height:20px;animation:spin 1s linear infinite;';
+    // [FIX-JS-1] Usa classe CSS em vez de style.cssText
+    svg.classList.add('loading-svg');
 
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     circle.setAttribute('cx', '12');
@@ -359,6 +333,10 @@ const togglePassword = document.getElementById('togglePassword');
 
 // ═══════════════════════════════════════════════════════════════
 //  FUNÇÕES DE MENSAGEM
+//  [FIX-JS-2] messageDiv.style.display removido.
+//  Antes: style.display = 'flex' / 'none' → bloqueado por CSP.
+//  Agora: classList com .visible (display:flex) e .show (opacity).
+//  O elemento parte oculto (sem .visible) via CSS base display:none.
 // ═══════════════════════════════════════════════════════════════
 let _messageTimer = null;
 
@@ -373,14 +351,15 @@ function showAuthMessage(message, type) {
 
     // textContent garante que nenhum HTML de usuário seja interpretado (anti-XSS)
     messageDiv.textContent = sanitizeText(message);
-    messageDiv.className   = `auth-message ${type} show`;
-    messageDiv.style.display = 'flex';
+    // [FIX-JS-2] className sem inline style — .visible controla display:flex
+    messageDiv.className   = `auth-message ${type} visible show`;
 
     _messageTimer = setTimeout(() => {
         messageDiv.classList.remove('show');
         setTimeout(() => {
-            messageDiv.style.display = 'none';
-            messageDiv.textContent   = '';
+            // Remove .visible para retornar ao display:none do CSS base
+            messageDiv.classList.remove('visible');
+            messageDiv.textContent = '';
         }, 300);
     }, CONFIG.MESSAGE_AUTO_HIDE_MS);
 }
@@ -399,14 +378,16 @@ function hideError() {
 
 // ═══════════════════════════════════════════════════════════════
 //  EFEITOS VISUAIS
+//  [FIX-JS-3] shakeInput: inline style removido.
+//  Antes: input.style.animation + input.style.borderColor.
+//  Agora: classe .input-shake definida no CSS (animation + border).
 // ═══════════════════════════════════════════════════════════════
 function shakeInput(input) {
     if (!input) return;
-    input.style.animation   = 'shake 0.5s';
-    input.style.borderColor = 'var(--error-red)';
+    // [FIX-JS-3] Usa classe CSS em vez de inline style
+    input.classList.add('input-shake');
     setTimeout(() => {
-        input.style.animation   = '';
-        input.style.borderColor = '';
+        input.classList.remove('input-shake');
     }, 500);
 }
 
@@ -482,7 +463,6 @@ async function validateCaptchaOnBackend(token) {
     }
 
     try {
-        // Captcha é verificado antes do login → sem sessão → endpoint público → _publicHeader()
         const response = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/verify-recaptcha`, {
             method:  'POST',
             headers: {
@@ -502,11 +482,6 @@ async function validateCaptchaOnBackend(token) {
 
 // ═══════════════════════════════════════════════════════════════
 //  VERIFICAÇÃO DE ACESSO — SEM ENUMERAÇÃO DE EMAIL
-//
-//  Após login bem-sucedido, a sessão já está ativa.
-//  Usamos o user_id do JWT — o backend valida internamente quem
-//  é o usuário sem expor nenhuma informação sobre outros emails.
-//  Fail closed: qualquer erro nega o acesso (não faz fail open).
 // ═══════════════════════════════════════════════════════════════
 async function checkUserAccess() {
     try {
@@ -516,7 +491,6 @@ async function checkUserAccess() {
             return { hasAccess: false };
         }
 
-        // Endpoint sensível pós-login → JWT obrigatório → _requireSessionHeader()
         const authHeader = await _requireSessionHeader();
 
         const response = await fetch(
@@ -527,7 +501,6 @@ async function checkUserAccess() {
                     'Content-Type':  'application/json',
                     'Authorization': authHeader,
                 },
-                // Não envia email — backend extrai user_id do JWT
                 body: JSON.stringify({ user_id: session.user.id }),
             }
         );
@@ -540,7 +513,6 @@ async function checkUserAccess() {
         return { hasAccess: result?.hasAccess === true };
 
     } catch {
-        // Fail closed: qualquer erro nega acesso
         return { hasAccess: false };
     }
 }
@@ -635,7 +607,6 @@ loginForm.addEventListener('submit', async (e) => {
 
         setButtonLoading(submitBtn, 'Verificando plano...');
 
-        // Não passa email — checkUserAccess usa o JWT da sessão
         const { hasAccess } = await checkUserAccess();
 
         if (!hasAccess) {
@@ -647,9 +618,6 @@ loginForm.addEventListener('submit', async (e) => {
             return;
         }
 
-        // Limpa campos sensíveis também no caminho de SUCESSO.
-        // Evita que email e senha fiquem no DOM durante o redirect,
-        // onde extensões ou scripts de terceiros poderiam lê-los.
         inputs.loginPassword.value = '';
         inputs.loginEmail.value    = '';
 
@@ -711,9 +679,6 @@ if (buttons.forgotPassword) {
 
 if (buttons.backToLogin) {
     buttons.backToLogin.addEventListener('click', () => {
-        // Limpa o estado de recuperação completo ao voltar para login,
-        // não apenas o campo de email. Evita estado residual caso o usuário
-        // tenha avançado para a tela de código e voltado.
         _clearRecoveryState();
         switchScreen(screens.forgotEmail, screens.login);
     });
@@ -721,6 +686,8 @@ if (buttons.backToLogin) {
 
 // ═══════════════════════════════════════════════════════════════
 //  ENVIAR CÓDIGO DE RECUPERAÇÃO
+//  [FIX-JS-4] inputs.recoveryEmail.style.borderColor removido.
+//  Usa classe .input-error-border definida no CSS.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.sendCode) {
     buttons.sendCode.addEventListener('click', async () => {
@@ -728,8 +695,11 @@ if (buttons.sendCode) {
 
         if (!email || !isValidEmail(email)) {
             if (inputs.recoveryEmail) {
-                inputs.recoveryEmail.style.borderColor = 'var(--error-red)';
-                setTimeout(() => { inputs.recoveryEmail.style.borderColor = ''; }, 2000);
+                // [FIX-JS-4] Classe CSS em vez de inline borderColor
+                inputs.recoveryEmail.classList.add('input-error-border');
+                setTimeout(() => {
+                    inputs.recoveryEmail.classList.remove('input-error-border');
+                }, 2000);
             }
             showAuthMessage('Digite um email válido.', 'error');
             return;
@@ -743,7 +713,6 @@ if (buttons.sendCode) {
         setButtonLoading(buttons.sendCode, 'Enviando...');
 
         try {
-            // Recuperação: usuário não está autenticado → endpoint público → _publicHeader()
             const response = await fetch(
                 `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
                 {
@@ -771,7 +740,6 @@ if (buttons.sendCode) {
                 setTimeout(() => inputs.codeInputs[0]?.focus(), 520);
 
             } else if (result.status === 'not_found' || result.status === 'payment_not_approved') {
-                // Resposta neutra — não confirma nem nega existência do email
                 showAuthMessage('Se o email estiver cadastrado com plano ativo, você receberá o código.', 'info');
 
             } else {
@@ -822,6 +790,9 @@ if (buttons.backToCode) {
 
 // ═══════════════════════════════════════════════════════════════
 //  ALTERAR SENHA
+//  [FIX-JS-5] inputs.newPassword.style.borderColor e
+//  inputs.confirmPassword.style.borderColor removidos.
+//  Usa classe .input-error-border definida no CSS.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.changePassword) {
     buttons.changePassword.addEventListener('click', async () => {
@@ -847,11 +818,12 @@ if (buttons.changePassword) {
 
         if (newPass !== confirmPass) {
             showError('As senhas não coincidem.');
-            if (inputs.newPassword)     inputs.newPassword.style.borderColor     = 'var(--error-red)';
-            if (inputs.confirmPassword) inputs.confirmPassword.style.borderColor = 'var(--error-red)';
+            // [FIX-JS-5] Classes CSS em vez de inline borderColor
+            if (inputs.newPassword)     inputs.newPassword.classList.add('input-error-border');
+            if (inputs.confirmPassword) inputs.confirmPassword.classList.add('input-error-border');
             setTimeout(() => {
-                if (inputs.newPassword)     inputs.newPassword.style.borderColor     = '';
-                if (inputs.confirmPassword) inputs.confirmPassword.style.borderColor = '';
+                if (inputs.newPassword)     inputs.newPassword.classList.remove('input-error-border');
+                if (inputs.confirmPassword) inputs.confirmPassword.classList.remove('input-error-border');
             }, 2000);
             return;
         }
@@ -868,7 +840,6 @@ if (buttons.changePassword) {
         setButtonLoading(buttons.changePassword, 'Alterando...');
 
         try {
-            // Reset de senha: sem sessão ativa → endpoint público → _publicHeader()
             const response = await fetch(
                 `${CONFIG.SUPABASE_URL}/functions/v1/verify-and-reset-password`,
                 {
@@ -942,7 +913,6 @@ if (buttons.resendCode) {
         btn.textContent    = 'Enviando...';
 
         try {
-            // Reenvio sem sessão ativa → _publicHeader()
             const response = await fetch(
                 `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
                 {
@@ -1058,7 +1028,10 @@ function resetCodeInputs() {
 // ═══════════════════════════════════════════════════════════════
 //  PARTÍCULAS E GRÁFICOS ANIMADOS
 //  Todos os elementos criados via createElementNS / createElement
-//  com valores numéricos hardcoded — sem dados externos, sem XSS
+//  com valores numéricos hardcoded — sem dados externos, sem XSS.
+//  Os inline styles aqui são de posicionamento aleatório calculado
+//  em runtime — não podem ser expressos como classes CSS estáticas.
+//  Permitidos por style-src 'unsafe-inline' (ver login.html).
 // ═══════════════════════════════════════════════════════════════
 function createMoneyParticles() {
     const container = document.getElementById('moneyParticles');
@@ -1069,7 +1042,6 @@ function createMoneyParticles() {
     for (let i = 0; i < CONFIG.moneyParticleCount; i++) {
         const particle = document.createElement('div');
         particle.classList.add('money-particle');
-        // textContent com símbolo do array hardcoded — sem dados externos
         particle.textContent = symbols[Math.floor(Math.random() * symbols.length)];
 
         particle.style.left               = `${Math.random() * 100}%`;
@@ -1087,7 +1059,6 @@ function createAnimatedCharts() {
     const container = document.getElementById('animatedCharts');
     if (!container) return;
 
-    // SVG criado via createElementNS — nunca via innerHTML, sem risco de XSS
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
 
@@ -1136,6 +1107,8 @@ inputs.recoveryEmail?.addEventListener('keypress', (e) => {
 
 // ═══════════════════════════════════════════════════════════════
 //  PARALLAX DO MOUSE
+//  Valores de transform calculados em tempo real — inline style
+//  necessário (valores dinâmicos de posição/rotação).
 // ═══════════════════════════════════════════════════════════════
 let mouseX = 0, mouseY = 0, currentX = 0, currentY = 0;
 
@@ -1168,7 +1141,8 @@ animateParallax();
 
 // ═══════════════════════════════════════════════════════════════
 //  EFEITO DE RIPPLE NOS BOTÕES
-//  Todos os valores são numéricos calculados — sem dados de usuário
+//  Posicionamento calculado a partir das coordenadas do clique —
+//  inline style necessário (valores dinâmicos por natureza).
 // ═══════════════════════════════════════════════════════════════
 document.querySelectorAll('.btn-submit').forEach(button => {
     button.addEventListener('click', function (e) {
@@ -1198,17 +1172,11 @@ document.querySelectorAll('.btn-submit').forEach(button => {
 
 // ═══════════════════════════════════════════════════════════════
 //  EFEITO NOS INPUTS
+//  [FIX-JS-6] Listeners de focus/blur que aplicavam
+//  wrapper.style.transform = 'scale(1.01)' foram REMOVIDOS.
+//  Substituídos por .input-wrapper:focus-within no CSS —
+//  sem inline style, sem JS, sem violação de CSP.
 // ═══════════════════════════════════════════════════════════════
-document.querySelectorAll('.form-input').forEach(input => {
-    input.addEventListener('focus', () => {
-        const wrapper = input.closest('.input-wrapper');
-        if (wrapper) wrapper.style.transform = 'scale(1.01)';
-    });
-    input.addEventListener('blur', () => {
-        const wrapper = input.closest('.input-wrapper');
-        if (wrapper) wrapper.style.transform = 'scale(1)';
-    });
-});
 
 // ═══════════════════════════════════════════════════════════════
 //  FEEDBACK VISUAL NO CHECKBOX
