@@ -34,6 +34,7 @@
         default-src 'self';
         upgrade-insecure-requests;
         script-src 'self'
+            'sha256-Qy9mS7bEqlEUxON8uHeSqpSpAVwmaih+kA/AVLUIKwA='
             https://cdn.jsdelivr.net
             https://www.google.com/recaptcha/
             https://www.recaptcha.net/recaptcha/
@@ -64,27 +65,30 @@
     <link rel="stylesheet" href="login.css">
 
     <!--
-        [HTML-FIX-3] SOLUÇÃO DEFINITIVA PARA O RECAPTCHA INVISÍVEL
+        SOLUÇÃO DEFINITIVA PARA O RECAPTCHA INVISÍVEL
 
-        O problema raiz: login.js usa type="module" — módulos são SEMPRE
-        deferidos pelo browser (executam após o parse do HTML completo).
-        O reCAPTCHA usa "async" e pode carregar e chamar window._grOnLoad
-        ANTES do módulo login.js ser avaliado, então _grOnLoad não existe.
+        Problema raiz: login.js usa type="module" (sempre deferido pelo browser).
+        O reCAPTCHA usa "async" e pode chamar window._grOnLoad ANTES do módulo
+        ser avaliado — _grOnLoad não existia, causando o erro no console.
 
-        Solução em duas partes:
-
-        PARTE 1 — recaptcha-bridge.js:
-          Script SÍNCRONO (sem async/defer/module) carregado ANTES do
-          reCAPTCHA. Define window._grOnLoad imediatamente, na hora que
-          o browser encontra a tag. Garante que o callback existe quando
-          o reCAPTCHA precisar chamá-lo.
-
-        PARTE 2 — reCAPTCHA api.js com ?render=explicit&onload=_grOnLoad:
-          render=explicit impede auto-render de elementos .g-recaptcha.
-          onload=_grOnLoad chama a função definida pelo bridge quando a
-          lib do Google estiver 100% pronta para uso.
+        Solução: script INLINE SÍNCRONO define _grOnLoad durante o parse do HTML.
+        Sem arquivo externo, sem risco de 404, sem problema de MIME type.
+        O login.js lê as flags __grCaptchaReady / __grPendingRender.
     -->
-    <script src="recaptcha-bridge.js"></script>
+    <script>
+    (function () {
+        window.__grCaptchaReady  = false;
+        window.__grPendingRender = null;
+        window._grOnLoad = function () {
+            window.__grCaptchaReady = true;
+            if (typeof window.__grPendingRender === 'function') {
+                var fn = window.__grPendingRender;
+                window.__grPendingRender = null;
+                fn();
+            }
+        };
+    }());
+    </script>
     <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=_grOnLoad"
             async
             defer
