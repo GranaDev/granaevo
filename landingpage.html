@@ -5,9 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <meta name="description" content="Controle suas finanças com inteligência. O GranaEvo é o app que transforma sua relação com o dinheiro.">
     <meta name="theme-color" content="#10b981">
+
+    <!--
+        ============================================================
+        SECURITY HEADERS (meta equivalents — camada extra de defesa)
+
+        LIMITAÇÕES IMPORTANTES:
+        ─────────────────────────────────────────────────────────────
+        [A] frame-ancestors 'none'  → IGNORADO via <meta>. REMOVIDO.
+            Protegido via HTTP header no vercel.json:
+            "Content-Security-Policy: frame-ancestors 'none'"
+
+        [B] X-Frame-Options via <meta> → IGNORADO por todos os browsers
+            modernos. REMOVIDO. Protegido via HTTP header no vercel.json:
+            "X-Frame-Options: DENY"
+
+        [C] A CSP real e completa está no vercel.json (HTTP header).
+            Este <meta> é apenas defesa em profundidade — o browser
+            aplica a política MAIS restritiva entre header e meta.
+            Por isso ambos devem ser consistentes.
+
+        SOBRE O CLOUDFLARE BEACON:
+        ─────────────────────────────────────────────────────────────
+        O Cloudflare injeta beacon.min.js automaticamente via proxy.
+        Por isso static.cloudflareinsights.com está liberado no
+        script-src e cloudflareinsights.com no connect-src,
+        tanto aqui quanto no vercel.json.
+
+        SOBRE O INLINE SCRIPT:
+        ─────────────────────────────────────────────────────────────
+        O Cloudflare também injeta um inline script ao fazer proxy.
+        O hash sha256 abaixo corresponde exatamente a esse script.
+        Se o hash mudar (após atualização do Cloudflare), o novo hash
+        aparecerá na mensagem de erro do console — basta substituir
+        aqui e no vercel.json.
+        Hash atual: sha256-GL6A4jS7qMll1kMeDRcLJpoLrZk+ljJKJwKhAdGmTs8=
+        ============================================================
+    -->
+
+    <!--
+        META CSP: camada extra de defesa (não substitui o HTTP header).
+        A CSP real e completa está no vercel.json.
+    -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' 'sha256-1PH1LjJXYny7ws3P8XxQGxFfEgCPPNXNGnWN3qr7wbY=' https://static.cloudflareinsights.com;
+        script-src 'self' 'sha256-GL6A4jS7qMll1kMeDRcLJpoLrZk+ljJKJwKhAdGmTs8=' https://static.cloudflareinsights.com;
         style-src 'self' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com;
         img-src 'self' data:;
@@ -21,13 +63,9 @@
     ">
 
     <!--
-        TRUSTED TYPES: bloqueia DOM XSS via innerHTML, document.write,
-        etc. Se você usar bibliotecas de terceiros que usam innerHTML,
+        TRUSTED TYPES: bloqueia DOM XSS via innerHTML, document.write, etc.
+        Se você usar bibliotecas de terceiros que usam innerHTML,
         será necessário criar uma policy explícita com createPolicy().
-        Exemplo:
-            const policy = trustedTypes.createPolicy('default', {
-                createHTML: str => str
-            });
     -->
 
     <!-- Anti-MIME-Sniffing -->
@@ -36,7 +74,11 @@
     <!-- Referrer Policy -->
     <meta name="referrer" content="strict-origin-when-cross-origin">
 
-    <!-- Permissions Policy — desabilita câmera, microfone, geolocalização e APIs modernas sensíveis -->
+    <!--
+        Permissions Policy — desabilita APIs sensíveis não utilizadas.
+        X-Frame-Options e frame-ancestors foram REMOVIDOS daqui —
+        só funcionam via HTTP header (vercel.json já os aplica).
+    -->
     <meta http-equiv="Permissions-Policy" content="
         camera=(),
         microphone=(),
@@ -51,10 +93,8 @@
 
     <!--
         X-Frame-Options via <meta> NÃO é suportado por nenhum browser
-        moderno e gera aviso no console. REMOVIDO.
-        A proteção real vem do HTTP header no vercel.json:
-            "key": "X-Frame-Options", "value": "DENY"
-        e da CSP com frame-ancestors 'none' no vercel.json.
+        moderno — gera aviso no console e é ignorado. REMOVIDO.
+        Proteção real: HTTP header "X-Frame-Options: DENY" no vercel.json.
     -->
 
     <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
@@ -146,11 +186,9 @@
                 <!--
                     Links internos: rel="noopener noreferrer" não é necessário aqui pois
                     não usam target="_blank". Aplicado apenas em links externos abertos
-                    em nova aba — veja o comentário abaixo sobre tabnabbing.
-
+                    em nova aba para prevenir tabnabbing attack.
                     REGRA: qualquer link com target="_blank" DEVE ter:
                     rel="noopener noreferrer"
-                    para prevenir tabnabbing attack.
                 -->
                 <a href="login.html" class="nav-link" role="menuitem">Login</a>
                 <a href="planos.html" class="btn-nav" role="menuitem">Começar Agora</a>
@@ -572,8 +610,6 @@
                     <!--
                         NOTA: Links externos com target="_blank" DEVEM conter
                         rel="noopener noreferrer" para prevenir tabnabbing.
-                        Exemplo:
-                        <a href="https://externo.com" target="_blank" rel="noopener noreferrer">Link</a>
                     -->
                     <a href="#">Contato</a>
                     <a href="#">FAQ</a>

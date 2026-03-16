@@ -32,34 +32,24 @@
         script-src e cloudflareinsights.com no connect-src,
         tanto aqui quanto no vercel.json.
 
-        SOBRE O INLINE SCRIPT (erro 4 do console):
+        SOBRE O INLINE SCRIPT:
         ─────────────────────────────────────────────────────────────
         O Cloudflare também injeta um inline script ao fazer proxy.
         O hash sha256 abaixo corresponde exatamente a esse script.
         Se o hash mudar (após atualização do Cloudflare), o novo hash
-        aparecerá na mensagem de erro do console — basta substituir.
-        Hash atual: sha256-+bKQFgEuYVoBJiIVKw/deWgC0Kx0EobOPldmbUS+dg8=
+        aparecerá na mensagem de erro do console — basta substituir
+        aqui e no vercel.json.
+        Hash atual: sha256-GL6A4jS7qMll1kMeDRcLJpoLrZk+ljJKJwKhAdGmTs8=
         ============================================================
     -->
 
     <!--
         META CSP: camada extra de defesa (não substitui o HTTP header).
         A CSP real e completa está no vercel.json.
-
-        ALTERAÇÕES em relação à versão anterior:
-        ✅ REMOVIDO:  frame-ancestors 'none' → inválido via <meta>
-        ✅ REMOVIDO:  <meta X-Frame-Options> → inválido via <meta>
-        ✅ ADICIONADO: hash do inline script do Cloudflare no script-src
-        ✅ ADICIONADO: https://static.cloudflareinsights.com no script-src
-        ✅ ADICIONADO: 'self' no font-src
-        ✅ ADICIONADO: https://cloudflareinsights.com no connect-src
-        ✅ ADICIONADO: require-trusted-types-for 'script'
-        ✅ ADICIONADO: browsing-topics, join-ad-interest-group,
-                       run-ad-auction no Permissions-Policy
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' 'sha256-1PH1LjJXYny7ws3P8XxQGxFfEgCPPNXNGnWN3qr7wbY=' https://static.cloudflareinsights.com;
+        script-src 'self' 'sha256-GL6A4jS7qMll1kMeDRcLJpoLrZk+ljJKJwKhAdGmTs8=' https://static.cloudflareinsights.com;
         style-src 'self' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com;
         img-src 'self' data:;
