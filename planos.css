@@ -1,6 +1,6 @@
 /* ==========================================
    GRANAEVO PLANOS — planos.css
-   v4 | Mobile First · Carousel Fix · Otimizado
+   v5 | Mobile First · Carousel Fix · Otimizado
    ========================================== */
 
 /* ==========================================
@@ -35,7 +35,6 @@
     --neon-glow:        0 0 20px rgba(16, 185, 129, 0.35);
     --neon-glow-md:     0 0 30px rgba(16, 185, 129, 0.50);
     --neon-glow-strong: 0 0 50px rgba(16, 185, 129, 0.65);
-    --shadow-xs:        0 1px 4px rgba(0, 0, 0, 0.15);
     --shadow-sm:        0 2px 10px rgba(0, 0, 0, 0.20);
     --shadow-md:        0 6px 20px rgba(0, 0, 0, 0.30);
     --shadow-lg:        0 12px 40px rgba(0, 0, 0, 0.45);
@@ -47,28 +46,27 @@
     --t-fast:      0.18s;
     --t-base:      0.28s;
     --t-slow:      0.50s;
-    --t-x-slow:    0.70s;
 
     /* Raios */
-    --r-sm:  8px;
-    --r-md:  12px;
-    --r-lg:  16px;
-    --r-xl:  24px;
-    --r-2xl: 32px;
+    --r-sm:   8px;
+    --r-md:   12px;
+    --r-lg:   16px;
+    --r-xl:   24px;
+    --r-2xl:  32px;
     --r-full: 9999px;
 
-    /* Espaçamentos base */
-    --sp-1: 0.25rem;
-    --sp-2: 0.50rem;
-    --sp-3: 0.75rem;
-    --sp-4: 1.00rem;
-    --sp-5: 1.25rem;
-    --sp-6: 1.50rem;
-    --sp-8: 2.00rem;
-    --sp-10: 2.50rem;
-    --sp-12: 3.00rem;
-    --sp-16: 4.00rem;
-    --sp-20: 5.00rem;
+    /* Espaçamentos */
+    --sp-1: 0.25rem;   /* 4px  */
+    --sp-2: 0.50rem;   /* 8px  */
+    --sp-3: 0.75rem;   /* 12px */
+    --sp-4: 1.00rem;   /* 16px */
+    --sp-5: 1.25rem;   /* 20px */
+    --sp-6: 1.50rem;   /* 24px */
+    --sp-8: 2.00rem;   /* 32px */
+    --sp-10: 2.50rem;  /* 40px */
+    --sp-12: 3.00rem;  /* 48px */
+    --sp-16: 4.00rem;  /* 64px */
+    --sp-20: 5.00rem;  /* 80px */
 }
 
 /* ==========================================
@@ -97,12 +95,14 @@ body {
     overflow-x: hidden;
     min-height: 100vh;
     position: relative;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
-img   { max-width: 100%; height: auto; display: block; }
-svg   { display: block; }
-a     { text-decoration: none; color: inherit; }
-ul    { list-style: none; }
+img    { max-width: 100%; height: auto; display: block; }
+svg    { display: block; }
+a      { text-decoration: none; color: inherit; }
+ul     { list-style: none; }
 
 button {
     font-family: inherit;
@@ -112,6 +112,7 @@ button {
     touch-action: manipulation;
 }
 
+/* Garante área de toque mínima (44px) em todos os elementos interativos */
 button, a { touch-action: manipulation; }
 
 /* ==========================================
@@ -156,9 +157,7 @@ button, a { touch-action: manipulation; }
     animation: spin 3s linear infinite;
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .logo-img-loader {
     width: 100%;
@@ -212,6 +211,11 @@ button, a { touch-action: manipulation; }
     animation: pulse 2s ease-in-out infinite;
 }
 
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.6; }
+}
+
 /* ==========================================
    SCROLL PROGRESS
    ========================================== */
@@ -236,6 +240,7 @@ button, a { touch-action: manipulation; }
     z-index: 0;
     overflow: hidden;
     background: radial-gradient(ellipse 80% 60% at 50% 0%, #0d1a14 0%, var(--dark) 60%);
+    pointer-events: none;
 }
 
 .grid-overlay {
@@ -391,10 +396,7 @@ button, a { touch-action: manipulation; }
     transition: width var(--t-base) var(--ease-out);
 }
 
-.nav-link:hover {
-    color: var(--white);
-}
-
+.nav-link:hover { color: var(--white); }
 .nav-link:hover::after { width: 100%; }
 
 .btn-nav {
@@ -500,7 +502,6 @@ button, a { touch-action: manipulation; }
     min-height: 52px !important;
     color: var(--gray-light) !important;
     transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease !important;
-    border-radius: var(--r-md) !important;
 }
 
 .nav-links.active a:hover,
@@ -618,17 +619,13 @@ button, a { touch-action: manipulation; }
     background: var(--primary);
     border-radius: 50%;
     box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+    flex-shrink: 0;
     animation: pulseDot 1.8s ease-in-out infinite;
 }
 
 @keyframes pulseDot {
-    0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 8px rgba(16, 185, 129, 0.7); }
+    0%, 100% { opacity: 1; transform: scale(1);   box-shadow: 0 0 8px rgba(16, 185, 129, 0.7); }
     50%       { opacity: 0.6; transform: scale(1.3); box-shadow: 0 0 16px rgba(16, 185, 129, 0.4); }
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.6; }
 }
 
 .hero-title {
@@ -682,7 +679,7 @@ button, a { touch-action: manipulation; }
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: var(--r-full);
-    transition: border-color var(--t-fast) ease;
+    transition: border-color var(--t-fast) ease, color var(--t-fast) ease;
 }
 
 .trust-item:hover { border-color: var(--primary-20); color: var(--white); }
@@ -717,12 +714,13 @@ button, a { touch-action: manipulation; }
     margin-bottom: var(--sp-5);
 }
 
+/* Oculto no desktop (sobrescrito no media query) */
 .mobile-only { display: flex; }
 
 .carousel-btn {
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
     background: var(--primary-15);
     border: 1.5px solid var(--primary-30);
     border-radius: 50%;
@@ -738,10 +736,9 @@ button, a { touch-action: manipulation; }
     background: var(--primary-20);
     border-color: var(--primary-60);
     transform: scale(1.08);
-    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.25);
 }
 
-.carousel-btn:active { transform: scale(0.93); }
+.carousel-btn:active { transform: scale(0.92); }
 
 .carousel-btn svg {
     width: 22px;
@@ -758,6 +755,7 @@ button, a { touch-action: manipulation; }
 .indicator-dot {
     width: 8px;
     height: 8px;
+    min-width: 8px;
     background: var(--primary-30);
     border-radius: var(--r-full);
     border: none;
@@ -773,28 +771,22 @@ button, a { touch-action: manipulation; }
 }
 
 /* ==========================================
-   CAROUSEL CONTAINER — FIX v4
+   CAROUSEL CONTAINER — v5
    
-   PROBLEMA ORIGINAL:
-   • overflow: visible  → todos os 3 cards eram exibidos simultaneamente
-   • gap: 1rem no track → translateX(-100%) não alinhava o card corretamente
-   
-   SOLUÇÃO v4:
-   • overflow: hidden   → clipa o carousel, exibe 1 card por vez
-   • gap: 0 no track    → translateX(-N * 100%) é matematicamente exato
-   • padding: 0         → sem distorção na largura do track
+   • overflow: hidden clipa o carousel (1 card visível por vez)
+   • gap: 0 no track → translateX(-N * 100%) é matematicamente exato
+   • padding: 0 evita distorção na largura do track
    ========================================== */
 .plans-carousel {
-    overflow: hidden;       /* FIX: clipa o carousel — era 'visible', mostrava todos os cards */
-    padding: 0;
+    overflow: hidden;
     width: 100%;
     border-radius: var(--r-lg);
 }
 
 .plans-track {
     display: flex;
-    gap: 0;                 /* FIX: sem gap no mobile — gap causava desalinhamento no translateX */
-    padding: 0;             /* FIX: sem padding no track — causava distorção da largura */
+    gap: 0;
+    padding: 0;
     transition: transform var(--t-slow) cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform;
 }
@@ -803,12 +795,13 @@ button, a { touch-action: manipulation; }
    PLAN CARDS — MOBILE
    ========================================== */
 .plan-card {
-    min-width: 100%;        /* Cada card ocupa exatamente 100% do track */
-    flex-shrink: 0;         /* Impede encolhimento */
+    /* Cada card ocupa exatamente 100% do track no mobile */
+    min-width: 100%;
+    flex-shrink: 0;
     background: linear-gradient(145deg,
-        rgba(17, 18, 32, 0.90) 0%,
-        rgba(22, 24, 42, 0.80) 50%,
-        rgba(17, 18, 32, 0.90) 100%);
+        rgba(17, 18, 32, 0.92) 0%,
+        rgba(22, 24, 42, 0.82) 50%,
+        rgba(17, 18, 32, 0.92) 100%);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(16, 185, 129, 0.18);
@@ -817,14 +810,15 @@ button, a { touch-action: manipulation; }
     position: relative;
     overflow: hidden;
     transition: transform var(--t-slow) ease, box-shadow var(--t-slow) ease, border-color var(--t-base) ease;
+    /* FIX v5: visibilidade forçada — override do IntersectionObserver */
+    opacity: 1 !important;
 }
 
+/* Linha brilhante no topo do card ao hover */
 .plan-card::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
+    top: 0; left: 0; right: 0;
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--primary-30), transparent);
     opacity: 0;
@@ -833,6 +827,7 @@ button, a { touch-action: manipulation; }
 
 .plan-card:hover::before { opacity: 1; }
 
+/* Glow radial interno ao hover */
 .plan-card::after {
     content: '';
     position: absolute;
@@ -873,7 +868,11 @@ button, a { touch-action: manipulation; }
     align-items: center;
     justify-content: center;
     margin: 0 auto var(--sp-4);
-    transition: background var(--t-base) ease, border-color var(--t-base) ease, transform var(--t-base) var(--ease-spring), box-shadow var(--t-base) ease;
+    transition:
+        background var(--t-base) ease,
+        border-color var(--t-base) ease,
+        transform var(--t-base) var(--ease-spring),
+        box-shadow var(--t-base) ease;
 }
 
 .plan-card:hover .plan-icon {
@@ -967,9 +966,7 @@ button, a { touch-action: manipulation; }
 }
 
 /* Plan Card — Features */
-.plan-features {
-    margin-bottom: var(--sp-6);
-}
+.plan-features { margin-bottom: var(--sp-6); }
 
 .feature-item {
     display: flex;
@@ -982,13 +979,9 @@ button, a { touch-action: manipulation; }
     transition: color var(--t-fast) ease, padding-left var(--t-fast) ease;
 }
 
-.feature-item:last-child { border-bottom: none; }
-.feature-item:hover { color: var(--white); padding-left: var(--sp-2); }
-
-.feature-item.highlight {
-    color: var(--primary-light);
-    font-weight: 600;
-}
+.feature-item:last-child  { border-bottom: none; }
+.feature-item:hover       { color: var(--white); padding-left: var(--sp-2); }
+.feature-item.highlight   { color: var(--primary-light); font-weight: 600; }
 
 .feature-item svg {
     width: 18px;
@@ -1052,6 +1045,8 @@ button, a { touch-action: manipulation; }
     overflow: hidden;
     box-shadow: 0 4px 18px rgba(16, 185, 129, 0.28);
     letter-spacing: 0.01em;
+    /* Garante área de toque adequada em mobile */
+    min-height: 52px;
 }
 
 .btn-plan:hover {
@@ -1157,7 +1152,11 @@ button, a { touch-action: manipulation; }
     align-items: center;
     justify-content: center;
     margin: 0 auto var(--sp-4);
-    transition: background var(--t-base) ease, border-color var(--t-base) ease, transform var(--t-base) var(--ease-spring), box-shadow var(--t-base) ease;
+    transition:
+        background var(--t-base) ease,
+        border-color var(--t-base) ease,
+        transform var(--t-base) var(--ease-spring),
+        box-shadow var(--t-base) ease;
 }
 
 .benefit-card:hover .benefit-icon {
@@ -1215,16 +1214,18 @@ button, a { touch-action: manipulation; }
     transition: border-color var(--t-base) ease;
 }
 
-.faq-item:hover { border-color: var(--primary-25); }
+.faq-item:hover { border-color: var(--primary-30); }
 
 .faq-question {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--sp-5) var(--sp-5);
+    padding: var(--sp-5);
     cursor: pointer;
     transition: background var(--t-fast) ease;
     gap: var(--sp-4);
+    /* Área de toque generosa */
+    min-height: 60px;
 }
 
 .faq-question:hover { background: rgba(16, 185, 129, 0.04); }
@@ -1286,8 +1287,7 @@ button, a { touch-action: manipulation; }
 .cta-content::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 50%;
+    top: 0; left: 50%;
     transform: translateX(-50%);
     width: 60%;
     height: 1px;
@@ -1381,16 +1381,8 @@ button, a { touch-action: manipulation; }
 }
 
 .footer-brand { text-align: center; }
-
-.footer-brand .logo {
-    justify-content: center;
-    margin-bottom: var(--sp-3);
-}
-
-.footer-brand p {
-    font-size: 0.875rem;
-    color: var(--gray-dim);
-}
+.footer-brand .logo { justify-content: center; margin-bottom: var(--sp-3); }
+.footer-brand p { font-size: 0.875rem; color: var(--gray-dim); }
 
 .footer-links { text-align: center; }
 
@@ -1419,10 +1411,7 @@ button, a { touch-action: manipulation; }
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.footer-bottom p {
-    font-size: 0.8125rem;
-    color: var(--gray-dim);
-}
+.footer-bottom p { font-size: 0.8125rem; color: var(--gray-dim); }
 
 /* ==========================================
    RESPONSIVE — TABLET (768px+)
@@ -1439,7 +1428,7 @@ button, a { touch-action: manipulation; }
         align-items: center;
     }
 
-    /* Reset de estilos mobile nos links */
+    /* Reset de estilos mobile nos links desktop */
     .nav-links a {
         background: none !important;
         border: none !important;
@@ -1450,7 +1439,6 @@ button, a { touch-action: manipulation; }
         display: inline-flex !important;
         border-radius: 0 !important;
         color: var(--gray-light) !important;
-        transition: color var(--t-fast) ease !important;
         justify-content: flex-start !important;
     }
 
@@ -1464,19 +1452,18 @@ button, a { touch-action: manipulation; }
         display: inline-flex !important;
         border: none !important;
         font-weight: 700 !important;
-        box-shadow: 0 4px 14px rgba(16, 185, 129, 0.30) !important;
     }
 
     /* Hero */
     .hero-plans { padding: 7.5rem 0 4rem; }
-    .hero-title { font-size: 2.875rem; }
+    .hero-title  { font-size: 2.875rem; }
     .hero-description { font-size: 1.0625rem; }
 
     /* Carousel → Grid no desktop */
     .mobile-only { display: none; }
 
     .plans-carousel {
-        overflow: visible; /* Desktop: mostra sombras dos cards que escalam */
+        overflow: visible; /* Desktop: permite sombras dos cards escalados */
         border-radius: 0;
     }
 
@@ -1485,7 +1472,7 @@ button, a { touch-action: manipulation; }
         grid-template-columns: repeat(3, 1fr);
         gap: var(--sp-6);
         padding: var(--sp-6) 0;
-        transform: none !important; /* Remove transform do carousel no desktop */
+        transform: none !important;
         transition: none;
     }
 
@@ -1493,6 +1480,7 @@ button, a { touch-action: manipulation; }
         min-width: auto;
         flex-shrink: 1;
         padding: var(--sp-8) var(--sp-6);
+        opacity: 1 !important; /* garante visibilidade no desktop também */
     }
 
     .plan-card:hover {
@@ -1502,13 +1490,12 @@ button, a { touch-action: manipulation; }
 
     .plan-card.featured {
         transform: scale(1.04) translateY(-4px);
-        box-shadow: 0 0 60px rgba(16, 185, 129, 0.25),
-                    0 20px 50px rgba(0, 0, 0, 0.4);
+        box-shadow:
+            0 0 60px rgba(16, 185, 129, 0.25),
+            0 20px 50px rgba(0, 0, 0, 0.4);
     }
 
-    .plan-card.featured:hover {
-        transform: scale(1.07) translateY(-10px);
-    }
+    .plan-card.featured:hover { transform: scale(1.07) translateY(-10px); }
 
     /* Benefits */
     .benefits-grid {
@@ -1520,7 +1507,7 @@ button, a { touch-action: manipulation; }
     .benefit-card h3 { font-size: 1.0625rem; }
     .benefit-card p  { font-size: 0.875rem; }
 
-    /* Section titles */
+    /* Sections */
     .section-title { font-size: 2.25rem; }
 
     /* CTA */
@@ -1532,8 +1519,7 @@ button, a { touch-action: manipulation; }
         grid-template-columns: 2fr 1fr 1fr 1fr;
         gap: var(--sp-8);
     }
-    .footer-brand,
-    .footer-links { text-align: left; }
+    .footer-brand, .footer-links { text-align: left; }
     .footer-brand .logo { justify-content: flex-start; }
 
     /* Notification */
@@ -1550,14 +1536,13 @@ button, a { touch-action: manipulation; }
 @media (min-width: 1024px) {
     .container { padding: 0 var(--sp-12); }
 
-    .hero-plans { padding: 9.5rem 0 5rem; }
+    .hero-plans  { padding: 9.5rem 0 5rem; }
     .hero-title  { font-size: 3.375rem; }
 
     .plans-track { gap: var(--sp-8); }
-
-    .plan-card { padding: var(--sp-10) var(--sp-8); }
-    .plan-name  { font-size: 1.625rem; }
-    .amount     { font-size: 3.75rem; }
+    .plan-card   { padding: var(--sp-10) var(--sp-8); }
+    .plan-name   { font-size: 1.625rem; }
+    .amount      { font-size: 3.75rem; }
 
     .benefits-grid { grid-template-columns: repeat(4, 1fr); }
 

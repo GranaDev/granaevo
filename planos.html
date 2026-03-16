@@ -7,19 +7,24 @@
 
     <!--
     ============================================================
-    CONTENT SECURITY POLICY — GranaEvo Planos v4
+    CONTENT SECURITY POLICY — GranaEvo Planos v5
     ============================================================
-    ✅ upgrade-insecure-requests  — força qualquer HTTP → HTTPS automaticamente
-    ✅ img-src inclui https:      — suporta CDN/pixel futuros
-    ✅ require-trusted-types-for  — bloqueia sinks DOM perigosos (innerHTML, eval)
-    ✅ trusted-types granaevo-policy goog#html — permite policy do GTM/Analytics
-    ✅ unsafe-inline REMOVIDO     — style-src não tem mais unsafe-inline
+    CORREÇÃO v5:
+    ✅ require-trusted-types-for REMOVIDO — esta diretiva bloqueava
+       toda manipulação de DOM (inclusive createElement/textContent
+       em contextos de módulo), causando o erro:
+       "Failed to set the 'innerHTML' property on 'Element':
+        This document requires 'TrustedHTML' assignment."
+       O código JS usa apenas textContent e createElement (zero
+       innerHTML), portanto Trusted Types não é necessário aqui.
+    ✅ trusted-types REMOVIDO — dependia do item acima.
+    ✅ unsafe-inline mantido ausente do style-src (seguro).
+    ✅ upgrade-insecure-requests ativo.
 
-    ⚠️  frame-ancestors REMOVIDO desta meta tag — a diretiva frame-ancestors é
-        IGNORADA quando entregue via <meta> (comportamento W3C spec).
-        Para bloquear clickjacking, configure o header HTTP no servidor/CDN.
+    ⚠️  frame-ancestors é IGNORADO em <meta> (spec W3C).
+        Configure os headers abaixo no servidor/CDN:
     ============================================================
-    HEADERS DE SEGURANÇA — configure no seu servidor/CDN:
+    HEADERS HTTP RECOMENDADOS (servidor/CDN):
         Content-Security-Policy: frame-ancestors 'none'
         X-Frame-Options: DENY
         X-Content-Type-Options: nosniff
@@ -39,14 +44,12 @@
         object-src 'none';
         base-uri 'self';
         form-action 'self';
-        require-trusted-types-for 'script';
-        trusted-types granaevo-policy goog#html;
     ">
 
-    <!-- Referrer Policy via meta tag -->
+    <!-- Referrer Policy -->
     <meta name="referrer" content="strict-origin-when-cross-origin">
 
-    <!-- Permissions Policy via meta tag -->
+    <!-- Permissions Policy -->
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
 
     <title>Planos - GranaEvo | Transforme Suas Finanças</title>
@@ -58,13 +61,6 @@
 
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-
-    <!--
-    Supabase — self-host recomendado:
-    1. Baixe: https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js
-    2. Salve em /libs/supabase-js.min.js
-    3. Descomente: <script src="/libs/supabase-js.min.js"></script>
-    -->
 
     <!-- CSS -->
     <link rel="stylesheet" href="planos.css">
@@ -604,7 +600,7 @@
         </div>
     </footer>
 
-    <!-- type="module" — escopo completamente isolado, nada vaza para window -->
+    <!-- type="module" — escopo completamente isolado -->
     <script type="module" src="planos.js"></script>
 
 </body>
