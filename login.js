@@ -556,8 +556,12 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    if (password.length < 8 || password.length > 128) {
-        showAuthMessage('Senha deve ter entre 8 e 128 caracteres.', 'error');
+    // Valida apenas o limite máximo para evitar DoS com payload gigante.
+    // Mínimo de caracteres NÃO é validado aqui — senhas erradas devem
+    // chegar ao Supabase para serem contadas como tentativa de login
+    // e ativar o captcha corretamente após 3 erros.
+    if (password.length > 128) {
+        showAuthMessage('Senha inválida.', 'error');
         shakeInput(inputs.loginPassword);
         return;
     }
