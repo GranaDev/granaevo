@@ -460,75 +460,78 @@ function _renderCaptchaWidget() {
 
     const el        = document.getElementById('captchaContainer');
     const container = el?.querySelector('.g-recaptcha');
-    if (!container) return;
+    if (!container) {
+        console.error('[reCAPTCHA] .g-recaptcha não encontrado no DOM');
+        return;
+    }
 
     // Limpa filhos de forma segura — evita bloqueio por Trusted Types
     while (container.firstChild) {
         container.removeChild(container.firstChild);
     }
 
-    try {
-        _captchaWidgetId = grecaptcha.render(container, {
-            sitekey:              CONFIG.CAPTCHA_SITE_KEY,
-            callback:             'onCaptchaResolved',
-            'expired-callback':   'onCaptchaExpired',
-            'error-callback':     'onCaptchaError',
-            theme:                'dark',
-        });
-    } catch {
-        // Verifica se widget foi criado antes do throw
-        const existing = container.querySelector('iframe');
-        _captchaWidgetId = existing ? 0 : null;
-    }
+    // [FIX-CAPTCHA-READY] grecaptcha.ready() garante que o objeto grecaptcha
+    // e todos os seus métodos estejam prontos antes do render().
+    // Se já pronto, executa o callback imediatamente (síncrono).
+    // Se não, enfileira internamente e dispara quando pronto.
+    grecaptcha.ready(() => {
+        if (_captchaWidgetId !== null) return; // checagem dupla — segurança extra
+        try {
+            _captchaWidgetId = grecaptcha.render(container, {
+                sitekey:              CONFIG.CAPTCHA_SITE_KEY,
+                callback:             'onCaptchaResolved',
+                'expired-callback':   'onCaptchaExpired',
+                'error-callback':     'onCaptchaError',
+                theme:                'dark',
+            });
+            console.log('[reCAPTCHA] widget renderizado com id:', _captchaWidgetId);
+        } catch (err) {
+            console.error('[reCAPTCHA] render() falhou:', err);
+            const existing = container.querySelector('iframe');
+            _captchaWidgetId = existing ? 0 : null;
+        }
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — EXIBIR
 //
 //  [FIX-CAPTCHA-DISPLAY] Controle de visibilidade EXCLUSIVAMENTE
-//  via classList. Inline style (el.style.display) removido por
-//  completo para evitar conflito com as regras CSS:
-//    .captcha-hidden  { display: none !important; }
-//    .captcha-visible { display: flex; }
+//  via classList. Inline style removido.
 //
-//  [FIX-CAPTCHA-RENDER] O container é tornado visível ANTES do
-//  render do widget. Isso garante que o iframe criado pelo
-//  grecaptcha.render() herde as dimensões corretas do container
-//  já em display:flex, e não as dimensões zeradas de display:none.
+//  [FIX-CAPTCHA-SETTIMEOUT] O container é tornado visível ANTES do
+//  render. setTimeout(fn, 0) cede o controle ao browser para que
+//  ele recalcule o layout (display:flex) antes de grecaptcha.render()
+//  medir as dimensões do container.
+//
+//  requestAnimationFrame não era suficiente porque dispara antes
+//  do paint em alguns browsers — setTimeout(fn, 0) garante que
+//  o browser processou o estilo e fez o reflow completo.
 // ═══════════════════════════════════════════════════════════════
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
 
     // 1. Torna o container visível PRIMEIRO
-    el.style.display = ''; // limpa qualquer inline style residual
+    el.style.display = '';
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
     CaptchaState.activate();
 
     if (_captchaWidgetId !== null) return; // widget já existe
 
-    // 2. Render do widget DEPOIS que o container está visível e layoutado.
-    //
-    // [FIX-CAPTCHA-RAF] grecaptcha.render() precisa medir as dimensões do
-    // container para criar o iframe com o tamanho correto. Se chamado no
-    // mesmo tick JS em que as classes CSS mudam, o browser ainda não
-    // recalculou o layout — o container tem dimensões zeradas e o widget
-    // fica invisível mesmo sendo criado.
-    //
-    // requestAnimationFrame dispara após o browser recalcular estilos e
-    // antes do próximo frame, garantindo que display:flex já foi aplicado
-    // e o container tem largura/altura reais quando o render ocorre.
-    //
-    // O mesmo wrapper é aplicado ao __grPendingRender para cobrir o caso
-    // em que a API ainda não carregou quando showCaptcha() é chamado.
-    if (_isCaptchaReady()) {
-        requestAnimationFrame(_renderCaptchaWidget);
-    } else {
-        window.__grPendingRender = () => requestAnimationFrame(_renderCaptchaWidget);
-    }
+    // 2. Adia o render para o próximo tick do event loop, dando
+    //    tempo ao browser de aplicar display:flex e calcular dimensões.
+    //    _renderCaptchaWidget usa grecaptcha.ready() internamente,
+    //    então cobre tanto o caso "API pronta" quanto "API ainda carregando".
+    setTimeout(_renderCaptchaWidget, 0);
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+//  CAPTCHA — EXIBIR
+//
+//  [FIX-CAPTCHA-DISPLAY] Controle de visibilidade EXCLUSIVAMENTE
 function hideCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
