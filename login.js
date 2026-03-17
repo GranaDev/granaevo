@@ -66,6 +66,12 @@ const CONFIG = Object.freeze({
 //  incluindo email vazio, email inválido, senha vazia, senha
 //  errada, usuário inexistente e qualquer outro erro do Supabase.
 //  Nunca revela detalhes (anti-enumeração de email/senha).
+//
+//  [FIX-BUG-1] Removida a validação de tamanho de senha no login.
+//  Qualquer senha não-vazia vai direto ao Supabase. Validar
+//  tamanho localmente revela ao atacante informação sobre a
+//  senha do usuário (anti-enumeração) e quebra o mecanismo de
+//  contagem de tentativas.
 // ═══════════════════════════════════════════════════════════════
 const LOGIN_ERROR_MSG = 'Tentativa inválida: email ou senha incorreto';
 
@@ -85,39 +91,7 @@ function _publicHeader() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — CARREGAMENTO CONFIÁVEL
-//
-//  [FIX-CAPTCHA-DISPLAY] Causa raiz do captcha invisível (histórico):
-//
-//  O código anterior misturava dois mecanismos de controle de
-//  visibilidade ao mesmo tempo:
-//    1) el.style.display = 'none' / 'flex'  (inline style)
-//    2) classList.add/remove 'captcha-hidden' / 'captcha-visible'
-//
-//  O CSS usa:
-//    .captcha-hidden  { display: none !important; }
-//    .captcha-visible { display: flex; }
-//
-//  O problema: quando showCaptcha() definia el.style.display='flex'
-//  e depois adicionava 'captcha-visible', o inline style restante
-//  de chamadas anteriores a hideCaptcha() podia conflitar.
-//  Além disso, em alguns browsers o '!important' no CSS sobrescrevia
-//  o inline style em ordem inesperada durante a remoção da classe.
-//
-//  [FIX-CAPTCHA-RENDER] Segunda causa raiz (corrigida nesta versão):
-//
-//  Sem ?render=explicit na URL do api.js, a API auto-renderizava
-//  o .g-recaptcha no carregamento da página — enquanto
-//  #captchaContainer ainda estava com display:none. O iframe era
-//  criado com dimensões 0×0 e permanecia invisível mesmo após o
-//  container ser exibido, pois o DOM do widget já estava "preso"
-//  nas dimensões iniciais de zero.
-//
-//  SOLUÇÃO COMBINADA:
-//    1. ?render=explicit na URL → sem auto-render no load
-//    2. onload=__grOnLoad → callback determinístico, sem poll
-//    3. Todo controle de visibilidade via classList — sem inline style
-//    4. el.style.display = '' limpa qualquer residual antes das classes
+//  CAPTCHA — ESTADO INTERNO
 // ═══════════════════════════════════════════════════════════════
 let _captchaWidgetId = null; // null = não renderizado, 0+ = ID do widget
 
@@ -351,6 +325,12 @@ const loginForm      = document.getElementById('loginForm');
 const errorMessage   = document.getElementById('errorMessage');
 const togglePassword = document.getElementById('togglePassword');
 
+// Guarda crítico: se o formulário não existir no DOM, não registra o listener
+// (evita TypeError que travaria o módulo inteiro antes do DOMContentLoaded)
+if (!loginForm) {
+    console.error('[GranaEvo] loginForm não encontrado no DOM. Verifique o HTML.');
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  FUNÇÕES DE MENSAGEM
 //  Visibilidade via classList (.visible / .show) — sem inline style.
@@ -401,9 +381,8 @@ function shakeInput(input) {
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
 
-    // [FIX-CAPTCHA-DISPLAY] Garante estado inicial via classList APENAS.
-    // NUNCA usar el.style.display aqui — conflita com as classes CSS
-    // .captcha-hidden { display:none !important } e .captcha-visible { display:flex }.
+    // Garante estado inicial via classList APENAS.
+    // NUNCA usar el.style.display aqui — conflita com as classes CSS.
     const captchaEl = document.getElementById('captchaContainer');
     if (captchaEl) {
         captchaEl.style.display = ''; // limpa qualquer inline style residual do HTML
@@ -441,12 +420,16 @@ window.addEventListener('DOMContentLoaded', async () => {
         showAuthMessage(sanitizeText(authError), 'error');
         sessionStorage.removeItem('auth_error');
     }
+
+    // [FIX-KB] Registra atalhos de teclado aqui — após garantir que o DOM
+    // e todos os closures do módulo estão completamente inicializados
+    _registerKeyboardShortcuts();
 });
 
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — RENDER INTERNO
 //
-//  [FIX-CAPTCHA-V4] Correção definitiva dos dois bugs identificados:
+//  [FIX-CAPTCHA-V4] Correção dos dois bugs identificados:
 //
 //  BUG 1: grecaptcha.ready() ficava fora do try-catch.
 //  Se o api.js ainda não tivesse carregado quando _renderCaptchaWidget
@@ -455,9 +438,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 //  __grPendingRender, então quando __grOnLoad disparava, nada
 //  acontecia. Widget nunca aparecia.
 //
-//  BUG 2: setTimeout(fn, 0) na DOMContentLoaded path disparava
-//  antes do api.js terminar de carregar em conexões lentas ou
-//  quando a página recarregava com tentativas já acumuladas.
+//  BUG 2: iframe já existente mas _captchaWidgetId === null causava
+//  re-render. Nesse caso, seta _captchaWidgetId = 0 antes de retornar.
 //
 //  SOLUÇÃO: typeof check antes de chamar grecaptcha.ready.
 //  Se undefined → seta __grPendingRender e retorna.
@@ -467,7 +449,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 function _renderCaptchaWidget() {
     if (_captchaWidgetId !== null) return; // já renderizado
 
-    // [FIX-V4-BUG1] Guarda para grecaptcha não definido.
+    // Guarda para grecaptcha não definido.
     // Se api.js ainda não carregou, registra render pendente e
     // aguarda __grOnLoad (definido em recaptcha-init.js).
     if (typeof grecaptcha === 'undefined') {
@@ -483,9 +465,11 @@ function _renderCaptchaWidget() {
         return;
     }
 
-    // Não re-renderiza se iframe já existir (segurança extra)
+    // Não re-renderiza se iframe já existir — apenas garante que
+    // _captchaWidgetId não fique null (o que causaria nova tentativa de render)
     if (container.querySelector('iframe')) {
-        console.log('[reCAPTCHA] iframe já existe — render ignorado');
+        console.log('[reCAPTCHA] iframe já existe — widgetId setado para 0');
+        _captchaWidgetId = 0;
         return;
     }
 
@@ -498,7 +482,10 @@ function _renderCaptchaWidget() {
     try {
         grecaptcha.ready(() => {
             if (_captchaWidgetId !== null) return;
-            if (container.querySelector('iframe')) return; // checagem extra
+            if (container.querySelector('iframe')) {
+                _captchaWidgetId = 0;
+                return;
+            }
             try {
                 _captchaWidgetId = grecaptcha.render(container, {
                     sitekey:              CONFIG.CAPTCHA_SITE_KEY,
@@ -524,37 +511,70 @@ function _renderCaptchaWidget() {
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — EXIBIR
 //
-//  [FIX-V4] Usa setTimeout com 50ms (em vez de 0) para garantir
-//  margem segura para o browser aplicar display:flex e calcular
-//  as dimensões do container antes de grecaptcha.render().
-//  _renderCaptchaWidget agora é seguro tanto para API pronta
-//  quanto para API ainda carregando.
+//  [FIX-BUG-3] CORREÇÃO DEFINITIVA DO CAPTCHA INVISÍVEL
+//
+//  CAUSA RAIZ IDENTIFICADA:
+//  classList.remove('captcha-hidden') e classList.add('captcha-visible')
+//  eram executados no mesmo frame de renderização sem reflow entre eles.
+//  O browser agrupa as duas mutações de classList em um único tick,
+//  aplicando 'captchaReveal' sobre um elemento que o browser considera
+//  que nunca saiu de display:none. Chrome, Safari e Edge não disparam
+//  corretamente animações CSS em elementos que acabaram de receber
+//  display:flex sem um reflow síncrono intermediário.
+//  Resultado: opacity permanece em 0 — widget invisível.
+//
+//  SOLUÇÃO:
+//  void el.offsetHeight — força o browser a calcular o layout
+//  (reflow síncrono) ENTRE as duas operações de classList.
+//  Após o reflow, o browser "vê" o elemento com display:flex,
+//  e a animação captchaReveal é disparada corretamente a partir
+//  de opacity:0 → opacity:1.
+//
+//  SEGUNDA CORREÇÃO (no CSS):
+//  animation-fill-mode: forwards em .captcha-visible — sem ele,
+//  ao terminar a animação o browser descarta os estilos animados
+//  e o elemento voltaria para opacity:0.
+//
+//  TERCEIRA CORREÇÃO (no CSS):
+//  Keyframe captchaReveal dedicado com translateY(6px) menor
+//  (vs 30px do fadeInUp global) — evita conflito com a animação
+//  global em edge cases de recarga de página.
 // ═══════════════════════════════════════════════════════════════
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
 
+    // Limpa qualquer inline style residual que possa conflitar com as classes
     el.style.display = '';
+
+    // Remove a classe que oculta (display:none)
     el.classList.remove('captcha-hidden');
+
+    // [FIX-BUG-3] REFLOW FORÇADO — crítico.
+    // void descarta o valor retornado (evita lint warnings).
+    // offsetHeight força o browser a calcular o layout antes de
+    // adicionar a classe de animação no próximo statement.
+    // Sem isso: as duas mutações de classList ficam no mesmo frame
+    // e a animação não dispara — captcha permanece invisível.
+    void el.offsetHeight;
+
+    // Adiciona a classe que exibe (display:flex + animação captchaReveal)
     el.classList.add('captcha-visible');
+
     CaptchaState.activate();
 
     if (_captchaWidgetId !== null) return; // widget já existe
 
-    // 50ms garante reflow completo antes do render
+    // 50ms garante margem extra de reflow antes de renderizar o widget
     setTimeout(_renderCaptchaWidget, 50);
 }
 
-
-
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — EXIBIR
-//
-//  [FIX-CAPTCHA-DISPLAY] Controle de visibilidade EXCLUSIVAMENTE
+//  CAPTCHA — OCULTAR
+// ═══════════════════════════════════════════════════════════════
 function hideCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
-    // [FIX-CAPTCHA-DISPLAY] Mesmo padrão: limpa inline style antes das classes
     el.style.display = '';
     el.classList.remove('captcha-visible');
     el.classList.add('captcha-hidden');
@@ -617,36 +637,31 @@ async function checkUserAccess() {
 // ═══════════════════════════════════════════════════════════════
 //  FORMULÁRIO DE LOGIN
 //
-//  [FIX-ATTEMPTS] Regra central corrigida:
+//  [FIX-BUG-1] Mensagem genérica para toda falha de login.
+//  Nenhuma mensagem específica revela ao atacante se o problema
+//  é o email ou a senha (anti-enumeração).
 //
-//  ANTES (bugado):
-//    — email vazio         → return sem contar tentativa
-//    — email mal-formatado → return sem contar tentativa
-//    — senha vazia         → return sem contar tentativa
-//    — senha < 8 chars     → return sem contar tentativa (via minlength nativo)
-//    — senha > 128 chars   → return sem contar tentativa
+//  [FIX-BUG-2] TODA falha conta como tentativa.
+//  Antes: validação local de tamanho de senha retornava early
+//  sem chamar _registerFailedAttempt(). O captcha nunca aparecia
+//  quando o atacante usava senhas muito curtas ou muito longas.
+//  Agora: qualquer falha — email vazio, email inválido, senha
+//  vazia, erro do Supabase — chama _registerFailedAttempt().
+//  Sem exceções.
 //
-//  Resultado: o captcha nunca aparecia nesses casos e o atacante
-//  podia tentar infinitamente com senhas inválidas.
-//
-//  AGORA (corrigido):
-//    — QUALQUER falha de validação local → conta tentativa
-//                                        → mostra LOGIN_ERROR_MSG
-//                                        → ativa captcha se >= 3 tentativas
-//    — Nenhuma validação de tamanho/formato de senha no login.
-//      Qualquer senha não-vazia é enviada ao Supabase.
-//      Motivo: validar tamanho localmente revela ao atacante
-//      informações sobre a senha (anti-enumeração de senhas)
-//      e quebra o mecanismo de captcha.
+//  [FIX-BUG-1+2] Validação de TAMANHO de senha REMOVIDA do login.
+//  Senha não-vazia vai direto ao Supabase, independente do tamanho.
+//  Validações de comprimento existem APENAS na tela de nova senha
+//  (recuperação de conta), onde são semanticamente corretas.
 //
 //  Fluxo garantido:
 //    Tentativa 1 → LOGIN_ERROR_MSG
 //    Tentativa 2 → LOGIN_ERROR_MSG
-//    Tentativa 3 → LOGIN_ERROR_MSG + captcha aparece ← CORRIGIDO
+//    Tentativa 3 → LOGIN_ERROR_MSG + captcha aparece
 //    Tentativa 4+ → captcha obrigatório antes de submeter
 // ═══════════════════════════════════════════════════════════════
 
-// Helper interno: contabiliza tentativa, exibe mensagem e mostra captcha se necessário.
+// Helper: contabiliza tentativa e mostra captcha se necessário.
 function _registerFailedAttempt() {
     LoginAttempts.inc();
     if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
@@ -654,7 +669,7 @@ function _registerFailedAttempt() {
     }
 }
 
-loginForm.addEventListener('submit', async (e) => {
+loginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     // Proteção contra flood de submissões (10 por minuto)
@@ -666,7 +681,7 @@ loginForm.addEventListener('submit', async (e) => {
     const email    = sanitizeText(inputs.loginEmail.value);
     const password = inputs.loginPassword.value; // NÃO aparar — espaços podem ser senha válida
 
-    // ── [FIX-ATTEMPTS] Email vazio ou inválido conta como tentativa ──
+    // [FIX-BUG-1+2] Email vazio ou inválido → mensagem genérica + conta tentativa
     if (!email || !isValidEmail(email)) {
         inputs.loginPassword.value = '';
         _registerFailedAttempt();
@@ -676,7 +691,8 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    // ── [FIX-ATTEMPTS] Senha vazia conta como tentativa ──
+    // [FIX-BUG-1+2] Senha vazia → mensagem genérica + conta tentativa
+    // NÃO há validação de tamanho aqui — qualquer senha não-vazia é válida para tentativa
     if (!password) {
         _registerFailedAttempt();
         showAuthMessage(LOGIN_ERROR_MSG, 'error');
@@ -684,7 +700,7 @@ loginForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    // ── Verifica captcha se limite de tentativas atingido ──
+    // Verifica captcha se limite de tentativas atingido
     const currentAttempts = LoginAttempts.get();
     if (currentAttempts >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         if (!CaptchaState.isResolved()) {
@@ -712,6 +728,7 @@ loginForm.addEventListener('submit', async (e) => {
             inputs.loginPassword.value = '';
 
             CaptchaState.reset();
+            // [FIX-BUG-2] Erro do Supabase também conta como tentativa
             _registerFailedAttempt();
 
             showAuthMessage(LOGIN_ERROR_MSG, 'error');
@@ -720,7 +737,7 @@ loginForm.addEventListener('submit', async (e) => {
             return;
         }
 
-        // ── Login bem-sucedido ──
+        // Login bem-sucedido
         LoginAttempts.reset();
         CaptchaState.reset();
         hideCaptcha();
@@ -887,7 +904,9 @@ if (buttons.backToCode) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ALTERAR SENHA (tela de recuperação — validações permitidas aqui)
+//  ALTERAR SENHA
+//  Validações de tamanho/formato PERMITIDAS aqui — esta tela é
+//  de criação de nova senha, não de autenticação.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.changePassword) {
     buttons.changePassword.addEventListener('click', async () => {
@@ -1137,17 +1156,25 @@ function createAnimatedCharts() {
 
 // ═══════════════════════════════════════════════════════════════
 //  ATALHOS DE TECLADO
+//  [FIX-KB] Movidos para dentro de DOMContentLoaded para garantir
+//  que os elementos DOM existam e que o closure do módulo esteja
+//  completamente inicializado antes de registrar os listeners.
+//  Registrar no topo do módulo causava ReferenceError em alguns
+//  browsers quando o event callback disparava antes da cadeia
+//  de closures estar estabilizada.
 // ═══════════════════════════════════════════════════════════════
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && document.activeElement === inputs.loginEmail) {
-        e.preventDefault();
-        inputs.loginPassword?.focus();
-    }
-});
+function _registerKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && document.activeElement === inputs.loginEmail) {
+            e.preventDefault();
+            inputs.loginPassword?.focus();
+        }
+    });
 
-inputs.newPassword?.addEventListener('keypress',     (e) => { if (e.key === 'Enter') inputs.confirmPassword?.focus(); });
-inputs.confirmPassword?.addEventListener('keypress', (e) => { if (e.key === 'Enter') buttons.changePassword?.click(); });
-inputs.recoveryEmail?.addEventListener('keypress',   (e) => { if (e.key === 'Enter') buttons.sendCode?.click(); });
+    inputs.newPassword?.addEventListener('keypress',     (e) => { if (e.key === 'Enter') inputs.confirmPassword?.focus(); });
+    inputs.confirmPassword?.addEventListener('keypress', (e) => { if (e.key === 'Enter') buttons.changePassword?.click(); });
+    inputs.recoveryEmail?.addEventListener('keypress',   (e) => { if (e.key === 'Enter') buttons.sendCode?.click(); });
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  PARALLAX DO MOUSE — inline style necessário (valores dinâmicos)

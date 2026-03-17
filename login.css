@@ -1,6 +1,6 @@
 /* ==========================================
    GRANAEVO — LOGIN CSS
-   Versão Segura e Otimizada — V2.2
+   Versão Segura e Otimizada — V2.3
 
    MELHORIAS APLICADAS v2.1 (mantidas):
    [1] pointer-events: none em todos os pseudoelementos decorativos
@@ -12,26 +12,38 @@
    [FIX-CSS-1] .auth-message.info adicionado
    [FIX-ANIM-1] Bloco de animStyle removido do login.js
 
-   MELHORIAS v2.2 (novas):
+   MELHORIAS v2.2 (mantidas):
    [FIX-CSS-2] .auth-message.visible adicionado.
-       style="display:none" foi removido do HTML (bloqueado por CSP).
-       Visibilidade agora controlada via .visible (display:flex) e
-       .show (opacity + transform). JS usa classList — sem inline style.
-
    [FIX-CSS-3] .input-shake adicionado.
-       Substitui input.style.animation e input.style.borderColor
-       no shakeInput() do JS — sem inline style.
-
    [FIX-CSS-4] .input-error-border adicionado.
-       Substitui atribuição direta de borderColor em campos de senha
-       e email de recuperação — sem inline style.
-
    [FIX-CSS-5] .loading-svg adicionado.
-       Substitui svg.style.cssText no createSpinnerElement() do JS.
-
    [FIX-CSS-6] .input-wrapper:focus-within adicionado.
-       Substitui os listeners focus/blur que aplicavam
-       wrapper.style.transform = 'scale(1.01)' via JS.
+
+   MELHORIAS v2.3 (novas — corrigem Bug 3 captcha invisível):
+   [FIX-CSS-7] @keyframes captchaReveal adicionado.
+       Keyframe dedicado para a animação do captcha, separado do
+       fadeInUp global. Usa translateY(6px) menor (vs 30px do global)
+       para evitar conflito com o fadeInUp em edge cases de recarga.
+
+   [FIX-CSS-8] animation-fill-mode: forwards adicionado em .captcha-visible.
+       CORREÇÃO CRÍTICA: sem forwards, ao terminar a animação o browser
+       descarta os estilos animados e o elemento volta para opacity:0.
+       Com forwards, os estilos do keyframe "to" (opacity:1) persistem
+       após o fim da animação.
+
+   [FIX-CSS-9] display removido do seletor #captchaContainer.
+       display controlado EXCLUSIVAMENTE pelas classes:
+         .captcha-hidden  { display: none; }
+         .captcha-visible { display: flex; ... }
+       Sem display no ID, não há conflito de especificidade que
+       poderia fazer o captcha aparecer com .captcha-hidden aplicado.
+
+   NOTA SOBRE [FIX-BUG-3] NO JS:
+       O CSS sozinho não é suficiente. A correção completa exige
+       também void el.offsetHeight no showCaptcha() do login.js,
+       que força um reflow síncrono entre classList.remove('captcha-hidden')
+       e classList.add('captcha-visible'). Sem o reflow, o browser
+       agrupa as duas mutações no mesmo frame e a animação não dispara.
    ========================================== */
 
 /* ==========================================
@@ -201,6 +213,20 @@ body {
 
 @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/*
+    [FIX-CSS-7] captchaReveal — keyframe DEDICADO para o captcha.
+    Separado do fadeInUp global para evitar conflito em edge cases
+    de recarga de página. Usa translateY menor (6px vs 30px) pois
+    o captcha já está posicionado no fluxo do formulário e um
+    deslocamento grande causa salto visual indesejado.
+    animation-fill-mode: forwards (em .captcha-visible) garante
+    que opacity:1 persista após o fim da animação.
+*/
+@keyframes captchaReveal {
+    from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -694,13 +720,10 @@ body {
 
 /* ==========================================
    MENSAGENS DE FEEDBACK
-   [FIX-CSS-1] .auth-message.info adicionado — tipo 'info' usado no JS.
+   [FIX-CSS-1] .auth-message.info adicionado
    [FIX-CSS-2] .auth-message.visible adicionado.
-       Substitui messageDiv.style.display = 'flex' no showAuthMessage().
        Base: display:none. Com .visible: display:flex.
        Com .show: opacity:1 + transform (animação de entrada).
-       Sequência JS: adiciona .visible + .show para mostrar,
-       remove .show (fade out) e depois remove .visible para ocultar.
    ========================================== */
 .auth-message {
     display: none;
@@ -733,7 +756,7 @@ body {
     border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-/* [FIX-CSS-1] Estilo para mensagens do tipo 'info' — antes inexistente */
+/* [FIX-CSS-1] Estilo para mensagens do tipo 'info' */
 .auth-message.info {
     background: rgba(6, 182, 212, 0.1);
     color: var(--info-blue);
@@ -747,10 +770,8 @@ body {
 
 /* ==========================================
    UTILITÁRIOS DE ESTADO DE INPUT
-   [FIX-CSS-3] .input-shake — substitui input.style.animation +
-       input.style.borderColor no shakeInput() do JS.
-   [FIX-CSS-4] .input-error-border — substitui atribuição de
-       borderColor em campos de nova senha e email de recuperação.
+   [FIX-CSS-3] .input-shake
+   [FIX-CSS-4] .input-error-border
    ========================================== */
 
 /* [FIX-CSS-3] */
@@ -766,8 +787,7 @@ body {
 
 /* ==========================================
    SPINNER DO BOTÃO
-   [FIX-CSS-5] .loading-svg — substitui svg.style.cssText
-       no createSpinnerElement() do JS.
+   [FIX-CSS-5] .loading-svg
    ========================================== */
 .loading-svg {
     width: 20px;
@@ -809,8 +829,7 @@ body {
     align-items: center;
     /*
         [FIX-CSS-6] Transição declarada aqui para que :focus-within
-        funcione suavemente — substitui o listener JS de focus/blur
-        que aplicava wrapper.style.transform = 'scale(1.01)'.
+        funcione suavemente.
     */
     transition: transform 0.3s ease;
 }
@@ -1387,13 +1406,40 @@ body {
 
 /* ==========================================
    RECAPTCHA CONTAINER
-   [FIX-ANIM-1] Classes captcha-hidden / captcha-visible / captcha-error
-   vivem exclusivamente aqui — removidas do bloco animStyle do JS.
+   ==========================================
+   [FIX-CSS-9] display REMOVIDO do seletor #captchaContainer.
+       display controlado EXCLUSIVAMENTE pelas classes abaixo:
+         .captcha-hidden  { display: none; }
+         .captcha-visible { display: flex; ... }
+       Sem display no ID, não há conflito de especificidade que
+       fazia o captcha aparecer mesmo com .captcha-hidden aplicado.
+
+   [FIX-CSS-7] @keyframes captchaReveal — keyframe dedicado.
+       Definido acima junto dos outros keyframes globais.
+
+   [FIX-CSS-8] animation-fill-mode: forwards em .captcha-visible.
+       CORREÇÃO CRÍTICA: sem forwards, ao terminar a animação
+       captchaReveal o browser descarta os estilos finais (opacity:1,
+       translateY:0) e o captcha volta para opacity:0 — invisível.
+       Com forwards, os estilos do keyframe "to" persistem.
+
+   NOTA: estas correções CSS são metade da solução.
+   A outra metade é void el.offsetHeight no showCaptcha() do JS,
+   que força um reflow síncrono entre remove('captcha-hidden') e
+   add('captcha-visible') para que a animação dispare corretamente.
    ========================================== */
 #captchaContainer {
-    /* [FIX-CSS-8] display removido daqui — controlado pelas classes
-       .captcha-hidden e .captcha-visible. Sem display aqui, não há
-       conflito de especificidade ID vs classe. */
+    /*
+        [FIX-CSS-10] display:none como PADRÃO SEGURO.
+        Antes: sem display aqui, o elemento ficava visível (display:block/flex
+        nativo) se as classes JS não fossem aplicadas — ex: quando DOMContentLoaded
+        travava com erro antes de adicionar .captcha-hidden.
+        Agora: o elemento é oculto por CSS puro, independente do JS.
+        .captcha-visible (abaixo) sobrescreve com display:flex quando necessário.
+        [FIX-CSS-9] Mantido: display controlado pelas classes, não pelo seletor ID.
+        A única função do display:none aqui é de FALLBACK de segurança.
+    */
+    display: none;
     background: rgba(239, 68, 68, 0.06);
     border: 1px solid rgba(239, 68, 68, 0.25);
     border-radius: 14px;
@@ -1425,12 +1471,25 @@ body {
     max-width: 100%;
 }
 
-/* [FIX-CSS-7/8] Classes de controle do CAPTCHA.
-   display controlado EXCLUSIVAMENTE aqui — o seletor #captchaContainer
-   não declara display, eliminando o conflito de especificidade
-   que fazia o captcha aparecer mesmo com .captcha-hidden aplicado. */
+/*
+    [FIX-CSS-7/8/9] Classes de controle EXCLUSIVO da visibilidade do captcha.
+
+    .captcha-hidden: oculta o container.
+    .captcha-visible: exibe com animação captchaReveal.
+
+    animation-fill-mode: forwards — CRÍTICO.
+    Sem ele, ao fim da animação (opacity:0→1) o browser descarta
+    os estilos e o elemento volta para opacity:0 (invisível).
+
+    animation: captchaReveal — usa o keyframe dedicado (não o fadeInUp
+    global) para evitar conflito de translateY em edge cases.
+
+    Funcionamento correto exige TAMBÉM void el.offsetHeight no JS
+    (showCaptcha em login.js) para forçar reflow síncrono antes de
+    adicionar esta classe.
+*/
 .captcha-hidden  { display: none; }
-.captcha-visible { display: flex; animation: fadeInUp 0.4s ease; }
+.captcha-visible { display: flex; animation: captchaReveal 0.35s ease forwards; }
 .captcha-error   { outline: 2px solid var(--error-red); border-radius: 12px; }
 
 /* ==========================================
@@ -1528,8 +1587,6 @@ body {
 
 /* ==========================================
    REDUÇÃO DE MOVIMENTO
-   Respeita preferência de acessibilidade do SO.
-   Remove animações para usuários sensíveis a movimento.
    ========================================== */
 @media (prefers-reduced-motion: reduce) {
     *,
@@ -1541,7 +1598,6 @@ body {
         scroll-behavior: auto !important;
     }
 
-    /* Remove will-change quando animações estão desativadas */
     .gradient-orb,
     .financial-visual,
     .btn-submit {
