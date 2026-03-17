@@ -444,113 +444,69 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — RENDER INTERNO
+//  CAPTCHA — EXIBIR E RENDERIZAR
 //
-//  [FIX-CAPTCHA-V4] Correção definitiva dos dois bugs identificados:
+//  [FIX-V5] Abordagem idêntica ao que funcionou no Console:
 //
-//  BUG 1: grecaptcha.ready() ficava fora do try-catch.
-//  Se o api.js ainda não tivesse carregado quando _renderCaptchaWidget
-//  era chamado via setTimeout, o acesso a grecaptcha.ready lançava
-//  ReferenceError não capturado. A função encerrava sem setar
-//  __grPendingRender, então quando __grOnLoad disparava, nada
-//  acontecia. Widget nunca aparecia.
-//
-//  BUG 2: setTimeout(fn, 0) na DOMContentLoaded path disparava
-//  antes do api.js terminar de carregar em conexões lentas ou
-//  quando a página recarregava com tentativas já acumuladas.
-//
-//  SOLUÇÃO: typeof check antes de chamar grecaptcha.ready.
-//  Se undefined → seta __grPendingRender e retorna.
-//  __grOnLoad (recaptcha-init.js) chamará _renderCaptchaWidget
-//  quando a API estiver pronta.
-// ═══════════════════════════════════════════════════════════════
-function _renderCaptchaWidget() {
-    if (_captchaWidgetId !== null) return; // já renderizado
-
-    // [FIX-V4-BUG1] Guarda para grecaptcha não definido.
-    // Se api.js ainda não carregou, registra render pendente e
-    // aguarda __grOnLoad (definido em recaptcha-init.js).
-    if (typeof grecaptcha === 'undefined') {
-        console.warn('[reCAPTCHA] API não carregada ainda — aguardando __grOnLoad');
-        window.__grPendingRender = _renderCaptchaWidget;
-        return;
-    }
-
-    const el        = document.getElementById('captchaContainer');
-    const container = el?.querySelector('.g-recaptcha');
-    if (!container) {
-        console.error('[reCAPTCHA] .g-recaptcha não encontrado no DOM');
-        return;
-    }
-
-    // Não re-renderiza se iframe já existir (segurança extra)
-    if (container.querySelector('iframe')) {
-        console.log('[reCAPTCHA] iframe já existe — render ignorado');
-        return;
-    }
-
-    // Limpa filhos de forma segura — evita bloqueio por Trusted Types
-    while (container.firstChild) {
-        container.removeChild(container.firstChild);
-    }
-
-    // grecaptcha.ready() dentro de try-catch para capturar qualquer erro
-    try {
-        grecaptcha.ready(() => {
-            if (_captchaWidgetId !== null) return;
-            if (container.querySelector('iframe')) return; // checagem extra
-            try {
-                _captchaWidgetId = grecaptcha.render(container, {
-                    sitekey:              CONFIG.CAPTCHA_SITE_KEY,
-                    callback:             'onCaptchaResolved',
-                    'expired-callback':   'onCaptchaExpired',
-                    'error-callback':     'onCaptchaError',
-                    theme:                'dark',
-                });
-                console.log('[reCAPTCHA] widget renderizado com id:', _captchaWidgetId);
-            } catch (err) {
-                console.error('[reCAPTCHA] render() falhou:', err);
-                const existing = container.querySelector('iframe');
-                _captchaWidgetId = existing ? 0 : null;
-            }
-        });
-    } catch (err) {
-        // grecaptcha existe mas .ready() falhou por algum motivo
-        console.error('[reCAPTCHA] ready() falhou:', err);
-        window.__grPendingRender = _renderCaptchaWidget;
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — EXIBIR
-//
-//  [FIX-V4] Usa setTimeout com 50ms (em vez de 0) para garantir
-//  margem segura para o browser aplicar display:flex e calcular
-//  as dimensões do container antes de grecaptcha.render().
-//  _renderCaptchaWidget agora é seguro tanto para API pronta
-//  quanto para API ainda carregando.
+//  1. Força display:flex via inline style (garantido, não depende
+//     de classes CSS que podem ser sobrescritas por especificidade)
+//  2. Chama grecaptcha.ready() diretamente, sem setTimeout nem
+//     requestAnimationFrame nem funções intermediárias
+//  3. Se grecaptcha ainda não existir, registra __grPendingRender
+//     que chama showCaptcha() de volta quando __grOnLoad disparar
 // ═══════════════════════════════════════════════════════════════
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
 
-    el.style.display = '';
-    el.classList.remove('captcha-hidden');
-    el.classList.add('captcha-visible');
+    // Força visibilidade via inline style — mesmo mecanismo que
+    // funciona no console. Não depende de CSS classes.
+    el.style.display = 'flex';
+    el.style.flexDirection = 'column';
     CaptchaState.activate();
 
     if (_captchaWidgetId !== null) return; // widget já existe
 
-    // 50ms garante reflow completo antes do render
-    setTimeout(_renderCaptchaWidget, 50);
+    const container = el.querySelector('.g-recaptcha');
+    if (!container) return;
+
+    // Se iframe já existe, widget está lá (pode estar oculto por CSS)
+    if (container.querySelector('iframe')) return;
+
+    // Limpa container
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    // API não carregou ainda — registra para __grOnLoad e aguarda
+    if (typeof grecaptcha === 'undefined') {
+        console.warn('[reCAPTCHA] API não pronta — aguardando __grOnLoad');
+        window.__grPendingRender = showCaptcha;
+        return;
+    }
+
+    // Exatamente o mesmo padrão que funcionou no Console
+    grecaptcha.ready(() => {
+        if (_captchaWidgetId !== null) return;
+        if (container.querySelector('iframe')) return;
+        try {
+            _captchaWidgetId = grecaptcha.render(container, {
+                sitekey:            CONFIG.CAPTCHA_SITE_KEY,
+                callback:           'onCaptchaResolved',
+                'expired-callback': 'onCaptchaExpired',
+                'error-callback':   'onCaptchaError',
+                theme:              'dark',
+            });
+            console.log('[reCAPTCHA] widget renderizado, id:', _captchaWidgetId);
+        } catch (err) {
+            console.error('[reCAPTCHA] render() falhou:', err);
+            _captchaWidgetId = container.querySelector('iframe') ? 0 : null;
+        }
+    });
 }
 
+// _renderCaptchaWidget agora é apenas um alias para compatibilidade
+// com __grPendingRender registrado antes de showCaptcha existir
+function _renderCaptchaWidget() { showCaptcha(); }
 
-
-// ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — EXIBIR
-//
-//  [FIX-CAPTCHA-DISPLAY] Controle de visibilidade EXCLUSIVAMENTE
 function hideCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
