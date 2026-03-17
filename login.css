@@ -1391,17 +1391,24 @@ body {
    vivem exclusivamente aqui — removidas do bloco animStyle do JS.
    ========================================== */
 #captchaContainer {
-    /* [FIX-CSS-8] display removido daqui — controlado pelas classes
-       .captcha-hidden e .captcha-visible. Sem display aqui, não há
-       conflito de especificidade ID vs classe. */
     background: rgba(239, 68, 68, 0.06);
-    border: 1px solid rgba(239, 68, 68, 0.25);
     border-radius: 14px;
-    padding: 16px;
+    padding: 0 16px;
+    display: flex;
     flex-direction: column;
-    align-items: flex-start;
     gap: 12px;
+    overflow: hidden;
+    max-height: 0;
+    border: 0px solid rgba(239, 68, 68, 0.25);
+    transition: max-height 0.35s ease, padding 0.35s ease, border-width 0.35s ease;
 }
+#captchaContainer.captcha-visible {
+    max-height: 200px;
+    padding: 16px;
+    border-width: 1px;
+    animation: fadeInUp 0.4s ease;
+}
+.captcha-error { outline: 2px solid var(--error-red); border-radius: 12px; }
 
 .captcha-label {
     display: flex;
@@ -1425,13 +1432,6 @@ body {
     max-width: 100%;
 }
 
-/* [FIX-CSS-7/8] Classes de controle do CAPTCHA.
-   display controlado EXCLUSIVAMENTE aqui — o seletor #captchaContainer
-   não declara display, eliminando o conflito de especificidade
-   que fazia o captcha aparecer mesmo com .captcha-hidden aplicado. */
-.captcha-hidden  { display: none; }
-.captcha-visible { display: flex; animation: fadeInUp 0.4s ease; }
-.captcha-error   { outline: 2px solid var(--error-red); border-radius: 12px; }
 
 /* ==========================================
    RESPONSIVIDADE
