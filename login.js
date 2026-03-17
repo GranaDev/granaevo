@@ -84,14 +84,51 @@ function _publicHeader() {
     return `Bearer ${supabase.supabaseKey}`;
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  CAPTCHA — CARREGAMENTO CONFIÁVEL
+//
+//  [FIX-CAPTCHA-DISPLAY] Causa raiz do captcha invisível (histórico):
+//
+//  O código anterior misturava dois mecanismos de controle de
+//  visibilidade ao mesmo tempo:
+//    1) el.style.display = 'none' / 'flex'  (inline style)
+//    2) classList.add/remove 'captcha-hidden' / 'captcha-visible'
+//
+//  O CSS usa:
+//    .captcha-hidden  { display: none !important; }
+//    .captcha-visible { display: flex; }
+//
+//  O problema: quando showCaptcha() definia el.style.display='flex'
+//  e depois adicionava 'captcha-visible', o inline style restante
+//  de chamadas anteriores a hideCaptcha() podia conflitar.
+//  Além disso, em alguns browsers o '!important' no CSS sobrescrevia
+//  o inline style em ordem inesperada durante a remoção da classe.
+//
+//  [FIX-CAPTCHA-RENDER] Segunda causa raiz (corrigida nesta versão):
+//
+//  Sem ?render=explicit na URL do api.js, a API auto-renderizava
+//  o .g-recaptcha no carregamento da página — enquanto
+//  #captchaContainer ainda estava com display:none. O iframe era
+//  criado com dimensões 0×0 e permanecia invisível mesmo após o
+//  container ser exibido, pois o DOM do widget já estava "preso"
+//  nas dimensões iniciais de zero.
+//
+//  SOLUÇÃO COMBINADA:
+//    1. ?render=explicit na URL → sem auto-render no load
+//    2. onload=__grOnLoad → callback determinístico, sem poll
+//    3. Todo controle de visibilidade via classList — sem inline style
+//    4. el.style.display = '' limpa qualquer residual antes das classes
+// ═══════════════════════════════════════════════════════════════
+let _captchaWidgetId = null; // null = não renderizado, 0+ = ID do widget
+
+function _isCaptchaReady() {
+    return window.__grCaptchaReady === true ||
+           (typeof grecaptcha !== 'undefined' && typeof grecaptcha.render === 'function');
+}
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — ESTADO
+//  CAPTCHA STATE
 // ═══════════════════════════════════════════════════════════════
-let _captchaWidgetId  = null;  // null = não renderizado
-let _captchaVisible   = false; // true = container deve estar visível
-let _captchaPollTimer = null;  // timer do polling
-
 const CaptchaState = (() => {
     let _token         = null;
     let _resolved      = false;
@@ -142,93 +179,341 @@ const CaptchaState = (() => {
 })();
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — POLLING
-//
-//  Abordagem definitiva: polling simples a cada 200ms.
-//  Não depende de callbacks, onload, requestAnimationFrame
-//  ou setTimeout. Verifica as duas condições necessárias:
-//    1. grecaptcha.ready disponível
-//    2. container visível com dimensões reais
-//  Quando ambas OK → renderiza e para o poll.
+//  RECOVERY STATE
 // ═══════════════════════════════════════════════════════════════
-function _startCaptchaPoll() {
-    if (_captchaPollTimer !== null) return; // já polling
+const RecoveryState = (() => {
+    let _email = '';
+    let _code  = '';
+    return {
+        getEmail:   ()  => _email,
+        getCode:    ()  => _code,
+        setEmail:   (v) => { _email = String(v ?? '').trim(); },
+        setCode:    (v) => { _code  = String(v ?? '').trim(); },
+        clearEmail: ()  => { _email = ''; },
+        clearCode:  ()  => { _code  = ''; },
+        clear:      ()  => { _email = ''; _code = ''; },
+        isValid:    ()  => _email.length > 0 && _code.length === 6,
+    };
+})();
 
-    _captchaPollTimer = setInterval(() => {
-        // Para se widget já foi criado
-        if (_captchaWidgetId !== null) {
-            clearInterval(_captchaPollTimer);
-            _captchaPollTimer = null;
-            return;
-        }
+// ═══════════════════════════════════════════════════════════════
+//  MÓDULO: TENTATIVAS DE LOGIN
+// ═══════════════════════════════════════════════════════════════
+const LoginAttempts = {
+    get()   { return parseInt(sessionStorage.getItem(CONFIG.KEYS.loginAttempts) || '0', 10); },
+    set(n)  { sessionStorage.setItem(CONFIG.KEYS.loginAttempts, String(Math.max(0, n))); },
+    inc()   { this.set(this.get() + 1); },
+    reset() { sessionStorage.removeItem(CONFIG.KEYS.loginAttempts); },
+};
 
-        // Espera container estar visível
-        const el = document.getElementById('captchaContainer');
-        if (!el || el.offsetParent === null) return; // não visível ainda
+// ═══════════════════════════════════════════════════════════════
+//  MÓDULO: COOLDOWN ANTI-FLOOD
+// ═══════════════════════════════════════════════════════════════
+const Cooldown = {
+    isActive(key) {
+        const until = parseInt(sessionStorage.getItem(key) || '0', 10);
+        return Date.now() < until;
+    },
+    set(key, ms) {
+        sessionStorage.setItem(key, String(Date.now() + ms));
+    },
+};
 
-        // Espera container ter largura real
-        if (el.offsetWidth < 50) return;
-
-        // Espera grecaptcha carregar
-        if (typeof grecaptcha === 'undefined' || typeof grecaptcha.render !== 'function') return;
-
-        // Tudo pronto — renderiza
-        clearInterval(_captchaPollTimer);
-        _captchaPollTimer = null;
-
-        const container = el.querySelector('.g-recaptcha');
-        if (!container) return;
-
-        // Limpa container
-        while (container.firstChild) container.removeChild(container.firstChild);
-
+// ═══════════════════════════════════════════════════════════════
+//  MÓDULO: RATE LIMITER DE SUBMISSÃO (client-side)
+// ═══════════════════════════════════════════════════════════════
+const SubmitRateLimiter = {
+    isAllowed() {
+        const now         = Date.now();
+        const windowStart = now - CONFIG.RATE_LIMIT_WINDOW_MS;
+        let log;
         try {
-            grecaptcha.ready(() => {
-                if (_captchaWidgetId !== null) return;
-                try {
-                    _captchaWidgetId = grecaptcha.render(container, {
-                        sitekey:            CONFIG.CAPTCHA_SITE_KEY,
-                        callback:           'onCaptchaResolved',
-                        'expired-callback': 'onCaptchaExpired',
-                        'error-callback':   'onCaptchaError',
-                        theme:              'dark',
-                    });
-                    console.log('[reCAPTCHA] OK — id:', _captchaWidgetId);
-                } catch (err) {
-                    console.error('[reCAPTCHA] render falhou:', err);
-                    // Se o iframe foi criado mesmo com erro, considera sucesso
-                    if (container.querySelector('iframe')) _captchaWidgetId = 0;
-                    else _startCaptchaPoll(); // tenta de novo
-                }
-            });
-        } catch (err) {
-            console.error('[reCAPTCHA] ready() falhou:', err);
-            _captchaPollTimer = null;
-            _startCaptchaPoll(); // reagenda
+            log = JSON.parse(sessionStorage.getItem(CONFIG.KEYS.submitRateLog) || '[]');
+        } catch {
+            log = [];
         }
+        log = log.filter(ts => ts > windowStart);
+        if (log.length >= CONFIG.RATE_LIMIT_MAX) return false;
+        log.push(now);
+        try {
+            sessionStorage.setItem(CONFIG.KEYS.submitRateLog, JSON.stringify(log));
+        } catch { /* sessionStorage cheio — fail open */ }
+        return true;
+    },
+};
 
-    }, 200);
+// ═══════════════════════════════════════════════════════════════
+//  UTILITÁRIOS
+// ═══════════════════════════════════════════════════════════════
+function sanitizeText(value) {
+    return String(value ?? '').trim();
 }
 
+function isValidEmail(email) {
+    return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RESTAURAÇÃO SEGURA DE BOTÕES (TRUSTED TYPES COMPLIANT)
+// ═══════════════════════════════════════════════════════════════
+const _buttonOriginalHTML = new WeakMap();
+
+function _captureButtonHTML(btn) {
+    if (btn && !_buttonOriginalHTML.has(btn)) {
+        _buttonOriginalHTML.set(btn, btn.innerHTML);
+    }
+}
+
+function restoreButton(btn) {
+    btn.disabled = false;
+    const original = _buttonOriginalHTML.get(btn);
+    if (original === undefined) return;
+    if (_trustedPolicy) {
+        btn.innerHTML = _trustedPolicy.createHTML(original);
+    } else {
+        btn.innerHTML = original;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SPINNER DO BOTÃO — usa .loading-svg do CSS (sem inline style)
+// ═══════════════════════════════════════════════════════════════
+function createSpinnerElement(labelText) {
+    const wrapper = document.createDocumentFragment();
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add('loading-svg');
+
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', '12');
+    circle.setAttribute('cy', '12');
+    circle.setAttribute('r', '10');
+    circle.setAttribute('stroke', 'currentColor');
+    circle.setAttribute('stroke-width', '4');
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('opacity', '0.25');
+    svg.appendChild(circle);
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M12 2a10 10 0 0 1 10 10');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '4');
+    path.setAttribute('fill', 'none');
+    svg.appendChild(path);
+
+    wrapper.appendChild(svg);
+    wrapper.appendChild(document.createTextNode(' ' + sanitizeText(labelText)));
+    return wrapper;
+}
+
+function setButtonLoading(btn, loadingText) {
+    btn.disabled    = true;
+    btn.textContent = '';
+    btn.appendChild(createSpinnerElement(loadingText));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SELEÇÃO DE ELEMENTOS DO DOM
+// ═══════════════════════════════════════════════════════════════
+const screens = Object.freeze({
+    login:       document.getElementById('loginScreen'),
+    forgotEmail: document.getElementById('forgotEmailScreen'),
+    code:        document.getElementById('codeScreen'),
+    newPassword: document.getElementById('newPasswordScreen'),
+    success:     document.getElementById('successScreen'),
+});
+
+const buttons = Object.freeze({
+    forgotPassword:   document.getElementById('forgotPasswordBtn'),
+    backToLogin:      document.getElementById('backToLogin'),
+    sendCode:         document.getElementById('sendCodeBtn'),
+    backToEmail:      document.getElementById('backToEmail'),
+    verifyCode:       document.getElementById('verifyCodeBtn'),
+    backToCode:       document.getElementById('backToCode'),
+    changePassword:   document.getElementById('changePasswordBtn'),
+    backToLoginFinal: document.getElementById('backToLoginFinal'),
+    resendCode:       document.getElementById('resendCode'),
+    loginSubmit:      document.getElementById('loginSubmitBtn'),
+});
+
+const inputs = Object.freeze({
+    loginEmail:      document.getElementById('loginEmail'),
+    loginPassword:   document.getElementById('loginPassword'),
+    recoveryEmail:   document.getElementById('recoveryEmail'),
+    codeInputs:      document.querySelectorAll('.code-input'),
+    newPassword:     document.getElementById('newPassword'),
+    confirmPassword: document.getElementById('confirmPassword'),
+});
+
+const loginForm      = document.getElementById('loginForm');
+const errorMessage   = document.getElementById('errorMessage');
+const togglePassword = document.getElementById('togglePassword');
+
+// ═══════════════════════════════════════════════════════════════
+//  FUNÇÕES DE MENSAGEM
+//  Visibilidade via classList (.visible / .show) — sem inline style.
+// ═══════════════════════════════════════════════════════════════
+let _messageTimer = null;
+
+function showAuthMessage(message, type) {
+    const messageDiv = document.getElementById('authErrorMessage');
+    if (!messageDiv) return;
+
+    if (_messageTimer) { clearTimeout(_messageTimer); _messageTimer = null; }
+
+    messageDiv.textContent = sanitizeText(message); // textContent = anti-XSS
+    messageDiv.className   = `auth-message ${type} visible show`;
+
+    _messageTimer = setTimeout(() => {
+        messageDiv.classList.remove('show');
+        setTimeout(() => {
+            messageDiv.classList.remove('visible');
+            messageDiv.textContent = '';
+        }, 300);
+    }, CONFIG.MESSAGE_AUTO_HIDE_MS);
+}
+
+function showError(message) {
+    if (!errorMessage) return;
+    errorMessage.textContent = sanitizeText(message);
+    errorMessage.classList.add('show');
+}
+
+function hideError() {
+    if (!errorMessage) return;
+    errorMessage.classList.remove('show');
+    setTimeout(() => { errorMessage.textContent = ''; }, 300);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  EFEITO SHAKE — usa .input-shake do CSS (sem inline style)
+// ═══════════════════════════════════════════════════════════════
+function shakeInput(input) {
+    if (!input) return;
+    input.classList.add('input-shake');
+    setTimeout(() => input.classList.remove('input-shake'), 500);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INICIALIZAÇÃO
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+
+    // [FIX-CAPTCHA-DISPLAY] Garante estado inicial via classList APENAS.
+    // NUNCA usar el.style.display aqui — conflita com as classes CSS
+    // .captcha-hidden { display:none !important } e .captcha-visible { display:flex }.
+    const captchaEl = document.getElementById('captchaContainer');
+    if (captchaEl) {
+        captchaEl.style.display = ''; // limpa qualquer inline style residual do HTML
+        captchaEl.classList.add('captcha-hidden');
+        captchaEl.classList.remove('captcha-visible');
+    }
+
+    // Captura innerHTML original de cada botão antes de qualquer mutação
+    Object.values(buttons).forEach(btn => {
+        if (btn instanceof HTMLElement) _captureButtonHTML(btn);
+    });
+
+    // Verifica sessão existente — redireciona sem expor estado intermediário
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            window.location.replace('dashboard.html');
+            return;
+        }
+    } catch {
+        // Sem sessão — continua para login
+    }
+
+    // Exibe captcha se o usuário já atingiu o limite de tentativas
+    if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
+        showCaptcha();
+    }
+
+    createMoneyParticles();
+    createAnimatedCharts();
+
+    // Exibe erro pendente de outro módulo (ex: dashboard.html)
+    const authError = sessionStorage.getItem('auth_error');
+    if (authError) {
+        showAuthMessage(sanitizeText(authError), 'error');
+        sessionStorage.removeItem('auth_error');
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  CAPTCHA — EXIBIR E RENDERIZAR
+//
+//  [FIX-V5] Abordagem idêntica ao que funcionou no Console:
+//
+//  1. Força display:flex via inline style (garantido, não depende
+//     de classes CSS que podem ser sobrescritas por especificidade)
+//  2. Chama grecaptcha.ready() diretamente, sem setTimeout nem
+//     requestAnimationFrame nem funções intermediárias
+//  3. Se grecaptcha ainda não existir, registra __grPendingRender
+//     que chama showCaptcha() de volta quando __grOnLoad disparar
+// ═══════════════════════════════════════════════════════════════
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
 
-    _captchaVisible = true;
-    el.style.display      = 'flex';
+    // Força visibilidade via inline style — mesmo mecanismo que
+    // funciona no console. Não depende de CSS classes.
+    el.style.display = 'flex';
     el.style.flexDirection = 'column';
     CaptchaState.activate();
 
     if (_captchaWidgetId !== null) return; // widget já existe
 
-    _startCaptchaPoll();
+    const container = el.querySelector('.g-recaptcha');
+    if (!container) return;
+
+    // Se iframe já existe, widget está lá (pode estar oculto por CSS)
+    if (container.querySelector('iframe')) return;
+
+    // Limpa container
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    // API não carregou ainda — registra para __grOnLoad e aguarda
+    if (typeof grecaptcha === 'undefined') {
+        console.warn('[reCAPTCHA] API não pronta — aguardando __grOnLoad');
+        window.__grPendingRender = showCaptcha;
+        return;
+    }
+
+    // Exatamente o mesmo padrão que funcionou no Console
+    grecaptcha.ready(() => {
+        if (_captchaWidgetId !== null) return;
+        if (container.querySelector('iframe')) return;
+        try {
+            _captchaWidgetId = grecaptcha.render(container, {
+                sitekey:            CONFIG.CAPTCHA_SITE_KEY,
+                callback:           'onCaptchaResolved',
+                'expired-callback': 'onCaptchaExpired',
+                'error-callback':   'onCaptchaError',
+                theme:              'dark',
+            });
+            console.log('[reCAPTCHA] widget renderizado, id:', _captchaWidgetId);
+        } catch (err) {
+            console.error('[reCAPTCHA] render() falhou:', err);
+            _captchaWidgetId = container.querySelector('iframe') ? 0 : null;
+        }
+    });
 }
+
+// _renderCaptchaWidget agora é apenas um alias para compatibilidade
+// com __grPendingRender registrado antes de showCaptcha existir
+function _renderCaptchaWidget() { showCaptcha(); }
 
 function hideCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
-    _captchaVisible = false;
-    el.style.display = 'none';
+    // [FIX-CAPTCHA-DISPLAY] Mesmo padrão: limpa inline style antes das classes
+    el.style.display = '';
+    el.classList.remove('captcha-visible');
+    el.classList.add('captcha-hidden');
     CaptchaState.deactivate();
 }
 
@@ -238,7 +523,6 @@ function highlightCaptcha() {
     el.classList.add('captcha-error');
     setTimeout(() => el.classList.remove('captcha-error'), 2000);
 }
-
 
 // ═══════════════════════════════════════════════════════════════
 //  VALIDAÇÃO DO CAPTCHA NO BACKEND
