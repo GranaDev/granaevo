@@ -95,14 +95,14 @@
         recaptcha-init.js é síncrono e garante que __grOnLoad esteja
         disponível no exato momento em que o api.js precisar.
     -->
-    <script src="recaptcha-init.js?v=7" data-cfasync="false"></script>
+    <script src="recaptcha-init.js?v=5"></script>
 
     <!--
         [CSP-FIX-15] render=explicit: impede auto-render no carregamento.
         onload=__grOnLoad: definido em recaptcha-init.js (não no módulo JS).
         referrerpolicy removido: o meta tag da página já cobre isso.
     -->
-    <script src="https://www.google.com/recaptcha/api.js"
+    <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=__grOnLoad"
             async
             defer></script>
 </head>
@@ -229,7 +229,7 @@
                     </div>
 
                     <!--
-                        [FIX-HTML-1] removido.
+                        [FIX-HTML-1] style="display:none" removido.
                         O atributo style inline também é bloqueado por style-src 'self'.
                         Visibilidade agora controlada exclusivamente via classe .visible no JS.
                     -->
@@ -307,7 +307,11 @@
                         </div>
 
                         <!-- ===== CONTAINER DO RECAPTCHA (oculto até 3 erros) ===== -->
-                        <div id="captchaContainer">
+                        <div id="captchaContainer"
+                             class="captcha-hidden"
+                             role="region"
+                             aria-label="Verificação de segurança"
+                             aria-live="polite">
                             <div class="captcha-label">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" style="width:16px;height:16px;stroke:var(--error-red);flex-shrink:0;">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -543,6 +547,6 @@
         </div>
     </div>
 
-    <script type="module" src="login.js?v=7" data-cfasync="false"></script>
+    <script type="module" src="login.js?v=5"></script>
 </body>
 </html>
