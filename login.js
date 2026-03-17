@@ -508,15 +508,24 @@ function showCaptcha() {
 
     if (_captchaWidgetId !== null) return; // widget já existe
 
-    // 2. Render do widget DEPOIS que o container está visível
+    // 2. Render do widget DEPOIS que o container está visível e layoutado.
+    //
+    // [FIX-CAPTCHA-RAF] grecaptcha.render() precisa medir as dimensões do
+    // container para criar o iframe com o tamanho correto. Se chamado no
+    // mesmo tick JS em que as classes CSS mudam, o browser ainda não
+    // recalculou o layout — o container tem dimensões zeradas e o widget
+    // fica invisível mesmo sendo criado.
+    //
+    // requestAnimationFrame dispara após o browser recalcular estilos e
+    // antes do próximo frame, garantindo que display:flex já foi aplicado
+    // e o container tem largura/altura reais quando o render ocorre.
+    //
+    // O mesmo wrapper é aplicado ao __grPendingRender para cobrir o caso
+    // em que a API ainda não carregou quando showCaptcha() é chamado.
     if (_isCaptchaReady()) {
-        // grecaptcha já está pronto — renderiza imediatamente
-        _renderCaptchaWidget();
+        requestAnimationFrame(_renderCaptchaWidget);
     } else {
-        // API ainda carregando — registra render pendente para o __grOnLoad
-        // [CSP-FIX-15] __grOnLoad (definido no topo do arquivo) executa
-        // __grPendingRender assim que o api.js terminar de carregar.
-        window.__grPendingRender = _renderCaptchaWidget;
+        window.__grPendingRender = () => requestAnimationFrame(_renderCaptchaWidget);
     }
 }
 
