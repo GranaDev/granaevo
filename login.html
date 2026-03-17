@@ -95,7 +95,7 @@
         recaptcha-init.js é síncrono e garante que __grOnLoad esteja
         disponível no exato momento em que o api.js precisar.
     -->
-    <script src="recaptcha-init.js?v=5"></script>
+    <script src="recaptcha-init.js?v=6"></script>
 
     <!--
         [CSP-FIX-15] render=explicit: impede auto-render no carregamento.
@@ -307,11 +307,7 @@
                         </div>
 
                         <!-- ===== CONTAINER DO RECAPTCHA (oculto até 3 erros) ===== -->
-                        <div id="captchaContainer"
-                             class="captcha-hidden"
-                             role="region"
-                             aria-label="Verificação de segurança"
-                             aria-live="polite">
+                        <div id="captchaContainer" style="display:none">
                             <div class="captcha-label">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" style="width:16px;height:16px;stroke:var(--error-red);flex-shrink:0;">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -547,6 +543,6 @@
         </div>
     </div>
 
-    <script type="module" src="login.js?v=5"></script>
+    <script type="module" src="login.js?v=6"></script>
 </body>
 </html>
