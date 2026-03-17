@@ -88,9 +88,18 @@
     <link rel="stylesheet" href="login.css">
 
     <!--
+        [CSP-FIX-16] recaptcha-init.js carregado ANTES e SEM async/defer.
+        Scripts type="module" (como login.js) são sempre diferidos — eles
+        executam após o HTML ser parseado. O api.js com async pode terminar
+        antes disso e tentar chamar window.__grOnLoad antes de ele existir.
+        recaptcha-init.js é síncrono e garante que __grOnLoad esteja
+        disponível no exato momento em que o api.js precisar.
+    -->
+    <script src="recaptcha-init.js"></script>
+
+    <!--
         [CSP-FIX-15] render=explicit: impede auto-render no carregamento.
-        onload=__grOnLoad: callback registrado no login.js que dispara
-        o render do widget assim que a API estiver pronta.
+        onload=__grOnLoad: definido em recaptcha-init.js (não no módulo JS).
         referrerpolicy removido: o meta tag da página já cobre isso.
     -->
     <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=__grOnLoad"

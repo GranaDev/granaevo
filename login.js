@@ -19,30 +19,22 @@ const _trustedPolicy = (() => {
 })();
 
 // ═══════════════════════════════════════════════════════════════
-//  [CSP-FIX-15] CALLBACK DE CARREGAMENTO DO reCAPTCHA
+//  NOTA: window.__grOnLoad está definido em recaptcha-init.js
 //
-//  Registrado ANTES do DOMContentLoaded para garantir que esteja
-//  disponível quando o api.js terminar de carregar (async/defer).
+//  Ele NÃO pode ser definido aqui porque este arquivo é type="module"
+//  — módulos são sempre diferidos e executam DEPOIS do HTML ser parseado.
+//  O api.js (async) pode terminar antes disso e chamar __grOnLoad quando
+//  ele ainda não existiria. recaptcha-init.js é um script síncrono
+//  carregado antes do api.js, garantindo a ordem correta.
 //
-//  O parâmetro onload=__grOnLoad na URL do script dispara esta
-//  função assim que a API estiver completamente pronta.
-//  Isso elimina o poll de 250ms e remove qualquer condição de
-//  corrida entre o carregamento da API e o showCaptcha().
-//
-//  Fluxo:
-//    1. api.js carrega em background (async defer)
-//    2. Usuário erra 3x → showCaptcha() é chamado
-//    3a. Se API já carregou → __grCaptchaReady=true → render imediato
-//    3b. Se API ainda carrega → __grPendingRender fica registrado
-//    4. api.js termina → __grOnLoad dispara → executa __grPendingRender
+//  Fluxo garantido:
+//    1. recaptcha-init.js executa → window.__grOnLoad fica disponível
+//    2. api.js carrega em background (async defer)
+//    3. Usuário erra 3x → showCaptcha() → container fica visível
+//    4a. Se API já carregou → __grCaptchaReady=true → render imediato
+//    4b. Se API ainda carrega → __grPendingRender fica registrado
+//    5. api.js termina → __grOnLoad dispara → executa __grPendingRender
 // ═══════════════════════════════════════════════════════════════
-window.__grOnLoad = () => {
-    window.__grCaptchaReady = true;
-    if (typeof window.__grPendingRender === 'function') {
-        window.__grPendingRender();
-        window.__grPendingRender = null;
-    }
-};
 
 // ═══════════════════════════════════════════════════════════════
 //  CONFIGURAÇÕES
