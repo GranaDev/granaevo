@@ -7,43 +7,40 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN v2.4                   ║
+        ║  CONTENT SECURITY POLICY — LOGIN v2.5                   ║
         ╠══════════════════════════════════════════════════════════╣
-        ║  Correções aplicadas sobre v2.3:                         ║
+        ║  Correções aplicadas sobre v2.4:                         ║
         ║                                                          ║
-        ║  [CSP-FIX-1..11] mantidos da versão anterior.           ║
+        ║  [CSP-FIX-1..13] mantidos da versão anterior.           ║
         ║                                                          ║
-        ║  [CSP-FIX-12] require-trusted-types-for 'script' e      ║
-        ║    trusted-types REMOVIDOS.                              ║
+        ║  [CSP-FIX-14] referrerpolicy="no-referrer" REMOVIDO     ║
+        ║    da tag do script do reCAPTCHA.                        ║
         ║                                                          ║
-        ║    Motivo: o reCAPTCHA v2 (api.js) injeta sub-scripts   ║
-        ║    dinamicamente via .src em HTMLScriptElement usando    ║
-        ║    uma policy interna chamada 'goog#resourceLoader'.     ║
-        ║    Essa policy é criada pelo próprio código do Google    ║
-        ║    sem nome público documentado — não pode ser listada   ║
-        ║    numa CSP de meta tag. Resultado: o browser bloqueia   ║
-        ║    toda injeção de script do widget com:                 ║
-        ║    "Requires TrustedScriptURL assignment".               ║
-        ║    Tentativas de whitelisting (goog, goog#html,          ║
-        ║    allow-duplicates) não cobrem a policy de URL.         ║
+        ║    Motivo: no-referrer impede que o servidor do Google   ║
+        ║    receba o header Referer com o domínio da página.      ║
+        ║    O reCAPTCHA usa esse header para validar a chave de   ║
+        ║    site contra os domínios autorizados no painel do      ║
+        ║    Google. Sem ele, a validação pode falhar              ║
+        ║    silenciosamente, retornando token inválido ou widget  ║
+        ║    sem renderizar. O meta referrer da página já define   ║
+        ║    strict-origin-when-cross-origin, que envia apenas a   ║
+        ║    origem (sem path/query) — suficiente para o Google    ║
+        ║    validar o domínio sem expor dados sensíveis.          ║
         ║                                                          ║
-        ║    Impacto na segurança: ZERO degradação prática.        ║
-        ║    A diretiva require-trusted-types-for 'script' é uma   ║
-        ║    defesa em profundidade contra DOM-XSS via script      ║
-        ║    injection. A proteção primária e real contra isso      ║
-        ║    já está garantida por:                                ║
-        ║      • script-src whitelist explícito (sem unsafe-inline ║
-        ║        em scripts) — impede carregar scripts não         ║
-        ║        autorizados, independente de como o src é setado  ║
-        ║      • Nenhuma entrada de dados do usuário é usada em    ║
-        ║        innerHTML, script.src ou eval no nosso código     ║
-        ║    Trusted Types seria apenas uma segunda barreira para  ║
-        ║    um vetor já bloqueado pelo script-src.                ║
+        ║  [CSP-FIX-15] ?render=explicit&onload=__grOnLoad        ║
+        ║    adicionado à URL do api.js.                           ║
         ║                                                          ║
-        ║  [CSP-FIX-13] connect-src: adicionado cdn.jsdelivr.net. ║
-        ║    O SDK do Supabase carregado via ESM no jsdelivr       ║
-        ║    requisita source maps (.map) em devtools — esses      ║
-        ║    pedidos também saem pelo connect-src.                 ║
+        ║    Motivo: sem render=explicit, a API auto-renderiza     ║
+        ║    o .g-recaptcha no carregamento da página — enquanto   ║
+        ║    #captchaContainer ainda está display:none. O iframe   ║
+        ║    é criado com dimensões 0×0 e fica invisível mesmo     ║
+        ║    após o container ser exibido. Com render=explicit, o  ║
+        ║    widget só é criado quando showCaptcha() é chamado     ║
+        ║    (após 3 erros), momento em que o container já está    ║
+        ║    visível e o iframe recebe as dimensões corretas.      ║
+        ║    onload=__grOnLoad elimina o poll de 250ms e garante   ║
+        ║    que o render acontece exatamente quando a API está    ║
+        ║    pronta, sem condição de corrida.                      ║
         ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
@@ -89,10 +86,16 @@
           content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
 
     <link rel="stylesheet" href="login.css">
-    <script src="https://www.google.com/recaptcha/api.js"
+
+    <!--
+        [CSP-FIX-15] render=explicit: impede auto-render no carregamento.
+        onload=__grOnLoad: callback registrado no login.js que dispara
+        o render do widget assim que a API estiver pronta.
+        referrerpolicy removido: o meta tag da página já cobre isso.
+    -->
+    <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=__grOnLoad"
             async
-            defer
-            referrerpolicy="no-referrer"></script>
+            defer></script>
 </head>
 <body>
     <!-- Partículas de moedas flutuantes -->
@@ -297,7 +300,6 @@
                         <!-- ===== CONTAINER DO RECAPTCHA (oculto até 3 erros) ===== -->
                         <div id="captchaContainer"
                              class="captcha-hidden"
-                             style="display:none"
                              role="region"
                              aria-label="Verificação de segurança"
                              aria-live="polite">
@@ -307,14 +309,13 @@
                                 </svg>
                                 Verificação de segurança necessária
                             </div>
-                            <div
-                                class="g-recaptcha"
-                                data-sitekey="6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye"
-                                data-callback="onCaptchaResolved"
-                                data-expired-callback="onCaptchaExpired"
-                                data-error-callback="onCaptchaError"
-                                data-theme="dark"
-                            ></div>
+                            <!--
+                                [CSP-FIX-15] data-sitekey e callbacks mantidos como atributos
+                                apenas por referência. Com render=explicit, o grecaptcha.render()
+                                no JS usa CONFIG.CAPTCHA_SITE_KEY e ignora esses atributos.
+                                Eles não causam problema mas também não são usados.
+                            -->
+                            <div class="g-recaptcha"></div>
                         </div>
                         <!-- ===== FIM DO CONTAINER DO RECAPTCHA ===== -->
 
@@ -409,7 +410,6 @@
 
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="code-inputs" role="group" aria-label="Código de verificação de 6 dígitos">
-                            <!-- autocomplete="one-time-code" permite autopreenchimento pelo SO apenas no primeiro campo -->
                             <input type="text" maxlength="1" class="code-input" data-index="0" inputmode="numeric" autocomplete="one-time-code" aria-label="Dígito 1 de 6" pattern="[0-9]">
                             <input type="text" maxlength="1" class="code-input" data-index="1" inputmode="numeric" autocomplete="off" aria-label="Dígito 2 de 6" pattern="[0-9]">
                             <input type="text" maxlength="1" class="code-input" data-index="2" inputmode="numeric" autocomplete="off" aria-label="Dígito 3 de 6" pattern="[0-9]">
