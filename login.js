@@ -446,17 +446,35 @@ window.addEventListener('DOMContentLoaded', async () => {
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — RENDER INTERNO
 //
-//  Chamado quando _isCaptchaReady() === true.
-//  Idempotente — renderiza uma única vez.
+//  [FIX-CAPTCHA-V4] Correção definitiva dos dois bugs identificados:
 //
-//  [FIX-CAPTCHA-RENDER] Com ?render=explicit na URL do api.js,
-//  o .g-recaptcha do HTML chega aqui VAZIO (sem iframe criado
-//  pelo auto-render). O grecaptcha.render() cria o iframe no
-//  momento exato em que o container já está visível (display:flex),
-//  garantindo que o iframe receba as dimensões corretas do layout.
+//  BUG 1: grecaptcha.ready() ficava fora do try-catch.
+//  Se o api.js ainda não tivesse carregado quando _renderCaptchaWidget
+//  era chamado via setTimeout, o acesso a grecaptcha.ready lançava
+//  ReferenceError não capturado. A função encerrava sem setar
+//  __grPendingRender, então quando __grOnLoad disparava, nada
+//  acontecia. Widget nunca aparecia.
+//
+//  BUG 2: setTimeout(fn, 0) na DOMContentLoaded path disparava
+//  antes do api.js terminar de carregar em conexões lentas ou
+//  quando a página recarregava com tentativas já acumuladas.
+//
+//  SOLUÇÃO: typeof check antes de chamar grecaptcha.ready.
+//  Se undefined → seta __grPendingRender e retorna.
+//  __grOnLoad (recaptcha-init.js) chamará _renderCaptchaWidget
+//  quando a API estiver pronta.
 // ═══════════════════════════════════════════════════════════════
 function _renderCaptchaWidget() {
     if (_captchaWidgetId !== null) return; // já renderizado
+
+    // [FIX-V4-BUG1] Guarda para grecaptcha não definido.
+    // Se api.js ainda não carregou, registra render pendente e
+    // aguarda __grOnLoad (definido em recaptcha-init.js).
+    if (typeof grecaptcha === 'undefined') {
+        console.warn('[reCAPTCHA] API não carregada ainda — aguardando __grOnLoad');
+        window.__grPendingRender = _renderCaptchaWidget;
+        return;
+    }
 
     const el        = document.getElementById('captchaContainer');
     const container = el?.querySelector('.g-recaptcha');
@@ -465,54 +483,57 @@ function _renderCaptchaWidget() {
         return;
     }
 
+    // Não re-renderiza se iframe já existir (segurança extra)
+    if (container.querySelector('iframe')) {
+        console.log('[reCAPTCHA] iframe já existe — render ignorado');
+        return;
+    }
+
     // Limpa filhos de forma segura — evita bloqueio por Trusted Types
     while (container.firstChild) {
         container.removeChild(container.firstChild);
     }
 
-    // [FIX-CAPTCHA-READY] grecaptcha.ready() garante que o objeto grecaptcha
-    // e todos os seus métodos estejam prontos antes do render().
-    // Se já pronto, executa o callback imediatamente (síncrono).
-    // Se não, enfileira internamente e dispara quando pronto.
-    grecaptcha.ready(() => {
-        if (_captchaWidgetId !== null) return; // checagem dupla — segurança extra
-        try {
-            _captchaWidgetId = grecaptcha.render(container, {
-                sitekey:              CONFIG.CAPTCHA_SITE_KEY,
-                callback:             'onCaptchaResolved',
-                'expired-callback':   'onCaptchaExpired',
-                'error-callback':     'onCaptchaError',
-                theme:                'dark',
-            });
-            console.log('[reCAPTCHA] widget renderizado com id:', _captchaWidgetId);
-        } catch (err) {
-            console.error('[reCAPTCHA] render() falhou:', err);
-            const existing = container.querySelector('iframe');
-            _captchaWidgetId = existing ? 0 : null;
-        }
-    });
+    // grecaptcha.ready() dentro de try-catch para capturar qualquer erro
+    try {
+        grecaptcha.ready(() => {
+            if (_captchaWidgetId !== null) return;
+            if (container.querySelector('iframe')) return; // checagem extra
+            try {
+                _captchaWidgetId = grecaptcha.render(container, {
+                    sitekey:              CONFIG.CAPTCHA_SITE_KEY,
+                    callback:             'onCaptchaResolved',
+                    'expired-callback':   'onCaptchaExpired',
+                    'error-callback':     'onCaptchaError',
+                    theme:                'dark',
+                });
+                console.log('[reCAPTCHA] widget renderizado com id:', _captchaWidgetId);
+            } catch (err) {
+                console.error('[reCAPTCHA] render() falhou:', err);
+                const existing = container.querySelector('iframe');
+                _captchaWidgetId = existing ? 0 : null;
+            }
+        });
+    } catch (err) {
+        // grecaptcha existe mas .ready() falhou por algum motivo
+        console.error('[reCAPTCHA] ready() falhou:', err);
+        window.__grPendingRender = _renderCaptchaWidget;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — EXIBIR
 //
-//  [FIX-CAPTCHA-DISPLAY] Controle de visibilidade EXCLUSIVAMENTE
-//  via classList. Inline style removido.
-//
-//  [FIX-CAPTCHA-SETTIMEOUT] O container é tornado visível ANTES do
-//  render. setTimeout(fn, 0) cede o controle ao browser para que
-//  ele recalcule o layout (display:flex) antes de grecaptcha.render()
-//  medir as dimensões do container.
-//
-//  requestAnimationFrame não era suficiente porque dispara antes
-//  do paint em alguns browsers — setTimeout(fn, 0) garante que
-//  o browser processou o estilo e fez o reflow completo.
+//  [FIX-V4] Usa setTimeout com 50ms (em vez de 0) para garantir
+//  margem segura para o browser aplicar display:flex e calcular
+//  as dimensões do container antes de grecaptcha.render().
+//  _renderCaptchaWidget agora é seguro tanto para API pronta
+//  quanto para API ainda carregando.
 // ═══════════════════════════════════════════════════════════════
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
 
-    // 1. Torna o container visível PRIMEIRO
     el.style.display = '';
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
@@ -520,12 +541,10 @@ function showCaptcha() {
 
     if (_captchaWidgetId !== null) return; // widget já existe
 
-    // 2. Adia o render para o próximo tick do event loop, dando
-    //    tempo ao browser de aplicar display:flex e calcular dimensões.
-    //    _renderCaptchaWidget usa grecaptcha.ready() internamente,
-    //    então cobre tanto o caso "API pronta" quanto "API ainda carregando".
-    setTimeout(_renderCaptchaWidget, 0);
+    // 50ms garante reflow completo antes do render
+    setTimeout(_renderCaptchaWidget, 50);
 }
+
 
 
 // ═══════════════════════════════════════════════════════════════
