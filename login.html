@@ -7,16 +7,21 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN v2.6                   ║
+        ║  CONTENT SECURITY POLICY — LOGIN v2.7                   ║
         ╠══════════════════════════════════════════════════════════╣
-        ║  Correções aplicadas sobre v2.5:                         ║
+        ║  Correções aplicadas sobre v2.6:                         ║
         ║                                                          ║
-        ║  [CSP-FIX-1..15] mantidos da versão anterior.           ║
-        ║                                                          ║
-        ║  [CSP-FIX-16] recaptcha-init.js síncrono (mantido).     ║
+        ║  [CSP-FIX-1..16] mantidos das versões anteriores.       ║
         ║                                                          ║
         ║  Sem alterações no HTML nesta versão.                    ║
-        ║  Os bugs foram corrigidos em login.js e login.css.       ║
+        ║  Os bugs foram corrigidos em login.js (v2.5)             ║
+        ║  e login.css (v2.5).                                     ║
+        ║                                                          ║
+        ║  Correções desta versão (v2.7):                          ║
+        ║  [FIX-HTML-2] captchaContainer inicia com class=         ║
+        ║  "captcha-hidden" apenas — sem style inline.             ║
+        ║  Em conjunto com [FIX-CSS-12], o display é              ║
+        ║  controlado puramente por classes, sem conflito.         ║
         ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
@@ -283,6 +288,14 @@
                         </div>
 
                         <!-- ===== CONTAINER DO RECAPTCHA (oculto até 3 erros) ===== -->
+                        <!--
+                            [FIX-HTML-2] class="captcha-hidden" — sem style inline.
+                            Em conjunto com [FIX-CSS-12] (display ausente do seletor #captchaContainer),
+                            o display é controlado exclusivamente pela classe:
+                              captcha-hidden → display:none  (especificidade 0,1,0)
+                              captcha-visible → display:flex (especificidade 0,1,0)
+                            Sem conflito de especificidade com seletor de ID.
+                        -->
                         <div id="captchaContainer"
                              class="captcha-hidden"
                              role="region"

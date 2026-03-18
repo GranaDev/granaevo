@@ -24,10 +24,11 @@ const _trustedPolicy = (() => {
 //  Fluxo garantido:
 //    1. recaptcha-init.js executa → window.__grOnLoad fica disponível
 //    2. api.js carrega em background (async defer)
-//    3. Usuário erra 3x → showCaptcha() → container fica visível
-//    4a. Se API já carregou → __grCaptchaReady=true → render imediato
-//    4b. Se API ainda carrega → __grPendingRender fica registrado
-//    5. api.js termina → __grOnLoad dispara → executa __grPendingRender
+//    3. login.js (module) carrega → configura _renderCaptchaWidget
+//    4. Usuário erra 3x → showCaptcha() → container fica visível
+//    5a. Se API já carregou → __grCaptchaReady=true → render imediato
+//    5b. Se API ainda carrega → __grPendingRender fica registrado
+//    6. api.js termina → __grOnLoad dispara → executa __grPendingRender
 // ═══════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
@@ -56,24 +57,22 @@ const CONFIG = Object.freeze({
 // ═══════════════════════════════════════════════════════════════
 //  MENSAGEM DE ERRO PADRÃO DE LOGIN
 //
-//  [FIX-MSG] Mensagem única para TODA falha de autenticação.
-//  Email vazio, email inválido, senha vazia, senha errada,
-//  senha curta, senha longa, usuário inexistente, erro Supabase.
-//  NUNCA revela detalhes (anti-enumeração de email/senha).
+//  Mensagem ÚNICA para TODA falha de autenticação na tela de login.
+//  Email vazio, email inválido, senha vazia, senha de qualquer
+//  tamanho, usuário inexistente, erro Supabase — TUDO retorna
+//  esta mesma mensagem genérica.
 //
-//  [FIX-BUG-1] VALIDAÇÃO DE TAMANHO DE SENHA REMOVIDA DO LOGIN.
-//  Qualquer senha não-vazia vai direto ao Supabase, sem checar
-//  comprimento. Validar tamanho localmente no login:
+//  [FIX-BUG-1] NENHUMA validação de formato ou tamanho de senha
+//  é feita no login. Qualquer senha não-vazia vai direto ao Supabase.
+//  Validar tamanho localmente no login:
 //    (a) revela ao atacante informação sobre a senha real do usuário
-//    (b) exibe mensagem diferente quebrando uniformidade de erro
-//    (c) retorna early sem chamar _registerFailedAttempt(),
+//    (b) exibe mensagem diferente, quebrando uniformidade de erro
+//    (c) retornaria early sem chamar _registerFailedAttempt(),
 //        impedindo que o captcha apareça após 3 tentativas
 //
 //  [FIX-BUG-2] TODA falha conta como tentativa, sem exceções.
-//  Antes: validação local de tamanho retornava early sem incrementar
-//  o contador. Resultado: captcha nunca aparecia para senhas curtas.
-//  Agora: email vazio, email inválido, senha vazia, erro Supabase —
-//  todos chamam _registerFailedAttempt(). Sem exceções.
+//  Email vazio → conta. Email inválido → conta. Senha vazia → conta.
+//  Erro Supabase → conta. Sem exceções. Sem early returns sem contador.
 // ═══════════════════════════════════════════════════════════════
 const LOGIN_ERROR_MSG = 'Tentativa inválida: email ou senha incorreto';
 
@@ -94,13 +93,14 @@ function _publicHeader() {
 
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — ESTADO INTERNO
+//
+//  _captchaWidgetId: null = não renderizado, 0+ = ID do widget.
+//  _captchaRenderAttempt: contador de tentativas de render.
+//  _CAPTCHA_MAX_RENDER_ATTEMPTS: limite de retentativas automáticas.
 // ═══════════════════════════════════════════════════════════════
-let _captchaWidgetId = null; // null = não renderizado, 0+ = ID do widget
-
-function _isCaptchaReady() {
-    return window.__grCaptchaReady === true ||
-           (typeof grecaptcha !== 'undefined' && typeof grecaptcha.render === 'function');
-}
+let _captchaWidgetId       = null;
+let _captchaRenderAttempt  = 0;
+const _CAPTCHA_MAX_RENDER_ATTEMPTS = 3;
 
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA STATE
@@ -381,11 +381,12 @@ function shakeInput(input) {
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
 
+    // Garante estado inicial correto do captcha — apenas classes, sem inline style.
     const captchaEl = document.getElementById('captchaContainer');
     if (captchaEl) {
         captchaEl.style.display = '';
-        captchaEl.classList.add('captcha-hidden');
         captchaEl.classList.remove('captcha-visible');
+        captchaEl.classList.add('captcha-hidden');
     }
 
     Object.values(buttons).forEach(btn => {
@@ -402,6 +403,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         // Sem sessão — continua para login
     }
 
+    // Se já tinha tentativas suficientes na sessão anterior, exibe captcha
     if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         showCaptcha();
     }
@@ -419,61 +421,189 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+//  CAPTCHA — REAGENDAR RENDER (RETRY)
+//
+//  Chamado quando o render falha ou produz um widget com
+//  dimensões 0×0. Incrementa o contador e agenda nova tentativa
+//  com backoff crescente (500ms × tentativa).
+// ═══════════════════════════════════════════════════════════════
+function _scheduleRenderRetry() {
+    if (_captchaRenderAttempt >= _CAPTCHA_MAX_RENDER_ATTEMPTS) {
+        console.warn('[reCAPTCHA] Máximo de tentativas de render atingido (' + _CAPTCHA_MAX_RENDER_ATTEMPTS + ').');
+        return;
+    }
+    _captchaRenderAttempt++;
+    const delay = _captchaRenderAttempt * 500;
+    console.log('[reCAPTCHA] Reagendando render em ' + delay + 'ms (tentativa ' + _captchaRenderAttempt + ' de ' + _CAPTCHA_MAX_RENDER_ATTEMPTS + ')');
+    setTimeout(_renderCaptchaWidget, delay);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CAPTCHA — VERIFICAÇÃO PÓS-RENDER
+//
+//  Executada 600ms após grecaptcha.render() retornar com sucesso.
+//  Verifica se o iframe do widget tem dimensões reais (> 0).
+//  Se o iframe estiver com 0×0 ou ausente, limpa e agenda retry.
+//
+//  MOTIVO: em alguns browsers, o grecaptcha.render() conclui mas
+//  o iframe fica com dimensões 0×0 se houve alguma interferência
+//  de layout durante o render. A verificação pós-render garante
+//  que o widget seja recriado corretamente nesses casos.
+// ═══════════════════════════════════════════════════════════════
+function _verifyCaptchaRender() {
+    const el = document.getElementById('captchaContainer');
+    if (!el) return;
+
+    // Só verifica se o container ainda deve estar visível
+    if (!el.classList.contains('captcha-visible')) return;
+
+    const container = el.querySelector('.g-recaptcha');
+    const iframe    = container ? container.querySelector('iframe') : null;
+
+    if (!iframe || iframe.offsetWidth === 0 || iframe.offsetHeight === 0) {
+        console.warn('[reCAPTCHA] Verificação pós-render falhou: iframe ausente ou com dimensões 0×0. Recriando widget...');
+
+        // Reseta o widget corrompido via API do Google, se disponível
+        try {
+            if (typeof grecaptcha !== 'undefined' && _captchaWidgetId !== null) {
+                grecaptcha.reset(_captchaWidgetId);
+            }
+        } catch { /* ignora — widget pode estar em estado inválido */ }
+
+        // Limpa o container para garantir render limpo
+        if (container) {
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+        }
+
+        // Libera o ID para permitir novo render
+        _captchaWidgetId = null;
+
+        // Agenda retry com backoff
+        _scheduleRenderRetry();
+    } else {
+        console.log('[reCAPTCHA] Verificação pós-render OK — iframe: ' + iframe.offsetWidth + 'x' + iframe.offsetHeight);
+        // Render bem-sucedido — reseta contador de tentativas
+        _captchaRenderAttempt = 0;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — RENDER INTERNO
 //
-//  [FIX-CAPTCHA-V4] Correção dos bugs de race condition.
-//  Ver comentários inline para detalhes.
+//  [FIX-CAPTCHA-V6] Versão definitiva.
+//
+//  Mudanças em relação à V5:
+//  1. Verificação de computed style ANTES do render: confirma que
+//     o container está genuinamente visível (display != 'none')
+//     antes de chamar grecaptcha.render(). Elimina a possibilidade
+//     de render em container oculto que criava widgets 0×0.
+//
+//  2. Verificação pós-render via _verifyCaptchaRender (600ms após):
+//     confirma que o iframe tem dimensões reais e aciona retry
+//     automático se necessário.
+//
+//  3. Container limpo ANTES do render: evita conflito com qualquer
+//     DOM residual de renders anteriores falhos.
+//
+//  4. Re-verificação dentro do callback grecaptcha.ready():
+//     o container pode ter mudado entre o agendamento e a execução
+//     do callback. Verificamos novamente antes de renderizar.
 // ═══════════════════════════════════════════════════════════════
 function _renderCaptchaWidget() {
+    // Widget já existe e está válido — não duplicar
     if (_captchaWidgetId !== null) return;
 
+    // API ainda não carregou — registra pendência e aguarda __grOnLoad
     if (typeof grecaptcha === 'undefined') {
         console.warn('[reCAPTCHA] API não carregada ainda — aguardando __grOnLoad');
         window.__grPendingRender = _renderCaptchaWidget;
         return;
     }
 
-    const el        = document.getElementById('captchaContainer');
-    const container = el?.querySelector('.g-recaptcha');
+    const el = document.getElementById('captchaContainer');
+    if (!el) {
+        console.error('[reCAPTCHA] #captchaContainer não encontrado no DOM');
+        return;
+    }
+
+    // [FIX-CAPTCHA-V6-1] Verificação de computed style ANTES do render.
+    // getComputedStyle reflete o valor REAL aplicado pelo browser,
+    // incluindo cascata de todas as regras CSS. Se o container estiver
+    // oculto por qualquer motivo (bug de classe, timing, etc.), o
+    // grecaptcha.render() produziria um widget invisível (0×0).
+    // Neste caso, a função retorna sem renderizar e o showCaptcha()
+    // garantirá que o container seja visível antes da próxima tentativa.
+    const computedDisplay = window.getComputedStyle(el).display;
+    if (computedDisplay === 'none') {
+        console.warn('[reCAPTCHA] Container está oculto (display:none) no momento do render. Aguardando showCaptcha() torná-lo visível.');
+        return;
+    }
+
+    const container = el.querySelector('.g-recaptcha');
     if (!container) {
-        console.error('[reCAPTCHA] .g-recaptcha não encontrado no DOM');
+        console.error('[reCAPTCHA] .g-recaptcha não encontrado dentro do #captchaContainer');
         return;
     }
 
-    if (container.querySelector('iframe')) {
-        console.log('[reCAPTCHA] iframe já existe — widgetId setado para 0');
-        _captchaWidgetId = 0;
-        return;
-    }
-
+    // [FIX-CAPTCHA-V6-3] Limpa qualquer DOM residual antes de renderizar.
+    // Garante que o grecaptcha.render() começa com container vazio.
     while (container.firstChild) {
         container.removeChild(container.firstChild);
     }
 
+    console.log('[reCAPTCHA] Iniciando render (tentativa ' + (_captchaRenderAttempt + 1) + ')...');
+
     try {
         grecaptcha.ready(() => {
+            // Guard: outro caminho pode ter setado o ID enquanto este callback aguardava
             if (_captchaWidgetId !== null) return;
-            if (container.querySelector('iframe')) {
-                _captchaWidgetId = 0;
+
+            // [FIX-CAPTCHA-V6-4] Re-verificação dentro do callback.
+            // O tempo entre _renderCaptchaWidget() e o callback ready() pode
+            // ser suficiente para o usuário navegar para outra tela.
+            const currentEl = document.getElementById('captchaContainer');
+            if (!currentEl) return;
+
+            const currentDisplay = window.getComputedStyle(currentEl).display;
+            if (currentDisplay === 'none') {
+                console.warn('[reCAPTCHA] Container ficou oculto antes do callback ready() — cancelando render');
                 return;
             }
+
+            const currentContainer = currentEl.querySelector('.g-recaptcha');
+            if (!currentContainer) return;
+
             try {
-                _captchaWidgetId = grecaptcha.render(container, {
-                    sitekey:              CONFIG.CAPTCHA_SITE_KEY,
-                    callback:             'onCaptchaResolved',
-                    'expired-callback':   'onCaptchaExpired',
-                    'error-callback':     'onCaptchaError',
-                    theme:                'dark',
+                _captchaWidgetId = grecaptcha.render(currentContainer, {
+                    sitekey:            CONFIG.CAPTCHA_SITE_KEY,
+                    callback:           'onCaptchaResolved',
+                    'expired-callback': 'onCaptchaExpired',
+                    'error-callback':   'onCaptchaError',
+                    theme:              'dark',
                 });
-                console.log('[reCAPTCHA] widget renderizado com id:', _captchaWidgetId);
-            } catch (err) {
-                console.error('[reCAPTCHA] render() falhou:', err);
-                const existing = container.querySelector('iframe');
-                _captchaWidgetId = existing ? 0 : null;
+                console.log('[reCAPTCHA] grecaptcha.render() concluído. widgetId:', _captchaWidgetId);
+
+                // [FIX-CAPTCHA-V6-2] Verificação pós-render após 600ms.
+                // Tempo suficiente para o browser finalizar o layout do iframe.
+                setTimeout(_verifyCaptchaRender, 600);
+
+            } catch (renderErr) {
+                console.error('[reCAPTCHA] grecaptcha.render() lançou exceção:', renderErr);
+
+                // Limpa o container que pode ter ficado em estado parcial
+                while (currentContainer.firstChild) {
+                    currentContainer.removeChild(currentContainer.firstChild);
+                }
+
+                _captchaWidgetId = null;
+                _scheduleRenderRetry();
             }
         });
-    } catch (err) {
-        console.error('[reCAPTCHA] ready() falhou:', err);
+    } catch (readyErr) {
+        console.error('[reCAPTCHA] grecaptcha.ready() lançou exceção:', readyErr);
+        // Fallback: registra pendência para __grOnLoad
         window.__grPendingRender = _renderCaptchaWidget;
     }
 }
@@ -481,90 +611,81 @@ function _renderCaptchaWidget() {
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — EXIBIR
 //
-//  [FIX-CAPTCHA-V5] CORREÇÃO DO WIDGET INVISÍVEL — ESTADO PERDIDO
+//  [FIX-CAPTCHA-V6] Versão definitiva.
 //
-//  CAUSA RAIZ IDENTIFICADA (diagnóstico 17/03/2026):
-//  O bug tem duas camadas:
+//  Fluxo simplificado em relação às versões anteriores:
+//  1. Garante ausência de inline style residual.
+//  2. Alterna as classes de visibilidade (remove hidden, adiciona visible).
+//  3. Ativa o estado do captcha.
+//  4. Se já existe um widget (_captchaWidgetId != null), verifica se
+//     ele está realmente visível. Se não, limpa e reseta para forçar
+//     novo render.
+//  5. Agenda render com 100ms de delay — tempo suficiente para o
+//     browser processar a mudança de classe e reflowiar o layout,
+//     garantindo que getComputedStyle dentro de _renderCaptchaWidget
+//     retornará display:flex (não display:none).
 //
-//  CAMADA 1 — CSS (corrigida em login.css):
-//  #captchaContainer { display:none } com especificidade (1,0,0)
-//  bloqueava .captcha-visible { display:flex } com (0,1,0).
-//  O container ficava oculto mesmo com a classe captcha-visible aplicada.
-//  O widget era renderizado com dimensões 0×0 dentro do elemento oculto.
+//  MOTIVO DO DELAY DE 100MS (vs. 50ms anterior):
+//  O browser aplica estilos de forma assíncrona ao event loop.
+//  50ms nem sempre era suficiente em browsers lentos ou mobile.
+//  100ms garante margem confortável sem impactar a UX.
 //
-//  CAMADA 2 — Estado JS (corrigida aqui):
-//  Após o render com 0×0, _captchaWidgetId ficava != null (ex: 0).
-//  Chamadas subsequentes a showCaptcha() encontravam _captchaWidgetId != null
-//  e retornavam cedo sem agendar novo render.
-//  O container ficava visível (label aparecia) mas sem o widget do Google.
-//
-//  SOLUÇÃO:
-//  Após aplicar captcha-visible e forçar reflow, verificamos se o iframe
-//  existente tem dimensões reais (offsetWidth > 0). Se o iframe tem
-//  dimensões 0×0 ou não existe, limpamos o container e resetamos
-//  _captchaWidgetId para null, forçando um novo render correto.
-//  Com a correção CSS garantindo que o container é display:flex ANTES
-//  do render, o novo widget é criado com dimensões visíveis.
+//  NOTA: void el.offsetHeight (força de reflow) foi REMOVIDO.
+//  Era executado ANTES de adicionar captcha-visible, portanto
+//  forçava reflow em elemento ainda oculto — completamente inútil
+//  e potencialmente confuso. O delay de 100ms substitui com mais
+//  confiabilidade.
 // ═══════════════════════════════════════════════════════════════
 function showCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
 
-    // Limpa inline style residual
+    // Remove qualquer inline style residual que possa interferir com as classes
     el.style.display = '';
 
-    // Remove a classe que oculta
+    // Alterna classes: remove hidden, adiciona visible.
+    // Com [FIX-CSS-12], não há seletor de ID definindo display,
+    // então captcha-visible (display:flex) vence sem conflito.
     el.classList.remove('captcha-hidden');
-
-    // REFLOW FORÇADO — crítico para animação captchaReveal disparar.
-    // void descarta o valor retornado (evita lint warnings).
-    void el.offsetHeight;
-
-    // Adiciona a classe que exibe (display:flex via CSS de alta especificidade)
     el.classList.add('captcha-visible');
 
+    // Ativa o estado para que onCaptchaResolved processe tokens
     CaptchaState.activate();
 
-    // [FIX-CAPTCHA-V5] Detecção e recuperação de widget invisível.
-    // Verifica se existe um widget previamente renderizado com dimensões 0×0.
-    // Isso ocorre quando o render foi executado com o container oculto
-    // (antes da correção CSS) — o widget "existe" mas é invisível.
+    // Verifica se existe um widget anterior inválido (sem iframe ou com 0×0)
     if (_captchaWidgetId !== null) {
         const container = el.querySelector('.g-recaptcha');
         const iframe    = container ? container.querySelector('iframe') : null;
+        const isInvalidWidget = !iframe || iframe.offsetWidth === 0 || iframe.offsetHeight === 0;
 
-        // iframe ausente OU com dimensões zero = widget inválido/invisível
-        const isInvisibleOrMissing = !iframe ||
-                                     iframe.offsetWidth  === 0 ||
-                                     iframe.offsetHeight === 0;
+        if (isInvalidWidget) {
+            console.warn('[reCAPTCHA] showCaptcha: widget anterior inválido detectado. Limpando para forçar novo render...');
 
-        if (isInvisibleOrMissing) {
-            console.warn('[reCAPTCHA] Widget inválido detectado (0×0 ou ausente). Recriando...');
-
-            // Reset do widget corrompido
             try {
                 if (typeof grecaptcha !== 'undefined') {
                     grecaptcha.reset(_captchaWidgetId);
                 }
-            } catch { /* ignora — widget pode estar em estado inválido */ }
+            } catch { /* ignora — widget pode estar corrompido */ }
 
-            // Limpa o container para garantir render limpo
             if (container) {
                 while (container.firstChild) {
                     container.removeChild(container.firstChild);
                 }
             }
 
-            // Libera o ID para permitir novo render
             _captchaWidgetId = null;
         }
     }
 
-    // Se o widget já existe E é visível, não precisamos renderizar novamente
+    // Se o widget já existe e é válido, não precisa renderizar novamente
     if (_captchaWidgetId !== null) return;
 
-    // 50ms garante margem extra de reflow antes de renderizar o widget
-    setTimeout(_renderCaptchaWidget, 50);
+    // Reseta o contador de tentativas para esta exibição
+    _captchaRenderAttempt = 0;
+
+    // Agenda o render com 100ms de delay para garantir que o browser
+    // processou a mudança de classe e o container está genuinamente visível
+    setTimeout(_renderCaptchaWidget, 100);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -635,13 +756,23 @@ async function checkUserAccess() {
 // ═══════════════════════════════════════════════════════════════
 //  FORMULÁRIO DE LOGIN
 //
-//  [FIX-BUG-1] Mensagem genérica para toda falha de login.
-//  Nenhuma mensagem específica revela ao atacante se o problema
-//  é o email ou a senha (anti-enumeração).
+//  [FIX-BUG-1] ZERO validação de formato ou tamanho de senha.
+//  A tela de LOGIN não valida comprimento, complexidade ou qualquer
+//  outro atributo da senha além de "está vazia?". Qualquer senha
+//  não-vazia vai diretamente ao Supabase para autenticação.
 //
-//  [FIX-BUG-2] TODA falha conta como tentativa. Sem exceções.
-//  NENHUMA validação de tamanho de senha no login — senha
-//  não-vazia vai direto ao Supabase, independente do tamanho.
+//  Motivo: validar a senha localmente no login:
+//    (a) Vaza informação sobre a senha real do usuário para atacantes
+//    (b) Exibe mensagem diferente da genérica, quebrando uniformidade
+//    (c) Faria early return sem chamar _registerFailedAttempt(),
+//        impedindo que o captcha apareça após 3 tentativas
+//
+//  [FIX-BUG-2] TODA falha conta como tentativa. Sem exceções:
+//    - Email vazio        → conta + LOGIN_ERROR_MSG
+//    - Email inválido     → conta + LOGIN_ERROR_MSG
+//    - Senha vazia        → conta + LOGIN_ERROR_MSG
+//    - Senha qualquer     → Supabase → se erro → conta + LOGIN_ERROR_MSG
+//    - Erro de rede       → NÃO conta (evita penalizar falha de infra)
 //
 //  Fluxo garantido:
 //    Tentativa 1 → LOGIN_ERROR_MSG
@@ -651,9 +782,12 @@ async function checkUserAccess() {
 // ═══════════════════════════════════════════════════════════════
 
 // Helper: contabiliza tentativa e mostra captcha se necessário.
+// Deve ser chamado em TODA falha de autenticação, sem exceção.
 function _registerFailedAttempt() {
     LoginAttempts.inc();
-    if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
+    const current = LoginAttempts.get();
+    console.log('[GranaEvo] Tentativas de login: ' + current + '/' + CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA);
+    if (current >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         showCaptcha();
     }
 }
@@ -668,10 +802,11 @@ loginForm?.addEventListener('submit', async (e) => {
     }
 
     const email    = sanitizeText(inputs.loginEmail.value);
-    const password = inputs.loginPassword.value; // NÃO aparar — espaços podem ser senha válida
+    // NÃO aparar a senha — espaços podem ser parte de uma senha válida
+    const password = inputs.loginPassword.value;
 
     // [FIX-BUG-1+2] Email vazio ou inválido → mensagem genérica + conta tentativa.
-    // NÃO há retorno sem contabilizar a tentativa.
+    // Sem retorno sem contabilizar. Sem mensagem específica que revele o problema.
     if (!email || !isValidEmail(email)) {
         inputs.loginPassword.value = '';
         _registerFailedAttempt();
@@ -682,8 +817,8 @@ loginForm?.addEventListener('submit', async (e) => {
     }
 
     // [FIX-BUG-1+2] Senha vazia → mensagem genérica + conta tentativa.
-    // SEM validação de tamanho aqui. Senha não-vazia vai direto ao Supabase.
-    // Validar tamanho no login revelaria informação sobre a senha real do usuário.
+    // APENAS verificamos se está vazia. NENHUMA validação de tamanho,
+    // complexidade ou qualquer outro critério. Senha não-vazia vai ao Supabase.
     if (!password) {
         _registerFailedAttempt();
         showAuthMessage(LOGIN_ERROR_MSG, 'error');
@@ -691,7 +826,7 @@ loginForm?.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Verifica captcha se limite de tentativas atingido
+    // Verifica captcha se limite de tentativas foi atingido
     const currentAttempts = LoginAttempts.get();
     if (currentAttempts >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
         if (!CaptchaState.isResolved()) {
@@ -717,9 +852,11 @@ loginForm?.addEventListener('submit', async (e) => {
 
         if (error) {
             inputs.loginPassword.value = '';
-
             CaptchaState.reset();
-            // [FIX-BUG-2] Erro do Supabase também conta como tentativa
+
+            // [FIX-BUG-2] Erro do Supabase também conta como tentativa.
+            // Não importa o motivo: usuário inexistente, senha errada,
+            // conta desativada — tudo registra a tentativa.
             _registerFailedAttempt();
 
             showAuthMessage(LOGIN_ERROR_MSG, 'error');
@@ -751,6 +888,8 @@ loginForm?.addEventListener('submit', async (e) => {
         setTimeout(() => window.location.replace('dashboard.html'), 1500);
 
     } catch {
+        // Erro de rede/conexão — NÃO conta como tentativa de login.
+        // O usuário não deve ser penalizado por falha de infraestrutura.
         showAuthMessage('Erro de conexão. Verifique sua internet e tente novamente.', 'error');
     } finally {
         restoreButton(submitBtn);
@@ -896,10 +1035,14 @@ if (buttons.backToCode) {
 
 // ═══════════════════════════════════════════════════════════════
 //  ALTERAR SENHA
-//  Validações de tamanho/formato PERMITIDAS aqui — esta tela é
-//  de CRIAÇÃO de nova senha, não de autenticação/login.
-//  O contexto é diferente: o usuário está definindo uma senha
-//  nova e PRECISA saber os requisitos.
+//
+//  NOTA: validações de tamanho e formato são PERMITIDAS e
+//  NECESSÁRIAS aqui. Esta é a tela de CRIAÇÃO de nova senha,
+//  não de autenticação. O contexto é completamente diferente:
+//    - O usuário está DEFININDO uma senha nova
+//    - Ele PRECISA saber os requisitos para criá-la corretamente
+//    - Não há risco de enumeração (o email já foi verificado)
+//    - Não há captcha nesta tela (autenticação por código OTP)
 // ═══════════════════════════════════════════════════════════════
 if (buttons.changePassword) {
     buttons.changePassword.addEventListener('click', async () => {

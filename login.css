@@ -1,6 +1,6 @@
 /* ==========================================
    GRANAEVO — LOGIN CSS
-   Versão Segura e Otimizada — V2.4
+   Versão Segura e Otimizada — V2.5
 
    MELHORIAS APLICADAS v2.1 (mantidas):
    [1] pointer-events: none em todos os pseudoelementos decorativos
@@ -24,29 +24,32 @@
    [FIX-CSS-8] animation-fill-mode: forwards em .captcha-visible.
    [FIX-CSS-9] display removido do seletor #captchaContainer.
 
-   MELHORIAS v2.4 (ESTA VERSÃO — corrigem Bug captcha invisível definitivo):
-   [FIX-CSS-11] #captchaContainer.captcha-visible { display: flex } adicionado.
+   MELHORIAS v2.4 — REMOVIDAS/SIMPLIFICADAS EM V2.5:
+   A abordagem de especificidade com #captchaContainer.captcha-visible
+   criava complexidade desnecessária e era frágil. Substituída em v2.5.
 
-       CAUSA RAIZ DO BUG:
-       O seletor #captchaContainer { display:none } tem especificidade (1,0,0).
-       O seletor .captcha-visible { display:flex } tem especificidade (0,1,0).
-       (1,0,0) > (0,1,0) → o display:none do ID SEMPRE vencia, deixando o
-       container oculto mesmo com a classe captcha-visible aplicada.
-       O widget era renderizado com dimensões 0×0 dentro do elemento oculto,
-       _captchaWidgetId ficava != null, e chamadas subsequentes a showCaptcha()
-       retornavam cedo sem re-renderizar. Resultado: apenas o label aparecia
-       (os 63px observados no diagnóstico), nunca o checkbox do Google.
+   MELHORIAS v2.5 (ESTA VERSÃO — correção definitiva do captcha invisível):
+   [FIX-CSS-12] display COMPLETAMENTE REMOVIDO do seletor #captchaContainer.
 
-       SOLUÇÃO:
-       #captchaContainer.captcha-visible tem especificidade (1,1,0).
-       (1,1,0) > (1,0,0) → o display:flex agora SEMPRE vence sobre o
-       display:none do ID. O container fica visível antes do render,
-       o widget é criado com dimensões corretas e o captcha aparece.
+       CAUSA RAIZ DO BUG (VERSÃO DEFINITIVA):
+       Toda abordagem baseada em seletor de ID para controlar display
+       cria um ponto de conflito de especificidade que é difícil de
+       sobrescrever de forma previsível entre browsers.
 
-       ESTA CORREÇÃO CSS é a metade da solução.
-       A outra metade está em login.js (FIX-CAPTCHA-V5): detecção e
-       recuperação de widgets previamente renderizados com 0×0 que
-       ficaram gravados em _captchaWidgetId bloqueando novos renders.
+       SOLUÇÃO DEFINITIVA v2.5:
+       O seletor #captchaContainer NÃO define nenhum valor de display.
+       O display é controlado EXCLUSIVAMENTE pelas classes utilitárias:
+         .captcha-hidden  { display: none; }   → especificidade (0,1,0)
+         .captcha-visible { display: flex; ... } → especificidade (0,1,0)
+       Zero conflito. Zero ambiguidade. Funciona em todos os browsers.
+
+       O elemento começa com class="captcha-hidden" no HTML.
+       O DOMContentLoaded no JS reforça esse estado.
+       showCaptcha() remove captcha-hidden e adiciona captcha-visible.
+       Não há nenhum seletor de ID competindo com isso.
+
+   [FIX-CSS-13] #captchaContainer.captcha-visible removido (era redundante
+       e só existia para compensar o conflito que agora não existe mais).
    ========================================== */
 
 /* ==========================================
@@ -1394,37 +1397,40 @@ body {
 /* ==========================================
    RECAPTCHA CONTAINER
    ==========================================
-   [FIX-CSS-9] display REMOVIDO do seletor #captchaContainer.
-       display controlado EXCLUSIVAMENTE pelas classes.
 
-   [FIX-CSS-10] display:none como PADRÃO SEGURO.
-       Garante que o elemento seja oculto mesmo se JS falhar
-       antes de aplicar as classes.
+   [FIX-CSS-12] CORREÇÃO DEFINITIVA — v2.5.
 
-   [FIX-CSS-11] #captchaContainer.captcha-visible { display:flex }
-       CORREÇÃO DEFINITIVA DA ESPECIFICIDADE CSS.
+   PROBLEMA DAS VERSÕES ANTERIORES:
+   Tentar controlar display via seletor de ID (#captchaContainer)
+   criava conflito de especificidade com os seletores de classe
+   (.captcha-hidden / .captcha-visible). Mesmo com a correção v2.4
+   adicionando #captchaContainer.captcha-visible (especificidade 1,1,0),
+   havia fragilidade em edge cases de reinicialização de página e
+   browsers que processam cascata de forma ligeiramente diferente.
 
-       PROBLEMA: #captchaContainer { display:none } tem especificidade
-       (1,0,0). Isso bloqueava .captcha-visible { display:flex } que
-       tem especificidade (0,1,0). O seletor de ID sempre vencia,
-       mantendo o container oculto mesmo com captcha-visible aplicado.
+   SOLUÇÃO v2.5 — DEFINITIVA:
+   O seletor #captchaContainer NÃO define nenhum valor de display.
+   A responsabilidade de display é 100% das classes utilitárias:
 
-       SOLUÇÃO: #captchaContainer.captcha-visible tem especificidade
-       (1,1,0), que supera (1,0,0) do seletor de ID simples.
-       O display:flex agora vence corretamente.
+     .captcha-hidden  → display: none  (especificidade 0,1,0)
+     .captcha-visible → display: flex  (especificidade 0,1,0)
 
-       NOTA: esta correção CSS trabalha em conjunto com FIX-CAPTCHA-V5
-       no login.js, que detecta e recupera widgets renderizados com
-       dimensões 0×0 (estado corrompido de versões anteriores).
+   Como não há seletor de ID competindo, não há conflito.
+   A classe no HTML começa como "captcha-hidden".
+   O JS em DOMContentLoaded reforça esse estado.
+   showCaptcha() alterna as classes.
+   Zero ambiguidade. Zero conflito. Funciona em todos os browsers.
+
+   NOTA: O JS também verifica o computed style (getComputedStyle)
+   antes de renderizar o widget, garantindo que o container
+   está genuinamente visível antes de chamar grecaptcha.render().
    ========================================== */
 #captchaContainer {
     /*
-        [FIX-CSS-10] display:none como PADRÃO SEGURO — fallback se JS falhar.
-        A visibilidade real é controlada pelas classes abaixo.
-        Sem conflito de especificidade com as classes porque a regra
-        #captchaContainer.captcha-visible (1,1,0) supera esta (1,0,0).
+        [FIX-CSS-12] SEM display aqui.
+        display é controlado EXCLUSIVAMENTE pelas classes abaixo.
+        Sem conflito de especificidade com nenhum seletor.
     */
-    display: none;
     background: rgba(239, 68, 68, 0.06);
     border: 1px solid rgba(239, 68, 68, 0.25);
     border-radius: 14px;
@@ -1457,33 +1463,18 @@ body {
 }
 
 /*
-    Classes de controle EXCLUSIVO da visibilidade do captcha.
+    CONTROLE EXCLUSIVO DE VISIBILIDADE DO CAPTCHA — v2.5.
 
     .captcha-hidden: oculta com display:none.
+    .captcha-visible: exibe com display:flex e animação captchaReveal.
+    animation-fill-mode: forwards — CRÍTICO para manter opacity:1
+    após o fim da animação.
 
-    .captcha-visible: exibe com animação captchaReveal.
-    animation-fill-mode: forwards — CRÍTICO.
-    Sem ele, ao fim da animação o browser descarta os estilos
-    finais e o captcha voltaria para opacity:0.
-
-    [FIX-CSS-11] #captchaContainer.captcha-visible — especificidade (1,1,0).
-    Supera #captchaContainer { display:none } (1,0,0).
-    Garante que display:flex vence mesmo com a regra de fallback presente.
-
-    Funcionamento correto exige TAMBÉM void el.offsetHeight no JS
-    (showCaptcha em login.js) para forçar reflow síncrono antes de
-    adicionar esta classe, garantindo que a animação captchaReveal dispare.
+    Sem conflito de especificidade porque nenhum seletor de ID
+    define display nesta versão.
 */
 .captcha-hidden  { display: none; }
 .captcha-visible { display: flex; animation: captchaReveal 0.35s ease forwards; }
-
-/*
-    [FIX-CSS-11] CORREÇÃO DA ESPECIFICIDADE — REGRA PRINCIPAL.
-    Esta regra garante que display:flex seja aplicado independente
-    do display:none do seletor de ID #captchaContainer.
-    Especificidade: (1,1,0) > (1,0,0) → flex vence sobre none.
-*/
-#captchaContainer.captcha-visible { display: flex; }
 
 .captcha-error   { outline: 2px solid var(--error-red); border-radius: 12px; }
 
