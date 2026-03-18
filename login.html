@@ -7,40 +7,16 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN v2.5                   ║
+        ║  CONTENT SECURITY POLICY — LOGIN v2.6                   ║
         ╠══════════════════════════════════════════════════════════╣
-        ║  Correções aplicadas sobre v2.4:                         ║
+        ║  Correções aplicadas sobre v2.5:                         ║
         ║                                                          ║
-        ║  [CSP-FIX-1..13] mantidos da versão anterior.           ║
+        ║  [CSP-FIX-1..15] mantidos da versão anterior.           ║
         ║                                                          ║
-        ║  [CSP-FIX-14] referrerpolicy="no-referrer" REMOVIDO     ║
-        ║    da tag do script do reCAPTCHA.                        ║
+        ║  [CSP-FIX-16] recaptcha-init.js síncrono (mantido).     ║
         ║                                                          ║
-        ║    Motivo: no-referrer impede que o servidor do Google   ║
-        ║    receba o header Referer com o domínio da página.      ║
-        ║    O reCAPTCHA usa esse header para validar a chave de   ║
-        ║    site contra os domínios autorizados no painel do      ║
-        ║    Google. Sem ele, a validação pode falhar              ║
-        ║    silenciosamente, retornando token inválido ou widget  ║
-        ║    sem renderizar. O meta referrer da página já define   ║
-        ║    strict-origin-when-cross-origin, que envia apenas a   ║
-        ║    origem (sem path/query) — suficiente para o Google    ║
-        ║    validar o domínio sem expor dados sensíveis.          ║
-        ║                                                          ║
-        ║  [CSP-FIX-15] ?render=explicit&onload=__grOnLoad        ║
-        ║    adicionado à URL do api.js.                           ║
-        ║                                                          ║
-        ║    Motivo: sem render=explicit, a API auto-renderiza     ║
-        ║    o .g-recaptcha no carregamento da página — enquanto   ║
-        ║    #captchaContainer ainda está display:none. O iframe   ║
-        ║    é criado com dimensões 0×0 e fica invisível mesmo     ║
-        ║    após o container ser exibido. Com render=explicit, o  ║
-        ║    widget só é criado quando showCaptcha() é chamado     ║
-        ║    (após 3 erros), momento em que o container já está    ║
-        ║    visível e o iframe recebe as dimensões corretas.      ║
-        ║    onload=__grOnLoad elimina o poll de 250ms e garante   ║
-        ║    que o render acontece exatamente quando a API está    ║
-        ║    pronta, sem condição de corrida.                      ║
+        ║  Sem alterações no HTML nesta versão.                    ║
+        ║  Os bugs foram corrigidos em login.js e login.css.       ║
         ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
@@ -319,10 +295,8 @@
                                 Verificação de segurança necessária
                             </div>
                             <!--
-                                [CSP-FIX-15] data-sitekey e callbacks mantidos como atributos
-                                apenas por referência. Com render=explicit, o grecaptcha.render()
+                                [CSP-FIX-15] Com render=explicit, o grecaptcha.render()
                                 no JS usa CONFIG.CAPTCHA_SITE_KEY e ignora esses atributos.
-                                Eles não causam problema mas também não são usados.
                             -->
                             <div class="g-recaptcha"></div>
                         </div>
