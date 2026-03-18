@@ -8,20 +8,24 @@
     <!-- ================================================================
          🔐 CAMADA 1 — Content Security Policy (Meta)
 
-         ALTERAÇÕES vs versão anterior:
-         ✅ data: REMOVIDO de img-src → placeholder substituído por icon/placeholder-user.svg
-         ✅ object-src 'none'    → bloqueia plugins (Flash, Silverlight, etc.)
-         ✅ worker-src 'none'    → bloqueia service workers não autorizados
-         ✅ manifest-src 'none'  → bloqueia web app manifests de origens externas
-         ✅ upgrade-insecure-requests → força sub-requests HTTP para HTTPS
-         ✅ block-all-mixed-content  → bloqueia qualquer recurso HTTP em página HTTPS
+         CORREÇÕES APLICADAS vs versão anterior:
+         ✅ connect-src: adicionado https://cdn.jsdelivr.net
+             → Necessário para bloquear erros de source maps (.map) do
+               Chart.js e Supabase carregados via jsdelivr. Sem isso,
+               o browser tenta buscar os .map e viola a CSP, gerando
+               7 erros no console por carregamento de página.
+         ✅ data: continua REMOVIDO de img-src (correto — não regredir)
+         ✅ object-src 'none'  — bloqueia plugins (Flash, Silverlight…)
+         ✅ worker-src 'none'  — bloqueia service workers não autorizados
+         ✅ manifest-src 'none'— bloqueia web app manifests externos
+         ✅ upgrade-insecure-requests — força sub-requests HTTP → HTTPS
+         ✅ block-all-mixed-content  — bloqueia qualquer recurso HTTP
 
-         ⚠️  NOTA IMPORTANTE: Meta CSP é COMPLEMENTAR ao HTTP header do servidor.
-         O HTTP header Content-Security-Policy tem PRIORIDADE e é mais eficaz.
-         Configure-o também no servidor / CDN / proxy reverso.
+         ⚠️  NOTA: Meta CSP é complementar ao HTTP header do servidor.
+         O header Content-Security-Policy tem PRIORIDADE.
+         Configure também no servidor / CDN / proxy reverso com:
 
-         Cabeçalhos HTTP recomendados para o servidor:
-           Content-Security-Policy: <conteúdo acima>
+           Content-Security-Policy: <mesma política abaixo>
            X-Content-Type-Options: nosniff
            X-Frame-Options: DENY
            Strict-Transport-Security: max-age=31536000; includeSubDomains
@@ -34,7 +38,10 @@
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
         font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
         img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co https://cdn-icons-png.flaticon.com https://logospng.org;
-        connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co;
+        connect-src 'self'
+            https://fvrhqqeofqedmhadzzqw.supabase.co
+            wss://fvrhqqeofqedmhadzzqw.supabase.co
+            https://cdn.jsdelivr.net;
         base-uri 'self';
         form-action 'self';
         object-src 'none';
@@ -46,10 +53,6 @@
 
     <!-- ================================================================
          🔐 CAMADA 2 — Referrer Policy
-         Impede que a URL completa e tokens de sessão sejam enviados
-         como cabeçalho Referer para domínios externos.
-         'strict-origin-when-cross-origin': envia apenas a origem
-         (sem path/query) para requests cross-origin.
          ================================================================ -->
     <meta name="referrer" content="strict-origin-when-cross-origin">
 
@@ -66,11 +69,8 @@
         rel="stylesheet">
 
     <!-- ================================================================
-         🔐 Font Awesome 6.5.1 — COM SRI (Subresource Integrity)
-
-         O atributo integrity garante que o arquivo CDN não foi adulterado
-         (proteção contra supply chain attacks).
-         Hash sha512 verificado via cdnjs: https://cdnjs.com/libraries/font-awesome/6.5.1
+         🔐 Font Awesome 6.5.1 — COM SRI verificado
+         Hash sha512 via cdnjs: https://cdnjs.com/libraries/font-awesome/6.5.1
          ================================================================ -->
     <link
         rel="stylesheet"
@@ -80,35 +80,46 @@
         referrerpolicy="no-referrer">
 
     <!-- ================================================================
-         🔐 Chart.js 4.4.0 — COM SRI
+         🔐 Chart.js 4.4.0 — SRI CORRIGIDO
 
-         ⚠️ AÇÃO NECESSÁRIA: Gere e substitua o hash abaixo.
-         Comando para gerar:
+         CORREÇÃO: hash placeholder substituído pelo hash SHA-384 real,
+         extraído do próprio erro do browser:
+           "computed SHA-384 integrity
+            'e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g'"
+
+         O browser calculou e reportou o hash correto no console —
+         basta prefixar com "sha384-" e usar aqui.
+
+         Para reverificar manualmente:
            curl -sL "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" \
              | openssl dgst -sha384 -binary | openssl base64 -A
-         Ou use: https://www.srihash.org/
-         Prefixe o resultado com "sha384-" antes de colocar em integrity="..."
          ================================================================ -->
     <script
         src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
-        integrity="sha384-SUBSTITUA_PELO_HASH_GERADO_COM_O_COMANDO_ACIMA"
+        integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g"
         crossorigin="anonymous"
         referrerpolicy="no-referrer"></script>
 
     <!-- ================================================================
-         🔐 Supabase JS v2 — COM SRI
+         🔐 Supabase JS v2 — SRI CORRIGIDO
 
-         ⚠️ AÇÃO NECESSÁRIA: Gere e substitua o hash abaixo.
-         Comando para gerar:
-           curl -sL "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" \
-             | openssl dgst -sha384 -binary | openssl base64 -A
+         CORREÇÃO: hash placeholder substituído pelo hash SHA-384 real,
+         extraído do próprio erro do browser:
+           "computed SHA-384 integrity
+            'zETTH+6IXxKQ6zbGcT6H6EDdnGaae9uhI8uO7doTJoNEmPGeTKVOe5S6/XybS9JH'"
 
-         Alternativa mais segura: baixar e hospedar o arquivo localmente
-         para controle total da versão e eliminar dependência de CDN externo.
+         ⚠️ ATENÇÃO: O path https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
+         sem versão fixa resolve para a última minor/patch disponível —
+         o hash pode quebrar em atualizações automáticas do CDN.
+
+         RECOMENDAÇÃO DE HARDENING: Fixe a versão exata e rehospede localmente:
+           npm install @supabase/supabase-js@2.X.Y
+           # Copie o dist/umd/supabase.js para /js/supabase.min.js
+           # Sirva de 'self' — elimina dependência de CDN externo.
          ================================================================ -->
     <script
         src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
-        integrity="sha384-SUBSTITUA_PELO_HASH_GERADO_COM_O_COMANDO_ACIMA"
+        integrity="sha384-zETTH+6IXxKQ6zbGcT6H6EDdnGaae9uhI8uO7doTJoNEmPGeTKVOe5S6/XybS9JH"
         crossorigin="anonymous"
         referrerpolicy="no-referrer"></script>
 
@@ -153,9 +164,44 @@
             margin-top: 20px;
             font-size: 16px;
         }
+
+        /*
+         * ✅ NOVO: Fallback para quando placeholder-user.svg não existe.
+         * A div .user-photo-fallback fica oculta por padrão; o onerror
+         * do <img> a exibe e oculta o <img> quebrado.
+         */
+        .user-photo-fallback {
+            display: none;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background-color: #10b981;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 32px;
+            font-weight: bold;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
+    <!-- ================================================================
+         ⚠️  ARQUIVO NECESSÁRIO: icon/placeholder-user.svg
+         Crie esse arquivo com o conteúdo abaixo para eliminar o 404:
+
+         <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+           <circle cx="40" cy="40" r="40" fill="#10b981"/>
+           <text x="50%" y="50%" dominant-baseline="middle"
+                 text-anchor="middle" font-family="Arial, sans-serif"
+                 font-size="32" font-weight="bold" fill="white">U</text>
+         </svg>
+
+         Até criar o arquivo, o fallback CSS abaixo exibirá um círculo
+         verde com a inicial "U" automaticamente (via onerror no <img>).
+         ================================================================ -->
+
     <!-- LOADING DE AUTENTICAÇÃO -->
     <div class="auth-loading" id="authLoading">
         <div class="spinner"></div>
@@ -168,13 +214,6 @@
         <!-- ========== SELEÇÃO DE PERFIS ========== -->
         <div id="selecaoPerfis" class="perfis-screen">
             <div class="perfis-container">
-                <!--
-                    ✅ CORRIGIDO: IDs saudacaoNome e saudacaoPlano adicionados.
-                    O dashboard.js usa getElementById('saudacaoNome') e
-                    getElementById('saudacaoPlano') em atualizarTelaPerfis(),
-                    mas o HTML original não declarava esses IDs — a saudação
-                    nunca era exibida.
-                -->
                 <h1 class="perfis-title">
                     Olá, <span id="saudacaoNome">Usuário</span>
                 </h1>
@@ -183,11 +222,7 @@
             </div>
         </div>
 
-        <!-- ========== BOTÃO MOBILE (FORA DA SIDEBAR) ========== -->
-        <!--
-            ✅ type="button" explícito — evita submissão acidental de form
-            ✅ aria-label — acessibilidade para leitores de tela
-        -->
+        <!-- ========== BOTÃO MOBILE ========== -->
         <button
             class="sidebar-toggle"
             id="sidebarToggle"
@@ -209,36 +244,34 @@
 
             <div class="sidebar-user">
                 <!--
-                    ✅ ALTERADO: inline data: URI removido → substituído por arquivo estático.
+                    ✅ CORREÇÃO: onerror adicionado ao <img>.
+                    Quando icon/placeholder-user.svg retornar 404, o handler:
+                      1. Oculta o <img> quebrado (sem ícone de imagem quebrada)
+                      2. Exibe o .user-photo-fallback (círculo CSS puro)
+                    Isso não requer data: URI nem CDN externo — CSP mantida intacta.
 
-                    AÇÃO NECESSÁRIA: Crie o arquivo icon/placeholder-user.svg com:
-                    ---------------------------------------------------------------
-                    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">
-                      <circle cx="40" cy="40" r="40" fill="#10b981"/>
-                      <text x="50%" y="50%" dominant-baseline="middle"
-                            text-anchor="middle" font-family="Arial"
-                            font-size="32" fill="white">U</text>
-                    </svg>
-                    ---------------------------------------------------------------
-
-                    Motivo: o src inline data:image/svg+xml impedia remover o
-                    esquema data: da diretiva img-src da CSP. Com arquivo estático,
-                    data: pode ser omitido completamente, eliminando o risco de
-                    data URI exfiltration via injection em img-src.
+                    NOTA: Quando o JS do dashboard.js definir uma foto real via
+                    userPhoto.src = 'https://...supabase...', o onerror NÃO dispara
+                    (a URL do Supabase já está em img-src) e o fallback permanece
+                    oculto normalmente.
                 -->
                 <img
                     src="icon/placeholder-user.svg"
                     alt="Foto de perfil"
                     id="userPhoto"
-                    class="user-photo">
+                    class="user-photo"
+                    onerror="this.style.display='none'; document.getElementById('userPhotoFallback').style.display='flex';">
+
+                <!-- Fallback CSS puro — visível apenas se o SVG não existir -->
+                <div
+                    id="userPhotoFallback"
+                    class="user-photo-fallback"
+                    aria-hidden="true">U</div>
+
                 <div class="user-info">
                     <div class="user-name" id="userName">Usuário</div>
                     <div class="user-plan" data-user-plan>Plano Premium</div>
                 </div>
-                <!--
-                    ✅ aria-label e for explícitos para acessibilidade
-                    ✅ accept restrito (mantido da versão original)
-                -->
                 <label for="photoUpload" class="photo-upload-btn" aria-label="Alterar foto de perfil">
                     <i class="fas fa-camera" aria-hidden="true"></i>
                 </label>
@@ -251,7 +284,6 @@
             </div>
 
             <nav class="sidebar-nav" aria-label="Seções do aplicativo">
-                <!-- ✅ type="button" explícito em todos os botões de nav -->
                 <button class="nav-btn active" data-page="dashboard" type="button">
                     <span class="nav-icon"><i class="fas fa-chart-line" aria-hidden="true"></i></span>
                     <span class="nav-text">Dashboard</span>
@@ -313,7 +345,6 @@
                             <div class="card-value" id="totalEntradas">R$ 0,00</div>
                         </div>
                     </div>
-
                     <div class="card card-red">
                         <div class="card-icon"><i class="fas fa-arrow-down" aria-hidden="true"></i></div>
                         <div class="card-content">
@@ -321,7 +352,6 @@
                             <div class="card-value" id="totalSaidas">R$ 0,00</div>
                         </div>
                     </div>
-
                     <div class="card card-blue">
                         <div class="card-icon"><i class="fas fa-wallet" aria-hidden="true"></i></div>
                         <div class="card-content">
@@ -329,7 +359,6 @@
                             <div class="card-value" id="totalSaldo">R$ 0,00</div>
                         </div>
                     </div>
-
                     <div class="card card-yellow">
                         <div class="card-icon"><i class="fas fa-piggy-bank" aria-hidden="true"></i></div>
                         <div class="card-content">
@@ -344,7 +373,6 @@
                         <h2 class="section-title">
                             <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> Contas Fixas
                         </h2>
-                        <!-- ✅ type="button" explícito -->
                         <button class="btn-primary" id="btnNovaContaFixa" type="button">
                             <i class="fas fa-plus" aria-hidden="true"></i> Nova Conta
                         </button>
@@ -354,10 +382,6 @@
                     </div>
                 </div>
 
-                <!--
-                    Widget "Onde Foi Meu Dinheiro?" — eventos gerenciados via dashboard.js
-                    ✅ role="button" + tabindex="0" para acessibilidade via teclado
-                -->
                 <div
                     class="section-box"
                     id="widgetOndeFoiDinheiro"
@@ -370,7 +394,6 @@
                     <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:16px;">
                         Descubra para onde seus gastos estão indo com análise inteligente
                     </p>
-                    <!-- pointer-events:none — o click está no div pai -->
                     <button class="btn-primary" style="pointer-events:none;" type="button">
                         🔍 Analisar Agora
                     </button>
@@ -399,10 +422,6 @@
                 </div>
 
                 <div class="transaction-form">
-                    <!--
-                        ✅ aria-label em todos os selects e inputs — acessibilidade
-                        ✅ maxlength/max nos inputs de texto e número
-                    -->
                     <select id="selectCategoria" class="form-input" aria-label="Categoria da transação">
                         <option value="">Selecione a categoria</option>
                         <option value="entrada">Entrada</option>
@@ -574,7 +593,6 @@
                     </div>
                 </div>
 
-                <!-- FILTROS DOS GRÁFICOS -->
                 <div class="graficos-filtros">
                     <div class="view-type-btns">
                         <button class="view-btn active" data-tipo="individual" type="button">
@@ -588,7 +606,6 @@
                         </button>
                     </div>
 
-                    <!-- Toggle de Comparação -->
                     <div class="comparacao-toggle">
                         <label>
                             <input type="checkbox" id="toggleComparacao">
@@ -597,23 +614,17 @@
                         </label>
                     </div>
 
-                    <!-- Filtros Normais -->
                     <div class="filtros-row">
                         <div class="filtro-group">
                             <label class="filtro-label" for="mesGrafico">Mês</label>
-                            <select id="mesGrafico" class="filtro-select">
-                                <!-- Preenchido via JS -->
-                            </select>
+                            <select id="mesGrafico" class="filtro-select"></select>
                         </div>
                         <div class="filtro-group">
                             <label class="filtro-label" for="anoGrafico">Ano</label>
-                            <select id="anoGrafico" class="filtro-select">
-                                <!-- Preenchido via JS -->
-                            </select>
+                            <select id="anoGrafico" class="filtro-select"></select>
                         </div>
                     </div>
 
-                    <!-- Filtros de Comparação (ocultos por padrão) -->
                     <div id="comparacaoContainer" class="comparacao-filtros">
                         <h4 style="color: var(--text-primary); margin-bottom: 16px; text-align: center;">
                             <i class="fas fa-calendar-alt" aria-hidden="true"></i>
@@ -622,29 +633,23 @@
                         <div class="filtros-row">
                             <div class="filtro-group">
                                 <label class="filtro-label" for="mesComparacao">Mês de Comparação</label>
-                                <select id="mesComparacao" class="filtro-select">
-                                    <!-- Preenchido via JS -->
-                                </select>
+                                <select id="mesComparacao" class="filtro-select"></select>
                             </div>
                             <div class="filtro-group">
                                 <label class="filtro-label" for="anoComparacao">Ano de Comparação</label>
-                                <select id="anoComparacao" class="filtro-select">
-                                    <!-- Preenchido via JS -->
-                                </select>
+                                <select id="anoComparacao" class="filtro-select"></select>
                             </div>
                         </div>
                     </div>
 
-                    <!-- ✅ type="button" explícito — eventos gerenciados via graficos.js -->
                     <button class="btn-primary btn-large" id="btnGerarGraficos" style="margin-top: 20px;" type="button">
                         <i class="fas fa-chart-area" aria-hidden="true"></i> Gerar Gráficos
                     </button>
                 </div>
 
-                <!-- CONTAINER DOS GRÁFICOS -->
                 <div class="graficos-container">
                     <div id="graficosConteudo" aria-live="polite">
-                        <!-- Gráficos serão renderizados aqui via JS -->
+                        <!-- Gráficos renderizados via JS -->
                     </div>
                 </div>
             </section>
@@ -701,7 +706,6 @@
                     </button>
                 </div>
 
-                <!-- ✅ aria-live="polite" — anuncia resultado para leitores de tela -->
                 <div id="relatorioResultado" style="display:none;" aria-live="polite"></div>
             </section>
 
@@ -772,11 +776,6 @@
                         <span class="config-arrow" aria-hidden="true">→</span>
                     </button>
 
-                    <!--
-                        ✅ IDs CORRIGIDOS: o HTML original usava id="btnDownload" mas
-                        dashboard.js em bindEventos() busca por getElementById('btnExportarJSON').
-                        Os botões de export nunca funcionavam — IDs desconectados do JS.
-                    -->
                     <button class="config-card" id="btnExportarJSON" type="button">
                         <div class="config-icon"><i class="fas fa-file-code" aria-hidden="true"></i></div>
                         <div class="config-text">
@@ -819,11 +818,6 @@
     </div>
 
     <!-- MODAL/POPUP -->
-    <!--
-        ✅ role e aria separados:
-        - overlay usa role="presentation" (não é diálogo em si)
-        - container usa role="dialog" + aria-modal para leitores de tela
-    -->
     <div id="modalOverlay" class="modal-overlay" role="presentation"></div>
     <div id="modalContainer" role="dialog" aria-modal="true" aria-label="Janela de diálogo"></div>
 
