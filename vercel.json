@@ -2,8 +2,8 @@
   "cleanUrls": true,
 
   "rewrites": [
-    { "source": "/",               "destination": "/landingpage.html"    },
-    { "source": "/landingpage",    "destination": "/landingpage.html"    },
+    { "source": "/",               "destination": "/index.html"    },
+    { "source": "/landingpage",    "destination": "/index.html"    },
     { "source": "/planos",         "destination": "/planos.html"         },
     { "source": "/login",          "destination": "/login.html"          },
     { "source": "/primeiroacesso", "destination": "/primeiroacesso.html" },
@@ -40,7 +40,7 @@
     },
 
     {
-      "source": "/landingpage.html",
+      "source": "/index.html",
       "headers": [
         {
           "key": "Content-Security-Policy",
