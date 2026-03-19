@@ -2,8 +2,6 @@
    GRANAEVO - ATUALIZAR PLANO CSS
    Página de Upgrade com Proteção de Login
    =========================================== */
-
-/* Importa variáveis do planos.css */
 :root {
     --primary: #10b981;
     --primary-dark: #059669;
