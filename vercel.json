@@ -2,8 +2,8 @@
   "cleanUrls": true,
 
   "rewrites": [
-    { "source": "/",               "destination": "/index.html"    },
-    { "source": "/landingpage",    "destination": "/index.html"    },
+    { "source": "/",               "destination": "/index.html"          },
+    { "source": "/landingpage",    "destination": "/index.html"          },
     { "source": "/planos",         "destination": "/planos.html"         },
     { "source": "/login",          "destination": "/login.html"          },
     { "source": "/primeiroacesso", "destination": "/primeiroacesso.html" },
@@ -109,14 +109,14 @@
     {
       "source": "/(.*)\\.css",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
       ]
     },
 
     {
       "source": "/(.*)\\.js",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
       ]
     }
 
