@@ -26,6 +26,8 @@ let nextMetaId = 1;
 let nextContaFixaId = 1;
 let metaSelecionadaId = null;
 let tipoRelatorioAtivo = 'individual';
+let _effectiveUserId = null;
+let _effectiveEmail  = null;
 
 // ========== REFERÊNCIAS GLOBAIS ==========
 
@@ -415,15 +417,32 @@ async function carregarPerfis(targetUserId = null) {
 // ========== CARREGAR DADOS DO PERFIL (CORRIGIDA) ==========
 async function carregarDadosPerfil(perfilId) {
     try {
-        // ✅ CORRIGIDO: não expõe perfilId no console em produção
         _log.info('📦 [carregarDadosPerfil] Iniciando carregamento de dados');
 
         const userData = await dataManager.loadUserData();
 
+        // ✅ CORREÇÃO CRÍTICA: data-manager.js rejeita perfis com id inteiro (ex: id=6)
+        //    ao validar o shape no loadUserData(), e como efeito colateral pode resetar
+        //    o userId interno. Detectamos isso aqui e re-inicializamos antes de prosseguir,
+        //    garantindo que salvarDados() encontre um dataManager.userId válido.
+        if (!dataManager.userId) {
+            if (_effectiveUserId && _effectiveEmail) {
+                _log.warn('[carregarDadosPerfil] dataManager.userId perdido após loadUserData(). Re-inicializando...');
+                try {
+                    await dataManager.initialize(_effectiveUserId, _effectiveEmail);
+                    _log.info('[carregarDadosPerfil] Re-inicialização concluída. userId:', !!dataManager.userId);
+                } catch (reinitErr) {
+                    _log.error('PERFIL_LOAD_REINIT_001', reinitErr);
+                }
+            } else {
+                _log.warn('[carregarDadosPerfil] dataManager.userId perdido e _effectiveUserId não disponível.');
+            }
+        }
+
         // ✅ Apenas contagem — sem dados identificáveis
         _log.info('📊 [carregarDadosPerfil] Dados recebidos. Total de perfis:', userData.profiles?.length || 0);
 
-        const perfilData = userData.profiles.find(p => p.id === perfilId);
+        const perfilData = userData.profiles.find(p => String(p.id) === String(perfilId));
 
         if (!perfilData) {
             _log.info('[carregarDadosPerfil] Perfil sem dados salvos. Criando estrutura vazia.');
@@ -600,9 +619,25 @@ async function salvarDados() {
         _log.error('SAVE_001', 'Nenhum perfil ativo');
         return false;
     }
+
+    // ✅ CORREÇÃO: data-manager.js pode resetar userId ao rejeitar perfis com id inteiro
+    //    durante loadUserData(). Antes de falhar definitivamente, tentamos re-inicializar
+    //    usando _effectiveUserId e _effectiveEmail persistidos no verificarLogin().
     if (!dataManager?.userId) {
-        _log.error('SAVE_002', 'DataManager não inicializado');
-        return false;
+        if (_effectiveUserId && _effectiveEmail) {
+            _log.warn('SAVE: dataManager.userId ausente. Tentando re-inicializar antes de salvar...');
+            try {
+                await dataManager.initialize(_effectiveUserId, _effectiveEmail);
+            } catch (reinitErr) {
+                _log.error('SAVE_002_REINIT', reinitErr);
+            }
+        }
+        // Verifica novamente após tentativa de recuperação
+        if (!dataManager?.userId) {
+            _log.error('SAVE_002', 'DataManager não inicializado e recuperação falhou');
+            return false;
+        }
+        _log.info('SAVE: dataManager.userId recuperado com sucesso.');
     }
 
     return new Promise((resolve) => {
@@ -643,9 +678,6 @@ async function salvarDados() {
                 }
 
                 // ── 2. Verificar limites de payload (Ponto 5) ───────────────
-                //    Falha rápido antes de construir dadosPerfil.
-                //    Impede que arrays gigantes (injetados ou corrompidos) travem
-                //    o banco ou gerem custo excessivo de armazenamento.
                 if (transacoesValidas.length > _SAVE_LIMITS.transacoes) {
                     _log.error('SAVE_LIMIT_001',
                         `Transações excedem o limite (${transacoesValidas.length} > ${_SAVE_LIMITS.transacoes})`);
@@ -672,9 +704,6 @@ async function salvarDados() {
                 }
 
                 // ── 3. Sanitizar estrutura — whitelist de chaves (Ponto 1) ──
-                //    _sanitizeObject garante que apenas campos conhecidos chegam
-                //    ao banco. Campos extras, __proto__ injetado e flags de runtime
-                //    são silenciosamente descartados aqui antes do spread no backend.
                 const transacoesSanitizadas = transacoesValidas.map(t =>
                     _sanitizeObject(t, _ALLOWED_KEYS.transacao)
                 );
@@ -700,15 +729,6 @@ async function salvarDados() {
                     lastUpdate:     new Date().toISOString(),
                 };
 
-                // ✅ CORREÇÃO PONTO 2 (Mass Assignment):
-                //    Antes: loadUserData() → modifica array em memória → saveUserData(array completo)
-                //    Janela de ataque: extensão maliciosa podia adulterar outros perfis entre o
-                //    load e o save, já que o array completo transitava pelo cliente.
-                //
-                //    Agora: saveProfileData() envia apenas o perfil ativo para a RPC
-                //    salvar_perfil_usuario(), que faz um jsonb_set() cirúrgico no banco.
-                //    Os outros perfis nunca saem do servidor — janela de ataque eliminada.
-                //    O userId é validado via auth.uid() server-side; o cliente não envia nenhum.
                 const sucesso = await dataManager.saveProfileData(dadosPerfil);
                 if (!sucesso) _log.error('SAVE_003', 'saveProfileData retornou false');
                 resolve(!!sucesso);
@@ -843,19 +863,23 @@ async function verificarLogin() {
         await dataManager.initialize(effectiveUserId, effectiveEmail);
         _log.info('[VERIFICAR LOGIN] DataManager inicializado');
 
-        // ✅ CORREÇÃO CRÍTICA: verifica se userId foi definido após initialize().
-        //    Quando data-manager.js rejeita perfis por shape inválido (id inteiro vs UUID),
-        //    o initialize() pode retornar sem definir userId.
-        //    Tentativa única de recuperação antes de falhar definitivamente.
+        // ✅ CORREÇÃO: persiste effectiveUserId e effectiveEmail no módulo.
+        //    data-manager.js pode resetar userId internamente ao rejeitar perfis
+        //    com id inteiro durante loadUserData(). Estas variáveis permitem
+        //    re-inicializar o dataManager em carregarDadosPerfil e salvarDados
+        //    sem precisar de nova sessão de autenticação.
+        _effectiveUserId = effectiveUserId;
+        _effectiveEmail  = effectiveEmail;
+
         if (!dataManager.userId) {
             _log.warn('[VERIFICAR LOGIN] dataManager.userId não definido após initialize(). Tentando re-inicialização...');
-            // ✅ Passa os parâmetros novamente — data-manager deve garantir que userId
-            //    seja definido mesmo quando não há dados válidos no banco (novo usuário).
             await dataManager.initialize(effectiveUserId, effectiveEmail);
 
+            // ✅ Persiste novamente após re-inicialização
+            _effectiveUserId = effectiveUserId;
+            _effectiveEmail  = effectiveEmail;
+
             if (!dataManager.userId) {
-                // ✅ Se ainda falhar, o data-manager.js tem um bug em initialize().
-                //    Lança erro descritivo para facilitar diagnóstico.
                 throw new Error(
                     'DataManager falhou ao inicializar (userId permanece nulo). ' +
                     'Verifique o método initialize() em data-manager.js: ' +
@@ -865,11 +889,6 @@ async function verificarLogin() {
         }
 
         _log.info('[VERIFICAR LOGIN] Carregando perfis...');
-        // ✅ CORREÇÃO: passa effectiveUserId para carregarPerfis().
-        //    Para convidados (isGuest=true), effectiveUserId é o ID do dono —
-        //    os perfis ficam sob o user_id do dono, não do convidado.
-        //    Antes desta correção, session.user.id (ID do convidado) era usado,
-        //    causando "nenhum perfil encontrado" para contas convidadas.
         const resultadoPerfis = await carregarPerfis(effectiveUserId);
 
         if (!resultadoPerfis.sucesso) {

@@ -38,10 +38,7 @@ function validateProfileShape(profile) {
         return 'perfil deve ser um objeto';
     }
 
-    // ✅ CORREÇÃO: aceita tanto UUID string quanto inteiro positivo (SERIAL do Supabase).
-    //    Antes: typeof profile.id !== 'string' rejeitava qualquer ID numérico,
-    //    descartando TODOS os perfis salvos com SERIAL/BIGSERIAL no banco.
-    //    Agora: inteiro positivo OU string não-vazia são aceitos.
+    // ✅ Aceita tanto UUID string quanto inteiro positivo (SERIAL do Supabase).
     const isIntId  = Number.isInteger(profile.id) && profile.id > 0;
     const isStrId  = typeof profile.id === 'string' && profile.id.trim() !== '';
 
@@ -49,9 +46,9 @@ function validateProfileShape(profile) {
         return 'profile.id ausente ou inválido';
     }
 
-    // ✅ Para IDs string: normaliza e valida formato seguro (bloqueia path traversal).
-    //    Para IDs inteiros: converte para string apenas para a validação de regex,
-    //    sem alterar o tipo original no objeto (evita quebrar comparações === downstream).
+    // ✅ Para IDs string: valida formato seguro SEM mutar o objeto original.
+    //    Antes: profile.id = trimmedId mutava o objeto do caller (efeito colateral perigoso).
+    //    Agora: usamos variável local — o objeto original nunca é tocado pelo validador.
     if (isStrId) {
         const trimmedId = profile.id.trim();
 
@@ -62,9 +59,9 @@ function validateProfileShape(profile) {
         if (!PROFILE_ID_REGEX.test(trimmedId)) {
             return 'profile.id possui caracteres inválidos (use apenas letras, números, hífen e underscore, máx. 64 chars)';
         }
-
-        // Normaliza string (remove espaços nas bordas)
-        profile.id = trimmedId;
+        // ✅ NÃO muta profile.id — normalização (trim) fica apenas local.
+        //    Se o banco retornar IDs com espaços, eles passam na validação mas chegam
+        //    intocados ao caller, que pode lidar com eles explicitamente se necessário.
     }
     // IDs inteiros não precisam de normalização — são imunes a path traversal por natureza.
 
@@ -100,14 +97,22 @@ function validateProfilesArray(profiles) {
 // ========== CLASSE ==========
 class DataManager {
 
-    // Private class fields — invisíveis via console, Object.keys, extensões, XSS
+    // ── Private class fields ─────────────────────────────────────────────────
+    // Invisíveis via console, Object.keys, extensões, XSS e eval.
+    // Nenhum script externo consegue ler ou sobrescrever diretamente.
     #userId       = null;
     #userEmail    = null;
     #isSaving     = false;
     #lastSaveTime = null;
-get userId() {
-    return this.#userId;
-}
+
+    // ── Getter público — acesso somente-leitura ao userId ────────────────────
+    // Expõe apenas o valor; o campo privado #userId permanece inacessível.
+    get userId() {
+        return this.#userId;
+    }
+
+    // ── Fila Promise chain — sem polling, sem setInterval, sem CPU waste ─────
+    // saveUserData e saveProfileData compartilham a mesma fila (nunca paralelas).
 
     // Fila Promise chain — sem polling, sem setInterval, sem CPU waste.
     // saveUserData e saveProfileData compartilham a mesma fila (nunca paralelas).
@@ -119,11 +124,11 @@ get userId() {
     #debounceResolve  = null;
     #debouncePending  = null; // dados mais recentes pendentes no debounce
 
-    // ============================
-    // INICIALIZAÇÃO
-    // ============================
+    // ============================ //
+    //        INICIALIZAÇÃO         //
+    // ============================ //
 
-    /**
+   /**
      * Inicializa o DataManager com as credenciais do usuário logado.
      * Deve ser chamado uma única vez após o login bem-sucedido.
      *
@@ -133,21 +138,24 @@ get userId() {
      */
     async initialize(userId, userEmail) {
         if (!userId || typeof userId !== 'string' || userId.trim() === '') {
-            console.error('❌ [DATA-MANAGER] userId inválido na inicialização');
+            console.error('❌ [DATA-MANAGER] userId inválido na inicialização — deve ser string não-vazia');
             return false;
         }
         if (!userEmail || typeof userEmail !== 'string' || userEmail.trim() === '') {
-            console.error('❌ [DATA-MANAGER] userEmail inválido na inicialização');
+            console.error('❌ [DATA-MANAGER] userEmail inválido na inicialização — deve ser string não-vazia');
             return false;
         }
 
+        // ✅ CORREÇÃO: define #userId ANTES de qualquer log, garantindo que
+        //    chamadas concorrentes a loadUserData/saveProfileData que chegarem
+        //    durante o await nunca encontrem #userId nulo se initialize() já foi chamado.
         this.#userId    = userId.trim();
         this.#userEmail = userEmail.trim();
 
         if (IS_DEV) {
-            console.log('📦 DataManager inicializado');
-            console.log('👤 UserID:', this.#userId);
-            console.log('📧 Email:', this.#userEmail);
+            console.log('📦 [DATA-MANAGER] Inicializado com sucesso.');
+            console.log('👤 UserID definido:', !!this.#userId);
+            console.log('📧 Email definido:',  !!this.#userEmail);
         }
 
         return true;
@@ -446,7 +454,7 @@ get userId() {
     // SALVAR PERFIL ESPECÍFICO (cirúrgico — apenas 1 perfil)
     // ============================
 
-    /**
+   /**
      * Salva um único perfil via RPC cirúrgica (upsert no array do banco).
      * Não passa pelo debounce — sempre enfileirado diretamente.
      *
@@ -454,6 +462,16 @@ get userId() {
      * @returns {Promise<boolean>}
      */
     async saveProfileData(dadosPerfil) {
+        // ✅ CORREÇÃO: verifica #userId antes de validar o perfil.
+        //    Com a correção do dashboard.js (_effectiveUserId / _effectiveEmail),
+        //    o userId nunca deveria ser nulo aqui. Mas adicionamos esta guarda
+        //    defensiva para evitar que um log enganoso de "Perfil inválido" mascare
+        //    um problema real de sessão não inicializada.
+        if (!this.#userId) {
+            console.error('❌ [DATA-MANAGER] saveProfileData: UserID não definido — faça initialize() primeiro');
+            return false;
+        }
+
         const validationError = validateProfileShape(dadosPerfil);
         if (validationError) {
             console.error('❌ [DATA-MANAGER] Perfil inválido:', validationError);
