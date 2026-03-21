@@ -1,55 +1,9 @@
 /* =============================================
    GRANAEVO - ATUALIZAR PLANO JS  v2.1
-   =============================================
-   Histórico de segurança:
-   [R1]   CSP com nonce                          ← HTML
-   [R2]   CSRF token obrigatório
-   [R3]   Validação URL: https + hostname + path + query length
-   [F1]   Trusted Types policy custom
-   [F2]   Subresource Integrity                  ← hash embutido no HTML pelo build
-   [F3]   Anti-token replay via jti (UUID único por request)
-
-   Correções v2.1 (em relação à v2.0):
-   [FIX1] container.innerHTML = '' → replaceChildren(aviso)
-          Alinha com o padrão do restante do código e evita
-          qualquer risco residual de parser HTML em dados anteriores.
-
-   [FIX2] _Cooldown movido de processarUpgrade() para o handler
-          do botão confirmar. O rate limit deve proteger a chamada
-          de API, não a abertura de um popup local. Na v2.0, abrir
-          e fechar o popup ativava o cooldown de 8s, prejudicando UX.
-
-   [FIX3] Forward reference entre fecharOverlay e onKeyDown corrigido.
-          Declaração de onKeyDown movida para antes de fecharOverlay
-          através de let hoistável para evitar Temporal Dead Zone.
-
-   [FIX4] Focus trap completo no modal (Tab e Shift+Tab contidos).
-          Previne interação com elementos de fundo enquanto o modal
-          está aberto — boa prática WCAG 2.1 e prevenção de cliques
-          acidentais em elementos ocultados pelo overlay.
-
-   [FIX5] Focus restoration ao fechar o modal. O foco retorna ao
-          botão que abriu o modal, conforme WCAG 2.1 SC 2.4.3.
-
-   [FIX6] console.log removido do bundle de produção.
-          Revelava nome do projeto, versão e tecnologias para
-          qualquer pessoa com DevTools aberto — information disclosure.
-
-   [FIX7] X-Frame-Options e X-Content-Type-Options como meta http-equiv
-          removidos do HTML (não funcionam como meta tag, browsers ignoram).
-          frame-ancestors 'none' no CSP já cobre o primeiro.
-          X-Content-Type-Options precisa ser definido como HTTP header.
-
-   [FIX8] Permissions-Policy adicionado ao HTML (câmera, microfone,
-          geolocalização, payment, usb, bluetooth, acelerômetro,
-          giroscópio todos negados explicitamente).
-
-   [FIX9] report-uri adicionado à CSP para monitoramento de violações
-          em produção. Configure o endpoint /csp-report no backend.
    ============================================= */
 
-import { supabase } from './supabase-client.js';
-import AuthGuard from './auth-guard.js';
+import { supabase } from './supabase-client.js?v=2';
+import AuthGuard from './auth-guard.js?v=2';
 
 // ========== [F1] TRUSTED TYPES POLICY ==========
 //

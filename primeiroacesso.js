@@ -4,72 +4,10 @@
  * ============================================================
  * HISTÓRICO DE CORREÇÕES — TODAS ATIVAS
  * ============================================================
- *
- * ── v7 (atual) ──────────────────────────────────────────────
- *
- * [SEC-TERMS-CACHE] termsWarning cacheado no topo com os demais elementos.
- *   Antes era consultado via getElementById DENTRO de dois event handlers
- *   separados (termsCheckbox.change e showTermsError). Isso causava:
- *   - dupla query ao DOM a cada evento
- *   - risco de dessincronização se o elemento fosse movido no DOM
- *   Fix: declarado na seção "ELEMENTOS DO DOM" e reutilizado em ambos os handlers.
- *
- * [SEC-CATCH-LOG] _createUserData: catch vazio substituído por console.warn.
- *   Antes: erros de insert em user_data eram silenciados completamente,
- *   tornando impossível diagnosticar falhas em produção.
- *   Fix: catch loga o erro com prefixo rastreável, sem interromper o fluxo.
- *
- * [SEC-LINK-TARGET] Links em showAlertWithLinks recebem target="_self" explícito.
- *   Antes: target era undefined (comportamento padrão do browser),
- *   o que em contextos de abertura por terceiros poderia abrir em nova aba.
- *   Fix: target="_self" garante navegação na mesma aba.
- *
- * [A11Y-ARIA-LIVE] alertBox recebe aria-live="assertive" via setAttribute no JS.
- *   Antes: leitores de tela (NVDA, JAWS, VoiceOver) não anunciavam os alertas
- *   porque o elemento não tinha a região live correta.
- *   Fix: atributo definido no JS logo após o DOMContentLoaded.
- *   (Complemento do aria-live="assertive" + role="alert" que está no HTML.)
- *
- * ── v6 (mantidos) ───────────────────────────────────────────
- *
- * [SEC-INLINE-STYLE] CRÍTICO — Todo element.style.X removido do JS.
- *   Qualquer atribuição de estilo inline via JS é bloqueada por CSP
- *   quando style-src não contém 'unsafe-inline'. Este arquivo não
- *   usa element.style.X em NENHUM lugar. Todo estado visual é
- *   gerenciado exclusivamente via classList.add/remove.
- *
- * [SEC-TIMEOUT] AbortController com timeout de 10s em TODOS os fetches.
- *
- * [SEC-MAXLENGTH] maxlength reforçado via setAttribute no JS.
- *   email → 254 chars (limite RFC 5321)
- *   senha → 128 chars (limite bcrypt)
- *
- * [UX-EMAIL-LOCK] emailInput.disabled = true após verificação bem-sucedida.
- *
- * [BUG-STRENGTH-FIX] Barra de força da senha corrigida via classes sw-*.
- *
- * [BUG-ANIM-FIX] document.createElement('style') removido.
- *
- * ── v4 / v3 (mantidos) ──────────────────────────────────────
- *
- * [SEC-02] Anon key removida do header de check-email-status.
- * [SEC-03] Account Enumeration eliminado — resposta genérica para não-ready.
- * [SEC-06] Rate limit de 5s no botão "Verificar Email".
- * [SEC-07] restoreButton via cloneNode + replaceChildren — zero innerHTML.
- * [SEC-08] Rate limit de 3s no botão "Criar Senha e Acessar".
- * [SEC-09] autocomplete="new-password" reforçado via setAttribute.
- * [SEC-10] userId validado como authData.user.id antes de qualquer insert.
- * [SEC-01] JWT do usuário nas Edge Functions autenticadas.
- * [SEC-04] showAlert/showAlertWithLinks sem innerHTML com dados externos.
- * [SEC-05] Campos de senha limpos em TODOS os caminhos de erro.
- * [BUG-03-FIX] _linkViaBackend com retry + backoff exponencial (3 tentativas).
- * [BUG-04-FIX] Tratamento de signUp sem session (confirmação de email ativa).
- * [FIX-01] submitBtn restaurado em todos os caminhos (finally).
- * [FIX-02] Email normalizado para lowercase antes de qualquer operação.
- * [FIX-03] Tratamento explícito do erro "email not confirmed" no login automático.
+
  */
 
-import { supabase } from './supabase-client.js';
+import { supabase } from './supabase-client.js?v=2';
 
 // ==========================================
 // CONFIGURAÇÃO

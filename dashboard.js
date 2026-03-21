@@ -1,7 +1,7 @@
 // ========== IMPORTS ESSENCIAIS ==========
-import { supabase } from './supabase-client.js';
-import { dataManager } from './data-manager.js';
-import AuthGuard from './auth-guard.js';
+import { supabase } from './supabase-client.js?v=2';
+import { dataManager } from './data-manager.js?v=2';
+import AuthGuard from './auth-guard.js?v=2';
 
 console.log('🚀 Dashboard.js carregado');
 console.log('📦 DataManager disponível:', !!dataManager);

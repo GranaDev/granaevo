@@ -5,82 +5,9 @@
  * ═══════════════════════════════════════════════════════════════
  *  REGISTRO COMPLETO DE CORREÇÕES DE SEGURANÇA
  * ═══════════════════════════════════════════════════════════════
- *
- * ── CORREÇÕES ORIGINAIS (mantidas) ──────────────────────────
- *
- * [SEC-01]  Helper _err() não exportado — encapsulado na closure do módulo
- * [SEC-02]  Fingerprint com múltiplos sinais + canvas + salt de sessão
- * [SEC-03]  Listener 'storage' detecta remoção de token em outra aba
- * [SEC-04]  HMAC-SHA256 real via SubtleCrypto
- * [SEC-05]  Encoding via TextEncoder / Uint8Array
- * [SEC-07]  Rate limit com MAC assinado
- * [SEC-08]  forceLogout aguarda signOut — sem race condition
- * [SEC-09]  PASSWORD_RECOVERY: signOut antes de redirecionar
- * [SEC-10]  Stack trace preservado em _err()
- * [SEC-11]  Integrity stamp com janela de 6 h
- * [SEC-12]  Token de acesso NÃO incluído em userData
- * [SEC-13]  BroadcastChannel — sincronização entre abas
- * [SEC-14]  SafeRedirect valida same-origin + blocklist de esquemas perigosos
- * [SEC-15]  Cache de subscription em closure privada
- *
- * [BUG-RLS-FIX]  SubscriptionChecker.getActive() reescrito.
- * [FIX-VUL-1]    Rate limit com MAC assinado pelo secret da sessão.
- * [FIX-VUL-2]    Fingerprint reforçado: canvas rendering + salt de sessão.
- * [FIX-VUL-3]    Auto-link exige email_confirmed_at + igualdade de emails.
- * [FIX-VUL-4]    _getOrCreateSecret() em closure privada de SecureCrypto.
- * [FIX-VUL-5]    Fingerprint.generate() usa HMAC-SHA256 assíncrono.
- * [FIX-VUL-6]    Monitor com contador de falhas consecutivas.
- * [FIX-VUL-7]    SafeRedirect._isSafe() com blocklist de esquemas.
- * [FIX-VUL-8]    onSuccess callback com timeout de segurança de 10s.
- * [FIX-VUL-9]    visibilitychange revalida fingerprint + integrity stamp.
- * [FIX-VUL-10]   sessionSecret em memória — nunca em sessionStorage.
- * [FIX-VUL-11]   Fallback por email rejeita múltiplas subscriptions.
- *
- * ── CORREÇÕES DO RELATÓRIO EXTERNO ──────────────────────────
- *
- * [FIX-REPORT-1]  Subscription query filtrada por email da sessão via
- *   .ilike('user_email', sessionEmail) — dupla defesa além do RLS.
- *   Evita enumeração de subscriptions em caso de regressão de política.
- *   A chamada getUser() foi movida para ANTES da query de fallback,
- *   eliminando o segundo getUser() que existia mais abaixo.
- *
- * [FIX-REPORT-2]  Fingerprint sem sinais instáveis. Removidos:
- *   screen.width, screen.height, devicePixelRatio, navigator.language,
- *   new Date().getTimezoneOffset(). Esses valores mudam legitimamente
- *   ao mover entre monitores, aplicar zoom ou trocar idioma do browser,
- *   causando logouts falsos. Canvas entropy + HMAC + user.id + platform
- *   já garantem unicidade criptográfica suficiente.
- *
- * [FIX-REPORT-3]  Rate limit migrado de sessionStorage para localStorage
- *   + TAB_ID. Log compartilhado entre abas — impede bypass abrindo
- *   múltiplas abas. Cada entrada contém {ts, tabId} para rastreio.
- *   Assinado com chave persistente (_ge_rls) em localStorage,
- *   distinta do session secret em memória.
- *
- * [FIX-REPORT-4]  Monitor de sessão verifica se sessão realmente sumiu
- *   antes de forçar logout por erros consecutivos de rede. Evita
- *   logout em massa durante instabilidade momentânea do Supabase.
- *   Comportamento: se sessão ainda existe → reseta contador de erros.
- *   Se nem a verificação funciona → logout preventivo.
- *
- * [FIX-REPORT-5]  _autoLink() adiciona .eq('user_email', subscriptionEmail)
- *   no UPDATE — guard duplo contra race condition entre abas tentando
- *   vincular a mesma subscription simultaneamente.
- *
- * ── CORREÇÕES EXTRAS (identificadas na revisão) ─────────────
- *
- * [FIX-EXTRA-1]   Mutex em protect() via flag _protecting. Impede que
- *   chamadas concorrentes (ex: hot-reload de framework, duplo click)
- *   criem race condition no handshake de segurança ou corrijam o rate
- *   log de forma inconsistente.
- *
- * [FIX-EXTRA-2]   Flag _isRedirecting em nível de módulo dentro de
- *   SafeRedirect.to(). Garante que apenas um redirect ocorra, mesmo
- *   que visibilitychange, onAuthStateChange e monitor disparem quase
- *   simultaneamente. Cobre todos os caminhos de redirect centralmente.
  */
 
-import { supabase } from './supabase-client.js';
+import { supabase } from './supabase-client.js?v=2';
 
 // ═══════════════════════════════════════════════════════════════
 //  TAB_ID — identificador único desta aba [FIX-REPORT-3]
