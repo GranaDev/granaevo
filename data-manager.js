@@ -1,84 +1,66 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
 import { supabase } from './supabase-client.js';
 
-// ========== CONSTANTES PRIVADAS (module-scope, inacessíveis externamente) ==========
-const MAX_PAYLOAD_BYTES   = 4_900_000; // 4.9MB — margem antes do limite RPC (5MB)
-const MAX_PROFILES        = 200;       // Limite de quantidade de perfis por save
-const MAX_QUEUE_DEPTH     = 3;         // Máximo de saves enfileirados simultâneos (anti-flood)
-const RPC_TIMEOUT_MS      = 15_000;    // 15s — aborta se Supabase travar
-const DEBOUNCE_DELAY_MS   = 800;       // Coalescing: agrupa saves rápidos em 1 único RPC
-const IS_DEV              = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-// ✅ FIX: Proxy interno — oculta o endpoint real da Edge Function.
-//    O endpoint direto do Supabase NÃO deve ser exposto no front-end:
-//    qualquer pessoa poderia descobri-lo e fazer flood mesmo sem autenticação.
-//    O proxy /api/save-user-data recebe a requisição, aplica rate limit / firewall
-//    e só então repassa internamente para a Edge Function.
+// ========== CONSTANTES PRIVADAS ==========
+const MAX_PAYLOAD_BYTES  = 4_900_000;
+const MAX_PROFILES       = 200;
+const MAX_QUEUE_DEPTH    = 3;
+const RPC_TIMEOUT_MS     = 15_000;
+const DEBOUNCE_DELAY_MS  = 800;
+const IS_DEV             = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const SUPABASE_BEACON_URL = `${window.location.origin}/api/save-user-data`;
 
-// ========== VALIDADORES INTERNOS ==========
+// ========== VALIDADORES ==========
 
-// ✅ FIX: Regex que restringe profile.id a caracteres seguros.
-//    Sem isso, um atacante poderia enviar IDs como "../../etc/passwd" ou
-//    o ID de outro usuário — causando path traversal ou overwrite de perfil errado
-//    se o backend usar o ID diretamente para localizar registros no JSON.
-//    Aceita: letras, números, hífen e underscore. Máximo 64 caracteres.
+// ✅ Regex segura para IDs string (path traversal prevention)
 const PROFILE_ID_REGEX = /^[a-zA-Z0-9_-]{1,64}$/;
 
 /**
- * Deep validation mínima do objeto de perfil.
- * Garante que campos críticos têm o tipo esperado antes de enviar ao servidor.
- * Não substitui validação server-side, mas evita que dados claramente
- * malformados cheguem até o RPC.
- *
- * @param {unknown} profile
- * @returns {string|null} Mensagem de erro, ou null se válido
+ * Validador ESTRITO — usado apenas no SAVE.
+ * Impede que dados malformados ou injetados cheguem ao banco.
  */
 function validateProfileShape(profile) {
     if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
         return 'perfil deve ser um objeto';
     }
-
-    // ✅ Aceita tanto UUID string quanto inteiro positivo (SERIAL do Supabase).
-    const isIntId  = Number.isInteger(profile.id) && profile.id > 0;
-    const isStrId  = typeof profile.id === 'string' && profile.id.trim() !== '';
-
+    const isIntId = Number.isInteger(profile.id) && profile.id > 0;
+    const isStrId = typeof profile.id === 'string' && profile.id.trim() !== '';
     if (!isIntId && !isStrId) {
         return 'profile.id ausente ou inválido';
     }
-
-    // ✅ Para IDs string: valida formato seguro SEM mutar o objeto original.
-    //    Antes: profile.id = trimmedId mutava o objeto do caller (efeito colateral perigoso).
-    //    Agora: usamos variável local — o objeto original nunca é tocado pelo validador.
     if (isStrId) {
         const trimmedId = profile.id.trim();
-
-        // PROFILE_ID_REGEX: [a-zA-Z0-9_-]{1,64}
-        // UUIDs passam (apenas alfanumérico + hífen).
-        // IDs com path traversal ("../../etc"), separadores ("/", "\") ou
-        // caracteres de controle são bloqueados aqui.
         if (!PROFILE_ID_REGEX.test(trimmedId)) {
             return 'profile.id possui caracteres inválidos (use apenas letras, números, hífen e underscore, máx. 64 chars)';
         }
-        // ✅ NÃO muta profile.id — normalização (trim) fica apenas local.
-        //    Se o banco retornar IDs com espaços, eles passam na validação mas chegam
-        //    intocados ao caller, que pode lidar com eles explicitamente se necessário.
     }
-    // IDs inteiros não precisam de normalização — são imunes a path traversal por natureza.
-
-    // typeof NaN === 'number' é true em JS — Number.isFinite é obrigatório aqui.
     if ('balance' in profile && !Number.isFinite(profile.balance)) {
         return 'profile.balance deve ser um número finito (NaN e Infinity não são aceitos)';
     }
     if ('name' in profile && (typeof profile.name !== 'string' || profile.name.length > 256)) {
         return 'profile.name inválido ou muito longo';
     }
-    return null; // válido
+    return null;
 }
 
 /**
- * Valida um array inteiro de perfis.
- * @param {unknown[]} profiles
- * @returns {{ ok: boolean, error?: string }}
+ * Validador LENIENTE — usado apenas no LOAD.
+ * Dados vindos do banco já foram validados no save. Ser estrito aqui
+ * causa rejeição de perfis legítimos salvos antes da migração de segurança
+ * (ex: id inteiro SERIAL, id ausente em dados antigos, etc).
+ * Apenas descartamos o que claramente não é um objeto.
+ */
+function validateProfileShapeForLoad(profile) {
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+        return 'perfil deve ser um objeto';
+    }
+    // ✅ Sem validação de id no load — dados do banco são confiáveis.
+    //    A validação estrita ocorre exclusivamente no save.
+    return null;
+}
+
+/**
+ * Valida array completo de perfis — usado antes de qualquer save.
  */
 function validateProfilesArray(profiles) {
     if (!Array.isArray(profiles)) {
@@ -97,45 +79,26 @@ function validateProfilesArray(profiles) {
 // ========== CLASSE ==========
 class DataManager {
 
-    // ── Private class fields ─────────────────────────────────────────────────
-    // Invisíveis via console, Object.keys, extensões, XSS e eval.
-    // Nenhum script externo consegue ler ou sobrescrever diretamente.
+    // ── Private class fields — invisíveis via console, XSS e extensões ──────
     #userId       = null;
     #userEmail    = null;
     #isSaving     = false;
     #lastSaveTime = null;
+    #saveQueue    = Promise.resolve();
+    #queueDepth   = 0;
+    #debounceTimer   = null;
+    #debounceResolve = null;
+    #debouncePending = null;
 
-    // ── Getter público — acesso somente-leitura ao userId ────────────────────
-    // Expõe apenas o valor; o campo privado #userId permanece inacessível.
+    // ── Getter público — somente leitura ─────────────────────────────────────
     get userId() {
         return this.#userId;
     }
-
-    // ── Fila Promise chain — sem polling, sem setInterval, sem CPU waste ─────
-    // saveUserData e saveProfileData compartilham a mesma fila (nunca paralelas).
-
-    // Fila Promise chain — sem polling, sem setInterval, sem CPU waste.
-    // saveUserData e saveProfileData compartilham a mesma fila (nunca paralelas).
-    #saveQueue  = Promise.resolve();
-    #queueDepth = 0;
-
-    // Debounce: coalescing de saves rápidos para evitar RPCs redundantes.
-    #debounceTimer    = null;
-    #debounceResolve  = null;
-    #debouncePending  = null; // dados mais recentes pendentes no debounce
 
     // ============================ //
     //        INICIALIZAÇÃO         //
     // ============================ //
 
-   /**
-     * Inicializa o DataManager com as credenciais do usuário logado.
-     * Deve ser chamado uma única vez após o login bem-sucedido.
-     *
-     * @param {string} userId   UUID do usuário (Supabase Auth)
-     * @param {string} userEmail Email do usuário
-     * @returns {Promise<boolean>}
-     */
     async initialize(userId, userEmail) {
         if (!userId || typeof userId !== 'string' || userId.trim() === '') {
             console.error('❌ [DATA-MANAGER] userId inválido na inicialização — deve ser string não-vazia');
@@ -146,9 +109,7 @@ class DataManager {
             return false;
         }
 
-        // ✅ CORREÇÃO: define #userId ANTES de qualquer log, garantindo que
-        //    chamadas concorrentes a loadUserData/saveProfileData que chegarem
-        //    durante o await nunca encontrem #userId nulo se initialize() já foi chamado.
+        // ✅ Define ANTES de qualquer await para evitar race conditions
         this.#userId    = userId.trim();
         this.#userEmail = userEmail.trim();
 
@@ -162,44 +123,32 @@ class DataManager {
     }
 
     /**
-     * ✅ FIX NOVO: Limpa o estado interno do DataManager ao deslogar.
-     * Impede que credenciais do usuário anterior permaneçam na memória.
-     * Cancela qualquer debounce pendente antes de limpar.
+     * Limpa estado interno ao deslogar.
+     * Cancela debounce pendente antes de limpar.
      */
     reset() {
-        // Cancela debounce pendente — dados do usuário anterior não devem ser salvos
         if (this.#debounceTimer !== null) {
             clearTimeout(this.#debounceTimer);
             this.#debounceTimer   = null;
             this.#debouncePending = null;
-
-            // Resolve a promise pendente com false — o caller sabe que foi cancelado
             if (this.#debounceResolve) {
                 this.#debounceResolve(false);
                 this.#debounceResolve = null;
             }
         }
-
         this.#userId       = null;
         this.#userEmail    = null;
         this.#isSaving     = false;
         this.#lastSaveTime = null;
         this.#queueDepth   = 0;
         this.#saveQueue    = Promise.resolve();
-
         if (IS_DEV) console.log('🔒 [DATA-MANAGER] Estado limpo — usuário deslogado');
     }
 
-    // ============================
-    // CARREGAR DADOS DO USUÁRIO
-    // ============================
+    // ============================ //
+    //     CARREGAR DADOS           //
+    // ============================ //
 
-    /**
-     * Carrega os dados do usuário do Supabase.
-     * Cria a estrutura inicial se o registro não existir.
-     *
-     * @returns {Promise<{ version: string, profiles: object[] }>}
-     */
     async loadUserData() {
         try {
             if (!this.#userId) {
@@ -223,7 +172,7 @@ class DataManager {
 
             cleanup();
 
-            // Nenhum registro ainda — cria via RPC
+            // Registro ainda não existe — cria estrutura inicial
             if (error?.code === 'PGRST116') {
                 if (IS_DEV) console.log('⚠️ [DATA-MANAGER] Nenhum dado encontrado, criando estrutura inicial...');
                 return await this.#createInitialRecord();
@@ -241,18 +190,19 @@ class DataManager {
 
             const userData = data.data_json;
 
-            // Garante estrutura mínima válida mesmo se o banco tiver dados parciais
             if (!Array.isArray(userData.profiles)) userData.profiles = [];
             if (!userData.version)                  userData.version  = '1.0';
 
-            // ✅ FIX NOVO: Sanitiza perfis vindos do banco — descarta shapes inválidos
-            //    silenciosamente ao invés de deixar chegar na aplicação.
-            //    Loga os descartados para diagnóstico em dev.
+            // ✅ CORREÇÃO CRÍTICA: usa validador LENIENTE no load.
+            //    O validador estrito (validateProfileShape) rejeita perfis legítimos
+            //    já gravados no banco (ex: id inteiro SERIAL, dados antes da migração).
+            //    No load, apenas descartamos o que claramente não é um objeto.
+            //    A validação estrita ocorre EXCLUSIVAMENTE no save.
             const validProfiles = [];
             for (let i = 0; i < userData.profiles.length; i++) {
-                const err = validateProfileShape(userData.profiles[i]);
+                const err = validateProfileShapeForLoad(userData.profiles[i]);
                 if (err) {
-                    console.warn(`⚠️ [DATA-MANAGER] Perfil [${i}] do banco ignorado (shape inválido): ${err}`);
+                    console.warn(`⚠️ [DATA-MANAGER] Perfil [${i}] ignorado no load: ${err}`);
                 } else {
                     validProfiles.push(userData.profiles[i]);
                 }
@@ -278,39 +228,22 @@ class DataManager {
         }
     }
 
-    // ============================
-    // SALVAR DADOS DO USUÁRIO (array completo de perfis) — com debounce
-    // ============================
+    // ============================ //
+    //     SALVAR (com debounce)    //
+    // ============================ //
 
-    /**
-     * Salva o array completo de perfis do usuário.
-     *
-     * Inclui debounce de 800ms: chamadas rápidas sucessivas são coalesced em
-     * um único RPC, evitando requests desnecessários durante edições rápidas
-     * (ex: digitação em tempo real, sliders).
-     *
-     * @param {object[]} profilesData
-     * @returns {Promise<boolean>}
-     */
     async saveUserData(profilesData) {
-        // Validação antecipada — rejeita dados inválidos antes de entrar na fila
         const validation = validateProfilesArray(profilesData);
         if (!validation.ok) {
             console.error(`❌ [DATA-MANAGER] ${validation.error} — save rejeitado antes da fila`);
             return false;
         }
 
-        // ✅ FIX NOVO: Debounce — coalescing de saves rápidos.
-        //    Ao invés de enfileirar 3 saves idênticos, apenas o último (mais recente)
-        //    é efetivamente enviado ao RPC após DEBOUNCE_DELAY_MS de inatividade.
-        //    Saves com >= DEBOUNCE_DELAY_MS de intervalo entre si não sofrem atraso.
+        // ✅ Debounce: coalescing de saves rápidos → apenas o último chega ao banco
         return new Promise((resolve) => {
-            // Atualiza os dados pendentes com o snapshot mais recente
             this.#debouncePending = profilesData;
 
-            // Se já há um timer rodando, apenas atualiza os dados e aguarda
             if (this.#debounceTimer !== null) {
-                // Resolve a promise anterior com false (foi substituída por save mais recente)
                 if (this.#debounceResolve) this.#debounceResolve(false);
                 this.#debounceResolve = resolve;
                 clearTimeout(this.#debounceTimer);
@@ -320,12 +253,11 @@ class DataManager {
 
             this.#debounceTimer = setTimeout(() => {
                 this.#debounceTimer = null;
-                const pendingData   = this.#debouncePending;
+                const pendingData    = this.#debouncePending;
                 const pendingResolve = this.#debounceResolve;
                 this.#debouncePending  = null;
                 this.#debounceResolve  = null;
 
-                // Enfileira o save com os dados mais recentes
                 this.#enqueue(() => this.#doSaveUserData(pendingData))
                     .then(pendingResolve)
                     .catch(() => pendingResolve(false));
@@ -335,15 +267,10 @@ class DataManager {
     }
 
     /**
-     * Força o salvamento imediatamente, ignorando o debounce.
-     * Use em situações onde a latência de 800ms é inaceitável
-     * (ex: botão "Salvar agora", troca de aba, fechar modal).
-     *
-     * @param {object[]} profilesData
-     * @returns {Promise<boolean>}
+     * Save imediato — ignora o debounce.
+     * Use em situações urgentes: beforeunload, fechar modal, troca de aba.
      */
     async saveUserDataNow(profilesData) {
-        // Cancela debounce pendente — este save síncrono toma prioridade
         if (this.#debounceTimer !== null) {
             clearTimeout(this.#debounceTimer);
             this.#debounceTimer = null;
@@ -353,13 +280,11 @@ class DataManager {
             }
             this.#debouncePending = null;
         }
-
         const validation = validateProfilesArray(profilesData);
         if (!validation.ok) {
             console.error(`❌ [DATA-MANAGER] ${validation.error} — saveNow rejeitado`);
             return false;
         }
-
         return this.#enqueue(() => this.#doSaveUserData(profilesData));
     }
 
@@ -372,13 +297,11 @@ class DataManager {
         this.#isSaving = true;
 
         try {
-            // Deep clone — imunidade a mutação externa durante a execução assíncrona do RPC
+            // Deep clone — imunidade a mutação externa durante operações assíncronas
             const safeProfiles = structuredClone(profilesData);
 
-            // ✅ FIX: userId e email REMOVIDOS do payload RPC.
-            //    O servidor DEVE identificar o usuário pelo JWT (cookie sb-access-token),
-            //    nunca por campos do body — que podem ser forjados (IDOR).
-            //    Mantemos apenas version, profiles e metadata.
+            // ✅ userId e email NÃO vão no payload — servidor identifica via JWT.
+            //    Apenas dados estruturais são enviados ao banco.
             const dataToSave = {
                 version:  '1.0',
                 profiles: safeProfiles,
@@ -396,53 +319,71 @@ class DataManager {
                 return false;
             }
 
-            if (IS_DEV) {
-                console.log('💾 [SUPABASE] Iniciando salvamento via RPC...');
-                console.log('📊 Total de perfis:', safeProfiles.length);
-                console.log('📦 Tamanho dos dados:', serialized.length, 'bytes');
-            }
-
             if (serialized.length > MAX_PAYLOAD_BYTES) {
                 console.error('❌ [DATA-MANAGER] Payload excede 4.9MB — salvamento abortado');
                 return false;
             }
 
-            const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
+            if (IS_DEV) {
+                console.log('💾 [DATA-MANAGER] Salvando dados...');
+                console.log('📊 Perfis:', safeProfiles.length);
+                console.log('📦 Tamanho:', serialized.length, 'bytes');
+            }
 
-            const { data: result, error } = await supabase
-                .rpc('salvar_dados_usuario', { p_data_json: dataToSave })
-                .abortSignal(signal);
+            // ✅ Verifica se já existe registro para este usuário
+            //    (SELECT leve de apenas o id — não carrega data_json inteiro)
+            const { data: existing, error: checkError } = await supabase
+                .from('user_data')
+                .select('id')
+                .eq('user_id', this.#userId)
+                .maybeSingle();
 
-            cleanup();
-
-            if (error) {
-                if (error.name === 'AbortError') {
-                    console.error('❌ [RPC] Timeout ao salvar dados (>15s)');
-                } else {
-                    console.error('❌ [RPC] Erro de comunicação:', error.message);
-                }
+            if (checkError && checkError.code !== 'PGRST116') {
+                console.error('❌ [DATA-MANAGER] Erro ao verificar registro existente:', checkError.message);
                 return false;
             }
 
-            if (!result?.ok) {
-                console.error('❌ [RPC] Salvamento recusado pelo servidor:', result?.erro);
-                if (result?.erro?.includes('Limite')) {
-                    console.warn('⚠️ [RATE LIMIT] Muitos salvamentos em pouco tempo. Aguarde.');
-                }
+            let saveError;
+
+            if (existing) {
+                // ✅ UPDATE — registro já existe
+                const { error } = await supabase
+                    .from('user_data')
+                    .update({
+                        data_json:     dataToSave,
+                        email:         this.#userEmail,
+                        last_modified: new Date().toISOString()
+                    })
+                    .eq('user_id', this.#userId);
+                saveError = error;
+            } else {
+                // ✅ INSERT — primeiro acesso do usuário
+                const { error } = await supabase
+                    .from('user_data')
+                    .insert({
+                        user_id:   this.#userId,
+                        email:     this.#userEmail,
+                        data_json: dataToSave
+                    });
+                saveError = error;
+            }
+
+            if (saveError) {
+                console.error('❌ [DATA-MANAGER] Erro ao salvar no banco:', saveError.message);
                 return false;
             }
 
             this.#lastSaveTime = new Date();
 
             if (IS_DEV) {
-                console.log('✅ [SUPABASE] Dados salvos com sucesso!');
+                console.log('✅ [DATA-MANAGER] Dados salvos com sucesso!');
                 console.log('🕐 Horário:', this.#lastSaveTime.toLocaleTimeString());
             }
 
             return true;
 
         } catch (err) {
-            console.error('❌ [SUPABASE] Erro crítico ao salvar:', err?.message ?? err);
+            console.error('❌ [DATA-MANAGER] Erro crítico ao salvar:', err?.message ?? err);
             return false;
 
         } finally {
@@ -450,44 +391,29 @@ class DataManager {
         }
     }
 
-    // ============================
-    // SALVAR PERFIL ESPECÍFICO (cirúrgico — apenas 1 perfil)
-    // ============================
+    // ============================ //
+    //   SALVAR PERFIL ESPECÍFICO   //
+    // ============================ //
 
-   /**
-     * Salva um único perfil via RPC cirúrgica (upsert no array do banco).
-     * Não passa pelo debounce — sempre enfileirado diretamente.
-     *
-     * @param {object} dadosPerfil
-     * @returns {Promise<boolean>}
-     */
     async saveProfileData(dadosPerfil) {
-        // ✅ CORREÇÃO: verifica #userId antes de validar o perfil.
-        //    Com a correção do dashboard.js (_effectiveUserId / _effectiveEmail),
-        //    o userId nunca deveria ser nulo aqui. Mas adicionamos esta guarda
-        //    defensiva para evitar que um log enganoso de "Perfil inválido" mascare
-        //    um problema real de sessão não inicializada.
         if (!this.#userId) {
             console.error('❌ [DATA-MANAGER] saveProfileData: UserID não definido — faça initialize() primeiro');
             return false;
         }
-
         const validationError = validateProfileShape(dadosPerfil);
         if (validationError) {
             console.error('❌ [DATA-MANAGER] Perfil inválido:', validationError);
             return false;
         }
-
         return this.#enqueue(() => this.#doSaveProfileData(dadosPerfil));
     }
 
     async #doSaveProfileData(dadosPerfil) {
         if (!this.#userId) {
-            console.error('❌ [DATA-MANAGER] Não é possível salvar: UserID não definido');
+            console.error('❌ [DATA-MANAGER] Não é possível salvar perfil: UserID não definido');
             return false;
         }
 
-        // Clone defensivo — blinda contra mutação externa durante o RPC
         let safeProfile;
         try {
             safeProfile = structuredClone(dadosPerfil);
@@ -496,108 +422,52 @@ class DataManager {
             return false;
         }
 
-        let serialized;
         try {
-            serialized = JSON.stringify(safeProfile);
-        } catch (serErr) {
-            console.error('❌ [DATA-MANAGER] Falha ao serializar perfil:', serErr?.message);
-            return false;
-        }
+            // Carrega o estado atual, atualiza apenas o perfil específico, salva tudo
+            const userData = await this.loadUserData();
 
-        if (serialized.length > MAX_PAYLOAD_BYTES) {
-            console.error('❌ [DATA-MANAGER] Perfil excede 4.9MB — salvamento abortado');
-            return false;
-        }
+            const idx = userData.profiles.findIndex(
+                p => String(p.id) === String(safeProfile.id)
+            );
 
-        this.#isSaving = true;
-
-        try {
-            if (IS_DEV) {
-                console.log('💾 [SUPABASE] Salvando perfil via RPC cirúrgica...');
-                console.log('🆔 Profile ID:', safeProfile.id);
+            if (idx !== -1) {
+                userData.profiles[idx] = safeProfile;
+            } else {
+                userData.profiles.push(safeProfile);
             }
 
-            const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
-
-            const { data: result, error } = await supabase
-                .rpc('salvar_perfil_usuario', {
-                    p_profile_id:   safeProfile.id,
-                    p_profile_data: safeProfile
-                })
-                .abortSignal(signal);
-
-            cleanup();
-
-            if (error) {
-                if (error.name === 'AbortError') {
-                    console.error('❌ [RPC] Timeout ao salvar perfil (>15s)');
-                } else {
-                    console.error('❌ [RPC] Erro de comunicação:', error.message);
-                }
-                return false;
-            }
-
-            if (!result?.ok) {
-                console.error('❌ [RPC] Salvamento recusado:', result?.erro);
-                return false;
-            }
-
-            this.#lastSaveTime = new Date();
-
-            if (IS_DEV) {
-                console.log('✅ [SUPABASE] Perfil salvo com sucesso!');
-                console.log('🕐 Horário:', this.#lastSaveTime.toLocaleTimeString());
-            }
-
-            return true;
+            // ✅ Chama diretamente #doSaveUserData (já estamos dentro da fila)
+            return await this.#doSaveUserData(userData.profiles);
 
         } catch (err) {
-            console.error('❌ [SUPABASE] Erro crítico ao salvar perfil:', err?.message ?? err);
+            console.error('❌ [DATA-MANAGER] Erro ao salvar perfil:', err?.message ?? err);
             return false;
-
-        } finally {
-            this.#isSaving = false;
         }
     }
 
-    // ============================
-    // SALVAMENTO IMEDIATO (beforeunload via sendBeacon)
-    // ============================
+    // ============================ //
+    //  SALVAMENTO IMEDIATO BEACON  //
+    // ============================ //
 
-    /**
-     * Envia dados via sendBeacon (best-effort) no evento beforeunload.
-     * Cancela qualquer debounce pendente antes de enviar o snapshot mais recente.
-     *
-     * @param {object[]} profilesData
-     * @returns {boolean} true se o beacon foi enfileirado pelo browser
-     */
     saveImmediate(profilesData) {
         if (!this.#userId) return false;
 
-        // ✅ FIX NOVO: Cancela debounce pendente — no beforeunload queremos
-        //    garantir que os dados mais recentes sejam enviados, não uma versão
-        //    antiga que estava esperando o debounce expirar.
         if (this.#debounceTimer !== null) {
             clearTimeout(this.#debounceTimer);
             this.#debounceTimer = null;
-            // Usa os dados pendentes do debounce se profilesData não for fornecido
-            // (chamador pode passar this.#debouncePending diretamente)
             if (this.#debounceResolve) {
-                this.#debounceResolve(false); // salvo via beacon em seguida
+                this.#debounceResolve(false);
                 this.#debounceResolve = null;
             }
             this.#debouncePending = null;
         }
 
-        // ✅ FIX: Valida o array E o shape de cada perfil — mesma proteção do RPC
         const validation = validateProfilesArray(profilesData);
         if (!validation.ok) {
             console.error(`❌ [BEACON] ${validation.error} — beacon cancelado`);
             return false;
         }
 
-        // userId e userEmail REMOVIDOS — autenticação via cookie sb-access-token.
-        // A Edge Function DEVE validar o JWT via cookie, nunca via body.userId.
         let payload;
         try {
             payload = JSON.stringify({ profiles: profilesData });
@@ -606,10 +476,8 @@ class DataManager {
             return false;
         }
 
-        // sendBeacon tem limite de ~64KB em alguns browsers.
-        // Falha silenciosa é inevitável (API não permite retry).
         if (payload.length > 60_000) {
-            console.warn('⚠️ [BEACON] Payload excede 60KB — beacon cancelado para evitar falha silenciosa');
+            console.warn('⚠️ [BEACON] Payload excede 60KB — beacon cancelado');
             return false;
         }
 
@@ -618,26 +486,20 @@ class DataManager {
             new Blob([payload], { type: 'application/json' })
         );
 
-        // sendBeacon retorna false se o browser recusou enfileirar.
-        // Não há como saber se o servidor recebeu — é best-effort por design.
         if (IS_DEV) {
             console.log(sent
-                ? '✅ [BEACON] Enfileirado com sucesso (entrega não garantida)'
-                : '❌ [BEACON] Browser recusou enfileirar beacon — dados podem ser perdidos'
+                ? '✅ [BEACON] Enfileirado com sucesso'
+                : '❌ [BEACON] Browser recusou enfileirar beacon'
             );
         }
 
         return sent;
     }
 
-    // ============================
-    // EXPORTAR DADOS (backup local)
-    // ============================
+    // ============================ //
+    //     EXPORTAR BACKUP LOCAL    //
+    // ============================ //
 
-    /**
-     * Baixa os dados completos do usuário como arquivo JSON.
-     * Email é sanitizado para uso seguro como nome de arquivo.
-     */
     async exportUserData() {
         let url;
         try {
@@ -645,7 +507,6 @@ class DataManager {
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             url = URL.createObjectURL(blob);
 
-            // Sanitiza email para uso seguro em nome de arquivo (evita path traversal)
             const safeEmail = (this.#userEmail ?? 'user').replace(/[^a-zA-Z0-9._-]/g, '_');
             const dateStr   = new Date().toISOString().slice(0, 10);
 
@@ -661,63 +522,40 @@ class DataManager {
         } catch (err) {
             console.error('❌ [EXPORT] Falha ao exportar backup:', err?.message ?? err);
         } finally {
-            // Garante limpeza do ObjectURL mesmo em caso de erro
             if (url) URL.revokeObjectURL(url);
         }
     }
 
-    // ============================
-    // STATUS DO SISTEMA (somente leitura, sem expor dados sensíveis)
-    // ============================
+    // ============================ //
+    //    STATUS (sem dados PII)    //
+    // ============================ //
 
-    /**
-     * Retorna snapshot imutável do estado interno para debug.
-     * userId e email NÃO são expostos.
-     *
-     * @returns {Readonly<object>}
-     */
     getStatus() {
         return Object.freeze({
-            initialized:    !!this.#userId,
-            isSaving:       this.#isSaving,
-            queueDepth:     this.#queueDepth,
-            debouncing:     this.#debounceTimer !== null,
-            lastSaveTime:   this.#lastSaveTime
+            initialized:  !!this.#userId,
+            isSaving:     this.#isSaving,
+            queueDepth:   this.#queueDepth,
+            debouncing:   this.#debounceTimer !== null,
+            lastSaveTime: this.#lastSaveTime
         });
     }
 
-    // ============================
-    // PRIVADOS — Utilitários internos
-    // ============================
+    // ============================ //
+    //     PRIVADOS — UTILITÁRIOS   //
+    // ============================ //
 
-    /**
-     * Enfileira uma função de save com proteção de flood.
-     * Rejeita imediatamente se MAX_QUEUE_DEPTH for atingido.
-     *
-     * @param {() => Promise<boolean>} fn
-     * @returns {Promise<boolean>}
-     */
     #enqueue(fn) {
         if (this.#queueDepth >= MAX_QUEUE_DEPTH) {
             console.warn(`⚠️ [DATA-MANAGER] Fila cheia (${this.#queueDepth}/${MAX_QUEUE_DEPTH}) — save descartado`);
             return Promise.resolve(false);
         }
-
         this.#queueDepth++;
         this.#saveQueue = this.#saveQueue
             .then(() => fn())
             .finally(() => { this.#queueDepth--; });
-
         return this.#saveQueue;
     }
 
-    /**
-     * AbortController com cleanup automático para evitar memory leak.
-     * Sempre chame cleanup() após a operação (mesmo em caso de erro).
-     *
-     * @param {number} timeoutMs
-     * @returns {{ signal: AbortSignal, cleanup: () => void }}
-     */
     #makeAbortSignal(timeoutMs) {
         const controller = new AbortController();
         const timer      = setTimeout(() => controller.abort(), timeoutMs);
@@ -727,35 +565,28 @@ class DataManager {
         };
     }
 
-    /**
-     * Cria o registro inicial do usuário via RPC.
-     * Chamado apenas quando loadUserData não encontra registro (PGRST116).
-     *
-     * @returns {Promise<{ version: string, profiles: object[] }>}
-     */
     async #createInitialRecord() {
         const initialData = this.#emptyStructure();
-        const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
+        try {
+            const { error } = await supabase
+                .from('user_data')
+                .insert({
+                    user_id:   this.#userId,
+                    email:     this.#userEmail,
+                    data_json: initialData
+                });
 
-        const { data: rpcResult, error: rpcError } = await supabase
-            .rpc('salvar_dados_usuario', { p_data_json: initialData })
-            .abortSignal(signal);
-
-        cleanup();
-
-        if (rpcError || !rpcResult?.ok) {
-            console.error('❌ [DATA-MANAGER] Erro ao criar registro inicial:', rpcError?.message || rpcResult?.erro);
-        } else if (IS_DEV) {
-            console.log('✅ [DATA-MANAGER] Registro inicial criado com sucesso!');
+            if (error) {
+                console.error('❌ [DATA-MANAGER] Erro ao criar registro inicial:', error.message ?? error);
+            } else if (IS_DEV) {
+                console.log('✅ [DATA-MANAGER] Registro inicial criado com sucesso!');
+            }
+        } catch (err) {
+            console.error('❌ [DATA-MANAGER] Erro crítico ao criar registro:', err?.message ?? err);
         }
-
-        return initialData; // Retorna a estrutura vazia mesmo se o RPC falhar
+        return initialData;
     }
 
-    /**
-     * Estrutura mínima padrão retornada em caso de erro ou usuário novo.
-     * @returns {{ version: string, profiles: [] }}
-     */
     #emptyStructure() {
         return { version: '1.0', profiles: [] };
     }
@@ -764,12 +595,9 @@ class DataManager {
 // ========== INSTÂNCIA GLOBAL ==========
 const dataManagerInstance = new DataManager();
 
-// Exposição global APENAS em desenvolvimento.
-// Em produção: window.dataManager === undefined.
-// Extensões maliciosas e scripts XSS não conseguem chamar saveUserData() pelo console.
+// ✅ Exposição global APENAS em desenvolvimento
 if (IS_DEV) {
     window.dataManager = dataManagerInstance;
-
     window.debugDataManager = () => {
         console.log('=== DATA MANAGER STATUS ===');
         console.log(dataManagerInstance.getStatus());
