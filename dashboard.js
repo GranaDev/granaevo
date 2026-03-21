@@ -213,23 +213,44 @@ function validarUserData(userData) {
                 configurable: false,
                 enumerable:   false,
             });
-        } catch (_) {
+        } catch (_) {}
+    };
 
-    }
-};
-
-    if (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1'
-) {
+    // ✅ perfilAtivo expõe apenas id e nome (sem dados sensíveis) — prod e dev
     _def('perfilAtivo', () => perfilAtivo
         ? Object.freeze({ id: perfilAtivo.id, nome: perfilAtivo.nome })
         : null
     );
-}
 
-    if (window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1') {
+    // ✅ Arrays de dados expostos como cópias congeladas (somente leitura)
+    //    Necessário para graficos.js (script não-módulo que lê window.transacoes etc.)
+    //    Retorna shallow-frozen copies — código externo lê mas não muta o array original
+    _def('transacoes', () =>
+        Object.freeze(transacoes.map(t => Object.freeze(Object.assign({}, t))))
+    );
+    _def('metas', () =>
+        Object.freeze(metas.map(m => Object.freeze(Object.assign({}, m))))
+    );
+    _def('contasFixas', () =>
+        Object.freeze(contasFixas.map(c => Object.freeze(Object.assign({}, c))))
+    );
+    _def('cartoesCredito', () =>
+        Object.freeze(cartoesCredito.map(c => Object.freeze(Object.assign({}, c))))
+    );
+
+    // ✅ usuarioLogado expõe apenas plano e perfis simplificados — graficos.js precisa do plano
+    _def('usuarioLogado', () => Object.freeze({
+        plano:  usuarioLogado.plano,
+        perfis: Object.freeze(
+            (usuarioLogado.perfis || []).map(p => Object.freeze({ id: p.id, nome: p.nome }))
+        ),
+    }));
+
+    // ✅ Dev-only: aliases com prefixo _dev_ para debugging no console
+    if (
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1'
+    ) {
         _def('_dev_transacoes',  () => Object.freeze(transacoes.map(t => Object.freeze(Object.assign({}, t)))));
         _def('_dev_metas',       () => Object.freeze(metas.map(m => Object.freeze(Object.assign({}, m)))));
         _def('_dev_contasFixas', () => Object.freeze(contasFixas.map(c => Object.freeze(Object.assign({}, c)))));
@@ -632,7 +653,6 @@ async function salvarDados() {
                 _log.error('SAVE_002_REINIT', reinitErr);
             }
         }
-        // Verifica novamente após tentativa de recuperação
         if (!dataManager?.userId) {
             _log.error('SAVE_002', 'DataManager não inicializado e recuperação falhou');
             return false;
@@ -660,9 +680,6 @@ async function salvarDados() {
                 const cartoesValidos    = cartoesCredito.filter(_validators.cartao);
 
                 // ✅ Remove a flag _processando antes de persistir.
-                //    Essa flag é apenas um lock de runtime para evitar cliques duplos.
-                //    Se salva no banco com _processando: true, o pagamento fica
-                //    permanentemente bloqueado em todas as sessões futuras.
                 const contasValidas = contasFixas
                     .filter(_validators.contaFixa)
                     .map(c => {
@@ -677,7 +694,7 @@ async function salvarDados() {
                     _log.warn('SAVE: itens inválidos descartados antes de persistir');
                 }
 
-                // ── 2. Verificar limites de payload (Ponto 5) ───────────────
+                // ── 2. Verificar limites de payload ─────────────────────────
                 if (transacoesValidas.length > _SAVE_LIMITS.transacoes) {
                     _log.error('SAVE_LIMIT_001',
                         `Transações excedem o limite (${transacoesValidas.length} > ${_SAVE_LIMITS.transacoes})`);
@@ -703,7 +720,7 @@ async function salvarDados() {
                     return;
                 }
 
-                // ── 3. Sanitizar estrutura — whitelist de chaves (Ponto 1) ──
+                // ── 3. Sanitizar estrutura — whitelist de chaves ────────────
                 const transacoesSanitizadas = transacoesValidas.map(t =>
                     _sanitizeObject(t, _ALLOWED_KEYS.transacao)
                 );
@@ -717,6 +734,7 @@ async function salvarDados() {
                     _sanitizeObject(c, _ALLOWED_KEYS.cartao)
                 );
 
+                // ── 4. Montar objeto do perfil atual ────────────────────────
                 const dadosPerfil = {
                     id:             perfilAtivo.id,
                     nome:           _sanitizeText(perfilAtivo.nome),
@@ -729,12 +747,35 @@ async function salvarDados() {
                     lastUpdate:     new Date().toISOString(),
                 };
 
-                const sucesso = await dataManager.saveProfileData(dadosPerfil);
-                if (!sucesso) _log.error('SAVE_003', 'saveProfileData retornou false');
+                // ── 5. Carregar dados existentes, atualizar perfil e salvar ─
+                //    ✅ CORREÇÃO CRÍTICA: usa saveUserData(profiles) que é o método
+                //       correto do data-manager.js. saveProfileData() não existe.
+                //       Carregamos o userData completo, atualizamos apenas o perfil
+                //       ativo e salvamos o array inteiro — igual ao fluxo original.
+                const userData = await dataManager.loadUserData();
+
+                if (!validarUserData(userData)) {
+                    _log.error('SAVE_003', 'Estrutura de userData inválida ao salvar');
+                    resolve(false);
+                    return;
+                }
+
+                const perfilIndex = userData.profiles.findIndex(
+                    p => String(p.id) === String(perfilAtivo.id)
+                );
+
+                if (perfilIndex !== -1) {
+                    userData.profiles[perfilIndex] = dadosPerfil;
+                } else {
+                    userData.profiles.push(dadosPerfil);
+                }
+
+                const sucesso = await dataManager.saveUserData(userData.profiles);
+                if (!sucesso) _log.error('SAVE_004', 'saveUserData retornou false');
                 resolve(!!sucesso);
 
             } catch (e) {
-                _log.error('SAVE_004', e);
+                _log.error('SAVE_005', e);
                 resolve(false);
             }
         }, 2_000);
