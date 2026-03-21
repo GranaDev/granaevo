@@ -37,22 +37,37 @@ function validateProfileShape(profile) {
     if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
         return 'perfil deve ser um objeto';
     }
-    if (!profile.id || typeof profile.id !== 'string' || profile.id.trim() === '') {
+
+    // ✅ CORREÇÃO: aceita tanto UUID string quanto inteiro positivo (SERIAL do Supabase).
+    //    Antes: typeof profile.id !== 'string' rejeitava qualquer ID numérico,
+    //    descartando TODOS os perfis salvos com SERIAL/BIGSERIAL no banco.
+    //    Agora: inteiro positivo OU string não-vazia são aceitos.
+    const isIntId  = Number.isInteger(profile.id) && profile.id > 0;
+    const isStrId  = typeof profile.id === 'string' && profile.id.trim() !== '';
+
+    if (!isIntId && !isStrId) {
         return 'profile.id ausente ou inválido';
     }
 
-    // ✅ FIX: Normaliza antes de validar — rejeita espaços nas bordas
-    const trimmedId = profile.id.trim();
+    // ✅ Para IDs string: normaliza e valida formato seguro (bloqueia path traversal).
+    //    Para IDs inteiros: converte para string apenas para a validação de regex,
+    //    sem alterar o tipo original no objeto (evita quebrar comparações === downstream).
+    if (isStrId) {
+        const trimmedId = profile.id.trim();
 
-    // ✅ FIX: Formato estrito — apenas [a-zA-Z0-9_-], máximo 64 caracteres.
-    //    Bloqueia path traversal ("../../etc"), injeção de separadores e
-    //    overwrite de perfis alheios via IDs forjados.
-    if (!PROFILE_ID_REGEX.test(trimmedId)) {
-        return 'profile.id possui caracteres inválidos (use apenas letras, números, hífen e underscore, máx. 64 chars)';
+        // PROFILE_ID_REGEX: [a-zA-Z0-9_-]{1,64}
+        // UUIDs passam (apenas alfanumérico + hífen).
+        // IDs com path traversal ("../../etc"), separadores ("/", "\") ou
+        // caracteres de controle são bloqueados aqui.
+        if (!PROFILE_ID_REGEX.test(trimmedId)) {
+            return 'profile.id possui caracteres inválidos (use apenas letras, números, hífen e underscore, máx. 64 chars)';
+        }
+
+        // Normaliza string (remove espaços nas bordas)
+        profile.id = trimmedId;
     }
+    // IDs inteiros não precisam de normalização — são imunes a path traversal por natureza.
 
-    // Normaliza o id no próprio objeto para garantir consistência downstream
-    profile.id = trimmedId;
     // typeof NaN === 'number' é true em JS — Number.isFinite é obrigatório aqui.
     if ('balance' in profile && !Number.isFinite(profile.balance)) {
         return 'profile.balance deve ser um número finito (NaN e Infinity não são aceitos)';
@@ -90,6 +105,9 @@ class DataManager {
     #userEmail    = null;
     #isSaving     = false;
     #lastSaveTime = null;
+get userId() {
+    return this.#userId;
+}
 
     // Fila Promise chain — sem polling, sem setInterval, sem CPU waste.
     // saveUserData e saveProfileData compartilham a mesma fila (nunca paralelas).

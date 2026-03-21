@@ -357,7 +357,11 @@ async function _resolverFotoPerfil(photo_url) {
     }
 }
 
-async function carregarPerfis() {
+// ✅ CORREÇÃO: aceita targetUserId opcional.
+//    Para titulares: targetUserId === session.user.id (sem mudança de comportamento).
+//    Para convidados: targetUserId === owner_user_id (carrega perfis do dono da conta).
+//    A validação da sessão JWT continua — apenas a query usa o targetUserId.
+async function carregarPerfis(targetUserId = null) {
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -365,8 +369,12 @@ async function carregarPerfis() {
             throw new Error('SEM_SESSAO_VALIDA');
         }
 
-        // 🔒 Sempre usa o ID vindo do token JWT — nunca do estado global mutável
-        const userIdSeguro = session.user.id;
+        // ✅ Se targetUserId foi fornecido (dono da conta para convidados), usa-o.
+        //    Caso contrário, usa o ID do próprio usuário autenticado (titulares).
+        //    A sessão JWT continua sendo validada acima — isso não abre falha de autenticação.
+        const userIdSeguro = (targetUserId && typeof targetUserId === 'string' && targetUserId.length > 0)
+            ? targetUserId
+            : session.user.id;
 
         const { data: perfis, error } = await supabase
             .from('profiles')
@@ -820,11 +828,6 @@ async function verificarLogin() {
             }
         }
 
-        // ✅ CORREÇÃO: effectiveUserId REMOVIDO do objeto usuarioLogado.
-        //    Ele já foi capturado em variável local acima e é usado diretamente
-        //    em dataManager.initialize() logo abaixo — antes de qualquer possível
-        //    manipulação via console. Armazená-lo em usuarioLogado seria expô-lo
-        //    desnecessariamente em um objeto mutável e acessível externamente.
         usuarioLogado = {
             userId:  session.user.id,
             nome:    session.user.user_metadata?.name || session.user.email.split('@')[0],
@@ -836,14 +839,38 @@ async function verificarLogin() {
 
         _log.info('[VERIFICAR LOGIN] Usuário inicializado. isGuest:', usuarioLogado.isGuest);
 
-        // ✅ effectiveUserId vem da variável local (JWT-verificada), não do objeto mutável.
-        //    Chamado imediatamente, sem janela de ataque entre atribuição e uso.
         _log.info('[VERIFICAR LOGIN] Inicializando DataManager...');
         await dataManager.initialize(effectiveUserId, effectiveEmail);
         _log.info('[VERIFICAR LOGIN] DataManager inicializado');
 
+        // ✅ CORREÇÃO CRÍTICA: verifica se userId foi definido após initialize().
+        //    Quando data-manager.js rejeita perfis por shape inválido (id inteiro vs UUID),
+        //    o initialize() pode retornar sem definir userId.
+        //    Tentativa única de recuperação antes de falhar definitivamente.
+        if (!dataManager.userId) {
+            _log.warn('[VERIFICAR LOGIN] dataManager.userId não definido após initialize(). Tentando re-inicialização...');
+            // ✅ Passa os parâmetros novamente — data-manager deve garantir que userId
+            //    seja definido mesmo quando não há dados válidos no banco (novo usuário).
+            await dataManager.initialize(effectiveUserId, effectiveEmail);
+
+            if (!dataManager.userId) {
+                // ✅ Se ainda falhar, o data-manager.js tem um bug em initialize().
+                //    Lança erro descritivo para facilitar diagnóstico.
+                throw new Error(
+                    'DataManager falhou ao inicializar (userId permanece nulo). ' +
+                    'Verifique o método initialize() em data-manager.js: ' +
+                    'userId deve ser definido independentemente de existir dados válidos no banco.'
+                );
+            }
+        }
+
         _log.info('[VERIFICAR LOGIN] Carregando perfis...');
-        const resultadoPerfis = await carregarPerfis();
+        // ✅ CORREÇÃO: passa effectiveUserId para carregarPerfis().
+        //    Para convidados (isGuest=true), effectiveUserId é o ID do dono —
+        //    os perfis ficam sob o user_id do dono, não do convidado.
+        //    Antes desta correção, session.user.id (ID do convidado) era usado,
+        //    causando "nenhum perfil encontrado" para contas convidadas.
+        const resultadoPerfis = await carregarPerfis(effectiveUserId);
 
         if (!resultadoPerfis.sucesso) {
             throw new Error("Não foi possível carregar os dados do usuário.");
