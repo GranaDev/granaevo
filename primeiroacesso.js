@@ -1,22 +1,17 @@
 /**
- * GranaEvo — primeiroacesso.js (v8)
+ * GranaEvo — primeiroacesso.js (v8.1)
  *
  * ============================================================
  * HISTÓRICO DE CORREÇÕES — TODAS ATIVAS
  * ============================================================
  *
  * [FIX-401] Adicionado header 'apikey' com SUPABASE_ANON_KEY em todas as
- *   chamadas a Edge Functions públicas. O gateway do Supabase exige essa
- *   chave para rotear a requisição, mesmo em endpoints sem autenticação.
- *   Sem esse header, o gateway retorna 401 antes de chegar na função.
+ *   chamadas a Edge Functions. O gateway do Supabase exige essa chave para
+ *   rotear a requisição, mesmo em endpoints sem autenticação.
  *
  * [FIX-EMAIL-CONFIRM] Adicionada chamada à Edge Function confirm-email
- *   logo após o signUp. Como o Supabase pode exigir confirmação de email,
- *   o usuário não teria sessão e não poderia fazer login. A função
- *   confirm-email valida internamente contra a tabela subscriptions
- *   (pagamento aprovado + email correto + senha ainda não criada) e só
- *   então confirma o email via admin API. Isso é seguro pois a validação
- *   de legitimidade acontece no backend.
+ *   logo após o signUp. Resolve o caso onde o Supabase exige confirmação
+ *   de email e a sessão vem nula, impedindo o login.
  *
  * [FIX-FLOW-ORDER] Fluxo pós-signUp reestruturado:
  *   1. signUp                          → obtém userId
@@ -26,6 +21,10 @@
  *   5. _acceptTerms                    → registra LGPD/GDPR
  *   6. _createUserData                 → cria perfil inicial
  *   7. redirect                        → envia para login.html
+ *
+ * [FIX-TERMS-VERSION] terms_acceptance.terms_version é NOT NULL no banco.
+ *   Coluna ausente causava silent insert error. Adicionado campo com versão
+ *   controlada pela constante TERMS_VERSION.
  *
  * [FIX-02] Normaliza email lowercase antes de qualquer operação
  * [SEC-06] Rate limit: 5s cooldown no "Verificar Email"
@@ -46,6 +45,13 @@ import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-client.js?
 // ==========================================
 // CONFIGURAÇÃO
 // ==========================================
+
+/**
+ * [FIX-TERMS-VERSION] Versão atual dos Termos de Uso e Política de Privacidade.
+ * Atualize este valor sempre que publicar uma nova versão dos termos.
+ * O valor é gravado em terms_acceptance.terms_version (NOT NULL).
+ */
+const TERMS_VERSION = '1.0';
 
 /** [SEC-06] Cooldown do botão "Verificar Email": 5 segundos */
 const EMAIL_CHECK_COOLDOWN_MS = 5_000;
@@ -86,8 +92,7 @@ const togglePassword1      = document.getElementById('togglePassword1');
 const togglePassword2      = document.getElementById('togglePassword2');
 const checkboxWrapper      = document.querySelector('.checkbox-wrapper');
 
-// [SEC-TERMS-CACHE] Cacheado no topo — antes era consultado via getElementById
-// dentro de dois event handlers separados, causando dupla query ao DOM.
+// [SEC-TERMS-CACHE] Cacheado no topo — evita dupla query ao DOM em dois handlers.
 const termsWarning         = document.getElementById('termsWarning');
 
 // ==========================================
@@ -105,8 +110,8 @@ let lastSubmitAt = 0;
 // INICIALIZAÇÃO
 // ==========================================
 
-// [SEC-09] autocomplete="new-password" reforçado via JS para cobrir HTML cacheado
-// [SEC-MAXLENGTH] maxlength reforçado via JS pela mesma razão
+// [SEC-09] autocomplete="new-password" reforçado via JS para cobrir HTML cacheado.
+// [SEC-MAXLENGTH] maxlength reforçado via JS pela mesma razão.
 if (passwordInput) {
     passwordInput.setAttribute('autocomplete', 'new-password');
     passwordInput.setAttribute('maxlength',    '128');
@@ -120,8 +125,6 @@ if (emailInput) {
 }
 
 // [A11Y-ARIA-LIVE] Garante que leitores de tela anunciem os alertas.
-// O role="alert" + aria-live="assertive" no HTML já cobre a maioria dos casos,
-// mas reforçar via JS garante que HTML cacheado sem o atributo também funcione.
 if (alertBox) {
     alertBox.setAttribute('aria-live', 'assertive');
     alertBox.setAttribute('aria-atomic', 'true');
@@ -132,7 +135,7 @@ if (alertBox) {
 // ==========================================
 checkEmailBtn.addEventListener('click', async () => {
 
-    // [SEC-06] Rate limit: bloqueia se ainda dentro do cooldown
+    // [SEC-06] Rate limit: bloqueia se ainda dentro do cooldown.
     const now = Date.now();
     if (now - lastEmailCheckAt < EMAIL_CHECK_COOLDOWN_MS) {
         const remaining = Math.ceil((EMAIL_CHECK_COOLDOWN_MS - (now - lastEmailCheckAt)) / 1000);
@@ -140,7 +143,7 @@ checkEmailBtn.addEventListener('click', async () => {
         return;
     }
 
-    // [FIX-02] Normaliza lowercase antes de qualquer operação
+    // [FIX-02] Normaliza lowercase antes de qualquer operação.
     const email = (emailInput.value || '').trim().toLowerCase();
 
     if (!email) {
@@ -153,16 +156,14 @@ checkEmailBtn.addEventListener('click', async () => {
         return;
     }
 
-    // Registra timestamp ANTES da requisição para cobrir erros de rede também
+    // Registra timestamp ANTES da requisição para cobrir erros de rede também.
     lastEmailCheckAt = Date.now();
 
     setButtonLoading(checkEmailBtn, 'Verificando...');
 
     try {
-        // [FIX-401] Header 'apikey' obrigatório para o gateway do Supabase
-        // rotear a requisição até a Edge Function. Sem ele, retorna 401
-        // antes mesmo de chegar no código da função.
-        // A anon key é pública por design no Supabase — segura no frontend.
+        // [FIX-401] Header 'apikey' obrigatório para o gateway do Supabase rotear
+        // a requisição até a Edge Function. A anon key é pública por design.
         //
         // [SEC-02] Sem Authorization header — endpoint é pré-auth público.
         // [SEC-TIMEOUT] fetchWithTimeout aborta após 10s.
@@ -192,8 +193,7 @@ checkEmailBtn.addEventListener('click', async () => {
                 break;
 
             // [SEC-03] Resposta genérica para todos os estados não-ready.
-            // Impede enumeração: atacante não distingue "inexistente",
-            // "pagamento pendente" ou "conta já criada".
+            // Impede enumeração de emails/status de pagamento.
             default:
                 showAlert(
                     'info',
@@ -203,7 +203,7 @@ checkEmailBtn.addEventListener('click', async () => {
         }
 
     } catch (err) {
-        // [SEC-TIMEOUT] AbortError = timeout expirou
+        // [SEC-TIMEOUT] AbortError = timeout expirou.
         if (err?.name === 'AbortError') {
             showAlert('error', 'Tempo esgotado. Verifique sua conexão e tente novamente.');
         } else {
@@ -223,7 +223,7 @@ function showPasswordForm(data) {
     alertBox.classList.remove('show-flex');
     infoBox.classList.add('show-block');
 
-    // textContent — nunca innerHTML com dados do servidor
+    // textContent — nunca innerHTML com dados do servidor.
     userName.textContent  = sanitize(data.user_name  || 'Usuário');
     userEmail.textContent = sanitize(data.email);
     planName.textContent  = sanitize(data.plan_name);
@@ -232,7 +232,6 @@ function showPasswordForm(data) {
     passwordInputs.classList.add('show-block');
 
     // [UX-EMAIL-LOCK] Trava o campo após verificação bem-sucedida.
-    // Evita inconsistência entre email exibido e email usado no signUp.
     emailInput.disabled = true;
 
     setTimeout(() => passwordInput.focus(), 300);
@@ -243,7 +242,7 @@ function hidePasswordInputs() {
     infoBox.classList.remove('show-block');
     emailCheckState.classList.remove('hide');
 
-    // [UX-EMAIL-LOCK] Reabilita para nova tentativa com outro email
+    // [UX-EMAIL-LOCK] Reabilita para nova tentativa com outro email.
     emailInput.disabled = false;
 }
 
@@ -262,11 +261,6 @@ function isValidEmail(email) {
  * [SEC-TIMEOUT] Wrapper de fetch com AbortController.
  * Aborta a requisição após `timeoutMs` ms, evitando botões travados
  * indefinidamente em caso de servidor lento ou rede instável.
- *
- * @param {string} url       - URL da requisição
- * @param {object} options   - Opções padrão do fetch
- * @param {number} timeoutMs - Timeout em ms (padrão: FETCH_TIMEOUT_MS)
- * @returns {Promise<Response>}
  */
 async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
     const controller = new AbortController();
@@ -277,7 +271,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS)
         return response;
     } catch (err) {
         clearTimeout(timerId);
-        throw err; // Repropaga AbortError para tratamento no chamador
+        throw err;
     }
 }
 
@@ -287,9 +281,8 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS)
 // [SEC-INLINE-STYLE] className completo — nenhum style.display
 // ==========================================
 function showAlert(type, message) {
-    // className completo em uma operação: tipo + visibilidade
     alertBox.className       = `alert-box ${type} show-flex`;
-    alertMessage.textContent = message; // textContent — imune a XSS
+    alertMessage.textContent = message;
 
     if (type !== 'error') {
         setTimeout(() => { alertBox.classList.remove('show-flex'); }, 8000);
@@ -299,9 +292,6 @@ function showAlert(type, message) {
 /**
  * Alerta com links hardcoded — construído via DOM, sem innerHTML.
  * hrefs são strings literais no código, nunca vindos do servidor.
- *
- * [SEC-LINK-TARGET] target="_self" explícito para garantir navegação
- * na mesma aba independente do contexto de abertura da página.
  */
 function showAlertWithLinks(type, message, links = []) {
     alertBox.className       = `alert-box ${type} show-flex`;
@@ -312,9 +302,9 @@ function showAlertWithLinks(type, message, links = []) {
     links.forEach((link, i) => {
         if (i > 0) alertMessage.appendChild(document.createTextNode(' · '));
         const a       = document.createElement('a');
-        a.href        = link.href;    // href hardcoded — não vem do servidor
-        a.textContent = link.text;    // textContent — imune a XSS
-        a.target      = '_self';      // [SEC-LINK-TARGET] navegação explícita na mesma aba
+        a.href        = link.href;
+        a.textContent = link.text;
+        a.target      = '_self'; // [SEC-LINK-TARGET] navegação explícita na mesma aba.
         alertMessage.appendChild(a);
     });
 
@@ -329,15 +319,14 @@ function showAlertWithLinks(type, message, links = []) {
 // ==========================================
 function setButtonLoading(btn, label) {
     btn.disabled    = true;
-    // Clona filhos originais (texto + SVGs) para restauração posterior
     btn._origNodes  = Array.from(btn.childNodes).map(n => n.cloneNode(true));
-    btn.textContent = label; // textContent — sem innerHTML
+    btn.textContent = label;
 }
 
 function restoreButton(btn, fallbackLabel) {
     btn.disabled = false;
     if (btn._origNodes?.length) {
-        btn.replaceChildren(...btn._origNodes); // replaceChildren — sem innerHTML
+        btn.replaceChildren(...btn._origNodes);
         delete btn._origNodes;
     } else if (fallbackLabel) {
         btn.textContent = fallbackLabel;
@@ -357,10 +346,7 @@ togglePassword2?.addEventListener('click', () => {
 
 // ==========================================
 // PASSWORD STRENGTH
-// [BUG-STRENGTH-FIX] className completo com classes sw-* (largura) +
-// strength-* (cor). Nenhum style.width — resolve o bug onde inline style
-// width:'0%' travava a barra nas digitações seguintes.
-// [SEC-INLINE-STYLE] Nenhum style.width — obrigatório para CSP.
+// [BUG-STRENGTH-FIX] className completo — nenhum style.width (CSP compliance)
 // ==========================================
 function checkPasswordStrength(password) {
     let strength = 0;
@@ -376,7 +362,7 @@ passwordInput?.addEventListener('input', () => {
     const strength = checkPasswordStrength(passwordInput.value);
 
     if (strength === 0) {
-        strengthFill.className   = 'strength-fill';           // sem largura = 0% (default CSS)
+        strengthFill.className   = 'strength-fill';
         strengthText.textContent = 'Mínimo 8 caracteres';
     } else if (strength <= 2) {
         strengthFill.className   = 'strength-fill sw-33 strength-weak';
@@ -392,7 +378,6 @@ passwordInput?.addEventListener('input', () => {
 
 // ==========================================
 // VALIDAR CONFIRMAÇÃO DE SENHA
-// [SEC-INLINE-STYLE] classList.add/remove('border-error') — nenhum style.borderColor
 // ==========================================
 confirmPasswordInput?.addEventListener('input', () => {
     if (confirmPasswordInput.value && confirmPasswordInput.value !== passwordInput.value) {
@@ -406,8 +391,6 @@ confirmPasswordInput?.addEventListener('input', () => {
 
 // ==========================================
 // CHECKBOX DE TERMOS
-// [SEC-INLINE-STYLE] classList apenas — nenhum style.borderColor / style.background
-// [SEC-TERMS-CACHE] termsWarning já cacheado no topo — sem getElementById aqui
 // ==========================================
 termsCheckbox?.addEventListener('change', () => {
     if (termsCheckbox.checked) {
@@ -421,18 +404,14 @@ termsCheckbox?.addEventListener('change', () => {
 });
 
 function showTermsError() {
-    // [SEC-TERMS-CACHE] termsWarning cacheado — sem getElementById repetido
     termsWarning?.classList.add('show');
     termsError?.classList.add('show-block');
     checkboxWrapper?.classList.add('error');
 
-    // [SEC-INLINE-STYLE] Shake via classList + animationend para restaurar
-    // pulse-error depois. Sem isso, style.animation ficaria preso e
-    // impediria pulse-error de retomar após o shake.
     checkboxWrapper?.classList.add('do-shake');
     checkboxWrapper?.addEventListener('animationend', () => {
         checkboxWrapper.classList.remove('do-shake');
-    }, { once: true }); // { once: true } = listener se auto-remove
+    }, { once: true });
 
     checkboxWrapper?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setTimeout(() => termsCheckbox?.focus(), 500);
@@ -440,21 +419,11 @@ function showTermsError() {
 
 // ==========================================
 // SUBMIT — CRIAR SENHA
-//
-// [FIX-FLOW-ORDER] Fluxo reestruturado (v8):
-//   1. Validações locais (termos, senha, confirmação)
-//   2. supabase.auth.signUp  → obtém userId (session pode ser null)
-//   3. _confirmEmail         → auto-confirma email via Edge Function segura
-//   4. supabase.auth.signIn  → obtém session + JWT
-//   5. _linkViaBackendWithRetry → vincula subscription via JWT
-//   6. _acceptTerms          → registra aceitação LGPD no banco
-//   7. _createUserData       → cria perfil inicial do usuário
-//   8. redirect              → envia para login.html
 // ==========================================
 accessForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    // [SEC-08] Rate limit no submit — 3s de cooldown entre tentativas
+    // [SEC-08] Rate limit no submit — 3s de cooldown entre tentativas.
     const now = Date.now();
     if (now - lastSubmitAt < SUBMIT_COOLDOWN_MS) {
         const remaining = Math.ceil((SUBMIT_COOLDOWN_MS - (now - lastSubmitAt)) / 1000);
@@ -494,13 +463,12 @@ accessForm?.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Registra timestamp ANTES de iniciar (bloqueia multi-clique mesmo em erro)
     lastSubmitAt = Date.now();
 
     setButtonLoading(submitBtn, 'Criando sua conta...');
 
     try {
-        // [FIX-02] Email sempre normalizado
+        // [FIX-02] Email sempre normalizado.
         const email = (currentSubscriptionData.email || '').toLowerCase().trim();
 
         // ── ETAPA 1: Criar usuário no Auth ──────────────────────────────
@@ -542,12 +510,6 @@ accessForm?.addEventListener('submit', async (e) => {
         }
 
         // ── ETAPA 2: Auto-confirmação de email via Edge Function segura ──
-        // [FIX-EMAIL-CONFIRM] O Supabase pode exigir confirmação de email,
-        // bloqueando o login. A Edge Function confirm-email valida a
-        // legitimidade da requisição (subscription ativa + pagamento aprovado
-        // + email correto + senha ainda não criada) e só então confirma.
-        // Isso substitui o fluxo antigo que dependia de authData.session
-        // não-null (que nunca vinha quando confirm email estava ativo).
         setButtonLoading(submitBtn, 'Confirmando acesso...');
 
         const confirmOk = await _confirmEmail(
@@ -557,8 +519,6 @@ accessForm?.addEventListener('submit', async (e) => {
         );
 
         if (!confirmOk) {
-            // Falha na confirmação — não prosseguir.
-            // O usuário será orientado a verificar o email ou tentar novamente.
             passwordInput.value        = '';
             confirmPasswordInput.value = '';
             showAlert(
@@ -569,7 +529,6 @@ accessForm?.addEventListener('submit', async (e) => {
         }
 
         // ── ETAPA 3: Login com as credenciais recém-criadas ──────────────
-        // Aguarda propagação no Supabase Auth antes de tentar o login
         setButtonLoading(submitBtn, 'Entrando na sua conta...');
         await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -578,13 +537,11 @@ accessForm?.addEventListener('submit', async (e) => {
             password,
         });
 
-        // [SEC-05] Limpa campos sensíveis independente do resultado do login
+        // [SEC-05] Limpa campos sensíveis independente do resultado.
         passwordInput.value        = '';
         confirmPasswordInput.value = '';
 
         if (loginError) {
-            // [FIX-03] Trata explicitamente caso de email não confirmado
-            // (não deveria ocorrer após confirm-email, mas é uma salvaguarda)
             if (loginError.message?.toLowerCase().includes('email not confirmed')) {
                 showAlert('warning', '✅ Conta criada! Confirme seu email na caixa de entrada e faça o login.');
             } else {
@@ -597,9 +554,6 @@ accessForm?.addEventListener('submit', async (e) => {
         const accessToken = loginData.session?.access_token;
 
         // ── ETAPA 4: Vincular subscription via Edge Function ────────────
-        // [BUG-03-FIX] Retry com backoff exponencial (até 3 tentativas).
-        // Agora temos accessToken garantido pois o login funcionou.
-        // Se ainda falhar, o check-user-access auto-vincula no próximo login.
         if (accessToken) {
             const linkSuccess = await _linkViaBackendWithRetry(
                 accessToken,
@@ -612,13 +566,14 @@ accessForm?.addEventListener('submit', async (e) => {
         }
 
         // ── ETAPA 5: Registrar aceitação dos termos ─────────────────────
-        // [SEC-10] Valida que userId é exatamente o usuário recém-criado
+        // [SEC-10] userId validado como authData.user.id.
+        // Executado após login para que a RLS (auth.uid() = user_id) passe.
         if (userId && userId === authData.user?.id) {
             await _acceptTerms(userId, email);
         }
 
         // ── ETAPA 6: Criar user_data ────────────────────────────────────
-        // [SEC-10] Valida que userId é exatamente o usuário recém-criado
+        // [SEC-10] userId validado como authData.user.id.
         if (userId && userId === authData.user?.id) {
             await _createUserData(userId, email, currentSubscriptionData);
         }
@@ -628,7 +583,7 @@ accessForm?.addEventListener('submit', async (e) => {
         setTimeout(() => { window.location.href = 'login.html'; }, 1500);
 
     } catch (err) {
-        // [SEC-05] Limpa senha em qualquer erro inesperado
+        // [SEC-05] Limpa senha em qualquer erro inesperado.
         passwordInput.value        = '';
         confirmPasswordInput.value = '';
 
@@ -646,7 +601,7 @@ accessForm?.addEventListener('submit', async (e) => {
         showAlert('error', msg);
 
     } finally {
-        // [FIX-01] Restaura o botão em TODOS os caminhos sem exceção
+        // [FIX-01] Restaura o botão em TODOS os caminhos sem exceção.
         restoreButton(submitBtn, 'Criar Senha e Acessar');
     }
 });
@@ -660,23 +615,18 @@ accessForm?.addEventListener('submit', async (e) => {
  * o email do usuário recém-criado.
  *
  * SEGURANÇA: A Edge Function valida internamente:
- *   - subscriptionId existe e está ativo
- *   - payment_status === 'approved'
+ *   - subscriptionId existe, is_active = true, payment_status = 'approved'
  *   - email bate com o da subscription
- *   - password_created === false (uso único)
+ *   - password_created = false (uso único — impede replay)
  *   - userId existe no Auth e o email confere
- *   - Usuário foi criado recentemente (janela de 10 minutos)
+ *   - Usuário foi criado há no máximo 10 minutos (anti-replay)
  *
  * Não envia Authorization header pois o usuário não tem JWT ainda.
- * A validação de legitimidade acontece inteiramente no backend.
- *
- * [FIX-401] Envia 'apikey' (anon key) para o gateway do Supabase rotear
- * corretamente a requisição até a Edge Function.
  *
  * @param {string} userId         - UUID do usuário recém-criado
  * @param {string} email          - Email normalizado
  * @param {string} subscriptionId - ID da subscription validada
- * @returns {Promise<boolean>}    - true se confirmou com sucesso
+ * @returns {Promise<boolean>}
  */
 async function _confirmEmail(userId, email, subscriptionId) {
     try {
@@ -687,8 +637,6 @@ async function _confirmEmail(userId, email, subscriptionId) {
                 headers: {
                     'Content-Type': 'application/json',
                     'apikey':       SUPABASE_ANON_KEY,
-                    // Sem Authorization — usuário não tem JWT neste ponto.
-                    // Autenticação é feita via subscriptionId + userId no backend.
                 },
                 body: JSON.stringify({ userId, email, subscriptionId }),
             }
@@ -712,8 +660,6 @@ async function _confirmEmail(userId, email, subscriptionId) {
 
 /**
  * [BUG-03-FIX] Tenta vincular até `maxRetries` vezes com backoff exponencial.
- * Cobre falhas de rede transitórias que antes deixavam user_id = NULL
- * na subscription, quebrando todos os logins futuros.
  *
  * @param {string} accessToken    - JWT do usuário autenticado
  * @param {string} subscriptionId - ID da subscription a vincular
@@ -726,7 +672,7 @@ async function _linkViaBackendWithRetry(accessToken, subscriptionId, maxRetries 
         if (success) return true;
 
         if (attempt < maxRetries) {
-            const delay = 500 * attempt; // 500ms → 1000ms (backoff exponencial)
+            const delay = 500 * attempt;
             console.warn(`[primeiroacesso] _linkViaBackend tentativa ${attempt} falhou. Retry em ${delay}ms...`);
             await new Promise(resolve => setTimeout(resolve, delay));
         }
@@ -736,8 +682,7 @@ async function _linkViaBackendWithRetry(accessToken, subscriptionId, maxRetries 
 
 /**
  * [SEC-01] Vincula subscription usando o JWT do usuário como autenticação.
- * [FIX-401] Envia 'apikey' (anon key) além do Authorization para cobrir
- *   o roteamento do gateway do Supabase.
+ * [FIX-401] Envia 'apikey' (anon key) além do Authorization.
  * [SEC-TIMEOUT] Usa fetchWithTimeout para evitar requisições penduradas.
  *
  * @param {string} accessToken    - JWT do usuário autenticado
@@ -753,7 +698,6 @@ async function _linkViaBackend(accessToken, subscriptionId) {
                 headers: {
                     'Content-Type':  'application/json',
                     'apikey':        SUPABASE_ANON_KEY,
-                    // [SEC-01] JWT do usuário autenticado — correto para endpoint protegido.
                     'Authorization': `Bearer ${accessToken}`,
                 },
                 body: JSON.stringify({ subscription_id: subscriptionId }),
@@ -776,42 +720,45 @@ async function _linkViaBackend(accessToken, subscriptionId) {
 /**
  * Registra aceitação dos termos de uso.
  *
- * [SEC-10] userId validado como authData.user.id antes de chamar esta função.
+ * [FIX-TERMS-VERSION] Inclui o campo terms_version (NOT NULL no banco).
+ *   Valor controlado pela constante TERMS_VERSION no topo do arquivo.
+ *   Atualizar TERMS_VERSION ao publicar nova versão dos termos.
  *
- * REQUISITO RLS obrigatório na tabela terms_acceptance:
- *   CREATE POLICY "insert_own_terms" ON terms_acceptance
- *     FOR INSERT TO authenticated
- *     WITH CHECK (auth.uid() = user_id);
+ * [SEC-10] userId validado como authData.user.id antes de chamar.
+ *
+ * RLS na tabela terms_acceptance:
+ *   INSERT: WITH CHECK (auth.uid() = user_id)  ← já existe no banco ✅
  *
  * @param {string} userId - UUID do usuário autenticado
  * @param {string} email  - Email normalizado do usuário
  */
 async function _acceptTerms(userId, email) {
     try {
-        await supabase.from('terms_acceptance').insert({
-            user_id:     userId,
+        const { error } = await supabase.from('terms_acceptance').insert({
+            user_id:       userId,
             email,
-            accepted:    true,
-            accepted_at: new Date().toISOString(),
-            user_agent:  navigator.userAgent.slice(0, 200),
+            accepted:      true,
+            accepted_at:   new Date().toISOString(),
+            user_agent:    navigator.userAgent.slice(0, 200),
+            terms_version: TERMS_VERSION, // [FIX-TERMS-VERSION] campo NOT NULL
         });
+
+        if (error) {
+            console.warn('[primeiroacesso] _acceptTerms insert error (não crítico):', error.message);
+        }
     } catch (err) {
-        // Não bloqueia o fluxo principal — falha não impede o cadastro
-        console.warn('[primeiroacesso] _acceptTerms falhou (não crítico):', err?.message);
+        console.warn('[primeiroacesso] _acceptTerms exceção (não crítico):', err?.message);
     }
 }
 
 /**
  * Cria entrada em user_data com informações iniciais do usuário.
  *
- * [SEC-10] userId validado como authData.user.id antes de chamar esta função.
- * [SEC-CATCH-LOG] catch loga o erro — antes era silencioso, impossibilitando
- * diagnóstico de falhas em produção.
+ * [SEC-10] userId validado como authData.user.id antes de chamar.
+ * [SEC-CATCH-LOG] catch loga o erro para diagnóstico em produção.
  *
- * REQUISITO RLS obrigatório na tabela user_data:
- *   CREATE POLICY "insert_own_user_data" ON user_data
- *     FOR INSERT TO authenticated
- *     WITH CHECK (auth.uid() = user_id);
+ * RLS na tabela user_data:
+ *   INSERT: WITH CHECK (auth.uid() = user_id)  ← já existe no banco ✅
  *
  * @param {string} userId  - UUID do usuário autenticado
  * @param {string} email   - Email normalizado do usuário
@@ -819,7 +766,7 @@ async function _acceptTerms(userId, email) {
  */
 async function _createUserData(userId, email, subData) {
     try {
-        await supabase.from('user_data').insert({
+        const { error } = await supabase.from('user_data').insert({
             user_id: userId,
             email,
             data_json: {
@@ -829,8 +776,11 @@ async function _createUserData(userId, email, subData) {
                 created_at:  new Date().toISOString(),
             },
         });
+
+        if (error) {
+            console.warn('[primeiroacesso] _createUserData insert error (não crítico):', error.message);
+        }
     } catch (err) {
-        // [SEC-CATCH-LOG] Loga para diagnóstico — não bloqueia o fluxo principal
-        console.warn('[primeiroacesso] _createUserData falhou (não crítico):', err?.message);
+        console.warn('[primeiroacesso] _createUserData exceção (não crítico):', err?.message);
     }
 }
