@@ -45,7 +45,7 @@
  * [A11Y-ARIA-LIVE]   aria-live="assertive" reforçado via JS
  */
 
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-client.js?v=3';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-client.js?v=2';
 
 // ==========================================
 // CONFIGURAÇÃO
