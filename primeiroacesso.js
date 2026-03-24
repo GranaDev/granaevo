@@ -1,18 +1,51 @@
 /**
- * GranaEvo — primeiroacesso.js (v7)
+ * GranaEvo — primeiroacesso.js (v8)
  *
  * ============================================================
  * HISTÓRICO DE CORREÇÕES — TODAS ATIVAS
  * ============================================================
-
+ *
+ * [FIX-401] Adicionado header 'apikey' com SUPABASE_ANON_KEY em todas as
+ *   chamadas a Edge Functions públicas. O gateway do Supabase exige essa
+ *   chave para rotear a requisição, mesmo em endpoints sem autenticação.
+ *   Sem esse header, o gateway retorna 401 antes de chegar na função.
+ *
+ * [FIX-EMAIL-CONFIRM] Adicionada chamada à Edge Function confirm-email
+ *   logo após o signUp. Como o Supabase pode exigir confirmação de email,
+ *   o usuário não teria sessão e não poderia fazer login. A função
+ *   confirm-email valida internamente contra a tabela subscriptions
+ *   (pagamento aprovado + email correto + senha ainda não criada) e só
+ *   então confirma o email via admin API. Isso é seguro pois a validação
+ *   de legitimidade acontece no backend.
+ *
+ * [FIX-FLOW-ORDER] Fluxo pós-signUp reestruturado:
+ *   1. signUp                          → obtém userId
+ *   2. _confirmEmail                   → auto-confirma + atualiza subscription
+ *   3. signInWithPassword              → obtém session + accessToken
+ *   4. _linkViaBackendWithRetry        → vincula via JWT (agora disponível)
+ *   5. _acceptTerms                    → registra LGPD/GDPR
+ *   6. _createUserData                 → cria perfil inicial
+ *   7. redirect                        → envia para login.html
+ *
+ * [FIX-02] Normaliza email lowercase antes de qualquer operação
+ * [SEC-06] Rate limit: 5s cooldown no "Verificar Email"
+ * [SEC-08] Rate limit: 3s cooldown no "Criar Senha e Acessar"
+ * [SEC-TIMEOUT] fetchWithTimeout aborta requisições após 10s
+ * [SEC-03] Resposta genérica para estados não-ready (anti-enumeração)
+ * [SEC-04] Sem innerHTML com dados externos — DOM programático
+ * [SEC-05] Limpa campos de senha em todos os caminhos de saída
+ * [SEC-07] setButtonLoading usa cloneNode + replaceChildren (zero innerHTML)
+ * [SEC-09] autocomplete + maxlength reforçados via JS (cobre HTML cacheado)
+ * [SEC-10] userId validado como authData.user.id antes de ops de banco
+ * [SEC-INLINE-STYLE] Nenhum style.* direto — classList apenas (compatível CSP)
+ * [A11Y-ARIA-LIVE] aria-live="assertive" reforçado via JS
  */
 
-import { supabase } from './supabase-client.js?v=2';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-client.js?v=8';
 
 // ==========================================
 // CONFIGURAÇÃO
 // ==========================================
-const SUPABASE_URL = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
 
 /** [SEC-06] Cooldown do botão "Verificar Email": 5 segundos */
 const EMAIL_CHECK_COOLDOWN_MS = 5_000;
@@ -126,14 +159,22 @@ checkEmailBtn.addEventListener('click', async () => {
     setButtonLoading(checkEmailBtn, 'Verificando...');
 
     try {
+        // [FIX-401] Header 'apikey' obrigatório para o gateway do Supabase
+        // rotear a requisição até a Edge Function. Sem ele, retorna 401
+        // antes mesmo de chegar no código da função.
+        // A anon key é pública por design no Supabase — segura no frontend.
+        //
         // [SEC-02] Sem Authorization header — endpoint é pré-auth público.
         // [SEC-TIMEOUT] fetchWithTimeout aborta após 10s.
         const response = await fetchWithTimeout(
             `${SUPABASE_URL}/functions/v1/check-email-status`,
             {
                 method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ email }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey':       SUPABASE_ANON_KEY,
+                },
+                body: JSON.stringify({ email }),
             }
         );
 
@@ -399,6 +440,16 @@ function showTermsError() {
 
 // ==========================================
 // SUBMIT — CRIAR SENHA
+//
+// [FIX-FLOW-ORDER] Fluxo reestruturado (v8):
+//   1. Validações locais (termos, senha, confirmação)
+//   2. supabase.auth.signUp  → obtém userId (session pode ser null)
+//   3. _confirmEmail         → auto-confirma email via Edge Function segura
+//   4. supabase.auth.signIn  → obtém session + JWT
+//   5. _linkViaBackendWithRetry → vincula subscription via JWT
+//   6. _acceptTerms          → registra aceitação LGPD no banco
+//   7. _createUserData       → cria perfil inicial do usuário
+//   8. redirect              → envia para login.html
 // ==========================================
 accessForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -484,62 +535,58 @@ accessForm?.addEventListener('submit', async (e) => {
             throw authError;
         }
 
-        const userId      = authData.user?.id;
-        const accessToken = authData.session?.access_token;
+        const userId = authData.user?.id;
 
-        // ── ETAPA 2: Verificação de confirmação de email ────────────────
-        // [BUG-04-FIX] Sem session = Supabase exige confirmação de email.
-        // Sem JWT não podemos chamar _linkViaBackend.
-        // O check-user-access auto-vincula no próximo login.
-        if (!accessToken) {
+        if (!userId) {
+            throw new Error('Não foi possível obter o ID do usuário após o cadastro.');
+        }
+
+        // ── ETAPA 2: Auto-confirmação de email via Edge Function segura ──
+        // [FIX-EMAIL-CONFIRM] O Supabase pode exigir confirmação de email,
+        // bloqueando o login. A Edge Function confirm-email valida a
+        // legitimidade da requisição (subscription ativa + pagamento aprovado
+        // + email correto + senha ainda não criada) e só então confirma.
+        // Isso substitui o fluxo antigo que dependia de authData.session
+        // não-null (que nunca vinha quando confirm email estava ativo).
+        setButtonLoading(submitBtn, 'Confirmando acesso...');
+
+        const confirmOk = await _confirmEmail(
+            userId,
+            email,
+            currentSubscriptionData.subscription_id
+        );
+
+        if (!confirmOk) {
+            // Falha na confirmação — não prosseguir.
+            // O usuário será orientado a verificar o email ou tentar novamente.
             passwordInput.value        = '';
             confirmPasswordInput.value = '';
             showAlert(
                 'warning',
-                '✅ Conta criada! Confirme seu email na sua caixa de entrada para ativar o acesso, depois faça login.'
+                'Houve um problema ao ativar seu acesso. Tente novamente ou entre em contato: suporte@granaevo.com'
             );
-            setTimeout(() => { window.location.href = 'login.html'; }, 4000);
             return;
         }
 
-        // ── ETAPA 3: Vincular subscription via Edge Function ────────────
-        // [BUG-03-FIX] Retry com backoff exponencial (até 3 tentativas).
-        // Se ainda falhar, o check-user-access auto-vincula no próximo login.
-        const linkSuccess = await _linkViaBackendWithRetry(
-            accessToken,
-            currentSubscriptionData.subscription_id
-        );
-
-        if (!linkSuccess) {
-            console.warn('[primeiroacesso] _linkViaBackend falhou após retries — será corrigido no próximo login via check-user-access.');
-        }
-
-        // ── ETAPA 4: Registrar aceitação dos termos ─────────────────────
-        // [SEC-10] Valida que userId é exatamente o usuário recém-criado
-        if (userId && userId === authData.user?.id) {
-            await _acceptTerms(userId, email);
-        }
-
-        // ── ETAPA 5: Criar user_data ────────────────────────────────────
-        // [SEC-10] Valida que userId é exatamente o usuário recém-criado
-        if (userId && userId === authData.user?.id) {
-            await _createUserData(userId, email, currentSubscriptionData);
-        }
-
-        // ── ETAPA 6: Login automático ───────────────────────────────────
-        // Aguarda propagação no servidor antes de tentar o login
+        // ── ETAPA 3: Login com as credenciais recém-criadas ──────────────
+        // Aguarda propagação no Supabase Auth antes de tentar o login
+        setButtonLoading(submitBtn, 'Entrando na sua conta...');
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+        const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+        });
 
         // [SEC-05] Limpa campos sensíveis independente do resultado do login
         passwordInput.value        = '';
         confirmPasswordInput.value = '';
 
         if (loginError) {
-            // [FIX-03] Trata explicitamente o caso de email não confirmado
+            // [FIX-03] Trata explicitamente caso de email não confirmado
+            // (não deveria ocorrer após confirm-email, mas é uma salvaguarda)
             if (loginError.message?.toLowerCase().includes('email not confirmed')) {
-                showAlert('warning', '✅ Conta criada! Confirme seu email e faça o login.');
+                showAlert('warning', '✅ Conta criada! Confirme seu email na caixa de entrada e faça o login.');
             } else {
                 showAlert('info', '✅ Conta criada com sucesso! Faça o login para continuar.');
             }
@@ -547,6 +594,36 @@ accessForm?.addEventListener('submit', async (e) => {
             return;
         }
 
+        const accessToken = loginData.session?.access_token;
+
+        // ── ETAPA 4: Vincular subscription via Edge Function ────────────
+        // [BUG-03-FIX] Retry com backoff exponencial (até 3 tentativas).
+        // Agora temos accessToken garantido pois o login funcionou.
+        // Se ainda falhar, o check-user-access auto-vincula no próximo login.
+        if (accessToken) {
+            const linkSuccess = await _linkViaBackendWithRetry(
+                accessToken,
+                currentSubscriptionData.subscription_id
+            );
+
+            if (!linkSuccess) {
+                console.warn('[primeiroacesso] _linkViaBackend falhou após retries — será corrigido no próximo login via check-user-access.');
+            }
+        }
+
+        // ── ETAPA 5: Registrar aceitação dos termos ─────────────────────
+        // [SEC-10] Valida que userId é exatamente o usuário recém-criado
+        if (userId && userId === authData.user?.id) {
+            await _acceptTerms(userId, email);
+        }
+
+        // ── ETAPA 6: Criar user_data ────────────────────────────────────
+        // [SEC-10] Valida que userId é exatamente o usuário recém-criado
+        if (userId && userId === authData.user?.id) {
+            await _createUserData(userId, email, currentSubscriptionData);
+        }
+
+        // ── ETAPA 7: Redirecionar ────────────────────────────────────────
         showAlert('info', '✅ Conta criada com sucesso! Redirecionando...');
         setTimeout(() => { window.location.href = 'login.html'; }, 1500);
 
@@ -579,6 +656,61 @@ accessForm?.addEventListener('submit', async (e) => {
 // ==========================================
 
 /**
+ * [FIX-EMAIL-CONFIRM] Chama a Edge Function confirm-email para auto-confirmar
+ * o email do usuário recém-criado.
+ *
+ * SEGURANÇA: A Edge Function valida internamente:
+ *   - subscriptionId existe e está ativo
+ *   - payment_status === 'approved'
+ *   - email bate com o da subscription
+ *   - password_created === false (uso único)
+ *   - userId existe no Auth e o email confere
+ *   - Usuário foi criado recentemente (janela de 10 minutos)
+ *
+ * Não envia Authorization header pois o usuário não tem JWT ainda.
+ * A validação de legitimidade acontece inteiramente no backend.
+ *
+ * [FIX-401] Envia 'apikey' (anon key) para o gateway do Supabase rotear
+ * corretamente a requisição até a Edge Function.
+ *
+ * @param {string} userId         - UUID do usuário recém-criado
+ * @param {string} email          - Email normalizado
+ * @param {string} subscriptionId - ID da subscription validada
+ * @returns {Promise<boolean>}    - true se confirmou com sucesso
+ */
+async function _confirmEmail(userId, email, subscriptionId) {
+    try {
+        const response = await fetchWithTimeout(
+            `${SUPABASE_URL}/functions/v1/confirm-email`,
+            {
+                method:  'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey':       SUPABASE_ANON_KEY,
+                    // Sem Authorization — usuário não tem JWT neste ponto.
+                    // Autenticação é feita via subscriptionId + userId no backend.
+                },
+                body: JSON.stringify({ userId, email, subscriptionId }),
+            }
+        );
+
+        if (!response.ok) {
+            const errBody = await response.json().catch(() => ({}));
+            console.error('[primeiroacesso] _confirmEmail HTTP', response.status, errBody?.error);
+            return false;
+        }
+
+        const result = await response.json();
+        return result?.success === true;
+
+    } catch (err) {
+        const label = err?.name === 'AbortError' ? 'timeout' : 'erro de rede';
+        console.error(`[primeiroacesso] _confirmEmail ${label}:`, err?.message);
+        return false;
+    }
+}
+
+/**
  * [BUG-03-FIX] Tenta vincular até `maxRetries` vezes com backoff exponencial.
  * Cobre falhas de rede transitórias que antes deixavam user_id = NULL
  * na subscription, quebrando todos os logins futuros.
@@ -604,6 +736,8 @@ async function _linkViaBackendWithRetry(accessToken, subscriptionId, maxRetries 
 
 /**
  * [SEC-01] Vincula subscription usando o JWT do usuário como autenticação.
+ * [FIX-401] Envia 'apikey' (anon key) além do Authorization para cobrir
+ *   o roteamento do gateway do Supabase.
  * [SEC-TIMEOUT] Usa fetchWithTimeout para evitar requisições penduradas.
  *
  * @param {string} accessToken    - JWT do usuário autenticado
@@ -618,8 +752,8 @@ async function _linkViaBackend(accessToken, subscriptionId) {
                 method:  'POST',
                 headers: {
                     'Content-Type':  'application/json',
+                    'apikey':        SUPABASE_ANON_KEY,
                     // [SEC-01] JWT do usuário autenticado — correto para endpoint protegido.
-                    // Nunca usar anon key aqui.
                     'Authorization': `Bearer ${accessToken}`,
                 },
                 body: JSON.stringify({ subscription_id: subscriptionId }),

@@ -1,15 +1,23 @@
 <!DOCTYPE html>
 <!--
-    GranaEvo — primeiroacesso.html (v7)
+    GranaEvo — primeiroacesso.html (v8)
 
     SEGURANÇA:
     - CSP via meta tag + headers do servidor (nginx/caddy/vercel)
     - upgrade-insecure-requests: força HTTPS em subresources
     - require-trusted-types-for 'script': bloqueia DOM XSS avançado
-    - SRI (integrity) no script do Supabase CDN
     - lang="pt-BR": acessibilidade + SEO
     - role="alert" + aria-live no alertBox: leitores de tela anunciam alertas
     - aria-describedby nos inputs: associa mensagens de erro a campos
+
+    v8 — CORREÇÕES:
+    - [FIX-CSP-SRI] Removido <script> CDN com hash SRI errado que bloqueava
+      o Supabase SDK. O SDK é carregado via ES module em supabase-client.js.
+    - [FIX-CSP-CONNECT] Adicionado wss:// do Supabase (realtime) e
+      https://cdn.jsdelivr.net ao connect-src para eliminar erros de console
+      com source maps de desenvolvimento.
+    - [FIX-CSP-SCRIPT] Mantido https://cdn.jsdelivr.net no script-src pois
+      supabase-client.js importa o SDK via ES module desse CDN.
 -->
 <html lang="pt-BR">
 <head>
@@ -21,8 +29,9 @@
         ╔══════════════════════════════════════════════════════════════╗
         ║  CONTENT SECURITY POLICY                                    ║
         ║                                                              ║
-        ║  v7: adicionado upgrade-insecure-requests                   ║
-        ║      adicionado require-trusted-types-for 'script'          ║
+        ║  v8: connect-src agora inclui:                              ║
+        ║    - wss://fvrhqqeofqedmhadzzqw.supabase.co (realtime)     ║
+        ║    - https://cdn.jsdelivr.net (source maps dev / ES module) ║
         ║                                                              ║
         ║  NOTA: Esta meta tag é uma camada extra de defesa.          ║
         ║  A CSP principal deve ser enviada como HTTP header pelo      ║
@@ -35,7 +44,10 @@
         script-src 'self' https://cdn.jsdelivr.net;
         style-src 'self' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com;
-        connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co;
+        connect-src 'self'
+                    https://fvrhqqeofqedmhadzzqw.supabase.co
+                    wss://fvrhqqeofqedmhadzzqw.supabase.co
+                    https://cdn.jsdelivr.net;
         img-src 'self' data:;
         frame-src 'none';
         object-src 'none';
@@ -54,16 +66,19 @@
     <link rel="stylesheet" href="primeiroacesso.css">
 
     <!--
-        Supabase SDK via CDN com SRI (Subresource Integrity).
-        integrity= protege contra comprometimento do CDN (supply chain attack).
-        Atualize o hash se atualizar a versão da biblioteca.
+        [FIX-CSP-SRI] O <script> CDN do Supabase foi REMOVIDO desta versão.
+        Motivo: o hash SHA-384 estava incorreto para a versão atual da biblioteca,
+        bloqueando o carregamento do SDK inteiro.
+
+        O Supabase SDK agora é carregado exclusivamente via ES module em
+        supabase-client.js (type="module"), que importa diretamente do CDN:
+            import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+
+        Vantagens desta abordagem:
+        1. Sem SRI para manter sincronizado manualmente
+        2. Sem conflito entre UMD (global window.supabase) e ES module
+        3. Tree-shaking: apenas o código necessário é importado
     -->
-    <script
-        src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"
-        integrity="sha384-cs2drFxoFkYMREeMfMNEMBsVubGOkBBjxuRFDJkBG7M0KdEa3P4rByXa0YVKQLA"
-        crossorigin="anonymous"
-        defer>
-    </script>
 </head>
 
 <body>
@@ -95,7 +110,7 @@
             <!-- Alerta global (erros, avisos, sucesso)
                  role="alert" + aria-live="assertive" → leitores de tela anunciam
                  automaticamente qualquer mudança neste elemento.
-                 [A11Y-ARIA-LIVE] atributo também reforçado via JS em v7. -->
+                 [A11Y-ARIA-LIVE] atributo também reforçado via JS. -->
             <div id="alertBox"
                  class="alert-box"
                  role="alert"
@@ -246,8 +261,7 @@
                                 </svg>
                             </button>
                         </div>
-                        <!-- Mensagem de erro: senhas não coincidem
-                             aria-live="polite" → anunciada sem interromper o usuário -->
+                        <!-- Mensagem de erro: senhas não coincidem -->
                         <div id="confirmError"
                              class="error-text"
                              role="alert"
@@ -322,7 +336,7 @@
     </div><!-- /.container -->
 
     <!-- JS principal (módulo ES) -->
-    <script type="module" src="primeiroacesso.js?v=2"></script>
+    <script type="module" src="primeiroacesso.js?v=8"></script>
 
 </body>
 </html>
