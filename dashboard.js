@@ -85,31 +85,31 @@ function sanitizeDate(dateStr) {
 
 async function _sanitizeImageFile(file) {
     return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
+        createImageBitmap(file)
+            .then((bitmap) => {
                 try {
                     const canvas = document.createElement('canvas');
                     const MAX_DIM = 1200;
-                    let { naturalWidth: w, naturalHeight: h } = img;
+                    let w = bitmap.width;
+                    let h = bitmap.height;
+
                     if (w > MAX_DIM || h > MAX_DIM) {
                         if (w >= h) { h = Math.round((h / w) * MAX_DIM); w = MAX_DIM; }
                         else        { w = Math.round((w / h) * MAX_DIM); h = MAX_DIM; }
                     }
+
                     canvas.width  = w;
                     canvas.height = h;
 
                     const ctx = canvas.getContext('2d');
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, w, h);
-                    ctx.drawImage(img, 0, 0, w, h);
+                    ctx.drawImage(bitmap, 0, 0, w, h);
+                    bitmap.close();
 
                     canvas.toBlob(
                         (blob) => {
                             if (!blob) {
-                                // ✅ CORRIGIDO: nunca retorna arquivo original.
-                                //    Retorna null — caller deve rejeitar o upload.
                                 _log.error('SANITIZE_IMG_001', 'canvas.toBlob retornou null — upload bloqueado');
                                 resolve(null);
                                 return;
@@ -125,24 +125,15 @@ async function _sanitizeImageFile(file) {
                         0.92
                     );
                 } catch (err) {
-                    // ✅ CORRIGIDO: erro no canvas → null, não arquivo original
                     _log.error('SANITIZE_IMG_002', err);
+                    try { bitmap.close(); } catch (_) {}
                     resolve(null);
                 }
-            };
-            img.onerror = () => {
-                // ✅ CORRIGIDO: falha ao decodificar → null, não arquivo original
-                _log.error('SANITIZE_IMG_003', 'Falha ao carregar imagem para sanitização — upload bloqueado');
+            })
+            .catch((err) => {
+                _log.error('SANITIZE_IMG_003', 'createImageBitmap falhou — upload bloqueado');
                 resolve(null);
-            };
-            img.src = e.target.result;
-        };
-        reader.onerror = () => {
-            // ✅ CORRIGIDO: falha de leitura → null, não arquivo original
-            _log.error('SANITIZE_IMG_004', 'FileReader falhou na sanitização — upload bloqueado');
-            resolve(null);
-        };
-        reader.readAsDataURL(file);
+            });
     });
 }
 
