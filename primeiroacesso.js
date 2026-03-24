@@ -5,7 +5,27 @@
  * HISTÓRICO DE CORREÇÕES — TODAS ATIVAS
  * ============================================================
  *
- * [FIX-EXPORTS] CRÍTICO — Depende de supabase-client.js que agora exporta
+ * [FIX-CONFIRM-REMOVED] CRÍTICO — Removida chamada à Edge Function
+ *   confirm-email (que na verdade se chama confirm-user-email no Supabase).
+ *   Como "Email Confirmation" está DESATIVADA nas configurações do projeto
+ *   (Authentication → User Signups), o Supabase já cria o usuário com email
+ *   confirmado automaticamente. A chamada era desnecessária e, por usar o
+ *   nome errado da função, retornava CORS 404, interrompendo todo o fluxo
+ *   pós-signUp e impedindo a criação de conta. A Edge Function
+ *   confirm-user-email foi reescrita separadamente com validações de
+ *   segurança reais, mas NÃO é chamada aqui enquanto a confirmação de email
+ *   permanecer desativada no Supabase.
+ *
+ * [FIX-FLOW-ORDER] Fluxo pós-signUp reestruturado na ordem correta:
+ *   1. signUp                       → cria usuário (já confirmado, pois
+ *                                     Email Confirmation está desativada)
+ *   2. signInWithPassword           → obtém session + accessToken
+ *   3. _linkViaBackendWithRetry     → vincula subscription via JWT
+ *   4. _acceptTerms                 → registra aceitação LGPD/GDPR
+ *   5. _createUserData              → cria perfil inicial
+ *   6. redirect                     → envia para login.html
+ *
+ * [FIX-EXPORTS] CRÍTICO — Depende de supabase-client.js que exporta
  *   SUPABASE_URL e SUPABASE_ANON_KEY corretamente. Esta era a causa raiz
  *   de todo o fluxo de Primeiro Acesso não funcionar: as constantes chegavam
  *   como `undefined`, quebrando silenciosamente todos os fetch às Edge Functions.
@@ -13,19 +33,6 @@
  * [FIX-401] Adicionado header 'apikey' com SUPABASE_ANON_KEY em todas as
  *   chamadas a Edge Functions. O gateway do Supabase exige essa chave para
  *   rotear a requisição, mesmo em endpoints sem autenticação de usuário.
- *
- * [FIX-EMAIL-CONFIRM] Adicionada chamada à Edge Function confirm-email
- *   logo após o signUp. Resolve o caso onde o Supabase exige confirmação
- *   de email e a sessão vem nula, impedindo o login automático.
- *
- * [FIX-FLOW-ORDER] Fluxo pós-signUp reestruturado na ordem correta:
- *   1. signUp                          → obtém userId
- *   2. _confirmEmail                   → auto-confirma + atualiza subscription
- *   3. signInWithPassword              → obtém session + accessToken
- *   4. _linkViaBackendWithRetry        → vincula via JWT (agora disponível)
- *   5. _acceptTerms                    → registra aceitação LGPD/GDPR
- *   6. _createUserData                 → cria perfil inicial
- *   7. redirect                        → envia para login.html
  *
  * [FIX-TERMS-VERSION] terms_acceptance.terms_version é NOT NULL no banco.
  *   Coluna ausente causava silent insert error. Adicionado campo com versão
@@ -326,8 +333,8 @@ function showAlertWithLinks(type, message, links = []) {
 // [SEC-07] cloneNode + replaceChildren — zero innerHTML
 // ==========================================
 function setButtonLoading(btn, label) {
-    btn.disabled   = true;
-    btn._origNodes = Array.from(btn.childNodes).map(n => n.cloneNode(true));
+    btn.disabled    = true;
+    btn._origNodes  = Array.from(btn.childNodes).map(n => n.cloneNode(true));
     btn.textContent = label;
 }
 
@@ -483,6 +490,9 @@ accessForm?.addEventListener('submit', async (e) => {
         const email = (currentSubscriptionData.email || '').toLowerCase().trim();
 
         // ── ETAPA 1: Criar usuário no Auth ──────────────────────────────
+        // [FIX-CONFIRM-REMOVED] Como "Email Confirmation" está DESATIVADA
+        // no Supabase (Authentication → User Signups), o usuário é criado
+        // já confirmado. Nenhuma Edge Function de confirmação é necessária.
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email,
             password,
@@ -521,34 +531,10 @@ accessForm?.addEventListener('submit', async (e) => {
             throw new Error('Não foi possível obter o ID do usuário após o cadastro.');
         }
 
-        // ── ETAPA 2: Auto-confirmação de email via Edge Function segura ──
-        // Necessário quando o Supabase requer confirmação de email —
-        // sem isso, signInWithPassword falha com "email not confirmed".
-        setButtonLoading(submitBtn, 'Confirmando acesso...');
-
-        const confirmOk = await _confirmEmail(
-            userId,
-            email,
-            currentSubscriptionData.subscription_id
-        );
-
-        if (!confirmOk) {
-            // [SEC-05] Limpa senha antes de retornar com erro.
-            passwordInput.value        = '';
-            confirmPasswordInput.value = '';
-            showAlert(
-                'warning',
-                'Houve um problema ao ativar seu acesso. Tente novamente ou entre em contato: suporte@granaevo.com'
-            );
-            return;
-        }
-
-        // ── ETAPA 3: Login com as credenciais recém-criadas ──────────────
+        // ── ETAPA 2: Login com as credenciais recém-criadas ──────────────
+        // Com "Email Confirmation" desativada, o login é imediato após signUp.
+        // Não há delay necessário pois não há propagação de confirmação a aguardar.
         setButtonLoading(submitBtn, 'Entrando na sua conta...');
-
-        // Pequeno delay para garantir que a confirmação de email propagou
-        // nos servidores do Supabase antes de tentar o login.
-        await new Promise(resolve => setTimeout(resolve, 1000));
 
         const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
             email,
@@ -560,18 +546,16 @@ accessForm?.addEventListener('submit', async (e) => {
         confirmPasswordInput.value = '';
 
         if (loginError) {
-            if (loginError.message?.toLowerCase().includes('email not confirmed')) {
-                showAlert('warning', '✅ Conta criada! Confirme seu email na caixa de entrada e faça o login.');
-            } else {
-                showAlert('info', '✅ Conta criada com sucesso! Faça o login para continuar.');
-            }
+            // Se o login falhar por algum motivo inesperado, redireciona
+            // para o login manual — a conta já foi criada com sucesso.
+            showAlert('info', '✅ Conta criada com sucesso! Faça o login para continuar.');
             setTimeout(() => { window.location.href = 'login.html'; }, 2500);
             return;
         }
 
         const accessToken = loginData.session?.access_token;
 
-        // ── ETAPA 4: Vincular subscription via Edge Function ────────────
+        // ── ETAPA 3: Vincular subscription via Edge Function ────────────
         // Feito com retry pois depende do JWT que acabou de ser emitido.
         if (accessToken) {
             const linkSuccess = await _linkViaBackendWithRetry(
@@ -585,21 +569,21 @@ accessForm?.addEventListener('submit', async (e) => {
             }
         }
 
-        // ── ETAPA 5: Registrar aceitação dos termos (LGPD/GDPR) ─────────
+        // ── ETAPA 4: Registrar aceitação dos termos (LGPD/GDPR) ─────────
         // Executado após login para que a RLS (auth.uid() = user_id) passe.
         // [SEC-10] Dupla validação de userId antes de operar no banco.
         if (userId && userId === authData.user?.id) {
             await _acceptTerms(userId, email);
         }
 
-        // ── ETAPA 6: Criar user_data ────────────────────────────────────
+        // ── ETAPA 5: Criar user_data ────────────────────────────────────
         // [SEC-10] Dupla validação de userId antes de operar no banco.
         if (userId && userId === authData.user?.id) {
             await _createUserData(userId, email, currentSubscriptionData);
         }
 
-        // ── ETAPA 7: Redirecionar para login ────────────────────────────
-        showAlert('info', '✅ Conta criada com sucesso! Redirecionando...');
+        // ── ETAPA 6: Redirecionar para login ────────────────────────────
+        showAlert('info', '✅ Conta criada com sucesso! Redirecionando para o login...');
         setTimeout(() => { window.location.href = 'login.html'; }, 1500);
 
     } catch (err) {
@@ -629,56 +613,6 @@ accessForm?.addEventListener('submit', async (e) => {
 // ==========================================
 // HELPERS INTERNOS
 // ==========================================
-
-/**
- * [FIX-EMAIL-CONFIRM] Chama a Edge Function confirm-email para auto-confirmar
- * o email do usuário recém-criado e marcar password_created na subscription.
- *
- * SEGURANÇA — A Edge Function valida internamente:
- *   - subscriptionId existe, is_active = true, payment_status = 'approved'
- *   - email bate com o da subscription
- *   - password_created = false (uso único — impede replay)
- *   - userId existe no Auth e o email confere
- *   - Usuário foi criado há no máximo 10 minutos (anti-replay temporal)
- *
- * Não envia Authorization header pois o usuário não tem JWT ainda (pré-login).
- *
- * [FIX-401] Envia header 'apikey' para o gateway do Supabase rotear a requisição.
- *
- * @param {string} userId         - UUID do usuário recém-criado
- * @param {string} email          - Email normalizado (lowercase)
- * @param {string} subscriptionId - ID da subscription validada
- * @returns {Promise<boolean>}    - true se confirmação foi bem-sucedida
- */
-async function _confirmEmail(userId, email, subscriptionId) {
-    try {
-        const response = await fetchWithTimeout(
-            `${SUPABASE_URL}/functions/v1/confirm-email`,
-            {
-                method:  'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey':       SUPABASE_ANON_KEY,
-                },
-                body: JSON.stringify({ userId, email, subscriptionId }),
-            }
-        );
-
-        if (!response.ok) {
-            const errBody = await response.json().catch(() => ({}));
-            console.error('[primeiroacesso] _confirmEmail HTTP', response.status, errBody?.error);
-            return false;
-        }
-
-        const result = await response.json();
-        return result?.success === true;
-
-    } catch (err) {
-        const label = err?.name === 'AbortError' ? 'timeout' : 'erro de rede';
-        console.error(`[primeiroacesso] _confirmEmail ${label}:`, err?.message);
-        return false;
-    }
-}
 
 /**
  * [BUG-03-FIX] Tenta vincular até `maxRetries` vezes com backoff exponencial.

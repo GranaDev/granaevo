@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-    GranaEvo — primeiroacesso.html (v9)
+    GranaEvo — primeiroacesso.html (v10)
 
     SEGURANÇA:
     - CSP via meta tag + headers do servidor (nginx/caddy/vercel)
@@ -10,12 +10,17 @@
     - role="alert" + aria-live no alertBox: leitores de tela anunciam alertas
     - aria-describedby nos inputs: associa mensagens de erro a campos
 
-    v9 — CORREÇÕES:
+    v10 — CORREÇÕES:
+    - [FIX-JS-VERSION] Versão do script JS atualizada de ?v=2 para ?v=3,
+      garantindo que o browser não sirva o arquivo antigo em cache. O novo
+      primeiroacesso.js remove a chamada à Edge Function com nome errado
+      (confirm-email → confirm-user-email) que bloqueava todo o fluxo de
+      criação de conta com erro de CORS.
+
+    v9 — CORREÇÕES (mantidas):
     - [FIX-INLINE-STYLE] Removido style="margin-top: 0.5rem;" do footer.
       Inline styles são bloqueados pela CSP (sem 'unsafe-inline' em style-src).
       Substituído por classe CSS utilitária .footer-contact-line.
-    - [FIX-JS-VERSION] Versão do script JS atualizada de ?v=2 para ?v=3,
-      garantindo que o browser não sirva o arquivo antigo em cache.
 
     v8 — CORREÇÕES (mantidas):
     - [FIX-CSP-SRI] Removido <script> CDN com hash SRI errado que bloqueava
@@ -341,8 +346,9 @@
         </div><!-- /.card -->
     </div><!-- /.container -->
 
-    <!-- JS principal (módulo ES) -->
-    <script type="module" src="primeiroacesso.js?v=2"></script>
+    <!-- [FIX-JS-VERSION] v=3 garante que o browser descarte o cache do v=2
+         que chamava a Edge Function com nome errado (confirm-email). -->
+    <script type="module" src="primeiroacesso.js?v=3"></script>
 
 </body>
 </html>
