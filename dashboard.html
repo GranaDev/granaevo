@@ -87,26 +87,11 @@
         referrerpolicy="no-referrer">
 
     <!-- ================================================================
-         🔐 Chart.js 4.4.0 — SRI correto
-         ================================================================ -->
-    <script
-        src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
-        integrity="sha384-4bKASEcnXfYfA/rrhF9qD3mYowkb5k4Xbzbrf3ccqgZrplKUrwnA2Q/L5xcdZFAp"
-        crossorigin="anonymous"
-        referrerpolicy="no-referrer">
-    </script>
-
-    <!-- ================================================================
-         🔐 Supabase JS v2 — SRI correto
-         ================================================================ -->
-    <script
-        src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
-        integrity="sha384-zETTH+6IXxKQ6zbGcT6H6EDdnGaae9uhI8uO7doTJoNEmPGeTKVOe5S6/XybS9JH"
-        crossorigin="anonymous"
-        referrerpolicy="no-referrer"></script>
-
-    <!-- ================================================================
          📦 Módulos da Aplicação
+         ✅ O Supabase JS é importado EXCLUSIVAMENTE pelo módulo ES
+            supabase-client.js — carregar via <script src="cdn"> em paralelo
+            criava múltiplas instâncias GoTrueClient (comportamento indefinido)
+            e invalidava os hashes SRI a cada novo release do pacote @2.
          ================================================================ -->
     <script type="module" src="supabase-client.js"></script>
     <script type="module" src="data-manager.js"></script>
