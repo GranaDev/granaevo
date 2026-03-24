@@ -831,17 +831,21 @@ async function verificarLogin() {
 
                 _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
                 try {
-                    // ✅ CORREÇÃO [FIX-INVOKE-401]: passa Authorization header explicitamente.
-                    //    Mesma causa das correções em _criarPerfilHandler e alterarFoto:
-                    //    o accessToken() callback do FunctionsClient retorna null com
-                    //    storageKey customizado, impedindo que o JWT chegue à Edge Function.
-                    const { error: linkError } = await supabase.functions.invoke('link-user-subscription', {
-                        body: { subscription_id: subByEmail.id },
-                        headers: { 'Authorization': `Bearer ${session.access_token}` }
-                    });
+                    const response = await fetch(
+                        `${supabase.supabaseUrl}/functions/v1/link-user-subscription`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${session.access_token}`,
+                                'apikey': supabase.supabaseKey,
+                            },
+                            body: JSON.stringify({ subscription_id: subByEmail.id }),
+                        }
+                    );
 
-                    if (linkError) {
-                        _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico). Status:', linkError.status ?? 'desconhecido');
+                    if (!response.ok) {
+                        _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico). Status:', response.status);
                     } else {
                         _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
                     }
@@ -1169,13 +1173,28 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         _log.info('[_criarPerfilHandler] Verificando permissão RPC...');
 
         const { data: podeCrear, error: rpcError } = await supabase.rpc('can_create_profile');
+
+        // ✅ CORREÇÃO: Se o RPC falhar (ex: plano ainda não vinculado ao user_id),
+        //    fazemos fallback para verificação local usando o plano já carregado em memória.
+        //    Isso evita bloquear criação de perfil por falha temporária de vínculo.
         if (rpcError) {
-            _log.error('PERFIL_RPC_001', rpcError);
-            alert('Não foi possível validar permissões. Tente novamente.');
+            _log.warn('[_criarPerfilHandler] RPC can_create_profile falhou, usando verificação local. Erro:', rpcError.message);
+
+            const limitesLocais = { "Individual": 1, "Casal": 2, "Família": 4 };
+            const limiteLocal = limitesLocais[usuarioLogado.plano] ?? 1;
+
+            if (usuarioLogado.perfis.length >= limiteLocal) {
+                mostrarPopupLimite();
+                fecharPopup();
+                return;
+            }
+
+            _log.info('[_criarPerfilHandler] Verificação local aprovada. Prosseguindo com criação...');
+        } else if (!podeCrear) {
+            mostrarPopupLimite();
             fecharPopup();
             return;
         }
-        if (!podeCrear) { mostrarPopupLimite(); fecharPopup(); return; }
 
         let fotoUrl = null;
 
@@ -1212,26 +1231,28 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             const formData = new FormData();
             formData.append('file', arquivo);
 
-            // ✅ CORREÇÃO [FIX-INVOKE-401]: passa Authorization header explicitamente.
-            //    supabase.functions.invoke() usa um accessToken() callback próprio que
-            //    retorna null quando storageKey: 'ge_auth' ainda não foi resolvido pelo
-            //    GoTrueClient no momento da chamada — causando 401 na Edge Function.
-            //    Solução: injetar session.access_token já disponível neste escopo.
-            const { data: uploadData, error: uploadError } = await supabase.functions.invoke(
-                'upload-profile-photo',
+            const uploadResponse = await fetch(
+                `${supabase.supabaseUrl}/functions/v1/upload-profile-photo`,
                 {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'apikey': supabase.supabaseKey,
+                    },
                     body: formData,
-                    headers: { 'Authorization': `Bearer ${session.access_token}` }
                 }
             );
 
-            if (uploadError) {
+            if (!uploadResponse.ok) {
+                const uploadError = await uploadResponse.json().catch(() => ({ message: 'Erro desconhecido' }));
                 _log.error('PERFIL_FOTO_001', uploadError);
                 alert(uploadError.message ?? 'Erro ao fazer upload da foto. Tente novamente.');
                 return;
             }
 
+            const uploadData = await uploadResponse.json();
             const nomeArquivo = uploadData?.path;
+
             if (!nomeArquivo) {
                 _log.error('PERFIL_FOTO_001B', 'path ausente na resposta da edge function');
                 alert('Erro ao processar a foto. Tente novamente.');
@@ -1288,7 +1309,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         alert('Ocorreu um erro ao criar o perfil. Tente novamente.');
     }
 }
-
 
 function mostrarPopupLimite(msgCustom) {
     let msg = msgCustom || "";
