@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-    GranaEvo — primeiroacesso.html (v8)
+    GranaEvo — primeiroacesso.html (v9)
 
     SEGURANÇA:
     - CSP via meta tag + headers do servidor (nginx/caddy/vercel)
@@ -10,12 +10,18 @@
     - role="alert" + aria-live no alertBox: leitores de tela anunciam alertas
     - aria-describedby nos inputs: associa mensagens de erro a campos
 
-    v8 — CORREÇÕES:
+    v9 — CORREÇÕES:
+    - [FIX-INLINE-STYLE] Removido style="margin-top: 0.5rem;" do footer.
+      Inline styles são bloqueados pela CSP (sem 'unsafe-inline' em style-src).
+      Substituído por classe CSS utilitária .footer-contact-line.
+    - [FIX-JS-VERSION] Versão do script JS atualizada de ?v=2 para ?v=3,
+      garantindo que o browser não sirva o arquivo antigo em cache.
+
+    v8 — CORREÇÕES (mantidas):
     - [FIX-CSP-SRI] Removido <script> CDN com hash SRI errado que bloqueava
       o Supabase SDK. O SDK é carregado via ES module em supabase-client.js.
     - [FIX-CSP-CONNECT] Adicionado wss:// do Supabase (realtime) e
-      https://cdn.jsdelivr.net ao connect-src para eliminar erros de console
-      com source maps de desenvolvimento.
+      https://cdn.jsdelivr.net ao connect-src.
     - [FIX-CSP-SCRIPT] Mantido https://cdn.jsdelivr.net no script-src pois
       supabase-client.js importa o SDK via ES module desse CDN.
 -->
@@ -29,14 +35,15 @@
         ╔══════════════════════════════════════════════════════════════╗
         ║  CONTENT SECURITY POLICY                                    ║
         ║                                                              ║
-        ║  v8: connect-src agora inclui:                              ║
-        ║    - wss://fvrhqqeofqedmhadzzqw.supabase.co (realtime)     ║
-        ║    - https://cdn.jsdelivr.net (source maps dev / ES module) ║
+        ║  connect-src inclui:                                        ║
+        ║    - https://fvrhqqeofqedmhadzzqw.supabase.co (REST/Auth)  ║
+        ║    - wss://fvrhqqeofqedmhadzzqw.supabase.co   (Realtime)   ║
+        ║    - https://cdn.jsdelivr.net (source maps / ES module)    ║
         ║                                                              ║
         ║  NOTA: Esta meta tag é uma camada extra de defesa.          ║
         ║  A CSP principal deve ser enviada como HTTP header pelo      ║
-        ║  servidor (nginx/Vercel/Cloudflare) pois meta tags não       ║
-        ║  cobrem navegação por document.location e alguns edge cases. ║
+        ║  servidor (vercel.json) pois meta tags não cobrem navegação  ║
+        ║  por document.location e alguns edge cases de browser.      ║
         ╚══════════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
@@ -66,18 +73,11 @@
     <link rel="stylesheet" href="primeiroacesso.css">
 
     <!--
-        [FIX-CSP-SRI] O <script> CDN do Supabase foi REMOVIDO desta versão.
-        Motivo: o hash SHA-384 estava incorreto para a versão atual da biblioteca,
-        bloqueando o carregamento do SDK inteiro.
+        O Supabase SDK é carregado exclusivamente via ES module em
+        supabase-client.js (type="module"), que importa do CDN:
+            import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/+esm'
 
-        O Supabase SDK agora é carregado exclusivamente via ES module em
-        supabase-client.js (type="module"), que importa diretamente do CDN:
-            import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
-
-        Vantagens desta abordagem:
-        1. Sem SRI para manter sincronizado manualmente
-        2. Sem conflito entre UMD (global window.supabase) e ES module
-        3. Tree-shaking: apenas o código necessário é importado
+        Sem SRI para manter manualmente, sem conflito UMD vs ESM.
     -->
 </head>
 
@@ -164,7 +164,7 @@
                     </button>
                 </div>
 
-                <!-- ── ETAPA 2: Informações da conta + senha ── -->
+                <!-- ── ETAPA 2: Informações da conta + criação de senha ── -->
                 <div id="passwordInputs" class="password-inputs">
 
                     <!-- Info box: dados da conta localizada -->
@@ -270,7 +270,7 @@
                         </div>
                     </div>
 
-                    <!-- Checkbox: termos de uso -->
+                    <!-- Checkbox: termos de uso (obrigatório — LGPD/GDPR) -->
                     <div class="form-group">
                         <div class="checkbox-wrapper">
                             <input
@@ -325,7 +325,13 @@
                     Já tem conta?
                     <a href="login.html">Fazer login</a>
                 </p>
-                <p style="margin-top: 0.5rem;">
+                <!--
+                    [FIX-INLINE-STYLE] Removido style="margin-top: 0.5rem;" que violava a
+                    CSP (sem 'unsafe-inline' em style-src). Substituído pela classe
+                    .footer-contact-line — adicione ao primeiroacesso.css:
+                    .footer-contact-line { margin-top: 0.5rem; }
+                -->
+                <p class="footer-contact-line">
                     Problemas? Fale conosco:
                     <a href="mailto:suporte@granaevo.com"
                        rel="noopener noreferrer">suporte@granaevo.com</a>
@@ -335,8 +341,8 @@
         </div><!-- /.card -->
     </div><!-- /.container -->
 
-    <!-- JS principal (módulo ES) -->
-    <script type="module" src="primeiroacesso.js?v=2"></script>
+    <!-- JS principal (módulo ES) — v=3 invalida cache do arquivo anterior -->
+    <script type="module" src="primeiroacesso.js?v=3"></script>
 
 </body>
 </html>

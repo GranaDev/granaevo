@@ -1,24 +1,29 @@
 /**
- * GranaEvo — primeiroacesso.js (v8.1)
+ * GranaEvo — primeiroacesso.js
  *
  * ============================================================
  * HISTÓRICO DE CORREÇÕES — TODAS ATIVAS
  * ============================================================
  *
+ * [FIX-EXPORTS] CRÍTICO — Depende de supabase-client.js que agora exporta
+ *   SUPABASE_URL e SUPABASE_ANON_KEY corretamente. Esta era a causa raiz
+ *   de todo o fluxo de Primeiro Acesso não funcionar: as constantes chegavam
+ *   como `undefined`, quebrando silenciosamente todos os fetch às Edge Functions.
+ *
  * [FIX-401] Adicionado header 'apikey' com SUPABASE_ANON_KEY em todas as
  *   chamadas a Edge Functions. O gateway do Supabase exige essa chave para
- *   rotear a requisição, mesmo em endpoints sem autenticação.
+ *   rotear a requisição, mesmo em endpoints sem autenticação de usuário.
  *
  * [FIX-EMAIL-CONFIRM] Adicionada chamada à Edge Function confirm-email
  *   logo após o signUp. Resolve o caso onde o Supabase exige confirmação
- *   de email e a sessão vem nula, impedindo o login.
+ *   de email e a sessão vem nula, impedindo o login automático.
  *
- * [FIX-FLOW-ORDER] Fluxo pós-signUp reestruturado:
+ * [FIX-FLOW-ORDER] Fluxo pós-signUp reestruturado na ordem correta:
  *   1. signUp                          → obtém userId
  *   2. _confirmEmail                   → auto-confirma + atualiza subscription
  *   3. signInWithPassword              → obtém session + accessToken
  *   4. _linkViaBackendWithRetry        → vincula via JWT (agora disponível)
- *   5. _acceptTerms                    → registra LGPD/GDPR
+ *   5. _acceptTerms                    → registra aceitação LGPD/GDPR
  *   6. _createUserData                 → cria perfil inicial
  *   7. redirect                        → envia para login.html
  *
@@ -26,21 +31,21 @@
  *   Coluna ausente causava silent insert error. Adicionado campo com versão
  *   controlada pela constante TERMS_VERSION.
  *
- * [FIX-02] Normaliza email lowercase antes de qualquer operação
- * [SEC-06] Rate limit: 5s cooldown no "Verificar Email"
- * [SEC-08] Rate limit: 3s cooldown no "Criar Senha e Acessar"
- * [SEC-TIMEOUT] fetchWithTimeout aborta requisições após 10s
- * [SEC-03] Resposta genérica para estados não-ready (anti-enumeração)
- * [SEC-04] Sem innerHTML com dados externos — DOM programático
- * [SEC-05] Limpa campos de senha em todos os caminhos de saída
- * [SEC-07] setButtonLoading usa cloneNode + replaceChildren (zero innerHTML)
- * [SEC-09] autocomplete + maxlength reforçados via JS (cobre HTML cacheado)
- * [SEC-10] userId validado como authData.user.id antes de ops de banco
+ * [FIX-02]  Normaliza email lowercase antes de qualquer operação
+ * [SEC-06]  Rate limit: 5s cooldown no "Verificar Email"
+ * [SEC-08]  Rate limit: 3s cooldown no "Criar Senha e Acessar"
+ * [SEC-TIMEOUT]   fetchWithTimeout aborta requisições após 10s
+ * [SEC-03]  Resposta genérica para estados não-ready (anti-enumeração)
+ * [SEC-04]  Sem innerHTML com dados externos — DOM programático
+ * [SEC-05]  Limpa campos de senha em todos os caminhos de saída
+ * [SEC-07]  setButtonLoading usa cloneNode + replaceChildren (zero innerHTML)
+ * [SEC-09]  autocomplete + maxlength reforçados via JS (cobre HTML cacheado)
+ * [SEC-10]  userId validado como authData.user.id antes de ops de banco
  * [SEC-INLINE-STYLE] Nenhum style.* direto — classList apenas (compatível CSP)
- * [A11Y-ARIA-LIVE] aria-live="assertive" reforçado via JS
+ * [A11Y-ARIA-LIVE]   aria-live="assertive" reforçado via JS
  */
 
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-client.js?v=8';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-client.js?v=3';
 
 // ==========================================
 // CONFIGURAÇÃO
@@ -49,7 +54,7 @@ import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-client.js?
 /**
  * [FIX-TERMS-VERSION] Versão atual dos Termos de Uso e Política de Privacidade.
  * Atualize este valor sempre que publicar uma nova versão dos termos.
- * O valor é gravado em terms_acceptance.terms_version (NOT NULL).
+ * O valor é gravado em terms_acceptance.terms_version (NOT NULL no banco).
  */
 const TERMS_VERSION = '1.0';
 
@@ -114,11 +119,11 @@ let lastSubmitAt = 0;
 // [SEC-MAXLENGTH] maxlength reforçado via JS pela mesma razão.
 if (passwordInput) {
     passwordInput.setAttribute('autocomplete', 'new-password');
-    passwordInput.setAttribute('maxlength',    '128');
+    passwordInput.setAttribute('maxlength', '128');
 }
 if (confirmPasswordInput) {
     confirmPasswordInput.setAttribute('autocomplete', 'new-password');
-    confirmPasswordInput.setAttribute('maxlength',    '128');
+    confirmPasswordInput.setAttribute('maxlength', '128');
 }
 if (emailInput) {
     emailInput.setAttribute('maxlength', '254');
@@ -167,6 +172,9 @@ checkEmailBtn.addEventListener('click', async () => {
         //
         // [SEC-02] Sem Authorization header — endpoint é pré-auth público.
         // [SEC-TIMEOUT] fetchWithTimeout aborta após 10s.
+        //
+        // [FIX-EXPORTS] SUPABASE_URL e SUPABASE_ANON_KEY agora chegam com valores
+        // reais graças às exportações corrigidas em supabase-client.js.
         const response = await fetchWithTimeout(
             `${SUPABASE_URL}/functions/v1/check-email-status`,
             {
@@ -318,8 +326,8 @@ function showAlertWithLinks(type, message, links = []) {
 // [SEC-07] cloneNode + replaceChildren — zero innerHTML
 // ==========================================
 function setButtonLoading(btn, label) {
-    btn.disabled    = true;
-    btn._origNodes  = Array.from(btn.childNodes).map(n => n.cloneNode(true));
+    btn.disabled   = true;
+    btn._origNodes = Array.from(btn.childNodes).map(n => n.cloneNode(true));
     btn.textContent = label;
 }
 
@@ -436,6 +444,9 @@ accessForm?.addEventListener('submit', async (e) => {
         return;
     }
 
+    // Valida aceitação dos termos ANTES de qualquer operação de conta.
+    // [UX-TERMS-FIRST] O usuário deve aceitar os termos explicitamente —
+    // é obrigatório por LGPD/GDPR. Interrompemos aqui para garantir isso.
     if (!termsCheckbox.checked) {
         showTermsError();
         showAlert('error', 'Você deve aceitar os Termos de Uso para criar sua conta.');
@@ -503,6 +514,7 @@ accessForm?.addEventListener('submit', async (e) => {
             throw authError;
         }
 
+        // [SEC-10] Valida que o userId veio do objeto correto antes de usá-lo.
         const userId = authData.user?.id;
 
         if (!userId) {
@@ -510,6 +522,8 @@ accessForm?.addEventListener('submit', async (e) => {
         }
 
         // ── ETAPA 2: Auto-confirmação de email via Edge Function segura ──
+        // Necessário quando o Supabase requer confirmação de email —
+        // sem isso, signInWithPassword falha com "email not confirmed".
         setButtonLoading(submitBtn, 'Confirmando acesso...');
 
         const confirmOk = await _confirmEmail(
@@ -519,6 +533,7 @@ accessForm?.addEventListener('submit', async (e) => {
         );
 
         if (!confirmOk) {
+            // [SEC-05] Limpa senha antes de retornar com erro.
             passwordInput.value        = '';
             confirmPasswordInput.value = '';
             showAlert(
@@ -530,6 +545,9 @@ accessForm?.addEventListener('submit', async (e) => {
 
         // ── ETAPA 3: Login com as credenciais recém-criadas ──────────────
         setButtonLoading(submitBtn, 'Entrando na sua conta...');
+
+        // Pequeno delay para garantir que a confirmação de email propagou
+        // nos servidores do Supabase antes de tentar o login.
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
@@ -554,6 +572,7 @@ accessForm?.addEventListener('submit', async (e) => {
         const accessToken = loginData.session?.access_token;
 
         // ── ETAPA 4: Vincular subscription via Edge Function ────────────
+        // Feito com retry pois depende do JWT que acabou de ser emitido.
         if (accessToken) {
             const linkSuccess = await _linkViaBackendWithRetry(
                 accessToken,
@@ -561,24 +580,25 @@ accessForm?.addEventListener('submit', async (e) => {
             );
 
             if (!linkSuccess) {
-                console.warn('[primeiroacesso] _linkViaBackend falhou após retries — será corrigido no próximo login via check-user-access.');
+                // Não crítico — o check-user-access corrige no próximo login.
+                console.warn('[primeiroacesso] _linkViaBackend falhou após retries — será corrigido via check-user-access no próximo login.');
             }
         }
 
-        // ── ETAPA 5: Registrar aceitação dos termos ─────────────────────
-        // [SEC-10] userId validado como authData.user.id.
+        // ── ETAPA 5: Registrar aceitação dos termos (LGPD/GDPR) ─────────
         // Executado após login para que a RLS (auth.uid() = user_id) passe.
+        // [SEC-10] Dupla validação de userId antes de operar no banco.
         if (userId && userId === authData.user?.id) {
             await _acceptTerms(userId, email);
         }
 
         // ── ETAPA 6: Criar user_data ────────────────────────────────────
-        // [SEC-10] userId validado como authData.user.id.
+        // [SEC-10] Dupla validação de userId antes de operar no banco.
         if (userId && userId === authData.user?.id) {
             await _createUserData(userId, email, currentSubscriptionData);
         }
 
-        // ── ETAPA 7: Redirecionar ────────────────────────────────────────
+        // ── ETAPA 7: Redirecionar para login ────────────────────────────
         showAlert('info', '✅ Conta criada com sucesso! Redirecionando...');
         setTimeout(() => { window.location.href = 'login.html'; }, 1500);
 
@@ -612,21 +632,23 @@ accessForm?.addEventListener('submit', async (e) => {
 
 /**
  * [FIX-EMAIL-CONFIRM] Chama a Edge Function confirm-email para auto-confirmar
- * o email do usuário recém-criado.
+ * o email do usuário recém-criado e marcar password_created na subscription.
  *
- * SEGURANÇA: A Edge Function valida internamente:
+ * SEGURANÇA — A Edge Function valida internamente:
  *   - subscriptionId existe, is_active = true, payment_status = 'approved'
  *   - email bate com o da subscription
  *   - password_created = false (uso único — impede replay)
  *   - userId existe no Auth e o email confere
- *   - Usuário foi criado há no máximo 10 minutos (anti-replay)
+ *   - Usuário foi criado há no máximo 10 minutos (anti-replay temporal)
  *
- * Não envia Authorization header pois o usuário não tem JWT ainda.
+ * Não envia Authorization header pois o usuário não tem JWT ainda (pré-login).
+ *
+ * [FIX-401] Envia header 'apikey' para o gateway do Supabase rotear a requisição.
  *
  * @param {string} userId         - UUID do usuário recém-criado
- * @param {string} email          - Email normalizado
+ * @param {string} email          - Email normalizado (lowercase)
  * @param {string} subscriptionId - ID da subscription validada
- * @returns {Promise<boolean>}
+ * @returns {Promise<boolean>}    - true se confirmação foi bem-sucedida
  */
 async function _confirmEmail(userId, email, subscriptionId) {
     try {
@@ -660,6 +682,7 @@ async function _confirmEmail(userId, email, subscriptionId) {
 
 /**
  * [BUG-03-FIX] Tenta vincular até `maxRetries` vezes com backoff exponencial.
+ * Útil pois o JWT recém-emitido pode ter um delay de propagação mínimo.
  *
  * @param {string} accessToken    - JWT do usuário autenticado
  * @param {string} subscriptionId - ID da subscription a vincular
@@ -682,7 +705,7 @@ async function _linkViaBackendWithRetry(accessToken, subscriptionId, maxRetries 
 
 /**
  * [SEC-01] Vincula subscription usando o JWT do usuário como autenticação.
- * [FIX-401] Envia 'apikey' (anon key) além do Authorization.
+ * [FIX-401] Envia 'apikey' (anon key) além do Authorization header.
  * [SEC-TIMEOUT] Usa fetchWithTimeout para evitar requisições penduradas.
  *
  * @param {string} accessToken    - JWT do usuário autenticado
@@ -718,19 +741,19 @@ async function _linkViaBackend(accessToken, subscriptionId) {
 }
 
 /**
- * Registra aceitação dos termos de uso.
+ * Registra aceitação dos termos de uso (obrigatório por LGPD/GDPR).
  *
  * [FIX-TERMS-VERSION] Inclui o campo terms_version (NOT NULL no banco).
  *   Valor controlado pela constante TERMS_VERSION no topo do arquivo.
  *   Atualizar TERMS_VERSION ao publicar nova versão dos termos.
  *
- * [SEC-10] userId validado como authData.user.id antes de chamar.
+ * [SEC-10] userId validado como authData.user.id antes de chamar esta função.
  *
  * RLS na tabela terms_acceptance:
  *   INSERT: WITH CHECK (auth.uid() = user_id)  ← já existe no banco ✅
  *
  * @param {string} userId - UUID do usuário autenticado
- * @param {string} email  - Email normalizado do usuário
+ * @param {string} email  - Email normalizado (lowercase) do usuário
  */
 async function _acceptTerms(userId, email) {
     try {
@@ -744,6 +767,7 @@ async function _acceptTerms(userId, email) {
         });
 
         if (error) {
+            // Não crítico — não impede o fluxo mas registra para diagnóstico.
             console.warn('[primeiroacesso] _acceptTerms insert error (não crítico):', error.message);
         }
     } catch (err) {
@@ -754,14 +778,14 @@ async function _acceptTerms(userId, email) {
 /**
  * Cria entrada em user_data com informações iniciais do usuário.
  *
- * [SEC-10] userId validado como authData.user.id antes de chamar.
+ * [SEC-10] userId validado como authData.user.id antes de chamar esta função.
  * [SEC-CATCH-LOG] catch loga o erro para diagnóstico em produção.
  *
  * RLS na tabela user_data:
  *   INSERT: WITH CHECK (auth.uid() = user_id)  ← já existe no banco ✅
  *
  * @param {string} userId  - UUID do usuário autenticado
- * @param {string} email   - Email normalizado do usuário
+ * @param {string} email   - Email normalizado (lowercase) do usuário
  * @param {object} subData - Dados da subscription (plan_name, user_name)
  */
 async function _createUserData(userId, email, subData) {
@@ -778,6 +802,7 @@ async function _createUserData(userId, email, subData) {
         });
 
         if (error) {
+            // Não crítico — não impede o fluxo mas registra para diagnóstico.
             console.warn('[primeiroacesso] _createUserData insert error (não crítico):', error.message);
         }
     } catch (err) {
