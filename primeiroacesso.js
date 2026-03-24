@@ -5,16 +5,18 @@
  * HISTÓRICO DE CORREÇÕES — TODAS ATIVAS
  * ============================================================
  *
- * [FIX-EXPORTS] CRÍTICO — Depende de supabase-client.js que exporta
- *   SUPABASE_URL e SUPABASE_ANON_KEY corretamente.
+ * [FIX-EXPORTS] CRÍTICO — Depende de supabase-client.js que agora exporta
+ *   SUPABASE_URL e SUPABASE_ANON_KEY corretamente. Esta era a causa raiz
+ *   de todo o fluxo de Primeiro Acesso não funcionar: as constantes chegavam
+ *   como `undefined`, quebrando silenciosamente todos os fetch às Edge Functions.
  *
- * [FIX-401] Header 'apikey' com SUPABASE_ANON_KEY em todas as chamadas
- *   a Edge Functions. O gateway do Supabase exige essa chave para rotear
- *   a requisição, mesmo em endpoints sem autenticação de usuário.
+ * [FIX-401] Adicionado header 'apikey' com SUPABASE_ANON_KEY em todas as
+ *   chamadas a Edge Functions. O gateway do Supabase exige essa chave para
+ *   rotear a requisição, mesmo em endpoints sem autenticação de usuário.
  *
- * [FIX-EMAIL-CONFIRM] Chamada à Edge Function confirm-email logo após
- *   o signUp. Resolve o caso onde o Supabase exige confirmação de email
- *   e a sessão vem nula, impedindo o login automático.
+ * [FIX-EMAIL-CONFIRM] Adicionada chamada à Edge Function confirm-email
+ *   logo após o signUp. Resolve o caso onde o Supabase exige confirmação
+ *   de email e a sessão vem nula, impedindo o login automático.
  *
  * [FIX-FLOW-ORDER] Fluxo pós-signUp reestruturado na ordem correta:
  *   1. signUp                          → obtém userId
@@ -26,22 +28,13 @@
  *   7. redirect                        → envia para login.html
  *
  * [FIX-TERMS-VERSION] terms_acceptance.terms_version é NOT NULL no banco.
- *   Adicionado campo com versão controlada pela constante TERMS_VERSION.
- *
- * [FIX-PASSWORD-STRENGTH] SEGURANÇA — Validação de senha fortalecida para
- *   espelhar as configurações do Supabase Auth. Impede o 422 do signup e
- *   garante que senhas fracas nunca cheguem ao servidor.
- *   Regras obrigatórias (configurar o mesmo no Supabase Dashboard):
- *     - Mínimo 12 caracteres
- *     - Pelo menos 1 letra maiúscula
- *     - Pelo menos 1 letra minúscula
- *     - Pelo menos 1 número
- *     - Pelo menos 1 caractere especial (!@#$%^&* etc.)
+ *   Coluna ausente causava silent insert error. Adicionado campo com versão
+ *   controlada pela constante TERMS_VERSION.
  *
  * [FIX-02]  Normaliza email lowercase antes de qualquer operação
  * [SEC-06]  Rate limit: 5s cooldown no "Verificar Email"
  * [SEC-08]  Rate limit: 3s cooldown no "Criar Senha e Acessar"
- * [SEC-TIMEOUT]      fetchWithTimeout aborta requisições após 10s
+ * [SEC-TIMEOUT]   fetchWithTimeout aborta requisições após 10s
  * [SEC-03]  Resposta genérica para estados não-ready (anti-enumeração)
  * [SEC-04]  Sem innerHTML com dados externos — DOM programático
  * [SEC-05]  Limpa campos de senha em todos os caminhos de saída
@@ -73,16 +66,6 @@ const SUBMIT_COOLDOWN_MS = 3_000;
 
 /** [SEC-TIMEOUT] Timeout máximo para qualquer fetch: 10 segundos */
 const FETCH_TIMEOUT_MS = 10_000;
-
-/**
- * [FIX-PASSWORD-STRENGTH] Requisitos mínimos de senha.
- * Devem espelhar EXATAMENTE as configurações do Supabase Auth Dashboard:
- * Authentication → Providers → Email → Password Settings
- *
- * Se alterar aqui, altere também no Dashboard — e vice-versa.
- */
-const PASSWORD_MIN_LENGTH = 12;
-const PASSWORD_MAX_LENGTH = 128;
 
 // ==========================================
 // ELEMENTOS DO DOM
@@ -133,16 +116,14 @@ let lastSubmitAt = 0;
 // ==========================================
 
 // [SEC-09] autocomplete="new-password" reforçado via JS para cobrir HTML cacheado.
-// [SEC-MAXLENGTH] maxlength e minlength reforçados via JS pela mesma razão.
+// [SEC-MAXLENGTH] maxlength reforçado via JS pela mesma razão.
 if (passwordInput) {
     passwordInput.setAttribute('autocomplete', 'new-password');
-    passwordInput.setAttribute('maxlength', String(PASSWORD_MAX_LENGTH));
-    passwordInput.setAttribute('minlength', String(PASSWORD_MIN_LENGTH));
+    passwordInput.setAttribute('maxlength', '128');
 }
 if (confirmPasswordInput) {
     confirmPasswordInput.setAttribute('autocomplete', 'new-password');
-    confirmPasswordInput.setAttribute('maxlength', String(PASSWORD_MAX_LENGTH));
-    confirmPasswordInput.setAttribute('minlength', String(PASSWORD_MIN_LENGTH));
+    confirmPasswordInput.setAttribute('maxlength', '128');
 }
 if (emailInput) {
     emailInput.setAttribute('maxlength', '254');
@@ -186,6 +167,14 @@ checkEmailBtn.addEventListener('click', async () => {
     setButtonLoading(checkEmailBtn, 'Verificando...');
 
     try {
+        // [FIX-401] Header 'apikey' obrigatório para o gateway do Supabase rotear
+        // a requisição até a Edge Function. A anon key é pública por design.
+        //
+        // [SEC-02] Sem Authorization header — endpoint é pré-auth público.
+        // [SEC-TIMEOUT] fetchWithTimeout aborta após 10s.
+        //
+        // [FIX-EXPORTS] SUPABASE_URL e SUPABASE_ANON_KEY agora chegam com valores
+        // reais graças às exportações corrigidas em supabase-client.js.
         const response = await fetchWithTimeout(
             `${SUPABASE_URL}/functions/v1/check-email-status`,
             {
@@ -337,8 +326,8 @@ function showAlertWithLinks(type, message, links = []) {
 // [SEC-07] cloneNode + replaceChildren — zero innerHTML
 // ==========================================
 function setButtonLoading(btn, label) {
-    btn.disabled    = true;
-    btn._origNodes  = Array.from(btn.childNodes).map(n => n.cloneNode(true));
+    btn.disabled   = true;
+    btn._origNodes = Array.from(btn.childNodes).map(n => n.cloneNode(true));
     btn.textContent = label;
 }
 
@@ -365,114 +354,33 @@ togglePassword2?.addEventListener('click', () => {
 
 // ==========================================
 // PASSWORD STRENGTH
-// [FIX-PASSWORD-STRENGTH] Critérios atualizados para refletir os requisitos
-// reais do Supabase Auth. A barra só chega a "forte" quando TODOS os
-// critérios obrigatórios são atendidos simultaneamente.
-//
-// Pontuação (5 pontos):
-//   1. Comprimento >= 12 caracteres  ← obrigatório
-//   2. Comprimento >= 16 caracteres  ← bônus (senha mais longa)
-//   3. Maiúscula + minúscula         ← obrigatório
-//   4. Pelo menos 1 número           ← obrigatório
-//   5. Pelo menos 1 símbolo especial ← obrigatório
-//
 // [BUG-STRENGTH-FIX] className completo — nenhum style.width (CSP compliance)
 // ==========================================
-
-/**
- * Avalia a força da senha e lista os critérios ainda não atendidos.
- * @param {string} password
- * @returns {{ score: number, missing: string[] }}
- */
-function evaluatePassword(password) {
-    const missing = [];
-    let score = 0;
-
-    if (password.length >= PASSWORD_MIN_LENGTH) {
-        score++;
-    } else {
-        missing.push(`mínimo ${PASSWORD_MIN_LENGTH} caracteres`);
-    }
-
-    // Bônus por senha mais longa — não é requisito obrigatório
-    if (password.length >= 16) {
-        score++;
-    }
-
-    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) {
-        score++;
-    } else {
-        missing.push('maiúscula e minúscula');
-    }
-
-    if (/\d/.test(password)) {
-        score++;
-    } else {
-        missing.push('pelo menos 1 número');
-    }
-
-    if (/[^a-zA-Z0-9]/.test(password)) {
-        score++;
-    } else {
-        missing.push('pelo menos 1 símbolo (!@#$%...)');
-    }
-
-    return { score, missing };
-}
-
-/**
- * [FIX-PASSWORD-STRENGTH] Valida se a senha atende a TODOS os requisitos
- * obrigatórios antes de enviar ao Supabase. Evita o 422 do /auth/v1/signup.
- * @param {string} password
- * @returns {{ valid: boolean, reason: string|null }}
- */
-function validatePasswordRequirements(password) {
-    if (password.length < PASSWORD_MIN_LENGTH) {
-        return { valid: false, reason: `A senha deve ter no mínimo ${PASSWORD_MIN_LENGTH} caracteres.` };
-    }
-    if (password.length > PASSWORD_MAX_LENGTH) {
-        return { valid: false, reason: `A senha deve ter no máximo ${PASSWORD_MAX_LENGTH} caracteres.` };
-    }
-    if (!/[A-Z]/.test(password)) {
-        return { valid: false, reason: 'A senha deve conter pelo menos uma letra maiúscula.' };
-    }
-    if (!/[a-z]/.test(password)) {
-        return { valid: false, reason: 'A senha deve conter pelo menos uma letra minúscula.' };
-    }
-    if (!/\d/.test(password)) {
-        return { valid: false, reason: 'A senha deve conter pelo menos um número.' };
-    }
-    if (!/[^a-zA-Z0-9]/.test(password)) {
-        return { valid: false, reason: 'A senha deve conter pelo menos um símbolo (!@#$%^&* etc.).' };
-    }
-    return { valid: true, reason: null };
+function checkPasswordStrength(password) {
+    let strength = 0;
+    if (password.length >= 8)                                  strength++;
+    if (password.length >= 12)                                 strength++;
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password))     strength++;
+    if (/\d/.test(password))                                   strength++;
+    if (/[^a-zA-Z0-9]/.test(password))                        strength++;
+    return strength;
 }
 
 passwordInput?.addEventListener('input', () => {
-    const val = passwordInput.value;
+    const strength = checkPasswordStrength(passwordInput.value);
 
-    if (!val) {
+    if (strength === 0) {
         strengthFill.className   = 'strength-fill';
-        strengthText.textContent = `Mínimo ${PASSWORD_MIN_LENGTH} caracteres, maiúscula, número e símbolo`;
-        return;
-    }
-
-    const { score, missing } = evaluatePassword(val);
-
-    if (score <= 2) {
+        strengthText.textContent = 'Mínimo 8 caracteres';
+    } else if (strength <= 2) {
         strengthFill.className   = 'strength-fill sw-33 strength-weak';
-        strengthText.textContent = `Senha fraca — falta: ${missing.join(', ')}`;
-    } else if (score === 3) {
+        strengthText.textContent = 'Senha fraca';
+    } else if (strength <= 4) {
         strengthFill.className   = 'strength-fill sw-66 strength-medium';
-        strengthText.textContent = `Senha média — falta: ${missing.join(', ')}`;
-    } else if (score === 4) {
-        strengthFill.className   = 'strength-fill sw-90 strength-medium';
-        strengthText.textContent = missing.length
-            ? `Quase lá — falta: ${missing.join(', ')}`
-            : 'Senha boa';
+        strengthText.textContent = 'Senha média';
     } else {
         strengthFill.className   = 'strength-fill sw-100 strength-strong';
-        strengthText.textContent = '✅ Senha forte';
+        strengthText.textContent = 'Senha forte';
     }
 });
 
@@ -537,7 +445,8 @@ accessForm?.addEventListener('submit', async (e) => {
     }
 
     // Valida aceitação dos termos ANTES de qualquer operação de conta.
-    // [UX-TERMS-FIRST] Obrigatório por LGPD/GDPR.
+    // [UX-TERMS-FIRST] O usuário deve aceitar os termos explicitamente —
+    // é obrigatório por LGPD/GDPR. Interrompemos aqui para garantir isso.
     if (!termsCheckbox.checked) {
         showTermsError();
         showAlert('error', 'Você deve aceitar os Termos de Uso para criar sua conta.');
@@ -547,11 +456,14 @@ accessForm?.addEventListener('submit', async (e) => {
     const password        = passwordInput.value;
     const confirmPassword = confirmPasswordInput.value;
 
-    // [FIX-PASSWORD-STRENGTH] Valida todos os requisitos antes de enviar ao Supabase.
-    // Evita o 422 do /auth/v1/signup por senha fora dos padrões configurados.
-    const { valid, reason } = validatePasswordRequirements(password);
-    if (!valid) {
-        showAlert('error', reason);
+    if (password.length < 8) {
+        showAlert('error', 'A senha deve ter no mínimo 8 caracteres.');
+        passwordInput.focus();
+        return;
+    }
+
+    if (password.length > 128) {
+        showAlert('error', 'A senha deve ter no máximo 128 caracteres.');
         passwordInput.focus();
         return;
     }
@@ -701,7 +613,7 @@ accessForm?.addEventListener('submit', async (e) => {
         if (msgLower.includes('invalid email')) {
             msg = 'Email inválido.';
         } else if (msgLower.includes('password')) {
-            msg = 'Senha fora dos requisitos. Verifique os critérios indicados e tente novamente.';
+            msg = 'Erro na senha. Tente uma senha diferente.';
         } else if (msgLower.includes('network') || msgLower.includes('fetch')) {
             msg = 'Erro de conexão. Verifique sua internet e tente novamente.';
         }
@@ -730,6 +642,8 @@ accessForm?.addEventListener('submit', async (e) => {
  *   - Usuário foi criado há no máximo 10 minutos (anti-replay temporal)
  *
  * Não envia Authorization header pois o usuário não tem JWT ainda (pré-login).
+ *
+ * [FIX-401] Envia header 'apikey' para o gateway do Supabase rotear a requisição.
  *
  * @param {string} userId         - UUID do usuário recém-criado
  * @param {string} email          - Email normalizado (lowercase)
@@ -768,6 +682,7 @@ async function _confirmEmail(userId, email, subscriptionId) {
 
 /**
  * [BUG-03-FIX] Tenta vincular até `maxRetries` vezes com backoff exponencial.
+ * Útil pois o JWT recém-emitido pode ter um delay de propagação mínimo.
  *
  * @param {string} accessToken    - JWT do usuário autenticado
  * @param {string} subscriptionId - ID da subscription a vincular
@@ -829,7 +744,10 @@ async function _linkViaBackend(accessToken, subscriptionId) {
  * Registra aceitação dos termos de uso (obrigatório por LGPD/GDPR).
  *
  * [FIX-TERMS-VERSION] Inclui o campo terms_version (NOT NULL no banco).
- * [SEC-10] userId validado como authData.user.id antes de chamar.
+ *   Valor controlado pela constante TERMS_VERSION no topo do arquivo.
+ *   Atualizar TERMS_VERSION ao publicar nova versão dos termos.
+ *
+ * [SEC-10] userId validado como authData.user.id antes de chamar esta função.
  *
  * RLS na tabela terms_acceptance:
  *   INSERT: WITH CHECK (auth.uid() = user_id)  ← já existe no banco ✅
@@ -845,10 +763,11 @@ async function _acceptTerms(userId, email) {
             accepted:      true,
             accepted_at:   new Date().toISOString(),
             user_agent:    navigator.userAgent.slice(0, 200),
-            terms_version: TERMS_VERSION,
+            terms_version: TERMS_VERSION, // [FIX-TERMS-VERSION] campo NOT NULL
         });
 
         if (error) {
+            // Não crítico — não impede o fluxo mas registra para diagnóstico.
             console.warn('[primeiroacesso] _acceptTerms insert error (não crítico):', error.message);
         }
     } catch (err) {
@@ -859,7 +778,8 @@ async function _acceptTerms(userId, email) {
 /**
  * Cria entrada em user_data com informações iniciais do usuário.
  *
- * [SEC-10] userId validado como authData.user.id antes de chamar.
+ * [SEC-10] userId validado como authData.user.id antes de chamar esta função.
+ * [SEC-CATCH-LOG] catch loga o erro para diagnóstico em produção.
  *
  * RLS na tabela user_data:
  *   INSERT: WITH CHECK (auth.uid() = user_id)  ← já existe no banco ✅
@@ -882,6 +802,7 @@ async function _createUserData(userId, email, subData) {
         });
 
         if (error) {
+            // Não crítico — não impede o fluxo mas registra para diagnóstico.
             console.warn('[primeiroacesso] _createUserData insert error (não crítico):', error.message);
         }
     } catch (err) {

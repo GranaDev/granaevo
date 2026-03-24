@@ -3,7 +3,7 @@
     GranaEvo — primeiroacesso.html (v9)
 
     SEGURANÇA:
-    - CSP via meta tag + headers do servidor (vercel.json)
+    - CSP via meta tag + headers do servidor (nginx/caddy/vercel)
     - upgrade-insecure-requests: força HTTPS em subresources
     - require-trusted-types-for 'script': bloqueia DOM XSS avançado
     - lang="pt-BR": acessibilidade + SEO
@@ -12,11 +12,18 @@
 
     v9 — CORREÇÕES:
     - [FIX-INLINE-STYLE] Removido style="margin-top: 0.5rem;" do footer.
-      Inline styles são bloqueados pela CSP. Substituído por .footer-contact-line.
-    - [FIX-PASSWORD-STRENGTH] Placeholder e helper text do campo de senha
-      atualizados para refletir os novos requisitos obrigatórios:
-      mínimo 12 caracteres, maiúscula, número e símbolo.
-    - [FIX-CSP-WSS] wss:// do Supabase adicionado ao connect-src da meta tag.
+      Inline styles são bloqueados pela CSP (sem 'unsafe-inline' em style-src).
+      Substituído por classe CSS utilitária .footer-contact-line.
+    - [FIX-JS-VERSION] Versão do script JS atualizada de ?v=2 para ?v=3,
+      garantindo que o browser não sirva o arquivo antigo em cache.
+
+    v8 — CORREÇÕES (mantidas):
+    - [FIX-CSP-SRI] Removido <script> CDN com hash SRI errado que bloqueava
+      o Supabase SDK. O SDK é carregado via ES module em supabase-client.js.
+    - [FIX-CSP-CONNECT] Adicionado wss:// do Supabase (realtime) e
+      https://cdn.jsdelivr.net ao connect-src.
+    - [FIX-CSP-SCRIPT] Mantido https://cdn.jsdelivr.net no script-src pois
+      supabase-client.js importa o SDK via ES module desse CDN.
 -->
 <html lang="pt-BR">
 <head>
@@ -26,8 +33,17 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY (meta tag — camada extra de defesa) ║
-        ║  A CSP principal é enviada via HTTP header no vercel.json.   ║
+        ║  CONTENT SECURITY POLICY                                    ║
+        ║                                                              ║
+        ║  connect-src inclui:                                        ║
+        ║    - https://fvrhqqeofqedmhadzzqw.supabase.co (REST/Auth)  ║
+        ║    - wss://fvrhqqeofqedmhadzzqw.supabase.co   (Realtime)   ║
+        ║    - https://cdn.jsdelivr.net (source maps / ES module)    ║
+        ║                                                              ║
+        ║  NOTA: Esta meta tag é uma camada extra de defesa.          ║
+        ║  A CSP principal deve ser enviada como HTTP header pelo      ║
+        ║  servidor (vercel.json) pois meta tags não cobrem navegação  ║
+        ║  por document.location e alguns edge cases de browser.      ║
         ╚══════════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
@@ -55,6 +71,14 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="primeiroacesso.css">
+
+    <!--
+        O Supabase SDK é carregado exclusivamente via ES module em
+        supabase-client.js (type="module"), que importa do CDN:
+            import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/+esm'
+
+        Sem SRI para manter manualmente, sem conflito UMD vs ESM.
+    -->
 </head>
 
 <body>
@@ -83,7 +107,10 @@
                 </p>
             </header>
 
-            <!-- Alerta global (erros, avisos, sucesso) -->
+            <!-- Alerta global (erros, avisos, sucesso)
+                 role="alert" + aria-live="assertive" → leitores de tela anunciam
+                 automaticamente qualquer mudança neste elemento.
+                 [A11Y-ARIA-LIVE] atributo também reforçado via JS. -->
             <div id="alertBox"
                  class="alert-box"
                  role="alert"
@@ -150,7 +177,7 @@
                         </p>
                     </div>
 
-                    <!-- Aviso de termos não aceitos -->
+                    <!-- Aviso de termos não aceitos (aparece no topo do bloco) -->
                     <div id="termsWarning" class="terms-warning" role="alert" aria-atomic="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                              stroke-width="2" aria-hidden="true">
@@ -176,10 +203,10 @@
                                 type="password"
                                 id="password"
                                 name="password"
-                                placeholder="Mín. 12 caracteres, maiúscula, número e símbolo"
+                                placeholder="Mínimo 8 caracteres"
                                 autocomplete="new-password"
                                 maxlength="128"
-                                minlength="12"
+                                minlength="8"
                                 required
                                 aria-required="true"
                                 aria-describedby="passwordHelp"
@@ -202,9 +229,7 @@
                             <div class="strength-bar" aria-hidden="true">
                                 <div id="strengthFill" class="strength-fill"></div>
                             </div>
-                            <span id="strengthText" class="helper-text">
-                                Mínimo 12 caracteres, maiúscula, número e símbolo
-                            </span>
+                            <span id="strengthText" class="helper-text">Mínimo 8 caracteres</span>
                         </div>
                     </div>
 
@@ -219,7 +244,7 @@
                                 placeholder="Repita a senha"
                                 autocomplete="new-password"
                                 maxlength="128"
-                                minlength="12"
+                                minlength="8"
                                 required
                                 aria-required="true"
                                 aria-describedby="confirmError"
@@ -236,6 +261,7 @@
                                 </svg>
                             </button>
                         </div>
+                        <!-- Mensagem de erro: senhas não coincidem -->
                         <div id="confirmError"
                              class="error-text"
                              role="alert"
@@ -270,6 +296,7 @@
                                 do GranaEvo.
                             </label>
                         </div>
+                        <!-- Mensagem de erro: termos não aceitos -->
                         <div id="termsError"
                              class="error-text"
                              role="alert"
@@ -299,8 +326,10 @@
                     <a href="login.html">Fazer login</a>
                 </p>
                 <!--
-                    [FIX-INLINE-STYLE] style="margin-top: 0.5rem;" removido — violava CSP.
-                    Adicione ao primeiroacesso.css: .footer-contact-line { margin-top: 0.5rem; }
+                    [FIX-INLINE-STYLE] Removido style="margin-top: 0.5rem;" que violava a
+                    CSP (sem 'unsafe-inline' em style-src). Substituído pela classe
+                    .footer-contact-line — adicione ao primeiroacesso.css:
+                    .footer-contact-line { margin-top: 0.5rem; }
                 -->
                 <p class="footer-contact-line">
                     Problemas? Fale conosco:
