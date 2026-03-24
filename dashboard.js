@@ -831,20 +831,27 @@ async function verificarLogin() {
 
                 _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
                 try {
-                const { error: linkFnErr } = await supabase.functions.invoke('link-user-subscription', {
-                    body: { subscription_id: subByEmail.id }
-                });
-                // ✅ 401 é esperado quando a Edge Function rejeita tokens antigos durante migração
-                //    Não impede o login — apenas registra internamente sem propagar ao console
-                if (linkFnErr && linkFnErr.status !== 401) {
-                    _log.warn('LOGIN_VINCULAR_001', 'Aviso ao vincular assinatura (não crítico)');
-                } else {
-                    _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
+                    // ✅ CORREÇÃO: desestrutura { error } para capturar o retorno sem throw.
+                    //    O invoke() não lança exceção em caso de 4xx — retorna { data, error }.
+                    //    O 401 era esperado quando a sessão ainda não tinha user_id vinculado,
+                    //    mas o Multiple GoTrueClient fazia o invoke() não enviar o JWT.
+                    //    Com o Multiple GoTrueClient corrigido no HTML, este bloco não deve
+                    //    mais retornar 401 em condições normais.
+                    const { error: linkError } = await supabase.functions.invoke('link-user-subscription', {
+                        body: { subscription_id: subByEmail.id }
+                    });
+
+                    if (linkError) {
+                        // ✅ Não propaga para console.error — falha no vínculo não impede login.
+                        //    O usuário já tem planName válido e continuará normalmente.
+                        _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico). Status:', linkError.status ?? 'desconhecido');
+                    } else {
+                        _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
+                    }
+                } catch (linkErr) {
+                    // Silencia — falha de rede no vínculo não impede login
+                    _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico)');
                 }
-            } catch (linkErr) {
-                // Silencia — falha no vínculo não impede login
-                _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico)');
-            }
 
             } else {
                 _log.info('[VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
@@ -902,11 +909,6 @@ async function verificarLogin() {
         await dataManager.initialize(effectiveUserId, effectiveEmail);
         _log.info('[VERIFICAR LOGIN] DataManager inicializado');
 
-        // ✅ CORREÇÃO: persiste effectiveUserId e effectiveEmail no módulo.
-        //    data-manager.js pode resetar userId internamente ao rejeitar perfis
-        //    com id inteiro durante loadUserData(). Estas variáveis permitem
-        //    re-inicializar o dataManager em carregarDadosPerfil e salvarDados
-        //    sem precisar de nova sessão de autenticação.
         _effectiveUserId = effectiveUserId;
         _effectiveEmail  = effectiveEmail;
 
@@ -914,7 +916,6 @@ async function verificarLogin() {
             _log.warn('[VERIFICAR LOGIN] dataManager.userId não definido após initialize(). Tentando re-inicialização...');
             await dataManager.initialize(effectiveUserId, effectiveEmail);
 
-            // ✅ Persiste novamente após re-inicialização
             _effectiveUserId = effectiveUserId;
             _effectiveEmail  = effectiveEmail;
 
