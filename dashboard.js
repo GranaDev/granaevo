@@ -1,5 +1,6 @@
 // ========== IMPORTS ESSENCIAIS ==========
 import { supabase } from './supabase-client.js?v=2';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-client.js?v=2';
 import { dataManager } from './data-manager.js?v=2';
 import AuthGuard from './auth-guard.js?v=2';
 
@@ -831,21 +832,21 @@ async function verificarLogin() {
 
                 _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
                 try {
-                    const response = await fetch(
-                        `${supabase.supabaseUrl}/functions/v1/link-user-subscription`,
+                    const linkResponse = await fetch(
+                        `${SUPABASE_URL}/functions/v1/link-user-subscription`,
                         {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${session.access_token}`,
-                                'apikey': supabase.supabaseKey,
+                                'apikey': SUPABASE_ANON_KEY,
                             },
                             body: JSON.stringify({ subscription_id: subByEmail.id }),
                         }
                     );
 
-                    if (!response.ok) {
-                        _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico). Status:', response.status);
+                    if (!linkResponse.ok) {
+                        _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico). Status:', linkResponse.status);
                     } else {
                         _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
                     }
@@ -1174,9 +1175,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         const { data: podeCrear, error: rpcError } = await supabase.rpc('can_create_profile');
 
-        // ✅ CORREÇÃO: Se o RPC falhar (ex: plano ainda não vinculado ao user_id),
-        //    fazemos fallback para verificação local usando o plano já carregado em memória.
-        //    Isso evita bloquear criação de perfil por falha temporária de vínculo.
         if (rpcError) {
             _log.warn('[_criarPerfilHandler] RPC can_create_profile falhou, usando verificação local. Erro:', rpcError.message);
 
@@ -1232,21 +1230,25 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             formData.append('file', arquivo);
 
             const uploadResponse = await fetch(
-                `${supabase.supabaseUrl}/functions/v1/upload-profile-photo`,
+                `${SUPABASE_URL}/functions/v1/upload-profile-photo`,
                 {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${session.access_token}`,
-                        'apikey': supabase.supabaseKey,
+                        'apikey': SUPABASE_ANON_KEY,
                     },
                     body: formData,
                 }
             );
 
             if (!uploadResponse.ok) {
-                const uploadError = await uploadResponse.json().catch(() => ({ message: 'Erro desconhecido' }));
-                _log.error('PERFIL_FOTO_001', uploadError);
-                alert(uploadError.message ?? 'Erro ao fazer upload da foto. Tente novamente.');
+                let uploadErrorMsg = 'Erro ao fazer upload da foto. Tente novamente.';
+                try {
+                    const uploadErrorData = await uploadResponse.json();
+                    uploadErrorMsg = uploadErrorData.message ?? uploadErrorMsg;
+                } catch (_) {}
+                _log.error('PERFIL_FOTO_001', `Status: ${uploadResponse.status}`);
+                alert(uploadErrorMsg);
                 return;
             }
 
@@ -1504,23 +1506,32 @@ async function alterarFoto(event) {
         const formData = new FormData();
         formData.append('file', file);
 
-        // ✅ CORREÇÃO [FIX-INVOKE-401]: mesma correção de _criarPerfilHandler.
-        //    Authorization explícito via session.access_token já disponível neste escopo.
-        const { data: uploadData, error: uploadError } = await supabase.functions.invoke(
-            'upload-profile-photo',
+        const uploadResponse = await fetch(
+            `${SUPABASE_URL}/functions/v1/upload-profile-photo`,
             {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'apikey': SUPABASE_ANON_KEY,
+                },
                 body: formData,
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
             }
         );
 
-        if (uploadError) {
-            _log.error('FOTO_001', uploadError);
-            alert(uploadError.message ?? 'Erro ao fazer upload. Tente novamente.');
+        if (!uploadResponse.ok) {
+            let uploadErrorMsg = 'Erro ao fazer upload. Tente novamente.';
+            try {
+                const uploadErrorData = await uploadResponse.json();
+                uploadErrorMsg = uploadErrorData.message ?? uploadErrorMsg;
+            } catch (_) {}
+            _log.error('FOTO_001', `Status: ${uploadResponse.status}`);
+            alert(uploadErrorMsg);
             return;
         }
 
+        const uploadData = await uploadResponse.json();
         const storagePath = uploadData?.path;
+
         if (!storagePath) {
             _log.error('FOTO_001B', 'path ausente na resposta da edge function');
             alert('Erro ao processar a foto. Tente novamente.');
