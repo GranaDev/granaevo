@@ -831,25 +831,21 @@ async function verificarLogin() {
 
                 _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
                 try {
-                    // ✅ CORREÇÃO: desestrutura { error } para capturar o retorno sem throw.
-                    //    O invoke() não lança exceção em caso de 4xx — retorna { data, error }.
-                    //    O 401 era esperado quando a sessão ainda não tinha user_id vinculado,
-                    //    mas o Multiple GoTrueClient fazia o invoke() não enviar o JWT.
-                    //    Com o Multiple GoTrueClient corrigido no HTML, este bloco não deve
-                    //    mais retornar 401 em condições normais.
+                    // ✅ CORREÇÃO [FIX-INVOKE-401]: passa Authorization header explicitamente.
+                    //    Mesma causa das correções em _criarPerfilHandler e alterarFoto:
+                    //    o accessToken() callback do FunctionsClient retorna null com
+                    //    storageKey customizado, impedindo que o JWT chegue à Edge Function.
                     const { error: linkError } = await supabase.functions.invoke('link-user-subscription', {
-                        body: { subscription_id: subByEmail.id }
+                        body: { subscription_id: subByEmail.id },
+                        headers: { 'Authorization': `Bearer ${session.access_token}` }
                     });
 
                     if (linkError) {
-                        // ✅ Não propaga para console.error — falha no vínculo não impede login.
-                        //    O usuário já tem planName válido e continuará normalmente.
                         _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico). Status:', linkError.status ?? 'desconhecido');
                     } else {
                         _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
                     }
                 } catch (linkErr) {
-                    // Silencia — falha de rede no vínculo não impede login
                     _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico)');
                 }
 
@@ -1216,12 +1212,17 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             const formData = new FormData();
             formData.append('file', arquivo);
 
-            // ✅ CORRIGIDO: usa supabase.functions.invoke em vez de fetch manual.
-            //    O SDK injeta o token automaticamente, trata refresh e reduz
-            //    o manuseio explícito do access_token no código de usuário.
+            // ✅ CORREÇÃO [FIX-INVOKE-401]: passa Authorization header explicitamente.
+            //    supabase.functions.invoke() usa um accessToken() callback próprio que
+            //    retorna null quando storageKey: 'ge_auth' ainda não foi resolvido pelo
+            //    GoTrueClient no momento da chamada — causando 401 na Edge Function.
+            //    Solução: injetar session.access_token já disponível neste escopo.
             const { data: uploadData, error: uploadError } = await supabase.functions.invoke(
                 'upload-profile-photo',
-                { body: formData }
+                {
+                    body: formData,
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                }
             );
 
             if (uploadError) {
@@ -1483,12 +1484,14 @@ async function alterarFoto(event) {
         const formData = new FormData();
         formData.append('file', file);
 
-        // ✅ CORRIGIDO: usa supabase.functions.invoke em vez de fetch manual.
-        //    O SDK injeta o token automaticamente — session.access_token não é
-        //    mais manuseado diretamente no código de usuário.
+        // ✅ CORREÇÃO [FIX-INVOKE-401]: mesma correção de _criarPerfilHandler.
+        //    Authorization explícito via session.access_token já disponível neste escopo.
         const { data: uploadData, error: uploadError } = await supabase.functions.invoke(
             'upload-profile-photo',
-            { body: formData }
+            {
+                body: formData,
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            }
         );
 
         if (uploadError) {
