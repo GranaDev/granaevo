@@ -5,16 +5,19 @@
  * CORREÇÕES NESTE ARQUIVO
  * ============================================================
  *
- * [FIX-EXPORTS] CRÍTICO — SUPABASE_URL e SUPABASE_ANON_KEY agora são
- *   exportados corretamente. A ausência dessas exportações era a causa
- *   raiz de TODAS as falhas do fluxo de Primeiro Acesso:
- *   - primeiroacesso.js importa { supabase, SUPABASE_URL, SUPABASE_ANON_KEY }
- *   - Sem os exports, ambas as constantes chegavam como `undefined`
- *   - Resultado: fetch(`undefined/functions/v1/check-email-status`) → erro
- *   - O header `apikey: undefined` gerava 401 no gateway do Supabase
+ * [FIX-CDN] CRÍTICO — trocado cdn.jsdelivr.net por esm.sh
+ *   O jsdelivr com @2.49.2/+esm carregava sub-dependências via
+ *   @supabase/supabase-js@2 (sem versão), causando:
+ *   - Erro de SRI: "Failed to find a valid digest in the integrity attribute"
+ *   - Multiple GoTrueClient instances (recurso bloqueado → tentativa de reload)
+ *   - Upload de foto bloqueado (cliente instanciado incorretamente)
+ *   O esm.sh serve ES modules puros sem sub-imports problemáticos.
  *
- * [FIX-RENAME] SUPABASE_KEY renomeada para SUPABASE_ANON_KEY internamente
- *   para manter consistência com os demais módulos que importam essa constante.
+ * [FIX-EXPORTS] CRÍTICO — SUPABASE_URL e SUPABASE_ANON_KEY exportados
+ *   corretamente para uso em primeiroacesso.js e demais módulos.
+ *
+ * [FIX-RENAME] SUPABASE_KEY renomeada para SUPABASE_ANON_KEY para
+ *   consistência com os demais módulos.
  *
  * ============================================================
  * SEGURANÇA
@@ -30,7 +33,10 @@
  * pois qualquer script na mesma origem pode ler o localStorage normalmente.
  */
 
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/+esm';
+// ✅ CORREÇÃO: esm.sh em vez de cdn.jsdelivr.net
+//    O jsdelivr gerava sub-imports sem versão fixa que causavam falha de SRI
+//    e instanciação duplicada do GoTrueClient (Multiple GoTrueClient warning)
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2';
 
 // ==========================================
 // CONFIGURAÇÃO — exportadas para os módulos

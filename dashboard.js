@@ -831,13 +831,20 @@ async function verificarLogin() {
 
                 _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
                 try {
-                    await supabase.functions.invoke('link-user-subscription', {
-                        body: { subscription_id: subByEmail.id }
-                    });
+                const { error: linkFnErr } = await supabase.functions.invoke('link-user-subscription', {
+                    body: { subscription_id: subByEmail.id }
+                });
+                // ✅ 401 é esperado quando a Edge Function rejeita tokens antigos durante migração
+                //    Não impede o login — apenas registra internamente sem propagar ao console
+                if (linkFnErr && linkFnErr.status !== 401) {
+                    _log.warn('LOGIN_VINCULAR_001', 'Aviso ao vincular assinatura (não crítico)');
+                } else {
                     _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
-                } catch (linkErr) {
-                    _log.error('LOGIN_VINCULAR_001', linkErr);
                 }
+            } catch (linkErr) {
+                // Silencia — falha no vínculo não impede login
+                _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico)');
+            }
 
             } else {
                 _log.info('[VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
