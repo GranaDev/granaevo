@@ -1168,9 +1168,19 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
     if (usuarioLogado.perfis.length >= limitePerfis) { mostrarPopupLimite(); fecharPopup(); return; }
 
     try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !session || !session.user || !session.user.id) throw new Error('SEM_SESSAO_VALIDA');
+        // ── Verifica sessão inicial ───────────────────────────────────────
+        const { data: { session: sessionInicial }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !sessionInicial?.user?.id) throw new Error('SEM_SESSAO_VALIDA');
 
+        // ── effectiveUserId: ID do dono para convidados, próprio ID para donos ──
+        // usuarioLogado.effectiveUserId é definido pelo AuthGuard no protect():
+        //   - Dono:      effectiveUserId = user.id
+        //   - Convidado: effectiveUserId = owner_user_id (do account_members)
+        const effectiveUserId = usuarioLogado.effectiveUserId || sessionInicial.user.id;
+
+        _log.info('[_criarPerfilHandler] effectiveUserId:', effectiveUserId.slice(0, 8) + '...');
+
+        // ── Verificação de permissão via RPC ──────────────────────────────
         _log.info('[_criarPerfilHandler] Verificando permissão RPC...');
 
         const { data: podeCrear, error: rpcError } = await supabase.rpc('can_create_profile');
@@ -1194,6 +1204,7 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             return;
         }
 
+        // ── Upload de foto (opcional) ─────────────────────────────────────
         let fotoUrl = null;
 
         if (inputFoto.files && inputFoto.files[0]) {
@@ -1220,11 +1231,30 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             if (!dimensaoValida) { alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`); return; }
 
             const arquivo = await _sanitizeImageFile(arquivoOriginal);
-
             if (!arquivo) {
                 alert('Não foi possível processar a imagem. Tente com outro arquivo.');
                 return;
             }
+
+            // ── FIX-2: Sessão fresca IMEDIATAMENTE antes do upload ────────
+            // O autoRefreshToken pode ter trocado o access_token enquanto
+            // a validação de imagem acontecia. Buscar novamente garante que
+            // o token enviado é o atual e válido (resolve o 401 ES256).
+            const { data: { session: sessionFresh }, error: freshError } = await supabase.auth.getSession();
+
+            if (freshError || !sessionFresh?.access_token) {
+                _log.error('PERFIL_TOKEN_001', 'Token de acesso ausente ou sessão expirada.');
+                alert('Sua sessão expirou. Por favor, faça login novamente.');
+                // Força logout para limpar estado
+                if (typeof AuthGuard !== 'undefined') {
+                    AuthGuard.logout('TOKEN_EXPIRED');
+                } else {
+                    window.location.replace('login.html');
+                }
+                return;
+            }
+
+            _log.info('[_criarPerfilHandler] Token fresco obtido. Iniciando upload...');
 
             const formData = new FormData();
             formData.append('file', arquivo);
@@ -1234,7 +1264,8 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${session.access_token}`,
+                        // FIX-2: usa token fresco (sessionFresh, não sessionInicial)
+                        'Authorization': `Bearer ${sessionFresh.access_token}`,
                         'apikey': SUPABASE_ANON_KEY,
                     },
                     body: formData,
@@ -1242,12 +1273,13 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             );
 
             if (!uploadResponse.ok) {
+                // FIX-5: campo correto é .error, não .message
                 let uploadErrorMsg = 'Erro ao fazer upload da foto. Tente novamente.';
                 try {
                     const uploadErrorData = await uploadResponse.json();
-                    uploadErrorMsg = uploadErrorData.message ?? uploadErrorMsg;
+                    uploadErrorMsg = uploadErrorData.error ?? uploadErrorData.message ?? uploadErrorMsg;
                 } catch (_) {}
-                _log.error('PERFIL_FOTO_001', `Status: ${uploadResponse.status}`);
+                _log.error('PERFIL_FOTO_001', `Status: ${uploadResponse.status} — ${uploadErrorMsg}`);
                 alert(uploadErrorMsg);
                 return;
             }
@@ -1261,24 +1293,40 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 return;
             }
 
-            const { data: signedData, error: signedError } = await supabase.storage
-                .from('profile-photos')
-                .createSignedUrl(nomeArquivo, 3600);
+            // ── FIX-3: Usa signedUrl retornada pelo servidor ───────────────
+            // A Edge Function gera a URL com service_role (sem restrição de RLS).
+            // Isso elimina o bug em que o convidado não conseguia gerar a URL
+            // assinada no cliente (auth.uid() ≠ foldername do arquivo do dono).
+            if (uploadData.signedUrl) {
+                fotoUrl = _sanitizeImgUrl(uploadData.signedUrl) || null;
+            } else {
+                // Fallback: tenta gerar no cliente (funciona apenas para donos)
+                _log.warn('[_criarPerfilHandler] signedUrl ausente na resposta. Tentando createSignedUrl...');
+                const { data: signedData, error: signedError } = await supabase.storage
+                    .from('profile-photos')
+                    .createSignedUrl(nomeArquivo, 3600);
 
-            if (signedError || !signedData?.signedUrl) {
-                _log.error('PERFIL_FOTO_002', signedError);
-                alert('Erro ao processar a foto. Tente novamente.');
-                return;
+                if (signedError || !signedData?.signedUrl) {
+                    _log.error('PERFIL_FOTO_002', signedError);
+                    alert('Erro ao processar a foto. Tente novamente.');
+                    return;
+                }
+                fotoUrl = _sanitizeImgUrl(signedData.signedUrl) || null;
             }
-
-            fotoUrl = _sanitizeImgUrl(signedData.signedUrl) || null;
         }
 
+        // ── Insere perfil no banco ────────────────────────────────────────
         _log.info('[_criarPerfilHandler] Inserindo perfil no banco...');
 
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
-            .insert({ name: nome, photo_url: fotoUrl, user_id: session.user.id })
+            .insert({
+                name:     nome,
+                photo_url: fotoUrl,
+                // FIX-1: effectiveUserId garante que o perfil vai para a
+                // conta do DONO mesmo quando criado por um convidado.
+                user_id:  effectiveUserId,
+            })
             .select()
             .single();
 
@@ -1293,12 +1341,12 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             return;
         }
 
-        _log.info('[_criarPerfilHandler] Perfil inserido com sucesso');
+        _log.info('[_criarPerfilHandler] Perfil inserido com sucesso. ID:', novoPerfil.id);
 
         usuarioLogado.perfis.push({
             id:   novoPerfil.id,
             nome: _sanitizeText(novoPerfil.name),
-            foto: _sanitizeImgUrl(novoPerfil.photo_url)
+            foto: _sanitizeImgUrl(novoPerfil.photo_url),
         });
 
         fecharPopup();
@@ -1308,7 +1356,12 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
     } catch (error) {
         _log.error('PERFIL_002', error);
-        alert('Ocorreu um erro ao criar o perfil. Tente novamente.');
+        if (error.message === 'SEM_SESSAO_VALIDA') {
+            alert('Sessão inválida. Por favor, faça login novamente.');
+            window.location.replace('login.html');
+        } else {
+            alert('Ocorreu um erro ao criar o perfil. Tente novamente.');
+        }
     }
 }
 
