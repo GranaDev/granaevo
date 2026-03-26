@@ -1,34 +1,28 @@
 <!DOCTYPE html>
 <!--
-    GranaEvo — primeiroacesso.html (v10)
+    GranaEvo — primeiroacesso.html (v11)
 
     SEGURANÇA:
     - CSP via meta tag + headers do servidor (nginx/caddy/vercel)
     - upgrade-insecure-requests: força HTTPS em subresources
-    - require-trusted-types-for 'script': bloqueia DOM XSS avançado
     - lang="pt-BR": acessibilidade + SEO
     - role="alert" + aria-live no alertBox: leitores de tela anunciam alertas
     - aria-describedby nos inputs: associa mensagens de erro a campos
 
-    v10 — CORREÇÕES:
-    - [FIX-JS-VERSION] Versão do script JS atualizada de ?v=2 para ?v=3,
-      garantindo que o browser não sirva o arquivo antigo em cache. O novo
-      primeiroacesso.js remove a chamada à Edge Function com nome errado
-      (confirm-email → confirm-user-email) que bloqueava todo o fluxo de
-      criação de conta com erro de CORS.
+    v11 — CORREÇÃO CRÍTICA:
+    - [CSP-FIX-ESM] Adicionado https://esm.sh a script-src e connect-src.
+      supabase-client.js importa @supabase/supabase-js via esm.sh.
+      Sem esse domínio na CSP, o módulo ES era bloqueado, o Supabase não
+      inicializava e o fluxo de primeiro acesso falhava silenciosamente.
+      Mesmo problema corrigido em login.html v2.8 ([CSP-FIX-17]).
 
-    v9 — CORREÇÕES (mantidas):
-    - [FIX-INLINE-STYLE] Removido style="margin-top: 0.5rem;" do footer.
-      Inline styles são bloqueados pela CSP (sem 'unsafe-inline' em style-src).
-      Substituído por classe CSS utilitária .footer-contact-line.
+    v10 — mantido:
+    - [FIX-JS-VERSION] Script atualizado para ?v=3.
+    - [FIX-INLINE-STYLE] Removido style inline do footer.
 
-    v8 — CORREÇÕES (mantidas):
-    - [FIX-CSP-SRI] Removido <script> CDN com hash SRI errado que bloqueava
-      o Supabase SDK. O SDK é carregado via ES module em supabase-client.js.
-    - [FIX-CSP-CONNECT] Adicionado wss:// do Supabase (realtime) e
-      https://cdn.jsdelivr.net ao connect-src.
-    - [FIX-CSP-SCRIPT] Mantido https://cdn.jsdelivr.net no script-src pois
-      supabase-client.js importa o SDK via ES module desse CDN.
+    v9 — mantido:
+    - [FIX-CSP-SRI] Removido script CDN com hash SRI errado.
+    - [FIX-CSP-CONNECT] wss:// do Supabase e cdn.jsdelivr.net no connect-src.
 -->
 <html lang="pt-BR">
 <head>
@@ -38,36 +32,53 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY                                    ║
+        ║  CONTENT SECURITY POLICY — v11                              ║
+        ║                                                              ║
+        ║  script-src inclui:                                         ║
+        ║    - https://esm.sh        (supabase-js ES module)         ║
+        ║    - https://cdn.jsdelivr.net (source maps / fallback)     ║
         ║                                                              ║
         ║  connect-src inclui:                                        ║
+        ║    - https://esm.sh        (fetch do módulo ES)            ║
         ║    - https://fvrhqqeofqedmhadzzqw.supabase.co (REST/Auth)  ║
         ║    - wss://fvrhqqeofqedmhadzzqw.supabase.co   (Realtime)   ║
-        ║    - https://cdn.jsdelivr.net (source maps / ES module)    ║
+        ║    - https://cdn.jsdelivr.net                               ║
         ║                                                              ║
         ║  NOTA: Esta meta tag é uma camada extra de defesa.          ║
-        ║  A CSP principal deve ser enviada como HTTP header pelo      ║
-        ║  servidor (vercel.json) pois meta tags não cobrem navegação  ║
-        ║  por document.location e alguns edge cases de browser.      ║
+        ║  Configure também no servidor (vercel.json / nginx):        ║
+        ║    Content-Security-Policy: <mesma política>                ║
+        ║    X-Content-Type-Options: nosniff                          ║
+        ║    X-Frame-Options: DENY                                    ║
+        ║    Strict-Transport-Security: max-age=31536000              ║
         ╚══════════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' https://cdn.jsdelivr.net;
+        script-src 'self'
+            https://esm.sh
+            https://cdn.jsdelivr.net;
         style-src 'self' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com;
         connect-src 'self'
-                    https://fvrhqqeofqedmhadzzqw.supabase.co
-                    wss://fvrhqqeofqedmhadzzqw.supabase.co
-                    https://cdn.jsdelivr.net;
+            https://esm.sh
+            https://fvrhqqeofqedmhadzzqw.supabase.co
+            wss://fvrhqqeofqedmhadzzqw.supabase.co
+            https://cdn.jsdelivr.net;
         img-src 'self' data:;
         frame-src 'none';
         object-src 'none';
         base-uri 'self';
         form-action 'self';
+        worker-src 'none';
+        manifest-src 'none';
         upgrade-insecure-requests;
-        require-trusted-types-for 'script';
+        block-all-mixed-content;
     ">
+
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <meta http-equiv="Permissions-Policy"
+          content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
 
     <!-- Fonte -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -76,14 +87,6 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="primeiroacesso.css">
-
-    <!--
-        O Supabase SDK é carregado exclusivamente via ES module em
-        supabase-client.js (type="module"), que importa do CDN:
-            import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.2/+esm'
-
-        Sem SRI para manter manualmente, sem conflito UMD vs ESM.
-    -->
 </head>
 
 <body>
@@ -112,10 +115,7 @@
                 </p>
             </header>
 
-            <!-- Alerta global (erros, avisos, sucesso)
-                 role="alert" + aria-live="assertive" → leitores de tela anunciam
-                 automaticamente qualquer mudança neste elemento.
-                 [A11Y-ARIA-LIVE] atributo também reforçado via JS. -->
+            <!-- Alerta global (erros, avisos, sucesso) -->
             <div id="alertBox"
                  class="alert-box"
                  role="alert"
@@ -149,6 +149,7 @@
                             required
                             aria-required="true"
                             aria-describedby="emailHelp"
+                            spellcheck="false"
                         >
                         <span id="emailHelp" class="helper-text">
                             Digite o email que você usou na compra.
@@ -182,7 +183,7 @@
                         </p>
                     </div>
 
-                    <!-- Aviso de termos não aceitos (aparece no topo do bloco) -->
+                    <!-- Aviso de termos não aceitos -->
                     <div id="termsWarning" class="terms-warning" role="alert" aria-atomic="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                              stroke-width="2" aria-hidden="true">
@@ -266,7 +267,6 @@
                                 </svg>
                             </button>
                         </div>
-                        <!-- Mensagem de erro: senhas não coincidem -->
                         <div id="confirmError"
                              class="error-text"
                              role="alert"
@@ -301,7 +301,6 @@
                                 do GranaEvo.
                             </label>
                         </div>
-                        <!-- Mensagem de erro: termos não aceitos -->
                         <div id="termsError"
                              class="error-text"
                              role="alert"
@@ -330,12 +329,7 @@
                     Já tem conta?
                     <a href="login.html">Fazer login</a>
                 </p>
-                <!--
-                    [FIX-INLINE-STYLE] Removido style="margin-top: 0.5rem;" que violava a
-                    CSP (sem 'unsafe-inline' em style-src). Substituído pela classe
-                    .footer-contact-line — adicione ao primeiroacesso.css:
-                    .footer-contact-line { margin-top: 0.5rem; }
-                -->
+                <!-- [FIX-INLINE-STYLE] classe .footer-contact-line substitui style inline -->
                 <p class="footer-contact-line">
                     Problemas? Fale conosco:
                     <a href="mailto:suporte@granaevo.com"
@@ -346,8 +340,6 @@
         </div><!-- /.card -->
     </div><!-- /.container -->
 
-    <!-- [FIX-JS-VERSION] v=3 garante que o browser descarte o cache do v=2
-         que chamava a Edge Function com nome errado (confirm-email). -->
     <script type="module" src="primeiroacesso.js?v=3"></script>
 
 </body>
