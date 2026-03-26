@@ -1172,10 +1172,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         const { data: { session: sessionInicial }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !sessionInicial?.user?.id) throw new Error('SEM_SESSAO_VALIDA');
 
-        // ── effectiveUserId: ID do dono para convidados, próprio ID para donos ──
-        // usuarioLogado.effectiveUserId é definido pelo AuthGuard no protect():
-        //   - Dono:      effectiveUserId = user.id
-        //   - Convidado: effectiveUserId = owner_user_id (do account_members)
         const effectiveUserId = usuarioLogado.effectiveUserId || sessionInicial.user.id;
 
         _log.info('[_criarPerfilHandler] effectiveUserId:', effectiveUserId.slice(0, 8) + '...');
@@ -1236,21 +1232,40 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 return;
             }
 
-            // ── FIX-2: Sessão fresca IMEDIATAMENTE antes do upload ────────
-            // O autoRefreshToken pode ter trocado o access_token enquanto
-            // a validação de imagem acontecia. Buscar novamente garante que
-            // o token enviado é o atual e válido (resolve o 401 ES256).
-            const { data: { session: sessionFresh }, error: freshError } = await supabase.auth.getSession();
+            // ── FIX-2: Token garantidamente fresco via refreshSession() ───
+            // getSession() lê do cache — após fluxo de "primeiro acesso"
+            // (magic link / recovery), o token pode estar expirado ou inválido.
+            // refreshSession() bate no servidor e sempre retorna token válido.
+            let sessionFresh;
+            try {
+                const { data: refreshData, error: refreshError } =
+                    await supabase.auth.refreshSession();
 
-            if (freshError || !sessionFresh?.access_token) {
-                _log.error('PERFIL_TOKEN_001', 'Token de acesso ausente ou sessão expirada.');
-                alert('Sua sessão expirou. Por favor, faça login novamente.');
-                // Força logout para limpar estado
-                if (typeof AuthGuard !== 'undefined') {
-                    AuthGuard.logout('TOKEN_EXPIRED');
+                if (refreshError || !refreshData?.session?.access_token) {
+                    // Fallback: tenta getSession uma última vez
+                    _log.warn('[_criarPerfilHandler] refreshSession falhou — tentando fallback getSession. Erro:', refreshError?.message);
+                    const { data: fallbackData, error: fallbackError } =
+                        await supabase.auth.getSession();
+
+                    if (fallbackError || !fallbackData?.session?.access_token) {
+                        _log.error('PERFIL_TOKEN_001',
+                            refreshError || fallbackError || 'token ausente após refresh e fallback');
+                        alert('Sua sessão expirou. Por favor, faça login novamente.');
+                        if (typeof AuthGuard !== 'undefined') {
+                            AuthGuard.logout('TOKEN_EXPIRED');
+                        } else {
+                            window.location.replace('login.html');
+                        }
+                        return;
+                    }
+                    _log.warn('[_criarPerfilHandler] Usando token do cache como fallback.');
+                    sessionFresh = fallbackData.session;
                 } else {
-                    window.location.replace('login.html');
+                    sessionFresh = refreshData.session;
                 }
+            } catch (tokenErr) {
+                _log.error('PERFIL_TOKEN_002', tokenErr);
+                alert('Erro ao validar sua sessão. Por favor, faça login novamente.');
                 return;
             }
 
@@ -1264,7 +1279,6 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 {
                     method: 'POST',
                     headers: {
-                        // FIX-2: usa token fresco (sessionFresh, não sessionInicial)
                         'Authorization': `Bearer ${sessionFresh.access_token}`,
                         'apikey': SUPABASE_ANON_KEY,
                     },
@@ -1273,13 +1287,20 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             );
 
             if (!uploadResponse.ok) {
-                // FIX-5: campo correto é .error, não .message
                 let uploadErrorMsg = 'Erro ao fazer upload da foto. Tente novamente.';
+                let rawBody = '';
                 try {
-                    const uploadErrorData = await uploadResponse.json();
-                    uploadErrorMsg = uploadErrorData.error ?? uploadErrorData.message ?? uploadErrorMsg;
-                } catch (_) {}
-                _log.error('PERFIL_FOTO_001', `Status: ${uploadResponse.status} — ${uploadErrorMsg}`);
+                    rawBody = await uploadResponse.text();
+                    const parsed = JSON.parse(rawBody);
+                    uploadErrorMsg = parsed.error ?? parsed.message ?? uploadErrorMsg;
+                } catch (_) {
+                    if (rawBody) uploadErrorMsg = rawBody.slice(0, 200);
+                }
+                _log.error('PERFIL_FOTO_001',
+                    `HTTP ${uploadResponse.status} | ${uploadErrorMsg}`);
+                console.error('[UPLOAD DEBUG]',
+                    'status:', uploadResponse.status,
+                    '| body:', rawBody.slice(0, 500));
                 alert(uploadErrorMsg);
                 return;
             }
@@ -1294,13 +1315,9 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             }
 
             // ── FIX-3: Usa signedUrl retornada pelo servidor ───────────────
-            // A Edge Function gera a URL com service_role (sem restrição de RLS).
-            // Isso elimina o bug em que o convidado não conseguia gerar a URL
-            // assinada no cliente (auth.uid() ≠ foldername do arquivo do dono).
             if (uploadData.signedUrl) {
                 fotoUrl = _sanitizeImgUrl(uploadData.signedUrl) || null;
             } else {
-                // Fallback: tenta gerar no cliente (funciona apenas para donos)
                 _log.warn('[_criarPerfilHandler] signedUrl ausente na resposta. Tentando createSignedUrl...');
                 const { data: signedData, error: signedError } = await supabase.storage
                     .from('profile-photos')
@@ -1321,11 +1338,9 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         const { data: novoPerfil, error } = await supabase
             .from('profiles')
             .insert({
-                name:     nome,
+                name:      nome,
                 photo_url: fotoUrl,
-                // FIX-1: effectiveUserId garante que o perfil vai para a
-                // conta do DONO mesmo quando criado por um convidado.
-                user_id:  effectiveUserId,
+                user_id:   effectiveUserId,
             })
             .select()
             .single();
