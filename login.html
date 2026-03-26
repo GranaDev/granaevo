@@ -7,23 +7,10 @@
 
     <!--
         ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN v2.8                   ║
+        ║  CONTENT SECURITY POLICY — LOGIN v2.9                   ║
         ╠══════════════════════════════════════════════════════════╣
-        ║  Correções aplicadas nesta versão (v2.8):               ║
-        ║                                                          ║
-        ║  [CSP-FIX-17] CORREÇÃO CRÍTICA — loop de login.         ║
-        ║  supabase-client.js importa @supabase/supabase-js        ║
-        ║  via https://esm.sh. Sem esse domínio em script-src,    ║
-        ║  o módulo ES era bloqueado pela CSP, o Supabase não      ║
-        ║  inicializava, event.preventDefault() nunca executava   ║
-        ║  e o form submetia como GET causando o loop              ║
-        ║  login?email=...&password=...                            ║
-        ║  FIX: https://esm.sh adicionado a script-src            ║
-        ║  e connect-src.                                          ║
-        ║                                                          ║
-        ║  [CSP-FIX-1..16] mantidos das versões anteriores.       ║
-        ║  [FIX-HTML-1] style inline removido de authErrorMessage. ║
-        ║  [FIX-HTML-2] captchaContainer usa class, não style.    ║
+        ║  [CSP-FIX-17] esm.sh em script-src e connect-src.       ║
+        ║  [CSP-FIX-v2.9] Sem alterações de CSP nesta versão.     ║
         ╚══════════════════════════════════════════════════════════╝
     -->
     <meta http-equiv="Content-Security-Policy" content="
@@ -57,43 +44,22 @@
         block-all-mixed-content;
     ">
 
-    <!--
-        [REF-FIX-1] strict-origin-when-cross-origin — envia apenas a origem
-        para destinos externos, protege tokens e parâmetros na URL.
-        Mantém referrer completo dentro do próprio domínio.
-    -->
     <meta name="referrer" content="strict-origin-when-cross-origin">
-
-    <!--
-        [PERM-FIX-1] Permissions-Policy — bloqueia acesso a APIs sensíveis
-        mesmo que um XSS ocorra.
-    -->
     <meta http-equiv="Permissions-Policy"
           content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
-
-    <!--
-        [SEC-META-1] X-Content-Type-Options via meta (complementar ao header HTTP).
-        Configure também no servidor/CDN:
-          X-Content-Type-Options: nosniff
-          X-Frame-Options: DENY
-          Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-    -->
 
     <link rel="stylesheet" href="login.css">
 
     <!--
-        [CSP-FIX-16] recaptcha-init.js carregado ANTES e SEM async/defer.
-        Scripts type="module" são sempre diferidos — executam após o HTML
-        ser parseado. O api.js com async pode terminar antes e tentar
-        chamar window.__grOnLoad antes de ele existir.
-        recaptcha-init.js é síncrono e garante que __grOnLoad esteja
-        disponível no exato momento em que o api.js precisar.
+        recaptcha-init.js — síncrono, define window.__grOnLoad ANTES
+        que o api.js possa terminar de carregar.
     -->
     <script src="recaptcha-init.js"></script>
 
     <!--
-        [CSP-FIX-15] render=explicit: impede auto-render no carregamento.
-        onload=__grOnLoad: definido em recaptcha-init.js (não no módulo JS).
+        render=explicit → sem auto-render. Os dois widgets (login e
+        código) são renderizados manualmente pelo login.js via
+        grecaptcha.render() com seus respectivos callbacks.
     -->
     <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=__grOnLoad"
             async
@@ -225,10 +191,6 @@
                         <p class="form-subtitle">Acesse sua conta para continuar evoluindo</p>
                     </div>
 
-                    <!--
-                        [FIX-HTML-1] style="display:none" removido — bloqueado por style-src 'self'.
-                        Visibilidade controlada exclusivamente via classe .visible no JS.
-                    -->
                     <div id="authErrorMessage"
                          class="auth-message"
                          role="alert"
@@ -236,15 +198,6 @@
                          aria-atomic="true">
                     </div>
 
-                    <!--
-                        [SEC-FORM-1] autocomplete="on" mantido para compatibilidade
-                        com gerenciadores de senha. novalidate permite validação
-                        customizada no JS sem interferência do browser nativo.
-                        method ausente = GET padrão do HTML, mas o form nunca
-                        chega a submeter pois login.js faz preventDefault().
-                        O loop era causado exatamente porque login.js não carregava
-                        (CSP bloqueava esm.sh) — corrigido em [CSP-FIX-17].
-                    -->
                     <form class="login-form" id="loginForm" novalidate autocomplete="on">
 
                         <div class="form-group">
@@ -288,7 +241,6 @@
                                     maxlength="128"
                                     aria-required="true"
                                 >
-                                <!-- type="button" garante que não submete o form -->
                                 <button type="button"
                                         class="toggle-password"
                                         id="togglePassword"
@@ -314,12 +266,10 @@
                         </div>
 
                         <!--
-                            ===== CONTAINER DO RECAPTCHA =====
-                            [FIX-HTML-2] class="captcha-hidden" — sem style inline.
-                            Visibilidade controlada exclusivamente por classes CSS:
-                              .captcha-hidden  → display: none
-                              .captcha-visible → display: flex
-                            Sem conflito de especificidade com seletor de ID.
+                            CAPTCHA DO LOGIN
+                            Exibido após MAX_LOGIN_ATTEMPTS_BEFORE_CAPTCHA tentativas erradas.
+                            Widget renderizado via grecaptcha.render() em login.js com
+                            callback 'onLoginCaptchaResolved'.
                         -->
                         <div id="captchaContainer"
                              class="captcha-hidden"
@@ -333,13 +283,8 @@
                                 </svg>
                                 Verificação de segurança necessária
                             </div>
-                            <!--
-                                [CSP-FIX-15] Com render=explicit, grecaptcha.render()
-                                no JS usa CONFIG.CAPTCHA_SITE_KEY e ignora esses atributos.
-                            -->
                             <div class="g-recaptcha"></div>
                         </div>
-                        <!-- ===== FIM DO CONTAINER DO RECAPTCHA ===== -->
 
                         <button type="submit" class="btn-submit" id="loginSubmitBtn">
                             <span class="btn-text">Entrar</span>
@@ -380,7 +325,7 @@
                     </div>
 
                     <h2 class="form-title">Recuperar senha</h2>
-                    <p class="form-subtitle">Digite seu email para receber o código de verificação</p>
+                    <p class="form-subtitle">Digite seu email cadastrado para receber o código de verificação</p>
 
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="form-group">
@@ -449,6 +394,28 @@
                             <input type="text" maxlength="1" class="code-input" data-index="5" inputmode="numeric" autocomplete="off"           aria-label="Dígito 6 de 6" pattern="[0-9]">
                         </div>
 
+                        <!--
+                            CAPTCHA DA TELA DE CÓDIGO
+                            Exibido após MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA tentativas erradas.
+                            Widget separado do captcha do login — renderizado via
+                            grecaptcha.render() com callback 'onCodeCaptchaResolved'.
+                            Oculto por padrão via classe captcha-hidden.
+                        -->
+                        <div id="codeCaptchaContainer"
+                             class="captcha-hidden"
+                             role="region"
+                             aria-label="Verificação de segurança para código"
+                             aria-live="polite">
+                            <div class="captcha-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"
+                                     style="width:16px;height:16px;stroke:var(--error-red);flex-shrink:0;">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Muitas tentativas — resolva a verificação
+                            </div>
+                            <div class="g-recaptcha"></div>
+                        </div>
+
                         <button type="button" class="btn-submit" id="verifyCodeBtn">
                             <span class="btn-text">Confirmar código</span>
                             <div class="btn-glow" aria-hidden="true"></div>
@@ -502,7 +469,6 @@
                                     minlength="8"
                                     maxlength="128"
                                     aria-required="true"
-                                    aria-describedby="passwordRequirements"
                                 >
                             </div>
                         </div>
@@ -580,13 +546,7 @@
     </div>
     <!-- .login-container — fim -->
 
-    <!--
-        [SEC-SCRIPT-1] login.js carregado como type="module" (sempre diferido).
-        Nunca use src inline ou eval() aqui.
-        O módulo importa supabase-client.js que por sua vez importa de esm.sh —
-        agora permitido pela CSP [CSP-FIX-17].
-    -->
-    <script type="module" src="login.js?v=2"></script>
+    <script type="module" src="login.js?v=3"></script>
 
 </body>
 </html>

@@ -2,10 +2,6 @@ import { supabase } from './supabase-client.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  [TT-POLICY-1] TRUSTED TYPES — POLÍTICA granaevo-policy
-//
-//  Usada EXCLUSIVAMENTE em restoreButton() para reinjetar o
-//  innerHTML ESTÁTICO dos botões capturado na inicialização.
-//  Nunca contém input do usuário.
 // ═══════════════════════════════════════════════════════════════
 const _trustedPolicy = (() => {
     if (typeof window.trustedTypes?.createPolicy !== 'function') return null;
@@ -19,34 +15,23 @@ const _trustedPolicy = (() => {
 })();
 
 // ═══════════════════════════════════════════════════════════════
-//  NOTA: window.__grOnLoad está definido em recaptcha-init.js
-//
-//  Fluxo garantido:
-//    1. recaptcha-init.js executa → window.__grOnLoad fica disponível
-//    2. api.js carrega em background (async defer)
-//    3. login.js (module) carrega → configura _renderCaptchaWidget
-//    4. Usuário erra 3x → showCaptcha() → container fica visível
-//    5a. Se API já carregou → __grCaptchaReady=true → render imediato
-//    5b. Se API ainda carrega → __grPendingRender fica registrado
-//    6. api.js termina → __grOnLoad dispara → executa __grPendingRender
-// ═══════════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════════
 //  CONFIGURAÇÕES
 // ═══════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
-    moneyParticleCount:          15,
-    chartLineCount:               8,
-    MAX_ATTEMPTS_BEFORE_CAPTCHA:  3,
-    MESSAGE_AUTO_HIDE_MS:      5000,
-    SEND_CODE_COOLDOWN_MS:    30_000,
-    RATE_LIMIT_MAX:               10,
-    RATE_LIMIT_WINDOW_MS:     60_000,
-    CAPTCHA_TOKEN_MAX_AGE_MS: 110_000,
-    CAPTCHA_TOKEN_MIN_LENGTH:     50,
+    moneyParticleCount:                15,
+    chartLineCount:                     8,
+    MAX_LOGIN_ATTEMPTS_BEFORE_CAPTCHA:  3,
+    MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA:   3,  // CAPTCHA na tela de código após N erros
+    MESSAGE_AUTO_HIDE_MS:            5000,
+    SEND_CODE_COOLDOWN_MS:          30_000,
+    RATE_LIMIT_MAX:                     10,
+    RATE_LIMIT_WINDOW_MS:           60_000,
+    CAPTCHA_TOKEN_MAX_AGE_MS:      110_000,
+    CAPTCHA_TOKEN_MIN_LENGTH:           50,
     CAPTCHA_SITE_KEY: '6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye',
     KEYS: Object.freeze({
         loginAttempts:  '_ge_la',
+        codeAttempts:   '_ge_ca',   // tentativas erradas de código OTP
         sendCooldown:   '_ge_scc',
         resendCooldown: '_ge_rcc',
         submitRateLog:  '_ge_srl',
@@ -55,35 +40,17 @@ const CONFIG = Object.freeze({
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  MENSAGEM DE ERRO PADRÃO DE LOGIN
-//
-//  Mensagem ÚNICA para TODA falha de autenticação na tela de login.
-//  Email vazio, email inválido, senha vazia, senha de qualquer
-//  tamanho, usuário inexistente, erro Supabase — TUDO retorna
-//  esta mesma mensagem genérica.
-//
-//  [FIX-BUG-1] NENHUMA validação de formato ou tamanho de senha
-//  é feita no login. Qualquer senha não-vazia vai direto ao Supabase.
-//  Validar tamanho localmente no login:
-//    (a) revela ao atacante informação sobre a senha real do usuário
-//    (b) exibe mensagem diferente, quebrando uniformidade de erro
-//    (c) retornaria early sem chamar _registerFailedAttempt(),
-//        impedindo que o captcha apareça após 3 tentativas
-//
-//  [FIX-BUG-2] TODA falha conta como tentativa, sem exceções.
-//  Email vazio → conta. Email inválido → conta. Senha vazia → conta.
-//  Erro Supabase → conta. Sem exceções. Sem early returns sem contador.
+//  MENSAGEM DE ERRO GENÉRICA DE LOGIN
+//  Toda falha de autenticação exibe esta mesma mensagem.
 // ═══════════════════════════════════════════════════════════════
 const LOGIN_ERROR_MSG = 'Tentativa inválida: email ou senha incorreto';
 
 // ═══════════════════════════════════════════════════════════════
-//  CABEÇALHOS DE AUTENTICAÇÃO
+//  CABEÇALHOS
 // ═══════════════════════════════════════════════════════════════
 async function _requireSessionHeader() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-        throw new Error('No active session — authenticated header required.');
-    }
+    if (!session?.access_token) throw new Error('No active session.');
     return `Bearer ${session.access_token}`;
 }
 
@@ -92,67 +59,75 @@ function _publicHeader() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — ESTADO INTERNO
-//
-//  _captchaWidgetId: null = não renderizado, 0+ = ID do widget.
-//  _captchaRenderAttempt: contador de tentativas de render.
-//  _CAPTCHA_MAX_RENDER_ATTEMPTS: limite de retentativas automáticas.
+//  CAPTCHA — WIDGET IDs
 // ═══════════════════════════════════════════════════════════════
-let _captchaWidgetId       = null;
-let _captchaRenderAttempt  = 0;
+let _loginCaptchaWidgetId      = null;
+let _loginCaptchaRenderAttempt = 0;
+let _codeCaptchaWidgetId       = null;
+let _codeCaptchaRenderAttempt  = 0;
 const _CAPTCHA_MAX_RENDER_ATTEMPTS = 3;
 
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA STATE
+//  FACTORY: CaptchaStateFactory
+//  Cria um módulo de estado de captcha para um dado widget.
+//  Usado para o captcha do login E para o captcha da tela de código.
 // ═══════════════════════════════════════════════════════════════
-const CaptchaState = (() => {
-    let _token         = null;
-    let _resolved      = false;
-    let _resolvedAt    = 0;
-    let _captchaActive = false;
+function _createCaptchaState(resolvedCallbackName, expiredCallbackName, errorCallbackName, getWidgetId) {
+    let _token      = null;
+    let _resolved   = false;
+    let _resolvedAt = 0;
+    let _active     = false;
 
-    window.onCaptchaResolved = (token) => {
-        if (!_captchaActive) return;
+    window[resolvedCallbackName] = (token) => {
+        if (!_active) return;
         if (typeof token !== 'string' || token.length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) return;
         if (typeof grecaptcha === 'undefined') return;
         try {
-            const widgetResponse = grecaptcha.getResponse(_captchaWidgetId ?? undefined);
+            const widgetId = getWidgetId();
+            const widgetResponse = grecaptcha.getResponse(widgetId ?? undefined);
             if (!widgetResponse || widgetResponse !== token) return;
-            _token      = token;
-            _resolved   = true;
-            _resolvedAt = Date.now();
+            _token = token; _resolved = true; _resolvedAt = Date.now();
         } catch {
             _token = null; _resolved = false; _resolvedAt = 0;
         }
     };
 
-    window.onCaptchaExpired = () => { _token = null; _resolved = false; _resolvedAt = 0; };
-    window.onCaptchaError   = () => { _token = null; _resolved = false; _resolvedAt = 0; };
+    window[expiredCallbackName] = () => { _token = null; _resolved = false; _resolvedAt = 0; };
+    window[errorCallbackName]   = () => { _token = null; _resolved = false; _resolvedAt = 0; };
 
     return {
-        activate()   { _captchaActive = true;  },
-        deactivate() { _captchaActive = false; },
-
+        activate()   { _active = true;  },
+        deactivate() { _active = false; },
         isResolved() {
             if (!_resolved || !_token) return false;
             return (Date.now() - _resolvedAt) < CONFIG.CAPTCHA_TOKEN_MAX_AGE_MS;
         },
-
         getToken() { return this.isResolved() ? _token : null; },
-
         reset() {
             _token = null; _resolved = false; _resolvedAt = 0;
             if (typeof grecaptcha === 'undefined') return;
             try {
-                if (_captchaWidgetId !== null) {
-                    grecaptcha.reset(_captchaWidgetId);
-                } else {
-                    grecaptcha.reset();
-                }
-            } catch { /* widget ainda não renderizado */ }
+                const widgetId = getWidgetId();
+                if (widgetId !== null) grecaptcha.reset(widgetId);
+                else grecaptcha.reset();
+            } catch {}
         },
     };
-})();
+}
+
+const LoginCaptchaState = _createCaptchaState(
+    'onLoginCaptchaResolved',
+    'onLoginCaptchaExpired',
+    'onLoginCaptchaError',
+    () => _loginCaptchaWidgetId,
+);
+
+const CodeCaptchaState = _createCaptchaState(
+    'onCodeCaptchaResolved',
+    'onCodeCaptchaExpired',
+    'onCodeCaptchaError',
+    () => _codeCaptchaWidgetId,
+);
 
 // ═══════════════════════════════════════════════════════════════
 //  RECOVERY STATE
@@ -168,12 +143,13 @@ const RecoveryState = (() => {
         clearEmail: ()  => { _email = ''; },
         clearCode:  ()  => { _code  = ''; },
         clear:      ()  => { _email = ''; _code = ''; },
+        hasEmail:   ()  => _email.length > 0,
         isValid:    ()  => _email.length > 0 && _code.length === 6,
     };
 })();
 
 // ═══════════════════════════════════════════════════════════════
-//  MÓDULO: TENTATIVAS DE LOGIN
+//  TENTATIVAS DE LOGIN
 // ═══════════════════════════════════════════════════════════════
 const LoginAttempts = {
     get()   { return parseInt(sessionStorage.getItem(CONFIG.KEYS.loginAttempts) || '0', 10); },
@@ -183,7 +159,18 @@ const LoginAttempts = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  MÓDULO: COOLDOWN ANTI-FLOOD
+//  TENTATIVAS DE CÓDIGO OTP
+//  Controla quando exibir o captcha na tela de código.
+// ═══════════════════════════════════════════════════════════════
+const CodeAttempts = {
+    get()   { return parseInt(sessionStorage.getItem(CONFIG.KEYS.codeAttempts) || '0', 10); },
+    set(n)  { sessionStorage.setItem(CONFIG.KEYS.codeAttempts, String(Math.max(0, n))); },
+    inc()   { this.set(this.get() + 1); },
+    reset() { sessionStorage.removeItem(CONFIG.KEYS.codeAttempts); },
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  COOLDOWN ANTI-FLOOD
 // ═══════════════════════════════════════════════════════════════
 const Cooldown = {
     isActive(key) {
@@ -193,10 +180,14 @@ const Cooldown = {
     set(key, ms) {
         sessionStorage.setItem(key, String(Date.now() + ms));
     },
+    remaining(key) {
+        const until = parseInt(sessionStorage.getItem(key) || '0', 10);
+        return Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    },
 };
 
 // ═══════════════════════════════════════════════════════════════
-//  MÓDULO: RATE LIMITER DE SUBMISSÃO (client-side)
+//  RATE LIMITER DE SUBMISSÃO
 // ═══════════════════════════════════════════════════════════════
 const SubmitRateLimiter = {
     isAllowed() {
@@ -211,9 +202,7 @@ const SubmitRateLimiter = {
         log = log.filter(ts => ts > windowStart);
         if (log.length >= CONFIG.RATE_LIMIT_MAX) return false;
         log.push(now);
-        try {
-            sessionStorage.setItem(CONFIG.KEYS.submitRateLog, JSON.stringify(log));
-        } catch { /* sessionStorage cheio — fail open */ }
+        try { sessionStorage.setItem(CONFIG.KEYS.submitRateLog, JSON.stringify(log)); } catch {}
         return true;
     },
 };
@@ -230,7 +219,7 @@ function isValidEmail(email) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  RESTAURAÇÃO SEGURA DE BOTÕES (TRUSTED TYPES COMPLIANT)
+//  RESTAURAÇÃO DE BOTÕES (TRUSTED TYPES)
 // ═══════════════════════════════════════════════════════════════
 const _buttonOriginalHTML = new WeakMap();
 
@@ -252,30 +241,24 @@ function restoreButton(btn) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SPINNER DO BOTÃO — usa .loading-svg do CSS (sem inline style)
+//  SPINNER
 // ═══════════════════════════════════════════════════════════════
 function createSpinnerElement(labelText) {
     const wrapper = document.createDocumentFragment();
-
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('aria-hidden', 'true');
     svg.classList.add('loading-svg');
 
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', '12');
-    circle.setAttribute('cy', '12');
-    circle.setAttribute('r', '10');
-    circle.setAttribute('stroke', 'currentColor');
-    circle.setAttribute('stroke-width', '4');
-    circle.setAttribute('fill', 'none');
-    circle.setAttribute('opacity', '0.25');
+    circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '10');
+    circle.setAttribute('stroke', 'currentColor'); circle.setAttribute('stroke-width', '4');
+    circle.setAttribute('fill', 'none'); circle.setAttribute('opacity', '0.25');
     svg.appendChild(circle);
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', 'M12 2a10 10 0 0 1 10 10');
-    path.setAttribute('stroke', 'currentColor');
-    path.setAttribute('stroke-width', '4');
+    path.setAttribute('stroke', 'currentColor'); path.setAttribute('stroke-width', '4');
     path.setAttribute('fill', 'none');
     svg.appendChild(path);
 
@@ -291,7 +274,7 @@ function setButtonLoading(btn, loadingText) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SELEÇÃO DE ELEMENTOS DO DOM
+//  ELEMENTOS DO DOM
 // ═══════════════════════════════════════════════════════════════
 const screens = Object.freeze({
     login:       document.getElementById('loginScreen'),
@@ -323,35 +306,24 @@ const inputs = Object.freeze({
     confirmPassword: document.getElementById('confirmPassword'),
 });
 
-const loginForm      = document.getElementById('loginForm');
-const errorMessage   = document.getElementById('errorMessage');
+const loginForm    = document.getElementById('loginForm');
+const errorMessage = document.getElementById('errorMessage');
 const togglePassword = document.getElementById('togglePassword');
 
-if (!loginForm) {
-    console.error('[GranaEvo] loginForm não encontrado no DOM. Verifique o HTML.');
-}
-
 // ═══════════════════════════════════════════════════════════════
-//  FUNÇÕES DE MENSAGEM
-//  Visibilidade via classList (.visible / .show) — sem inline style.
+//  MENSAGENS
 // ═══════════════════════════════════════════════════════════════
 let _messageTimer = null;
 
 function showAuthMessage(message, type) {
-    const messageDiv = document.getElementById('authErrorMessage');
-    if (!messageDiv) return;
-
+    const el = document.getElementById('authErrorMessage');
+    if (!el) return;
     if (_messageTimer) { clearTimeout(_messageTimer); _messageTimer = null; }
-
-    messageDiv.textContent = sanitizeText(message);
-    messageDiv.className   = `auth-message ${type} visible show`;
-
+    el.textContent = sanitizeText(message);
+    el.className   = `auth-message ${type} visible show`;
     _messageTimer = setTimeout(() => {
-        messageDiv.classList.remove('show');
-        setTimeout(() => {
-            messageDiv.classList.remove('visible');
-            messageDiv.textContent = '';
-        }, 300);
+        el.classList.remove('show');
+        setTimeout(() => { el.classList.remove('visible'); el.textContent = ''; }, 300);
     }, CONFIG.MESSAGE_AUTO_HIDE_MS);
 }
 
@@ -368,7 +340,7 @@ function hideError() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  EFEITO SHAKE — usa .input-shake do CSS (sem inline style)
+//  SHAKE
 // ═══════════════════════════════════════════════════════════════
 function shakeInput(input) {
     if (!input) return;
@@ -377,343 +349,175 @@ function shakeInput(input) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  INICIALIZAÇÃO
+//  CAPTCHA — RENDER GENÉRICO
+//  Renderiza um widget em qualquer container.
 // ═══════════════════════════════════════════════════════════════
-window.addEventListener('DOMContentLoaded', async () => {
+function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidgetId, getRenderAttempt, setRenderAttempt) {
 
-    // Garante estado inicial correto do captcha — apenas classes, sem inline style.
-    const captchaEl = document.getElementById('captchaContainer');
-    if (captchaEl) {
-        captchaEl.style.display = '';
-        captchaEl.classList.remove('captcha-visible');
-        captchaEl.classList.add('captcha-hidden');
-    }
+    // Widget já existe e é válido
+    if (getWidgetId() !== null) return;
 
-    Object.values(buttons).forEach(btn => {
-        if (btn instanceof HTMLElement) _captureButtonHTML(btn);
-    });
-
-    try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-            window.location.replace('dashboard.html');
-            return;
-        }
-    } catch {
-        // Sem sessão — continua para login
-    }
-
-    // Se já tinha tentativas suficientes na sessão anterior, exibe captcha
-    if (LoginAttempts.get() >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
-        showCaptcha();
-    }
-
-    createMoneyParticles();
-    createAnimatedCharts();
-
-    const authError = sessionStorage.getItem('auth_error');
-    if (authError) {
-        showAuthMessage(sanitizeText(authError), 'error');
-        sessionStorage.removeItem('auth_error');
-    }
-
-    _registerKeyboardShortcuts();
-});
-
-// ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — REAGENDAR RENDER (RETRY)
-//
-//  Chamado quando o render falha ou produz um widget com
-//  dimensões 0×0. Incrementa o contador e agenda nova tentativa
-//  com backoff crescente (500ms × tentativa).
-// ═══════════════════════════════════════════════════════════════
-function _scheduleRenderRetry() {
-    if (_captchaRenderAttempt >= _CAPTCHA_MAX_RENDER_ATTEMPTS) {
-        console.warn('[reCAPTCHA] Máximo de tentativas de render atingido (' + _CAPTCHA_MAX_RENDER_ATTEMPTS + ').');
-        return;
-    }
-    _captchaRenderAttempt++;
-    const delay = _captchaRenderAttempt * 500;
-    console.log('[reCAPTCHA] Reagendando render em ' + delay + 'ms (tentativa ' + _captchaRenderAttempt + ' de ' + _CAPTCHA_MAX_RENDER_ATTEMPTS + ')');
-    setTimeout(_renderCaptchaWidget, delay);
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — VERIFICAÇÃO PÓS-RENDER
-//
-//  Executada 600ms após grecaptcha.render() retornar com sucesso.
-//  Verifica se o iframe do widget tem dimensões reais (> 0).
-//  Se o iframe estiver com 0×0 ou ausente, limpa e agenda retry.
-//
-//  MOTIVO: em alguns browsers, o grecaptcha.render() conclui mas
-//  o iframe fica com dimensões 0×0 se houve alguma interferência
-//  de layout durante o render. A verificação pós-render garante
-//  que o widget seja recriado corretamente nesses casos.
-// ═══════════════════════════════════════════════════════════════
-function _verifyCaptchaRender() {
-    const el = document.getElementById('captchaContainer');
-    if (!el) return;
-
-    // Só verifica se o container ainda deve estar visível
-    if (!el.classList.contains('captcha-visible')) return;
-
-    const container = el.querySelector('.g-recaptcha');
-    const iframe    = container ? container.querySelector('iframe') : null;
-
-    if (!iframe || iframe.offsetWidth === 0 || iframe.offsetHeight === 0) {
-        console.warn('[reCAPTCHA] Verificação pós-render falhou: iframe ausente ou com dimensões 0×0. Recriando widget...');
-
-        // Reseta o widget corrompido via API do Google, se disponível
-        try {
-            if (typeof grecaptcha !== 'undefined' && _captchaWidgetId !== null) {
-                grecaptcha.reset(_captchaWidgetId);
-            }
-        } catch { /* ignora — widget pode estar em estado inválido */ }
-
-        // Limpa o container para garantir render limpo
-        if (container) {
-            while (container.firstChild) {
-                container.removeChild(container.firstChild);
-            }
-        }
-
-        // Libera o ID para permitir novo render
-        _captchaWidgetId = null;
-
-        // Agenda retry com backoff
-        _scheduleRenderRetry();
-    } else {
-        console.log('[reCAPTCHA] Verificação pós-render OK — iframe: ' + iframe.offsetWidth + 'x' + iframe.offsetHeight);
-        // Render bem-sucedido — reseta contador de tentativas
-        _captchaRenderAttempt = 0;
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — RENDER INTERNO
-//
-//  [FIX-CAPTCHA-V6] Versão definitiva.
-//
-//  Mudanças em relação à V5:
-//  1. Verificação de computed style ANTES do render: confirma que
-//     o container está genuinamente visível (display != 'none')
-//     antes de chamar grecaptcha.render(). Elimina a possibilidade
-//     de render em container oculto que criava widgets 0×0.
-//
-//  2. Verificação pós-render via _verifyCaptchaRender (600ms após):
-//     confirma que o iframe tem dimensões reais e aciona retry
-//     automático se necessário.
-//
-//  3. Container limpo ANTES do render: evita conflito com qualquer
-//     DOM residual de renders anteriores falhos.
-//
-//  4. Re-verificação dentro do callback grecaptcha.ready():
-//     o container pode ter mudado entre o agendamento e a execução
-//     do callback. Verificamos novamente antes de renderizar.
-// ═══════════════════════════════════════════════════════════════
-function _renderCaptchaWidget() {
-    // Widget já existe e está válido — não duplicar
-    if (_captchaWidgetId !== null) return;
-
-    // API ainda não carregou — registra pendência e aguarda __grOnLoad
     if (typeof grecaptcha === 'undefined') {
-        console.warn('[reCAPTCHA] API não carregada ainda — aguardando __grOnLoad');
-        window.__grPendingRender = _renderCaptchaWidget;
+        console.warn(`[reCAPTCHA:${containerId}] API não carregada — aguardando`);
+        if (containerId === 'captchaContainer') window.__grPendingRender = () => _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidgetId, getRenderAttempt, setRenderAttempt);
         return;
     }
 
-    const el = document.getElementById('captchaContainer');
-    if (!el) {
-        console.error('[reCAPTCHA] #captchaContainer não encontrado no DOM');
-        return;
-    }
+    const el = document.getElementById(containerId);
+    if (!el) { console.error(`[reCAPTCHA] #${containerId} não encontrado`); return; }
 
-    // [FIX-CAPTCHA-V6-1] Verificação de computed style ANTES do render.
-    // getComputedStyle reflete o valor REAL aplicado pelo browser,
-    // incluindo cascata de todas as regras CSS. Se o container estiver
-    // oculto por qualquer motivo (bug de classe, timing, etc.), o
-    // grecaptcha.render() produziria um widget invisível (0×0).
-    // Neste caso, a função retorna sem renderizar e o showCaptcha()
-    // garantirá que o container seja visível antes da próxima tentativa.
     const computedDisplay = window.getComputedStyle(el).display;
     if (computedDisplay === 'none') {
-        console.warn('[reCAPTCHA] Container está oculto (display:none) no momento do render. Aguardando showCaptcha() torná-lo visível.');
+        console.warn(`[reCAPTCHA:${containerId}] Container oculto no momento do render`);
         return;
     }
 
     const container = el.querySelector('.g-recaptcha');
-    if (!container) {
-        console.error('[reCAPTCHA] .g-recaptcha não encontrado dentro do #captchaContainer');
-        return;
-    }
+    if (!container) { console.error(`[reCAPTCHA] .g-recaptcha não encontrado em #${containerId}`); return; }
 
-    // [FIX-CAPTCHA-V6-3] Limpa qualquer DOM residual antes de renderizar.
-    // Garante que o grecaptcha.render() começa com container vazio.
-    while (container.firstChild) {
-        container.removeChild(container.firstChild);
-    }
-
-    console.log('[reCAPTCHA] Iniciando render (tentativa ' + (_captchaRenderAttempt + 1) + ')...');
+    while (container.firstChild) container.removeChild(container.firstChild);
 
     try {
         grecaptcha.ready(() => {
-            // Guard: outro caminho pode ter setado o ID enquanto este callback aguardava
-            if (_captchaWidgetId !== null) return;
+            if (getWidgetId() !== null) return;
 
-            // [FIX-CAPTCHA-V6-4] Re-verificação dentro do callback.
-            // O tempo entre _renderCaptchaWidget() e o callback ready() pode
-            // ser suficiente para o usuário navegar para outra tela.
-            const currentEl = document.getElementById('captchaContainer');
+            const currentEl = document.getElementById(containerId);
             if (!currentEl) return;
-
-            const currentDisplay = window.getComputedStyle(currentEl).display;
-            if (currentDisplay === 'none') {
-                console.warn('[reCAPTCHA] Container ficou oculto antes do callback ready() — cancelando render');
-                return;
-            }
-
+            if (window.getComputedStyle(currentEl).display === 'none') return;
             const currentContainer = currentEl.querySelector('.g-recaptcha');
             if (!currentContainer) return;
 
             try {
-                _captchaWidgetId = grecaptcha.render(currentContainer, {
+                const widgetId = grecaptcha.render(currentContainer, {
                     sitekey:            CONFIG.CAPTCHA_SITE_KEY,
-                    callback:           'onCaptchaResolved',
-                    'expired-callback': 'onCaptchaExpired',
-                    'error-callback':   'onCaptchaError',
+                    callback:           callbacks.resolved,
+                    'expired-callback': callbacks.expired,
+                    'error-callback':   callbacks.error,
                     theme:              'dark',
                 });
-                console.log('[reCAPTCHA] grecaptcha.render() concluído. widgetId:', _captchaWidgetId);
+                setWidgetId(widgetId);
+                console.log(`[reCAPTCHA:${containerId}] Renderizado. widgetId:`, widgetId);
 
-                // [FIX-CAPTCHA-V6-2] Verificação pós-render após 600ms.
-                // Tempo suficiente para o browser finalizar o layout do iframe.
-                setTimeout(_verifyCaptchaRender, 600);
+                setTimeout(() => {
+                    const iframe = currentContainer.querySelector('iframe');
+                    if (!iframe || iframe.offsetWidth === 0) {
+                        console.warn(`[reCAPTCHA:${containerId}] Iframe 0x0 — tentando novamente`);
+                        while (currentContainer.firstChild) currentContainer.removeChild(currentContainer.firstChild);
+                        setWidgetId(null);
+                        const attempt = getRenderAttempt() + 1;
+                        setRenderAttempt(attempt);
+                        if (attempt <= _CAPTCHA_MAX_RENDER_ATTEMPTS) {
+                            setTimeout(() => _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidgetId, getRenderAttempt, setRenderAttempt), attempt * 500);
+                        }
+                    }
+                }, 600);
 
-            } catch (renderErr) {
-                console.error('[reCAPTCHA] grecaptcha.render() lançou exceção:', renderErr);
-
-                // Limpa o container que pode ter ficado em estado parcial
-                while (currentContainer.firstChild) {
-                    currentContainer.removeChild(currentContainer.firstChild);
+            } catch (err) {
+                console.error(`[reCAPTCHA:${containerId}] render() falhou:`, err);
+                setWidgetId(null);
+                const attempt = getRenderAttempt() + 1;
+                setRenderAttempt(attempt);
+                if (attempt <= _CAPTCHA_MAX_RENDER_ATTEMPTS) {
+                    setTimeout(() => _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidgetId, getRenderAttempt, setRenderAttempt), attempt * 500);
                 }
-
-                _captchaWidgetId = null;
-                _scheduleRenderRetry();
             }
         });
-    } catch (readyErr) {
-        console.error('[reCAPTCHA] grecaptcha.ready() lançou exceção:', readyErr);
-        // Fallback: registra pendência para __grOnLoad
-        window.__grPendingRender = _renderCaptchaWidget;
+    } catch (err) {
+        console.error(`[reCAPTCHA:${containerId}] ready() falhou:`, err);
     }
 }
 
+// ── Captcha do login ──────────────────────────────────────────
+function _renderLoginCaptcha() {
+    _renderCaptchaInContainer(
+        'captchaContainer',
+        { resolved: 'onLoginCaptchaResolved', expired: 'onLoginCaptchaExpired', error: 'onLoginCaptchaError' },
+        () => _loginCaptchaWidgetId,
+        (id) => { _loginCaptchaWidgetId = id; },
+        () => _loginCaptchaRenderAttempt,
+        (n) => { _loginCaptchaRenderAttempt = n; },
+    );
+}
+
+// ── Captcha da tela de código ─────────────────────────────────
+function _renderCodeCaptcha() {
+    _renderCaptchaInContainer(
+        'codeCaptchaContainer',
+        { resolved: 'onCodeCaptchaResolved', expired: 'onCodeCaptchaExpired', error: 'onCodeCaptchaError' },
+        () => _codeCaptchaWidgetId,
+        (id) => { _codeCaptchaWidgetId = id; },
+        () => _codeCaptchaRenderAttempt,
+        (n) => { _codeCaptchaRenderAttempt = n; },
+    );
+}
+
 // ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — EXIBIR
-//
-//  [FIX-CAPTCHA-V6] Versão definitiva.
-//
-//  Fluxo simplificado em relação às versões anteriores:
-//  1. Garante ausência de inline style residual.
-//  2. Alterna as classes de visibilidade (remove hidden, adiciona visible).
-//  3. Ativa o estado do captcha.
-//  4. Se já existe um widget (_captchaWidgetId != null), verifica se
-//     ele está realmente visível. Se não, limpa e reseta para forçar
-//     novo render.
-//  5. Agenda render com 100ms de delay — tempo suficiente para o
-//     browser processar a mudança de classe e reflowiar o layout,
-//     garantindo que getComputedStyle dentro de _renderCaptchaWidget
-//     retornará display:flex (não display:none).
-//
-//  MOTIVO DO DELAY DE 100MS (vs. 50ms anterior):
-//  O browser aplica estilos de forma assíncrona ao event loop.
-//  50ms nem sempre era suficiente em browsers lentos ou mobile.
-//  100ms garante margem confortável sem impactar a UX.
-//
-//  NOTA: void el.offsetHeight (força de reflow) foi REMOVIDO.
-//  Era executado ANTES de adicionar captcha-visible, portanto
-//  forçava reflow em elemento ainda oculto — completamente inútil
-//  e potencialmente confuso. O delay de 100ms substitui com mais
-//  confiabilidade.
+//  CAPTCHA — SHOW / HIDE
 // ═══════════════════════════════════════════════════════════════
-function showCaptcha() {
-    const el = document.getElementById('captchaContainer');
+function _showCaptchaContainer(containerId, captchaState, renderFn, getWidgetId, setWidgetId) {
+    const el = document.getElementById(containerId);
     if (!el) return;
-
-    // Remove qualquer inline style residual que possa interferir com as classes
     el.style.display = '';
-
-    // Alterna classes: remove hidden, adiciona visible.
-    // Com [FIX-CSS-12], não há seletor de ID definindo display,
-    // então captcha-visible (display:flex) vence sem conflito.
     el.classList.remove('captcha-hidden');
     el.classList.add('captcha-visible');
+    captchaState.activate();
 
-    // Ativa o estado para que onCaptchaResolved processe tokens
-    CaptchaState.activate();
-
-    // Verifica se existe um widget anterior inválido (sem iframe ou com 0×0)
-    if (_captchaWidgetId !== null) {
+    if (getWidgetId() !== null) {
         const container = el.querySelector('.g-recaptcha');
         const iframe    = container ? container.querySelector('iframe') : null;
-        const isInvalidWidget = !iframe || iframe.offsetWidth === 0 || iframe.offsetHeight === 0;
-
-        if (isInvalidWidget) {
-            console.warn('[reCAPTCHA] showCaptcha: widget anterior inválido detectado. Limpando para forçar novo render...');
-
-            try {
-                if (typeof grecaptcha !== 'undefined') {
-                    grecaptcha.reset(_captchaWidgetId);
-                }
-            } catch { /* ignora — widget pode estar corrompido */ }
-
-            if (container) {
-                while (container.firstChild) {
-                    container.removeChild(container.firstChild);
-                }
-            }
-
-            _captchaWidgetId = null;
+        if (!iframe || iframe.offsetWidth === 0) {
+            try { if (typeof grecaptcha !== 'undefined') grecaptcha.reset(getWidgetId()); } catch {}
+            if (container) while (container.firstChild) container.removeChild(container.firstChild);
+            setWidgetId(null);
         }
     }
 
-    // Se o widget já existe e é válido, não precisa renderizar novamente
-    if (_captchaWidgetId !== null) return;
-
-    // Reseta o contador de tentativas para esta exibição
-    _captchaRenderAttempt = 0;
-
-    // Agenda o render com 100ms de delay para garantir que o browser
-    // processou a mudança de classe e o container está genuinamente visível
-    setTimeout(_renderCaptchaWidget, 100);
+    if (getWidgetId() !== null) return;
+    setTimeout(renderFn, 100);
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  CAPTCHA — OCULTAR
-// ═══════════════════════════════════════════════════════════════
-function hideCaptcha() {
-    const el = document.getElementById('captchaContainer');
+function _hideCaptchaContainer(containerId, captchaState) {
+    const el = document.getElementById(containerId);
     if (!el) return;
     el.style.display = '';
     el.classList.remove('captcha-visible');
     el.classList.add('captcha-hidden');
-    CaptchaState.deactivate();
+    captchaState.deactivate();
 }
 
-function highlightCaptcha() {
+function showLoginCaptcha() {
+    _showCaptchaContainer(
+        'captchaContainer', LoginCaptchaState, _renderLoginCaptcha,
+        () => _loginCaptchaWidgetId, (id) => { _loginCaptchaWidgetId = id; },
+    );
+}
+function hideLoginCaptcha() { _hideCaptchaContainer('captchaContainer', LoginCaptchaState); }
+function highlightLoginCaptcha() {
     const el = document.getElementById('captchaContainer');
     if (!el) return;
     el.classList.add('captcha-error');
     setTimeout(() => el.classList.remove('captcha-error'), 2000);
 }
 
+function showCodeCaptcha() {
+    _showCaptchaContainer(
+        'codeCaptchaContainer', CodeCaptchaState, _renderCodeCaptcha,
+        () => _codeCaptchaWidgetId, (id) => { _codeCaptchaWidgetId = id; },
+    );
+}
+function hideCodeCaptcha() { _hideCaptchaContainer('codeCaptchaContainer', CodeCaptchaState); }
+function highlightCodeCaptcha() {
+    const el = document.getElementById('codeCaptchaContainer');
+    if (!el) return;
+    el.classList.add('captcha-error');
+    setTimeout(() => el.classList.remove('captcha-error'), 2000);
+}
+
 // ═══════════════════════════════════════════════════════════════
-//  VALIDAÇÃO DO CAPTCHA NO BACKEND
+//  VERIFICAÇÃO DE CAPTCHA NO BACKEND (para o login)
 // ═══════════════════════════════════════════════════════════════
-async function validateCaptchaOnBackend(token) {
-    if (!token || typeof token !== 'string' || token.trim().length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) {
-        return false;
-    }
+async function validateLoginCaptchaOnBackend(token) {
+    if (!token || typeof token !== 'string' || token.trim().length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) return false;
     try {
         const response = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/verify-recaptcha`, {
             method:  'POST',
@@ -729,7 +533,7 @@ async function validateCaptchaOnBackend(token) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  VERIFICAÇÃO DE ACESSO — SEM ENUMERAÇÃO DE EMAIL
+//  VERIFICAÇÃO DE ACESSO
 // ═══════════════════════════════════════════════════════════════
 async function checkUserAccess() {
     try {
@@ -737,14 +541,11 @@ async function checkUserAccess() {
         if (!session?.user?.id || !session?.access_token) return { hasAccess: false };
 
         const authHeader = await _requireSessionHeader();
-        const response   = await fetch(
-            `${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
-                body: JSON.stringify({ user_id: session.user.id }),
-            }
-        );
+        const response   = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+            body: JSON.stringify({ user_id: session.user.id }),
+        });
         if (!response.ok) return { hasAccess: false };
         const result = await response.json();
         return { hasAccess: result?.hasAccess === true };
@@ -754,92 +555,96 @@ async function checkUserAccess() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  INICIALIZAÇÃO
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+
+    // Estado inicial dos captchas
+    ['captchaContainer', 'codeCaptchaContainer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.style.display = '';
+            el.classList.remove('captcha-visible');
+            el.classList.add('captcha-hidden');
+        }
+    });
+
+    Object.values(buttons).forEach(btn => {
+        if (btn instanceof HTMLElement) _captureButtonHTML(btn);
+    });
+
+    // Sessão existente → dashboard
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) { window.location.replace('dashboard.html'); return; }
+    } catch {}
+
+    // Exibe captcha se já havia tentativas suficientes
+    if (LoginAttempts.get() >= CONFIG.MAX_LOGIN_ATTEMPTS_BEFORE_CAPTCHA) showLoginCaptcha();
+    if (CodeAttempts.get()  >= CONFIG.MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA)  showCodeCaptcha();
+
+    createMoneyParticles();
+    createAnimatedCharts();
+
+    const authError = sessionStorage.getItem('auth_error');
+    if (authError) {
+        showAuthMessage(sanitizeText(authError), 'error');
+        sessionStorage.removeItem('auth_error');
+    }
+
+    _registerKeyboardShortcuts();
+});
+
+// ═══════════════════════════════════════════════════════════════
 //  FORMULÁRIO DE LOGIN
 //
-//  [FIX-BUG-1] ZERO validação de formato ou tamanho de senha.
-//  A tela de LOGIN não valida comprimento, complexidade ou qualquer
-//  outro atributo da senha além de "está vazia?". Qualquer senha
-//  não-vazia vai diretamente ao Supabase para autenticação.
-//
-//  Motivo: validar a senha localmente no login:
-//    (a) Vaza informação sobre a senha real do usuário para atacantes
-//    (b) Exibe mensagem diferente da genérica, quebrando uniformidade
-//    (c) Faria early return sem chamar _registerFailedAttempt(),
-//        impedindo que o captcha apareça após 3 tentativas
-//
-//  [FIX-BUG-2] TODA falha conta como tentativa. Sem exceções:
-//    - Email vazio        → conta + LOGIN_ERROR_MSG
-//    - Email inválido     → conta + LOGIN_ERROR_MSG
-//    - Senha vazia        → conta + LOGIN_ERROR_MSG
-//    - Senha qualquer     → Supabase → se erro → conta + LOGIN_ERROR_MSG
-//    - Erro de rede       → NÃO conta (evita penalizar falha de infra)
-//
-//  Fluxo garantido:
-//    Tentativa 1 → LOGIN_ERROR_MSG
-//    Tentativa 2 → LOGIN_ERROR_MSG
-//    Tentativa 3 → LOGIN_ERROR_MSG + captcha aparece
-//    Tentativa 4+ → captcha obrigatório antes de submeter
+//  [FIX-LOGIN-1] Zero validação de formato/tamanho de senha.
+//  [FIX-LOGIN-2] Toda falha conta como tentativa (exceto rede).
 // ═══════════════════════════════════════════════════════════════
-
-// Helper: contabiliza tentativa e mostra captcha se necessário.
-// Deve ser chamado em TODA falha de autenticação, sem exceção.
-function _registerFailedAttempt() {
+function _registerFailedLoginAttempt() {
     LoginAttempts.inc();
-    const current = LoginAttempts.get();
-    console.log('[GranaEvo] Tentativas de login: ' + current + '/' + CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA);
-    if (current >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
-        showCaptcha();
-    }
+    if (LoginAttempts.get() >= CONFIG.MAX_LOGIN_ATTEMPTS_BEFORE_CAPTCHA) showLoginCaptcha();
 }
 
 loginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    // Proteção contra flood de submissões (10 por minuto)
     if (!SubmitRateLimiter.isAllowed()) {
         showAuthMessage('Muitas tentativas em pouco tempo. Aguarde um momento.', 'error');
         return;
     }
 
     const email    = sanitizeText(inputs.loginEmail.value);
-    // NÃO aparar a senha — espaços podem ser parte de uma senha válida
-    const password = inputs.loginPassword.value;
+    const password = inputs.loginPassword.value; // NÃO apara — espaços são válidos em senha
 
-    // [FIX-BUG-1+2] Email vazio ou inválido → mensagem genérica + conta tentativa.
-    // Sem retorno sem contabilizar. Sem mensagem específica que revele o problema.
     if (!email || !isValidEmail(email)) {
         inputs.loginPassword.value = '';
-        _registerFailedAttempt();
+        _registerFailedLoginAttempt();
         showAuthMessage(LOGIN_ERROR_MSG, 'error');
         shakeInput(inputs.loginEmail);
         shakeInput(inputs.loginPassword);
         return;
     }
 
-    // [FIX-BUG-1+2] Senha vazia → mensagem genérica + conta tentativa.
-    // APENAS verificamos se está vazia. NENHUMA validação de tamanho,
-    // complexidade ou qualquer outro critério. Senha não-vazia vai ao Supabase.
     if (!password) {
-        _registerFailedAttempt();
+        _registerFailedLoginAttempt();
         showAuthMessage(LOGIN_ERROR_MSG, 'error');
         shakeInput(inputs.loginPassword);
         return;
     }
 
-    // Verifica captcha se limite de tentativas foi atingido
-    const currentAttempts = LoginAttempts.get();
-    if (currentAttempts >= CONFIG.MAX_ATTEMPTS_BEFORE_CAPTCHA) {
-        if (!CaptchaState.isResolved()) {
+    // Captcha obrigatório após N tentativas
+    if (LoginAttempts.get() >= CONFIG.MAX_LOGIN_ATTEMPTS_BEFORE_CAPTCHA) {
+        if (!LoginCaptchaState.isResolved()) {
             showAuthMessage('Por favor, resolva a verificação de segurança.', 'error');
-            highlightCaptcha();
+            highlightLoginCaptcha();
             return;
         }
-
         showAuthMessage('Verificando segurança...', 'info');
-        const captchaValid = await validateCaptchaOnBackend(CaptchaState.getToken());
+        const captchaValid = await validateLoginCaptchaOnBackend(LoginCaptchaState.getToken());
         if (!captchaValid) {
             showAuthMessage('Falha na verificação de segurança. Tente novamente.', 'error');
-            CaptchaState.reset();
+            LoginCaptchaState.reset();
             return;
         }
     }
@@ -852,13 +657,8 @@ loginForm?.addEventListener('submit', async (e) => {
 
         if (error) {
             inputs.loginPassword.value = '';
-            CaptchaState.reset();
-
-            // [FIX-BUG-2] Erro do Supabase também conta como tentativa.
-            // Não importa o motivo: usuário inexistente, senha errada,
-            // conta desativada — tudo registra a tentativa.
-            _registerFailedAttempt();
-
+            LoginCaptchaState.reset();
+            _registerFailedLoginAttempt();
             showAuthMessage(LOGIN_ERROR_MSG, 'error');
             shakeInput(inputs.loginEmail);
             shakeInput(inputs.loginPassword);
@@ -867,8 +667,8 @@ loginForm?.addEventListener('submit', async (e) => {
 
         // Login bem-sucedido
         LoginAttempts.reset();
-        CaptchaState.reset();
-        hideCaptcha();
+        LoginCaptchaState.reset();
+        hideLoginCaptcha();
 
         setButtonLoading(submitBtn, 'Verificando plano...');
         const { hasAccess } = await checkUserAccess();
@@ -888,8 +688,7 @@ loginForm?.addEventListener('submit', async (e) => {
         setTimeout(() => window.location.replace('dashboard.html'), 1500);
 
     } catch {
-        // Erro de rede/conexão — NÃO conta como tentativa de login.
-        // O usuário não deve ser penalizado por falha de infraestrutura.
+        // Erro de rede — não penaliza o usuário
         showAuthMessage('Erro de conexão. Verifique sua internet e tente novamente.', 'error');
     } finally {
         restoreButton(submitBtn);
@@ -916,7 +715,6 @@ function switchScreen(currentScreen, nextScreen) {
         s.classList.remove('active', 'exit-left');
         s.setAttribute('aria-hidden', 'true');
     });
-
     if (currentScreen) {
         currentScreen.classList.add('exit-left');
         setTimeout(() => {
@@ -947,6 +745,11 @@ if (buttons.backToLogin) {
 
 // ═══════════════════════════════════════════════════════════════
 //  ENVIAR CÓDIGO DE RECUPERAÇÃO
+//
+//  [FIX-EMAIL-1] Resposta 'not_found' agora exibe erro claro ao
+//  usuário — o endpoint não enum era o email (só retorna sent ou
+//  not_found/payment_not_approved). Exibir 'email não encontrado'
+//  é uma decisão de UX do produto, aceita aqui.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.sendCode) {
     buttons.sendCode.addEventListener('click', async () => {
@@ -955,12 +758,14 @@ if (buttons.sendCode) {
         if (!email || !isValidEmail(email)) {
             inputs.recoveryEmail?.classList.add('input-error-border');
             setTimeout(() => inputs.recoveryEmail?.classList.remove('input-error-border'), 2000);
+            shakeInput(inputs.recoveryEmail);
             showAuthMessage('Digite um email válido.', 'error');
             return;
         }
 
         if (Cooldown.isActive(CONFIG.KEYS.sendCooldown)) {
-            showAuthMessage('Aguarde antes de solicitar um novo código.', 'error');
+            const remaining = Cooldown.remaining(CONFIG.KEYS.sendCooldown);
+            showAuthMessage(`Aguarde ${remaining}s antes de solicitar um novo código.`, 'error');
             return;
         }
 
@@ -976,21 +781,33 @@ if (buttons.sendCode) {
                 }
             );
 
-            if (!response.ok) { showAuthMessage('Erro de conexão. Tente novamente.', 'error'); return; }
+            if (!response.ok) {
+                showAuthMessage('Erro de conexão. Tente novamente.', 'error');
+                return;
+            }
 
             const result = await response.json();
 
             if (result.status === 'sent') {
                 RecoveryState.setEmail(email);
+                CodeAttempts.reset();        // zera tentativas ao enviar novo código
                 Cooldown.set(CONFIG.KEYS.sendCooldown, CONFIG.SEND_CODE_COOLDOWN_MS);
                 showAuthMessage('Código enviado! Verifique seu email.', 'success');
                 switchScreen(screens.forgotEmail, screens.code);
                 setTimeout(() => inputs.codeInputs[0]?.focus(), 520);
-            } else if (result.status === 'not_found' || result.status === 'payment_not_approved') {
-                showAuthMessage('Se o email estiver cadastrado com plano ativo, você receberá o código.', 'info');
+
+            } else if (result.status === 'not_found') {
+                // [FIX-EMAIL-1] Email não cadastrado — informa o usuário claramente
+                shakeInput(inputs.recoveryEmail);
+                showAuthMessage('Email não encontrado. Verifique o endereço digitado.', 'error');
+
+            } else if (result.status === 'payment_not_approved') {
+                showAuthMessage('Seu plano não está ativo. Confira seus planos.', 'error');
+
             } else {
                 showAuthMessage('Não foi possível enviar o código. Tente novamente.', 'error');
             }
+
         } catch {
             showAuthMessage('Erro de conexão. Tente novamente.', 'error');
         } finally {
@@ -1002,25 +819,117 @@ if (buttons.sendCode) {
 if (buttons.backToEmail) {
     buttons.backToEmail.addEventListener('click', () => {
         resetCodeInputs();
+        hideCodeCaptcha();
+        CodeAttempts.reset();
         switchScreen(screens.code, screens.forgotEmail);
     });
 }
 
 // ═══════════════════════════════════════════════════════════════
 //  VERIFICAR CÓDIGO
+//
+//  [FIX-CODE-1] Agora chama o backend com action='verify_code'.
+//  O código NÃO é armazenado localmente até ser validado.
+//  [FIX-CODE-2] Após MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA erros,
+//  exibe CAPTCHA obrigatório. O token é enviado junto à requisição
+//  e verificado pelo backend.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.verifyCode) {
-    buttons.verifyCode.addEventListener('click', () => {
+    buttons.verifyCode.addEventListener('click', async () => {
         const code = Array.from(inputs.codeInputs).map(i => i.value).join('');
 
         if (code.length !== 6 || !/^\d{6}$/.test(code)) {
             showAuthMessage('Digite o código completo de 6 dígitos.', 'error');
+            Array.from(inputs.codeInputs).forEach(i => shakeInput(i));
             return;
         }
 
-        RecoveryState.setCode(code);
-        switchScreen(screens.code, screens.newPassword);
-        setTimeout(() => inputs.newPassword?.focus(), 520);
+        if (!RecoveryState.hasEmail()) {
+            showAuthMessage('Sessão expirada. Volte e informe seu email novamente.', 'error');
+            return;
+        }
+
+        // Verifica se CAPTCHA é necessário
+        const codeAttempts = CodeAttempts.get();
+        if (codeAttempts >= CONFIG.MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA) {
+            if (!CodeCaptchaState.isResolved()) {
+                showAuthMessage('Por favor, resolva a verificação de segurança.', 'error');
+                showCodeCaptcha();
+                highlightCodeCaptcha();
+                return;
+            }
+        }
+
+        setButtonLoading(buttons.verifyCode, 'Verificando...');
+
+        try {
+            const body = {
+                action: 'verify_code',
+                email:  RecoveryState.getEmail(),
+                code,
+                ...(CodeCaptchaState.getToken() ? { captchaToken: CodeCaptchaState.getToken() } : {}),
+            };
+
+            const response = await fetch(
+                `${CONFIG.SUPABASE_URL}/functions/v1/verify-and-reset-password`,
+                {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+                    body: JSON.stringify(body),
+                }
+            );
+
+            if (!response.ok) {
+                showAuthMessage('Erro de conexão. Tente novamente.', 'error');
+                return;
+            }
+
+            const result = await response.json();
+
+            if (result.status === 'code_valid') {
+                // Código correto — armazena e avança
+                RecoveryState.setCode(code);
+                CodeAttempts.reset();
+                CodeCaptchaState.reset();
+                hideCodeCaptcha();
+                switchScreen(screens.code, screens.newPassword);
+                setTimeout(() => inputs.newPassword?.focus(), 520);
+
+            } else if (result.status === 'captcha_required') {
+                // Backend exige CAPTCHA (tentativas >= limiar)
+                showCodeCaptcha();
+                CodeCaptchaState.reset();
+                showAuthMessage('Por favor, resolva a verificação de segurança.', 'error');
+
+            } else if (result.status === 'invalid_code') {
+                // Código errado — incrementa localmente e sincroniza com backend
+                CodeAttempts.set(result.attempts ?? CodeAttempts.get() + 1);
+                resetCodeInputs();
+                inputs.codeInputs[0]?.focus();
+
+                if (result.captcha_required || CodeAttempts.get() >= CONFIG.MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA) {
+                    showCodeCaptcha();
+                    CodeCaptchaState.reset();
+                    showAuthMessage('Código incorreto. Resolva a verificação de segurança para continuar.', 'error');
+                } else {
+                    const remaining = CONFIG.MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA - CodeAttempts.get();
+                    showAuthMessage(
+                        remaining > 0
+                            ? `Código incorreto. Mais ${remaining} tentativa${remaining > 1 ? 's' : ''} antes da verificação de segurança.`
+                            : 'Código incorreto.',
+                        'error',
+                    );
+                }
+
+            } else {
+                showAuthMessage('Erro ao verificar código. Tente novamente.', 'error');
+            }
+
+        } catch {
+            showAuthMessage('Erro de conexão. Tente novamente.', 'error');
+        } finally {
+            restoreButton(buttons.verifyCode);
+        }
     });
 }
 
@@ -1036,13 +945,10 @@ if (buttons.backToCode) {
 // ═══════════════════════════════════════════════════════════════
 //  ALTERAR SENHA
 //
-//  NOTA: validações de tamanho e formato são PERMITIDAS e
-//  NECESSÁRIAS aqui. Esta é a tela de CRIAÇÃO de nova senha,
-//  não de autenticação. O contexto é completamente diferente:
-//    - O usuário está DEFININDO uma senha nova
-//    - Ele PRECISA saber os requisitos para criá-la corretamente
-//    - Não há risco de enumeração (o email já foi verificado)
-//    - Não há captcha nesta tela (autenticação por código OTP)
+//  [FIX-RESET-1] Usa action='reset_password' para verificar o
+//  código novamente no backend antes de alterar a senha.
+//  Isso garante que ninguém pule a tela de verificação ou
+//  manipule o estado local para avançar indevidamente.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.changePassword) {
     buttons.changePassword.addEventListener('click', async () => {
@@ -1051,7 +957,10 @@ if (buttons.changePassword) {
 
         hideError();
 
-        if (!newPass || !confirmPass) { showError('Por favor, preencha todos os campos.'); return; }
+        if (!newPass || !confirmPass) {
+            showError('Por favor, preencha todos os campos.');
+            return;
+        }
 
         if (newPass.length < 8 || newPass.length > 128) {
             showError('A senha deve ter entre 8 e 128 caracteres.');
@@ -1076,19 +985,25 @@ if (buttons.changePassword) {
 
         if (!RecoveryState.isValid()) {
             showError('Sessão de recuperação expirada. Reinicie o processo.');
-            setTimeout(() => { _clearRecoveryState(); switchScreen(screens.newPassword, screens.login); }, 2000);
+            setTimeout(() => {
+                _clearRecoveryState();
+                switchScreen(screens.newPassword, screens.login);
+            }, 2000);
             return;
         }
 
         setButtonLoading(buttons.changePassword, 'Alterando...');
 
         try {
+            // [FIX-RESET-1] Envia action='reset_password' — o backend re-verifica
+            // o código e só então altera a senha. O código é marcado como usado.
             const response = await fetch(
                 `${CONFIG.SUPABASE_URL}/functions/v1/verify-and-reset-password`,
                 {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
                     body: JSON.stringify({
+                        action:      'reset_password',
                         email:       RecoveryState.getEmail(),
                         code:        RecoveryState.getCode(),
                         newPassword: newPass,
@@ -1102,13 +1017,19 @@ if (buttons.changePassword) {
 
             if (result.status === 'success') {
                 RecoveryState.clear();
+                CodeAttempts.reset();
                 switchScreen(screens.newPassword, screens.success);
+
             } else if (result.status === 'invalid_code') {
-                showError('Código inválido, expirado ou já utilizado.');
+                // Código expirou ou foi usado entre verify_code e reset_password
+                showError('Código expirado ou inválido. Por favor, solicite um novo código.');
                 RecoveryState.clearCode();
+                setTimeout(() => switchScreen(screens.newPassword, screens.code), 2500);
+
             } else {
                 showError('Não foi possível alterar a senha. Tente novamente.');
             }
+
         } catch {
             showError('Erro de conexão. Tente novamente.');
         } finally {
@@ -1131,13 +1052,14 @@ if (buttons.resendCode) {
     buttons.resendCode.addEventListener('click', async (e) => {
         e.preventDefault();
 
-        if (!RecoveryState.getEmail()) {
-            showAuthMessage('Email não encontrado. Volte e digite novamente.', 'error');
+        if (!RecoveryState.hasEmail()) {
+            showAuthMessage('Email não encontrado. Volte e informe seu email.', 'error');
             return;
         }
 
         if (Cooldown.isActive(CONFIG.KEYS.resendCooldown)) {
-            showAuthMessage('Aguarde antes de reenviar o código.', 'error');
+            const remaining = Cooldown.remaining(CONFIG.KEYS.resendCooldown);
+            showAuthMessage(`Aguarde ${remaining}s antes de reenviar.`, 'error');
             return;
         }
 
@@ -1161,6 +1083,11 @@ if (buttons.resendCode) {
             const result = await response.json();
 
             if (result.status === 'sent') {
+                // Zera tentativas e captcha ao enviar novo código
+                CodeAttempts.reset();
+                CodeCaptchaState.reset();
+                hideCodeCaptcha();
+
                 Cooldown.set(CONFIG.KEYS.resendCooldown, CONFIG.SEND_CODE_COOLDOWN_MS);
                 showAuthMessage('Novo código enviado!', 'success');
                 btn.textContent = 'Código enviado!';
@@ -1168,8 +1095,9 @@ if (buttons.resendCode) {
                 inputs.codeInputs[0]?.focus();
                 setTimeout(() => { btn.textContent = originalText; }, 3000);
             } else {
-                showAuthMessage('Erro ao reenviar o código.', 'error');
+                showAuthMessage('Erro ao reenviar o código. Tente novamente.', 'error');
             }
+
         } catch {
             showAuthMessage('Erro de conexão.', 'error');
         } finally {
@@ -1179,10 +1107,13 @@ if (buttons.resendCode) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  LIMPEZA DO ESTADO DE RECUPERAÇÃO
+//  LIMPAR ESTADO DE RECUPERAÇÃO
 // ═══════════════════════════════════════════════════════════════
 function _clearRecoveryState() {
     RecoveryState.clear();
+    CodeAttempts.reset();
+    CodeCaptchaState.reset();
+    hideCodeCaptcha();
     if (inputs.recoveryEmail)   inputs.recoveryEmail.value   = '';
     if (inputs.newPassword)     inputs.newPassword.value     = '';
     if (inputs.confirmPassword) inputs.confirmPassword.value = '';
@@ -1191,20 +1122,18 @@ function _clearRecoveryState() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  INPUTS DE CÓDIGO DE VERIFICAÇÃO
+//  INPUTS DE CÓDIGO
 // ═══════════════════════════════════════════════════════════════
 inputs.codeInputs.forEach((input, index) => {
     input.addEventListener('input', (e) => {
         const value = e.target.value.replace(/[^0-9]/g, '');
         e.target.value = value;
-
         if (value.length === 1) {
             input.classList.add('filled');
             inputs.codeInputs[index + 1]?.focus();
         } else {
             input.classList.remove('filled');
         }
-
         const allFilled = Array.from(inputs.codeInputs).every(i => i.value.length === 1);
         if (allFilled && buttons.verifyCode) {
             buttons.verifyCode.classList.add('btn-pulse');
@@ -1215,9 +1144,7 @@ inputs.codeInputs.forEach((input, index) => {
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace' && !input.value && index > 0) {
             const prev = inputs.codeInputs[index - 1];
-            prev.focus();
-            prev.value = '';
-            prev.classList.remove('filled');
+            prev.focus(); prev.value = ''; prev.classList.remove('filled');
         }
         if (e.key === 'Enter') buttons.verifyCode?.click();
     });
@@ -1248,8 +1175,7 @@ function resetCodeInputs() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PARTÍCULAS E GRÁFICOS ANIMADOS
-//  Inline styles: valores numéricos gerados em runtime.
+//  PARTÍCULAS E GRÁFICOS
 // ═══════════════════════════════════════════════════════════════
 function createMoneyParticles() {
     const container = document.getElementById('moneyParticles');
@@ -1258,13 +1184,13 @@ function createMoneyParticles() {
     for (let i = 0; i < CONFIG.moneyParticleCount; i++) {
         const particle = document.createElement('div');
         particle.classList.add('money-particle');
-        particle.textContent              = symbols[Math.floor(Math.random() * symbols.length)];
-        particle.style.left               = `${Math.random() * 100}%`;
-        particle.style.top                = `${Math.random() * 100}%`;
-        particle.style.fontSize           = `${Math.random() * 12 + 18}px`;
-        particle.style.animationDuration  = `${Math.random() * 10 + 15}s`;
-        particle.style.animationDelay     = `${Math.random() * 5}s`;
-        particle.style.color              = `rgba(16, 185, 129, ${Math.random() * 0.4 + 0.3})`;
+        particle.textContent             = symbols[Math.floor(Math.random() * symbols.length)];
+        particle.style.left              = `${Math.random() * 100}%`;
+        particle.style.top               = `${Math.random() * 100}%`;
+        particle.style.fontSize          = `${Math.random() * 12 + 18}px`;
+        particle.style.animationDuration = `${Math.random() * 10 + 15}s`;
+        particle.style.animationDelay    = `${Math.random() * 5}s`;
+        particle.style.color             = `rgba(16, 185, 129, ${Math.random() * 0.4 + 0.3})`;
         container.appendChild(particle);
     }
 }
@@ -1277,9 +1203,7 @@ function createAnimatedCharts() {
     for (let i = 0; i < CONFIG.chartLineCount; i++) {
         const path   = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         const points = [];
-        for (let j = 0; j <= 12; j++) {
-            points.push(`${(j / 12) * 100},${20 + Math.random() * 60}`);
-        }
+        for (let j = 0; j <= 12; j++) points.push(`${(j / 12) * 100},${20 + Math.random() * 60}`);
         path.classList.add('chart-line');
         path.setAttribute('d', `M ${points.join(' L ')}`);
         path.style.opacity           = String(Math.random() * 0.2 + 0.1);
@@ -1300,14 +1224,13 @@ function _registerKeyboardShortcuts() {
             inputs.loginPassword?.focus();
         }
     });
-
     inputs.newPassword?.addEventListener('keypress',     (e) => { if (e.key === 'Enter') inputs.confirmPassword?.focus(); });
     inputs.confirmPassword?.addEventListener('keypress', (e) => { if (e.key === 'Enter') buttons.changePassword?.click(); });
     inputs.recoveryEmail?.addEventListener('keypress',   (e) => { if (e.key === 'Enter') buttons.sendCode?.click(); });
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PARALLAX DO MOUSE — inline style necessário (valores dinâmicos)
+//  PARALLAX
 // ═══════════════════════════════════════════════════════════════
 let mouseX = 0, mouseY = 0, currentX = 0, currentY = 0;
 
@@ -1319,35 +1242,27 @@ document.addEventListener('mousemove', (e) => {
 function animateParallax() {
     currentX += (mouseX - currentX) * 0.08;
     currentY += (mouseY - currentY) * 0.08;
-
     const visual = document.querySelector('.financial-visual');
-    if (visual) {
-        visual.style.transform = `rotateY(${-8 + currentX * 8}deg) rotateX(${3 + currentY * 5}deg)`;
-    }
-
+    if (visual) visual.style.transform = `rotateY(${-8 + currentX * 8}deg) rotateX(${3 + currentY * 5}deg)`;
     document.querySelectorAll('.gradient-orb').forEach((orb, i) => {
         const speed = (i + 1) * 0.4;
         orb.style.transform = `translate(${currentX * speed * 25}px, ${currentY * speed * 25}px)`;
     });
-
     requestAnimationFrame(animateParallax);
 }
-
 animateParallax();
 
 // ═══════════════════════════════════════════════════════════════
-//  EFEITO DE RIPPLE NOS BOTÕES — inline style necessário (coords)
+//  RIPPLE
 // ═══════════════════════════════════════════════════════════════
 document.querySelectorAll('.btn-submit').forEach(button => {
     button.addEventListener('click', function (e) {
         const ripple = document.createElement('span');
         const rect   = this.getBoundingClientRect();
         const size   = Math.max(rect.width, rect.height);
-
         ripple.style.cssText = [
             'position:absolute',
-            `width:${size}px`,
-            `height:${size}px`,
+            `width:${size}px`, `height:${size}px`,
             'border-radius:50%',
             'background:rgba(255,255,255,0.25)',
             `left:${e.clientX - rect.left - size / 2}px`,
@@ -1355,7 +1270,6 @@ document.querySelectorAll('.btn-submit').forEach(button => {
             'pointer-events:none',
             'animation:ripple 0.6s ease-out forwards',
         ].join(';');
-
         this.style.position = 'relative';
         this.style.overflow = 'hidden';
         this.appendChild(ripple);
@@ -1364,7 +1278,7 @@ document.querySelectorAll('.btn-submit').forEach(button => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-//  FEEDBACK VISUAL NO CHECKBOX — usa .checkbox-custom-bounce (CSS)
+//  CHECKBOX BOUNCE
 // ═══════════════════════════════════════════════════════════════
 document.querySelector('.checkbox-wrapper')?.addEventListener('click', () => {
     const custom = document.querySelector('.checkbox-custom');
