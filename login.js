@@ -747,9 +747,13 @@ if (buttons.backToLogin) {
 // ═══════════════════════════════════════════════════════════════
 //  ENVIAR CÓDIGO DE RECUPERAÇÃO
 //
-//  [FIX-SEND-1] not_found e payment_not_approved exibem a mesma
-//  mensagem genérica "Email não cadastrado ou inexistente" e
-//  mantêm o usuário na tela de email — sem redirecionamento.
+//  [FIX-SEND-1] Os status not_found, payment_not_approved e
+//  payment_pending exibem a mesma mensagem genérica
+//  "Email não cadastrado ou inexistente" e MANTÊM o usuário
+//  na tela de email — sem redirecionamento algum.
+//
+//  [FIX-SEND-2] Qualquer status inesperado ou erro de resposta
+//  também mantém o usuário na tela de email com mensagem de erro.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.sendCode) {
     buttons.sendCode.addEventListener('click', async () => {
@@ -781,7 +785,9 @@ if (buttons.sendCode) {
                 }
             );
 
+            // [FIX-SEND-2] Resposta HTTP não-ok → permanece na tela de email
             if (!response.ok) {
+                shakeInput(inputs.recoveryEmail);
                 showAuthMessage('Erro de conexão. Tente novamente.', 'error');
                 return;
             }
@@ -789,6 +795,7 @@ if (buttons.sendCode) {
             const result = await response.json();
 
             if (result.status === 'sent') {
+                // Único caminho que avança para a tela de código
                 RecoveryState.setEmail(email);
                 CodeAttempts.reset();        // zera tentativas ao enviar novo código
                 Cooldown.set(CONFIG.KEYS.sendCooldown, CONFIG.SEND_CODE_COOLDOWN_MS);
@@ -796,16 +803,25 @@ if (buttons.sendCode) {
                 switchScreen(screens.forgotEmail, screens.code);
                 setTimeout(() => inputs.codeInputs[0]?.focus(), 520);
 
-            } else if (result.status === 'not_found' || result.status === 'payment_not_approved') {
-                // [FIX-SEND-1] Ambos os casos exibem mensagem genérica e ficam na tela de email
+            } else if (
+                result.status === 'not_found'          ||
+                result.status === 'payment_not_approved' ||
+                result.status === 'payment_pending'    ||
+                result.status === 'payment_required'
+            ) {
+                // [FIX-SEND-1] Todos esses casos: mensagem genérica, fica na tela de email
                 shakeInput(inputs.recoveryEmail);
                 showAuthMessage('Email não cadastrado ou inexistente.', 'error');
 
             } else {
+                // [FIX-SEND-2] Qualquer outro status inesperado: fica na tela de email
+                shakeInput(inputs.recoveryEmail);
                 showAuthMessage('Não foi possível enviar o código. Tente novamente.', 'error');
             }
 
         } catch {
+            // Erro de rede: fica na tela de email
+            shakeInput(inputs.recoveryEmail);
             showAuthMessage('Erro de conexão. Tente novamente.', 'error');
         } finally {
             restoreButton(buttons.sendCode);
@@ -825,13 +841,15 @@ if (buttons.backToEmail) {
 // ═══════════════════════════════════════════════════════════════
 //  VERIFICAR CÓDIGO
 //
-//  [FIX-CODE-1] Agora chama o backend com action='verify_code'.
+//  [FIX-CODE-1] Chama o backend com action='verify_code'.
 //  O código NÃO é armazenado localmente até ser validado.
 //  [FIX-CODE-2] Após MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA erros,
 //  exibe CAPTCHA obrigatório. O token é enviado junto à requisição
 //  e verificado pelo backend.
-//  [FIX-CODE-3] Toda resposta de código errado exibe simplesmente
-//  "Código inválido." — sem revelar contagem de tentativas restantes.
+//  [FIX-CODE-3] Toda resposta de código errado exibe apenas
+//  "Código inválido." — sem revelar contagem de tentativas.
+//  [FIX-CODE-4] resetCodeInputs() é chamado APÓS showAuthMessage(),
+//  garantindo que a mensagem de erro apareça antes de limpar os campos.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.verifyCode) {
     buttons.verifyCode.addEventListener('click', async () => {
@@ -886,7 +904,7 @@ if (buttons.verifyCode) {
             const result = await response.json();
 
             if (result.status === 'code_valid') {
-                // Código correto — armazena e avança
+                // Código correto — armazena e avança para nova senha
                 RecoveryState.setCode(code);
                 CodeAttempts.reset();
                 CodeCaptchaState.reset();
@@ -898,20 +916,24 @@ if (buttons.verifyCode) {
                 // [FIX-CODE-3] Backend exige CAPTCHA — mostra o widget e mensagem padronizada
                 showCodeCaptcha();
                 CodeCaptchaState.reset();
+                // [FIX-CODE-4] Exibe mensagem ANTES de resetar os inputs
                 showAuthMessage('Código inválido.', 'error');
+                resetCodeInputs();
+                inputs.codeInputs[0]?.focus();
 
             } else if (result.status === 'invalid_code') {
                 // [FIX-CODE-3] Código errado — sempre exibe "Código inválido."
                 CodeAttempts.set(result.attempts ?? CodeAttempts.get() + 1);
-                resetCodeInputs();
-                inputs.codeInputs[0]?.focus();
 
                 if (result.captcha_required || CodeAttempts.get() >= CONFIG.MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA) {
                     showCodeCaptcha();
                     CodeCaptchaState.reset();
                 }
 
+                // [FIX-CODE-4] Exibe mensagem ANTES de resetar os inputs
                 showAuthMessage('Código inválido.', 'error');
+                resetCodeInputs();
+                inputs.codeInputs[0]?.focus();
 
             } else {
                 showAuthMessage('Erro ao verificar código. Tente novamente.', 'error');
