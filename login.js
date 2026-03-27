@@ -747,13 +747,24 @@ if (buttons.backToLogin) {
 // ═══════════════════════════════════════════════════════════════
 //  ENVIAR CÓDIGO DE RECUPERAÇÃO
 //
-//  [FIX-SEND-1] Os status not_found, payment_not_approved e
-//  payment_pending exibem a mesma mensagem genérica
-//  "Email não cadastrado ou inexistente" e MANTÊM o usuário
-//  na tela de email — sem redirecionamento algum.
+//  [FIX-SEND-DEFINITIVO] A raiz do bug era que send-password-reset-code
+//  retornava { status: 'sent' } para TODOS os emails (inclusive
+//  inválidos), como medida de segurança anti-enumeração no backend.
+//  Por isso, qualquer lógica de verificação no retorno dessa função
+//  nunca funcionaria — ela sempre retorna 'sent'.
 //
-//  [FIX-SEND-2] Qualquer status inesperado ou erro de resposta
-//  também mantém o usuário na tela de email com mensagem de erro.
+//  SOLUÇÃO: Antes de chamar send-password-reset-code, chamamos
+//  check-email-status, que retorna os status corretos (not_found,
+//  payment_pending, ready, password_exists).
+//  Somente se o email for válido e tiver subscription ativa com
+//  pagamento aprovado (status 'ready' ou 'password_exists') é que
+//  avançamos para enviar o código e redirecionar para a tela de código.
+//  Qualquer outro status mantém o usuário na tela de email com a
+//  mensagem "Email não cadastrado ou inexistente.".
+//
+//  [FIX-SEND-1] not_found, payment_pending, payment_not_approved e
+//  qualquer outro status não-válido: mensagem genérica, fica na tela.
+//  [FIX-SEND-2] Erros de rede ou resposta HTTP não-ok: fica na tela.
 // ═══════════════════════════════════════════════════════════════
 if (buttons.sendCode) {
     buttons.sendCode.addEventListener('click', async () => {
@@ -773,28 +784,92 @@ if (buttons.sendCode) {
             return;
         }
 
-        setButtonLoading(buttons.sendCode, 'Enviando...');
+        setButtonLoading(buttons.sendCode, 'Verificando...');
 
         try {
-            const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
-                {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
-                    body: JSON.stringify({ email }),
-                }
-            );
+            // ── ETAPA 1: Verificar se o email existe e tem pagamento aprovado ──
+            // [FIX-SEND-DEFINITIVO] Esta chamada é o gate de validação.
+            // check-email-status retorna status confiáveis (not_found,
+            // payment_pending, ready, password_exists) ao contrário de
+            // send-password-reset-code que sempre retorna 'sent'.
+            let checkResult;
+            try {
+                const checkResponse = await fetch(
+                    `${CONFIG.SUPABASE_URL}/functions/v1/check-email-status`,
+                    {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+                        body: JSON.stringify({ email }),
+                    }
+                );
 
-            // [FIX-SEND-2] Resposta HTTP não-ok → permanece na tela de email
-            if (!response.ok) {
+                // [FIX-SEND-2] Resposta HTTP não-ok → permanece na tela de email
+                if (!checkResponse.ok) {
+                    shakeInput(inputs.recoveryEmail);
+                    showAuthMessage('Erro de conexão. Tente novamente.', 'error');
+                    return;
+                }
+
+                checkResult = await checkResponse.json();
+            } catch {
+                // Erro de rede na verificação → permanece na tela de email
                 shakeInput(inputs.recoveryEmail);
                 showAuthMessage('Erro de conexão. Tente novamente.', 'error');
                 return;
             }
 
-            const result = await response.json();
+            // [FIX-SEND-1] Apenas 'ready' e 'password_exists' indicam email válido
+            // com subscription ativa e pagamento aprovado — qualquer outro status
+            // exibe mensagem genérica e mantém o usuário na tela de email.
+            //
+            // 'ready'           → email válido, pagamento OK, ainda não criou senha
+            // 'password_exists' → email válido, pagamento OK, senha já criada (recuperação normal)
+            // 'not_found'       → email não existe nas subscriptions
+            // 'payment_pending' → email existe mas pagamento não aprovado
+            // 'error'           → erro interno no backend
+            const emailIsValid = (
+                checkResult.status === 'ready' ||
+                checkResult.status === 'password_exists'
+            );
 
-            if (result.status === 'sent') {
+            if (!emailIsValid) {
+                // [FIX-SEND-1] Mensagem genérica — não revela se o email existe
+                // ou qual é o motivo da rejeição (anti-enumeração).
+                shakeInput(inputs.recoveryEmail);
+                showAuthMessage('Email não cadastrado ou inexistente.', 'error');
+                return;
+            }
+
+            // ── ETAPA 2: Email válido — agora sim envia o código ──────────────
+            setButtonLoading(buttons.sendCode, 'Enviando...');
+
+            let sendResult;
+            try {
+                const sendResponse = await fetch(
+                    `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
+                    {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+                        body: JSON.stringify({ email }),
+                    }
+                );
+
+                // [FIX-SEND-2] Resposta HTTP não-ok → permanece na tela de email
+                if (!sendResponse.ok) {
+                    shakeInput(inputs.recoveryEmail);
+                    showAuthMessage('Erro de conexão. Tente novamente.', 'error');
+                    return;
+                }
+
+                sendResult = await sendResponse.json();
+            } catch {
+                // Erro de rede no envio → permanece na tela de email
+                shakeInput(inputs.recoveryEmail);
+                showAuthMessage('Erro de conexão. Tente novamente.', 'error');
+                return;
+            }
+
+            if (sendResult.status === 'sent') {
                 // Único caminho que avança para a tela de código
                 RecoveryState.setEmail(email);
                 CodeAttempts.reset();        // zera tentativas ao enviar novo código
@@ -802,27 +877,12 @@ if (buttons.sendCode) {
                 showAuthMessage('Código enviado! Verifique seu email.', 'success');
                 switchScreen(screens.forgotEmail, screens.code);
                 setTimeout(() => inputs.codeInputs[0]?.focus(), 520);
-
-            } else if (
-                result.status === 'not_found'          ||
-                result.status === 'payment_not_approved' ||
-                result.status === 'payment_pending'    ||
-                result.status === 'payment_required'
-            ) {
-                // [FIX-SEND-1] Todos esses casos: mensagem genérica, fica na tela de email
-                shakeInput(inputs.recoveryEmail);
-                showAuthMessage('Email não cadastrado ou inexistente.', 'error');
-
             } else {
                 // [FIX-SEND-2] Qualquer outro status inesperado: fica na tela de email
                 shakeInput(inputs.recoveryEmail);
                 showAuthMessage('Não foi possível enviar o código. Tente novamente.', 'error');
             }
 
-        } catch {
-            // Erro de rede: fica na tela de email
-            shakeInput(inputs.recoveryEmail);
-            showAuthMessage('Erro de conexão. Tente novamente.', 'error');
         } finally {
             restoreButton(buttons.sendCode);
         }
