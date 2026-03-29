@@ -234,35 +234,39 @@
             </div>
 
             <nav class="sidebar-nav" aria-label="Seções do aplicativo">
-                <button class="nav-btn active" data-page="dashboard" type="button">
-                    <span class="nav-icon"><i class="fas fa-chart-line" aria-hidden="true"></i></span>
-                    <span class="nav-text">Dashboard</span>
-                </button>
-                <button class="nav-btn" data-page="transacoes" type="button">
-                    <span class="nav-icon"><i class="fas fa-credit-card" aria-hidden="true"></i></span>
-                    <span class="nav-text">Transações</span>
-                </button>
-                <button class="nav-btn" data-page="reservas" type="button">
-                    <span class="nav-icon"><i class="fas fa-bullseye" aria-hidden="true"></i></span>
-                    <span class="nav-text">Reservas</span>
-                </button>
-                <button class="nav-btn" data-page="cartoes" type="button">
-                    <span class="nav-icon"><i class="fas fa-gem" aria-hidden="true"></i></span>
-                    <span class="nav-text">Cartões</span>
-                </button>
-                <button class="nav-btn" data-page="graficos" type="button">
-                    <span class="nav-icon"><i class="fas fa-chart-bar" aria-hidden="true"></i></span>
-                    <span class="nav-text">Gráficos</span>
-                </button>
-                <button class="nav-btn" data-page="relatorios" type="button">
-                    <span class="nav-icon"><i class="fas fa-file-alt" aria-hidden="true"></i></span>
-                    <span class="nav-text">Relatórios</span>
-                </button>
-                <button class="nav-btn" data-page="configuracoes" type="button">
-                    <span class="nav-icon"><i class="fas fa-cog" aria-hidden="true"></i></span>
-                    <span class="nav-text">Configurações</span>
-                </button>
-            </nav>
+            <button class="nav-btn active" data-page="dashboard" data-tooltip="Dashboard" type="button">
+                <span class="nav-icon"><i class="fas fa-chart-line" aria-hidden="true"></i></span>
+                <span class="nav-text">Dashboard</span>
+            </button>
+            <button class="nav-btn" data-page="transacoes" data-tooltip="Transações" type="button">
+                <span class="nav-icon"><i class="fas fa-credit-card" aria-hidden="true"></i></span>
+                <span class="nav-text">Transações</span>
+            </button>
+            <button class="nav-btn" data-page="reservas" data-tooltip="Reservas" type="button">
+                <span class="nav-icon"><i class="fas fa-bullseye" aria-hidden="true"></i></span>
+                <span class="nav-text">Reservas</span>
+            </button>
+            <button class="nav-btn" data-page="cartoes" data-tooltip="Cartões" type="button">
+                <span class="nav-icon"><i class="fas fa-gem" aria-hidden="true"></i></span>
+                <span class="nav-text">Cartões</span>
+            </button>
+            <button class="nav-btn" data-page="graficos" data-tooltip="Gráficos" type="button">
+                <span class="nav-icon"><i class="fas fa-chart-bar" aria-hidden="true"></i></span>
+                <span class="nav-text">Gráficos</span>
+            </button>
+            <button class="nav-btn" data-page="relatorios" data-tooltip="Relatórios" type="button">
+                <span class="nav-icon"><i class="fas fa-file-alt" aria-hidden="true"></i></span>
+                <span class="nav-text">Relatórios</span>
+            </button>
+
+            <!-- Spacer empurra configurações para o fundo -->
+            <div class="sidebar-nav-spacer"></div>
+
+            <button class="nav-btn" data-page="configuracoes" data-tooltip="Configurações" type="button">
+                <span class="nav-icon"><i class="fas fa-cog" aria-hidden="true"></i></span>
+                <span class="nav-text">Configurações</span>
+            </button>
+        </nav>
         </aside>
 
         <!-- ========== MAIN CONTENT ========== -->
