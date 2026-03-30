@@ -129,37 +129,36 @@
          * <script> hasheado no final do <body> quando o SVG retorna 404.
          * CSS puro, sem data: URI, sem CDN externo.
          */
-        .user-photo-fallback {
+            .user-photo-fallback {
             display: none;
-            width: 80px; height: 80px;
+            width: clamp(36px, 3.5vw, 48px);
+            height: clamp(36px, 3.5vw, 48px);
+            min-width: clamp(36px, 3.5vw, 48px);
             border-radius: 50%;
-            background-color: #10b981;
+            background: linear-gradient(135deg, #10b981, #059669);
             color: #fff;
-            font-family: Arial, sans-serif;
-            font-size: 32px;
-            font-weight: bold;
+            font-family: 'DM Sans', Arial, sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            border: 2px solid var(--primary);
+            box-shadow: 0 4px 16px rgba(67, 160, 71, 0.35);
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .sidebar:hover .user-photo-fallback {
+            width: clamp(56px, 5vw, 72px);
+            height: clamp(56px, 5vw, 72px);
+            min-width: clamp(56px, 5vw, 72px);
+            font-size: 1.5rem;
+            box-shadow: 0 8px 28px rgba(67, 160, 71, 0.45);
         }
     </style>
 </head>
 <body>
-    <!--
-        ARQUIVO NECESSÁRIO: coloque o placeholder-user.svg em:
-          <raiz-do-site>/icon/placeholder-user.svg
-
-        Conteúdo do arquivo SVG:
-          <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
-            <circle cx="40" cy="40" r="40" fill="#10b981"/>
-            <text x="50%" y="50%" dominant-baseline="middle"
-                  text-anchor="middle" font-family="Arial, sans-serif"
-                  font-size="32" font-weight="bold" fill="white">U</text>
-          </svg>
-
-        Enquanto o arquivo não existir, o fallback CSS é exibido
-        automaticamente (círculo verde com "U").
-    -->
 
     <!-- LOADING DE AUTENTICAÇÃO -->
     <div class="auth-loading" id="authLoading">
@@ -202,21 +201,17 @@
             </div>
 
             <div class="sidebar-user">
-                <!--
-                    ✅ SEM onerror inline — atributos de evento HTML violam CSP script-src.
-                    O fallback é gerenciado pelo <script> hasheado no final do <body>.
-                -->
-                <img
-                    src="icon/placeholder-user.svg"
-                    alt="Foto de perfil"
-                    id="userPhoto"
-                    class="user-photo">
-
-                <!-- Visível apenas se a imagem falhar (controlado via JS hasheado) -->
-                <div
-                    id="userPhotoFallback"
-                    class="user-photo-fallback"
-                    aria-hidden="true">U</div>
+                <div class="user-photo-wrapper">
+                    <img
+                        src="icon/placeholder-user.svg"
+                        alt="Foto de perfil"
+                        id="userPhoto"
+                        class="user-photo">
+                    <div
+                        id="userPhotoFallback"
+                        class="user-photo-fallback"
+                        aria-hidden="true">U</div>
+                </div>
 
                 <div class="user-info">
                     <div class="user-name" id="userName">Usuário</div>
@@ -708,7 +703,7 @@
     <script type="module" src="dashboard.js?v=2"></script>
     <script type="module" src="chat-assistant.js?v=2"></script>
     <script src="graficos.js"></script>
-    <script>document.getElementById("userPhoto").addEventListener("error",function(){this.style.display="none";var f=document.getElementById("userPhotoFallback");if(f)f.style.display="flex";});</script>
+    <script>document.getElementById("userPhoto").addEventListener("error",function(){this.style.display="none";var f=document.getElementById("userPhotoFallback");if(f){f.style.display="flex";var n=(document.getElementById("userName")||{}).textContent||"U";f.textContent=n.trim().charAt(0).toUpperCase()||"U";}});</script>
 
 </body>
 </html>
