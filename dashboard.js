@@ -974,7 +974,7 @@ function mostrarSelecaoPerfis() {
 // ── Utilitário interno: escapa texto para uso em DOM via textContent
 function _sanitizeText(str) {
     if (str === null || str === undefined) return '';
-    return String(str).replace(/[^\w\s\-.,!?áéíóúàèìòùâêîôûãõäëïöüçñÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇÑ]/gi, '');
+    return String(str).replace(/[^\w\s\-.,!?:\/áéíóúàèìòùâêîôûãõäëïöüçñÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇÑ]/gi, '');
 }
 
 // ── Utilitário interno: valida URL de imagem (apenas HTTPS, domínios permitidos)
