@@ -40,7 +40,7 @@
         script-src 'self'
         https://esm.sh
         https://cdn.jsdelivr.net
-        'sha256-yGOdSFHpuJuHOzwpFpblCYIQTXSJQHknFAFMuUaXCoA='
+        'sha256-mZiPUOz2f2tF4Gv9gE1anzWI9jirOVLtoG94lOIXXiM=';
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
         font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
         img-src 'self'
@@ -708,16 +708,7 @@
     <script type="module" src="dashboard.js?v=2"></script>
     <script type="module" src="chat-assistant.js?v=2"></script>
     <script src="graficos.js"></script>
-    <script>
-    (function(){
-    var img=document.getElementById("userPhoto");
-    var fallback=document.getElementById("userPhotoFallback");
-    function showFallback(){if(img)img.style.display="none";if(fallback)fallback.style.display="flex";}
-    if(!img)return;
-    if(img.complete&&img.naturalWidth===0){showFallback();}
-    else{img.addEventListener("error",showFallback);}
-    })();
-    </script>
+    <script>document.getElementById("userPhoto").addEventListener("error",function(){this.style.display="none";var f=document.getElementById("userPhotoFallback");if(f)f.style.display="flex";});</script>
 
 </body>
 </html>
