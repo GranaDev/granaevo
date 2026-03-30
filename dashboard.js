@@ -1470,23 +1470,41 @@ function atualizarNomeUsuario() {
     const nome  = _sanitizeText(perfilAtivo?.nome || usuarioLogado.nome || 'Usuário');
     const plano = _sanitizeText(usuarioLogado.plano || 'Plano Indefinido');
 
-    // ✅ textContent em todos — nunca innerHTML
-    const userNameEl    = document.getElementById('userName');
-    const welcomeNameEl = document.getElementById('welcomeName');
-    const userPlanEl    = document.querySelector('[data-user-plan]');
-    const userPhotoEl   = document.getElementById('userPhoto');
+    const userNameEl          = document.getElementById('userName');
+    const welcomeNameEl       = document.getElementById('welcomeName');
+    const userPlanEl          = document.querySelector('[data-user-plan]');
+    const userPhotoEl         = document.getElementById('userPhoto');
+    const userPhotoFallbackEl = document.getElementById('userPhotoFallback');
 
     if (userNameEl)    userNameEl.textContent    = nome;
     if (welcomeNameEl) welcomeNameEl.textContent = nome;
     if (userPlanEl)    userPlanEl.textContent     = plano;
 
-    if (userPhotoEl && perfilAtivo?.foto) {
+    if (perfilAtivo?.foto) {
         // ✅ Valida URL antes de atribuir ao src
         const urlSegura = _sanitizeImgUrl(perfilAtivo.foto);
         if (urlSegura) {
-            userPhotoEl.src = urlSegura;
+            // Tem foto válida — exibe a imagem, esconde o fallback
+            if (userPhotoEl) {
+                userPhotoEl.src = urlSegura;
+                userPhotoEl.style.display = '';
+            }
+            if (userPhotoFallbackEl) userPhotoFallbackEl.style.display = 'none';
+        } else {
+            // URL inválida — esconde img, exibe fallback com inicial
+            if (userPhotoEl) userPhotoEl.style.display = 'none';
+            if (userPhotoFallbackEl) {
+                userPhotoFallbackEl.style.display = 'flex';
+                userPhotoFallbackEl.textContent = nome.trim().charAt(0).toUpperCase() || 'U';
+            }
         }
-        // Se URL inválida, mantém o SVG padrão definido no HTML
+    } else {
+        // Sem foto — esconde img, exibe fallback com inicial
+        if (userPhotoEl) userPhotoEl.style.display = 'none';
+        if (userPhotoFallbackEl) {
+            userPhotoFallbackEl.style.display = 'flex';
+            userPhotoFallbackEl.textContent = nome.trim().charAt(0).toUpperCase() || 'U';
+        }
     }
 }
 
