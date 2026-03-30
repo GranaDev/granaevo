@@ -126,6 +126,23 @@ button {
     margin: 0 auto 2rem;
 }
 
+.loader-logo::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 20px;
+    border: 2px solid transparent;
+    background: linear-gradient(135deg, var(--primary), transparent) border-box;
+    -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: destination-out;
+    mask-composite: exclude;
+    animation: spin 3s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 .logo-img-loader {
     width: 100%;
     height: 100%;
@@ -161,11 +178,22 @@ button {
     left: 0;
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, var(--primary), var(--neon-green), var(--primary));
+    background: linear-gradient(90deg, var(--primary-dark), var(--neon-green), var(--primary));
     background-size: 200% 100%;
     border-radius: 10px;
-    animation: loading 2s ease-in-out infinite;
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.8);
+    animation: loadProgress 1.4s ease-in-out forwards, shimmerBg 1.5s ease infinite;
+    box-shadow: 0 0 14px rgba(16, 185, 129, 0.8);
+}
+
+@keyframes loadProgress {
+    0%   { width: 0%;   }
+    60%  { width: 75%;  }
+    100% { width: 100%; }
+}
+
+@keyframes shimmerBg {
+    0%   { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
 }
 
 .loader-text {
@@ -175,21 +203,6 @@ button {
     text-align: center;
     letter-spacing: 0.5px;
     text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-}
-
-@keyframes loading {
-    0% { 
-        width: 0%;
-        opacity: 0.6;
-    }
-    50% {
-        width: 100%;
-        opacity: 1;
-    }
-    100% { 
-        width: 100%;
-        opacity: 0.6;
-    }
 }
 
 @keyframes pulse {
@@ -419,12 +432,16 @@ button {
 }
 
 .btn-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: var(--primary);
     color: var(--dark);
     padding: 0.75rem 1.5rem;
     border-radius: 10px;
     font-weight: 700;
     font-size: 0.875rem;
+    line-height: 1;
     box-shadow: var(--neon-glow);
     transition: all var(--transition);
     white-space: nowrap;
@@ -1739,11 +1756,16 @@ img, svg {
     }
     
     .hero-stats {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: 1fr auto 1fr auto 1fr;
         padding: 1.5rem;
         max-width: 100%;
+        align-items: center;
     }
-    
+
+    .stat-item:not(:last-child) {
+        border-bottom: none;
+    }
+
     .stat-divider {
         display: block;
         width: 1px;
