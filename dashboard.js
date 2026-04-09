@@ -2481,23 +2481,10 @@ function pagarContaFixa(id, valorPago) {
     }
     conta._processando = true;
 
-    // ✅ Validação de valor: deve ser número positivo e finito
+    // ✅ Validação de valor: deve ser número positivo, finito e dentro do limite razoável
     const valorSeguro = parseFloat(valorPago);
-    if (!isFinite(valorSeguro) || valorSeguro <= 0) {
-        alert('Valor de pagamento inválido.');
-        conta._processando = false;
-        return;
-    }
-
-    // ✅ Tolerância de R$0,05 apenas para arredondamento de parcelas
-    if (Math.abs(valorSeguro - conta.valor) > 0.05) {
-        alert(
-            `❌ Valor divergente! Pagamento bloqueado.\n\n` +
-            `Valor da conta: R$ ${conta.valor.toFixed(2)}\n` +
-            `Valor informado: R$ ${valorSeguro.toFixed(2)}\n\n` +
-            `Por segurança, não é permitido pagar valor diferente do registrado.\n` +
-            `Edite a conta para corrigir o valor se necessário.`
-        );
+    if (!isFinite(valorSeguro) || valorSeguro <= 0 || valorSeguro > 9_999_999) {
+        alert('Valor de pagamento inválido. Informe um valor entre R$ 0,01 e R$ 9.999.999,00.');
         conta._processando = false;
         return;
     }
@@ -2566,7 +2553,6 @@ function pagarContaFixa(id, valorPago) {
                 return sum + (isFinite(p) && p > 0 ? p : 0);
             }, 0);
 
-            // ✅ Usa _avancarMes (escopo de módulo, não bloco try)
             conta.vencimento = _avancarMes(conta.vencimento);
             conta.pago = false;
 
@@ -2587,7 +2573,6 @@ function pagarContaFixa(id, valorPago) {
 
             if (conta.parcelaAtual < conta.totalParcelas) {
                 conta.parcelaAtual++;
-                // ✅ Usa _avancarMes (escopo de módulo)
                 conta.vencimento = _avancarMes(conta.vencimento);
                 conta.pago = false;
             } else {
@@ -2602,7 +2587,6 @@ function pagarContaFixa(id, valorPago) {
         }
 
         // ── CONTA RECORRENTE (sem parcelas) ──────────────────────────────
-        // ✅ Usa _avancarMes (escopo de módulo)
         conta.vencimento = _avancarMes(conta.vencimento);
         conta.pago = false;
 
