@@ -951,8 +951,10 @@ async function verificarLogin() {
 
 // ========== SELEÇÃO DE PERFIS ==========
 function mostrarSelecaoPerfis() {
-    const selecao = document.getElementById('selecaoPerfis');
-    const sidebar = document.getElementById('sidebar');
+    const selecao         = document.getElementById('selecaoPerfis');
+    const sidebar         = document.getElementById('sidebar');
+    const mobileTopbar    = document.getElementById('mobileTopbar');
+    const mobileBottomNav = document.getElementById('mobileBottomNav');
 
     if (!selecao) {
         console.error('❌ Elemento #selecaoPerfis não existe no HTML');
@@ -960,7 +962,9 @@ function mostrarSelecaoPerfis() {
     }
 
     selecao.style.display = 'flex';
-    if (sidebar) sidebar.style.display = 'none';
+    if (sidebar)          sidebar.style.display         = 'none';
+    if (mobileTopbar)     mobileTopbar.style.display    = 'none';
+    if (mobileBottomNav)  mobileBottomNav.style.display = 'none';
 
     document.querySelectorAll('.page').forEach(p => {
         p.style.display = 'none';
@@ -1086,10 +1090,15 @@ async function entrarNoPerfil(index) {
         atualizarTudo();
         atualizarNomeUsuario();
 
-        const selecao = document.getElementById('selecaoPerfis');
-        const sidebar = document.getElementById('sidebar');
-        if (selecao) selecao.style.display = 'none';
-        if (sidebar) sidebar.style.display = 'flex';
+        const selecao         = document.getElementById('selecaoPerfis');
+        const sidebar         = document.getElementById('sidebar');
+        const mobileTopbar    = document.getElementById('mobileTopbar');
+        const mobileBottomNav = document.getElementById('mobileBottomNav');
+
+        if (selecao)          selecao.style.display         = 'none';
+        if (sidebar)          sidebar.style.display         = 'flex';
+        if (mobileTopbar)     mobileTopbar.style.display    = '';
+        if (mobileBottomNav)  mobileBottomNav.style.display = '';
 
         if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
             window.chatAssistant.onProfileSelected(Object.freeze({ ...perfilAtivo }));

@@ -3359,49 +3359,36 @@ select.form-input option:checked {
 
     /* ── Botão Configurações (direito) ── */
     .mobile-settings-btn {
-        width: 42px; height: 42px;
+        width: 44px; height: 44px;
         border-radius: 12px;
-        border: 1px solid rgba(67, 160, 71, 0.22);
-        background: rgba(67, 160, 71, 0.07);
+        border: none;
+        background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         position: relative;
-        overflow: hidden;
         -webkit-tap-highlight-color: transparent;
     }
 
     .mobile-settings-btn::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: 12px;
-        background: radial-gradient(circle, rgba(67, 160, 71, 0.35) 0%, transparent 70%);
-        opacity: 0;
-        transition: opacity 0.25s;
+        content: none;
     }
-
-    .mobile-settings-btn:active::before { opacity: 1; }
 
     .mobile-settings-btn:active {
         transform: scale(0.88);
-        border-color: var(--primary);
-        background: rgba(67, 160, 71, 0.2);
-        box-shadow: 0 0 18px rgba(67, 160, 71, 0.7),
-                    0 0 36px rgba(67, 160, 71, 0.3);
     }
 
     .mobile-settings-btn .mobile-settings-icon-img {
-        width: 26px; height: 26px;
+        width: 36px; height: 36px;
         object-fit: contain;
-        filter: drop-shadow(0 0 4px rgba(67, 160, 71, 0.4));
+        filter: brightness(0.75) drop-shadow(0 0 4px rgba(67, 160, 71, 0.4));
         transition: filter 0.25s;
     }
 
     .mobile-settings-btn:active .mobile-settings-icon-img {
-        filter: drop-shadow(0 0 8px rgba(67, 160, 71, 1));
+        filter: brightness(1.1) drop-shadow(0 0 8px rgba(67, 160, 71, 1));
     }
 
     /* ── Ajuste main-content no mobile ── */
