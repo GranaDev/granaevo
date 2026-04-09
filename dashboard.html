@@ -189,6 +189,36 @@
             <span class="hamburger"></span>
         </button>
 
+        <!-- ========== TOPBAR MOBILE ========== -->
+        <div class="mobile-topbar" id="mobileTopbar">
+            <!-- Foto de perfil (esquerdo) — abre input de foto -->
+            <label for="photoUpload" class="mobile-profile-btn" aria-label="Alterar foto de perfil">
+                <img
+                    src="icon/placeholder-user.svg"
+                    alt="Foto de perfil"
+                    id="mobileUserPhoto"
+                    class="mobile-user-photo">
+                <div
+                    id="mobileUserPhotoFallback"
+                    class="mobile-user-photo-fallback"
+                    aria-hidden="true">U</div>
+            </label>
+
+            <!-- Logo central -->
+            <div class="mobile-topbar-center">
+                <span class="mobile-logo-text">GranaEvo</span>
+            </div>
+
+            <!-- Configurações (direito) -->
+            <button
+                class="mobile-settings-btn"
+                id="mobileSettingsBtn"
+                type="button"
+                aria-label="Configurações">
+                <img src="icon/Configuracoes.gif" alt="Configurações" class="mobile-settings-icon-img">
+            </button>
+        </div>
+
         <!-- ========== SIDEBAR ========== -->
         <aside class="sidebar" id="sidebar" aria-label="Menu de navegação principal">
             <div class="sidebar-header">
@@ -694,6 +724,34 @@
 
         </main>
     </div>
+
+    <!-- ========== BOTTOM NAV MOBILE ========== -->
+        <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Navegação inferior">
+            <button class="mobile-nav-item active" data-page="dashboard" type="button" aria-label="Dashboard">
+                <img src="icon/Dashboard.gif" alt="" class="mobile-nav-icon-img">
+                <span class="mobile-nav-label">Home</span>
+            </button>
+            <button class="mobile-nav-item" data-page="transacoes" type="button" aria-label="Transações">
+                <img src="icon/Extrato.gif" alt="" class="mobile-nav-icon-img">
+                <span class="mobile-nav-label">Extrato</span>
+            </button>
+            <button class="mobile-nav-item" data-page="reservas" type="button" aria-label="Reservas">
+                <img src="icon/Reservas.gif" alt="" class="mobile-nav-icon-img">
+                <span class="mobile-nav-label">Reservas</span>
+            </button>
+            <button class="mobile-nav-item" data-page="cartoes" type="button" aria-label="Cartões">
+                <img src="icon/Cartoes.gif" alt="" class="mobile-nav-icon-img">
+                <span class="mobile-nav-label">Cartões</span>
+            </button>
+            <button class="mobile-nav-item" data-page="graficos" type="button" aria-label="Gráficos">
+                <img src="icon/Graficos.gif" alt="" class="mobile-nav-icon-img">
+                <span class="mobile-nav-label">Gráficos</span>
+            </button>
+            <button class="mobile-nav-item" data-page="relatorios" type="button" aria-label="Relatórios">
+                <img src="icon/Relatorios.gif" alt="" class="mobile-nav-icon-img">
+                <span class="mobile-nav-label">Relatórios</span>
+            </button>
+        </nav>
 
     <!-- MODAL/POPUP -->
     <div id="modalOverlay" class="modal-overlay" role="presentation"></div>

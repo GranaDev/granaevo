@@ -1445,24 +1445,27 @@ function mostrarTela(tela) {
         p.classList.remove('active');
         p.style.display = 'none';
     });
-    
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    
+
+    // Sidebar — nav-btn
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    const sidebarBtn = document.querySelector(`.nav-btn[data-page="${tela}"]`);
+    if (sidebarBtn) sidebarBtn.classList.add('active');
+
+    // Mobile — bottom nav
+    document.querySelectorAll('.mobile-nav-item').forEach(btn => btn.classList.remove('active'));
+    const mobileBtn = document.querySelector(`.mobile-nav-item[data-page="${tela}"]`);
+    if (mobileBtn) mobileBtn.classList.add('active');
+
     const pageEl = document.getElementById(tela + 'Page');
-    if(pageEl) {
+    if (pageEl) {
         pageEl.style.display = 'block';
         pageEl.classList.add('active');
     }
-    
-    const navBtn = document.querySelector(`[data-page="${tela}"]`);
-    if(navBtn) navBtn.classList.add('active');
-    
-    if(tela === 'reservas') renderMetasList();
-    if(tela === 'relatorios') popularFiltrosRelatorio();
-    if(tela === 'graficos') inicializarGraficos();
-    if(tela === 'cartoes') atualizarTelaCartoes();
+
+    if (tela === 'reservas')    renderMetasList();
+    if (tela === 'relatorios')  popularFiltrosRelatorio();
+    if (tela === 'graficos')    inicializarGraficos();
+    if (tela === 'cartoes')     atualizarTelaCartoes();
 }
 
 // ========== ATUALIZAR NOME E FOTO DO USUÁRIO ==========
@@ -1473,39 +1476,38 @@ function atualizarNomeUsuario() {
     const userNameEl          = document.getElementById('userName');
     const welcomeNameEl       = document.getElementById('welcomeName');
     const userPlanEl          = document.querySelector('[data-user-plan]');
+
+    // Sidebar
     const userPhotoEl         = document.getElementById('userPhoto');
     const userPhotoFallbackEl = document.getElementById('userPhotoFallback');
+
+    // Mobile topbar
+    const mobilePhotoEl       = document.getElementById('mobileUserPhoto');
+    const mobilePhotoFbEl     = document.getElementById('mobileUserPhotoFallback');
 
     if (userNameEl)    userNameEl.textContent    = nome;
     if (welcomeNameEl) welcomeNameEl.textContent = nome;
     if (userPlanEl)    userPlanEl.textContent     = plano;
 
-    if (perfilAtivo?.foto) {
-        // ✅ Valida URL antes de atribuir ao src
-        const urlSegura = _sanitizeImgUrl(perfilAtivo.foto);
-        if (urlSegura) {
-            // Tem foto válida — exibe a imagem, esconde o fallback
-            if (userPhotoEl) {
-                userPhotoEl.src = urlSegura;
-                userPhotoEl.style.display = '';
+    // Helper: atualiza par (img + fallback) com a mesma lógica
+    const _syncFoto = (photoEl, fbEl) => {
+        if (perfilAtivo?.foto) {
+            const urlSegura = _sanitizeImgUrl(perfilAtivo.foto);
+            if (urlSegura) {
+                if (photoEl) { photoEl.src = urlSegura; photoEl.style.display = ''; }
+                if (fbEl)    fbEl.style.display = 'none';
+            } else {
+                if (photoEl) photoEl.style.display = 'none';
+                if (fbEl)    { fbEl.style.display = 'flex'; fbEl.textContent = nome.trim().charAt(0).toUpperCase() || 'U'; }
             }
-            if (userPhotoFallbackEl) userPhotoFallbackEl.style.display = 'none';
         } else {
-            // URL inválida — esconde img, exibe fallback com inicial
-            if (userPhotoEl) userPhotoEl.style.display = 'none';
-            if (userPhotoFallbackEl) {
-                userPhotoFallbackEl.style.display = 'flex';
-                userPhotoFallbackEl.textContent = nome.trim().charAt(0).toUpperCase() || 'U';
-            }
+            if (photoEl) photoEl.style.display = 'none';
+            if (fbEl)    { fbEl.style.display = 'flex'; fbEl.textContent = nome.trim().charAt(0).toUpperCase() || 'U'; }
         }
-    } else {
-        // Sem foto — esconde img, exibe fallback com inicial
-        if (userPhotoEl) userPhotoEl.style.display = 'none';
-        if (userPhotoFallbackEl) {
-            userPhotoFallbackEl.style.display = 'flex';
-            userPhotoFallbackEl.textContent = nome.trim().charAt(0).toUpperCase() || 'U';
-        }
-    }
+    };
+
+    _syncFoto(userPhotoEl, userPhotoFallbackEl);   // sidebar
+    _syncFoto(mobilePhotoEl, mobilePhotoFbEl);     // mobile topbar
 }
 
 // Magic bytes das extensões permitidas
@@ -1648,6 +1650,12 @@ async function alterarFoto(event) {
 
         const userPhotoEl = document.getElementById('userPhoto');
         if (userPhotoEl) userPhotoEl.src = urlSegura;
+
+        // Sincronizar foto na topbar mobile
+        const mobilePhotoEl = document.getElementById('mobileUserPhoto');
+        const mobilePhotoFbEl = document.getElementById('mobileUserPhotoFallback');
+        if (mobilePhotoEl)  { mobilePhotoEl.src = urlSegura; mobilePhotoEl.style.display = ''; }
+        if (mobilePhotoFbEl) mobilePhotoFbEl.style.display = 'none';
 
         await salvarDados();
         atualizarTelaPerfis();
@@ -7872,54 +7880,49 @@ function atualizarHeaderReservas() {
 
 // ========== SIDEBAR TOGGLE (MOBILE) ==========
 function setupSidebarToggle() {
-    const sidebar = document.getElementById('sidebar');
+    const sidebar   = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('sidebarToggle');
-    const body = document.body;
-    
-    if(!toggleBtn || !sidebar) return;
-    
-    toggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        sidebar.classList.toggle('open');
-        
-        // Bloquear/desbloquear scroll do body no mobile
-        if(window.innerWidth <= 768) {
-            if(sidebar.classList.contains('open')) {
-                body.classList.add('sidebar-open');
-            } else {
-                body.classList.remove('sidebar-open');
+    const body      = document.body;
+
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.classList.toggle('open');
+            if (window.innerWidth <= 768) {
+                body.classList.toggle('sidebar-open', sidebar.classList.contains('open'));
             }
-        }
-    });
-    
-    // Fechar ao clicar fora (mobile)
-    document.addEventListener('click', (e) => {
-        if(window.innerWidth <= 768) {
-            if(!sidebar.contains(e.target) && !toggleBtn.contains(e.target) && sidebar.classList.contains('open')) {
-                sidebar.classList.remove('open');
-                body.classList.remove('sidebar-open');
-            }
-        }
-    });
-    
-    // Fechar ao clicar em um item do menu (mobile)
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if(window.innerWidth <= 768) {
+        });
+
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 &&
+                !sidebar.contains(e.target) &&
+                !toggleBtn.contains(e.target) &&
+                sidebar.classList.contains('open')) {
                 sidebar.classList.remove('open');
                 body.classList.remove('sidebar-open');
             }
         });
-    });
-    
-    // Limpar classes ao redimensionar
-    window.addEventListener('resize', () => {
-        if(window.innerWidth > 768) {
-            body.classList.remove('sidebar-open');
-        }
-    });
-}
 
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    sidebar.classList.remove('open');
+                    body.classList.remove('sidebar-open');
+                }
+            });
+        });
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) body.classList.remove('sidebar-open');
+        });
+    }
+
+    // ── Botão Configurações — mobile topbar (direito)
+    const mobileSettingsBtn = document.getElementById('mobileSettingsBtn');
+    if (mobileSettingsBtn) {
+        mobileSettingsBtn.addEventListener('click', () => mostrarTela('configuracoes'));
+    }
+}
 // ========== BINDINGS DE UI ==========
 function bindEventos() {
     // Navegação
