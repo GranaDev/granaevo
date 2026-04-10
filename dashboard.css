@@ -3540,3 +3540,138 @@ select.form-input option:checked {
         }
     }
 }
+
+/* ================================================================
+   SALDO HERO + CARDS MOBILE REDESIGN
+   ================================================================ */
+
+/* Oculto no desktop */
+.saldo-hero-mobile { display: none; }
+
+@media (max-width: 768px) {
+
+    /* ── Ocultar card de saldo (exibido no hero) ── */
+    #cardSaldoDashboard {
+        display: none !important;
+    }
+
+    /* ── Forçar 3 colunas iguais no grid de cards ── */
+    .cards-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 10px !important;
+        padding: 0 12px !important;
+        margin-bottom: 20px !important;
+    }
+
+    /* ── Cards clean / glass ── */
+    .card {
+        background: rgba(255, 255, 255, 0.055) !important;
+        backdrop-filter: blur(16px) saturate(160%) !important;
+        -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+        border: 1px solid rgba(255, 255, 255, 0.09) !important;
+        border-radius: 18px !important;
+        padding: 14px 10px 12px !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 4px !important;
+        box-shadow:
+            0 4px 20px rgba(0, 0, 0, 0.25),
+            inset 0 1px 0 rgba(255,255,255,0.07) !important;
+        transition: transform 0.15s ease, background 0.15s ease !important;
+    }
+
+    .card::before { display: none !important; }
+
+    /* Active / tap feedback */
+    .card:active {
+        transform: scale(0.95) !important;
+        background: rgba(255, 255, 255, 0.10) !important;
+    }
+
+    .card-icon {
+        font-size: 1.3rem !important;
+        min-width: unset !important;
+        margin-bottom: 4px;
+    }
+
+    .card-label {
+        font-size: 0.62rem !important;
+        letter-spacing: 0.6px !important;
+        color: rgba(255, 255, 255, 0.45) !important;
+        text-transform: uppercase !important;
+        margin-bottom: 2px !important;
+    }
+
+    .card-value {
+        font-size: 0.92rem !important;
+        font-weight: 800 !important;
+        letter-spacing: -0.3px !important;
+    }
+
+    /* ── Saldo Hero ── */
+    .saldo-hero-mobile {
+        display: block;
+        padding: 8px 20px 18px;
+    }
+
+    .saldo-hero-label {
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.45);
+        margin: 0 0 6px 0;
+        font-weight: 500;
+        letter-spacing: 0.4px;
+    }
+
+    .saldo-hero-value-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .saldo-hero-value {
+        font-size: 2.3rem;
+        font-weight: 800;
+        color: #ffffff;
+        letter-spacing: -1.5px;
+        text-shadow:
+            0 0 40px rgba(255, 255, 255, 0.15),
+            0 2px 8px rgba(0, 0, 0, 0.4);
+        transition: filter 0.3s ease;
+    }
+
+    .saldo-hero-value.oculto {
+        filter: blur(8px);
+        user-select: none;
+    }
+
+    .saldo-hero-eye {
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 1rem;
+        cursor: pointer;
+        padding: 7px 9px;
+        line-height: 1;
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .saldo-hero-eye:active {
+        background: rgba(255, 255, 255, 0.14);
+        color: #ffffff;
+        transform: scale(0.9);
+    }
+
+    /* ── Glassmorphism bottom nav aprimorado ── */
+    .mobile-bottom-nav {
+        background: rgba(6, 8, 18, 0.75) !important;
+        backdrop-filter: blur(48px) saturate(220%) brightness(1.05) !important;
+        -webkit-backdrop-filter: blur(48px) saturate(220%) brightness(1.05) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.07) !important;
+        box-shadow:
+            0 -8px 40px rgba(0, 0, 0, 0.5),
+            0 0 60px rgba(67, 160, 71, 0.06),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    }
+}

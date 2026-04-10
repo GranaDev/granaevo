@@ -316,6 +316,18 @@
                     </div>
                 </div>
 
+                <!-- ===== SALDO HERO MOBILE ===== -->
+                <div class="saldo-hero-mobile">
+                    <p class="saldo-hero-label">Saldo disponível</p>
+                    <div class="saldo-hero-value-row">
+                        <span id="heroSaldo" class="saldo-hero-value">R$ 0,00</span>
+                        <button class="saldo-hero-eye" id="btnToggleSaldo" type="button" aria-label="Mostrar/ocultar saldo">
+                            <i class="fas fa-eye-slash"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- ===== FIM SALDO HERO MOBILE ===== -->
+
                 <div class="cards-grid">
                     <div class="card card-green">
                         <div class="card-icon"><i class="fas fa-arrow-up" aria-hidden="true"></i></div>
@@ -331,7 +343,7 @@
                             <div class="card-value" id="totalSaidas">R$ 0,00</div>
                         </div>
                     </div>
-                    <div class="card card-blue">
+                    <div class="card card-blue" id="cardSaldoDashboard">
                         <div class="card-icon"><i class="fas fa-wallet" aria-hidden="true"></i></div>
                         <div class="card-content">
                             <div class="card-label">Saldo</div>

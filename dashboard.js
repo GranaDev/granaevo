@@ -1768,6 +1768,11 @@ function atualizarDashboardResumo() {
     if (entradasEl) entradasEl.textContent = formatBRL(totalEntradas);
     if (saidasEl)   saidasEl.textContent   = formatBRL(totalSaidas);
     if (saldoEl)    saldoEl.textContent     = formatBRL(saldo);
+    const heroSaldoEl = document.getElementById('heroSaldo');
+    if (heroSaldoEl && !heroSaldoEl.classList.contains('oculto')) {
+        heroSaldoEl.textContent = formatBRL(saldo);
+    }
+    if (heroSaldoEl) heroSaldoEl.dataset.valor = formatBRL(saldo);
     if (reservasEl) reservasEl.textContent  = formatBRL(totalReservasCalc);
 }
 
@@ -8027,6 +8032,25 @@ function bindEventos() {
     const btnExportarCSV = document.getElementById('btnExportarCSV');
     if (btnExportarCSV) {
         btnExportarCSV.addEventListener('click', exportarDadosCSV);
+    }
+
+    // Toggle saldo hero mobile
+    const btnToggleSaldo = document.getElementById('btnToggleSaldo');
+    if (btnToggleSaldo) {
+        btnToggleSaldo.addEventListener('click', () => {
+            const heroSaldoEl = document.getElementById('heroSaldo');
+            const icone       = btnToggleSaldo.querySelector('i');
+            if (!heroSaldoEl || !icone) return;
+
+            const estaOculto = heroSaldoEl.classList.toggle('oculto');
+
+            if (estaOculto) {
+                icone.className = 'fas fa-eye';
+            } else {
+                icone.className = 'fas fa-eye-slash';
+                heroSaldoEl.textContent = heroSaldoEl.dataset.valor || 'R$ 0,00';
+            }
+        });
     }
 }
 
