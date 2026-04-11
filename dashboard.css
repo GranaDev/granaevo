@@ -1092,7 +1092,6 @@ body::before {
 }
 
 /* ========== CONTAS FIXAS GRID ========== */
-/* ========== CONTAS FIXAS GRID ========== */
 .contas-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -1101,77 +1100,88 @@ body::before {
 }
 
 .conta-card {
-    background: rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(18px) saturate(160%);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
-    border: 1px solid rgba(67, 160, 71, 0.18);
-    padding: 14px 12px 12px;
-    border-radius: 18px;
-    font-size: 0.82rem;
+    background: rgba(30, 40, 35, 0.35);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(67, 160, 71, 0.2);
+    padding: 14px;
+    border-radius: 16px;
+    font-size: 0.85rem;
     font-weight: 500;
     box-shadow:
-        0 4px 20px rgba(0, 0, 0, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        0 4px 20px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
     position: relative;
     overflow: hidden;
 }
 
+/* Linha de destaque no topo do card (igual aos cards de KPI) */
 .conta-card::before {
     content: '';
     position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(67, 160, 71, 0.6), transparent);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+/* Brilho hover */
+.conta-card::after {
+    content: '';
+    position: absolute;
     inset: 0;
-    border-radius: 18px;
-    background: radial-gradient(circle at 50% 0%, rgba(67, 160, 71, 0.12), transparent 70%);
+    border-radius: 16px;
+    background: radial-gradient(circle at 50% 0%,
+        rgba(67, 160, 71, 0.1), transparent 65%);
     opacity: 0;
-    transition: opacity 0.35s ease;
+    transition: opacity 0.3s ease;
     pointer-events: none;
 }
 
-.conta-card:hover,
-.conta-card:active {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: rgba(67, 160, 71, 0.55);
+.conta-card:hover {
+    border-color: rgba(67, 160, 71, 0.5);
     box-shadow:
-        0 0 0 1px rgba(67, 160, 71, 0.35),
-        0 8px 28px rgba(67, 160, 71, 0.2),
-        0 0 40px rgba(67, 160, 71, 0.08),
+        0 0 0 1px rgba(67, 160, 71, 0.25),
+        0 8px 28px rgba(67, 160, 71, 0.18),
+        0 0 35px rgba(67, 160, 71, 0.07),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
     transform: translateY(-3px);
 }
 
-.conta-card:hover::before,
-.conta-card:active::before {
-    opacity: 1;
-}
+.conta-card:hover::before { transform: scaleX(1); }
+.conta-card:hover::after  { opacity: 1; }
 
 .conta-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     margin-bottom: 10px;
     gap: 6px;
+    flex-wrap: wrap;
 }
 
 .conta-title {
-    font-size: 0.82rem;
+    font-size: 0.85rem;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.2px;
     flex: 1;
-    white-space: nowrap;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .conta-status {
-    font-size: 0.62rem;
+    font-size: 0.6rem;
     padding: 3px 8px;
     border-radius: 20px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.5px;
     white-space: nowrap;
     flex-shrink: 0;
 }
@@ -1179,40 +1189,43 @@ body::before {
 .status-pendente {
     background: rgba(255, 209, 102, 0.15);
     color: var(--warning);
-    border: 1px solid rgba(255, 209, 102, 0.35);
+    border: 1px solid rgba(255, 209, 102, 0.3);
 }
 
 .status-pago {
     background: rgba(0, 255, 153, 0.12);
     color: var(--success);
-    border: 1px solid rgba(0, 255, 153, 0.3);
+    border: 1px solid rgba(0, 255, 153, 0.28);
 }
 
 .status-vencido {
     background: rgba(255, 75, 75, 0.15);
     color: var(--danger);
-    border: 1px solid rgba(255, 75, 75, 0.35);
+    border: 1px solid rgba(255, 75, 75, 0.3);
     animation: pulseVencido 2s ease-in-out infinite;
 }
 
 @keyframes pulseVencido {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 75, 75, 0); }
-    50%       { box-shadow: 0 0 0 3px rgba(255, 75, 75, 0.2); }
+    0%, 100% { box-shadow: none; }
+    50%       { box-shadow: 0 0 0 3px rgba(255, 75, 75, 0.15); }
 }
 
 .conta-info {
-    color: var(--text-secondary);
+    color: rgba(255, 255, 255, 0.6);
     font-size: 0.78rem;
-    line-height: 1.7;
-    margin-bottom: 10px;
+    line-height: 1.8;
+    margin-bottom: 12px;
     padding: 8px 0;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.conta-info div {
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.75);
+/* Valor em destaque dentro do card */
+.conta-info div:first-child {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
 }
 
 .conta-actions {
@@ -1223,43 +1236,44 @@ body::before {
 
 .conta-btn {
     flex: 1;
-    padding: 9px 10px;
-    font-size: 0.75rem;
-    background: linear-gradient(135deg, rgba(67, 160, 71, 0.85), rgba(46, 125, 50, 0.85));
+    padding: 9px 8px;
+    font-size: 0.72rem;
+    background: linear-gradient(135deg,
+        rgba(67, 160, 71, 0.9), rgba(46, 125, 50, 0.9));
     color: white;
-    border: 1px solid rgba(67, 160, 71, 0.5);
+    border: 1px solid rgba(67, 160, 71, 0.45);
     border-radius: 12px;
     cursor: pointer;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.7px;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 10px rgba(67, 160, 71, 0.25),
-                0 0 16px rgba(67, 160, 71, 0.1);
+    box-shadow:
+        0 3px 10px rgba(67, 160, 71, 0.3),
+        0 0 18px rgba(67, 160, 71, 0.1);
     position: relative;
     overflow: hidden;
 }
 
-.conta-btn::after {
+.conta-btn::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+    background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent);
     opacity: 0;
     transition: opacity 0.25s;
 }
 
-.conta-btn:hover::after,
-.conta-btn:active::after {
-    opacity: 1;
-}
+.conta-btn:hover::before,
+.conta-btn:active::before { opacity: 1; }
 
 .conta-btn:hover,
 .conta-btn:active {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(67, 160, 71, 0.45),
-                0 0 28px rgba(67, 160, 71, 0.2);
-    border-color: rgba(102, 187, 106, 0.7);
+    box-shadow:
+        0 6px 20px rgba(67, 160, 71, 0.45),
+        0 0 30px rgba(67, 160, 71, 0.2);
+    border-color: rgba(102, 187, 106, 0.65);
 }
 
 .empty-state {
@@ -1285,7 +1299,8 @@ body::before {
     .conta-card { padding: 20px; }
 }
 
-.contas-grid {
+@media (max-width: 768px) {
+    .contas-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
     }
