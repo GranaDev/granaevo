@@ -1322,16 +1322,18 @@ body::before {
 @media (max-width: 768px) {
     .contas-grid {
         grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
+        gap: 10px;
         max-width: 100%;
-        padding: 0 4px;
+        padding: 0;
     }
-    .conta-title    { font-size: 0.9rem; }
-    .conta-status   { font-size: 0.62rem; padding: 4px 8px; }
-    .conta-info     { font-size: 0.82rem; line-height: 1.7; margin-bottom: 12px; padding: 10px 0; }
-    .conta-info div:first-child { font-size: 0.88rem; }
+    .conta-card     { padding: 12px 10px 10px; }
+    .conta-header   { gap: 4px; align-items: center; flex-wrap: nowrap; }
+    .conta-title    { font-size: 0.8rem; }
+    .conta-status   { font-size: 0.56rem; padding: 3px 6px; letter-spacing: 0; flex-shrink: 0; }
+    .conta-info     { font-size: 0.78rem; line-height: 1.65; margin-bottom: 10px; padding: 8px 0; }
+    .conta-info div:first-child { font-size: 0.82rem; }
     .conta-actions  { flex-direction: column; }
-    .conta-btn      { width: 100%; padding: 11px 8px; font-size: 0.75rem; }
+    .conta-btn      { width: 100%; padding: 9px 6px; font-size: 0.7rem; }
 }
 
 /* ========== PAINEL DE ALERTAS DE VENCIMENTO ========== */
