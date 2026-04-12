@@ -2255,7 +2255,12 @@ function atualizarListaContasFixas() {
             }
 
         } else {
-            title.textContent = c.descricao;
+            const _icConta = document.createElement('i');
+            _icConta.className = 'fas fa-receipt';
+            _icConta.setAttribute('aria-hidden', 'true');
+            _icConta.style.cssText = 'color:rgba(67,160,71,0.85); margin-right:4px; font-size:0.88em;';
+            title.appendChild(_icConta);
+            title.appendChild(document.createTextNode(_sanitizeText(c.descricao)));
 
             const divValor = document.createElement('div');
             divValor.textContent = `Valor: ${formatBRL(c.valor)}`;
