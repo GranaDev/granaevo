@@ -1093,13 +1093,100 @@ body::before {
 
 /* ========== CONTAS FIXAS GRID ========== */
 
-/* Wrapper externo — flex coluna para empilhar painel de alertas + grid */
+/* ── Container premium da seção ── */
+.section-box--contas {
+    background:
+        linear-gradient(160deg,
+            rgba(67, 160, 71, 0.07) 0%,
+            rgba(10, 24, 14, 0.82) 35%,
+            rgba(6, 15, 9, 0.92) 100%);
+    backdrop-filter: blur(48px) saturate(200%) brightness(1.03);
+    -webkit-backdrop-filter: blur(48px) saturate(200%) brightness(1.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid rgba(67, 160, 71, 0.32);
+    border-radius: 24px;
+    padding: 28px 22px;
+    box-shadow:
+        0 24px 72px rgba(0, 0, 0, 0.55),
+        0 8px 24px rgba(0, 0, 0, 0.35),
+        0 0 80px rgba(67, 160, 71, 0.07),
+        inset 0 1px 0 rgba(255, 255, 255, 0.09),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+        inset 0 0 60px rgba(67, 160, 71, 0.03);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Linha neon no topo do container */
+.section-box--contas::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 10%; right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(67, 160, 71, 0.55) 30%,
+        rgba(134, 213, 138, 0.90) 50%,
+        rgba(67, 160, 71, 0.55) 70%,
+        transparent);
+    box-shadow:
+        0 0 18px rgba(67, 160, 71, 0.55),
+        0 0 36px rgba(67, 160, 71, 0.25);
+    z-index: 1;
+}
+
+/* Brilho ambiental no canto superior esquerdo */
+.section-box--contas::after {
+    content: '';
+    position: absolute;
+    top: -40px; left: -40px;
+    width: 220px; height: 220px;
+    background: radial-gradient(ellipse,
+        rgba(67, 160, 71, 0.10) 0%,
+        transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Garante que o conteúdo fique acima dos pseudo-elementos */
+.section-box--contas > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Hover do container */
+.section-box--contas:hover {
+    border-top-color: rgba(67, 160, 71, 0.50);
+    box-shadow:
+        0 28px 80px rgba(0, 0, 0, 0.60),
+        0 10px 30px rgba(0, 0, 0, 0.40),
+        0 0 100px rgba(67, 160, 71, 0.10),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.30),
+        inset 0 0 80px rgba(67, 160, 71, 0.05);
+}
+
+@media (max-width: 768px) {
+    .section-box--contas {
+        backdrop-filter: blur(20px) saturate(160%);
+        -webkit-backdrop-filter: blur(20px) saturate(160%);
+        background:
+            linear-gradient(160deg,
+                rgba(67, 160, 71, 0.09) 0%,
+                rgba(8, 20, 12, 0.96) 100%);
+        border-radius: 20px;
+        padding: 22px 14px;
+    }
+}
+
+/* ── Wrapper interno: flex coluna ── */
 #listaContasFixas {
     display: flex;
     flex-direction: column;
     gap: 16px;
 }
 
+/* ── Grid 2 colunas ── */
 .contas-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -1108,77 +1195,109 @@ body::before {
     width: 100%;
 }
 
+/* ── Card individual — glassmorfismo premium ── */
 .conta-card {
-    background: rgba(10, 22, 14, 0.62);
-    backdrop-filter: blur(22px) saturate(160%);
-    -webkit-backdrop-filter: blur(22px) saturate(160%);
-    border: 1px solid rgba(67, 160, 71, 0.22);
+    background:
+        linear-gradient(145deg,
+            rgba(255, 255, 255, 0.085) 0%,
+            rgba(67, 160, 71, 0.028) 40%,
+            rgba(6, 18, 10, 0.72) 100%);
+    backdrop-filter: blur(28px) saturate(170%) brightness(1.10);
+    -webkit-backdrop-filter: blur(28px) saturate(170%) brightness(1.10);
+    /* Borda com luz vindo de cima-esquerda */
+    border-top:    1px solid rgba(255, 255, 255, 0.22);
+    border-left:   1px solid rgba(255, 255, 255, 0.13);
+    border-right:  1px solid rgba(0, 0, 0, 0.22);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.28);
     padding: 13px 11px;
-    border-radius: 16px;
+    border-radius: 18px;
     font-size: 0.80rem;
     font-weight: 500;
     box-shadow:
-        0 4px 22px rgba(0, 0, 0, 0.40),
-        0 0 0 1px rgba(67, 160, 71, 0.09),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        /* Sombra de profundidade principal */
+        0 10px 36px rgba(0, 0, 0, 0.50),
+        0 4px 12px rgba(0, 0, 0, 0.30),
+        0 1px 3px rgba(0, 0, 0, 0.20),
+        /* Highlight interno no topo */
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        /* Sombra interna no fundo */
+        inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+        /* Highlight lateral esquerdo */
+        inset 1px 0 0 rgba(255, 255, 255, 0.08),
+        /* Glow verde suave */
+        0 0 0 1px rgba(67, 160, 71, 0.06);
     transition: all 0.30s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
     position: relative;
     overflow: hidden;
 }
 
-/* Linha neon no topo do card */
+/* Reflexo de luz no topo do card */
 .conta-card::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 18%;
-    right: 18%;
-    height: 1.5px;
-    background: linear-gradient(90deg, transparent, rgba(67, 160, 71, 0.95), transparent);
-    box-shadow: 0 0 10px rgba(67, 160, 71, 0.65);
-    opacity: 0.45;
+    top: 0; left: 15%; right: 15%;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(67, 160, 71, 0.85),
+        rgba(150, 230, 155, 0.95),
+        rgba(67, 160, 71, 0.85),
+        transparent);
+    box-shadow:
+        0 0 12px rgba(67, 160, 71, 0.60),
+        0 0 24px rgba(67, 160, 71, 0.28);
+    opacity: 0.50;
     transition: opacity 0.30s, left 0.30s, right 0.30s;
-    border-radius: 0 0 4px 4px;
 }
 
-/* Brilho lateral esquerdo */
+/* Barra lateral esquerda (glow) */
 .conta-card::after {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 3px;
-    height: 100%;
-    background: linear-gradient(180deg, rgba(67, 160, 71, 0.7), transparent 60%);
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: linear-gradient(180deg,
+        rgba(134, 213, 138, 0.80) 0%,
+        rgba(67, 160, 71, 0.40) 50%,
+        transparent 100%);
     opacity: 0;
     transition: opacity 0.30s;
+    border-radius: 18px 0 0 18px;
 }
 
 .conta-card:hover::before {
     opacity: 1;
-    left: 8%;
-    right: 8%;
+    left: 5%; right: 5%;
 }
 
 .conta-card:hover::after { opacity: 1; }
 
 .conta-card:hover {
-    background: rgba(16, 32, 20, 0.82);
-    border-color: rgba(67, 160, 71, 0.48);
+    background:
+        linear-gradient(145deg,
+            rgba(255, 255, 255, 0.11) 0%,
+            rgba(67, 160, 71, 0.05) 40%,
+            rgba(10, 26, 14, 0.78) 100%);
+    border-top-color:  rgba(255, 255, 255, 0.30);
+    border-left-color: rgba(255, 255, 255, 0.18);
     box-shadow:
-        0 8px 28px rgba(0, 0, 0, 0.45),
-        0 0 22px rgba(67, 160, 71, 0.13),
-        0 0 0 1px rgba(67, 160, 71, 0.30),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    transform: translateY(-3px) scale(1.015);
+        0 14px 44px rgba(0, 0, 0, 0.55),
+        0 6px 16px rgba(0, 0, 0, 0.35),
+        0 0 32px rgba(67, 160, 71, 0.14),
+        0 0 0 1px rgba(67, 160, 71, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.20),
+        inset 1px 0 0 rgba(255, 255, 255, 0.10);
+    transform: translateY(-4px) scale(1.018);
 }
 
 .conta-card:active {
     transform: scale(0.97) translateY(0);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
 }
 
+/* ── Cabeçalho do card ── */
 .conta-header {
     display: flex;
     justify-content: space-between;
@@ -1190,9 +1309,11 @@ body::before {
 .conta-title {
     font-size: 0.80rem;
     font-weight: 700;
-    color: var(--text-primary);
+    color: rgba(255, 255, 255, 0.92);
     letter-spacing: -0.2px;
-    text-shadow: 0 0 10px rgba(67, 160, 71, 0.28);
+    text-shadow:
+        0 0 14px rgba(67, 160, 71, 0.32),
+        0 1px 2px rgba(0, 0, 0, 0.5);
     flex: 1;
     line-height: 1.35;
     display: flex;
@@ -1212,44 +1333,46 @@ body::before {
 }
 
 .status-pendente {
-    background: rgba(255, 209, 102, 0.14);
+    background: rgba(255, 209, 102, 0.13);
     color: var(--warning);
-    border: 1px solid rgba(255, 209, 102, 0.38);
-    text-shadow: 0 0 6px rgba(255, 209, 102, 0.45);
-    box-shadow: 0 0 8px rgba(255, 209, 102, 0.12);
+    border: 1px solid rgba(255, 209, 102, 0.35);
+    text-shadow: 0 0 8px rgba(255, 209, 102, 0.50);
+    box-shadow: 0 0 10px rgba(255, 209, 102, 0.10);
 }
 
 .status-pago {
-    background: rgba(0, 255, 153, 0.14);
+    background: rgba(0, 255, 153, 0.13);
     color: var(--success);
-    border: 1px solid rgba(0, 255, 153, 0.38);
-    text-shadow: 0 0 6px rgba(0, 255, 153, 0.45);
-    box-shadow: 0 0 8px rgba(0, 255, 153, 0.12);
+    border: 1px solid rgba(0, 255, 153, 0.35);
+    text-shadow: 0 0 8px rgba(0, 255, 153, 0.50);
+    box-shadow: 0 0 10px rgba(0, 255, 153, 0.10);
 }
 
 .status-vencido {
-    background: rgba(255, 75, 75, 0.14);
+    background: rgba(255, 75, 75, 0.13);
     color: var(--danger);
-    border: 1px solid rgba(255, 75, 75, 0.38);
-    text-shadow: 0 0 6px rgba(255, 75, 75, 0.45);
+    border: 1px solid rgba(255, 75, 75, 0.35);
+    text-shadow: 0 0 8px rgba(255, 75, 75, 0.50);
     animation: pulseVencido 2s ease-in-out infinite;
 }
 
 @keyframes pulseVencido {
-    0%, 100% { box-shadow: 0 0 6px rgba(255, 75, 75, 0.25); }
-    50%       { box-shadow: 0 0 14px rgba(255, 75, 75, 0.55); }
+    0%, 100% { box-shadow: 0 0 6px rgba(255, 75, 75, 0.22); }
+    50%       { box-shadow: 0 0 16px rgba(255, 75, 75, 0.55); }
 }
 
+/* ── Informações ── */
 .conta-info {
-    color: var(--text-secondary);
+    color: rgba(176, 179, 193, 0.85);
     font-size: 0.72rem;
-    line-height: 1.80;
+    line-height: 1.85;
     margin-bottom: 10px;
     padding: 7px 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-top:    1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.22);
 }
 
+/* ── Ações ── */
 .conta-actions {
     display: flex;
     gap: 6px;
@@ -1260,27 +1383,36 @@ body::before {
     flex: 1;
     padding: 8px 8px;
     font-size: 0.68rem;
-    background: linear-gradient(135deg, rgba(67, 160, 71, 0.88), rgba(46, 125, 50, 0.88));
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    border-radius: 10px;
+    background:
+        linear-gradient(135deg,
+            rgba(80, 175, 85, 0.92) 0%,
+            rgba(46, 125, 50, 0.92) 100%);
+    color: rgba(255, 255, 255, 0.96);
+    border-top:    1px solid rgba(255, 255, 255, 0.20);
+    border-left:   1px solid rgba(255, 255, 255, 0.12);
+    border-right:  1px solid rgba(0, 0, 0, 0.20);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.28);
+    border-radius: 11px;
     cursor: pointer;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.7px;
+    letter-spacing: 0.8px;
     transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow:
-        0 2px 12px rgba(67, 160, 71, 0.34),
-        0 0 12px rgba(67, 160, 71, 0.14);
+        0 4px 16px rgba(67, 160, 71, 0.38),
+        0 0 18px rgba(67, 160, 71, 0.16),
+        inset 0 1px 0 rgba(255, 255, 255, 0.20),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.15);
     position: relative;
     overflow: hidden;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
 }
 
 .conta-btn::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.20), transparent 60%);
     opacity: 0;
     transition: opacity 0.22s;
 }
@@ -1288,35 +1420,36 @@ body::before {
 .conta-btn:hover {
     transform: translateY(-2px);
     box-shadow:
-        0 4px 18px rgba(67, 160, 71, 0.52),
-        0 0 24px rgba(67, 160, 71, 0.22);
-    border-color: rgba(255, 255, 255, 0.22);
+        0 6px 22px rgba(67, 160, 71, 0.55),
+        0 0 28px rgba(67, 160, 71, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+    border-top-color: rgba(255, 255, 255, 0.28);
 }
 
 .conta-btn:hover::before { opacity: 1; }
 .conta-btn:active { transform: scale(0.96); }
 
+/* ── Empty state ── */
 .empty-state {
     grid-column: 1 / -1;
     text-align: center;
     color: var(--text-secondary);
     padding: 40px 16px;
     font-size: 0.88rem;
-    background: rgba(20, 30, 22, 0.38);
+    background: rgba(255, 255, 255, 0.02);
     border-radius: 14px;
-    border: 2px dashed rgba(67, 160, 71, 0.18);
+    border: 1px dashed rgba(67, 160, 71, 0.18);
 }
 
+/* ── Breakpoints ── */
 @media (max-width: 1400px) {
     .contas-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 900px) {
-    .contas-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-    }
-    .conta-card { padding: 12px 10px; }
+    .contas-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .conta-card  { padding: 12px 10px; }
 }
 
 @media (max-width: 768px) {
@@ -1324,22 +1457,22 @@ body::before {
         grid-template-columns: repeat(2, 1fr);
         gap: 8px;
     }
-
     .conta-card {
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
-        background: rgba(10, 22, 14, 0.90);
+        /* Mobile: mantém blur reduzido para performance */
+        backdrop-filter: blur(18px) saturate(150%);
+        -webkit-backdrop-filter: blur(18px) saturate(150%);
+        background:
+            linear-gradient(145deg,
+                rgba(255, 255, 255, 0.08) 0%,
+                rgba(6, 18, 10, 0.88) 100%);
         padding: 11px 9px;
     }
-
-    .conta-card::before { display: none; }
     .conta-card:hover   { transform: none; }
-
-    .conta-title   { font-size: 0.74rem; }
-    .conta-info    { font-size: 0.68rem; }
-    .conta-btn     { font-size: 0.65rem; padding: 7px 6px; }
-    .conta-status  { font-size: 0.58rem; padding: 2px 6px; }
-    .conta-actions { flex-direction: row; }
+    .conta-title        { font-size: 0.74rem; }
+    .conta-info         { font-size: 0.68rem; }
+    .conta-btn          { font-size: 0.65rem; padding: 7px 6px; }
+    .conta-status       { font-size: 0.58rem; padding: 2px 6px; }
+    .conta-actions      { flex-direction: row; }
 }
 
 /* ========== PAINEL DE ALERTAS DE VENCIMENTO ========== */
