@@ -1092,110 +1092,13 @@ body::before {
 }
 
 /* ========== CONTAS FIXAS GRID ========== */
-
-/* ── Container premium da seção ── */
-.section-box--contas {
-    background:
-        linear-gradient(160deg,
-            rgba(67, 160, 71, 0.07) 0%,
-            rgba(10, 24, 14, 0.82) 35%,
-            rgba(6, 15, 9, 0.92) 100%);
-    backdrop-filter: blur(48px) saturate(200%) brightness(1.03);
-    -webkit-backdrop-filter: blur(48px) saturate(200%) brightness(1.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-top: 1px solid rgba(67, 160, 71, 0.32);
-    border-radius: 24px;
-    padding: 28px 22px;
-    box-shadow:
-        0 24px 72px rgba(0, 0, 0, 0.55),
-        0 8px 24px rgba(0, 0, 0, 0.35),
-        0 0 80px rgba(67, 160, 71, 0.07),
-        inset 0 1px 0 rgba(255, 255, 255, 0.09),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.25),
-        inset 0 0 60px rgba(67, 160, 71, 0.03);
-    position: relative;
-    overflow: hidden;
-}
-
-/* Linha neon no topo do container */
-.section-box--contas::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 10%; right: 10%;
-    height: 1px;
-    background: linear-gradient(90deg,
-        transparent,
-        rgba(67, 160, 71, 0.55) 30%,
-        rgba(134, 213, 138, 0.90) 50%,
-        rgba(67, 160, 71, 0.55) 70%,
-        transparent);
-    box-shadow:
-        0 0 18px rgba(67, 160, 71, 0.55),
-        0 0 36px rgba(67, 160, 71, 0.25);
-    z-index: 1;
-}
-
-/* Brilho ambiental no canto superior esquerdo */
-.section-box--contas::after {
-    content: '';
-    position: absolute;
-    top: -40px; left: -40px;
-    width: 220px; height: 220px;
-    background: radial-gradient(ellipse,
-        rgba(67, 160, 71, 0.10) 0%,
-        transparent 70%);
-    pointer-events: none;
-    z-index: 0;
-}
-
-/* Garante que o conteúdo fique acima dos pseudo-elementos */
-.section-box--contas > * {
-    position: relative;
-    z-index: 1;
-}
-
-/* Hover do container */
-.section-box--contas:hover {
-    border-top-color: rgba(67, 160, 71, 0.50);
-    box-shadow:
-        0 28px 80px rgba(0, 0, 0, 0.60),
-        0 10px 30px rgba(0, 0, 0, 0.40),
-        0 0 100px rgba(67, 160, 71, 0.10),
-        inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.30),
-        inset 0 0 80px rgba(67, 160, 71, 0.05);
-}
-
-@media (max-width: 768px) {
-    .section-box--contas {
-        backdrop-filter: blur(20px) saturate(160%);
-        -webkit-backdrop-filter: blur(20px) saturate(160%);
-        background:
-            linear-gradient(160deg,
-                rgba(67, 160, 71, 0.09) 0%,
-                rgba(8, 20, 12, 0.96) 100%);
-        border-radius: 20px;
-        padding: 22px 14px;
-    }
-}
-
-/* ── Wrapper interno: flex coluna ── */
-#listaContasFixas {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-/* ── Grid 2 colunas ── */
 .contas-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
     align-items: start;
-    width: 100%;
 }
 
-/* ── Card individual — glassmorfismo premium ── */
 .conta-card {
     background:
         linear-gradient(145deg,
@@ -1204,27 +1107,21 @@ body::before {
             rgba(6, 18, 10, 0.72) 100%);
     backdrop-filter: blur(28px) saturate(170%) brightness(1.10);
     -webkit-backdrop-filter: blur(28px) saturate(170%) brightness(1.10);
-    /* Borda com luz vindo de cima-esquerda */
     border-top:    1px solid rgba(255, 255, 255, 0.22);
     border-left:   1px solid rgba(255, 255, 255, 0.13);
     border-right:  1px solid rgba(0, 0, 0, 0.22);
     border-bottom: 1px solid rgba(0, 0, 0, 0.28);
-    padding: 13px 11px;
-    border-radius: 18px;
-    font-size: 0.80rem;
+    padding: 24px;
+    border-radius: 16px;
+    font-size: 0.95rem;
     font-weight: 500;
     box-shadow:
-        /* Sombra de profundidade principal */
         0 10px 36px rgba(0, 0, 0, 0.50),
         0 4px 12px rgba(0, 0, 0, 0.30),
         0 1px 3px rgba(0, 0, 0, 0.20),
-        /* Highlight interno no topo */
         inset 0 1px 0 rgba(255, 255, 255, 0.18),
-        /* Sombra interna no fundo */
         inset 0 -1px 0 rgba(0, 0, 0, 0.18),
-        /* Highlight lateral esquerdo */
         inset 1px 0 0 rgba(255, 255, 255, 0.08),
-        /* Glow verde suave */
         0 0 0 1px rgba(67, 160, 71, 0.06);
     transition: all 0.30s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
@@ -1232,7 +1129,6 @@ body::before {
     overflow: hidden;
 }
 
-/* Reflexo de luz no topo do card */
 .conta-card::before {
     content: '';
     position: absolute;
@@ -1251,7 +1147,6 @@ body::before {
     transition: opacity 0.30s, left 0.30s, right 0.30s;
 }
 
-/* Barra lateral esquerda (glow) */
 .conta-card::after {
     content: '';
     position: absolute;
@@ -1263,7 +1158,7 @@ body::before {
         transparent 100%);
     opacity: 0;
     transition: opacity 0.30s;
-    border-radius: 18px 0 0 18px;
+    border-radius: 16px 0 0 16px;
 }
 
 .conta-card:hover::before {
@@ -1289,7 +1184,7 @@ body::before {
         inset 0 1px 0 rgba(255, 255, 255, 0.22),
         inset 0 -1px 0 rgba(0, 0, 0, 0.20),
         inset 1px 0 0 rgba(255, 255, 255, 0.10);
-    transform: translateY(-4px) scale(1.018);
+    transform: translateY(-6px) scale(1.02);
 }
 
 .conta-card:active {
@@ -1297,39 +1192,32 @@ body::before {
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
 }
 
-/* ── Cabeçalho do card ── */
 .conta-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 8px;
-    gap: 5px;
+    margin-bottom: 16px;
+    gap: 12px;
 }
 
 .conta-title {
-    font-size: 0.80rem;
+    font-size: 1.1rem;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.92);
-    letter-spacing: -0.2px;
-    text-shadow:
-        0 0 14px rgba(67, 160, 71, 0.32),
-        0 1px 2px rgba(0, 0, 0, 0.5);
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     flex: 1;
-    line-height: 1.35;
-    display: flex;
-    align-items: center;
-    gap: 5px;
 }
 
 .conta-status {
-    font-size: 0.60rem;
-    padding: 3px 7px;
+    font-size: 0.8rem;
+    padding: 6px 14px;
     border-radius: 20px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     white-space: nowrap;
-    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .status-pendente {
@@ -1361,48 +1249,36 @@ body::before {
     50%       { box-shadow: 0 0 16px rgba(255, 75, 75, 0.55); }
 }
 
-/* ── Informações ── */
 .conta-info {
-    color: rgba(176, 179, 193, 0.85);
-    font-size: 0.72rem;
-    line-height: 1.85;
-    margin-bottom: 10px;
-    padding: 7px 0;
-    border-top:    1px solid rgba(255, 255, 255, 0.06);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.22);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.8;
+    margin-bottom: 20px;
+    padding: 12px 0;
+    border-top:    1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* ── Ações ── */
 .conta-actions {
     display: flex;
-    gap: 6px;
+    gap: 10px;
     margin-top: auto;
 }
 
 .conta-btn {
     flex: 1;
-    padding: 8px 8px;
-    font-size: 0.68rem;
-    background:
-        linear-gradient(135deg,
-            rgba(80, 175, 85, 0.92) 0%,
-            rgba(46, 125, 50, 0.92) 100%);
-    color: rgba(255, 255, 255, 0.96);
-    border-top:    1px solid rgba(255, 255, 255, 0.20);
-    border-left:   1px solid rgba(255, 255, 255, 0.12);
-    border-right:  1px solid rgba(0, 0, 0, 0.20);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.28);
-    border-radius: 11px;
+    padding: 12px 20px;
+    font-size: 0.9rem;
+    background: linear-gradient(135deg, rgba(67, 160, 71, 0.9), rgba(46, 125, 50, 0.9));
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
     cursor: pointer;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
-    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow:
-        0 4px 16px rgba(67, 160, 71, 0.38),
-        0 0 18px rgba(67, 160, 71, 0.16),
-        inset 0 1px 0 rgba(255, 255, 255, 0.20),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+    letter-spacing: 0.5px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(67, 160, 71, 0.3);
     position: relative;
     overflow: hidden;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
@@ -1418,47 +1294,90 @@ body::before {
 }
 
 .conta-btn:hover {
-    transform: translateY(-2px);
-    box-shadow:
-        0 6px 22px rgba(67, 160, 71, 0.55),
-        0 0 28px rgba(67, 160, 71, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.25),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.15);
-    border-top-color: rgba(255, 255, 255, 0.28);
+    transform: translateY(-3px) scale(1.03);
+    box-shadow: 0 8px 20px rgba(67, 160, 71, 0.5);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .conta-btn:hover::before { opacity: 1; }
-.conta-btn:active { transform: scale(0.96); }
+.conta-btn:active { transform: translateY(-1px) scale(1.01); }
 
-/* ── Empty state ── */
 .empty-state {
     grid-column: 1 / -1;
     text-align: center;
     color: var(--text-secondary);
-    padding: 40px 16px;
-    font-size: 0.88rem;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 14px;
-    border: 1px dashed rgba(67, 160, 71, 0.18);
+    padding: 60px 20px;
+    font-size: 1rem;
+    background: rgba(26, 29, 46, 0.4);
+    border-radius: 16px;
+    border: 2px dashed rgba(67, 160, 71, 0.2);
 }
 
-/* ── Breakpoints ── */
 @media (max-width: 1400px) {
-    .contas-grid { grid-template-columns: repeat(2, 1fr); }
+    .contas-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 }
 
 @media (max-width: 900px) {
-    .contas-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .conta-card  { padding: 12px 10px; }
+    .contas-grid {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+    }
+    .conta-card { padding: 20px; }
 }
 
 @media (max-width: 768px) {
+    /* ── Seção premium apenas no mobile ── */
+    .section-box--contas {
+        background:
+            linear-gradient(160deg,
+                rgba(67, 160, 71, 0.07) 0%,
+                rgba(10, 24, 14, 0.82) 35%,
+                rgba(6, 15, 9, 0.92) 100%);
+        backdrop-filter: blur(48px) saturate(200%) brightness(1.03);
+        -webkit-backdrop-filter: blur(48px) saturate(200%) brightness(1.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-top: 1px solid rgba(67, 160, 71, 0.32);
+        border-radius: 20px;
+        padding: 22px 14px;
+        box-shadow:
+            0 24px 72px rgba(0, 0, 0, 0.55),
+            0 8px 24px rgba(0, 0, 0, 0.35),
+            0 0 80px rgba(67, 160, 71, 0.07),
+            inset 0 1px 0 rgba(255, 255, 255, 0.09),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+            inset 0 0 60px rgba(67, 160, 71, 0.03);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .section-box--contas::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 10%; right: 10%;
+        height: 1px;
+        background: linear-gradient(90deg,
+            transparent,
+            rgba(67, 160, 71, 0.55) 30%,
+            rgba(134, 213, 138, 0.90) 50%,
+            rgba(67, 160, 71, 0.55) 70%,
+            transparent);
+        box-shadow:
+            0 0 18px rgba(67, 160, 71, 0.55),
+            0 0 36px rgba(67, 160, 71, 0.25);
+        z-index: 1;
+    }
+
+    .section-box--contas > * {
+        position: relative;
+        z-index: 1;
+    }
+
     .contas-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, 1fr) !important;
         gap: 8px;
     }
+
     .conta-card {
-        /* Mobile: mantém blur reduzido para performance */
         backdrop-filter: blur(18px) saturate(150%);
         -webkit-backdrop-filter: blur(18px) saturate(150%);
         background:
@@ -1466,13 +1385,14 @@ body::before {
                 rgba(255, 255, 255, 0.08) 0%,
                 rgba(6, 18, 10, 0.88) 100%);
         padding: 11px 9px;
+        border-radius: 18px;
     }
-    .conta-card:hover   { transform: none; }
-    .conta-title        { font-size: 0.74rem; }
-    .conta-info         { font-size: 0.68rem; }
-    .conta-btn          { font-size: 0.65rem; padding: 7px 6px; }
-    .conta-status       { font-size: 0.58rem; padding: 2px 6px; }
-    .conta-actions      { flex-direction: row; }
+    .conta-card:hover { transform: none; }
+    .conta-title      { font-size: 0.74rem; }
+    .conta-info       { font-size: 0.68rem; margin-bottom: 10px; }
+    .conta-btn        { font-size: 0.65rem; padding: 7px 6px; }
+    .conta-status     { font-size: 0.58rem; padding: 2px 6px; }
+    .conta-actions    { flex-direction: row; }
 }
 
 /* ========== PAINEL DE ALERTAS DE VENCIMENTO ========== */
