@@ -3444,13 +3444,13 @@ select.form-input option:checked {
 
     /* ── Ajuste main-content no mobile ── */
     .main-content {
-        margin-left: 0 !important;
-        padding: 16px 16px 88px 16px !important;
+    margin-left: 0 !important;
+    padding: 78px 16px 88px 16px !important;
     }
 
     .page-header-premium {
     display: none !important;
-}
+    }
 
     /* ══════════════════════════════════════════
        BOTTOM NAV MOBILE
