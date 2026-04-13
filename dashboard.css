@@ -3449,8 +3449,8 @@ select.form-input option:checked {
     }
 
     .page-header-premium {
-        margin-top: 74px !important;
-    }
+    display: none !important;
+}
 
     /* ══════════════════════════════════════════
        BOTTOM NAV MOBILE
