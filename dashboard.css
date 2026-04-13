@@ -3808,3 +3808,409 @@ select.form-input option:checked {
             inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
     }
 }
+
+/* ========== CARTÕES - NOVO LAYOUT PREMIUM ========== */
+
+#cartoesGrid.cartoes-grid {
+    display: block;
+}
+
+.cartoes-novo-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding: 0 4px;
+}
+
+.cartoes-novo-titulo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.cartoes-novo-titulo i { color: var(--primary); }
+
+.cartoes-novo-btn-add {
+    background: var(--gradient-primary);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+    box-shadow: 0 4px 12px rgba(67,160,71,0.3);
+}
+
+.cartoes-novo-btn-add:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(67,160,71,0.45);
+}
+
+.cartao-featured-wrapper { margin-bottom: 28px; }
+
+.cartao-featured-card {
+    position: relative;
+    border-radius: 22px;
+    padding: 28px 24px 22px;
+    min-height: 210px;
+    overflow: hidden;
+    margin-bottom: 14px;
+    box-shadow:
+        0 24px 64px rgba(0,0,0,0.55),
+        inset 0 1px 0 rgba(255,255,255,0.15);
+    transition: transform 0.35s ease, box-shadow 0.35s ease;
+}
+
+.cartao-featured-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 32px 80px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.cartao-featured-card::before {
+    content: '';
+    position: absolute;
+    top: -60%;
+    right: -25%;
+    width: 320px;
+    height: 320px;
+    background: rgba(255,255,255,0.055);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.cartao-featured-card::after {
+    content: '';
+    position: absolute;
+    bottom: -45%;
+    left: -15%;
+    width: 260px;
+    height: 260px;
+    background: rgba(255,255,255,0.035);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.cartao-featured-bank-icon {
+    position: absolute;
+    top: 18px;
+    left: 20px;
+    width: 50px;
+    height: 50px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 7px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+}
+
+.cartao-featured-bank-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.cartao-featured-contactless {
+    position: absolute;
+    top: 20px;
+    right: 22px;
+    font-size: 1.5rem;
+    color: rgba(255,255,255,0.6);
+    transform: rotate(90deg);
+}
+
+.cartao-featured-chip {
+    position: absolute;
+    top: 72px;
+    left: 24px;
+    width: 42px;
+    height: 32px;
+    background: linear-gradient(135deg, #d4af37 0%, #f5d060 50%, #c9a227 100%);
+    border-radius: 7px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+
+.cartao-featured-chip::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 70%;
+    height: 62%;
+    border: 1.5px solid rgba(0,0,0,0.18);
+    border-radius: 3px;
+}
+
+.cartao-featured-nome {
+    position: relative;
+    z-index: 1;
+    margin-top: 72px;
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: white;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    letter-spacing: 0.5px;
+    margin-bottom: 16px;
+}
+
+.cartao-featured-limite,
+.cartao-featured-disponivel {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 10px;
+}
+
+.cartao-featured-label {
+    font-size: 0.72rem;
+    color: rgba(255,255,255,0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+    font-weight: 500;
+}
+
+.cartao-featured-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: white;
+    letter-spacing: -0.3px;
+}
+
+.cartao-featured-value--green { color: #00ff99; }
+
+.cartao-featured-bar-wrapper {
+    position: relative;
+    z-index: 1;
+    margin-top: 10px;
+}
+
+.cartao-featured-bar {
+    width: 100%;
+    height: 5px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+
+.cartao-featured-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.7s ease;
+}
+
+.cartao-featured-bar-label {
+    font-size: 0.72rem;
+    color: rgba(255,255,255,0.55);
+}
+
+/* Frozen state */
+.cartao-congelado { filter: saturate(0.25) brightness(0.75); }
+
+.cartao-frozen-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: rgba(50,180,255,0.12);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    color: #70ddff;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 22px;
+}
+
+.cartao-frozen-overlay i {
+    font-size: 2.2rem;
+    animation: snowflakeSpin 4s linear infinite;
+}
+
+@keyframes snowflakeSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* Action buttons */
+.cartao-actions-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.cartao-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 14px 8px;
+    background: rgba(255,255,255,0.065);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.22s;
+    -webkit-tap-highlight-color: transparent;
+    font-family: 'DM Sans', sans-serif;
+}
+
+.cartao-action-btn i { font-size: 1.15rem; color: var(--primary); }
+
+.cartao-action-btn:hover {
+    background: rgba(67,160,71,0.14);
+    border-color: rgba(67,160,71,0.3);
+    transform: translateY(-2px);
+}
+
+.cartao-action-btn:active { transform: scale(0.95); }
+
+.cartao-action-btn--freeze i  { color: #60d4ff; }
+.cartao-action-btn--frozen    { background: rgba(96,212,255,0.1); border-color: rgba(96,212,255,0.3); }
+.cartao-action-btn--frozen i  { color: #ff8c42; }
+
+/* My Cards section */
+.meus-cartoes-section { margin-top: 6px; }
+
+.meus-cartoes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.meus-cartoes-count {
+    font-size: 0.83rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.meus-cartoes-lista {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    scrollbar-width: none;
+}
+
+.meus-cartoes-lista::-webkit-scrollbar { display: none; }
+
+.meus-cartoes-mini {
+    flex-shrink: 0;
+    width: 130px;
+    height: 82px;
+    border-radius: 14px;
+    padding: 10px 12px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    border: 2px solid transparent;
+    transition: all 0.22s cubic-bezier(0.4,0,0.2,1);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+
+.meus-cartoes-mini:hover { transform: translateY(-3px); }
+
+.meus-cartoes-mini--ativo {
+    border-color: rgba(255,255,255,0.55) !important;
+    transform: translateY(-5px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.2);
+}
+
+.meus-cartoes-mini-icon {
+    position: absolute;
+    top: 7px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    opacity: 0.9;
+}
+
+.meus-cartoes-mini-nome {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.92);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+    z-index: 1;
+}
+
+.meus-cartoes-mini-disp {
+    font-size: 0.63rem;
+    color: rgba(255,255,255,0.55);
+    margin-top: 2px;
+    position: relative;
+    z-index: 1;
+}
+
+.meus-cartoes-mini--add {
+    background: rgba(255,255,255,0.04) !important;
+    border: 2px dashed rgba(67,160,71,0.4) !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    color: var(--primary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+}
+
+.meus-cartoes-mini--add i { font-size: 1.1rem; }
+.meus-cartoes-mini--add:hover { border-color: var(--primary) !important; background: rgba(67,160,71,0.1) !important; }
+
+.mini-frozen-badge {
+    position: absolute;
+    top: 5px;
+    left: 6px;
+    color: #60d4ff;
+    font-size: 0.75rem;
+    z-index: 2;
+}
+
+.cartoes-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.cartoes-empty-state p { margin-top: 12px; font-size: 0.95rem; }
+
+@media (max-width: 768px) {
+    .cartao-featured-card { padding: 20px 18px 16px; min-height: 185px; }
+    .cartao-featured-nome { margin-top: 62px; font-size: 1.2rem; }
+    .cartao-featured-value { font-size: 1.1rem; }
+    .cartao-action-btn { padding: 12px 6px; font-size: 0.7rem; }
+    .meus-cartoes-mini { width: 112px; height: 74px; }
+}
