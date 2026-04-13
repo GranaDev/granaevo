@@ -413,39 +413,55 @@
                 </div>
 
                 <div class="transaction-form">
-                    <select id="selectCategoria" class="form-input" aria-label="Categoria da transação">
-                        <option value="">Selecione a categoria</option>
-                        <option value="entrada">Entrada</option>
-                        <option value="saida">Saída</option>
-                        <option value="reserva">Reserva</option>
-                        <option value="saida_credito">Saída no Crédito</option>
-                    </select>
-                    <select id="selectTipo" class="form-input" aria-label="Tipo da transação">
-                        <option value="">Selecione o tipo</option>
-                    </select>
-                    <input
-                        type="text"
-                        id="inputDescricao"
-                        class="form-input"
-                        placeholder="Descrição"
-                        maxlength="300"
-                        aria-label="Descrição da transação">
-                    <input
-                        type="number"
-                        id="inputValor"
-                        class="form-input"
-                        placeholder="Valor (R$)"
-                        step="0.01"
-                        min="0"
-                        max="99999999"
-                        aria-label="Valor da transação">
+                    <div class="form-field-icon">
+                        <i class="fas fa-tag" aria-hidden="true"></i>
+                        <select id="selectCategoria" class="form-input" aria-label="Categoria da transação">
+                            <option value="">Selecione a categoria</option>
+                            <option value="entrada">Entrada</option>
+                            <option value="saida">Saída</option>
+                            <option value="reserva">Reserva</option>
+                            <option value="saida_credito">Saída no Crédito</option>
+                        </select>
+                    </div>
+                    <div class="form-field-icon">
+                        <i class="fas fa-list-ul" aria-hidden="true"></i>
+                        <select id="selectTipo" class="form-input" aria-label="Tipo da transação">
+                            <option value="">Selecione o tipo</option>
+                        </select>
+                    </div>
+                    <div class="form-field-icon">
+                        <i class="fas fa-pen" aria-hidden="true"></i>
+                        <input
+                            type="text"
+                            id="inputDescricao"
+                            class="form-input"
+                            placeholder="Descrição"
+                            maxlength="300"
+                            aria-label="Descrição da transação">
+                    </div>
+                    <div class="form-field-icon">
+                        <i class="fas fa-coins" aria-hidden="true"></i>
+                        <input
+                            type="number"
+                            id="inputValor"
+                            class="form-input"
+                            placeholder="Valor (R$)"
+                            step="0.01"
+                            min="0"
+                            max="99999999"
+                            aria-label="Valor da transação">
+                    </div>
                     <div id="creditoFields" style="display:none;">
-                        <select id="selectCartao" class="form-input" aria-label="Cartão de crédito">
-                            <option value="">Selecione o cartão</option>
-                        </select>
-                        <select id="selectParcelas" class="form-input" aria-label="Número de parcelas">
-                            <option value="1">1x</option>
-                        </select>
+                        <div class="form-field-icon">
+                            <i class="fas fa-credit-card" aria-hidden="true"></i>
+                            <select id="selectCartao" class="form-input" aria-label="Cartão de crédito"></select>
+                        </div>
+                        <div class="form-field-icon">
+                            <i class="fas fa-layer-group" aria-hidden="true"></i>
+                            <select id="selectParcelas" class="form-input" aria-label="Número de parcelas">
+                                <option value="1">1x</option>
+                            </select>
+                        </div>
                     </div>
                     <button class="btn-primary btn-large" id="btnLancar" type="button">
                         Lançar Transação
