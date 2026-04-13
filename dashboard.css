@@ -1102,8 +1102,8 @@ body::before {
 
 .contas-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
     align-items: start;
     width: 100%;
 }
@@ -1308,8 +1308,9 @@ body::before {
 }
 
 @media (max-width: 1400px) {
-    .contas-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+    .contas-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 }
+
 @media (max-width: 900px) {
     .contas-grid {
         grid-template-columns: repeat(2, 1fr);
