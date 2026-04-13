@@ -3216,43 +3216,6 @@ function lancarTransacao() {
     });
 }
 
-function _obterIconeTransacao(categoria, tipo) {
-    const t = (tipo || '').toLowerCase();
-
-    if (categoria === 'entrada') {
-        if (t.includes('sal') && (t.includes('rio') || t.includes('rio'))) return 'fa-money-bill-wave';
-        if (t.includes('renda') || t.includes('extra')) return 'fa-chart-line';
-        if (t.includes('recebimento')) return 'fa-hand-holding-dollar';
-        return 'fa-arrow-trend-up';
-    }
-
-    if (categoria === 'reserva')          return 'fa-piggy-bank';
-    if (categoria === 'retirada_reserva') return 'fa-arrow-right-from-bracket';
-
-    if (t.includes('mercado livre'))                              return 'fa-store';
-    if (t.includes('mercado'))                                    return 'fa-cart-shopping';
-    if (t.includes('farm'))                                       return 'fa-pills';
-    if (t.includes('eletr'))                                      return 'fa-laptop';
-    if (t.includes('roupa') || t.includes('vestuário'))          return 'fa-shirt';
-    if (t.includes('assinatura') || t.includes('streaming'))     return 'fa-rotate';
-    if (t.includes('beleza') || t.includes('cabelo'))            return 'fa-scissors';
-    if (t.includes('presente'))                                   return 'fa-gift';
-    if (t.includes('conta') || t.includes('fatura'))             return 'fa-file-invoice-dollar';
-    if (t.includes('cart'))                                       return 'fa-credit-card';
-    if (t.includes('academia') || t.includes('gym'))             return 'fa-dumbbell';
-    if (t.includes('lazer') || t.includes('entretenimento'))     return 'fa-gamepad';
-    if (t.includes('transporte') || t.includes('uber') || t.includes('gasolina') || t.includes('combustível')) return 'fa-bus';
-    if (t.includes('shopee'))                                     return 'fa-bag-shopping';
-    if (t.includes('ifood') || t.includes('restaurante') || t.includes('alimenta')) return 'fa-utensils';
-    if (t.includes('amazon'))                                     return 'fa-box';
-    if (t.includes('chat') || t.includes('ia') || t.includes('robot')) return 'fa-robot';
-    if (t.includes('saúde') || t.includes('médico') || t.includes('consulta')) return 'fa-stethoscope';
-    if (t.includes('educação') || t.includes('curso') || t.includes('livro')) return 'fa-graduation-cap';
-    if (t.includes('viagem') || t.includes('hotel') || t.includes('passagem')) return 'fa-plane';
-
-    return 'fa-arrow-up-right-dots';
-}
-
 function atualizarMovimentacoesUI() {
     const lista = document.getElementById('listaMovimentacoes');
     if (!lista) return;
@@ -3268,36 +3231,16 @@ function atualizarMovimentacoesUI() {
     }
 
     const arr = transacoes.slice().reverse();
-    let ultimaData = null;
 
     arr.forEach(t => {
-        const dataExibida = _sanitizeText(t.data || '');
+        const div       = document.createElement('div');
+        div.className   = 'mov-item';
 
-        if (dataExibida && dataExibida !== ultimaData) {
-            ultimaData = dataExibida;
-            const sep       = document.createElement('div');
-            sep.className   = 'mov-date-separator';
-            sep.textContent = dataExibida;
-            lista.appendChild(sep);
-        }
+        // ── Lado esquerdo
+        const left      = document.createElement('div');
+        left.className  = 'mov-left';
 
-        const div     = document.createElement('div');
-        div.className = 'mov-item';
-
-        const categoriasPermitidas = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
-        const categoriaSegura = categoriasPermitidas.includes(t.categoria) ? t.categoria : 'saida';
-
-        const iconeBadge     = document.createElement('div');
-        iconeBadge.className = `mov-icon-badge ${categoriaSegura}`;
-
-        const iconeEl = document.createElement('i');
-        iconeEl.className = `fas ${_obterIconeTransacao(t.categoria, t.tipo)}`;
-        iconeEl.setAttribute('aria-hidden', 'true');
-        iconeBadge.appendChild(iconeEl);
-
-        const left    = document.createElement('div');
-        left.className = 'mov-left';
-
+        // ✅ textContent — nunca innerHTML com dados do usuário
         const divTipo       = document.createElement('div');
         divTipo.className   = 'mov-tipo';
         divTipo.textContent = _sanitizeText(t.tipo);
@@ -3306,24 +3249,36 @@ function atualizarMovimentacoesUI() {
         divDesc.className   = 'mov-desc';
         divDesc.textContent = _sanitizeText(t.descricao);
 
+        const divData       = document.createElement('div');
+        divData.className   = 'mov-data';
+        divData.textContent = `${_sanitizeText(t.data)} ${_sanitizeText(t.hora)}`;
+
         left.appendChild(divTipo);
         left.appendChild(divDesc);
+        left.appendChild(divData);
 
+        // ── Lado direito
         const right     = document.createElement('div');
         right.className = 'mov-right';
 
-        const sinal = (t.categoria === 'entrada' || t.categoria === 'retirada_reserva') ? '+' : '-';
+        // ✅ className atribuído por lookup — nunca interpolado com dado do usuário
+        const categoriasPermitidas = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
+        const styleClass = categoriasPermitidas.includes(t.categoria) ? t.categoria : 'saida';
 
         const divValor       = document.createElement('div');
-        divValor.className   = categoriaSegura;
+        divValor.className   = styleClass;
+        // ✅ sinal determinado por lógica — nunca vem de dado do usuário
+        const sinal = (t.categoria === 'entrada' || t.categoria === 'retirada_reserva') ? '+' : '-';
         divValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
+
         right.appendChild(divValor);
 
-        div.appendChild(iconeBadge);
         div.appendChild(left);
         div.appendChild(right);
 
+        // ✅ addEventListener — sem onclick inline
         div.addEventListener('click', () => abrirDetalhesTransacao(t.id));
+
         lista.appendChild(div);
     });
 }
