@@ -3813,6 +3813,8 @@ select.form-input option:checked {
 
 #cartoesGrid.cartoes-grid {
     display: block;
+    max-width: 600px;
+    margin: 0 auto;
 }
 
 .cartoes-novo-header {
@@ -3855,13 +3857,20 @@ select.form-input option:checked {
     box-shadow: 0 6px 18px rgba(67,160,71,0.45);
 }
 
-.cartao-featured-wrapper { margin-bottom: 28px; }
+.cartao-featured-wrapper { 
+    margin-bottom: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
 
 .cartao-featured-card {
     position: relative;
     border-radius: 22px;
     padding: 28px 24px 22px;
     min-height: 210px;
+    width: 100%;
+    max-width: 480px;
     overflow: hidden;
     margin-bottom: 14px;
     box-shadow:
@@ -4055,6 +4064,9 @@ select.form-input option:checked {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 10px;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
 }
 
 .cartao-action-btn {
@@ -4091,7 +4103,7 @@ select.form-input option:checked {
 .cartao-action-btn--frozen i  { color: #ff8c42; }
 
 /* My Cards section */
-.meus-cartoes-section { margin-top: 6px; }
+.meus-cartoes-section { margin-top: 24px; }
 
 .meus-cartoes-header {
     display: flex;
@@ -4111,8 +4123,8 @@ select.form-input option:checked {
 
 .meus-cartoes-lista {
     display: flex;
-    gap: 12px;
-    overflow-x: auto;
+    gap: 16px;
+    flex-wrap: wrap;
     padding-bottom: 8px;
     scrollbar-width: none;
 }
@@ -4121,10 +4133,10 @@ select.form-input option:checked {
 
 .meus-cartoes-mini {
     flex-shrink: 0;
-    width: 130px;
-    height: 82px;
+    width: 160px;
+    height: 100px;
     border-radius: 14px;
-    padding: 10px 12px;
+    padding: 12px 14px;
     cursor: pointer;
     position: relative;
     overflow: hidden;
