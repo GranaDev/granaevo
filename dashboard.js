@@ -1455,6 +1455,8 @@ function mostrarTela(tela) {
         p.style.display = 'none';
     });
 
+    window.scrollTo({ top: 0, behavior: 'instant' });
+
     // Sidebar — nav-btn
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     const sidebarBtn = document.querySelector(`.nav-btn[data-page="${tela}"]`);
