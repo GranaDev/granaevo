@@ -3813,7 +3813,7 @@ select.form-input option:checked {
 
 #cartoesGrid.cartoes-grid {
     display: block;
-    max-width: 600px;
+    max-width: 1100px;
     margin: 0 auto;
 }
 
@@ -3862,6 +3862,15 @@ select.form-input option:checked {
     display: flex;
     flex-direction: column;
     align-items: center;
+}
+
+@media (min-width: 769px) {
+    .cartao-featured-card {
+        max-width: 560px;
+    }
+    .cartao-actions-row {
+        max-width: 560px;
+    }
 }
 
 .cartao-featured-card {
@@ -4148,22 +4157,21 @@ select.form-input option:checked {
 }
 
 .meus-cartoes-lista {
-    display: flex;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
     padding-bottom: 8px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
     scrollbar-width: none;
 }
 
 .meus-cartoes-lista::-webkit-scrollbar { display: none; }
 
 .meus-cartoes-mini {
-    width: 130px;
-    height: 84px;
+    width: 100%;
+    height: 130px;
     flex-shrink: 0;
     border-radius: 14px;
-    padding: 12px 14px;
+    padding: 14px 16px;
     cursor: pointer;
     position: relative;
     overflow: hidden;
