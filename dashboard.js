@@ -4601,6 +4601,19 @@ function abrirAnaliseDisciplina(metaId) {
 // Expor função globalmente
 window.abrirAnaliseDisciplina = abrirAnaliseDisciplina;
 
+// ── Abreviações dos bancos — badge CSS sem dependência de imagem externa
+const BANCO_ABREV = Object.freeze({
+    'Nubank':          'NU',
+    'Bradesco':        'BDC',
+    'Mercado Pago':    'MP',
+    'C6 Bank':         'C6',
+    'Itaú':            'ITÁ',
+    'Santander':       'SAN',
+    'Banco do Brasil': 'BB',
+    'Caixa':           'CEF',
+    'Alelo':           'ALE',
+});
+
 // ========== CARTÕES DE CRÉDITO ==========
 function atualizarTelaCartoes() {
     const grid = document.getElementById('cartoesGrid');
@@ -4684,20 +4697,11 @@ function atualizarTelaCartoes() {
     const nameRow = document.createElement('div');
     nameRow.className = 'cartao-featured-name-row';
 
-    if (cartaoAtivo.bandeiraImg) {
-        try {
-            const urlObj = new URL(cartaoAtivo.bandeiraImg);
-            if (urlObj.protocol === 'https:' && urlObj.hostname === 'logospng.org') {
-                const bankIconWrap = document.createElement('div');
-                bankIconWrap.className = 'cartao-featured-bank-icon';
-                const bankIconImg = document.createElement('img');
-                bankIconImg.src = cartaoAtivo.bandeiraImg;
-                bankIconImg.alt = '';
-                bankIconWrap.appendChild(bankIconImg);
-                nameRow.appendChild(bankIconWrap);
-            }
-        } catch (_) {}
-    }
+    const bankIconWrap = document.createElement('div');
+    bankIconWrap.className = 'cartao-featured-bank-icon';
+    bankIconWrap.textContent = BANCO_ABREV[cartaoAtivo.nomeBanco]
+        || _sanitizeText(cartaoAtivo.nomeBanco).substring(0, 2).toUpperCase();
+    nameRow.appendChild(bankIconWrap);
 
     const nomeDiv = document.createElement('div');
     nomeDiv.className = 'cartao-featured-nome';
@@ -4882,18 +4886,11 @@ function atualizarTelaCartoes() {
             miniCard.appendChild(frozenBadge);
         }
 
-        if (c.bandeiraImg) {
-            try {
-                const urlObj = new URL(c.bandeiraImg);
-                if (urlObj.protocol === 'https:' && urlObj.hostname === 'logospng.org') {
-                    const miniIc = document.createElement('img');
-                    miniIc.src = c.bandeiraImg;
-                    miniIc.alt = '';
-                    miniIc.className = 'meus-cartoes-mini-icon';
-                    miniCard.appendChild(miniIc);
-                }
-            } catch (_) {}
-        }
+        const miniAbrevEl = document.createElement('div');
+        miniAbrevEl.className = 'meus-cartoes-mini-abrev';
+        miniAbrevEl.textContent = BANCO_ABREV[c.nomeBanco]
+            || _sanitizeText(c.nomeBanco).substring(0, 2).toUpperCase();
+        miniCard.appendChild(miniAbrevEl);
 
         const miniNome = document.createElement('div');
         miniNome.className = 'meus-cartoes-mini-nome';
@@ -4932,16 +4929,16 @@ function atualizarTelaCartoes() {
 
 function abrirCartaoForm(editId = null) {
     const bancos = [
-        { nome: 'Nubank',          img: 'https://logospng.org/download/nubank/logo-nubank-roxo-4096.png' },
-        { nome: 'Bradesco',        img: 'https://logospng.org/download/bradesco/logo-bradesco-escudo-1024.png' },
-        { nome: 'Mercado Pago',    img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icone-1024.png' },
-        { nome: 'C6 Bank',         img: 'https://logospng.org/download/c6-bank/logo-c6-bank-1024.png' },
-        { nome: 'Itaú',            img: 'https://logospng.org/download/itau/logo-itau-4096.png' },
-        { nome: 'Santander',       img: 'https://logospng.org/download/santander/logo-santander-icon-4096.png' },
-        { nome: 'Banco do Brasil', img: 'https://logospng.org/download/banco-do-brasil/logo-banco-do-brasil-icon-4096.png' },
-        { nome: 'Caixa',           img: 'https://logospng.org/download/caixa-economica-federal/logo-caixa-economica-federal-4096.png' },
-        { nome: 'Alelo',           img: 'https://logospng.org/download/alelo/alelo-4096.png' },
-        { nome: 'Outro',           img: '' },
+        { nome: 'Nubank' },
+        { nome: 'Bradesco' },
+        { nome: 'Mercado Pago' },
+        { nome: 'C6 Bank' },
+        { nome: 'Itaú' },
+        { nome: 'Santander' },
+        { nome: 'Banco do Brasil' },
+        { nome: 'Caixa' },
+        { nome: 'Alelo' },
+        { nome: 'Outro' },
     ];
 
     // ========== CONGELAR / DESCONGELAR CARTÃO ==========
