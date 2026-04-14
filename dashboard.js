@@ -4932,12 +4932,12 @@ function atualizarTelaCartoes() {
 
 function abrirCartaoForm(editId = null) {
     const bancos = [
-        { nome: 'Nubank',          img: 'https://logospng.org/download/nubank/logo-roxo-nubank-icone.png' },
-        { nome: 'Bradesco',        img: 'https://logospng.org/download/bradesco/logo-bradesco-icon-256.png' },
+        { nome: 'Nubank',          img: 'https://logospng.org/download/nubank/logo-nubank-roxo-icon-256.png' },
+        { nome: 'Bradesco',        img: 'https://logospng.org/download/bradesco/logo-bradesco-escudo-256.png' },
         { nome: 'Mercado Pago',    img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icon.png' },
         { nome: 'C6 Bank',         img: 'https://logospng.org/download/c6-bank/logo-c6-bank-icon.png' },
         { nome: 'Itaú',            img: 'https://logospng.org/download/itau/logo-itau-icon.png' },
-        { nome: 'Santander',       img: 'https://logospng.org/download/santander/logo-santander-icon.png' },
+        { nome: 'Santander',       img: 'https://logospng.org/download/santander/logo-santander-icon-256.png' },
         { nome: 'Banco do Brasil', img: 'https://logospng.org/download/banco-do-brasil/logo-banco-do-brasil-icon.png' },
         { nome: 'Caixa',           img: 'https://logospng.org/download/caixa/logo-caixa-icon.png' },
         { nome: 'Outro',           img: '' },
