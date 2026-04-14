@@ -4088,9 +4088,9 @@ select.form-input option:checked {
 .cartao-actions-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+    gap: 14px;
     width: 100%;
-    max-width: 480px;
+    max-width: 520px;
     margin: 0 auto;
 }
 
@@ -4099,22 +4099,22 @@ select.form-input option:checked {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 18px 12px;
+    gap: 10px;
+    padding: 26px 20px;
     background: rgba(255,255,255,0.065);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 16px;
     color: var(--text-primary);
-    font-size: 0.88rem;
+    font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.22s;
     -webkit-tap-highlight-color: transparent;
     font-family: 'DM Sans', sans-serif;
-    min-height: 80px;
+    min-height: 108px;
 }
 
-.cartao-action-btn i { font-size: 1.4rem; color: var(--primary); }
+.cartao-action-btn i { font-size: 1.75rem; color: var(--primary); }
 
 .cartao-action-btn:hover {
     background: rgba(67,160,71,0.14);
@@ -4148,18 +4148,20 @@ select.form-input option:checked {
 }
 
 .meus-cartoes-lista {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    display: flex;
     gap: 12px;
     padding-bottom: 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     scrollbar-width: none;
 }
 
 .meus-cartoes-lista::-webkit-scrollbar { display: none; }
 
 .meus-cartoes-mini {
-    width: 100%;
-    height: 110px;
+    width: 130px;
+    height: 84px;
+    flex-shrink: 0;
     border-radius: 14px;
     padding: 12px 14px;
     cursor: pointer;
