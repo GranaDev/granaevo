@@ -4932,14 +4932,15 @@ function atualizarTelaCartoes() {
 
 function abrirCartaoForm(editId = null) {
     const bancos = [
-        { nome: 'Nubank',          img: 'https://logospng.org/download/nubank/logo-nubank-roxo-icon-256.png' },
-        { nome: 'Bradesco',        img: 'https://logospng.org/download/bradesco/logo-bradesco-escudo-256.png' },
-        { nome: 'Mercado Pago',    img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icon.png' },
-        { nome: 'C6 Bank',         img: 'https://logospng.org/download/c6-bank/logo-c6-bank-icon.png' },
-        { nome: 'Itaú',            img: 'https://logospng.org/download/itau/logo-itau-icon.png' },
-        { nome: 'Santander',       img: 'https://logospng.org/download/santander/logo-santander-icon-256.png' },
-        { nome: 'Banco do Brasil', img: 'https://logospng.org/download/banco-do-brasil/logo-banco-do-brasil-icon.png' },
-        { nome: 'Caixa',           img: 'https://logospng.org/download/caixa/logo-caixa-icon.png' },
+        { nome: 'Nubank',          img: 'https://logospng.org/download/nubank/logo-nubank-roxo-4096.png' },
+        { nome: 'Bradesco',        img: 'https://logospng.org/download/bradesco/logo-bradesco-escudo-1024.png' },
+        { nome: 'Mercado Pago',    img: 'https://logospng.org/download/mercado-pago/logo-mercado-pago-icone-1024.png' },
+        { nome: 'C6 Bank',         img: 'https://logospng.org/download/c6-bank/logo-c6-bank-1024.png' },
+        { nome: 'Itaú',            img: 'https://logospng.org/download/itau/logo-itau-4096.png' },
+        { nome: 'Santander',       img: 'https://logospng.org/download/santander/logo-santander-icon-4096.png' },
+        { nome: 'Banco do Brasil', img: 'https://logospng.org/download/banco-do-brasil/logo-banco-do-brasil-icon-4096.png' },
+        { nome: 'Caixa',           img: 'https://logospng.org/download/caixa-economica-federal/logo-caixa-economica-federal-4096.png' },
+        { nome: 'Alelo',           img: 'https://logospng.org/download/alelo/alelo-4096.png' },
         { nome: 'Outro',           img: '' },
     ];
 
