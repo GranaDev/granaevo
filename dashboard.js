@@ -4667,7 +4667,7 @@ function atualizarTelaCartoes() {
         return;
     }
 
-    // ── FEATURED CARD ────────────────────────────────────────
+    // ── FEATURED CARD ────────────────────────────────────────────────
     const featuredWrapper = document.createElement('div');
     featuredWrapper.className = 'cartao-featured-wrapper';
 
@@ -4677,7 +4677,13 @@ function atualizarTelaCartoes() {
     featured.style.background = corGrad;
     if (cartaoAtivo.congelado) featured.classList.add('cartao-congelado');
 
-    // Bank icon
+    // ── TOPO: ícone do banco + nome (esquerda) | contactless (direita)
+    const topoDiv = document.createElement('div');
+    topoDiv.className = 'cartao-featured-top';
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'cartao-featured-name-row';
+
     if (cartaoAtivo.bandeiraImg) {
         try {
             const urlObj = new URL(cartaoAtivo.bandeiraImg);
@@ -4688,61 +4694,58 @@ function atualizarTelaCartoes() {
                 bankIconImg.src = cartaoAtivo.bandeiraImg;
                 bankIconImg.alt = '';
                 bankIconWrap.appendChild(bankIconImg);
-                featured.appendChild(bankIconWrap);
+                nameRow.appendChild(bankIconWrap);
             }
         } catch (_) {}
     }
 
-    // Contactless icon
+    const nomeDiv = document.createElement('div');
+    nomeDiv.className = 'cartao-featured-nome';
+    nomeDiv.textContent = _sanitizeText(cartaoAtivo.nomeBanco);
+    nameRow.appendChild(nomeDiv);
+
     const contactless = document.createElement('div');
     contactless.className = 'cartao-featured-contactless';
     const icContactless = document.createElement('i');
     icContactless.className = 'fas fa-wifi';
     icContactless.setAttribute('aria-hidden', 'true');
     contactless.appendChild(icContactless);
-    featured.appendChild(contactless);
 
-    // Chip
+    topoDiv.appendChild(nameRow);
+    topoDiv.appendChild(contactless);
+    featured.appendChild(topoDiv);
+
+    // ── MEIO: chip centralizado à esquerda
+    const middleDiv = document.createElement('div');
+    middleDiv.className = 'cartao-featured-middle';
+
     const chip = document.createElement('div');
     chip.className = 'cartao-featured-chip';
-    featured.appendChild(chip);
+    middleDiv.appendChild(chip);
+    featured.appendChild(middleDiv);
 
-    // Card name row (nome + símbolo lado a lado)
-    const nomeRow = document.createElement('div');
-    nomeRow.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-bottom: 16px;';
-
-    const nomeDiv = document.createElement('div');
-    nomeDiv.className = 'cartao-featured-nome';
-    nomeDiv.style.margin = '0';
-    nomeDiv.textContent = _sanitizeText(cartaoAtivo.nomeBanco);
-
-    nomeRow.appendChild(nomeDiv);
-    featured.appendChild(nomeRow);
-    
-    // Available row (canto inferior esquerdo)
+    // ── RODAPÉ: disponível (esquerda) + limite (direita)
     const disponivel = Math.max(0, cartaoAtivo.limite - (cartaoAtivo.usado || 0));
-    const infoBottomRow = document.createElement('div');
-    infoBottomRow.style.cssText = 'display: flex; justify-content: space-between; align-items: flex-end; width: 100%; margin-top: auto;';
 
+    const bottomDiv = document.createElement('div');
+    bottomDiv.className = 'cartao-featured-bottom';
+
+    // Disponível — esquerda
     const dispDiv = document.createElement('div');
     dispDiv.className = 'cartao-featured-disponivel';
-    dispDiv.style.cssText = 'border-left: none; background: none; padding: 0;';
     const dispLbl = document.createElement('span');
     dispLbl.className = 'cartao-featured-label';
     dispLbl.textContent = 'Disponível';
     const dispVal = document.createElement('span');
     dispVal.className = 'cartao-featured-value cartao-featured-value--green';
     dispVal.textContent = formatBRL(disponivel);
-    const dispCol = document.createElement('div');
-    dispCol.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
-    dispCol.appendChild(dispLbl);
-    dispCol.appendChild(dispVal);
-    dispDiv.appendChild(dispCol);
+    dispDiv.appendChild(dispLbl);
+    dispDiv.appendChild(dispVal);
 
-    // Limit (canto inferior direito)
+    // Limite — direita
     const limiteDiv = document.createElement('div');
     limiteDiv.className = 'cartao-featured-limite';
-    limiteDiv.style.cssText = 'display: flex; flex-direction: column; align-items: flex-end; gap: 2px;';
+    limiteDiv.style.textAlign = 'right';
     const limiteLbl = document.createElement('span');
     limiteLbl.className = 'cartao-featured-label';
     limiteLbl.textContent = 'Limite';
@@ -4752,11 +4755,11 @@ function atualizarTelaCartoes() {
     limiteDiv.appendChild(limiteLbl);
     limiteDiv.appendChild(limiteVal);
 
-    infoBottomRow.appendChild(dispDiv);
-    infoBottomRow.appendChild(limiteDiv);
-    featured.appendChild(infoBottomRow);
+    bottomDiv.appendChild(dispDiv);
+    bottomDiv.appendChild(limiteDiv);
+    featured.appendChild(bottomDiv);
 
-    // Usage bar
+    // ── BARRA de uso (abaixo do bottom)
     const percUsado = cartaoAtivo.limite > 0
         ? Math.min(100, ((cartaoAtivo.usado || 0) / cartaoAtivo.limite) * 100)
         : 0;
