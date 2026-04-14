@@ -4707,15 +4707,42 @@ function atualizarTelaCartoes() {
     chip.className = 'cartao-featured-chip';
     featured.appendChild(chip);
 
-    // Card name
+    // Card name row (nome + símbolo lado a lado)
+    const nomeRow = document.createElement('div');
+    nomeRow.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-bottom: 16px;';
+
     const nomeDiv = document.createElement('div');
     nomeDiv.className = 'cartao-featured-nome';
+    nomeDiv.style.margin = '0';
     nomeDiv.textContent = _sanitizeText(cartaoAtivo.nomeBanco);
-    featured.appendChild(nomeDiv);
 
-    // Limit row
+    nomeRow.appendChild(nomeDiv);
+    featured.appendChild(nomeRow);
+    
+    // Available row (canto inferior esquerdo)
+    const disponivel = Math.max(0, cartaoAtivo.limite - (cartaoAtivo.usado || 0));
+    const infoBottomRow = document.createElement('div');
+    infoBottomRow.style.cssText = 'display: flex; justify-content: space-between; align-items: flex-end; width: 100%; margin-top: auto;';
+
+    const dispDiv = document.createElement('div');
+    dispDiv.className = 'cartao-featured-disponivel';
+    dispDiv.style.cssText = 'border-left: none; background: none; padding: 0;';
+    const dispLbl = document.createElement('span');
+    dispLbl.className = 'cartao-featured-label';
+    dispLbl.textContent = 'Disponível';
+    const dispVal = document.createElement('span');
+    dispVal.className = 'cartao-featured-value cartao-featured-value--green';
+    dispVal.textContent = formatBRL(disponivel);
+    const dispCol = document.createElement('div');
+    dispCol.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
+    dispCol.appendChild(dispLbl);
+    dispCol.appendChild(dispVal);
+    dispDiv.appendChild(dispCol);
+
+    // Limit (canto inferior direito)
     const limiteDiv = document.createElement('div');
     limiteDiv.className = 'cartao-featured-limite';
+    limiteDiv.style.cssText = 'display: flex; flex-direction: column; align-items: flex-end; gap: 2px;';
     const limiteLbl = document.createElement('span');
     limiteLbl.className = 'cartao-featured-label';
     limiteLbl.textContent = 'Limite';
@@ -4724,21 +4751,10 @@ function atualizarTelaCartoes() {
     limiteVal.textContent = formatBRL(cartaoAtivo.limite);
     limiteDiv.appendChild(limiteLbl);
     limiteDiv.appendChild(limiteVal);
-    featured.appendChild(limiteDiv);
 
-    // Available row
-    const disponivel = Math.max(0, cartaoAtivo.limite - (cartaoAtivo.usado || 0));
-    const dispDiv = document.createElement('div');
-    dispDiv.className = 'cartao-featured-disponivel';
-    const dispLbl = document.createElement('span');
-    dispLbl.className = 'cartao-featured-label';
-    dispLbl.textContent = 'Disponível';
-    const dispVal = document.createElement('span');
-    dispVal.className = 'cartao-featured-value cartao-featured-value--green';
-    dispVal.textContent = formatBRL(disponivel);
-    dispDiv.appendChild(dispLbl);
-    dispDiv.appendChild(dispVal);
-    featured.appendChild(dispDiv);
+    infoBottomRow.appendChild(dispDiv);
+    infoBottomRow.appendChild(limiteDiv);
+    featured.appendChild(infoBottomRow);
 
     // Usage bar
     const percUsado = cartaoAtivo.limite > 0
