@@ -26,8 +26,9 @@
 // ========== CONFIGURAÇÃO (via env vars — nunca hardcoded) ==========
 const EDGE_FUNCTION_URL    = process.env.SUPABASE_EDGE_URL;
 const SUPABASE_ANON_KEY    = process.env.SUPABASE_ANON_KEY;
-const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN;         // ex: https://granaevo.com.br
-const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF;  // ex: fvrhqqeofqedmhadzzqw
+const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN;         // ex: https://seudominio.com.br
+const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF;  // ex: seu-project-ref
+const PROXY_SECRET         = process.env.PROXY_SECRET;           // segredo compartilhado proxy→Edge Function
 
 const RATE_LIMIT_MAX_IP    = 10;      // requests por IP por janela
 const RATE_LIMIT_MAX_USER  = 8;       // requests por userId por janela (mais restritivo)
@@ -96,6 +97,14 @@ setInterval(() => {
 export default async function handler(req, res) {
 
     // ── 1. Método HTTP ────────────────────────────────────────
+    if (req.method === 'OPTIONS') {
+        res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN ?? '');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Max-Age', '86400');
+        return res.status(204).end();
+    }
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
@@ -121,13 +130,14 @@ export default async function handler(req, res) {
     }
 
     // ── 4. Variáveis de ambiente obrigatórias ─────────────────
-    if (!EDGE_FUNCTION_URL || !SUPABASE_ANON_KEY || !ALLOWED_ORIGIN || !SUPABASE_PROJECT_REF) {
+    if (!EDGE_FUNCTION_URL || !SUPABASE_ANON_KEY || !ALLOWED_ORIGIN || !SUPABASE_PROJECT_REF || !PROXY_SECRET) {
         log('error', 'env_missing', null, null, {
             missing: [
                 !EDGE_FUNCTION_URL      && 'SUPABASE_EDGE_URL',
                 !SUPABASE_ANON_KEY      && 'SUPABASE_ANON_KEY',
                 !ALLOWED_ORIGIN         && 'ALLOWED_ORIGIN',
                 !SUPABASE_PROJECT_REF   && 'SUPABASE_PROJECT_REF',
+                !PROXY_SECRET           && 'PROXY_SECRET',
             ].filter(Boolean)
         });
         return res.status(503).json({ error: 'Serviço indisponível' });
@@ -288,6 +298,7 @@ export default async function handler(req, res) {
                 'Authorization':   `Bearer ${accessToken}`,
                 'apikey':          SUPABASE_ANON_KEY,
                 'x-forwarded-for': ip,
+                'x-proxy-secret':  PROXY_SECRET,
             },
             body:   rawBody,
             signal: AbortSignal.timeout(15_000),

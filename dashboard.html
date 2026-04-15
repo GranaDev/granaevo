@@ -209,14 +209,24 @@
                 <span class="mobile-logo-text">GranaEvo</span>
             </div>
 
-            <!-- Configurações (direito) -->
-            <button
-                class="mobile-settings-btn"
-                id="mobileSettingsBtn"
-                type="button"
-                aria-label="Configurações">
-                <img src="icon/Configuracoes.gif" alt="Configurações" class="mobile-settings-icon-img">
-            </button>
+            <!-- Notificações + Configurações (direito) -->
+            <div class="mobile-topbar-right">
+                <button
+                    class="mobile-notif-btn"
+                    id="mobileNotifBtn"
+                    type="button"
+                    aria-label="Notificações">
+                    <i class="fas fa-bell" aria-hidden="true"></i>
+                    <span class="mobile-notif-dot" id="mobileNotifDot" aria-hidden="true"></span>
+                </button>
+                <button
+                    class="mobile-settings-btn"
+                    id="mobileSettingsBtn"
+                    type="button"
+                    aria-label="Configurações">
+                    <img src="icon/Configuracoes.gif" alt="Configurações" class="mobile-settings-icon-img">
+                </button>
+            </div>
         </div>
 
         <!-- ========== SIDEBAR ========== -->
@@ -286,6 +296,14 @@
 
             <!-- Spacer empurra configurações para o fundo -->
             <div class="sidebar-nav-spacer"></div>
+
+            <button class="nav-btn" id="btnNotificacoes" data-tooltip="Notificações" type="button">
+                <span class="nav-icon">
+                    <i class="fas fa-bell" aria-hidden="true"></i>
+                    <span class="notif-badge-sidebar" id="notifBadgeSidebar" aria-hidden="true"></span>
+                </span>
+                <span class="nav-text">Notificações</span>
+            </button>
 
             <button class="nav-btn" data-page="configuracoes" data-tooltip="Configurações" type="button">
                 <span class="nav-icon"><i class="fas fa-cog" aria-hidden="true"></i></span>
@@ -781,6 +799,21 @@
         </nav>
 
     </div>
+
+    <!-- PAINEL DE NOTIFICAÇÕES -->
+    <div id="notificacoesOverlay" class="notificacoes-overlay" style="display:none;" role="presentation"></div>
+    <aside id="notificacoesPanel" class="notificacoes-panel" style="display:none;" role="dialog" aria-modal="true" aria-label="Painel de notificações">
+        <div class="notificacoes-panel-header">
+            <div class="notificacoes-panel-title">
+                <i class="fas fa-bell" aria-hidden="true"></i>
+                <h2>Notificações</h2>
+            </div>
+            <button class="notificacoes-panel-close" id="btnFecharNotificacoes" type="button" aria-label="Fechar notificações">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div id="notificacoesLista" class="notificacoes-lista"></div>
+    </aside>
 
     <!-- MODAL/POPUP -->
     <div id="modalOverlay" class="modal-overlay" role="presentation"></div>

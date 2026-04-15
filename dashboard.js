@@ -1865,40 +1865,46 @@ function verificarVencimentos() {
     };
 }
 
-// Exibir badge de alertas
-function atualizarBadgeVencimentos() {
+// Gera hash dos ids das notificações para detectar mudanças
+function _notifHash(alertas) {
+    if (!alertas || alertas.total === 0) return '';
+    return [
+        ...alertas.vencidas.map(c => `v:${c.id}`),
+        ...alertas.aVencer.map(c => `a:${c.id}`)
+    ].sort().join(',');
+}
+
+// Atualiza badge (desktop) e bolinha (mobile) de notificações
+function atualizarBadgeNotificacoes() {
     const alertas = verificarVencimentos();
-    if(!alertas) return;
-    
-    const dashboardBtn = document.querySelector('[data-page="dashboard"]');
-    if(!dashboardBtn) return;
-    
-    const badgeExistente = dashboardBtn.querySelector('.badge-alerta');
-    if(badgeExistente) badgeExistente.remove();
-    
-    if(alertas.total > 0) {
-        const badge = document.createElement('span');
-        badge.className = 'badge-alerta';
-        badge.textContent = alertas.total;
+    const total   = alertas?.total ?? 0;
 
-        // ✅ FIX #6: atribuição direta de propriedades em vez de cssText com template
-        //    cssText com interpolação é vetor de CSS injection se dado de usuário
-        //    for inserido no futuro — atribuição direta é imune por design
-        badge.style.position    = 'absolute';
-        badge.style.top         = '13px';
-        badge.style.right       = '22px';
-        badge.style.background  = alertas.vencidas.length > 0 ? '#ff4b4b' : '#ffd166';
-        badge.style.color       = 'white';
-        badge.style.fontSize    = '0.7rem';
-        badge.style.fontWeight  = '700';
-        badge.style.padding     = '2px 6px';
-        badge.style.borderRadius = '10px';
-        badge.style.boxShadow   = '0 2px 8px rgba(0,0,0,0.3)';
-        badge.style.animation   = 'pulseAlert 2s infinite';
-
-        dashboardBtn.style.position = 'relative';
-        dashboardBtn.appendChild(badge);
+    // Badge sidebar desktop
+    const badgeSidebar = document.getElementById('notifBadgeSidebar');
+    if (badgeSidebar) {
+        if (total > 0) {
+            badgeSidebar.textContent   = String(total);
+            badgeSidebar.style.display = 'flex';
+            badgeSidebar.style.background = alertas.vencidas.length > 0 ? '#ff4b4b' : '#ffd166';
+        } else {
+            badgeSidebar.style.display = 'none';
+        }
     }
+
+    // Bolinha mobile — aparece apenas quando há notificações novas (hash diferente do visto)
+    const hashAtual = alertas ? _notifHash(alertas) : '';
+    const hashVisto = localStorage.getItem('granaevo_notif_hash_visto') ?? '';
+    const temNovo   = total > 0 && hashAtual !== hashVisto;
+
+    const dotMobile = document.getElementById('mobileNotifDot');
+    if (dotMobile) {
+        dotMobile.style.display = temNovo ? 'block' : 'none';
+    }
+}
+
+// Mantém compatibilidade com chamadas antigas (substituída por atualizarBadgeNotificacoes)
+function atualizarBadgeVencimentos() {
+    atualizarBadgeNotificacoes();
 }
 
 // Mostrar painel de alertas na dashboard
@@ -2122,6 +2128,99 @@ function verificacaoAutomaticaVencimentos() {
     }
 }
 
+// ========== PAINEL DE NOTIFICAÇÕES ==========
+
+// Marca notificações como lidas e esconde a bolinha mobile
+function marcarNotificacoesLidas() {
+    const alertas = verificarVencimentos();
+    const hash = alertas ? _notifHash(alertas) : '';
+    localStorage.setItem('granaevo_notif_hash_visto', hash);
+
+    const dotMobile = document.getElementById('mobileNotifDot');
+    if (dotMobile) dotMobile.style.display = 'none';
+}
+
+// Fecha o painel com animação
+function fecharPainelNotificacoes() {
+    const painel  = document.getElementById('notificacoesPanel');
+    const overlay = document.getElementById('notificacoesOverlay');
+    if (!painel) return;
+
+    painel.classList.add('fechando');
+    setTimeout(() => {
+        painel.style.display  = 'none';
+        painel.classList.remove('fechando');
+        if (overlay) overlay.style.display = 'none';
+        document.body.style.overflow = '';
+    }, 230);
+}
+
+// Renderiza e abre o painel de notificações
+function abrirPainelNotificacoes() {
+    const painel  = document.getElementById('notificacoesPanel');
+    const lista   = document.getElementById('notificacoesLista');
+    const overlay = document.getElementById('notificacoesOverlay');
+    if (!painel || !lista) return;
+
+    // Limpa conteúdo anterior
+    lista.innerHTML = '';
+
+    const alertas = verificarVencimentos();
+
+    if (!alertas || alertas.total === 0) {
+        // Estado vazio
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'notificacoes-empty';
+
+        const icon = document.createElement('i');
+        icon.className       = 'fas fa-bell-slash';
+        icon.setAttribute('aria-hidden', 'true');
+
+        const p = document.createElement('p');
+        p.textContent = 'Nenhuma notificação por enquanto.\nSuas contas estão em dia! ✅';
+        p.style.whiteSpace = 'pre-line';
+
+        emptyDiv.appendChild(icon);
+        emptyDiv.appendChild(p);
+        lista.appendChild(emptyDiv);
+    } else {
+        // Reutiliza renderizarPainelAlertas com listener de ações
+        const painelEl = renderizarPainelAlertas();
+        if (painelEl) {
+            painelEl.addEventListener('click', (e) => {
+                const card = e.target.closest('[data-acao]');
+                if (!card) return;
+
+                const idRaw = card.dataset.id;
+                const idNum = parseInt(idRaw, 10);
+                const id    = Number.isInteger(idNum) && String(idNum) === idRaw ? idNum : idRaw;
+
+                if (id === null || id === undefined || id === '' || id !== id) return;
+
+                const acao = card.dataset.acao;
+
+                if (acao === 'pagar' || acao === 'pagar-btn') {
+                    e.stopPropagation();
+                    fecharPainelNotificacoes();
+                    setTimeout(() => abrirPopupPagarContaFixa(id), 260);
+                } else if (acao === 'editar') {
+                    fecharPainelNotificacoes();
+                    setTimeout(() => abrirContaFixaForm(id), 260);
+                }
+            });
+            lista.appendChild(painelEl);
+        }
+    }
+
+    // Exibe painel e overlay
+    painel.style.display  = 'flex';
+    if (overlay) overlay.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+
+    // Marca como lidas — bolinha desaparece
+    marcarNotificacoesLidas();
+}
+
 // Adicionar animação de pulso
 const styleAlertas = document.createElement('style');
 styleAlertas.textContent = `
@@ -2143,32 +2242,6 @@ function atualizarListaContasFixas() {
     if (!lista) return;
 
     lista.innerHTML = '';
-
-    // ✅ renderizarPainelAlertas agora retorna elemento DOM ou null — sem innerHTML
-    const painelAlertasEl = renderizarPainelAlertas();
-    if (painelAlertasEl) {
-        painelAlertasEl.addEventListener('click', (e) => {
-            const card = e.target.closest('[data-acao]');
-            if (!card) return;
-
-            const idRaw = card.dataset.id;
-            const idNum = parseInt(idRaw, 10);
-            const id    = Number.isInteger(idNum) && String(idNum) === idRaw ? idNum : idRaw;
-
-            if (id === null || id === undefined || id === '' || id !== id) return;
-
-            const acao = card.dataset.acao;
-
-            if (acao === 'pagar' || acao === 'pagar-btn') {
-                e.stopPropagation();
-                abrirPopupPagarContaFixa(id);
-            } else if (acao === 'editar') {
-                abrirContaFixaForm(id);
-            }
-        });
-
-        lista.appendChild(painelAlertasEl); // ✅ appendChild direto — elemento DOM puro
-    }
 
     if (contasFixas.length === 0) {
         const empty = document.createElement('p');
@@ -8434,6 +8507,38 @@ function setupSidebarToggle() {
     if (mobileSettingsBtn) {
         mobileSettingsBtn.addEventListener('click', () => mostrarTela('configuracoes'));
     }
+
+    // ── Botão Notificações — sidebar desktop
+    const btnNotificacoes = document.getElementById('btnNotificacoes');
+    if (btnNotificacoes) {
+        btnNotificacoes.addEventListener('click', () => abrirPainelNotificacoes());
+    }
+
+    // ── Botão Notificações — mobile topbar (sininho)
+    const mobileNotifBtn = document.getElementById('mobileNotifBtn');
+    if (mobileNotifBtn) {
+        mobileNotifBtn.addEventListener('click', () => abrirPainelNotificacoes());
+    }
+
+    // ── Fechar painel: botão X
+    const btnFecharNotificacoes = document.getElementById('btnFecharNotificacoes');
+    if (btnFecharNotificacoes) {
+        btnFecharNotificacoes.addEventListener('click', () => fecharPainelNotificacoes());
+    }
+
+    // ── Fechar painel: clique no overlay
+    const notifOverlay = document.getElementById('notificacoesOverlay');
+    if (notifOverlay) {
+        notifOverlay.addEventListener('click', () => fecharPainelNotificacoes());
+    }
+
+    // ── Fechar painel: tecla Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const painel = document.getElementById('notificacoesPanel');
+            if (painel && painel.style.display !== 'none') fecharPainelNotificacoes();
+        }
+    });
 }
 // ========== BINDINGS DE UI ==========
 function bindEventos() {
