@@ -841,7 +841,7 @@ const AuthGuard = (() => {
             _protecting = true;
 
             const loader = document.getElementById(loadingElementId);
-            if (loader) loader.style.display = 'flex';
+            if (loader) loader.classList.remove('hidden');
 
             try {
                 // ── Passo 1: Rate limit ───────────────────────────────
@@ -953,7 +953,7 @@ const AuthGuard = (() => {
                 // ── Passo 10: Iniciar monitoramento ───────────────────
                 _startMonitoring();
 
-                if (loader) loader.style.display = 'none';
+                if (loader) loader.classList.add('hidden');
 
                 // [FIX-VUL-8] onSuccess com timeout de segurança
                 if (onSuccess) {
@@ -969,7 +969,7 @@ const AuthGuard = (() => {
                 return userData;
 
             } catch (error) {
-                if (loader) loader.style.display = 'none';
+                if (loader) loader.classList.add('hidden');
 
                 const code = error?.code || 'UNKNOWN';
 

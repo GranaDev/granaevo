@@ -555,6 +555,16 @@ async function checkUserAccess() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  LOADING SCREEN
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('load', () => {
+    const loadingScreen = document.getElementById('loadingScreen');
+    if (loadingScreen) {
+        setTimeout(() => loadingScreen.classList.add('hidden'), 1200);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
 //  INICIALIZAÇÃO
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
