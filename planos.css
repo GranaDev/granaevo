@@ -432,7 +432,7 @@ button, a { touch-action: manipulation; }
 
 .btn-nav {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-    color: var(--dark);
+    color: var(--white);
     padding: 0.5625rem 1.25rem;
     border-radius: var(--r-sm);
     font-weight: 700;
@@ -545,7 +545,7 @@ button, a { touch-action: manipulation; }
 
 .nav-links.active .btn-nav {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
-    color: var(--dark) !important;
+    color: var(--white) !important;
     border-color: transparent !important;
     margin-top: var(--sp-2) !important;
     font-weight: 700 !important;
@@ -1091,7 +1091,7 @@ button, a { touch-action: manipulation; }
 .plan-note {
     text-align: center;
     font-size: 0.8125rem;
-    color: var(--gray-dim);
+    color: var(--gray-light);
     margin-top: var(--sp-4);
     padding-top: var(--sp-4);
     border-top: 1px solid rgba(16, 185, 129, 0.08);
@@ -1103,7 +1103,7 @@ button, a { touch-action: manipulation; }
 .btn-plan {
     width: 100%;
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-    color: var(--dark);
+    color: var(--white);
     padding: var(--sp-4) var(--sp-6);
     border-radius: var(--r-md);
     font-weight: 700;
@@ -1132,7 +1132,7 @@ button, a { touch-action: manipulation; }
 .btn-plan svg {
     width: 19px;
     height: 19px;
-    stroke: var(--dark);
+    stroke: var(--white);
     transition: transform var(--t-base) var(--ease-spring);
     flex-shrink: 0;
 }
@@ -1395,7 +1395,7 @@ button, a { touch-action: manipulation; }
     justify-content: center;
     gap: var(--sp-2);
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-    color: var(--dark);
+    color: var(--white);
     padding: var(--sp-4) var(--sp-8);
     border-radius: var(--r-md);
     font-weight: 700;
@@ -1417,7 +1417,7 @@ button, a { touch-action: manipulation; }
 .btn-primary svg {
     width: 18px;
     height: 18px;
-    stroke: var(--dark);
+    stroke: var(--white);
     transition: transform var(--t-base) var(--ease-spring);
 }
 
@@ -1540,7 +1540,7 @@ button, a { touch-action: manipulation; }
 
     .nav-links .btn-nav {
         background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
-        color: var(--dark) !important;
+        color: var(--white) !important;
         padding: 0.5625rem 1.25rem !important;
         border-radius: var(--r-sm) !important;
         display: inline-flex !important;

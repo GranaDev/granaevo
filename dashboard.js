@@ -20,6 +20,9 @@ let perfilAtivo = null;
 let cartoesCredito = [];
 let nextCartaoId = 1;
 let transacoes = [];
+let filtroMovAtivo = 'mes_atual';
+let filtroMovMes   = null;
+let filtroMovAno   = null;
 let metas = [];
 let contasFixas = [];
 let nextTransId = 1;
@@ -1478,6 +1481,20 @@ function mostrarTela(tela) {
     if (tela === 'relatorios')  popularFiltrosRelatorio();
     if (tela === 'graficos')    inicializarGraficos();
     if (tela === 'cartoes')     atualizarTelaCartoes();
+    if (tela === 'transacoes') {
+        filtroMovAtivo = 'mes_atual';
+        filtroMovMes   = null;
+        filtroMovAno   = null;
+        const container = document.getElementById('movFiltros');
+        if (container) {
+            container.querySelectorAll('.mov-filtro-btn').forEach(b => b.classList.remove('active'));
+            const btnMesAtual = container.querySelector('[data-filtro="mes_atual"]');
+            if (btnMesAtual) btnMesAtual.classList.add('active');
+        }
+        const periodoSel = document.getElementById('movPeriodoSelector');
+        if (periodoSel) periodoSel.style.display = 'none';
+        atualizarMovimentacoesUI();
+    }
 }
 
 // ========== ATUALIZAR NOME E FOTO DO USUÁRIO ==========
@@ -3328,21 +3345,104 @@ function _obterIconeTransacao(categoria, tipo) {
     return 'fa-arrow-up-right-dots';
 }
 
+function filtrarTransacoesParaUI() {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    return transacoes.filter(t => {
+        if (filtroMovAtivo === 'todo') return true;
+
+        const iso = dataParaISO(t.data || '');
+        if (!iso) return false;
+        const d = new Date(iso + 'T00:00:00');
+
+        if (filtroMovAtivo === 'mes_atual') {
+            return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+        }
+        if (filtroMovAtivo === '15_dias') {
+            const limite = new Date(hoje); limite.setDate(hoje.getDate() - 14);
+            return d >= limite && d <= hoje;
+        }
+        if (filtroMovAtivo === '30_dias') {
+            const limite = new Date(hoje); limite.setDate(hoje.getDate() - 29);
+            return d >= limite && d <= hoje;
+        }
+        if (filtroMovAtivo === '60_dias') {
+            const limite = new Date(hoje); limite.setDate(hoje.getDate() - 59);
+            return d >= limite && d <= hoje;
+        }
+        if (filtroMovAtivo === 'periodo') {
+            const mes = filtroMovMes !== null ? filtroMovMes : hoje.getMonth();
+            const ano = filtroMovAno !== null ? filtroMovAno : hoje.getFullYear();
+            return d.getMonth() === mes && d.getFullYear() === ano;
+        }
+        return true;
+    });
+}
+
+function bindFiltrosMovimentacoes() {
+    const container = document.getElementById('movFiltros');
+    if (!container) return;
+
+    container.addEventListener('click', e => {
+        const btn = e.target.closest('.mov-filtro-btn');
+        if (!btn) return;
+
+        container.querySelectorAll('.mov-filtro-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        filtroMovAtivo = btn.dataset.filtro;
+
+        const periodoSel = document.getElementById('movPeriodoSelector');
+        if (periodoSel) periodoSel.style.display = filtroMovAtivo === 'periodo' ? 'flex' : 'none';
+
+        if (filtroMovAtivo !== 'periodo') atualizarMovimentacoesUI();
+    });
+
+    const btnAplicar = document.getElementById('btnAplicarFiltroMes');
+    if (btnAplicar) {
+        btnAplicar.addEventListener('click', () => {
+            const mesEl = document.getElementById('movFiltroMes');
+            const anoEl = document.getElementById('movFiltroAno');
+            if (mesEl) filtroMovMes = parseInt(mesEl.value, 10);
+            if (anoEl) filtroMovAno = parseInt(anoEl.value, 10);
+            atualizarMovimentacoesUI();
+        });
+    }
+
+    // Populate year select
+    const anoEl = document.getElementById('movFiltroAno');
+    if (anoEl && anoEl.options.length === 0) {
+        const anoAtual = new Date().getFullYear();
+        for (let a = anoAtual; a >= anoAtual - 5; a--) {
+            const opt = document.createElement('option');
+            opt.value = a;
+            opt.textContent = a;
+            if (a === anoAtual) opt.selected = true;
+            anoEl.appendChild(opt);
+        }
+    }
+
+    // Pre-select current month in month select
+    const mesEl = document.getElementById('movFiltroMes');
+    if (mesEl) mesEl.value = new Date().getMonth();
+}
+
 function atualizarMovimentacoesUI() {
     const lista = document.getElementById('listaMovimentacoes');
     if (!lista) return;
 
     lista.innerHTML = '';
 
-    if (transacoes.length === 0) {
+    const arr = filtrarTransacoesParaUI().slice().reverse();
+
+    if (arr.length === 0) {
         const p       = document.createElement('p');
         p.className   = 'empty-state';
         p.textContent = 'Nenhuma movimentação registrada.';
         lista.appendChild(p);
         return;
     }
-
-    const arr = transacoes.slice().reverse();
     let ultimaData = null;
 
     arr.forEach(t => {
@@ -8572,6 +8672,8 @@ function bindEventos() {
     if(btnLancar) {
         btnLancar.addEventListener('click', lancarTransacao);
     }
+
+    bindFiltrosMovimentacoes();
     
     // Reservas/Metas
     const btnNovaMeta = document.getElementById('btnNovaMeta');

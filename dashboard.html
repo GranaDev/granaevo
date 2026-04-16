@@ -473,6 +473,42 @@
                     <h2 class="section-title">
                         <i class="fas fa-list" aria-hidden="true"></i> Movimentações
                     </h2>
+
+                    <div class="mov-filtros-wrapper">
+                        <div class="mov-filtros-header">
+                            <svg class="mov-filtros-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span class="mov-filtros-label">Filtrar</span>
+                        </div>
+                        <div class="mov-filtros" id="movFiltros" role="group" aria-label="Filtros de movimentações">
+                            <button class="mov-filtro-btn active" data-filtro="mes_atual" type="button">Mês atual</button>
+                            <button class="mov-filtro-btn" data-filtro="15_dias" type="button">Últimos 15 dias</button>
+                            <button class="mov-filtro-btn" data-filtro="30_dias" type="button">Últimos 30 dias</button>
+                            <button class="mov-filtro-btn" data-filtro="60_dias" type="button">Últimos 60 dias</button>
+                            <button class="mov-filtro-btn" data-filtro="periodo" type="button">Selecionar mês/ano</button>
+                            <button class="mov-filtro-btn" data-filtro="todo" type="button">Todo o período</button>
+                        </div>
+                        <div class="mov-periodo-selector" id="movPeriodoSelector" style="display:none;">
+                            <select id="movFiltroMes" class="form-input" aria-label="Mês">
+                                <option value="0">Janeiro</option>
+                                <option value="1">Fevereiro</option>
+                                <option value="2">Março</option>
+                                <option value="3">Abril</option>
+                                <option value="4">Maio</option>
+                                <option value="5">Junho</option>
+                                <option value="6">Julho</option>
+                                <option value="7">Agosto</option>
+                                <option value="8">Setembro</option>
+                                <option value="9">Outubro</option>
+                                <option value="10">Novembro</option>
+                                <option value="11">Dezembro</option>
+                            </select>
+                            <select id="movFiltroAno" class="form-input" aria-label="Ano"></select>
+                            <button class="btn-primary" id="btnAplicarFiltroMes" type="button">Aplicar</button>
+                        </div>
+                    </div>
+
                     <div id="listaMovimentacoes" class="movimentacoes-list">
                         <p class="empty-state">Nenhuma movimentação registrada.</p>
                     </div>

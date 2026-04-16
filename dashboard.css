@@ -1672,6 +1672,88 @@ select.form-input option:checked {
     box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
+/* ========== FILTROS DE MOVIMENTAÇÕES ========== */
+.mov-filtros-wrapper {
+    margin-bottom: 1rem;
+}
+
+.mov-filtros-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.6rem;
+    color: var(--gray-light);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.mov-filtros-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    stroke: currentColor;
+}
+
+.mov-filtros-label {
+    line-height: 1;
+}
+
+.mov-filtros {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.mov-filtro-btn {
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: var(--gray-light);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.mov-filtro-btn:hover {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: var(--white);
+}
+
+.mov-filtro-btn.active {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: var(--primary);
+    color: var(--primary);
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25);
+    font-weight: 600;
+}
+
+.mov-periodo-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.mov-periodo-selector .form-input {
+    flex: 1;
+    min-width: 120px;
+    max-width: 160px;
+}
+
+.mov-periodo-selector .btn-primary {
+    padding: 0.45rem 1rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
 /* ========== MOVIMENTAÇÕES ========== */
 .movimentacoes-list {
     display: flex;
