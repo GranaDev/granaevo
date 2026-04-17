@@ -4,9 +4,6 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?
 import { dataManager } from '../modules/data-manager.js?v=2';
 import AuthGuard from '../modules/auth-guard.js?v=2';
 
-console.log('🚀 Dashboard.js carregado');
-console.log('📦 DataManager disponível:', !!dataManager);
-
 // ========== ESTADO GLOBAL ==========
 let usuarioLogado = {
     userId: null,     
@@ -2272,21 +2269,7 @@ function abrirPainelNotificacoes() {
     marcarNotificacoesLidas();
 }
 
-// Adicionar animação de pulso
-const styleAlertas = document.createElement('style');
-styleAlertas.textContent = `
-    @keyframes pulseAlert {
-        0%, 100% {
-            transform: scale(1);
-            opacity: 1;
-        }
-        50% {
-            transform: scale(1.1);
-            opacity: 0.8;
-        }
-    }
-`;
-document.head.appendChild(styleAlertas);
+// @keyframes pulseAlert definido em dashboard.css
 
 function atualizarListaContasFixas() {
     const lista = document.getElementById('listaContasFixas');
@@ -8827,7 +8810,6 @@ window.alterarEmail = alterarEmail;
 
 // ✅ Hostname do Supabase definido como constante imutável no topo do módulo.
 //    Nunca usar window.SUPABASE_URL ou variáveis mutáveis em runtime.
-const _SUPABASE_ALLOWED_HOSTNAME = 'fvrhqqeofqedmhadzzqw.supabase.co';
 
 // ✅ Controle de rate limit client-side para convites
 //    Impede spam via duplo clique ou automação simples no frontend
@@ -8887,38 +8869,11 @@ async function enviarConvite() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error('Sessão expirada. Faça login novamente.');
 
-        if (typeof SUPABASE_URL === 'undefined') {
-            throw new Error('Configuração de servidor inválida. Contate o suporte.');
-        }
-        let _parsedSupabaseUrl;
-        try {
-            _parsedSupabaseUrl = new URL(SUPABASE_URL);
-        } catch {
-            throw new Error('Configuração de servidor inválida. Contate o suporte.');
-        }
-        if (
-            _parsedSupabaseUrl.protocol !== 'https:' ||
-            _parsedSupabaseUrl.hostname !== _SUPABASE_ALLOWED_HOSTNAME
-        ) {
-            throw new Error('Configuração de servidor inválida. Contate o suporte.');
-        }
-
-        const endpointUrl = `https://${_SUPABASE_ALLOWED_HOSTNAME}/functions/v1/send-guest-invite`;
-
-        // ✅ CORREÇÃO: nonce único por requisição como camada extra de rastreabilidade.
-        //    O backend pode logar/validar o nonce para detectar replays ou automação.
-        //    Combinado com o rate limit acima, dificulta significativamente o abuse.
-        const requestNonce = (typeof crypto !== 'undefined' && crypto.randomUUID)
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-        const response = await fetch(endpointUrl, {
+        const response = await fetch('/api/send-guest-invite', {
             method: 'POST',
             headers: {
-                'Content-Type':   'application/json',
-                'Authorization':  `Bearer ${session.access_token}`,
-                'X-Request-Nonce': requestNonce,
-                'X-Request-Time':  String(Date.now()),
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
             },
             body: JSON.stringify({ guestName: nome, guestEmail: email }),
         });
@@ -10290,73 +10245,18 @@ function exportarDadosCSV() {
 
 // ========== NOTIFICAÇÕES ==========
 
-// Sistema simples de notificações
+// Sistema simples de notificações — estilos em dashboard.css (classes ge-notif)
 function mostrarNotificacao(mensagem, tipo = 'info') {
+    const tipoMap = { success: 'ge-notif--success', error: 'ge-notif--error', warning: 'ge-notif--warning' };
     const notif = document.createElement('div');
-    notif.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 16px 24px;
-        border-radius: 12px;
-        color: white;
-        font-weight: 600;
-        z-index: 10000;
-        animation: slideInRight 0.3s ease-out;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    `;
-    
-    switch(tipo) {
-        case 'success':
-            notif.style.background = 'linear-gradient(135deg, #00ff99, #00cc77)';
-            break;
-        case 'error':
-            notif.style.background = 'linear-gradient(135deg, #ff4b4b, #cc0000)';
-            break;
-        case 'warning':
-            notif.style.background = 'linear-gradient(135deg, #ffd166, #ffaa00)';
-            break;
-        default:
-            notif.style.background = 'linear-gradient(135deg, #6c63ff, #4a42cc)';
-    }
-    
-    notif.textContent = mensagem;
+    notif.className = `ge-notif ${tipoMap[tipo] ?? 'ge-notif--info'}`;
+    notif.textContent = String(mensagem ?? '').slice(0, 200);
     document.body.appendChild(notif);
-    
     setTimeout(() => {
-        notif.style.animation = 'slideOutRight 0.3s ease-out';
-        setTimeout(() => {
-            document.body.removeChild(notif);
-        }, 300);
+        notif.classList.add('ge-notif--exit');
+        setTimeout(() => { notif.remove(); }, 320);
     }, 3000);
 }
-
-// Adiciona animações CSS para notificações
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideInRight {
-        from {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    @keyframes slideOutRight {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-    }
-`;
-document.head.appendChild(style);
 
 window.mostrarNotificacao = mostrarNotificacao;
 
@@ -10383,7 +10283,6 @@ document.addEventListener('keydown', (e) => {
     if((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         // Implementar busca rápida aqui
-        console.log('Busca rápida (não implementado)');
     }
 });
 
@@ -10516,9 +10415,6 @@ const sistemaLog = (() => {
 
 // Log de inicialização
 sistemaLog.adicionar('INFO', 'Sistema GranaEvo inicializado');
-
-console.log('%c🚀 GranaEvo (DEV) carregado!', 'color: #43a047; font-size: 16px; font-weight: bold;');
-console.log('%c💡 Use window.debugGranaEvo() para ver estado interno', 'color: #6c63ff; font-size: 12px;');
 
 // Verificação automática de vencimentos a cada 30 minutos
 setInterval(() => {
@@ -10837,8 +10733,6 @@ function desenharTopGastos(dados, label) {
 // ========== SALVAMENTO GARANTIDO AO SAIR ==========
 window.addEventListener('beforeunload', () => {
     if (perfilAtivo && dataManager.userId) {
-        console.log('🚪 Usuário saindo - Enviando dados via beacon...');
-
         atualizarReferenciasGlobais();
 
         // ✅ Aplica os mesmos _validators usados em salvarDados()
@@ -10900,8 +10794,21 @@ window.addEventListener('blur', () => {
 
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 Dashboard carregado, iniciando verificação de login...');
     verificarLogin();
     bindEventos();
     setupSidebarToggle();
+
+    // Fallback para qualquer <img> de foto de perfil que falhar ao carregar
+    document.querySelectorAll('#userPhoto, #mobileUserPhoto, #cfgUserPhoto').forEach(img => {
+        img.addEventListener('error', function () {
+            this.style.display = 'none';
+            const fbId = this.id.replace('Photo', 'PhotoFallback').replace('cfgUser', 'cfgUser');
+            const fb = document.getElementById(fbId) || this.nextElementSibling;
+            if (fb) {
+                fb.style.display = 'flex';
+                const nameEl = document.getElementById('userName');
+                fb.textContent = (nameEl?.textContent || 'U').trim().charAt(0).toUpperCase() || 'U';
+            }
+        }, { once: true });
+    });
 });

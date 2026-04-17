@@ -6080,3 +6080,67 @@ select.form-input option:checked {
         grid-template-columns: repeat(4, 1fr) !important;
     }
 }
+
+/* ── Fallback foto de perfil ─────────────────────────────── */
+.user-photo-fallback {
+    display: none;
+    width: clamp(36px, 3.5vw, 48px);
+    height: clamp(36px, 3.5vw, 48px);
+    min-width: clamp(36px, 3.5vw, 48px);
+    border-radius: 50%;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    font-family: 'DM Sans', Arial, sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 2px solid var(--primary);
+    box-shadow: 0 4px 16px rgba(67, 160, 71, 0.35);
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sidebar:hover .user-photo-fallback {
+    width: clamp(56px, 5vw, 72px);
+    height: clamp(56px, 5vw, 72px);
+    min-width: clamp(56px, 5vw, 72px);
+    font-size: 1.5rem;
+    box-shadow: 0 8px 28px rgba(67, 160, 71, 0.45);
+}
+
+/* ── Animações de alerta e notificação ───────────────────── */
+@keyframes pulseAlert {
+    0%, 100% { transform: scale(1);   opacity: 1;   }
+    50%       { transform: scale(1.1); opacity: 0.8; }
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(400px); opacity: 0; }
+    to   { transform: translateX(0);     opacity: 1; }
+}
+
+@keyframes slideOutRight {
+    from { transform: translateX(0);     opacity: 1; }
+    to   { transform: translateX(400px); opacity: 0; }
+}
+
+/* ── Toast de notificação (mostrarNotificacao) ───────────── */
+.ge-notif {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 16px 24px;
+    border-radius: 12px;
+    color: #fff;
+    font-weight: 600;
+    z-index: 10000;
+    animation: slideInRight 0.3s ease-out;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+}
+.ge-notif--success { background: linear-gradient(135deg, #00ff99, #00cc77); }
+.ge-notif--error   { background: linear-gradient(135deg, #ff4b4b, #cc0000); }
+.ge-notif--warning { background: linear-gradient(135deg, #ffd166, #ffaa00); }
+.ge-notif--info    { background: linear-gradient(135deg, #6c63ff, #4a42cc); }
+.ge-notif--exit    { animation: slideOutRight 0.3s ease-out; }

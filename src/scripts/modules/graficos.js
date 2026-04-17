@@ -403,8 +403,6 @@ async function gerarGraficos() {
     mostrarLoading();
 
     try {
-        console.log('🔍 Iniciando geração de gráficos...');
-
         // ─── CASAL ───────────────────────────────────────────────────────────
         if (filtroAtual.tipo === 'casal') {
             const perfis = UserStore.getPerfis();
@@ -452,11 +450,7 @@ async function gerarGraficos() {
             return;
         }
 
-        console.log('✅ Perfil ativo encontrado:', perfilAtivo.nome);
-
         const todasTransacoes = UserStore.getTransacoes();
-
-        console.log('📊 Total de transações encontradas:', todasTransacoes.length);
 
         if (todasTransacoes.length === 0) {
             console.warn('⚠️ Nenhuma transação encontrada');
@@ -468,9 +462,6 @@ async function gerarGraficos() {
         filtroAtual.perfil = perfilAtivo.id;
         const transacoesFiltradas = filtrarTransacoesPorPeriodo(todasTransacoes);
 
-        console.log('🔎 Transações filtradas:', transacoesFiltradas.length);
-        console.log('📅 Filtro aplicado:', `Mês ${filtroAtual.mes}/${filtroAtual.ano}`);
-
         if (transacoesFiltradas.length === 0) {
             const mesNome = _NOMES_MESES[filtroAtual.mes - 1];
             console.warn(`⚠️ Nenhuma transação para ${mesNome}/${filtroAtual.ano}`);
@@ -479,15 +470,12 @@ async function gerarGraficos() {
             return;
         }
 
-        console.log('🎨 Renderizando gráficos...');
-
         if (filtroAtual.comparacao) {
             await renderizarGraficosComparativos(todasTransacoes);
         } else {
             renderizarTodosGraficos(transacoesFiltradas);
         }
 
-        console.log('✅ Gráficos renderizados com sucesso!');
         esconderLoading();
 
     } catch (error) {
@@ -600,8 +588,6 @@ function confirmarSelecaoPerfisCasalGraficos() {
 
 // ========== GERAR GRÁFICOS COMPARTILHADOS (CASAL/FAMÍLIA) ==========
 async function gerarGraficosCompartilhados(perfisAtivos) {
-    console.log('👨‍👩‍👧‍👦 Gerando gráficos compartilhados para:', perfisAtivos.map(p => p.nome).join(', '));
-
     try {
         if (!perfisAtivos || perfisAtivos.length === 0) {
             mostrarEmptyState('Nenhum perfil foi selecionado.');
@@ -646,16 +632,12 @@ async function gerarGraficosCompartilhados(perfisAtivos) {
             }
         });
 
-        console.log('📊 Total de transações coletadas:', todasTransacoes.length);
-
         if (todasTransacoes.length === 0) {
             mostrarEmptyState('Nenhuma transação encontrada nos perfis selecionados. Adicione movimentações primeiro!');
             return;
         }
 
         const transacoesFiltradas = filtrarTransacoesPorPeriodo(todasTransacoes);
-
-        console.log('🔎 Transações após filtro:', transacoesFiltradas.length);
 
         if (transacoesFiltradas.length === 0) {
             const mesNome = _NOMES_MESES[filtroAtual.mes - 1];
@@ -668,8 +650,6 @@ async function gerarGraficosCompartilhados(perfisAtivos) {
             const transacoesPerfil = transacoesFiltradas.filter(t => t.perfilId === perfil.id);
             return { perfil, ...processarDadosGraficos(transacoesPerfil) };
         });
-
-        console.log('✅ Dados processados. Renderizando...');
 
         if (filtroAtual.comparacao) {
             await renderizarGraficosComparativos(todasTransacoes);
@@ -875,23 +855,13 @@ function gerarInsightsComparacaoCasal(perfil1, perfil2) {
 
 // ========== RENDERIZAÇÃO DOS GRÁFICOS ==========
 function renderizarTodosGraficos(transacoes) {
-    console.log('🎨 Iniciando renderização de todos os gráficos...');
-
     const container = document.getElementById('graficosConteudo');
     if (!container) {
         console.error('❌ Container "graficosConteudo" não encontrado!');
         return;
     }
 
-    console.log('📊 Processando dados dos gráficos...');
     const dados = processarDadosGraficos(transacoes);
-
-    console.log('📈 Dados processados:', {
-        totalEntradas: dados.totalEntradas,
-        totalSaidas:   dados.totalSaidas,
-        saldo:         dados.saldo,
-        categorias:    Object.keys(dados.categorias).length
-    });
 
     _setSafeHTML(container, `
         <div class="graficos-grid">
@@ -904,14 +874,10 @@ function renderizarTodosGraficos(transacoes) {
         ${renderizarTendencias(dados)}
     `);
 
-    console.log('✅ HTML dos gráficos inserido no DOM');
-
     setTimeout(() => {
-        console.log('🎨 Criando gráficos Chart.js...');
         criarGraficoPizza('pizzaGastosChart', dados);
         setTimeout(() => { criarGraficoBarras('barrasCategoriasChart', dados); }, 150);
         setTimeout(() => { criarGraficoLinha('linhaEvolucaoChart', dados); }, 300);
-        console.log('✅ Gráficos Chart.js criados!');
     }, 100);
 }
 

@@ -6,59 +6,35 @@
     <title>Dashboard - GranaEvo</title>
 
     <!-- ================================================================
-         🔐 CAMADA 1 — Content Security Policy (Meta)
+         🔐 CAMADA 1 — Content Security Policy (Meta fallback)
 
-         CORREÇÕES NESTA VERSÃO:
-         ✅ script-src: adicionado hash SHA-256 do script inline de fallback
-             de foto de perfil. Inline event handlers (onerror="...") são
-             bloqueados pela CSP — a solução correta é um <script> separado
-             com conteúdo hasheado individualmente em script-src.
-             Hash: 'sha256-mZiPUOz2f2tF4Gv9gE1anzWI9jirOVLtoG94lOIXXiM='
+         A política principal está no vercel.json (HTTP header).
+         Esta meta é fallback para ambientes sem header (ex: preview local).
+         Não há scripts inline nesta página — nenhum hash necessário.
 
-         ✅ connect-src: https://cdn.jsdelivr.net mantido
-             (necessário para source maps do Chart.js / Supabase via jsdelivr)
-
-         ✅ data: continua REMOVIDO de img-src
-
-         ⚠️  ATENÇÃO: O hash SHA-256 identifica o conteúdo EXATO do <script>
-         inline no final do <body>. Se editar qualquer caractere naquele
-         script, recalcule:
-           printf '%s' 'NOVO_CONTEUDO' | openssl dgst -sha256 -binary | openssl base64 -A
-         e atualize o hash aqui em script-src.
-
-         ⚠️  NOTA: Meta CSP é complementar ao HTTP header do servidor.
-         Configure também no servidor / CDN / proxy reverso:
-           Content-Security-Policy: <mesma política>
-           X-Content-Type-Options: nosniff
-           X-Frame-Options: DENY
-           Strict-Transport-Security: max-age=31536000; includeSubDomains
-           Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
-           Referrer-Policy: strict-origin-when-cross-origin
+         ⚠️  Se adicionar um <script> inline, calcule o hash:
+           printf '%s' 'CONTEUDO' | openssl dgst -sha256 -binary | openssl base64 -A
+         e adicione 'sha256-HASH=' em script-src aqui e no vercel.json.
          ================================================================ -->
+    <!-- CSP principal via vercel.json HTTP headers. Esta meta é fallback para ambientes sem header. -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self'
-        https://esm.sh
-        https://cdn.jsdelivr.net
-        'sha256-mZiPUOz2f2tF4Gv9gE1anzWI9jirOVLtoG94lOIXXiM=';
+        script-src 'self' https://esm.sh https://cdn.jsdelivr.net;
         style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
         font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
-        img-src 'self'
-            https://fvrhqqeofqedmhadzzqw.supabase.co
-            https://cdn-icons-png.flaticon.com
-            https://logospng.org;
+        img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co;
         connect-src 'self'
-        https://fvrhqqeofqedmhadzzqw.supabase.co
-        wss://fvrhqqeofqedmhadzzqw.supabase.co
-        https://esm.sh
-        https://cdn.jsdelivr.net;
+            https://fvrhqqeofqedmhadzzqw.supabase.co
+            wss://fvrhqqeofqedmhadzzqw.supabase.co
+            https://esm.sh
+            https://cdn.jsdelivr.net;
         base-uri 'self';
         form-action 'self';
         object-src 'none';
         worker-src 'none';
-        manifest-src 'none';
         upgrade-insecure-requests;
         block-all-mixed-content;
+        report-uri /api/csp-report;
     ">
 
     <!-- ================================================================
@@ -99,40 +75,6 @@
     <script type="module" src="src/scripts/modules/data-manager.js?v=2"></script>
     <script type="module" src="src/scripts/modules/auth-guard.js?v=2"></script>
 
-    <style>
-        /*
-         * Fallback da foto de perfil — ativado via addEventListener no
-         * <script> hasheado no final do <body> quando o SVG retorna 404.
-         * CSS puro, sem data: URI, sem CDN externo.
-         */
-            .user-photo-fallback {
-            display: none;
-            width: clamp(36px, 3.5vw, 48px);
-            height: clamp(36px, 3.5vw, 48px);
-            min-width: clamp(36px, 3.5vw, 48px);
-            border-radius: 50%;
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: #fff;
-            font-family: 'DM Sans', Arial, sans-serif;
-            font-size: 1.1rem;
-            font-weight: 700;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            border: 2px solid var(--primary);
-            box-shadow: 0 4px 16px rgba(67, 160, 71, 0.35);
-            cursor: pointer;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .sidebar:hover .user-photo-fallback {
-            width: clamp(56px, 5vw, 72px);
-            height: clamp(56px, 5vw, 72px);
-            min-width: clamp(56px, 5vw, 72px);
-            font-size: 1.5rem;
-            box-shadow: 0 8px 28px rgba(67, 160, 71, 0.45);
-        }
-    </style>
 </head>
 <body>
 
@@ -907,7 +849,6 @@
             integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
             crossorigin="anonymous"></script>
     <script src="src/scripts/modules/graficos.js"></script>
-    <script>document.getElementById("userPhoto").addEventListener("error",function(){this.style.display="none";var f=document.getElementById("userPhotoFallback");if(f){f.style.display="flex";var n=(document.getElementById("userName")||{}).textContent||"U";f.textContent=n.trim().charAt(0).toUpperCase()||"U";}});</script>
 
 </body>
 </html>

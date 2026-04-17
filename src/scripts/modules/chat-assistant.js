@@ -432,29 +432,36 @@ class ChatAssistant {
     
     // ========== FUNÇÕES DE UTILIDADE DE UI ==========
     getAvatarHtml(isUser = false) {
-    if (isUser) {
-        const perfil = this.perfilAtivo || window.perfilAtivo;
-        if (perfil && perfil.foto) {
-            return `<img src="${perfil.foto}" alt="${perfil.nome.charAt(0).toUpperCase()}">`;
+        if (isUser) {
+            const perfil = this.perfilAtivo || window.perfilAtivo;
+            if (perfil?.foto) return `<img src="${this._escapeHtml(perfil.foto)}" alt="${this._escapeHtml(perfil.nome?.charAt(0).toUpperCase() || 'U')}">`;
+            return this._escapeHtml(perfil?.nome?.charAt(0).toUpperCase() || 'U');
         }
-        return perfil?.nome?.charAt(0).toUpperCase() || 'U';
+        return 'Ge';
     }
-    return 'Ge';
-}
+
+    // Renderiza avatar como DOM (sem innerHTML)
+    _renderAvatar(container, isUser) {
+        const perfil = isUser ? (this.perfilAtivo || window.perfilAtivo) : null;
+        if (isUser && perfil?.foto) {
+            const img = document.createElement('img');
+            img.src = perfil.foto;
+            img.alt = perfil.nome?.charAt(0).toUpperCase() || 'U';
+            container.appendChild(img);
+        } else {
+            container.textContent = isUser ? (perfil?.nome?.charAt(0).toUpperCase() || 'U') : 'Ge';
+        }
+    }
 
 // ========== INICIALIZAÇÃO ==========
     init() {
         this.createChatUI();
         this.attachEventListeners();
         window.chatAssistant = this; // ✅ Torna o chat acessível globalmente
-        
-        // ✅ NÃO carregar mensagens aqui - aguardar seleção de perfil
-        console.log('💬 Chat Assistant inicializado. Aguardando seleção de perfil...');
     }
 
     // ✅ MÉTODO CORRIGIDO: onProfileSelected
     onProfileSelected(perfil) {
-        console.log('💬 Chat Assistant recebeu o sinal do perfil:', perfil);
         this.perfilAtivo = perfil; // Armazena a referência do perfil ativo
 
         // Agora que temos um perfil, carregamos as mensagens
@@ -510,24 +517,35 @@ class ChatAssistant {
     updateHeaderAvatar() {
         const avatarElement = document.querySelector('#chatAssistantContainer .chat-assistant-header .chat-assistant-avatar');
         if (avatarElement) {
-            avatarElement.innerHTML = this.getAvatarHtml(false); // Ge
+            avatarElement.textContent = '';
+            this._renderAvatar(avatarElement, false);
         }
     }
 
     // ========== EVENTOS ==========
     attachEventListeners() {
-        // Usa o botão do nav inferior; fallback para o botão flutuante legado
-        const btn = document.getElementById('chatNavBtn') || document.getElementById('chatAssistantBtn');
+        const btn      = document.getElementById('chatNavBtn') || document.getElementById('chatAssistantBtn');
         const closeBtn = document.getElementById('chatAssistantClose');
-        const sendBtn = document.getElementById('chatAssistantSend');
-        const input = document.getElementById('chatAssistantInput');
+        const sendBtn  = document.getElementById('chatAssistantSend');
+        const input    = document.getElementById('chatAssistantInput');
+        const body     = document.getElementById('chatAssistantBody');
 
-        if (btn) btn.addEventListener('click', () => this.toggleChat());
-        closeBtn.addEventListener('click', () => this.closeChat());
-        sendBtn.addEventListener('click', () => this.sendMessage());
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.sendMessage();
-        });
+        if (btn)     btn.addEventListener('click', () => this.toggleChat());
+        if (closeBtn) closeBtn.addEventListener('click', () => this.closeChat());
+        if (sendBtn)  sendBtn.addEventListener('click', () => this.sendMessage());
+        if (input)    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.sendMessage(); });
+
+        // Event delegation para opções (substitui onclick="chatAssistant.select...")
+        if (body) {
+            body.addEventListener('click', (e) => {
+                const opt = e.target.closest('[data-chat-action]');
+                if (!opt) return;
+                const action = opt.dataset.chatAction;
+                const index  = parseInt(opt.dataset.chatIndex, 10);
+                if (action === 'card') this.selectCardOption(index);
+                else if (action === 'type') this.selectTypeOption(index);
+            });
+        }
     }
 
     // ========== CONTROLE DE ABERTURA/FECHAMENTO ==========
@@ -593,16 +611,21 @@ class ChatAssistant {
         const messageDiv = document.createElement('div');
         messageDiv.className = `chat-message ${sender}`;
 
-        const avatarContent = this.getAvatarHtml(sender === 'user');
+        // Avatar
+        const avatarDiv = document.createElement('div');
+        avatarDiv.className = 'chat-message-avatar';
+        this._renderAvatar(avatarDiv, sender === 'user');
 
-        messageDiv.innerHTML = `
-            <div class="chat-message-avatar">${avatarContent}</div>
-            <div>
-                <div class="chat-message-content">${this.formatMessage(text)}</div>
-                ${options ? this.createOptions(options) : ''}
-            </div>
-        `;
+        // Conteúdo
+        const contentWrapper = document.createElement('div');
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'chat-message-content';
+        contentDiv.innerHTML = this.formatMessage(text); // formatMessage já escapa HTML
+        contentWrapper.appendChild(contentDiv);
+        if (options) contentWrapper.appendChild(this._buildOptionsNode(options));
 
+        messageDiv.appendChild(avatarDiv);
+        messageDiv.appendChild(contentWrapper);
         body.appendChild(messageDiv);
         this.scrollToBottom();
 
@@ -615,39 +638,47 @@ class ChatAssistant {
     }
 
     // ========== FORMATAR MENSAGEM ==========
+    // Escapa HTML antes de aplicar markdown para prevenir XSS
+    _escapeHtml(str) {
+        return String(str ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#x27;');
+    }
+
     formatMessage(text) {
-        // Corrigido para usar <br> e manter a formatação de markdown
-        // O problema de quebra de linha vertical em palavras curtas é resolvido no CSS com word-break: normal;
-        return text
+        return this._escapeHtml(text)
             .replace(/\n/g, '<br>')
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>');
     }
 
     // ========== CRIAR OPÇÕES DE CARTÃO ==========
+    // Usa data attributes em vez de onclick strings (previne XSS via CSP)
+    _buildOptionsNode(options) {
+        const container = document.createElement('div');
+        container.className = 'chat-card-options';
+        const icon = this.waitingForCardSelection ? 'fa-credit-card' : 'fa-tag';
+        const action = this.waitingForCardSelection ? 'card' : 'type';
+        options.forEach((option, index) => {
+            const div = document.createElement('div');
+            div.className = 'chat-card-option';
+            div.dataset.chatAction = action;
+            div.dataset.chatIndex  = String(index);
+            const i = document.createElement('i');
+            i.className = `fas ${icon}`;
+            div.appendChild(i);
+            div.appendChild(document.createTextNode(' ' + String(option.text ?? '')));
+            container.appendChild(div);
+        });
+        return container;
+    }
+
     createOptions(options) {
-    let html = '<div class="chat-card-options">';
-    options.forEach((option, index) => {
-        // Determinar qual função chamar baseado no estado de espera
-        const onClick = this.waitingForCardSelection 
-            ? `chatAssistant.selectCardOption(${index})` 
-            : `chatAssistant.selectTypeOption(${index})`;
-        
-        // Determinar ícone baseado no tipo de seleção
-        const icon = this.waitingForCardSelection 
-            ? 'fa-credit-card' 
-            : 'fa-tag';
-        
-        html += `
-            <div class="chat-card-option" onclick="${onClick}">
-                <i class="fas ${icon}"></i>
-                ${option.text}
-            </div>
-        `;
-    });
-    html += '</div>';
-    return html;
-}
+        return this._buildOptionsNode(options);
+    }
 
     // ========== SELECIONAR OPÇÃO DE CARTÃO ==========
     selectCardOption(index) {
@@ -1656,7 +1687,6 @@ saveMessages() {
     if (this.perfilAtivo) { // ✅ CORRIGIDO: usando this.perfilAtivo
         const chave = `granaevo_chat_${this.perfilAtivo.id}`;
         localStorage.setItem(chave, JSON.stringify(this.messages));
-        console.log(`💾 Mensagens do chat salvas para perfil ${this.perfilAtivo.nome}`);
     }
 }
 
@@ -1689,8 +1719,6 @@ loadMessages() {
                 localStorage.removeItem(chave);
             }
         }
-    } else {
-        console.log('💬 Nenhum perfil ativo encontrado para carregar mensagens do chat');
     }
 }
 
@@ -1701,13 +1729,19 @@ loadMessages() {
         this.messages.forEach(msg => {
             const messageDiv = document.createElement('div');
             messageDiv.className = `chat-message ${msg.sender}`;
-            const avatarContent = this.getAvatarHtml(msg.sender === 'user');
-            messageDiv.innerHTML = `
-                <div class="chat-message-avatar">${avatarContent}</div>
-                <div>
-                    <div class="chat-message-content">${this.formatMessage(msg.text)}</div>
-                </div>
-            `;
+
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = 'chat-message-avatar';
+            this._renderAvatar(avatarDiv, msg.sender === 'user');
+
+            const contentWrapper = document.createElement('div');
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'chat-message-content';
+            contentDiv.innerHTML = this.formatMessage(msg.text);
+            contentWrapper.appendChild(contentDiv);
+
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentWrapper);
             body.appendChild(messageDiv);
         });
         this.scrollToBottom();
@@ -1720,6 +1754,5 @@ let chatAssistant;
 window.addEventListener('load', () => {
     setTimeout(() => {
         chatAssistant = new ChatAssistant();
-        console.log('✅ Chat Assistant Ge inicializado com sucesso!');
     }, 1000);
 });

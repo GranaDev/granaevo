@@ -110,7 +110,6 @@ function _lerRefUrl() {
         const ref    = params.get('ref');
         if (ref) {
             const refSanitized = String(ref).replace(/[^a-zA-Z0-9\-_]/g, '');
-            if (refSanitized) console.log('[INVITE] ref:', refSanitized);
         }
     } catch {
         // Silencioso — parâmetro inválido ignorado

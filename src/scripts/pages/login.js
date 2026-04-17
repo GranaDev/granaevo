@@ -396,7 +396,6 @@ function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidge
                     theme:              'dark',
                 });
                 setWidgetId(widgetId);
-                console.log(`[reCAPTCHA:${containerId}] Renderizado. widgetId:`, widgetId);
 
                 setTimeout(() => {
                     const iframe = currentContainer.querySelector('iframe');
@@ -543,7 +542,11 @@ async function checkUserAccess() {
         const authHeader = await _requireSessionHeader();
         const response   = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`, {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': authHeader,
+                'apikey': supabase.supabaseKey,
+            },
             body: JSON.stringify({ user_id: session.user.id }),
         });
         if (!response.ok) return { hasAccess: false };

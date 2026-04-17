@@ -1,21 +1,19 @@
-// /api/verify-invite.js — Proxy para verify-guest-invite Edge Function
-// Esconde a URL da Edge Function do frontend. Frontend chama /api/verify-invite.
+// /api/send-guest-invite.js — Proxy para send-guest-invite Edge Function
+// Requer sessão autenticada (JWT do usuário), não usa anon key como auth principal.
 
 import { checkRate } from './_rate-limit.js'
 
-const EDGE_URL       = `${process.env.SUPABASE_URL}/functions/v1/verify-guest-invite`
+const EDGE_URL       = `${process.env.SUPABASE_URL}/functions/v1/send-guest-invite`
 const ANON_KEY       = process.env.SUPABASE_ANON_KEY
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? 'https://granaevo.com'
-const MAX_BODY_BYTES = 8192
+const MAX_BODY_BYTES = 4096
 const RATE_MAX       = 5
 
 export default async function handler(req, res) {
-  const origin = req.headers['origin'] ?? ''
-
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin',  ALLOWED_ORIGIN)
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     res.setHeader('Access-Control-Max-Age',       '86400')
     return res.status(204).end()
   }
@@ -24,17 +22,18 @@ export default async function handler(req, res) {
   res.setHeader('Vary', 'Origin')
   res.setHeader('Cache-Control', 'no-store')
 
+  const origin = req.headers['origin'] ?? ''
   if (origin !== ALLOWED_ORIGIN) return res.status(403).json({ error: 'Forbidden' })
   if (req.method !== 'POST')     return res.status(405).json({ error: 'Method Not Allowed' })
+  if (!EDGE_URL || !ANON_KEY)    return res.status(503).json({ error: 'Serviço indisponível' })
 
-  if (!EDGE_URL || !ANON_KEY) {
-    return res.status(503).json({ error: 'Serviço indisponível' })
-  }
+  const authHeader = req.headers['authorization'] ?? ''
+  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
 
   const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
     .toString().split(',')[0].trim()
 
-  if (!(await checkRate(`verify-invite:${ip}`, RATE_MAX))) {
+  if (!(await checkRate(`guest-invite:${ip}`, RATE_MAX))) {
     res.setHeader('Retry-After', '60')
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
@@ -56,8 +55,8 @@ export default async function handler(req, res) {
   let body
   try { body = JSON.parse(raw) } catch { return res.status(400).json({ error: 'JSON inválido' }) }
 
-  if (typeof body?.email !== 'string' || typeof body?.code !== 'string') {
-    return res.status(400).json({ error: 'Parâmetros inválidos' })
+  if (typeof body?.guestEmail !== 'string' || typeof body?.guestName !== 'string') {
+    return res.status(400).json({ error: 'guestEmail e guestName são obrigatórios' })
   }
 
   let upstream
@@ -66,10 +65,10 @@ export default async function handler(req, res) {
       method:  'POST',
       headers: {
         'Content-Type':  'application/json',
-        'Authorization': `Bearer ${ANON_KEY}`,
+        'Authorization': authHeader,
         'apikey':        ANON_KEY,
       },
-      body:   raw,
+      body:   JSON.stringify({ guestName: body.guestName, guestEmail: body.guestEmail }),
       signal: AbortSignal.timeout(15_000),
     })
   } catch {

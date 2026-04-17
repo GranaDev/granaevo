@@ -1,16 +1,12 @@
 // /api/check-email.js — Proxy para check-email-status Edge Function
-// Rate limit + Origin check antes de chegar na Edge Function.
+// Rate limit distribuído (Upstash Redis) + Origin check + body limit
+
+import { checkRate } from './_rate-limit.js'
 
 const EDGE_URL       = `${process.env.SUPABASE_URL}/functions/v1/check-email-status`
 const ANON_KEY       = process.env.SUPABASE_ANON_KEY
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? 'https://granaevo.com'
-
-const RATE_STORE = new Map(); const RATE_MAX = 10; const RATE_WINDOW_MS = 60_000
-function checkRate(k) {
-  const now = Date.now(); const r = RATE_STORE.get(k)
-  if (!r || now - r.t > RATE_WINDOW_MS) { RATE_STORE.set(k, { c: 1, t: now }); return true }
-  if (r.c >= RATE_MAX) return false; r.c++; return true
-}
+const RATE_MAX       = 10
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -28,8 +24,13 @@ export default async function handler(req, res) {
   if (req.method !== 'POST')     return res.status(405).json({ error: 'Method Not Allowed' })
   if (!EDGE_URL || !ANON_KEY)    return res.status(503).json({ error: 'Serviço indisponível' })
 
-  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown').toString().split(',')[0].trim()
-  if (!checkRate(`ip:${ip}`)) { res.setHeader('Retry-After', '60'); return res.status(429).json({ error: 'Muitas requisições' }) }
+  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
+    .toString().split(',')[0].trim()
+
+  if (!(await checkRate(`chk-email:${ip}`, RATE_MAX))) {
+    res.setHeader('Retry-After', '60')
+    return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
+  }
 
   let raw = ''
   try {
@@ -42,10 +43,17 @@ export default async function handler(req, res) {
   } catch (e) { return res.status(e.message === 'TOO_LARGE' ? 413 : 400).json({ error: 'Body inválido' }) }
 
   let body; try { body = JSON.parse(raw) } catch { return res.status(400).json({ error: 'JSON inválido' }) }
-  if (typeof body?.email !== 'string') return res.status(400).json({ error: 'email obrigatório' })
+  if (typeof body?.email !== 'string' || body.email.length > 254) {
+    return res.status(400).json({ error: 'email obrigatório' })
+  }
 
   try {
-    const r = await fetch(EDGE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}`, 'apikey': ANON_KEY }, body: raw, signal: AbortSignal.timeout(10_000) })
+    const r = await fetch(EDGE_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}`, 'apikey': ANON_KEY },
+      body:    raw,
+      signal:  AbortSignal.timeout(10_000),
+    })
     res.setHeader('Content-Type', 'application/json')
     return res.status(r.status).send(await r.text())
   } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
