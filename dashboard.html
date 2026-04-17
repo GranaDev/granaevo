@@ -751,89 +751,93 @@
                     <i class="fas fa-chevron-right cfg-profile-arrow" aria-hidden="true"></i>
                 </div>
 
-                <!-- Seção: Conta -->
-                <div class="cfg-section">
-                    <div class="cfg-section-label">Conta</div>
-                    <div class="cfg-list">
-                        <button class="cfg-item" id="btnAlterarNome" type="button">
-                            <div class="cfg-item-icon cfg-item-icon--blue"><i class="fas fa-user" aria-hidden="true"></i></div>
-                            <div class="cfg-item-text">
-                                <span class="cfg-item-title">Alterar Nome</span>
-                                <span class="cfg-item-sub">Mude seu nome ou apelido</span>
+                <div class="cfg-body">
+                    <!-- Coluna principal: Conta -->
+                    <div class="cfg-col-main">
+                        <div class="cfg-section">
+                            <div class="cfg-section-label">Conta</div>
+                            <div class="cfg-list">
+                                <button class="cfg-item" id="btnAlterarNome" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--blue"><i class="fas fa-user" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Alterar Nome</span>
+                                        <span class="cfg-item-sub">Mude seu nome ou apelido</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
+                                <button class="cfg-item" id="btnAlterarEmail" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--green"><i class="fas fa-user-plus" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Convidar Usuário</span>
+                                        <span class="cfg-item-sub">Compartilhe o acesso com amigos e familiares</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
+                                <button class="cfg-item" id="btnAlterarSenha" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--purple"><i class="fas fa-lock" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Alterar Senha</span>
+                                        <span class="cfg-item-sub">Defina uma nova senha de acesso</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
+                                <button class="cfg-item" id="btnTrocarPerfil" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--teal"><i class="fas fa-sync-alt" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Trocar Perfil</span>
+                                        <span class="cfg-item-sub">Alternar entre perfis cadastrados</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
                             </div>
-                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
-                        </button>
-                        <button class="cfg-item" id="btnAlterarEmail" type="button">
-                            <div class="cfg-item-icon cfg-item-icon--green"><i class="fas fa-user-plus" aria-hidden="true"></i></div>
-                            <div class="cfg-item-text">
-                                <span class="cfg-item-title">Convidar Usuário</span>
-                                <span class="cfg-item-sub">Compartilhe o acesso com amigos e familiares</span>
-                            </div>
-                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
-                        </button>
-                        <button class="cfg-item" id="btnAlterarSenha" type="button">
-                            <div class="cfg-item-icon cfg-item-icon--purple"><i class="fas fa-lock" aria-hidden="true"></i></div>
-                            <div class="cfg-item-text">
-                                <span class="cfg-item-title">Alterar Senha</span>
-                                <span class="cfg-item-sub">Defina uma nova senha de acesso</span>
-                            </div>
-                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
-                        </button>
-                        <button class="cfg-item" id="btnTrocarPerfil" type="button">
-                            <div class="cfg-item-icon cfg-item-icon--teal"><i class="fas fa-sync-alt" aria-hidden="true"></i></div>
-                            <div class="cfg-item-text">
-                                <span class="cfg-item-title">Trocar Perfil</span>
-                                <span class="cfg-item-sub">Alternar entre perfis cadastrados</span>
-                            </div>
-                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
-                        </button>
+                        </div>
                     </div>
-                </div>
 
-                <!-- Seção: Plano -->
-                <div class="cfg-section">
-                    <div class="cfg-section-label">Plano</div>
-                    <div class="cfg-list">
-                        <button class="cfg-item" id="btnUpgradePlano" type="button">
-                            <div class="cfg-item-icon cfg-item-icon--gold"><i class="fas fa-crown" aria-hidden="true"></i></div>
-                            <div class="cfg-item-text">
-                                <span class="cfg-item-title">Upgrade de Plano</span>
-                                <span class="cfg-item-sub">Mais perfis, recursos e limites</span>
+                    <!-- Coluna lateral: Plano + Suporte + Sessão -->
+                    <div class="cfg-col-side">
+                        <div class="cfg-section">
+                            <div class="cfg-section-label">Plano</div>
+                            <div class="cfg-list">
+                                <button class="cfg-item" id="btnUpgradePlano" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--gold"><i class="fas fa-crown" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Upgrade de Plano</span>
+                                        <span class="cfg-item-sub">Mais perfis, recursos e limites</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
                             </div>
-                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
-                        </button>
-                    </div>
-                </div>
+                        </div>
 
-                <!-- Seção: Suporte -->
-                <div class="cfg-section">
-                    <div class="cfg-section-label">Suporte</div>
-                    <div class="cfg-list">
-                        <button class="cfg-item" id="btnComoUsar" type="button">
-                            <div class="cfg-item-icon cfg-item-icon--sky"><i class="fas fa-question-circle" aria-hidden="true"></i></div>
-                            <div class="cfg-item-text">
-                                <span class="cfg-item-title">Como Usar</span>
-                                <span class="cfg-item-sub">Guia completo do GranaEvo</span>
+                        <div class="cfg-section">
+                            <div class="cfg-section-label">Suporte</div>
+                            <div class="cfg-list">
+                                <button class="cfg-item" id="btnComoUsar" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--sky"><i class="fas fa-question-circle" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Como Usar</span>
+                                        <span class="cfg-item-sub">Guia completo do GranaEvo</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
                             </div>
-                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
-                        </button>
-                    </div>
-                </div>
+                        </div>
 
-                <!-- Seção: Sessão -->
-                <div class="cfg-section">
-                    <div class="cfg-section-label">Sessão</div>
-                    <div class="cfg-list">
-                        <button class="cfg-item cfg-item--danger" id="btnLogout" type="button">
-                            <div class="cfg-item-icon cfg-item-icon--red"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></div>
-                            <div class="cfg-item-text">
-                                <span class="cfg-item-title">Sair / Logout</span>
-                                <span class="cfg-item-sub">Encerrar sessão atual</span>
+                        <div class="cfg-section">
+                            <div class="cfg-section-label">Sessão</div>
+                            <div class="cfg-list">
+                                <button class="cfg-item cfg-item--danger" id="btnLogout" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--red"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Sair / Logout</span>
+                                        <span class="cfg-item-sub">Encerrar sessão atual</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
                             </div>
-                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
-                        </button>
+                        </div>
                     </div>
-                </div>
+                </div><!-- /.cfg-body -->
 
             </section>
 

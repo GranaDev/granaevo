@@ -5819,3 +5819,147 @@ select.form-input option:checked {
 .cfg-item--danger .cfg-item-title { color: var(--danger); }
 .cfg-item--danger:hover,
 .cfg-item--danger:active           { background: rgba(255, 75, 75, 0.06); }
+
+/* ================================================================
+   CONFIGURAÇÕES — DESKTOP (min-width: 769px)
+   Mobile intocável — todas as regras aqui são min-width only
+   ================================================================ */
+@media (min-width: 769px) {
+    /* Limita e centraliza o conteúdo da página */
+    #configuracoesPage {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    /* Profile card: espaçamento um pouco maior */
+    .cfg-profile-card {
+        padding: 22px 26px;
+        margin-bottom: 28px;
+        border-radius: 22px;
+    }
+
+    .cfg-avatar {
+        width: 64px;
+        height: 64px;
+        font-size: 1.65rem;
+        border-radius: 18px;
+    }
+
+    .cfg-profile-name { font-size: 1.15rem; }
+
+    /* cfg-body: 2 colunas — Conta (esq. 3fr) + Plano/Suporte/Sessão (dir. 2fr) */
+    .cfg-body {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 16px;
+        align-items: start;
+    }
+
+    /* Itens um pouco mais espaçados no desktop */
+    .cfg-item {
+        padding: 15px 18px;
+    }
+
+    .cfg-item-title { font-size: 0.95rem; }
+
+    .cfg-item-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        font-size: 0.9rem;
+    }
+}
+
+/* ================================================================
+   RELATÓRIOS — DESKTOP (min-width: 769px)
+   Mobile intocável — todas as regras aqui são min-width only
+   ================================================================ */
+@media (min-width: 769px) {
+    /* Centraliza e limita largura da página */
+    #relatoriosPage {
+        max-width: 1040px;
+        margin: 0 auto;
+    }
+
+    /* ── Filtros: layout horizontal em linha ── */
+    .rel-filtros {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: flex-end !important;
+        flex-wrap: wrap !important;
+        gap: 14px !important;
+        padding: 20px 22px !important;
+    }
+
+    /* Tabs de tipo: ficam na mesma linha, não ocupam 100% */
+    .rel-tipo-tabs {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* Selector de perfil (casal/família): inline */
+    .rel-perfil-selector {
+        flex: 0 0 180px;
+        margin-bottom: 0 !important;
+    }
+
+    /* Period row: vira flex row inline */
+    .rel-period-row {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 10px !important;
+        margin-bottom: 0 !important;
+        flex: 0 0 auto !important;
+    }
+
+    /* Botão gerar: auto width */
+    #btnGerarRelatorio {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        padding-left: 24px !important;
+        padding-right: 24px !important;
+    }
+
+    /* ── KPI: 3 colunas no desktop ── */
+    .rel-kpi-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 12px !important;
+    }
+
+    /* ── Resultado: 2 colunas para as sections ── */
+    #relatorioResultado {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        align-items: start;
+    }
+
+    /* Header do relatório e KPI grid: span completo */
+    #relatorioResultado .rel-report-header,
+    #relatorioResultado .rel-kpi-grid {
+        grid-column: 1 / -1;
+    }
+
+    /* Última section (Transações) também span completo */
+    #relatorioResultado .rel-section:last-child {
+        grid-column: 1 / -1;
+    }
+
+    /* ── Cards de crédito: 2 por linha ── */
+    #listaCartoesRelatorio {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    /* Cards summary: 4 cols no desktop */
+    .rel-cards-summary {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+
+    /* Bills chips: garantir 4 cols */
+    .rel-bills-chips {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+}
