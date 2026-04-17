@@ -469,12 +469,7 @@ class ChatAssistant {
 
     // ========== CRIAR INTERFACE DO CHAT ==========
     createChatUI() {
-        // Botão flutuante
-        const chatBtn = document.createElement('button');
-        chatBtn.className = 'chat-assistant-btn';
-        chatBtn.id = 'chatAssistantBtn';
-        chatBtn.innerHTML = '<i class="fas fa-comments"></i>';
-        document.body.appendChild(chatBtn);
+        // Botão flutuante removido — o Chat usa o botão do nav inferior (#chatNavBtn)
 
         // Container do chat
         const chatContainer = document.createElement('div');
@@ -521,12 +516,13 @@ class ChatAssistant {
 
     // ========== EVENTOS ==========
     attachEventListeners() {
-        const btn = document.getElementById('chatAssistantBtn');
+        // Usa o botão do nav inferior; fallback para o botão flutuante legado
+        const btn = document.getElementById('chatNavBtn') || document.getElementById('chatAssistantBtn');
         const closeBtn = document.getElementById('chatAssistantClose');
         const sendBtn = document.getElementById('chatAssistantSend');
         const input = document.getElementById('chatAssistantInput');
 
-        btn.addEventListener('click', () => this.toggleChat());
+        if (btn) btn.addEventListener('click', () => this.toggleChat());
         closeBtn.addEventListener('click', () => this.closeChat());
         sendBtn.addEventListener('click', () => this.sendMessage());
         input.addEventListener('keypress', (e) => {
@@ -538,18 +534,23 @@ class ChatAssistant {
     toggleChat() {
         this.isOpen = !this.isOpen;
         const container = document.getElementById('chatAssistantContainer');
+        const navBtn = document.getElementById('chatNavBtn');
         if (this.isOpen) {
             container.classList.add('active');
+            if (navBtn) navBtn.classList.add('active');
             document.getElementById('chatAssistantInput').focus();
             this.scrollToBottom();
         } else {
             container.classList.remove('active');
+            if (navBtn) navBtn.classList.remove('active');
         }
     }
 
     closeChat() {
         this.isOpen = false;
         document.getElementById('chatAssistantContainer').classList.remove('active');
+        const navBtn = document.getElementById('chatNavBtn');
+        if (navBtn) navBtn.classList.remove('active');
     }
 
      // ========== MENSAGEM DE BOAS-VINDAS ==========

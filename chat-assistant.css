@@ -29,7 +29,9 @@
 }
 
 /* ========== BOTÃO FLUTUANTE DO CHAT ========== */
+/* Removido: Chat está no nav inferior. Escondido por segurança. */
 .chat-assistant-btn {
+    display: none !important;
     position: fixed;
     bottom: 30px;
     right: 30px;

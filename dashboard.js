@@ -538,6 +538,29 @@ const _validators = {
         if (typeof m.descricao !== 'string' || m.descricao.length > 200)               return false;
         if (typeof m.objetivo !== 'number' || m.objetivo < 0 || m.objetivo > 99999999) return false;
         if (typeof m.saved !== 'number' || m.saved < 0)                                return false;
+
+        // Campos opcionais — novos
+        if (m.prazo !== undefined && m.prazo !== null) {
+            if (typeof m.prazo !== 'string' || !/^\d{2}\/\d{4}$/.test(m.prazo)) return false;
+        }
+        if (m.tipoRendimento !== undefined && m.tipoRendimento !== null) {
+            if (!['sem_rendimento', 'cdi', 'personalizado'].includes(m.tipoRendimento)) return false;
+        }
+        if (m.taxaJuros !== undefined && m.taxaJuros !== null) {
+            if (typeof m.taxaJuros !== 'number' || m.taxaJuros < 0 || m.taxaJuros > 100) return false;
+        }
+        if (m.cdiPct !== undefined && m.cdiPct !== null) {
+            if (typeof m.cdiPct !== 'number' || m.cdiPct <= 0 || m.cdiPct > 200) return false;
+        }
+        if (m.rendimentoPeriodo !== undefined && m.rendimentoPeriodo !== null) {
+            if (!['mes', 'ano'].includes(m.rendimentoPeriodo)) return false;
+        }
+        if (m.aporteRecorrente !== undefined && m.aporteRecorrente !== null) {
+            if (typeof m.aporteRecorrente !== 'boolean') return false;
+        }
+        if (m.valorAporte !== undefined && m.valorAporte !== null) {
+            if (typeof m.valorAporte !== 'number' || m.valorAporte < 0 || m.valorAporte > 99999999) return false;
+        }
         return true;
     },
     contaFixa(c) {
@@ -612,6 +635,8 @@ const _ALLOWED_KEYS = Object.freeze({
     meta: Object.freeze([
         'id', 'descricao', 'objetivo', 'saved',
         'monthly', 'historicoRetiradas',
+        'prazo', 'tipoRendimento', 'taxaJuros', 'cdiPct',
+        'rendimentoPeriodo', 'aporteRecorrente', 'valorAporte',
     ]),
     contaFixa: Object.freeze([
         'id', 'descricao', 'valor', 'vencimento', 'pago',
@@ -3393,6 +3418,31 @@ function bindFiltrosMovimentacoes() {
     const container = document.getElementById('movFiltros');
     if (!container) return;
 
+    // Toggle do painel de filtros
+    const toggleBtn = document.getElementById('toggleFiltrosBtn');
+    const wrapper   = document.getElementById('movFiltrosWrapper');
+    if (toggleBtn && wrapper) {
+        toggleBtn.addEventListener('click', () => {
+            const isOpen = wrapper.classList.toggle('open');
+            toggleBtn.setAttribute('aria-expanded', String(isOpen));
+        });
+    }
+
+    // Mapa para exibir nome legível do filtro ativo
+    const nomeFiltros = {
+        mes_atual: 'Mês atual',
+        '15_dias': 'Últimos 15 dias',
+        '30_dias': 'Últimos 30 dias',
+        '60_dias': 'Últimos 60 dias',
+        periodo:   'Mês/ano',
+        todo:      'Todo o período',
+    };
+
+    function atualizarLabelAtivo(filtro) {
+        const label = document.getElementById('filtroAtivoLabel');
+        if (label) label.textContent = nomeFiltros[filtro] || filtro;
+    }
+
     container.addEventListener('click', e => {
         const btn = e.target.closest('.mov-filtro-btn');
         if (!btn) return;
@@ -3401,6 +3451,13 @@ function bindFiltrosMovimentacoes() {
         btn.classList.add('active');
 
         filtroMovAtivo = btn.dataset.filtro;
+        atualizarLabelAtivo(filtroMovAtivo);
+
+        // Fecha o painel após selecionar (exceto "período" que precisa de sub-seleção)
+        if (filtroMovAtivo !== 'periodo' && wrapper) {
+            wrapper.classList.remove('open');
+            if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+        }
 
         const periodoSel = document.getElementById('movPeriodoSelector');
         if (periodoSel) periodoSel.style.display = filtroMovAtivo === 'periodo' ? 'flex' : 'none';
@@ -3573,79 +3630,461 @@ function abrirDetalhesTransacao(t) {
 }
 // ========== METAS/RESERVAS ==========
 function abrirMetaForm(editId = null) {
-    if (editId === null) {
-        criarPopup(`
-            <h3>Adicionar Meta</h3>
-            <input id="metaDesc" class="form-input" placeholder="Descrição" maxlength="200"><br>
-            <input id="metaObj" class="form-input" placeholder="Valor objetivo (R$)" type="number" step="0.01" min="0"><br>
-            <button class="btn-primary" id="okMeta">Concluir</button>
-            <button class="btn-cancelar" id="cancelarMeta">Cancelar</button>
-        `);
+    const isEdit = editId !== null;
+    const meta   = isEdit ? metas.find(m => m.id === editId) : null;
+    if (isEdit && !meta) return;
 
-        document.getElementById('cancelarMeta').addEventListener('click', () => fecharPopup());
+    criarPopupDOM((popup) => {
+        popup.style.cssText = 'max-width:500px; width:96%;';
 
-        document.getElementById('okMeta').addEventListener('click', () => {
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'max-height:82vh; overflow-y:auto; overflow-x:hidden; padding-right:4px;';
+
+        // ── Título
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'text-align:center; margin-bottom:18px; display:flex; align-items:center; justify-content:center; gap:10px; font-size:1.15rem;';
+        const tIcon = document.createElement('i');
+        tIcon.className = isEdit ? 'fas fa-pen' : 'fas fa-piggy-bank';
+        tIcon.style.color = 'var(--primary)';
+        titulo.appendChild(tIcon);
+        titulo.appendChild(document.createTextNode(isEdit ? ' Editar Reserva' : ' Nova Reserva'));
+
+        // ── Helper: cria uma seção com fundo glass
+        function secao(labelTxt) {
+            const sec = document.createElement('div');
+            sec.style.cssText = 'background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px 16px; margin-bottom:12px;';
+            if (labelTxt) {
+                const lbl = document.createElement('div');
+                lbl.style.cssText = 'font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:10px;';
+                lbl.textContent = labelTxt;
+                sec.appendChild(lbl);
+            }
+            return sec;
+        }
+
+        // ─────────────────────────── SEÇÃO 1: Básico ───────────────────────────
+        const secBasico = secao('Informações básicas');
+
+        const inpDesc = document.createElement('input');
+        inpDesc.className = 'form-input'; inpDesc.id = 'metaDesc';
+        inpDesc.placeholder = 'Nome da reserva (ex: Viagem, Emergência...)';
+        inpDesc.maxLength = 200; inpDesc.style.marginBottom = '10px';
+        if (meta) inpDesc.value = meta.descricao;
+
+        const inpObj = document.createElement('input');
+        inpObj.className = 'form-input'; inpObj.id = 'metaObj';
+        inpObj.type = 'number'; inpObj.step = '0.01'; inpObj.min = '0';
+        inpObj.placeholder = 'Objetivo (R$)';
+        if (meta) inpObj.value = meta.objetivo;
+
+        secBasico.appendChild(inpDesc);
+        secBasico.appendChild(inpObj);
+
+        // ─────────────────────────── SEÇÃO 2: Prazo ────────────────────────────
+        const secPrazo = secao('Prazo (opcional)');
+        const rowPrazo = document.createElement('div');
+        rowPrazo.style.cssText = 'display:flex; gap:10px;';
+
+        const selMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                          'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+        const selPM = document.createElement('select');
+        selPM.className = 'form-input'; selPM.id = 'metaPrazoMes'; selPM.style.flex = '1';
+        const optPMV = document.createElement('option'); optPMV.value = ''; optPMV.textContent = 'Mês';
+        selPM.appendChild(optPMV);
+        selMeses.forEach((n, i) => {
+            const o = document.createElement('option');
+            o.value = String(i + 1).padStart(2, '0'); o.textContent = n;
+            selPM.appendChild(o);
+        });
+
+        const selPA = document.createElement('select');
+        selPA.className = 'form-input'; selPA.id = 'metaPrazoAno'; selPA.style.flex = '1';
+        const optPAV = document.createElement('option'); optPAV.value = ''; optPAV.textContent = 'Ano';
+        selPA.appendChild(optPAV);
+        const anoBase = new Date().getFullYear();
+        for (let a = anoBase; a <= anoBase + 20; a++) {
+            const o = document.createElement('option'); o.value = String(a); o.textContent = String(a);
+            selPA.appendChild(o);
+        }
+
+        if (meta && meta.prazo) {
+            const [pm, pa] = meta.prazo.split('/');
+            if (pm) selPM.value = pm;
+            if (pa) selPA.value = pa;
+        }
+        rowPrazo.appendChild(selPM); rowPrazo.appendChild(selPA);
+        secPrazo.appendChild(rowPrazo);
+
+        // ─────────────────────────── SEÇÃO 3: Rendimentos ──────────────────────
+        const secRend = secao('Rendimentos');
+        const tipoRAtual = meta ? (meta.tipoRendimento || 'sem_rendimento') : 'sem_rendimento';
+
+        function criarRadio(name, value, labelTxt) {
+            const lbl = document.createElement('label');
+            lbl.style.cssText = 'display:flex; align-items:center; gap:8px; cursor:pointer; padding:7px 8px; border-radius:8px; margin-bottom:4px; transition:background 0.15s;';
+            lbl.addEventListener('mouseenter', () => { lbl.style.background = 'rgba(255,255,255,0.04)'; });
+            lbl.addEventListener('mouseleave', () => { lbl.style.background = ''; });
+            const r = document.createElement('input');
+            r.type = 'radio'; r.name = name; r.value = value; r.style.accentColor = 'var(--primary)';
+            if (tipoRAtual === value && name === 'tipoRend') r.checked = true;
+            const s = document.createElement('span'); s.style.fontSize = '0.9rem'; s.textContent = labelTxt;
+            lbl.appendChild(r); lbl.appendChild(s);
+            return { lbl, r };
+        }
+
+        const { lbl: lblSem }            = criarRadio('tipoRend', 'sem_rendimento', 'Sem rendimentos');
+        const { lbl: lblCdi }            = criarRadio('tipoRend', 'cdi', 'CDI');
+        const { lbl: lblPers }           = criarRadio('tipoRend', 'personalizado', 'Taxa personalizada');
+
+        // CDI sub-opções
+        const divCdi = document.createElement('div');
+        divCdi.id = 'cdiOpts';
+        divCdi.style.cssText = `display:${tipoRAtual === 'cdi' ? 'block' : 'none'}; padding:4px 0 6px 26px;`;
+
+        const rowCdiTaxa = document.createElement('div');
+        rowCdiTaxa.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px;';
+        const inpCdiPct = document.createElement('input');
+        inpCdiPct.className = 'form-input'; inpCdiPct.id = 'metaCdiPct';
+        inpCdiPct.type = 'number'; inpCdiPct.step = '1'; inpCdiPct.min = '1'; inpCdiPct.max = '200';
+        inpCdiPct.placeholder = '100'; inpCdiPct.style.cssText = 'width:72px; flex-shrink:0;';
+        inpCdiPct.value = (meta && meta.cdiPct != null) ? meta.cdiPct : '100';
+        const spanCdiPct = document.createElement('span');
+        spanCdiPct.style.cssText = 'font-size:0.82rem; color:var(--text-muted);';
+        spanCdiPct.textContent = '% do CDI';
+        rowCdiTaxa.appendChild(inpCdiPct); rowCdiTaxa.appendChild(spanCdiPct);
+
+        const rowCdiPer = document.createElement('div');
+        rowCdiPer.style.cssText = 'display:flex; gap:16px;';
+        function criarPeriodoRadio(name, val, txt, checkedIf) {
+            const lbl = document.createElement('label');
+            lbl.style.cssText = 'display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.82rem; color:var(--text-secondary);';
+            const r = document.createElement('input');
+            r.type = 'radio'; r.name = name; r.value = val; r.style.accentColor = 'var(--primary)';
+            if (checkedIf) r.checked = true;
+            lbl.appendChild(r); lbl.appendChild(document.createTextNode(txt));
+            return lbl;
+        }
+        const periodoAtual = meta ? (meta.rendimentoPeriodo || 'mes') : 'mes';
+        rowCdiPer.appendChild(criarPeriodoRadio('periodoRendCdi', 'mes', 'Ao mês',  periodoAtual !== 'ano'));
+        rowCdiPer.appendChild(criarPeriodoRadio('periodoRendCdi', 'ano', 'Ao ano',  periodoAtual === 'ano'));
+        divCdi.appendChild(rowCdiTaxa); divCdi.appendChild(rowCdiPer);
+
+        // Personalizado sub-opções
+        const divPers = document.createElement('div');
+        divPers.id = 'persOpts';
+        divPers.style.cssText = `display:${tipoRAtual === 'personalizado' ? 'block' : 'none'}; padding:4px 0 6px 26px;`;
+
+        const rowPersTaxa = document.createElement('div');
+        rowPersTaxa.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px;';
+        const inpPersPct = document.createElement('input');
+        inpPersPct.className = 'form-input'; inpPersPct.id = 'metaPersPct';
+        inpPersPct.type = 'number'; inpPersPct.step = '0.01'; inpPersPct.min = '0'; inpPersPct.max = '999';
+        inpPersPct.placeholder = '0.5'; inpPersPct.style.cssText = 'width:72px; flex-shrink:0;';
+        if (meta && meta.taxaJuros != null) inpPersPct.value = meta.taxaJuros;
+        const spanPersPct = document.createElement('span');
+        spanPersPct.style.cssText = 'font-size:0.82rem; color:var(--text-muted);';
+        spanPersPct.textContent = '%';
+        rowPersTaxa.appendChild(inpPersPct); rowPersTaxa.appendChild(spanPersPct);
+
+        const rowPersPer = document.createElement('div');
+        rowPersPer.style.cssText = 'display:flex; gap:16px;';
+        rowPersPer.appendChild(criarPeriodoRadio('periodoRendPers', 'mes', 'Ao mês', periodoAtual !== 'ano'));
+        rowPersPer.appendChild(criarPeriodoRadio('periodoRendPers', 'ano', 'Ao ano', periodoAtual === 'ano'));
+        divPers.appendChild(rowPersTaxa); divPers.appendChild(rowPersPer);
+
+        secRend.appendChild(lblSem);
+        secRend.appendChild(lblCdi);
+        secRend.appendChild(divCdi);
+        secRend.appendChild(lblPers);
+        secRend.appendChild(divPers);
+
+        secRend.addEventListener('change', e => {
+            if (e.target.name === 'tipoRend') {
+                divCdi.style.display  = e.target.value === 'cdi'          ? 'block' : 'none';
+                divPers.style.display = e.target.value === 'personalizado' ? 'block' : 'none';
+            }
+        });
+
+        // ─────────────────────────── SEÇÃO 4: Aporte Recorrente ────────────────
+        const secAporte = secao('Aporte Recorrente');
+
+        const lblChkAporte = document.createElement('label');
+        lblChkAporte.style.cssText = 'display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;';
+        const chkAporte = document.createElement('input');
+        chkAporte.type = 'checkbox'; chkAporte.id = 'metaAporteRecorrente';
+        chkAporte.style.cssText = 'width:17px; height:17px; accent-color:var(--primary); cursor:pointer; flex-shrink:0;';
+        if (meta && meta.aporteRecorrente) chkAporte.checked = true;
+        const spanChkAporte = document.createElement('span');
+        spanChkAporte.style.fontSize = '0.9rem';
+        spanChkAporte.textContent = 'Criar aporte mensal automático';
+        lblChkAporte.appendChild(chkAporte); lblChkAporte.appendChild(spanChkAporte);
+
+        const divAporteVal = document.createElement('div');
+        divAporteVal.id = 'aporteValorDiv';
+        divAporteVal.style.cssText = `display:${(meta && meta.aporteRecorrente) ? 'flex' : 'none'}; align-items:center; gap:10px;`;
+        const inpAporteV = document.createElement('input');
+        inpAporteV.className = 'form-input'; inpAporteV.id = 'metaAporteValor';
+        inpAporteV.type = 'number'; inpAporteV.step = '0.01'; inpAporteV.min = '0';
+        inpAporteV.placeholder = 'Valor mensal (R$)'; inpAporteV.style.flex = '1';
+        if (meta && meta.valorAporte) inpAporteV.value = meta.valorAporte;
+        const spanAporteMes = document.createElement('span');
+        spanAporteMes.style.cssText = 'font-size:0.8rem; color:var(--text-muted); white-space:nowrap;';
+        spanAporteMes.textContent = '/mês';
+        divAporteVal.appendChild(inpAporteV); divAporteVal.appendChild(spanAporteMes);
+
+        chkAporte.addEventListener('change', () => {
+            divAporteVal.style.display = chkAporte.checked ? 'flex' : 'none';
+        });
+        secAporte.appendChild(lblChkAporte); secAporte.appendChild(divAporteVal);
+
+        // ─────────────────────────── SEÇÃO 5: Projeção ─────────────────────────
+        const secProj = document.createElement('div');
+        secProj.id = 'metaProjecaoPreview';
+        secProj.style.cssText = 'display:none; background:rgba(67,160,71,0.06); border:1px solid rgba(67,160,71,0.22); border-radius:12px; padding:14px 16px; margin-bottom:12px;';
+
+        const btnSimular = document.createElement('button');
+        btnSimular.className = 'btn-primary'; btnSimular.type = 'button';
+        btnSimular.style.cssText = 'width:100%; margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:8px;';
+        const bsI = document.createElement('i'); bsI.className = 'fas fa-calculator';
+        btnSimular.appendChild(bsI); btnSimular.appendChild(document.createTextNode(' Ver Projeção'));
+
+        // Funções de cálculo financeiro (usadas também no clique)
+        function fvComposto(pv, pmt, r, n) {
+            if (r <= 0) return pv + pmt * n;
+            return pv * Math.pow(1 + r, n) + pmt * (Math.pow(1 + r, n) - 1) / r;
+        }
+        function mesesParaMeta(pv, obj, pmt, r) {
+            for (let n = 1; n <= 600; n++) {
+                if (fvComposto(pv, pmt, r, n) >= obj) return n;
+            }
+            return null;
+        }
+        function aporteNecessario(pv, obj, r, n) {
+            if (n <= 0) return null;
+            const fv = obj - pv * Math.pow(1 + r, n);
+            if (r <= 0) return fv / n;
+            const fator = Math.pow(1 + r, n) - 1;
+            if (fator <= 0) return null;
+            return fv * r / fator;
+        }
+
+        btnSimular.addEventListener('click', () => {
+            const obj     = parseFloat(document.getElementById('metaObj').value) || 0;
+            const savedPV = isEdit && meta ? Number(meta.saved || 0) : 0;
+            const tipoR   = document.querySelector('input[name="tipoRend"]:checked')?.value || 'sem_rendimento';
+            const aporte  = parseFloat(document.getElementById('metaAporteValor')?.value) || 0;
+            const prazoM  = document.getElementById('metaPrazoMes')?.value || '';
+            const prazoA  = document.getElementById('metaPrazoAno')?.value || '';
+
+            let r = 0;
+            if (tipoR === 'cdi') {
+                const pct = parseFloat(document.getElementById('metaCdiPct').value) || 100;
+                const per = document.querySelector('input[name="periodoRendCdi"]:checked')?.value || 'mes';
+                const taxaAnual = 10.5 * pct / 100;
+                r = per === 'ano'
+                    ? Math.pow(1 + taxaAnual / 100, 1/12) - 1
+                    : taxaAnual / 100 / 12;
+            } else if (tipoR === 'personalizado') {
+                const pct = parseFloat(document.getElementById('metaPersPct').value) || 0;
+                const per = document.querySelector('input[name="periodoRendPers"]:checked')?.value || 'mes';
+                r = per === 'ano'
+                    ? Math.pow(1 + pct / 100, 1/12) - 1
+                    : pct / 100;
+            }
+
+            let mesesPrazo = null;
+            if (prazoM && prazoA) {
+                const hoje = new Date();
+                const dt   = new Date(parseInt(prazoA), parseInt(prazoM) - 1, 1);
+                mesesPrazo = Math.max(1, Math.round((dt - hoje) / (1000 * 60 * 60 * 24 * 30.44)));
+            }
+
+            const secP = document.getElementById('metaProjecaoPreview');
+            secP.style.display = 'block';
+            // Limpa conteúdo anterior
+            while (secP.firstChild) secP.removeChild(secP.firstChild);
+
+            const tP = document.createElement('div');
+            tP.style.cssText = 'font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--primary); margin-bottom:10px;';
+            tP.textContent = '📊 Projeção calculada';
+            secP.appendChild(tP);
+
+            function addLinha(icon, lbl, val, cor) {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:7px 10px; border-radius:8px; margin-bottom:5px; background:rgba(255,255,255,0.03);';
+                const left = document.createElement('span');
+                left.style.cssText = 'font-size:0.83rem; color:var(--text-secondary); display:flex; align-items:center; gap:6px;';
+                const ic = document.createElement('i'); ic.className = icon;
+                ic.style.color = cor || 'var(--primary)'; ic.style.width = '14px';
+                left.appendChild(ic); left.appendChild(document.createTextNode(lbl));
+                const right = document.createElement('span');
+                right.style.cssText = `font-size:0.88rem; font-weight:700; color:${cor || 'var(--text-primary)'};`;
+                right.textContent = val;
+                row.appendChild(left); row.appendChild(right);
+                secP.appendChild(row);
+            }
+
+            if (obj <= 0) {
+                addLinha('fas fa-exclamation-triangle', 'Defina um objetivo', 'Necessário', '#ffd166');
+                return;
+            }
+
+            const falta = Math.max(0, obj - savedPV);
+            addLinha('fas fa-piggy-bank', 'Falta atingir', formatBRL(falta), '#ffd166');
+
+            if (aporte > 0 || r > 0) {
+                const meses = mesesParaMeta(savedPV, obj, aporte, r);
+                if (meses !== null) {
+                    const anos = Math.floor(meses / 12);
+                    const mr   = meses % 12;
+                    const tStr = anos > 0
+                        ? `${anos}a ${mr}m`
+                        : `${meses} mês${meses !== 1 ? 'es' : ''}`;
+                    addLinha('fas fa-clock', 'Tempo estimado', tStr, 'var(--primary)');
+                    const fvFinal    = fvComposto(savedPV, aporte, r, meses);
+                    const rendim     = Math.max(0, fvFinal - (savedPV + aporte * meses));
+                    if (rendim > 1) addLinha('fas fa-chart-line', 'Rendimentos acumulados', `+${formatBRL(rendim)}`, '#00ff99');
+                }
+            }
+
+            if (mesesPrazo !== null) {
+                const ap = aporteNecessario(savedPV, obj, r, mesesPrazo);
+                if (ap !== null && ap > 0) {
+                    addLinha('fas fa-calendar-check', `Aporte p/ prazo (${mesesPrazo}m)`, `${formatBRL(ap)}/mês`, '#a78bfa');
+                }
+                const fvP = fvComposto(savedPV, aporte, r, mesesPrazo);
+                const ok  = fvP >= obj;
+                addLinha(
+                    ok ? 'fas fa-check-circle' : 'fas fa-exclamation-circle',
+                    'Status no prazo',
+                    ok ? 'Atingirá o objetivo!' : `Chegará a ${formatBRL(Math.min(fvP, obj))}`,
+                    ok ? '#00ff99' : '#ff4b4b'
+                );
+            }
+        });
+
+        // ─────────────────────────── BOTÕES ────────────────────────────────────
+        const rowBtns = document.createElement('div');
+        rowBtns.style.cssText = 'display:flex; gap:10px; margin-top:4px;';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar'; btnCancelar.type = 'button';
+        btnCancelar.style.flex = '1'; btnCancelar.textContent = 'Cancelar';
+        btnCancelar.addEventListener('click', () => fecharPopup());
+
+        const btnOk = document.createElement('button');
+        btnOk.className = 'btn-primary'; btnOk.type = 'button'; btnOk.style.flex = '2';
+        const btnOkI = document.createElement('i');
+        btnOkI.className = isEdit ? 'fas fa-save' : 'fas fa-plus';
+        btnOkI.style.marginRight = '6px';
+        btnOk.appendChild(btnOkI);
+        btnOk.appendChild(document.createTextNode(isEdit ? 'Salvar' : 'Criar Reserva'));
+
+        btnOk.addEventListener('click', () => {
             const desc   = document.getElementById('metaDesc').value.trim();
             const objStr = document.getElementById('metaObj').value;
 
-            if (!desc)                                                              return alert('Digite descrição da meta.');
-            if (desc.length > 200)                                                  return alert('Descrição muito longa (máx. 200 caracteres).');
-            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0) return alert('Digite objetivo válido.');
+            if (!desc)                                                              return alert('Digite o nome da reserva.');
+            if (desc.length > 200)                                                  return alert('Nome muito longo (máx. 200 caracteres).');
+            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0) return alert('Digite um objetivo válido.');
 
             const objetivo = parseFloat(parseFloat(objStr).toFixed(2));
-            if (!Number.isFinite(objetivo) || objetivo <= 0)                        return alert('Digite objetivo válido.');
+            if (!Number.isFinite(objetivo) || objetivo <= 0) return alert('Digite um objetivo válido.');
 
-            // ✅ CORREÇÃO: gera id local para que editar e remover funcionem corretamente
-            const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-                ? crypto.randomUUID()
-                : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            // Prazo
+            const prazoMV = document.getElementById('metaPrazoMes').value;
+            const prazoAV = document.getElementById('metaPrazoAno').value;
+            const prazo   = (prazoMV && prazoAV) ? `${prazoMV}/${prazoAV}` : null;
 
-            metas.push({ id: novoId, descricao: desc, objetivo, saved: 0, monthly: {} });
+            // Rendimentos
+            const tipoR = document.querySelector('input[name="tipoRend"]:checked')?.value || 'sem_rendimento';
+            let taxaJuros = null, rendimentoPeriodo = null, cdiPct = null;
+
+            if (tipoR === 'cdi') {
+                const pct = parseFloat(document.getElementById('metaCdiPct').value);
+                if (!Number.isFinite(pct) || pct <= 0 || pct > 200) return alert('Digite uma porcentagem válida do CDI (1–200).');
+                cdiPct = pct;
+                rendimentoPeriodo = document.querySelector('input[name="periodoRendCdi"]:checked')?.value || 'mes';
+                const taxaAnual = 10.5 * pct / 100;
+                taxaJuros = rendimentoPeriodo === 'ano'
+                    ? parseFloat(((Math.pow(1 + taxaAnual / 100, 1/12) - 1) * 100).toFixed(6))
+                    : parseFloat((taxaAnual / 12).toFixed(6));
+            } else if (tipoR === 'personalizado') {
+                const pct = parseFloat(document.getElementById('metaPersPct').value);
+                if (!Number.isFinite(pct) || pct < 0 || pct > 999) return alert('Digite uma taxa válida (0–999).');
+                rendimentoPeriodo = document.querySelector('input[name="periodoRendPers"]:checked')?.value || 'mes';
+                taxaJuros = rendimentoPeriodo === 'ano'
+                    ? parseFloat(((Math.pow(1 + pct / 100, 1/12) - 1) * 100).toFixed(6))
+                    : parseFloat(pct.toFixed(6));
+            }
+
+            // Aporte
+            const aporteRecorrente = document.getElementById('metaAporteRecorrente').checked;
+            let valorAporte = null;
+            if (aporteRecorrente) {
+                const apStr = document.getElementById('metaAporteValor').value;
+                valorAporte = parseFloat(apStr);
+                if (!Number.isFinite(valorAporte) || valorAporte <= 0) return alert('Digite um valor de aporte válido.');
+            }
+
+            if (isEdit) {
+                meta.descricao        = desc;
+                meta.objetivo         = objetivo;
+                meta.prazo            = prazo;
+                meta.tipoRendimento   = tipoR;
+                meta.taxaJuros        = taxaJuros;
+                meta.cdiPct           = cdiPct;
+                meta.rendimentoPeriodo = rendimentoPeriodo;
+                meta.aporteRecorrente = aporteRecorrente;
+                meta.valorAporte      = valorAporte;
+            } else {
+                const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+                metas.push({
+                    id: novoId, descricao: desc, objetivo, saved: 0, monthly: {},
+                    prazo, tipoRendimento: tipoR, taxaJuros, cdiPct,
+                    rendimentoPeriodo, aporteRecorrente, valorAporte,
+                });
+
+                // Cria conta fixa de aporte recorrente
+                if (aporteRecorrente && valorAporte > 0) {
+                    const hoje = new Date();
+                    const mm   = hoje.getMonth() + 2 > 12 ? 1 : hoje.getMonth() + 2;
+                    const aa   = hoje.getMonth() + 2 > 12 ? hoje.getFullYear() + 1 : hoje.getFullYear();
+                    contasFixas.push({
+                        id:          (typeof crypto !== 'undefined' && crypto.randomUUID)
+                                         ? crypto.randomUUID()
+                                         : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                        descricao:   `Aporte ${desc}`.slice(0, 200),
+                        valor:       valorAporte,
+                        vencimento:  `${aa}-${String(mm).padStart(2,'0')}-01`,
+                        pago:        false,
+                    });
+                }
+            }
+
             salvarDados();
             renderMetasList();
             atualizarTudo();
             fecharPopup();
         });
 
-    } else {
-        const meta = metas.find(m => m.id === editId);
-        if (!meta) return;
+        rowBtns.appendChild(btnCancelar);
+        rowBtns.appendChild(btnOk);
 
-        criarPopup(`
-            <h3>Editar Meta</h3>
-            <input id="metaDesc" class="form-input" maxlength="200"><br>
-            <input id="metaObj" class="form-input" type="number" step="0.01" min="0"><br>
-            <button class="btn-primary" id="okMeta">Salvar</button>
-            <button class="btn-cancelar" id="cancelarMeta">Cancelar</button>
-        `);
-
-        document.getElementById('metaDesc').value = meta.descricao;
-        document.getElementById('metaObj').value  = meta.objetivo;
-
-        document.getElementById('cancelarMeta').addEventListener('click', () => fecharPopup());
-
-        document.getElementById('okMeta').addEventListener('click', () => {
-            const desc   = document.getElementById('metaDesc').value.trim();
-            const objStr = document.getElementById('metaObj').value;
-
-            if (!desc)
-            return alert('Digite descrição da meta.');
-            if (desc.length > 200)
-            return alert('Descrição muito longa (máx. 200 caracteres).');
-            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0)
-            return alert('Digite objetivo válido.');
-
-            meta.descricao = desc;
-            meta.objetivo  = parseFloat(parseFloat(objStr).toFixed(2));
-            if (!Number.isFinite(meta.objetivo) || meta.objetivo <= 0)
-            return alert('Digite objetivo válido.');
-
-            salvarDados();
-            renderMetasList();
-            atualizarTudo();
-            fecharPopup();
-        });
-    }
+        // ─────────────────────────── MONTAGEM ──────────────────────────────────
+        wrapper.appendChild(titulo);
+        wrapper.appendChild(secBasico);
+        wrapper.appendChild(secPrazo);
+        wrapper.appendChild(secRend);
+        wrapper.appendChild(secAporte);
+        wrapper.appendChild(btnSimular);
+        wrapper.appendChild(secProj);
+        wrapper.appendChild(rowBtns);
+        popup.appendChild(wrapper);
+    });
 }
 
 function renderMetasList() {
@@ -3694,6 +4133,43 @@ function renderMetasList() {
 
         colInfo.appendChild(strongDesc);
         colInfo.appendChild(divValores);
+
+        // ── Tags: prazo + rendimentos
+        if (m.prazo || (m.tipoRendimento && m.tipoRendimento !== 'sem_rendimento')) {
+            const rowTags = document.createElement('div');
+            rowTags.style.cssText = 'display:flex; gap:5px; flex-wrap:wrap; margin-top:5px;';
+
+            if (m.prazo) {
+                const [pm, pa] = m.prazo.split('/');
+                const nomeMes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+                const mesNum  = parseInt(pm, 10);
+                const tagPrazo = document.createElement('span');
+                tagPrazo.style.cssText = 'font-size:10px; padding:2px 7px; border-radius:20px; background:rgba(167,139,250,0.15); color:#a78bfa; font-weight:600;';
+                tagPrazo.textContent = `⏰ ${nomeMes[mesNum - 1] || pm}/${pa}`;
+                rowTags.appendChild(tagPrazo);
+            }
+
+            if (m.tipoRendimento === 'cdi') {
+                const tagRend = document.createElement('span');
+                tagRend.style.cssText = 'font-size:10px; padding:2px 7px; border-radius:20px; background:rgba(0,255,153,0.12); color:#00cc7a; font-weight:600;';
+                tagRend.textContent = `📈 CDI ${m.cdiPct != null ? m.cdiPct + '%' : ''}`.trim();
+                rowTags.appendChild(tagRend);
+            } else if (m.tipoRendimento === 'personalizado' && m.taxaJuros != null) {
+                const tagRend = document.createElement('span');
+                tagRend.style.cssText = 'font-size:10px; padding:2px 7px; border-radius:20px; background:rgba(0,255,153,0.12); color:#00cc7a; font-weight:600;';
+                tagRend.textContent = `📈 ${m.taxaJuros.toFixed(2)}%/mês`;
+                rowTags.appendChild(tagRend);
+            }
+
+            if (m.aporteRecorrente && m.valorAporte) {
+                const tagAp = document.createElement('span');
+                tagAp.style.cssText = 'font-size:10px; padding:2px 7px; border-radius:20px; background:rgba(67,160,71,0.15); color:var(--primary); font-weight:600;';
+                tagAp.textContent = `💰 ${formatBRL(m.valorAporte)}/mês`;
+                rowTags.appendChild(tagAp);
+            }
+
+            colInfo.appendChild(rowTags);
+        }
 
         const divPerc = document.createElement('div');
         // ✅ Atribuição direta de propriedades — sem cssText com dados do usuário
@@ -4257,6 +4733,98 @@ function renderMetaVisual() {
         details.appendChild(cardInsuf);
     }
     
+    // ── Compound interest info if meta has taxaJuros
+    if (meta.taxaJuros && meta.taxaJuros > 0) {
+        const r = meta.taxaJuros / 100;
+        const aporte = Number(meta.valorAporte || 0);
+        const fvComposto = (pv, pmt, rate, n) =>
+            rate <= 0 ? pv + pmt * n : pv * Math.pow(1 + rate, n) + pmt * (Math.pow(1 + rate, n) - 1) / rate;
+
+        const cardRendim              = document.createElement('div');
+        cardRendim.style.background   = 'rgba(0,255,153,0.06)';
+        cardRendim.style.padding      = '14px';
+        cardRendim.style.borderRadius = '12px';
+        cardRendim.style.marginTop    = '12px';
+        cardRendim.style.borderLeft   = '3px solid #00ff99';
+
+        const rdTit = document.createElement('div');
+        rdTit.style.cssText = 'font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#00cc7a; margin-bottom:10px;';
+        rdTit.textContent = '📈 Projeção com Rendimentos';
+        cardRendim.appendChild(rdTit);
+
+        function addRendRow(lbl, val, cor) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.05);';
+            const l = document.createElement('span');
+            l.style.cssText = 'font-size:0.83rem; color:var(--text-secondary);';
+            l.textContent = lbl;
+            const v = document.createElement('span');
+            v.style.cssText = `font-size:0.88rem; font-weight:700; color:${cor || 'var(--text-primary)'};`;
+            v.textContent = val;
+            row.appendChild(l); row.appendChild(v);
+            cardRendim.appendChild(row);
+        }
+
+        addRendRow('Taxa mensal', `${meta.taxaJuros.toFixed(4)}%`, '#00ff99');
+        if (aporte > 0) {
+            const fv12 = fvComposto(saved, aporte, r, 12);
+            const rend12 = Math.max(0, fv12 - (saved + aporte * 12));
+            addRendRow('Rendimento estimado (12m)', `+${formatBRL(rend12)}`, '#00ff99');
+            addRendRow('Saldo após 12m', formatBRL(fv12), 'var(--primary)');
+        }
+
+        details.appendChild(cardRendim);
+    }
+
+    // ── Smart tips based on real transactions
+    const gastosPorCategoria = {};
+    const hoje = new Date();
+    const mesAtualKey = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+    transacoes.filter(t => t.categoria === 'saida').forEach(t => {
+        const cat = t.tipo || 'Outros';
+        if (!gastosPorCategoria[cat]) gastosPorCategoria[cat] = 0;
+        gastosPorCategoria[cat] += Number(t.valor || 0);
+    });
+    const top5Cats = Object.entries(gastosPorCategoria)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+    if (top5Cats.length > 0 && saved < objetivo) {
+        const falta = objetivo - saved;
+        const cardTips              = document.createElement('div');
+        cardTips.style.background   = 'rgba(108,99,255,0.07)';
+        cardTips.style.padding      = '14px';
+        cardTips.style.borderRadius = '12px';
+        cardTips.style.marginTop    = '12px';
+        cardTips.style.borderLeft   = '3px solid #6c63ff';
+
+        const tTit = document.createElement('div');
+        tTit.style.cssText = 'font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#6c63ff; margin-bottom:10px;';
+        tTit.textContent = '💡 Dicas Personalizadas';
+        cardTips.appendChild(tTit);
+
+        // Tip 1: save 10% per top category
+        const economiaTop5 = top5Cats.reduce((s, [, v]) => s + v * 0.1, 0);
+        if (economiaTop5 > 0) {
+            const p = document.createElement('p');
+            p.style.cssText = 'font-size:0.83rem; color:var(--text-secondary); margin-bottom:8px; line-height:1.5;';
+            const meses10pct = economiaTop5 > 0 ? Math.ceil(falta / economiaTop5) : null;
+            p.textContent = `Se economizar 10% nas suas ${top5Cats.length} maiores categorias de gasto, você guardaria ${formatBRL(economiaTop5)}/mês${meses10pct ? ` e atingiria a meta em ~${meses10pct} meses` : ''}.`;
+            cardTips.appendChild(p);
+        }
+
+        // Tip 2: specific category suggestion
+        if (top5Cats[0]) {
+            const [catNome, catVal] = top5Cats[0];
+            const p2 = document.createElement('p');
+            p2.style.cssText = 'font-size:0.83rem; color:var(--text-secondary); margin-bottom:0; line-height:1.5;';
+            p2.textContent = `Sua maior despesa é "${_sanitizeText(catNome)}" com ${formatBRL(catVal)} no total. Reduzir 15% aqui = ${formatBRL(catVal * 0.15)} a mais por período para sua reserva.`;
+            cardTips.appendChild(p2);
+        }
+
+        details.appendChild(cardTips);
+    }
+
     if (!line._clickListenerRegistrado) {
         line._clickListenerRegistrado = true;
         line.addEventListener('click', function(ev) {
@@ -7165,125 +7733,130 @@ function processarAnaliseOndeForDinheiro() {
         }
     });
 
-    let html = `
-        <div style="background:linear-gradient(135deg, rgba(67,160,71,0.2), rgba(108,99,255,0.2)); padding:24px; border-radius:16px; margin-bottom:24px; border-left:4px solid var(--primary);">
-            <div id="_narrativaPlaceholder"></div>
-            <div style="text-align:center; margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
-                <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:8px;">Total Gasto no Período</div>
-                <div style="font-size:2rem; font-weight:700; color:#ff4b4b;">${formatBRL(analise.totalGastos)}</div>
-                <div style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;">${sanitizeHTML(String(analise.totalTransacoes))} transações registradas</div>
-            </div>
-        </div>
-        <div style="background:rgba(255,255,255,0.03); padding:24px; border-radius:16px; margin-bottom:24px;">
-            <h4 style="margin-bottom:16px; color:var(--text-primary); text-align:center; display:flex; align-items:center; justify-content:center; gap:8px;"><i class="fas fa-chart-pie" style="color:var(--primary);"></i> Distribuição por Categoria</h4>
-            <div style="display:flex; flex-direction:column; gap:12px;">
-    `;
+    // Limpa container
+    container.innerHTML = '';
 
-    const cores = ['#ff4b4b', '#ffd166', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8'];
+    // ── Card de resumo (glassmorphism)
+    const cardResumo = document.createElement('div');
+    cardResumo.style.cssText = 'background:linear-gradient(135deg,rgba(67,160,71,0.15),rgba(108,99,255,0.15)); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(67,160,71,0.25); padding:18px; border-radius:16px; margin-bottom:16px;';
+
+    // Narrativa
+    narrativaContainer.style.cssText = 'font-size:0.95rem; line-height:1.7; color:var(--text-primary); margin-bottom:14px;';
+    cardResumo.appendChild(narrativaContainer);
+
+    // Stats rápidos: total + transações
+    const rowStats = document.createElement('div');
+    rowStats.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:10px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);';
+
+    function criarStatMini(lbl, val, cor) {
+        const c = document.createElement('div');
+        c.style.cssText = 'background:rgba(255,255,255,0.04); border-radius:10px; padding:10px 12px; text-align:center;';
+        const vEl = document.createElement('div');
+        vEl.style.cssText = `font-size:1.2rem; font-weight:700; color:${cor}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;`;
+        vEl.textContent = val;
+        const lEl = document.createElement('div');
+        lEl.style.cssText = 'font-size:0.72rem; color:var(--text-muted); margin-top:3px; text-transform:uppercase; letter-spacing:0.04em;';
+        lEl.textContent = lbl;
+        c.appendChild(vEl); c.appendChild(lEl);
+        return c;
+    }
+    rowStats.appendChild(criarStatMini('Total gasto', formatBRL(analise.totalGastos), '#ff4b4b'));
+    rowStats.appendChild(criarStatMini('Transações', String(analise.totalTransacoes), '#4ecdc4'));
+    cardResumo.appendChild(rowStats);
+    container.appendChild(cardResumo);
+
+    // ── Distribuição por categoria
+    const cardCats = document.createElement('div');
+    cardCats.style.cssText = 'background:rgba(255,255,255,0.03); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:16px; margin-bottom:14px;';
+
+    const catTitulo = document.createElement('div');
+    catTitulo.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted);';
+    const catIcon = document.createElement('i'); catIcon.className = 'fas fa-chart-pie'; catIcon.style.color = 'var(--primary)';
+    catTitulo.appendChild(catIcon); catTitulo.appendChild(document.createTextNode(' Distribuição por Categoria'));
+    cardCats.appendChild(catTitulo);
+
+    const cores = ['#ff4b4b','#ffd166','#4ecdc4','#45b7d1','#f9ca24','#6c5ce7','#a29bfe','#fd79a8'];
 
     analise.categorias.forEach(([categoria, valor], i) => {
-        const percentual = ((valor / analise.totalGastos) * 100).toFixed(1);
-        const cor        = cores[i % cores.length]; // ✅ cor vem de array interno, nunca de dado de usuário
+        const percentual = parseFloat(((valor / analise.totalGastos) * 100).toFixed(1));
+        const cor        = cores[i % cores.length];
 
-        html += `
-            <div style="margin-bottom:12px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <div style="width:16px; height:16px; background:${cor}; border-radius:4px;"></div>
-                        <span style="font-weight:600; color:var(--text-primary);">${sanitizeHTML(categoria)}</span>
-                    </div>
-                    <div style="text-align:right;">
-                        <div style="font-weight:700; color:var(--text-primary);">${formatBRL(valor)}</div>
-                        <div style="font-size:0.85rem; color:var(--text-secondary);">${sanitizeHTML(percentual)}%</div>
-                    </div>
-                </div>
-                <div style="width:100%; height:12px; background:rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;">
-                    <div style="width:${sanitizeHTML(percentual)}%; height:100%; background:${cor}; border-radius:6px; transition:width 0.5s;"></div>
-                </div>
-            </div>
-        `;
+        const itemCat = document.createElement('div');
+        itemCat.style.cssText = 'margin-bottom:10px;';
+
+        const rowCat = document.createElement('div');
+        rowCat.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;';
+
+        const leftCat = document.createElement('div');
+        leftCat.style.cssText = 'display:flex; align-items:center; gap:8px; min-width:0;';
+        const dot = document.createElement('span');
+        dot.style.cssText = `width:10px; height:10px; border-radius:3px; background:${cor}; flex-shrink:0;`;
+        const nomeCat = document.createElement('span');
+        nomeCat.style.cssText = 'font-size:0.85rem; font-weight:600; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+        nomeCat.textContent = _sanitizeText(categoria); // ✅ textContent
+        leftCat.appendChild(dot); leftCat.appendChild(nomeCat);
+
+        const rightCat = document.createElement('div');
+        rightCat.style.cssText = 'display:flex; align-items:center; gap:8px; flex-shrink:0;';
+        const valEl = document.createElement('span');
+        valEl.style.cssText = 'font-size:0.85rem; font-weight:700; color:var(--text-primary);';
+        valEl.textContent = formatBRL(valor);
+        const pctEl = document.createElement('span');
+        // Cores são todas do array interno (6 chars hex) — seguro interpolar
+        const [rr,gg,bb] = (cor.slice(1).match(/../g) || ['ff','ff','ff']).map(x => parseInt(x, 16));
+        pctEl.style.cssText = `font-size:0.75rem; padding:2px 6px; border-radius:10px; background:rgba(${rr},${gg},${bb},0.18); color:${cor}; font-weight:600; min-width:36px; text-align:center;`;
+        pctEl.textContent = `${percentual}%`;
+        rightCat.appendChild(valEl); rightCat.appendChild(pctEl);
+
+        rowCat.appendChild(leftCat); rowCat.appendChild(rightCat);
+
+        const barra = document.createElement('div');
+        barra.style.cssText = 'width:100%; height:5px; background:rgba(255,255,255,0.08); border-radius:10px; overflow:hidden;';
+        const fill = document.createElement('div');
+        fill.style.cssText = `width:0%; height:100%; background:${cor}; border-radius:10px; transition:width 0.6s ease ${i * 80}ms;`;
+        barra.appendChild(fill);
+
+        // Animação com timeout para efeito de entrada
+        setTimeout(() => { fill.style.width = `${percentual}%`; }, 50);
+
+        itemCat.appendChild(rowCat); itemCat.appendChild(barra);
+        cardCats.appendChild(itemCat);
     });
 
-    html += `</div></div>`;
+    container.appendChild(cardCats);
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // ✅ CORREÇÃO PRINCIPAL:
-    //    Antes: container.innerHTML = html  (sem DOMParser)
-    //    Depois: passa por _sanitizarHTMLRelatorio (DOMParser + whitelist CSS)
-    //    ENTÃO: insere a narrativa via DOM API — dados de usuário NUNCA tocam innerHTML
-    // ─────────────────────────────────────────────────────────────────────────
-    container.innerHTML = _sanitizarHTMLRelatorio(html);
-
-    // ✅ Substitui o placeholder pela narrativa construída via DOM
-    const placeholder = container.querySelector('#_narrativaPlaceholder');
-    if (placeholder && narrativaContainer) {
-        placeholder.replaceWith(narrativaContainer);
-    }
-
-    // Insight section — apenas texto estático + formatBRL (numérico)
+    // ── Insight card (glassmorphism roxo)
     const insightDiv = document.createElement('div');
-    insightDiv.style.cssText = 'background:rgba(108,99,255,0.1); padding:20px; border-radius:16px; border-left:4px solid #6c63ff;';
+    insightDiv.style.cssText = 'background:rgba(108,99,255,0.1); backdrop-filter:blur(8px); border:1px solid rgba(108,99,255,0.2); padding:16px; border-radius:16px;';
 
-    const insightHeader = document.createElement('div');
-    insightHeader.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:12px;';
-
-    const iconInsight = document.createElement('div');
-    iconInsight.style.cssText = 'font-size:1.4rem; color:#6c63ff;';
-    const iconInsightI = document.createElement('i');
-    iconInsightI.className = 'fas fa-lightbulb';
-    iconInsight.appendChild(iconInsightI);
-
-    const tituloInsight = document.createElement('div');
-    tituloInsight.style.cssText = 'font-weight:700; font-size:1.1rem; color:var(--text-primary);';
-    tituloInsight.textContent = 'Insight Inteligente';
-
-    insightHeader.appendChild(iconInsight);
-    insightHeader.appendChild(tituloInsight);
-
-    const textoInsight = document.createElement('div');
-    textoInsight.style.cssText = 'color:var(--text-secondary); line-height:1.6; font-size:0.95rem;';
+    const insightTit = document.createElement('div');
+    insightTit.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#a78bfa;';
+    const insightI = document.createElement('i'); insightI.className = 'fas fa-lightbulb'; insightI.style.color = '#6c63ff';
+    insightTit.appendChild(insightI); insightTit.appendChild(document.createTextNode(' Insight Inteligente'));
+    insightDiv.appendChild(insightTit);
 
     const ticketMedio = analise.totalGastos / analise.totalTransacoes;
 
-    // ✅ Constrói insight via textContent — zero risco de XSS
-    if (analise.top3[0]) {
-        const percTop = ((analise.top3[0][1] / analise.totalGastos) * 100).toFixed(0);
-        if (Number(percTop) > 50) {
-            const p = document.createElement('p');
-            const aviso = document.createElement('strong');
-            const avisoIcon = document.createElement('i');
-            avisoIcon.className = 'fas fa-triangle-exclamation';
-            avisoIcon.style.cssText = 'color:#ffd166; margin-right:5px;';
-            aviso.appendChild(avisoIcon);
-            aviso.appendChild(document.createTextNode('Atenção: '));
-            p.appendChild(aviso);
-            p.appendChild(document.createTextNode(
-                `${percTop}% dos seus gastos foram com `
-            ));
-            const bold = document.createElement('strong');
-            bold.textContent = analise.top3[0][0]; // ✅ textContent
-            p.appendChild(bold);
-            p.appendChild(document.createTextNode(
-                `. Isso representa mais da metade do seu orçamento! Considere analisar oportunidades de redução nesta categoria.`
-            ));
-            textoInsight.appendChild(p);
-        }
+    function addInsightP(txt) {
+        const p = document.createElement('p');
+        p.style.cssText = 'font-size:0.84rem; color:var(--text-secondary); line-height:1.6; margin-bottom:6px;';
+        p.textContent = txt;
+        insightDiv.appendChild(p);
     }
 
-    const pTicket = document.createElement('p');
-    const boldTicket = document.createElement('strong');
-    boldTicket.textContent = 'Gasto médio por transação: ';
-    pTicket.appendChild(boldTicket);
-    pTicket.appendChild(document.createTextNode(
-        `${formatBRL(ticketMedio)}. ${ticketMedio > 200
-            ? 'Isso indica transações de valores significativos. Certifique-se de que cada gasto esteja alinhado com suas prioridades.'
-            : 'Você mantém transações de valores moderados, o que pode indicar um bom controle diário.'
-        }`
-    ));
-    textoInsight.appendChild(pTicket);
+    if (analise.top3[0]) {
+        const percTop = Math.round((analise.top3[0][1] / analise.totalGastos) * 100);
+        if (percTop > 50) {
+            addInsightP(`⚠️ Atenção: ${percTop}% dos gastos foram em "${_sanitizeText(analise.top3[0][0])}" — mais da metade do orçamento! Analise oportunidades de redução nessa categoria.`);
+        }
+    }
+    addInsightP(`💳 Ticket médio: ${formatBRL(ticketMedio)} por transação. ${ticketMedio > 200 ? 'Valores altos — certifique-se de que cada gasto está alinhado com suas prioridades.' : 'Valores moderados — bom sinal de controle diário.'}`);
 
-    insightDiv.appendChild(insightHeader);
-    insightDiv.appendChild(textoInsight);
+    if (analise.top3.length >= 2) {
+        const ec = analise.top3.reduce((s, [, v]) => s + v * 0.1, 0);
+        addInsightP(`💡 Economizando 10% nas ${analise.top3.length} maiores categorias você teria ${formatBRL(ec)} a mais por mês.`);
+    }
+
     container.appendChild(insightDiv);
 }
 
@@ -7384,15 +7957,15 @@ function abrirWidgetOndeForDinheiro() {
     };
 
     criarPopupDOM((popup) => {
-        popup.style.cssText = 'max-width:500px; width:96%;';
+        popup.style.cssText = 'max-width:480px; width:96%;';
 
         // ── Wrapper scroll
         const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'max-height:75vh; overflow-y:auto; overflow-x:hidden; padding-right:6px;';
+        wrapper.style.cssText = 'max-height:82vh; overflow-y:auto; overflow-x:hidden; padding-right:4px;';
 
         // ── Título
         const titulo = document.createElement('h3');
-        titulo.style.cssText = 'text-align:center; margin-bottom:6px; display:flex; align-items:center; justify-content:center; gap:10px;';
+        titulo.style.cssText = 'text-align:center; margin-bottom:4px; display:flex; align-items:center; justify-content:center; gap:10px; font-size:1.1rem;';
         const tituloIcon = document.createElement('i');
         tituloIcon.className = 'fas fa-magnifying-glass-dollar';
         tituloIcon.style.color = 'var(--primary)';
@@ -7403,8 +7976,8 @@ function abrirWidgetOndeForDinheiro() {
 
         // ── Subtítulo
         const subtitulo = document.createElement('p');
-        subtitulo.style.cssText = 'color:var(--text-secondary); margin-bottom:20px; font-size:0.88rem; text-align:center;';
-        subtitulo.textContent = 'Veja para onde foram seus gastos em um período específico.';
+        subtitulo.style.cssText = 'color:var(--text-muted); margin-bottom:14px; font-size:0.8rem; text-align:center;';
+        subtitulo.textContent = 'Analise seus gastos por período';
 
         // ── Row de filtros
         const rowFiltros = document.createElement('div');

@@ -1066,21 +1066,34 @@
 
 @media (max-width: 768px) {
     .graficos-filtros {
-        padding: 20px;
+        padding: 16px;
+        border-radius: 12px;
     }
 
     .filtros-row {
-        grid-template-columns: 1fr;
-        gap: 12px;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
     }
 
     .view-type-btns {
-        flex-direction: column;
+        flex-direction: row;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        gap: 8px;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .view-type-btns::-webkit-scrollbar {
+        display: none;
     }
 
     .view-btn {
-        width: 100%;
-        justify-content: center;
+        flex-shrink: 0;
+        padding: 9px 16px;
+        font-size: 0.85rem;
+        white-space: nowrap;
     }
 
     .grafico-card {
@@ -1104,7 +1117,30 @@
 
     .stats-rapidas {
         grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
+        gap: 10px;
+    }
+
+    .stat-card {
+        padding: 14px 12px;
+        border-radius: 14px;
+        background: rgba(30, 40, 35, 0.55);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(67, 160, 71, 0.18);
+    }
+
+    .stat-icon {
+        font-size: 1.8rem;
+        margin-bottom: 8px;
+    }
+
+    .stat-label {
+        font-size: 0.72rem;
+        margin-bottom: 4px;
+    }
+
+    .stat-value {
+        font-size: 1.35rem;
     }
 
     .perfis-comparacao-grid {
@@ -1143,20 +1179,37 @@
 }
 
 @media (max-width: 480px) {
+    .graficos-filtros {
+        padding: 12px;
+    }
+
+    .filtros-row {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .filtro-select {
+        padding: 9px 10px;
+        font-size: 0.85rem;
+    }
+
     .stats-rapidas {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
     }
 
     .stat-card {
-        padding: 16px;
+        padding: 12px 10px;
+        border-radius: 12px;
     }
 
     .stat-icon {
-        font-size: 2rem;
+        font-size: 1.6rem;
+        margin-bottom: 6px;
     }
 
     .stat-value {
-        font-size: 1.5rem;
+        font-size: 1.2rem;
     }
 
     .grafico-card {
