@@ -1518,6 +1518,14 @@ function atualizarNomeUsuario() {
     if (welcomeNameEl) welcomeNameEl.textContent = nome;
     if (userPlanEl)    userPlanEl.textContent     = plano;
 
+    // Card de perfil na aba Configurações
+    const cfgNomeEl   = document.getElementById('cfgUserNome');
+    const cfgPlanoEl  = document.getElementById('cfgUserPlano');
+    const cfgAvatarEl = document.getElementById('cfgUserAvatar');
+    if (cfgNomeEl)   cfgNomeEl.textContent   = nome;
+    if (cfgPlanoEl)  cfgPlanoEl.textContent  = plano;
+    if (cfgAvatarEl) cfgAvatarEl.textContent = nome.trim().charAt(0).toUpperCase() || '?';
+
     // Helper: atualiza par (img + fallback) com a mesma lógica
     const _syncFoto = (photoEl, fbEl) => {
         if (perfilAtivo?.foto) {

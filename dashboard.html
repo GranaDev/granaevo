@@ -740,60 +740,101 @@
 
             <!-- CONFIGURAÇÕES -->
             <section class="page" id="configuracoesPage">
-                <div class="page-header-premium">
-                    <div class="header-content">
-                        <div class="header-title-group">
-                            <div class="breadcrumb-premium">
-                                <a href="dashboard.html">Início</a>
-                                <span class="separator">›</span>
-                                <span>Configurações</span>
+
+                <!-- Card de perfil do usuário -->
+                <div class="cfg-profile-card">
+                    <div class="cfg-avatar" id="cfgUserAvatar">?</div>
+                    <div class="cfg-profile-info">
+                        <span class="cfg-profile-name" id="cfgUserNome">Usuário</span>
+                        <span class="cfg-profile-plan" id="cfgUserPlano">Individual</span>
+                    </div>
+                    <i class="fas fa-chevron-right cfg-profile-arrow" aria-hidden="true"></i>
+                </div>
+
+                <!-- Seção: Conta -->
+                <div class="cfg-section">
+                    <div class="cfg-section-label">Conta</div>
+                    <div class="cfg-list">
+                        <button class="cfg-item" id="btnAlterarNome" type="button">
+                            <div class="cfg-item-icon cfg-item-icon--blue"><i class="fas fa-user" aria-hidden="true"></i></div>
+                            <div class="cfg-item-text">
+                                <span class="cfg-item-title">Alterar Nome</span>
+                                <span class="cfg-item-sub">Mude seu nome ou apelido</span>
                             </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-cog" aria-hidden="true"></i> Configurações
-                            </h1>
-                            <p class="page-subtitle-premium">
-                                Personalize sua experiência no GranaEvo
-                            </p>
-                        </div>
-                        <div class="header-actions"></div>
+                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                        </button>
+                        <button class="cfg-item" id="btnAlterarEmail" type="button">
+                            <div class="cfg-item-icon cfg-item-icon--green"><i class="fas fa-user-plus" aria-hidden="true"></i></div>
+                            <div class="cfg-item-text">
+                                <span class="cfg-item-title">Convidar Usuário</span>
+                                <span class="cfg-item-sub">Compartilhe o acesso com amigos e familiares</span>
+                            </div>
+                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                        </button>
+                        <button class="cfg-item" id="btnAlterarSenha" type="button">
+                            <div class="cfg-item-icon cfg-item-icon--purple"><i class="fas fa-lock" aria-hidden="true"></i></div>
+                            <div class="cfg-item-text">
+                                <span class="cfg-item-title">Alterar Senha</span>
+                                <span class="cfg-item-sub">Defina uma nova senha de acesso</span>
+                            </div>
+                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                        </button>
+                        <button class="cfg-item" id="btnTrocarPerfil" type="button">
+                            <div class="cfg-item-icon cfg-item-icon--teal"><i class="fas fa-sync-alt" aria-hidden="true"></i></div>
+                            <div class="cfg-item-text">
+                                <span class="cfg-item-title">Trocar Perfil</span>
+                                <span class="cfg-item-sub">Alternar entre perfis cadastrados</span>
+                            </div>
+                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                        </button>
                     </div>
                 </div>
-                <div class="config-grid">
-                    <button class="config-card" id="btnAlterarNome" type="button">
-                        <div class="config-icon"><i class="fas fa-user" aria-hidden="true"></i></div>
-                        <div class="config-text"><h3>Alterar Nome</h3><p>Mude seu nome ou apelido</p></div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
-                    </button>
-                    <button class="config-card" id="btnAlterarEmail" type="button">
-                        <div class="config-icon"><i class="fas fa-user-plus" aria-hidden="true"></i></div>
-                        <div class="config-text"><h3>Convidar Usuário</h3><p>Compartilhe o acesso à sua conta com amigos e familiares</p></div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
-                    </button>
-                    <button class="config-card" id="btnAlterarSenha" type="button">
-                        <div class="config-icon"><i class="fas fa-lock" aria-hidden="true"></i></div>
-                        <div class="config-text"><h3>Alterar Senha</h3><p>Defina uma nova senha</p></div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
-                    </button>
-                    <button class="config-card" id="btnTrocarPerfil" type="button">
-                        <div class="config-icon"><i class="fas fa-sync-alt" aria-hidden="true"></i></div>
-                        <div class="config-text"><h3>Trocar Perfil</h3><p>Alternar entre perfis</p></div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
-                    </button>
-                    <button class="config-card" id="btnComoUsar" type="button">
-                        <div class="config-icon"><i class="fas fa-question-circle" aria-hidden="true"></i></div>
-                        <div class="config-text"><h3>Como Usar</h3><p>Guia do GranaEvo</p></div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
-                    <button class="config-card" id="btnUpgradePlano" type="button">
-                        <div class="config-icon"><i class="fas fa-crown" aria-hidden="true"></i></div>
-                        <div class="config-text"><h3>Upgrade de Plano</h3><p>Tenha mais perfis e recursos</p></div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
-                    </button>
-                    <button class="config-card config-danger" id="btnLogout" type="button">
-                        <div class="config-icon"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></div>
-                        <div class="config-text"><h3>Sair / Logout</h3><p>Encerrar sessão</p></div>
-                        <span class="config-arrow" aria-hidden="true">→</span>
-                    </button>
+
+                <!-- Seção: Plano -->
+                <div class="cfg-section">
+                    <div class="cfg-section-label">Plano</div>
+                    <div class="cfg-list">
+                        <button class="cfg-item" id="btnUpgradePlano" type="button">
+                            <div class="cfg-item-icon cfg-item-icon--gold"><i class="fas fa-crown" aria-hidden="true"></i></div>
+                            <div class="cfg-item-text">
+                                <span class="cfg-item-title">Upgrade de Plano</span>
+                                <span class="cfg-item-sub">Mais perfis, recursos e limites</span>
+                            </div>
+                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                        </button>
+                    </div>
                 </div>
+
+                <!-- Seção: Suporte -->
+                <div class="cfg-section">
+                    <div class="cfg-section-label">Suporte</div>
+                    <div class="cfg-list">
+                        <button class="cfg-item" id="btnComoUsar" type="button">
+                            <div class="cfg-item-icon cfg-item-icon--sky"><i class="fas fa-question-circle" aria-hidden="true"></i></div>
+                            <div class="cfg-item-text">
+                                <span class="cfg-item-title">Como Usar</span>
+                                <span class="cfg-item-sub">Guia completo do GranaEvo</span>
+                            </div>
+                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Seção: Sessão -->
+                <div class="cfg-section">
+                    <div class="cfg-section-label">Sessão</div>
+                    <div class="cfg-list">
+                        <button class="cfg-item cfg-item--danger" id="btnLogout" type="button">
+                            <div class="cfg-item-icon cfg-item-icon--red"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></div>
+                            <div class="cfg-item-text">
+                                <span class="cfg-item-title">Sair / Logout</span>
+                                <span class="cfg-item-sub">Encerrar sessão atual</span>
+                            </div>
+                            <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+
             </section>
 
         </main>

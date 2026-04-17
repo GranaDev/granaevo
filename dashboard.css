@@ -5634,3 +5634,188 @@ select.form-input option:checked {
     .rel-kpi-grid { grid-template-columns: 1fr; }
     .rel-bills-chips { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ================================================================
+   CONFIGURAÇÕES — REDESIGN (Mobile-First, iOS-style Glassmorphism)
+   ================================================================ */
+
+/* — Card de perfil no topo — */
+.cfg-profile-card {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 20px;
+    padding: 18px;
+    margin-bottom: 22px;
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.22),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    cursor: default;
+}
+
+.cfg-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--primary) 0%, #1b5e20 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(67, 160, 71, 0.45);
+    font-family: 'Syne', sans-serif;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.cfg-profile-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.cfg-profile-name {
+    display: block;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: 'Syne', sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cfg-profile-plan {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 5px;
+    padding: 3px 10px;
+    background: rgba(67, 160, 71, 0.1);
+    border: 1px solid rgba(67, 160, 71, 0.22);
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--primary-light);
+    letter-spacing: 0.3px;
+}
+
+.cfg-profile-arrow {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    opacity: 0.5;
+    flex-shrink: 0;
+}
+
+/* — Section wrapper — */
+.cfg-section {
+    margin-bottom: 14px;
+}
+
+.cfg-section-label {
+    font-size: 0.67rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+    padding: 0 6px;
+    margin-bottom: 7px;
+}
+
+/* — List glass container — */
+.cfg-list {
+    background: rgba(255, 255, 255, 0.025);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* — Individual item — */
+.cfg-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 13px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: background 0.15s ease;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.cfg-item:last-child {
+    border-bottom: none;
+}
+
+.cfg-item:hover,
+.cfg-item:active {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* — Colored icon bubble — */
+.cfg-item-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.88rem;
+    flex-shrink: 0;
+    color: #fff;
+}
+
+.cfg-item-icon--blue   { background: linear-gradient(135deg, #3b82f6, #1d4ed8); box-shadow: 0 3px 8px rgba(59,  130, 246, 0.35); }
+.cfg-item-icon--green  { background: linear-gradient(135deg, #43a047, #1b5e20); box-shadow: 0 3px 8px rgba(67,  160,  71, 0.35); }
+.cfg-item-icon--purple { background: linear-gradient(135deg, #8b5cf6, #5b21b6); box-shadow: 0 3px 8px rgba(139,  92, 246, 0.35); }
+.cfg-item-icon--teal   { background: linear-gradient(135deg, #0891b2, #0e7490); box-shadow: 0 3px 8px rgba(8,   145, 178, 0.35); }
+.cfg-item-icon--gold   { background: linear-gradient(135deg, #f59e0b, #d97706); box-shadow: 0 3px 8px rgba(245, 158,  11, 0.35); }
+.cfg-item-icon--sky    { background: linear-gradient(135deg, #38bdf8, #0284c7); box-shadow: 0 3px 8px rgba(56,  189, 248, 0.35); }
+.cfg-item-icon--red    { background: linear-gradient(135deg, #ff4b4b, #b91c1c); box-shadow: 0 3px 8px rgba(255,  75,  75, 0.35); }
+
+/* — Text block — */
+.cfg-item-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.cfg-item-title {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.cfg-item-sub {
+    display: block;
+    font-size: 0.71rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* — Chevron arrow — */
+.cfg-item-arrow {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    opacity: 0.55;
+    flex-shrink: 0;
+}
+
+/* — Danger variant — */
+.cfg-item--danger .cfg-item-title { color: var(--danger); }
+.cfg-item--danger:hover,
+.cfg-item--danger:active           { background: rgba(255, 75, 75, 0.06); }
