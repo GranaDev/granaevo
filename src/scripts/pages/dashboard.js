@@ -808,7 +808,6 @@ async function verificarLogin() {
         _log.info('[VERIFICAR LOGIN] Iniciando verificação...');
 
         if (authLoading) authLoading.style.display = 'flex';
-        if (protectedContent) protectedContent.style.display = 'none';
 
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -838,7 +837,7 @@ async function verificarLogin() {
             .maybeSingle();
 
         if (!subError && subscription) {
-            planName = subscription.plans.name;
+            planName = subscription.plans?.name ?? '';
             _log.info('[VERIFICAR LOGIN] Assinatura própria encontrada');
         } else {
             _log.info('[VERIFICAR LOGIN] Sem assinatura por user_id. Tentando fallback por email...');
@@ -853,7 +852,7 @@ async function verificarLogin() {
                 .maybeSingle();
 
             if (!subEmailError && subByEmail) {
-                planName = subByEmail.plans.name;
+                planName = subByEmail.plans?.name ?? '';
                 _log.info('[VERIFICAR LOGIN] Assinatura encontrada por email');
 
                 _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
@@ -913,7 +912,7 @@ async function verificarLogin() {
                     return;
                 }
 
-                planName = ownerSub.plans.name;
+                planName = ownerSub.plans?.name ?? '';
                 effectiveUserId = membership.owner_user_id;
                 effectiveEmail  = membership.owner_email;
                 isGuest = true;
@@ -971,7 +970,10 @@ async function verificarLogin() {
         window.location.href = 'login.html';
     } finally {
         if (authLoading) authLoading.style.display = 'none';
-        if (protectedContent) protectedContent.style.display = 'block';
+        if (protectedContent) {
+            protectedContent.classList.remove('js-hidden');
+            protectedContent.style.display = '';
+        }
     }
 }
 
