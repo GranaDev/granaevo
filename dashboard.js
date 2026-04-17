@@ -5165,6 +5165,26 @@ function atualizarTelaCartoes() {
     grid.appendChild(meusSection);
 }
 
+// ========== CONGELAR / DESCONGELAR CARTÃO ==========
+function congelarCartao(cartaoId) {
+    const cartao = cartoesCredito.find(c => c.id === cartaoId);
+    if (!cartao) return;
+
+    const msg = cartao.congelado
+        ? 'Descongelar este cartão? Ele voltará a aceitar novos lançamentos normalmente.'
+        : 'Congelar este cartão? Nenhum novo lançamento poderá ser realizado enquanto estiver congelado.';
+
+    confirmarAcao(msg, () => {
+        cartao.congelado = !cartao.congelado;
+        salvarDados();
+        atualizarTelaCartoes();
+        mostrarNotificacao(
+            cartao.congelado ? 'Cartão congelado com sucesso!' : 'Cartão descongelado!',
+            cartao.congelado ? 'warning' : 'success'
+        );
+    });
+}
+
 function abrirCartaoForm(editId = null) {
     const bancos = [
         { nome: 'Nubank' },
@@ -5178,26 +5198,6 @@ function abrirCartaoForm(editId = null) {
         { nome: 'Alelo' },
         { nome: 'Outro' },
     ];
-
-    // ========== CONGELAR / DESCONGELAR CARTÃO ==========
-    function congelarCartao(cartaoId) {
-        const cartao = cartoesCredito.find(c => c.id === cartaoId);
-        if (!cartao) return;
-
-        const msg = cartao.congelado
-            ? '🔥 Descongelar este cartão? Ele voltará a aceitar novos lançamentos normalmente.'
-            : '❄️ Congelar este cartão? Nenhum novo lançamento poderá ser realizado enquanto estiver congelado.';
-
-        confirmarAcao(msg, () => {
-            cartao.congelado = !cartao.congelado;
-            salvarDados();
-            atualizarTelaCartoes();
-            mostrarNotificacao(
-                cartao.congelado ? '❄️ Cartão congelado com sucesso!' : '🔥 Cartão descongelado!',
-                cartao.congelado ? 'warning' : 'success'
-            );
-        });
-    }
 
     // ✅ Constrói o <select> de bancos via DOM — nunca interpolação de string
     function _criarSelectBancos(idSelect, valorSelecionado) {
@@ -7752,7 +7752,7 @@ window.abrirDetalhesPerfilRelatorio = abrirDetalhesPerfilRelatorio;
 
 async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
     const userData = await dataManager.loadUserData();
-    const dadosPerfil = userData.profiles.find(p => p.id === perfilId);
+    const dadosPerfil = userData.profiles.find(p => String(p.id) === String(perfilId));
 
     const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
     const contasFixasPerfil = dadosPerfil ? dadosPerfil.contasFixas || [] : [];
