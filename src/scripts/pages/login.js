@@ -1,4 +1,4 @@
-import { supabase } from '../services/supabase-client.js';
+import { supabase, SUPABASE_ANON_KEY } from '../services/supabase-client.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  [TT-POLICY-1] TRUSTED TYPES — POLÍTICA granaevo-policy
@@ -55,7 +55,7 @@ async function _requireSessionHeader() {
 }
 
 function _publicHeader() {
-    return `Bearer ${supabase.supabaseKey}`;
+    return `Bearer ${SUPABASE_ANON_KEY}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -545,7 +545,7 @@ async function checkUserAccess() {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': authHeader,
-                'apikey': supabase.supabaseKey,
+                'apikey': SUPABASE_ANON_KEY,
             },
             body: JSON.stringify({ user_id: session.user.id }),
         });
