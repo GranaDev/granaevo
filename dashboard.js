@@ -3157,7 +3157,7 @@ function lancarTransacao() {
 
         const cartao = cartoesCredito.find(c => String(c.id) === String(cartaoSel));
         if(!cartao) return alert("Cartão não encontrado!");
-        if(cartao.congelado) return alert("❄️ Este cartão está congelado! Vá em Cartões → Descongelar para utilizá-lo.");
+        if(cartao.congelado) { mostrarNotificacao('Cartão congelado. Descongele no menu de Cartões para utilizá-lo.', 'error'); return; }
 
         if(!confirm(`Compra de ${formatBRL(valor)} no cartão ${cartao.nomeBanco}, em ${parcelasSel}x de ${formatBRL(valor/parcelasSel)}.\nProsseguir?`)) return;
 
@@ -3507,13 +3507,12 @@ function atualizarMovimentacoesUI() {
         div.appendChild(left);
         div.appendChild(right);
 
-        div.addEventListener('click', () => abrirDetalhesTransacao(t.id));
+        div.addEventListener('click', () => abrirDetalhesTransacao(t));
         lista.appendChild(div);
     });
 }
 
-function abrirDetalhesTransacao(id) {
-    const t = transacoes.find(x => x.id === id);
+function abrirDetalhesTransacao(t) {
     if (!t) return;
 
     // ✅ HTML estático — zero dados do usuário interpolados
@@ -3545,7 +3544,7 @@ function abrirDetalhesTransacao(id) {
     document.getElementById('fecharDetalhesBtn').addEventListener('click', () => fecharPopup());
 
     document.getElementById('delTransBtn').addEventListener('click', () => {
-        transacoes = transacoes.filter(x => x.id !== t.id);
+        transacoes = transacoes.filter(x => x !== t);
 
         if (t.categoria === 'reserva' && t.metaId) {
             const meta = metas.find(m => String(m.id) === String(t.metaId));
@@ -3736,7 +3735,11 @@ function renderMetasList() {
         const btnEditar         = document.createElement('button');
         btnEditar.className     = 'btn-primary';
         btnEditar.style.cssText = 'padding:6px 12px; font-size:0.85rem;';
-        btnEditar.textContent   = '✏️ Editar';
+        const btnEditarIcon = document.createElement('i');
+        btnEditarIcon.className = 'fas fa-pen';
+        btnEditarIcon.style.marginRight = '6px';
+        btnEditar.appendChild(btnEditarIcon);
+        btnEditar.appendChild(document.createTextNode('Editar'));
         btnEditar.addEventListener('click', (e) => {
             e.stopPropagation();
             abrirMetaForm(m.id);
@@ -3749,7 +3752,11 @@ function renderMetasList() {
             const btnAnalise         = document.createElement('button');
             btnAnalise.className     = 'btn-primary';
             btnAnalise.style.cssText = 'padding:6px 12px; font-size:0.85rem; background: var(--accent);';
-            btnAnalise.textContent   = '📊 Análise';
+            const btnAnaliseIcon = document.createElement('i');
+            btnAnaliseIcon.className = 'fas fa-chart-bar';
+            btnAnaliseIcon.style.marginRight = '6px';
+            btnAnalise.appendChild(btnAnaliseIcon);
+            btnAnalise.appendChild(document.createTextNode('Análise'));
             btnAnalise.addEventListener('click', (e) => {
                 e.stopPropagation();
                 abrirAnaliseDisciplina(m.id);
@@ -3761,7 +3768,11 @@ function renderMetasList() {
         const btnExcluir         = document.createElement('button');
         btnExcluir.className     = 'btn-excluir';
         btnExcluir.style.cssText = 'padding:6px 12px; font-size:0.85rem;';
-        btnExcluir.textContent   = '🗑️ Excluir';
+        const btnExcluirIcon = document.createElement('i');
+        btnExcluirIcon.className = 'fas fa-trash';
+        btnExcluirIcon.style.marginRight = '6px';
+        btnExcluir.appendChild(btnExcluirIcon);
+        btnExcluir.appendChild(document.createTextNode('Excluir'));
         btnExcluir.addEventListener('click', (e) => {
             e.stopPropagation();
             removerMeta(m.id);
@@ -5498,19 +5509,30 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
         popup.style.cssText = 'max-width: 460px; width: 95%;';
 
         const scroll = document.createElement('div');
-        scroll.style.cssText = 'max-height: 70vh; overflow-y: auto; padding-right: 6px;';
+        scroll.style.cssText = 'max-height: 70vh; overflow-y: auto; overflow-x: hidden; padding-right: 6px;';
 
         // ── Título
         const titulo = document.createElement('h3');
-        titulo.style.cssText = 'text-align: center; margin-bottom: 20px;';
-        titulo.textContent = `💳 ${_sanitizeText(cartao.nomeBanco)}`;
+        titulo.style.cssText = 'text-align: center; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 10px;';
+        const tituloIcon = document.createElement('i');
+        tituloIcon.className = 'fas fa-credit-card';
+        tituloIcon.style.color = 'var(--primary)';
+        const tituloText = document.createElement('span');
+        tituloText.textContent = _sanitizeText(cartao.nomeBanco);
+        titulo.appendChild(tituloIcon);
+        titulo.appendChild(tituloText);
         scroll.appendChild(titulo);
 
         // Status frozen
         if (cartao.congelado) {
             const frozenBanner = document.createElement('div');
-            frozenBanner.style.cssText = 'background: rgba(96,212,255,0.12); border: 1px solid rgba(96,212,255,0.3); border-radius: 10px; padding: 10px 14px; text-align: center; color: #60d4ff; font-weight: 600; font-size: 0.9rem; margin-bottom: 16px;';
-            frozenBanner.textContent = '❄️ Cartão congelado — nenhum novo lançamento permitido';
+            frozenBanner.style.cssText = 'background: rgba(96,212,255,0.12); border: 1px solid rgba(96,212,255,0.3); border-radius: 10px; padding: 10px 14px; text-align: center; color: #60d4ff; font-weight: 600; font-size: 0.9rem; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; gap: 8px;';
+            const frozenIcon = document.createElement('i');
+            frozenIcon.className = 'fas fa-snowflake';
+            const frozenText = document.createElement('span');
+            frozenText.textContent = 'Cartão congelado — nenhum novo lançamento permitido';
+            frozenBanner.appendChild(frozenIcon);
+            frozenBanner.appendChild(frozenText);
             scroll.appendChild(frozenBanner);
         }
 
@@ -5519,20 +5541,25 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
         statsGrid.style.cssText = 'display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px;';
 
         const statsData = [
-            { icon: '💰', label: 'Limite Total',      value: formatBRL(cartao.limite),            color: 'var(--text-primary)' },
-            { icon: '💸', label: 'Valor Usado',        value: formatBRL(usado),                    color: '#ff4b4b' },
-            { icon: '✅', label: 'Disponível',          value: formatBRL(disponivel),               color: '#00ff99' },
-            { icon: '📊', label: '% Utilizado',         value: `${percUsado.toFixed(1)}%`,          color: percUsado > 80 ? '#ff4b4b' : '#00ff99' },
-            { icon: '📄', label: 'Fatura em Aberto',    value: formatBRL(totalFatura),              color: '#ffd166' },
-            { icon: '📅', label: 'Vencimento',          value: `Todo dia ${cartao.vencimentoDia}`,  color: 'var(--primary)' },
+            { iconCls: 'fas fa-wallet',          label: 'Limite Total',      value: formatBRL(cartao.limite),            color: 'var(--text-primary)' },
+            { iconCls: 'fas fa-arrow-trend-up',  label: 'Valor Usado',       value: formatBRL(usado),                    color: '#ff4b4b' },
+            { iconCls: 'fas fa-circle-check',    label: 'Disponível',         value: formatBRL(disponivel),               color: '#00ff99' },
+            { iconCls: 'fas fa-chart-pie',       label: '% Utilizado',        value: `${percUsado.toFixed(1)}%`,          color: percUsado > 80 ? '#ff4b4b' : '#00ff99' },
+            { iconCls: 'fas fa-file-invoice',    label: 'Fatura em Aberto',   value: formatBRL(totalFatura),              color: '#ffd166' },
+            { iconCls: 'fas fa-calendar-day',    label: 'Vencimento',         value: `Todo dia ${cartao.vencimentoDia}`,  color: 'var(--primary)' },
         ];
 
         statsData.forEach(s => {
             const card = document.createElement('div');
             card.style.cssText = 'background: rgba(255,255,255,0.05); padding: 14px; border-radius: 12px; text-align: center;';
             const lbl = document.createElement('div');
-            lbl.style.cssText = 'font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 6px;';
-            lbl.textContent = `${s.icon} ${s.label}`;
+            lbl.style.cssText = 'font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 6px; display: flex; align-items: center; justify-content: center; gap: 6px;';
+            const lblIcon = document.createElement('i');
+            lblIcon.className = s.iconCls;
+            const lblText = document.createElement('span');
+            lblText.textContent = s.label;
+            lbl.appendChild(lblIcon);
+            lbl.appendChild(lblText);
             const val = document.createElement('div');
             val.style.cssText = `font-size: 1.05rem; font-weight: 700; color: ${s.color};`;
             val.textContent = s.value;
@@ -5571,8 +5598,14 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
         // ── Faturas em aberto
         if (faturas.length > 0) {
             const fTitle = document.createElement('h4');
-            fTitle.style.cssText = 'color: var(--text-primary); margin-bottom: 12px;';
-            fTitle.textContent = '📋 Faturas em Aberto';
+            fTitle.style.cssText = 'color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
+            const fTitleIcon = document.createElement('i');
+            fTitleIcon.className = 'fas fa-receipt';
+            fTitleIcon.style.color = '#ffd166';
+            const fTitleText = document.createElement('span');
+            fTitleText.textContent = 'Faturas em Aberto';
+            fTitle.appendChild(fTitleIcon);
+            fTitle.appendChild(fTitleText);
             scroll.appendChild(fTitle);
 
             faturas.forEach(f => {
@@ -5611,8 +5644,14 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
             const instDiv = document.createElement('div');
             instDiv.style.cssText = 'background: rgba(108,99,255,0.1); padding: 14px; border-radius: 12px; border-left: 3px solid #6c63ff; margin-top: 12px;';
             const instLbl = document.createElement('div');
-            instLbl.style.cssText = 'font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 5px;';
-            instLbl.textContent = '🔄 Compras Parceladas Ativas';
+            instLbl.style.cssText = 'font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 5px; display: flex; align-items: center; gap: 6px;';
+            const instLblIcon = document.createElement('i');
+            instLblIcon.className = 'fas fa-rotate';
+            instLblIcon.style.color = '#6c63ff';
+            const instLblText = document.createElement('span');
+            instLblText.textContent = 'Compras Parceladas Ativas';
+            instLbl.appendChild(instLblIcon);
+            instLbl.appendChild(instLblText);
             const instVal = document.createElement('div');
             instVal.style.cssText = 'font-size: 1.1rem; font-weight: 700; color: #6c63ff;';
             instVal.textContent = `${parcelasAtivas.length} compra(s)`;
@@ -5621,27 +5660,37 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
             scroll.appendChild(instDiv);
         }
 
-        // ── Botão editar cartão
+        popup.appendChild(scroll);
+
+        // ── Botões fora do scroll (sem gap de scroll)
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display: flex; gap: 10px; margin-top: 16px;';
+
         const btnEditar = document.createElement('button');
         btnEditar.className = 'btn-primary';
         btnEditar.type = 'button';
-        btnEditar.style.cssText = 'width: 100%; margin-top: 16px; padding: 12px;';
-        btnEditar.textContent = '✏️ Editar Configurações do Cartão';
+        btnEditar.style.cssText = 'flex: 1; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 8px;';
+        const btnEditarIcon = document.createElement('i');
+        btnEditarIcon.className = 'fas fa-pen';
+        const btnEditarText = document.createElement('span');
+        btnEditarText.textContent = 'Editar Cartão';
+        btnEditar.appendChild(btnEditarIcon);
+        btnEditar.appendChild(btnEditarText);
         btnEditar.addEventListener('click', () => {
             fecharPopup();
             setTimeout(() => abrirCartaoForm(cartaoId), 200);
         });
-        scroll.appendChild(btnEditar);
-
-        popup.appendChild(scroll);
 
         const btnFechar = document.createElement('button');
         btnFechar.className = 'btn-cancelar';
         btnFechar.type = 'button';
-        btnFechar.style.cssText = 'width: 100%; margin-top: 12px;';
+        btnFechar.style.cssText = 'flex: 1; padding: 12px;';
         btnFechar.textContent = 'Fechar';
         btnFechar.addEventListener('click', fecharPopup);
-        popup.appendChild(btnFechar);
+
+        btnRow.appendChild(btnEditar);
+        btnRow.appendChild(btnFechar);
+        popup.appendChild(btnRow);
     });
 }
 
@@ -7078,8 +7127,10 @@ function processarAnaliseOndeForDinheiro() {
         wrapperVazio.style.cssText = 'text-align:center; padding:40px; background:rgba(255,255,255,0.03); border-radius:12px;';
 
         const iconDiv = document.createElement('div');
-        iconDiv.style.cssText = 'font-size:3rem; margin-bottom:12px; opacity:0.5;';
-        iconDiv.textContent = '🔍';
+        iconDiv.style.cssText = 'font-size:2.5rem; margin-bottom:12px; opacity:0.4; color:var(--text-secondary);';
+        const iconDivI = document.createElement('i');
+        iconDivI.className = 'fas fa-magnifying-glass';
+        iconDiv.appendChild(iconDivI);
 
         const tituloDiv = document.createElement('div');
         tituloDiv.style.cssText = 'font-size:1.1rem; font-weight:600; color:var(--text-primary); margin-bottom:8px;';
@@ -7124,7 +7175,7 @@ function processarAnaliseOndeForDinheiro() {
             </div>
         </div>
         <div style="background:rgba(255,255,255,0.03); padding:24px; border-radius:16px; margin-bottom:24px;">
-            <h4 style="margin-bottom:16px; color:var(--text-primary); text-align:center;">📊 Distribuição por Categoria</h4>
+            <h4 style="margin-bottom:16px; color:var(--text-primary); text-align:center; display:flex; align-items:center; justify-content:center; gap:8px;"><i class="fas fa-chart-pie" style="color:var(--primary);"></i> Distribuição por Categoria</h4>
             <div style="display:flex; flex-direction:column; gap:12px;">
     `;
 
@@ -7177,8 +7228,10 @@ function processarAnaliseOndeForDinheiro() {
     insightHeader.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:12px;';
 
     const iconInsight = document.createElement('div');
-    iconInsight.style.fontSize = '2rem';
-    iconInsight.textContent = '💡';
+    iconInsight.style.cssText = 'font-size:1.4rem; color:#6c63ff;';
+    const iconInsightI = document.createElement('i');
+    iconInsightI.className = 'fas fa-lightbulb';
+    iconInsight.appendChild(iconInsightI);
 
     const tituloInsight = document.createElement('div');
     tituloInsight.style.cssText = 'font-weight:700; font-size:1.1rem; color:var(--text-primary);';
@@ -7198,7 +7251,11 @@ function processarAnaliseOndeForDinheiro() {
         if (Number(percTop) > 50) {
             const p = document.createElement('p');
             const aviso = document.createElement('strong');
-            aviso.textContent = '⚠️ Atenção: ';
+            const avisoIcon = document.createElement('i');
+            avisoIcon.className = 'fas fa-triangle-exclamation';
+            avisoIcon.style.cssText = 'color:#ffd166; margin-right:5px;';
+            aviso.appendChild(avisoIcon);
+            aviso.appendChild(document.createTextNode('Atenção: '));
             p.appendChild(aviso);
             p.appendChild(document.createTextNode(
                 `${percTop}% dos seus gastos foram com `
@@ -7327,31 +7384,44 @@ function abrirWidgetOndeForDinheiro() {
     };
 
     criarPopupDOM((popup) => {
+        popup.style.cssText = 'max-width:500px; width:96%;';
+
         // ── Wrapper scroll
         const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'max-height:75vh; overflow-y:auto; padding-right:8px;';
+        wrapper.style.cssText = 'max-height:75vh; overflow-y:auto; overflow-x:hidden; padding-right:6px;';
 
         // ── Título
         const titulo = document.createElement('h3');
-        titulo.style.cssText = 'text-align:center; margin-bottom:8px;';
-        titulo.textContent = '🔍 Onde Foi Meu Dinheiro?';
+        titulo.style.cssText = 'text-align:center; margin-bottom:6px; display:flex; align-items:center; justify-content:center; gap:10px;';
+        const tituloIcon = document.createElement('i');
+        tituloIcon.className = 'fas fa-magnifying-glass-dollar';
+        tituloIcon.style.color = 'var(--primary)';
+        const tituloText = document.createElement('span');
+        tituloText.textContent = 'Onde Foi Meu Dinheiro?';
+        titulo.appendChild(tituloIcon);
+        titulo.appendChild(tituloText);
 
         // ── Subtítulo
         const subtitulo = document.createElement('p');
-        subtitulo.style.cssText = 'color:var(--text-secondary); margin-bottom:20px; font-size:0.9rem; text-align:center;';
+        subtitulo.style.cssText = 'color:var(--text-secondary); margin-bottom:20px; font-size:0.88rem; text-align:center;';
         subtitulo.textContent = 'Veja para onde foram seus gastos em um período específico.';
 
         // ── Row de filtros
         const rowFiltros = document.createElement('div');
-        rowFiltros.style.cssText = 'display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;';
+        rowFiltros.style.cssText = 'display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap;';
 
         // ── Coluna Mês
         const colMes = document.createElement('div');
         colMes.style.cssText = 'flex:1; min-width:130px;';
 
         const labelMes = document.createElement('label');
-        labelMes.style.cssText = 'display:block; margin-bottom:6px; font-size:0.85rem; font-weight:600; color:var(--text-secondary);';
-        labelMes.textContent = '📅 Mês:';
+        labelMes.style.cssText = 'display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:0.85rem; font-weight:600; color:var(--text-secondary);';
+        const labelMesIcon = document.createElement('i');
+        labelMesIcon.className = 'fas fa-calendar';
+        const labelMesText = document.createElement('span');
+        labelMesText.textContent = 'Mês';
+        labelMes.appendChild(labelMesIcon);
+        labelMes.appendChild(labelMesText);
 
         const selectMes = document.createElement('select');
         selectMes.id        = 'mesAnalise';
@@ -7373,8 +7443,13 @@ function abrirWidgetOndeForDinheiro() {
         colAno.style.cssText = 'flex:1; min-width:100px;';
 
         const labelAno = document.createElement('label');
-        labelAno.style.cssText = 'display:block; margin-bottom:6px; font-size:0.85rem; font-weight:600; color:var(--text-secondary);';
-        labelAno.textContent = '📆 Ano:';
+        labelAno.style.cssText = 'display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:0.85rem; font-weight:600; color:var(--text-secondary);';
+        const labelAnoIcon = document.createElement('i');
+        labelAnoIcon.className = 'fas fa-calendar-days';
+        const labelAnoText = document.createElement('span');
+        labelAnoText.textContent = 'Ano';
+        labelAno.appendChild(labelAnoIcon);
+        labelAno.appendChild(labelAnoText);
 
         const selectAno = document.createElement('select');
         selectAno.id        = 'anoAnalise';
@@ -7398,8 +7473,13 @@ function abrirWidgetOndeForDinheiro() {
         const btnAnalisar = document.createElement('button');
         btnAnalisar.id        = 'btnAnalisarGastos';
         btnAnalisar.className = 'btn-primary';
-        btnAnalisar.style.cssText = 'width:100%; margin-bottom:20px;';
-        btnAnalisar.textContent = '🔍 Analisar Gastos';
+        btnAnalisar.style.cssText = 'width:100%; margin-bottom:20px; display:flex; align-items:center; justify-content:center; gap:8px;';
+        const btnAnalisarIcon = document.createElement('i');
+        btnAnalisarIcon.className = 'fas fa-magnifying-glass';
+        const btnAnalisarText = document.createElement('span');
+        btnAnalisarText.textContent = 'Analisar Gastos';
+        btnAnalisar.appendChild(btnAnalisarIcon);
+        btnAnalisar.appendChild(btnAnalisarText);
         btnAnalisar.addEventListener('click', processarAnaliseOndeForDinheiro);
 
         // ── Container resultado
@@ -7677,7 +7757,7 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
     const cartoesPerfil = dadosPerfil ? dadosPerfil.cartoesCredito || [] : [];
     const contasFixasPerfil = dadosPerfil ? dadosPerfil.contasFixas || [] : [];
 
-    const cartao = cartoesPerfil.find(c => c.id === cartaoId);
+    const cartao = cartoesPerfil.find(c => String(c.id) === String(cartaoId));
     if (!cartao) {
         mostrarNotificacao('Cartão não encontrado.', 'error');
         return;
@@ -7686,7 +7766,7 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
     const periodoSelecionado = `${ano}-${mes}`;
 
     const faturasCartao = contasFixasPerfil.filter(c =>
-        c.cartaoId === cartaoId &&
+        String(c.cartaoId) === String(cartaoId) &&
         c.vencimento &&
         c.vencimento.startsWith(periodoSelecionado)
     );
