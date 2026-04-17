@@ -697,33 +697,42 @@
                         </div>
                     </div>
                 </div>
-                <div class="filtros-box">
-                    <div class="tipo-relatorio-btns">
-                        <button class="tipo-btn active" data-tipo="individual" type="button">
-                            <i class="fas fa-user" aria-hidden="true"></i> Individual
+                <div class="rel-filtros">
+                    <div class="tipo-relatorio-btns rel-tipo-tabs">
+                        <button class="tipo-btn rel-tipo-tab active" data-tipo="individual" type="button">
+                            <i class="fas fa-user" aria-hidden="true"></i>
+                            <span>Individual</span>
                         </button>
-                        <button class="tipo-btn" data-tipo="casal" type="button">
-                            <i class="fas fa-heart" aria-hidden="true"></i> Casal
+                        <button class="tipo-btn rel-tipo-tab" data-tipo="casal" type="button">
+                            <i class="fas fa-heart" aria-hidden="true"></i>
+                            <span>Casal</span>
                         </button>
-                        <button class="tipo-btn" data-tipo="familia" type="button">
-                            <i class="fas fa-users" aria-hidden="true"></i> Família
+                        <button class="tipo-btn rel-tipo-tab" data-tipo="familia" type="button">
+                            <i class="fas fa-users" aria-hidden="true"></i>
+                            <span>Família</span>
                         </button>
                     </div>
-                    <div id="perfilSelectorDiv" class="perfil-selector">
+                    <div id="perfilSelectorDiv" class="perfil-selector rel-perfil-selector">
                         <select id="selectPerfilRelatorio" class="form-input" aria-label="Perfil para o relatório">
                             <option value="">Selecione o perfil</option>
                         </select>
                     </div>
-                    <div class="filtros-row">
-                        <select id="mesRelatorio" class="form-input" aria-label="Mês do relatório">
-                            <option value="">Mês</option>
-                        </select>
-                        <select id="anoRelatorio" class="form-input" aria-label="Ano do relatório">
-                            <option value="">Ano</option>
-                        </select>
+                    <div class="rel-period-row">
+                        <div class="rel-period-field">
+                            <label class="rel-period-label" for="mesRelatorio">Mês</label>
+                            <select id="mesRelatorio" class="form-input" aria-label="Mês do relatório">
+                                <option value="">Selecione</option>
+                            </select>
+                        </div>
+                        <div class="rel-period-field">
+                            <label class="rel-period-label" for="anoRelatorio">Ano</label>
+                            <select id="anoRelatorio" class="form-input" aria-label="Ano do relatório">
+                                <option value="">Selecione</option>
+                            </select>
+                        </div>
                     </div>
                     <button class="btn-primary btn-large" id="btnGerarRelatorio" type="button">
-                        Gerar Relatório
+                        <i class="fas fa-chart-line" aria-hidden="true"></i> Gerar Relatório
                     </button>
                 </div>
                 <div id="relatorioResultado" style="display:none;" aria-live="polite"></div>

@@ -6242,43 +6242,40 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
     }
 
     let html = `
-    <h2 style="text-align:center; margin-bottom:30px;">
-        Relatório Completo de ${perfilNome}<br>
-        <span style="font-size:1.2rem; color: var(--text-secondary);">${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</span>
-    </h2>
-
-    <div class="relatorio-kpis-container">
-        <div class="relatorio-kpis-scroll">
-            <div class="relatorio-kpi-card relatorio-kpi-entradas">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💰</span><span class="relatorio-kpi-label">Entradas</span></div>
-                <div class="relatorio-kpi-value">${formatBRL(totalEntradas)}</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Total do período</span></div>
-            </div>
-            <div class="relatorio-kpi-card relatorio-kpi-saidas">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💸</span><span class="relatorio-kpi-label">Saídas</span></div>
-                <div class="relatorio-kpi-value">${formatBRL(totalSaidas)}</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Total do período</span></div>
-            </div>
-            <div class="relatorio-kpi-card relatorio-kpi-guardado">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">🎯</span><span class="relatorio-kpi-label">Guardado Líquido</span></div>
-                <div class="relatorio-kpi-value">${formatBRL(valorReservadoLiquido)}</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period" style="font-size:10px;">Guardou: ${formatBRL(totalGuardado)} | Retirou: ${formatBRL(totalRetirado)}</span></div>
-            </div>
-            <div class="relatorio-kpi-card relatorio-kpi-saldo">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">📈</span><span class="relatorio-kpi-label">Saldo Total</span></div>
-                <div class="relatorio-kpi-value">${formatBRL(saldoFinal)}</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period" style="font-size:10px;">Saldo inicial: ${formatBRL(saldoInicial)} | Saldo do mês: ${formatBRL(saldoDoMes)}</span></div>
-            </div>
-            <div class="relatorio-kpi-card relatorio-kpi-economia">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">💎</span><span class="relatorio-kpi-label">Taxa de Economia</span></div>
-                <div class="relatorio-kpi-value">${sanitizeHTML(String(taxaEconomia))}%</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Do que ganhou foi guardado</span></div>
-            </div>
-            <div class="relatorio-kpi-card relatorio-kpi-media">
-                <div class="relatorio-kpi-header"><span class="relatorio-kpi-icon">📅</span><span class="relatorio-kpi-label">Gasto Médio/Dia</span></div>
-                <div class="relatorio-kpi-value">${formatBRL(mediaGastoDiario)}</div>
-                <div class="relatorio-kpi-footer"><span class="relatorio-kpi-period">Média diária de gastos</span></div>
-            </div>
+    <div class="rel-report-header">
+        <div class="rel-report-title">Relatório de ${perfilNome}</div>
+        <span class="rel-report-badge"><i class="fas fa-calendar-alt"></i> ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</span>
+    </div>
+    <div class="rel-kpi-grid">
+        <div class="rel-kpi-card rel-kpi-card--entradas">
+            <div class="rel-kpi-top"><i class="fas fa-arrow-up rel-kpi-icon"></i><span class="rel-kpi-label">Entradas</span></div>
+            <div class="rel-kpi-value">${formatBRL(totalEntradas)}</div>
+            <div class="rel-kpi-sub">Total do período</div>
+        </div>
+        <div class="rel-kpi-card rel-kpi-card--saidas">
+            <div class="rel-kpi-top"><i class="fas fa-arrow-down rel-kpi-icon"></i><span class="rel-kpi-label">Saídas</span></div>
+            <div class="rel-kpi-value">${formatBRL(totalSaidas)}</div>
+            <div class="rel-kpi-sub">Total do período</div>
+        </div>
+        <div class="rel-kpi-card rel-kpi-card--guardado">
+            <div class="rel-kpi-top"><i class="fas fa-piggy-bank rel-kpi-icon"></i><span class="rel-kpi-label">Guardado Líquido</span></div>
+            <div class="rel-kpi-value">${formatBRL(valorReservadoLiquido)}</div>
+            <div class="rel-kpi-sub">Guardou: ${formatBRL(totalGuardado)} · Retirou: ${formatBRL(totalRetirado)}</div>
+        </div>
+        <div class="rel-kpi-card rel-kpi-card--saldo">
+            <div class="rel-kpi-top"><i class="fas fa-wallet rel-kpi-icon"></i><span class="rel-kpi-label">Saldo Total</span></div>
+            <div class="rel-kpi-value">${formatBRL(saldoFinal)}</div>
+            <div class="rel-kpi-sub">Inicial: ${formatBRL(saldoInicial)} · Mês: ${formatBRL(saldoDoMes)}</div>
+        </div>
+        <div class="rel-kpi-card rel-kpi-card--economia">
+            <div class="rel-kpi-top"><i class="fas fa-gem rel-kpi-icon"></i><span class="rel-kpi-label">Taxa de Economia</span></div>
+            <div class="rel-kpi-value">${sanitizeHTML(String(taxaEconomia))}%</div>
+            <div class="rel-kpi-sub">Do que ganhou foi guardado</div>
+        </div>
+        <div class="rel-kpi-card rel-kpi-card--media">
+            <div class="rel-kpi-top"><i class="fas fa-calendar-day rel-kpi-icon"></i><span class="rel-kpi-label">Gasto Médio/Dia</span></div>
+            <div class="rel-kpi-value">${formatBRL(mediaGastoDiario)}</div>
+            <div class="rel-kpi-sub">Média diária de gastos</div>
         </div>
     </div>
     `;
@@ -6288,18 +6285,19 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         const totalGastoCategorias   = Object.values(categorias).reduce((a, b) => a + b, 0);
         const coresCategorias        = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
 
-        html += `<div class="section-box" style="margin-top:30px;"><h3 style="margin-bottom:20px;">🏆 Top 5 Categorias que Mais Gastou</h3><div style="display:flex; flex-direction:column; gap:12px;">`;
+        html += `<div class="rel-section"><div class="rel-section-header"><i class="fas fa-chart-bar"></i><span>Top 5 Categorias</span></div><div class="rel-cat-list">`;
 
         categoriasOrdenadas.forEach(([cat, valor], i) => {
             const percentual = ((valor / totalGastoCategorias) * 100).toFixed(1);
             html += `
-                <div style="margin-bottom:8px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-                        <span style="font-weight:600;">${sanitizeHTML(cat)}</span>
-                        <span>${formatBRL(valor)} (${sanitizeHTML(String(percentual))}%)</span>
+                <div class="rel-cat-item">
+                    <div class="rel-cat-info">
+                        <div class="rel-cat-dot" style="background:${coresCategorias[i]};"></div>
+                        <span class="rel-cat-name">${sanitizeHTML(cat)}</span>
                     </div>
-                    <div style="width:100%; height:12px; background:rgba(255,255,255,0.1); border-radius:6px; overflow:hidden;">
-                        <div style="width:${sanitizeHTML(String(percentual))}%; height:100%; background:${coresCategorias[i]}; border-radius:6px;"></div>
+                    <div class="rel-cat-bar-wrap">
+                        <div class="rel-cat-bar-track"><div class="rel-cat-bar-fill" style="width:${sanitizeHTML(String(percentual))}%; background:${coresCategorias[i]};"></div></div>
+                        <span class="rel-cat-value">${formatBRL(valor)}</span>
                     </div>
                 </div>`;
         });
@@ -6317,31 +6315,29 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         const percUsado         = totalLimiteCartoes > 0 ?
             ((totalUsadoCartoes / totalLimiteCartoes) * 100).toFixed(1) : 0;
 
+        const corUtilizado = Number(percUsado) > 80 ? 'var(--danger)' : 'var(--success)';
         html += `
-            <div class="section-box" style="margin-top:30px;">
-                <h3 style="margin-bottom:20px;">💳 Análise de Cartões de Crédito</h3>
-                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:20px;">
-                    <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
-                        <div style="font-size:0.85rem; color:var(--text-secondary);">Limite Total</div>
-                        <div style="font-size:1.3rem; font-weight:700;">${formatBRL(totalLimiteCartoes)}</div>
+            <div class="rel-section">
+                <div class="rel-section-header"><i class="fas fa-credit-card"></i><span>Cartões de Crédito</span></div>
+                <div class="rel-cards-summary">
+                    <div class="rel-card-stat">
+                        <span class="rel-card-stat-label">Limite Total</span>
+                        <span class="rel-card-stat-value">${formatBRL(totalLimiteCartoes)}</span>
                     </div>
-                    <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
-                        <div style="font-size:0.85rem; color:var(--text-secondary);">Usado no Mês</div>
-                        <div style="font-size:1.3rem; font-weight:700; color:#ff4b4b;">${formatBRL(totalUsadoCartoes)}</div>
+                    <div class="rel-card-stat">
+                        <span class="rel-card-stat-label">Usado</span>
+                        <span class="rel-card-stat-value" style="color:var(--danger);">${formatBRL(totalUsadoCartoes)}</span>
                     </div>
-                    <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
-                        <div style="font-size:0.85rem; color:var(--text-secondary);">Disponível</div>
-                        <div style="font-size:1.3rem; font-weight:700; color:#00ff99;">${formatBRL(disponivelCartoes)}</div>
+                    <div class="rel-card-stat">
+                        <span class="rel-card-stat-label">Disponível</span>
+                        <span class="rel-card-stat-value" style="color:var(--success);">${formatBRL(disponivelCartoes)}</span>
                     </div>
-                    <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:12px;">
-                        <div style="font-size:0.85rem; color:var(--text-secondary);">% Utilizado</div>
-                        <div style="font-size:1.3rem; font-weight:700; color:${Number(percUsado) > 80 ? '#ff4b4b' : '#00ff99'};">${sanitizeHTML(String(percUsado))}%</div>
+                    <div class="rel-card-stat">
+                        <span class="rel-card-stat-label">Utilizado</span>
+                        <span class="rel-card-stat-value" style="color:${corUtilizado};">${sanitizeHTML(String(percUsado))}%</span>
                     </div>
                 </div>
-                <div style="margin-top:16px;">
-                    <div style="font-weight:600; margin-bottom:12px;">Detalhes por Cartão:</div>
-                    <div id="listaCartoesRelatorio"></div>
-                </div>
+                <div id="listaCartoesRelatorio"></div>
             </div>`;
 
         // ✅ CORREÇÃO: aplica _sanitizarHTMLRelatorio (DOMParser) antes de injetar no DOM
@@ -6357,35 +6353,39 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                 const disponivel  = limite - usado;
                 const percCartao  = limite > 0 ? ((usado / limite) * 100).toFixed(1) : 0;
 
+                const corCartao = Number(percCartao) > 80 ? 'var(--danger)' : 'var(--success)';
+
                 const div = document.createElement('div');
-                div.style.cssText = `background:rgba(255,255,255,0.03); padding:14px; border-radius:10px; margin-bottom:10px; border-left:3px solid ${Number(percCartao) > 80 ? '#ff4b4b' : '#00ff99'}; cursor:pointer; transition:all 0.3s;`;
+                div.className = 'rel-card-item';
+                div.style.borderLeftColor = Number(percCartao) > 80 ? 'var(--danger)' : 'var(--success)';
 
                 // ✅ Constrói via DOM para dados de usuário — zero innerHTML com dados variáveis
                 const rowDiv = document.createElement('div');
-                rowDiv.style.cssText = 'display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;';
+                rowDiv.className = 'rel-card-item-row';
 
                 const leftDiv = document.createElement('div');
                 const nomeDiv = document.createElement('div');
-                nomeDiv.style.fontWeight = '600';
-                nomeDiv.textContent = `💳 ${String(c.nomeBanco || '')}`;
+                nomeDiv.className = 'rel-card-item-name';
+                nomeDiv.textContent = String(c.nomeBanco || '');
 
                 const limiteDiv = document.createElement('div');
-                limiteDiv.style.cssText = 'font-size:0.85rem; color:var(--text-secondary);';
+                limiteDiv.className = 'rel-card-item-sub';
                 limiteDiv.textContent = `Limite: ${formatBRL(limite)}`;
 
                 leftDiv.appendChild(nomeDiv);
                 leftDiv.appendChild(limiteDiv);
 
                 const rightDiv = document.createElement('div');
-                rightDiv.style.textAlign = 'right';
+                rightDiv.className = 'rel-card-item-right';
 
                 const usadoDiv = document.createElement('div');
-                usadoDiv.style.cssText = 'font-size:0.85rem; color:var(--text-secondary);';
-                usadoDiv.textContent = `Usado: ${formatBRL(usado)}`;
+                usadoDiv.className = 'rel-card-item-used';
+                usadoDiv.textContent = formatBRL(usado);
 
                 const percDiv = document.createElement('div');
-                percDiv.style.cssText = `font-size:0.9rem; font-weight:600; color:${Number(percCartao) > 80 ? '#ff4b4b' : '#00ff99'};`;
-                percDiv.textContent = `${percCartao}% utilizado`;
+                percDiv.className = 'rel-card-item-perc';
+                percDiv.style.color = corCartao;
+                percDiv.textContent = `${percCartao}% usado`;
 
                 rightDiv.appendChild(usadoDiv);
                 rightDiv.appendChild(percDiv);
@@ -6393,11 +6393,20 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                 rowDiv.appendChild(leftDiv);
                 rowDiv.appendChild(rightDiv);
 
+                const barDiv = document.createElement('div');
+                barDiv.className = 'rel-card-item-bar';
+                const barFill = document.createElement('div');
+                barFill.className = 'rel-card-item-bar-fill';
+                barFill.style.width = `${Math.min(100, Number(percCartao))}%`;
+                barFill.style.background = corCartao;
+                barDiv.appendChild(barFill);
+
                 const dicaDiv = document.createElement('div');
-                dicaDiv.style.cssText = 'text-align:center; margin-top:8px; font-size:0.75rem; color:var(--text-muted);';
-                dicaDiv.textContent = '👆 Clique para ver detalhes';
+                dicaDiv.className = 'rel-card-item-hint';
+                dicaDiv.textContent = 'Toque para ver detalhes';
 
                 div.appendChild(rowDiv);
+                div.appendChild(barDiv);
                 div.appendChild(dicaDiv);
 
                 div.addEventListener('click', () => { abrirDetalhesCartaoRelatorio(c.id, mes, ano, perfilId); });
@@ -6412,12 +6421,11 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
 
     if (metasPerfil.length > 0) {
         html += `
-            <div class="section-box" style="margin-top:30px;">
-                <h3 style="margin-bottom:20px;">🎯 Progresso das Metas</h3>
-                <div style="margin-bottom:16px;">
-                    <label style="display:block; margin-bottom:8px; font-weight:600; color:var(--text-secondary);">Selecione uma meta para ver detalhes:</label>
-                    <select id="selectMetaRelatorio" class="form-input" style="max-width:400px;">
-                        <option value="">Escolha uma meta...</option>
+            <div class="rel-section">
+                <div class="rel-section-header"><i class="fas fa-bullseye"></i><span>Progresso das Metas</span></div>
+                <div class="rel-meta-selector-wrap">
+                    <select id="selectMetaRelatorio" class="form-input">
+                        <option value="">Selecione uma meta...</option>
         `;
         metasPerfil.forEach(m => {
             if (!m || typeof m !== 'object') return;
@@ -6448,26 +6456,27 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
     const totalContasValor = contasComStatus.reduce((sum, c) => sum + sanitizeNumber(c.valor), 0);
 
     html += `
-        <div class="section-box" style="margin-top:30px;">
-            <h3 style="margin-bottom:20px;">📋 Contas Fixas do Mês</h3>
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px;">
-                <div style="background:rgba(0,255,153,0.1); padding:12px; border-radius:10px; border-left:3px solid #00ff99;">
-                    <div style="font-size:0.85rem; color:var(--text-secondary);">✅ Pagas</div>
-                    <div style="font-size:1.5rem; font-weight:700; color:#00ff99;">${contasPagas}</div>
+        <div class="rel-section">
+            <div class="rel-section-header"><i class="fas fa-file-invoice-dollar"></i><span>Contas Fixas do Mês</span></div>
+            <div class="rel-bills-chips">
+                <div class="rel-bill-chip rel-bill-chip--success">
+                    <span class="rel-bill-chip-count">${contasPagas}</span>
+                    <span class="rel-bill-chip-label">Pagas</span>
                 </div>
-                <div style="background:rgba(255,209,102,0.1); padding:12px; border-radius:10px; border-left:3px solid #ffd166;">
-                    <div style="font-size:0.85rem; color:var(--text-secondary);">⏳ Pendentes</div>
-                    <div style="font-size:1.5rem; font-weight:700; color:#ffd166;">${contasPendentes}</div>
+                <div class="rel-bill-chip rel-bill-chip--warning">
+                    <span class="rel-bill-chip-count">${contasPendentes}</span>
+                    <span class="rel-bill-chip-label">Pendentes</span>
                 </div>
-                <div style="background:rgba(255,75,75,0.1); padding:12px; border-radius:10px; border-left:3px solid #ff4b4b;">
-                    <div style="font-size:0.85rem; color:var(--text-secondary);">❌ Vencidas</div>
-                    <div style="font-size:1.5rem; font-weight:700; color:#ff4b4b;">${contasVencidas}</div>
+                <div class="rel-bill-chip rel-bill-chip--danger">
+                    <span class="rel-bill-chip-count">${contasVencidas}</span>
+                    <span class="rel-bill-chip-label">Vencidas</span>
                 </div>
-                <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:10px;">
-                    <div style="font-size:0.85rem; color:var(--text-secondary);">💰 Valor Total</div>
-                    <div style="font-size:1.5rem; font-weight:700;">${formatBRL(totalContasValor)}</div>
+                <div class="rel-bill-chip">
+                    <span class="rel-bill-chip-count" style="font-size:0.72rem;">${formatBRL(totalContasValor)}</span>
+                    <span class="rel-bill-chip-label">Total</span>
                 </div>
             </div>
+            <div class="rel-bills-list">
     `;
 
     if (contasComStatus.length > 0) {
@@ -6475,43 +6484,33 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         const pendentes = contasComStatus.filter(c => c.status === 'Pendente');
         const vencidas  = contasComStatus.filter(c => c.status === 'Vencida');
 
+        const _statusClass = (s) => s === 'Paga' ? 'paga' : s === 'Vencida' ? 'vencida' : 'pendente';
         const renderConta = (c) => `
-            <div style="background:${c.corFundo}; padding:14px; border-radius:10px; border-left:3px solid ${c.corStatus};">
-                <div style="font-weight:600; font-size:0.9rem;">${sanitizeHTML(String(c.descricao || '').slice(0, 100))}</div>
-                <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:6px;">
-                    Valor: <strong>${formatBRL(sanitizeNumber(c.valor))}</strong><br>
-                    Vencimento: <strong>${sanitizeHTML(formatarDataBR(c.vencimento))}</strong>
-                    ${c.status === 'Vencida' ? '<br><span style="color:#ff4b4b; font-weight:600; font-size:0.8rem;">⚠️ Atenção: Conta vencida!</span>' : ''}
+            <div class="rel-bill-item rel-bill-item--${_statusClass(c.status)}">
+                <div class="rel-bill-dot"></div>
+                <div class="rel-bill-info">
+                    <span class="rel-bill-name">${sanitizeHTML(String(c.descricao || '').slice(0, 100))}</span>
+                    <span class="rel-bill-date">Vence: ${sanitizeHTML(formatarDataBR(c.vencimento))}</span>
                 </div>
+                <div class="rel-bill-amount">${formatBRL(sanitizeNumber(c.valor))}</div>
+                <div class="rel-bill-badge">${sanitizeHTML(c.status)}</div>
             </div>`;
 
-        const col = (items, vazio) => items.length > 0
-            ? items.map(renderConta).join('')
-            : `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:0.85rem;">${vazio}</div>`;
-
-        html += `
-            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; align-items:start;">
-                <div style="display:flex; flex-direction:column; gap:12px;">${col(pagas, 'Nenhuma conta paga')}</div>
-                <div style="display:flex; flex-direction:column; gap:12px;">${col(pendentes, 'Nenhuma conta pendente')}</div>
-                <div style="display:flex; flex-direction:column; gap:12px;">${col(vencidas, 'Nenhuma conta vencida')}</div>
-                <div></div>
-            </div>`;
+        const todasContas = [...pagas, ...pendentes, ...vencidas];
+        html += todasContas.length > 0
+            ? todasContas.map(renderConta).join('')
+            : `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:0.85rem;">Nenhuma conta fixa registrada</div>`;
     } else {
-        html += `
-            <div style="text-align:center; padding:40px; background:rgba(255,255,255,0.03); border-radius:12px; border:2px dashed var(--border);">
-                <div style="font-size:3rem; margin-bottom:12px; opacity:0.5;">🔭</div>
-                <div style="font-size:1.1rem; font-weight:600; margin-bottom:8px;">Nenhuma Conta Fixa Registrada</div>
-                <div style="font-size:0.9rem; color:var(--text-secondary);">
-                    ${periodoSelecionado === periodoAtualCompleto ?
-                        'Você não tem contas fixas para este mês. Cadastre no menu Dashboard!' :
-                        'Não há contas fixas registradas para este período.'}
-                </div>
+        html += `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:0.85rem;">
+                ${periodoSelecionado === periodoAtualCompleto ?
+                    'Nenhuma conta fixa cadastrada. Adicione no Dashboard!' :
+                    'Sem contas fixas neste período.'}
             </div>`;
     }
-    html += `</div>`;
+    html += `</div></div>`;
 
     if (transacoesPeriodo.length > 0) {
-        html += `<div class="relatorio-lista" style="margin-top:30px;"><h3>Todas as Transações (${transacoesPeriodo.length})</h3>`;
+        html += `<div class="rel-section"><div class="rel-section-header"><i class="fas fa-list"></i><span>Todas as Transações (${transacoesPeriodo.length})</span></div><div class="rel-tx-list">`;
 
         transacoesPeriodo.sort((a, b) => {
             const dataHoraA = `${sanitizeDate(dataParaISO(a.data)) || ''} ${String(a.hora || '')}`;
@@ -6521,23 +6520,22 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
 
         transacoesPeriodo.forEach(t => {
             if (!t || typeof t !== 'object') return;
-            let styleClass, sinal;
-            if (t.categoria === 'entrada') { styleClass = 'entrada'; sinal = '+'; }
-            else { styleClass = t.categoria === 'saida' ? 'saida' : 'reserva'; sinal = '-'; }
+            let dotClass, sinal;
+            if (t.categoria === 'entrada') { dotClass = 'entrada'; sinal = '+'; }
+            else { dotClass = t.categoria === 'saida' ? 'saida' : 'reserva'; sinal = '-'; }
 
             html += `
-                <div class="relatorio-item">
-                    <div class="relatorio-item-info">
-                        <div class="relatorio-item-tipo">${sanitizeHTML(String(t.tipo || '').slice(0, 100))}</div>
-                        <div class="relatorio-item-desc">${sanitizeHTML(String(t.descricao || '').slice(0, 200))}</div>
-                        <div class="relatorio-item-data">${sanitizeHTML(String(t.data || ''))} às ${sanitizeHTML(String(t.hora || ''))}</div>
+                <div class="rel-tx-item">
+                    <div class="rel-tx-dot rel-tx-dot--${dotClass}"></div>
+                    <div class="rel-tx-info">
+                        <span class="rel-tx-tipo">${sanitizeHTML(String(t.tipo || '').slice(0, 100))}</span>
+                        <span class="rel-tx-desc">${sanitizeHTML(String(t.descricao || '').slice(0, 200))}</span>
+                        <span class="rel-tx-date">${sanitizeHTML(String(t.data || ''))} · ${sanitizeHTML(String(t.hora || ''))}</span>
                     </div>
-                    <div class="${styleClass}" style="font-size:18px; font-weight:bold;">
-                        ${sinal} ${formatBRL(sanitizeNumber(t.valor))}
-                    </div>
+                    <div class="rel-tx-value rel-tx-value--${dotClass}">${sinal}${formatBRL(sanitizeNumber(t.valor))}</div>
                 </div>`;
         });
-        html += `</div>`;
+        html += `</div></div>`;
     }
 
     // ✅ CORREÇÃO PRINCIPAL: aplica _sanitizarHTMLRelatorio (DOMParser + whitelist CSS)
@@ -6587,48 +6585,17 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                 else if (perc >= 40) corProgresso = '#ffd166';
 
                 const detalhesHtml = `
-                    <div style="background:rgba(255,255,255,0.05); padding:20px; border-radius:12px; border:1px solid var(--border);">
-                        <h4 style="margin-bottom:16px; font-size:1.2rem;">${sanitizeHTML(String(meta.descricao || '').slice(0, 100))}</h4>
-                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:20px;">
-                            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-                                <div style="font-size:0.85rem; color:var(--text-secondary);">Objetivo</div>
-                                <div style="font-size:1.2rem; font-weight:700;">${formatBRL(objetivo)}</div>
-                            </div>
-                            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-                                <div style="font-size:0.85rem; color:var(--text-secondary);">Guardado</div>
-                                <div style="font-size:1.2rem; font-weight:700; color:#00ff99;">${formatBRL(saved)}</div>
-                            </div>
-                            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-                                <div style="font-size:0.85rem; color:var(--text-secondary);">Falta</div>
-                                <div style="font-size:1.2rem; font-weight:700; color:#ff4b4b;">${formatBRL(falta)}</div>
-                            </div>
-                            <div style="text-align:center; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-                                <div style="font-size:0.85rem; color:var(--text-secondary);">Progresso</div>
-                                <div style="font-size:1.2rem; font-weight:700; color:${corProgresso};">${sanitizeHTML(String(perc))}%</div>
-                            </div>
+                    <div class="rel-meta-detail">
+                        <div class="rel-meta-detail-name">${sanitizeHTML(String(meta.descricao || '').slice(0, 100))}</div>
+                        <div class="rel-meta-bar-wrap">
+                            <div class="rel-meta-bar-track"><div class="rel-meta-bar-fill" style="width:${sanitizeHTML(String(perc))}%; background:${corProgresso};"></div></div>
+                            <span class="rel-meta-bar-label" style="color:${corProgresso};">${sanitizeHTML(String(perc))}%</span>
                         </div>
-                        <div style="margin-bottom:20px;">
-                            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                                <span style="font-weight:600; color:var(--text-secondary);">Barra de Progresso</span>
-                                <span style="font-weight:700; color:${corProgresso};">${sanitizeHTML(String(perc))}%</span>
-                            </div>
-                            <div style="width:100%; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden;">
-                                <div style="width:${sanitizeHTML(String(perc))}%; height:100%; background:${corProgresso}; border-radius:10px; transition:width 0.8s; display:flex; align-items:center; justify-content:center; color:white; font-weight:700; font-size:0.85rem;">
-                                    ${Number(perc) > 10 ? sanitizeHTML(String(perc)) + '%' : ''}
-                                </div>
-                            </div>
-                        </div>
-                        <div style="background:rgba(255,209,102,0.1); padding:14px; border-radius:10px; border-left:3px solid #ffd166; margin-bottom:12px;">
-                            <div style="font-weight:600; margin-bottom:4px;">💰 Depositado neste mês</div>
-                            <div style="font-size:1.3rem; font-weight:700; color:#ffd166;">${formatBRL(totalDepositadoMes)}</div>
-                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px;">${depositosMes.length} depósito(s) realizado(s)</div>
-                        </div>
-                        ${totalRetiradoMes > 0 ? `
-                        <div style="background:rgba(255,149,0,0.1); padding:14px; border-radius:10px; border-left:3px solid #ff9500;">
-                            <div style="font-weight:600; margin-bottom:4px;">💸 Retirado neste mês</div>
-                            <div style="font-size:1.3rem; font-weight:700; color:#ff9500;">${formatBRL(totalRetiradoMes)}</div>
-                            <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px;">${retiradasMes.length} retirada(s) realizada(s)</div>
-                        </div>` : ''}
+                        <div class="rel-meta-info-row"><span class="rel-meta-info-label">Objetivo</span><span class="rel-meta-info-value">${formatBRL(objetivo)}</span></div>
+                        <div class="rel-meta-info-row"><span class="rel-meta-info-label">Guardado</span><span class="rel-meta-info-value" style="color:var(--success);">${formatBRL(saved)}</span></div>
+                        <div class="rel-meta-info-row"><span class="rel-meta-info-label">Falta</span><span class="rel-meta-info-value" style="color:var(--danger);">${formatBRL(falta)}</span></div>
+                        <div class="rel-meta-info-row"><span class="rel-meta-info-label">Depositado neste mês</span><span class="rel-meta-info-value" style="color:var(--warning);">${formatBRL(totalDepositadoMes)} <small style="font-weight:400; color:var(--text-muted);">(${depositosMes.length}x)</small></span></div>
+                        ${totalRetiradoMes > 0 ? `<div class="rel-meta-info-row"><span class="rel-meta-info-label">Retirado neste mês</span><span class="rel-meta-info-value" style="color:#ff9500;">${formatBRL(totalRetiradoMes)} <small style="font-weight:400; color:var(--text-muted);">(${retiradasMes.length}x)</small></span></div>` : ''}
                     </div>`;
 
                 // ✅ CORREÇÃO: detalhesEl.innerHTML também passa pelo sanitizador DOMParser
@@ -6850,86 +6817,52 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
     //    Dados de usuário (nomes, categorias) continuam sanitizados via sanitizeHTML()
     //    E recebem uma segunda camada pelo DOMParser — defesa em profundidade real.
     let html = `
-    <h2 style="text-align:center; margin-bottom:30px;">
-        ${icone} Relatório Completo ${sanitizeHTML(tipoTexto)}<br>
-        <span style="font-size:1.2rem; color:var(--text-secondary);">
-            ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}
-        </span>
-    </h2>
-
-    <div class="relatorio-kpis-container">
-        <div class="relatorio-kpis-scroll">
-            <div class="relatorio-kpi-card relatorio-kpi-entradas">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">💰</span>
-                    <span class="relatorio-kpi-label">Entradas Totais</span>
-                </div>
-                <div class="relatorio-kpi-value">${formatBRL(totalGeralEntradas)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Soma de todos os perfis</span>
-                </div>
-            </div>
-            <div class="relatorio-kpi-card relatorio-kpi-saidas">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">💸</span>
-                    <span class="relatorio-kpi-label">Saídas Totais</span>
-                </div>
-                <div class="relatorio-kpi-value">${formatBRL(totalGeralSaidas)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Soma de todos os perfis</span>
-                </div>
-            </div>
-            <div class="relatorio-kpi-card relatorio-kpi-guardado">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">🎯</span>
-                    <span class="relatorio-kpi-label">Guardado Líquido</span>
-                </div>
-                <div class="relatorio-kpi-value">${formatBRL(totalGeralReservasLiquido)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period" style="font-size:10px;">
-                        Guardou: ${formatBRL(totalGeralGuardado)} | Retirou: ${formatBRL(totalGeralRetirado)}
-                    </span>
-                </div>
-            </div>
-            <div class="relatorio-kpi-card relatorio-kpi-saldo">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">📈</span>
-                    <span class="relatorio-kpi-label">Saldo Total</span>
-                </div>
-                <div class="relatorio-kpi-value">${formatBRL(saldoGeral)}</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period" style="font-size:10px;">
-                        Saldo inicial: ${formatBRL(saldoInicialGeral)} | Saldo do mês: ${formatBRL(saldoGeralDoMes)}
-                    </span>
-                </div>
-            </div>
-            <div class="relatorio-kpi-card relatorio-kpi-economia">
-                <div class="relatorio-kpi-header">
-                    <span class="relatorio-kpi-icon">💎</span>
-                    <span class="relatorio-kpi-label">Taxa de Economia</span>
-                </div>
-                <div class="relatorio-kpi-value">${sanitizeHTML(String(taxaEconomiaGeral))}%</div>
-                <div class="relatorio-kpi-footer">
-                    <span class="relatorio-kpi-period">Média ${sanitizeHTML(tipoTexto.toLowerCase())}</span>
-                </div>
-            </div>
+    <div class="rel-report-header">
+        <div class="rel-report-title">${icone} Relatório ${sanitizeHTML(tipoTexto)}</div>
+        <span class="rel-report-badge"><i class="fas fa-calendar-alt"></i> ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</span>
+    </div>
+    <div class="rel-kpi-grid">
+        <div class="rel-kpi-card rel-kpi-card--entradas">
+            <div class="rel-kpi-top"><i class="fas fa-arrow-up rel-kpi-icon"></i><span class="rel-kpi-label">Entradas Totais</span></div>
+            <div class="rel-kpi-value">${formatBRL(totalGeralEntradas)}</div>
+            <div class="rel-kpi-sub">Soma de todos os perfis</div>
+        </div>
+        <div class="rel-kpi-card rel-kpi-card--saidas">
+            <div class="rel-kpi-top"><i class="fas fa-arrow-down rel-kpi-icon"></i><span class="rel-kpi-label">Saídas Totais</span></div>
+            <div class="rel-kpi-value">${formatBRL(totalGeralSaidas)}</div>
+            <div class="rel-kpi-sub">Soma de todos os perfis</div>
+        </div>
+        <div class="rel-kpi-card rel-kpi-card--guardado">
+            <div class="rel-kpi-top"><i class="fas fa-piggy-bank rel-kpi-icon"></i><span class="rel-kpi-label">Guardado Líquido</span></div>
+            <div class="rel-kpi-value">${formatBRL(totalGeralReservasLiquido)}</div>
+            <div class="rel-kpi-sub">Guardou: ${formatBRL(totalGeralGuardado)} · Retirou: ${formatBRL(totalGeralRetirado)}</div>
+        </div>
+        <div class="rel-kpi-card rel-kpi-card--saldo">
+            <div class="rel-kpi-top"><i class="fas fa-wallet rel-kpi-icon"></i><span class="rel-kpi-label">Saldo Total</span></div>
+            <div class="rel-kpi-value">${formatBRL(saldoGeral)}</div>
+            <div class="rel-kpi-sub">Inicial: ${formatBRL(saldoInicialGeral)} · Mês: ${formatBRL(saldoGeralDoMes)}</div>
+        </div>
+        <div class="rel-kpi-card rel-kpi-card--economia">
+            <div class="rel-kpi-top"><i class="fas fa-gem rel-kpi-icon"></i><span class="rel-kpi-label">Taxa de Economia</span></div>
+            <div class="rel-kpi-value">${sanitizeHTML(String(taxaEconomiaGeral))}%</div>
+            <div class="rel-kpi-sub">Média ${sanitizeHTML(tipoTexto.toLowerCase())}</div>
         </div>
     </div>
 
-    <div class="section-box" style="margin-top:30px;">
-        <h3 style="text-align:center; margin-bottom:20px;">🏆 Rankings e Comparativos</h3>
-        <div class="tipo-relatorio-btns" style="margin-bottom:24px;">
-            <button class="tipo-btn ranking-btn active" data-ranking="gastos">💸 Quem Gastou Mais</button>
-            <button class="tipo-btn ranking-btn" data-ranking="guardou">💰 Quem Guardou Mais</button>
-            <button class="tipo-btn ranking-btn" data-ranking="economia">📊 Melhor Taxa de Economia</button>
-            <button class="tipo-btn ranking-btn" data-ranking="evolucao">📈 Maior Evolução</button>
+    <div class="rel-section">
+        <div class="rel-section-header"><i class="fas fa-trophy"></i><span>Rankings e Comparativos</span></div>
+        <div class="rel-ranking-tabs">
+            <button class="rel-ranking-tab ranking-btn active" data-ranking="gastos">Quem Gastou Mais</button>
+            <button class="rel-ranking-tab ranking-btn" data-ranking="guardou">Quem Guardou Mais</button>
+            <button class="rel-ranking-tab ranking-btn" data-ranking="economia">Melhor Economia</button>
+            <button class="rel-ranking-tab ranking-btn" data-ranking="evolucao">Maior Evolução</button>
         </div>
         <div id="rankingContainer"></div>
     </div>
 
-    <div class="section-box" style="margin-top:30px;">
-        <h3 style="text-align:center; margin-bottom:20px;">📋 Análise Individual Completa</h3>
-        <div class="comparacao-perfis" style="grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));">
+    <div class="rel-section">
+        <div class="rel-section-header"><i class="fas fa-users"></i><span>Análise Individual Completa</span></div>
+        <div class="rel-profiles-grid">
     `;
 
     dadosPorPerfil.forEach(d => {
@@ -6951,84 +6884,52 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
         const nomePerfilSeguro = sanitizeHTML(String(d.perfil?.nome || '').slice(0, 100));
         const perfilIdSeguro   = sanitizeHTML(String(d.perfil?.id   || ''));
 
+        const varEntStr = d.mesAnterior?.entradas > 0 ?
+            `<span class="rel-variacao rel-variacao--${variacaoEntradas >= 0 ? 'up' : 'down'}">${variacaoEntradas >= 0 ? '↑' : '↓'}${Math.abs(variacaoEntradas)}%</span>` : '';
+        const varSaiStr = d.mesAnterior?.saidas > 0 ?
+            `<span class="rel-variacao rel-variacao--${variacaoSaidas <= 0 ? 'up' : 'down'}">${variacaoSaidas >= 0 ? '↑' : '↓'}${Math.abs(variacaoSaidas)}%</span>` : '';
+        const varResStr = d.mesAnterior?.reservas !== 0 ?
+            `<span class="rel-variacao rel-variacao--${variacaoReservas >= 0 ? 'up' : 'down'}">${variacaoReservas >= 0 ? '↑' : '↓'}${Math.abs(variacaoReservas)}%</span>` : '';
+
         html += `
-            <div class="perfil-card-relatorio"
-                 style="background:var(--gradient-dark); border:1px solid var(--border); padding:20px;">
-                <h4 style="margin-bottom:16px; font-size:1.3rem; color:var(--primary);">
-                    ${nomePerfilSeguro}
-                </h4>
-                <div class="perfil-stats">
-                    <div class="stat-row">
-                        <span class="stat-label">💰 Entradas</span>
-                        <span class="stat-value entrada">${formatBRL(d.entradas)}</span>
+            <div class="rel-profile-card">
+                <div class="rel-profile-name">${nomePerfilSeguro}</div>
+                <div class="rel-profile-grid">
+                    <div class="rel-profile-row">
+                        <span class="rel-profile-row-label"><i class="fas fa-arrow-up"></i> Entradas</span>
+                        <span class="rel-profile-row-value entrada">${formatBRL(d.entradas)} ${varEntStr}</span>
                     </div>
-                    ${d.mesAnterior?.entradas > 0 ? `
-                    <div style="font-size:0.8rem;
-                                color:${variacaoEntradas >= 0 ? '#00ff99' : '#ff4b4b'};
-                                text-align:right; margin-top:-8px; margin-bottom:8px;">
-                        ${variacaoEntradas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoEntradas)}% vs mês anterior
-                    </div>` : ''}
-                    <div class="stat-row">
-                        <span class="stat-label">💸 Saídas</span>
-                        <span class="stat-value saida">${formatBRL(d.saidas)}</span>
+                    <div class="rel-profile-row">
+                        <span class="rel-profile-row-label"><i class="fas fa-arrow-down"></i> Saídas</span>
+                        <span class="rel-profile-row-value saida">${formatBRL(d.saidas)} ${varSaiStr}</span>
                     </div>
-                    ${d.mesAnterior?.saidas > 0 ? `
-                    <div style="font-size:0.8rem;
-                                color:${variacaoSaidas <= 0 ? '#00ff99' : '#ff4b4b'};
-                                text-align:right; margin-top:-8px; margin-bottom:8px;">
-                        ${variacaoSaidas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoSaidas)}% vs mês anterior
-                    </div>` : ''}
-                    <div class="stat-row">
-                        <span class="stat-label">🎯 Guardado Líquido</span>
-                        <span class="stat-value reserva">${formatBRL(d.reservas)}</span>
+                    <div class="rel-profile-row">
+                        <span class="rel-profile-row-label"><i class="fas fa-piggy-bank"></i> Guardado</span>
+                        <span class="rel-profile-row-value reserva">${formatBRL(d.reservas)} ${varResStr}</span>
                     </div>
-                    ${d.mesAnterior?.reservas !== 0 ? `
-                    <div style="font-size:0.8rem;
-                                color:${variacaoReservas >= 0 ? '#00ff99' : '#ff4b4b'};
-                                text-align:right; margin-top:-8px; margin-bottom:8px;">
-                        ${variacaoReservas >= 0 ? '↑' : '↓'} ${Math.abs(variacaoReservas)}% vs mês anterior
-                    </div>` : ''}
-                    <div class="stat-row">
-                        <span class="stat-label">📊 Saldo</span>
-                        <span class="stat-value" style="color:#6c63ff;">${formatBRL(d.saldo)}</span>
+                    <div class="rel-profile-row">
+                        <span class="rel-profile-row-label"><i class="fas fa-wallet"></i> Saldo</span>
+                        <span class="rel-profile-row-value" style="color:var(--accent);">${formatBRL(d.saldo)}</span>
                     </div>
-                    <div class="stat-row">
-                        <span class="stat-label">💎 Taxa de Economia</span>
-                        <span class="stat-value" style="color:#00ff99;">
-                            ${sanitizeHTML(String(d.taxaEconomia.toFixed(1)))}%
-                        </span>
+                    <div class="rel-profile-row">
+                        <span class="rel-profile-row-label"><i class="fas fa-gem"></i> Economia</span>
+                        <span class="rel-profile-row-value" style="color:var(--success);">${sanitizeHTML(String(d.taxaEconomia.toFixed(1)))}%</span>
                     </div>
-                    ${d.taxaEconomiaAnterior > 0 ? `
-                    <div style="font-size:0.8rem;
-                                color:${d.evolucaoEconomia >= 0 ? '#00ff99' : '#ff4b4b'};
-                                text-align:right; margin-top:-8px; margin-bottom:8px;">
-                        ${d.evolucaoEconomia >= 0 ? '↑' : '↓'} ${Math.abs(d.evolucaoEconomia.toFixed(1))}% vs mês anterior
-                    </div>` : ''}
-                    <div class="stat-row"
-                         style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;">
-                        <span class="stat-label">📅 Média Diária</span>
-                        <span class="stat-value">${formatBRL(mediaGastoDiario)}</span>
+                    <div class="rel-profile-row">
+                        <span class="rel-profile-row-label"><i class="fas fa-calendar-day"></i> Média/Dia</span>
+                        <span class="rel-profile-row-value">${formatBRL(mediaGastoDiario)}</span>
                     </div>
-                    <div class="stat-row">
-                        <span class="stat-label">📝 Transações</span>
-                        <span class="stat-value">${d.transacoes.length}</span>
+                    <div class="rel-profile-row">
+                        <span class="rel-profile-row-label"><i class="fas fa-list"></i> Transações</span>
+                        <span class="rel-profile-row-value">${d.transacoes.length}</span>
                     </div>
                     ${d.cartoes?.length > 0 ? `
-                    <div class="stat-row"
-                         style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;">
-                        <span class="stat-label">💳 Cartões Usados</span>
-                        <span class="stat-value"
-                              style="color:${percUsadoCartoes > 80 ? '#ff4b4b' : '#00ff99'};">
-                            ${sanitizeHTML(String(percUsadoCartoes))}%
-                        </span>
-                    </div>` : ''}
-                    ${d.metas?.length > 0 ? `
-                    <div class="stat-row">
-                        <span class="stat-label">🎯 Metas Ativas</span>
-                        <span class="stat-value">${d.metas.length}</span>
+                    <div class="rel-profile-row">
+                        <span class="rel-profile-row-label"><i class="fas fa-credit-card"></i> Cartões</span>
+                        <span class="rel-profile-row-value" style="color:${percUsadoCartoes > 80 ? 'var(--danger)' : 'var(--success)'};">${sanitizeHTML(String(percUsadoCartoes))}% usado</span>
                     </div>` : ''}
                 </div>
-                <div id="btnDetalhes_${perfilIdSeguro}" style="margin-top:16px;"></div>
+                <div id="btnDetalhes_${perfilIdSeguro}" style="margin-top:12px;"></div>
             </div>`;
     });
 
@@ -7039,25 +6940,19 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
         const totalGastoCategorias  = Object.values(categoriasGerais).reduce((a, b) => a + b, 0);
         const coresCategorias       = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
 
-        html += `
-        <div class="section-box" style="margin-top:30px;">
-            <h3 style="margin-bottom:20px;">🎯 Top 5 Categorias Mais Gastas (Geral)</h3>
-            <div style="display:flex; flex-direction:column; gap:12px;">
-        `;
+        html += `<div class="rel-section"><div class="rel-section-header"><i class="fas fa-chart-bar"></i><span>Top 5 Categorias (Geral)</span></div><div class="rel-cat-list">`;
 
         categoriasTop.forEach(([cat, valor], i) => {
             const percentual = ((valor / totalGastoCategorias) * 100).toFixed(1);
             html += `
-                <div style="margin-bottom:8px;">
-                    <div style="display:flex; justify-content:space-between;
-                                margin-bottom:6px; flex-wrap:wrap; gap:8px;">
-                        <span style="font-weight:600;">${sanitizeHTML(cat)}</span>
-                        <span>${formatBRL(valor)} (${sanitizeHTML(String(percentual))}%)</span>
+                <div class="rel-cat-item">
+                    <div class="rel-cat-info">
+                        <div class="rel-cat-dot" style="background:${coresCategorias[i]};"></div>
+                        <span class="rel-cat-name">${sanitizeHTML(cat)}</span>
                     </div>
-                    <div style="width:100%; height:12px; background:rgba(255,255,255,0.1);
-                                border-radius:6px; overflow:hidden;">
-                        <div style="width:${sanitizeHTML(String(percentual))}%; height:100%;
-                                    background:${coresCategorias[i]}; border-radius:6px;"></div>
+                    <div class="rel-cat-bar-wrap">
+                        <div class="rel-cat-bar-track"><div class="rel-cat-bar-fill" style="width:${sanitizeHTML(String(percentual))}%; background:${coresCategorias[i]};"></div></div>
+                        <span class="rel-cat-value">${formatBRL(valor)}</span>
                     </div>
                 </div>`;
         });
