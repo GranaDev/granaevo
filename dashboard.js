@@ -4787,6 +4787,31 @@ const BANCO_ABREV = Object.freeze({
     'Alelo':           'ALE',
 });
 
+// Gradientes dos bancos — usados no mini-cartão dos Relatórios
+const BANCO_COR = Object.freeze({
+    'Nubank':          'linear-gradient(135deg, #5b0d8c 0%, #9b19d1 100%)',
+    'Bradesco':        'linear-gradient(135deg, #c00000 0%, #e83232 100%)',
+    'Mercado Pago':    'linear-gradient(135deg, #006bb3 0%, #009ee3 100%)',
+    'C6 Bank':         'linear-gradient(135deg, #111114 0%, #2c2c30 100%)',
+    'Itaú':            'linear-gradient(135deg, #d46000 0%, #f07800 100%)',
+    'Santander':       'linear-gradient(135deg, #a80000 0%, #d40000 100%)',
+    'Banco do Brasil': 'linear-gradient(135deg, #003070 0%, #005cc5 100%)',
+    'Caixa':           'linear-gradient(135deg, #004f96 0%, #0074cc 100%)',
+    'Alelo':           'linear-gradient(135deg, #1a6b3a 0%, #2ea862 100%)',
+});
+
+// Ícones dos bancos — usados no mini-cartão dos Relatórios
+const BANCO_ICON = Object.freeze({
+    'Nubank':          'icon/Card_Icon/Nubank.png',
+    'Bradesco':        'icon/Card_Icon/Bradesco.png',
+    'Mercado Pago':    'icon/Card_Icon/logo-mercado-pago-icone-1024.png',
+    'C6 Bank':         'icon/Card_Icon/logo-c6-bank-1024.png',
+    'Itaú':            'icon/Card_Icon/logo-itau-4096.png',
+    'Banco do Brasil': 'icon/Card_Icon/logo-banco-do-brasil-icon-4096.png',
+    'Caixa':           'icon/Card_Icon/logo-caixa-economica-federal-4096.png',
+    'Alelo':           'icon/Card_Icon/alelo-4096.png',
+});
+
 // ========== CARTÕES DE CRÉDITO ==========
 function atualizarTelaCartoes() {
     const grid = document.getElementById('cartoesGrid');
@@ -6350,68 +6375,90 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                 if (!c || typeof c !== 'object') return;
                 const usado       = sanitizeNumber(c.usado);
                 const limite      = sanitizeNumber(c.limite);
-                const disponivel  = limite - usado;
                 const percCartao  = limite > 0 ? ((usado / limite) * 100).toFixed(1) : 0;
+                const percNum     = Number(percCartao);
+                const corBarra    = percNum > 80 ? '#ff4b4b' : percNum > 50 ? '#ffd166' : '#00ff99';
+                const nomeBanco   = String(c.nomeBanco || '');
 
-                const corCartao = Number(percCartao) > 80 ? 'var(--danger)' : 'var(--success)';
-
+                // ── Outer card ──
                 const div = document.createElement('div');
-                div.className = 'rel-card-item';
-                div.style.borderLeftColor = Number(percCartao) > 80 ? 'var(--danger)' : 'var(--success)';
+                div.className = 'rel-card-visual';
+                div.style.background = BANCO_COR[nomeBanco] || 'linear-gradient(135deg,#1a1d2e 0%,#2a2d3e 100%)';
 
-                // ✅ Constrói via DOM para dados de usuário — zero innerHTML com dados variáveis
-                const rowDiv = document.createElement('div');
-                rowDiv.className = 'rel-card-item-row';
+                // ── Top row ──
+                const topDiv = document.createElement('div');
+                topDiv.className = 'rel-card-visual-top';
 
-                const leftDiv = document.createElement('div');
-                const nomeDiv = document.createElement('div');
-                nomeDiv.className = 'rel-card-item-name';
-                nomeDiv.textContent = String(c.nomeBanco || '');
+                // Icon (logo or abbreviation)
+                const iconDiv = document.createElement('div');
+                iconDiv.className = 'rel-card-visual-icon';
+                const iconPath = BANCO_ICON[nomeBanco];
+                if (iconPath) {
+                    const img = document.createElement('img');
+                    img.className = 'rel-card-visual-img';
+                    img.src   = iconPath;
+                    img.alt   = '';  // decorativo
+                    img.setAttribute('aria-hidden', 'true');
+                    iconDiv.appendChild(img);
+                } else {
+                    const abrev = document.createElement('span');
+                    abrev.className = 'rel-card-visual-icon-text';
+                    abrev.textContent = BANCO_ABREV[nomeBanco] || nomeBanco.substring(0, 2).toUpperCase();
+                    iconDiv.appendChild(abrev);
+                }
 
-                const limiteDiv = document.createElement('div');
-                limiteDiv.className = 'rel-card-item-sub';
-                limiteDiv.textContent = `Limite: ${formatBRL(limite)}`;
+                // Info (name + limit)
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'rel-card-visual-info';
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'rel-card-visual-name';
+                nameSpan.textContent = nomeBanco;
+                const subSpan = document.createElement('span');
+                subSpan.className = 'rel-card-visual-sub';
+                subSpan.textContent = `Limite: ${formatBRL(limite)}`;
+                infoDiv.appendChild(nameSpan);
+                infoDiv.appendChild(subSpan);
 
-                leftDiv.appendChild(nomeDiv);
-                leftDiv.appendChild(limiteDiv);
-
+                // Right (used + perc)
                 const rightDiv = document.createElement('div');
-                rightDiv.className = 'rel-card-item-right';
+                rightDiv.className = 'rel-card-visual-right';
+                const usadoSpan = document.createElement('span');
+                usadoSpan.className = 'rel-card-visual-used';
+                usadoSpan.textContent = formatBRL(usado);
+                const percSpan = document.createElement('span');
+                percSpan.className = 'rel-card-visual-perc';
+                percSpan.style.color = corBarra;
+                percSpan.textContent = `${percCartao}% usado`;
+                rightDiv.appendChild(usadoSpan);
+                rightDiv.appendChild(percSpan);
 
-                const usadoDiv = document.createElement('div');
-                usadoDiv.className = 'rel-card-item-used';
-                usadoDiv.textContent = formatBRL(usado);
+                topDiv.appendChild(iconDiv);
+                topDiv.appendChild(infoDiv);
+                topDiv.appendChild(rightDiv);
 
-                const percDiv = document.createElement('div');
-                percDiv.className = 'rel-card-item-perc';
-                percDiv.style.color = corCartao;
-                percDiv.textContent = `${percCartao}% usado`;
-
-                rightDiv.appendChild(usadoDiv);
-                rightDiv.appendChild(percDiv);
-
-                rowDiv.appendChild(leftDiv);
-                rowDiv.appendChild(rightDiv);
-
-                const barDiv = document.createElement('div');
-                barDiv.className = 'rel-card-item-bar';
+                // ── Progress bar ──
+                const barWrap = document.createElement('div');
+                barWrap.className = 'rel-card-visual-bar-wrap';
                 const barFill = document.createElement('div');
-                barFill.className = 'rel-card-item-bar-fill';
-                barFill.style.width = `${Math.min(100, Number(percCartao))}%`;
-                barFill.style.background = corCartao;
-                barDiv.appendChild(barFill);
+                barFill.className = 'rel-card-visual-bar-fill';
+                barFill.style.width      = `${Math.min(100, percNum)}%`;
+                barFill.style.background = corBarra;
+                barWrap.appendChild(barFill);
 
+                // ── Hint ──
                 const dicaDiv = document.createElement('div');
-                dicaDiv.className = 'rel-card-item-hint';
-                dicaDiv.textContent = 'Toque para ver detalhes';
+                dicaDiv.className = 'rel-card-visual-hint';
+                const dicaIc = document.createElement('i');
+                dicaIc.className = 'fas fa-chevron-right';
+                dicaIc.setAttribute('aria-hidden', 'true');
+                dicaDiv.appendChild(document.createTextNode('Toque para ver detalhes'));
+                dicaDiv.appendChild(dicaIc);
 
-                div.appendChild(rowDiv);
-                div.appendChild(barDiv);
+                div.appendChild(topDiv);
+                div.appendChild(barWrap);
                 div.appendChild(dicaDiv);
 
                 div.addEventListener('click', () => { abrirDetalhesCartaoRelatorio(c.id, mes, ano, perfilId); });
-                div.addEventListener('mouseover', () => { div.style.background = 'rgba(255,255,255,0.08)'; });
-                div.addEventListener('mouseout',  () => { div.style.background = 'rgba(255,255,255,0.03)'; });
                 listaCartoes.appendChild(div);
             });
         }
