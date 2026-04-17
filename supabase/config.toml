@@ -348,6 +348,54 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+# ── Edge Functions — verify_jwt=false para endpoints públicos/externos ──────
+# Funções chamadas por serviços externos (Cakto) ou sem JWT de usuário
+[functions.webhook-cakto]
+verify_jwt = false
+
+[functions.process-cakto-payment]
+verify_jwt = false
+
+[functions.verify-and-reset-password]
+verify_jwt = false
+
+[functions.send-password-reset-code]
+verify_jwt = false
+
+[functions.check-email-status]
+verify_jwt = false
+
+[functions.confirm-user-email]
+verify_jwt = false
+
+[functions.verify-cakto-payment]
+verify_jwt = false
+
+[functions.verify-guest-invite]
+verify_jwt = false
+
+[functions.verify-recaptcha]
+verify_jwt = false
+
+[functions.send-welcome-email]
+verify_jwt = false
+
+# Funções com JWT obrigatório (usuário autenticado)
+[functions.save-user-data]
+verify_jwt = true
+
+[functions.send-guest-invite]
+verify_jwt = true
+
+[functions.link-user-subscription]
+verify_jwt = true
+
+[functions.check-user-access]
+verify_jwt = true
+
+[functions.upload-profile-photo]
+verify_jwt = true
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
