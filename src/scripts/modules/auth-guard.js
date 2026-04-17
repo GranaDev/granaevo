@@ -7,7 +7,7 @@
  * ═══════════════════════════════════════════════════════════════
  */
 
-import { supabase } from './supabase-client.js?v=2';
+import { supabase } from '../services/supabase-client.js?v=2';
 
 // ═══════════════════════════════════════════════════════════════
 //  TAB_ID — identificador único desta aba [FIX-REPORT-3]

@@ -1,4 +1,4 @@
-import { supabase } from './supabase-client.js';
+import { supabase } from '../services/supabase-client.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  [TT-POLICY-1] TRUSTED TYPES — POLÍTICA granaevo-policy

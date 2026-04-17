@@ -69,9 +69,9 @@
     <!-- ================================================================
          📦 Estilos da Aplicação
          ================================================================ -->
-    <link rel="stylesheet" href="dashboard.css">
-    <link rel="stylesheet" href="graficos.css">
-    <link rel="stylesheet" href="chat-assistant.css">
+    <link rel="stylesheet" href="src/styles/dashboard.css">
+    <link rel="stylesheet" href="src/styles/graficos.css">
+    <link rel="stylesheet" href="src/styles/chat-assistant.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -95,9 +95,9 @@
             criava múltiplas instâncias GoTrueClient (comportamento indefinido)
             e invalidava os hashes SRI a cada novo release do pacote @2.
          ================================================================ -->
-    <script type="module" src="supabase-client.js?v=2"></script>
-    <script type="module" src="data-manager.js?v=2"></script>
-    <script type="module" src="auth-guard.js?v=2"></script>
+    <script type="module" src="src/scripts/services/supabase-client.js?v=2"></script>
+    <script type="module" src="src/scripts/modules/data-manager.js?v=2"></script>
+    <script type="module" src="src/scripts/modules/auth-guard.js?v=2"></script>
 
     <style>
         /*
@@ -140,7 +140,7 @@
     <div class="loading-screen" id="authLoading" role="status" aria-label="Verificando acesso">
         <div class="loader">
             <div class="loader-logo">
-                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
+                <img src="public/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
             </div>
             <div class="loader-bar" aria-hidden="true">
                 <div class="loader-progress"></div>
@@ -177,7 +177,7 @@
             <!-- Foto de perfil (esquerdo) — abre input de foto -->
             <label for="photoUpload" class="mobile-profile-btn" aria-label="Alterar foto de perfil">
                 <img
-                    src="icon/placeholder-user.svg"
+                    src="public/assets/icons/placeholder-user.svg"
                     alt="Foto de perfil"
                     id="mobileUserPhoto"
                     class="mobile-user-photo">
@@ -207,7 +207,7 @@
                     id="mobileSettingsBtn"
                     type="button"
                     aria-label="Configurações">
-                    <img src="icon/Configuracoes.gif" alt="Configurações" class="mobile-settings-icon-img">
+                    <img src="public/assets/icons/Configuracoes.gif" alt="Configurações" class="mobile-settings-icon-img">
                 </button>
             </div>
         </div>
@@ -217,7 +217,7 @@
             <div class="sidebar-header">
                 <div class="logo">
                     <div class="logo-img-wrapper">
-                        <img src="icon/granaevo-logo.jpg" alt="GranaEvo - Gestão Financeira" class="logo-img">
+                        <img src="public/assets/icons/granaevo-logo.jpg" alt="GranaEvo - Gestão Financeira" class="logo-img">
                     </div>
                     <span class="logo-text">GranaEvo</span>
                 </div>
@@ -226,7 +226,7 @@
             <div class="sidebar-user">
                 <div class="user-photo-wrapper">
                     <img
-                        src="icon/placeholder-user.svg"
+                        src="public/assets/icons/placeholder-user.svg"
                         alt="Foto de perfil"
                         id="userPhoto"
                         class="user-photo">
@@ -746,7 +746,7 @@
                 <!-- Card de perfil do usuário -->
                 <div class="cfg-profile-card">
                     <div class="cfg-avatar">
-                        <img src="icon/placeholder-user.svg" id="cfgUserPhoto" class="cfg-avatar-img" alt="Foto de perfil">
+                        <img src="public/assets/icons/placeholder-user.svg" id="cfgUserPhoto" class="cfg-avatar-img" alt="Foto de perfil">
                         <div id="cfgUserAvatar" class="cfg-avatar-fallback" aria-hidden="true">?</div>
                     </div>
                     <div class="cfg-profile-info">
@@ -851,27 +851,27 @@
         <!-- ========== BOTTOM NAV MOBILE ========== -->
         <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Navegação inferior">
             <button class="mobile-nav-item active" data-page="dashboard" type="button" aria-label="Dashboard">
-                <img src="icon/Dashboard.gif" alt="" class="mobile-nav-icon-img">
+                <img src="public/assets/icons/Dashboard.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Home</span>
             </button>
             <button class="mobile-nav-item" data-page="transacoes" type="button" aria-label="Transações">
-                <img src="icon/Extrato.gif" alt="" class="mobile-nav-icon-img">
+                <img src="public/assets/icons/Extrato.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Transações</span>
             </button>
             <button class="mobile-nav-item" data-page="reservas" type="button" aria-label="Reservas">
-                <img src="icon/Reservas.gif" alt="" class="mobile-nav-icon-img">
+                <img src="public/assets/icons/Reservas.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Reservas</span>
             </button>
             <button class="mobile-nav-item" data-page="cartoes" type="button" aria-label="Cartões">
-                <img src="icon/Cartoes.gif" alt="" class="mobile-nav-icon-img">
+                <img src="public/assets/icons/Cartoes.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Cartões</span>
             </button>
             <button class="mobile-nav-item" data-page="graficos" type="button" aria-label="Gráficos">
-                <img src="icon/Graficos.gif" alt="" class="mobile-nav-icon-img">
+                <img src="public/assets/icons/Graficos.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Gráficos</span>
             </button>
             <button class="mobile-nav-item" data-page="relatorios" type="button" aria-label="Relatórios">
-                <img src="icon/Relatorios.gif" alt="" class="mobile-nav-icon-img">
+                <img src="public/assets/icons/Relatorios.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Relatórios</span>
             </button>
             <button class="mobile-nav-item" id="chatNavBtn" type="button" aria-label="Chat">
@@ -902,10 +902,10 @@
     <div id="modalContainer" role="dialog" aria-modal="true" aria-label="Janela de diálogo"></div>
 
     <!-- Scripts do Sistema -->
-    <script type="module" src="dashboard.js?v=2"></script>
-    <script type="module" src="chat-assistant.js?v=2"></script>
+    <script type="module" src="src/scripts/pages/dashboard.js?v=2"></script>
+    <script type="module" src="src/scripts/modules/chat-assistant.js?v=2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-    <script src="graficos.js"></script>
+    <script src="src/scripts/modules/graficos.js"></script>
     <script>document.getElementById("userPhoto").addEventListener("error",function(){this.style.display="none";var f=document.getElementById("userPhotoFallback");if(f){f.style.display="flex";var n=(document.getElementById("userName")||{}).textContent||"U";f.textContent=n.trim().charAt(0).toUpperCase()||"U";}});</script>
 
 </body>

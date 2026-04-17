@@ -48,13 +48,13 @@
     <meta http-equiv="Permissions-Policy"
           content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
 
-    <link rel="stylesheet" href="login.css">
+    <link rel="stylesheet" href="src/styles/login.css">
 
     <!--
         recaptcha-init.js — síncrono, define window.__grOnLoad ANTES
         que o api.js possa terminar de carregar.
     -->
-    <script src="recaptcha-init.js"></script>
+    <script src="src/scripts/modules/recaptcha-init.js"></script>
 
     <!--
         render=explicit → sem auto-render. Os dois widgets (login e
@@ -71,7 +71,7 @@
     <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando GranaEvo">
         <div class="loader">
             <div class="loader-logo">
-                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
+                <img src="public/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
             </div>
             <div class="loader-bar" aria-hidden="true">
                 <div class="loader-progress"></div>
@@ -559,7 +559,7 @@
     </div>
     <!-- .login-container — fim -->
 
-    <script type="module" src="login.js?v=3"></script>
+    <script type="module" src="src/scripts/pages/login.js?v=3"></script>
 
 </body>
 </html>

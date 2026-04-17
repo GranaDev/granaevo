@@ -4,7 +4,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: 'landingpage.html',
+        main: 'index.html',
         planos: 'planos.html',
         login: 'login.html',
         primeiroacesso: 'primeiroacesso.html',

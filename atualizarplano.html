@@ -119,7 +119,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <!-- CSS -->
-    <link rel="stylesheet" href="atualizarplano.css">
+    <link rel="stylesheet" href="src/styles/atualizarplano.css">
 </head>
 <body>
 
@@ -127,7 +127,7 @@
     <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando GranaEvo">
         <div class="loader">
             <div class="loader-logo">
-                <img src="icon/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
+                <img src="public/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
             </div>
             <div class="loader-bar" aria-hidden="true">
                 <div class="loader-progress"></div>
@@ -357,7 +357,7 @@
         openssl dgst -sha384 -binary atualizarplano.js | openssl base64 -A
     -->
     <script
-        type="module" src="atualizarplano.js?v=2"
+        type="module" src="src/scripts/pages/atualizarplano.js?v=2"
         integrity="sha384-REGENERE_ESTE_HASH_APOS_QUALQUER_ALTERACAO_NO_JS"
         crossorigin="anonymous"
         nonce="NONCE_GERADO_PELO_SERVIDOR">

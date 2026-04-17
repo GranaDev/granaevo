@@ -1,8 +1,8 @@
 // ========== IMPORTS ESSENCIAIS ==========
-import { supabase } from './supabase-client.js?v=2';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-client.js?v=2';
-import { dataManager } from './data-manager.js?v=2';
-import AuthGuard from './auth-guard.js?v=2';
+import { supabase } from '../services/supabase-client.js?v=2';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?v=2';
+import { dataManager } from '../modules/data-manager.js?v=2';
+import AuthGuard from '../modules/auth-guard.js?v=2';
 
 console.log('🚀 Dashboard.js carregado');
 console.log('📦 DataManager disponível:', !!dataManager);
@@ -5390,14 +5390,14 @@ const BANCO_COR = Object.freeze({
 
 // Ícones dos bancos — usados no mini-cartão dos Relatórios
 const BANCO_ICON = Object.freeze({
-    'Nubank':          'icon/Card_Icon/Nubank.png',
-    'Bradesco':        'icon/Card_Icon/Bradesco.png',
-    'Mercado Pago':    'icon/Card_Icon/logo-mercado-pago-icone-1024.png',
-    'C6 Bank':         'icon/Card_Icon/logo-c6-bank-1024.png',
-    'Itaú':            'icon/Card_Icon/logo-itau-4096.png',
-    'Banco do Brasil': 'icon/Card_Icon/logo-banco-do-brasil-icon-4096.png',
-    'Caixa':           'icon/Card_Icon/logo-caixa-economica-federal-4096.png',
-    'Alelo':           'icon/Card_Icon/alelo-4096.png',
+    'Nubank':          'public/assets/icons/cards/Nubank.png',
+    'Bradesco':        'public/assets/icons/cards/Bradesco.png',
+    'Mercado Pago':    'public/assets/icons/cards/logo-mercado-pago-icone-1024.png',
+    'C6 Bank':         'public/assets/icons/cards/logo-c6-bank-1024.png',
+    'Itaú':            'public/assets/icons/cards/logo-itau-4096.png',
+    'Banco do Brasil': 'public/assets/icons/cards/logo-banco-do-brasil-icon-4096.png',
+    'Caixa':           'public/assets/icons/cards/logo-caixa-economica-federal-4096.png',
+    'Alelo':           'public/assets/icons/cards/alelo-4096.png',
 });
 
 // ========== CARTÕES DE CRÉDITO ==========

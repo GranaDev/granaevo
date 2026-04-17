@@ -2,8 +2,8 @@
    GRANAEVO - ATUALIZAR PLANO JS  v2.1
    ============================================= */
 
-import { supabase } from './supabase-client.js?v=2';
-import AuthGuard from './auth-guard.js?v=2';
+import { supabase } from '../services/supabase-client.js?v=2';
+import AuthGuard from '../modules/auth-guard.js?v=2';
 
 // ========== [F1] TRUSTED TYPES POLICY ==========
 //

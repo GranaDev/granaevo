@@ -1,5 +1,5 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
-import { supabase } from './supabase-client.js?v=2';
+import { supabase } from '../services/supabase-client.js?v=2';
 
 // ========== CONSTANTES PRIVADAS ==========
 const MAX_PAYLOAD_BYTES  = 4_900_000;
