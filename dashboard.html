@@ -41,7 +41,7 @@
         https://esm.sh
         https://cdn.jsdelivr.net
         'sha256-mZiPUOz2f2tF4Gv9gE1anzWI9jirOVLtoG94lOIXXiM=';
-        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
+        style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
         font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
         img-src 'self'
             https://fvrhqqeofqedmhadzzqw.supabase.co
@@ -150,7 +150,7 @@
     </div>
 
     <!-- CONTEÚDO PROTEGIDO -->
-    <div data-protected-content style="display: none;">
+    <div data-protected-content class="js-hidden">
 
         <!-- ========== SELEÇÃO DE PERFIS ========== -->
         <div id="selecaoPerfis" class="perfis-screen">
@@ -247,7 +247,7 @@
                     type="file"
                     id="photoUpload"
                     accept="image/jpeg,image/png,image/webp"
-                    style="display:none;"
+                    class="js-hidden"
                     aria-hidden="true">
             </div>
 
@@ -375,18 +375,17 @@
                 </div>
 
                 <div
-                    class="section-box"
+                    class="section-box promo-bloco"
                     id="widgetOndeFoiDinheiro"
-                    style="margin-top:32px; text-align:center; cursor:pointer; transition:all 0.3s;"
                     role="button"
                     tabindex="0"
                     aria-label="Analisar para onde foi o seu dinheiro">
-                    <div style="font-size:3rem; margin-bottom:12px;">💸</div>
-                    <h3 style="margin-bottom:8px; color:var(--text-primary);">Onde Foi Meu Dinheiro?</h3>
-                    <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:16px;">
+                    <div class="promo-emoji" aria-hidden="true">💸</div>
+                    <h3 class="promo-titulo">Onde Foi Meu Dinheiro?</h3>
+                    <p class="promo-desc">
                         Descubra para onde seus gastos estão indo com análise inteligente
                     </p>
-                    <button class="btn-primary" style="pointer-events:none;" type="button">
+                    <button class="btn-primary btn-no-events" type="button">
                         🔍 Analisar Agora
                     </button>
                 </div>
@@ -452,7 +451,7 @@
                             max="99999999"
                             aria-label="Valor da transação">
                     </div>
-                    <div id="creditoFields" style="display:none;">
+                    <div id="creditoFields" class="js-hidden">
                         <div class="form-field-icon">
                             <i class="fas fa-credit-card" aria-hidden="true"></i>
                             <select id="selectCartao" class="form-input" aria-label="Cartão de crédito"></select>
@@ -491,7 +490,7 @@
                             <button class="mov-filtro-btn" data-filtro="periodo" type="button">Selecionar mês/ano</button>
                             <button class="mov-filtro-btn" data-filtro="todo" type="button">Todo o período</button>
                         </div>
-                        <div class="mov-periodo-selector" id="movPeriodoSelector" style="display:none;">
+                        <div class="mov-periodo-selector js-hidden" id="movPeriodoSelector">
                             <select id="movFiltroMes" class="form-input" aria-label="Mês">
                                 <option value="0">Janeiro</option>
                                 <option value="1">Fevereiro</option>
@@ -576,7 +575,7 @@
                                 </div>
                             </div>
                             <div id="metaDetalhes" class="meta-details"></div>
-                            <button class="btn-warning" id="btnRetirar" style="display:none;" type="button">
+                            <button class="btn-warning js-hidden" id="btnRetirar" type="button">
                                 Retirar Dinheiro
                             </button>
                         </div>
@@ -656,7 +655,7 @@
                         </div>
                     </div>
                     <div id="comparacaoContainer" class="comparacao-filtros">
-                        <h4 style="color: var(--text-primary); margin-bottom: 16px; text-align: center;">
+                        <h4 class="grafico-titulo">
                             <i class="fas fa-calendar-alt" aria-hidden="true"></i>
                             Selecione o Período para Comparar
                         </h4>
@@ -671,7 +670,7 @@
                             </div>
                         </div>
                     </div>
-                    <button class="btn-primary btn-large" id="btnGerarGraficos" style="margin-top: 20px;" type="button">
+                    <button class="btn-primary btn-large mt-20" id="btnGerarGraficos" type="button">
                         <i class="fas fa-chart-area" aria-hidden="true"></i> Gerar Gráficos
                     </button>
                 </div>
@@ -737,7 +736,7 @@
                         <i class="fas fa-chart-line" aria-hidden="true"></i> Gerar Relatório
                     </button>
                 </div>
-                <div id="relatorioResultado" style="display:none;" aria-live="polite"></div>
+                <div id="relatorioResultado" class="js-hidden" aria-live="polite"></div>
             </section>
 
             <!-- CONFIGURAÇÕES -->
@@ -883,8 +882,8 @@
     </div>
 
     <!-- PAINEL DE NOTIFICAÇÕES -->
-    <div id="notificacoesOverlay" class="notificacoes-overlay" style="display:none;" role="presentation"></div>
-    <aside id="notificacoesPanel" class="notificacoes-panel" style="display:none;" role="dialog" aria-modal="true" aria-label="Painel de notificações">
+    <div id="notificacoesOverlay" class="notificacoes-overlay js-hidden" role="presentation"></div>
+    <aside id="notificacoesPanel" class="notificacoes-panel js-hidden" role="dialog" aria-modal="true" aria-label="Painel de notificações">
         <div class="notificacoes-panel-header">
             <div class="notificacoes-panel-title">
                 <i class="fas fa-bell" aria-hidden="true"></i>
@@ -904,7 +903,9 @@
     <!-- Scripts do Sistema -->
     <script type="module" src="src/scripts/pages/dashboard.js?v=2"></script>
     <script type="module" src="src/scripts/modules/chat-assistant.js?v=2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
+            integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
+            crossorigin="anonymous"></script>
     <script src="src/scripts/modules/graficos.js"></script>
     <script>document.getElementById("userPhoto").addEventListener("error",function(){this.style.display="none";var f=document.getElementById("userPhotoFallback");if(f){f.style.display="flex";var n=(document.getElementById("userName")||{}).textContent||"U";f.textContent=n.trim().charAt(0).toUpperCase()||"U";}});</script>
 

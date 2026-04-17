@@ -4,7 +4,8 @@
       "Bash(mv icon/Card_Icon/*.png public/assets/icons/cards/)",
       "Bash(mv icon/*.gif public/assets/icons/)",
       "Bash(mv icon/*.jpg public/assets/icons/)",
-      "Bash(grep -v \"^\\\\s*//\")"
+      "Bash(grep -v \"^\\\\s*//\")",
+      "Bash(supabase functions *)"
     ]
   }
 }

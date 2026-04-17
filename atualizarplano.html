@@ -6,59 +6,7 @@
     <title>Atualizar Plano - GranaEvo</title>
     <meta name="description" content="Faça upgrade do seu plano e desbloqueie mais recursos">
 
-    <!--
-    ╔══════════════════════════════════════════════════════════════════╗
-    ║  SEGURANÇA — CSP v2.1                                           ║
-    ╠══════════════════════════════════════════════════════════════════╣
-    ║  [R1]  nonce — gerado pelo servidor, diferente em cada request  ║
-    ║  [F1]  trusted-types — apenas a policy 'granaevo-policy' aceita ║
-    ║  [F2]  require-trusted-types-for 'script'                       ║
-    ║                                                                  ║
-    ║  ⚠️  NOTA CRÍTICA — meta vs. HTTP header:                       ║
-    ║  Esta meta tag é um ponto de partida seguro, MAS em produção    ║
-    ║  mova a CSP para HTTP header. Motivo: se houver HTML injection   ║
-    ║  ANTES desta meta tag, a proteção não se aplica.                ║
-    ║  HTTP headers são aplicados antes do HTML ser parseado.         ║
-    ║                                                                  ║
-    ║  Exemplo Node/Express:                                          ║
-    ║    const nonce = crypto.randomBytes(16).toString('base64');     ║
-    ║    res.set('Content-Security-Policy',                           ║
-    ║      `script-src 'self' 'nonce-${nonce}'; ...`);               ║
-    ║    res.locals.cspNonce = nonce;                                 ║
-    ║                                                                  ║
-    ║  [NOVO v2.1] report-to adicionado para monitoramento de         ║
-    ║  violações em produção. Configure o endpoint /csp-report        ║
-    ║  no backend para receber e logar violações.                     ║
-    ║                                                                  ║
-    ║  AÇÃO OBRIGATÓRIA NO BACKEND:                                   ║
-    ║  Substitua NONCE_GERADO_PELO_SERVIDOR em TRÊS lugares:          ║
-    ║    1. meta http-equiv (abaixo)                                  ║
-    ║    2. meta name="csp-nonce" (abaixo)                            ║
-    ║    3. atributo nonce= do <script> (no final do body)            ║
-    ╚══════════════════════════════════════════════════════════════════╝
-    -->
-    <meta http-equiv="Content-Security-Policy"
-        content="
-            default-src   'self';
-            script-src    'self' 'nonce-NONCE_GERADO_PELO_SERVIDOR';
-            style-src     'self' https://fonts.googleapis.com;
-            font-src      'self' https://fonts.gstatic.com;
-            img-src       'self' https://*.stripe.com;
-            connect-src   'self' https://*.supabase.co https://api.stripe.com https://checkout.stripe.com;
-            object-src    'none';
-            base-uri      'self';
-            frame-ancestors 'none';
-            require-trusted-types-for 'script';
-            trusted-types granaevo-policy;
-            report-uri /csp-report;
-        ">
-
-    <!--
-    CSRF token gerado pelo servidor — lido pelo JS via _lerCsrfToken().
-    Sem ele o fetch sensível é bloqueado no cliente (não enviado).
-    Substitua TOKEN_GERADO_PELO_SERVIDOR pelo valor real em runtime.
-    -->
-    <meta name="csrf-token" content="TOKEN_GERADO_PELO_SERVIDOR">
+    <!-- CSP is enforced via vercel.json HTTP headers (see vercel.json /atualizarplano.html entry). -->
 
     <!--
     ╔══════════════════════════════════════════════════════════════════╗
@@ -344,23 +292,11 @@
         </div>
     </footer>
 
-    <!--
-    [F2] SRI — integrity contém o hash sha384 do atualizarplano.js.
-         Se o arquivo for adulterado, o browser recusa o carregamento.
-         crossorigin="anonymous" é obrigatório para que o browser
-         execute a verificação de integridade mesmo em same-origin.
-
-    [R1] nonce deve ser IDÊNTICO ao injetado na CSP acima.
-         Substitua NONCE_GERADO_PELO_SERVIDOR pelo valor real.
-
-    ⚠️  Regenere o hash após qualquer alteração no JS:
-        openssl dgst -sha384 -binary atualizarplano.js | openssl base64 -A
-    -->
+    <!-- SRI: regenerate with: openssl dgst -sha384 -binary src/scripts/pages/atualizarplano.js | openssl base64 -A -->
     <script
         type="module" src="src/scripts/pages/atualizarplano.js?v=2"
-        integrity="sha384-REGENERE_ESTE_HASH_APOS_QUALQUER_ALTERACAO_NO_JS"
-        crossorigin="anonymous"
-        nonce="NONCE_GERADO_PELO_SERVIDOR">
+        integrity="sha384-6s8XGOVAyHs4FgT/nTJHh4vQ/ykYsCkLD6bjBO/IjHm3zh1F13mOyXgGR2lKjIPY"
+        crossorigin="anonymous">
     </script>
 
 </body>

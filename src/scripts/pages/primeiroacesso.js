@@ -183,12 +183,11 @@ checkEmailBtn.addEventListener('click', async () => {
         // [FIX-EXPORTS] SUPABASE_URL e SUPABASE_ANON_KEY agora chegam com valores
         // reais graças às exportações corrigidas em supabase-client.js.
         const response = await fetchWithTimeout(
-            `${SUPABASE_URL}/functions/v1/check-email-status`,
+            '/api/check-email',
             {
                 method:  'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'apikey':       SUPABASE_ANON_KEY,
                 },
                 body: JSON.stringify({ email }),
             }

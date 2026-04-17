@@ -2,6 +2,16 @@
    GRANAEVO - CSS COMPLETO E RESPONSIVO
    ============================================== */
 
+/* ========== UTILITÁRIOS — sem unsafe-inline ========== */
+.js-hidden      { display: none !important; }
+.promo-bloco    { margin-top: 32px; text-align: center; cursor: pointer; transition: all 0.3s; }
+.promo-emoji    { font-size: 3rem; margin-bottom: 12px; }
+.promo-titulo   { margin-bottom: 8px; color: var(--text-primary, #fff); }
+.promo-desc     { color: var(--text-secondary, #b0b3c1); font-size: 0.9rem; margin-bottom: 16px; }
+.btn-no-events  { pointer-events: none; }
+.grafico-titulo { color: var(--text-primary, #fff); margin-bottom: 16px; text-align: center; }
+.mt-20          { margin-top: 20px; }
+
 /* ========== RESET E VARIÁVEIS ========== */
 * {
     box-sizing: border-box;

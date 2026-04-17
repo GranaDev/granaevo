@@ -378,14 +378,6 @@ function _validarUrlPagamento(url) {
     }
 }
 
-// ========== LEITURA DO CSRF TOKEN ==========
-//
-// Token gerado pelo servidor, injetado em <meta name="csrf-token">.
-// Ausência bloqueia o request no cliente.
-function _lerCsrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.content ?? null;
-}
-
 // ========== FETCH COM TIMEOUT ==========
 const _FETCH_TIMEOUT_MS = 10000;
 
@@ -1063,15 +1055,6 @@ function criarPopupUpgrade(novoPlano, config, btnOrigem) {
                 return;
             }
 
-            // CSRF obrigatório
-            const csrfToken = _lerCsrfToken();
-            if (!csrfToken) {
-                console.error('[SEGURANÇA] CSRF token ausente — request bloqueado no cliente.');
-                _mostrarFeedback('❌ Erro de sessão. Recarregue a página e tente novamente.');
-                fecharOverlay();
-                return;
-            }
-
             // [F3] jti único por request — backend deve registrar e rejeitar reenvios
             const jti = _gerarJti();
 
@@ -1080,7 +1063,6 @@ function criarPopupUpgrade(novoPlano, config, btnOrigem) {
                 headers: {
                     'Content-Type':     'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-Token':     csrfToken,
                 },
                 credentials: 'same-origin',
                 body: JSON.stringify({

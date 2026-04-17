@@ -805,10 +805,10 @@ if (buttons.sendCode) {
             let checkResult;
             try {
                 const checkResponse = await fetch(
-                    `${CONFIG.SUPABASE_URL}/functions/v1/check-email-status`,
+                    '/api/check-email',
                     {
                         method:  'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email }),
                     }
                 );
@@ -856,11 +856,11 @@ if (buttons.sendCode) {
             let sendResult;
             try {
                 const sendResponse = await fetch(
-                    `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
+                    '/api/reset-password',
                     {
                         method:  'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
-                        body: JSON.stringify({ email }),
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ step: 'send', email }),
                     }
                 );
 
@@ -951,17 +951,17 @@ if (buttons.verifyCode) {
 
         try {
             const body = {
-                action: 'verify_code',
-                email:  RecoveryState.getEmail(),
+                step:  'verify_code',
+                email: RecoveryState.getEmail(),
                 code,
                 ...(CodeCaptchaState.getToken() ? { captchaToken: CodeCaptchaState.getToken() } : {}),
             };
 
             const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/functions/v1/verify-and-reset-password`,
+                '/api/reset-password',
                 {
                     method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
                 }
             );
@@ -1082,12 +1082,12 @@ if (buttons.changePassword) {
             // [FIX-RESET-1] Envia action='reset_password' — o backend re-verifica
             // o código e só então altera a senha. O código é marcado como usado.
             const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/functions/v1/verify-and-reset-password`,
+                '/api/reset-password',
                 {
                     method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        action:      'reset_password',
+                        step:        'reset_password',
                         email:       RecoveryState.getEmail(),
                         code:        RecoveryState.getCode(),
                         newPassword: newPass,
@@ -1154,11 +1154,11 @@ if (buttons.resendCode) {
 
         try {
             const response = await fetch(
-                `${CONFIG.SUPABASE_URL}/functions/v1/send-password-reset-code`,
+                '/api/reset-password',
                 {
                     method:  'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
-                    body: JSON.stringify({ email: RecoveryState.getEmail() }),
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ step: 'send', email: RecoveryState.getEmail() }),
                 }
             );
 

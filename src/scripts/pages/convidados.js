@@ -14,14 +14,8 @@
 const SUPABASE_URL      = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo';
 
-/**
- * [FIX-R02] Ponto único de configuração do endpoint.
- *
- * AGORA  → chama Edge Function diretamente (URL exposta no frontend).
- * FUTURO → substitua por '/api/verify-invite' após implementar proxy interno.
- *           Com proxy: atualize CSP connect-src para 'self' apenas.
- */
-const VERIFY_ENDPOINT = `${SUPABASE_URL}/functions/v1/verify-guest-invite`;
+// Chama proxy interno — Edge Function URL nunca exposta ao browser
+const VERIFY_ENDPOINT = '/api/verify-invite';
 
 // ═══════════════════════════════════════════════════════════════
 //  CONSTANTES DE SEGURANÇA

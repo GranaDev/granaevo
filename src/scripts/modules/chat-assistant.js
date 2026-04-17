@@ -1667,10 +1667,26 @@ loadMessages() {
         const saved = localStorage.getItem(chave);
         if (saved) {
             try {
-                this.messages = JSON.parse(saved);
-                this.renderMessages();
+                const parsed = JSON.parse(saved);
+                if (
+                    Array.isArray(parsed) &&
+                    parsed.every(m =>
+                        m !== null &&
+                        typeof m === 'object' &&
+                        typeof m.role === 'string' &&
+                        ['user', 'assistant', 'system'].includes(m.role) &&
+                        typeof m.content === 'string' &&
+                        m.content.length <= 32768
+                    )
+                ) {
+                    this.messages = parsed;
+                    this.renderMessages();
+                } else {
+                    localStorage.removeItem(chave);
+                }
             } catch (e) {
                 console.error('Erro ao carregar mensagens do chat', e);
+                localStorage.removeItem(chave);
             }
         }
     } else {
