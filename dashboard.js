@@ -4897,8 +4897,18 @@ function atualizarTelaCartoes() {
 
     const bankIconWrap = document.createElement('div');
     bankIconWrap.className = 'cartao-featured-bank-icon';
-    bankIconWrap.textContent = BANCO_ABREV[cartaoAtivo.nomeBanco]
-        || _sanitizeText(cartaoAtivo.nomeBanco).substring(0, 2).toUpperCase();
+    const featuredIconPath = BANCO_ICON[cartaoAtivo.nomeBanco];
+    if (featuredIconPath) {
+        const featuredImg = document.createElement('img');
+        featuredImg.src = featuredIconPath;
+        featuredImg.alt = '';
+        featuredImg.setAttribute('aria-hidden', 'true');
+        featuredImg.className = 'cartao-featured-bank-img';
+        bankIconWrap.appendChild(featuredImg);
+    } else {
+        bankIconWrap.textContent = BANCO_ABREV[cartaoAtivo.nomeBanco]
+            || _sanitizeText(cartaoAtivo.nomeBanco).substring(0, 2).toUpperCase();
+    }
     nameRow.appendChild(bankIconWrap);
 
     const nomeDiv = document.createElement('div');
@@ -5084,11 +5094,21 @@ function atualizarTelaCartoes() {
             miniCard.appendChild(frozenBadge);
         }
 
-        const miniAbrevEl = document.createElement('div');
-        miniAbrevEl.className = 'meus-cartoes-mini-abrev';
-        miniAbrevEl.textContent = BANCO_ABREV[c.nomeBanco]
-            || _sanitizeText(c.nomeBanco).substring(0, 2).toUpperCase();
-        miniCard.appendChild(miniAbrevEl);
+        const miniIconPath = BANCO_ICON[c.nomeBanco];
+        if (miniIconPath) {
+            const miniImg = document.createElement('img');
+            miniImg.className = 'meus-cartoes-mini-icon';
+            miniImg.src = miniIconPath;
+            miniImg.alt = '';
+            miniImg.setAttribute('aria-hidden', 'true');
+            miniCard.appendChild(miniImg);
+        } else {
+            const miniAbrevEl = document.createElement('div');
+            miniAbrevEl.className = 'meus-cartoes-mini-abrev';
+            miniAbrevEl.textContent = BANCO_ABREV[c.nomeBanco]
+                || _sanitizeText(c.nomeBanco).substring(0, 2).toUpperCase();
+            miniCard.appendChild(miniAbrevEl);
+        }
 
         const miniNome = document.createElement('div');
         miniNome.className = 'meus-cartoes-mini-nome';

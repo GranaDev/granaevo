@@ -4113,6 +4113,14 @@ select.form-input option:checked {
     white-space: nowrap;
 }
 
+.cartao-featured-bank-img {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.45));
+    display: block;
+}
+
 .cartao-featured-nome {
     font-size: 1.6rem;
     font-weight: 800;
