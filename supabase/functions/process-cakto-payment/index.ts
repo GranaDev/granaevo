@@ -1,119 +1,165 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// ---------------------------------------------------------------------------
+// process-cakto-payment — FUNÇÃO ADMINISTRATIVA
+//
+// Disparo manual de aprovação / reembolso / cancelamento de pedidos Cakto.
+// NÃO deve ser exposta ao front-end. Requer ADMIN_SECRET no header.
+//
+// Fluxo normal: use webhook-cakto (chamado automaticamente pela Cakto).
+// Esta função é para correção manual via ferramenta admin / n8n / dashboard.
+// ---------------------------------------------------------------------------
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc    = new TextEncoder()
+  const aBytes = enc.encode(a)
+  const bBytes = enc.encode(b)
+  if (aBytes.length !== bBytes.length) return false
+  let diff = 0
+  for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i]
+  return diff === 0
 }
 
-serve(async (req) => {
+// Sem CORS — função admin, nunca chamada pelo browser
+const corsHeaders = {
+  'Access-Control-Allow-Origin':  'none',
+  'Access-Control-Allow-Headers': 'content-type, x-admin-secret',
+}
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { status: 204, headers: corsHeaders })
   }
 
+  if (req.method !== 'POST') {
+    return json({ success: false, error: 'Método não permitido' }, 405)
+  }
+
+  // ── Autenticação administrativa obrigatória ──────────────────────────────
+  const adminSecret = Deno.env.get('ADMIN_SECRET')
+  if (!adminSecret) {
+    console.error('[process-cakto-payment] ADMIN_SECRET não configurado')
+    return json({ success: false, error: 'Serviço não configurado' }, 500)
+  }
+
+  const received = req.headers.get('x-admin-secret') ?? ''
+  if (!timingSafeEqual(received, adminSecret)) {
+    console.warn('[process-cakto-payment] Acesso não autorizado')
+    return json({ success: false, error: 'Não autorizado' }, 401)
+  }
+
+  const supabaseClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  )
+
+  let body: { orderId?: string; action?: string }
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    )
+    body = await req.json()
+  } catch {
+    return json({ success: false, error: 'Body JSON inválido' }, 400)
+  }
 
-    const { orderId, action } = await req.json()
+  const { orderId, action } = body
 
-    if (!orderId) {
-      throw new Error('orderId é obrigatório')
-    }
+  if (!orderId || typeof orderId !== 'string') {
+    return json({ success: false, error: 'orderId é obrigatório' }, 400)
+  }
 
+  if (!action || !['approve', 'refund', 'cancel'].includes(action)) {
+    return json({ success: false, error: 'action deve ser approve, refund ou cancel' }, 400)
+  }
+
+  console.log(`[process-cakto-payment] Ação "${action}" para orderId: ${orderId}`)
+
+  try {
     // Buscar dados do pedido na Cakto
     const accessToken = await getCaktoAccessToken()
-    
+
     const orderResponse = await fetch(
       `https://api.cakto.com.br/api/orders/${orderId}/`,
       {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+          'Content-Type':  'application/json',
         },
       }
     )
 
     if (!orderResponse.ok) {
-      throw new Error(`Erro ao buscar pedido: ${orderResponse.statusText}`)
+      throw new Error(`Erro ao buscar pedido Cakto: ${orderResponse.status} ${orderResponse.statusText}`)
     }
 
     const orderData = await orderResponse.json()
 
-    // Processar baseado na ação
     let result
     switch (action) {
-      case 'approve':
-        result = await processApproval(supabaseClient, orderData)
-        break
-      case 'refund':
-        result = await processRefund(supabaseClient, orderData)
-        break
-      case 'cancel':
-        result = await processCancellation(supabaseClient, orderData)
-        break
-      default:
-        throw new Error('Ação inválida')
+      case 'approve': result = await processApproval(supabaseClient, orderData, orderId);    break
+      case 'refund':  result = await processRefund(supabaseClient, orderData, orderId);      break
+      case 'cancel':  result = await processCancellation(supabaseClient, orderData, orderId); break
     }
 
-    return new Response(
-      JSON.stringify({ success: true, result }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
-      },
-    )
+    console.log(`[process-cakto-payment] Concluído: ${JSON.stringify(result)}`)
+    return json({ success: true, result })
 
-  } catch (error) {
-    console.error('❌ Erro:', error)
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500 
-      },
-    )
+  } catch (error: any) {
+    console.error('[process-cakto-payment] Erro:', error?.message)
+    return json({ success: false, error: error?.message ?? 'Erro interno' }, 500)
   }
 })
 
 async function getCaktoAccessToken(): Promise<string> {
-  const clientId = Deno.env.get('CAKTO_CLIENT_ID')
+  const clientId     = Deno.env.get('CAKTO_CLIENT_ID')
   const clientSecret = Deno.env.get('CAKTO_CLIENT_SECRET')
 
   const response = await fetch('https://api.cakto.com.br/oauth/token/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      grant_type: 'client_credentials',
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret }),
   })
 
-  if (!response.ok) {
-    throw new Error('Falha ao obter token da Cakto')
-  }
-
+  if (!response.ok) throw new Error('Falha ao obter token da Cakto')
   const data = await response.json()
   return data.access_token
 }
 
-async function processApproval(supabase: any, orderData: any) {
-  // Mesma lógica do webhook handleApprovedPurchase
-  // (copiar código da função handleApprovedPurchase aqui)
-  return { message: 'Aprovação processada' }
+async function processApproval(supabase: any, _orderData: any, orderId: string) {
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ payment_status: 'approved', is_active: true, updated_at: new Date().toISOString() })
+    .eq('cakto_order_id', orderId)
+  if (error) throw error
+  return { action: 'approved', order_id: orderId }
 }
 
-async function processRefund(supabase: any, orderData: any) {
-  // Mesma lógica do webhook handleRefund
-  return { message: 'Reembolso processado' }
+async function processRefund(supabase: any, _orderData: any, orderId: string) {
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({
+      payment_status:    'refunded',
+      is_active:         false,
+      refunded_at:       new Date().toISOString(),
+      access_revoked_at: new Date().toISOString(),
+      updated_at:        new Date().toISOString(),
+    })
+    .eq('cakto_order_id', orderId)
+  if (error) throw error
+  return { action: 'refunded', order_id: orderId }
 }
 
-async function processCancellation(supabase: any, orderData: any) {
-  // Mesma lógica do webhook handleCancellation
-  return { message: 'Cancelamento processado' }
+async function processCancellation(supabase: any, _orderData: any, orderId: string) {
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ payment_status: 'cancelled', is_active: false, updated_at: new Date().toISOString() })
+    .eq('cakto_order_id', orderId)
+  if (error) throw error
+  return { action: 'cancelled', order_id: orderId }
 }

@@ -1,32 +1,104 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// ═══════════════════════════════════════════════════════════════
+//  CORS
+//
+//  [SEC-FIX-CORS] Restrito ao domínio real.
+//  '*' permitia que qualquer origem chamasse este endpoint.
+//  Lista de origens permitidas — ajuste conforme seus domínios.
+// ═══════════════════════════════════════════════════════════════
+const ALLOWED_ORIGINS = [
+  'https://granaevo.vercel.app',
+  'https://granaevo.com',
+  'https://www.granaevo.com',
+]
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin  = req.headers.get('origin') ?? ''
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HELPER: SHA-256
+// ═══════════════════════════════════════════════════════════════
+async function hashCode(code: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data    = encoder.encode(code)
+  const buffer  = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(buffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RESPOSTA NEUTRA ANTI-ENUMERAÇÃO
+//
+//  Usada para não_encontrado e pagamento_não_aprovado.
+//  Ambos retornam exatamente a mesma resposta que o caso de
+//  sucesso, impedindo que o caller descubra se o email existe.
+// ═══════════════════════════════════════════════════════════════
+function neutralResponse(corsHeaders: Record<string, string>): Response {
+  return new Response(
+    JSON.stringify({
+      status:     'sent',
+      message:    'Se o email estiver cadastrado com plano ativo, você receberá o código.',
+      expires_in: '6 horas',
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+  )
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req)
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_URL')             ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    const { email } = await req.json()
+    // ── Parse e validação básica ──────────────────────────────
+    let body: { email?: unknown }
+    try {
+      body = await req.json()
+    } catch {
+      return new Response(
+        JSON.stringify({ status: 'error', message: 'Corpo da requisição inválido.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
 
-    if (!email) {
-      throw new Error('Email é obrigatório')
+    const { email } = body
+
+    if (typeof email !== 'string' || !email.trim()) {
+      return new Response(
+        JSON.stringify({ status: 'error', message: 'Parâmetros inválidos.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
     }
 
     const normalizedEmail = email.toLowerCase().trim()
-    console.log('🔐 Solicitação de recuperação para:', normalizedEmail)
 
-    // 1. Verificar se email existe e tem plano aprovado
+    // Validação básica de formato (defesa em profundidade)
+    if (!/^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(normalizedEmail)) {
+      // Retorna neutro — não confirma nem nega que o email é inválido
+      return neutralResponse(corsHeaders)
+    }
+
+    console.log('[send-reset-code] Solicitação para:', normalizedEmail)
+
+    // ── 1. Verificar subscription ─────────────────────────────
     const { data: subscription, error: subError } = await supabase
       .from('subscriptions')
       .select('user_id, user_name, payment_status, is_active')
@@ -35,77 +107,77 @@ serve(async (req) => {
       .maybeSingle()
 
     if (subError) {
-      console.error('Erro ao buscar subscription:', subError)
-      throw subError
+      console.error('[send-reset-code] Erro ao buscar subscription:', subError.message)
+      // Não vaza o erro interno — retorna neutro
+      return neutralResponse(corsHeaders)
     }
 
+    // Email não cadastrado → resposta neutra (não vaza enumeração)
     if (!subscription) {
-      return new Response(
-        JSON.stringify({ 
-          status: 'not_found',
-          message: 'Email não encontrado ou sem plano ativo'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      )
+      console.log('[send-reset-code] Email não encontrado (não exposto ao caller):', normalizedEmail)
+      return neutralResponse(corsHeaders)
     }
 
+    // Pagamento não aprovado → resposta neutra (não vaza enumeração)
     if (subscription.payment_status !== 'approved') {
-      return new Response(
-        JSON.stringify({ 
-          status: 'payment_not_approved',
-          message: 'Seu plano não está aprovado. Verifique o status do pagamento.'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      )
+      console.log('[send-reset-code] Pagamento não aprovado (não exposto ao caller):', normalizedEmail)
+      return neutralResponse(corsHeaders)
     }
 
-    // 2. Gerar código de 6 dígitos
-    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    // ── 2. Gerar código e calcular hash ───────────────────────
+    const code     = Math.floor(100000 + Math.random() * 900000).toString()
+    const codeHash = await hashCode(code)
+
     const expiresAt = new Date()
-    expiresAt.setHours(expiresAt.getHours() + 6) // 6 horas de validade
+    expiresAt.setHours(expiresAt.getHours() + 6)
 
-    console.log('🔢 Código gerado:', code)
-    console.log('⏰ Expira em:', expiresAt.toISOString())
+    console.log('[send-reset-code] Código gerado e hasheado (raw não logado)')
 
-    // 3. Salvar código no banco
+    // ── 3. Invalidar códigos anteriores do mesmo email ────────
+    await supabase
+      .from('password_reset_codes')
+      .update({ used: true, used_at: new Date().toISOString() })
+      .eq('email', normalizedEmail)
+      .eq('used', false)
+
+    // ── 4. Salvar hash — nunca o código em texto plano ────────
     const { error: insertError } = await supabase
       .from('password_reset_codes')
       .insert({
-        email: normalizedEmail,
-        code: code,
-        expires_at: expiresAt.toISOString(),
-        used: false,
+        email:                 normalizedEmail,
+        code_hash:             codeHash,
+        expires_at:            expiresAt.toISOString(),
+        used:                  false,
+        verification_attempts: 0,
       })
 
     if (insertError) {
-      console.error('Erro ao salvar código:', insertError)
-      throw insertError
+      console.error('[send-reset-code] Erro ao salvar hash:', insertError.message)
+      return new Response(
+        JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
     }
 
-    // 4. Formatar data de expiração
+    // ── 5. Montar e enviar email ──────────────────────────────
     const expiresFormatted = expiresAt.toLocaleString('pt-BR', {
       dateStyle: 'short',
-      timeStyle: 'short'
+      timeStyle: 'short',
     })
-
-    // Separar dígitos do código para exibição estilizada
-    const codeDigits = code.split('')
-
-    // 5. Enviar email com código via Resend
+    const codeDigits   = code.split('')
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
-    
+
     const emailResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
+        'Content-Type':  'application/json',
       },
       body: JSON.stringify({
-        from: 'GranaEvo <noreply@granaevo.com>',
-        to: [normalizedEmail],
+        from:    'GranaEvo <noreply@granaevo.com>',
+        to:      [normalizedEmail],
         subject: '🔐 Seu código de verificação — GranaEvo',
-        html: `
-<!DOCTYPE html>
+        html: `<!DOCTYPE html>
 <html lang="pt-BR" xmlns:v="urn:schemas-microsoft-com:vml">
 <head>
   <meta charset="UTF-8">
@@ -152,7 +224,6 @@ serve(async (req) => {
       margin: 0 auto;
     }
 
-    /* ── TOP WORDMARK ── */
     .top-wordmark {
       text-align: center;
       padding-bottom: 28px;
@@ -166,7 +237,6 @@ serve(async (req) => {
       opacity: 0.7;
     }
 
-    /* ── MAIN CARD ── */
     .main-card {
       background: linear-gradient(160deg, #0d1117 0%, #111827 60%, #0a0f1a 100%);
       border: 1px solid rgba(16, 185, 129, 0.18);
@@ -178,7 +248,6 @@ serve(async (req) => {
         0 0 80px rgba(16, 185, 129, 0.06) inset;
     }
 
-    /* ── HEADER STRIP ── */
     .header-strip {
       position: relative;
       padding: 52px 48px 44px;
@@ -259,7 +328,6 @@ serve(async (req) => {
       letter-spacing: 0.3px;
     }
 
-    /* ── SECURITY BANNER ── */
     .security-banner {
       background: rgba(16, 185, 129, 0.06);
       border-bottom: 1px solid rgba(16, 185, 129, 0.12);
@@ -274,7 +342,6 @@ serve(async (req) => {
       letter-spacing: 0.5px;
     }
 
-    /* ── BODY ── */
     .body-content {
       padding: 48px 48px 40px;
     }
@@ -310,14 +377,12 @@ serve(async (req) => {
       font-weight: 600;
     }
 
-    /* ── DIVIDER ── */
     .divider {
       height: 1px;
       background: linear-gradient(90deg, transparent, rgba(16,185,129,0.25), transparent);
       margin: 36px 0;
     }
 
-    /* ── CODE SHOWCASE ── */
     .code-showcase {
       border-radius: 20px;
       overflow: hidden;
@@ -376,7 +441,6 @@ serve(async (req) => {
       display: block;
     }
 
-    /* Individual digit boxes */
     .code-digits {
       display: inline-flex;
       gap: 8px;
@@ -423,7 +487,6 @@ serve(async (req) => {
       z-index: 1;
     }
 
-    /* ── EXPIRY BOX ── */
     .expiry-box {
       display: flex;
       align-items: flex-start;
@@ -443,8 +506,6 @@ serve(async (req) => {
       margin-top: 2px;
     }
 
-    .expiry-content {}
-
     .expiry-title {
       font-size: 14px;
       font-weight: 700;
@@ -454,7 +515,6 @@ serve(async (req) => {
 
     .expiry-text {
       font-size: 13px;
-      color: #92400e;
       color: rgba(251, 191, 36, 0.65);
       line-height: 1.5;
     }
@@ -464,7 +524,6 @@ serve(async (req) => {
       font-weight: 600;
     }
 
-    /* ── NOT YOU BOX ── */
     .not-you-box {
       padding: 16px 20px;
       background: rgba(10, 11, 20, 0.4);
@@ -484,7 +543,6 @@ serve(async (req) => {
       font-weight: 600;
     }
 
-    /* ── SECURITY TIPS ── */
     .security-header {
       font-size: 11px;
       font-weight: 700;
@@ -526,7 +584,6 @@ serve(async (req) => {
       line-height: 1.4;
     }
 
-    /* ── FOOTER ── */
     .email-footer {
       padding: 40px 48px 36px;
       border-top: 1px solid rgba(255,255,255,0.05);
@@ -571,7 +628,6 @@ serve(async (req) => {
       line-height: 1.6;
     }
 
-    /* ── OUTER ── */
     .outer-footer {
       text-align: center;
       padding-top: 28px;
@@ -583,7 +639,6 @@ serve(async (req) => {
       letter-spacing: 0.5px;
     }
 
-    /* ── RESPONSIVE ── */
     @media only screen and (max-width: 600px) {
       .email-bg { padding: 24px 12px; }
       .header-strip { padding: 40px 28px 36px; }
@@ -610,15 +665,12 @@ serve(async (req) => {
 <div class="email-bg">
   <div class="wrapper">
 
-    <!-- Top wordmark -->
     <div class="top-wordmark">
       <span>G R A N A E V O</span>
     </div>
 
-    <!-- Main card -->
     <div class="main-card">
 
-      <!-- Header -->
       <div class="header-strip">
         <div class="header-lines"></div>
         <div class="logo-wrap">
@@ -631,15 +683,12 @@ serve(async (req) => {
         <span class="header-tagline">Recuperação de Senha</span>
       </div>
 
-      <!-- Security banner -->
       <div class="security-banner">
         <span>🔒 Solicitação autenticada · Comunicação oficial GranaEvo</span>
       </div>
 
-      <!-- Body -->
       <div class="body-content">
 
-        <!-- Greeting -->
         <span class="greeting-eyebrow">Verificação de identidade ✦</span>
         <div class="greeting-name">Olá, ${subscription.user_name || 'Usuário'}! 👋</div>
         <p class="intro-text">
@@ -649,7 +698,6 @@ serve(async (req) => {
 
         <div class="divider"></div>
 
-        <!-- Code showcase -->
         <div class="code-showcase">
           <div class="code-showcase-top">
             <span class="cs-dot" style="background:#ef4444;"></span>
@@ -672,7 +720,6 @@ serve(async (req) => {
           </div>
         </div>
 
-        <!-- Expiry -->
         <div class="expiry-box">
           <div class="expiry-icon">⏱</div>
           <div class="expiry-content">
@@ -684,17 +731,15 @@ serve(async (req) => {
           </div>
         </div>
 
-        <!-- Not you -->
         <div class="not-you-box">
           <div class="not-you-text">
-            Não solicitou esta redefinição? <strong>Ignore este email com segurança.</strong> 
+            Não solicitou esta redefinição? <strong>Ignore este email com segurança.</strong>
             Sua senha permanece inalterada e nenhuma ação é necessária.
           </div>
         </div>
 
         <div class="divider"></div>
 
-        <!-- Security tips -->
         <div class="security-header">🛡 Dicas de segurança</div>
 
         <div class="tip-row">
@@ -714,9 +759,8 @@ serve(async (req) => {
           <div class="tip-text">Evite usar a mesma senha em outros serviços ou aplicativos</div>
         </div>
 
-      </div><!-- /body-content -->
+      </div>
 
-      <!-- Footer inside card -->
       <div class="email-footer">
         <div class="footer-brand">GranaEvo</div>
         <div class="footer-links">
@@ -733,44 +777,45 @@ serve(async (req) => {
         </div>
       </div>
 
-    </div><!-- /main-card -->
+    </div>
 
-    <!-- Outer footer -->
     <div class="outer-footer">
       <span>Sua segurança é nossa prioridade · granaevo.vercel.app</span>
     </div>
 
-  </div><!-- /wrapper -->
-</div><!-- /email-bg -->
+  </div>
+</div>
 </body>
-</html>
-        `,
+</html>`,
       }),
     })
 
     if (!emailResponse.ok) {
       const errorData = await emailResponse.json()
-      console.error('❌ Erro ao enviar email:', errorData)
-      throw new Error(`Erro Resend: ${JSON.stringify(errorData)}`)
+      console.error('[send-reset-code] Erro Resend:', errorData)
+      return new Response(
+        JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
     }
 
-    const emailResult = await emailResponse.json()
-    console.log('✅ Email enviado:', emailResult)
+    console.log('[send-reset-code] Email enviado com sucesso')
 
     return new Response(
-      JSON.stringify({ 
-        status: 'sent',
-        message: 'Código enviado para seu email',
-        expires_in: '6 horas'
+      JSON.stringify({
+        status:     'sent',
+        message:    'Código enviado para seu email',
+        expires_in: '6 horas',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
 
   } catch (error) {
-    console.error('❌ Erro:', error)
+    // [SEC-FIX-LEAK] Catch genérico — não vaza detalhes do erro interno
+    console.error('[send-reset-code] Erro não tratado:', error)
     return new Response(
-      JSON.stringify({ status: 'error', message: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
+      { headers: { 'Content-Type': 'application/json' }, status: 500 }
     )
   }
 })

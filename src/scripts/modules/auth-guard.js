@@ -21,7 +21,7 @@ const TAB_ID = (() => {
 //  CONFIGURAÇÕES CENTRAIS DE SEGURANÇA
 // ═══════════════════════════════════════════════════════════════
 const SECURITY = Object.freeze({
-    SESSION_POLL_INTERVAL:           5 * 60 * 1000,
+    SESSION_POLL_INTERVAL:           10 * 60 * 1000,
     TOKEN_REFRESH_THRESHOLD_SECONDS: 10 * 60,
     MAX_SESSION_AGE_MS:              24 * 60 * 60 * 1000,
     RATE_LIMIT_MAX:                  15,

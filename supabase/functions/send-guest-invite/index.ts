@@ -1,168 +1,272 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// supabase/functions/send-guest-invite/index.ts
+/**
+ * GranaEvo — send-guest-invite
+ *
+ * CORREÇÃO ES256: supabaseAdmin.auth.getUser(token) em vez de
+ * createClient(url, anonKey) + getUser() com token no global header.
+ * O Admin client usa SERVICE_ROLE_KEY (aceita pelo gateway) e delega
+ * a validação do token ES256 ao servidor Auth via JWKS.
+ */
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const ALLOWED_ORIGINS = [
+  'https://granaevo.vercel.app',
+  'https://granaevo.com',
+  'https://www.granaevo.com',
+]
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin  = req.headers.get('origin') ?? ''
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
 }
 
 // Quantos CONVIDADOS cada plano permite (além do dono)
 const GUEST_LIMITS: Record<string, number> = {
-  'Individual': 0,
-  'Casal': 1,
-  'Família': 3,
-}
+  "Individual": 0,
+  "Casal":      1,
+  "Família":    3,
+};
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req)
+
+  function json(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    })
+  }
+
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return json({ success: false, error: "Método não permitido." }, 405);
+  }
+
+  // ── 1. Extrai o header Authorization ─────────────────────────────────────
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+
+  if (!token || token.length < 20) {
+    return json({ success: false, error: "Token de autenticação ausente." }, 401);
+  }
+
+  // ── 2. Lê variáveis de ambiente ───────────────────────────────────────────
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const resendKey   = Deno.env.get("RESEND_API_KEY");
+
+  if (!supabaseUrl || !serviceKey) {
+    console.error("[send-guest-invite] Variáveis de ambiente Supabase ausentes");
+    return json({ success: false, error: "Configuração interna incompleta." }, 500);
+  }
+
+  if (!resendKey) {
+    console.error("[send-guest-invite] RESEND_API_KEY ausente");
+    return json({ success: false, error: "Configuração de email incompleta." }, 500);
+  }
+
+  // ── 3. Admin client ───────────────────────────────────────────────────────
+  const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
+    auth: {
+      autoRefreshToken:   false,
+      persistSession:     false,
+      detectSessionInUrl: false,
+    },
+  });
+
+  // ── 4. Verifica o JWT via Admin client (funciona com ES256 e HS256) ───────
+  const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+
+  if (userError || !user || !user.id || !user.email) {
+    console.error("[send-guest-invite] JWT inválido:", userError?.message ?? "user null");
+    return json({ success: false, error: "Sessão inválida ou expirada." }, 401);
+  }
+
+  // ── 5. Parse do body ──────────────────────────────────────────────────────
+  let guestName: string;
+  let guestEmail: string;
+  try {
+    const body = await req.json();
+    guestName  = (body?.guestName  ?? "").trim();
+    guestEmail = (body?.guestEmail ?? "").trim().toLowerCase();
+  } catch {
+    return json({ success: false, error: "Body JSON inválido." }, 400);
+  }
+
+  if (!guestName || guestName.length < 2 || guestName.length > 100) {
+    return json({ success: false, error: "Nome do convidado inválido (2-100 caracteres)." }, 400);
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!guestEmail || !emailRegex.test(guestEmail)) {
+    return json({ success: false, error: "Email do convidado inválido." }, 400);
+  }
+
+  const ownerEmail = user.email.toLowerCase().trim();
+
+  // ── 6. Não pode convidar a si mesmo ──────────────────────────────────────
+  if (guestEmail === ownerEmail) {
+    return json({ success: false, error: "Você não pode convidar seu próprio email." }, 400);
+  }
 
   try {
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) throw new Error('Não autorizado')
+    // ── 7. Verificar plano do dono ────────────────────────────────────────
+    const { data: sub, error: subError } = await supabaseAdmin
+      .from("subscriptions")
+      .select("plans(name)")
+      .eq("user_id", user.id)
+      .eq("payment_status", "approved")
+      .eq("is_active", true)
+      .maybeSingle();
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-
-    const supabaseUser = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } }
-    })
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey)
-
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser()
-    if (userError || !user) throw new Error('Sessão inválida')
-
-    const { guestName, guestEmail } = await req.json()
-    if (!guestName || !guestEmail) throw new Error('Nome e email são obrigatórios')
-
-    const guestEmailNorm = guestEmail.toLowerCase().trim()
-    const ownerEmail = user.email!.toLowerCase().trim()
-
-    // ── 1. Não pode convidar a si mesmo
-    if (guestEmailNorm === ownerEmail) {
-      throw new Error('Você não pode convidar seu próprio email.')
+    if (subError || !sub) {
+      console.error("[send-guest-invite] Assinatura não encontrada:", subError?.message);
+      return json({ success: false, error: "Assinatura não encontrada ou inativa." }, 403);
     }
 
-    // ── 2. Verificar plano do dono
-    const { data: sub, error: subError } = await supabaseAdmin
-      .from('subscriptions')
-      .select('plans(name)')
-      .eq('user_id', user.id)
-      .eq('payment_status', 'approved')
-      .eq('is_active', true)
-      .maybeSingle()
-
-    if (subError || !sub) throw new Error('Assinatura não encontrada ou inativa.')
-
-    const planName: string = (sub as any).plans.name
-    const guestLimit = GUEST_LIMITS[planName] ?? 0
+    const planName: string = (sub as any).plans.name;
+    const guestLimit = GUEST_LIMITS[planName] ?? 0;
 
     if (guestLimit === 0) {
-      throw new Error(
-        `PLAN_BLOCK:${planName}:Você possui o plano ${planName}, que permite apenas 01 email por conta. Faça upgrade para adicionar convidados.`
-      )
+      return json({
+        success: false,
+        error: `PLAN_BLOCK:${planName}:Você possui o plano ${planName}, que permite apenas 01 email por conta. Faça upgrade para adicionar convidados.`,
+      }, 403);
     }
 
-    // ── 3. Contar membros ativos atuais
-    const { data: currentMembers } = await supabaseAdmin
-      .from('account_members')
-      .select('id, member_email')
-      .eq('owner_user_id', user.id)
-      .eq('is_active', true)
+    // ── 8. Contar membros ativos atuais ───────────────────────────────────
+    const { data: currentMembers, error: membersError } = await supabaseAdmin
+      .from("account_members")
+      .select("id, member_email")
+      .eq("owner_user_id", user.id)
+      .eq("is_active", true);
 
-    const memberCount = currentMembers?.length ?? 0
+    if (membersError) {
+      console.error("[send-guest-invite] Erro ao listar membros:", membersError.message);
+      return json({ success: false, error: "Erro ao verificar membros. Tente novamente." }, 500);
+    }
+
+    const memberCount = currentMembers?.length ?? 0;
 
     if (memberCount >= guestLimit) {
-      const emails = currentMembers?.map((m: any) => m.member_email).join(', ') || ''
-      const totalAllowed = guestLimit + 1
-      throw new Error(`LIMIT_REACHED:${planName}:${totalAllowed}:${emails}`)
+      const emails       = currentMembers?.map((m: any) => m.member_email).join(", ") ?? "";
+      const totalAllowed = guestLimit + 1;
+      return json({
+        success: false,
+        error: `LIMIT_REACHED:${planName}:${totalAllowed}:${emails}`,
+      }, 403);
     }
 
-    // ── 4. Verificar se já é membro
-    const alreadyMember = currentMembers?.find((m: any) => m.member_email === guestEmailNorm)
-    if (alreadyMember) throw new Error('Este email já é membro desta conta.')
+    // ── 9. Verificar se já é membro ───────────────────────────────────────
+    const alreadyMember = currentMembers?.find((m: any) => m.member_email === guestEmail);
+    if (alreadyMember) {
+      return json({ success: false, error: "Este email já é membro desta conta." }, 409);
+    }
 
-    // ── 5. Rate limit: máx 4 convites por 24h por dono
-    const oneDayAgo = new Date(Date.now() - 86400000).toISOString()
+    // ── 10. Rate limit: máx 4 convites por 24h por dono ──────────────────
+    const oneDayAgo = new Date(Date.now() - 86_400_000).toISOString();
     const { data: recentInvites } = await supabaseAdmin
-      .from('guest_invitations')
-      .select('id')
-      .eq('owner_user_id', user.id)
-      .gte('created_at', oneDayAgo)
+      .from("guest_invitations")
+      .select("id")
+      .eq("owner_user_id", user.id)
+      .gte("created_at", oneDayAgo);
 
     if ((recentInvites?.length ?? 0) >= 4) {
-      throw new Error('Você atingiu o limite de 4 convites em 24h. Tente novamente mais tarde.')
+      return json({
+        success: false,
+        error: "Você atingiu o limite de 4 convites em 24h. Tente novamente mais tarde.",
+      }, 429);
     }
 
-    // ── 6. Invalidar convites pendentes anteriores para este email
+    // ── 11. Invalidar convites pendentes anteriores para este email ────────
     await supabaseAdmin
-      .from('guest_invitations')
+      .from("guest_invitations")
       .update({ used: true })
-      .eq('owner_user_id', user.id)
-      .eq('guest_email', guestEmailNorm)
-      .eq('used', false)
+      .eq("owner_user_id", user.id)
+      .eq("guest_email", guestEmail)
+      .eq("used", false);
 
-    // ── 7. Gerar código de 6 dígitos e salvar
-    const code = Math.floor(100000 + Math.random() * 900000).toString()
-    const expiresAt = new Date(Date.now() + 43200000).toISOString() // 12h
-
-    const ownerName = user.user_metadata?.name || ownerEmail.split('@')[0]
+    // ── 12. Gerar código de 6 dígitos e salvar ────────────────────────────
+    const code      = Math.floor(100_000 + Math.random() * 900_000).toString();
+    const expiresAt = new Date(Date.now() + 43_200_000).toISOString(); // 12h
+    const ownerName = (user.user_metadata?.name as string) || ownerEmail.split("@")[0];
 
     const { data: invitation, error: invError } = await supabaseAdmin
-      .from('guest_invitations')
+      .from("guest_invitations")
       .insert({
         owner_user_id: user.id,
-        owner_email: ownerEmail,
-        owner_name: ownerName,
-        guest_name: guestName,
-        guest_email: guestEmailNorm,
+        owner_email:   ownerEmail,
+        owner_name:    ownerName,
+        guest_name:    guestName,
+        guest_email:   guestEmail,
         code,
-        expires_at: expiresAt,
+        expires_at:    expiresAt,
       })
       .select()
-      .single()
+      .single();
 
-    if (invError || !invitation) throw invError ?? new Error('Erro ao criar convite')
+    if (invError || !invitation) {
+      console.error("[send-guest-invite] Erro ao criar convite:", invError?.message);
+      return json({ success: false, error: "Erro ao criar convite. Tente novamente." }, 500);
+    }
 
-    // ── 8. Enviar email via Resend
-    const resendKey = Deno.env.get('RESEND_API_KEY')!
-    const emailHtml = buildInviteEmail(guestName, ownerName, planName, invitation.id)
+    // ── 13. Enviar email via Resend ───────────────────────────────────────
+    const emailHtml = buildInviteEmail(guestName, ownerName, planName, invitation.id);
 
-    const emailRes = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+    const emailRes = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendKey}`,
+        "Content-Type":  "application/json",
+      },
       body: JSON.stringify({
-        from: 'GranaEvo <noreply@granaevo.com>',
-        to: [guestEmailNorm],
+        from:    "GranaEvo <noreply@granaevo.com>",
+        to:      [guestEmail],
         subject: `🎉 ${ownerName} te convidou para o GranaEvo!`,
-        html: emailHtml,
+        html:    emailHtml,
       }),
-    })
+    });
 
     if (!emailRes.ok) {
-      const errText = await emailRes.text()
-      console.error('Resend error:', errText)
-      throw new Error('Erro ao enviar email de convite.')
+      const errText = await emailRes.text();
+      console.error("[send-guest-invite] Resend error:", errText);
+      await supabaseAdmin.from("guest_invitations").delete().eq("id", invitation.id);
+      return json({ success: false, error: "Erro ao enviar email de convite." }, 500);
     }
+
+    console.log(`[send-guest-invite] Convite enviado para ${guestEmail} por ${user.id.slice(0, 8)}...`);
 
     return new Response(
       JSON.stringify({ success: true, code, expiresAt, invitationId: invitation.id }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    )
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
 
-  } catch (error: any) {
-    console.error('❌ send-guest-invite:', error)
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-    )
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : "Erro desconhecido";
+    console.error("[send-guest-invite] Erro inesperado:", errMsg);
+    return json({ success: false, error: "Erro interno. Tente novamente." }, 500);
   }
-})
+});
 
-function buildInviteEmail(guestName: string, ownerName: string, planName: string, invId: string): string {
-  const inviteUrl = `https://granaevo.com/convidados?ref=${invId}`
-  return `
-<!DOCTYPE html>
+// ─── Template de email do convite ─────────────────────────────────────────────
+function buildInviteEmail(
+  guestName:  string,
+  ownerName:  string,
+  planName:   string,
+  invId:      string
+): string {
+  const inviteUrl = `https://granaevo.com/convidados?ref=${encodeURIComponent(invId)}`;
+
+  return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -208,7 +312,10 @@ function buildInviteEmail(guestName: string, ownerName: string, planName: string
     .footer-copy { font-size:12px; color:#334155; line-height:1.6; }
     .outer { text-align:center; padding-top:28px; }
     .outer span { font-size:12px; color:#1e293b; }
-    @media (max-width:600px) { .body,.header,.footer { padding-left:24px; padding-right:24px; } .h1 { font-size:22px; } }
+    @media (max-width:600px) {
+      .body,.header,.footer { padding-left:24px; padding-right:24px; }
+      .h1 { font-size:22px; }
+    }
   </style>
 </head>
 <body>
@@ -229,7 +336,7 @@ function buildInviteEmail(guestName: string, ownerName: string, planName: string
         <span class="eyebrow">Convite Especial ✦</span>
         <div class="h1">Olá, ${guestName}! 🎉</div>
         <p class="text">
-          Você recebeu um convite exclusivo para acessar a conta <strong>GranaEvo</strong> de um amigo ou familiar. 
+          Você recebeu um convite exclusivo para acessar a conta <strong>GranaEvo</strong> de um amigo ou familiar.
           Com o GranaEvo vocês poderão organizar as finanças juntos, de forma simples e segura.
         </p>
         <div class="divider"></div>
@@ -249,7 +356,7 @@ function buildInviteEmail(guestName: string, ownerName: string, planName: string
         <div class="info-box">
           <div class="info-label">⚠️ Importante</div>
           <div class="info-text">
-            Você precisará do <strong>código de 6 dígitos</strong> fornecido por <strong>${ownerName}</strong> 
+            Você precisará do <strong>código de 6 dígitos</strong> fornecido por <strong>${ownerName}</strong>
             para ativar sua conta. Solicite-o diretamente a ele(a) antes de prosseguir.<br><br>
             Se você não solicitou este convite, ignore este email com segurança.
           </div>
@@ -257,13 +364,15 @@ function buildInviteEmail(guestName: string, ownerName: string, planName: string
       </div>
       <div class="footer">
         <div class="footer-brand">GranaEvo</div>
-        <div class="footer-copy">© 2026 GranaEvo. Todos os direitos reservados.<br>
-        Você recebeu este email porque alguém utilizou seu endereço em um convite.</div>
+        <div class="footer-copy">
+          © 2026 GranaEvo. Todos os direitos reservados.<br>
+          Você recebeu este email porque alguém utilizou seu endereço em um convite.
+        </div>
       </div>
     </div>
-    <div class="outer"><span>Evolua suas finanças com inteligência · granaevo.vercel.app</span></div>
+    <div class="outer"><span>Evolua suas finanças com inteligência · granaevo.com</span></div>
   </div>
 </div>
 </body>
-</html>`
+</html>`;
 }

@@ -1,12 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// Webhook server-to-server — sem CORS para browser
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cakto-signature',
+  'Access-Control-Allow-Origin': 'none',
+  'Access-Control-Allow-Headers': 'content-type, x-cakto-signature',
 }
 
-// ✅ Hash SHA-256 via Web Crypto API (Deno nativo — sem dependência externa)
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc    = new TextEncoder()
+  const aBytes = enc.encode(a)
+  const bBytes = enc.encode(b)
+  if (aBytes.length !== bBytes.length) return false
+  let diff = 0
+  for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i]
+  return diff === 0
+}
+
 async function hashSensitiveData(value: string | null): Promise<string | null> {
   if (!value) return null
   const encoder = new TextEncoder()
@@ -21,9 +31,7 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  console.log('🔔 ========== WEBHOOK CAKTO RECEBIDO ==========')
-  console.log('📅 Timestamp:', new Date().toISOString())
-  console.log('🌐 Headers:', Object.fromEntries(req.headers))
+  console.log('[webhook-cakto] Recebido:', new Date().toISOString())
 
   try {
     const supabase = createClient(
@@ -31,40 +39,36 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    // Ler body
     const rawBody = await req.text()
-    console.log('📦 Raw Body:', rawBody)
 
-    // Parsear payload
     let payload
     try {
       payload = JSON.parse(rawBody)
-      console.log('✅ Payload parseado:', JSON.stringify(payload, null, 2))
     } catch (e) {
-      console.error('❌ Erro ao parsear JSON:', e.message)
+      console.error('[webhook-cakto] Payload inválido:', e.message)
       throw new Error('Payload inválido')
     }
 
-    // ✅ CORREÇÃO: sem fallback hardcoded — se env var não existir, rejeita tudo
-    const webhookSecret = Deno.env.get('CAKTO_WEBHOOK_SECRET') 
+    // Extrair e apagar secret do payload antes de qualquer log
+    const receivedSecret = payload.secret ?? ''
+    delete payload.secret
+
+    const webhookSecret = Deno.env.get('CAKTO_WEBHOOK_SECRET')
     if (!webhookSecret) {
-      console.error('❌ CAKTO_WEBHOOK_SECRET não configurado nas env vars')
+      console.error('[webhook-cakto] CAKTO_WEBHOOK_SECRET não configurado')
       return new Response(
         JSON.stringify({ error: 'Webhook não configurado' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       )
     }
 
-    const receivedSecret = payload.secret
-    if (receivedSecret !== webhookSecret) {
-      console.error('❌ Secret inválido!')
-      console.error('Recebido:', receivedSecret)
+    if (!timingSafeEqual(receivedSecret, webhookSecret)) {
+      console.warn('[webhook-cakto] Secret inválido — acesso bloqueado')
       return new Response(
         JSON.stringify({ error: 'Invalid secret' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       )
     }
-    console.log('✅ Secret válido')
 
     // Extrair dados do evento
     const eventType = payload.event || 'unknown'
@@ -84,10 +88,7 @@ serve(async (req) => {
     const rawPhone = (customer.phone || orderData.phone || '').replace(/\D/g, '')
     const phone = (rawPhone.length >= 10 && rawPhone.length <= 11) ? rawPhone : null
 
-    console.log('🏷️ Tipo de evento:', eventType)
-    console.log('🆔 Order ID:', caktoOrderId)
-    console.log('📊 Status do pedido:', orderData.status)
-    console.log('👤 Cliente:', { email, name, cpf: cpf ? '[PRESENTE]' : 'null', phone: phone ? '[PRESENTE]' : 'null' })
+    console.log(`[webhook-cakto] event=${eventType} order=${caktoOrderId} status=${orderData.status}`)
 
     // Salvar evento bruto
     const { data: eventLog, error: logError } = await supabase
@@ -111,10 +112,8 @@ serve(async (req) => {
       .single()
 
     if (logError) {
-      console.error('⚠️ Erro ao salvar log:', logError)
+      console.error('[webhook-cakto] Erro ao salvar log:', logError.message)
       throw new Error(`Erro ao salvar evento: ${logError.message}`)
-    } else {
-      console.log('✅ Evento salvo em payment_events:', eventLog.id)
     }
 
     // Processar evento
@@ -135,8 +134,6 @@ serve(async (req) => {
         statusLower === 'pago' ||
         statusLower === 'aprovado'
       ) {
-        console.log('💚 ===== PROCESSANDO APROVAÇÃO =====')
-        console.log(`Razão: evento="${eventType}" status="${orderData.status}"`)
         result = await handleApproval(supabase, orderData, caktoOrderId, { email, name, cpf, phone })
       }
       else if (
@@ -145,7 +142,6 @@ serve(async (req) => {
         statusLower === 'refunded' ||
         statusLower === 'reembolsado'
       ) {
-        console.log('💰 ===== PROCESSANDO REEMBOLSO =====')
         result = await handleRefund(supabase, orderData, caktoOrderId)
       }
       else if (
@@ -155,7 +151,6 @@ serve(async (req) => {
         statusLower === 'canceled' ||
         statusLower === 'cancelado'
       ) {
-        console.log('🚫 ===== PROCESSANDO CANCELAMENTO =====')
         result = await handleCancellation(supabase, orderData, caktoOrderId)
       }
       else if (
@@ -165,11 +160,10 @@ serve(async (req) => {
         statusLower === 'disputed' ||
         statusLower === 'chargeback'
       ) {
-        console.log('⚠️ ===== PROCESSANDO DISPUTA =====')
         result = await handleDispute(supabase, orderData, caktoOrderId)
       }
       else {
-        console.log(`ℹ️ Evento "${eventType}" com status "${orderData.status}" registrado mas não processado`)
+        console.log(`[webhook-cakto] Evento "${eventType}" registrado sem ação`)
         result = {
           message: 'Evento registrado sem ação',
           event_type: eventType,
@@ -187,10 +181,10 @@ serve(async (req) => {
         })
         .eq('id', eventLog.id)
 
-      console.log('✅ ========== WEBHOOK PROCESSADO COM SUCESSO ==========')
+      console.log(`[webhook-cakto] Processado com sucesso: order=${caktoOrderId}`)
 
     } catch (processingError) {
-      console.error('❌ Erro ao processar evento:', processingError)
+      console.error('[webhook-cakto] Erro ao processar evento:', processingError)
 
       await supabase
         .from('payment_events')
@@ -217,10 +211,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('❌ ========== ERRO NO WEBHOOK ==========')
-    console.error('Mensagem:', error.message)
-    console.error('Stack:', error.stack)
-
+    console.error('[webhook-cakto] Erro:', error.message)
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
@@ -237,8 +228,6 @@ async function handleApproval(
   caktoOrderId: string,
   customerData: { email: string, name: string, cpf: string | null, phone: string | null }
 ) {
-  console.log('💚 Processando aprovação...')
-
   let { email, name, cpf, phone } = customerData
 
   if (!email) {
@@ -248,33 +237,17 @@ async function handleApproval(
   // Validar CPF
   if (cpf) {
     cpf = cpf.replace(/\D/g, '')
-    if (cpf.length !== 11) {
-      console.warn('⚠️ CPF inválido, será salvo como null')
-      cpf = null
-    }
+    if (cpf.length !== 11) cpf = null
   }
 
-  // Validar telefone
   if (phone) {
     phone = phone.replace(/\D/g, '')
-    if (phone.length < 10 || phone.length > 11) {
-      console.warn('⚠️ Telefone inválido, será salvo como null')
-      phone = null
-    }
+    if (phone.length < 10 || phone.length > 11) phone = null
   }
 
-  // ✅ CORREÇÃO: hash antes de salvar — CPF e telefone nunca vão ao banco em texto puro
   const cpfHash   = await hashSensitiveData(cpf)
   const phoneHash = await hashSensitiveData(phone)
 
-  console.log('✅ Dados validados:', {
-    email,
-    name,
-    cpf:   cpf   ? '[HASH GERADO]' : 'null',
-    phone: phone ? '[HASH GERADO]' : 'null'
-  })
-
-  // Produto/Plano
   const offer = orderData.offer || {}
   const product = orderData.product || {}
   const productName = offer.name || product.name || orderData.product_name || 'Unknown'
@@ -285,8 +258,7 @@ async function handleApproval(
   if (nameLower.includes('casal')) planName = 'Casal'
   else if (nameLower.includes('família') || nameLower.includes('familia')) planName = 'Família'
 
-  console.log('📋 Produto:', productName)
-  console.log('📋 Plano identificado:', planName)
+  console.log(`[webhook-cakto] Aprovação: email=${email} plano=${planName}`)
 
   // Buscar plano
   const { data: plan, error: planError } = await supabase
@@ -296,11 +268,9 @@ async function handleApproval(
     .single()
 
   if (planError || !plan) {
-    console.error('❌ Plano não encontrado:', planName, planError)
+    console.error(`[webhook-cakto] Plano não encontrado: ${planName}`)
     throw new Error(`Plano "${planName}" não encontrado no banco de dados`)
   }
-
-  console.log('✅ Plano encontrado:', plan)
 
   // Verificar se já existe subscription com este cakto_order_id
   const { data: existingByOrderId } = await supabase
@@ -310,7 +280,6 @@ async function handleApproval(
     .maybeSingle()
 
   if (existingByOrderId) {
-    console.log('📝 Atualizando subscription existente (por order_id):', existingByOrderId.id)
 
     const { error: updateError } = await supabase
       .from('subscriptions')
@@ -326,12 +295,7 @@ async function handleApproval(
       })
       .eq('id', existingByOrderId.id)
 
-    if (updateError) {
-      console.error('❌ Erro ao atualizar subscription:', updateError)
-      throw updateError
-    }
-
-    console.log('✅ Subscription atualizada com sucesso')
+    if (updateError) throw updateError
 
     if (!existingByOrderId.password_created) {
       await enviarEmailBoasVindas(email, name, planName)
@@ -350,8 +314,6 @@ async function handleApproval(
     .maybeSingle()
 
   if (existingByEmail) {
-    console.log('📝 Já existe subscription ativa para este email:', existingByEmail.id)
-
     const { error: updateError } = await supabase
       .from('subscriptions')
       .update({
@@ -365,17 +327,12 @@ async function handleApproval(
       })
       .eq('id', existingByEmail.id)
 
-    if (updateError) {
-      console.error('❌ Erro ao atualizar subscription por email:', updateError)
-      throw updateError
-    }
+    if (updateError) throw updateError
 
-    console.log('✅ Subscription existente atualizada com novo order_id')
-    return { action: 'updated_existing', subscription_id: existingByEmail.id, note: 'Subscription já existia para este email' }
+    return { action: 'updated_existing', subscription_id: existingByEmail.id }
   }
 
   // Criar nova subscription
-  console.log('🆕 Criando nova subscription')
 
   const { data: newSub, error: insertError } = await supabase
     .from('subscriptions')
@@ -395,19 +352,13 @@ async function handleApproval(
     .select()
     .single()
 
-  if (insertError) {
-    console.error('❌ Erro ao criar subscription:', insertError)
-    throw insertError
-  }
+  if (insertError) throw insertError
 
-  console.log('✅ Subscription criada:', newSub.id)
-  console.log('📧 Cliente cadastrado:', email)
+  console.log(`[webhook-cakto] Subscription criada: ${newSub.id}`)
 
   await enviarEmailBoasVindas(email, name, planName)
 
-  console.log('🔗 Link de primeiro acesso: https://granaevo.vercel.app/primeiroacesso.html')
-
-  return { action: 'created', subscription_id: newSub.id, email, name }
+  return { action: 'created', subscription_id: newSub.id }
 }
 
 // ==========================================
@@ -415,8 +366,6 @@ async function handleApproval(
 // ==========================================
 async function enviarEmailBoasVindas(email: string, name: string, planName: string) {
   try {
-    console.log('📧 Enviando email de boas-vindas...')
-
     const emailResponse = await fetch(
       `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-welcome-email`,
       {
@@ -429,15 +378,11 @@ async function enviarEmailBoasVindas(email: string, name: string, planName: stri
       }
     )
 
-    if (emailResponse.ok) {
-      const emailResult = await emailResponse.json()
-      console.log('✅ Email de boas-vindas enviado:', emailResult.email_id)
-    } else {
-      const errorData = await emailResponse.json()
-      console.error('⚠️ Falha ao enviar email (não crítico):', errorData)
+    if (!emailResponse.ok) {
+      console.error('[webhook-cakto] Falha ao enviar email de boas-vindas (não crítico)')
     }
   } catch (emailError) {
-    console.error('⚠️ Erro ao enviar email (não crítico):', emailError)
+    console.error('[webhook-cakto] Erro ao enviar email (não crítico):', emailError)
   }
 }
 
@@ -452,7 +397,7 @@ async function handleRefund(supabase: any, orderData: any, caktoOrderId: string)
     .maybeSingle()
 
   if (!sub) {
-    console.warn('⚠️ Subscription não encontrada para reembolso:', caktoOrderId)
+    console.warn(`[webhook-cakto] Subscription não encontrada para reembolso: ${caktoOrderId}`)
     return { action: 'not_found', message: 'Subscription não encontrada' }
   }
 
@@ -481,7 +426,6 @@ async function handleRefund(supabase: any, orderData: any, caktoOrderId: string)
     })
   }
 
-  console.log('✅ Reembolso processado para subscription:', sub.id)
   return { action: 'refunded', subscription_id: sub.id }
 }
 
@@ -500,7 +444,6 @@ async function handleCancellation(supabase: any, orderData: any, caktoOrderId: s
 
   if (updateError) throw updateError
 
-  console.log('✅ Cancelamento processado para order:', caktoOrderId)
   return { action: 'cancelled', order_id: caktoOrderId }
 }
 
@@ -515,7 +458,7 @@ async function handleDispute(supabase: any, orderData: any, caktoOrderId: string
     .maybeSingle()
 
   if (!sub) {
-    console.warn('⚠️ Subscription não encontrada para disputa:', caktoOrderId)
+    console.warn(`[webhook-cakto] Subscription não encontrada para disputa: ${caktoOrderId}`)
     return { action: 'not_found' }
   }
 
@@ -542,6 +485,5 @@ async function handleDispute(supabase: any, orderData: any, caktoOrderId: string
     })
   }
 
-  console.log('✅ Disputa processada para subscription:', sub.id)
   return { action: 'disputed', subscription_id: sub.id }
 }
