@@ -1521,10 +1521,10 @@ function atualizarNomeUsuario() {
     // Card de perfil na aba Configurações
     const cfgNomeEl   = document.getElementById('cfgUserNome');
     const cfgPlanoEl  = document.getElementById('cfgUserPlano');
+    const cfgPhotoEl  = document.getElementById('cfgUserPhoto');
     const cfgAvatarEl = document.getElementById('cfgUserAvatar');
-    if (cfgNomeEl)   cfgNomeEl.textContent   = nome;
-    if (cfgPlanoEl)  cfgPlanoEl.textContent  = plano;
-    if (cfgAvatarEl) cfgAvatarEl.textContent = nome.trim().charAt(0).toUpperCase() || '?';
+    if (cfgNomeEl)  cfgNomeEl.textContent  = nome;
+    if (cfgPlanoEl) cfgPlanoEl.textContent = plano;
 
     // Helper: atualiza par (img + fallback) com a mesma lógica
     const _syncFoto = (photoEl, fbEl) => {
@@ -1545,6 +1545,7 @@ function atualizarNomeUsuario() {
 
     _syncFoto(userPhotoEl, userPhotoFallbackEl);   // sidebar
     _syncFoto(mobilePhotoEl, mobilePhotoFbEl);     // mobile topbar
+    _syncFoto(cfgPhotoEl,   cfgAvatarEl);          // card de perfil em Configurações
 }
 
 // Magic bytes das extensões permitidas
