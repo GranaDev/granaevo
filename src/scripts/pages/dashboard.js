@@ -2787,6 +2787,7 @@ function criarPopup(html) {
     const box = document.createElement('div');
     box.className = 'popup';
     box.innerHTML = htmlSanitizado;
+    _aplicarEstilosCSOM(box);
     container.appendChild(box);
 
     overlay.classList.add('active');
@@ -2924,6 +2925,23 @@ function sanitizarHTMLPopup(html) {
     });
 
     return doc.body.innerHTML;
+}
+
+// ── Converte atributos style em propriedades CSSOM (não bloqueadas pela CSP style-src)
+function _aplicarEstilosCSOM(container) {
+    container.querySelectorAll('[style]').forEach(el => {
+        const styleVal = el.getAttribute('style') || '';
+        el.removeAttribute('style');
+        styleVal.split(';').forEach(decl => {
+            const colonIdx = decl.indexOf(':');
+            if (colonIdx === -1) return;
+            const prop = decl.slice(0, colonIdx).trim();
+            const val  = decl.slice(colonIdx + 1).trim();
+            if (!prop || !val) return;
+            const camel = prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+            try { el.style[camel] = val; } catch (_) {}
+        });
+    });
 }
 
 // ========== POPUP VIA DOM (SEM innerHTML COM DADOS DO USUÁRIO) ==========
@@ -4384,7 +4402,11 @@ function renderMetaVisual() {
     ctxLine.clearRect(0, 0, line.width, line.height);
     
     if(!metaSelecionadaId) {
-        details.innerHTML = '<div style="color: var(--text-secondary);">Selecione uma reserva para ver detalhes e gráficos</div>';
+        details.innerHTML = '';
+        const _emptyMsg = document.createElement('div');
+        _emptyMsg.className = 'text-secondary';
+        _emptyMsg.textContent = 'Selecione uma reserva para ver detalhes e gráficos';
+        details.appendChild(_emptyMsg);
         const progressEl = document.getElementById('metaProgress');
         if(progressEl) progressEl.textContent = 'Selecione uma reserva';
         const btnRetirar = document.getElementById('btnRetirar');
@@ -4394,7 +4416,11 @@ function renderMetaVisual() {
     
     const meta = metas.find(m => String(m.id) === String(metaSelecionadaId));
     if(!meta) {
-        details.innerHTML = '<div style="color: var(--text-secondary);">Meta não encontrada</div>';
+        details.innerHTML = '';
+        const _notFound = document.createElement('div');
+        _notFound.className = 'text-secondary';
+        _notFound.textContent = 'Meta não encontrada';
+        details.appendChild(_notFound);
         const btnRetirar = document.getElementById('btnRetirar');
         if(btnRetirar) btnRetirar.style.display = 'none';
         return;
@@ -6996,8 +7022,8 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                 <div id="listaCartoesRelatorio"></div>
             </div>`;
 
-        // ✅ CORREÇÃO: aplica _sanitizarHTMLRelatorio (DOMParser) antes de injetar no DOM
         resultado.innerHTML = _sanitizarHTMLRelatorio(html);
+        _aplicarEstilosCSOM(resultado);
         resultado.style.display = 'block';
 
         const listaCartoes = document.getElementById('listaCartoesRelatorio');
@@ -7224,6 +7250,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
     //    Crítico para planos Família/Casal onde dados do dono são exibidos para membros convidados.
     if (html) {
         resultado.insertAdjacentHTML('beforeend', _sanitizarHTMLRelatorio(html));
+        _aplicarEstilosCSOM(resultado);
     }
     resultado.style.display = 'block';
 

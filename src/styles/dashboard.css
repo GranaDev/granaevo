@@ -4,6 +4,7 @@
 
 /* ========== UTILITÁRIOS — sem unsafe-inline ========== */
 .js-hidden      { display: none !important; }
+.text-secondary { color: var(--text-secondary, #b0b3c1); }
 .promo-bloco    { margin-top: 32px; text-align: center; cursor: pointer; transition: all 0.3s; }
 .promo-emoji    { font-size: 3rem; margin-bottom: 12px; }
 .promo-titulo   { margin-bottom: 8px; color: var(--text-primary, #fff); }
