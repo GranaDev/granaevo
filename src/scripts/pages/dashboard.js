@@ -586,6 +586,8 @@ const _validators = {
         if (typeof c.nomeBanco !== 'string' || c.nomeBanco.length > 100)                        return false;
         if (typeof c.limite !== 'number' || c.limite <= 0 || c.limite > 9999999)                return false;
         if (!Number.isInteger(c.vencimentoDia) || c.vencimentoDia < 1 || c.vencimentoDia > 28) return false;
+        if (c.fechamentoDia !== undefined && c.fechamentoDia !== null &&
+            (!Number.isInteger(c.fechamentoDia) || c.fechamentoDia < 1 || c.fechamentoDia > 28)) return false;
 
         // ✅ CORREÇÃO: valida `usado` — impede valor negativo que inflaria o limite disponível
         if (c.usado !== undefined && c.usado !== null) {
@@ -641,7 +643,7 @@ const _ALLOWED_KEYS = Object.freeze({
         'totalParcelas', 'parcelaAtual',
     ]),
     cartao: Object.freeze([
-        'id', 'nomeBanco', 'limite', 'vencimentoDia',
+        'id', 'nomeBanco', 'limite', 'vencimentoDia', 'fechamentoDia',
         'bandeiraImg', 'usado', 'congelado',
     ]),
 });
@@ -3189,14 +3191,18 @@ function lancarTransacao() {
 
         if(!confirm(`Compra de ${formatBRL(valor)} no cartão ${cartao.nomeBanco}, em ${parcelasSel}x de ${formatBRL(valor/parcelasSel)}.\nProsseguir?`)) return;
 
-        let hoje     = new Date();
-        let anoAtual = hoje.getFullYear();
-        let mesAtual = hoje.getMonth() + 1;
-        let diaHoje  = hoje.getDate();
-        let diaFatura = cartao.vencimentoDia;
+        let hoje       = new Date();
+        let anoAtual   = hoje.getFullYear();
+        let mesAtual   = hoje.getMonth() + 1;
+        let diaHoje    = hoje.getDate();
+        // diaFechamento determina qual ciclo a compra pertence (cutoff real do cartão)
+        // fallback para vencimentoDia mantém compatibilidade com cartões antigos sem fechamentoDia
+        let diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia;
+        let diaFatura     = cartao.vencimentoDia;
 
         let proxMes, proxAno;
-        if(diaHoje >= diaFatura) {
+        if(diaHoje >= diaFechamento) {
+            // Fatura já fechou ou fecha hoje → compra vai pro próximo ciclo
             proxMes = mesAtual + 1;
             proxAno = anoAtual;
             if(proxMes > 12) { proxMes = 1; proxAno++; }
@@ -5831,7 +5837,7 @@ function abrirCartaoForm(editId = null) {
     }
 
     // ── Lógica de salvar/editar compartilhada entre os dois modos
-    function _executarSalvar(selectBanco, inputOutro, inputLimite, selectDia, cartaoExistente) {
+    function _executarSalvar(selectBanco, inputOutro, inputLimite, selectFechamento, selectDia, cartaoExistente) {
         let nomeBanco = selectBanco.value;
 
         if (nomeBanco === 'Outro') {
@@ -5842,13 +5848,19 @@ function abrirCartaoForm(editId = null) {
         }
 
         const limiteStr     = inputLimite.value;
+        const fechamentoDia = selectFechamento.value;
         const vencimentoDia = selectDia.value;
 
-        if (!nomeBanco || !limiteStr || !vencimentoDia) { alert('Preencha todos os campos!'); return; }
+        if (!nomeBanco || !limiteStr || !fechamentoDia || !vencimentoDia) { alert('Preencha todos os campos!'); return; }
 
         const limite = parseFloat(parseFloat(limiteStr).toFixed(2));
         if (isNaN(limite) || limite <= 0) { alert('Informe um limite válido e positivo.'); return; }
         if (limite > 9999999)              { alert('Limite máximo permitido: R$ 9.999.999,00.'); return; }
+
+        if (Number(fechamentoDia) === Number(vencimentoDia)) {
+            alert('O dia de fechamento e o dia de vencimento não podem ser iguais.');
+            return;
+        }
 
         const bandeiraImg = bancos.find(b => b.nome === nomeBanco)?.img || '';
 
@@ -5856,17 +5868,19 @@ function abrirCartaoForm(editId = null) {
             // Modo edição
             cartaoExistente.nomeBanco     = nomeBanco;
             cartaoExistente.limite        = limite;
+            cartaoExistente.fechamentoDia = Number(fechamentoDia);
             cartaoExistente.vencimentoDia = Number(vencimentoDia);
             cartaoExistente.bandeiraImg   = bandeiraImg;
         } else {
             // Modo criação
             cartoesCredito.push({
-                id:            nextCartaoId++,
+                id:             nextCartaoId++,
                 nomeBanco,
                 limite,
-                vencimentoDia: Number(vencimentoDia),
+                fechamentoDia:  Number(fechamentoDia),
+                vencimentoDia:  Number(vencimentoDia),
                 bandeiraImg,
-                usado:         0,
+                usado:          0,
             });
         }
 
@@ -5925,10 +5939,17 @@ function abrirCartaoForm(editId = null) {
             inputLimite.min         = '1';
             inputLimite.max         = '9999999';
 
-            // Label + Select dia
+            // Label + Select fechamento
+            const labelFechamento       = document.createElement('label');
+            labelFechamento.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+            labelFechamento.textContent = 'Dia do Fechamento da Fatura:';
+
+            const selectFechamento = _criarSelectDias('novoFechamentoDia', '');
+
+            // Label + Select vencimento
             const labelDia       = document.createElement('label');
             labelDia.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
-            labelDia.textContent = 'Dia da Fatura:';
+            labelDia.textContent = 'Dia do Vencimento da Fatura:';
 
             const selectDia = _criarSelectDias('novoVencimentoDia', '');
 
@@ -5944,7 +5965,7 @@ function abrirCartaoForm(editId = null) {
             btnCancelar.textContent = 'Cancelar';
 
             btnCancelar.addEventListener('click', fecharPopup);
-            btnSalvar.addEventListener('click', () => _executarSalvar(selectBanco, inputOutro, inputLimite, selectDia, null));
+            btnSalvar.addEventListener('click', () => _executarSalvar(selectBanco, inputOutro, inputLimite, selectFechamento, selectDia, null));
 
             _configurarSelectBanco(selectBanco, campoOutro, inputOutro);
 
@@ -5954,6 +5975,8 @@ function abrirCartaoForm(editId = null) {
             popup.appendChild(campoOutro);
             popup.appendChild(labelLimite);
             popup.appendChild(inputLimite);
+            popup.appendChild(labelFechamento);
+            popup.appendChild(selectFechamento);
             popup.appendChild(labelDia);
             popup.appendChild(selectDia);
             popup.appendChild(btnSalvar);
@@ -6012,10 +6035,17 @@ function abrirCartaoForm(editId = null) {
             inputLimite.max         = '9999999';
             inputLimite.value       = parseFloat(c.limite); // ✅ .value — não atributo HTML
 
-            // Label + Select dia (pré-selecionado)
+            // Label + Select fechamento (pré-selecionado)
+            const labelFechamento       = document.createElement('label');
+            labelFechamento.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+            labelFechamento.textContent = 'Dia do Fechamento da Fatura:';
+
+            const selectFechamento = _criarSelectDias('novoFechamentoDia', c.fechamentoDia ?? '');
+
+            // Label + Select vencimento (pré-selecionado)
             const labelDia       = document.createElement('label');
             labelDia.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
-            labelDia.textContent = 'Dia da Fatura:';
+            labelDia.textContent = 'Dia do Vencimento da Fatura:';
 
             const selectDia = _criarSelectDias('novoVencimentoDia', c.vencimentoDia);
 
@@ -6036,7 +6066,7 @@ function abrirCartaoForm(editId = null) {
             btnExcluir.textContent = 'Excluir';
 
             btnCancelar.addEventListener('click', fecharPopup);
-            btnSalvar.addEventListener('click', () => _executarSalvar(selectBanco, inputOutro, inputLimite, selectDia, c));
+            btnSalvar.addEventListener('click', () => _executarSalvar(selectBanco, inputOutro, inputLimite, selectFechamento, selectDia, c));
             btnExcluir.addEventListener('click', () => {
                 if (confirm('Excluir cartão? Todas as compras futuras vinculadas a ele serão removidas.')) {
                     cartoesCredito = cartoesCredito.filter(x => x.id !== editId);
@@ -6058,6 +6088,8 @@ function abrirCartaoForm(editId = null) {
             popup.appendChild(campoOutro);
             popup.appendChild(labelLimite);
             popup.appendChild(inputLimite);
+            popup.appendChild(labelFechamento);
+            popup.appendChild(selectFechamento);
             popup.appendChild(labelDia);
             popup.appendChild(selectDia);
             popup.appendChild(btnSalvar);
@@ -6124,8 +6156,9 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
             { iconCls: 'fas fa-arrow-trend-up',  label: 'Valor Usado',       value: formatBRL(usado),                    color: '#ff4b4b' },
             { iconCls: 'fas fa-circle-check',    label: 'Disponível',         value: formatBRL(disponivel),               color: '#00ff99' },
             { iconCls: 'fas fa-chart-pie',       label: '% Utilizado',        value: `${percUsado.toFixed(1)}%`,          color: percUsado > 80 ? '#ff4b4b' : '#00ff99' },
-            { iconCls: 'fas fa-file-invoice',    label: 'Fatura em Aberto',   value: formatBRL(totalFatura),              color: '#ffd166' },
-            { iconCls: 'fas fa-calendar-day',    label: 'Vencimento',         value: `Todo dia ${cartao.vencimentoDia}`,  color: 'var(--primary)' },
+            { iconCls: 'fas fa-file-invoice',    label: 'Fatura em Aberto',   value: formatBRL(totalFatura),                                                                   color: '#ffd166' },
+            { iconCls: 'fas fa-calendar-xmark',  label: 'Fechamento',          value: cartao.fechamentoDia ? `Todo dia ${cartao.fechamentoDia}` : '— (edite o cartão)',         color: '#ff9f43' },
+            { iconCls: 'fas fa-calendar-day',    label: 'Vencimento',          value: `Todo dia ${cartao.vencimentoDia}`,                                                        color: 'var(--primary)' },
         ];
 
         statsData.forEach(s => {
