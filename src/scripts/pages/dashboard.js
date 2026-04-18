@@ -6385,9 +6385,14 @@ function inicializarGraficos() {
     // pois era bloqueada pelo setter e gerava erro silencioso
 
     function _ativarGraficos() {
-        if (typeof configurarFiltros    === 'function') configurarFiltros();
-        if (typeof configurarViewButtons === 'function') configurarViewButtons();
-        if (typeof configurarComparacao  === 'function') configurarComparacao();
+        // Chama a inicialização própria de graficos.js (window.inicializarGraficos).
+        // Isso captura _dataManager, vincula o click do btnGerarGraficos e configura
+        // filtros/viewButtons/comparacao — tudo que o DOMContentLoaded faria.
+        // As funções têm guards internos (ex: options.length === 0) que evitam
+        // duplicação se o usuário sair e voltar para a aba de gráficos.
+        if (typeof window.inicializarGraficos === 'function') {
+            window.inicializarGraficos();
+        }
     }
 
     // Módulo já carregado — chama direto sem novo download
@@ -6396,7 +6401,7 @@ function inicializarGraficos() {
         return;
     }
 
-    // Já está carregando (duplo clique / navegação rápida) — aguarda via polling
+    // Já está carregando (duplo clique / navegação rápida) — aguarda
     if (_graficosCarregando) return;
 
     _graficosCarregando = true;
