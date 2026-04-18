@@ -3128,7 +3128,7 @@ function atualizarCamposCredito() {
     }
 
     if (catVal === 'saida_credito') {
-        creditDiv.style.display = 'flex';
+        creditDiv.classList.remove('js-hidden');
         cartaoSelect.innerHTML  = '';
 
         if (cartoesCredito.length === 0) {
@@ -3155,7 +3155,7 @@ function atualizarCamposCredito() {
             cartaoSelect.disabled = false;
         }
     } else {
-        creditDiv.style.display = 'none';
+        creditDiv.classList.add('js-hidden');
     }
 }
 
@@ -6452,7 +6452,7 @@ function setupBotoesRelatorio() {
         newBtnFamilia.classList.remove('active');
         perfilSelector.classList.add('show');
         const resultado = document.getElementById('relatorioResultado');
-        if (resultado) resultado.style.display = 'none';
+        if (resultado) resultado.classList.add('js-hidden');
         popularFiltrosRelatorio();
     });
     
@@ -6467,10 +6467,10 @@ function setupBotoesRelatorio() {
         newBtnFamilia.classList.remove('active');
         perfilSelector.classList.remove('show');
         const resultado = document.getElementById('relatorioResultado');
-        if (resultado) resultado.style.display = 'none';
+        if (resultado) resultado.classList.add('js-hidden');
         popularFiltrosRelatorio();
     });
-    
+
     newBtnFamilia.addEventListener('click', function () {
         if (!Array.isArray(usuarioLogado?.perfis) || usuarioLogado.perfis.length < 2) {
             alert('Você precisa ter pelo menos 2 perfis para gerar relatório da família!');
@@ -6482,7 +6482,7 @@ function setupBotoesRelatorio() {
         newBtnFamilia.classList.add('active');
         perfilSelector.classList.remove('show');
         const resultado = document.getElementById('relatorioResultado');
-        if (resultado) resultado.style.display = 'none';
+        if (resultado) resultado.classList.add('js-hidden');
         popularFiltrosRelatorio();
     });
 }
@@ -6772,7 +6772,7 @@ window.gerarRelatorioCompartilhadoPersonalizado = async function gerarRelatorioC
                 </p>
             </div>
         `;
-        resultado.style.display = 'block';
+        resultado.classList.remove('js-hidden');
         return;
     }
 
@@ -6816,7 +6816,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
             div.appendChild(h3);
             div.appendChild(p);
             resultado.appendChild(div);
-            resultado.style.display = 'block';
+            resultado.classList.remove('js-hidden');
         }
         return;
     }
@@ -6919,7 +6919,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         div.appendChild(h3);
         div.appendChild(p);
         resultado.appendChild(div);
-        resultado.style.display = 'block';
+        resultado.classList.remove('js-hidden');
         return;
     }
 
@@ -7024,7 +7024,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
 
         resultado.innerHTML = _sanitizarHTMLRelatorio(html);
         _aplicarEstilosCSOM(resultado);
-        resultado.style.display = 'block';
+        resultado.classList.remove('js-hidden');
 
         const listaCartoes = document.getElementById('listaCartoesRelatorio');
         if (listaCartoes) {
@@ -7252,7 +7252,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         resultado.insertAdjacentHTML('beforeend', _sanitizarHTMLRelatorio(html));
         _aplicarEstilosCSOM(resultado);
     }
-    resultado.style.display = 'block';
+    resultado.classList.remove('js-hidden');
 
     if (metasPerfil.length > 0) {
         const selectMeta = document.getElementById('selectMetaRelatorio');
@@ -7336,11 +7336,11 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
                     <p>Você precisa ter pelo menos 2 perfis cadastrados para gerar este tipo de relatório.</p>
                 </div>
             `);
-            resultado.style.display = 'block';
+            resultado.classList.remove('js-hidden');
         }
         return;
     }
-    
+
     let mesAnterior, anoAnterior;
     if (mes === '01') {
         mesAnterior = '12';
@@ -7469,10 +7469,10 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
                 </p>
             </div>
         `);
-        resultado.style.display = 'block';
+        resultado.classList.remove('js-hidden');
         return;
     }
-    
+
     renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior, anoAnterior);
 }
 
@@ -7670,7 +7670,7 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
     //    Agora: passa pelo DOMParser com whitelist CSS, remoção de on*, tags perigosas
     //           e bloqueio de esquemas javascript:/vbscript:/data: em atributos
     resultado.innerHTML = _sanitizarHTMLRelatorio(html);
-    resultado.style.display = 'block';
+    resultado.classList.remove('js-hidden');
 
     dadosPorPerfil.forEach(d => {
         if (!d?.perfil?.id) return;
