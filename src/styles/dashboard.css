@@ -1821,6 +1821,28 @@ select.form-input option:checked {
     padding: 14px 2px 6px;
 }
 
+.btn-load-more {
+    display: block;
+    width: 100%;
+    padding: 14px 20px;
+    margin-top: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 14px;
+    color: var(--text-secondary, #a0aec0);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.btn-load-more:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: var(--text-primary, #fff);
+}
+
 .mov-item {
     background: rgba(255, 255, 255, 0.04);
     backdrop-filter: blur(12px) saturate(140%);

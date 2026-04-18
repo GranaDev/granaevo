@@ -15,14 +15,15 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Frame-Options",        "value": "DENY"                            },
-        { "key": "X-Content-Type-Options", "value": "nosniff"                         },
-        { "key": "X-XSS-Protection",       "value": "1; mode=block"                   },
-        { "key": "Referrer-Policy",        "value": "strict-origin-when-cross-origin" },
-        { "key": "Cache-Control",          "value": "no-transform"                    },
+        { "key": "X-Frame-Options",                      "value": "DENY"                            },
+        { "key": "X-Content-Type-Options",               "value": "nosniff"                         },
+        { "key": "X-XSS-Protection",                     "value": "1; mode=block"                   },
+        { "key": "X-Permitted-Cross-Domain-Policies",    "value": "none"                            },
+        { "key": "Referrer-Policy",                      "value": "strict-origin-when-cross-origin" },
+        { "key": "Cache-Control",                        "value": "no-transform"                    },
         {
           "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=(), browsing-topics=(), join-ad-interest-group=(), run-ad-auction=()"
+          "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=(), browsing-topics=(), join-ad-interest-group=(), run-ad-auction=(), screen-wake-lock=(), serial=(), web-share=(), xr-spatial-tracking=()"
         },
         {
           "key": "Strict-Transport-Security",
@@ -143,14 +144,14 @@
     {
       "source": "/(.*)\\.css",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
       ]
     },
 
     {
       "source": "/(.*)\\.js",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
       ]
     }
 

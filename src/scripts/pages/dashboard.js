@@ -3505,24 +3505,41 @@ function bindFiltrosMovimentacoes() {
     if (mesEl) mesEl.value = new Date().getMonth();
 }
 
-function atualizarMovimentacoesUI() {
+// Paginação das movimentações — 50 itens por página para não sobrecarregar o DOM
+const MOV_POR_PAGINA = 50;
+let _movPaginaAtual  = 1;
+
+function _renderizarItemMovimentacao(t, lista) {
+    const dataExibida = _sanitizeText(t.data || '');
+    return { dataExibida, t };
+}
+
+function atualizarMovimentacoesUI(resetPagina = true) {
     const lista = document.getElementById('listaMovimentacoes');
     if (!lista) return;
 
+    if (resetPagina) _movPaginaAtual = 1;
+
     lista.innerHTML = '';
 
-    const arr = filtrarTransacoesParaUI().slice().reverse();
+    const todos   = filtrarTransacoesParaUI().slice().reverse();
+    const total   = todos.length;
+    const visivel = todos.slice(0, _movPaginaAtual * MOV_POR_PAGINA);
+    const restam  = total - visivel.length;
 
-    if (arr.length === 0) {
+    if (total === 0) {
         const p       = document.createElement('p');
         p.className   = 'empty-state';
         p.textContent = 'Nenhuma movimentação registrada.';
         lista.appendChild(p);
         return;
     }
+
+    // Usar DocumentFragment para inserir todos os itens em um único reflow
+    const frag     = document.createDocumentFragment();
     let ultimaData = null;
 
-    arr.forEach(t => {
+    visivel.forEach(t => {
         const dataExibida = _sanitizeText(t.data || '');
 
         if (dataExibida && dataExibida !== ultimaData) {
@@ -3530,7 +3547,7 @@ function atualizarMovimentacoesUI() {
             const sep       = document.createElement('div');
             sep.className   = 'mov-date-separator';
             sep.textContent = dataExibida;
-            lista.appendChild(sep);
+            frag.appendChild(sep);
         }
 
         const div     = document.createElement('div');
@@ -3576,8 +3593,23 @@ function atualizarMovimentacoesUI() {
         div.appendChild(right);
 
         div.addEventListener('click', () => abrirDetalhesTransacao(t));
-        lista.appendChild(div);
+        frag.appendChild(div);
     });
+
+    lista.appendChild(frag);
+
+    // Botão "Carregar mais" — evita renderizar centenas de itens de uma vez
+    if (restam > 0) {
+        const btnMais       = document.createElement('button');
+        btnMais.className   = 'btn-load-more';
+        btnMais.type        = 'button';
+        btnMais.textContent = `Carregar mais ${Math.min(restam, MOV_POR_PAGINA)} de ${restam} movimentações`;
+        btnMais.addEventListener('click', () => {
+            _movPaginaAtual++;
+            atualizarMovimentacoesUI(false);
+        });
+        lista.appendChild(btnMais);
+    }
 }
 
 function abrirDetalhesTransacao(t) {
@@ -6308,16 +6340,72 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
     });
 }
 
-// ========== GRÁFICOS - DELEGA PARA graficos.js ==========
+// ========== GRÁFICOS - DELEGA PARA graficos.js (LAZY LOAD) ==========
+
+// Estado do carregamento lazy do módulo de gráficos
+let _graficosCarregados  = false;
+let _graficosCarregando  = false;
+
+// SRI do Chart.js 4.4.4 — mantido aqui para validação even no carregamento dinâmico
+const _CHARTJS_SRC       = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
+const _CHARTJS_INTEGRITY = 'sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt';
+const _GRAFICOS_SRC      = 'src/scripts/modules/graficos.js';
+
+function _carregarDependenciasGraficos(callback) {
+    // 1. Chart.js (CDN com SRI)
+    const chartScript         = document.createElement('script');
+    chartScript.src           = _CHARTJS_SRC;
+    chartScript.integrity     = _CHARTJS_INTEGRITY;
+    chartScript.crossOrigin   = 'anonymous';
+    chartScript.referrerPolicy = 'no-referrer';
+
+    chartScript.onerror = () => {
+        _graficosCarregando = false;
+        mostrarNotificacao('Erro ao carregar o módulo de gráficos. Verifique a conexão.', 'error');
+    };
+
+    chartScript.onload = () => {
+        // 2. graficos.js (local)
+        const grafScript     = document.createElement('script');
+        grafScript.src       = _GRAFICOS_SRC;
+        grafScript.onerror   = () => {
+            _graficosCarregando = false;
+            mostrarNotificacao('Erro ao carregar o módulo de gráficos.', 'error');
+        };
+        grafScript.onload    = callback;
+        document.head.appendChild(grafScript);
+    };
+
+    document.head.appendChild(chartScript);
+}
 
 function inicializarGraficos() {
     // ✅ window.* são getters read-only definidos em _inicializarWindowRefs
     // Sincronizados automaticamente com o estado do módulo — reatribuição removida
     // pois era bloqueada pelo setter e gerava erro silencioso
 
-    if (typeof configurarFiltros    === 'function') configurarFiltros();
-    if (typeof configurarViewButtons === 'function') configurarViewButtons();
-    if (typeof configurarComparacao  === 'function') configurarComparacao();
+    function _ativarGraficos() {
+        if (typeof configurarFiltros    === 'function') configurarFiltros();
+        if (typeof configurarViewButtons === 'function') configurarViewButtons();
+        if (typeof configurarComparacao  === 'function') configurarComparacao();
+    }
+
+    // Módulo já carregado — chama direto sem novo download
+    if (_graficosCarregados) {
+        _ativarGraficos();
+        return;
+    }
+
+    // Já está carregando (duplo clique / navegação rápida) — aguarda via polling
+    if (_graficosCarregando) return;
+
+    _graficosCarregando = true;
+
+    _carregarDependenciasGraficos(() => {
+        _graficosCarregados = true;
+        _graficosCarregando = false;
+        _ativarGraficos();
+    });
 }
 
 function atualizarGraficos() {

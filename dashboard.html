@@ -50,6 +50,8 @@
     <link rel="stylesheet" href="src/styles/chat-assistant.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Pré-conexão para Chart.js (carregado sob demanda ao abrir Gráficos) -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet">
@@ -845,10 +847,8 @@
     <!-- Scripts do Sistema -->
     <script type="module" src="src/scripts/pages/dashboard.js?v=7"></script>
     <script type="module" src="src/scripts/modules/chat-assistant.js?v=2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
-            integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
-            crossorigin="anonymous"></script>
-    <script src="src/scripts/modules/graficos.js"></script>
+    <!-- Chart.js e graficos.js são carregados sob demanda em inicializarGraficos() -->
+    <!-- Isso reduz ~300KB do carregamento inicial da página -->
 
 </body>
 </html>
