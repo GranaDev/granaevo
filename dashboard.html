@@ -847,8 +847,9 @@
     <!-- Scripts do Sistema -->
     <script type="module" src="src/scripts/pages/dashboard.js?v=7"></script>
     <script type="module" src="src/scripts/modules/chat-assistant.js?v=2"></script>
-    <!-- Chart.js e graficos.js são carregados sob demanda em inicializarGraficos() -->
-    <!-- Isso reduz ~300KB do carregamento inicial da página -->
+    <!-- graficos.js carregado no HTML para garantir DOMContentLoaded correto -->
+    <!-- Chart.js (~500KB) é carregado sob demanda em inicializarGraficos() -->
+    <script src="src/scripts/modules/graficos.js"></script>
 
 </body>
 </html>

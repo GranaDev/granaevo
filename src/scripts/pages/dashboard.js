@@ -6340,77 +6340,45 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
     });
 }
 
-// ========== GRÁFICOS - DELEGA PARA graficos.js (LAZY LOAD) ==========
+// ========== GRÁFICOS - DELEGA PARA graficos.js ==========
+// graficos.js é carregado no HTML e inicializa via DOMContentLoaded.
+// Aqui apenas garantimos que Chart.js (CDN ~500KB) esteja disponível
+// antes de o usuário tentar gerar gráficos.
 
-// Estado do carregamento lazy do módulo de gráficos
-let _graficosCarregados  = false;
-let _graficosCarregando  = false;
+let _chartJsCarregado   = false;
+let _chartJsCarregando  = false;
 
-// SRI do Chart.js 4.4.4 — mantido aqui para validação even no carregamento dinâmico
 const _CHARTJS_SRC       = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
 const _CHARTJS_INTEGRITY = 'sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt';
-const _GRAFICOS_SRC      = 'src/scripts/modules/graficos.js';
-
-function _carregarDependenciasGraficos(callback) {
-    // 1. Chart.js (CDN com SRI)
-    const chartScript         = document.createElement('script');
-    chartScript.src           = _CHARTJS_SRC;
-    chartScript.integrity     = _CHARTJS_INTEGRITY;
-    chartScript.crossOrigin   = 'anonymous';
-    chartScript.referrerPolicy = 'no-referrer';
-
-    chartScript.onerror = () => {
-        _graficosCarregando = false;
-        mostrarNotificacao('Erro ao carregar o módulo de gráficos. Verifique a conexão.', 'error');
-    };
-
-    chartScript.onload = () => {
-        // 2. graficos.js (local)
-        const grafScript     = document.createElement('script');
-        grafScript.src       = _GRAFICOS_SRC;
-        grafScript.onerror   = () => {
-            _graficosCarregando = false;
-            mostrarNotificacao('Erro ao carregar o módulo de gráficos.', 'error');
-        };
-        grafScript.onload    = callback;
-        document.head.appendChild(grafScript);
-    };
-
-    document.head.appendChild(chartScript);
-}
 
 function inicializarGraficos() {
-    // ✅ window.* são getters read-only definidos em _inicializarWindowRefs
-    // Sincronizados automaticamente com o estado do módulo — reatribuição removida
-    // pois era bloqueada pelo setter e gerava erro silencioso
-
-    function _ativarGraficos() {
-        // Chama a inicialização própria de graficos.js (window.inicializarGraficos).
-        // Isso captura _dataManager, vincula o click do btnGerarGraficos e configura
-        // filtros/viewButtons/comparacao — tudo que o DOMContentLoaded faria.
-        // As funções têm guards internos (ex: options.length === 0) que evitam
-        // duplicação se o usuário sair e voltar para a aba de gráficos.
-        if (typeof window.inicializarGraficos === 'function') {
-            window.inicializarGraficos();
-        }
-    }
-
-    // Módulo já carregado — chama direto sem novo download
-    if (_graficosCarregados) {
-        _ativarGraficos();
+    // Se Chart.js já está disponível (carregado em sessão anterior ou pelo HTML), nada a fazer.
+    if (typeof Chart !== 'undefined') {
+        _chartJsCarregado = true;
         return;
     }
 
-    // Já está carregando (duplo clique / navegação rápida) — aguarda
-    if (_graficosCarregando) return;
+    if (_chartJsCarregado || _chartJsCarregando) return;
 
-    _graficosCarregando = true;
+    _chartJsCarregando = true;
 
-    _carregarDependenciasGraficos(() => {
-        _graficosCarregados = true;
-        _graficosCarregando = false;
-        _ativarGraficos();
-    });
+    const chartScript          = document.createElement('script');
+    chartScript.src            = _CHARTJS_SRC;
+    chartScript.integrity      = _CHARTJS_INTEGRITY;
+    chartScript.crossOrigin    = 'anonymous';
+    chartScript.referrerPolicy = 'no-referrer';
+
+    chartScript.onload = () => {
+        _chartJsCarregado  = true;
+        _chartJsCarregando = false;
+    };
+
+    chartScript.onerror = () => {
+        _chartJsCarregando = false;
+        mostrarNotificacao('Erro ao carregar Chart.js. Verifique a conexão e tente novamente.', 'error');
+    };
+
+    document.head.appendChild(chartScript);
 }
 
 function atualizarGraficos() {
