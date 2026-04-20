@@ -1041,10 +1041,22 @@ function atualizarTelaPerfis() {
 
     lista.innerHTML = '';
 
+    // Event delegation — um único listener para todos os cards de perfil
+    if (!lista._perfisDelegate) {
+        lista.addEventListener('click', e => {
+            const btn = e.target.closest('.perfil-card');
+            if (!btn) return;
+            const idx = parseInt(btn.dataset.perfilIdx, 10);
+            if (!isNaN(idx)) entrarNoPerfil(idx);
+        });
+        lista._perfisDelegate = true;
+    }
+
     usuarioLogado.perfis.forEach((perfil, index) => {
         const btn = document.createElement('button');
-        btn.className = 'perfil-card';
-        btn.type      = 'button';
+        btn.className       = 'perfil-card';
+        btn.type            = 'button';
+        btn.dataset.perfilIdx = index;
 
         // ── Foto
         const fotoDiv = document.createElement('div');
@@ -1073,8 +1085,6 @@ function atualizarTelaPerfis() {
         btn.appendChild(fotoDiv);
         btn.appendChild(nomeDiv);
 
-        // ✅ addEventListener em vez de onclick inline
-        btn.addEventListener('click', () => entrarNoPerfil(index));
         lista.appendChild(btn);
     });
 
@@ -1479,8 +1489,18 @@ function irParaAtualizarPlano() {
 window.irParaAtualizarPlano = irParaAtualizarPlano;
 
 // ========== NAVEGAÇÃO ENTRE TELAS ==========
+
+// Cached once — static nav elements never change after DOM is ready
+let _domPages     = null;
+let _domNavBtns   = null;
+let _domMobileNav = null;
+
 function mostrarTela(tela) {
-    document.querySelectorAll('.page').forEach(p => {
+    if (!_domPages)     _domPages     = document.querySelectorAll('.page');
+    if (!_domNavBtns)   _domNavBtns   = document.querySelectorAll('.nav-btn');
+    if (!_domMobileNav) _domMobileNav = document.querySelectorAll('.mobile-nav-item');
+
+    _domPages.forEach(p => {
         p.classList.remove('active');
         p.style.display = 'none';
     });
@@ -1488,12 +1508,12 @@ function mostrarTela(tela) {
     window.scrollTo({ top: 0, behavior: 'instant' });
 
     // Sidebar — nav-btn
-    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    _domNavBtns.forEach(btn => btn.classList.remove('active'));
     const sidebarBtn = document.querySelector(`.nav-btn[data-page="${tela}"]`);
     if (sidebarBtn) sidebarBtn.classList.add('active');
 
     // Mobile — bottom nav
-    document.querySelectorAll('.mobile-nav-item').forEach(btn => btn.classList.remove('active'));
+    _domMobileNav.forEach(btn => btn.classList.remove('active'));
     const mobileBtn = document.querySelector(`.mobile-nav-item[data-page="${tela}"]`);
     if (mobileBtn) mobileBtn.classList.add('active');
 
@@ -1753,6 +1773,9 @@ async function _renovarFotosExpiradas() {
 // ✅ Inicia renovação automática de signed URLs a cada 50 minutos
 //    (URLs expiram em 60 min — renovamos 10 min antes)
 let _renovacaoFotosInterval = null;
+
+// Cached saldo DOM refs — populated once, reused on every transaction change
+const _domSaldoEls = { entradas: null, saidas: null, saldo: null, reservas: null, hero: null };
 function iniciarRenovacaoFotos() {
     if (_renovacaoFotosInterval) clearInterval(_renovacaoFotosInterval);
     _renovacaoFotosInterval = setInterval(_renovarFotosExpiradas, 50 * 60 * 1000);
@@ -1815,20 +1838,23 @@ function atualizarDashboardResumo() {
         if (banner) banner.style.display = 'block';
     }
 
-    const entradasEl = document.getElementById('totalEntradas');
-    const saidasEl   = document.getElementById('totalSaidas');
-    const saldoEl    = document.getElementById('totalSaldo');
-    const reservasEl = document.getElementById('totalReservas');
+    if (!_domSaldoEls.entradas) {
+        _domSaldoEls.entradas = document.getElementById('totalEntradas');
+        _domSaldoEls.saidas   = document.getElementById('totalSaidas');
+        _domSaldoEls.saldo    = document.getElementById('totalSaldo');
+        _domSaldoEls.reservas = document.getElementById('totalReservas');
+        _domSaldoEls.hero     = document.getElementById('heroSaldo');
+    }
+    const { entradas: entradasEl, saidas: saidasEl, saldo: saldoEl, reservas: reservasEl, hero: heroSaldoEl } = _domSaldoEls;
 
     if (entradasEl) entradasEl.textContent = formatBRL(totalEntradas);
     if (saidasEl)   saidasEl.textContent   = formatBRL(totalSaidas);
     if (saldoEl)    saldoEl.textContent     = formatBRL(saldo);
-    const heroSaldoEl = document.getElementById('heroSaldo');
     if (heroSaldoEl && !heroSaldoEl.classList.contains('oculto')) {
         heroSaldoEl.textContent = formatBRL(saldo);
     }
     if (heroSaldoEl) heroSaldoEl.dataset.valor = formatBRL(saldo);
-    if (reservasEl) reservasEl.textContent  = formatBRL(totalReservasCalc);
+    if (reservasEl)  reservasEl.textContent    = formatBRL(totalReservasCalc);
 }
 
 // ========== SISTEMA DE NOTIFICAÇÕES DE VENCIMENTO ==========
@@ -3508,6 +3534,8 @@ function bindFiltrosMovimentacoes() {
 // Paginação das movimentações — 50 itens por página para não sobrecarregar o DOM
 const MOV_POR_PAGINA = 50;
 let _movPaginaAtual  = 1;
+let _movVisivelCache = [];   // backing array for delegated click handler
+let _movDelegateSet  = false;
 
 function _renderizarItemMovimentacao(t, lista) {
     const dataExibida = _sanitizeText(t.data || '');
@@ -3517,6 +3545,17 @@ function _renderizarItemMovimentacao(t, lista) {
 function atualizarMovimentacoesUI(resetPagina = true) {
     const lista = document.getElementById('listaMovimentacoes');
     if (!lista) return;
+
+    // Event delegation — um único listener para todos os itens da lista
+    if (!_movDelegateSet) {
+        lista.addEventListener('click', e => {
+            const item = e.target.closest('.mov-item');
+            if (!item) return;
+            const idx = parseInt(item.dataset.txIdx, 10);
+            if (!isNaN(idx) && _movVisivelCache[idx]) abrirDetalhesTransacao(_movVisivelCache[idx]);
+        });
+        _movDelegateSet = true;
+    }
 
     if (resetPagina) _movPaginaAtual = 1;
 
@@ -3535,11 +3574,13 @@ function atualizarMovimentacoesUI(resetPagina = true) {
         return;
     }
 
+    _movVisivelCache = visivel;
+
     // Usar DocumentFragment para inserir todos os itens em um único reflow
     const frag     = document.createDocumentFragment();
     let ultimaData = null;
 
-    visivel.forEach(t => {
+    visivel.forEach((t, txIdx) => {
         const dataExibida = _sanitizeText(t.data || '');
 
         if (dataExibida && dataExibida !== ultimaData) {
@@ -3588,11 +3629,11 @@ function atualizarMovimentacoesUI(resetPagina = true) {
         divValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
         right.appendChild(divValor);
 
+        div.dataset.txIdx = txIdx;
         div.appendChild(iconeBadge);
         div.appendChild(left);
         div.appendChild(right);
 
-        div.addEventListener('click', () => abrirDetalhesTransacao(t));
         frag.appendChild(div);
     });
 

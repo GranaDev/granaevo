@@ -225,7 +225,7 @@ body {
     font-weight: 800;
     color: var(--white);
     text-decoration: none;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .logo:hover {
@@ -243,7 +243,7 @@ body {
     font-weight: 900;
     font-size: 1.125rem;
     box-shadow: var(--neon-glow);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .btn-back {
@@ -258,7 +258,7 @@ body {
     font-weight: 600;
     font-size: 0.875rem;
     text-decoration: none;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .btn-back:hover {
@@ -359,7 +359,7 @@ body {
     padding: 2rem;
     position: relative;
     overflow: hidden;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .term-section:hover {
@@ -499,7 +499,7 @@ body {
     border-radius: 12px;
     text-decoration: none;
     box-shadow: var(--neon-glow);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .btn-contact:hover {

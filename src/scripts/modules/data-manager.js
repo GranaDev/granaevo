@@ -1,5 +1,4 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
-import { supabase } from '../services/supabase-client.js?v=2';
 
 // ========== CONSTANTES PRIVADAS ==========
 const MAX_PAYLOAD_BYTES  = 4_900_000;
@@ -162,33 +161,31 @@ class DataManager {
             }
 
             const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
-
-            const { data, error } = await supabase
-                .from('user_data')
-                .select('data_json')
-                .eq('user_id', this.#userId)
-                .abortSignal(signal)
-                .single();
-
-            cleanup();
+            let resp;
+            try {
+                resp = await fetch('/api/get-user-data', { signal });
+            } finally {
+                cleanup();
+            }
 
             // Registro ainda não existe — cria estrutura inicial
-            if (error?.code === 'PGRST116') {
+            if (resp.status === 404) {
                 if (IS_DEV) console.log('⚠️ [DATA-MANAGER] Nenhum dado encontrado, criando estrutura inicial...');
                 return await this.#createInitialRecord();
             }
 
-            if (error) {
-                console.error('❌ [DATA-MANAGER] Erro ao carregar:', error.message ?? error);
-                return this.#emptyStructure();
+            if (!resp.ok) {
+                throw new Error(`HTTP ${resp.status}`);
             }
 
-            if (!data?.data_json) {
+            const result = await resp.json();
+
+            if (!result?.data_json) {
                 console.warn('⚠️ [DATA-MANAGER] data_json vazio, retornando estrutura padrão');
                 return this.#emptyStructure();
             }
 
-            const userData = data.data_json;
+            const userData = result.data_json;
 
             if (!Array.isArray(userData.profiles)) userData.profiles = [];
             if (!userData.version)                  userData.version  = '1.0';
@@ -330,23 +327,22 @@ class DataManager {
                 console.log('📦 Tamanho:', serialized.length, 'bytes');
             }
 
-            // ✅ UPSERT atômico — elimina double SELECT e race condition entre abas.
-            //    onConflict: 'user_id' requer UNIQUE constraint na coluna user_id
-            //    (garantido pela migração). ignoreDuplicates: false → atualiza sempre.
-            const { error: saveError } = await supabase
-                .from('user_data')
-                .upsert(
-                    {
-                        user_id:       this.#userId,
-                        email:         this.#userEmail,
-                        data_json:     dataToSave,
-                        last_modified: new Date().toISOString(),
-                    },
-                    { onConflict: 'user_id', ignoreDuplicates: false }
-                );
+            const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
+            let saveResp;
+            try {
+                saveResp = await fetch('/api/save-user-data', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    serialized,
+                    signal,
+                });
+            } finally {
+                cleanup();
+            }
 
-            if (saveError) {
-                console.error('❌ [DATA-MANAGER] Erro ao salvar no banco:', saveError.message);
+            if (!saveResp.ok) {
+                const errText = await saveResp.text().catch(() => '');
+                console.error('❌ [DATA-MANAGER] Erro ao salvar no banco:', saveResp.status, errText);
                 return false;
             }
 
@@ -545,17 +541,21 @@ class DataManager {
     async #createInitialRecord() {
         const initialData = this.#emptyStructure();
         try {
-            const { error } = await supabase
-                .from('user_data')
-                .upsert(
-                    { user_id: this.#userId, email: this.#userEmail, data_json: initialData },
-                    { onConflict: 'user_id', ignoreDuplicates: true }
-                );
-
-            if (error) {
-                console.error('❌ [DATA-MANAGER] Erro ao criar registro inicial:', error.message ?? error);
-            } else if (IS_DEV) {
-                console.log('✅ [DATA-MANAGER] Registro inicial criado com sucesso!');
+            const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
+            let resp;
+            try {
+                resp = await fetch('/api/save-user-data', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ profiles: [] }),
+                    signal,
+                });
+            } finally {
+                cleanup();
+            }
+            if (IS_DEV) {
+                if (resp.ok) console.log('✅ [DATA-MANAGER] Registro inicial criado com sucesso!');
+                else         console.error('❌ [DATA-MANAGER] Erro ao criar registro inicial:', resp.status);
             }
         } catch (err) {
             console.error('❌ [DATA-MANAGER] Erro crítico ao criar registro:', err?.message ?? err);

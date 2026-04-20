@@ -328,7 +328,7 @@ button {
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid rgba(16, 185, 129, 0.1);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .header.scrolled {
@@ -367,7 +367,7 @@ button {
     object-fit: contain;
     border-radius: 8px;
     box-shadow: var(--neon-glow);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .logo:hover .logo-img {
@@ -391,7 +391,7 @@ button {
     color: var(--white);
     font-weight: 500;
     font-size: 0.9375rem;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     position: relative;
     padding: 0.5rem 0;
 }
@@ -423,7 +423,7 @@ button {
     font-weight: 700;
     font-size: 0.9375rem;
     box-shadow: var(--neon-glow);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     white-space: nowrap;
     min-height: 44px;
     display: inline-flex;
@@ -450,7 +450,7 @@ button {
     background: rgba(16, 185, 129, 0.1);
     border: 2px solid rgba(16, 185, 129, 0.3);
     border-radius: 8px;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .mobile-toggle:hover {
@@ -466,7 +466,7 @@ button {
     width: 24px;
     height: 3px;
     background: var(--primary);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     border-radius: 2px;
     box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
@@ -538,7 +538,7 @@ button {
     min-height: 48px;
     text-align: center;
     justify-content: center;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .nav-links.active a:hover,
@@ -593,7 +593,7 @@ button {
     font-size: 0.9375rem;
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(16, 185, 129, 0.5);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .btn-float:active {
@@ -615,7 +615,7 @@ button {
     font-size: 0.9375rem;
     border-radius: 12px;
     box-shadow: var(--neon-glow);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     width: 100%;
     max-width: 100%;
 }
@@ -641,7 +641,7 @@ button {
     font-size: 0.9375rem;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     width: 100%;
     max-width: 100%;
 }
@@ -848,7 +848,7 @@ button {
     border-radius: 18px;
     padding: 1.125rem;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-    transition: all var(--transition-smooth);
+    transition: color var(--transition-smooth), background-color var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth), opacity var(--transition-smooth), transform var(--transition-smooth);
     width: 100%;
     overflow: hidden;
 }
@@ -957,7 +957,7 @@ button {
     display: flex;
     flex-direction: column;
     gap: 0.4375rem;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .stat-box:active {
@@ -1079,7 +1079,7 @@ button {
     border-radius: 16px;
     padding: 1.75rem 1.5rem;
     text-align: center;
-    transition: all var(--transition-smooth);
+    transition: color var(--transition-smooth), background-color var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth), opacity var(--transition-smooth), transform var(--transition-smooth);
     position: relative;
     overflow: hidden;
 }
@@ -1110,7 +1110,7 @@ button {
     align-items: center;
     justify-content: center;
     color: var(--danger);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .problem-icon svg {
@@ -1206,7 +1206,7 @@ button {
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 16px;
     padding: 1.75rem 1.5rem;
-    transition: all var(--transition-smooth);
+    transition: color var(--transition-smooth), background-color var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth), opacity var(--transition-smooth), transform var(--transition-smooth);
     position: relative;
     overflow: hidden;
 }
@@ -1237,7 +1237,7 @@ button {
     justify-content: center;
     color: var(--primary);
     margin-bottom: 1rem;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .feature-icon svg {
@@ -1308,7 +1308,7 @@ button {
     color: var(--dark);
     box-shadow: var(--neon-glow-strong);
     z-index: 2;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .timeline-content {
@@ -1317,7 +1317,7 @@ button {
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 14px;
     padding: 1.5rem 1.25rem;
-    transition: all var(--transition-smooth);
+    transition: color var(--transition-smooth), background-color var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth), opacity var(--transition-smooth), transform var(--transition-smooth);
 }
 
 .timeline-content h3 {
@@ -1425,7 +1425,7 @@ button {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
     padding: 1.75rem 1.5rem;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform, border-color;
     transform: translateZ(0);
 }
@@ -1580,7 +1580,7 @@ button {
     display: block;
     color: var(--gray);
     margin-bottom: 0.5rem;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     font-size: 0.875rem;
     padding: 0.375rem 0;
 }
@@ -1607,7 +1607,7 @@ button {
 .reveal {
     opacity: 0;
     transform: translateY(30px);
-    transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.8s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.8s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.8s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .reveal.active {

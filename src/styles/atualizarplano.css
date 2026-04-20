@@ -259,7 +259,7 @@ button {
     background: rgba(10, 11, 20, 0.95);
     backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(16, 185, 129, 0.1);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .nav-container {
@@ -289,7 +289,7 @@ button {
     align-items: center;
     justify-content: center;
     box-shadow: var(--neon-glow);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .logo-icon svg {
@@ -306,7 +306,7 @@ button {
     font-weight: 700;
     font-size: 0.875rem;
     box-shadow: var(--neon-glow);
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .btn-nav:hover {
@@ -463,7 +463,7 @@ button {
     border-radius: 20px;
     padding: 2rem;
     position: relative;
-    transition: all var(--transition-smooth);
+    transition: color var(--transition-smooth), background-color var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth), opacity var(--transition-smooth), transform var(--transition-smooth);
     opacity: 0;
     animation: fadeInUp 0.8s ease forwards;
 }
@@ -599,7 +599,7 @@ button {
     color: white;
     font-weight: 700;
     font-size: 1rem;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     box-shadow: var(--neon-glow);
 }
 
@@ -644,7 +644,7 @@ button {
     border-radius: 18px;
     padding: 2rem;
     text-align: center;
-    transition: all var(--transition-smooth);
+    transition: color var(--transition-smooth), background-color var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth), opacity var(--transition-smooth), transform var(--transition-smooth);
     opacity: 0;
     animation: fadeInUp 0.8s ease forwards;
 }
@@ -697,7 +697,7 @@ button {
     border: 1px solid rgba(16, 185, 129, 0.2);
     border-radius: 14px;
     overflow: hidden;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 
 .faq-question {
@@ -775,7 +775,7 @@ button {
     display: block;
     color: var(--gray);
     margin-bottom: 0.5rem;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     font-size: 0.875rem;
 }
 

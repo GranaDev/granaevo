@@ -103,7 +103,7 @@ input[type="password"] {
     border-radius: 12px;
     color: var(--white);
     font-size: 0.9375rem;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     font-family: inherit;
 }
 
@@ -168,7 +168,7 @@ input.border-error { border-color: var(--error) !important; }
  * As classes .sw-* (abaixo) controlam width.
  * Isso é o par do fix no JS: className = 'strength-fill sw-33 strength-weak'
  */
-.strength-fill   { height: 100%; width: 0%; transition: all var(--transition); }
+.strength-fill   { height: 100%; width: 0%; transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition); }
 .strength-weak   { background: var(--error);  }
 .strength-medium { background: var(--warning); }
 .strength-strong { background: var(--success); }
@@ -207,7 +207,7 @@ input.border-error { border-color: var(--error) !important; }
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 12px;
-    transition: all var(--transition);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 }
 .checkbox-wrapper:hover { background: rgba(255, 255, 255, 0.04); border-color: rgba(16, 185, 129, 0.2); }
 
@@ -275,7 +275,7 @@ input.border-error { border-color: var(--error) !important; }
     background: linear-gradient(135deg, var(--primary), var(--primary-dark));
     border: none; border-radius: 12px;
     color: var(--white); font-size: 1rem; font-weight: 700;
-    cursor: pointer; transition: all var(--transition);
+    cursor: pointer; transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
     box-shadow: var(--neon-glow);
     display: flex; align-items: center; justify-content: center;
     gap: 0.5rem; text-decoration: none;

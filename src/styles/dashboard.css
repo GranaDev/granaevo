@@ -5,7 +5,7 @@
 /* ========== UTILITÁRIOS — sem unsafe-inline ========== */
 .js-hidden      { display: none !important; }
 .text-secondary { color: var(--text-secondary, #b0b3c1); }
-.promo-bloco    { margin-top: 32px; text-align: center; cursor: pointer; transition: all 0.3s; }
+.promo-bloco    { margin-top: 32px; text-align: center; cursor: pointer; transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s; }
 .promo-emoji    { font-size: 3rem; margin-bottom: 12px; }
 .promo-titulo   { margin-bottom: 8px; color: var(--text-primary, #fff); }
 .promo-desc     { color: var(--text-secondary, #b0b3c1); font-size: 0.9rem; margin-bottom: 16px; }
@@ -361,7 +361,7 @@ body::before {
     justify-content: center;
     font-size: 4rem;
     color: var(--text-muted);
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     box-shadow: var(--shadow-md);
     overflow: hidden;
 }
@@ -559,7 +559,7 @@ body::before {
     border: 2px solid var(--primary);
     object-fit: cover;
     cursor: pointer;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 4px 16px rgba(67,160,71,0.35);
     flex-shrink: 0;
 }
@@ -622,7 +622,7 @@ body::before {
     border-radius: 10px;
     cursor: pointer;
     font-size: 0.78rem;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     border: 1px solid rgba(67,160,71,0.3);
     font-weight: 600;
 }
@@ -797,7 +797,7 @@ body::before {
     height: 38px;
     cursor: pointer;
     z-index: 10001;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     display: none;
     box-shadow: 0 4px 12px rgba(67,160,71,0.4);
     align-items: center;
@@ -814,7 +814,7 @@ body::before {
     width: 20px; height: 2px;
     background: white;
     position: relative;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
 }
 
 .hamburger::before,
@@ -824,7 +824,7 @@ body::before {
     width: 100%; height: 2px;
     background: white;
     left: 0;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
 }
 
 .hamburger::before { top: -6px; }
@@ -978,7 +978,7 @@ body::before {
     display: flex;
     align-items: center;
     gap: 0px;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     position: relative;
     overflow: hidden;
     animation: fadeIn 0.5s ease-out backwards;
@@ -1206,7 +1206,7 @@ body::before {
         0 4px 22px rgba(0, 0, 0, 0.40),
         0 0 0 1px rgba(67, 160, 71, 0.09),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    transition: all 0.30s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.30s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.30s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.30s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.30s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.30s cubic-bezier(0.4, 0, 0.2, 1), transform 0.30s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
     position: relative;
     overflow: hidden;
@@ -1353,7 +1353,7 @@ body::before {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.7px;
-    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow:
         0 2px 12px rgba(67, 160, 71, 0.34),
         0 0 12px rgba(67, 160, 71, 0.14);
@@ -1475,7 +1475,7 @@ body::before {
     border-radius: 12px;
     padding: 16px;
     border-left: 4px solid #ff4b4b;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
 }
 
@@ -1542,7 +1542,7 @@ body::before {
     border-radius: 10px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     margin-top: 8px;
 }
 
@@ -1585,7 +1585,7 @@ body::before {
     border-radius: 16px;
     border: 1px solid rgba(67, 160, 71, 0.15);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s ease;
+    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
 }
 
 .transaction-form:hover {
@@ -1642,7 +1642,7 @@ body::before {
     font-size: 0.95rem;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(67, 160, 71, 0.1);
 }
 
@@ -1855,7 +1855,7 @@ select.form-input option:checked {
     align-items: center;
     gap: 16px;
     cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
@@ -1877,7 +1877,7 @@ select.form-input option:checked {
     justify-content: center;
     font-size: 1.05rem;
     flex-shrink: 0;
-    transition: all 0.22s;
+    transition: color 0.22s, background-color 0.22s, border-color 0.22s, box-shadow 0.22s, opacity 0.22s, transform 0.22s;
 }
 
 .mov-icon-badge.entrada {
@@ -2003,7 +2003,7 @@ select.form-input option:checked {
     padding: 24px;
     min-height: 400px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s ease;
+    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
 }
 
 .reservas-sidebar:hover {
@@ -2037,7 +2037,7 @@ select.form-input option:checked {
     backdrop-filter: blur(8px);
     cursor: pointer;
     color: var(--text-primary);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border: 1px solid rgba(67, 160, 71, 0.15);
     position: relative;
     overflow: hidden;
@@ -2103,7 +2103,7 @@ select.form-input option:checked {
     padding: 32px;
     min-height: 400px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s ease;
+    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
 }
 
 .reservas-main:hover {
@@ -2321,7 +2321,7 @@ select.form-input option:checked {
     font-weight: 700;
     color: rgba(67, 160, 71, 0.6);
     cursor: pointer;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
@@ -2432,7 +2432,7 @@ select.form-input option:checked {
     padding: 20px;
     min-width: 220px;
     flex-shrink: 0;
-    transition: all 0.3s ease;
+    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
     position: relative;
     overflow: hidden;
 }
@@ -2513,7 +2513,7 @@ select.form-input option:checked {
     cursor: pointer;
     font-size: 0.95rem;
     font-weight: 600;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
 }
 
 .tipo-btn:hover {
@@ -2579,7 +2579,7 @@ select.form-input option:checked {
     padding: 40px;
     margin-top: 32px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s ease;
+    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
 }
 
 .relatorio-resultado:hover {
@@ -2600,7 +2600,7 @@ select.form-input option:checked {
     border-radius: 12px;
     padding: 24px;
     text-align: center;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
 }
 
 .relatorio-card:hover {
@@ -2637,7 +2637,7 @@ select.form-input option:checked {
     border-radius: 16px;
     padding: 28px;
     text-align: center;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     position: relative;
     overflow: hidden;
 }
@@ -2713,7 +2713,7 @@ select.form-input option:checked {
     background: var(--gradient-dark);
     border: 1px solid var(--border);
     border-radius: 12px;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     animation: slideInUp 0.4s ease-out backwards;
 }
 
@@ -2805,7 +2805,7 @@ select.form-input option:checked {
     justify-content: space-between;
     align-items: center;
     gap: 16px;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
 }
 
 .relatorio-item:hover {
@@ -2844,7 +2844,7 @@ select.form-input option:checked {
     padding: 24px;
     border-radius: 16px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     display: flex;
     align-items: center;
     gap: 20px;
@@ -2941,7 +2941,7 @@ select.form-input option:checked {
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
     font-size: 0.95rem;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
 }
 
 .popup input:focus {
@@ -2957,7 +2957,7 @@ select.form-input option:checked {
     border: none;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
 }
 
 .btn-cancelar {
@@ -2980,7 +2980,7 @@ select.form-input option:checked {
     cursor: pointer;
     border: none;
     border-radius: 12px;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
 }
 
 .btn-excluir:hover {
@@ -3033,7 +3033,7 @@ select.form-input option:checked {
                 0 0 100px rgba(67, 160, 71, 0.15),
                 inset 0 2px 0 rgba(255, 255, 255, 0.15),
                 inset 0 -1px 0 rgba(0, 0, 0, 0.3);
-    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .page-header-premium::before {
@@ -3156,7 +3156,7 @@ select.form-input option:checked {
 .breadcrumb-premium a {
     color: rgba(255, 255, 255, 0.8);
     text-decoration: none;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     position: relative;
     padding: 4px 8px;
     border-radius: 6px;
@@ -3239,7 +3239,7 @@ select.form-input option:checked {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -3324,7 +3324,7 @@ select.form-input option:checked {
     backdrop-filter: blur(10px);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.15);
-    transition: all 0.3s ease;
+    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
     min-width: 140px;
 }
 
@@ -3652,7 +3652,7 @@ select.form-input option:checked {
         border: 2px solid var(--primary);
         object-fit: cover;
         box-shadow: 0 0 12px rgba(67, 160, 71, 0.45);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         display: block;
     }
 
@@ -3672,7 +3672,7 @@ select.form-input option:checked {
         border: 2px solid var(--primary);
         box-shadow: 0 0 12px rgba(67, 160, 71, 0.45);
         cursor: pointer;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .mobile-profile-btn:active .mobile-user-photo,
@@ -3730,7 +3730,7 @@ select.form-input option:checked {
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         -webkit-tap-highlight-color: transparent;
     }
 
@@ -3802,7 +3802,7 @@ select.form-input option:checked {
         cursor: pointer;
         padding: 6px 2px 4px;
         border-radius: 14px;
-        transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
         position: relative;
         overflow: hidden;
         -webkit-tap-highlight-color: transparent;
@@ -3855,7 +3855,7 @@ select.form-input option:checked {
     .mobile-nav-icon-img {
         width: 28px; height: 28px;
         object-fit: contain;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         filter: grayscale(0.5) brightness(0.6) opacity(0.75);
     }
 
@@ -3879,7 +3879,7 @@ select.form-input option:checked {
         color: rgba(255, 255, 255, 0.35);
         letter-spacing: 0.4px;
         text-transform: uppercase;
-        transition: all 0.22s;
+        transition: color 0.22s, background-color 0.22s, border-color 0.22s, box-shadow 0.22s, opacity 0.22s, transform 0.22s;
         white-space: nowrap;
     }
 
@@ -3892,7 +3892,7 @@ select.form-input option:checked {
     .mobile-nav-icon-fa {
         font-size: 22px;
         color: rgba(255, 255, 255, 0.38);
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         line-height: 1;
     }
 
@@ -4035,7 +4035,7 @@ select.form-input option:checked {
         cursor: pointer;
         padding: 7px 9px;
         line-height: 1;
-        transition: all 0.2s ease;
+        transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
         -webkit-tap-highlight-color: transparent;
     }
 
@@ -4097,7 +4097,7 @@ select.form-input option:checked {
     display: flex;
     align-items: center;
     gap: 8px;
-    transition: all 0.3s;
+    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
     box-shadow: 0 4px 12px rgba(67,160,71,0.3);
 }
 
@@ -4374,7 +4374,7 @@ select.form-input option:checked {
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.22s;
+    transition: color 0.22s, background-color 0.22s, border-color 0.22s, box-shadow 0.22s, opacity 0.22s, transform 0.22s;
     -webkit-tap-highlight-color: transparent;
     font-family: 'DM Sans', sans-serif;
     min-height: 130px;
@@ -4435,7 +4435,7 @@ select.form-input option:checked {
     position: relative;
     overflow: hidden;
     border: 2px solid transparent;
-    transition: all 0.22s cubic-bezier(0.4,0,0.2,1);
+    transition: color 0.22s cubic-bezier(0.4,0,0.2,1), background-color 0.22s cubic-bezier(0.4,0,0.2,1), border-color 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.22s cubic-bezier(0.4,0,0.2,1), transform 0.22s cubic-bezier(0.4,0,0.2,1);
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -4594,7 +4594,7 @@ select.form-input option:checked {
     cursor: pointer;
     color: rgba(255, 255, 255, 0.75);
     font-size: 1.1rem;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     -webkit-tap-highlight-color: transparent;
 }
 
@@ -4703,7 +4703,7 @@ select.form-input option:checked {
     justify-content: center;
     cursor: pointer;
     font-size: 0.9rem;
-    transition: all 0.2s;
+    transition: color 0.2s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s, opacity 0.2s, transform 0.2s;
 }
 
 .notificacoes-panel-close:hover {
@@ -4885,7 +4885,7 @@ select.form-input option:checked {
     font-size: 0.82rem !important;
     font-weight: 600 !important;
     cursor: pointer !important;
-    transition: all 0.2s ease !important;
+    transition: color 0.2s ease !important, background-color 0.2s ease !important, border-color 0.2s ease !important, box-shadow 0.2s ease !important, opacity 0.2s ease !important, transform 0.2s ease !important;
     white-space: nowrap !important;
     box-shadow: none !important;
     transform: none !important;
@@ -5412,7 +5412,7 @@ select.form-input option:checked {
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-left: 3px solid var(--border);
-    transition: all 0.2s ease;
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
@@ -5491,7 +5491,7 @@ select.form-input option:checked {
     background: rgba(255, 255, 255, 0.025);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    transition: all 0.15s ease;
+    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
     box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
 }
 
@@ -5624,7 +5624,7 @@ select.form-input option:checked {
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 14px;
     padding: 14px;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
 }
 
 .rel-profile-card:hover {
@@ -5721,7 +5721,7 @@ select.form-input option:checked {
     font-size: 0.75rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
 }
 
 .rel-ranking-tab:hover {
@@ -6122,7 +6122,7 @@ select.form-input option:checked {
     border: 2px solid var(--primary);
     box-shadow: 0 4px 16px rgba(67, 160, 71, 0.35);
     cursor: pointer;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .sidebar:hover .user-photo-fallback {
     width: clamp(56px, 5vw, 72px);
