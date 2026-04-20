@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 // Webhook server-to-server — sem CORS para browser
 const corsHeaders = {
@@ -26,7 +25,7 @@ async function hashSensitiveData(value: string | null): Promise<string | null> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -213,7 +212,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('[webhook-cakto] Erro:', error.message)
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
+      JSON.stringify({ success: false, error: 'Erro interno ao processar webhook' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
@@ -392,7 +391,7 @@ async function enviarEmailBoasVindas(email: string, name: string, planName: stri
 async function handleRefund(supabase: any, orderData: any, caktoOrderId: string) {
   const { data: sub } = await supabase
     .from('subscriptions')
-    .select('*')
+    .select('id, user_id, payment_status')
     .eq('cakto_order_id', caktoOrderId)
     .maybeSingle()
 
@@ -453,7 +452,7 @@ async function handleCancellation(supabase: any, orderData: any, caktoOrderId: s
 async function handleDispute(supabase: any, orderData: any, caktoOrderId: string) {
   const { data: sub } = await supabase
     .from('subscriptions')
-    .select('*')
+    .select('id, user_id, payment_status')
     .eq('cakto_order_id', caktoOrderId)
     .maybeSingle()
 

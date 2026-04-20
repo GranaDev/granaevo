@@ -35,8 +35,7 @@
  * o header Access-Control-Allow-Methods, causando falha no preflight.
  */
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 // ==========================================
 // CORS — permite apenas a origem do site
@@ -57,7 +56,7 @@ const MAX_USER_AGE_MS = 10 * 60 * 1000; // 10 minutos
 // ==========================================
 // HANDLER PRINCIPAL
 // ==========================================
-serve(async (req) => {
+Deno.serve(async (req) => {
 
     // Preflight CORS — deve retornar 200 com os headers corretos.
     // A versão anterior retornava 'ok' sem Access-Control-Allow-Methods,

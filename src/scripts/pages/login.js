@@ -514,13 +514,15 @@ function highlightCodeCaptcha() {
 
 // ═══════════════════════════════════════════════════════════════
 //  VERIFICAÇÃO DE CAPTCHA NO BACKEND (para o login)
+//  Usa o proxy Vercel /api/verify-recaptcha — nunca expõe a URL
+//  da Edge Function diretamente no frontend.
 // ═══════════════════════════════════════════════════════════════
 async function validateLoginCaptchaOnBackend(token) {
     if (!token || typeof token !== 'string' || token.trim().length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) return false;
     try {
-        const response = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/verify-recaptcha`, {
+        const response = await fetch('/api/verify-recaptcha', {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': _publicHeader() },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: token.trim() }),
         });
         if (!response.ok) return false;
@@ -533,6 +535,8 @@ async function validateLoginCaptchaOnBackend(token) {
 
 // ═══════════════════════════════════════════════════════════════
 //  VERIFICAÇÃO DE ACESSO
+//  Usa o proxy Vercel /api/check-user-access — nunca expõe a URL
+//  da Edge Function diretamente no frontend.
 // ═══════════════════════════════════════════════════════════════
 async function checkUserAccess() {
     try {
@@ -540,12 +544,11 @@ async function checkUserAccess() {
         if (!session?.user?.id || !session?.access_token) return { hasAccess: false };
 
         const authHeader = await _requireSessionHeader();
-        const response   = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/check-user-access`, {
+        const response   = await fetch('/api/check-user-access', {
             method:  'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type':  'application/json',
                 'Authorization': authHeader,
-                'apikey': SUPABASE_ANON_KEY,
             },
             body: JSON.stringify({ user_id: session.user.id }),
         });

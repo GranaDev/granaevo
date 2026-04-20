@@ -330,43 +330,20 @@ class DataManager {
                 console.log('📦 Tamanho:', serialized.length, 'bytes');
             }
 
-            // ✅ Verifica se já existe registro para este usuário
-            //    (SELECT leve de apenas o id — não carrega data_json inteiro)
-            const { data: existing, error: checkError } = await supabase
+            // ✅ UPSERT atômico — elimina double SELECT e race condition entre abas.
+            //    onConflict: 'user_id' requer UNIQUE constraint na coluna user_id
+            //    (garantido pela migração). ignoreDuplicates: false → atualiza sempre.
+            const { error: saveError } = await supabase
                 .from('user_data')
-                .select('id')
-                .eq('user_id', this.#userId)
-                .maybeSingle();
-
-            if (checkError && checkError.code !== 'PGRST116') {
-                console.error('❌ [DATA-MANAGER] Erro ao verificar registro existente:', checkError.message);
-                return false;
-            }
-
-            let saveError;
-
-            if (existing) {
-                // ✅ UPDATE — registro já existe
-                const { error } = await supabase
-                    .from('user_data')
-                    .update({
-                        data_json:     dataToSave,
+                .upsert(
+                    {
+                        user_id:       this.#userId,
                         email:         this.#userEmail,
-                        last_modified: new Date().toISOString()
-                    })
-                    .eq('user_id', this.#userId);
-                saveError = error;
-            } else {
-                // ✅ INSERT — primeiro acesso do usuário
-                const { error } = await supabase
-                    .from('user_data')
-                    .insert({
-                        user_id:   this.#userId,
-                        email:     this.#userEmail,
-                        data_json: dataToSave
-                    });
-                saveError = error;
-            }
+                        data_json:     dataToSave,
+                        last_modified: new Date().toISOString(),
+                    },
+                    { onConflict: 'user_id', ignoreDuplicates: false }
+                );
 
             if (saveError) {
                 console.error('❌ [DATA-MANAGER] Erro ao salvar no banco:', saveError.message);
@@ -570,11 +547,10 @@ class DataManager {
         try {
             const { error } = await supabase
                 .from('user_data')
-                .insert({
-                    user_id:   this.#userId,
-                    email:     this.#userEmail,
-                    data_json: initialData
-                });
+                .upsert(
+                    { user_id: this.#userId, email: this.#userEmail, data_json: initialData },
+                    { onConflict: 'user_id', ignoreDuplicates: true }
+                );
 
             if (error) {
                 console.error('❌ [DATA-MANAGER] Erro ao criar registro inicial:', error.message ?? error);

@@ -667,7 +667,7 @@ body::before {
     font-size: clamp(0.82rem, 0.9vw, 0.95rem);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     text-align: left;
     position: relative;
     overflow: hidden;
@@ -727,11 +727,11 @@ body::before {
     align-items: center;
     justify-content: center;
     font-size: clamp(0.95rem, 1.1vw, 1.2rem);
-    transition: all 0.25s;
+    transition: color 0.25s, filter 0.25s;
 }
 
 .nav-icon i {
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), filter 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     color: inherit;
 }
 
@@ -1057,7 +1057,7 @@ body::before {
     padding: 32px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     margin-bottom: 32px;
-    transition: all 0.3s ease;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .section-box:hover {
@@ -1131,7 +1131,7 @@ body::before {
     cursor: pointer;
     font-weight: 600;
     font-size: 0.95rem;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 8px 24px rgba(67, 160, 71, 0.3),
                 0 0 20px rgba(67, 160, 71, 0.2);
     position: relative;
@@ -1167,7 +1167,7 @@ body::before {
     cursor: pointer;
     border: none;
     font-weight: 600;
-    transition: all 0.3s;
+    transition: background-color 0.3s, transform 0.3s;
     font-size: 0.95rem;
 }
 
@@ -2201,7 +2201,7 @@ select.form-input option:checked {
     position: relative;
     cursor: pointer;
     overflow: hidden;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .cartao-cc::before {
@@ -2233,7 +2233,7 @@ select.form-input option:checked {
     height: auto;
     object-fit: contain;
     filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
-    transition: all 0.3s ease;
+    transition: transform 0.3s ease, filter 0.3s ease;
 }
 
 .cartao-cc:hover .cartao-bandeira {
@@ -2248,7 +2248,7 @@ select.form-input option:checked {
     text-shadow: 0 2px 8px rgba(67, 160, 71, 0.3);
     letter-spacing: 0.5px;
     margin-bottom: 20px;
-    transition: all 0.3s ease;
+    transition: color 0.3s ease, text-shadow 0.3s ease;
 }
 
 .cartao-cc:hover .cartao-cc-nome {
@@ -2285,7 +2285,7 @@ select.form-input option:checked {
     background: rgba(255, 255, 255, 0.03);
     border-radius: 8px;
     border-left: 3px solid var(--success);
-    transition: all 0.3s ease;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .cartao-cc:hover .cartao-cc-disponivel {
@@ -6167,3 +6167,16 @@ select.form-input option:checked {
 .ge-notif--warning { background: linear-gradient(135deg, #ffd166, #ffaa00); }
 .ge-notif--info    { background: linear-gradient(135deg, #6c63ff, #4a42cc); }
 .ge-notif--exit    { animation: slideOutRight 0.3s ease-out; }
+
+/* ========== REDUÇÃO DE MOVIMENTO ========== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    #particles-canvas { display: none; }
+}

@@ -42,21 +42,32 @@ const EXT_MAP: Record<string, string> = {
 const SIGNED_URL_EXPIRES = 60 * 60 * 24 * 7; // 7 dias em segundos
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
-const CORS = {
-  "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const ALLOWED_ORIGINS = [
+  "https://granaevo.vercel.app",
+  "https://granaevo.com",
+  "https://www.granaevo.com",
+];
 
-function json(body: object, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", ...CORS },
-  });
+function getCors(req: Request): Record<string, string> {
+  const origin  = req.headers.get("origin") ?? "";
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin":  allowed,
+    "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
 }
 
 // ─── Handler principal ────────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
+  const CORS = getCors(req);
+  const json = (body: object, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json", ...CORS },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS });
   }

@@ -196,7 +196,9 @@ Deno.serve(async (req: Request) => {
       .eq("used", false);
 
     // ── 12. Gerar código de 6 dígitos e salvar ────────────────────────────
-    const code      = Math.floor(100_000 + Math.random() * 900_000).toString();
+    const rnd       = new Uint32Array(1)
+    crypto.getRandomValues(rnd)
+    const code      = String(100_000 + (rnd[0] % 900_000)).padStart(6, '0');
     const expiresAt = new Date(Date.now() + 43_200_000).toISOString(); // 12h
     const ownerName = (user.user_metadata?.name as string) || ownerEmail.split("@")[0];
 
@@ -257,6 +259,17 @@ Deno.serve(async (req: Request) => {
   }
 });
 
+// ─── HTML escaping seguro para prevenir XSS em emails ─────────────────────────
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;')
+}
+
 // ─── Template de email do convite ─────────────────────────────────────────────
 function buildInviteEmail(
   guestName:  string,
@@ -264,7 +277,11 @@ function buildInviteEmail(
   planName:   string,
   invId:      string
 ): string {
-  const inviteUrl = `https://granaevo.com/convidados?ref=${encodeURIComponent(invId)}`;
+  const safeGuestName = escapeHtml(guestName)
+  const safeOwnerName = escapeHtml(ownerName)
+  const safePlanName  = escapeHtml(planName)
+  const safeInvId     = encodeURIComponent(invId)
+  const inviteUrl = `https://granaevo.com/convidados?ref=${safeInvId}`;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -334,7 +351,7 @@ function buildInviteEmail(
       </div>
       <div class="body">
         <span class="eyebrow">Convite Especial ✦</span>
-        <div class="h1">Olá, ${guestName}! 🎉</div>
+        <div class="h1">Olá, ${safeGuestName}! 🎉</div>
         <p class="text">
           Você recebeu um convite exclusivo para acessar a conta <strong>GranaEvo</strong> de um amigo ou familiar.
           Com o GranaEvo vocês poderão organizar as finanças juntos, de forma simples e segura.
@@ -343,9 +360,9 @@ function buildInviteEmail(
         <div class="invite-box">
           <div class="invite-icon">💌</div>
           <div class="invite-from">Convite enviado por</div>
-          <div class="invite-name">${ownerName}</div>
+          <div class="invite-name">${safeOwnerName}</div>
           <div style="margin:12px 0; color:#64748b; font-size:14px;">Plano ativo:</div>
-          <span class="invite-plan">${planName}</span>
+          <span class="invite-plan">${safePlanName}</span>
         </div>
         <div class="cta-section">
           <div class="cta-sub">Clique abaixo para aceitar o convite e criar sua senha de acesso</div>
@@ -356,7 +373,7 @@ function buildInviteEmail(
         <div class="info-box">
           <div class="info-label">⚠️ Importante</div>
           <div class="info-text">
-            Você precisará do <strong>código de 6 dígitos</strong> fornecido por <strong>${ownerName}</strong>
+            Você precisará do <strong>código de 6 dígitos</strong> fornecido por <strong>${safeOwnerName}</strong>
             para ativar sua conta. Solicite-o diretamente a ele(a) antes de prosseguir.<br><br>
             Se você não solicitou este convite, ignore este email com segurança.
           </div>

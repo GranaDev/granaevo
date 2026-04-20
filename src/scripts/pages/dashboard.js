@@ -10660,8 +10660,9 @@ setTimeout(() => {
 // ========== SISTEMA DE PARTÍCULAS OTIMIZADO (APENAS DESKTOP) ==========
 class ParticleSystem {
     constructor() {
-        // ⚡ Desativado em mobile
+        // ⚡ Desativado em mobile e para usuários que preferem menos movimento
         if (window.innerWidth <= 768) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
         this.canvas = document.getElementById('particles-canvas');
         if (!this.canvas) return;

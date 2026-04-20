@@ -56,9 +56,14 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
 
-  // Remove o campo "step"/"action" antes de repassar (Edge Function não os conhece)
+  // verify-and-reset-password exige o campo 'action' no body.
+  // O frontend envia 'step'; o proxy repassa como 'action' para a Edge Function.
+  // Para 'send', a Edge Function de destino não usa 'action' — não incluído.
   const { step: _s, action: _a, ...rest } = body
-  const upstreamBody = JSON.stringify(rest)
+  const forwardBody  = (step === 'verify_code' || step === 'reset_password')
+    ? { action: step, ...rest }
+    : rest
+  const upstreamBody = JSON.stringify(forwardBody)
 
   try {
     const r = await fetch(ENDPOINTS[step], {

@@ -20,17 +20,22 @@
  *   - Adicionada restrição ao método HTTP
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
-// ──────────────────────────────────────────────────────────────────────────────
-// CORS
-// Em produção, substitua '*' pelo domínio exato do seu frontend:
-// 'Access-Control-Allow-Origin': 'https://www.granaevo.com'
-// ──────────────────────────────────────────────────────────────────────────────
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const ALLOWED_ORIGINS = [
+  'https://granaevo.vercel.app',
+  'https://granaevo.com',
+  'https://www.granaevo.com',
+]
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin  = req.headers.get('origin') ?? ''
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Vary': 'Origin',
+  }
 }
 
 /** Regex segura para orderId — apenas chars que a Cakto usa em IDs */
@@ -39,7 +44,8 @@ const ORDER_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/
 // ──────────────────────────────────────────────────────────────────────────────
 // HANDLER PRINCIPAL
 // ──────────────────────────────────────────────────────────────────────────────
-serve(async (req) => {
+Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req)
 
   // Preflight CORS
   if (req.method === 'OPTIONS') {

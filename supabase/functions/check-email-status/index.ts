@@ -32,21 +32,33 @@
  *               password_created no banco e retorna password_exists.
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CORS
+// CORS — restrito às origens conhecidas (proxy Vercel + domínios da aplicação)
 // ──────────────────────────────────────────────────────────────────────────────
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const ALLOWED_ORIGINS = [
+  'https://granaevo.vercel.app',
+  'https://granaevo.com',
+  'https://www.granaevo.com',
+]
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin  = req.headers.get('origin') ?? ''
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // HANDLER PRINCIPAL
 // ──────────────────────────────────────────────────────────────────────────────
-serve(async (req) => {
+Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req)
 
   // Preflight CORS
   if (req.method === 'OPTIONS') {
