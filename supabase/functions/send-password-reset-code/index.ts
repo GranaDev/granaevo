@@ -124,7 +124,9 @@ Deno.serve(async (req) => {
     }
 
     // ── 2. Gerar código e calcular hash ───────────────────────
-    const code     = Math.floor(100000 + Math.random() * 900000).toString()
+    const rnd      = new Uint32Array(1)
+    crypto.getRandomValues(rnd)
+    const code     = String(100_000 + (rnd[0] % 900_000)).padStart(6, '0')
     const codeHash = await hashCode(code)
 
     const expiresAt = new Date()
