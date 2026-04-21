@@ -1,4 +1,5 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
+import { supabase } from '../services/supabase-client.js?v=2';
 
 // ========== CONSTANTES PRIVADAS ==========
 const MAX_PAYLOAD_BYTES  = 4_900_000;
@@ -94,6 +95,11 @@ class DataManager {
         return this.#userId;
     }
 
+    async #getAuthToken() {
+        const { data: { session } } = await supabase.auth.getSession();
+        return session?.access_token ?? null;
+    }
+
     // ============================ //
     //        INICIALIZAÇÃO         //
     // ============================ //
@@ -160,10 +166,19 @@ class DataManager {
                 console.log('🔑 [DATA-MANAGER] User ID:', this.#userId);
             }
 
+            const token = await this.#getAuthToken();
+            if (!token) {
+                console.error('❌ [DATA-MANAGER] Sessão inativa — faça login novamente');
+                return this.#emptyStructure();
+            }
+
             const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
             let resp;
             try {
-                resp = await fetch('/api/get-user-data', { credentials: 'include', signal });
+                resp = await fetch('/api/get-user-data', {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    signal,
+                });
             } finally {
                 cleanup();
             }
@@ -333,11 +348,14 @@ class DataManager {
             const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
             let saveResp;
             try {
+                const saveToken = await this.#getAuthToken();
                 saveResp = await fetch('/api/save-user-data', {
-                    method:      'POST',
-                    credentials: 'include',
-                    headers:     { 'Content-Type': 'application/json' },
-                    body:        serialized,
+                    method:  'POST',
+                    headers: {
+                        'Content-Type':  'application/json',
+                        'Authorization': saveToken ? `Bearer ${saveToken}` : '',
+                    },
+                    body:   serialized,
                     signal,
                 });
             } finally {
@@ -548,11 +566,14 @@ class DataManager {
             const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
             let resp;
             try {
+                const initToken = await this.#getAuthToken();
                 resp = await fetch('/api/save-user-data', {
-                    method:      'POST',
-                    credentials: 'include',
-                    headers:     { 'Content-Type': 'application/json' },
-                    body:        JSON.stringify({ profiles: [] }),
+                    method:  'POST',
+                    headers: {
+                        'Content-Type':  'application/json',
+                        'Authorization': initToken ? `Bearer ${initToken}` : '',
+                    },
+                    body:   JSON.stringify({ profiles: [] }),
                     signal,
                 });
             } finally {

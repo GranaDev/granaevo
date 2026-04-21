@@ -1,7 +1,7 @@
 // ========== IMPORTS ESSENCIAIS ==========
 import { supabase } from '../services/supabase-client.js?v=2';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?v=2';
-import { dataManager } from '../modules/data-manager.js?v=3';
+import { dataManager } from '../modules/data-manager.js?v=4';
 import AuthGuard from '../modules/auth-guard.js?v=2';
 
 // ========== ESTADO GLOBAL ==========

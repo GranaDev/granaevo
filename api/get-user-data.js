@@ -182,9 +182,13 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: 'Muitas requisições. Aguarde um momento.' });
     }
 
-    // ── 7. Extrai JWT do cookie de sessão ─────────────────────
-    const cookieHeader = req.headers['cookie'] ?? '';
-    const accessToken  = extractSupabaseToken(cookieHeader, SUPABASE_PROJECT_REF);
+    // ── 7. Extrai JWT — Authorization header (fetch) ou cookie (fallback) ──
+    const authHeaderVal = req.headers['authorization'] ?? '';
+    let accessToken = authHeaderVal.startsWith('Bearer ') ? authHeaderVal.slice(7).trim() : null;
+    if (!accessToken) {
+        const cookieHeader = req.headers['cookie'] ?? '';
+        accessToken = extractSupabaseToken(cookieHeader, SUPABASE_PROJECT_REF);
+    }
 
     if (!accessToken) {
         log('warn', 'unauthenticated', ip, null, {});
