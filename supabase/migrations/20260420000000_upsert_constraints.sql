@@ -8,8 +8,17 @@
 --    no data-manager.js. O índice idx_user_data_user_id existia como index
 --    simples; precisamos de UNIQUE constraint para o ON CONFLICT do upsert.
 -- ---------------------------------------------------------------------------
-ALTER TABLE public.user_data
-  ADD CONSTRAINT IF NOT EXISTS user_data_user_id_key UNIQUE (user_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'user_data_user_id_key'
+      AND conrelid = 'public.user_data'::regclass
+  ) THEN
+    ALTER TABLE public.user_data ADD CONSTRAINT user_data_user_id_key UNIQUE (user_id);
+  END IF;
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 2. pg_cron: limpeza automática de rate limits (ativa se pg_cron disponível)
