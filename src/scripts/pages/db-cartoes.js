@@ -4,12 +4,12 @@ let _ctx = null;
 export function init(ctx) {
     _ctx = ctx;
     window._dbCartoes = { atualizarTelaCartoes };
-    window.abrirCartaoForm      = (id) => abrirCartaoForm(id);
-    window.congelarCartao       = (id) => congelarCartao(id);
-    window.abrirVisualizacaoFatura = (id) => abrirVisualizacaoFatura(id);
-    window.pagarCompraIndividual   = (cid, coid) => pagarCompraIndividual(cid, coid);
-    window.editarCompraFatura      = (cid, coid) => editarCompraFatura(cid, coid);
-    window.excluirCompraFatura     = (cid, coid) => excluirCompraFatura(cid, coid);
+    window.abrirCartaoForm         = _ctx._requerPerfilAtivo((id) => abrirCartaoForm(id));
+    window.congelarCartao          = _ctx._requerPerfilAtivo((id) => congelarCartao(id));
+    window.abrirVisualizacaoFatura = _ctx._requerPerfilAtivo((id) => abrirVisualizacaoFatura(id));
+    window.pagarCompraIndividual   = _ctx._requerPerfilAtivo((cid, coid) => pagarCompraIndividual(cid, coid));
+    window.editarCompraFatura      = _ctx._requerPerfilAtivo((cid, coid) => editarCompraFatura(cid, coid));
+    window.excluirCompraFatura     = _ctx._requerPerfilAtivo((cid, coid) => excluirCompraFatura(cid, coid));
     atualizarTelaCartoes();
 }
 
@@ -1476,76 +1476,6 @@ function excluirCompraFatura(faturaId, compraId) {
 }
 
 window.excluirCompraFatura = excluirCompraFatura;
-
-
-// ✅ Guard aprimorado: além de perfil ativo, valida uma nonce de sessão gerada
-//    no carregamento da página. Extensões maliciosas que tentam chamar window.X
-//    não têm acesso ao _sessionNonce pois ele é gerado dentro do módulo IIFE
-//    e nunca exposto publicamente.
-//
-//    COMO FUNCIONA:
-//    1. _sessionNonce é gerado com crypto.randomUUID() ao carregar o módulo
-//    2. Funções protegidas exigem que o caller passe o nonce correto como último argumento
-//    3. Código legítimo (event listeners internos) não passa o nonce — eles chamam
-//       a função interna diretamente, não via window.*
-//    4. Callers externos (extensões, console, outros scripts) não conhecem o nonce
-//
-//    IMPORTANTE: window.* são necessários para comunicação entre módulos legítimos
-//    (graficos.js, chat-assistant.js). O nonce não quebra esse uso pois esses módulos
-//    usam as funções internas diretamente via import/script-tag no mesmo contexto.
-//    Para funções chamadas de HTML (onclick de buttons), usar event delegation interno
-//    em vez de window.X — já feito no padrão addEventListener do código atual.
-
-// _sessionNonce, _requerPerfilAtivo e _requerNonce são definidos em dashboard.js
-// e compartilhados via _ctx — não devem ser redeclarados aqui.
-
-// ── Utilitários de UI — necessários para módulos externos (graficos.js, etc.)
-//    Sem risco de uso malicioso — apenas abrem/fecham UI, não alteram dados
-window.fecharPopup        = _ctx.fecharPopup;
-window.mostrarTela        = mostrarTela;
-window.mostrarNotificacao = _ctx.mostrarNotificacao;
-
-// ── Navegação e sessão — sem dados financeiros, sem risco alto
-window.confirmarLogout      = confirmarLogout_seguro;
-window.irParaAtualizarPlano = irParaAtualizarPlano;
-window.comoUsar             = comoUsar;
-
-// ── Funções de UI de baixo risco (apenas abrem formulários visuais)
-//    Guard base: perfil ativo obrigatório
-window.abrirContaFixaForm           = _ctx._requerPerfilAtivo(abrirContaFixaForm);
-window.abrirCartaoForm              = _ctx._requerPerfilAtivo(abrirCartaoForm);
-window.abrirMetaForm                = _ctx._requerPerfilAtivo(abrirMetaForm);
-window.abrirRetiradaForm            = _ctx._requerPerfilAtivo(abrirRetiradaForm);
-window.abrirVisualizacaoFatura      = _ctx._requerPerfilAtivo(abrirVisualizacaoFatura);
-window.abrirAnaliseDisciplina       = _ctx._requerPerfilAtivo(abrirAnaliseDisciplina);
-window.abrirWidgetOndeForDinheiro   = _ctx._requerPerfilAtivo(abrirWidgetOndeForDinheiro);
-window.trocarPerfil                 = _ctx._requerPerfilAtivo(trocarPerfil);
-window.confirmarAcao                = _ctx._requerPerfilAtivo(_ctx.confirmarAcao);
-
-// ✅ ALTO RISCO — requerem nonce além de perfil ativo:
-//    Alteram dados persistentes ou expõem dados financeiros completos
-//    Extensões maliciosas bloqueadas pois não conhecem _sessionNonce
-window.alterarNome          = _ctx._requerNonce(alterarNome);
-window.alterarEmail         = _ctx._requerNonce(alterarEmail);
-window.abrirAlterarSenha    = _ctx._requerNonce(abrirAlterarSenha);
-window.removerConvidado     = _ctx._requerNonce(removerConvidado);
-window.gerarRelatorio       = _ctx._requerNonce(gerarRelatorio);
-window.atualizarGraficos    = _ctx._requerNonce(atualizarGraficos);
-window.abrirDetalhesPerfilRelatorio          = _ctx._requerNonce(abrirDetalhesPerfilRelatorio);
-window.abrirDetalhesCartaoRelatorio          = _ctx._requerNonce(abrirDetalhesCartaoRelatorio);
-window.abrirSelecaoPerfisCasal               = _ctx._requerNonce(window.abrirSelecaoPerfisCasal || function(){});
-window.confirmarSelecaoPerfisCasal           = _ctx._requerNonce(window.confirmarSelecaoPerfisCasal || function(){});
-window.gerarRelatorioCompartilhadoPersonalizado = _ctx._requerNonce(window.gerarRelatorioCompartilhadoPersonalizado || function(){});
-window.processarAnaliseOndeForDinheiro       = _ctx._requerNonce(processarAnaliseOndeForDinheiro);
-
-// ✅ OPERAÇÕES FINANCEIRAS DIRETAS — nonce obrigatório
-window.pagarCompraIndividual = _ctx._requerNonce(pagarCompraIndividual);
-window.editarCompraFatura    = _ctx._requerNonce(editarCompraFatura);
-window.excluirCompraFatura   = _ctx._requerNonce(excluirCompraFatura);
-
-// ── Auto-save controls — sem dado sensível, sem risco alto
-window.iniciarAutoSave = _ctx._requerPerfilAtivo(iniciarAutoSave);
-window.pararAutoSave   = pararAutoSave;
 
 
 

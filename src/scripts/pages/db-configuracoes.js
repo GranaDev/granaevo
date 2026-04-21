@@ -1,4 +1,5 @@
 // db-configuracoes.js — Seção de Configurações (lazy-loaded)
+import { supabase } from '../services/supabase-client.js?v=2';
 let _ctx = null;
 
 export function init(ctx) {
@@ -478,7 +479,7 @@ window.abrirAlterarSenha = abrirAlterarSenha;
 
 function trocarPerfil() {
     _ctx.salvarDados();
-    mostrarSelecaoPerfis();
+    _ctx.mostrarSelecaoPerfis();
 }
 
 function comoUsar() {

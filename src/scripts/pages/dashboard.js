@@ -1624,6 +1624,7 @@ function _makeCtx() {
         exportarDadosJSON:         { value: (...a) => exportarDadosJSON(...a),         enumerable: true },
         exportarDadosCSV:          { value: (...a) => exportarDadosCSV(...a),          enumerable: true },
         sistemaLog:                { get: () => sistemaLog,                             enumerable: true },
+        mostrarSelecaoPerfis:      { value: (...a) => mostrarSelecaoPerfis(...a),      enumerable: true },
         // Cross-section lazy calls
         atualizarMovimentacoesUI: { value: () => window._dbTransacoes?.atualizarMovimentacoesUI?.(), enumerable: true },
         renderMetasList:          { value: () => window._dbMetas?.renderMetasList?.(),               enumerable: true },
@@ -1700,7 +1701,7 @@ function mostrarTela(tela) {
 
     if (tela === 'cartoes') {
         if (!_dbLoaded.cartoes) {
-            import('./db-cartoes.js?v=3').then(m => {
+            import('./db-cartoes.js?v=4').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.cartoes = true;
             });
@@ -1722,7 +1723,7 @@ function mostrarTela(tela) {
 
     if (tela === 'relatorios') {
         if (!_dbLoaded.relatorios) {
-            import('./db-relatorios.js?v=3').then(m => {
+            import('./db-relatorios.js?v=4').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.relatorios = true;
             });
@@ -1733,7 +1734,7 @@ function mostrarTela(tela) {
 
     if (tela === 'configuracoes') {
         if (!_dbLoaded.configuracoes) {
-            import('./db-configuracoes.js?v=3').then(m => {
+            import('./db-configuracoes.js?v=4').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.configuracoes = true;
             });

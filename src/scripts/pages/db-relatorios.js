@@ -1,4 +1,5 @@
 // db-relatorios.js — Seção de Relatórios (lazy-loaded)
+import { dataManager } from '../modules/data-manager.js?v=8';
 let _ctx = null;
 
 export function init(ctx) {
