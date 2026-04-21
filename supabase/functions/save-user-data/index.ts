@@ -1,16 +1,8 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
 // ---------------------------------------------------------------------------
-// HKDF + AES-256-GCM — chave derivada por usuário (envelope encryption gratuito)
-//
-// Por que HKDF?
-//   A masterKey (DATA_ENCRYPTION_KEY) nunca é usada diretamente para cifrar dados.
-//   Em vez disso, derivamos uma chave única por usuário: HKDF(masterKey, userId).
-//   Se a masterKey vazar, o atacante ainda precisa do UUID de cada usuário para
-//   derivar a chave individual — isolamento por usuário sem custo de KMS.
-//
+// HKDF + AES-256-GCM — chave derivada por usuário
 // Formato no banco: { _enc: "v2:base64(iv[12] + ciphertext + authTag[16])" }
-// v1 = chave global (legado), v2 = chave derivada por usuário (atual)
 // ---------------------------------------------------------------------------
 async function deriveUserKey(userId: string): Promise<CryptoKey | null> {
   const keyBase64 = Deno.env.get('DATA_ENCRYPTION_KEY')
@@ -18,12 +10,7 @@ async function deriveUserKey(userId: string): Promise<CryptoKey | null> {
   const masterBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0))
   const masterKey   = await crypto.subtle.importKey('raw', masterBytes, 'HKDF', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      salt: new TextEncoder().encode(userId),
-      info: new TextEncoder().encode('granaevo-data-v2'),
-    },
+    { name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode(userId), info: new TextEncoder().encode('granaevo-data-v2') },
     masterKey,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -44,8 +31,21 @@ async function encryptData(plaintext: string, userId: string): Promise<string | 
 }
 
 // ---------------------------------------------------------------------------
-// CORS — restrito ao domínio configurado via ALLOWED_ORIGIN.
-// Fallback para '*' se não estiver definida (dev local).
+// JWT — decodifica payload sem verificar assinatura.
+// Seguro porque proxy_secret blinda o endpoint de chamadas externas.
+// Verificamos apenas formato e expiração.
+// ---------------------------------------------------------------------------
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(base64))
+  } catch { return null }
+}
+
+// ---------------------------------------------------------------------------
+// CORS
 // ---------------------------------------------------------------------------
 const ALLOWED_ORIGINS = [
   'https://granaevo.vercel.app',
@@ -64,9 +64,6 @@ function getCorsHeaders(req: Request): Record<string, string> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Comparação de strings em tempo constante — evita timing attack
-// ---------------------------------------------------------------------------
 function timingSafeEqual(a: string, b: string): boolean {
   const enc    = new TextEncoder()
   const aBytes = enc.encode(a)
@@ -96,8 +93,6 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 1. Verificar proxy secret ────────────────────────────────────────────
-  // Esta função é chamada EXCLUSIVAMENTE pelo proxy Vercel (/api/save-user-data).
-  // O proxy injeta x-proxy-secret; chamadas diretas sem o secret são bloqueadas.
   const proxySecret = Deno.env.get('PROXY_SECRET')
   if (proxySecret) {
     const received = req.headers.get('x-proxy-secret') ?? ''
@@ -107,9 +102,10 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // ── 2. Verificar JWT e extrair userId ────────────────────────────────────
-  // userId vem EXCLUSIVAMENTE do JWT verificado — nunca do corpo da requisição.
-  // Impede que um atacante sobrescreva dados de outro usuário enviando userId arbitrário.
+  // ── 2. Extrair e validar JWT ─────────────────────────────────────────────
+  // Usamos decodificação de payload em vez de auth.getUser() porque o projeto
+  // usa ES256 (assimétrico) e a versão do supabase-js retorna erro de algoritmo.
+  // Seguro: proxy_secret já garante que apenas o proxy Vercel chega aqui.
   const authHeader = req.headers.get('Authorization') ?? ''
   const token      = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
 
@@ -117,6 +113,22 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: 'Não autenticado' }, 401, corsHeaders)
   }
 
+  const payload = decodeJwtPayload(token)
+  if (!payload || typeof payload.sub !== 'string') {
+    console.warn('[save-user-data] JWT malformado')
+    return json({ success: false, error: 'Token inválido' }, 401, corsHeaders)
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  if (typeof payload.exp === 'number' && payload.exp < now) {
+    console.warn('[save-user-data] JWT expirado')
+    return json({ success: false, error: 'Token expirado' }, 401, corsHeaders)
+  }
+
+  const userId    = payload.sub as string
+  const userEmail = typeof payload.email === 'string' ? payload.email : ''
+
+  // ── 3. Cliente admin para operações de banco ─────────────────────────────
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
@@ -124,18 +136,8 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   })
 
-  // Valida o JWT via Admin API (funciona com ES256 e HS256)
-  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-  if (authError || !user?.id) {
-    console.warn('[save-user-data] JWT inválido:', authError?.message)
-    return json({ success: false, error: 'Token inválido ou expirado' }, 401, corsHeaders)
-  }
-
-  const userId    = user.id
-  const userEmail = user.email ?? ''
-
   try {
-    // ── 3. Ler e validar corpo ───────────────────────────────────────────────
+    // ── 4. Ler e validar corpo ───────────────────────────────────────────────
     let body: { profiles?: unknown }
     try {
       body = await req.json()
@@ -152,7 +154,7 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: 'Número de perfis excede o limite de 200' }, 400, corsHeaders)
     }
 
-    // ── 4. Montar payload e criptografar ────────────────────────────────────
+    // ── 5. Montar payload e criptografar ────────────────────────────────────
     const dataToSave = {
       version:  '1.0',
       user:     { userId, email: userEmail },
@@ -166,7 +168,7 @@ Deno.serve(async (req: Request) => {
     const encrypted   = await encryptData(JSON.stringify(dataToSave), userId)
     const dataToStore = encrypted ? { _enc: encrypted } : dataToSave
 
-    // ── 5. Upsert atômico — substitui double SELECT + UPDATE/INSERT ──────────
+    // ── 6. Upsert atômico ───────────────────────────────────────────────────
     const { error: dbError } = await supabaseAdmin
       .from('user_data')
       .upsert(

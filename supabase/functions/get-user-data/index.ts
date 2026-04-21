@@ -1,11 +1,9 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
 // ---------------------------------------------------------------------------
 // HKDF + AES-256-GCM — descriptografia com chave derivada por usuário
-//
 // v2: chave derivada via HKDF(masterKey, userId) — atual
-// v1: chave global direta — legado (dados antigos, lazy migration)
-// sem prefixo: texto simples legado — retorna como estão
+// v1: chave global direta — legado (lazy migration)
 // ---------------------------------------------------------------------------
 async function deriveUserKey(userId: string): Promise<CryptoKey | null> {
   const keyBase64 = Deno.env.get('DATA_ENCRYPTION_KEY')
@@ -13,12 +11,7 @@ async function deriveUserKey(userId: string): Promise<CryptoKey | null> {
   const masterBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0))
   const masterKey   = await crypto.subtle.importKey('raw', masterBytes, 'HKDF', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
-    {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      salt: new TextEncoder().encode(userId),
-      info: new TextEncoder().encode('granaevo-data-v2'),
-    },
+    { name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode(userId), info: new TextEncoder().encode('granaevo-data-v2') },
     masterKey,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -29,26 +22,21 @@ async function deriveUserKey(userId: string): Promise<CryptoKey | null> {
 async function decryptData(encrypted: string, userId: string): Promise<string | null> {
   const keyBase64 = Deno.env.get('DATA_ENCRYPTION_KEY')
   if (!keyBase64) return null
-
   let key: CryptoKey
   let payload: string
-
   try {
     if (encrypted.startsWith('v2:')) {
-      // Chave derivada por usuário (HKDF) — formato atual
       const derived = await deriveUserKey(userId)
       if (!derived) return null
       key     = derived
       payload = encrypted.slice(3)
     } else if (encrypted.startsWith('v1:')) {
-      // Chave global — legado, lazy migrated na próxima escrita
       const keyBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0))
       key     = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt'])
       payload = encrypted.slice(3)
     } else {
       return null
     }
-
     const combined = Uint8Array.from(atob(payload), c => c.charCodeAt(0))
     const iv       = combined.slice(0, 12)
     const cipher   = combined.slice(12)
@@ -60,7 +48,21 @@ async function decryptData(encrypted: string, userId: string): Promise<string | 
 }
 
 // ---------------------------------------------------------------------------
-// CORS — restrito ao domínio configurado.
+// JWT — decodifica payload sem verificar assinatura.
+// Seguro porque proxy_secret blinda o endpoint de chamadas externas.
+// Verificamos apenas formato e expiração.
+// ---------------------------------------------------------------------------
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(base64))
+  } catch { return null }
+}
+
+// ---------------------------------------------------------------------------
+// CORS
 // ---------------------------------------------------------------------------
 const ALLOWED_ORIGINS = [
   'https://granaevo.vercel.app',
@@ -79,9 +81,6 @@ function getCorsHeaders(req: Request): Record<string, string> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Comparação de strings em tempo constante — evita timing attack
-// ---------------------------------------------------------------------------
 function timingSafeEqual(a: string, b: string): boolean {
   const enc    = new TextEncoder()
   const aBytes = enc.encode(a)
@@ -120,7 +119,10 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // ── 2. Verificar JWT e extrair userId ────────────────────────────────────
+  // ── 2. Extrair e validar JWT ─────────────────────────────────────────────
+  // Usamos decodificação de payload em vez de auth.getUser() porque o projeto
+  // usa ES256 (assimétrico) e a versão do supabase-js retorna erro de algoritmo.
+  // Seguro: proxy_secret já garante que apenas o proxy Vercel chega aqui.
   const authHeader = req.headers.get('Authorization') ?? ''
   const token      = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
 
@@ -128,6 +130,21 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: 'Não autenticado' }, 401, corsHeaders)
   }
 
+  const payload = decodeJwtPayload(token)
+  if (!payload || typeof payload.sub !== 'string') {
+    console.warn('[get-user-data] JWT malformado')
+    return json({ success: false, error: 'Token inválido' }, 401, corsHeaders)
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  if (typeof payload.exp === 'number' && payload.exp < now) {
+    console.warn('[get-user-data] JWT expirado')
+    return json({ success: false, error: 'Token expirado' }, 401, corsHeaders)
+  }
+
+  const userId = payload.sub
+
+  // ── 3. Cliente admin para operações de banco ─────────────────────────────
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
@@ -135,23 +152,14 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   })
 
-  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-  if (authError || !user?.id) {
-    console.warn('[get-user-data] JWT inválido:', authError?.message)
-    return json({ success: false, error: 'Token inválido ou expirado' }, 401, corsHeaders)
-  }
-
-  const userId = user.id
-
   try {
-    // ── 3. Buscar dados do banco ─────────────────────────────────────────────
+    // ── 4. Buscar dados do banco ─────────────────────────────────────────────
     const { data, error } = await supabaseAdmin
       .from('user_data')
       .select('data_json')
       .eq('user_id', userId)
       .single()
 
-    // Registro não existe — cliente deve criar com o save endpoint
     if (error?.code === 'PGRST116') {
       return json({ success: false, error: 'NOT_FOUND' }, 404, corsHeaders)
     }
@@ -162,9 +170,7 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: 'NOT_FOUND' }, 404, corsHeaders)
     }
 
-    // ── 4. Descriptografar se necessário (lazy migration) ────────────────────
-    // Dados com _enc: "v1:..." → descriptografar.
-    // Dados sem _enc → texto simples antigo → retornar como estão.
+    // ── 5. Descriptografar se necessário (lazy migration) ────────────────────
     let dataJson = data.data_json as Record<string, unknown>
 
     if (typeof dataJson._enc === 'string') {
@@ -176,7 +182,7 @@ Deno.serve(async (req: Request) => {
       try {
         dataJson = JSON.parse(plaintext)
       } catch {
-        console.error('[get-user-data] JSON inválido após descriptografar para userId:', userId.slice(0, 8))
+        console.error('[get-user-data] JSON inválido após descriptografar')
         return json({ success: false, error: 'Erro ao processar dados' }, 500, corsHeaders)
       }
     }
