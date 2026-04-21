@@ -26,8 +26,15 @@
 // ========== CONFIGURAÇÃO (via env vars — nunca hardcoded) ==========
 const EDGE_FUNCTION_URL    = process.env.SUPABASE_EDGE_URL;
 const SUPABASE_ANON_KEY    = process.env.SUPABASE_ANON_KEY;
-const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN;
+const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN; // kept for env check
 const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF;
+
+const ALLOWED_ORIGINS = [
+    process.env.ALLOWED_ORIGIN,
+    'https://granaevo.com',
+    'https://www.granaevo.com',
+    'https://granaevo.vercel.app',
+].filter(Boolean);
 const PROXY_SECRET         = process.env.PROXY_SECRET;
 const REDIS_URL            = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN          = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -100,7 +107,8 @@ export default async function handler(req, res) {
 
     // ── 1. Método HTTP ────────────────────────────────────────
     if (req.method === 'OPTIONS') {
-        res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN ?? '');
+        const preflightOrigin = ALLOWED_ORIGINS.includes(req.headers['origin'] ?? '') ? req.headers['origin'] : ALLOWED_ORIGINS[0];
+        res.setHeader('Access-Control-Allow-Origin', preflightOrigin);
         res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
         res.setHeader('Access-Control-Max-Age', '86400');
@@ -178,7 +186,7 @@ export default async function handler(req, res) {
     //
     //  1. Origin: presente em todos os browsers para requests cross-origin.
     //     curl sem -H 'Origin: ...' envia sem Origin — bloqueado aqui.
-    if (origin !== ALLOWED_ORIGIN) {
+    if (!ALLOWED_ORIGINS.includes(origin)) {
         log('warn', 'csrf_origin_blocked', ip, null, { origin, fetchSite, fetchMode, fetchDest });
         return res.status(403).json({ error: 'Forbidden' });
     }

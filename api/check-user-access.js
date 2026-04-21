@@ -3,14 +3,23 @@
 
 import { checkRate } from './_rate-limit.js'
 
-const EDGE_URL       = `${process.env.SUPABASE_URL}/functions/v1/check-user-access`
-const ANON_KEY       = process.env.SUPABASE_ANON_KEY ?? ''
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN   ?? 'https://granaevo.com'
-const RATE_MAX       = 20
+const EDGE_URL  = `${process.env.SUPABASE_URL}/functions/v1/check-user-access`
+const ANON_KEY  = process.env.SUPABASE_ANON_KEY ?? ''
+const RATE_MAX  = 20
+
+const ALLOWED_ORIGINS = [
+  process.env.ALLOWED_ORIGIN,
+  'https://granaevo.com',
+  'https://www.granaevo.com',
+  'https://granaevo.vercel.app',
+].filter(Boolean)
 
 export default async function handler(req, res) {
+  const origin        = req.headers['origin'] ?? ''
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : null
+
   res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin ?? ALLOWED_ORIGINS[0])
   res.setHeader('Vary', 'Origin')
 
   if (req.method === 'OPTIONS') {
@@ -19,8 +28,7 @@ export default async function handler(req, res) {
     return res.status(204).end()
   }
 
-  const origin = req.headers['origin'] ?? ''
-  if (origin !== ALLOWED_ORIGIN) return res.status(403).json({ error: 'Forbidden' })
+  if (!allowedOrigin) return res.status(403).json({ error: 'Forbidden' })
   if (req.method !== 'POST')     return res.status(405).json({ error: 'Method Not Allowed' })
   if (!EDGE_URL || !ANON_KEY)    return res.status(503).json({ error: 'Serviço indisponível' })
 
