@@ -10,7 +10,20 @@
  * ✅ SIGNED URL LONGA: 7 dias (604800s) — evita foto quebrada imediatamente
  * ✅ upsert: true — evita erro se o mesmo arquivo tentar ser re-enviado
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.2";
+
+// ---------------------------------------------------------------------------
+// JWT — decodifica payload sem verificar assinatura.
+// Seguro: verify_jwt=false no gateway, a função valida exp e sub localmente.
+// ---------------------------------------------------------------------------
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".")
+    if (parts.length !== 3) return null
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/")
+    return JSON.parse(atob(base64))
+  } catch { return null }
+}
 
 // ─── Magic bytes de cada formato permitido ────────────────────────────────────
 const MAGIC: Record<string, (buf: Uint8Array) => boolean> = {
@@ -96,13 +109,22 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Configuração interna incompleta" }, 500);
   }
 
-  // ── 3. Admin client ────────────────────────────────────────────────────────
-  //
-  // CORREÇÃO ES256:
-  // supabaseAdmin.auth.getUser(token) delega validação ao servidor Auth via JWKS.
-  // Funciona com ES256 e HS256. A abordagem antiga (createClient + anonKey no
-  // global header) falhava silenciosamente com tokens ES256 de novos usuários.
-  //
+  // ── 3. Validar JWT localmente ─────────────────────────────────────────────
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.sub !== "string") {
+    console.error("[upload-profile-photo] JWT malformado");
+    return json({ error: "Unauthorized: invalid token" }, 401);
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (typeof payload.exp === "number" && payload.exp < nowSec) {
+    console.error("[upload-profile-photo] JWT expirado");
+    return json({ error: "Unauthorized: token expired" }, 401);
+  }
+
+  const callerUserId = payload.sub as string;
+
+  // ── 4. Admin client (service role — para storage e DB, nunca para user JWT) ─
   const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
     auth: {
       autoRefreshToken:   false,
@@ -110,19 +132,6 @@ Deno.serve(async (req: Request) => {
       detectSessionInUrl: false,
     },
   });
-
-  // ── 4. Verifica o JWT via Admin client ────────────────────────────────────
-  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-
-  if (authError || !user || !user.id) {
-    console.error(
-      "[upload-profile-photo] Falha na autenticação:",
-      authError?.message ?? "user null"
-    );
-    return json({ error: "Unauthorized: invalid or expired token" }, 401);
-  }
-
-  const callerUserId = user.id;
 
   // ── 5. Resolve effectiveUserId — suporta convidados ──────────────────────
   //

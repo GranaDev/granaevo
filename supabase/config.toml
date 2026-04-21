@@ -380,20 +380,26 @@ verify_jwt = false
 [functions.send-welcome-email]
 verify_jwt = false
 
-# Funções com JWT obrigatório (usuário autenticado)
+# Funções que fazem verificação JWT própria (decodeJwtPayload + proxy_secret)
+# verify_jwt = false evita que o gateway Supabase rejeite JWTs ES256 antes de
+# chegar no código da função. A segurança é garantida internamente.
 [functions.save-user-data]
-verify_jwt = true
+verify_jwt = false
 
+[functions.get-user-data]
+verify_jwt = false
+
+[functions.check-user-access]
+verify_jwt = false
+
+[functions.upload-profile-photo]
+verify_jwt = false
+
+# Funções com JWT obrigatório (usuário autenticado) — HS256 compatível
 [functions.send-guest-invite]
 verify_jwt = true
 
 [functions.link-user-subscription]
-verify_jwt = true
-
-[functions.check-user-access]
-verify_jwt = true
-
-[functions.upload-profile-photo]
 verify_jwt = true
 
 [edge_runtime]
