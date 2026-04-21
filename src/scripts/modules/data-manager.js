@@ -163,7 +163,7 @@ class DataManager {
             const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
             let resp;
             try {
-                resp = await fetch('/api/get-user-data', { signal });
+                resp = await fetch('/api/get-user-data', { credentials: 'include', signal });
             } finally {
                 cleanup();
             }
@@ -334,9 +334,10 @@ class DataManager {
             let saveResp;
             try {
                 saveResp = await fetch('/api/save-user-data', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    serialized,
+                    method:      'POST',
+                    credentials: 'include',
+                    headers:     { 'Content-Type': 'application/json' },
+                    body:        serialized,
                     signal,
                 });
             } finally {
@@ -548,9 +549,10 @@ class DataManager {
             let resp;
             try {
                 resp = await fetch('/api/save-user-data', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ profiles: [] }),
+                    method:      'POST',
+                    credentials: 'include',
+                    headers:     { 'Content-Type': 'application/json' },
+                    body:        JSON.stringify({ profiles: [] }),
                     signal,
                 });
             } finally {
