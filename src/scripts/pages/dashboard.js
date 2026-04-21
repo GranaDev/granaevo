@@ -1,7 +1,7 @@
 // ========== IMPORTS ESSENCIAIS ==========
 import { supabase } from '../services/supabase-client.js?v=2';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?v=2';
-import { dataManager } from '../modules/data-manager.js?v=4';
+import { dataManager } from '../modules/data-manager.js?v=5';
 import AuthGuard from '../modules/auth-guard.js?v=2';
 
 // ========== ESTADO GLOBAL ==========
@@ -30,6 +30,7 @@ let cartaoSelecionadoId = null;
 let tipoRelatorioAtivo = 'individual';
 let _effectiveUserId = null;
 let _effectiveEmail  = null;
+let _lastKnownUserData = null; // fallback when loadUserData returns empty unexpectedly
 
 // ========== REFERÊNCIAS GLOBAIS ==========
 
@@ -434,6 +435,7 @@ async function carregarDadosPerfil(perfilId) {
         _log.info('📦 [carregarDadosPerfil] Iniciando carregamento de dados');
 
         const userData = await dataManager.loadUserData();
+        if (userData.profiles.length > 0) _lastKnownUserData = userData;
 
         // ✅ CORREÇÃO CRÍTICA: data-manager.js rejeita perfis com id inteiro (ex: id=6)
         //    ao validar o shape no loadUserData(), e como efeito colateral pode resetar
@@ -768,11 +770,17 @@ async function salvarDados() {
                 };
 
                 // ── 5. Carregar dados existentes, atualizar perfil e salvar ─
-                //    ✅ CORREÇÃO CRÍTICA: usa saveUserData(profiles) que é o método
-                //       correto do data-manager.js. saveProfileData() não existe.
-                //       Carregamos o userData completo, atualizamos apenas o perfil
-                //       ativo e salvamos o array inteiro — igual ao fluxo original.
-                const userData = await dataManager.loadUserData();
+                //    Carregamos o userData completo, atualizamos apenas o perfil
+                //    ativo e salvamos o array inteiro para preservar outros perfis.
+                //    Se o GET retornar vazio inesperadamente, usa o último carregamento
+                //    bem-sucedido como base (evita sobrescrever dados reais com vazio).
+                let userData = await dataManager.loadUserData();
+                if (userData.profiles.length === 0 && _lastKnownUserData?.profiles?.length > 0) {
+                    _log.warn('SAVE: loadUserData retornou vazio — usando _lastKnownUserData como fallback');
+                    userData = _lastKnownUserData;
+                } else if (userData.profiles.length > 0) {
+                    _lastKnownUserData = userData;
+                }
 
                 if (!validarUserData(userData)) {
                     _log.error('SAVE_003', 'Estrutura de userData inválida ao salvar');
