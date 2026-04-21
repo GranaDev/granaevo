@@ -4,11 +4,12 @@ let _ctx = null;
 export function init(ctx) {
     _ctx = ctx;
     window._dbMetas = { renderMetasList };
-    window.abrirMetaForm     = (id) => abrirMetaForm(id);
-    window.removerMeta       = (id) => removerMeta(id);
-    window.selecionarMeta    = (id) => selecionarMeta(id);
-    window.abrirRetiradaForm = (id) => abrirRetiradaForm(id);
+    window.abrirMetaForm          = (id) => abrirMetaForm(id);
+    window.removerMeta            = (id) => removerMeta(id);
+    window.selecionarMeta         = (id) => selecionarMeta(id);
+    window.abrirRetiradaForm      = (id) => abrirRetiradaForm(id);
     window.abrirAnaliseDisciplina = () => abrirAnaliseDisciplina();
+    window.renderMetaVisual       = () => renderMetaVisual();
     renderMetasList();
 }
 

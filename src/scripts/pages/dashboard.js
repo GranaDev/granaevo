@@ -1638,7 +1638,7 @@ function mostrarTela(tela) {
 
     if (tela === 'reservas') {
         if (!_dbLoaded.metas) {
-            import('./db-metas.js?v=2').then(m => {
+            import('./db-metas.js?v=3').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.metas = true;
             });
@@ -3293,7 +3293,7 @@ function atualizarTudo() {
     atualizarDashboardResumo();
     atualizarListaContasFixas();
     window._dbMetas?.renderMetasList?.();
-    renderMetaVisual();
+    window.renderMetaVisual?.();
     atualizarHeaderReservas();
 }
 

@@ -168,15 +168,40 @@ Deno.serve(async (req: Request) => {
     const encrypted   = await encryptData(JSON.stringify(dataToSave), userId)
     const dataToStore = encrypted ? { _enc: encrypted } : dataToSave
 
-    // ── 6. Upsert atômico ───────────────────────────────────────────────────
-    const { error: dbError } = await supabaseAdmin
-      .from('user_data')
-      .upsert(
-        { user_id: userId, email: userEmail, data_json: dataToStore, last_modified: new Date().toISOString() },
-        { onConflict: 'user_id', ignoreDuplicates: false }
-      )
+    const now = new Date().toISOString()
 
-    if (dbError) throw dbError
+    // ── 6. INSERT ou UPDATE — funciona independente de constraints ──────────
+    // Tenta UPDATE primeiro; se nenhuma linha for afetada, faz INSERT.
+    // Evita depender de UNIQUE constraint para onConflict.
+    const { data: existing, error: selectErr } = await supabaseAdmin
+      .from('user_data')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (selectErr) {
+      console.error('[save-user-data] Erro ao verificar registro existente:', selectErr.message)
+      throw selectErr
+    }
+
+    if (existing) {
+      const { error: updateErr } = await supabaseAdmin
+        .from('user_data')
+        .update({ email: userEmail, data_json: dataToStore, last_modified: now })
+        .eq('user_id', userId)
+      if (updateErr) {
+        console.error('[save-user-data] Erro no UPDATE:', updateErr.message)
+        throw updateErr
+      }
+    } else {
+      const { error: insertErr } = await supabaseAdmin
+        .from('user_data')
+        .insert({ user_id: userId, email: userEmail, data_json: dataToStore, last_modified: now })
+      if (insertErr) {
+        console.error('[save-user-data] Erro no INSERT:', insertErr.message)
+        throw insertErr
+      }
+    }
 
     return json({ success: true }, 200, corsHeaders)
 
