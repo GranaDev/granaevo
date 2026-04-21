@@ -1,7 +1,7 @@
 // ========== IMPORTS ESSENCIAIS ==========
 import { supabase } from '../services/supabase-client.js?v=2';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?v=2';
-import { dataManager } from '../modules/data-manager.js?v=6';
+import { dataManager } from '../modules/data-manager.js?v=7';
 import AuthGuard from '../modules/auth-guard.js?v=2';
 
 // ========== ESTADO GLOBAL ==========
@@ -791,6 +791,9 @@ async function salvarDados() {
                 const perfilIndex = userData.profiles.findIndex(
                     p => String(p.id) === String(perfilAtivo.id)
                 );
+
+                // TEMP DIAG
+                console.warn('💾 [DASH-DIAG] salvarDados: contas no perfil a salvar:', dadosPerfil.contasFixas?.length, '| perfilIndex:', perfilIndex);
 
                 if (perfilIndex !== -1) {
                     userData.profiles[perfilIndex] = dadosPerfil;
