@@ -309,9 +309,6 @@ class DataManager {
             return false;
         }
 
-        // TEMP DIAG
-        console.warn('💾 [SAVE-DIAG] doSave iniciado. Perfis:', profilesData?.length, '| userId:', !!this.#userId);
-
         this.#isSaving = true;
 
         try {
@@ -365,9 +362,6 @@ class DataManager {
                 cleanup();
             }
 
-            // TEMP DIAG
-            console.warn('💾 [SAVE-DIAG] POST status:', saveResp.status);
-
             if (!saveResp.ok) {
                 const errText = await saveResp.text().catch(() => '');
                 console.error('❌ [DATA-MANAGER] Erro ao salvar no banco:', saveResp.status, errText);
@@ -375,7 +369,6 @@ class DataManager {
             }
 
             this.#lastSaveTime = new Date();
-            console.warn('✅ [SAVE-DIAG] Save OK às', this.#lastSaveTime.toLocaleTimeString());
 
             return true;
 

@@ -200,16 +200,7 @@ export default async function handler(req, res) {
     const userId = extractUserIdFromJwt(accessToken);
     log('info', 'load_attempt', ip, userId, {});
 
-    // ── 8. Cache Redis — evita chamar a Edge Function em reloads frequentes ──
-    if (userId) {
-        const cached = await cacheGet(userId);
-        if (cached) {
-            log('info', 'load_cache_hit', ip, userId, {});
-            res.setHeader('X-Content-Type-Options', 'nosniff');
-            res.setHeader('Cache-Control', 'no-store');
-            return res.status(200).json(JSON.parse(cached));
-        }
-    }
+    // Cache Redis removido — sempre vai ao banco para garantir consistência dos dados
 
     // ── 9. Repassa para a Edge Function ──────────────────────
     let edgeResponse;
@@ -233,12 +224,7 @@ export default async function handler(req, res) {
         return res.status(502).json({ error: 'Bad Gateway' });
     }
 
-    // ── 10. Cacheia resposta bem-sucedida ─────────────────────
     const edgeBody = await edgeResponse.text();
-
-    if (edgeResponse.status === 200 && userId) {
-        cacheSet(userId, edgeBody); // fire-and-forget — não bloqueia resposta
-    }
 
     log('info', 'load_result', ip, userId, { status: edgeResponse.status });
 

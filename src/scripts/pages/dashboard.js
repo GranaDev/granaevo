@@ -1,7 +1,7 @@
 // ========== IMPORTS ESSENCIAIS ==========
 import { supabase } from '../services/supabase-client.js?v=2';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?v=2';
-import { dataManager } from '../modules/data-manager.js?v=7';
+import { dataManager } from '../modules/data-manager.js?v=8';
 import AuthGuard from '../modules/auth-guard.js?v=2';
 
 // ========== ESTADO GLOBAL ==========
@@ -30,7 +30,8 @@ let cartaoSelecionadoId = null;
 let tipoRelatorioAtivo = 'individual';
 let _effectiveUserId = null;
 let _effectiveEmail  = null;
-let _lastKnownUserData = null; // fallback when loadUserData returns empty unexpectedly
+let _allProfilesData = []; // cache local de todos os perfis — fonte de verdade para o save
+let _cachedAuthToken = null; // token cacheado para beforeunload (fetch+keepalive)
 
 // ========== REFERÊNCIAS GLOBAIS ==========
 
@@ -435,7 +436,7 @@ async function carregarDadosPerfil(perfilId) {
         _log.info('📦 [carregarDadosPerfil] Iniciando carregamento de dados');
 
         const userData = await dataManager.loadUserData();
-        if (userData.profiles.length > 0) _lastKnownUserData = userData;
+        if (userData.profiles.length > 0) _allProfilesData = userData.profiles;
 
         // ✅ CORREÇÃO CRÍTICA: data-manager.js rejeita perfis com id inteiro (ex: id=6)
         //    ao validar o shape no loadUserData(), e como efeito colateral pode resetar
@@ -769,39 +770,28 @@ async function salvarDados() {
                     lastUpdate:     new Date().toISOString(),
                 };
 
-                // ── 5. Carregar dados existentes, atualizar perfil e salvar ─
-                //    Carregamos o userData completo, atualizamos apenas o perfil
-                //    ativo e salvamos o array inteiro para preservar outros perfis.
-                //    Se o GET retornar vazio inesperadamente, usa o último carregamento
-                //    bem-sucedido como base (evita sobrescrever dados reais com vazio).
-                let userData = await dataManager.loadUserData();
-                if (userData.profiles.length === 0 && _lastKnownUserData?.profiles?.length > 0) {
-                    _log.warn('SAVE: loadUserData retornou vazio — usando _lastKnownUserData como fallback');
-                    userData = _lastKnownUserData;
-                } else if (userData.profiles.length > 0) {
-                    _lastKnownUserData = userData;
-                }
+                // ── 5. Montar lista de perfis e salvar ──────────────────────
+                //    Usa _allProfilesData (cache local) como base — sem round-trip
+                //    ao servidor. Isso evita race conditions com o Redis cache e
+                //    garante que os dados mais recentes em memória são preservados.
+                const profilesBase = _allProfilesData.length > 0
+                    ? JSON.parse(JSON.stringify(_allProfilesData)) // cópia profunda
+                    : [];
 
-                if (!validarUserData(userData)) {
-                    _log.error('SAVE_003', 'Estrutura de userData inválida ao salvar');
-                    resolve(false);
-                    return;
-                }
-
-                const perfilIndex = userData.profiles.findIndex(
+                const perfilIndex = profilesBase.findIndex(
                     p => String(p.id) === String(perfilAtivo.id)
                 );
 
-                // TEMP DIAG
-                console.warn('💾 [DASH-DIAG] salvarDados: contas no perfil a salvar:', dadosPerfil.contasFixas?.length, '| perfilIndex:', perfilIndex);
-
                 if (perfilIndex !== -1) {
-                    userData.profiles[perfilIndex] = dadosPerfil;
+                    profilesBase[perfilIndex] = dadosPerfil;
                 } else {
-                    userData.profiles.push(dadosPerfil);
+                    profilesBase.push(dadosPerfil);
                 }
 
-                const sucesso = await dataManager.saveUserData(userData.profiles);
+                // Atualizar cache local imediatamente (antes do POST para refletir estado atual)
+                _allProfilesData = profilesBase;
+
+                const sucesso = await dataManager.saveUserData(profilesBase);
                 if (!sucesso) _log.error('SAVE_004', 'saveUserData retornou false');
                 resolve(!!sucesso);
 
@@ -950,6 +940,7 @@ async function verificarLogin() {
 
         _effectiveUserId = effectiveUserId;
         _effectiveEmail  = effectiveEmail;
+        _cachedAuthToken = session.access_token ?? null;
 
         if (!dataManager.userId) {
             _log.warn('[VERIFICAR LOGIN] dataManager.userId não definido após initialize(). Tentando re-inicialização...');
@@ -4323,45 +4314,51 @@ function desenharTopGastos(dados, label) {
 
 // ========== SALVAMENTO GARANTIDO AO SAIR ==========
 window.addEventListener('beforeunload', () => {
-    if (perfilAtivo && dataManager.userId) {
-        atualizarReferenciasGlobais();
+    if (!perfilAtivo || !dataManager.userId || !_cachedAuthToken) return;
 
-        // ✅ Aplica os mesmos _validators usados em salvarDados()
-        //    Garante que dados corrompidos ou injetados via console
-        //    não bypassem a validação ao fechar a aba
-        const transacoesValidas  = transacoes.filter(_validators.transacao);
-        const metasValidas       = metas.filter(_validators.meta);
-        const contasValidas      = contasFixas.filter(_validators.contaFixa);
-        const cartoesValidos     = cartoesCredito.filter(_validators.cartao);
+    atualizarReferenciasGlobais();
 
-        // ✅ Remove _processando antes de persistir — flag temporária de runtime,
-        //    nunca deve ser salva no banco (ver Vulnerabilidade 2)
-        const contasSemLock = contasValidas.map(c => {
-            const { _processando, ...rest } = c;
-            return rest;
-        });
+    const transacoesValidas = transacoes.filter(_validators.transacao);
+    const metasValidas      = metas.filter(_validators.meta);
+    const contasValidas     = contasFixas.filter(_validators.contaFixa).map(c => {
+        const { _processando, ...rest } = c;
+        return rest;
+    });
+    const cartoesValidos    = cartoesCredito.filter(_validators.cartao);
 
-        if (transacoesValidas.length !== transacoes.length   ||
-            metasValidas.length      !== metas.length         ||
-            contasValidas.length     !== contasFixas.length   ||
-            cartoesValidos.length    !== cartoesCredito.length) {
-            _log.warn('BEFOREUNLOAD: itens inválidos descartados antes de persistir via beacon');
-        }
+    const dadosAtual = {
+        id:             perfilAtivo.id,
+        nome:           _sanitizeText(perfilAtivo.nome),
+        foto:           _sanitizeImgUrl(perfilAtivo.foto) || null,
+        transacoes:     transacoesValidas,
+        metas:          metasValidas,
+        contasFixas:    contasValidas,
+        cartoesCredito: cartoesValidos,
+        nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
+        lastUpdate:     new Date().toISOString(),
+    };
 
-        const profilesAtual = [{
-            id:             perfilAtivo.id,
-            nome:           _sanitizeText(perfilAtivo.nome),
-            foto:           _sanitizeImgUrl(perfilAtivo.foto) || null,
-            transacoes:     transacoesValidas,
-            metas:          metasValidas,
-            contasFixas:    contasSemLock,
-            cartoesCredito: cartoesValidos,
-            nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
-            lastUpdate:     new Date().toISOString()
-        }];
+    // Monta lista completa de perfis com dados atuais em memória
+    const profilesAtual = _allProfilesData.length > 0
+        ? JSON.parse(JSON.stringify(_allProfilesData))
+        : [];
+    const idx = profilesAtual.findIndex(p => String(p.id) === String(perfilAtivo.id));
+    if (idx !== -1) profilesAtual[idx] = dadosAtual;
+    else profilesAtual.push(dadosAtual);
 
-        dataManager.saveImmediate(profilesAtual);
-    }
+    const payload = JSON.stringify({ profiles: profilesAtual });
+    if (payload.length > 4_900_000) return;
+
+    // fetch com keepalive suporta headers — substitui sendBeacon que não suporta Authorization
+    fetch('/api/save-user-data', {
+        method:    'POST',
+        keepalive: true,
+        headers: {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${_cachedAuthToken}`,
+        },
+        body: payload,
+    });
 });
 
 
