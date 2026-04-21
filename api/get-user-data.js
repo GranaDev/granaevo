@@ -52,10 +52,12 @@ async function cacheGet(userId) {
 async function cacheSet(userId, value) {
     if (!REDIS_URL || !REDIS_TOKEN) return;
     try {
-        await fetch(`${REDIS_URL}/set/gd:${userId}`, {
+        // Upstash REST: usar pipeline para passar TTL como argumento de comando,
+        // não como campo JSON (que seria armazenado como valor literal).
+        await fetch(`${REDIS_URL}/pipeline`, {
             method:  'POST',
             headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ value, ex: CACHE_TTL_SECS }),
+            body:    JSON.stringify([["SET", `gd:${userId}`, value, "EX", String(CACHE_TTL_SECS)]]),
             signal:  AbortSignal.timeout(2_000),
         });
     } catch { /* cache miss não é crítico */ }

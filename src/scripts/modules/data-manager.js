@@ -198,9 +198,6 @@ class DataManager {
 
             const result = await resp.json();
 
-            // TEMP DIAG — remove after diagnosis
-            console.warn('🔍 [DATA-MANAGER] GET resp status:', resp.status, '| keys:', result ? Object.keys(result).join(',') : 'null', '| data_json type:', typeof result?.data_json, '| has _enc:', !!(result?.data_json?._enc));
-
             if (!result?.data_json) {
                 console.warn('⚠️ [DATA-MANAGER] data_json vazio, retornando estrutura padrão');
                 return this.#emptyStructure();
