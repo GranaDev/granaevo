@@ -186,7 +186,7 @@ export default async function handler(req, res) {
     //
     //  1. Origin: presente em todos os browsers para requests cross-origin.
     //     curl sem -H 'Origin: ...' envia sem Origin — bloqueado aqui.
-    if (!ALLOWED_ORIGINS.includes(origin)) {
+    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
         log('warn', 'csrf_origin_blocked', ip, null, { origin, fetchSite, fetchMode, fetchDest });
         return res.status(403).json({ error: 'Forbidden' });
     }

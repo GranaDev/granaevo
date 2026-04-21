@@ -155,7 +155,7 @@ export default async function handler(req, res) {
     const fetchMode = req.headers['sec-fetch-mode'] ?? '';
     const fetchDest = req.headers['sec-fetch-dest'] ?? '';
 
-    if (!ALLOWED_ORIGINS.includes(origin)) {
+    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
         log('warn', 'csrf_origin_blocked', ip, null, { origin, fetchSite });
         return res.status(403).json({ error: 'Forbidden' });
     }

@@ -3439,30 +3439,30 @@ function bindEventos() {
     
     const btnRetirar = document.getElementById('btnRetirar');
     if(btnRetirar) {
-        btnRetirar.addEventListener('click', abrirRetiradaForm);
+        btnRetirar.addEventListener('click', () => window.abrirRetiradaForm?.());
     }
-    
+
     // Gráficos
     const btnAtualizarGraficos = document.getElementById('btnAtualizarGraficos');
     if(btnAtualizarGraficos) {
-        btnAtualizarGraficos.addEventListener('click', atualizarGraficos);
+        btnAtualizarGraficos.addEventListener('click', () => window.atualizarGraficos?.());
     }
-    
+
     // Relatórios
     const btnGerarRelatorio = document.getElementById('btnGerarRelatorio');
     if(btnGerarRelatorio) {
-        btnGerarRelatorio.addEventListener('click', gerarRelatorio);
+        btnGerarRelatorio.addEventListener('click', () => window.gerarRelatorio?.());
     }
-    
+
     // Configurações
     const btnAlterarNome = document.getElementById('btnAlterarNome');
     if(btnAlterarNome) {
-        btnAlterarNome.addEventListener('click', alterarNome);
+        btnAlterarNome.addEventListener('click', () => window.alterarNome?.());
     }
-    
+
     const btnAlterarEmail = document.getElementById('btnAlterarEmail');
     if(btnAlterarEmail) {
-        btnAlterarEmail.addEventListener('click', alterarEmail);
+        btnAlterarEmail.addEventListener('click', () => window.alterarEmail?.());
     }
     
     const btnAlterarSenha = document.getElementById('btnAlterarSenha');
