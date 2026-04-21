@@ -4,8 +4,9 @@ let _ctx = null;
 export function init(ctx) {
     _ctx = ctx;
     window._dbTransacoes = { atualizarMovimentacoesUI };
-    window.lancarTransacao     = () => lancarTransacao();
-    window.abrirDetalhesTransacao = (t) => abrirDetalhesTransacao(t);
+    window.lancarTransacao          = () => lancarTransacao();
+    window.abrirDetalhesTransacao   = (t) => abrirDetalhesTransacao(t);
+    window.atualizarTiposDinamicos  = () => atualizarTiposDinamicos();
     bindFiltrosMovimentacoes();
 }
 

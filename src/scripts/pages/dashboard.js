@@ -3419,18 +3419,17 @@ function bindEventos() {
         btnNovaContaFixa.addEventListener('click', () => abrirContaFixaForm());
     }
     
-    // Transações
+    // Transações — funções em db-transacoes.js (lazy), resolvidas em runtime via window
     const selectCategoria = document.getElementById('selectCategoria');
     if(selectCategoria) {
-        selectCategoria.addEventListener('change', atualizarTiposDinamicos);
-    }
-    
-    const btnLancar = document.getElementById('btnLancar');
-    if(btnLancar) {
-        btnLancar.addEventListener('click', lancarTransacao);
+        selectCategoria.addEventListener('change', () => window.atualizarTiposDinamicos?.());
     }
 
-    bindFiltrosMovimentacoes();
+    const btnLancar = document.getElementById('btnLancar');
+    if(btnLancar) {
+        btnLancar.addEventListener('click', () => window.lancarTransacao?.());
+    }
+    // bindFiltrosMovimentacoes() já é chamado no init() de db-transacoes.js
     
     // Reservas/Metas
     const btnNovaMeta = document.getElementById('btnNovaMeta');
@@ -3468,22 +3467,22 @@ function bindEventos() {
     
     const btnAlterarSenha = document.getElementById('btnAlterarSenha');
     if(btnAlterarSenha) {
-        btnAlterarSenha.addEventListener('click', abrirAlterarSenha);
+        btnAlterarSenha.addEventListener('click', () => window.abrirAlterarSenha?.());
     }
-    
+
     const btnTrocarPerfil = document.getElementById('btnTrocarPerfil');
     if(btnTrocarPerfil) {
-        btnTrocarPerfil.addEventListener('click', trocarPerfil);
+        btnTrocarPerfil.addEventListener('click', () => window.trocarPerfil?.());
     }
-    
+
     const btnComoUsar = document.getElementById('btnComoUsar');
     if(btnComoUsar) {
-        btnComoUsar.addEventListener('click', comoUsar);
+        btnComoUsar.addEventListener('click', () => window.comoUsar?.());
     }
-    
+
     const btnLogout = document.getElementById('btnLogout');
     if(btnLogout) {
-        btnLogout.addEventListener('click', confirmarLogout);
+        btnLogout.addEventListener('click', () => window.confirmarLogout?.());
     }
 
     const btnExportarJSON = document.getElementById('btnExportarJSON');
@@ -3518,7 +3517,7 @@ function bindEventos() {
 
 const widgetOndeFoi = document.getElementById('widgetOndeFoiDinheiro');
 if (widgetOndeFoi) {
-    widgetOndeFoi.addEventListener('click', abrirWidgetOndeForDinheiro);
+    widgetOndeFoi.addEventListener('click', () => window.abrirWidgetOndeForDinheiro?.());
     widgetOndeFoi.addEventListener('mouseover', () => {
         widgetOndeFoi.style.transform = 'translateY(-4px)';
         widgetOndeFoi.style.boxShadow = '0 8px 24px rgba(67,160,71,0.3)';

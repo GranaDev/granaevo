@@ -8,6 +8,8 @@ export function init(ctx) {
     window.abrirAlterarSenha = () => abrirAlterarSenha();
     window.enviarConvite    = () => enviarConvite();
     window.removerConvidado = (id) => removerConvidado(id);
+    window.trocarPerfil     = () => trocarPerfil();
+    window.comoUsar         = () => comoUsar();
 }
 
 // ========== CONFIGURAÇÕES ==========
