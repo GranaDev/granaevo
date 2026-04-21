@@ -1626,6 +1626,8 @@ function _makeCtx() {
         sistemaLog:                { get: () => sistemaLog,                             enumerable: true },
         mostrarSelecaoPerfis:      { value: (...a) => mostrarSelecaoPerfis(...a),      enumerable: true },
         validarUserData:           { value: (...a) => validarUserData(...a),           enumerable: true },
+        safeCategorias:            { value: (...a) => safeCategorias(...a),            enumerable: true },
+        sanitizarHTMLPopup:        { value: (...a) => sanitizarHTMLPopup(...a),        enumerable: true },
         // Cross-section lazy calls
         atualizarMovimentacoesUI: { value: () => window._dbTransacoes?.atualizarMovimentacoesUI?.(), enumerable: true },
         renderMetasList:          { value: () => window._dbMetas?.renderMetasList?.(),               enumerable: true },
@@ -1724,7 +1726,7 @@ function mostrarTela(tela) {
 
     if (tela === 'relatorios') {
         if (!_dbLoaded.relatorios) {
-            import('./db-relatorios.js?v=5').then(m => {
+            import('./db-relatorios.js?v=6').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.relatorios = true;
             });

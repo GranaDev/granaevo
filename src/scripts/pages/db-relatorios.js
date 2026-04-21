@@ -9,9 +9,11 @@ const sanitizeHTML   = (...a) => _ctx.sanitizeHTML(...a);
 const getMesNome     = (...a) => _ctx.getMesNome(...a);
 const formatarDataBR = (...a) => _ctx.formatarDataBR(...a);
 const sanitizeNumber = (...a) => _ctx.sanitizeNumber(...a);
-const sanitizeDate   = (...a) => _ctx.sanitizeDate(...a);
-const dataParaISO    = (...a) => _ctx.dataParaISO(...a);
-const _sanitizeText  = (...a) => _ctx._sanitizeText(...a);
+const sanitizeDate        = (...a) => _ctx.sanitizeDate(...a);
+const dataParaISO         = (...a) => _ctx.dataParaISO(...a);
+const _sanitizeText       = (...a) => _ctx._sanitizeText(...a);
+const safeCategorias      = (...a) => _ctx.safeCategorias(...a);
+const sanitizarHTMLPopup  = (...a) => _ctx.sanitizarHTMLPopup(...a);
 
 export function init(ctx) {
     _ctx = ctx;
