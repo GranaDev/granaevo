@@ -1678,7 +1678,7 @@ function mostrarTela(tela) {
         if (periodoSel) periodoSel.style.display = 'none';
 
         if (!_dbLoaded.transacoes) {
-            import('./db-transacoes.js?v=2').then(m => {
+            import('./db-transacoes.js?v=3').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.transacoes = true;
             });
@@ -1689,7 +1689,7 @@ function mostrarTela(tela) {
 
     if (tela === 'reservas') {
         if (!_dbLoaded.metas) {
-            import('./db-metas.js?v=3').then(m => {
+            import('./db-metas.js?v=4').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.metas = true;
             });
@@ -1700,7 +1700,7 @@ function mostrarTela(tela) {
 
     if (tela === 'cartoes') {
         if (!_dbLoaded.cartoes) {
-            import('./db-cartoes.js?v=2').then(m => {
+            import('./db-cartoes.js?v=3').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.cartoes = true;
             });
@@ -1711,7 +1711,7 @@ function mostrarTela(tela) {
 
     if (tela === 'graficos') {
         if (!_dbLoaded.graficos) {
-            import('./db-graficos.js?v=2').then(m => {
+            import('./db-graficos.js?v=3').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.graficos = true;
             });
@@ -1722,7 +1722,7 @@ function mostrarTela(tela) {
 
     if (tela === 'relatorios') {
         if (!_dbLoaded.relatorios) {
-            import('./db-relatorios.js?v=2').then(m => {
+            import('./db-relatorios.js?v=3').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.relatorios = true;
             });
@@ -1733,7 +1733,7 @@ function mostrarTela(tela) {
 
     if (tela === 'configuracoes') {
         if (!_dbLoaded.configuracoes) {
-            import('./db-configuracoes.js?v=2').then(m => {
+            import('./db-configuracoes.js?v=3').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.configuracoes = true;
             });
