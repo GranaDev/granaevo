@@ -1,6 +1,10 @@
 // db-cartoes.js — Seção de Cartões de Crédito (lazy-loaded)
 let _ctx = null;
 
+// Proxies para utilitários de dashboard.js disponíveis via _ctx após init()
+const formatBRL      = (...a) => _ctx.formatBRL(...a);
+const formatarDataBR = (...a) => _ctx.formatarDataBR(...a);
+
 export function init(ctx) {
     _ctx = ctx;
     window._dbCartoes = { atualizarTelaCartoes };

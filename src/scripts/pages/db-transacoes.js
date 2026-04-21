@@ -1,6 +1,9 @@
 // db-transacoes.js — Seção de Transações (lazy-loaded)
 let _ctx = null;
 
+// Proxy para utilitários de dashboard.js disponíveis via _ctx após init()
+const formatBRL = (...a) => _ctx.formatBRL(...a);
+
 export function init(ctx) {
     _ctx = ctx;
     window._dbTransacoes = { atualizarMovimentacoesUI };

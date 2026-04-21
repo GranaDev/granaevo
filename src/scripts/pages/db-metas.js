@@ -1,6 +1,10 @@
 // db-metas.js — Seção de Metas/Reservas (lazy-loaded)
 let _ctx = null;
 
+// Proxies para utilitários de dashboard.js disponíveis via _ctx após init()
+const formatBRL     = (...a) => _ctx.formatBRL(...a);
+const _sanitizeText = (...a) => _ctx._sanitizeText(...a);
+
 export function init(ctx) {
     _ctx = ctx;
     window._dbMetas = { renderMetasList };

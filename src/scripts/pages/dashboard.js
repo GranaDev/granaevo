@@ -1628,6 +1628,7 @@ function _makeCtx() {
         validarUserData:           { value: (...a) => validarUserData(...a),           enumerable: true },
         safeCategorias:            { value: (...a) => safeCategorias(...a),            enumerable: true },
         sanitizarHTMLPopup:        { value: (...a) => sanitizarHTMLPopup(...a),        enumerable: true },
+        mostrarPopupLimite:        { value: (...a) => mostrarPopupLimite(...a),        enumerable: true },
         // Cross-section lazy calls
         atualizarMovimentacoesUI: { value: () => window._dbTransacoes?.atualizarMovimentacoesUI?.(), enumerable: true },
         renderMetasList:          { value: () => window._dbMetas?.renderMetasList?.(),               enumerable: true },
@@ -1682,7 +1683,7 @@ function mostrarTela(tela) {
         if (periodoSel) periodoSel.style.display = 'none';
 
         if (!_dbLoaded.transacoes) {
-            import('./db-transacoes.js?v=3').then(m => {
+            import('./db-transacoes.js?v=4').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.transacoes = true;
             });
@@ -1693,7 +1694,7 @@ function mostrarTela(tela) {
 
     if (tela === 'reservas') {
         if (!_dbLoaded.metas) {
-            import('./db-metas.js?v=4').then(m => {
+            import('./db-metas.js?v=5').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.metas = true;
             });
@@ -1704,7 +1705,7 @@ function mostrarTela(tela) {
 
     if (tela === 'cartoes') {
         if (!_dbLoaded.cartoes) {
-            import('./db-cartoes.js?v=4').then(m => {
+            import('./db-cartoes.js?v=5').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.cartoes = true;
             });
@@ -1737,7 +1738,7 @@ function mostrarTela(tela) {
 
     if (tela === 'configuracoes') {
         if (!_dbLoaded.configuracoes) {
-            import('./db-configuracoes.js?v=4').then(m => {
+            import('./db-configuracoes.js?v=5').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.configuracoes = true;
             });

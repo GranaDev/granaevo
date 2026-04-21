@@ -2,6 +2,10 @@
 import { supabase } from '../services/supabase-client.js?v=2';
 let _ctx = null;
 
+// Proxies para utilitários de dashboard.js disponíveis via _ctx após init()
+const sanitizeHTML       = (...a) => _ctx.sanitizeHTML(...a);
+const mostrarPopupLimite = (...a) => _ctx.mostrarPopupLimite(...a);
+
 export function init(ctx) {
     _ctx = ctx;
     window.alterarNome      = () => alterarNome();
