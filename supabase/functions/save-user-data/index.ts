@@ -1,21 +1,46 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 // ---------------------------------------------------------------------------
-// AES-256-GCM — criptografia dos dados em repouso
-// Formato: { _enc: "v1:base64(iv[12] + ciphertext + authTag[16])" }
+// HKDF + AES-256-GCM — chave derivada por usuário (envelope encryption gratuito)
+//
+// Por que HKDF?
+//   A masterKey (DATA_ENCRYPTION_KEY) nunca é usada diretamente para cifrar dados.
+//   Em vez disso, derivamos uma chave única por usuário: HKDF(masterKey, userId).
+//   Se a masterKey vazar, o atacante ainda precisa do UUID de cada usuário para
+//   derivar a chave individual — isolamento por usuário sem custo de KMS.
+//
+// Formato no banco: { _enc: "v2:base64(iv[12] + ciphertext + authTag[16])" }
+// v1 = chave global (legado), v2 = chave derivada por usuário (atual)
 // ---------------------------------------------------------------------------
-async function encryptData(plaintext: string): Promise<string | null> {
+async function deriveUserKey(userId: string): Promise<CryptoKey | null> {
   const keyBase64 = Deno.env.get('DATA_ENCRYPTION_KEY')
   if (!keyBase64) return null
-  const keyBytes  = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0))
-  const key       = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt'])
-  const iv        = crypto.getRandomValues(new Uint8Array(12))
-  const encoded   = new TextEncoder().encode(plaintext)
-  const cipher    = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded)
-  const combined  = new Uint8Array(iv.byteLength + cipher.byteLength)
+  const masterBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0))
+  const masterKey   = await crypto.subtle.importKey('raw', masterBytes, 'HKDF', false, ['deriveKey'])
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new TextEncoder().encode(userId),
+      info: new TextEncoder().encode('granaevo-data-v2'),
+    },
+    masterKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  )
+}
+
+async function encryptData(plaintext: string, userId: string): Promise<string | null> {
+  const key = await deriveUserKey(userId)
+  if (!key) return null
+  const iv      = crypto.getRandomValues(new Uint8Array(12))
+  const encoded = new TextEncoder().encode(plaintext)
+  const cipher  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded)
+  const combined = new Uint8Array(iv.byteLength + cipher.byteLength)
   combined.set(iv, 0)
   combined.set(new Uint8Array(cipher), iv.byteLength)
-  return 'v1:' + btoa(String.fromCharCode(...combined))
+  return 'v2:' + btoa(String.fromCharCode(...combined))
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +163,7 @@ Deno.serve(async (req: Request) => {
       },
     }
 
-    const encrypted  = await encryptData(JSON.stringify(dataToSave))
+    const encrypted   = await encryptData(JSON.stringify(dataToSave), userId)
     const dataToStore = encrypted ? { _enc: encrypted } : dataToSave
 
     // ── 5. Upsert atômico — substitui double SELECT + UPDATE/INSERT ──────────

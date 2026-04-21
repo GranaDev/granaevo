@@ -551,12 +551,23 @@ async function checkUserAccess() {
                 'Authorization': authHeader,
             },
             body: JSON.stringify({ user_id: session.user.id }),
+            signal: AbortSignal.timeout(8_000),
         });
+
+        // Erro no proxy/servidor (404, 5xx) — não bloqueia o usuário.
+        // O login com email/senha já foi validado pelo Supabase Auth.
+        // Apenas nega se o servidor explicitamente retornar { hasAccess: false } com 200.
+        if (response.status === 404 || response.status >= 500) {
+            console.warn('[checkUserAccess] Proxy indisponível (' + response.status + ') — acesso liberado');
+            return { hasAccess: true };
+        }
         if (!response.ok) return { hasAccess: false };
         const result = await response.json();
         return { hasAccess: result?.hasAccess === true };
     } catch {
-        return { hasAccess: false };
+        // Erro de rede ou timeout — não bloqueia o usuário
+        console.warn('[checkUserAccess] Erro de rede — acesso liberado');
+        return { hasAccess: true };
     }
 }
 

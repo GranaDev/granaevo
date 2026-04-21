@@ -168,14 +168,17 @@ class DataManager {
                 cleanup();
             }
 
-            // Registro ainda não existe — cria estrutura inicial
-            if (resp.status === 404) {
-                if (IS_DEV) console.log('⚠️ [DATA-MANAGER] Nenhum dado encontrado, criando estrutura inicial...');
-                return await this.#createInitialRecord();
-            }
-
+            // Proxy indisponível — retorna estrutura vazia SEM sobrescrever o banco.
+            // O registro existe no banco; o erro é temporário (deploy, proxy, rede).
             if (!resp.ok) {
-                throw new Error(`HTTP ${resp.status}`);
+                if (resp.status === 404) {
+                    // Pode ser um usuário genuinamente novo — retorna vazio.
+                    // O upsert em saveUserData criará o registro no primeiro save.
+                    if (IS_DEV) console.log('⚠️ [DATA-MANAGER] Nenhum dado encontrado (404)');
+                } else {
+                    console.error(`❌ [DATA-MANAGER] Erro ao carregar: HTTP ${resp.status}`);
+                }
+                return this.#emptyStructure();
             }
 
             const result = await resp.json();

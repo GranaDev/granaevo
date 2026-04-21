@@ -26,9 +26,11 @@
 // ========== CONFIGURAÇÃO (via env vars — nunca hardcoded) ==========
 const EDGE_FUNCTION_URL    = process.env.SUPABASE_EDGE_URL;
 const SUPABASE_ANON_KEY    = process.env.SUPABASE_ANON_KEY;
-const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN;         // ex: https://seudominio.com.br
-const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF;  // ex: seu-project-ref
-const PROXY_SECRET         = process.env.PROXY_SECRET;           // segredo compartilhado proxy→Edge Function
+const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN;
+const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF;
+const PROXY_SECRET         = process.env.PROXY_SECRET;
+const REDIS_URL            = process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN          = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 const RATE_LIMIT_MAX_IP    = 10;      // requests por IP por janela
 const RATE_LIMIT_MAX_USER  = 8;       // requests por userId por janela (mais restritivo)
@@ -317,6 +319,15 @@ export default async function handler(req, res) {
     const edgeBody = await edgeResponse.text();
 
     log('info', 'save_result', ip, userId, { status: edgeResponse.status });
+
+    // Invalida cache Redis após save bem-sucedido — dados atualizados no próximo GET
+    if (edgeResponse.status === 200 && userId && REDIS_URL && REDIS_TOKEN) {
+        fetch(`${REDIS_URL}/del/gd:${userId}`, {
+            method:  'POST',
+            headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+            signal:  AbortSignal.timeout(2_000),
+        }).catch(() => {/* fire-and-forget */});
+    }
 
     // Headers defensivos na resposta — boas práticas mesmo em endpoints de API
     res.setHeader('X-Content-Type-Options', 'nosniff');

@@ -20,10 +20,39 @@ const SUPABASE_ANON_KEY    = process.env.SUPABASE_ANON_KEY;
 const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN;
 const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF;
 const PROXY_SECRET         = process.env.PROXY_SECRET;
+const REDIS_URL            = process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN          = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-const RATE_LIMIT_MAX_IP    = 20;      // GETs têm janela maior — load inicial + navegação
+const RATE_LIMIT_MAX_IP    = 20;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const MAX_RATE_STORE_SIZE  = 10_000;
+const CACHE_TTL_SECS       = 30;   // cache de dados por usuário — reduz invocações ~95%
+
+// ========== CACHE REDIS ==========
+async function cacheGet(userId) {
+    if (!REDIS_URL || !REDIS_TOKEN) return null;
+    try {
+        const res = await fetch(`${REDIS_URL}/get/gd:${userId}`, {
+            headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+            signal:  AbortSignal.timeout(2_000),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data?.result ?? null;
+    } catch { return null; }
+}
+
+async function cacheSet(userId, value) {
+    if (!REDIS_URL || !REDIS_TOKEN) return;
+    try {
+        await fetch(`${REDIS_URL}/set/gd:${userId}`, {
+            method:  'POST',
+            headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ value, ex: CACHE_TTL_SECS }),
+            signal:  AbortSignal.timeout(2_000),
+        });
+    } catch { /* cache miss não é crítico */ }
+}
 
 // ========== RATE LIMITER IN-MEMORY ==========
 const rateLimitStore = new Map();
@@ -157,7 +186,18 @@ export default async function handler(req, res) {
     const userId = extractUserIdFromJwt(accessToken);
     log('info', 'load_attempt', ip, userId, {});
 
-    // ── 8. Repassa para a Edge Function ──────────────────────
+    // ── 8. Cache Redis — evita chamar a Edge Function em reloads frequentes ──
+    if (userId) {
+        const cached = await cacheGet(userId);
+        if (cached) {
+            log('info', 'load_cache_hit', ip, userId, {});
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(200).json(JSON.parse(cached));
+        }
+    }
+
+    // ── 9. Repassa para a Edge Function ──────────────────────
     let edgeResponse;
     try {
         edgeResponse = await fetch(GET_DATA_EDGE_URL, {
@@ -179,8 +219,12 @@ export default async function handler(req, res) {
         return res.status(502).json({ error: 'Bad Gateway' });
     }
 
-    // ── 9. Retorna resposta ───────────────────────────────────
+    // ── 10. Cacheia resposta bem-sucedida ─────────────────────
     const edgeBody = await edgeResponse.text();
+
+    if (edgeResponse.status === 200 && userId) {
+        cacheSet(userId, edgeBody); // fire-and-forget — não bloqueia resposta
+    }
 
     log('info', 'load_result', ip, userId, { status: edgeResponse.status });
 

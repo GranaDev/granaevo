@@ -1,17 +1,55 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 // ---------------------------------------------------------------------------
-// AES-256-GCM — descriptografia dos dados em repouso
-// Formato esperado: { _enc: "v1:base64(iv[12] + ciphertext + authTag[16])" }
-// Lazy migration: se _enc ausente, retorna dados como estão (texto simples antigo).
+// HKDF + AES-256-GCM — descriptografia com chave derivada por usuário
+//
+// v2: chave derivada via HKDF(masterKey, userId) — atual
+// v1: chave global direta — legado (dados antigos, lazy migration)
+// sem prefixo: texto simples legado — retorna como estão
 // ---------------------------------------------------------------------------
-async function decryptData(encrypted: string): Promise<string | null> {
+async function deriveUserKey(userId: string): Promise<CryptoKey | null> {
   const keyBase64 = Deno.env.get('DATA_ENCRYPTION_KEY')
-  if (!keyBase64 || !encrypted.startsWith('v1:')) return null
+  if (!keyBase64) return null
+  const masterBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0))
+  const masterKey   = await crypto.subtle.importKey('raw', masterBytes, 'HKDF', false, ['deriveKey'])
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new TextEncoder().encode(userId),
+      info: new TextEncoder().encode('granaevo-data-v2'),
+    },
+    masterKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  )
+}
+
+async function decryptData(encrypted: string, userId: string): Promise<string | null> {
+  const keyBase64 = Deno.env.get('DATA_ENCRYPTION_KEY')
+  if (!keyBase64) return null
+
+  let key: CryptoKey
+  let payload: string
+
   try {
-    const keyBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0))
-    const key      = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt'])
-    const combined = Uint8Array.from(atob(encrypted.slice(3)), c => c.charCodeAt(0))
+    if (encrypted.startsWith('v2:')) {
+      // Chave derivada por usuário (HKDF) — formato atual
+      const derived = await deriveUserKey(userId)
+      if (!derived) return null
+      key     = derived
+      payload = encrypted.slice(3)
+    } else if (encrypted.startsWith('v1:')) {
+      // Chave global — legado, lazy migrated na próxima escrita
+      const keyBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0))
+      key     = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt'])
+      payload = encrypted.slice(3)
+    } else {
+      return null
+    }
+
+    const combined = Uint8Array.from(atob(payload), c => c.charCodeAt(0))
     const iv       = combined.slice(0, 12)
     const cipher   = combined.slice(12)
     const plain    = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher)
@@ -130,7 +168,7 @@ Deno.serve(async (req: Request) => {
     let dataJson = data.data_json as Record<string, unknown>
 
     if (typeof dataJson._enc === 'string') {
-      const plaintext = await decryptData(dataJson._enc)
+      const plaintext = await decryptData(dataJson._enc, userId)
       if (!plaintext) {
         console.error('[get-user-data] Falha ao descriptografar para userId:', userId.slice(0, 8))
         return json({ success: false, error: 'Erro ao descriptografar dados' }, 500, corsHeaders)
