@@ -17,7 +17,7 @@ export function init(ctx) {
 }
 
 // ========== RELATÓRIOS ==========
-function _ctx.popularFiltrosRelatorio() {
+function popularFiltrosRelatorio() {
     const mesSelect    = document.getElementById('mesRelatorio');
     const anoSelect    = document.getElementById('anoRelatorio');
     const perfilSelect = document.getElementById('selectPerfilRelatorio');
@@ -206,8 +206,7 @@ function setupBotoesRelatorio() {
     });
 }
 
-// CORREÇÃO: Flag para evitar cliques duplos / race condition
-let _ctx._gerandoRelatorio = false;
+// _gerandoRelatorio é estado de dashboard.js, acessível via _ctx.
 
 async function gerarRelatorio() {
     if (_ctx._gerandoRelatorio) return; // CORREÇÃO: Debounce de segurança

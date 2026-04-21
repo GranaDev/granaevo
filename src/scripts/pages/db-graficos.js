@@ -13,14 +13,10 @@ export function init(ctx) {
 // graficos.js é carregado no HTML e inicializa via DOMContentLoaded.
 // Aqui apenas garantimos que Chart.js (CDN ~500KB) esteja disponível
 // antes de o usuário tentar gerar gráficos.
+// _chartJsCarregado, _chartJsCarregando, _CHARTJS_SRC e _CHARTJS_INTEGRITY
+// são estado/constantes de dashboard.js, acessíveis via _ctx.
 
-let _ctx._chartJsCarregado   = false;
-let _ctx._chartJsCarregando  = false;
-
-const _ctx._CHARTJS_SRC       = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
-const _ctx._CHARTJS_INTEGRITY = 'sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt';
-
-function _ctx.inicializarGraficos() {
+function inicializarGraficos() {
     // Se Chart.js já está disponível (carregado em sessão anterior ou pelo HTML), nada a fazer.
     if (typeof Chart !== 'undefined') {
         _ctx._chartJsCarregado = true;

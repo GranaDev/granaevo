@@ -472,7 +472,7 @@ function abrirMetaForm(editId = null) {
     });
 }
 
-function _ctx.renderMetasList() {
+function renderMetasList() {
     const cont = document.getElementById('listaMetas');
     if (!cont) return;
 
@@ -1755,41 +1755,6 @@ function abrirAnaliseDisciplina(metaId) {
 // Expor função globalmente
 window.abrirAnaliseDisciplina = abrirAnaliseDisciplina;
 
-// ── Abreviações dos bancos — badge CSS sem dependência de imagem externa
-const _ctx.BANCO_ABREV = Object.freeze({
-    'Nubank':          'NU',
-    'Bradesco':        'BDC',
-    'Mercado Pago':    'MP',
-    'C6 Bank':         'C6',
-    'Itaú':            'ITÁ',
-    'Santander':       'SAN',
-    'Banco do Brasil': 'BB',
-    'Caixa':           'CEF',
-    'Alelo':           'ALE',
-});
-
-// Gradientes dos bancos — usados no mini-cartão dos Relatórios
-const _ctx.BANCO_COR = Object.freeze({
-    'Nubank':          'linear-gradient(135deg, #5b0d8c 0%, #9b19d1 100%)',
-    'Bradesco':        'linear-gradient(135deg, #c00000 0%, #e83232 100%)',
-    'Mercado Pago':    'linear-gradient(135deg, #006bb3 0%, #009ee3 100%)',
-    'C6 Bank':         'linear-gradient(135deg, #111114 0%, #2c2c30 100%)',
-    'Itaú':            'linear-gradient(135deg, #d46000 0%, #f07800 100%)',
-    'Santander':       'linear-gradient(135deg, #a80000 0%, #d40000 100%)',
-    'Banco do Brasil': 'linear-gradient(135deg, #003070 0%, #005cc5 100%)',
-    'Caixa':           'linear-gradient(135deg, #004f96 0%, #0074cc 100%)',
-    'Alelo':           'linear-gradient(135deg, #1a6b3a 0%, #2ea862 100%)',
-});
-
-// Ícones dos bancos — usados no mini-cartão dos Relatórios
-const _ctx.BANCO_ICON = Object.freeze({
-    'Nubank':          'public/assets/icons/cards/Nubank.png',
-    'Bradesco':        'public/assets/icons/cards/Bradesco.png',
-    'Mercado Pago':    'public/assets/icons/cards/logo-mercado-pago-icone-1024.png',
-    'C6 Bank':         'public/assets/icons/cards/logo-c6-bank-1024.png',
-    'Itaú':            'public/assets/icons/cards/logo-itau-4096.png',
-    'Banco do Brasil': 'public/assets/icons/cards/logo-banco-do-brasil-icon-4096.png',
-    'Caixa':           'public/assets/icons/cards/logo-caixa-economica-federal-4096.png',
-    'Alelo':           'public/assets/icons/cards/alelo-4096.png',
-});
+// BANCO_ABREV, BANCO_COR e BANCO_ICON são constantes de dashboard.js,
+// acessíveis via _ctx.BANCO_ABREV, _ctx.BANCO_COR e _ctx.BANCO_ICON.
 

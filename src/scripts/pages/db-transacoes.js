@@ -449,16 +449,15 @@ function bindFiltrosMovimentacoes() {
 
 // Paginação das movimentações — 50 itens por página para não sobrecarregar o DOM
 const MOV_POR_PAGINA = 50;
-let _ctx._movPaginaAtual  = 1;
-let _ctx._movVisivelCache = [];   // backing array for delegated click handler
-let _ctx._movDelegateSet  = false;
+// _movPaginaAtual, _movVisivelCache e _movDelegateSet são estado de dashboard.js,
+// acessíveis via _ctx.
 
 function _renderizarItemMovimentacao(t, lista) {
     const dataExibida = _ctx._sanitizeText(t.data || '');
     return { dataExibida, t };
 }
 
-function _ctx.atualizarMovimentacoesUI(resetPagina = true) {
+function atualizarMovimentacoesUI(resetPagina = true) {
     const lista = document.getElementById('listaMovimentacoes');
     if (!lista) return;
 

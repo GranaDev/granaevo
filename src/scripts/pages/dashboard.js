@@ -33,6 +33,17 @@ let _effectiveEmail  = null;
 let _allProfilesData = []; // cache local de todos os perfis — fonte de verdade para o save
 let _cachedAuthToken = null; // token cacheado para beforeunload (fetch+keepalive)
 
+// Estado compartilhado com módulos lazy-loaded via _ctx
+let _movPaginaAtual  = 1;
+let _movVisivelCache = [];
+let _movDelegateSet  = false;
+let _chartJsCarregado  = false;
+let _chartJsCarregando = false;
+let _gerandoRelatorio  = false;
+let _sessionNonce = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `nonce_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
 // ========== REFERÊNCIAS GLOBAIS ==========
 
 let _GE_snapshot_atual = null;
@@ -279,6 +290,44 @@ const limitesPlano = {
     "Casal": 2,
     "Família": 4
 };
+
+// Constantes de banco — compartilhadas via _ctx com módulos lazy-loaded
+const BANCO_ABREV = Object.freeze({
+    'Nubank':          'NU',
+    'Bradesco':        'BDC',
+    'Mercado Pago':    'MP',
+    'C6 Bank':         'C6',
+    'Itaú':            'ITÁ',
+    'Santander':       'SAN',
+    'Banco do Brasil': 'BB',
+    'Caixa':           'CEF',
+    'Alelo':           'ALE',
+});
+const BANCO_COR = Object.freeze({
+    'Nubank':          'linear-gradient(135deg, #5b0d8c 0%, #9b19d1 100%)',
+    'Bradesco':        'linear-gradient(135deg, #c00000 0%, #e83232 100%)',
+    'Mercado Pago':    'linear-gradient(135deg, #006bb3 0%, #009ee3 100%)',
+    'C6 Bank':         'linear-gradient(135deg, #111114 0%, #2c2c30 100%)',
+    'Itaú':            'linear-gradient(135deg, #d46000 0%, #f07800 100%)',
+    'Santander':       'linear-gradient(135deg, #a80000 0%, #d40000 100%)',
+    'Banco do Brasil': 'linear-gradient(135deg, #003070 0%, #005cc5 100%)',
+    'Caixa':           'linear-gradient(135deg, #004f96 0%, #0074cc 100%)',
+    'Alelo':           'linear-gradient(135deg, #1a6b3a 0%, #2ea862 100%)',
+});
+const BANCO_ICON = Object.freeze({
+    'Nubank':          'public/assets/icons/cards/Nubank.png',
+    'Bradesco':        'public/assets/icons/cards/Bradesco.png',
+    'Mercado Pago':    'public/assets/icons/cards/logo-mercado-pago-icone-1024.png',
+    'C6 Bank':         'public/assets/icons/cards/logo-c6-bank-1024.png',
+    'Itaú':            'public/assets/icons/cards/logo-itau-4096.png',
+    'Banco do Brasil': 'public/assets/icons/cards/logo-banco-do-brasil-icon-4096.png',
+    'Caixa':           'public/assets/icons/cards/logo-caixa-economica-federal-4096.png',
+    'Alelo':           'public/assets/icons/cards/alelo-4096.png',
+});
+
+// Constantes Chart.js — compartilhadas via _ctx
+const _CHARTJS_SRC       = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
+const _CHARTJS_INTEGRITY = 'sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt';
 
 // ========== FUNÇÕES DE FORMATAÇÃO ==========
 function formatBRL(v) { 
@@ -3243,8 +3292,32 @@ function confirmarAcao(mensagem, callbackConfirmar) {
 
 window.confirmarAcao = confirmarAcao;
 
-// ========== CONFIRMAR LOGOUT (VERSÃO FINAL CORRIGIDA) ==========
-// ========== CONFIRMAR LOGOUT (VERSÃO FINAL CORRIGIDA) ==========
+// Guards de segurança — compartilhados com módulos lazy-loaded via _ctx
+function _requerPerfilAtivo(fn) {
+    return function(...args) {
+        if (!perfilAtivo || !dataManager?.userId) {
+            _log.warn('[SEGURANÇA] Chamada bloqueada — sem perfil ativo ou sessão inválida.');
+            return;
+        }
+        return fn.apply(this, args);
+    };
+}
+
+function _requerNonce(fn) {
+    return function(nonce, ...args) {
+        if (!perfilAtivo || !dataManager?.userId) {
+            _log.warn('[SEGURANÇA] Chamada bloqueada — sem perfil ativo.');
+            return;
+        }
+        if (typeof nonce !== 'string' || nonce !== _sessionNonce) {
+            _log.warn('[SEGURANÇA] Chamada bloqueada — nonce inválido ou ausente.');
+            return;
+        }
+        return fn.apply(this, args);
+    };
+}
+
+// ========== CONFIRMAR LOGOUT ==========
 async function confirmarLogout_seguro() {
     criarPopup(`
         <h3>Confirmar Saída</h3>
@@ -3436,7 +3509,7 @@ function bindEventos() {
     // Reservas/Metas
     const btnNovaMeta = document.getElementById('btnNovaMeta');
     if(btnNovaMeta) {
-        btnNovaMeta.addEventListener('click', () => abrirMetaForm());
+        btnNovaMeta.addEventListener('click', () => window.abrirMetaForm?.());
     }
     
     const btnRetirar = document.getElementById('btnRetirar');

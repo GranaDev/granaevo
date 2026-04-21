@@ -14,7 +14,7 @@ export function init(ctx) {
 }
 
 // ========== CARTÕES DE CRÉDITO ==========
-function _ctx.atualizarTelaCartoes() {
+function atualizarTelaCartoes() {
     const grid = document.getElementById('cartoesGrid');
     if (!grid) return;
     grid.innerHTML = '';
@@ -1496,38 +1496,8 @@ window.excluirCompraFatura = excluirCompraFatura;
 //    Para funções chamadas de HTML (onclick de buttons), usar event delegation interno
 //    em vez de window.X — já feito no padrão addEventListener do código atual.
 
-const _ctx._sessionNonce = (typeof crypto !== 'undefined' && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : `nonce_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
-// ✅ Guard base: perfil ativo + userId
-function _ctx._requerPerfilAtivo(fn) {
-    return function(...args) {
-        if (!_ctx.perfilAtivo || !dataManager?.userId) {
-            _ctx._log.warn('[SEGURANÇA] Chamada bloqueada — sem perfil ativo ou sessão inválida.');
-            return;
-        }
-        return fn.apply(this, args);
-    };
-}
-
-// ✅ Guard de nonce: para funções de alto risco expostas no window.*
-//    Uso: window.alterarNome(_sessionNonce, 'Novo Nome')
-//    Extensões não conhecem _sessionNonce → chamada bloqueada
-//    Módulos internos chamam alterarNome() diretamente sem nonce → sem restrição
-function _ctx._requerNonce(fn) {
-    return function(nonce, ...args) {
-        if (!_ctx.perfilAtivo || !dataManager?.userId) {
-            _ctx._log.warn('[SEGURANÇA] Chamada bloqueada — sem perfil ativo.');
-            return;
-        }
-        if (typeof nonce !== 'string' || nonce !== _ctx._sessionNonce) {
-            _ctx._log.warn('[SEGURANÇA] Chamada bloqueada — nonce inválido ou ausente.');
-            return;
-        }
-        return fn.apply(this, args);
-    };
-}
+// _sessionNonce, _requerPerfilAtivo e _requerNonce são definidos em dashboard.js
+// e compartilhados via _ctx — não devem ser redeclarados aqui.
 
 // ── Utilitários de UI — necessários para módulos externos (graficos.js, etc.)
 //    Sem risco de uso malicioso — apenas abrem/fecham UI, não alteram dados
