@@ -2656,7 +2656,15 @@ function atualizarListaContasFixas() {
             if (e.target.tagName === 'BUTTON') return;
 
             if (c.tipoContaFixa === 'fatura_cartao') {
-                window.abrirVisualizacaoFatura?.(c.id);
+                if (!_dbLoaded.cartoes) {
+                    import('./db-cartoes.js?v=5').then(m => {
+                        m.init(_makeCtx());
+                        _dbLoaded.cartoes = true;
+                        window.abrirVisualizacaoFatura?.(c.id);
+                    });
+                } else {
+                    window.abrirVisualizacaoFatura?.(c.id);
+                }
             } else {
                 abrirContaFixaForm(c.id);
             }
