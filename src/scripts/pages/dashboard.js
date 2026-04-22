@@ -3605,7 +3605,17 @@ function bindEventos() {
 
 const widgetOndeFoi = document.getElementById('widgetOndeFoiDinheiro');
 if (widgetOndeFoi) {
-    widgetOndeFoi.addEventListener('click', () => window.abrirWidgetOndeForDinheiro?.());
+    widgetOndeFoi.addEventListener('click', () => {
+        if (!_dbLoaded.relatorios) {
+            import('./db-relatorios.js?v=6').then(m => {
+                m.init(_makeCtx());
+                _dbLoaded.relatorios = true;
+                window.abrirWidgetOndeForDinheiro?.();
+            });
+        } else {
+            window.abrirWidgetOndeForDinheiro?.();
+        }
+    });
     widgetOndeFoi.addEventListener('mouseover', () => {
         widgetOndeFoi.style.transform = 'translateY(-4px)';
         widgetOndeFoi.style.boxShadow = '0 8px 24px rgba(67,160,71,0.3)';
