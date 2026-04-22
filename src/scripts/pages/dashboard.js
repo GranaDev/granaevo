@@ -2656,7 +2656,7 @@ function atualizarListaContasFixas() {
             if (e.target.tagName === 'BUTTON') return;
 
             if (c.tipoContaFixa === 'fatura_cartao') {
-                abrirVisualizacaoFatura(c.id);
+                window.abrirVisualizacaoFatura?.(c.id);
             } else {
                 abrirContaFixaForm(c.id);
             }
