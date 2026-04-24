@@ -3,14 +3,22 @@
 
 import { checkRate } from './_rate-limit.js'
 
-const EDGE_URL       = `${process.env.SUPABASE_URL}/functions/v1/check-email-status`
+const _SUPABASE_URL  = process.env.SUPABASE_URL ?? ''
+const EDGE_URL       = `${_SUPABASE_URL}/functions/v1/check-email-status`
 const ANON_KEY       = process.env.SUPABASE_ANON_KEY
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? 'https://granaevo.com'
-const RATE_MAX       = 10
+// Suporta múltiplas origens separadas por vírgula (www e não-www)
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGIN ?? 'https://www.granaevo.com,https://granaevo.com')
+    .split(',').map(s => s.trim()).filter(Boolean)
+)
+const RATE_MAX = 10
 
 export default async function handler(req, res) {
+  const origin     = req.headers['origin'] ?? ''
+  const corsOrigin = ALLOWED_ORIGINS.has(origin) ? origin : [...ALLOWED_ORIGINS][0]
+
   res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin)
   res.setHeader('Vary', 'Origin')
 
   if (req.method === 'OPTIONS') {
@@ -19,10 +27,9 @@ export default async function handler(req, res) {
     return res.status(204).end()
   }
 
-  const origin = req.headers['origin'] ?? ''
-  if (origin !== ALLOWED_ORIGIN) return res.status(403).json({ error: 'Forbidden' })
-  if (req.method !== 'POST')     return res.status(405).json({ error: 'Method Not Allowed' })
-  if (!EDGE_URL || !ANON_KEY)    return res.status(503).json({ error: 'Serviço indisponível' })
+  if (!ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Forbidden' })
+  if (req.method !== 'POST')        return res.status(405).json({ error: 'Method Not Allowed' })
+  if (!_SUPABASE_URL || !ANON_KEY)  return res.status(503).json({ error: 'Serviço indisponível' })
 
   const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
     .toString().split(',')[0].trim()

@@ -739,6 +739,9 @@ if (togglePassword && inputs.loginPassword) {
 //  NAVEGAÇÃO ENTRE TELAS
 // ═══════════════════════════════════════════════════════════════
 function switchScreen(currentScreen, nextScreen) {
+    // Move o foco para o body antes de esconder as telas para evitar
+    // aria-hidden num ancestral de elemento focado (violação WAI-ARIA).
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     Object.values(screens).forEach(s => {
         s.classList.remove('active', 'exit-left');
         s.setAttribute('aria-hidden', 'true');

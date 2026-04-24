@@ -3,31 +3,37 @@
 
 import { checkRate } from './_rate-limit.js'
 
-const EDGE_URL       = `${process.env.SUPABASE_URL}/functions/v1/verify-guest-invite`
+const _SUPABASE_URL  = process.env.SUPABASE_URL ?? ''
+const EDGE_URL       = `${_SUPABASE_URL}/functions/v1/verify-guest-invite`
 const ANON_KEY       = process.env.SUPABASE_ANON_KEY
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? 'https://granaevo.com'
+// Suporta múltiplas origens separadas por vírgula (www e não-www)
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGIN ?? 'https://www.granaevo.com,https://granaevo.com')
+    .split(',').map(s => s.trim()).filter(Boolean)
+)
 const MAX_BODY_BYTES = 8192
 const RATE_MAX       = 5
 
 export default async function handler(req, res) {
-  const origin = req.headers['origin'] ?? ''
+  const origin     = req.headers['origin'] ?? ''
+  const corsOrigin = ALLOWED_ORIGINS.has(origin) ? origin : [...ALLOWED_ORIGINS][0]
 
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin',  ALLOWED_ORIGIN)
+    res.setHeader('Access-Control-Allow-Origin',  corsOrigin)
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
     res.setHeader('Access-Control-Max-Age',       '86400')
     return res.status(204).end()
   }
 
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin)
   res.setHeader('Vary', 'Origin')
   res.setHeader('Cache-Control', 'no-store')
 
-  if (origin !== ALLOWED_ORIGIN) return res.status(403).json({ error: 'Forbidden' })
-  if (req.method !== 'POST')     return res.status(405).json({ error: 'Method Not Allowed' })
+  if (!ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Forbidden' })
+  if (req.method !== 'POST')        return res.status(405).json({ error: 'Method Not Allowed' })
 
-  if (!EDGE_URL || !ANON_KEY) {
+  if (!_SUPABASE_URL || !ANON_KEY) {
     return res.status(503).json({ error: 'Serviço indisponível' })
   }
 

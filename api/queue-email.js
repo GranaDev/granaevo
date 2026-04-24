@@ -18,10 +18,14 @@
 
 import { checkRate } from './_rate-limit.js'
 
-const QSTASH_TOKEN  = process.env.QSTASH_TOKEN
-const SUPABASE_URL  = process.env.SUPABASE_URL  ?? ''
-const ANON_KEY      = process.env.SUPABASE_ANON_KEY ?? ''
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? 'https://granaevo.com'
+const QSTASH_TOKEN = process.env.QSTASH_TOKEN
+const SUPABASE_URL = process.env.SUPABASE_URL       ?? ''
+const ANON_KEY     = process.env.SUPABASE_ANON_KEY  ?? ''
+// Suporta múltiplas origens separadas por vírgula (www e não-www)
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGIN ?? 'https://www.granaevo.com,https://granaevo.com')
+    .split(',').map(s => s.trim()).filter(Boolean)
+)
 
 const EMAIL_FUNCTIONS = {
   'welcome':        `${SUPABASE_URL}/functions/v1/send-welcome-email`,
@@ -32,8 +36,11 @@ const EMAIL_FUNCTIONS = {
 const RATE_MAX = 5 // emails por IP por minuto
 
 export default async function handler(req, res) {
+  const origin     = req.headers['origin'] ?? ''
+  const corsOrigin = ALLOWED_ORIGINS.has(origin) ? origin : [...ALLOWED_ORIGINS][0]
+
   res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin)
   res.setHeader('Vary', 'Origin')
 
   if (req.method === 'OPTIONS') {
@@ -42,9 +49,8 @@ export default async function handler(req, res) {
     return res.status(204).end()
   }
 
-  const origin = req.headers['origin'] ?? ''
   // Permite chamadas internas (sem origin) e do domínio permitido
-  if (origin && origin !== ALLOWED_ORIGIN) return res.status(403).json({ error: 'Forbidden' })
+  if (origin && !ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Forbidden' })
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' })
   if (!SUPABASE_URL || !ANON_KEY) return res.status(503).json({ error: 'Serviço indisponível' })
 
