@@ -6,11 +6,14 @@ import { checkRate } from './_rate-limit.js'
 const _SUPABASE_URL  = process.env.SUPABASE_URL ?? ''
 const EDGE_URL       = `${_SUPABASE_URL}/functions/v1/verify-guest-invite`
 const ANON_KEY       = process.env.SUPABASE_ANON_KEY
-// Suporta múltiplas origens separadas por vírgula (www e não-www)
-const ALLOWED_ORIGINS = new Set(
-  (process.env.ALLOWED_ORIGIN ?? 'https://www.granaevo.com,https://granaevo.com')
-    .split(',').map(s => s.trim()).filter(Boolean)
-)
+// Origens de produção sempre permitidas; env var adiciona origens extras (ex.: dev local)
+const ALLOWED_ORIGINS = new Set([
+  'https://www.granaevo.com',
+  'https://granaevo.com',
+  ...(process.env.ALLOWED_ORIGIN
+    ? process.env.ALLOWED_ORIGIN.split(',').map(s => s.trim()).filter(Boolean)
+    : []),
+])
 const MAX_BODY_BYTES = 8192
 const RATE_MAX       = 5
 

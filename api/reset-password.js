@@ -5,11 +5,14 @@ import { checkRate } from './_rate-limit.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL    ?? ''
 const ANON_KEY     = process.env.SUPABASE_ANON_KEY ?? ''
-// Suporta múltiplas origens separadas por vírgula (www e não-www)
-const ALLOWED_ORIGINS = new Set(
-  (process.env.ALLOWED_ORIGIN ?? 'https://www.granaevo.com,https://granaevo.com')
-    .split(',').map(s => s.trim()).filter(Boolean)
-)
+// Origens de produção sempre permitidas; env var adiciona origens extras (ex.: dev local)
+const ALLOWED_ORIGINS = new Set([
+  'https://www.granaevo.com',
+  'https://granaevo.com',
+  ...(process.env.ALLOWED_ORIGIN
+    ? process.env.ALLOWED_ORIGIN.split(',').map(s => s.trim()).filter(Boolean)
+    : []),
+])
 
 const ENDPOINTS = {
   send:           `${SUPABASE_URL}/functions/v1/send-password-reset-code`,
