@@ -515,6 +515,7 @@ function atualizarMovimentacoesUI(resetPagina = true) {
 
         // Categoria
         const tdCat = document.createElement('td');
+        tdCat.className = 'td-cat';
         const badge = document.createElement('span');
         badge.className = `cat-badge cat-${cat}`;
         badge.textContent = _CAT_LABELS[cat] || cat;
