@@ -455,25 +455,12 @@ const MOV_POR_PAGINA = 50;
 // _movPaginaAtual, _movVisivelCache e _movDelegateSet são estado de dashboard.js,
 // acessíveis via _ctx.
 
-function _renderizarItemMovimentacao(t, lista) {
-    const dataExibida = _ctx._sanitizeText(t.data || '');
-    return { dataExibida, t };
-}
+const _CAT_LABELS = { entrada: 'Entrada', saida: 'Saída', reserva: 'Reserva', retirada_reserva: 'Retirada' };
+const _CAT_PERMITIDAS = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
 
 function atualizarMovimentacoesUI(resetPagina = true) {
     const lista = document.getElementById('listaMovimentacoes');
     if (!lista) return;
-
-    // Event delegation — um único listener para todos os itens da lista
-    if (!_ctx._movDelegateSet) {
-        lista.addEventListener('click', e => {
-            const item = e.target.closest('.mov-item');
-            if (!item) return;
-            const idx = parseInt(item.dataset.txIdx, 10);
-            if (!isNaN(idx) && _ctx._movVisivelCache[idx]) abrirDetalhesTransacao(_ctx._movVisivelCache[idx]);
-        });
-        _ctx._movDelegateSet = true;
-    }
 
     if (resetPagina) _ctx._movPaginaAtual = 1;
 
@@ -494,70 +481,95 @@ function atualizarMovimentacoesUI(resetPagina = true) {
 
     _ctx._movVisivelCache = visivel;
 
-    // Usar DocumentFragment para inserir todos os itens em um único reflow
-    const frag     = document.createDocumentFragment();
-    let ultimaData = null;
+    const table   = document.createElement('table');
+    table.className = 'mov-table';
 
-    visivel.forEach((t, txIdx) => {
-        const dataExibida = _ctx._sanitizeText(t.data || '');
+    const thead = document.createElement('thead');
+    const trHead = document.createElement('tr');
+    ['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor', 'Ações'].forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col;
+        trHead.appendChild(th);
+    });
+    thead.appendChild(trHead);
+    table.appendChild(thead);
 
-        if (dataExibida && dataExibida !== ultimaData) {
-            ultimaData = dataExibida;
-            const sep       = document.createElement('div');
-            sep.className   = 'mov-date-separator';
-            sep.textContent = dataExibida;
-            frag.appendChild(sep);
-        }
+    const tbody = document.createElement('tbody');
 
-        const div     = document.createElement('div');
-        div.className = 'mov-item';
+    visivel.forEach(t => {
+        const cat = _CAT_PERMITIDAS.includes(t.categoria) ? t.categoria : 'saida';
 
-        const categoriasPermitidas = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
-        const categoriaSegura = categoriasPermitidas.includes(t.categoria) ? t.categoria : 'saida';
+        const tr = document.createElement('tr');
 
-        const iconeBadge     = document.createElement('div');
-        iconeBadge.className = `mov-icon-badge ${categoriaSegura}`;
+        // Data
+        const tdData = document.createElement('td');
+        tdData.className = 'td-data';
+        tdData.textContent = _ctx._sanitizeText(t.data || '');
+        tr.appendChild(tdData);
 
-        const iconeEl = document.createElement('i');
-        iconeEl.className = `fas ${_obterIconeTransacao(t.categoria, t.tipo)}`;
-        iconeEl.setAttribute('aria-hidden', 'true');
-        iconeBadge.appendChild(iconeEl);
+        // Descrição
+        const tdDesc = document.createElement('td');
+        tdDesc.className = 'td-desc';
+        tdDesc.textContent = _ctx._sanitizeText(t.descricao || '');
+        tr.appendChild(tdDesc);
 
-        const left    = document.createElement('div');
-        left.className = 'mov-left';
+        // Categoria
+        const tdCat = document.createElement('td');
+        const badge = document.createElement('span');
+        badge.className = `cat-badge cat-${cat}`;
+        badge.textContent = _CAT_LABELS[cat] || cat;
+        tdCat.appendChild(badge);
+        tr.appendChild(tdCat);
 
-        const divTipo       = document.createElement('div');
-        divTipo.className   = 'mov-tipo';
-        divTipo.textContent = _ctx._sanitizeText(t.tipo);
+        // Tipo
+        const tdTipo = document.createElement('td');
+        tdTipo.className = 'td-tipo';
+        tdTipo.textContent = _ctx._sanitizeText(t.tipo || '');
+        tr.appendChild(tdTipo);
 
-        const divDesc       = document.createElement('div');
-        divDesc.className   = 'mov-desc';
-        divDesc.textContent = _ctx._sanitizeText(t.descricao);
+        // Valor
+        const sinal = (cat === 'entrada' || cat === 'retirada_reserva') ? '+' : '-';
+        const tdValor = document.createElement('td');
+        tdValor.className = `td-valor val-${cat}`;
+        tdValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
+        tr.appendChild(tdValor);
 
-        left.appendChild(divTipo);
-        left.appendChild(divDesc);
+        // Ações
+        const tdAcoes = document.createElement('td');
+        tdAcoes.className = 'td-acoes';
 
-        const right     = document.createElement('div');
-        right.className = 'mov-right';
+        const btnEdit = document.createElement('button');
+        btnEdit.className = 'btn-tx-action btn-tx-edit';
+        btnEdit.type  = 'button';
+        btnEdit.title = 'Editar';
+        btnEdit.setAttribute('aria-label', 'Editar transação');
+        const iEdit = document.createElement('i');
+        iEdit.className = 'fas fa-pen';
+        iEdit.setAttribute('aria-hidden', 'true');
+        btnEdit.appendChild(iEdit);
+        btnEdit.addEventListener('click', () => editarTransacao(t));
 
-        const sinal = (t.categoria === 'entrada' || t.categoria === 'retirada_reserva') ? '+' : '-';
+        const btnDel = document.createElement('button');
+        btnDel.className = 'btn-tx-action btn-tx-del';
+        btnDel.type  = 'button';
+        btnDel.title = 'Excluir';
+        btnDel.setAttribute('aria-label', 'Excluir transação');
+        const iDel = document.createElement('i');
+        iDel.className = 'fas fa-trash';
+        iDel.setAttribute('aria-hidden', 'true');
+        btnDel.appendChild(iDel);
+        btnDel.addEventListener('click', () => excluirTransacao(t));
 
-        const divValor       = document.createElement('div');
-        divValor.className   = categoriaSegura;
-        divValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
-        right.appendChild(divValor);
+        tdAcoes.appendChild(btnEdit);
+        tdAcoes.appendChild(btnDel);
+        tr.appendChild(tdAcoes);
 
-        div.dataset.txIdx = txIdx;
-        div.appendChild(iconeBadge);
-        div.appendChild(left);
-        div.appendChild(right);
-
-        frag.appendChild(div);
+        tbody.appendChild(tr);
     });
 
-    lista.appendChild(frag);
+    table.appendChild(tbody);
+    lista.appendChild(table);
 
-    // Botão "Carregar mais" — evita renderizar centenas de itens de uma vez
     if (restam > 0) {
         const btnMais       = document.createElement('button');
         btnMais.className   = 'btn-load-more';
@@ -571,56 +583,80 @@ function atualizarMovimentacoesUI(resetPagina = true) {
     }
 }
 
-function abrirDetalhesTransacao(t) {
+function editarTransacao(t) {
     if (!t) return;
 
-    // ✅ HTML estático — zero dados do usuário interpolados
     _ctx.criarPopup(`
-        <h3>Detalhes da Transação</h3>
-        <div class="small" id="detTransId"></div>
-        <div style="text-align:left; margin:20px 0; color: var(--text-secondary);">
-            <b>Categoria:</b> <span id="detCategoria"></span><br>
-            <b>Tipo:</b>      <span id="detTipo"></span><br>
-            <b>Descrição:</b> <span id="detDescricao"></span><br>
-            <b>Valor:</b>     <span id="detValor"></span><br>
-            <b>Data:</b>      <span id="detData"></span><br>
-            <b>Hora:</b>      <span id="detHora"></span>
+        <h3>Editar Transação</h3>
+        <div class="edit-tx-form">
+            <label class="edit-tx-label" for="editDescricao">Descrição</label>
+            <input type="text" id="editDescricao" class="form-input" maxlength="300" placeholder="Descrição">
+            <label class="edit-tx-label" for="editValor">Valor (R$)</label>
+            <input type="number" id="editValor" class="form-input" step="0.01" min="0.01" placeholder="Valor">
         </div>
-        <button class="btn-excluir" id="delTransBtn">Excluir</button>
-        <button class="btn-primary" id="fecharDetalhesBtn">Fechar</button>
+        <button class="btn-primary" id="salvarEditBtn">Salvar</button>
+        <button class="btn-cancelar" id="cancelarEditBtn">Cancelar</button>
     `);
 
-    // ✅ Preenchimento via textContent — nunca innerHTML com dados do usuário
-    document.getElementById('detTransId').textContent  = t.id ? `ID: ${String(t.id).slice(0, 40)}` : '';
-    document.getElementById('detCategoria').textContent = _ctx._sanitizeText(t.categoria);
-    document.getElementById('detTipo').textContent      = _ctx._sanitizeText(t.tipo);
-    document.getElementById('detDescricao').textContent = _ctx._sanitizeText(t.descricao);
-    document.getElementById('detValor').textContent     = _ctx.formatBRL(t.valor);
-    document.getElementById('detData').textContent      = _ctx._sanitizeText(t.data);
-    document.getElementById('detHora').textContent      = _ctx._sanitizeText(t.hora);
+    document.getElementById('editDescricao').value = t.descricao || '';
+    document.getElementById('editValor').value     = t.valor     || '';
 
-    // ✅ addEventListener — sem onclick inline
-    document.getElementById('fecharDetalhesBtn').addEventListener('click', () => _ctx.fecharPopup());
+    document.getElementById('cancelarEditBtn').addEventListener('click', () => _ctx.fecharPopup());
 
-    document.getElementById('delTransBtn').addEventListener('click', () => {
+    document.getElementById('salvarEditBtn').addEventListener('click', () => {
+        const novaDesc    = document.getElementById('editDescricao').value.trim();
+        const novoValorStr = document.getElementById('editValor').value;
+
+        if (!novaDesc) return alert('Digite a descrição.');
+        const novoValor = parseFloat(parseFloat(novoValorStr).toFixed(2));
+        if (!novoValorStr || !Number.isFinite(novoValor) || novoValor <= 0) return alert('Digite um valor válido.');
+
+        const diff = novoValor - Number(t.valor);
+        if (diff !== 0 && t.metaId) {
+            const meta = _ctx.metas.find(m => String(m.id) === String(t.metaId));
+            if (meta) {
+                const sinal = t.categoria === 'reserva' ? 1 : -1;
+                meta.saved = Number((Number(meta.saved || 0) + sinal * diff).toFixed(2));
+                const ym = _ctx.yearMonthKey(t.data);
+                meta.monthly = meta.monthly || {};
+                meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + sinal * diff).toFixed(2));
+            }
+        }
+
+        t.descricao = novaDesc;
+        t.valor     = novoValor;
+
+        _ctx.salvarDados();
+        _ctx.atualizarTudo();
+        _ctx.fecharPopup();
+    });
+}
+
+function excluirTransacao(t) {
+    if (!t) return;
+
+    _ctx.criarPopup(`
+        <h3>Excluir Transação</h3>
+        <p id="excluirMsg" style="color:var(--text-secondary);margin:16px 0;"></p>
+        <button class="btn-excluir" id="confirmarExcluirBtn">Excluir</button>
+        <button class="btn-cancelar" id="cancelarExcluirBtn">Cancelar</button>
+    `);
+
+    document.getElementById('excluirMsg').textContent = `Deseja excluir "${_ctx._sanitizeText(t.descricao)}"?`;
+
+    document.getElementById('cancelarExcluirBtn').addEventListener('click', () => _ctx.fecharPopup());
+
+    document.getElementById('confirmarExcluirBtn').addEventListener('click', () => {
         _ctx.transacoes = _ctx.transacoes.filter(x => x !== t);
 
-        if (t.categoria === 'reserva' && t.metaId) {
+        if (t.metaId) {
             const meta = _ctx.metas.find(m => String(m.id) === String(t.metaId));
             if (meta) {
-                meta.saved = Number((Number(meta.saved || 0) - Number(t.valor)).toFixed(2));
+                const sinal = t.categoria === 'reserva' ? -1 : 1;
+                meta.saved = Number((Number(meta.saved || 0) + sinal * Number(t.valor)).toFixed(2));
                 const ym = _ctx.yearMonthKey(t.data);
                 if (meta.monthly && meta.monthly[ym]) {
-                    meta.monthly[ym] = Number((Number(meta.monthly[ym]) - Number(t.valor)).toFixed(2));
-                }
-            }
-        } else if (t.categoria === 'retirada_reserva' && t.metaId) {
-            const meta = _ctx.metas.find(m => String(m.id) === String(t.metaId));
-            if (meta) {
-                meta.saved = Number((Number(meta.saved || 0) + Number(t.valor)).toFixed(2));
-                const ym = _ctx.yearMonthKey(t.data);
-                if (meta.monthly && meta.monthly[ym]) {
-                    meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + Number(t.valor)).toFixed(2));
+                    meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + sinal * Number(t.valor)).toFixed(2));
                 }
             }
         }
@@ -629,4 +665,8 @@ function abrirDetalhesTransacao(t) {
         _ctx.atualizarTudo();
         _ctx.fecharPopup();
     });
+}
+
+function abrirDetalhesTransacao(t) {
+    editarTransacao(t);
 }

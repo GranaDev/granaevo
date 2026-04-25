@@ -2146,6 +2146,186 @@ select.form-input option:checked {
     .mov-data  { display: none; }
 }
 
+/* ========== TRANSAÇÕES — HEADER SIMPLES ========== */
+.tx-page-header {
+    padding: 24px 0 20px;
+}
+
+.tx-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.tx-breadcrumb a {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.tx-breadcrumb a:hover { color: var(--primary-light); }
+
+.tx-breadcrumb span:last-child { color: var(--text-secondary); }
+
+.tx-page-title {
+    font-size: 1.65rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 4px;
+    line-height: 1.2;
+}
+
+.tx-page-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* ========== TRANSAÇÕES — TABELA ========== */
+.mov-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.mov-table thead tr {
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.mov-table thead th {
+    padding: 11px 14px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    white-space: nowrap;
+}
+
+.mov-table thead th:last-child { text-align: center; }
+
+.mov-table tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.15s;
+}
+
+.mov-table tbody tr:last-child { border-bottom: none; }
+
+.mov-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+
+.mov-table tbody td {
+    padding: 13px 14px;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+.td-data {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.td-desc {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.td-tipo {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.td-valor {
+    font-weight: 600;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.val-entrada          { color: var(--primary-light); }
+.val-saida            { color: #ff6b6b; }
+.val-reserva          { color: #8a84ff; }
+.val-retirada_reserva { color: #ffd166; }
+
+.td-acoes {
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* ========== TRANSAÇÕES — BADGES ========== */
+.cat-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+.cat-entrada          { background: rgba(67,160,71,0.15);  color: #66bb6a; border: 1px solid rgba(67,160,71,0.3); }
+.cat-saida            { background: rgba(255,75,75,0.13);  color: #ff7070; border: 1px solid rgba(255,75,75,0.3); }
+.cat-reserva          { background: rgba(108,99,255,0.14); color: #9d97ff; border: 1px solid rgba(108,99,255,0.3); }
+.cat-retirada_reserva { background: rgba(255,209,102,0.13);color: #ffd166; border: 1px solid rgba(255,209,102,0.3); }
+
+/* ========== TRANSAÇÕES — BOTÕES DE AÇÃO ========== */
+.btn-tx-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: background 0.15s, color 0.15s, transform 0.1s;
+    margin: 0 2px;
+}
+
+.btn-tx-action:hover { transform: translateY(-1px); }
+
+.btn-tx-edit          { background: rgba(108,99,255,0.14); color: #9d97ff; }
+.btn-tx-edit:hover    { background: rgba(108,99,255,0.3);  color: #fff; }
+.btn-tx-del           { background: rgba(255,75,75,0.12);  color: #ff7070; }
+.btn-tx-del:hover     { background: rgba(255,75,75,0.28);  color: #fff; }
+
+/* ========== TRANSAÇÕES — MODAL EDITAR ========== */
+.edit-tx-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+    margin: 16px 0;
+}
+
+.edit-tx-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+}
+
+@media (max-width: 768px) {
+    .mov-table thead th:nth-child(3),
+    .mov-table tbody td:nth-child(3) { display: none; }
+
+    .mov-table thead th { font-size: 0.65rem; padding: 9px 8px; }
+    .mov-table tbody td { font-size: 0.8rem;  padding: 10px 8px; }
+    .td-desc { max-width: 120px; }
+}
+
 /* ========== RESERVAS/METAS ========== */
 .reservas-layout {
     display: grid;
