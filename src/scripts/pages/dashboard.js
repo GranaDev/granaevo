@@ -315,14 +315,14 @@ const BANCO_COR = Object.freeze({
     'Alelo':           'linear-gradient(135deg, #1a6b3a 0%, #2ea862 100%)',
 });
 const BANCO_ICON = Object.freeze({
-    'Nubank':          'public/assets/icons/cards/Nubank.png',
-    'Bradesco':        'public/assets/icons/cards/Bradesco.png',
-    'Mercado Pago':    'public/assets/icons/cards/logo-mercado-pago-icone-1024.png',
-    'C6 Bank':         'public/assets/icons/cards/logo-c6-bank-1024.png',
-    'Itaú':            'public/assets/icons/cards/logo-itau-4096.png',
-    'Banco do Brasil': 'public/assets/icons/cards/logo-banco-do-brasil-icon-4096.png',
-    'Caixa':           'public/assets/icons/cards/logo-caixa-economica-federal-4096.png',
-    'Alelo':           'public/assets/icons/cards/alelo-4096.png',
+    'Nubank':          '/assets/icons/cards/Nubank.png',
+    'Bradesco':        '/assets/icons/cards/Bradesco.png',
+    'Mercado Pago':    '/assets/icons/cards/logo-mercado-pago-icone-1024.png',
+    'C6 Bank':         '/assets/icons/cards/logo-c6-bank-1024.png',
+    'Itaú':            '/assets/icons/cards/logo-itau-4096.png',
+    'Banco do Brasil': '/assets/icons/cards/logo-banco-do-brasil-icon-4096.png',
+    'Caixa':           '/assets/icons/cards/logo-caixa-economica-federal-4096.png',
+    'Alelo':           '/assets/icons/cards/alelo-4096.png',
 });
 
 // Constantes Chart.js — compartilhadas via _ctx
