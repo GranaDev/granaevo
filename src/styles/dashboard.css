@@ -5,19 +5,20 @@
 /* ========== UTILITÁRIOS — sem unsafe-inline ========== */
 .js-hidden      { display: none !important; }
 .text-secondary { color: var(--text-secondary, #b0b3c1); }
-.promo-bloco         { margin-top: 32px; cursor: pointer; display: flex; align-items: center; gap: 28px; text-align: left; position: relative; overflow: hidden; transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s; }
-.promo-titulo        { margin-bottom: 6px; color: var(--text-primary, #fff); font-size: 1.15rem; font-weight: 700; }
-.promo-desc          { color: var(--text-secondary, #b0b3c1); font-size: 0.85rem; margin-bottom: 18px; }
-.promo-ilustracao    { flex-shrink: 0; width: 130px; position: relative; z-index: 1; }
-.promo-icon-img      { width: 100%; object-fit: contain; filter: drop-shadow(0 0 14px rgba(67,160,71,0.5)); }
-.promo-conteudo      { flex: 1; min-width: 0; position: relative; z-index: 1; }
-.promo-features      { display: flex; gap: 20px; flex-wrap: nowrap; }
+.promo-bloco         { margin-top: 32px; cursor: pointer; display: flex; align-items: stretch; gap: 28px; text-align: left; position: relative; overflow: hidden; transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s; }
+.promo-titulo        { margin-bottom: 6px; color: var(--text-primary, #fff); font-size: 1.35rem; font-weight: 700; }
+.promo-desc          { color: var(--text-secondary, #b0b3c1); font-size: 0.85rem; margin-bottom: 0; }
+.promo-ilustracao    { flex-shrink: 0; width: 210px; align-self: stretch; position: relative; z-index: 1; }
+.promo-icon-img      { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0 14px rgba(67,160,71,0.5)); }
+.promo-conteudo      { flex: 1; min-width: 0; position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: space-between; }
+.promo-text-top      { display: flex; flex-direction: column; }
+.promo-features      { display: flex; gap: 20px; flex-wrap: nowrap; align-items: flex-start; }
 .promo-feature-item  { display: flex; align-items: flex-start; gap: 10px; }
 .promo-feature-icon  { width: 30px; height: 30px; border-radius: 50%; background: rgba(67,160,71,0.15); border: 1px solid rgba(67,160,71,0.35); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #4caf50; }
 .promo-feature-title { display: block; color: #fff; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
 .promo-feature-sub   { display: block; color: var(--text-secondary, #b0b3c1); font-size: 0.72rem; white-space: nowrap; }
-.promo-acao          { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; position: relative; z-index: 1; }
-.promo-trend-icon    { color: #4caf50; }
+.promo-acao          { flex-shrink: 0; display: flex; align-items: center; position: relative; z-index: 1; }
+.promo-trend-icon    { position: absolute; top: 16px; right: 20px; color: #4caf50; z-index: 1; }
 .promo-btn           { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 0.9rem; padding: 11px 20px; }
 .btn-no-events       { pointer-events: none; }
 .grafico-titulo { color: var(--text-primary, #fff); margin-bottom: 16px; text-align: center; }
@@ -1079,7 +1080,8 @@ body::before {
 .section-box.promo-bloco {
     background: rgba(8, 18, 10, 0.9);
     border-color: rgba(67, 160, 71, 0.3);
-    padding: 22px 28px;
+    padding: 24px 28px;
+    min-height: 148px;
 }
 .section-box.promo-bloco::before {
     content: '';
@@ -1102,12 +1104,15 @@ body::before {
     z-index: 0;
 }
 @media (max-width: 768px) {
-    .section-box.promo-bloco    { flex-direction: column; text-align: center; gap: 16px; padding: 20px; }
-    .promo-ilustracao            { width: 90px; }
-    .promo-features              { flex-wrap: wrap; justify-content: center; gap: 12px; }
+    .section-box.promo-bloco { flex-direction: column; text-align: center; gap: 16px; padding: 20px; min-height: unset; }
+    .promo-ilustracao        { width: 100px; align-self: auto; }
+    .promo-icon-img          { height: auto; }
+    .promo-conteudo          { align-items: center; }
+    .promo-features          { flex-wrap: wrap; justify-content: center; gap: 12px; }
     .promo-feature-title,
-    .promo-feature-sub           { white-space: normal; }
-    .promo-acao                  { align-items: center; }
+    .promo-feature-sub       { white-space: normal; }
+    .promo-acao              { justify-content: center; }
+    .promo-trend-icon        { top: 12px; right: 14px; }
 }
 
 @media (max-width: 768px) {
