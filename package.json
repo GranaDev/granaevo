@@ -12,10 +12,13 @@
     "@supabase/supabase-js": "^2.49.2"
   },
   "devDependencies": {
-    "vite": "^5.4.14",
+    "vite": "^8.0.10",
     "terser": "^5.31.0"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "overrides": {
+    "esbuild": ">=0.25.0"
   }
 }

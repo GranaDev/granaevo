@@ -18,9 +18,12 @@ export default defineConfig({
         termos:         'termos.html',
       },
       output: {
-        // Supabase JS em chunk próprio — cacheado separado entre páginas
-        manualChunks: {
-          'vendor-supabase': ['@supabase/supabase-js'],
+        // Supabase JS em chunk próprio — cacheado separado entre páginas.
+        // Vite 8 (Rolldown) exige função em vez de objeto para manualChunks.
+        manualChunks: (id) => {
+          if (id.includes('@supabase/supabase-js') || id.includes('node_modules/@supabase')) {
+            return 'vendor-supabase';
+          }
         },
       },
     },
@@ -40,6 +43,9 @@ export default defineConfig({
     sourcemap: false,
     chunkSizeWarningLimit: 600,
     cssCodeSplit: true,
+    // Vite 8 usa LightningCSS por padrão — mais estrito que esbuild com !important
+    // em múltiplos valores de transition. Mantém esbuild para compatibilidade.
+    cssMinify: 'esbuild',
   },
 
   server: {
