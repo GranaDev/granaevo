@@ -1,7 +1,10 @@
 // /api/csp-report.js — Recebe violações de CSP e loga estruturado
 // Permite que o browser reporte violações sem expor nenhum dado sensível.
 
+import { checkRate } from './_rate-limit.js'
+
 const MAX_BODY_BYTES = 4096  // relatórios CSP são pequenos
+const RATE_MAX       = 30    // 30 reports por IP por minuto — browsers legítimos nunca chegam perto
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -13,6 +16,14 @@ export default async function handler(req, res) {
   const ct = req.headers['content-type'] ?? ''
   if (!ct.includes('application/csp-report') && !ct.includes('application/json')) {
     return res.status(415).end()
+  }
+
+  // Rate limit por IP — protege contra flood de custo em Vercel Functions
+  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
+    .toString().split(',')[0].trim()
+
+  if (!(await checkRate(`csp-report:${ip}`, RATE_MAX))) {
+    return res.status(429).end()
   }
 
   let raw = ''
@@ -45,14 +56,15 @@ export default async function handler(req, res) {
     ts:               new Date().toISOString(),
     level:            'warn',
     event:            'csp_violation',
-    blocked_uri:      report['blocked-uri']       ?? report.blockedURI       ?? 'unknown',
-    violated:         report['violated-directive'] ?? report.violatedDirective ?? 'unknown',
+    blocked_uri:      report['blocked-uri']        ?? report.blockedURI        ?? 'unknown',
+    violated:         report['violated-directive']  ?? report.violatedDirective  ?? 'unknown',
     effective:        report['effective-directive'] ?? report.effectiveDirective ?? 'unknown',
-    document_uri:     report['document-uri']       ?? report.documentURI       ?? 'unknown',
-    referrer:         report['referrer']            ?? report.referrer           ?? '',
-    status_code:      report['status-code']         ?? report.statusCode         ?? 0,
-    source_file:      report['source-file']         ?? report.sourceFile         ?? '',
-    line:             report['line-number']          ?? report.lineNumber          ?? 0,
+    document_uri:     report['document-uri']        ?? report.documentURI        ?? 'unknown',
+    referrer:         report['referrer']             ?? report.referrer            ?? '',
+    status_code:      report['status-code']          ?? report.statusCode          ?? 0,
+    source_file:      report['source-file']          ?? report.sourceFile          ?? '',
+    line:             report['line-number']           ?? report.lineNumber           ?? 0,
+    ip,
   }))
 
   return res.status(204).end()

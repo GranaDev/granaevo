@@ -1698,15 +1698,17 @@ loadMessages() {
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
+                // Valida campos reais do formato salvo: { text, sender, timestamp }
+                // (anterior usava m.role/m.content — mismatch com o formato real)
                 if (
                     Array.isArray(parsed) &&
                     parsed.every(m =>
                         m !== null &&
                         typeof m === 'object' &&
-                        typeof m.role === 'string' &&
-                        ['user', 'assistant', 'system'].includes(m.role) &&
-                        typeof m.content === 'string' &&
-                        m.content.length <= 32768
+                        typeof m.sender === 'string' &&
+                        ['user', 'assistant'].includes(m.sender) &&
+                        typeof m.text === 'string' &&
+                        m.text.length <= 32768
                     )
                 ) {
                     this.messages = parsed;
