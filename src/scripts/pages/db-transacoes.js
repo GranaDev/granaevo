@@ -657,6 +657,7 @@ function editarTransacao(t) {
             <input type="number" id="editValor" class="form-input" step="0.01" min="0.01" placeholder="Valor">
         </div>
         <button class="btn-primary" id="salvarEditBtn">Salvar</button>
+        <button class="btn-excluir" id="excluirEditBtn">Excluir</button>
         <button class="btn-cancelar" id="cancelarEditBtn">Cancelar</button>
     `);
 
@@ -664,6 +665,10 @@ function editarTransacao(t) {
     document.getElementById('editValor').value     = t.valor     || '';
 
     document.getElementById('cancelarEditBtn').addEventListener('click', () => _ctx.fecharPopup());
+    document.getElementById('excluirEditBtn').addEventListener('click', () => {
+        _ctx.fecharPopup();
+        excluirTransacao(t);
+    });
 
     document.getElementById('salvarEditBtn').addEventListener('click', () => {
         const novaDesc    = document.getElementById('editDescricao').value.trim();
