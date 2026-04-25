@@ -32,26 +32,9 @@
     <title>Primeiro Acesso — GranaEvo</title>
 
     <!--
-        ╔══════════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — v11                              ║
-        ║                                                              ║
-        ║  script-src inclui:                                         ║
-        ║    - https://esm.sh        (supabase-js ES module)         ║
-        ║    - https://cdn.jsdelivr.net (source maps / fallback)     ║
-        ║                                                              ║
-        ║  connect-src inclui:                                        ║
-        ║    - https://esm.sh        (fetch do módulo ES)            ║
-        ║    - https://fvrhqqeofqedmhadzzqw.supabase.co (REST/Auth)  ║
-        ║    - wss://fvrhqqeofqedmhadzzqw.supabase.co   (Realtime)   ║
-        ║    - https://cdn.jsdelivr.net                               ║
-        ║                                                              ║
-        ║  NOTA: Esta meta tag é uma camada extra de defesa.          ║
-        ║  Configure também no servidor (vercel.json / nginx):        ║
-        ║    Content-Security-Policy: <mesma política>                ║
-        ║    X-Content-Type-Options: nosniff                          ║
-        ║    X-Frame-Options: DENY                                    ║
-        ║    Strict-Transport-Security: max-age=31536000              ║
-        ╚══════════════════════════════════════════════════════════════╝
+        CONTENT SECURITY POLICY — v12
+        Supabase JS bundled via Vite — esm.sh e cdn.jsdelivr.net removidos.
+        CSP principal via vercel.json HTTP headers; esta meta é fallback para dev local.
     -->
     <!-- Supabase JS agora bundled via Vite — esm.sh e cdn.jsdelivr.net removidos -->
     <meta http-equiv="Content-Security-Policy" content="

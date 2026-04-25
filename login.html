@@ -14,22 +14,19 @@
         ║  [CSP-FIX-v2.9] Sem alterações de CSP nesta versão.     ║
         ╚══════════════════════════════════════════════════════════╝
     -->
+    <!-- Supabase JS bundled via Vite — esm.sh e cdn.jsdelivr.net removidos -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         upgrade-insecure-requests;
         script-src 'self'
-            https://esm.sh
-            https://cdn.jsdelivr.net
             https://www.google.com/recaptcha/
             https://www.gstatic.com/recaptcha/;
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: https://www.gstatic.com/;
         font-src 'self';
         connect-src 'self'
-            https://esm.sh
             https://fvrhqqeofqedmhadzzqw.supabase.co
             wss://fvrhqqeofqedmhadzzqw.supabase.co
-            https://cdn.jsdelivr.net
             https://www.google.com
             https://www.recaptcha.net
             https://recaptcha.google.com
