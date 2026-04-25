@@ -5334,7 +5334,7 @@ select.form-input option:checked {
 /* ── Top row: featured card | resumo ── */
 .cdes-top-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 9fr 11fr;
     gap: 20px;
     align-items: stretch;
     margin-bottom: 20px;
@@ -5349,13 +5349,14 @@ select.form-input option:checked {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 0;
 }
 
 .cdes-resumo-title {
     font-size: 0.88rem;
     font-weight: 700;
     color: var(--text-secondary);
+    margin-bottom: 14px;
 }
 
 .cdes-resumo-stats {
@@ -5363,6 +5364,7 @@ select.form-input option:checked {
     grid-template-columns: repeat(3, 1fr);
     gap: 10px;
     flex: 1;
+    padding-bottom: 16px;
 }
 
 .cdes-resumo-stat {
@@ -5422,6 +5424,8 @@ select.form-input option:checked {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 8px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding-top: 16px;
 }
 
 .cdes-resumo-action-btn {
