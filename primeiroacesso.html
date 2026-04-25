@@ -115,6 +115,13 @@
 
             <!-- Formulário principal -->
             <form id="accessForm" novalidate>
+                <!-- honeypot: bots preenchem, humanos não veem -->
+                <div aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;" tabindex="-1">
+                    <label for="_ge_hp_email">Confirmar email</label>
+                    <input type="email" id="_ge_hp_email" name="confirm_email" autocomplete="off" tabindex="-1" value="">
+                    <label for="_ge_hp_url">Website</label>
+                    <input type="url" id="_ge_hp_url" name="website" autocomplete="off" tabindex="-1" value="">
+                </div>
 
                 <!-- ── ETAPA 1: Verificação de email ── -->
                 <div id="emailCheckState" class="email-check-state">

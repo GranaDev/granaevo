@@ -136,7 +136,9 @@ Deno.serve(async (req) => {
     }
 
     // ── Email não encontrado ─────────────────────────────────────────────────
-    // [SEC-GENERIC] Retorno genérico — não confirma nem nega a existência do email.
+    // [SEC-FIX] Retorno IDÊNTICO ao de payment_pending — não revela se o email
+    // existe ou não. Ambas as condições retornam o mesmo status 'not_found' para
+    // impedir enumeração via chamadas diretas ao endpoint.
     if (!subscriptions || subscriptions.length === 0) {
       return new Response(
         JSON.stringify({ status: 'not_found' }),
@@ -147,10 +149,11 @@ Deno.serve(async (req) => {
     const subscription = subscriptions[0]
 
     // ── Pagamento não aprovado ───────────────────────────────────────────────
-    // [SEC-GENERIC] Retorno genérico — não revela o status do pagamento.
+    // [SEC-FIX] Mesmo status que not_found — impede distinguir "email cadastrado
+    // sem pagamento" de "email não existe". Ambos retornam 'not_found'.
     if (subscription.payment_status !== 'approved') {
       return new Response(
-        JSON.stringify({ status: 'payment_pending' }),
+        JSON.stringify({ status: 'not_found' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }

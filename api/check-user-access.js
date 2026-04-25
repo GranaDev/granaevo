@@ -3,9 +3,10 @@
 
 import { checkRate } from './_rate-limit.js'
 
-const EDGE_URL  = `${process.env.SUPABASE_URL}/functions/v1/check-user-access`
-const ANON_KEY  = process.env.SUPABASE_ANON_KEY ?? ''
-const RATE_MAX  = 20
+const EDGE_URL    = `${process.env.SUPABASE_URL}/functions/v1/check-user-access`
+const ANON_KEY    = process.env.SUPABASE_ANON_KEY ?? ''
+const PROXY_SECRET = process.env.PROXY_SECRET ?? ''
+const RATE_MAX    = 20
 
 const ALLOWED_ORIGINS = [
   process.env.ALLOWED_ORIGIN,
@@ -70,9 +71,10 @@ export default async function handler(req, res) {
     const r = await fetch(EDGE_URL, {
       method:  'POST',
       headers: {
-        'Content-Type':  'application/json',
-        'Authorization': authHeader,
-        'apikey':        ANON_KEY,
+        'Content-Type':   'application/json',
+        'Authorization':  authHeader,
+        'apikey':         ANON_KEY,
+        'x-proxy-secret': PROXY_SECRET,
       },
       body:   JSON.stringify({ user_id: body.user_id }),
       signal: AbortSignal.timeout(10_000),

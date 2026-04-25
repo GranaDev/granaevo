@@ -210,6 +210,13 @@
                     </div>
 
                     <form class="login-form" id="loginForm" novalidate autocomplete="on">
+                        <!-- honeypot: bots preenchem, humanos não veem -->
+                        <div aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;" tabindex="-1">
+                            <label for="_ge_confirm_email">Confirmar email</label>
+                            <input type="email" id="_ge_confirm_email" name="confirm_email" autocomplete="off" tabindex="-1" value="">
+                            <label for="_ge_phone">Telefone</label>
+                            <input type="text" id="_ge_phone" name="phone" autocomplete="off" tabindex="-1" value="">
+                        </div>
 
                         <div class="form-group">
                             <label for="loginEmail" class="form-label">Email</label>

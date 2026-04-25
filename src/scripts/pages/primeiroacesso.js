@@ -437,6 +437,15 @@ function showTermsError() {
 accessForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    // Honeypot check — bots preenchem campos ocultos, humanos não
+    const hpEmail = document.getElementById('_ge_hp_email');
+    const hpUrl   = document.getElementById('_ge_hp_url');
+    if ((hpEmail && hpEmail.value) || (hpUrl && hpUrl.value)) {
+        // Silencioso: simula sucesso sem fazer nada
+        showAlert('info', '✅ Conta criada com sucesso! Redirecionando...');
+        return;
+    }
+
     // [SEC-08] Rate limit no submit — 3s de cooldown entre tentativas.
     const now = Date.now();
     if (now - lastSubmitAt < SUBMIT_COOLDOWN_MS) {

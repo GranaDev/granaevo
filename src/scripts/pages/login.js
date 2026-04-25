@@ -554,6 +554,16 @@ async function checkUserAccess() {
             signal: AbortSignal.timeout(8_000),
         });
 
+        // Lockout progressivo (429) — conta bloqueada
+        if (response.status === 429) {
+            try {
+                const lockResult = await response.json();
+                return { hasAccess: false, lockMessage: lockResult?.message || 'Conta bloqueada temporariamente.' };
+            } catch {
+                return { hasAccess: false, lockMessage: 'Conta bloqueada temporariamente.' };
+            }
+        }
+
         // Erro no proxy/servidor (404, 5xx) — não bloqueia o usuário.
         // O login com email/senha já foi validado pelo Supabase Auth.
         // Apenas nega se o servidor explicitamente retornar { hasAccess: false } com 200.
@@ -637,6 +647,15 @@ function _registerFailedLoginAttempt() {
 loginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    // Honeypot check — bots preenchem campos ocultos, humanos não
+    const hpEmail = document.getElementById('_ge_confirm_email');
+    const hpPhone = document.getElementById('_ge_phone');
+    if ((hpEmail && hpEmail.value) || (hpPhone && hpPhone.value)) {
+        // Silencioso: simula comportamento normal sem revelar detecção
+        setTimeout(() => window.location.replace('login.html'), 2000);
+        return;
+    }
+
     if (!SubmitRateLimiter.isAllowed()) {
         showAuthMessage('Muitas tentativas em pouco tempo. Aguarde um momento.', 'error');
         return;
@@ -699,12 +718,18 @@ loginForm?.addEventListener('submit', async (e) => {
         hideLoginCaptcha();
 
         setButtonLoading(submitBtn, 'Verificando plano...');
-        const { hasAccess } = await checkUserAccess();
+        const checkAccessResult = await checkUserAccess();
+        const { hasAccess } = checkAccessResult;
 
         if (!hasAccess) {
             await supabase.auth.signOut();
-            showAuthMessage('Você precisa de um plano ativo para acessar o sistema.', 'error');
-            setTimeout(() => window.location.replace('planos.html'), 2500);
+            const lockMsg = checkAccessResult?.lockMessage;
+            if (lockMsg) {
+                showAuthMessage(sanitizeText(lockMsg), 'error');
+            } else {
+                showAuthMessage('Você precisa de um plano ativo para acessar o sistema.', 'error');
+                setTimeout(() => window.location.replace('planos.html'), 2500);
+            }
             return;
         }
 

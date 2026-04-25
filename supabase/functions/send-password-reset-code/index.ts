@@ -25,6 +25,20 @@ function getCorsHeaders(req: Request): Record<string, string> {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  HELPER: HTML escape — previne injeção no template de email
+//  user_name vem do banco (preenchido pelo webhook Cakto via dados
+//  do pagador) — deve ser escapado antes de interpolar em HTML.
+// ═══════════════════════════════════════════════════════════════
+function escapeHtml(str: string): string {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  HELPER: SHA-256
 // ═══════════════════════════════════════════════════════════════
 async function hashCode(code: string): Promise<string> {
@@ -691,7 +705,7 @@ Deno.serve(async (req) => {
       <div class="body-content">
 
         <span class="greeting-eyebrow">Verificação de identidade ✦</span>
-        <div class="greeting-name">Olá, ${subscription.user_name || 'Usuário'}! 👋</div>
+        <div class="greeting-name">Olá, ${escapeHtml(subscription.user_name || 'Usuário')}! 👋</div>
         <p class="intro-text">
           Recebemos uma solicitação para <strong>redefinir a senha</strong> da sua conta GranaEvo.
           Use o código abaixo para concluir o processo.
@@ -774,7 +788,7 @@ Deno.serve(async (req) => {
         <div class="footer-divider-line"></div>
         <div class="footer-copy">
           © 2026 GranaEvo. Todos os direitos reservados.<br>
-          Este email foi enviado para ${normalizedEmail} por solicitação de recuperação de senha.
+          Este email foi enviado para ${escapeHtml(normalizedEmail)} por solicitação de recuperação de senha.
         </div>
       </div>
 

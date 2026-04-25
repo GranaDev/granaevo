@@ -195,12 +195,21 @@ Deno.serve(async (req: Request) => {
       .eq("guest_email", guestEmail)
       .eq("used", false);
 
-    // ── 12. Gerar código de 6 dígitos e salvar ────────────────────────────
+    // ── 12. Gerar código de 6 dígitos, hashar e salvar ────────────────────
+    // [SEC-FIX] O código é armazenado APENAS como hash SHA-256 no banco.
+    // O código em texto puro é retornado ao frontend (para o dono compartilhar
+    // com o convidado por canal externo) mas nunca persiste no banco.
     const rnd       = new Uint32Array(1)
     crypto.getRandomValues(rnd)
     const code      = String(100_000 + (rnd[0] % 900_000)).padStart(6, '0');
     const expiresAt = new Date(Date.now() + 43_200_000).toISOString(); // 12h
     const ownerName = (user.user_metadata?.name as string) || ownerEmail.split("@")[0];
+
+    // Hash do código — apenas o hash vai para o banco
+    const codeHashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code.toLowerCase()))
+    const codeHash = Array.from(new Uint8Array(codeHashBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
 
     const { data: invitation, error: invError } = await supabaseAdmin
       .from("guest_invitations")
@@ -210,7 +219,7 @@ Deno.serve(async (req: Request) => {
         owner_name:    ownerName,
         guest_name:    guestName,
         guest_email:   guestEmail,
-        code,
+        code_hash:     codeHash,
         expires_at:    expiresAt,
       })
       .select()

@@ -1,9 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
-// Webhook server-to-server — sem CORS para browser
+// Webhook server-to-server — sem CORS para browser.
+// [SEC-FIX] 'none' não é um valor CORS válido ('none' seria tratado como string literal).
+// Para webhooks server-to-server, CORS headers são intencionalmente omitidos das
+// respostas reais. O preflight OPTIONS retorna headers mínimos apenas para satisfazer
+// eventuais proxies; browsers legítimos não devem chamar este endpoint.
 const corsHeaders = {
-  'Access-Control-Allow-Origin': 'none',
-  'Access-Control-Allow-Headers': 'content-type, x-cakto-signature',
+  'Content-Type': 'application/json',
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -27,7 +30,7 @@ async function hashSensitiveData(value: string | null): Promise<string | null> {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { status: 204 })
   }
 
   console.log('[webhook-cakto] Recebido:', new Date().toISOString())
