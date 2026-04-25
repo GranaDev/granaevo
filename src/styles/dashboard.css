@@ -984,9 +984,8 @@ body::before {
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(67, 160, 71, 0.15);
     border-radius: 16px;
-    padding: 24px 20px;
-    min-height: 130px;
-    aspect-ratio: 2 / 1;
+    padding: 20px 22px;
+    height: 130px;
     display: flex;
     align-items: center;
     gap: 0;
@@ -1079,11 +1078,11 @@ body::before {
     .card-icon  { width: 46px; height: 46px; font-size: 1.1rem; margin-right: 12px; }
     .card-value { font-size: 1.35rem; }
     .card-percent { font-size: 0.7rem; }
-    .card { aspect-ratio: unset; min-height: 110px; }
+    .card { height: auto; min-height: 100px; }
     .btn-periodo { font-size: 0.8rem; padding: 8px 12px; gap: 6px; }
     .section-header-actions { flex-wrap: wrap; justify-content: center; gap: 8px; }
     .btn-outline { padding: 8px 14px; font-size: 0.82rem; }
-    .conta-card { aspect-ratio: unset; }
+    .conta-card { min-height: 140px; }
 }
 
 /* ========== SECTION BOX ========== */
@@ -1355,10 +1354,9 @@ body::before {
     backdrop-filter: blur(22px) saturate(160%);
     -webkit-backdrop-filter: blur(22px) saturate(160%);
     border: 1px solid rgba(67, 160, 71, 0.22);
-    padding: 18px 14px;
+    padding: 16px 14px;
     border-radius: 16px;
-    min-height: 190px;
-    aspect-ratio: 1;
+    min-height: 175px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
