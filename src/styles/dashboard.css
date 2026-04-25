@@ -985,7 +985,8 @@ body::before {
     border: 1px solid rgba(67, 160, 71, 0.15);
     border-radius: 16px;
     padding: 24px 20px;
-    min-height: 145px;
+    min-height: 130px;
+    aspect-ratio: 2 / 1;
     display: flex;
     align-items: center;
     gap: 0;
@@ -1078,9 +1079,11 @@ body::before {
     .card-icon  { width: 46px; height: 46px; font-size: 1.1rem; margin-right: 12px; }
     .card-value { font-size: 1.35rem; }
     .card-percent { font-size: 0.7rem; }
+    .card { aspect-ratio: unset; min-height: 110px; }
     .btn-periodo { font-size: 0.8rem; padding: 8px 12px; gap: 6px; }
     .section-header-actions { flex-wrap: wrap; justify-content: center; gap: 8px; }
     .btn-outline { padding: 8px 14px; font-size: 0.82rem; }
+    .conta-card { aspect-ratio: unset; }
 }
 
 /* ========== SECTION BOX ========== */
@@ -1355,6 +1358,10 @@ body::before {
     padding: 18px 14px;
     border-radius: 16px;
     min-height: 190px;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
     font-size: 0.80rem;
     font-weight: 500;
     box-shadow:
