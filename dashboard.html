@@ -258,7 +258,20 @@
                             </h1>
                             <p class="page-subtitle-premium">Visão geral completa das suas finanças</p>
                         </div>
-                        <div class="header-actions"></div>
+                        <div class="header-actions">
+                            <div class="dash-period-selector" id="dashPeriodSelector">
+                                <button class="dash-period-btn" id="btnPeriodPrev" type="button" aria-label="Mês anterior">
+                                    <i class="fas fa-chevron-left" aria-hidden="true"></i>
+                                </button>
+                                <span class="dash-period-display">
+                                    <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                                    <span id="dashPeriodLabel">Carregando...</span>
+                                </span>
+                                <button class="dash-period-btn" id="btnPeriodNext" type="button" aria-label="Próximo mês">
+                                    <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -280,6 +293,7 @@
                         <div class="card-content">
                             <div class="card-label">Entradas</div>
                             <div class="card-value" id="totalEntradas">R$ 0,00</div>
+                            <div class="card-change" id="changeEntradas">+0,00% vs mês anterior</div>
                         </div>
                     </div>
                     <div class="card card-red">
@@ -287,6 +301,7 @@
                         <div class="card-content">
                             <div class="card-label">Saídas</div>
                             <div class="card-value" id="totalSaidas">R$ 0,00</div>
+                            <div class="card-change" id="changeSaidas">+0,00% vs mês anterior</div>
                         </div>
                     </div>
                     <div class="card card-blue" id="cardSaldoDashboard">
@@ -294,6 +309,7 @@
                         <div class="card-content">
                             <div class="card-label">Saldo</div>
                             <div class="card-value" id="totalSaldo">R$ 0,00</div>
+                            <div class="card-change" id="changeSaldo">+0,00% vs mês anterior</div>
                         </div>
                     </div>
                     <div class="card card-yellow">
@@ -301,18 +317,27 @@
                         <div class="card-content">
                             <div class="card-label">Reservas</div>
                             <div class="card-value" id="totalReservas">R$ 0,00</div>
+                            <div class="card-change" id="changeReservas">+0,00% vs mês anterior</div>
                         </div>
                     </div>
                 </div>
 
                 <div class="section-box section-box--contas" id="sectionContasFixas">
                     <div class="section-header">
-                        <h2 class="section-title">
-                            <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> Contas Fixas
-                        </h2>
-                        <button class="btn-primary" id="btnNovaContaFixa" type="button">
-                            <i class="fas fa-plus" aria-hidden="true"></i> Nova Conta
-                        </button>
+                        <div>
+                            <h2 class="section-title">
+                                <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> Contas Fixas
+                            </h2>
+                            <p class="section-subtitle">Acompanhe e gerencie suas contas</p>
+                        </div>
+                        <div class="section-header-actions">
+                            <button class="btn-outline" id="btnVerTodasContas" type="button">
+                                <i class="fas fa-list" aria-hidden="true"></i> Ver todas
+                            </button>
+                            <button class="btn-primary" id="btnNovaContaFixa" type="button">
+                                <i class="fas fa-plus" aria-hidden="true"></i> Nova Conta
+                            </button>
+                        </div>
                     </div>
                     <div id="listaContasFixas" class="contas-grid">
                         <p class="empty-state">Nenhuma conta fixa cadastrada.</p>
@@ -325,14 +350,51 @@
                     role="button"
                     tabindex="0"
                     aria-label="Analisar para onde foi o seu dinheiro">
-                    <div class="promo-emoji" aria-hidden="true">💸</div>
-                    <h3 class="promo-titulo">Onde Foi Meu Dinheiro?</h3>
-                    <p class="promo-desc">
-                        Descubra para onde seus gastos estão indo com análise inteligente
-                    </p>
-                    <button class="btn-primary btn-no-events" type="button">
-                        🔍 Analisar Agora
-                    </button>
+
+                    <!-- Layout DESKTOP -->
+                    <div class="promo-desktop">
+                        <div class="promo-illustration" aria-hidden="true">
+                            <img src="public/assets/icons/Dashboard.gif" alt="">
+                        </div>
+                        <div class="promo-content">
+                            <h3 class="promo-titulo">Onde Foi Meu Dinheiro?</h3>
+                            <p class="promo-desc">Descubra para onde seus gastos estão indo com análise inteligente</p>
+                            <div class="promo-features">
+                                <div class="promo-feature">
+                                    <div class="promo-feature-icon"><i class="fas fa-chart-pie" aria-hidden="true"></i></div>
+                                    <div class="promo-feature-text">
+                                        <span class="promo-feature-title">Análise por categoria</span>
+                                        <span class="promo-feature-desc">Entenda seus principais gastos</span>
+                                    </div>
+                                </div>
+                                <div class="promo-feature">
+                                    <div class="promo-feature-icon"><i class="fas fa-chart-bar" aria-hidden="true"></i></div>
+                                    <div class="promo-feature-text">
+                                        <span class="promo-feature-title">Gráficos interativos</span>
+                                        <span class="promo-feature-desc">Visualize seus dados facilmente</span>
+                                    </div>
+                                </div>
+                                <div class="promo-feature">
+                                    <div class="promo-feature-icon"><i class="fas fa-file-alt" aria-hidden="true"></i></div>
+                                    <div class="promo-feature-text">
+                                        <span class="promo-feature-title">Relatórios inteligentes</span>
+                                        <span class="promo-feature-desc">Insights que ajudam você a decidir</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="btn-primary btn-no-events promo-cta" type="button">
+                                <i class="fas fa-chart-line" aria-hidden="true"></i> Analisar Agora →
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Layout MOBILE (original intocado) -->
+                    <div class="promo-mobile">
+                        <div class="promo-emoji" aria-hidden="true">💸</div>
+                        <h3 class="promo-titulo">Onde Foi Meu Dinheiro?</h3>
+                        <p class="promo-desc">Descubra para onde seus gastos estão indo com análise inteligente</p>
+                        <button class="btn-primary btn-no-events" type="button">🔍 Analisar Agora</button>
+                    </div>
                 </div>
             </section>
 

@@ -20,6 +20,7 @@ let transacoes = [];
 let filtroMovAtivo = 'mes_atual';
 let filtroMovMes   = null;
 let filtroMovAno   = null;
+let dashboardMesAtivo = '';
 let metas = [];
 let contasFixas = [];
 let nextTransId = 1;
@@ -1984,6 +1985,15 @@ function iniciarRenovacaoFotos() {
     _renovacaoFotosInterval = setInterval(_renovarFotosExpiradas, 50 * 60 * 1000);
 }
 
+// ========== DASHBOARD: LABEL DO PERÍODO ==========
+function _atualizarPeriodLabel() {
+    const el = document.getElementById('dashPeriodLabel');
+    if (!el) return;
+    if (!dashboardMesAtivo) dashboardMesAtivo = yearMonthKey();
+    const [y, m] = dashboardMesAtivo.split('-');
+    el.textContent = `${getMesNome(m)} / ${y}`;
+}
+
 // ========== DASHBOARD - RESUMO E CONTAS FIXAS ==========
 function atualizarDashboardResumo() {
     let totalEntradas = 0, totalSaidas = 0, totalReservas = 0;
@@ -2008,7 +2018,23 @@ function atualizarDashboardResumo() {
         return n;
     };
 
-    transacoes.forEach((t, i) => {
+    // Filtrar transações pelo período selecionado
+    if (!dashboardMesAtivo) dashboardMesAtivo = yearMonthKey();
+    const _prevMesKey = (() => {
+        const [y, m] = dashboardMesAtivo.split('-').map(Number);
+        const prev = new Date(y, m - 2, 1);
+        return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+    })();
+
+    let _entAnt = 0, _saiAnt = 0;
+    transacoes.filter(t => dataParaISO(t.data)?.startsWith(_prevMesKey)).forEach(t => {
+        const v = toValorSeguro(t.valor, 'ant');
+        if (t.categoria === 'entrada') _entAnt += v;
+        else if (t.categoria === 'saida') _saiAnt += v;
+    });
+
+    const _txAtual = transacoes.filter(t => dataParaISO(t.data)?.startsWith(dashboardMesAtivo));
+    _txAtual.forEach((t, i) => {
         const valor = toValorSeguro(t.valor, `transacao[${i}] id=${t.id}`);
 
         if (t.categoria === 'entrada') {
@@ -2058,6 +2084,27 @@ function atualizarDashboardResumo() {
     }
     if (heroSaldoEl) heroSaldoEl.dataset.valor = formatBRL(saldo);
     if (reservasEl)  reservasEl.textContent    = formatBRL(totalReservasCalc);
+
+    // Percentuais vs mês anterior
+    const _pctStr = (atual, ant) => {
+        if (ant === 0) return atual > 0 ? '+100,00% vs mês anterior' : '+0,00% vs mês anterior';
+        const p = ((atual - ant) / ant) * 100;
+        return `${p >= 0 ? '+' : ''}${p.toFixed(2).replace('.', ',')}% vs mês anterior`;
+    };
+    const _applyChange = (id, str, isPositiveWhenUp) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = str;
+        const pVal = parseFloat(str);
+        el.className = 'card-change' + (isNaN(pVal) ? '' : pVal >= 0
+            ? (isPositiveWhenUp ? ' positive' : ' negative')
+            : (isPositiveWhenUp ? ' negative' : ' positive'));
+    };
+    _applyChange('changeEntradas', _pctStr(totalEntradas, _entAnt), true);
+    _applyChange('changeSaidas',   _pctStr(totalSaidas, _saiAnt),   false);
+    _applyChange('changeSaldo',    '+0,00% vs mês anterior', true);
+    _applyChange('changeReservas', '+0,00% vs mês anterior', true);
+    _atualizarPeriodLabel();
 }
 
 // ========== SISTEMA DE NOTIFICAÇÕES DE VENCIMENTO ==========
@@ -3505,6 +3552,33 @@ function bindEventos() {
     const btnNovaContaFixa = document.getElementById('btnNovaContaFixa');
     if(btnNovaContaFixa) {
         btnNovaContaFixa.addEventListener('click', () => abrirContaFixaForm());
+    }
+
+    // Dashboard — navegação por período (mês anterior / próximo)
+    const _navPeriod = (delta) => {
+        if (!dashboardMesAtivo) dashboardMesAtivo = yearMonthKey();
+        const [y, m] = dashboardMesAtivo.split('-').map(Number);
+        const d = new Date(y, m - 1 + delta, 1);
+        dashboardMesAtivo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        atualizarDashboardResumo();
+    };
+    const btnPrev = document.getElementById('btnPeriodPrev');
+    const btnNext = document.getElementById('btnPeriodNext');
+    if (btnPrev) btnPrev.addEventListener('click', () => _navPeriod(-1));
+    if (btnNext) btnNext.addEventListener('click', () => _navPeriod(+1));
+
+    // Dashboard — "Ver todas" contas fixas
+    const btnVerTodasContas = document.getElementById('btnVerTodasContas');
+    if (btnVerTodasContas) {
+        btnVerTodasContas.addEventListener('click', () => {
+            const grid = document.getElementById('listaContasFixas');
+            if (grid) {
+                grid.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                grid.style.transition = 'box-shadow 0.3s';
+                grid.style.boxShadow = '0 0 0 2px rgba(67,160,71,0.5)';
+                setTimeout(() => { grid.style.boxShadow = ''; }, 1200);
+            }
+        });
     }
     
     // Transações — funções em db-transacoes.js (lazy), resolvidas em runtime via window
