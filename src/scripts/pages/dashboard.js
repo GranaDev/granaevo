@@ -20,7 +20,7 @@ let transacoes = [];
 let filtroMovAtivo = 'mes_atual';
 let filtroMovMes   = null;
 let filtroMovAno   = null;
-let dashboardMesAtivo = '';
+let dashboardMesAtivo = yearMonthKey();
 let metas = [];
 let contasFixas = [];
 let nextTransId = 1;
@@ -3553,6 +3553,9 @@ function bindEventos() {
     if(btnNovaContaFixa) {
         btnNovaContaFixa.addEventListener('click', () => abrirContaFixaForm());
     }
+
+    // Inicializa label do período imediatamente (evita "Carregando...")
+    _atualizarPeriodLabel();
 
     // Dashboard — navegação por período (mês anterior / próximo)
     const _navPeriod = (delta) => {

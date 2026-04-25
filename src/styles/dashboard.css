@@ -6213,42 +6213,49 @@ select.form-input option:checked {
     flex-shrink: 0;
 }
 
-/* ---------- btn-outline ---------- */
+/* ---------- btn-outline (premium glass) ---------- */
 .btn-outline {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 10px 18px;
+    gap: 8px;
+    padding: 10px 20px;
     border-radius: 12px;
-    border: 1px solid rgba(67, 160, 71, 0.3);
-    background: transparent;
+    border: 1px solid rgba(67, 160, 71, 0.25);
+    background: rgba(30, 40, 35, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     color: var(--text-primary);
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s, border-color 0.2s, color 0.2s;
+    transition: background 0.25s, border-color 0.25s, box-shadow 0.25s, transform 0.15s;
     white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .btn-outline:hover {
-    background: rgba(67, 160, 71, 0.1);
-    border-color: rgba(67, 160, 71, 0.55);
-    color: var(--primary-light);
+    background: rgba(67, 160, 71, 0.12);
+    border-color: rgba(67, 160, 71, 0.5);
+    box-shadow: 0 4px 16px rgba(67,160,71,0.15);
+    transform: translateY(-1px);
+    color: #a5d6a7;
 }
+.btn-outline:active { transform: translateY(0); }
 
 /* ---------- periodo selector (visível só no desktop) ---------- */
-.dash-period-selector {
-    display: none;
-}
+.dash-period-selector { display: none; }
 
 @media (min-width: 769px) {
     .dash-period-selector {
         display: flex;
         align-items: center;
         gap: 2px;
-        background: rgba(30, 40, 35, 0.45);
-        border: 1px solid rgba(67, 160, 71, 0.2);
+        background: rgba(20, 26, 38, 0.75);
+        border: 1px solid rgba(67, 160, 71, 0.22);
         border-radius: 12px;
         padding: 4px;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 2px 12px rgba(0,0,0,0.3);
     }
 }
 
@@ -6275,25 +6282,33 @@ select.form-input option:checked {
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 4px 10px;
+    padding: 4px 12px;
     color: var(--text-primary);
     font-size: 0.88rem;
     font-weight: 600;
     white-space: nowrap;
     user-select: none;
+    letter-spacing: 0.2px;
 }
 .dash-period-display i { color: var(--primary); font-size: 0.82rem; }
 
-/* ---------- cards maiores no desktop ---------- */
+/* ---------- contas-grid: forçar 5 colunas no desktop ---------- */
+@media (min-width: 769px) {
+    .contas-grid {
+        grid-template-columns: repeat(5, 1fr) !important;
+        gap: 14px;
+    }
+}
+
+/* ---------- cards desktop ---------- */
 @media (min-width: 769px) {
     .cards-grid {
-        gap: 20px;
+        gap: 18px;
         padding: 0;
         margin-bottom: 28px;
     }
-    .card { padding: 22px 18px; }
-    .card-icon { font-size: 2.6rem; min-width: 52px; }
-    .card-value { font-size: 1.75rem; }
+    .card { padding: 20px 18px; }
+    .card-value { font-size: 1.65rem; }
 }
 
 /* ---------- "Onde Foi Meu Dinheiro?" — mobile default ---------- */
@@ -6316,23 +6331,74 @@ select.form-input option:checked {
         min-height: 170px;
     }
 
+    /* Ilustração CSS art — sem imagem externa (gif tem fundo branco) */
     .promo-illustration {
-        width: 200px;
-        min-width: 200px;
-        background: linear-gradient(135deg, rgba(27, 94, 32, 0.85) 0%, rgba(67, 160, 71, 0.55) 100%);
+        width: 210px;
+        min-width: 210px;
+        background: linear-gradient(145deg, #1b5e20 0%, #2e7d32 55%, #388e3c 100%);
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 16px;
-        border-radius: 0;
+        align-self: stretch;
+        padding: 20px 16px;
+        position: relative;
+        overflow: hidden;
+        flex-shrink: 0;
     }
-    .promo-illustration img {
-        width: 100%;
-        max-width: 160px;
-        height: auto;
-        object-fit: contain;
-        border-radius: 8px;
+    .promo-illustration::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse at 65% 25%, rgba(0,255,136,0.18) 0%, transparent 65%);
         pointer-events: none;
+    }
+    .promo-chart-art {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        position: relative;
+        z-index: 1;
+    }
+    .promo-chart-bars {
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 7px;
+        height: 75px;
+        width: 100%;
+        padding: 0 4px;
+    }
+    .chart-bar {
+        flex: 1;
+        max-width: 30px;
+        border-radius: 5px 5px 2px 2px;
+        background: linear-gradient(to top, rgba(0,255,136,0.8) 0%, rgba(0,255,136,0.3) 100%);
+        box-shadow: 0 0 8px rgba(0,255,136,0.2);
+    }
+    .cb1 { height: 48%; }
+    .cb2 { height: 80%; }
+    .cb3 { height: 58%; }
+    .cb4 { height: 94%; }
+    .promo-art-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 0 4px;
+    }
+    .promo-art-pie {
+        font-size: 1.6rem;
+        color: rgba(255,255,255,0.5);
+        filter: drop-shadow(0 0 6px rgba(0,255,136,0.3));
+    }
+    .promo-art-line {
+        flex: 1;
+        height: 2px;
+        margin-left: 10px;
+        background: linear-gradient(to right, rgba(0,255,136,0.5), transparent);
+        border-radius: 2px;
     }
 
     .promo-content {
@@ -6367,16 +6433,17 @@ select.form-input option:checked {
         gap: 9px;
     }
     .promo-feature-icon {
-        width: 34px;
-        height: 34px;
-        border-radius: 9px;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
         background: rgba(67, 160, 71, 0.14);
+        border: 1px solid rgba(67, 160, 71, 0.22);
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
     }
-    .promo-feature-icon i { color: var(--primary); font-size: 0.88rem; }
+    .promo-feature-icon i { color: var(--primary); font-size: 0.9rem; }
     .promo-feature-text { display: flex; flex-direction: column; }
     .promo-feature-title {
         font-size: 0.8rem;
