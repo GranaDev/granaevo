@@ -248,17 +248,16 @@
                 <div class="page-header-premium">
                     <div class="header-content">
                         <div class="header-title-group">
-                            <div class="breadcrumb-premium">
-                                <a href="dashboard.html">Início</a>
-                                <span class="separator">›</span>
-                                <span>Dashboard</span>
-                            </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-chart-line" aria-hidden="true"></i> Dashboard
-                            </h1>
+                            <h1 class="page-title-premium">Dashboard</h1>
                             <p class="page-subtitle-premium">Visão geral completa das suas finanças</p>
                         </div>
-                        <div class="header-actions"></div>
+                        <div class="header-actions">
+                            <button class="btn-periodo" id="btnPeriodoDashboard" type="button">
+                                <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                                <span id="labelPeriodoDashboard">Maio / 2026</span>
+                                <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -276,17 +275,19 @@
 
                 <div class="cards-grid">
                     <div class="card card-green">
-                        <div class="card-icon"><i class="fas fa-arrow-up" aria-hidden="true"></i></div>
+                        <div class="card-icon"><i class="fas fa-arrow-trend-up" aria-hidden="true"></i></div>
                         <div class="card-content">
                             <div class="card-label">Entradas</div>
                             <div class="card-value" id="totalEntradas">R$ 0,00</div>
+                            <div class="card-percent" id="percentEntradas">+0,00% vs mês anterior</div>
                         </div>
                     </div>
                     <div class="card card-red">
-                        <div class="card-icon"><i class="fas fa-arrow-down" aria-hidden="true"></i></div>
+                        <div class="card-icon"><i class="fas fa-arrow-trend-down" aria-hidden="true"></i></div>
                         <div class="card-content">
                             <div class="card-label">Saídas</div>
                             <div class="card-value" id="totalSaidas">R$ 0,00</div>
+                            <div class="card-percent card-percent--red" id="percentSaidas">+0,00% vs mês anterior</div>
                         </div>
                     </div>
                     <div class="card card-blue" id="cardSaldoDashboard">
@@ -294,6 +295,7 @@
                         <div class="card-content">
                             <div class="card-label">Saldo</div>
                             <div class="card-value" id="totalSaldo">R$ 0,00</div>
+                            <div class="card-percent" id="percentSaldo">+0,00% vs mês anterior</div>
                         </div>
                     </div>
                     <div class="card card-yellow">
@@ -301,18 +303,27 @@
                         <div class="card-content">
                             <div class="card-label">Reservas</div>
                             <div class="card-value" id="totalReservas">R$ 0,00</div>
+                            <div class="card-percent" id="percentReservas">+0,00% vs mês anterior</div>
                         </div>
                     </div>
                 </div>
 
                 <div class="section-box section-box--contas" id="sectionContasFixas">
                     <div class="section-header">
-                        <h2 class="section-title">
-                            <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> Contas Fixas
-                        </h2>
-                        <button class="btn-primary" id="btnNovaContaFixa" type="button">
-                            <i class="fas fa-plus" aria-hidden="true"></i> Nova Conta
-                        </button>
+                        <div class="section-header-left">
+                            <h2 class="section-title">
+                                <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> Contas Fixas
+                            </h2>
+                            <p class="section-subtitle">Acompanhe e gerencie suas contas</p>
+                        </div>
+                        <div class="section-header-actions">
+                            <button class="btn-outline" id="btnVerTodasContas" type="button">
+                                <i class="fas fa-list" aria-hidden="true"></i> Ver todas
+                            </button>
+                            <button class="btn-primary" id="btnNovaContaFixa" type="button">
+                                <i class="fas fa-plus" aria-hidden="true"></i> Nova Conta
+                            </button>
+                        </div>
                     </div>
                     <div id="listaContasFixas" class="contas-grid">
                         <p class="empty-state">Nenhuma conta fixa cadastrada.</p>
@@ -325,9 +336,7 @@
                     role="button"
                     tabindex="0"
                     aria-label="Analisar para onde foi o seu dinheiro">
-                    <div class="promo-ilustracao" aria-hidden="true">
-                        <img src="public/assets/icons/Icon_onde_foi.png" alt="" class="promo-icon-img">
-                    </div>
+                    <div class="promo-ilustracao" aria-hidden="true"></div>
                     <div class="promo-conteudo">
                         <div class="promo-text-top">
                             <h3 class="promo-titulo">Onde Foi Meu Dinheiro?</h3>
