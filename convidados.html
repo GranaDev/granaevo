@@ -3,35 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/png" href="/public/assets/icons/favicon.png">
+    <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
     <title>Aceitar Convite — GranaEvo</title>
 
     <!--
-        [FIX-R01] SDK Supabase removido — não era utilizado nesta página.
-                  Isso permitiu remover cdn.jsdelivr.net do script-src,
-                  travando-o para 'self' apenas. Elimina por completo
-                  o risco de supply chain via CDN de scripts.
-
-        [FIX-R02] VERIFY_ENDPOINT configurável no JS:
-                  Para máxima segurança, implemente um proxy interno
-                  (ex: /api/verify-invite no seu servidor ou Cloudflare Worker)
-                  e atualize connect-src para 'self' — removendo a URL do Supabase.
-
-        CSP atual: script-src travado em 'self' (nenhum CDN externo para scripts).
-                   CDN externo restante: apenas Font Awesome CSS + Google Fonts (sem JS).
+        CSP definida exclusivamente via HTTP header no vercel.json.
+        A meta CSP foi removida para evitar conflito: quando ambas coexistem,
+        o browser exige que a requisição passe em AMBAS simultaneamente —
+        a meta anterior bloqueava /api/verify-invite por não conter 'self'.
+        Fonte única de verdade: vercel.json → headers → /convidados.html
     -->
-    <meta http-equiv="Content-Security-Policy" content="
-        default-src  'self';
-        script-src   'self';
-        style-src    'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
-        font-src     https://fonts.gstatic.com https://cdnjs.cloudflare.com;
-        img-src      'self' data:;
-        connect-src  https://fvrhqqeofqedmhadzzqw.supabase.co;
-        frame-ancestors 'none';
-        base-uri     'none';
-        object-src   'none';
-        form-action  'self';
-    ">
 
     <!--
         [FIX-REL-3] Referrer-Policy — evita vazamento de URL para domínios externos.
@@ -82,7 +63,7 @@
         <!-- LOGO -->
         <div class="invite-logo">
             <div class="logo-ring">
-                <img src="public/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img">
             </div>
             <span class="logo-text">GranaEvo</span>
         </div>

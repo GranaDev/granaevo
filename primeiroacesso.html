@@ -28,7 +28,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/png" href="/public/assets/icons/favicon.png">
+    <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
     <title>Primeiro Acesso — GranaEvo</title>
 
     <!--
@@ -53,18 +53,15 @@
         ║    Strict-Transport-Security: max-age=31536000              ║
         ╚══════════════════════════════════════════════════════════════╝
     -->
+    <!-- Supabase JS agora bundled via Vite — esm.sh e cdn.jsdelivr.net removidos -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self'
-            https://esm.sh
-            https://cdn.jsdelivr.net;
+        script-src 'self';
         style-src 'self' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com;
         connect-src 'self'
-            https://esm.sh
             https://fvrhqqeofqedmhadzzqw.supabase.co
-            wss://fvrhqqeofqedmhadzzqw.supabase.co
-            https://cdn.jsdelivr.net;
+            wss://fvrhqqeofqedmhadzzqw.supabase.co;
         img-src 'self' data:;
         frame-src 'none';
         object-src 'none';
@@ -341,6 +338,8 @@
         </div><!-- /.card -->
     </div><!-- /.container -->
 
+    <!-- Pré-carrega o Supabase client em paralelo com o parse do HTML -->
+    <link rel="modulepreload" href="src/scripts/services/supabase-client.js?v=2">
     <script type="module" src="src/scripts/pages/primeiroacesso.js?v=3"></script>
 
 </body>

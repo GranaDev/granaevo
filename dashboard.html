@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/png" href="/public/assets/icons/favicon.png">
+    <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
     <title>Dashboard - GranaEvo</title>
 
     <!-- ================================================================
@@ -17,18 +17,16 @@
            printf '%s' 'CONTEUDO' | openssl dgst -sha256 -binary | openssl base64 -A
          e adicione 'sha256-HASH=' em script-src aqui e no vercel.json.
          ================================================================ -->
-    <!-- CSP principal via vercel.json HTTP headers. Esta meta é fallback para ambientes sem header. -->
+    <!-- CSP principal via vercel.json HTTP headers. Esta meta é fallback para dev local. -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' https://esm.sh https://cdn.jsdelivr.net;
+        script-src 'self' https://cdn.jsdelivr.net;
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
         font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
         img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co;
         connect-src 'self'
             https://fvrhqqeofqedmhadzzqw.supabase.co
-            wss://fvrhqqeofqedmhadzzqw.supabase.co
-            https://esm.sh
-            https://cdn.jsdelivr.net;
+            wss://fvrhqqeofqedmhadzzqw.supabase.co;
         base-uri 'self';
         form-action 'self';
         object-src 'none';
@@ -74,6 +72,12 @@
             criava múltiplas instâncias GoTrueClient (comportamento indefinido)
             e invalidava os hashes SRI a cada novo release do pacote @2.
          ================================================================ -->
+    <!-- Pré-carrega os módulos críticos em paralelo com o parse do HTML.
+         Vite substitui estes hrefs pelos caminhos hashed no build de produção. -->
+    <link rel="modulepreload" href="src/scripts/services/supabase-client.js?v=2">
+    <link rel="modulepreload" href="src/scripts/modules/auth-guard.js?v=2">
+    <link rel="modulepreload" href="src/scripts/modules/data-manager.js?v=8">
+
     <script type="module" src="src/scripts/services/supabase-client.js?v=2"></script>
     <script type="module" src="src/scripts/modules/data-manager.js?v=8"></script>
     <script type="module" src="src/scripts/modules/auth-guard.js?v=2"></script>
@@ -85,7 +89,7 @@
     <div class="loading-screen" id="authLoading" role="status" aria-label="Verificando acesso">
         <div class="loader">
             <div class="loader-logo">
-                <img src="public/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
             </div>
             <div class="loader-bar" aria-hidden="true">
                 <div class="loader-progress"></div>
@@ -122,7 +126,7 @@
             <!-- Foto de perfil (esquerdo) — abre input de foto -->
             <label for="photoUpload" class="mobile-profile-btn" aria-label="Alterar foto de perfil">
                 <img
-                    src="public/assets/icons/placeholder-user.svg"
+                    src="/assets/icons/placeholder-user.svg"
                     alt="Foto de perfil"
                     id="mobileUserPhoto"
                     class="mobile-user-photo">
@@ -152,7 +156,7 @@
                     id="mobileSettingsBtn"
                     type="button"
                     aria-label="Configurações">
-                    <img src="public/assets/icons/Configuracoes.gif" alt="Configurações" class="mobile-settings-icon-img">
+                    <img src="/assets/icons/Configuracoes.gif" alt="Configurações" class="mobile-settings-icon-img">
                 </button>
             </div>
         </div>
@@ -162,7 +166,7 @@
             <div class="sidebar-header">
                 <div class="logo">
                     <div class="logo-img-wrapper">
-                        <img src="public/assets/icons/granaevo-logo.jpg" alt="GranaEvo - Gestão Financeira" class="logo-img">
+                        <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo - Gestão Financeira" class="logo-img">
                     </div>
                     <span class="logo-text">GranaEvo</span>
                 </div>
@@ -171,7 +175,7 @@
             <div class="sidebar-user">
                 <div class="user-photo-wrapper">
                     <img
-                        src="public/assets/icons/placeholder-user.svg"
+                        src="/assets/icons/placeholder-user.svg"
                         alt="Foto de perfil"
                         id="userPhoto"
                         class="user-photo">
@@ -736,7 +740,7 @@
                 <!-- Card de perfil do usuário -->
                 <div class="cfg-profile-card">
                     <div class="cfg-avatar">
-                        <img src="public/assets/icons/placeholder-user.svg" id="cfgUserPhoto" class="cfg-avatar-img" alt="Foto de perfil">
+                        <img src="/assets/icons/placeholder-user.svg" id="cfgUserPhoto" class="cfg-avatar-img" alt="Foto de perfil">
                         <div id="cfgUserAvatar" class="cfg-avatar-fallback" aria-hidden="true">?</div>
                     </div>
                     <div class="cfg-profile-info">
@@ -841,27 +845,27 @@
         <!-- ========== BOTTOM NAV MOBILE ========== -->
         <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Navegação inferior">
             <button class="mobile-nav-item active" data-page="dashboard" type="button" aria-label="Dashboard">
-                <img src="public/assets/icons/Dashboard.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Dashboard.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Home</span>
             </button>
             <button class="mobile-nav-item" data-page="transacoes" type="button" aria-label="Transações">
-                <img src="public/assets/icons/Extrato.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Extrato.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Transações</span>
             </button>
             <button class="mobile-nav-item" data-page="reservas" type="button" aria-label="Reservas">
-                <img src="public/assets/icons/Reservas.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Reservas.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Reservas</span>
             </button>
             <button class="mobile-nav-item" data-page="cartoes" type="button" aria-label="Cartões">
-                <img src="public/assets/icons/Cartoes.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Cartoes.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Cartões</span>
             </button>
             <button class="mobile-nav-item" data-page="graficos" type="button" aria-label="Gráficos">
-                <img src="public/assets/icons/Graficos.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Graficos.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Gráficos</span>
             </button>
             <button class="mobile-nav-item" data-page="relatorios" type="button" aria-label="Relatórios">
-                <img src="public/assets/icons/Relatorios.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Relatorios.gif" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Relatórios</span>
             </button>
             <button class="mobile-nav-item" id="chatNavBtn" type="button" aria-label="Chat">

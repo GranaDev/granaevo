@@ -93,13 +93,16 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 1. Verificar proxy secret ────────────────────────────────────────────
+  // PROXY_SECRET é obrigatória — sem ela, qualquer requisição seria aceita.
   const proxySecret = Deno.env.get('PROXY_SECRET')
-  if (proxySecret) {
-    const received = req.headers.get('x-proxy-secret') ?? ''
-    if (!timingSafeEqual(received, proxySecret)) {
-      console.warn('[save-user-data] Proxy secret inválido — acesso bloqueado')
-      return json({ success: false, error: 'Não autorizado' }, 401, corsHeaders)
-    }
+  if (!proxySecret) {
+    console.error('[save-user-data] PROXY_SECRET não configurada — requisição bloqueada')
+    return json({ success: false, error: 'Configuração interna inválida' }, 500, corsHeaders)
+  }
+  const received = req.headers.get('x-proxy-secret') ?? ''
+  if (!timingSafeEqual(received, proxySecret)) {
+    console.warn('[save-user-data] Proxy secret inválido — acesso bloqueado')
+    return json({ success: false, error: 'Não autorizado' }, 401, corsHeaders)
   }
 
   // ── 2. Extrair e validar JWT ─────────────────────────────────────────────

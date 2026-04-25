@@ -495,7 +495,8 @@ window.gerarRelatorioCompartilhadoPersonalizado = async function gerarRelatorioC
     if (!resultado) return;
 
     if (!temDados) {
-        resultado.innerHTML = `
+        // ✅ _sanitizarHTMLRelatorio (DOMParser) — consistente com todo o módulo
+        resultado.innerHTML = _sanitizarHTMLRelatorio(`
             <div class="relatorio-vazio">
                 <h3>📊 Nenhum relatório disponível</h3>
                 <p>Não há transações registradas para os perfis selecionados em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</p>
@@ -503,7 +504,7 @@ window.gerarRelatorioCompartilhadoPersonalizado = async function gerarRelatorioC
                     Perfis: ${perfisAtivos.map(p => sanitizeHTML(String(p.nome || ''))).join(', ')}
                 </p>
             </div>
-        `;
+        `);
         resultado.classList.remove('js-hidden');
         return;
     }

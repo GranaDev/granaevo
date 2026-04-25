@@ -33,10 +33,10 @@
  * pois qualquer script na mesma origem pode ler o localStorage normalmente.
  */
 
-// ✅ CORREÇÃO: esm.sh em vez de cdn.jsdelivr.net
-//    O jsdelivr gerava sub-imports sem versão fixa que causavam falha de SRI
-//    e instanciação duplicada do GoTrueClient (Multiple GoTrueClient warning)
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2';
+// Importado via pacote npm — bundled pelo Vite em vendor-supabase.js.
+// Elimina dependência de CDN externo (esm.sh) e permite SRI implícito
+// pelo hash do bundle gerado em build (nenhum request CDN em runtime).
+import { createClient } from '@supabase/supabase-js';
 
 // ==========================================
 // CONFIGURAÇÃO — exportadas para os módulos
