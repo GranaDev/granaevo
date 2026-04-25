@@ -15,6 +15,16 @@ export function init(ctx) {
     window.abrirAnaliseDisciplina = () => abrirAnaliseDisciplina();
     window.renderMetaVisual       = () => renderMetaVisual();
     renderMetasList();
+
+    // search + filter listeners (elementos podem não existir em mobile — guarda com ?.)
+    document.getElementById('metaSearchInput')?.addEventListener('input', () => {
+        _metaPagina = 1;
+        renderMetasList();
+    });
+    document.getElementById('metaStatusFilter')?.addEventListener('change', () => {
+        _metaPagina = 1;
+        renderMetasList();
+    });
 }
 
 // ========== METAS/RESERVAS ==========
@@ -476,9 +486,21 @@ function abrirMetaForm(editId = null) {
     });
 }
 
+const _META_POR_PAGINA = 5;
+let _metaPagina = 1;
+
+function _metaIconClass(m) {
+    if (String(m.id) === 'emergency') return 'fa-shield-alt';
+    if (m.tipoRendimento && m.tipoRendimento !== 'sem_rendimento') return 'fa-chart-line';
+    return 'fa-piggy-bank';
+}
+
 function renderMetasList() {
     const cont = document.getElementById('listaMetas');
     if (!cont) return;
+
+    const searchVal  = (document.getElementById('metaSearchInput')?.value  || '').toLowerCase();
+    const statusVal  = (document.getElementById('metaStatusFilter')?.value || '');
 
     cont.innerHTML = '';
 
@@ -490,168 +512,166 @@ function renderMetasList() {
         return;
     }
 
-    _ctx.metas.forEach(m => {
+    const filtradas = _ctx.metas.filter(m => {
+        const nome = _ctx._sanitizeText(m.descricao).toLowerCase();
+        if (searchVal && !nome.includes(searchVal)) return false;
+        if (statusVal) {
+            const concluida = Number(m.saved || 0) >= Number(m.objetivo || 1);
+            if (statusVal === 'concluida' && !concluida) return false;
+            if (statusVal === 'ativa'     &&  concluida) return false;
+        }
+        return true;
+    });
+
+    if (filtradas.length === 0) {
+        const p       = document.createElement('p');
+        p.className   = 'empty-state';
+        p.textContent = 'Nenhuma reserva encontrada.';
+        cont.appendChild(p);
+        return;
+    }
+
+    const total   = filtradas.length;
+    const inicio  = (_metaPagina - 1) * _META_POR_PAGINA;
+    const pagina  = filtradas.slice(inicio, inicio + _META_POR_PAGINA);
+
+    pagina.forEach(m => {
         const div         = document.createElement('div');
         div.className     = 'meta-item';
         div.dataset.id    = String(m.id);
 
-        const saved     = Number(m.saved    || 0);
-        const objetivo  = Number(m.objetivo || 0);
+        const saved      = Number(m.saved    || 0);
+        const objetivo   = Number(m.objetivo || 0);
         const percentual = objetivo > 0
             ? Math.min(100, parseFloat(((saved / objetivo) * 100).toFixed(1)))
             : 0;
 
-        // ✅ Cor determinada por lógica — nunca vem de dado do usuário
         let corProgresso = '#ff4b4b';
         if      (percentual >= 70) corProgresso = '#00ff99';
         else if (percentual >= 40) corProgresso = '#ffd166';
 
-        // ── Linha superior: descrição + percentual
+        // ── Linha superior: ícone + info + percentual
         const rowTop = document.createElement('div');
-        rowTop.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;';
+        rowTop.className = 'meta-item-top';
+
+        const iconWrap = document.createElement('div');
+        iconWrap.className = 'meta-item-icon';
+        const iconI = document.createElement('i');
+        iconI.className = `fas ${_metaIconClass(m)}`;
+        iconI.setAttribute('aria-hidden', 'true');
+        iconWrap.appendChild(iconI);
 
         const colInfo = document.createElement('div');
-        colInfo.style.flex = '1';
+        colInfo.className = 'meta-item-info';
 
         const strongDesc       = document.createElement('strong');
-        strongDesc.textContent = _ctx._sanitizeText(m.descricao); // ✅ textContent
+        strongDesc.textContent = _ctx._sanitizeText(m.descricao);
 
-        const divValores           = document.createElement('div');
-        divValores.style.cssText   = 'font-size:12px; color: var(--text-muted); margin-top:4px;';
-        divValores.textContent     = `${formatBRL(saved)} de ${formatBRL(objetivo)}`; // ✅ textContent
+        const divValores       = document.createElement('div');
+        divValores.className   = 'meta-item-valores';
+        divValores.textContent = `${formatBRL(saved)} de ${formatBRL(objetivo)}`;
 
         colInfo.appendChild(strongDesc);
         colInfo.appendChild(divValores);
 
-        // ── Tags: prazo + rendimentos
-        if (m.prazo || (m.tipoRendimento && m.tipoRendimento !== 'sem_rendimento')) {
+        // Tags: prazo + rendimentos + aporte
+        if (m.prazo || (m.tipoRendimento && m.tipoRendimento !== 'sem_rendimento') || (m.aporteRecorrente && m.valorAporte)) {
             const rowTags = document.createElement('div');
-            rowTags.style.cssText = 'display:flex; gap:5px; flex-wrap:wrap; margin-top:5px;';
+            rowTags.className = 'meta-item-tags';
 
             if (m.prazo) {
                 const [pm, pa] = m.prazo.split('/');
-                const nomeMes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-                const mesNum  = parseInt(pm, 10);
+                const nomeMes  = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
                 const tagPrazo = document.createElement('span');
-                tagPrazo.style.cssText = 'font-size:10px; padding:2px 7px; border-radius:20px; background:rgba(167,139,250,0.15); color:#a78bfa; font-weight:600;';
-                tagPrazo.textContent = `⏰ ${nomeMes[mesNum - 1] || pm}/${pa}`;
+                tagPrazo.className = 'meta-tag meta-tag-prazo';
+                tagPrazo.textContent = `⏰ ${nomeMes[parseInt(pm,10) - 1] || pm}/${pa}`;
                 rowTags.appendChild(tagPrazo);
             }
-
             if (m.tipoRendimento === 'cdi') {
                 const tagRend = document.createElement('span');
-                tagRend.style.cssText = 'font-size:10px; padding:2px 7px; border-radius:20px; background:rgba(0,255,153,0.12); color:#00cc7a; font-weight:600;';
+                tagRend.className = 'meta-tag meta-tag-rend';
                 tagRend.textContent = `📈 CDI ${m.cdiPct != null ? m.cdiPct + '%' : ''}`.trim();
                 rowTags.appendChild(tagRend);
             } else if (m.tipoRendimento === 'personalizado' && m.taxaJuros != null) {
                 const tagRend = document.createElement('span');
-                tagRend.style.cssText = 'font-size:10px; padding:2px 7px; border-radius:20px; background:rgba(0,255,153,0.12); color:#00cc7a; font-weight:600;';
+                tagRend.className = 'meta-tag meta-tag-rend';
                 tagRend.textContent = `📈 ${m.taxaJuros.toFixed(2)}%/mês`;
                 rowTags.appendChild(tagRend);
             }
-
             if (m.aporteRecorrente && m.valorAporte) {
                 const tagAp = document.createElement('span');
-                tagAp.style.cssText = 'font-size:10px; padding:2px 7px; border-radius:20px; background:rgba(67,160,71,0.15); color:var(--primary); font-weight:600;';
+                tagAp.className = 'meta-tag meta-tag-aporte';
                 tagAp.textContent = `💰 ${formatBRL(m.valorAporte)}/mês`;
                 rowTags.appendChild(tagAp);
             }
-
             colInfo.appendChild(rowTags);
         }
 
         const divPerc = document.createElement('div');
-        // ✅ Atribuição direta de propriedades — sem cssText com dados do usuário
-        divPerc.style.background    = `rgba(${percentual >= 70 ? '0,255,153' : percentual >= 40 ? '255,209,102' : '255,75,75'},0.2)`;
-        divPerc.style.padding       = '6px 12px';
-        divPerc.style.borderRadius  = '20px';
-        divPerc.style.fontSize      = '0.85rem';
-        divPerc.style.fontWeight    = '700';
-        divPerc.style.color         = corProgresso; // ✅ valor interno — não vem do usuário
-        divPerc.style.whiteSpace    = 'nowrap';
-        divPerc.textContent         = `${percentual}%`; // ✅ textContent
+        divPerc.className = 'meta-item-perc';
+        divPerc.style.background = `rgba(${percentual >= 70 ? '0,255,153' : percentual >= 40 ? '255,209,102' : '255,75,75'},0.15)`;
+        divPerc.style.color      = corProgresso;
+        divPerc.textContent      = `${percentual}%`;
 
+        rowTop.appendChild(iconWrap);
         rowTop.appendChild(colInfo);
         rowTop.appendChild(divPerc);
 
         // ── Barra de progresso
         const barraContainer = document.createElement('div');
-        barraContainer.style.cssText = 'width:100%; height:6px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; margin-bottom:12px;';
+        barraContainer.className = 'meta-barra-wrap';
 
         const barraFill = document.createElement('div');
-        // ✅ Atribuição direta — percentual e corProgresso são valores internos calculados
+        barraFill.className          = 'meta-barra-fill';
         barraFill.style.width        = `${percentual}%`;
-        barraFill.style.height       = '100%';
         barraFill.style.background   = corProgresso;
-        barraFill.style.borderRadius = '10px';
-        barraFill.style.transition   = 'width 0.5s ease';
-        barraFill.style.boxShadow    = `0 0 10px ${corProgresso}`;
-
+        barraFill.style.boxShadow    = `0 0 8px ${corProgresso}55`;
         barraContainer.appendChild(barraFill);
 
         // ── Botões de ação
         const rowBotoes = document.createElement('div');
-        rowBotoes.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:12px;';
+        rowBotoes.className = 'meta-item-botoes';
 
-        const colBotoes = document.createElement('div');
-        colBotoes.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap;';
+        const btnEditar     = document.createElement('button');
+        btnEditar.className = 'btn-meta-edit';
+        btnEditar.type      = 'button';
+        const iEdit = document.createElement('i');
+        iEdit.className = 'fas fa-pen';
+        iEdit.setAttribute('aria-hidden', 'true');
+        btnEditar.appendChild(iEdit);
+        btnEditar.appendChild(document.createTextNode(' Editar'));
+        btnEditar.addEventListener('click', e => { e.stopPropagation(); abrirMetaForm(m.id); });
 
-        // ✅ Botão Editar — addEventListener em vez de onclick inline com m.id interpolado
-        const btnEditar         = document.createElement('button');
-        btnEditar.className     = 'btn-primary';
-        btnEditar.style.cssText = 'padding:6px 12px; font-size:0.85rem;';
-        const btnEditarIcon = document.createElement('i');
-        btnEditarIcon.className = 'fas fa-pen';
-        btnEditarIcon.style.marginRight = '6px';
-        btnEditar.appendChild(btnEditarIcon);
-        btnEditar.appendChild(document.createTextNode('Editar'));
-        btnEditar.addEventListener('click', (e) => {
-            e.stopPropagation();
-            abrirMetaForm(m.id);
-        });
+        const btnExcluir     = document.createElement('button');
+        btnExcluir.className = 'btn-meta-del';
+        btnExcluir.type      = 'button';
+        const iDel = document.createElement('i');
+        iDel.className = 'fas fa-trash';
+        iDel.setAttribute('aria-hidden', 'true');
+        btnExcluir.appendChild(iDel);
+        btnExcluir.appendChild(document.createTextNode(' Excluir'));
+        btnExcluir.addEventListener('click', e => { e.stopPropagation(); removerMeta(m.id); });
 
-        colBotoes.appendChild(btnEditar);
+        rowBotoes.appendChild(btnEditar);
+        rowBotoes.appendChild(btnExcluir);
 
-        // ✅ Botão Análise — só aparece se há histórico, sem interpolação de ID
         if (m.historicoRetiradas && m.historicoRetiradas.length > 0) {
-            const btnAnalise         = document.createElement('button');
-            btnAnalise.className     = 'btn-primary';
-            btnAnalise.style.cssText = 'padding:6px 12px; font-size:0.85rem; background: var(--accent);';
-            const btnAnaliseIcon = document.createElement('i');
-            btnAnaliseIcon.className = 'fas fa-chart-bar';
-            btnAnaliseIcon.style.marginRight = '6px';
-            btnAnalise.appendChild(btnAnaliseIcon);
-            btnAnalise.appendChild(document.createTextNode('Análise'));
-            btnAnalise.addEventListener('click', (e) => {
-                e.stopPropagation();
-                abrirAnaliseDisciplina(m.id);
-            });
-            colBotoes.appendChild(btnAnalise);
+            const btnAnalise     = document.createElement('button');
+            btnAnalise.className = 'btn-meta-analise';
+            btnAnalise.type      = 'button';
+            const iAn = document.createElement('i');
+            iAn.className = 'fas fa-chart-bar';
+            iAn.setAttribute('aria-hidden', 'true');
+            btnAnalise.appendChild(iAn);
+            btnAnalise.appendChild(document.createTextNode(' Análise'));
+            btnAnalise.addEventListener('click', e => { e.stopPropagation(); abrirAnaliseDisciplina(m.id); });
+            rowBotoes.appendChild(btnAnalise);
         }
 
-        // ✅ Botão Excluir — addEventListener em vez de onclick inline
-        const btnExcluir         = document.createElement('button');
-        btnExcluir.className     = 'btn-excluir';
-        btnExcluir.style.cssText = 'padding:6px 12px; font-size:0.85rem;';
-        const btnExcluirIcon = document.createElement('i');
-        btnExcluirIcon.className = 'fas fa-trash';
-        btnExcluirIcon.style.marginRight = '6px';
-        btnExcluir.appendChild(btnExcluirIcon);
-        btnExcluir.appendChild(document.createTextNode('Excluir'));
-        btnExcluir.addEventListener('click', (e) => {
-            e.stopPropagation();
-            removerMeta(m.id);
-        });
-
-        colBotoes.appendChild(btnExcluir);
-        rowBotoes.appendChild(colBotoes);
-
-        // ── Monta card
         div.appendChild(rowTop);
         div.appendChild(barraContainer);
         div.appendChild(rowBotoes);
 
-        // ✅ Click no card via addEventListener
         div.addEventListener('click', () => {
             document.querySelectorAll('.meta-item').forEach(x => x.classList.remove('selected'));
             div.classList.add('selected');
@@ -660,6 +680,42 @@ function renderMetasList() {
 
         cont.appendChild(div);
     });
+
+    // ── Paginação
+    const pagination = document.createElement('div');
+    pagination.className = 'meta-pagination';
+
+    const info = document.createElement('span');
+    info.className = 'meta-pagination-info';
+    const fim = Math.min(inicio + _META_POR_PAGINA, total);
+    info.textContent = `Mostrando ${inicio + 1} a ${fim} de ${total} ${total === 1 ? 'reserva' : 'reservas'}`;
+
+    const btnPrev = document.createElement('button');
+    btnPrev.className = 'meta-pag-btn';
+    btnPrev.type      = 'button';
+    btnPrev.innerHTML = '<i class="fas fa-chevron-left" aria-hidden="true"></i>';
+    btnPrev.disabled  = _metaPagina === 1;
+    btnPrev.addEventListener('click', () => { _metaPagina--; renderMetasList(); });
+
+    const btnNext = document.createElement('button');
+    btnNext.className = 'meta-pag-btn';
+    btnNext.type      = 'button';
+    btnNext.innerHTML = '<i class="fas fa-chevron-right" aria-hidden="true"></i>';
+    btnNext.disabled  = fim >= total;
+    btnNext.addEventListener('click', () => { _metaPagina++; renderMetasList(); });
+
+    const pageNum = document.createElement('span');
+    pageNum.className = 'meta-pag-num active';
+    pageNum.textContent = String(_metaPagina);
+
+    pagination.appendChild(info);
+    const pagControls = document.createElement('div');
+    pagControls.className = 'meta-pag-controls';
+    pagControls.appendChild(btnPrev);
+    pagControls.appendChild(pageNum);
+    pagControls.appendChild(btnNext);
+    pagination.appendChild(pagControls);
+    cont.appendChild(pagination);
 }
 
 function removerMeta(id) {
@@ -913,25 +969,77 @@ function renderMetaVisual() {
         ctxLine.fillText(p.month, p.x, padding + h + 16);
     });
     
-    // ✅ NOVO: Exibir detalhes com projeção
-    // ✅ Reconstrói details via DOM — zero dados do usuário em innerHTML
+    // ── Reconstrói details via DOM — zero dados do usuário em innerHTML
     details.innerHTML = '';
 
-    // ── Cabeçalho: nome da meta
-    const divNome       = document.createElement('div');
-    const strong        = document.createElement('strong');
-    strong.textContent  = _ctx._sanitizeText(meta.descricao); // ✅ textContent
-    divNome.appendChild(strong);
+    const falta = Math.max(0, Number(meta.objetivo || 0) - Number(meta.saved || 0));
+    const concluida = Number(meta.saved || 0) >= Number(meta.objetivo || 1);
 
-    // ── Linha de valores
-    const divValores           = document.createElement('div');
-    divValores.style.color     = 'var(--text-secondary)';
-    divValores.style.marginTop = '8px';
-    // ✅ formatBRL retorna string numérica — seguro via textContent
-    divValores.textContent = `Objetivo: ${formatBRL(meta.objetivo)} • Guardado: ${formatBRL(meta.saved)} • Falta: ${formatBRL(Math.max(0, meta.objetivo - meta.saved))}`;
+    // ── Card de detalhe
+    const detCard = document.createElement('div');
+    detCard.className = 'res-detail-card';
 
-    details.appendChild(divNome);
-    details.appendChild(divValores);
+    // Header: ícone + nome/subtítulo + badge Ativa/Concluída
+    const detHeader = document.createElement('div');
+    detHeader.className = 'res-detail-header';
+
+    const detIconWrap = document.createElement('div');
+    detIconWrap.className = 'res-detail-icon';
+    const detIconI = document.createElement('i');
+    detIconI.className = `fas ${_metaIconClass(meta)}`;
+    detIconI.setAttribute('aria-hidden', 'true');
+    detIconWrap.appendChild(detIconI);
+
+    const detInfo = document.createElement('div');
+    detInfo.className = 'res-detail-info';
+    const detName = document.createElement('div');
+    detName.className = 'res-detail-name';
+    detName.textContent = _ctx._sanitizeText(meta.descricao);
+    const detSub = document.createElement('div');
+    detSub.className = 'res-detail-sub';
+    detSub.textContent = `Objetivo: ${_ctx._sanitizeText(meta.descricao)}`;
+    detInfo.appendChild(detName);
+    detInfo.appendChild(detSub);
+
+    const detBadge = document.createElement('span');
+    detBadge.className = concluida ? 'res-ativa-badge res-ativa-badge--done' : 'res-ativa-badge';
+    detBadge.textContent = concluida ? '● Concluída' : '● Ativa';
+
+    detHeader.appendChild(detIconWrap);
+    detHeader.appendChild(detInfo);
+    detHeader.appendChild(detBadge);
+
+    // Stat boxes: Objetivo / Guardado / Falta
+    const detStats = document.createElement('div');
+    detStats.className = 'res-detail-stats';
+
+    const statsData = [
+        { label: 'Objetivo',  value: formatBRL(meta.objetivo), sub: 'Valor alvo da reserva',    cls: '' },
+        { label: 'Guardado',  value: formatBRL(meta.saved),    sub: 'Valor acumulado',           cls: 'res-stat-guardado' },
+        { label: 'Falta',     value: formatBRL(falta),         sub: 'Para atingir o objetivo',   cls: 'res-stat-falta' },
+    ];
+
+    statsData.forEach(s => {
+        const box = document.createElement('div');
+        box.className = 'res-stat-box';
+        const lbl = document.createElement('div');
+        lbl.className = 'res-stat-box-label';
+        lbl.textContent = s.label;
+        const val = document.createElement('div');
+        val.className = `res-stat-box-value ${s.cls}`;
+        val.textContent = s.value;
+        const sub = document.createElement('div');
+        sub.className = 'res-stat-box-sub';
+        sub.textContent = s.sub;
+        box.appendChild(lbl);
+        box.appendChild(val);
+        box.appendChild(sub);
+        detStats.appendChild(box);
+    });
+
+    detCard.appendChild(detHeader);
+    detCard.appendChild(detStats);
+    details.appendChild(detCard);
 
     if (projecao.temHistorico) {
         // ── Card de projeção

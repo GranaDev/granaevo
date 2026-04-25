@@ -504,30 +504,30 @@
 
             <!-- RESERVAS -->
             <section class="page" id="reservasPage">
-                <div class="page-header-premium">
-                    <div class="header-content">
-                        <div class="header-title-group">
-                            <div class="breadcrumb-premium">
-                                <a href="dashboard.html">Início</a>
-                                <span class="separator">›</span>
-                                <span>Reservas</span>
-                            </div>
-                            <h1 class="page-title-premium">
-                                <i class="fas fa-bullseye" aria-hidden="true"></i> Reservas
-                            </h1>
-                            <p class="page-subtitle-premium">
-                                Organize e acompanhe suas reservas e objetivos financeiros
-                            </p>
-                        </div>
+                <div class="res-page-header">
+                    <div class="res-header-left">
+                        <nav class="tx-breadcrumb" aria-label="Navegação">
+                            <a href="dashboard.html">Início</a>
+                            <span aria-hidden="true">›</span>
+                            <span>Reservas</span>
+                        </nav>
+                        <h1 class="tx-page-title">Reservas</h1>
+                        <p class="tx-page-subtitle">Organize e acompanhe suas reservas e objetivos financeiros</p>
                     </div>
-                    <div class="header-stats">
-                        <div class="header-stat-item">
-                            <span class="header-stat-label">Total Reservado</span>
-                            <span class="header-stat-value" id="headerTotalReservas">R$ 0,00</span>
+                    <div class="res-stat-cards">
+                        <div class="res-stat-card">
+                            <i class="fas fa-wallet res-stat-icon" aria-hidden="true"></i>
+                            <div>
+                                <span class="res-stat-label">TOTAL RESERVADO</span>
+                                <span class="res-stat-value" id="headerTotalReservas">R$ 0,00</span>
+                            </div>
                         </div>
-                        <div class="header-stat-item">
-                            <span class="header-stat-label">Reservas Ativas</span>
-                            <span class="header-stat-value" id="headerQtdReservas">0</span>
+                        <div class="res-stat-card res-stat-card--accent">
+                            <i class="fas fa-folder-open res-stat-icon" aria-hidden="true"></i>
+                            <div>
+                                <span class="res-stat-label">RESERVAS ATIVAS</span>
+                                <span class="res-stat-value" id="headerQtdReservas">0</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -539,6 +539,17 @@
                                 <i class="fas fa-plus" aria-hidden="true"></i> Nova Reserva
                             </button>
                         </div>
+                        <div class="res-sidebar-filters">
+                            <div class="res-search-wrap">
+                                <i class="fas fa-search" aria-hidden="true"></i>
+                                <input type="text" id="metaSearchInput" class="res-search-input" placeholder="Buscar reservas...">
+                            </div>
+                            <select id="metaStatusFilter" class="res-filter-select" aria-label="Filtrar por status">
+                                <option value="">Status: Todas</option>
+                                <option value="ativa">Ativas</option>
+                                <option value="concluida">Concluídas</option>
+                            </select>
+                        </div>
                         <div id="listaMetas" class="metas-list">
                             <p class="empty-state">Nenhuma reserva criada.</p>
                         </div>
@@ -546,18 +557,28 @@
                     <div class="reservas-main">
                         <div class="meta-visual">
                             <div class="charts-container">
-                                <div class="chart-wrapper">
-                                    <canvas id="donutChart" width="180" height="180"
-                                        role="img"
-                                        aria-label="Gráfico de progresso da reserva selecionada"></canvas>
-                                    <div id="metaProgress" class="meta-progress-text">
-                                        Selecione uma reserva
+                                <div class="chart-section">
+                                    <div class="chart-section-header">
+                                        <span class="chart-section-title">Progresso geral</span>
+                                    </div>
+                                    <div class="chart-wrapper">
+                                        <canvas id="donutChart" width="180" height="180"
+                                            role="img"
+                                            aria-label="Gráfico de progresso da reserva selecionada"></canvas>
+                                        <div id="metaProgress" class="meta-progress-text">
+                                            Selecione uma reserva
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="chart-wrapper">
-                                    <canvas id="lineChart" width="400" height="200"
-                                        role="img"
-                                        aria-label="Histórico mensal da reserva"></canvas>
+                                <div class="chart-section">
+                                    <div class="chart-section-header">
+                                        <span class="chart-section-title">Evolução (últimos 12 meses)</span>
+                                    </div>
+                                    <div class="chart-wrapper">
+                                        <canvas id="lineChart" width="400" height="200"
+                                            role="img"
+                                            aria-label="Histórico mensal da reserva"></canvas>
+                                    </div>
                                 </div>
                             </div>
                             <div id="metaDetalhes" class="meta-details"></div>
