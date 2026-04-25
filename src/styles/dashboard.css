@@ -2317,35 +2317,12 @@ select.form-input option:checked {
     margin-bottom: 2px;
 }
 
+/* Desktop: tabela visível, cards ocultos */
+.mov-cards { display: none; }
+
 @media (max-width: 640px) {
-    .mov-table          { display: block; }
-    .mov-table thead    { display: none; }
-    .mov-table tbody    { display: flex; flex-direction: column; gap: 8px; }
-
-    .mov-table tbody tr {
-        display: grid;
-        grid-template-areas:
-            "data  valor"
-            "desc  valor"
-            "tipo  acoes";
-        grid-template-columns: 1fr auto;
-        gap: 3px 12px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 12px;
-        padding: 12px 14px;
-    }
-
-    .mov-table tbody tr:hover { background: rgba(255, 255, 255, 0.06); }
-
-    .mov-table tbody td { padding: 0; border: none; }
-
-    .td-data  { grid-area: data;  font-size: 0.72rem; align-self: end; }
-    .td-desc  { grid-area: desc;  font-size: 0.9rem; font-weight: 600; max-width: none; }
-    .td-tipo  { grid-area: tipo;  font-size: 0.75rem; align-self: start; }
-    .td-valor { grid-area: valor; text-align: right; align-self: center; font-size: 0.9rem; }
-    .td-acoes { grid-area: acoes; text-align: right; align-self: end; }
-    .td-cat   { display: none; }
+    .mov-table { display: none; }
+    .mov-cards { display: flex; flex-direction: column; gap: 0; }
 }
 
 /* ========== RESERVAS/METAS ========== */

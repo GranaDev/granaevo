@@ -458,33 +458,11 @@ const MOV_POR_PAGINA = 50;
 const _CAT_LABELS = { entrada: 'Entrada', saida: 'Saída', reserva: 'Reserva', retirada_reserva: 'Retirada' };
 const _CAT_PERMITIDAS = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
 
-function atualizarMovimentacoesUI(resetPagina = true) {
-    const lista = document.getElementById('listaMovimentacoes');
-    if (!lista) return;
-
-    if (resetPagina) _ctx._movPaginaAtual = 1;
-
-    lista.innerHTML = '';
-
-    const todos   = filtrarTransacoesParaUI().slice().reverse();
-    const total   = todos.length;
-    const visivel = todos.slice(0, _ctx._movPaginaAtual * MOV_POR_PAGINA);
-    const restam  = total - visivel.length;
-
-    if (total === 0) {
-        const p       = document.createElement('p');
-        p.className   = 'empty-state';
-        p.textContent = 'Nenhuma movimentação registrada.';
-        lista.appendChild(p);
-        return;
-    }
-
-    _ctx._movVisivelCache = visivel;
-
-    const table   = document.createElement('table');
+function _buildTable(visivel) {
+    const table = document.createElement('table');
     table.className = 'mov-table';
 
-    const thead = document.createElement('thead');
+    const thead  = document.createElement('thead');
     const trHead = document.createElement('tr');
     ['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor', 'Ações'].forEach(col => {
         const th = document.createElement('th');
@@ -498,22 +476,18 @@ function atualizarMovimentacoesUI(resetPagina = true) {
 
     visivel.forEach(t => {
         const cat = _CAT_PERMITIDAS.includes(t.categoria) ? t.categoria : 'saida';
+        const tr  = document.createElement('tr');
 
-        const tr = document.createElement('tr');
-
-        // Data
         const tdData = document.createElement('td');
         tdData.className = 'td-data';
         tdData.textContent = _ctx._sanitizeText(t.data || '');
         tr.appendChild(tdData);
 
-        // Descrição
         const tdDesc = document.createElement('td');
         tdDesc.className = 'td-desc';
         tdDesc.textContent = _ctx._sanitizeText(t.descricao || '');
         tr.appendChild(tdDesc);
 
-        // Categoria
         const tdCat = document.createElement('td');
         tdCat.className = 'td-cat';
         const badge = document.createElement('span');
@@ -522,20 +496,17 @@ function atualizarMovimentacoesUI(resetPagina = true) {
         tdCat.appendChild(badge);
         tr.appendChild(tdCat);
 
-        // Tipo
         const tdTipo = document.createElement('td');
         tdTipo.className = 'td-tipo';
         tdTipo.textContent = _ctx._sanitizeText(t.tipo || '');
         tr.appendChild(tdTipo);
 
-        // Valor
-        const sinal = (cat === 'entrada' || cat === 'retirada_reserva') ? '+' : '-';
+        const sinal   = (cat === 'entrada' || cat === 'retirada_reserva') ? '+' : '-';
         const tdValor = document.createElement('td');
         tdValor.className = `td-valor val-${cat}`;
         tdValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
         tr.appendChild(tdValor);
 
-        // Ações
         const tdAcoes = document.createElement('td');
         tdAcoes.className = 'td-acoes';
 
@@ -569,7 +540,97 @@ function atualizarMovimentacoesUI(resetPagina = true) {
     });
 
     table.appendChild(tbody);
-    lista.appendChild(table);
+    return table;
+}
+
+function _buildCards(visivel) {
+    const wrapper  = document.createElement('div');
+    wrapper.className = 'mov-cards';
+    const frag     = document.createDocumentFragment();
+    let ultimaData = null;
+
+    visivel.forEach(t => {
+        const cat         = _CAT_PERMITIDAS.includes(t.categoria) ? t.categoria : 'saida';
+        const dataExibida = _ctx._sanitizeText(t.data || '');
+
+        if (dataExibida && dataExibida !== ultimaData) {
+            ultimaData = dataExibida;
+            const sep       = document.createElement('div');
+            sep.className   = 'mov-date-separator';
+            sep.textContent = dataExibida;
+            frag.appendChild(sep);
+        }
+
+        const div     = document.createElement('div');
+        div.className = 'mov-item';
+
+        const iconeBadge     = document.createElement('div');
+        iconeBadge.className = `mov-icon-badge ${cat}`;
+        const iconeEl = document.createElement('i');
+        iconeEl.className = `fas ${_obterIconeTransacao(t.categoria, t.tipo)}`;
+        iconeEl.setAttribute('aria-hidden', 'true');
+        iconeBadge.appendChild(iconeEl);
+
+        const left = document.createElement('div');
+        left.className = 'mov-left';
+
+        const divTipo       = document.createElement('div');
+        divTipo.className   = 'mov-tipo';
+        divTipo.textContent = _ctx._sanitizeText(t.tipo);
+
+        const divDesc       = document.createElement('div');
+        divDesc.className   = 'mov-desc';
+        divDesc.textContent = _ctx._sanitizeText(t.descricao);
+
+        left.appendChild(divTipo);
+        left.appendChild(divDesc);
+
+        const right     = document.createElement('div');
+        right.className = 'mov-right';
+
+        const sinal = (cat === 'entrada' || cat === 'retirada_reserva') ? '+' : '-';
+        const divValor       = document.createElement('div');
+        divValor.className   = cat;
+        divValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
+        right.appendChild(divValor);
+
+        div.appendChild(iconeBadge);
+        div.appendChild(left);
+        div.appendChild(right);
+        div.addEventListener('click', () => editarTransacao(t));
+
+        frag.appendChild(div);
+    });
+
+    wrapper.appendChild(frag);
+    return wrapper;
+}
+
+function atualizarMovimentacoesUI(resetPagina = true) {
+    const lista = document.getElementById('listaMovimentacoes');
+    if (!lista) return;
+
+    if (resetPagina) _ctx._movPaginaAtual = 1;
+
+    lista.innerHTML = '';
+
+    const todos   = filtrarTransacoesParaUI().slice().reverse();
+    const total   = todos.length;
+    const visivel = todos.slice(0, _ctx._movPaginaAtual * MOV_POR_PAGINA);
+    const restam  = total - visivel.length;
+
+    if (total === 0) {
+        const p       = document.createElement('p');
+        p.className   = 'empty-state';
+        p.textContent = 'Nenhuma movimentação registrada.';
+        lista.appendChild(p);
+        return;
+    }
+
+    _ctx._movVisivelCache = visivel;
+
+    lista.appendChild(_buildTable(visivel));
+    lista.appendChild(_buildCards(visivel));
 
     if (restam > 0) {
         const btnMais       = document.createElement('button');
