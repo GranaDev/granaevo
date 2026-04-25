@@ -2210,7 +2210,7 @@ select.form-input option:checked {
 .mov-table thead th:last-child { text-align: center; }
 
 .mov-table tbody tr {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     transition: background 0.15s;
 }
 
@@ -2232,8 +2232,25 @@ select.form-input option:checked {
     font-variant-numeric: tabular-nums;
 }
 
-.td-desc {
-    max-width: 220px;
+.td-cal-icon {
+    margin-right: 6px;
+    font-size: 0.72rem;
+    opacity: 0.5;
+}
+
+.td-desc { max-width: 240px; }
+
+.td-desc-main {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.td-desc-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2242,7 +2259,28 @@ select.form-input option:checked {
 .td-tipo {
     color: var(--text-secondary);
     font-size: 0.82rem;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
 }
+
+.tipo-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border-radius: 50%;
+    font-size: 0.6rem;
+    flex-shrink: 0;
+}
+
+.tipo-icon-entrada          { background: rgba(67, 160, 71, 0.2);   color: #66bb6a; }
+.tipo-icon-saida            { background: rgba(255, 75, 75, 0.15);  color: #ff7070; }
+.tipo-icon-reserva          { background: rgba(255, 209, 102, 0.2); color: #ffd166; }
+.tipo-icon-retirada_reserva { background: rgba(255, 149, 0, 0.2);  color: #ff9500; }
 
 .td-valor {
     font-weight: 600;
@@ -2252,8 +2290,8 @@ select.form-input option:checked {
 
 .val-entrada          { color: var(--primary-light); }
 .val-saida            { color: #ff6b6b; }
-.val-reserva          { color: #8a84ff; }
-.val-retirada_reserva { color: #ffd166; }
+.val-reserva          { color: #ffd166; }
+.val-retirada_reserva { color: #ff9500; }
 
 .td-acoes {
     text-align: center;

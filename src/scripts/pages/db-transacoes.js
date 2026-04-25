@@ -457,6 +457,12 @@ const MOV_POR_PAGINA = 50;
 
 const _CAT_LABELS = { entrada: 'Entrada', saida: 'Saída', reserva: 'Reserva', retirada_reserva: 'Retirada' };
 const _CAT_PERMITIDAS = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
+const _TIPO_ICON = {
+    entrada:          'fa-arrow-up',
+    saida:            'fa-arrow-down',
+    reserva:          'fa-piggy-bank',
+    retirada_reserva: 'fa-wallet',
+};
 
 function _buildTable(visivel) {
     const table = document.createElement('table');
@@ -478,16 +484,32 @@ function _buildTable(visivel) {
         const cat = _CAT_PERMITIDAS.includes(t.categoria) ? t.categoria : 'saida';
         const tr  = document.createElement('tr');
 
+        // — Data com ícone de calendário —
         const tdData = document.createElement('td');
         tdData.className = 'td-data';
-        tdData.textContent = _ctx._sanitizeText(t.data || '');
+        const calIcon = document.createElement('i');
+        calIcon.className = 'fas fa-calendar-alt td-cal-icon';
+        calIcon.setAttribute('aria-hidden', 'true');
+        tdData.appendChild(calIcon);
+        tdData.appendChild(document.createTextNode(_ctx._sanitizeText(t.data || '')));
         tr.appendChild(tdData);
 
+        // — Descrição com subtítulo —
         const tdDesc = document.createElement('td');
         tdDesc.className = 'td-desc';
-        tdDesc.textContent = _ctx._sanitizeText(t.descricao || '');
+        const descMain = document.createElement('div');
+        descMain.className = 'td-desc-main';
+        descMain.textContent = _ctx._sanitizeText(t.descricao || '');
+        tdDesc.appendChild(descMain);
+        if (t.tipo) {
+            const descSub = document.createElement('div');
+            descSub.className = 'td-desc-sub';
+            descSub.textContent = _ctx._sanitizeText(t.tipo);
+            tdDesc.appendChild(descSub);
+        }
         tr.appendChild(tdDesc);
 
+        // — Categoria —
         const tdCat = document.createElement('td');
         tdCat.className = 'td-cat';
         const badge = document.createElement('span');
@@ -496,17 +518,27 @@ function _buildTable(visivel) {
         tdCat.appendChild(badge);
         tr.appendChild(tdCat);
 
+        // — Tipo com ícone colorido —
         const tdTipo = document.createElement('td');
         tdTipo.className = 'td-tipo';
-        tdTipo.textContent = _ctx._sanitizeText(t.tipo || '');
+        const tipoIconWrap = document.createElement('span');
+        tipoIconWrap.className = `tipo-icon tipo-icon-${cat}`;
+        const tipoI = document.createElement('i');
+        tipoI.className = `fas ${_TIPO_ICON[cat] || 'fa-circle'}`;
+        tipoI.setAttribute('aria-hidden', 'true');
+        tipoIconWrap.appendChild(tipoI);
+        tdTipo.appendChild(tipoIconWrap);
+        tdTipo.appendChild(document.createTextNode(_ctx._sanitizeText(t.tipo || '')));
         tr.appendChild(tdTipo);
 
+        // — Valor colorido —
         const sinal   = (cat === 'entrada' || cat === 'retirada_reserva') ? '+' : '-';
         const tdValor = document.createElement('td');
         tdValor.className = `td-valor val-${cat}`;
         tdValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
         tr.appendChild(tdValor);
 
+        // — Ações —
         const tdAcoes = document.createElement('td');
         tdAcoes.className = 'td-acoes';
 
