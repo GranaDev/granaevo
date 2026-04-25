@@ -5319,6 +5319,253 @@ select.form-input option:checked {
     .meus-cartoes-mini { width: 112px; height: 74px; flex-shrink: 0; }
 }
 
+/* ========== CARTÕES — DUAL LAYOUT ========== */
+.cartoes-desktop { display: block; }
+.cartoes-mobile  { display: none;  }
+
+@media (max-width: 768px) {
+    .cartoes-desktop { display: none;  }
+    .cartoes-mobile  { display: block; }
+}
+
+/* ── Desktop header ── */
+.cdes-header { padding: 24px 0 20px; }
+
+/* ── Top row: featured card | resumo ── */
+.cdes-top-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+    margin-bottom: 20px;
+}
+
+/* ── Resumo do cartão ── */
+.cdes-resumo-panel {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 20px;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.cdes-resumo-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.cdes-resumo-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.cdes-resumo-stat {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 12px 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.cdes-resumo-stat-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border-radius: 9px;
+    background: rgba(255,255,255,0.06);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.cdes-resumo-stat-label {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.cdes-resumo-stat-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 3px;
+}
+
+.cdes-resumo-stat-sub  { font-size: 0.68rem; color: var(--text-muted); }
+.cdes-stat--fatura .cdes-resumo-stat-value  { color: #ffd166; }
+.cdes-stat--danger .cdes-resumo-stat-value  { color: #ff6b6b; }
+.cdes-stat--warning .cdes-resumo-stat-value { color: #ffd166; }
+
+.cdes-resumo-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: auto;
+}
+
+.cdes-resumo-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 14px 6px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: rgba(255,255,255,0.04);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.cdes-resumo-action-btn i { font-size: 1.15rem; color: var(--primary-light); }
+.cdes-resumo-action-btn:hover { background: rgba(67,160,71,0.1); border-color: rgba(67,160,71,0.3); transform: translateY(-2px); }
+.cdes-action--frozen { background: rgba(96,212,255,0.08); border-color: rgba(96,212,255,0.2); }
+.cdes-action--frozen i { color: #60d4ff; }
+
+/* ── Bottom row: meus cartões | últimas transações ── */
+.cdes-bottom-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+.cdes-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.cdes-section-title { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); }
+
+/* Meus Cartões list */
+.cdes-cartoes-section {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.cdes-cartoes-list { display: flex; flex-direction: column; }
+
+.cdes-cartao-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.cdes-cartao-row:last-child  { border-bottom: none; }
+.cdes-cartao-row:hover       { background: rgba(255,255,255,0.04); }
+.cdes-cartao-row--ativo      { background: rgba(67,160,71,0.07) !important; }
+
+.cdes-cartao-color-sq {
+    width: 38px; height: 38px; min-width: 38px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 700; color: white; overflow: hidden;
+}
+
+.cdes-cartao-color-sq img { width: 22px; height: 22px; object-fit: contain; }
+
+.cdes-cartao-info { flex: 1; min-width: 0; }
+
+.cdes-cartao-name {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.87rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.cdes-status-badge    { font-size: 0.62rem; font-weight: 700; padding: 2px 7px; border-radius: 20px; }
+.cdes-status--ativo   { background: rgba(67,160,71,0.15);   color: var(--primary-light); }
+.cdes-status--frozen  { background: rgba(96,212,255,0.12); color: #60d4ff; }
+
+.cdes-cartao-stat     { text-align: right; min-width: 88px; }
+.cdes-cartao-stat-val { font-size: 0.87rem; font-weight: 600; color: var(--text-primary); }
+.cdes-cartao-stat-lbl { font-size: 0.68rem; color: var(--text-muted); margin-top: 1px; }
+.cdes-cartao-arrow    { color: var(--text-muted); font-size: 0.72rem; margin-left: 2px; }
+
+.cdes-btn-add-cartao {
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    width: 100%; padding: 11px; margin-top: 10px;
+    border: 1px dashed rgba(67,160,71,0.3); border-radius: 10px;
+    background: transparent; color: var(--primary-light);
+    font-size: 0.83rem; font-weight: 600; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.cdes-btn-add-cartao:hover { background: rgba(67,160,71,0.08); border-color: rgba(67,160,71,0.5); }
+
+/* Últimas transações */
+.cdes-txs-section {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.cdes-ver-todas { background: none; border: none; color: var(--primary-light); font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.cdes-ver-todas:hover { text-decoration: underline; }
+
+.cdes-txs-list { display: flex; flex-direction: column; }
+
+.cdes-tx-row {
+    display: flex; align-items: center; gap: 11px;
+    padding: 11px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.cdes-tx-row:last-child { border-bottom: none; }
+
+.cdes-tx-avatar {
+    width: 34px; height: 34px; min-width: 34px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.82rem; font-weight: 700; color: white;
+}
+
+.cdes-tx-info { flex: 1; min-width: 0; }
+.cdes-tx-nome { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdes-tx-cat  { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cdes-tx-right { text-align: right; flex-shrink: 0; }
+.cdes-tx-valor { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+.cdes-tx-data  { font-size: 0.7rem; color: var(--text-muted); margin-top: 1px; }
+
+.cdes-txs-total {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 13px; margin-top: 4px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    font-size: 0.8rem; color: var(--text-secondary);
+}
+
+.cdes-txs-total-val { font-weight: 700; color: var(--primary-light); }
+
 /* ========== BADGE DE NOTIFICAÇÃO — SIDEBAR DESKTOP ========== */
 .notif-badge-sidebar {
     display: none;

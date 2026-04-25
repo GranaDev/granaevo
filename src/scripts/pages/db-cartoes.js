@@ -18,6 +18,350 @@ export function init(ctx) {
 }
 
 // ========== CARTÕES DE CRÉDITO ==========
+const _CORES_CARTAO = {
+    'Nubank':          'linear-gradient(135deg, #5b0d8c 0%, #9b19d1 100%)',
+    'Bradesco':        'linear-gradient(135deg, #c00000 0%, #e83232 100%)',
+    'Mercado Pago':    'linear-gradient(135deg, #006bb3 0%, #009ee3 100%)',
+    'C6 Bank':         'linear-gradient(135deg, #111114 0%, #2c2c30 100%)',
+    'Itaú':            'linear-gradient(135deg, #d46000 0%, #f07800 100%)',
+    'Santander':       'linear-gradient(135deg, #a80000 0%, #d40000 100%)',
+    'Banco do Brasil': 'linear-gradient(135deg, #003070 0%, #005cc5 100%)',
+    'Caixa':           'linear-gradient(135deg, #004f96 0%, #0074cc 100%)',
+};
+
+function _getCorCartao(nome) {
+    return _CORES_CARTAO[nome] || 'linear-gradient(135deg, #1a1d2e 0%, #2a2d3e 100%)';
+}
+
+function _buildFeaturedCard(cartao) {
+    const featured = document.createElement('div');
+    featured.className = 'cartao-featured-card';
+    featured.style.background = _getCorCartao(cartao.nomeBanco);
+    if (cartao.congelado) featured.classList.add('cartao-congelado');
+
+    const topoDiv = document.createElement('div');
+    topoDiv.className = 'cartao-featured-top';
+    const nameRow = document.createElement('div');
+    nameRow.className = 'cartao-featured-name-row';
+    const bankIconWrap = document.createElement('div');
+    bankIconWrap.className = 'cartao-featured-bank-icon';
+    const iconPath = _ctx.BANCO_ICON[cartao.nomeBanco];
+    if (iconPath) {
+        const img = document.createElement('img');
+        img.src = iconPath; img.alt = ''; img.setAttribute('aria-hidden', 'true');
+        img.className = 'cartao-featured-bank-img';
+        bankIconWrap.appendChild(img);
+    } else {
+        bankIconWrap.textContent = _ctx.BANCO_ABREV[cartao.nomeBanco]
+            || _ctx._sanitizeText(cartao.nomeBanco).substring(0, 2).toUpperCase();
+    }
+    nameRow.appendChild(bankIconWrap);
+    const nomeDiv = document.createElement('div');
+    nomeDiv.className = 'cartao-featured-nome';
+    nomeDiv.textContent = _ctx._sanitizeText(cartao.nomeBanco);
+    nameRow.appendChild(nomeDiv);
+    const contactless = document.createElement('div');
+    contactless.className = 'cartao-featured-contactless';
+    const icContact = document.createElement('i');
+    icContact.className = 'fas fa-wifi'; icContact.setAttribute('aria-hidden', 'true');
+    contactless.appendChild(icContact);
+    topoDiv.appendChild(nameRow); topoDiv.appendChild(contactless);
+    featured.appendChild(topoDiv);
+
+    const middleDiv = document.createElement('div');
+    middleDiv.className = 'cartao-featured-middle';
+    const chip = document.createElement('div');
+    chip.className = 'cartao-featured-chip';
+    middleDiv.appendChild(chip);
+    featured.appendChild(middleDiv);
+
+    const disponivel = Math.max(0, cartao.limite - (cartao.usado || 0));
+    const bottomDiv = document.createElement('div');
+    bottomDiv.className = 'cartao-featured-bottom';
+    const dispDiv = document.createElement('div');
+    dispDiv.className = 'cartao-featured-disponivel';
+    const dispLbl = document.createElement('span'); dispLbl.className = 'cartao-featured-label'; dispLbl.textContent = 'Disponível';
+    const dispVal = document.createElement('span'); dispVal.className = 'cartao-featured-value cartao-featured-value--green'; dispVal.textContent = _ctx.formatBRL(disponivel);
+    dispDiv.appendChild(dispLbl); dispDiv.appendChild(dispVal);
+    const limiteDiv = document.createElement('div');
+    limiteDiv.className = 'cartao-featured-limite'; limiteDiv.style.textAlign = 'right';
+    const limiteLbl = document.createElement('span'); limiteLbl.className = 'cartao-featured-label'; limiteLbl.textContent = 'Limite';
+    const limiteVal = document.createElement('span'); limiteVal.className = 'cartao-featured-value'; limiteVal.textContent = _ctx.formatBRL(cartao.limite);
+    limiteDiv.appendChild(limiteLbl); limiteDiv.appendChild(limiteVal);
+    bottomDiv.appendChild(dispDiv); bottomDiv.appendChild(limiteDiv);
+    featured.appendChild(bottomDiv);
+
+    const percUsado = cartao.limite > 0 ? Math.min(100, ((cartao.usado || 0) / cartao.limite) * 100) : 0;
+    const corBarra  = percUsado > 80 ? '#ff4b4b' : percUsado > 50 ? '#ffd166' : '#00ff99';
+    const barWrapper = document.createElement('div'); barWrapper.className = 'cartao-featured-bar-wrapper';
+    const bar = document.createElement('div'); bar.className = 'cartao-featured-bar';
+    const barFill = document.createElement('div'); barFill.className = 'cartao-featured-bar-fill';
+    barFill.style.width = `${percUsado.toFixed(1)}%`; barFill.style.background = corBarra;
+    bar.appendChild(barFill);
+    const barLabel = document.createElement('span'); barLabel.className = 'cartao-featured-bar-label'; barLabel.textContent = `${percUsado.toFixed(0)}% usado`;
+    barWrapper.appendChild(bar); barWrapper.appendChild(barLabel);
+    featured.appendChild(barWrapper);
+
+    if (cartao.congelado) {
+        const frozenOverlay = document.createElement('div'); frozenOverlay.className = 'cartao-frozen-overlay';
+        const frozenIc = document.createElement('i'); frozenIc.className = 'fas fa-snowflake'; frozenIc.setAttribute('aria-hidden', 'true');
+        const frozenTxt = document.createElement('span'); frozenTxt.textContent = 'Cartão Congelado';
+        frozenOverlay.appendChild(frozenIc); frozenOverlay.appendChild(frozenTxt);
+        featured.appendChild(frozenOverlay);
+    }
+    return featured;
+}
+
+function _buildResumoCartao(cartao) {
+    const percUsado = cartao.limite > 0 ? Math.min(100, ((cartao.usado || 0) / cartao.limite) * 100) : 0;
+    const faturasAbertas = _ctx.contasFixas.filter(c =>
+        c.cartaoId === cartao.id && c.tipoContaFixa === 'fatura_cartao' && !c.pago
+    );
+    const totalFatura   = faturasAbertas.reduce((s, f) => s + Number(f.valor || 0), 0);
+    const proxFatura    = faturasAbertas.slice().sort((a, b) => (a.vencimento || '').localeCompare(b.vencimento || ''))[0];
+    const vencTexto     = proxFatura?.vencimento ? `Vencimento: ${formatarDataBR(proxFatura.vencimento)}` : 'Sem fatura aberta';
+    const melhorDia     = ((cartao.fechamentoDia ?? 10) % 28) + 1;
+    const hoje          = new Date();
+    const diaVenc       = cartao.vencimentoDia || 1;
+    let proxVenc = new Date(hoje.getFullYear(), hoje.getMonth(), diaVenc);
+    if (proxVenc <= hoje) proxVenc = new Date(hoje.getFullYear(), hoje.getMonth() + 1, diaVenc);
+    const diasAteVenc   = Math.ceil((proxVenc - hoje) / 86400000);
+
+    const panel = document.createElement('div'); panel.className = 'cdes-resumo-panel';
+    const title = document.createElement('div'); title.className = 'cdes-resumo-title'; title.textContent = 'Resumo do cartão';
+    panel.appendChild(title);
+
+    const statsDiv = document.createElement('div'); statsDiv.className = 'cdes-resumo-stats';
+    const statsDef = [
+        { icon: 'fa-file-invoice-dollar', label: 'FATURA ATUAL',         value: formatBRL(totalFatura),           sub: vencTexto,                                                    cls: 'cdes-stat--fatura' },
+        { icon: 'fa-percent',             label: 'LIMITE UTILIZADO',      value: `${percUsado.toFixed(0)}%`,       sub: `${formatBRL(cartao.usado || 0)} de ${formatBRL(cartao.limite)}`, cls: percUsado > 80 ? 'cdes-stat--danger' : percUsado > 50 ? 'cdes-stat--warning' : '' },
+        { icon: 'fa-calendar-day',        label: 'MELHOR DIA DE COMPRA',  value: String(melhorDia).padStart(2,'0'), sub: `Vence em ${diasAteVenc} dia${diasAteVenc !== 1 ? 's' : ''}`, cls: '' },
+    ];
+    statsDef.forEach(s => {
+        const box = document.createElement('div'); box.className = `cdes-resumo-stat ${s.cls}`;
+        const iconWrap = document.createElement('div'); iconWrap.className = 'cdes-resumo-stat-icon';
+        const ic = document.createElement('i'); ic.className = `fas ${s.icon}`; ic.setAttribute('aria-hidden', 'true');
+        iconWrap.appendChild(ic);
+        const tw = document.createElement('div');
+        const lbl = document.createElement('div'); lbl.className = 'cdes-resumo-stat-label'; lbl.textContent = s.label;
+        const val = document.createElement('div'); val.className = 'cdes-resumo-stat-value'; val.textContent = s.value;
+        const sub = document.createElement('div'); sub.className = 'cdes-resumo-stat-sub'; sub.textContent = s.sub;
+        tw.appendChild(lbl); tw.appendChild(val); tw.appendChild(sub);
+        box.appendChild(iconWrap); box.appendChild(tw);
+        statsDiv.appendChild(box);
+    });
+    panel.appendChild(statsDiv);
+
+    const actionsDiv = document.createElement('div'); actionsDiv.className = 'cdes-resumo-actions';
+    const actionsDef = [
+        { icon: 'fa-file-invoice-dollar', label: 'Pagar Fatura',    extraClass: '', action: () => { const f = _ctx.contasFixas.find(c => c.cartaoId === cartao.id && c.tipoContaFixa === 'fatura_cartao' && !c.pago); if (f) abrirPopupPagarContaFixa(f.id); else _ctx.mostrarNotificacao('Nenhuma fatura em aberto.', 'info'); } },
+        { icon: cartao.congelado ? 'fa-fire' : 'fa-snowflake',       label: cartao.congelado ? 'Descongelar' : 'Congelar Cartão', extraClass: cartao.congelado ? 'cdes-action--frozen' : '', action: () => congelarCartao(cartao.id) },
+        { icon: 'fa-circle-info',         label: 'Ver Detalhes',     extraClass: '', action: () => abrirDetalhesCartaoCompleto(cartao.id) },
+        { icon: 'fa-ellipsis-vertical',   label: 'Mais opções',      extraClass: '', action: () => abrirCartaoForm(cartao.id) },
+    ];
+    actionsDef.forEach(def => {
+        const btn = document.createElement('button'); btn.type = 'button';
+        btn.className = 'cdes-resumo-action-btn' + (def.extraClass ? ` ${def.extraClass}` : '');
+        const ic = document.createElement('i'); ic.className = `fas ${def.icon}`; ic.setAttribute('aria-hidden', 'true');
+        const lbl = document.createElement('span'); lbl.textContent = def.label;
+        btn.appendChild(ic); btn.appendChild(lbl);
+        btn.addEventListener('click', def.action);
+        actionsDiv.appendChild(btn);
+    });
+    panel.appendChild(actionsDiv);
+    return panel;
+}
+
+function _buildMeusCartoesList(cartaoAtivo) {
+    const section = document.createElement('div'); section.className = 'cdes-cartoes-section';
+    const hdr = document.createElement('div'); hdr.className = 'cdes-section-header';
+    const tit = document.createElement('span'); tit.className = 'cdes-section-title'; tit.textContent = 'Meus Cartões';
+    hdr.appendChild(tit); section.appendChild(hdr);
+
+    const list = document.createElement('div'); list.className = 'cdes-cartoes-list';
+    _ctx.cartoesCredito.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'cdes-cartao-row' + (c.id === _ctx.cartaoSelecionadoId ? ' cdes-cartao-row--ativo' : '');
+        const sq = document.createElement('div'); sq.className = 'cdes-cartao-color-sq'; sq.style.background = _getCorCartao(c.nomeBanco);
+        const sqIconPath = _ctx.BANCO_ICON[c.nomeBanco];
+        if (sqIconPath) { const img = document.createElement('img'); img.src = sqIconPath; img.alt = ''; img.setAttribute('aria-hidden', 'true'); sq.appendChild(img); }
+        else { sq.textContent = _ctx.BANCO_ABREV[c.nomeBanco] || _ctx._sanitizeText(c.nomeBanco).substring(0, 2).toUpperCase(); }
+        row.appendChild(sq);
+
+        const info = document.createElement('div'); info.className = 'cdes-cartao-info';
+        const nameWrap = document.createElement('div'); nameWrap.className = 'cdes-cartao-name';
+        const nameSpan = document.createElement('span'); nameSpan.textContent = _ctx._sanitizeText(c.nomeBanco);
+        const badge = document.createElement('span'); badge.className = c.congelado ? 'cdes-status-badge cdes-status--frozen' : 'cdes-status-badge cdes-status--ativo'; badge.textContent = c.congelado ? 'Congelado' : 'Ativo';
+        nameWrap.appendChild(nameSpan); nameWrap.appendChild(badge); info.appendChild(nameWrap);
+        row.appendChild(info);
+
+        const limDiv = document.createElement('div'); limDiv.className = 'cdes-cartao-stat';
+        const limVal = document.createElement('div'); limVal.className = 'cdes-cartao-stat-val'; limVal.textContent = formatBRL(c.limite);
+        const limLbl = document.createElement('div'); limLbl.className = 'cdes-cartao-stat-lbl'; limLbl.textContent = 'Limite total';
+        limDiv.appendChild(limVal); limDiv.appendChild(limLbl); row.appendChild(limDiv);
+
+        const fatAberta = _ctx.contasFixas.filter(f => f.cartaoId === c.id && f.tipoContaFixa === 'fatura_cartao' && !f.pago).reduce((s, f) => s + Number(f.valor || 0), 0);
+        const fatDiv = document.createElement('div'); fatDiv.className = 'cdes-cartao-stat';
+        const fatVal = document.createElement('div'); fatVal.className = 'cdes-cartao-stat-val'; fatVal.textContent = formatBRL(fatAberta);
+        const fatLbl = document.createElement('div'); fatLbl.className = 'cdes-cartao-stat-lbl'; fatLbl.textContent = 'Fatura atual';
+        fatDiv.appendChild(fatVal); fatDiv.appendChild(fatLbl); row.appendChild(fatDiv);
+
+        const arrow = document.createElement('div'); arrow.className = 'cdes-cartao-arrow';
+        const arrowIc = document.createElement('i'); arrowIc.className = 'fas fa-chevron-right'; arrowIc.setAttribute('aria-hidden', 'true');
+        arrow.appendChild(arrowIc); row.appendChild(arrow);
+        row.addEventListener('click', () => { _ctx.cartaoSelecionadoId = c.id; _ctx.atualizarTelaCartoes(); });
+        list.appendChild(row);
+    });
+    section.appendChild(list);
+
+    const btnAdd = document.createElement('button'); btnAdd.type = 'button'; btnAdd.className = 'cdes-btn-add-cartao';
+    const icAdd = document.createElement('i'); icAdd.className = 'fas fa-plus'; icAdd.setAttribute('aria-hidden', 'true');
+    btnAdd.appendChild(icAdd); btnAdd.appendChild(document.createTextNode(' Adicionar Cartão'));
+    btnAdd.addEventListener('click', () => abrirCartaoForm());
+    section.appendChild(btnAdd);
+    return section;
+}
+
+function _txAvatarColor(nome) {
+    const pal = ['#E50914','#003087','#e8960a','#FF6B00','#00B14F','#8B2FC9','#0066FF','#cc2200','#0099cc'];
+    let h = 0; for (const ch of nome) h = ((h << 5) - h + ch.charCodeAt(0)) | 0;
+    return pal[Math.abs(h) % pal.length];
+}
+
+function _buildUltimasTransacoes(cartao) {
+    const section = document.createElement('div'); section.className = 'cdes-txs-section';
+    const hdr = document.createElement('div'); hdr.className = 'cdes-section-header';
+    const tit = document.createElement('span'); tit.className = 'cdes-section-title'; tit.textContent = 'Últimas transações';
+    const verTodas = document.createElement('button'); verTodas.type = 'button'; verTodas.className = 'cdes-ver-todas'; verTodas.textContent = 'Ver todas';
+    verTodas.addEventListener('click', () => abrirDetalhesCartaoCompleto(cartao.id));
+    hdr.appendChild(tit); hdr.appendChild(verTodas); section.appendChild(hdr);
+
+    const todasCompras = [];
+    _ctx.contasFixas.filter(f => f.cartaoId === cartao.id && f.tipoContaFixa === 'fatura_cartao').forEach(f => {
+        (f.compras || []).forEach(c => todasCompras.push({ tipo: c.tipo || '', descricao: c.descricao || '', valor: c.valorParcela || c.valorTotal || 0, data: c.dataCompra || '' }));
+    });
+    todasCompras.sort((a, b) => b.data.localeCompare(a.data));
+    const ultimas    = todasCompras.slice(0, 5);
+    const totalGastos = todasCompras.reduce((s, c) => s + Number(c.valor || 0), 0);
+
+    const list = document.createElement('div'); list.className = 'cdes-txs-list';
+    if (ultimas.length === 0) {
+        const empty = document.createElement('p'); empty.className = 'empty-state'; empty.style.padding = '20px 0'; empty.textContent = 'Nenhuma transação registrada.';
+        list.appendChild(empty);
+    } else {
+        ultimas.forEach(t => {
+            const row = document.createElement('div'); row.className = 'cdes-tx-row';
+            const avatar = document.createElement('div'); avatar.className = 'cdes-tx-avatar'; avatar.style.background = _txAvatarColor(_ctx._sanitizeText(t.tipo)); avatar.textContent = _ctx._sanitizeText(t.tipo).charAt(0).toUpperCase();
+            const info = document.createElement('div'); info.className = 'cdes-tx-info';
+            const nome = document.createElement('div'); nome.className = 'cdes-tx-nome'; nome.textContent = _ctx._sanitizeText(t.tipo);
+            const cat  = document.createElement('div'); cat.className  = 'cdes-tx-cat';  cat.textContent  = _ctx._sanitizeText(t.descricao) || _ctx._sanitizeText(t.tipo);
+            info.appendChild(nome); info.appendChild(cat);
+            const rDiv = document.createElement('div'); rDiv.className = 'cdes-tx-right';
+            const val  = document.createElement('div'); val.className  = 'cdes-tx-valor'; val.textContent  = formatBRL(t.valor);
+            const dat  = document.createElement('div'); dat.className  = 'cdes-tx-data';  dat.textContent  = t.data ? formatarDataBR(t.data) : '';
+            rDiv.appendChild(val); rDiv.appendChild(dat);
+            row.appendChild(avatar); row.appendChild(info); row.appendChild(rDiv);
+            list.appendChild(row);
+        });
+    }
+    section.appendChild(list);
+
+    const totalDiv = document.createElement('div'); totalDiv.className = 'cdes-txs-total';
+    const totalLbl = document.createElement('span'); totalLbl.textContent = 'Total de gastos no período';
+    const totalVal = document.createElement('span'); totalVal.className = 'cdes-txs-total-val'; totalVal.textContent = formatBRL(totalGastos);
+    totalDiv.appendChild(totalLbl); totalDiv.appendChild(totalVal);
+    section.appendChild(totalDiv);
+    return section;
+}
+
+function _buildMobileContent(container, cartaoAtivo) {
+    const header = document.createElement('div'); header.className = 'cartoes-novo-header';
+    const titulo = document.createElement('div'); titulo.className = 'cartoes-novo-titulo';
+    const icTit = document.createElement('i'); icTit.className = 'fas fa-credit-card'; icTit.setAttribute('aria-hidden', 'true');
+    const spanTit = document.createElement('span'); spanTit.textContent = 'Cartões';
+    titulo.appendChild(icTit); titulo.appendChild(spanTit);
+    const btnAdd = document.createElement('button'); btnAdd.className = 'cartoes-novo-btn-add'; btnAdd.type = 'button';
+    const icAdd = document.createElement('i'); icAdd.className = 'fas fa-plus'; icAdd.setAttribute('aria-hidden', 'true');
+    btnAdd.appendChild(icAdd); btnAdd.appendChild(document.createTextNode(' Adicionar Cartão'));
+    btnAdd.addEventListener('click', () => abrirCartaoForm());
+    header.appendChild(titulo); header.appendChild(btnAdd); container.appendChild(header);
+
+    if (!cartaoAtivo) {
+        const empty = document.createElement('div'); empty.className = 'cartoes-empty-state';
+        const ei = document.createElement('div'); ei.style.fontSize = '3.5rem'; ei.textContent = '💳';
+        const et = document.createElement('p'); et.textContent = 'Nenhum cartão cadastrado. Adicione seu primeiro cartão!';
+        empty.appendChild(ei); empty.appendChild(et); container.appendChild(empty); return;
+    }
+
+    const featuredWrapper = document.createElement('div'); featuredWrapper.className = 'cartao-featured-wrapper';
+    featuredWrapper.appendChild(_buildFeaturedCard(cartaoAtivo));
+
+    const actionsRow = document.createElement('div'); actionsRow.className = 'cartao-actions-row';
+    const acoesDef = [
+        { icon: 'fa-file-invoice-dollar', label: 'Pagar Fatura', action: () => { const f = _ctx.contasFixas.find(c => c.cartaoId === cartaoAtivo.id && c.tipoContaFixa === 'fatura_cartao' && !c.pago); if (f) abrirPopupPagarContaFixa(f.id); else _ctx.mostrarNotificacao('Nenhuma fatura em aberto neste cartão.', 'info'); } },
+        { icon: cartaoAtivo.congelado ? 'fa-fire' : 'fa-snowflake', label: cartaoAtivo.congelado ? 'Descongelar' : 'Congelar', extraClass: cartaoAtivo.congelado ? 'cartao-action-btn--freeze cartao-action-btn--frozen' : 'cartao-action-btn--freeze', action: () => congelarCartao(cartaoAtivo.id) },
+        { icon: 'fa-circle-info', label: 'Detalhes', action: () => abrirDetalhesCartaoCompleto(cartaoAtivo.id) },
+    ];
+    acoesDef.forEach(def => {
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'cartao-action-btn' + (def.extraClass ? ' ' + def.extraClass : '');
+        const ic = document.createElement('i'); ic.className = `fas ${def.icon}`; ic.setAttribute('aria-hidden', 'true');
+        const lbl = document.createElement('span'); lbl.textContent = def.label;
+        btn.appendChild(ic); btn.appendChild(lbl); btn.addEventListener('click', def.action); actionsRow.appendChild(btn);
+    });
+    featuredWrapper.appendChild(actionsRow); container.appendChild(featuredWrapper);
+
+    const meusSection = document.createElement('div'); meusSection.className = 'meus-cartoes-section';
+    const meusHeader = document.createElement('div'); meusHeader.className = 'meus-cartoes-header';
+    const meusTit = document.createElement('span'); meusTit.textContent = 'Meus Cartões';
+    meusHeader.appendChild(meusTit); meusSection.appendChild(meusHeader);
+    const meusLista = document.createElement('div'); meusLista.className = 'meus-cartoes-lista';
+    _ctx.cartoesCredito.forEach(c => {
+        const mc = document.createElement('div'); mc.className = 'meus-cartoes-mini' + (c.id === _ctx.cartaoSelecionadoId ? ' meus-cartoes-mini--ativo' : ''); mc.style.background = _getCorCartao(c.nomeBanco);
+        if (c.congelado) { const fb = document.createElement('div'); fb.className = 'mini-frozen-badge'; const fi = document.createElement('i'); fi.className = 'fas fa-snowflake'; fi.setAttribute('aria-hidden','true'); fb.appendChild(fi); mc.appendChild(fb); }
+        const mip = _ctx.BANCO_ICON[c.nomeBanco];
+        if (mip) { const mi = document.createElement('img'); mi.className = 'meus-cartoes-mini-icon'; mi.src = mip; mi.alt = ''; mi.setAttribute('aria-hidden','true'); mc.appendChild(mi); }
+        else { const ma = document.createElement('div'); ma.className = 'meus-cartoes-mini-abrev'; ma.textContent = _ctx.BANCO_ABREV[c.nomeBanco] || _ctx._sanitizeText(c.nomeBanco).substring(0,2).toUpperCase(); mc.appendChild(ma); }
+        const mn = document.createElement('div'); mn.className = 'meus-cartoes-mini-nome'; mn.textContent = _ctx._sanitizeText(c.nomeBanco); mc.appendChild(mn);
+        const md = document.createElement('div'); md.className = 'meus-cartoes-mini-disp'; md.textContent = _ctx.formatBRL(Math.max(0, c.limite - (c.usado||0))); mc.appendChild(md);
+        mc.addEventListener('click', () => { _ctx.cartaoSelecionadoId = c.id; _ctx.atualizarTelaCartoes(); });
+        meusLista.appendChild(mc);
+    });
+    const addMini = document.createElement('div'); addMini.className = 'meus-cartoes-mini meus-cartoes-mini--add';
+    const addIc = document.createElement('i'); addIc.className = 'fas fa-plus'; addIc.setAttribute('aria-hidden','true');
+    const addTxt = document.createElement('span'); addTxt.textContent = 'Novo';
+    addMini.appendChild(addIc); addMini.appendChild(addTxt);
+    addMini.addEventListener('click', () => abrirCartaoForm());
+    meusLista.appendChild(addMini); meusSection.appendChild(meusLista); container.appendChild(meusSection);
+}
+
+function _buildDesktopContent(container, cartaoAtivo) {
+    const hdr = document.createElement('div'); hdr.className = 'cdes-header';
+    const nav = document.createElement('nav'); nav.className = 'tx-breadcrumb'; nav.setAttribute('aria-label','Navegação');
+    const lnk = document.createElement('a'); lnk.href = 'dashboard.html'; lnk.textContent = 'Início';
+    nav.appendChild(lnk); nav.appendChild(document.createTextNode(' › ')); const spPage = document.createElement('span'); spPage.textContent = 'Cartões'; nav.appendChild(spPage);
+    const h1 = document.createElement('h1'); h1.className = 'tx-page-title'; h1.textContent = 'Cartões';
+    const sub = document.createElement('p'); sub.className = 'tx-page-subtitle'; sub.textContent = 'Controle total dos seus cartões de crédito e faturas';
+    hdr.appendChild(nav); hdr.appendChild(h1); hdr.appendChild(sub); container.appendChild(hdr);
+
+    if (!cartaoAtivo) {
+        const empty = document.createElement('div'); empty.className = 'cartoes-empty-state';
+        const ei = document.createElement('div'); ei.style.fontSize='3.5rem'; ei.textContent='💳';
+        const et = document.createElement('p'); et.textContent='Nenhum cartão cadastrado.';
+        const eb = document.createElement('button'); eb.type='button'; eb.className='btn-primary'; eb.style.marginTop='16px'; eb.textContent='+ Adicionar Cartão'; eb.addEventListener('click', () => abrirCartaoForm());
+        empty.appendChild(ei); empty.appendChild(et); empty.appendChild(eb); container.appendChild(empty); return;
+    }
+
+    const topRow = document.createElement('div'); topRow.className = 'cdes-top-row';
+    const topL = document.createElement('div'); topL.className = 'cdes-top-left'; topL.appendChild(_buildFeaturedCard(cartaoAtivo));
+    const topR = document.createElement('div'); topR.className = 'cdes-top-right'; topR.appendChild(_buildResumoCartao(cartaoAtivo));
+    topRow.appendChild(topL); topRow.appendChild(topR); container.appendChild(topRow);
+
+    const botRow = document.createElement('div'); botRow.className = 'cdes-bottom-row';
+    botRow.appendChild(_buildMeusCartoesList(cartaoAtivo));
+    botRow.appendChild(_buildUltimasTransacoes(cartaoAtivo));
+    container.appendChild(botRow);
+}
+
 function atualizarTelaCartoes() {
     const grid = document.getElementById('cartoesGrid');
     if (!grid) return;
@@ -26,328 +370,15 @@ function atualizarTelaCartoes() {
     if (!_ctx.cartaoSelecionadoId && _ctx.cartoesCredito.length > 0) {
         _ctx.cartaoSelecionadoId = _ctx.cartoesCredito[0].id;
     }
-
     const cartaoAtivo = _ctx.cartoesCredito.find(c => c.id === _ctx.cartaoSelecionadoId) || _ctx.cartoesCredito[0] || null;
 
-    const coresCartao = {
-        'Nubank':          'linear-gradient(135deg, #5b0d8c 0%, #9b19d1 100%)',
-        'Bradesco':        'linear-gradient(135deg, #c00000 0%, #e83232 100%)',
-        'Mercado Pago':    'linear-gradient(135deg, #006bb3 0%, #009ee3 100%)',
-        'C6 Bank':         'linear-gradient(135deg, #111114 0%, #2c2c30 100%)',
-        'Itaú':            'linear-gradient(135deg, #d46000 0%, #f07800 100%)',
-        'Santander':       'linear-gradient(135deg, #a80000 0%, #d40000 100%)',
-        'Banco do Brasil': 'linear-gradient(135deg, #003070 0%, #005cc5 100%)',
-        'Caixa':           'linear-gradient(135deg, #004f96 0%, #0074cc 100%)',
-    };
+    const mobile = document.createElement('div'); mobile.className = 'cartoes-mobile';
+    _buildMobileContent(mobile, cartaoAtivo);
+    grid.appendChild(mobile);
 
-    // ── HEADER ──────────────────────────────────────────────
-    const header = document.createElement('div');
-    header.className = 'cartoes-novo-header';
-
-    const titulo = document.createElement('div');
-    titulo.className = 'cartoes-novo-titulo';
-    const icTit = document.createElement('i');
-    icTit.className = 'fas fa-credit-card';
-    icTit.setAttribute('aria-hidden', 'true');
-    const spanTit = document.createElement('span');
-    spanTit.textContent = 'Cartões';
-    titulo.appendChild(icTit);
-    titulo.appendChild(spanTit);
-
-    const btnAdd = document.createElement('button');
-    btnAdd.className = 'cartoes-novo-btn-add';
-    btnAdd.type = 'button';
-    const icAdd = document.createElement('i');
-    icAdd.className = 'fas fa-plus';
-    icAdd.setAttribute('aria-hidden', 'true');
-    btnAdd.appendChild(icAdd);
-    btnAdd.appendChild(document.createTextNode(' Adicionar Cartão'));
-    btnAdd.addEventListener('click', () => abrirCartaoForm());
-
-    header.appendChild(titulo);
-    header.appendChild(btnAdd);
-    grid.appendChild(header);
-
-    // ── EMPTY STATE ──────────────────────────────────────────
-    if (!cartaoAtivo) {
-        const empty = document.createElement('div');
-        empty.className = 'cartoes-empty-state';
-        const emptyIcon = document.createElement('div');
-        emptyIcon.style.fontSize = '3.5rem';
-        emptyIcon.textContent = '💳';
-        const emptyTxt = document.createElement('p');
-        emptyTxt.textContent = 'Nenhum cartão cadastrado. Adicione seu primeiro cartão!';
-        empty.appendChild(emptyIcon);
-        empty.appendChild(emptyTxt);
-        grid.appendChild(empty);
-        return;
-    }
-
-    // ── FEATURED CARD ────────────────────────────────────────────────
-    const featuredWrapper = document.createElement('div');
-    featuredWrapper.className = 'cartao-featured-wrapper';
-
-    const featured = document.createElement('div');
-    featured.className = 'cartao-featured-card';
-    const corGrad = coresCartao[cartaoAtivo.nomeBanco] || 'linear-gradient(135deg, #1a1d2e 0%, #2a2d3e 100%)';
-    featured.style.background = corGrad;
-    if (cartaoAtivo.congelado) featured.classList.add('cartao-congelado');
-
-    // ── TOPO: ícone do banco + nome (esquerda) | contactless (direita)
-    const topoDiv = document.createElement('div');
-    topoDiv.className = 'cartao-featured-top';
-
-    const nameRow = document.createElement('div');
-    nameRow.className = 'cartao-featured-name-row';
-
-    const bankIconWrap = document.createElement('div');
-    bankIconWrap.className = 'cartao-featured-bank-icon';
-    const featuredIconPath = _ctx.BANCO_ICON[cartaoAtivo.nomeBanco];
-    if (featuredIconPath) {
-        const featuredImg = document.createElement('img');
-        featuredImg.src = featuredIconPath;
-        featuredImg.alt = '';
-        featuredImg.setAttribute('aria-hidden', 'true');
-        featuredImg.className = 'cartao-featured-bank-img';
-        bankIconWrap.appendChild(featuredImg);
-    } else {
-        bankIconWrap.textContent = _ctx.BANCO_ABREV[cartaoAtivo.nomeBanco]
-            || _ctx._sanitizeText(cartaoAtivo.nomeBanco).substring(0, 2).toUpperCase();
-    }
-    nameRow.appendChild(bankIconWrap);
-
-    const nomeDiv = document.createElement('div');
-    nomeDiv.className = 'cartao-featured-nome';
-    nomeDiv.textContent = _ctx._sanitizeText(cartaoAtivo.nomeBanco);
-    nameRow.appendChild(nomeDiv);
-
-    const contactless = document.createElement('div');
-    contactless.className = 'cartao-featured-contactless';
-    const icContactless = document.createElement('i');
-    icContactless.className = 'fas fa-wifi';
-    icContactless.setAttribute('aria-hidden', 'true');
-    contactless.appendChild(icContactless);
-
-    topoDiv.appendChild(nameRow);
-    topoDiv.appendChild(contactless);
-    featured.appendChild(topoDiv);
-
-    // ── MEIO: chip centralizado à esquerda
-    const middleDiv = document.createElement('div');
-    middleDiv.className = 'cartao-featured-middle';
-
-    const chip = document.createElement('div');
-    chip.className = 'cartao-featured-chip';
-    middleDiv.appendChild(chip);
-    featured.appendChild(middleDiv);
-
-    // ── RODAPÉ: disponível (esquerda) + limite (direita)
-    const disponivel = Math.max(0, cartaoAtivo.limite - (cartaoAtivo.usado || 0));
-
-    const bottomDiv = document.createElement('div');
-    bottomDiv.className = 'cartao-featured-bottom';
-
-    // Disponível — esquerda
-    const dispDiv = document.createElement('div');
-    dispDiv.className = 'cartao-featured-disponivel';
-    const dispLbl = document.createElement('span');
-    dispLbl.className = 'cartao-featured-label';
-    dispLbl.textContent = 'Disponível';
-    const dispVal = document.createElement('span');
-    dispVal.className = 'cartao-featured-value cartao-featured-value--green';
-    dispVal.textContent = _ctx.formatBRL(disponivel);
-    dispDiv.appendChild(dispLbl);
-    dispDiv.appendChild(dispVal);
-
-    // Limite — direita
-    const limiteDiv = document.createElement('div');
-    limiteDiv.className = 'cartao-featured-limite';
-    limiteDiv.style.textAlign = 'right';
-    const limiteLbl = document.createElement('span');
-    limiteLbl.className = 'cartao-featured-label';
-    limiteLbl.textContent = 'Limite';
-    const limiteVal = document.createElement('span');
-    limiteVal.className = 'cartao-featured-value';
-    limiteVal.textContent = _ctx.formatBRL(cartaoAtivo.limite);
-    limiteDiv.appendChild(limiteLbl);
-    limiteDiv.appendChild(limiteVal);
-
-    bottomDiv.appendChild(dispDiv);
-    bottomDiv.appendChild(limiteDiv);
-    featured.appendChild(bottomDiv);
-
-    // ── BARRA de uso (abaixo do bottom)
-    const percUsado = cartaoAtivo.limite > 0
-        ? Math.min(100, ((cartaoAtivo.usado || 0) / cartaoAtivo.limite) * 100)
-        : 0;
-    const corBarra = percUsado > 80 ? '#ff4b4b' : percUsado > 50 ? '#ffd166' : '#00ff99';
-
-    const barWrapper = document.createElement('div');
-    barWrapper.className = 'cartao-featured-bar-wrapper';
-    const bar = document.createElement('div');
-    bar.className = 'cartao-featured-bar';
-    const barFill = document.createElement('div');
-    barFill.className = 'cartao-featured-bar-fill';
-    barFill.style.width = `${percUsado.toFixed(1)}%`;
-    barFill.style.background = corBarra;
-    bar.appendChild(barFill);
-    const barLabel = document.createElement('span');
-    barLabel.className = 'cartao-featured-bar-label';
-    barLabel.textContent = `${percUsado.toFixed(0)}% usado`;
-    barWrapper.appendChild(bar);
-    barWrapper.appendChild(barLabel);
-    featured.appendChild(barWrapper);
-
-    // Frozen overlay
-    if (cartaoAtivo.congelado) {
-        const frozenOverlay = document.createElement('div');
-        frozenOverlay.className = 'cartao-frozen-overlay';
-        const frozenIc = document.createElement('i');
-        frozenIc.className = 'fas fa-snowflake';
-        frozenIc.setAttribute('aria-hidden', 'true');
-        const frozenTxt = document.createElement('span');
-        frozenTxt.textContent = 'Cartão Congelado';
-        frozenOverlay.appendChild(frozenIc);
-        frozenOverlay.appendChild(frozenTxt);
-        featured.appendChild(frozenOverlay);
-    }
-
-    featuredWrapper.appendChild(featured);
-
-    // ── ACTION BUTTONS ────────────────────────────────────────
-    const actionsRow = document.createElement('div');
-    actionsRow.className = 'cartao-actions-row';
-
-    const acoesDef = [
-        {
-            icon:   'fa-file-invoice-dollar',
-            label:  'Pagar Fatura',
-            action: () => {
-                const fatura = _ctx.contasFixas.find(c =>
-                    c.cartaoId === cartaoAtivo.id && c.tipoContaFixa === 'fatura_cartao' && !c.pago
-                );
-                if (fatura) abrirPopupPagarContaFixa(fatura.id);
-                else _ctx.mostrarNotificacao('Nenhuma fatura em aberto neste cartão.', 'info');
-            }
-        },
-        {
-            icon:        cartaoAtivo.congelado ? 'fa-fire' : 'fa-snowflake',
-            label:       cartaoAtivo.congelado ? 'Descongelar' : 'Congelar',
-            extraClass:  cartaoAtivo.congelado
-                             ? 'cartao-action-btn--freeze cartao-action-btn--frozen'
-                             : 'cartao-action-btn--freeze',
-            action: () => congelarCartao(cartaoAtivo.id)
-        },
-        {
-            icon:   'fa-circle-info',
-            label:  'Detalhes',
-            action: () => abrirDetalhesCartaoCompleto(cartaoAtivo.id)
-        }
-    ];
-
-    acoesDef.forEach(def => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'cartao-action-btn' + (def.extraClass ? ' ' + def.extraClass : '');
-        const ic = document.createElement('i');
-        ic.className = `fas ${def.icon}`;
-        ic.setAttribute('aria-hidden', 'true');
-        const lbl = document.createElement('span');
-        lbl.textContent = def.label;
-        btn.appendChild(ic);
-        btn.appendChild(lbl);
-        btn.addEventListener('click', def.action);
-        actionsRow.appendChild(btn);
-    });
-
-    featuredWrapper.appendChild(actionsRow);
-    grid.appendChild(featuredWrapper);
-
-    // ── MEUS CARTÕES ─────────────────────────────────────────
-    const meusSection = document.createElement('div');
-    meusSection.className = 'meus-cartoes-section';
-
-    const meusHeader = document.createElement('div');
-    meusHeader.className = 'meus-cartoes-header';
-    const meusTit = document.createElement('span');
-    meusTit.textContent = 'Meus Cartões';
-    const meusCountSpan = document.createElement('span');
-    meusCountSpan.className = 'meus-cartoes-count';
-    if (_ctx.cartoesCredito.length > 3) {
-        meusCountSpan.textContent = `${cartoesCredito.length - 3} oculto(s) >`;
-    }
-    meusHeader.appendChild(meusTit);
-    meusHeader.appendChild(meusCountSpan);
-    meusSection.appendChild(meusHeader);
-
-    const meusLista = document.createElement('div');
-    meusLista.className = 'meus-cartoes-lista';
-
-    _ctx.cartoesCredito.forEach(c => {
-        const miniCard = document.createElement('div');
-        miniCard.className = 'meus-cartoes-mini' + (c.id === _ctx.cartaoSelecionadoId ? ' meus-cartoes-mini--ativo' : '');
-        const corMini = coresCartao[c.nomeBanco] || 'linear-gradient(135deg, #1a1d2e 0%, #2a2d3e 100%)';
-        miniCard.style.background = corMini;
-
-        if (c.congelado) {
-            const frozenBadge = document.createElement('div');
-            frozenBadge.className = 'mini-frozen-badge';
-            const fIc = document.createElement('i');
-            fIc.className = 'fas fa-snowflake';
-            fIc.setAttribute('aria-hidden', 'true');
-            frozenBadge.appendChild(fIc);
-            miniCard.appendChild(frozenBadge);
-        }
-
-        const miniIconPath = _ctx.BANCO_ICON[c.nomeBanco];
-        if (miniIconPath) {
-            const miniImg = document.createElement('img');
-            miniImg.className = 'meus-cartoes-mini-icon';
-            miniImg.src = miniIconPath;
-            miniImg.alt = '';
-            miniImg.setAttribute('aria-hidden', 'true');
-            miniCard.appendChild(miniImg);
-        } else {
-            const miniAbrevEl = document.createElement('div');
-            miniAbrevEl.className = 'meus-cartoes-mini-abrev';
-            miniAbrevEl.textContent = _ctx.BANCO_ABREV[c.nomeBanco]
-                || _ctx._sanitizeText(c.nomeBanco).substring(0, 2).toUpperCase();
-            miniCard.appendChild(miniAbrevEl);
-        }
-
-        const miniNome = document.createElement('div');
-        miniNome.className = 'meus-cartoes-mini-nome';
-        miniNome.textContent = _ctx._sanitizeText(c.nomeBanco);
-        miniCard.appendChild(miniNome);
-
-        const miniDisp = document.createElement('div');
-        miniDisp.className = 'meus-cartoes-mini-disp';
-        miniDisp.textContent = _ctx.formatBRL(Math.max(0, c.limite - (c.usado || 0)));
-        miniCard.appendChild(miniDisp);
-
-        miniCard.addEventListener('click', () => {
-            _ctx.cartaoSelecionadoId = c.id;
-            _ctx.atualizarTelaCartoes();
-        });
-
-        meusLista.appendChild(miniCard);
-    });
-
-    // Mini card "Adicionar"
-    const addMini = document.createElement('div');
-    addMini.className = 'meus-cartoes-mini meus-cartoes-mini--add';
-    const addIc = document.createElement('i');
-    addIc.className = 'fas fa-plus';
-    addIc.setAttribute('aria-hidden', 'true');
-    const addTxt = document.createElement('span');
-    addTxt.textContent = 'Novo';
-    addMini.appendChild(addIc);
-    addMini.appendChild(addTxt);
-    addMini.addEventListener('click', () => abrirCartaoForm());
-    meusLista.appendChild(addMini);
-
-    meusSection.appendChild(meusLista);
-    grid.appendChild(meusSection);
+    const desktop = document.createElement('div'); desktop.className = 'cartoes-desktop';
+    _buildDesktopContent(desktop, cartaoAtivo);
+    grid.appendChild(desktop);
 }
 
 // ========== CONGELAR / DESCONGELAR CARTÃO ==========
