@@ -1079,17 +1079,11 @@ supabase.auth.onAuthStateChange((event, session) => {
     }
 });
 
-// [SEC-03] Detecta remoção do token em outra aba (localStorage do Supabase)
-window.addEventListener('storage', (e) => {
-    if (e.key?.startsWith('sb-') && e.newValue === null) {
-        if (!window.location.href.includes('login.html')) {
-            Fingerprint.clear();
-            SubscriptionChecker.invalidate();
-            RateLimiter.clear();
-            SafeRedirect.toLogin('NO_SESSION'); // dedup via _isRedirecting
-        }
-    }
-});
+// [SEC-03] sessionStorage não dispara evento 'storage' entre abas (é por design).
+// A sincronização entre abas é feita pelo BroadcastChannel (LOGOUT/FORCE_LOGOUT).
+// O listener de storage era para localStorage (sb-*) do SDK antigo — não mais necessário
+// pois o storage adapter agora usa sessionStorage com chave 'ge_auth'.
+// Mantido como comentário para documentar a decisão arquitetural.
 
 // [FIX-VUL-9] Reativação da aba — revalida fingerprint + integrity stamp
 document.addEventListener('visibilitychange', async () => {
