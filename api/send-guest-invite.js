@@ -6,6 +6,7 @@ import { checkRate } from './_rate-limit.js'
 const _SUPABASE_URL  = process.env.SUPABASE_URL ?? ''
 const EDGE_URL       = `${_SUPABASE_URL}/functions/v1/send-guest-invite`
 const ANON_KEY       = process.env.SUPABASE_ANON_KEY
+const PROXY_SECRET   = process.env.PROXY_SECRET ?? ''
 // Suporta múltiplas origens separadas por vírgula (www e não-www)
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGIN ?? 'https://www.granaevo.com,https://granaevo.com')
@@ -71,9 +72,11 @@ export default async function handler(req, res) {
     upstream = await fetch(EDGE_URL, {
       method:  'POST',
       headers: {
-        'Content-Type':  'application/json',
-        'Authorization': authHeader,
-        'apikey':        ANON_KEY,
+        'Content-Type':    'application/json',
+        'Authorization':   authHeader,
+        'apikey':          ANON_KEY,
+        'x-proxy-secret':  PROXY_SECRET,
+        'x-forwarded-for': ip,
       },
       body:   JSON.stringify({ guestName: body.guestName, guestEmail: body.guestEmail }),
       signal: AbortSignal.timeout(15_000),

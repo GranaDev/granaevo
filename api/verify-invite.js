@@ -72,14 +72,15 @@ export default async function handler(req, res) {
 
   let upstream
   try {
-    // [NOVO-005] Envia x-proxy-secret para que verify-guest-invite bloqueie chamadas diretas
+    // Envia x-proxy-secret + IP real para que verify-guest-invite possa rate-limit por cliente
     upstream = await fetch(EDGE_URL, {
       method:  'POST',
       headers: {
-        'Content-Type':   'application/json',
-        'Authorization':  `Bearer ${ANON_KEY}`,
-        'apikey':         ANON_KEY,
-        'x-proxy-secret': PROXY_SECRET,
+        'Content-Type':    'application/json',
+        'Authorization':   `Bearer ${ANON_KEY}`,
+        'apikey':          ANON_KEY,
+        'x-proxy-secret':  PROXY_SECRET,
+        'x-forwarded-for': ip,
       },
       body:   raw,
       signal: AbortSignal.timeout(15_000),

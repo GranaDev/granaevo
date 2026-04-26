@@ -43,12 +43,22 @@ const ALLOWED_ORIGINS = [
   'https://www.granaevo.com',
 ]
 
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder()
+  const aB  = enc.encode(a)
+  const bB  = enc.encode(b)
+  if (aB.length !== bB.length) return false
+  let diff = 0
+  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  return diff === 0
+}
+
 function getCorsHeaders(req: Request): Record<string, string> {
   const origin  = req.headers.get('origin') ?? ''
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
   return {
     'Access-Control-Allow-Origin':  allowed,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-proxy-secret',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin',
   }
@@ -63,6 +73,19 @@ Deno.serve(async (req) => {
   // Preflight CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // Proxy-secret obrigatório — bloqueia chamadas diretas que bypassam rate limits Vercel
+  const proxySecret = Deno.env.get('PROXY_SECRET')
+  if (proxySecret) {
+    const received = req.headers.get('x-proxy-secret') ?? ''
+    if (!timingSafeEqual(received, proxySecret)) {
+      console.warn('[check-email-status] Proxy secret inválido — chamada direta bloqueada')
+      return new Response(
+        JSON.stringify({ status: 'not_found' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      )
+    }
   }
 
   // Apenas POST aceito
