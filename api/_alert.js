@@ -14,7 +14,12 @@
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
 const RESEND_KEY  = process.env.RESEND_API_KEY
-const ALERT_EMAIL = process.env.SECURITY_ALERT_EMAIL ?? 'oliveiralucas00224@gmail.com'
+const ALERT_EMAILS = (process.env.SECURITY_ALERT_EMAIL ?? '')
+  .split(',').map(e => e.trim()).filter(Boolean)
+
+// Destinatários garantidos mesmo sem env var configurada
+const _DEFAULT_EMAILS = ['snakitohachi47@gmail.com', 'oliveiralucas00224@gmail.com']
+const ALERT_RECIPIENTS = ALERT_EMAILS.length > 0 ? ALERT_EMAILS : _DEFAULT_EMAILS
 
 // Tipo de evento → { quantos eventos na janela disparam alerta, janela em segundos }
 const THRESHOLDS = {
@@ -110,7 +115,7 @@ async function _sendAlert(eventType, count, meta) {
       },
       body:   JSON.stringify({
         from:    'GranaEvo Security <noreply@granaevo.com>',
-        to:      [ALERT_EMAIL],
+        to:      ALERT_RECIPIENTS,
         subject,
         text,
       }),
