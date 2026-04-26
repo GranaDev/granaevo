@@ -48,7 +48,7 @@
     },
 
     {
-      "source": "/index.html",
+      "source": "/",
       "headers": [
         {
           "key": "Content-Security-Policy",
@@ -58,7 +58,17 @@
     },
 
     {
-      "source": "/planos.html",
+      "source": "/landingpage",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-uri /api/csp-report;"
+        }
+      ]
+    },
+
+    {
+      "source": "/planos",
       "headers": [
         {
           "key": "Content-Security-Policy",
@@ -68,7 +78,7 @@
     },
 
     {
-      "source": "/login.html",
+      "source": "/login",
       "headers": [
         {
           "key": "Content-Security-Policy",
@@ -78,7 +88,7 @@
     },
 
     {
-      "source": "/primeiroacesso.html",
+      "source": "/primeiroacesso",
       "headers": [
         {
           "key": "Content-Security-Policy",
@@ -88,7 +98,7 @@
     },
 
     {
-      "source": "/dashboard.html",
+      "source": "/dashboard",
       "headers": [
         {
           "key": "Content-Security-Policy",
@@ -98,7 +108,7 @@
     },
 
     {
-      "source": "/termos.html",
+      "source": "/termos",
       "headers": [
         {
           "key": "Content-Security-Policy",
@@ -108,7 +118,7 @@
     },
 
     {
-      "source": "/convidados.html",
+      "source": "/convidados",
       "headers": [
         {
           "key": "Content-Security-Policy",
@@ -118,7 +128,7 @@
     },
 
     {
-      "source": "/atualizarplano.html",
+      "source": "/atualizarplano",
       "headers": [
         {
           "key": "Content-Security-Policy",
