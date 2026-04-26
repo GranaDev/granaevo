@@ -58,12 +58,20 @@ async function _checkRedis(key, max, windowSecs = 60) {
 // ── API pública ───────────────────────────────────────────────────────────────
 /**
  * Verifica se a chave está dentro do limite.
+ * Quando bloqueado, registra automaticamente o evento de segurança.
  * @param {string} key   Chave única (ex: `send:127.0.0.1`)
  * @param {number} max   Número máximo de requisições por janela
  * @returns {Promise<boolean>} true se permitido, false se bloqueado
  */
 export async function checkRate(key, max) {
-  return USE_REDIS ? _checkRedis(key, max) : _checkMemory(key, max)
+  const allowed = await (USE_REDIS ? _checkRedis(key, max) : _checkMemory(key, max))
+  if (!allowed) {
+    // Fire-and-forget: track burst para detectar scan/botnet via alertas
+    import('./_alert.js').then(({ trackSecurityEvent }) => {
+      trackSecurityEvent('rate_limit_burst', { key }).catch(() => {})
+    }).catch(() => {})
+  }
+  return allowed
 }
 
 export const isRedisEnabled = USE_REDIS

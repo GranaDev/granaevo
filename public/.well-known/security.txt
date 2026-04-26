@@ -1,0 +1,5 @@
+Contact: mailto:oliveiralucas00224@gmail.com
+Expires: 2027-04-26T00:00:00.000Z
+Preferred-Languages: pt, en
+Canonical: https://www.granaevo.com/.well-known/security.txt
+Policy: Reporte vulnerabilidades de segurança encontradas no GranaEvo diretamente ao desenvolvedor. Por favor, não divulgue publicamente antes de uma resposta ser recebida.

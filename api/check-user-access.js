@@ -2,6 +2,7 @@
 // Requer sessão autenticada (JWT do usuário no Authorization header).
 
 import { checkRate } from './_rate-limit.js'
+import { trackSecurityEvent } from './_alert.js'
 
 const EDGE_URL    = `${process.env.SUPABASE_URL}/functions/v1/check-user-access`
 const ANON_KEY    = process.env.SUPABASE_ANON_KEY ?? ''
@@ -79,6 +80,12 @@ export default async function handler(req, res) {
       body:   JSON.stringify({ user_id: body.user_id }),
       signal: AbortSignal.timeout(10_000),
     })
+
+    // Tracking de lockout progressivo — indica possível credential stuffing
+    if (r.status === 429) {
+      trackSecurityEvent('login_lockout', { ip, user_id: body.user_id?.slice?.(0, 8) }).catch(() => {})
+    }
+
     res.setHeader('Content-Type', 'application/json')
     return res.status(r.status).send(await r.text())
   } catch {

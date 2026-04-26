@@ -1375,12 +1375,11 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             formData.append('file', arquivo);
 
             const uploadResponse = await fetch(
-                `${SUPABASE_URL}/functions/v1/upload-profile-photo`,
+                '/api/upload-profile-photo',
                 {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${sessionFresh.access_token}`,
-                        'apikey': SUPABASE_ANON_KEY,
                     },
                     body: formData,
                 }
@@ -1882,12 +1881,11 @@ async function alterarFoto(event) {
         formData.append('file', file);
 
         const uploadResponse = await fetch(
-            `${SUPABASE_URL}/functions/v1/upload-profile-photo`,
+            '/api/upload-profile-photo',
             {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`,
-                    'apikey': SUPABASE_ANON_KEY,
                 },
                 body: formData,
             }

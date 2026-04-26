@@ -60,6 +60,17 @@ function getCors(req: Request): Record<string, string> {
   };
 }
 
+// ─── timing-safe compare (prevenção de timing oracle no proxy secret) ─────────
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder()
+  const aB  = enc.encode(a)
+  const bB  = enc.encode(b)
+  if (aB.length !== bB.length) return false
+  let diff = 0
+  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  return diff === 0
+}
+
 // ─── Handler principal ────────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   const CORS = getCors(req);
@@ -77,7 +88,19 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
-  // ── 1. Extrai o token do header Authorization ─────────────────────────────
+  // ── 1. Verificar proxy secret ─────────────────────────────────────────────
+  // [SEC-FIX] Bloqueia chamadas diretas que bypassam o proxy Vercel
+  // (que aplica rate limit, CSRF e body size enforcement).
+  const proxySecret = Deno.env.get("PROXY_SECRET")
+  if (proxySecret) {
+    const received = req.headers.get("x-proxy-secret") ?? ""
+    if (!timingSafeEqual(received, proxySecret)) {
+      console.warn("[upload-profile-photo] Proxy secret inválido — acesso direto bloqueado")
+      return json({ error: "Unauthorized" }, 401)
+    }
+  }
+
+  // ── 2. Extrai o token do header Authorization ─────────────────────────────
   const authHeader = req.headers.get("Authorization") ?? "";
   const token = authHeader.startsWith("Bearer ")
     ? authHeader.slice(7).trim()
@@ -88,7 +111,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Unauthorized: missing Bearer token" }, 401);
   }
 
-  // ── 2. Lê variáveis de ambiente ───────────────────────────────────────────
+  // ── 3. Lê variáveis de ambiente ───────────────────────────────────────────
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -97,7 +120,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Configuração interna incompleta" }, 500);
   }
 
-  // ── 3. Admin client (service role — para storage e DB, nunca para user JWT) ─
+  // ── 4. Admin client (service role — para storage e DB, nunca para user JWT) ─
   const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
     auth: {
       autoRefreshToken:   false,

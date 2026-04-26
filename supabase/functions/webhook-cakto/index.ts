@@ -66,6 +66,21 @@ Deno.serve(async (req) => {
 
     if (!timingSafeEqual(receivedSecret, webhookSecret)) {
       console.warn('[webhook-cakto] Secret inválido — acesso bloqueado')
+
+      // Conta tentativas inválidas via check_rate_limit (atômico).
+      // check_rate_limit(key, max, window) retorna FALSE quando o limite é atingido.
+      // max=3 em 60s: se retornar false, é a 4ª tentativa → alerta crítico.
+      const clientIp = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown'
+      supabase.rpc('check_rate_limit', {
+        p_key:            `webhook_tamper:${clientIp}`,
+        p_max:            3,
+        p_window_seconds: 60,
+      }).then(({ data: allowed }) => {
+        if (allowed === false) {
+          console.error(`[webhook-cakto] 🚨 CRÍTICO: 3+ tentativas com secret inválido do IP ${clientIp}. Possível fraude de pagamento.`)
+        }
+      }).catch(() => {})
+
       return new Response(
         JSON.stringify({ error: 'Invalid secret' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
