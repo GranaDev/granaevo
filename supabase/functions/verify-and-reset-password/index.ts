@@ -37,7 +37,7 @@ function getCorsHeaders(req: Request): Record<string, string> {
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
   return {
     'Access-Control-Allow-Origin':  allowed,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-proxy-secret',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin',
   }
@@ -97,6 +97,17 @@ async function verifyCaptchaToken(token: string): Promise<boolean> {
   }
 }
 
+// [NOVO-002] timing-safe compare — impede bypass via chamada direta sem PROXY_SECRET
+function timingSafeEqualLocal(a: string, b: string): boolean {
+  const enc  = new TextEncoder()
+  const aB   = enc.encode(a)
+  const bB   = enc.encode(b)
+  if (aB.length !== bB.length) return false
+  let diff   = 0
+  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  return diff === 0
+}
+
 // ── HANDLER PRINCIPAL ─────────────────────────────────────────
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req)
@@ -104,6 +115,21 @@ Deno.serve(async (req) => {
   // Preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200, headers: corsHeaders })
+  }
+
+  // [NOVO-002] Proxy secret obrigatório — bloqueia chamadas diretas que bypas-
+  // sam os rate limits Vercel (10 verify_code/min e 5 reset_password/min por IP).
+  // Retorna 200 genérico para não revelar que o endpoint existe sem proxy.
+  const proxySecret = Deno.env.get('PROXY_SECRET')
+  if (proxySecret) {
+    const received = req.headers.get('x-proxy-secret') ?? ''
+    if (!timingSafeEqualLocal(received, proxySecret)) {
+      console.warn('[verify-reset] Proxy secret inválido — chamada direta bloqueada')
+      return new Response(
+        JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
   }
 
   // Só POST

@@ -5,6 +5,7 @@ import { checkRate } from './_rate-limit.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL    ?? ''
 const ANON_KEY     = process.env.SUPABASE_ANON_KEY ?? ''
+const PROXY_SECRET = process.env.PROXY_SECRET ?? ''
 // Origens de produção sempre permitidas; env var adiciona origens extras (ex.: dev local)
 const ALLOWED_ORIGINS = new Set([
   'https://www.granaevo.com',
@@ -75,9 +76,16 @@ export default async function handler(req, res) {
   const upstreamBody = JSON.stringify(forwardBody)
 
   try {
+    // [NOVO-003] Envia x-proxy-secret para que as Edge Functions possam bloquear
+    // chamadas diretas que bypassam os rate limits deste proxy Vercel.
     const r = await fetch(ENDPOINTS[step], {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}`, 'apikey': ANON_KEY },
+      headers: {
+        'Content-Type':    'application/json',
+        'Authorization':   `Bearer ${ANON_KEY}`,
+        'apikey':          ANON_KEY,
+        'x-proxy-secret':  PROXY_SECRET,
+      },
       body:    upstreamBody,
       signal:  AbortSignal.timeout(15_000),
     })

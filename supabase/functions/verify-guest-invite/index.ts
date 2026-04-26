@@ -42,11 +42,12 @@ const PASSWORD_MIN            = 10   // [FIX-EF-2] alinhado com frontend
 const MIN_RESP_MS             = 400  // [FIX-EF-7] tempo mínimo de resposta
 const TERMS_VERSION           = '1.0'
 
-// [FIX-EF-5] Origens permitidas — ajuste para seu domínio real
+// [FIX-EF-5] Origens permitidas — domínios de produção reais
+// [NOVO-006] Removido app.granaevo.com (subdomínio inexistente)
 const ALLOWED_ORIGINS = new Set([
     'https://granaevo.com',
     'https://www.granaevo.com',
-    'https://app.granaevo.com',
+    'https://granaevo.vercel.app',
 ])
 
 // ═══════════════════════════════════════════════════════════════
@@ -57,9 +58,20 @@ function getCorsHeaders(req: Request): Record<string, string> {
     const allowed = ALLOWED_ORIGINS.has(origin) ? origin : ''
     return {
         'Access-Control-Allow-Origin':  allowed,
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-proxy-secret',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
     }
+}
+
+// [NOVO-004] timing-safe compare — proxy secret para verificar convite
+function timingSafeEqualInvite(a: string, b: string): boolean {
+    const enc  = new TextEncoder()
+    const aB   = enc.encode(a)
+    const bB   = enc.encode(b)
+    if (aB.length !== bB.length) return false
+    let diff   = 0
+    for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+    return diff === 0
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -214,6 +226,17 @@ Deno.serve(async (req) => {
             await new Promise(r => setTimeout(r, MIN_RESP_MS - elapsed))
         }
         return res
+    }
+
+    // [NOVO-004] Proxy secret — bloqueia chamadas diretas que bypassam rate limits
+    // do proxy Vercel api/verify-invite.js (5/min por IP).
+    const proxySecret = Deno.env.get('PROXY_SECRET')
+    if (proxySecret) {
+        const received = req.headers.get('x-proxy-secret') ?? ''
+        if (!timingSafeEqualInvite(received, proxySecret)) {
+            console.warn('[verify-guest-invite] Proxy secret inválido — chamada direta bloqueada')
+            return respond(jsonErr(corsHeaders, 'Requisição inválida.', 400))
+        }
     }
 
     try {

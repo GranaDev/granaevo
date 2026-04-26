@@ -6,6 +6,7 @@ import { checkRate } from './_rate-limit.js'
 const _SUPABASE_URL  = process.env.SUPABASE_URL ?? ''
 const EDGE_URL       = `${_SUPABASE_URL}/functions/v1/verify-guest-invite`
 const ANON_KEY       = process.env.SUPABASE_ANON_KEY
+const PROXY_SECRET   = process.env.PROXY_SECRET ?? ''
 // Origens de produção sempre permitidas; env var adiciona origens extras (ex.: dev local)
 const ALLOWED_ORIGINS = new Set([
   'https://www.granaevo.com',
@@ -71,12 +72,14 @@ export default async function handler(req, res) {
 
   let upstream
   try {
+    // [NOVO-005] Envia x-proxy-secret para que verify-guest-invite bloqueie chamadas diretas
     upstream = await fetch(EDGE_URL, {
       method:  'POST',
       headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${ANON_KEY}`,
-        'apikey':        ANON_KEY,
+        'Content-Type':   'application/json',
+        'Authorization':  `Bearer ${ANON_KEY}`,
+        'apikey':         ANON_KEY,
+        'x-proxy-secret': PROXY_SECRET,
       },
       body:   raw,
       signal: AbortSignal.timeout(15_000),

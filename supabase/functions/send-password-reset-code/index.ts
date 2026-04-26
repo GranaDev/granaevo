@@ -18,10 +18,21 @@ function getCorsHeaders(req: Request): Record<string, string> {
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
   return {
     'Access-Control-Allow-Origin':  allowed,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-proxy-secret',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin',
   }
+}
+
+// [NOVO-001] timing-safe compare — impede bypass via chamada direta sem PROXY_SECRET
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc  = new TextEncoder()
+  const aB   = enc.encode(a)
+  const bB   = enc.encode(b)
+  if (aB.length !== bB.length) return false
+  let diff   = 0
+  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  return diff === 0
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -73,6 +84,21 @@ Deno.serve(async (req) => {
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // [NOVO-001] Proxy secret obrigatório — bloqueia chamadas diretas que bypas-
+  // sam os rate limits Vercel (3 envios/min por IP). Sem este check, um atacante
+  // pode spammar /functions/v1/send-password-reset-code diretamente.
+  const proxySecret = Deno.env.get('PROXY_SECRET')
+  if (proxySecret) {
+    const received = req.headers.get('x-proxy-secret') ?? ''
+    if (!timingSafeEqual(received, proxySecret)) {
+      console.warn('[send-reset-code] Proxy secret inválido — chamada direta bloqueada')
+      return new Response(
+        JSON.stringify({ status: 'sent', message: 'Se o email estiver cadastrado com plano ativo, você receberá o código.', expires_in: '30 minutos' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      )
+    }
   }
 
   try {
