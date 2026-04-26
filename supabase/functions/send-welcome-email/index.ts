@@ -17,7 +17,7 @@ function escapeHtml(str: string): string {
 
 // [SEC-FIX] Validação básica de email antes de usar como destinatário
 function isValidEmail(email: string): boolean {
-  return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email)
+  return /^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/.test(email)
 }
 
 Deno.serve(async (req) => {

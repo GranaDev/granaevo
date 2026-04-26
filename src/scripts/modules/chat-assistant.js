@@ -444,13 +444,26 @@ class ChatAssistant {
     _renderAvatar(container, isUser) {
         const perfil = isUser ? (this.perfilAtivo || window.perfilAtivo) : null;
         if (isUser && perfil?.foto) {
-            const img = document.createElement('img');
-            img.src = perfil.foto;
-            img.alt = perfil.nome?.charAt(0).toUpperCase() || 'U';
-            container.appendChild(img);
-        } else {
-            container.textContent = isUser ? (perfil?.nome?.charAt(0).toUpperCase() || 'U') : 'Ge';
+            const urlSegura = this._sanitizeImgUrl(perfil.foto);
+            if (urlSegura) {
+                const img = document.createElement('img');
+                img.src = urlSegura;
+                img.alt = perfil.nome?.charAt(0).toUpperCase() || 'U';
+                container.appendChild(img);
+                return;
+            }
         }
+        container.textContent = isUser ? (perfil?.nome?.charAt(0).toUpperCase() || 'U') : 'Ge';
+    }
+
+    _sanitizeImgUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        try {
+            const parsed = new URL(url);
+            if (parsed.protocol !== 'https:') return null;
+            if (parsed.hostname !== 'fvrhqqeofqedmhadzzqw.supabase.co') return null;
+            return parsed.href;
+        } catch { return null; }
     }
 
 // ========== INICIALIZAÇÃO ==========

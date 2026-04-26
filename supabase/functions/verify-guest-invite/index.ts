@@ -289,7 +289,7 @@ Deno.serve(async (req) => {
             return respond(jsonErr(corsHeaders, 'Email e código são obrigatórios.'))
         }
 
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+        if (!/^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/.test(emailNorm)) {
             return respond(jsonErr(corsHeaders, 'Email inválido.'))
         }
 

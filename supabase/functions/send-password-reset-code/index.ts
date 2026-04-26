@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
     const normalizedEmail = email.toLowerCase().trim()
 
     // Validação básica de formato (defesa em profundidade)
-    if (!/^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(normalizedEmail)) {
+    if (!/^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/.test(normalizedEmail)) {
       // Retorna neutro — não confirma nem nega que o email é inválido
       return neutralResponse(corsHeaders)
     }

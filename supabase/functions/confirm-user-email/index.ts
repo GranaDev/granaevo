@@ -232,5 +232,5 @@ function isValidUUID(value) {
 function isValidEmail(email) {
     return typeof email === 'string' &&
            email.length <= 254 &&
-           /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email);
+           /^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/.test(email);
 }

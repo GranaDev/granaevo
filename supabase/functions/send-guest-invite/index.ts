@@ -107,7 +107,7 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: "Nome do convidado inválido (2-100 caracteres)." }, 400);
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailRegex = /^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/;
   if (!guestEmail || !emailRegex.test(guestEmail)) {
     return json({ success: false, error: "Email do convidado inválido." }, 400);
   }

@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
     const normalizedEmail = email.toLowerCase().trim()
 
     // Validação básica de formato (bloqueia payloads obviamente malformados)
-    if (!/^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(normalizedEmail)) {
+    if (!/^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/.test(normalizedEmail)) {
       return new Response(
         JSON.stringify({ status: 'error', message: 'Formato de email inválido' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
