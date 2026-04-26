@@ -96,8 +96,9 @@ Deno.serve(async (req: Request) => {
   let guestEmail: string;
   try {
     const body = await req.json();
-    guestName  = (body?.guestName  ?? "").trim();
-    guestEmail = (body?.guestEmail ?? "").trim().toLowerCase();
+    // [SEC-FIX R4-006] Remove null bytes antes de qualquer processamento.
+    guestName  = (body?.guestName  ?? "").replace(/\x00/g, '').trim();
+    guestEmail = (body?.guestEmail ?? "").replace(/\x00/g, '').trim().toLowerCase();
   } catch {
     return json({ success: false, error: "Body JSON inválido." }, 400);
   }

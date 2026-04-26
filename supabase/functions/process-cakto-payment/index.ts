@@ -74,6 +74,12 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: 'orderId é obrigatório' }, 400)
   }
 
+  // [SEC-FIX R4-002] Validação de orderId — impede path traversal na URL da Cakto.
+  // Espelha a mesma regex usada em verify-cakto-payment.
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(orderId)) {
+    return json({ success: false, error: 'orderId inválido' }, 400)
+  }
+
   if (!action || !['approve', 'refund', 'cancel'].includes(action)) {
     return json({ success: false, error: 'action deve ser approve, refund ou cancel' }, 400)
   }

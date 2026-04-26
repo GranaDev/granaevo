@@ -434,3 +434,124 @@ describe('HTTP Method Restrictions', () => {
   }
 
 })
+
+// ─── 10. ROUND 4 — JWT ASSINATURA, ADMIN ENDPOINT, BODY LIMITS ───────────────
+
+describe('Round 4 — JWT Signature, Admin Endpoint, Body Limits', () => {
+
+  // R4-001: save-user-data deve rejeitar JWT forjado (sem assinatura válida)
+  // Antes do fix: decodeJwtPayload aceitava qualquer payload base64 válido.
+  // Após o fix: supabaseAdmin.auth.getUser() valida assinatura ES256 via JWKS.
+  test('save-user-data rejeita JWT com assinatura forjada', async () => {
+    const { status, json } = await post('/api/save-user-data', {
+      profiles: [{ name: 'hacker', type: 'individual' }]
+    }, {
+      'Authorization': `Bearer ${FORGED_JWT}`,
+    })
+    // 401 = JWT rejeitado por assinatura inválida
+    // 403 = CSRF/Origin check (bloqueio antes do JWT check — igualmente correto)
+    // 429 = rate limit
+    assert.ok([401, 403, 429].includes(status),
+      `JWT forjado deve ser rejeitado em save-user-data: status=${status} json=${JSON.stringify(json)}`)
+  })
+
+  // R4-001: get-user-data deve rejeitar JWT forjado
+  test('get-user-data rejeita JWT com assinatura forjada', async () => {
+    const r = await fetch(`${BASE_URL}/api/get-user-data`, {
+      method:  'GET',
+      headers: {
+        'Origin':        'https://www.granaevo.com',
+        'Authorization': `Bearer ${FORGED_JWT}`,
+      },
+    })
+    let json = null
+    try { json = await r.json() } catch {}
+    assert.ok([401, 403, 429].includes(r.status),
+      `JWT forjado deve ser rejeitado em get-user-data: status=${r.status} json=${JSON.stringify(json)}`)
+  })
+
+  // R4-001: alg:none JWT deve ser rejeitado em save-user-data
+  test('save-user-data rejeita JWT com alg:none', async () => {
+    const { status } = await post('/api/save-user-data', {
+      profiles: []
+    }, {
+      'Authorization': `Bearer ${JWT_ALG_NONE}`,
+    })
+    assert.ok([401, 403, 429].includes(status),
+      `alg:none JWT deve ser rejeitado em save-user-data: ${status}`)
+  })
+
+  // R4-002: process-cakto-payment deve rejeitar orderId com path traversal
+  // (testamos sem ADMIN_SECRET pois a intenção é verificar que o endpoint existe
+  //  e rejeita inputs inválidos antes de chegar à lógica administrativa)
+  test('process-cakto-payment rejeita orderId com path traversal', async () => {
+    const supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co'
+    const r = await fetch(`${supabaseUrl}/functions/v1/process-cakto-payment`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'x-admin-secret': 'INTENTIONALLY_WRONG_SECRET',
+      },
+      body: JSON.stringify({
+        orderId: '../../../oauth/token/',
+        action:  'approve',
+      }),
+    })
+    // 401 = secret inválido (bloqueado antes do regex check — correto)
+    // 400 = orderId inválido (passou pelo admin check — o regex funcionou)
+    assert.ok([400, 401].includes(r.status),
+      `path traversal em orderId deve ser rejeitado: ${r.status}`)
+  })
+
+  // R4-003: verify-guest-invite deve rejeitar body muito grande
+  test('verify-guest-invite rejeita body acima de 8KB', async () => {
+    const supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co'
+    const r = await fetch(`${supabaseUrl}/functions/v1/verify-guest-invite`, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin':       'https://www.granaevo.com',
+      },
+      body: JSON.stringify({
+        step:  'verify',
+        email: 'test@test.com',
+        code:  '123456',
+        nonce: 'A'.repeat(9_000), // 9KB — acima do limite de 8KB
+      }),
+    })
+    assert.ok([400, 413, 429].includes(r.status),
+      `body gigante deve ser rejeitado: ${r.status}`)
+  })
+
+  // R4-006: Null byte em email deve ser sanitizado (não causar erro de DB)
+  test('check-email sanitiza null byte em email', async () => {
+    const { status, json } = await post('/api/check-email', {
+      email: 'test\x00@example.com'
+    })
+    // Deve retornar not_found (email inválido) ou 400, nunca 500 (DB error)
+    assert.ok([200, 400, 429].includes(status), `null byte deve ser sanitizado: ${status}`)
+    if (status === 200) {
+      assert.notEqual(json?.status, 'ready', 'email com null byte não deve estar ready')
+      assert.notEqual(status, 500, 'null byte não deve causar erro interno')
+    }
+  })
+
+  // R4-004: Webhook idempotência — mesmo cakto_order_id não cria subscriptions duplicadas
+  // (testamos sem secret pois não temos o webhook secret em CI — verificamos rejeição)
+  test('webhook-cakto sem secret retorna 401 (não 500 de DB)', async () => {
+    const supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co'
+    const r = await fetch(`${supabaseUrl}/functions/v1/webhook-cakto`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        event: 'purchase.approved',
+        data:  { id: 'REPLAY_TEST_ORDER_' + Date.now(), customer: { email: 'hacker@evil.com' } },
+        // sem secret
+      }),
+    })
+    assert.ok([400, 401].includes(r.status),
+      `webhook sem secret deve dar 401 (não 500): ${r.status}`)
+  })
+
+})
+

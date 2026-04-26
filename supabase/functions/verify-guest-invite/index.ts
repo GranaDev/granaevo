@@ -228,18 +228,39 @@ Deno.serve(async (req) => {
         // [FIX-EF-3] IP real do header da requisição
         const clientIp = getClientIp(req)
 
+        // [SEC-FIX R4-003] Limite de tamanho de body antes do parse JSON.
+        // verify-guest-invite é chamado direto do browser — sem proxy Vercel.
+        const MAX_BODY_BYTES = 8_192 // 8 KB suficiente para todos os campos
+        const rawBody = await (async () => {
+            const reader = req.body?.getReader()
+            if (!reader) return ''
+            const chunks: Uint8Array[] = []
+            let total = 0
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done || !value) break
+                total += value.byteLength
+                if (total > MAX_BODY_BYTES) throw Object.assign(new Error('TOO_LARGE'), { status: 413 })
+                chunks.push(value)
+            }
+            return new TextDecoder().decode(
+                chunks.reduce((a, b) => { const m = new Uint8Array(a.length + b.length); m.set(a); m.set(b, a.length); return m }, new Uint8Array())
+            )
+        })()
+
+        let parsed: Record<string, unknown>
+        try { parsed = JSON.parse(rawBody) }
+        catch { return respond(jsonErr(corsHeaders, 'Body JSON inválido.', 400)) }
+
         // Desestrutura payload — ipAddress e userAgent descartados [FIX-EF-3]
-        const {
-            step,
-            email,
-            code,
-            password,
-            acceptedTerms,
-            nonce,
-        } = await req.json()
+        const { step, email, code, password, acceptedTerms, nonce } = parsed as {
+            step?: string; email?: string; code?: string | number
+            password?: string; acceptedTerms?: boolean; nonce?: string
+        }
 
         // ── Validações básicas de entrada ─────────────────────────
-        const emailNorm = email?.toLowerCase().trim()
+        // [SEC-FIX R4-006] Remove null bytes antes de qualquer processamento.
+        const emailNorm = (email ?? '').replace(/\x00/g, '').toLowerCase().trim()
 
         if (!emailNorm || !code) {
             return respond(jsonErr(corsHeaders, 'Email e código são obrigatórios.'))
@@ -497,6 +518,10 @@ Deno.serve(async (req) => {
         return respond(jsonErr(corsHeaders, 'Step inválido. Use "verify" ou "create".'))
 
     } catch (error: unknown) {
+        const e = error as { status?: number; message?: string }
+        if (e?.status === 413) {
+            return respond(jsonErr(corsHeaders, 'Requisição muito grande.', 413))
+        }
         console.error('❌ verify-guest-invite:', error)
         return respond(jsonErr(corsHeaders, 'Erro interno. Tente novamente em instantes.', 500))
     }

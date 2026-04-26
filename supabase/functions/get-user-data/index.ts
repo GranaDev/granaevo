@@ -47,19 +47,6 @@ async function decryptData(encrypted: string, userId: string): Promise<string | 
   }
 }
 
-// ---------------------------------------------------------------------------
-// JWT — decodifica payload sem verificar assinatura.
-// Seguro porque proxy_secret blinda o endpoint de chamadas externas.
-// Verificamos apenas formato e expiração.
-// ---------------------------------------------------------------------------
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return null
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    return JSON.parse(atob(base64))
-  } catch { return null }
-}
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -122,10 +109,7 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: 'Não autorizado' }, 401, corsHeaders)
   }
 
-  // ── 2. Extrair e validar JWT ─────────────────────────────────────────────
-  // Usamos decodificação de payload em vez de auth.getUser() porque o projeto
-  // usa ES256 (assimétrico) e a versão do supabase-js retorna erro de algoritmo.
-  // Seguro: proxy_secret já garante que apenas o proxy Vercel chega aqui.
+  // ── 2. Extrair token JWT ─────────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization') ?? ''
   const token      = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
 
@@ -133,27 +117,23 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: 'Não autenticado' }, 401, corsHeaders)
   }
 
-  const payload = decodeJwtPayload(token)
-  if (!payload || typeof payload.sub !== 'string') {
-    console.warn('[get-user-data] JWT malformado')
-    return json({ success: false, error: 'Token inválido' }, 401, corsHeaders)
-  }
-
-  const now = Math.floor(Date.now() / 1000)
-  if (typeof payload.exp === 'number' && payload.exp < now) {
-    console.warn('[get-user-data] JWT expirado')
-    return json({ success: false, error: 'Token expirado' }, 401, corsHeaders)
-  }
-
-  const userId = payload.sub
-
-  // ── 3. Cliente admin para operações de banco ─────────────────────────────
+  // ── 3. Cliente admin + verificação JWT com assinatura real ────────────────
+  // [SEC-FIX R4-001] Substituído decodeJwtPayload (sem verificação de assinatura)
+  // por supabaseAdmin.auth.getUser(token) que valida ES256 via JWKS.
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
   const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   })
+
+  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+  if (authError || !user?.id) {
+    console.warn('[get-user-data] JWT inválido ou expirado:', authError?.message ?? 'user null')
+    return json({ success: false, error: 'Token inválido' }, 401, corsHeaders)
+  }
+
+  const userId = user.id
 
   try {
     // ── 4. Buscar dados do banco ─────────────────────────────────────────────
