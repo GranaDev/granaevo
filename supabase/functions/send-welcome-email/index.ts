@@ -1,20 +1,56 @@
-// Chamada server-to-server (webhook-cakto) — sem CORS para browser
+// Chamada server-to-server (webhook-cakto) — sem CORS para browser.
+// [SEC-FIX] 'none' não é um valor CORS válido — removido.
 const corsHeaders = {
-  'Access-Control-Allow-Origin': 'none',
-  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Content-Type': 'application/json',
+}
+
+// [SEC-FIX] HTML escape para prevenir injeção no template de email.
+// name/planName vêm do webhook Cakto (dados do pagador) — nunca confiáveis.
+function escapeHtml(str: string): string {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+}
+
+// [SEC-FIX] Validação básica de email antes de usar como destinatário
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email)
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { status: 204 })
   }
 
   try {
-    const { email, name, planName } = await req.json()
-
-    if (!email || !name) {
-      throw new Error('Email e nome são obrigatórios')
+    let body: { email?: unknown; name?: unknown; planName?: unknown }
+    try {
+      body = await req.json()
+    } catch {
+      return new Response(JSON.stringify({ success: false, error: 'Body inválido' }), { headers: corsHeaders, status: 400 })
     }
+
+    const rawEmail    = typeof body.email    === 'string' ? body.email.toLowerCase().trim()   : ''
+    const rawName     = typeof body.name     === 'string' ? body.name.trim()                   : 'Usuário'
+    const rawPlanName = typeof body.planName === 'string' ? body.planName.trim()               : 'Individual'
+
+    // [SEC-FIX] Validação de email antes de enviar
+    if (!rawEmail || !isValidEmail(rawEmail)) {
+      console.warn('[send-welcome-email] Email inválido recebido')
+      return new Response(JSON.stringify({ success: false, error: 'Email inválido' }), { headers: corsHeaders, status: 400 })
+    }
+
+    const email    = rawEmail
+    const name     = rawName    || 'Usuário'
+    const planName = rawPlanName || 'Individual'
+
+    // [SEC-FIX] Escapa dados do pagador antes de interpolar no HTML
+    const safeName     = escapeHtml(name)
+    const safeEmail    = escapeHtml(email)
+    const safePlanName = escapeHtml(planName)
 
     console.log('📧 Enviando email de boas-vindas para:', email)
 
@@ -544,7 +580,7 @@ Deno.serve(async (req) => {
         <!-- Greeting -->
         <div class="greeting-block">
           <span class="greeting-eyebrow">Conta Ativada ✦</span>
-          <div class="greeting-name">Olá, ${name}! 👋</div>
+          <div class="greeting-name">Olá, ${safeName}! 👋</div>
           <p class="greeting-text">
             Sua conta foi ativada com <strong>sucesso</strong> e o pagamento confirmado. 
             Bem-vindo(a) à comunidade GranaEvo — o lugar onde sua relação com o dinheiro muda de verdade.
@@ -562,7 +598,7 @@ Deno.serve(async (req) => {
           </div>
           <div class="plan-showcase-body">
             <div class="plan-label-text">Plano Ativo</div>
-            <div class="plan-title">${planName || 'Individual'}</div>
+            <div class="plan-title">${safePlanName}</div>
             <div class="plan-badge-active">
               <span class="status-dot"></span>
               Acesso vitalício ativado
@@ -637,7 +673,7 @@ Deno.serve(async (req) => {
           <div class="cred-label">🔑 Seu acesso</div>
           <div class="cred-text">
             Use o email abaixo para fazer login após configurar sua senha:<br><br>
-            <span class="cred-email">${email}</span><br><br>
+            <span class="cred-email">${safeEmail}</span><br><br>
             Guarde este email — ele é seu identificador permanente na plataforma.
           </div>
         </div>

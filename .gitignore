@@ -1,4 +1,9 @@
 .vercel
-.env*.local
+# Todos os arquivos .env (com e sem sufixo .local, qualquer ambiente)
+.env
+.env.*
+!.env.example
 node_modules/
 dist/
+# Metadados do Supabase CLI (contêm project_ref e org_id)
+supabase/.temp/

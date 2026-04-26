@@ -20,10 +20,10 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0
 }
 
-// Sem CORS — função admin, nunca chamada pelo browser
+// Função administrativa — nunca chamada pelo browser.
+// [SEC-FIX] 'none' não é um valor CORS válido — removido. Endpoint admin-only.
 const corsHeaders = {
-  'Access-Control-Allow-Origin':  'none',
-  'Access-Control-Allow-Headers': 'content-type, x-admin-secret',
+  'Content-Type': 'application/json',
 }
 
 function json(body: unknown, status = 200): Response {
@@ -35,7 +35,7 @@ function json(body: unknown, status = 200): Response {
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders })
+    return new Response(null, { status: 204 })
   }
 
   if (req.method !== 'POST') {

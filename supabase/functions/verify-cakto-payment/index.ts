@@ -96,28 +96,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    // ── [SEC-AUTHZ] Verificar que o usuário tem subscription ativa ───────────
-    // Impede que usuários autenticados sem plano ativo acessem dados da Cakto.
-    const supabaseAdmin = createClient(supabaseUrl, supabaseAdmin_, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
-
-    const { data: subscription, error: subError } = await supabaseAdmin
-      .from('subscriptions')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .eq('payment_status', 'approved')
-      .single()
-
-    if (subError || !subscription) {
-      console.warn('[get-cakto-order] Usuário sem subscription ativa tentou acessar. userId:', user.id)
-      return new Response(
-        JSON.stringify({ success: false, error: 'Acesso não autorizado' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
-      )
-    }
-
     // ── Leitura e validação do body ─────────────────────────────────────────
     let body: { orderId?: unknown }
     try {
@@ -145,6 +123,41 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'orderId inválido' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    // ── [SEC-AUTHZ + IDOR FIX] Verificar que orderId pertence ao usuário ──────
+    // [SEC-FIX] IDOR: Versão anterior apenas verificava que o usuário tem
+    // subscription ativa, sem verificar se o orderId pertence a ESSE usuário.
+    // Um usuário A com plano ativo poderia consultar o pedido do usuário B.
+    // Correção: cross-check obrigatório entre orderId e user_id.
+    const supabaseAdmin = createClient(supabaseUrl, supabaseAdmin_, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    const { data: subscription, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .select('id, cakto_order_id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .eq('payment_status', 'approved')
+      .maybeSingle()
+
+    if (subError || !subscription) {
+      console.warn('[get-cakto-order] Usuário sem subscription ativa. userId:', user.id)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Acesso não autorizado' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+      )
+    }
+
+    // [SEC-FIX] IDOR: O orderId DEVE corresponder ao cakto_order_id da subscription
+    // do próprio usuário. Retorna 404 (não 403) para não confirmar existência.
+    if (!subscription.cakto_order_id || subscription.cakto_order_id !== orderIdStr) {
+      console.warn('[get-cakto-order] orderId não pertence ao usuário:', user.id.slice(0, 8))
+      return new Response(
+        JSON.stringify({ success: false, error: 'Pedido não encontrado' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
       )
     }
 
