@@ -81,9 +81,13 @@ export default async function handler(req, res) {
       signal: AbortSignal.timeout(10_000),
     })
 
-    // Tracking de lockout progressivo — indica possível credential stuffing
+    // Lockout progressivo — possível credential stuffing
     if (r.status === 429) {
       trackSecurityEvent('login_lockout', { ip, user_id: body.user_id?.slice?.(0, 8) }).catch(() => {})
+    }
+    // JWT inválido/expirado retornado pela EF — possível JWT forgery
+    if (r.status === 401) {
+      trackSecurityEvent('jwt_forgery', { ip, user_id: body.user_id?.slice?.(0, 8) }).catch(() => {})
     }
 
     res.setHeader('Content-Type', 'application/json')

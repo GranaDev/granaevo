@@ -19,6 +19,8 @@ export const config = {
   api: { bodyParser: false }, // multipart/form-data — sem parse automático
 }
 
+import { trackSecurityEvent } from './_alert.js'
+
 const EDGE_URL     = `${process.env.SUPABASE_URL ?? ''}/functions/v1/upload-profile-photo`
 const ANON_KEY     = process.env.SUPABASE_ANON_KEY ?? ''
 const PROXY_SECRET = process.env.PROXY_SECRET ?? ''
@@ -111,6 +113,7 @@ export default async function handler(req, res) {
 
   // ── 4. Rate limit por IP ───────────────────────────────────────────────────
   if (!_checkLimit(`upload:ip:${ip}`, RATE_MAX_IP)) {
+    trackSecurityEvent('upload_abuse', { ip, reason: 'rate_limit_ip' }).catch(() => {})
     res.setHeader('Retry-After', '3600')
     return res.status(429).json({ error: 'Limite de uploads por IP atingido. Aguarde 1 hora.' })
   }
@@ -118,6 +121,7 @@ export default async function handler(req, res) {
   // ── 5. Rate limit por userId ───────────────────────────────────────────────
   const userId = _extractUserId(authHeader.slice(7))
   if (userId && !_checkLimit(`upload:uid:${userId}`, RATE_MAX_USER)) {
+    trackSecurityEvent('upload_abuse', { ip, reason: 'rate_limit_user', uid: userId?.slice(0, 8) }).catch(() => {})
     res.setHeader('Retry-After', '3600')
     return res.status(429).json({ error: 'Limite de uploads por conta atingido. Aguarde 1 hora.' })
   }
@@ -165,6 +169,11 @@ export default async function handler(req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
   res.setHeader('Cache-Control', 'no-store')
+
+  // Rastrear rejeições da EF (MIME inválido, magic bytes falhou, tamanho)
+  if (edgeResponse.status === 400 || edgeResponse.status === 415) {
+    trackSecurityEvent('upload_abuse', { ip, reason: 'ef_rejected', status: edgeResponse.status, uid: userId?.slice(0, 8) ?? 'unknown' }).catch(() => {})
+  }
 
   res.status(edgeResponse.status)
      .setHeader('Content-Type', 'application/json')

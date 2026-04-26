@@ -28,6 +28,7 @@ const THRESHOLDS = {
   webhook_tamper:    { count:  3,  window:  60  }, // 3 secrets inválidos em 1min → probe no webhook
   login_lockout:     { count:  5,  window: 600  }, // 5 lockouts em 10min → credential stuffing
   upload_abuse:      { count: 15,  window: 300  }, // 15 uploads rejeitados em 5min → storage abuse
+  proxy_bypass:      { count:  5,  window: 120  }, // 5 tentativas sem proxy-secret em 2min → scan direto de EF
 }
 
 const LABELS = {
@@ -36,6 +37,7 @@ const LABELS = {
   webhook_tamper:   '🔴 Webhook Secret Inválido (possível fraude de pagamento)',
   login_lockout:    '⚠️  Múltiplos Lockouts (possível credential stuffing)',
   upload_abuse:     '⚠️  Abuso de Upload de Fotos',
+  proxy_bypass:     '🔴 Tentativa de Acesso Direto às Edge Functions (bypass de proxy Vercel)',
 }
 
 /**
