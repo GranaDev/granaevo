@@ -567,7 +567,7 @@ Deno.serve(async (req) => {
         <div class="logo-wrap">
           <div class="logo-ring"></div>
           <img class="logo-img"
-            src="https://raw.githubusercontent.com/GranaDev/granaevo/main/icon/granaevo-logo.jpg"
+            src="https://www.granaevo.com/assets/icons/granaevo-logo.jpg"
             alt="GranaEvo">
         </div>
         <span class="brand-name">GranaEvo</span>

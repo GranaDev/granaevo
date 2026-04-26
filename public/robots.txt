@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Allow: /planos
+Allow: /termos
+
+# Rotas autenticadas — sem conteúdo indexável
+Disallow: /dashboard
+Disallow: /primeiroacesso
+Disallow: /convidados
+Disallow: /atualizarplano
+Disallow: /login
+
+# API e infraestrutura — nunca indexar
+Disallow: /api/
+Disallow: /.well-known/
+
+Sitemap: https://www.granaevo.com/sitemap.xml

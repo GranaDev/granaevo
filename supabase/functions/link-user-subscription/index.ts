@@ -111,10 +111,12 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, message: "Assinatura não encontrada." }, 404);
     }
 
-    // Email do JWT deve bater com o email da subscription
+    // [SEC-FIX GHOST-004] Email mismatch retorna 404 (não 403) — impede enumeração
+    // de subscription UUIDs via diferença entre "não encontrado" e "não autorizado".
+    // Um atacante com JWT válido poderia testar UUIDs e saber quais existem via 403.
     if (sub.user_email?.toLowerCase().trim() !== verifiedEmail) {
-      console.warn("[link-user-subscription] Email JWT não confere com a subscription.");
-      return json({ success: false, message: "Assinatura não pertence a este usuário." }, 403);
+      console.warn("[link-user-subscription] Email JWT não confere com a subscription (retorno 404 intencional).");
+      return json({ success: false, message: "Assinatura não encontrada." }, 404);
     }
 
     if (sub.payment_status !== "approved" || !sub.is_active) {

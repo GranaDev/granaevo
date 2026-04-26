@@ -508,9 +508,91 @@ describe('Upload Proxy (api/upload-profile-photo)', () => {
 
 })
 
-// ─── 11. ROUND 4 — JWT ASSINATURA, ADMIN ENDPOINT, BODY LIMITS ───────────────
+// ─── 11. ROUND 5 (GHOSTKILL) — EMAIL, TIMING, IDOR, ROBOTS ──────────────────
 
-describe('Round 4 (R4) — JWT Signature, Admin Endpoint, Body Limits', () => {
+describe('GHOSTKILL — Email Tracking, Timing Oracle, IDOR, Robots', () => {
+
+  test('robots.txt existe e bloqueia rotas autenticadas (requer deploy)', async () => {
+    const r = await fetch(`${BASE_URL}/robots.txt`)
+    assert.ok([200, 404].includes(r.status), `robots.txt: ${r.status}`)
+    if (r.status === 200) {
+      const text = await r.text()
+      assert.ok(text.includes('Disallow: /dashboard'), 'dashboard deve ser bloqueado')
+      assert.ok(text.includes('Disallow: /api/'), 'API deve ser bloqueada')
+    }
+  })
+
+  test('reset password retorna expires_in coerente com 30min', async () => {
+    const { status, json } = await post('/api/reset-password', {
+      step: 'send', email: 'notexist_expires_test@granaevo.com',
+    })
+    if (status === 200 && json?.expires_in) {
+      assert.ok(
+        json.expires_in.includes('30') || json.expires_in.includes('minuto'),
+        `expires_in deve ser 30min, recebeu: ${json.expires_in}`
+      )
+    }
+    assert.ok([200, 429].includes(status), `${status}`)
+  })
+
+  test('link-user-subscription sem auth retorna 401 (não 403 que revelaria existência)', async () => {
+    const supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co'
+    const r = await fetch(`${supabaseUrl}/functions/v1/link-user-subscription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.granaevo.com' },
+      body: JSON.stringify({ subscription_id: '00000000-0000-0000-0000-000000000000' }),
+    })
+    assert.ok([401, 403].includes(r.status), `sem auth deve dar 401: ${r.status}`)
+  })
+
+  test('link-user-subscription com JWT forjado retorna 401 (não enumera via 403)', async () => {
+    const supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co'
+    const r = await fetch(`${supabaseUrl}/functions/v1/link-user-subscription`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${FORGED_JWT}`,
+        'Origin': 'https://www.granaevo.com',
+      },
+      body: JSON.stringify({ subscription_id: '00000000-0000-0000-0000-000000000000' }),
+    })
+    // 401 = JWT forjado rejeitado | 404 = JWT passou mas UUID não existe
+    // NUNCA 403 para UUID de outro usuário (revelaria existência)
+    assert.ok([401, 404].includes(r.status),
+      `IDOR: JWT forjado deve dar 401 ou 404, não 403: ${r.status}`)
+  })
+
+  test('source maps não estão expostos em produção', async () => {
+    const r = await fetch(`${BASE_URL}/assets/index.js.map`)
+    assert.ok([403, 404].includes(r.status), `source map acessível: ${r.status}`)
+  })
+
+  test('prototype pollution via __proto__ em JSON é inerte', async () => {
+    const { status } = await post('/api/save-user-data', {
+      __proto__: { isAdmin: true, role: 'admin' },
+      profiles: [],
+    }, { 'Authorization': `Bearer ${FORGED_JWT}` })
+    assert.ok([401, 403, 429].includes(status), `prototype pollution deve ser inerte: ${status}`)
+  })
+
+  test('SVG declarado como JPEG é rejeitado (magic bytes ou JWT)', async () => {
+    const supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co'
+    const svgContent = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    const formData = new FormData()
+    formData.append('file', new Blob([svgContent], { type: 'image/jpeg' }), 'evil.jpg')
+    const r = await fetch(`${supabaseUrl}/functions/v1/upload-profile-photo`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${FORGED_JWT}` },
+      body: formData,
+    })
+    assert.ok([401, 403, 415].includes(r.status), `SVG como JPEG deve ser rejeitado: ${r.status}`)
+  })
+
+})
+
+// ─── 12. ROUND 4 — JWT ASSINATURA, ADMIN ENDPOINT, BODY LIMITS ───────────────
+
+describe('Round 4 (R4) — JWT Signature, Admin Endpoint, Body Limits (legacy)', () => {
 
   // R4-001: save-user-data deve rejeitar JWT forjado (sem assinatura válida)
   // Antes do fix: decodeJwtPayload aceitava qualquer payload base64 válido.

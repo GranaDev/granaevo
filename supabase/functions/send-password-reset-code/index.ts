@@ -62,7 +62,7 @@ function neutralResponse(corsHeaders: Record<string, string>): Response {
     JSON.stringify({
       status:     'sent',
       message:    'Se o email estiver cadastrado com plano ativo, você receberá o código.',
-      expires_in: '6 horas',
+      expires_in: '30 minutos',
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
   )
@@ -143,8 +143,10 @@ Deno.serve(async (req) => {
     const code     = String(100_000 + (rnd[0] % 900_000)).padStart(6, '0')
     const codeHash = await hashCode(code)
 
+    // [SEC-FIX GHOST-003] 30 minutos — tempo suficiente para o usuário completar
+    // o reset, sem dar 6 horas para um atacante com acesso ao email.
     const expiresAt = new Date()
-    expiresAt.setHours(expiresAt.getHours() + 6)
+    expiresAt.setMinutes(expiresAt.getMinutes() + 30)
 
     console.log('[send-reset-code] Código gerado e hasheado (raw não logado)')
 
@@ -691,7 +693,7 @@ Deno.serve(async (req) => {
         <div class="logo-wrap">
           <div class="logo-ring"></div>
           <img class="logo-img"
-            src="https://raw.githubusercontent.com/GranaDev/granaevo/main/icon/granaevo-logo.jpg"
+            src="https://www.granaevo.com/assets/icons/granaevo-logo.jpg"
             alt="GranaEvo">
         </div>
         <span class="brand-name">GranaEvo</span>
@@ -738,7 +740,7 @@ Deno.serve(async (req) => {
         <div class="expiry-box">
           <div class="expiry-icon">⏱</div>
           <div class="expiry-content">
-            <div class="expiry-title">Este código expira em 6 horas</div>
+            <div class="expiry-title">Este código expira em 30 minutos</div>
             <div class="expiry-text">
               Válido até <span class="expiry-time">${expiresFormatted}</span>.
               Após este horário, solicite um novo código na tela de login.
@@ -820,7 +822,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         status:     'sent',
         message:    'Código enviado para seu email',
-        expires_in: '6 horas',
+        expires_in: '30 minutos',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )

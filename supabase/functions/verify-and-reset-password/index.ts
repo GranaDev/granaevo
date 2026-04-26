@@ -61,6 +61,21 @@ async function hashCode(code: string): Promise<string> {
     .join('')
 }
 
+/**
+ * Comparação de strings em tempo constante.
+ * [SEC-FIX GHOST-002] Previne timing oracle na verificação de hash.
+ * `a === b` vaza informação sobre o prefixo comum via diferença de tempo.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc  = new TextEncoder()
+  const aB   = enc.encode(a)
+  const bB   = enc.encode(b)
+  if (aB.length !== bB.length) return false
+  let diff   = 0
+  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  return diff === 0
+}
+
 /** Valida o token reCAPTCHA direto na API do Google. */
 async function verifyCaptchaToken(token: string): Promise<boolean> {
   try {
@@ -228,8 +243,9 @@ Deno.serve(async (req) => {
     }
 
     // ── 4. Verificar hash do código ────────────────────────────
+    // [SEC-FIX GHOST-002] timingSafeEqual previne timing oracle.
     const incomingHash = await hashCode(normalizedCode)
-    const hashMatch    = incomingHash === resetEntry.code_hash
+    const hashMatch    = timingSafeEqual(incomingHash, resetEntry.code_hash)
 
     if (!hashMatch) {
       const newAttempts = attempts + 1

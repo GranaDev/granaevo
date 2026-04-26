@@ -354,7 +354,7 @@ function buildInviteEmail(
         <div class="header-grid"></div>
         <div class="logo-wrap">
           <div class="logo-ring"></div>
-          <img class="logo-img" src="https://raw.githubusercontent.com/GranaDev/granaevo/main/icon/granaevo-logo.jpg" alt="GranaEvo">
+          <img class="logo-img" src="https://www.granaevo.com/assets/icons/granaevo-logo.jpg" alt="GranaEvo">
         </div>
         <span class="brand">GranaEvo</span>
         <span class="tagline">Domine suas finanças com inteligência</span>
