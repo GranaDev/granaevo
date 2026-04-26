@@ -138,13 +138,13 @@ Deno.serve(async (req: Request) => {
 
     if (!subscription) {
       console.log('[check-user-access] Sem subscription ativa para:', userId.slice(0, 8))
-      // Registra como falha de acesso para lockout progressivo
-      if (userEmail) {
-        await supabaseAdmin.rpc('record_failed_login', {
-          p_identifier:      userEmail,
-          p_identifier_type: 'email',
-        }).catch(() => {})
-      }
+      // [GHOST-004] record_failed_login NÃO deve ser chamado aqui.
+      // Ausência de subscription não é uma falha de autenticação — é uma
+      // falha de autorização de negócio. Usar record_failed_login aqui
+      // causava lockout progressivo em usuários legítimos sem plano ativo,
+      // bloqueando a conta por 15min/1h/24h desnecessariamente.
+      // O lockout progressivo é reservado exclusivamente para brute-force
+      // de credenciais (via login.js ou ataques diretos ao Supabase Auth).
       return deny()
     }
 

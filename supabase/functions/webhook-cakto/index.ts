@@ -43,12 +43,16 @@ Deno.serve(async (req) => {
 
     const rawBody = await req.text()
 
+    // [GHOST-001] Parsear JSON antes de validar o secret — mas resposta em caso
+    // de JSON inválido é 200 silencioso para não vazar comportamento do endpoint.
     let payload
     try {
       payload = JSON.parse(rawBody)
     } catch (e) {
       console.error('[webhook-cakto] Payload inválido:', e.message)
-      throw new Error('Payload inválido')
+      return new Response(JSON.stringify({ received: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200
+      })
     }
 
     // Extrair e apagar secret do payload antes de qualquer log
@@ -81,9 +85,12 @@ Deno.serve(async (req) => {
         }
       }).catch(() => {})
 
+      // [GHOST-001] Resposta silenciosa 200 — não revela que a secret estava errada.
+      // 401 informaria ao atacante que o endpoint existe e que a validação falhou,
+      // facilitando calibração de ataques. 200 silencioso é o padrão para webhooks.
       return new Response(
-        JSON.stringify({ error: 'Invalid secret' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        JSON.stringify({ received: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 

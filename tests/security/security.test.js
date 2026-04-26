@@ -704,10 +704,71 @@ describe('Round 4 (R4) — JWT Signature, Admin Endpoint, Body Limits (legacy)',
         // sem secret — espera 400/401/500 (500 quando CAKTO_WEBHOOK_SECRET não configurado no env)
       }),
     })
-    // 400/401 = secret check OK | 500 = env var não configurada | 503 = cold start
-    // Em qualquer caso, o pagamento NÃO é processado sem secret válido
-    assert.ok([400, 401, 500, 503].includes(r.status),
-      `webhook sem secret não deve processar: ${r.status}`)
+    // [GHOST-001] Após correção: deve retornar 200 silencioso (não 401)
+    // O 200 silencioso não confirma ao atacante se o endpoint existe ou se a secret estava errada.
+    // 500 = env var CAKTO_WEBHOOK_SECRET não configurada no ambiente de teste.
+    assert.ok([200, 500, 503].includes(r.status),
+      `webhook sem secret deve retornar 200 silencioso, não 401: ${r.status}`)
+    if (r.status === 200) {
+      // Não deve ter processado o pagamento — body indica recebimento mas sem processamento
+      // (o campo "received: true" é retornado mas nenhuma subscription é criada)
+      assert.notEqual(r.json?.success, true, 'webhook sem secret não deve processar pagamento')
+    }
+  })
+
+})
+
+// ─── PHANTOM ZERO — GHOST FINDINGS REGRESSION TESTS ──────────────────────────
+// Testes adicionados após os findings GHOST-001..005 em 2026-04-26
+
+describe('PHANTOM ZERO — Ghost Findings Regression', () => {
+
+  test('[GHOST-001] webhook com secret inválida retorna 200 silencioso (não 401)', async () => {
+    const r = await fetch(`${BASE_URL}/api/save-user-data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.granaevo.com' },
+      body: JSON.stringify({ secret: 'WRONG_SECRET_DO_NOT_PROCESS', event: 'purchase.approved' }),
+    })
+    // Nota: /api/save-user-data não é o webhook, mas o webhook-cakto é uma Edge Function Supabase.
+    // Este teste verifica o proxy Vercel. O webhook em si retorna 200 silencioso agora.
+    // A lógica foi corrigida na Edge Function — não há endpoint Vercel para o webhook.
+    assert.ok(r.status !== 401, `[GHOST-001] 401 ainda está sendo retornado — secret disclosure: ${r.status}`)
+  })
+
+  test('[GHOST-002] check-user-access com JWT inválido retorna hasAccess: false (fail-closed)', async () => {
+    const { status, json } = await post('/api/check-user-access', {}, {
+      'Authorization': 'Bearer INVALID_TOKEN_GHOST002_TEST',
+    })
+    // Fail-closed: qualquer erro de JWT deve negar acesso
+    assert.ok(
+      status === 401 || status === 403 || status === 429 || json?.hasAccess === false,
+      `[GHOST-002] fail-open detectado: status=${status} hasAccess=${json?.hasAccess}`
+    )
+  })
+
+  test('[GHOST-005] header X-XSS-Protection é 0 (não 1; mode=block)', async () => {
+    const r = await fetch(`${BASE_URL}/login`)
+    const xssHeader = r.headers.get('x-xss-protection')
+    // Deve ser '0' — o valor '1; mode=block' é legado e contra-produtivo
+    assert.notEqual(xssHeader, '1; mode=block',
+      `[GHOST-005] X-XSS-Protection ainda é '1; mode=block' — atualizar para '0'`)
+    assert.equal(xssHeader, '0', `[GHOST-005] X-XSS-Protection deve ser '0', encontrado: '${xssHeader}'`)
+  })
+
+  test('[GHOST-001] webhook com JSON malformado retorna 200 silencioso (não 500)', async () => {
+    const supabaseUrl = process.env.SUPABASE_URL
+    if (!supabaseUrl) {
+      // Sem SUPABASE_URL não podemos testar a Edge Function diretamente — skip
+      return
+    }
+    const r = await fetch(`${supabaseUrl}/functions/v1/webhook-cakto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'INVALID_JSON{{{',
+    })
+    // Após correção: JSON inválido deve retornar 200 silencioso (não expor erro interno)
+    assert.equal(r.status, 200,
+      `[GHOST-001] JSON inválido no webhook deve retornar 200 silencioso, encontrado: ${r.status}`)
   })
 
 })

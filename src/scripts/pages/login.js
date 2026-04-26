@@ -151,11 +151,16 @@ const RecoveryState = (() => {
 // ═══════════════════════════════════════════════════════════════
 //  TENTATIVAS DE LOGIN
 // ═══════════════════════════════════════════════════════════════
+// [GHOST-003] Contador de tentativas armazenado em localStorage (persistente entre abas)
+// ao invés de sessionStorage (resetado ao abrir nova aba). Um atacante que abria nova aba
+// resetava o contador e bypassa o captcha frontend. localStorage persiste entre abas e
+// sessões, tornando o bypass mais difícil. O reset apenas ocorre após login bem-sucedido.
+// Nota: o lockout progressivo server-side é a proteção primária — este é um layer adicional.
 const LoginAttempts = {
-    get()   { return parseInt(sessionStorage.getItem(CONFIG.KEYS.loginAttempts) || '0', 10); },
-    set(n)  { sessionStorage.setItem(CONFIG.KEYS.loginAttempts, String(Math.max(0, n))); },
+    get()   { try { return parseInt(localStorage.getItem(CONFIG.KEYS.loginAttempts) || '0', 10); } catch { return 0; } },
+    set(n)  { try { localStorage.setItem(CONFIG.KEYS.loginAttempts, String(Math.max(0, n))); } catch {} },
     inc()   { this.set(this.get() + 1); },
-    reset() { sessionStorage.removeItem(CONFIG.KEYS.loginAttempts); },
+    reset() { try { localStorage.removeItem(CONFIG.KEYS.loginAttempts); } catch {} },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -564,20 +569,22 @@ async function checkUserAccess() {
             }
         }
 
-        // Erro no proxy/servidor (404, 5xx) — não bloqueia o usuário.
-        // O login com email/senha já foi validado pelo Supabase Auth.
-        // Apenas nega se o servidor explicitamente retornar { hasAccess: false } com 200.
+        // [GHOST-002] Fail-closed: erros de servidor não concedem acesso.
+        // Antes era fail-open (5xx/timeout → hasAccess: true), permitindo que
+        // usuários com subscription cancelada acessassem o dashboard se o
+        // endpoint estivesse instável. Agora qualquer falha nega o acesso
+        // com mensagem amigável indicando problema temporário.
         if (response.status === 404 || response.status >= 500) {
-            console.warn('[checkUserAccess] Proxy indisponível (' + response.status + ') — acesso liberado');
-            return { hasAccess: true };
+            console.warn('[checkUserAccess] Proxy indisponível (' + response.status + ')');
+            return { hasAccess: false, serverError: true };
         }
         if (!response.ok) return { hasAccess: false };
         const result = await response.json();
         return { hasAccess: result?.hasAccess === true };
     } catch {
-        // Erro de rede ou timeout — não bloqueia o usuário
-        console.warn('[checkUserAccess] Erro de rede — acesso liberado');
-        return { hasAccess: true };
+        // [GHOST-002] Erro de rede ou timeout — fail-closed
+        console.warn('[checkUserAccess] Erro de rede — acesso negado');
+        return { hasAccess: false, serverError: true };
     }
 }
 
@@ -726,6 +733,9 @@ loginForm?.addEventListener('submit', async (e) => {
             const lockMsg = checkAccessResult?.lockMessage;
             if (lockMsg) {
                 showAuthMessage(sanitizeText(lockMsg), 'error');
+            } else if (checkAccessResult?.serverError) {
+                // [GHOST-002] Erro de servidor — mensagem distinta de "sem plano"
+                showAuthMessage('Serviço temporariamente indisponível. Tente novamente em instantes.', 'error');
             } else {
                 showAuthMessage('Você precisa de um plano ativo para acessar o sistema.', 'error');
                 setTimeout(() => window.location.replace('planos.html'), 2500);
