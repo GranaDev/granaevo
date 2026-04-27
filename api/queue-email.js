@@ -94,8 +94,11 @@ export default async function handler(req, res) {
         headers: {
           'Authorization':  `Bearer ${QSTASH_TOKEN}`,
           'Content-Type':   'application/json',
-          'Upstash-Forward-Authorization': `Bearer ${ANON_KEY}`,
-          'Upstash-Forward-apikey':        ANON_KEY,
+          'Upstash-Forward-Authorization':  `Bearer ${ANON_KEY}`,
+          'Upstash-Forward-apikey':         ANON_KEY,
+          // [GOD4-001] EFs com PROXY_SECRET configurado rejeitam chamadas sem este header.
+          // Sem o forward, QStash entregaria sem x-proxy-secret → 401 → retry exausto → email nunca enviado.
+          'Upstash-Forward-x-proxy-secret': process.env.PROXY_SECRET ?? '',
           'Upstash-Retries': '3',
           'Upstash-Delay':   '0s',
         },

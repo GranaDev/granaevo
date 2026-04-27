@@ -187,13 +187,15 @@ Deno.serve(async (req) => {
     }
 
     // ── Validação de nova senha (somente reset_password) ───────
+    // [GOD4-003] Alinhado com verify-guest-invite (PASSWORD_MIN = 10).
+    // Antes aceitava 8 chars — inconsistência com o fluxo de convite.
     if (action === 'reset_password') {
       if (
         typeof newPassword !== 'string' ||
-        newPassword.length < 8           ||
+        newPassword.length < 10          ||
         newPassword.length > 128
       ) {
-        return json({ status: 'error', message: 'Senha inválida.' }, 400)
+        return json({ status: 'error', message: 'A senha deve ter no mínimo 10 caracteres.' }, 400)
       }
     }
 

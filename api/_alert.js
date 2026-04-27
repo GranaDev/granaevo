@@ -17,9 +17,10 @@ const RESEND_KEY  = process.env.RESEND_API_KEY
 const ALERT_EMAILS = (process.env.SECURITY_ALERT_EMAIL ?? '')
   .split(',').map(e => e.trim()).filter(Boolean)
 
-// Destinatários garantidos mesmo sem env var configurada
-const _DEFAULT_EMAILS = ['snakitohachi47@gmail.com', 'oliveiralucas00224@gmail.com']
-const ALERT_RECIPIENTS = ALERT_EMAILS.length > 0 ? ALERT_EMAILS : _DEFAULT_EMAILS
+// [GOD4-002] Emails pessoais removidos do código-fonte — usar SECURITY_ALERT_EMAIL env var.
+// Se a env var não estiver configurada, alertas são silenciosos (sem envio de email).
+// Isso é seguro: logs no Vercel e Supabase ainda registram todos os eventos.
+const ALERT_RECIPIENTS = ALERT_EMAILS
 
 // Tipo de evento → { quantos eventos na janela disparam alerta, janela em segundos }
 const THRESHOLDS = {
@@ -81,7 +82,7 @@ export async function trackSecurityEvent(eventType, meta = {}) {
 }
 
 async function _sendAlert(eventType, count, meta) {
-  if (!RESEND_KEY) return
+  if (!RESEND_KEY || ALERT_RECIPIENTS.length === 0) return
 
   const label   = LABELS[eventType] ?? eventType
   const subject = `[GranaEvo Security] ${label}`

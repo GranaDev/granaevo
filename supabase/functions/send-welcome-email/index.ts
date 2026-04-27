@@ -710,16 +710,16 @@ Deno.serve(async (req) => {
       <div class="email-footer">
         <div class="footer-brand">GranaEvo</div>
         <div class="footer-links">
-          <a href="https://granaevo.vercel.app" class="footer-link">Plataforma</a>
+          <a href="https://granaevo.com" class="footer-link">Plataforma</a>
           <span class="footer-sep">·</span>
-          <a href="https://granaevo.vercel.app/ajuda" class="footer-link">Ajuda</a>
+          <a href="https://granaevo.com/ajuda" class="footer-link">Ajuda</a>
           <span class="footer-sep">·</span>
           <a href="mailto:suporte@granaevo.com" class="footer-link">Suporte</a>
         </div>
         <div class="footer-divider-line"></div>
         <div class="footer-copy">
           © 2026 GranaEvo. Todos os direitos reservados.<br>
-          Você recebeu este email porque realizou uma compra em granaevo.vercel.app
+          Você recebeu este email porque realizou uma compra em granaevo.com
         </div>
       </div>
 
@@ -727,7 +727,7 @@ Deno.serve(async (req) => {
 
     <!-- Outer footer -->
     <div class="outer-footer">
-      <span>Evolua suas finanças com inteligência · granaevo.vercel.app</span>
+      <span>Evolua suas finanças com inteligência · granaevo.com</span>
     </div>
 
   </div><!-- /wrapper -->

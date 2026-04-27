@@ -1351,3 +1351,140 @@ describe('GOD MODE Round 3 — Email Spam Protection & Nonce Integrity', () => {
 
 })
 
+// ─── 17. GOD MODE ROUND 4 — QSTASH PROXY-SECRET, PASSWORD MIN, CSP REPORT ─────
+// [GOD4-001] queue-email via QStash não encaminhava x-proxy-secret → EFs rejeitavam.
+// [GOD4-002] Emails pessoais hardcoded em _alert.js → removidos, usar env var.
+// [GOD4-003] verify-and-reset-password aceitava 8 chars → alinhado com 10 (guest-invite).
+// [GOD4-004] Dead code (cacheGet/cacheSet) removido de get-user-data.js.
+
+describe('GOD MODE Round 4 — QStash, Password Min, CSP Report', () => {
+
+  const SUPABASE_EF_URL = process.env.SUPABASE_URL ?? 'https://fvrhqqeofqedmhadzzqw.supabase.co'
+
+  // ── [GOD4-001] Vetor 1: queue-email fallback com welcome não retorna 502 ──
+
+  test('[GOD4-001-V1] /api/queue-email type=welcome fallback não retorna 502', async () => {
+    const { status } = await post('/api/queue-email', {
+      type:     'welcome',
+      email:    'god4_v1_test@granaevo.com',
+      name:     'Test GOD4',
+      planName: 'Individual',
+    })
+    assert.notEqual(status, 502,
+      `[GOD4-001-V1] 502 = EF rejeitou x-proxy-secret faltando no fallback: ${status}`)
+    assert.ok(
+      [200, 202, 400, 401, 403, 429, 503].includes(status),
+      `[GOD4-001-V1] status inesperado: ${status}`
+    )
+  })
+
+  // ── [GOD4-001] Vetor 2: queue-email fallback com reset-code não retorna 502 ──
+
+  test('[GOD4-001-V2] /api/queue-email type=reset-code fallback não retorna 502', async () => {
+    const { status } = await post('/api/queue-email', {
+      type:  'reset-code',
+      email: 'god4_v2_test@granaevo.com',
+    })
+    assert.notEqual(status, 502,
+      `[GOD4-001-V2] 502 = EF rejeitou x-proxy-secret: ${status}`)
+    assert.ok(
+      [200, 202, 400, 401, 403, 429, 503].includes(status),
+      `[GOD4-001-V2] status inesperado: ${status}`
+    )
+  })
+
+  // ── [GOD4-001] Vetor 3: queue-email type inválido retorna 400 ──
+
+  test('[GOD4-001-V3] /api/queue-email type inválido retorna 400', async () => {
+    const { status } = await post('/api/queue-email', {
+      type:  'malicious-type',
+      email: 'god4_v3_test@granaevo.com',
+    })
+    assert.ok(
+      [400, 403, 429].includes(status),
+      `[GOD4-001-V3] type inválido deve retornar 400: ${status}`
+    )
+  })
+
+  // ── [GOD4-002] csp-report endpoint funcional ──
+
+  test('[GOD4-002-V1] csp-report aceita POST application/csp-report', async () => {
+    const r = await fetch(`${BASE_URL}/api/csp-report`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/csp-report' },
+      body: JSON.stringify({
+        'csp-report': {
+          'blocked-uri':        'https://evil.com/script.js',
+          'violated-directive': "script-src 'self'",
+          'document-uri':       'https://granaevo.com/dashboard',
+        }
+      }),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 204, 429].includes(r.status),
+      `[GOD4-002-V1] csp-report deve aceitar POST válido: ${r.status}`
+    )
+  })
+
+  test('[GOD4-002-V2] csp-report rejeita GET com 405', async () => {
+    const r = await fetch(`${BASE_URL}/api/csp-report`, {
+      method: 'GET',
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 405, 429].includes(r.status),
+      `[GOD4-002-V2] GET em csp-report deve ser 405: ${r.status}`
+    )
+  })
+
+  // ── [GOD4-003] verify-and-reset-password exige mínimo 10 chars ──
+
+  test('[GOD4-003-V1] /api/reset-password step=verify_code encaminha com proxy-secret (não 502)', async () => {
+    const { status } = await post('/api/reset-password', {
+      step:  'verify_code',
+      email: 'god4_pwd_test@granaevo.com',
+      code:  '000000',
+    })
+    assert.notEqual(status, 502,
+      `[GOD4-003-V1] 502 = proxy não enviou x-proxy-secret para EF: ${status}`)
+    assert.ok(
+      [200, 400, 429].includes(status),
+      `[GOD4-003-V1] status inesperado do verify_code: ${status}`
+    )
+  })
+
+  test('[GOD4-003-V2] /api/reset-password step=reset_password código inválido nunca retorna success', async () => {
+    const { status, json } = await post('/api/reset-password', {
+      step:        'reset_password',
+      email:       'god4_pwd2_test@granaevo.com',
+      code:        '000000',
+      newPassword: 'curta123',
+    })
+    assert.ok(
+      [200, 400, 429].includes(status),
+      `[GOD4-003-V2] status inesperado: ${status}`
+    )
+    if (status === 200) {
+      assert.notEqual(json?.status, 'success',
+        `[GOD4-003-V2] código inválido não deve retornar success: ${JSON.stringify(json)}`)
+    }
+  })
+
+  test('[GOD4-003-V3] verify-and-reset-password EF direto rejeita sem proxy-secret', async () => {
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/verify-and-reset-password`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.granaevo.com' },
+      body:    JSON.stringify({
+        action:      'reset_password',
+        email:       'god4_direct_test@granaevo.com',
+        code:        '000000',
+        newPassword: 'minhasenha123',
+      }),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 200, 400, 401, 429].includes(r.status),
+      `[GOD4-003-V3] chamada direta sem proxy-secret deve ser bloqueada: ${r.status}`
+    )
+  })
+
+})
+

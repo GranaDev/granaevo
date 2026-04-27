@@ -33,35 +33,6 @@ const REDIS_TOKEN          = process.env.UPSTASH_REDIS_REST_TOKEN;
 const RATE_LIMIT_MAX_IP    = 20;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const MAX_RATE_STORE_SIZE  = 10_000;
-const CACHE_TTL_SECS       = 30;   // cache de dados por usuário — reduz invocações ~95%
-
-// ========== CACHE REDIS ==========
-async function cacheGet(userId) {
-    if (!REDIS_URL || !REDIS_TOKEN) return null;
-    try {
-        const res = await fetch(`${REDIS_URL}/get/gd:${userId}`, {
-            headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-            signal:  AbortSignal.timeout(2_000),
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
-        return data?.result ?? null;
-    } catch { return null; }
-}
-
-async function cacheSet(userId, value) {
-    if (!REDIS_URL || !REDIS_TOKEN) return;
-    try {
-        // Upstash REST: usar pipeline para passar TTL como argumento de comando,
-        // não como campo JSON (que seria armazenado como valor literal).
-        await fetch(`${REDIS_URL}/pipeline`, {
-            method:  'POST',
-            headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
-            body:    JSON.stringify([["SET", `gd:${userId}`, value, "EX", String(CACHE_TTL_SECS)]]),
-            signal:  AbortSignal.timeout(2_000),
-        });
-    } catch { /* cache miss não é crítico */ }
-}
 
 // ========== RATE LIMITER IN-MEMORY ==========
 const rateLimitStore = new Map();

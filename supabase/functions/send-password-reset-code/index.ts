@@ -795,7 +795,7 @@ Deno.serve(async (req) => {
         </div>
         <div class="tip-row">
           <div class="tip-check">✓</div>
-          <div class="tip-text">Use uma senha forte: mínimo 8 caracteres com letras, números e símbolos</div>
+          <div class="tip-text">Use uma senha forte: mínimo 10 caracteres com letras, números e símbolos</div>
         </div>
         <div class="tip-row">
           <div class="tip-check">✓</div>
@@ -823,7 +823,7 @@ Deno.serve(async (req) => {
     </div>
 
     <div class="outer-footer">
-      <span>Sua segurança é nossa prioridade · granaevo.vercel.app</span>
+      <span>Sua segurança é nossa prioridade · granaevo.com</span>
     </div>
 
   </div>
