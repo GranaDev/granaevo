@@ -111,10 +111,18 @@ export default async function handler(req, res) {
   }
 
   // ── Fallback: envio síncrono direto ──────────────────────────────────────
+  // [SEC-FIX GOD-001] proxy secret incluído — send-welcome-email e send-guest-invite
+  // exigem x-proxy-secret para bloquear chamadas diretas. Sem este header o fallback
+  // falharia silenciosamente durante indisponibilidade do QStash.
   try {
     const r = await fetch(targetUrl, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}`, 'apikey': ANON_KEY },
+      headers: {
+        'Content-Type':   'application/json',
+        'Authorization':  `Bearer ${ANON_KEY}`,
+        'apikey':         ANON_KEY,
+        'x-proxy-secret': process.env.PROXY_SECRET ?? '',
+      },
       body:    payloadStr,
       signal:  AbortSignal.timeout(15_000),
     })

@@ -20,9 +20,35 @@ function isValidEmail(email: string): boolean {
   return /^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/.test(email)
 }
 
+// [SEC-FIX GOD-001] timing-safe compare para proxy secret
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder()
+  const aB  = enc.encode(a)
+  const bB  = enc.encode(b)
+  if (aB.length !== bB.length) return false
+  let diff = 0
+  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  return diff === 0
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204 })
+  }
+
+  // [SEC-FIX GOD-001] Proxy secret obrigatório — bloqueia chamadas diretas.
+  // Sem esta proteção, qualquer atacante com a anon_key pública pode chamar
+  // este endpoint diretamente para enviar spam com branding GranaEvo.
+  const proxySecret = Deno.env.get('PROXY_SECRET')
+  if (proxySecret) {
+    const received = req.headers.get('x-proxy-secret') ?? ''
+    if (!timingSafeEqual(received, proxySecret)) {
+      console.warn('[send-welcome-email] Proxy secret inválido — chamada direta bloqueada')
+      return new Response(
+        JSON.stringify({ success: false, error: 'Não autorizado.' }),
+        { headers: corsHeaders, status: 401 }
+      )
+    }
   }
 
   try {

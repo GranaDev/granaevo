@@ -325,11 +325,14 @@ Deno.serve(async (req) => {
             return respond(jsonErr(corsHeaders, 'Requisição inválida.', 400))
         }
 
-        // Registra o nonce antes de consumir (permite validação)
-        // Se já existe, consumeNonce retorna false
+        // Registra o nonce com TTL explícito de 2 minutos antes de consumir.
+        // [SEC-FIX GOD-002] expires_at agora sempre definido no insert — sem depender
+        // do DEFAULT do banco. consumeNonce filtra por expires_at > NOW(), portanto
+        // sem este campo o nonce nunca seria consumido (NULL > timestamp = NULL/false).
+        const nonceExpiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString()
         await supabaseAdmin
             .from('invite_nonces')
-            .insert({ nonce })
+            .insert({ nonce, expires_at: nonceExpiresAt })
             .then(() => {})  // ignora erro de duplicata — consumeNonce tratará
 
         const nonceValido = await consumeNonce(supabaseAdmin, nonce)

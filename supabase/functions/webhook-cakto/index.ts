@@ -397,6 +397,8 @@ async function enviarEmailBoasVindas(email: string, name: string, planName: stri
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          // [SEC-FIX GOD-001] proxy secret exigido pelo send-welcome-email
+          'x-proxy-secret': Deno.env.get('PROXY_SECRET') ?? '',
         },
         body: JSON.stringify({ email, name, planName }),
       }
