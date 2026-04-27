@@ -33,9 +33,20 @@ function getCorsHeaders(req: Request): Record<string, string> {
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
   return {
     'Access-Control-Allow-Origin':  allowed,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-proxy-secret',
     'Vary': 'Origin',
   }
+}
+
+// [FINAL-H03] timing-safe compare — previne timing oracle no proxy secret
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder()
+  const aB  = enc.encode(a)
+  const bB  = enc.encode(b)
+  if (aB.length !== bB.length) return false
+  let diff = 0
+  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  return diff === 0
 }
 
 /** Regex segura para orderId — apenas chars que a Cakto usa em IDs */
@@ -60,6 +71,21 @@ Deno.serve(async (req) => {
     )
   }
 
+  // [FINAL-M04] Proxy secret opcional — bloqueia chamadas diretas que bypassam
+  // o rate limit Vercel. Se PROXY_SECRET não estiver configurado, aceita qualquer
+  // origem (graceful fallback — JWT auth ainda protege o endpoint).
+  const proxySecret = Deno.env.get('PROXY_SECRET')
+  if (proxySecret) {
+    const received = req.headers.get('x-proxy-secret') ?? ''
+    if (!timingSafeEqual(received, proxySecret)) {
+      console.warn('[get-cakto-order] Proxy secret inválido — chamada direta bloqueada')
+      return new Response(
+        JSON.stringify({ success: false, error: 'Não autorizado' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      )
+    }
+  }
+
   try {
     // ── [SEC-AUTH] Verificar JWT no header Authorization ─────────────────────
     const authHeader = req.headers.get('Authorization')
@@ -70,11 +96,10 @@ Deno.serve(async (req) => {
       )
     }
 
-    const supabaseUrl    = Deno.env.get('SUPABASE_URL')    ?? ''
-    const supabaseAnon   = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const supabaseUrl    = Deno.env.get('SUPABASE_URL')             ?? ''
     const supabaseAdmin_ = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-    if (!supabaseUrl || !supabaseAnon || !supabaseAdmin_) {
+    if (!supabaseUrl || !supabaseAdmin_) {
       console.error('[get-cakto-order] Variáveis de ambiente do Supabase não configuradas')
       return new Response(
         JSON.stringify({ success: false, error: 'Configuração do servidor incompleta' }),
@@ -82,12 +107,23 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Valida o JWT com o Supabase (usando anon key + JWT do usuário)
-    const supabaseClient = createClient(supabaseUrl, supabaseAnon, {
-      global: { headers: { Authorization: authHeader } },
+    // [FINAL-H03] Usa supabaseAdmin.auth.getUser(token) — padrão correto para
+    // validação ES256 via JWKS, igual a todas as outras Edge Functions.
+    // O padrão anterior (createClient + global Authorization header) era legado
+    // e menos explícito sobre qual JWT está sendo verificado.
+    const token = authHeader.slice(7).trim()
+    if (!token || token.length < 20) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Token inválido' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      )
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseAdmin_, {
+      auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
     })
 
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
 
     if (userError || !user) {
       return new Response(
@@ -127,14 +163,6 @@ Deno.serve(async (req) => {
     }
 
     // ── [SEC-AUTHZ + IDOR FIX] Verificar que orderId pertence ao usuário ──────
-    // [SEC-FIX] IDOR: Versão anterior apenas verificava que o usuário tem
-    // subscription ativa, sem verificar se o orderId pertence a ESSE usuário.
-    // Um usuário A com plano ativo poderia consultar o pedido do usuário B.
-    // Correção: cross-check obrigatório entre orderId e user_id.
-    const supabaseAdmin = createClient(supabaseUrl, supabaseAdmin_, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
-
     const { data: subscription, error: subError } = await supabaseAdmin
       .from('subscriptions')
       .select('id, cakto_order_id')

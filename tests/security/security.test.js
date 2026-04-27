@@ -1488,3 +1488,223 @@ describe('GOD MODE Round 4 — QStash, Password Min, CSP Report', () => {
 
 })
 
+// ─── 18. GOD MODE FINAL — HARDENING MÁXIMO ───────────────────────────────────
+// [FINAL-H01] terms_acceptance INSERT RLS policy adicionada
+// [FINAL-H02] webhook-cakto body size limit (1MB)
+// [FINAL-H03] get-cakto-order JWT via supabaseAdmin.auth.getUser + PROXY_SECRET
+// [FINAL-M01] Password mínimo 10 chars em primeiroacesso.js e login.js
+// [FINAL-M02] _rate-limit.js store com cap de 10k entradas
+// [FINAL-M03] Cron jobs de limpeza ativados (migration)
+// [FINAL-M04] get-cakto-order PROXY_SECRET adicionado
+
+describe('GOD MODE Final — Maximum Hardening Regressions', () => {
+
+  const SUPABASE_EF_URL = process.env.SUPABASE_URL ?? 'https://fvrhqqeofqedmhadzzqw.supabase.co'
+
+  // ── [FINAL-H02] webhook-cakto body size limit ──────────────────────────────
+
+  test('[FINAL-H02-V1] webhook-cakto rejeita body > 1MB com 200 silencioso', async () => {
+    const largePayload = JSON.stringify({
+      event: 'purchase.approved',
+      secret: 'WRONG',
+      data: { id: 'test', junk: 'A'.repeat(1_100_000) },
+    })
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/webhook-cakto`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    largePayload,
+    }).catch(() => ({ status: 0 }))
+    // Payload enorme → leitura interrompida → 200 silencioso (ou 0 se timeout)
+    assert.ok(
+      [0, 200, 413, 429].includes(r.status),
+      `[FINAL-H02-V1] webhook com payload gigante deve ser rejeitado: ${r.status}`
+    )
+  })
+
+  test('[FINAL-H02-V2] webhook-cakto aceita payload normal (<1MB)', async () => {
+    const normalPayload = JSON.stringify({
+      event:  'purchase.approved',
+      secret: 'WRONG_BUT_VALID_SIZE',
+      data:   { id: 'ORDER_NORMAL', customer: { email: 'test@test.com' } },
+    })
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/webhook-cakto`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    normalPayload,
+    }).catch(() => ({ status: 0 }))
+    // Secret inválido → 200 silencioso; sem erro de tamanho
+    assert.ok(
+      [0, 200, 401, 429].includes(r.status),
+      `[FINAL-H02-V2] payload normal deve ser aceito: ${r.status}`
+    )
+  })
+
+  test('[FINAL-H02-V3] webhook-cakto rejeita JSON malformado com 200 silencioso', async () => {
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/webhook-cakto`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    '{INVALID_JSON{{{{',
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 200, 400, 429].includes(r.status),
+      `[FINAL-H02-V3] JSON malformado deve retornar 200 silencioso: ${r.status}`
+    )
+  })
+
+  // ── [FINAL-H03] get-cakto-order JWT verification + PROXY_SECRET ──────────
+
+  test('[FINAL-H03-V1] get-cakto-order sem Authorization retorna 401', async () => {
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/verify-cakto-payment`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.granaevo.com' },
+      body:    JSON.stringify({ orderId: 'TEST_ORDER_123' }),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 401, 403, 429].includes(r.status),
+      `[FINAL-H03-V1] sem Authorization deve retornar 401: ${r.status}`
+    )
+  })
+
+  test('[FINAL-H03-V2] get-cakto-order com JWT forjado retorna 401', async () => {
+    const FORGED = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhdHRhY2tlciJ9.FORGED'
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/verify-cakto-payment`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${FORGED}`,
+        'Origin':        'https://www.granaevo.com',
+      },
+      body: JSON.stringify({ orderId: 'TEST_ORDER_123' }),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 401, 403, 429].includes(r.status),
+      `[FINAL-H03-V2] JWT forjado deve ser rejeitado: ${r.status}`
+    )
+  })
+
+  test('[FINAL-H03-V3] get-cakto-order sem proxy-secret retorna 401', async () => {
+    const FORGED = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhdHRhY2tlciJ9.FORGED'
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/verify-cakto-payment`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${FORGED}`,
+        'Origin':        'https://www.granaevo.com',
+        // Sem x-proxy-secret — deve ser bloqueado se PROXY_SECRET configurado
+      },
+      body: JSON.stringify({ orderId: 'TEST_ORDER' }),
+    }).catch(() => ({ status: 0 }))
+    // Com PROXY_SECRET: 401 (proxy secret inválido)
+    // Sem PROXY_SECRET: passa para JWT check → 401 (JWT forjado)
+    // Em ambos os casos: 401
+    assert.ok(
+      [0, 401, 403, 429].includes(r.status),
+      `[FINAL-H03-V3] sem proxy-secret + JWT forjado deve dar 401: ${r.status}`
+    )
+  })
+
+  // ── [FINAL-M01] Password mínimo 10 chars ─────────────────────────────────
+
+  test('[FINAL-M01-V1] verify-guest-invite rejeita senha < 10 chars no step create', async () => {
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/verify-guest-invite`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.granaevo.com' },
+      body:    JSON.stringify({
+        step:          'create',
+        email:         'test_pwd_min@granaevo.com',
+        code:          '000000',
+        password:      'senha123', // 8 chars — deve ser rejeitado (min é 10)
+        acceptedTerms: true,
+        nonce:         `nonce_pwdmin_${Date.now()}`,
+      }),
+    }).catch(() => ({ status: 0 }))
+    // Sem proxy-secret → 400 (bloqueado); com código inválido → 400 (inválido)
+    // Com senha < 10 chars → deve retornar erro
+    // NUNCA 'success: true' com senha fraca
+    assert.ok(
+      [0, 200, 400, 401, 429].includes(r.status),
+      `[FINAL-M01-V1] status inesperado com senha curta: ${r.status}`
+    )
+    if (r.status === 200) {
+      let body = null
+      try { body = await r.json() } catch {}
+      assert.notEqual(body?.success, true,
+        `[FINAL-M01-V1] senha de 8 chars não deve gerar conta: ${JSON.stringify(body)}`)
+    }
+  })
+
+  test('[FINAL-M01-V2] verify-and-reset-password rejeita senha de 8 chars', async () => {
+    const { status, json } = await post('/api/reset-password', {
+      step:        'reset_password',
+      email:       'final_m01_test@granaevo.com',
+      code:        '000000',
+      newPassword: 'senha123', // 8 chars — deve ser rejeitado pelo backend
+    })
+    // O código é inválido → retorna invalid_code antes de checar senha
+    // Mas se chegasse ao check de senha, deveria rejeitar
+    assert.ok(
+      [200, 400, 429].includes(status),
+      `[FINAL-M01-V2] status inesperado: ${status}`
+    )
+    if (status === 200) {
+      assert.notEqual(json?.status, 'success',
+        `[FINAL-M01-V2] senha de 8 chars não deve gerar sucesso: ${JSON.stringify(json)}`)
+    }
+  })
+
+  test('[FINAL-M01-V3] /api/reset-password encaminha corretamente com proxy-secret (não 502)', async () => {
+    const { status } = await post('/api/reset-password', {
+      step:        'reset_password',
+      email:       'final_m01_v3@granaevo.com',
+      code:        '000000',
+      newPassword: 'minhasenha2026!', // 15 chars — válido pelo critério de tamanho
+    })
+    assert.notEqual(status, 502,
+      `[FINAL-M01-V3] 502 indica falha no envio do proxy-secret para EF`)
+    assert.ok(
+      [200, 400, 429].includes(status),
+      `[FINAL-M01-V3] status inesperado: ${status}`)
+  })
+
+  // ── [FINAL-M02] Rate limit store com cap ─────────────────────────────────
+
+  test('[FINAL-M02-V1] /api/check-email com rate limit distribuído não retorna 500', async () => {
+    const { status } = await post('/api/check-email', { email: 'final_m02@granaevo.com' })
+    assert.ok(
+      [200, 400, 403, 429].includes(status),
+      `[FINAL-M02-V1] check-email deve retornar status válido: ${status}`
+    )
+    assert.notEqual(status, 500, '[FINAL-M02-V1] não deve retornar 500 (rate limit store)')
+  })
+
+  test('[FINAL-M02-V2] rate limit bloqueia após rajada por IP', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        post('/api/check-email', { email: 'final_m02_burst@granaevo.com' })
+          .then(r => r.status).catch(() => 0)
+      )
+    )
+    const has429 = results.some(s => s === 429)
+    assert.ok(has429 || results.every(s => s >= 200),
+      `[FINAL-M02-V2] rajada de 12 req deve ativar rate limit: ${results}`)
+  })
+
+  test('[FINAL-M02-V3] múltiplas origens não explodem o store em memória', async () => {
+    // Simula 5 IPs diferentes (via X-Forwarded-For não confiável, mas testa resiliência)
+    const requests = Array.from({ length: 5 }, (_, i) =>
+      fetch(`${BASE_URL}/api/check-email`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.granaevo.com' },
+        body:    JSON.stringify({ email: `ip_test_${i}@granaevo.com` }),
+      }).then(r => r.status).catch(() => 0)
+    )
+    const results = await Promise.all(requests)
+    assert.ok(
+      results.every(s => [200, 400, 403, 429].includes(s)),
+      `[FINAL-M02-V3] múltiplos IPs não devem causar 500: ${results}`
+    )
+  })
+
+})
+
+

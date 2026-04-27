@@ -28,6 +28,32 @@ async function hashSensitiveData(value: string | null): Promise<string | null> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
+// [FINAL-H02] Limite de tamanho de body para webhook-cakto.
+// req.text() sem limite bufferiza payloads ilimitados em memória.
+// Webhooks da Cakto são pequenos (<100KB). Limite de 1MB por segurança.
+const MAX_WEBHOOK_BODY_BYTES = 1_048_576 // 1 MB
+
+async function readBodyWithLimit(req: Request, maxBytes: number): Promise<string> {
+  const reader = req.body?.getReader()
+  if (!reader) return ''
+  const chunks: Uint8Array[] = []
+  let total = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done || !value) break
+    total += value.byteLength
+    if (total > maxBytes) {
+      reader.cancel().catch(() => {})
+      throw Object.assign(new Error('TOO_LARGE'), { status: 413 })
+    }
+    chunks.push(value)
+  }
+  const merged = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength }
+  return new TextDecoder().decode(merged)
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204 })
@@ -41,7 +67,19 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    const rawBody = await req.text()
+    // [FINAL-H02] Leitura com limite de tamanho — impede exhaustão de memória
+    let rawBody: string
+    try {
+      rawBody = await readBodyWithLimit(req, MAX_WEBHOOK_BODY_BYTES)
+    } catch (e: any) {
+      if (e?.status === 413) {
+        console.warn('[webhook-cakto] Payload excede 1MB — rejeitado')
+        return new Response(JSON.stringify({ received: true }), {
+          headers: { 'Content-Type': 'application/json' }, status: 200
+        })
+      }
+      throw e
+    }
 
     // [GHOST-001] Parsear JSON antes de validar o secret — mas resposta em caso
     // de JSON inválido é 200 silencioso para não vazar comportamento do endpoint.

@@ -1101,8 +1101,8 @@ if (buttons.changePassword) {
             return;
         }
 
-        if (newPass.length < 8 || newPass.length > 128) {
-            showError('A senha deve ter entre 8 e 128 caracteres.');
+        if (newPass.length < 10 || newPass.length > 128) {
+            showError('A senha deve ter entre 10 e 128 caracteres.');
             return;
         }
 

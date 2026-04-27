@@ -364,8 +364,8 @@ togglePassword2?.addEventListener('click', () => {
 // ==========================================
 function checkPasswordStrength(password) {
     let strength = 0;
-    if (password.length >= 8)                                  strength++;
-    if (password.length >= 12)                                 strength++;
+    if (password.length >= 10)                                 strength++;
+    if (password.length >= 14)                                 strength++;
     if (/[a-z]/.test(password) && /[A-Z]/.test(password))     strength++;
     if (/\d/.test(password))                                   strength++;
     if (/[^a-zA-Z0-9]/.test(password))                        strength++;
@@ -377,7 +377,7 @@ passwordInput?.addEventListener('input', () => {
 
     if (strength === 0) {
         strengthFill.className   = 'strength-fill';
-        strengthText.textContent = 'Mínimo 8 caracteres';
+        strengthText.textContent = 'Mínimo 10 caracteres';
     } else if (strength <= 2) {
         strengthFill.className   = 'strength-fill sw-33 strength-weak';
         strengthText.textContent = 'Senha fraca';
@@ -471,8 +471,8 @@ accessForm?.addEventListener('submit', async (e) => {
     const password        = passwordInput.value;
     const confirmPassword = confirmPasswordInput.value;
 
-    if (password.length < 8) {
-        showAlert('error', 'A senha deve ter no mínimo 8 caracteres.');
+    if (password.length < 10) {
+        showAlert('error', 'A senha deve ter no mínimo 10 caracteres.');
         passwordInput.focus();
         return;
     }

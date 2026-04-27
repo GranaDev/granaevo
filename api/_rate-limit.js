@@ -16,13 +16,29 @@ const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
 const USE_REDIS   = !!(REDIS_URL && REDIS_TOKEN)
 
 // ── Fallback in-memory ────────────────────────────────────────────────────────
-const _store  = new Map()
-const _WINDOW = 60_000
+const _store     = new Map()
+const _WINDOW    = 60_000
+// [FINAL-M02] Cap no tamanho do Map — sem limite, um DDoS com IPs únicos esgotava
+// a memória da instância serverless. 10k entradas = ~1MB, seguro para qualquer escala.
+const _MAX_STORE = 10_000
 
 function _checkMemory(key, max) {
   const now = Date.now()
   const r   = _store.get(key)
-  if (!r || now - r.t > _WINDOW) { _store.set(key, { c: 1, t: now }); return true }
+  if (!r || now - r.t > _WINDOW) {
+    // Aplica cap antes de inserir nova chave
+    if (!r && _store.size >= _MAX_STORE) {
+      // Limpa entradas expiradas
+      for (const [k, v] of _store) {
+        if (now - v.t > _WINDOW) _store.delete(k)
+        if (_store.size < _MAX_STORE) break
+      }
+      // Se ainda cheio após limpeza, rejeita novo IP
+      if (_store.size >= _MAX_STORE) return false
+    }
+    _store.set(key, { c: 1, t: now })
+    return true
+  }
   if (r.c >= max) return false
   r.c++; return true
 }
