@@ -6,41 +6,7 @@
     <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
     <title>GranaEvo - Acesso Premium</title>
 
-    <!--
-        ╔══════════════════════════════════════════════════════════╗
-        ║  CONTENT SECURITY POLICY — LOGIN v2.9                   ║
-        ╠══════════════════════════════════════════════════════════╣
-        ║  [CSP-FIX-17] esm.sh em script-src e connect-src.       ║
-        ║  [CSP-FIX-v2.9] Sem alterações de CSP nesta versão.     ║
-        ╚══════════════════════════════════════════════════════════╝
-    -->
-    <!-- Supabase JS bundled via Vite — esm.sh e cdn.jsdelivr.net removidos -->
-    <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self';
-        upgrade-insecure-requests;
-        script-src 'self'
-            https://www.google.com/recaptcha/
-            https://www.gstatic.com/recaptcha/;
-        style-src 'self' 'unsafe-inline';
-        img-src 'self' data: https://www.gstatic.com/;
-        font-src 'self';
-        connect-src 'self'
-            https://fvrhqqeofqedmhadzzqw.supabase.co
-            wss://fvrhqqeofqedmhadzzqw.supabase.co
-            https://www.google.com
-            https://www.recaptcha.net
-            https://recaptcha.google.com
-            https://www.gstatic.com;
-        frame-src
-            https://www.google.com/recaptcha/
-            https://recaptcha.google.com/;
-        object-src 'none';
-        base-uri 'self';
-        form-action 'self';
-        worker-src 'none';
-        manifest-src 'none';
-        block-all-mixed-content;
-    ">
+    <!-- CSP definida via HTTP header em vercel.json — não duplicar aqui -->
 
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta http-equiv="Permissions-Policy"
@@ -52,7 +18,7 @@
         recaptcha-init.js — síncrono, define window.__grOnLoad ANTES
         que o api.js possa terminar de carregar.
     -->
-    <script src="src/scripts/modules/recaptcha-init.js"></script>
+    <script src="/scripts/modules/recaptcha-init.js"></script>
 
     <!--
         render=explicit → sem auto-render. Os dois widgets (login e
@@ -564,8 +530,6 @@
     </div>
     <!-- .login-container — fim -->
 
-    <!-- Pré-carrega o Supabase client em paralelo com o parse do HTML -->
-    <link rel="modulepreload" href="src/scripts/services/supabase-client.js">
     <script type="module" src="src/scripts/pages/login.js?v=4"></script>
 
 </body>
