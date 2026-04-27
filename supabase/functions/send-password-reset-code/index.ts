@@ -89,16 +89,22 @@ Deno.serve(async (req) => {
   // [NOVO-001] Proxy secret obrigatório — bloqueia chamadas diretas que bypas-
   // sam os rate limits Vercel (3 envios/min por IP). Sem este check, um atacante
   // pode spammar /functions/v1/send-password-reset-code diretamente.
+  // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
   const proxySecret = Deno.env.get('PROXY_SECRET')
-  if (proxySecret) {
-    const received = req.headers.get('x-proxy-secret') ?? ''
-    if (!timingSafeEqual(received, proxySecret)) {
-      console.warn('[send-reset-code] Proxy secret inválido — chamada direta bloqueada')
-      return new Response(
-        JSON.stringify({ status: 'sent', message: 'Se o email estiver cadastrado com plano ativo, você receberá o código.', expires_in: '30 minutos' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      )
-    }
+  if (!proxySecret) {
+    console.error('[send-reset-code] PROXY_SECRET não configurada — requisição bloqueada')
+    return new Response(
+      JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+    )
+  }
+  const received = req.headers.get('x-proxy-secret') ?? ''
+  if (!timingSafeEqual(received, proxySecret)) {
+    console.warn('[send-reset-code] Proxy secret inválido — chamada direta bloqueada')
+    return new Response(
+      JSON.stringify({ status: 'sent', message: 'Se o email estiver cadastrado com plano ativo, você receberá o código.', expires_in: '30 minutos' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+    )
   }
 
   try {

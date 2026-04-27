@@ -42,6 +42,17 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 // ==========================================
 const ALLOWED_ORIGIN = 'https://www.granaevo.com';
 
+// [GOD5-M01/M02] timing-safe compare para proxy secret
+function timingSafeEqualStr(a: string, b: string): boolean {
+    const enc = new TextEncoder()
+    const aB  = enc.encode(a)
+    const bB  = enc.encode(b)
+    if (aB.length !== bB.length) return false
+    let diff = 0
+    for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+    return diff === 0
+}
+
 const corsHeaders = {
     'Access-Control-Allow-Origin':  ALLOWED_ORIGIN,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -71,6 +82,20 @@ Deno.serve(async (req) => {
     // Apenas POST é aceito.
     if (req.method !== 'POST') {
         return jsonResponse(405, { success: false, error: 'Método não permitido.' });
+    }
+
+    // [GOD5-M02] Proxy secret obrigatório — fail-closed.
+    // Esta EF não estava em uso mas é endpoint ativo — qualquer caller com
+    // userId+email+subscriptionId válidos podia tentar chamá-la sem limite.
+    const proxySecret = Deno.env.get('PROXY_SECRET')
+    if (!proxySecret) {
+        console.error('[confirm-user-email] PROXY_SECRET não configurada — requisição bloqueada')
+        return jsonResponse(500, { success: false, error: 'Configuração interna inválida.' })
+    }
+    const receivedSecret = req.headers.get('x-proxy-secret') ?? ''
+    if (!timingSafeEqualStr(receivedSecret, proxySecret)) {
+        console.warn('[confirm-user-email] Proxy secret inválido — chamada direta bloqueada')
+        return jsonResponse(401, { success: false, error: 'Operação não autorizada.' })
     }
 
     // ── Parse do body ────────────────────────────────────────────────────
@@ -112,9 +137,10 @@ Deno.serve(async (req) => {
 
     try {
         // ── VALIDAÇÃO 1: Subscription existe, pertence ao email e está aprovada ──
+        // [GOD5-L03] Corrigido: coluna era 'email' (inexistente) — a tabela usa 'user_email'.
         const { data: subscription, error: subError } = await supabaseAdmin
             .from('subscriptions')
-            .select('id, email, is_active, payment_status, password_created')
+            .select('id, user_email, is_active, payment_status, password_created')
             .eq('id', subscriptionId)
             .single();
 
@@ -124,7 +150,7 @@ Deno.serve(async (req) => {
             return jsonResponse(403, { success: false, error: 'Operação não autorizada.' });
         }
 
-        if (subscription.email.toLowerCase().trim() !== normalizedEmail) {
+        if (subscription.user_email.toLowerCase().trim() !== normalizedEmail) {
             console.error('[confirm-user-email] email não bate com a subscription');
             return jsonResponse(403, { success: false, error: 'Operação não autorizada.' });
         }

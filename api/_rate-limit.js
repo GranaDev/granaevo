@@ -61,6 +61,7 @@ async function _checkRedis(key, max, windowSecs = 60) {
       method:  'POST',
       headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
       body:    JSON.stringify(pipeline),
+      signal:  AbortSignal.timeout(3_000), // [GOD5-L01] evita hang se Redis for lento
     })
     if (!res.ok) return _checkMemory(key, max) // fallback em erro de rede
     const data = await res.json()

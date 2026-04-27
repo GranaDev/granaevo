@@ -91,13 +91,16 @@ Deno.serve(async (req: Request) => {
   // ── 1. Verificar proxy secret ─────────────────────────────────────────────
   // [SEC-FIX] Bloqueia chamadas diretas que bypassam o proxy Vercel
   // (que aplica rate limit, CSRF e body size enforcement).
+  // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
   const proxySecret = Deno.env.get("PROXY_SECRET")
-  if (proxySecret) {
-    const received = req.headers.get("x-proxy-secret") ?? ""
-    if (!timingSafeEqual(received, proxySecret)) {
-      console.warn("[upload-profile-photo] Proxy secret inválido — acesso direto bloqueado")
-      return json({ error: "Unauthorized" }, 401)
-    }
+  if (!proxySecret) {
+    console.error("[upload-profile-photo] PROXY_SECRET não configurada — requisição bloqueada")
+    return json({ error: "Configuração interna inválida" }, 500)
+  }
+  const received = req.headers.get("x-proxy-secret") ?? ""
+  if (!timingSafeEqual(received, proxySecret)) {
+    console.warn("[upload-profile-photo] Proxy secret inválido — acesso direto bloqueado")
+    return json({ error: "Unauthorized" }, 401)
   }
 
   // ── 2. Extrai o token do header Authorization ─────────────────────────────

@@ -39,16 +39,23 @@ Deno.serve(async (req) => {
   // [SEC-FIX GOD-001] Proxy secret obrigatório — bloqueia chamadas diretas.
   // Sem esta proteção, qualquer atacante com a anon_key pública pode chamar
   // este endpoint diretamente para enviar spam com branding GranaEvo.
+  // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
+  // Antes: if (proxySecret) → fail-open quando env var ausente.
   const proxySecret = Deno.env.get('PROXY_SECRET')
-  if (proxySecret) {
-    const received = req.headers.get('x-proxy-secret') ?? ''
-    if (!timingSafeEqual(received, proxySecret)) {
-      console.warn('[send-welcome-email] Proxy secret inválido — chamada direta bloqueada')
-      return new Response(
-        JSON.stringify({ success: false, error: 'Não autorizado.' }),
-        { headers: corsHeaders, status: 401 }
-      )
-    }
+  if (!proxySecret) {
+    console.error('[send-welcome-email] PROXY_SECRET não configurada — requisição bloqueada')
+    return new Response(
+      JSON.stringify({ success: false, error: 'Configuração interna inválida.' }),
+      { headers: corsHeaders, status: 500 }
+    )
+  }
+  const received = req.headers.get('x-proxy-secret') ?? ''
+  if (!timingSafeEqual(received, proxySecret)) {
+    console.warn('[send-welcome-email] Proxy secret inválido — chamada direta bloqueada')
+    return new Response(
+      JSON.stringify({ success: false, error: 'Não autorizado.' }),
+      { headers: corsHeaders, status: 401 }
+    )
   }
 
   try {

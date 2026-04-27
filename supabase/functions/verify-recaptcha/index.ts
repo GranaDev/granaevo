@@ -39,14 +39,16 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  // Proxy secret obrigatório — bloqueia chamadas diretas que bypassam rate limits Vercel
+  // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
   const proxySecret = Deno.env.get('PROXY_SECRET')
-  if (proxySecret) {
-    const received = req.headers.get('x-proxy-secret') ?? ''
-    if (!timingSafeEqual(received, proxySecret)) {
-      console.warn('[verify-recaptcha] Proxy secret inválido — chamada direta bloqueada')
-      return Response.json({ success: false }, { headers: corsHeaders, status: 401 })
-    }
+  if (!proxySecret) {
+    console.error('[verify-recaptcha] PROXY_SECRET não configurada — requisição bloqueada')
+    return Response.json({ success: false }, { headers: corsHeaders, status: 500 })
+  }
+  const received = req.headers.get('x-proxy-secret') ?? ''
+  if (!timingSafeEqual(received, proxySecret)) {
+    console.warn('[verify-recaptcha] Proxy secret inválido — chamada direta bloqueada')
+    return Response.json({ success: false }, { headers: corsHeaders, status: 401 })
   }
 
   try {

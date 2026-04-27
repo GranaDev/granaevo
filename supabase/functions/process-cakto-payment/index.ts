@@ -90,6 +90,7 @@ Deno.serve(async (req: Request) => {
     // Buscar dados do pedido na Cakto
     const accessToken = await getCaktoAccessToken()
 
+    // [GOD5-L02] timeout adicionado para busca do pedido na Cakto API
     const orderResponse = await fetch(
       `https://api.cakto.com.br/api/orders/${orderId}/`,
       {
@@ -97,6 +98,7 @@ Deno.serve(async (req: Request) => {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type':  'application/json',
         },
+        signal: AbortSignal.timeout(10_000),
       }
     )
 
@@ -126,10 +128,13 @@ async function getCaktoAccessToken(): Promise<string> {
   const clientId     = Deno.env.get('CAKTO_CLIENT_ID')
   const clientSecret = Deno.env.get('CAKTO_CLIENT_SECRET')
 
+  // [GOD5-L02] timeout adicionado — sem isso a função travava indefinidamente se
+  // a API da Cakto ficasse lenta ou fora do ar.
   const response = await fetch('https://api.cakto.com.br/oauth/token/', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret }),
+    signal:  AbortSignal.timeout(10_000),
   })
 
   if (!response.ok) throw new Error('Falha ao obter token da Cakto')

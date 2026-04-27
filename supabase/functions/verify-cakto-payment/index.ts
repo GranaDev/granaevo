@@ -71,19 +71,23 @@ Deno.serve(async (req) => {
     )
   }
 
-  // [FINAL-M04] Proxy secret opcional — bloqueia chamadas diretas que bypassam
-  // o rate limit Vercel. Se PROXY_SECRET não estiver configurado, aceita qualquer
-  // origem (graceful fallback — JWT auth ainda protege o endpoint).
+  // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
+  // Antes: if (proxySecret) → fail-open se env var ausente.
   const proxySecret = Deno.env.get('PROXY_SECRET')
-  if (proxySecret) {
-    const received = req.headers.get('x-proxy-secret') ?? ''
-    if (!timingSafeEqual(received, proxySecret)) {
-      console.warn('[get-cakto-order] Proxy secret inválido — chamada direta bloqueada')
-      return new Response(
-        JSON.stringify({ success: false, error: 'Não autorizado' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      )
-    }
+  if (!proxySecret) {
+    console.error('[get-cakto-order] PROXY_SECRET não configurada — requisição bloqueada')
+    return new Response(
+      JSON.stringify({ success: false, error: 'Configuração interna inválida' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+    )
+  }
+  const received = req.headers.get('x-proxy-secret') ?? ''
+  if (!timingSafeEqual(received, proxySecret)) {
+    console.warn('[get-cakto-order] Proxy secret inválido — chamada direta bloqueada')
+    return new Response(
+      JSON.stringify({ success: false, error: 'Não autorizado' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+    )
   }
 
   try {

@@ -55,13 +55,16 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 0. Proxy secret obrigatório — bloqueia chamadas diretas ──────────────
+  // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
   const proxySecret = Deno.env.get("PROXY_SECRET")
-  if (proxySecret) {
-    const received = req.headers.get("x-proxy-secret") ?? ""
-    if (!timingSafeEqual(received, proxySecret)) {
-      console.warn("[link-user-subscription] Proxy secret inválido — chamada direta bloqueada")
-      return json({ success: false, message: "Não autorizado." }, 401)
-    }
+  if (!proxySecret) {
+    console.error("[link-user-subscription] PROXY_SECRET não configurada — requisição bloqueada")
+    return json({ success: false, message: "Configuração interna inválida." }, 500)
+  }
+  const received = req.headers.get("x-proxy-secret") ?? ""
+  if (!timingSafeEqual(received, proxySecret)) {
+    console.warn("[link-user-subscription] Proxy secret inválido — chamada direta bloqueada")
+    return json({ success: false, message: "Não autorizado." }, 401)
   }
 
   // ── 1. Extrai o JWT do header Authorization ───────────────────────────────

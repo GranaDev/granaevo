@@ -57,14 +57,16 @@ Deno.serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // Proxy-secret obrigatório — defense-in-depth para chamadas diretas
+  // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
   const proxySecret = Deno.env.get('PROXY_SECRET')
-  if (proxySecret) {
-    const received = req.headers.get('x-proxy-secret') ?? ''
-    if (!timingSafeEqualInvite(received, proxySecret)) {
-      console.warn('[send-guest-invite] Proxy secret inválido — chamada direta bloqueada')
-      return json({ success: false, error: 'Não autorizado.' }, 401)
-    }
+  if (!proxySecret) {
+    console.error('[send-guest-invite] PROXY_SECRET não configurada — requisição bloqueada')
+    return json({ success: false, error: 'Configuração interna inválida.' }, 500)
+  }
+  const received = req.headers.get('x-proxy-secret') ?? ''
+  if (!timingSafeEqualInvite(received, proxySecret)) {
+    console.warn('[send-guest-invite] Proxy secret inválido — chamada direta bloqueada')
+    return json({ success: false, error: 'Não autorizado.' }, 401)
   }
 
   if (req.method !== "POST") {

@@ -120,16 +120,22 @@ Deno.serve(async (req) => {
   // [NOVO-002] Proxy secret obrigatório — bloqueia chamadas diretas que bypas-
   // sam os rate limits Vercel (10 verify_code/min e 5 reset_password/min por IP).
   // Retorna 200 genérico para não revelar que o endpoint existe sem proxy.
+  // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
   const proxySecret = Deno.env.get('PROXY_SECRET')
-  if (proxySecret) {
-    const received = req.headers.get('x-proxy-secret') ?? ''
-    if (!timingSafeEqualLocal(received, proxySecret)) {
-      console.warn('[verify-reset] Proxy secret inválido — chamada direta bloqueada')
-      return new Response(
-        JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      )
-    }
+  if (!proxySecret) {
+    console.error('[verify-reset] PROXY_SECRET não configurada — requisição bloqueada')
+    return new Response(
+      JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+    )
+  }
+  const received = req.headers.get('x-proxy-secret') ?? ''
+  if (!timingSafeEqualLocal(received, proxySecret)) {
+    console.warn('[verify-reset] Proxy secret inválido — chamada direta bloqueada')
+    return new Response(
+      JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+    )
   }
 
   // Só POST

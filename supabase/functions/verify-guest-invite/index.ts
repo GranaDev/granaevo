@@ -228,15 +228,16 @@ Deno.serve(async (req) => {
         return res
     }
 
-    // [NOVO-004] Proxy secret — bloqueia chamadas diretas que bypassam rate limits
-    // do proxy Vercel api/verify-invite.js (5/min por IP).
+    // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
     const proxySecret = Deno.env.get('PROXY_SECRET')
-    if (proxySecret) {
-        const received = req.headers.get('x-proxy-secret') ?? ''
-        if (!timingSafeEqualInvite(received, proxySecret)) {
-            console.warn('[verify-guest-invite] Proxy secret inválido — chamada direta bloqueada')
-            return respond(jsonErr(corsHeaders, 'Requisição inválida.', 400))
-        }
+    if (!proxySecret) {
+        console.error('[verify-guest-invite] PROXY_SECRET não configurada — requisição bloqueada')
+        return respond(jsonErr(corsHeaders, 'Configuração interna inválida.', 500))
+    }
+    const received = req.headers.get('x-proxy-secret') ?? ''
+    if (!timingSafeEqualInvite(received, proxySecret)) {
+        console.warn('[verify-guest-invite] Proxy secret inválido — chamada direta bloqueada')
+        return respond(jsonErr(corsHeaders, 'Requisição inválida.', 400))
     }
 
     try {
