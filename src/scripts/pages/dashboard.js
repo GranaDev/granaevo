@@ -910,13 +910,12 @@ async function verificarLogin() {
                 _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
                 try {
                     const linkResponse = await fetch(
-                        `${SUPABASE_URL}/functions/v1/link-user-subscription`,
+                        '/api/link-subscription',
                         {
                             method: 'POST',
                             headers: {
-                                'Content-Type': 'application/json',
+                                'Content-Type':  'application/json',
                                 'Authorization': `Bearer ${session.access_token}`,
-                                'apikey': SUPABASE_ANON_KEY,
                             },
                             body: JSON.stringify({ subscription_id: subByEmail.id }),
                         }

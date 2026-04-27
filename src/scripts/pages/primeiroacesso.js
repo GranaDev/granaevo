@@ -657,12 +657,11 @@ async function _linkViaBackendWithRetry(accessToken, subscriptionId, maxRetries 
 async function _linkViaBackend(accessToken, subscriptionId) {
     try {
         const response = await fetchWithTimeout(
-            `${SUPABASE_URL}/functions/v1/link-user-subscription`,
+            '/api/link-subscription',
             {
                 method:  'POST',
                 headers: {
                     'Content-Type':  'application/json',
-                    'apikey':        SUPABASE_ANON_KEY,
                     'Authorization': `Bearer ${accessToken}`,
                 },
                 body: JSON.stringify({ subscription_id: subscriptionId }),
