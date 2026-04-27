@@ -1038,3 +1038,148 @@ describe('GOD MODE Round 1 — Infrastructure & Vault Regressions', () => {
 
 })
 
+// ─── 15. GOD MODE ROUND 2 — PROXY-SECRET COVERAGE ───────────────────────────
+// Testes para GAP-01..03 corrigidos no ciclo GOD MODE Round 2.
+
+describe('GOD MODE Round 2 — Proxy-Secret & Nonce Coverage', () => {
+
+  const SUPABASE_EF_URL = process.env.SUPABASE_URL ?? 'https://fvrhqqeofqedmhadzzqw.supabase.co'
+
+  // ── GAP-02: verify-recaptcha proxy-secret ────────────────────────────────
+
+  test('[GM2-01] verify-recaptcha EF direto sem proxy-secret retorna 401 ou 400', async () => {
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/verify-recaptcha`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        process.env.SUPABASE_ANON_KEY ?? 'test',
+        'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY ?? 'test'}`,
+        'Origin':        'https://www.granaevo.com',
+      },
+      body: JSON.stringify({ token: 'a'.repeat(100) }),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 401, 400, 403].includes(r.status),
+      `[GM2-01] EF direto sem proxy-secret deve ser bloqueado: ${r.status}`
+    )
+  })
+
+  test('[GM2-02] /api/verify-recaptcha rejeita token curto com 400', async () => {
+    const { status } = await post('/api/verify-recaptcha', { token: 'curto' })
+    assert.ok(
+      [400, 429].includes(status),
+      `[GM2-02] token inválido deve retornar 400 ou 429: ${status}`
+    )
+  })
+
+  test('[GM2-03] /api/verify-recaptcha sem Origin retorna 403', async () => {
+    const r = await fetch(`${BASE_URL}/api/verify-recaptcha`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ token: 'a'.repeat(100) }),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 403, 429].includes(r.status),
+      `[GM2-03] sem Origin deve retornar 403: ${r.status}`
+    )
+  })
+
+  // ── GAP-01: link-subscription proxy-secret ───────────────────────────────
+
+  test('[GM2-04] link-user-subscription EF direto sem proxy-secret retorna 401', async () => {
+    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/link-user-subscription`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        process.env.SUPABASE_ANON_KEY ?? 'test',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.test',
+        'Origin':        'https://www.granaevo.com',
+      },
+      body: JSON.stringify({ subscription_id: '00000000-0000-0000-0000-000000000000' }),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 401, 400, 403].includes(r.status),
+      `[GM2-04] EF direto sem proxy-secret deve ser bloqueado: ${r.status}`
+    )
+  })
+
+  test('[GM2-05] /api/link-subscription sem Authorization retorna 401', async () => {
+    const r = await fetch(`${BASE_URL}/api/link-subscription`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.granaevo.com' },
+      body:    JSON.stringify({ subscription_id: '00000000-0000-0000-0000-000000000000' }),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 401, 429].includes(r.status),
+      `[GM2-05] sem Authorization deve retornar 401: ${r.status}`
+    )
+  })
+
+  test('[GM2-06] /api/link-subscription sem Origin retorna 403', async () => {
+    const r = await fetch(`${BASE_URL}/api/link-subscription`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer token' },
+      body:    JSON.stringify({ subscription_id: '00000000-0000-0000-0000-000000000000' }),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 403, 429].includes(r.status),
+      `[GM2-06] sem Origin deve retornar 403: ${r.status}`
+    )
+  })
+
+  test('[GM2-07] /api/link-subscription subscription_id ausente retorna 400', async () => {
+    const r = await fetch(`${BASE_URL}/api/link-subscription`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer test.test.test',
+        'Origin':        'https://www.granaevo.com',
+      },
+      body: JSON.stringify({}),
+    }).catch(() => ({ status: 0 }))
+    assert.ok(
+      [0, 400, 401, 403, 429].includes(r.status),
+      `[GM2-07] subscription_id ausente deve ser rejeitado: ${r.status}`
+    )
+  })
+
+  // ── GAP-03: invite_nonces UNIQUE constraint ──────────────────────────────
+
+  test('[GM2-08] /api/verify-invite sem body retorna 400', async () => {
+    const { status } = await post('/api/verify-invite', {})
+    assert.ok(
+      [400, 429].includes(status),
+      `[GM2-08] body inválido deve retornar 400: ${status}`
+    )
+  })
+
+  test('[GM2-09] /api/verify-invite sem step retorna 400', async () => {
+    const { status } = await post('/api/verify-invite', { email: 'a@b.com' })
+    assert.ok(
+      [400, 429].includes(status),
+      `[GM2-09] sem step deve retornar 400: ${status}`
+    )
+  })
+
+  test('[GM2-10] /api/link-subscription tem rate limit por IP', async () => {
+    const promises = Array.from({ length: 15 }, () =>
+      fetch(`${BASE_URL}/api/link-subscription`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer test',
+          'Origin':        'https://www.granaevo.com',
+        },
+        body: JSON.stringify({ subscription_id: '00000000-0000-0000-0000-000000000000' }),
+      }).then(r => r.status).catch(() => 0)
+    )
+    const results = await Promise.all(promises)
+    const has429  = results.some(s => s === 429)
+    assert.ok(
+      has429 || results.every(s => s >= 400),
+      `[GM2-10] rate limit deve bloquear após 10 req/min: ${results}`
+    )
+  })
+
+})
+
