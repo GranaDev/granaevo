@@ -6,35 +6,7 @@
     <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
     <title>Dashboard - GranaEvo</title>
 
-    <!-- ================================================================
-         🔐 CAMADA 1 — Content Security Policy (Meta fallback)
-
-         A política principal está no vercel.json (HTTP header).
-         Esta meta é fallback para ambientes sem header (ex: preview local).
-         Não há scripts inline nesta página — nenhum hash necessário.
-
-         ⚠️  Se adicionar um <script> inline, calcule o hash:
-           printf '%s' 'CONTEUDO' | openssl dgst -sha256 -binary | openssl base64 -A
-         e adicione 'sha256-HASH=' em script-src aqui e no vercel.json.
-         ================================================================ -->
-    <!-- CSP principal via vercel.json HTTP headers. Esta meta é fallback para dev local. -->
-    <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self';
-        script-src 'self' https://cdn.jsdelivr.net;
-        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
-        font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
-        img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co;
-        connect-src 'self'
-            https://fvrhqqeofqedmhadzzqw.supabase.co
-            wss://fvrhqqeofqedmhadzzqw.supabase.co;
-        base-uri 'self';
-        form-action 'self';
-        object-src 'none';
-        worker-src 'none';
-        upgrade-insecure-requests;
-        block-all-mixed-content;
-        report-uri /api/csp-report;
-    ">
+    <!-- CSP definida via HTTP header em vercel.json — não duplicar aqui -->
 
     <!-- ================================================================
          🔐 CAMADA 2 — Referrer Policy
@@ -72,12 +44,6 @@
             criava múltiplas instâncias GoTrueClient (comportamento indefinido)
             e invalidava os hashes SRI a cada novo release do pacote @2.
          ================================================================ -->
-    <!-- Pré-carrega os módulos críticos em paralelo com o parse do HTML.
-         Vite substitui estes hrefs pelos caminhos hashed no build de produção. -->
-    <link rel="modulepreload" href="src/scripts/services/supabase-client.js?v=2">
-    <link rel="modulepreload" href="src/scripts/modules/auth-guard.js?v=2">
-    <link rel="modulepreload" href="src/scripts/modules/data-manager.js?v=8">
-
     <script type="module" src="src/scripts/services/supabase-client.js?v=2"></script>
     <script type="module" src="src/scripts/modules/data-manager.js?v=8"></script>
     <script type="module" src="src/scripts/modules/auth-guard.js?v=2"></script>
@@ -892,9 +858,9 @@
     <!-- Scripts do Sistema -->
     <script type="module" src="src/scripts/pages/dashboard.js?v=23"></script>
     <script type="module" src="src/scripts/modules/chat-assistant.js?v=2"></script>
-    <!-- graficos.js carregado no HTML para garantir DOMContentLoaded correto -->
+    <!-- graficos.js — classic script (não usa import/export), servido de public/ -->
     <!-- Chart.js (~500KB) é carregado sob demanda em inicializarGraficos() -->
-    <script src="src/scripts/modules/graficos.js"></script>
+    <script src="/scripts/modules/graficos.js"></script>
 
 </body>
 </html>
