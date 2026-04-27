@@ -158,11 +158,15 @@ Deno.serve(async (req: Request) => {
     }
 
     // Login bem-sucedido — limpa lockout acumulado
+    // rpc() retorna PostgrestFilterBuilder (thenable, não Promise completo)
+    // .catch() não existe nesse objeto — usar try/catch convencional
     if (userEmail) {
-      await supabaseAdmin.rpc('clear_login_lockout', {
-        p_identifier:      userEmail,
-        p_identifier_type: 'email',
-      }).catch(() => {})
+      try {
+        await supabaseAdmin.rpc('clear_login_lockout', {
+          p_identifier:      userEmail,
+          p_identifier_type: 'email',
+        })
+      } catch { /* falha silenciosa — não crítica para o fluxo de login */ }
     }
 
     console.log('[check-user-access] Acesso concedido para:', userId.slice(0, 8))
