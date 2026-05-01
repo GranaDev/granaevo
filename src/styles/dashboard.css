@@ -6645,6 +6645,64 @@ select.form-input option:checked {
 .rel-meta-info-label { color: var(--text-secondary); }
 .rel-meta-info-value { font-weight: 700; color: var(--text-primary); }
 
+/* — Meta Projection — */
+.rel-meta-projection {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 10px;
+    background: rgba(67, 160, 71, 0.07);
+    border: 1px solid rgba(67, 160, 71, 0.18);
+}
+
+.rel-meta-projection--done {
+    background: rgba(67, 160, 71, 0.12);
+    border-color: rgba(67, 160, 71, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.rel-meta-projection--done i { color: var(--success); font-size: 1.1rem; }
+.rel-meta-projection--done span { color: var(--success); font-weight: 700; font-size: 0.88rem; }
+
+.rel-meta-projection--empty {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rel-meta-projection--empty i { color: var(--text-muted); font-size: 0.88rem; }
+
+.rel-meta-proj-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+
+.rel-meta-proj-header i { color: var(--primary); }
+
+.rel-meta-proj-time {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--primary);
+    letter-spacing: -0.3px;
+    margin-bottom: 4px;
+}
+
+.rel-meta-proj-sub {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
 /* — Shared Report Profile Cards — */
 .rel-profiles-grid {
     display: grid;
@@ -7363,7 +7421,7 @@ select.form-input option:checked {
         grid-row: 2 !important;
     }
 
-    /* Linha 3: Visão Geral | Metas | Insights */
+    /* Linha 3-4: Visão Geral + Cartões | Metas (span 2 linhas) | Insights + Contas */
     #relatorioResultado .rel-section--visao-geral {
         grid-column: 1 !important;
         grid-row: 3 !important;
@@ -7371,7 +7429,10 @@ select.form-input option:checked {
 
     #relatorioResultado .rel-section--metas {
         grid-column: 2 !important;
-        grid-row: 3 !important;
+        grid-row: 3 / 5 !important;
+        align-self: stretch !important;
+        display: flex !important;
+        flex-direction: column !important;
     }
 
     #relatorioResultado .rel-section--insights {
@@ -7379,20 +7440,21 @@ select.form-input option:checked {
         grid-row: 3 !important;
     }
 
-    /* Linha 4: Cartões | Contas | Transações */
+    /* Linha 4: Cartões | (Metas continua) | Contas */
     #relatorioResultado .rel-section--cartoes {
         grid-column: 1 !important;
         grid-row: 4 !important;
     }
 
     #relatorioResultado .rel-section--contas {
-        grid-column: 2 !important;
+        grid-column: 3 !important;
         grid-row: 4 !important;
     }
 
+    /* Linha 5: Transações — span completo */
     #relatorioResultado .rel-section--transacoes {
-        grid-column: 3 !important;
-        grid-row: 4 !important;
+        grid-column: 1 / -1 !important;
+        grid-row: 5 !important;
     }
 
     /* ── Visão Geral: donut + legenda lado a lado ── */
@@ -7505,9 +7567,11 @@ select.form-input option:checked {
         font-size: 0.78rem;
     }
 
-    .rel-insight-icon--perf  { background: rgba(67, 160, 71, 0.15); color: var(--primary); }
-    .rel-insight-icon--gasto { background: rgba(255, 75, 75, 0.15);  color: var(--danger); }
-    .rel-insight-icon--op    { background: rgba(255, 209, 102, 0.15); color: var(--warning); }
+    .rel-insight-icon--perf   { background: rgba(67, 160, 71, 0.15);  color: var(--primary); }
+    .rel-insight-icon--gasto  { background: rgba(255, 75, 75, 0.15);   color: var(--danger); }
+    .rel-insight-icon--op     { background: rgba(255, 209, 102, 0.15); color: var(--warning); }
+    .rel-insight-icon--contas { background: rgba(99, 102, 241, 0.15);  color: #818cf8; }
+    .rel-insight-icon--saude  { background: rgba(20, 184, 166, 0.15);  color: #2dd4bf; }
 
     .rel-insight-body {
         flex: 1;
@@ -7633,9 +7697,11 @@ select.form-input option:checked {
         font-size: 0.72rem;
     }
 
-    .rel-insight-icon--perf  { background: rgba(67, 160, 71, 0.15); color: var(--primary); }
-    .rel-insight-icon--gasto { background: rgba(255, 75, 75, 0.15);  color: var(--danger); }
-    .rel-insight-icon--op    { background: rgba(255, 209, 102, 0.15); color: var(--warning); }
+    .rel-insight-icon--perf   { background: rgba(67, 160, 71, 0.15);  color: var(--primary); }
+    .rel-insight-icon--gasto  { background: rgba(255, 75, 75, 0.15);   color: var(--danger); }
+    .rel-insight-icon--op     { background: rgba(255, 209, 102, 0.15); color: var(--warning); }
+    .rel-insight-icon--contas { background: rgba(99, 102, 241, 0.15);  color: #818cf8; }
+    .rel-insight-icon--saude  { background: rgba(20, 184, 166, 0.15);  color: #2dd4bf; }
 
     .rel-insight-body { flex: 1; min-width: 0; }
 

@@ -782,23 +782,52 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         const topCatEntry = Object.entries(categorias).sort((a, b) => b[1] - a[1])[0];
         const topCatNome  = topCatEntry ? sanitizeHTML(String(topCatEntry[0]).slice(0, 60)) : null;
         const topCatVal   = topCatEntry ? topCatEntry[1] : 0;
+        const taxa        = Number(taxaEconomia);
 
-        const insightPerf = Number(taxaEconomia) > 0
-            ? `Você economizou ${sanitizeHTML(String(taxaEconomia))}% do que ganhou neste período.`
-            : totalEntradas > 0
-                ? 'Nenhum valor foi guardado neste período. Comece a reservar hoje!'
-                : 'Adicione entradas para calcular sua taxa de economia.';
+        // 1. Performance
+        const insightPerf = taxa >= 30
+            ? `Incrível! Você guardou ${sanitizeHTML(String(taxaEconomia))}% da sua renda — no caminho da liberdade financeira.`
+            : taxa > 0
+                ? `Você economizou ${sanitizeHTML(String(taxaEconomia))}% do que ganhou neste período.`
+                : totalEntradas > 0
+                    ? 'Nenhum valor foi guardado neste período. Comece a reservar hoje!'
+                    : 'Adicione entradas para calcular sua taxa de economia.';
 
+        // 2. Maior gasto
         const insightGasto = topCatNome
             ? `${topCatNome} com ${formatBRL(topCatVal)}`
             : 'Nenhum gasto registrado no período.';
 
+        // 3. Pressão das contas fixas
+        const totalContasMes = contasFixasMes.reduce((s, c) => s + sanitizeNumber(c.valor), 0);
+        const percContas = totalEntradas > 0 ? ((totalContasMes / totalEntradas) * 100).toFixed(0) : 0;
+        const insightContas = contasFixasMes.length === 0
+            ? 'Nenhuma conta fixa cadastrada. Adicione no Dashboard!'
+            : totalEntradas > 0
+                ? Number(percContas) > 60
+                    ? `Atenção: contas fixas (${formatBRL(totalContasMes)}) consomem ${percContas}% da renda. Revise seus compromissos.`
+                    : `Suas ${contasFixasMes.length} conta${contasFixasMes.length > 1 ? 's' : ''} fixa${contasFixasMes.length > 1 ? 's' : ''} somam ${formatBRL(totalContasMes)} (${percContas}% da renda).`
+                : `Você tem ${contasFixasMes.length} conta${contasFixasMes.length > 1 ? 's' : ''} fixa${contasFixasMes.length > 1 ? 's' : ''} totalizando ${formatBRL(totalContasMes)}.`;
+
+        // 4. Saúde financeira (relação gastos/renda)
+        const percGastos = totalEntradas > 0 ? ((totalSaidas / totalEntradas) * 100).toFixed(0) : 0;
+        const insightSaude = totalEntradas === 0
+            ? 'Registre suas entradas para analisar sua saúde financeira.'
+            : Number(percGastos) > 90
+                ? `Seus gastos (${percGastos}% da renda) estão críticos. Reduza despesas imediatamente.`
+                : Number(percGastos) > 70
+                    ? `Gastos em ${percGastos}% da renda. Tente manter abaixo de 70% para ter folga financeira.`
+                    : Number(percGastos) > 0
+                        ? `Gastos controlados em ${percGastos}% da renda. Bom equilíbrio!`
+                        : 'Registre seus gastos para análise completa.';
+
+        // 5. Oportunidade / dica de ação
         const insightOp = totalSaidas === 0 && totalEntradas > 0
             ? 'Registre seus gastos para obter insights personalizados.'
-            : Number(taxaEconomia) >= 20
+            : taxa >= 20
                 ? 'Ótima taxa de economia! Continue assim para atingir suas metas mais rápido.'
-                : Number(taxaEconomia) > 0
-                    ? 'Tente guardar pelo menos 20% do seu ganho mensal.'
+                : taxa > 0
+                    ? 'Tente guardar pelo menos 20% do seu ganho mensal (regra 50/30/20).'
                     : 'Adicione reservas para melhorar sua saúde financeira.';
 
         html += `
@@ -817,6 +846,20 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                     <div class="rel-insight-body">
                         <div class="rel-insight-title">Maior gasto</div>
                         <div class="rel-insight-text">${insightGasto}</div>
+                    </div>
+                </div>
+                <div class="rel-insight-item">
+                    <div class="rel-insight-icon-wrap rel-insight-icon--contas"><i class="fas fa-file-invoice-dollar"></i></div>
+                    <div class="rel-insight-body">
+                        <div class="rel-insight-title">Contas fixas</div>
+                        <div class="rel-insight-text">${insightContas}</div>
+                    </div>
+                </div>
+                <div class="rel-insight-item">
+                    <div class="rel-insight-icon-wrap rel-insight-icon--saude"><i class="fas fa-heartbeat"></i></div>
+                    <div class="rel-insight-body">
+                        <div class="rel-insight-title">Saúde financeira</div>
+                        <div class="rel-insight-text">${insightSaude}</div>
                     </div>
                 </div>
                 <div class="rel-insight-item">
@@ -1133,6 +1176,49 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                 if (perc >= 75) corProgresso = '#00ff99';
                 else if (perc >= 40) corProgresso = '#ffd166';
 
+                // ── Projeção de conclusão ──
+                const todosDepositosMeta = transacoesPerfil.filter(t =>
+                    t.categoria === 'reserva' && String(t.metaId) === String(metaId)
+                );
+                const depositosPorMes = {};
+                todosDepositosMeta.forEach(t => {
+                    const dataISO = _ctx.sanitizeDate(_ctx.dataParaISO(t.data));
+                    if (!dataISO) return;
+                    const mesKey = dataISO.slice(0, 7);
+                    depositosPorMes[mesKey] = (depositosPorMes[mesKey] || 0) + _ctx.sanitizeNumber(t.valor);
+                });
+                const valoresPorMes     = Object.values(depositosPorMes);
+                const mediaDepositoMes  = valoresPorMes.length > 0
+                    ? valoresPorMes.reduce((a, b) => a + b, 0) / valoresPorMes.length
+                    : 0;
+
+                let projecaoHtml = '';
+                if (falta <= 0) {
+                    projecaoHtml = `<div class="rel-meta-projection rel-meta-projection--done">
+                        <i class="fas fa-trophy"></i>
+                        <span>Meta concluída! Parabéns!</span>
+                    </div>`;
+                } else if (mediaDepositoMes > 0) {
+                    const mesesParaConcluir = Math.ceil(falta / mediaDepositoMes);
+                    const anos             = Math.floor(mesesParaConcluir / 12);
+                    const mesesRest        = mesesParaConcluir % 12;
+                    const tempoTexto = anos > 0 && mesesRest > 0
+                        ? `${anos} ano${anos > 1 ? 's' : ''} e ${mesesRest} mês${mesesRest > 1 ? 'es' : ''}`
+                        : anos > 0
+                            ? `${anos} ano${anos > 1 ? 's' : ''}`
+                            : `${mesesParaConcluir} mês${mesesParaConcluir > 1 ? 'es' : ''}`;
+                    projecaoHtml = `<div class="rel-meta-projection">
+                        <div class="rel-meta-proj-header"><i class="fas fa-clock"></i><span>Projeção de conclusão</span></div>
+                        <div class="rel-meta-proj-time">${sanitizeHTML(tempoTexto)}</div>
+                        <div class="rel-meta-proj-sub">Com ${formatBRL(mediaDepositoMes)}/mês (média de ${sanitizeHTML(String(valoresPorMes.length))} mês${valoresPorMes.length > 1 ? 'es' : ''} com depósito)</div>
+                    </div>`;
+                } else {
+                    projecaoHtml = `<div class="rel-meta-projection rel-meta-projection--empty">
+                        <i class="fas fa-info-circle"></i>
+                        <div class="rel-meta-proj-sub">Faça depósitos para ver a projeção de conclusão</div>
+                    </div>`;
+                }
+
                 const detalhesHtml = `
                     <div class="rel-meta-detail">
                         <div class="rel-meta-detail-name">${sanitizeHTML(String(meta.descricao || '').slice(0, 100))}</div>
@@ -1145,6 +1231,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
                         <div class="rel-meta-info-row"><span class="rel-meta-info-label">Falta</span><span class="rel-meta-info-value" style="color:var(--danger);">${formatBRL(falta)}</span></div>
                         <div class="rel-meta-info-row"><span class="rel-meta-info-label">Depositado neste mês</span><span class="rel-meta-info-value" style="color:var(--warning);">${formatBRL(totalDepositadoMes)} <small style="font-weight:400; color:var(--text-muted);">(${depositosMes.length}x)</small></span></div>
                         ${totalRetiradoMes > 0 ? `<div class="rel-meta-info-row"><span class="rel-meta-info-label">Retirado neste mês</span><span class="rel-meta-info-value" style="color:#ff9500;">${formatBRL(totalRetiradoMes)} <small style="font-weight:400; color:var(--text-muted);">(${retiradasMes.length}x)</small></span></div>` : ''}
+                        ${projecaoHtml}
                     </div>`;
 
                 // ✅ CORREÇÃO: detalhesEl.innerHTML também passa pelo sanitizador DOMParser
