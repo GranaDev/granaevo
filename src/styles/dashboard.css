@@ -7335,144 +7335,78 @@ select.form-input option:checked {
         white-space: nowrap !important;
     }
 
-    /* ── Resultado: oculta o header do relatório (o filtro já diz o período) ── */
-    #relatorioResultado .rel-report-header {
-        display: none !important;
+    /* ── KPI grid: 6 colunas ── */
+    #relatorioResultado .rel-kpi-grid {
+        grid-template-columns: repeat(6, 1fr) !important;
+        gap: 16px !important;
+    }
+
+    #relatorioResultado .rel-kpi-card {
+        min-width: 0 !important;
+        padding: 16px 14px 14px 18px !important;
     }
 
     /* ── Resultado: grid 3 colunas ── */
     #relatorioResultado {
         display: grid !important;
         grid-template-columns: repeat(3, 1fr) !important;
-        gap: 24px !important;
+        gap: 20px !important;
         align-items: start !important;
     }
 
-    /* ── KPI grid: 6 colunas, ocupa linha inteira ── */
+    #relatorioResultado .rel-report-header {
+        grid-column: 1 / -1 !important;
+    }
+
     #relatorioResultado .rel-kpi-grid {
         grid-column: 1 / -1 !important;
-        grid-row: 1 !important;
-        grid-template-columns: repeat(6, 1fr) !important;
-        gap: 18px !important;
-        margin-bottom: 0 !important;
+        grid-row: 2 !important;
     }
 
-    /* ── KPI Card redesign para desktop ── */
-    #relatorioResultado .rel-kpi-card {
-        min-width: 0 !important;
-        padding: 22px 18px 18px 18px !important;
-        border-radius: 16px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        text-align: center !important;
-        position: relative !important;
-        overflow: hidden !important;
-        min-height: 130px !important;
-    }
-
-    /* Barra de cor no topo (substitui o ::before lateral) */
-    #relatorioResultado .rel-kpi-card::before {
-        left: 0 !important;
-        right: 0 !important;
-        top: 0 !important;
-        bottom: auto !important;
-        width: 100% !important;
-        height: 3px !important;
-    }
-
-    #relatorioResultado .rel-kpi-top {
-        flex-direction: column !important;
-        align-items: center !important;
-        gap: 10px !important;
-        margin-bottom: 10px !important;
-    }
-
-    #relatorioResultado .rel-kpi-icon {
-        font-size: 1.6rem !important;
-        width: 44px !important;
-        height: 44px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        border-radius: 50% !important;
-        background: rgba(255, 255, 255, 0.06) !important;
-        color: inherit !important;
-    }
-
-    #relatorioResultado .rel-kpi-card--entradas .rel-kpi-icon { background: rgba(0, 255, 153, 0.12) !important; color: var(--success) !important; }
-    #relatorioResultado .rel-kpi-card--saidas   .rel-kpi-icon { background: rgba(255, 75, 75, 0.12) !important;  color: var(--danger)  !important; }
-    #relatorioResultado .rel-kpi-card--guardado .rel-kpi-icon { background: rgba(255, 209, 102, 0.12) !important; color: var(--warning) !important; }
-    #relatorioResultado .rel-kpi-card--saldo    .rel-kpi-icon { background: rgba(108, 99, 255, 0.12) !important;  color: var(--accent)  !important; }
-    #relatorioResultado .rel-kpi-card--economia .rel-kpi-icon { background: rgba(67, 160, 71, 0.12) !important;   color: var(--primary) !important; }
-    #relatorioResultado .rel-kpi-card--media    .rel-kpi-icon { background: rgba(167, 139, 250, 0.12) !important; color: #a78bfa       !important; }
-
-    #relatorioResultado .rel-kpi-label {
-        font-size: 0.75rem !important;
-        letter-spacing: 0.4px !important;
-    }
-
-    #relatorioResultado .rel-kpi-value {
-        font-size: 1.5rem !important;
-        letter-spacing: -0.5px !important;
-        margin-bottom: 6px !important;
-    }
-
-    #relatorioResultado .rel-kpi-sub {
-        font-size: 0.72rem !important;
-        line-height: 1.4 !important;
-        text-align: center !important;
-    }
-
-    /* Linha 2: Visão Geral | Metas | Insights */
+    /* Linha 3: Visão Geral | Metas | Insights */
     #relatorioResultado .rel-section--visao-geral {
         grid-column: 1 !important;
-        grid-row: 2 !important;
+        grid-row: 3 !important;
     }
 
     #relatorioResultado .rel-section--metas {
         grid-column: 2 !important;
-        grid-row: 2 !important;
+        grid-row: 3 !important;
     }
 
     #relatorioResultado .rel-section--insights {
         grid-column: 3 !important;
-        grid-row: 2 !important;
+        grid-row: 3 !important;
     }
 
-    /* Linha 3: Cartões | Contas | Transações */
+    /* Linha 4: Cartões | Contas | Transações */
     #relatorioResultado .rel-section--cartoes {
         grid-column: 1 !important;
-        grid-row: 3 !important;
+        grid-row: 4 !important;
     }
 
     #relatorioResultado .rel-section--contas {
         grid-column: 2 !important;
-        grid-row: 3 !important;
+        grid-row: 4 !important;
     }
 
     #relatorioResultado .rel-section--transacoes {
         grid-column: 3 !important;
-        grid-row: 3 !important;
+        grid-row: 4 !important;
     }
 
-    /* Seções: mais espaço interno no desktop */
-    #relatorioResultado .rel-section {
-        padding: 22px 24px !important;
-    }
-
-    /* ── Visão Geral: donut maior ── */
+    /* ── Visão Geral: donut + legenda lado a lado ── */
     .rel-vg-wrap {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 20px;
+        gap: 18px;
     }
 
     .rel-vg-donut-wrap {
         position: relative;
-        width: 180px;
-        height: 180px;
+        width: 160px;
+        height: 160px;
         flex-shrink: 0;
     }
 
@@ -7495,11 +7429,11 @@ select.form-input option:checked {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 3px;
+        gap: 2px;
     }
 
     .rel-vg-center-val {
-        font-size: 0.9rem;
+        font-size: 0.75rem;
         font-weight: 700;
         color: var(--text-primary);
         letter-spacing: -0.3px;
@@ -7508,7 +7442,7 @@ select.form-input option:checked {
     }
 
     .rel-vg-center-label {
-        font-size: 0.62rem;
+        font-size: 0.6rem;
         color: var(--text-muted);
         font-weight: 600;
         text-transform: uppercase;
@@ -7522,64 +7456,75 @@ select.form-input option:checked {
         gap: 8px;
     }
 
-    /* Subheader Top 5 Gastos */
+    /* Subheader Top 5 Gastos (dentro de Visão Geral) */
     .rel-vg-cats-header {
         display: flex;
         align-items: center;
         gap: 6px;
-        padding: 12px 0 8px;
+        padding: 10px 0 6px;
         border-top: 1px solid rgba(255, 255, 255, 0.06);
         margin-top: 4px;
     }
 
-    .rel-vg-cats-header i   { font-size: 0.75rem; color: var(--primary); }
-    .rel-vg-cats-header span { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); }
+    .rel-vg-cats-header i {
+        font-size: 0.72rem;
+        color: var(--primary);
+    }
+
+    .rel-vg-cats-header span {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
 
     /* ── Insights do Período ── */
     .rel-insight-list {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 12px;
     }
 
     .rel-insight-item {
         display: flex;
         align-items: flex-start;
-        gap: 14px;
-        padding: 14px;
-        border-radius: 12px;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 10px;
         background: rgba(255, 255, 255, 0.025);
         border: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .rel-insight-icon-wrap {
-        width: 36px;
-        height: 36px;
-        border-radius: 10px;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        font-size: 0.9rem;
+        font-size: 0.78rem;
     }
 
     .rel-insight-icon--perf  { background: rgba(67, 160, 71, 0.15); color: var(--primary); }
     .rel-insight-icon--gasto { background: rgba(255, 75, 75, 0.15);  color: var(--danger); }
     .rel-insight-icon--op    { background: rgba(255, 209, 102, 0.15); color: var(--warning); }
 
-    .rel-insight-body { flex: 1; min-width: 0; }
+    .rel-insight-body {
+        flex: 1;
+        min-width: 0;
+    }
 
     .rel-insight-title {
-        font-size: 0.85rem;
+        font-size: 0.78rem;
         font-weight: 700;
         color: var(--text-primary);
-        margin-bottom: 4px;
+        margin-bottom: 3px;
     }
 
     .rel-insight-text {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         color: var(--text-secondary);
-        line-height: 1.5;
+        line-height: 1.4;
     }
 }
 
