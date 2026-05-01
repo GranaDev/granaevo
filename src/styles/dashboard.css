@@ -7409,7 +7409,12 @@ select.form-input option:checked {
         display: grid !important;
         grid-template-columns: repeat(3, 1fr) !important;
         gap: 20px !important;
-        align-items: start !important;
+        align-items: stretch !important;
+    }
+
+    /* Todos os cards sem margin-bottom no grid desktop */
+    #relatorioResultado .rel-section {
+        margin-bottom: 0 !important;
     }
 
     #relatorioResultado .rel-report-header {
@@ -7430,9 +7435,6 @@ select.form-input option:checked {
     #relatorioResultado .rel-section--metas {
         grid-column: 2 !important;
         grid-row: 3 / 5 !important;
-        align-self: stretch !important;
-        display: flex !important;
-        flex-direction: column !important;
     }
 
     #relatorioResultado .rel-section--insights {
