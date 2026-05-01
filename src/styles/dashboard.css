@@ -7426,7 +7426,7 @@ select.form-input option:checked {
         grid-row: 2 !important;
     }
 
-    /* Linha 3-4: Visão Geral + Cartões | Metas (span 2 linhas) | Insights + Contas */
+    /* Linha 3: Visão Geral | Metas | Insights (mesma altura) */
     #relatorioResultado .rel-section--visao-geral {
         grid-column: 1 !important;
         grid-row: 3 !important;
@@ -7434,7 +7434,7 @@ select.form-input option:checked {
 
     #relatorioResultado .rel-section--metas {
         grid-column: 2 !important;
-        grid-row: 3 / 5 !important;
+        grid-row: 3 !important;
     }
 
     #relatorioResultado .rel-section--insights {
@@ -7442,14 +7442,14 @@ select.form-input option:checked {
         grid-row: 3 !important;
     }
 
-    /* Linha 4: Cartões | (Metas continua) | Contas */
+    /* Linha 4: Cartões | Contas Fixas (span cols 2-3) */
     #relatorioResultado .rel-section--cartoes {
         grid-column: 1 !important;
         grid-row: 4 !important;
     }
 
     #relatorioResultado .rel-section--contas {
-        grid-column: 3 !important;
+        grid-column: 2 / 4 !important;
         grid-row: 4 !important;
     }
 
