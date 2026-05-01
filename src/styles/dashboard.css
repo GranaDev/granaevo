@@ -4728,7 +4728,7 @@ select.form-input option:checked {
         border-radius: 18px !important;
         padding: 14px 10px 12px !important;
         flex-direction: column !important;
-        align-items: flex-start !important;
+        align-items: center !important;
         gap: 4px !important;
         box-shadow:
             0 4px 20px rgba(0, 0, 0, 0.25),
@@ -4745,9 +4745,32 @@ select.form-input option:checked {
     }
 
     .card-icon {
-        font-size: 1.3rem !important;
+        width: 42px !important;
+        height: 42px !important;
+        font-size: 1.2rem !important;
         min-width: unset !important;
-        margin-bottom: 4px;
+        margin-right: 0 !important;
+        margin-bottom: 6px !important;
+    }
+
+    .card-label {
+        text-align: center !important;
+    }
+
+    .card-value {
+        text-align: center !important;
+    }
+
+    .card-percent {
+        text-align: center !important;
+    }
+
+    /* Blur ao ocultar via botão olho */
+    .card-value.oculto,
+    .card-percent.oculto {
+        filter: blur(6px);
+        user-select: none;
+        transition: filter 0.3s ease;
     }
 
     .card-label {

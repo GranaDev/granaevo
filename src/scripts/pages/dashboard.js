@@ -3590,6 +3590,12 @@ function bindEventos() {
 
             const estaOculto = heroSaldoEl.classList.toggle('oculto');
 
+            ['totalEntradas', 'totalSaidas', 'totalReservas',
+             'percentEntradas', 'percentSaidas', 'percentReservas'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.toggle('oculto', estaOculto);
+            });
+
             if (estaOculto) {
                 icone.className = 'fas fa-eye';
             } else {
