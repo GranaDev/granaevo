@@ -695,28 +695,139 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
     </div>
     `;
 
-    if (Object.keys(categorias).length > 0) {
-        const categoriasOrdenadas    = Object.entries(categorias).sort((a, b) => b[1] - a[1]).slice(0, 5);
-        const totalGastoCategorias   = Object.values(categorias).reduce((a, b) => a + b, 0);
-        const coresCategorias        = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+    // ── Visão Geral (donut + top gastos) ─────────────────────────────────────
+    {
+        const totalVG   = totalEntradas + totalSaidas + Math.max(0, valorReservadoLiquido);
+        const pEnt      = totalVG > 0 ? (totalEntradas / totalVG * 100) : 0;
+        const pSai      = totalVG > 0 ? (totalSaidas   / totalVG * 100) : 0;
+        const pRes      = totalVG > 0 ? (Math.max(0, valorReservadoLiquido) / totalVG * 100) : 0;
+        const seg1      = pEnt.toFixed(2);
+        const seg2      = (pEnt + pSai).toFixed(2);
+        const seg3      = (pEnt + pSai + pRes).toFixed(2);
+        const donutGrad = `conic-gradient(var(--success) 0% ${seg1}%, var(--danger) ${seg1}% ${seg2}%, var(--warning) ${seg2}% ${seg3}%, rgba(255,255,255,0.05) ${seg3}% 100%)`;
 
-        html += `<div class="rel-section"><div class="rel-section-header"><i class="fas fa-chart-bar"></i><span>Top 5 Categorias</span></div><div class="rel-cat-list">`;
+        html += `
+        <div class="rel-section rel-section--visao-geral">
+            <div class="rel-section-header"><i class="fas fa-chart-pie"></i><span>Visão Geral</span></div>
+            <div class="rel-vg-wrap">
+                <div class="rel-vg-donut-wrap">
+                    <div class="rel-vg-donut" style="background: ${donutGrad}"></div>
+                    <div class="rel-vg-inner">
+                        <span class="rel-vg-center-val">${formatBRL(saldoFinal)}</span>
+                        <span class="rel-vg-center-label">Saldo total</span>
+                    </div>
+                </div>
+                <div class="rel-vg-legend">
+                    <div class="rel-vg-leg-item">
+                        <span class="rel-vg-leg-dot" style="background: var(--success)"></span>
+                        <div class="rel-vg-leg-info">
+                            <span class="rel-vg-leg-label">Entradas</span>
+                            <span class="rel-vg-leg-val" style="color: var(--success)">${formatBRL(totalEntradas)}</span>
+                        </div>
+                        <span class="rel-vg-leg-pct">${pEnt.toFixed(1)}%</span>
+                    </div>
+                    <div class="rel-vg-leg-item">
+                        <span class="rel-vg-leg-dot" style="background: var(--danger)"></span>
+                        <div class="rel-vg-leg-info">
+                            <span class="rel-vg-leg-label">Saídas</span>
+                            <span class="rel-vg-leg-val" style="color: var(--danger)">${formatBRL(totalSaidas)}</span>
+                        </div>
+                        <span class="rel-vg-leg-pct">${pSai.toFixed(1)}%</span>
+                    </div>
+                    <div class="rel-vg-leg-item">
+                        <span class="rel-vg-leg-dot" style="background: var(--warning)"></span>
+                        <div class="rel-vg-leg-info">
+                            <span class="rel-vg-leg-label">Reservas</span>
+                            <span class="rel-vg-leg-val" style="color: var(--warning)">${formatBRL(valorReservadoLiquido)}</span>
+                        </div>
+                        <span class="rel-vg-leg-pct">${pRes.toFixed(1)}%</span>
+                    </div>
+                    <div class="rel-vg-leg-item">
+                        <span class="rel-vg-leg-dot" style="background: var(--accent)"></span>
+                        <div class="rel-vg-leg-info">
+                            <span class="rel-vg-leg-label">Saldo</span>
+                            <span class="rel-vg-leg-val" style="color: var(--accent)">${formatBRL(saldoFinal)}</span>
+                        </div>
+                        <span class="rel-vg-leg-pct">-</span>
+                    </div>
+                </div>
+            </div>`;
 
-        categoriasOrdenadas.forEach(([cat, valor], i) => {
-            const percentual = ((valor / totalGastoCategorias) * 100).toFixed(1);
-            html += `
-                <div class="rel-cat-item">
-                    <div class="rel-cat-info">
-                        <div class="rel-cat-dot" style="background:${coresCategorias[i]};"></div>
-                        <span class="rel-cat-name">${sanitizeHTML(cat)}</span>
+        if (Object.keys(categorias).length > 0) {
+            const categoriasOrdenadas  = Object.entries(categorias).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            const totalGastoCategorias = Object.values(categorias).reduce((a, b) => a + b, 0);
+            const coresCategorias      = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
+            html += `<div class="rel-vg-cats-header"><i class="fas fa-chart-bar"></i><span>Top 5 Gastos</span></div><div class="rel-cat-list">`;
+            categoriasOrdenadas.forEach(([cat, valor], i) => {
+                const percentual = ((valor / totalGastoCategorias) * 100).toFixed(1);
+                html += `
+                    <div class="rel-cat-item">
+                        <div class="rel-cat-info">
+                            <div class="rel-cat-dot" style="background:${coresCategorias[i]};"></div>
+                            <span class="rel-cat-name">${sanitizeHTML(cat)}</span>
+                        </div>
+                        <div class="rel-cat-bar-wrap">
+                            <div class="rel-cat-bar-track"><div class="rel-cat-bar-fill" style="width:${sanitizeHTML(String(percentual))}%; background:${coresCategorias[i]};"></div></div>
+                            <span class="rel-cat-value">${formatBRL(valor)}</span>
+                        </div>
+                    </div>`;
+            });
+            html += `</div>`;
+        }
+        html += `</div>`;
+    }
+
+    // ── Insights do Período ──────────────────────────────────────────────────
+    {
+        const topCatEntry = Object.entries(categorias).sort((a, b) => b[1] - a[1])[0];
+        const topCatNome  = topCatEntry ? sanitizeHTML(String(topCatEntry[0]).slice(0, 60)) : null;
+        const topCatVal   = topCatEntry ? topCatEntry[1] : 0;
+
+        const insightPerf = Number(taxaEconomia) > 0
+            ? `Você economizou ${sanitizeHTML(String(taxaEconomia))}% do que ganhou neste período.`
+            : totalEntradas > 0
+                ? 'Nenhum valor foi guardado neste período. Comece a reservar hoje!'
+                : 'Adicione entradas para calcular sua taxa de economia.';
+
+        const insightGasto = topCatNome
+            ? `${topCatNome} com ${formatBRL(topCatVal)}`
+            : 'Nenhum gasto registrado no período.';
+
+        const insightOp = totalSaidas === 0 && totalEntradas > 0
+            ? 'Registre seus gastos para obter insights personalizados.'
+            : Number(taxaEconomia) >= 20
+                ? 'Ótima taxa de economia! Continue assim para atingir suas metas mais rápido.'
+                : Number(taxaEconomia) > 0
+                    ? 'Tente guardar pelo menos 20% do seu ganho mensal.'
+                    : 'Adicione reservas para melhorar sua saúde financeira.';
+
+        html += `
+        <div class="rel-section rel-section--insights">
+            <div class="rel-section-header"><i class="fas fa-lightbulb"></i><span>Insights do Período</span></div>
+            <div class="rel-insight-list">
+                <div class="rel-insight-item">
+                    <div class="rel-insight-icon-wrap rel-insight-icon--perf"><i class="fas fa-chart-line"></i></div>
+                    <div class="rel-insight-body">
+                        <div class="rel-insight-title">Performance</div>
+                        <div class="rel-insight-text">${insightPerf}</div>
                     </div>
-                    <div class="rel-cat-bar-wrap">
-                        <div class="rel-cat-bar-track"><div class="rel-cat-bar-fill" style="width:${sanitizeHTML(String(percentual))}%; background:${coresCategorias[i]};"></div></div>
-                        <span class="rel-cat-value">${formatBRL(valor)}</span>
+                </div>
+                <div class="rel-insight-item">
+                    <div class="rel-insight-icon-wrap rel-insight-icon--gasto"><i class="fas fa-arrow-down"></i></div>
+                    <div class="rel-insight-body">
+                        <div class="rel-insight-title">Maior gasto</div>
+                        <div class="rel-insight-text">${insightGasto}</div>
                     </div>
-                </div>`;
-        });
-        html += `</div></div>`;
+                </div>
+                <div class="rel-insight-item">
+                    <div class="rel-insight-icon-wrap rel-insight-icon--op"><i class="fas fa-lightbulb"></i></div>
+                    <div class="rel-insight-body">
+                        <div class="rel-insight-title">Oportunidade</div>
+                        <div class="rel-insight-text">${insightOp}</div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
     }
 
     if (cartoesPerfil.length > 0) {
@@ -732,7 +843,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
 
         const corUtilizado = Number(percUsado) > 80 ? 'var(--danger)' : 'var(--success)';
         html += `
-            <div class="rel-section">
+            <div class="rel-section rel-section--cartoes">
                 <div class="rel-section-header"><i class="fas fa-credit-card"></i><span>Cartões de Crédito</span></div>
                 <div class="rel-cards-summary">
                     <div class="rel-card-stat">
@@ -858,7 +969,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
 
     if (metasPerfil.length > 0) {
         html += `
-            <div class="rel-section">
+            <div class="rel-section rel-section--metas">
                 <div class="rel-section-header"><i class="fas fa-bullseye"></i><span>Progresso das Metas</span></div>
                 <div class="rel-meta-selector-wrap">
                     <select id="selectMetaRelatorio" class="form-input">
@@ -893,7 +1004,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
     const totalContasValor = contasComStatus.reduce((sum, c) => sum + _ctx.sanitizeNumber(c.valor), 0);
 
     html += `
-        <div class="rel-section">
+        <div class="rel-section rel-section--contas">
             <div class="rel-section-header"><i class="fas fa-file-invoice-dollar"></i><span>Contas Fixas do Mês</span></div>
             <div class="rel-bills-chips">
                 <div class="rel-bill-chip rel-bill-chip--success">
@@ -947,7 +1058,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
     html += `</div></div>`;
 
     if (transacoesPeriodo.length > 0) {
-        html += `<div class="rel-section"><div class="rel-section-header"><i class="fas fa-list"></i><span>Todas as Transações (${transacoesPeriodo.length})</span></div><div class="rel-tx-list">`;
+        html += `<div class="rel-section rel-section--transacoes"><div class="rel-section-header"><i class="fas fa-list"></i><span>Todas as Transações (${transacoesPeriodo.length})</span></div><div class="rel-tx-list">`;
 
         transacoesPeriodo.sort((a, b) => {
             const dataHoraA = `${sanitizeDate(dataParaISO(a.data)) || ''} ${String(a.hora || '')}`;
