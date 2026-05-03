@@ -52,10 +52,12 @@ export default async function handler(req, res) {
     return res.status(204).end()
   }
 
-  // Permite chamadas internas (sem origin) e do domínio permitido
-  if (origin && !ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Forbidden' })
+  // [GOD6-V01] Origin obrigatório — sem origin bypass: qualquer chamada sem Origin é bloqueada.
+  // queue-email é chamado exclusivamente do browser; ferramentas sem Origin (curl, scripts)
+  // eram capazes de enviar emails para endereços arbitrários sem autenticação.
+  if (!origin || !ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Forbidden' })
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' })
-  if (!SUPABASE_URL || !ANON_KEY) return res.status(503).json({ error: 'Serviço indisponível' })
+  if (!SUPABASE_URL || !ANON_KEY || !process.env.PROXY_SECRET) return res.status(503).json({ error: 'Serviço indisponível' })
 
   const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
     .toString().split(',')[0].trim()

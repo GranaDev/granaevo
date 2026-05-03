@@ -91,9 +91,9 @@ export default async function handler(req, res) {
   }
 
   // ── 1. Validações estruturais ──────────────────────────────────────────────
-  if (!ALLOWED_ORIGINS.has(origin))                  return res.status(403).json({ error: 'Forbidden' })
-  if (req.method !== 'POST')                         return res.status(405).json({ error: 'Method Not Allowed' })
-  if (!EDGE_URL || !ANON_KEY)                        return res.status(503).json({ error: 'Serviço indisponível' })
+  if (!ALLOWED_ORIGINS.has(origin))                         return res.status(403).json({ error: 'Forbidden' })
+  if (req.method !== 'POST')                                return res.status(405).json({ error: 'Method Not Allowed' })
+  if (!EDGE_URL || !ANON_KEY || !PROXY_SECRET)             return res.status(503).json({ error: 'Serviço indisponível' })
 
   const contentType = req.headers['content-type'] ?? ''
   if (!contentType.includes('multipart/form-data')) return res.status(415).json({ error: 'Content-Type inválido' })

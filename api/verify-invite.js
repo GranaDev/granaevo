@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   if (!ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Forbidden' })
   if (req.method !== 'POST')        return res.status(405).json({ error: 'Method Not Allowed' })
 
-  if (!_SUPABASE_URL || !ANON_KEY) {
+  if (!_SUPABASE_URL || !ANON_KEY || !PROXY_SECRET) {
     return res.status(503).json({ error: 'Serviço indisponível' })
   }
 
