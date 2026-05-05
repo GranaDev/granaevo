@@ -2,14 +2,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
 // ---------------------------------------------------------------------------
 // timing-safe compare (prevents timing oracle on proxy secret)
+// [GOD-TSE] Sem early-return em length — codifica divergência via XOR
 // ---------------------------------------------------------------------------
 function timingSafeEqual(a: string, b: string): boolean {
-  const enc    = new TextEncoder()
-  const aBytes = enc.encode(a)
-  const bBytes = enc.encode(b)
-  if (aBytes.length !== bBytes.length) return false
-  let diff = 0
-  for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i]
+  const enc  = new TextEncoder()
+  const aB   = enc.encode(a)
+  const bB   = enc.encode(b)
+  const len  = Math.max(aB.length, bB.length)
+  let diff   = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 

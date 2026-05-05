@@ -563,21 +563,9 @@ accessForm?.addEventListener('submit', async (e) => {
 
         const accessToken = loginData.session?.access_token;
 
-        // ── ETAPA 3: Vincular subscription ──────────────────────────────────
-        // Usuários Stripe: a vinculação acontece automaticamente no check-user-access
-        // pelo email (auto-link) — não é necessário chamar link-subscription.
-        // Usuários Cakto: check-user-access também auto-vincula por email agora.
-        // O link explícito via backend não é mais necessário em nenhum dos casos.
-        if (accessToken && !currentSubscriptionData.is_stripe) {
-            const linkSuccess = await _linkViaBackendWithRetry(
-                accessToken,
-                currentSubscriptionData.subscription_id
-            );
-            if (!linkSuccess) {
-                // Não crítico — check-user-access corrige no próximo login por email.
-                console.warn('[primeiroacesso] link-subscription falhou — auto-link via check-user-access no próximo login.');
-            }
-        }
+        // ── ETAPA 3: Vinculação automática por email ─────────────────────────
+        // check-user-access auto-vincula a subscription (Cakto e Stripe)
+        // pelo email na primeira autenticação. Nenhuma chamada explícita necessária.
 
         // ── ETAPA 4: Registrar aceitação dos termos (LGPD/GDPR) ─────────
         // Executado após login para que a RLS (auth.uid() = user_id) passe.
@@ -623,65 +611,6 @@ accessForm?.addEventListener('submit', async (e) => {
 // ==========================================
 // HELPERS INTERNOS
 // ==========================================
-
-/**
- * [BUG-03-FIX] Tenta vincular até `maxRetries` vezes com backoff exponencial.
- * Útil pois o JWT recém-emitido pode ter um delay de propagação mínimo.
- *
- * @param {string} accessToken    - JWT do usuário autenticado
- * @param {string} subscriptionId - ID da subscription a vincular
- * @param {number} maxRetries     - Número máximo de tentativas (padrão: 3)
- * @returns {Promise<boolean>}
- */
-async function _linkViaBackendWithRetry(accessToken, subscriptionId, maxRetries = 3) {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        const success = await _linkViaBackend(accessToken, subscriptionId);
-        if (success) return true;
-
-        if (attempt < maxRetries) {
-            const delay = 500 * attempt;
-            console.warn(`[primeiroacesso] _linkViaBackend tentativa ${attempt} falhou. Retry em ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-    return false;
-}
-
-/**
- * [SEC-01] Vincula subscription usando o JWT do usuário como autenticação.
- * [FIX-401] Envia 'apikey' (anon key) além do Authorization header.
- * [SEC-TIMEOUT] Usa fetchWithTimeout para evitar requisições penduradas.
- *
- * @param {string} accessToken    - JWT do usuário autenticado
- * @param {string} subscriptionId - ID da subscription a vincular
- * @returns {Promise<boolean>}
- */
-async function _linkViaBackend(accessToken, subscriptionId) {
-    try {
-        const response = await fetchWithTimeout(
-            '/api/link-subscription',
-            {
-                method:  'POST',
-                headers: {
-                    'Content-Type':  'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify({ subscription_id: subscriptionId }),
-            }
-        );
-
-        if (!response.ok) {
-            console.error(`[primeiroacesso] _linkViaBackend HTTP ${response.status}`);
-            return false;
-        }
-        const result = await response.json();
-        return result?.success === true;
-    } catch (err) {
-        const label = err?.name === 'AbortError' ? 'timeout' : 'erro de rede';
-        console.error(`[primeiroacesso] _linkViaBackend ${label}:`, err?.message);
-        return false;
-    }
-}
 
 /**
  * Registra aceitação dos termos de uso (obrigatório por LGPD/GDPR).

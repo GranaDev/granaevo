@@ -227,9 +227,13 @@ async function handleCheckoutCompleted(db: DB, data: Record<string, unknown>) {
   }
 
   // [GOD7-F07] Validar UUID do user_id antes de inserir — evita injeção e corrupção
-  const rawUserId  = metadata.user_id ?? (session.client_reference_id as string ?? '')
-  const userId     = UUID_REGEX.test(rawUserId) ? rawUserId : null
-  const userEmail  = typeof metadata.user_email === 'string' ? metadata.user_email.slice(0, 254) : ''
+  const rawUserId       = metadata.user_id ?? (session.client_reference_id as string ?? '')
+  const userId          = UUID_REGEX.test(rawUserId) ? rawUserId : null
+  const customerDetails = (session.customer_details as Record<string, unknown>) ?? {}
+  const rawEmail        = (typeof metadata.user_email === 'string' && metadata.user_email)
+    ? metadata.user_email
+    : (typeof customerDetails.email === 'string' ? customerDetails.email : '')
+  const userEmail = rawEmail.slice(0, 254)
   const planName   = ['individual', 'casal', 'familia'].includes(metadata.plan_name ?? '')
     ? metadata.plan_name
     : 'individual'

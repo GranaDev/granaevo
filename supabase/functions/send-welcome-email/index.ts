@@ -21,13 +21,14 @@ function isValidEmail(email: string): boolean {
 }
 
 // [SEC-FIX GOD-001] timing-safe compare para proxy secret
+// [GOD-TSE] Sem early-return em length — codifica divergência via XOR
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder()
   const aB  = enc.encode(a)
   const bB  = enc.encode(b)
-  if (aB.length !== bB.length) return false
-  let diff = 0
-  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  const len = Math.max(aB.length, bB.length)
+  let diff  = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 
@@ -634,7 +635,7 @@ Deno.serve(async (req) => {
             <div class="plan-title">${safePlanName}</div>
             <div class="plan-badge-active">
               <span class="status-dot"></span>
-              Acesso vitalício ativado
+              Assinatura ativa
             </div>
           </div>
         </div>
@@ -642,7 +643,7 @@ Deno.serve(async (req) => {
         <!-- CTA -->
         <div class="cta-section">
           <div class="cta-sub">Clique abaixo para configurar sua senha e entrar na plataforma</div>
-          <a href="https://granaevo.com/primeiroacesso" class="cta-btn">
+          <a href="https://granaevo.com/primeiroacesso.html" class="cta-btn">
             Cadastrar nova senha →
           </a>
           <div class="cta-note">Leva menos de 2 minutos ✓</div>

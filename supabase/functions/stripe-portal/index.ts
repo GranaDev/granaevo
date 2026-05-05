@@ -9,13 +9,16 @@ const ALLOWED_ORIGINS = [
   'https://www.granaevo.com',
 ]
 
+const STRIPE_ID_REGEX = /^[a-zA-Z0-9_]{4,100}$/
+
+// [GOD-TSE] Sem early-return em length — codifica divergência via XOR
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder()
   const aB  = enc.encode(a)
   const bB  = enc.encode(b)
-  if (aB.length !== bB.length) return false
-  let diff = 0
-  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  const len = Math.max(aB.length, bB.length)
+  let diff  = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 
@@ -69,6 +72,10 @@ Deno.serve(async (req: Request) => {
 
   if (subErr) return json({ error: 'Erro interno' }, 500)
   if (!stripeSub?.stripe_customer_id) return json({ error: 'Nenhuma assinatura Stripe encontrada' }, 404)
+
+  // [GOD-PORTAL-01] Valida formato do customer_id antes de usar na API Stripe
+  if (!STRIPE_ID_REGEX.test(stripeSub.stripe_customer_id))
+    return json({ error: 'Erro interno' }, 500)
 
   // ── 4. Criar Customer Portal Session ─────────────────────────────────────
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
