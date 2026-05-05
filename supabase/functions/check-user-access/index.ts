@@ -149,6 +149,31 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── 7b. Auto-vinculação Cakto por email (substitui link-subscription) ────
+    // Usuário criou conta via primeiroacesso mas a vinculação falhou.
+    // Na primeira autenticação, vinculamos automaticamente pelo email.
+    if (!caktoOk && userEmail) {
+      const { data: emailCaktoSub } = await supabaseAdmin
+        .from('subscriptions')
+        .select('id, is_active, payment_status, expires_at')
+        .eq('user_email', userEmail)
+        .eq('is_active', true)
+        .eq('payment_status', 'approved')
+        .is('user_id', null)
+        .maybeSingle()
+
+      if (emailCaktoSub) {
+        const caktoExpired = emailCaktoSub.expires_at && new Date(emailCaktoSub.expires_at) < new Date()
+        if (!caktoExpired) {
+          await supabaseAdmin.from('subscriptions')
+            .update({ user_id: userId, updated_at: new Date().toISOString() })
+            .eq('id', emailCaktoSub.id)
+          caktoOk = true
+          console.log('[check-user-access] Auto-vinculação Cakto por email para:', userId.slice(0, 8))
+        }
+      }
+    }
+
     if (caktoOk) {
       // Acesso concedido via Cakto/vitálicio
       if (userEmail) {

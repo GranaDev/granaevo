@@ -563,17 +563,19 @@ accessForm?.addEventListener('submit', async (e) => {
 
         const accessToken = loginData.session?.access_token;
 
-        // ── ETAPA 3: Vincular subscription via Edge Function ────────────
-        // Feito com retry pois depende do JWT que acabou de ser emitido.
-        if (accessToken) {
+        // ── ETAPA 3: Vincular subscription ──────────────────────────────────
+        // Usuários Stripe: a vinculação acontece automaticamente no check-user-access
+        // pelo email (auto-link) — não é necessário chamar link-subscription.
+        // Usuários Cakto: check-user-access também auto-vincula por email agora.
+        // O link explícito via backend não é mais necessário em nenhum dos casos.
+        if (accessToken && !currentSubscriptionData.is_stripe) {
             const linkSuccess = await _linkViaBackendWithRetry(
                 accessToken,
                 currentSubscriptionData.subscription_id
             );
-
             if (!linkSuccess) {
-                // Não crítico — o check-user-access corrige no próximo login.
-                console.warn('[primeiroacesso] _linkViaBackend falhou após retries — será corrigido via check-user-access no próximo login.');
+                // Não crítico — check-user-access corrige no próximo login por email.
+                console.warn('[primeiroacesso] link-subscription falhou — auto-link via check-user-access no próximo login.');
             }
         }
 

@@ -264,8 +264,27 @@ async function handleCheckoutCompleted(db: DB, data: Record<string, unknown>) {
     updated_at:             new Date().toISOString(),
   }, { onConflict: 'stripe_customer_id' })
 
-  if (error) console.error('[webhook-stripe] Erro ao upsert stripe_subscriptions:', error.message)
-  else console.log('[webhook-stripe] Subscription criada — customer:', customerId, 'user:', finalUserId?.slice(0, 8))
+  if (error) {
+    console.error('[webhook-stripe] Erro ao upsert stripe_subscriptions:', error.message)
+    return
+  }
+
+  console.log('[webhook-stripe] Subscription criada — customer:', customerId, 'user:', finalUserId?.slice(0, 8))
+
+  // ── Enviar email de boas-vindas via send-welcome-email ──────────────────
+  // Fire-and-forget — não bloqueia o webhook nem afeta idempotência
+  if (userEmail) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const proxySecret = Deno.env.get('PROXY_SECRET') ?? ''
+    if (supabaseUrl && proxySecret) {
+      fetch(`${supabaseUrl}/functions/v1/send-welcome-email`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-proxy-secret': proxySecret },
+        body:    JSON.stringify({ email: userEmail, name: userEmail.split('@')[0], planName: planName ?? 'GranaEvo' }),
+        signal:  AbortSignal.timeout(10_000),
+      }).catch(err => console.error('[webhook-stripe] Erro ao enviar welcome email:', err?.message))
+    }
+  }
 }
 
 async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) {

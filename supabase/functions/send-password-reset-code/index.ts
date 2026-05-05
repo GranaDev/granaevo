@@ -24,14 +24,14 @@ function getCorsHeaders(req: Request): Record<string, string> {
   }
 }
 
-// [NOVO-001] timing-safe compare — impede bypass via chamada direta sem PROXY_SECRET
+// [GOD2-F01] Sem early-return em length — elimina timing oracle
 function timingSafeEqual(a: string, b: string): boolean {
   const enc  = new TextEncoder()
   const aB   = enc.encode(a)
   const bB   = enc.encode(b)
-  if (aB.length !== bB.length) return false
-  let diff   = 0
-  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  const len  = Math.max(aB.length, bB.length)
+  let diff   = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 
@@ -157,15 +157,25 @@ Deno.serve(async (req) => {
       return neutralResponse(corsHeaders)
     }
 
-    // Email não cadastrado → resposta neutra (não vaza enumeração)
+    // Email não cadastrado em Cakto → verifica Stripe antes de negar
     if (!subscription) {
-      console.log('[send-reset-code] Email não encontrado (não exposto ao caller):', normalizedEmail)
-      return neutralResponse(corsHeaders)
-    }
+      // [STRIPE-MIGRATION] Usuários novos estão em stripe_subscriptions
+      const { data: stripeSub } = await supabase
+        .from('stripe_subscriptions')
+        .select('user_id')
+        .eq('user_email', normalizedEmail)
+        .in('status', ['active', 'trialing'])
+        .not('user_id', 'is', null)
+        .maybeSingle()
 
-    // Pagamento não aprovado → resposta neutra (não vaza enumeração)
-    if (subscription.payment_status !== 'approved') {
-      console.log('[send-reset-code] Pagamento não aprovado (não exposto ao caller):', normalizedEmail)
+      if (!stripeSub?.user_id) {
+        console.log('[send-reset-code] Email não encontrado em Cakto nem Stripe:', normalizedEmail)
+        return neutralResponse(corsHeaders)
+      }
+      // Stripe user encontrado — continua para geração do código
+      // user_name será string vazia (nenhum nome disponível para Stripe)
+    } else if (subscription.payment_status !== 'approved') {
+      console.log('[send-reset-code] Pagamento não aprovado:', normalizedEmail)
       return neutralResponse(corsHeaders)
     }
 
@@ -175,10 +185,10 @@ Deno.serve(async (req) => {
     const code     = String(100_000 + (rnd[0] % 900_000)).padStart(6, '0')
     const codeHash = await hashCode(code)
 
-    // [SEC-FIX GHOST-003] 30 minutos — tempo suficiente para o usuário completar
-    // o reset, sem dar 6 horas para um atacante com acesso ao email.
+    // [GOD2-F04] 15 minutos — reduzido de 30min para limitar janela de bruteforce
+    // (código de 6 dígitos × 15min × 5 tentativas = risco praticamente zero)
     const expiresAt = new Date()
-    expiresAt.setMinutes(expiresAt.getMinutes() + 30)
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15)
 
     console.log('[send-reset-code] Código gerado e hasheado (raw não logado)')
 

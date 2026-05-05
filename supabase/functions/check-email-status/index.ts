@@ -43,13 +43,14 @@ const ALLOWED_ORIGINS = [
   'https://www.granaevo.com',
 ]
 
+// [GOD2-F01] Sem early-return em length — elimina timing oracle
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder()
   const aB  = enc.encode(a)
   const bB  = enc.encode(b)
-  if (aB.length !== bB.length) return false
-  let diff = 0
-  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  const len = Math.max(aB.length, bB.length)
+  let diff  = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 
@@ -163,13 +164,56 @@ Deno.serve(async (req) => {
       throw subError
     }
 
-    // ── Email não encontrado ─────────────────────────────────────────────────
-    // [SEC-FIX] Retorno IDÊNTICO ao de payment_pending — não revela se o email
-    // existe ou não. Ambas as condições retornam o mesmo status 'not_found' para
-    // impedir enumeração via chamadas diretas ao endpoint.
+    // ── Email não encontrado em Cakto — verifica Stripe ─────────────────────
     if (!subscriptions || subscriptions.length === 0) {
+      // [STRIPE-MIGRATION] Usuários novos têm subscription em stripe_subscriptions,
+      // não em subscriptions (Cakto). Verifica a segunda tabela antes de negar.
+      const { data: stripeSubList } = await supabaseAdmin
+        .from('stripe_subscriptions')
+        .select('id, user_id, user_email, plan_name, status, current_period_end')
+        .eq('user_email', normalizedEmail)
+        .in('status', ['active', 'trialing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (!stripeSubList || stripeSubList.length === 0) {
+        return new Response(
+          JSON.stringify({ status: 'not_found' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        )
+      }
+
+      const stripeSub = stripeSubList[0]
+
+      // Período expirado → nega (webhook pode estar atrasado)
+      if (stripeSub.current_period_end && new Date(stripeSub.current_period_end) < new Date()) {
+        return new Response(
+          JSON.stringify({ status: 'not_found' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        )
+      }
+
+      // Usuário Stripe já tem conta criada (user_id vinculado)
+      if (stripeSub.user_id) {
+        return new Response(
+          JSON.stringify({ status: 'password_exists', needs_link: false, data: null }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        )
+      }
+
+      // Usuário Stripe sem conta — pode criar senha
+      // is_stripe=true sinaliza ao primeiroacesso.js que não precisa chamar link-subscription
       return new Response(
-        JSON.stringify({ status: 'not_found' }),
+        JSON.stringify({
+          status: 'ready',
+          data: {
+            subscription_id: stripeSub.id,
+            user_name:       'Usuário',
+            plan_name:       stripeSub.plan_name ?? 'GranaEvo',
+            email:           normalizedEmail,
+            is_stripe:       true,
+          },
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }

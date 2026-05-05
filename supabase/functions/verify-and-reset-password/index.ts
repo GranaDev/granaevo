@@ -66,13 +66,14 @@ async function hashCode(code: string): Promise<string> {
  * [SEC-FIX GHOST-002] Previne timing oracle na verificação de hash.
  * `a === b` vaza informação sobre o prefixo comum via diferença de tempo.
  */
+// [GOD2-F01] Sem early-return em length — elimina timing oracle
 function timingSafeEqual(a: string, b: string): boolean {
   const enc  = new TextEncoder()
   const aB   = enc.encode(a)
   const bB   = enc.encode(b)
-  if (aB.length !== bB.length) return false
-  let diff   = 0
-  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  const len  = Math.max(aB.length, bB.length)
+  let diff   = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 
@@ -97,16 +98,8 @@ async function verifyCaptchaToken(token: string): Promise<boolean> {
   }
 }
 
-// [NOVO-002] timing-safe compare — impede bypass via chamada direta sem PROXY_SECRET
-function timingSafeEqualLocal(a: string, b: string): boolean {
-  const enc  = new TextEncoder()
-  const aB   = enc.encode(a)
-  const bB   = enc.encode(b)
-  if (aB.length !== bB.length) return false
-  let diff   = 0
-  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
-  return diff === 0
-}
+// Alias — mesma implementação sem early-return
+const timingSafeEqualLocal = timingSafeEqual
 
 // ── HANDLER PRINCIPAL ─────────────────────────────────────────
 Deno.serve(async (req) => {
@@ -311,16 +304,30 @@ Deno.serve(async (req) => {
 
     // ── 5b. reset_password — altera senha e marca como usado ───
 
-    // Obtém user_id via subscriptions ativas
-    const { data: subscription, error: subError } = await supabase
+    // Obtém user_id — verifica Cakto primeiro, depois Stripe
+    const { data: subscription } = await supabase
       .from('subscriptions')
       .select('user_id')
       .eq('user_email', normalizedEmail)
       .eq('is_active', true)
       .maybeSingle()
 
-    if (subError || !subscription?.user_id) {
-      console.error('[verify-reset] user_id não encontrado:', normalizedEmail, subError?.message ?? '')
+    let resolvedUserId: string | null = subscription?.user_id ?? null
+
+    if (!resolvedUserId) {
+      // [STRIPE-MIGRATION] Tenta stripe_subscriptions se não encontrado em Cakto
+      const { data: stripeSub } = await supabase
+        .from('stripe_subscriptions')
+        .select('user_id')
+        .eq('user_email', normalizedEmail)
+        .in('status', ['active', 'trialing'])
+        .not('user_id', 'is', null)
+        .maybeSingle()
+      resolvedUserId = stripeSub?.user_id ?? null
+    }
+
+    if (!resolvedUserId) {
+      console.error('[verify-reset] user_id não encontrado em Cakto nem Stripe:', normalizedEmail)
 
       // Invalida o código para evitar reuso
       await supabase
@@ -333,7 +340,7 @@ Deno.serve(async (req) => {
 
     // Atualiza a senha via Admin API
     const { error: updateError } = await supabase.auth.admin.updateUserById(
-      subscription.user_id,
+      resolvedUserId,
       { password: newPassword as string },
     )
 
