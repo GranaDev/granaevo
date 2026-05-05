@@ -6,6 +6,9 @@ export default defineConfig({
   publicDir: 'public',
 
   build: {
+    // [CSP-FIX] Desabilita polyfill de modulepreload que injeta scripts data:URI
+    // bloqueados pela CSP (script-src 'self' não permite data:).
+    modulePreload: { polyfill: false },
     rollupOptions: {
       input: {
         main:           'index.html',
