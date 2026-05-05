@@ -81,13 +81,13 @@ async function iniciarCheckout(rawPlanName) {
         const btn = document.querySelector(`.btn-plan[data-plan="${rawPlanName}"]`);
         if (btn) { btn.textContent = 'Aguarde...'; btn.disabled = true; }
 
-        const res = await fetch('/api/create-checkout', {
+        const res = await fetch('/api/stripe', {
             method:  'POST',
             headers: {
                 'Content-Type':  'application/json',
                 'Authorization': `Bearer ${session.access_token}`,
             },
-            body: JSON.stringify({ plan }),
+            body: JSON.stringify({ action: 'checkout', plan }),
         });
         const data = await res.json();
         if (!res.ok || !data.url) throw new Error(data.error ?? 'URL não retornada');

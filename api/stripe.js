@@ -1,10 +1,11 @@
-// /api/create-checkout.js — Proxy para create-stripe-checkout Edge Function
-// Adiciona rate limit por IP e proxy-secret antes de chamar a EF.
+// /api/stripe.js — Proxy unificado para operações Stripe
+// action=checkout → create-stripe-checkout EF
+// action=portal   → stripe-portal EF
+// Mantém proxy secret para proteger as Edge Functions de chamadas diretas.
 
 import { checkRate } from './_rate-limit.js'
 
 const _SUPABASE_URL   = process.env.SUPABASE_URL ?? ''
-const EDGE_URL        = `${_SUPABASE_URL}/functions/v1/create-stripe-checkout`
 const ANON_KEY        = process.env.SUPABASE_ANON_KEY ?? ''
 const PROXY_SECRET    = process.env.PROXY_SECRET ?? ''
 const ALLOWED_ORIGINS = new Set([
@@ -15,7 +16,13 @@ const ALLOWED_ORIGINS = new Set([
     ? process.env.ALLOWED_ORIGIN.split(',').map(s => s.trim()).filter(Boolean)
     : []),
 ])
-const RATE_MAX = 5 // checkout é mais sensível — limite menor
+
+const VALID_PLANS   = new Set(['individual', 'casal', 'familia'])
+const RATE_LIMITS   = { checkout: 5, portal: 10 }
+const EF_URLS       = {
+  checkout: `${_SUPABASE_URL}/functions/v1/create-stripe-checkout`,
+  portal:   `${_SUPABASE_URL}/functions/v1/stripe-portal`,
+}
 
 export default async function handler(req, res) {
   const origin     = req.headers['origin'] ?? ''
@@ -39,21 +46,14 @@ export default async function handler(req, res) {
   const authHeader = req.headers['authorization'] ?? ''
   if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
 
-  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
-    .toString().split(',')[0].trim()
-
-  if (!(await checkRate(`create-checkout:${ip}`, RATE_MAX))) {
-    res.setHeader('Retry-After', '60')
-    return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
-  }
-
+  // Lê body
   let raw = ''
   try {
     raw = await new Promise((resolve, reject) => {
       const chunks = []; let total = 0
       req.on('data', c => {
         total += c.length
-        if (total > 1024) { req.destroy(); return reject(new Error('TOO_LARGE')) }
+        if (total > 2048) { req.destroy(); return reject(new Error('TOO_LARGE')) }
         chunks.push(c)
       })
       req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
@@ -66,13 +66,32 @@ export default async function handler(req, res) {
   let body
   try { body = JSON.parse(raw) } catch { return res.status(400).json({ error: 'JSON inválido' }) }
 
-  const VALID_PLANS = new Set(['individual', 'casal', 'familia'])
-  if (typeof body?.plan !== 'string' || !VALID_PLANS.has(body.plan.toLowerCase())) {
-    return res.status(400).json({ error: 'Plano inválido. Use: individual, casal ou familia' })
+  const action = body?.action
+  if (action !== 'checkout' && action !== 'portal')
+    return res.status(400).json({ error: 'action inválida. Use: checkout ou portal' })
+
+  // Validação específica por action
+  if (action === 'checkout') {
+    const plan = (body.plan ?? '').toLowerCase()
+    if (!VALID_PLANS.has(plan))
+      return res.status(400).json({ error: 'Plano inválido. Use: individual, casal ou familia' })
   }
 
+  // Rate limit por IP
+  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
+    .toString().split(',')[0].trim()
+  if (!(await checkRate(`stripe-${action}:${ip}`, RATE_LIMITS[action]))) {
+    res.setHeader('Retry-After', '60')
+    return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
+  }
+
+  // Monta payload para a Edge Function
+  const efPayload = action === 'checkout'
+    ? { plan: body.plan.toLowerCase() }
+    : {}
+
   try {
-    const r = await fetch(EDGE_URL, {
+    const r = await fetch(EF_URLS[action], {
       method:  'POST',
       headers: {
         'Content-Type':   'application/json',
@@ -80,7 +99,7 @@ export default async function handler(req, res) {
         'apikey':         ANON_KEY,
         'x-proxy-secret': PROXY_SECRET,
       },
-      body:   JSON.stringify({ plan: body.plan.toLowerCase() }),
+      body:   JSON.stringify(efPayload),
       signal: AbortSignal.timeout(20_000),
     })
     res.setHeader('Content-Type', 'application/json')

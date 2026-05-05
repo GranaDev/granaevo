@@ -1,6 +1,5 @@
 // supabase/functions/stripe-portal/index.ts
-// Cria uma sessão no Stripe Customer Portal para o usuário gerenciar
-// sua assinatura (cancelar, mudar plano, atualizar cartão).
+// Chamada via /api/stripe (proxy Vercel). Requer proxy secret + JWT válido.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
@@ -41,20 +40,14 @@ Deno.serve(async (req: Request) => {
 
   // ── 1. Proxy secret ───────────────────────────────────────────────────────
   const proxySecret = Deno.env.get('PROXY_SECRET')
-  if (!proxySecret) {
-    console.error('[stripe-portal] PROXY_SECRET não configurada')
-    return json({ error: 'Serviço indisponível' }, 503)
-  }
-  if (!timingSafeEqual(req.headers.get('x-proxy-secret') ?? '', proxySecret)) {
-    console.warn('[stripe-portal] Proxy secret inválido — acesso direto bloqueado')
+  if (!proxySecret) return json({ error: 'Serviço indisponível' }, 503)
+  if (!timingSafeEqual(req.headers.get('x-proxy-secret') ?? '', proxySecret))
     return json({ error: 'Não autorizado' }, 401)
-  }
 
-  // ── 2. Verificar JWT ───────────────────────────────────────────────────────
+  // ── 2. JWT ────────────────────────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) return json({ error: 'Não autorizado' }, 401)
   const token = authHeader.slice(7).trim()
-  if (!token || token.length < 20) return json({ error: 'Não autorizado' }, 401)
 
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -63,12 +56,9 @@ Deno.serve(async (req: Request) => {
   )
 
   const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token)
-  if (userErr || !user?.id) {
-    console.warn('[stripe-portal] JWT inválido:', userErr?.message)
-    return json({ error: 'Sessão inválida' }, 401)
-  }
+  if (userErr || !user?.id) return json({ error: 'Sessão inválida' }, 401)
 
-  // ── 3. Buscar stripe_customer_id do usuário ───────────────────────────────
+  // ── 3. Buscar stripe_customer_id ──────────────────────────────────────────
   const { data: stripeSub, error: subErr } = await supabaseAdmin
     .from('stripe_subscriptions')
     .select('stripe_customer_id')
@@ -77,20 +67,12 @@ Deno.serve(async (req: Request) => {
     .limit(1)
     .maybeSingle()
 
-  if (subErr) {
-    console.error('[stripe-portal] Erro ao buscar stripe_subscriptions:', subErr.message)
-    return json({ error: 'Erro interno' }, 500)
-  }
-  if (!stripeSub?.stripe_customer_id) {
-    return json({ error: 'Nenhuma assinatura Stripe encontrada para este usuário' }, 404)
-  }
+  if (subErr) return json({ error: 'Erro interno' }, 500)
+  if (!stripeSub?.stripe_customer_id) return json({ error: 'Nenhuma assinatura Stripe encontrada' }, 404)
 
-  // ── 4. Criar sessão no Stripe Customer Portal ─────────────────────────────
+  // ── 4. Criar Customer Portal Session ─────────────────────────────────────
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
-  if (!stripeKey) {
-    console.error('[stripe-portal] STRIPE_SECRET_KEY não configurada')
-    return json({ error: 'Serviço indisponível' }, 503)
-  }
+  if (!stripeKey) return json({ error: 'Configuração indisponível' }, 503)
 
   const params = new URLSearchParams()
   params.set('customer',   stripeSub.stripe_customer_id)
@@ -108,20 +90,18 @@ Deno.serve(async (req: Request) => {
       body:   params.toString(),
       signal: AbortSignal.timeout(10_000),
     })
-  } catch (err) {
-    console.error('[stripe-portal] Timeout/rede ao chamar Stripe:', err)
+  } catch {
     return json({ error: 'Erro de conexão com gateway de pagamento' }, 502)
   }
 
   if (!portalRes.ok) {
-    const errText = await portalRes.text()
-    console.error('[stripe-portal] Stripe API error:', portalRes.status, errText)
-    return json({ error: 'Erro ao criar portal de gerenciamento' }, 502)
+    console.error('[stripe-portal] Stripe error:', await portalRes.text())
+    return json({ error: 'Erro ao criar portal' }, 502)
   }
 
   const portal = await portalRes.json()
-  if (!portal.url) return json({ error: 'URL do portal não retornada' }, 502)
+  if (!portal.url) return json({ error: 'URL não retornada pelo Stripe' }, 502)
 
-  console.log('[stripe-portal] Portal criado para user:', user.id.slice(0, 8))
+  console.log('[stripe-portal] OK — user:', user.id.slice(0, 8))
   return json({ url: portal.url })
 })

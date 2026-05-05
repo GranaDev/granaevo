@@ -1,6 +1,5 @@
 // supabase/functions/create-stripe-checkout/index.ts
-// Cria uma Stripe Checkout Session para assinaturas mensais.
-// Requer: PROXY_SECRET + JWT válido + STRIPE_SECRET_KEY + STRIPE_PRICE_xxx
+// Chamada via /api/stripe (proxy Vercel). Requer proxy secret + JWT válido.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
@@ -10,7 +9,6 @@ const ALLOWED_ORIGINS = [
   'https://www.granaevo.com',
 ]
 
-// Mapeia nome do plano → variável de ambiente que contém o Price ID do Stripe
 const PLAN_ENV_MAP: Record<string, string> = {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
   casal:      'STRIPE_PRICE_CASAL',
@@ -46,22 +44,16 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405)
 
-  // ── 1. Proxy secret — bloqueia chamadas diretas que bypassam o Vercel ──────
+  // ── 1. Proxy secret ───────────────────────────────────────────────────────
   const proxySecret = Deno.env.get('PROXY_SECRET')
-  if (!proxySecret) {
-    console.error('[create-stripe-checkout] PROXY_SECRET não configurada')
-    return json({ error: 'Serviço indisponível' }, 503)
-  }
-  if (!timingSafeEqual(req.headers.get('x-proxy-secret') ?? '', proxySecret)) {
-    console.warn('[create-stripe-checkout] Proxy secret inválido — acesso direto bloqueado')
+  if (!proxySecret) return json({ error: 'Serviço indisponível' }, 503)
+  if (!timingSafeEqual(req.headers.get('x-proxy-secret') ?? '', proxySecret))
     return json({ error: 'Não autorizado' }, 401)
-  }
 
-  // ── 2. Verificar JWT via Admin client (ES256/HS256) ───────────────────────
+  // ── 2. JWT ────────────────────────────────────────────────────────────────
   const authHeader = req.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) return json({ error: 'Não autorizado' }, 401)
   const token = authHeader.slice(7).trim()
-  if (!token || token.length < 20) return json({ error: 'Não autorizado' }, 401)
 
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -70,45 +62,29 @@ Deno.serve(async (req: Request) => {
   )
 
   const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token)
-  if (userErr || !user?.id) {
-    console.warn('[create-stripe-checkout] JWT inválido:', userErr?.message)
-    return json({ error: 'Sessão inválida' }, 401)
-  }
+  if (userErr || !user?.id) return json({ error: 'Sessão inválida' }, 401)
 
-  // ── 3. Validar plano solicitado ───────────────────────────────────────────
+  // ── 3. Plano ──────────────────────────────────────────────────────────────
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
 
   const plan = (body.plan as string ?? '').toLowerCase().trim()
-  if (!plan || !PLAN_ENV_MAP[plan]) {
-    console.warn('[create-stripe-checkout] Plano inválido:', plan)
-    return json({ error: 'Plano inválido. Use: individual, casal ou familia' }, 400)
-  }
+  if (!plan || !PLAN_ENV_MAP[plan]) return json({ error: 'Plano inválido' }, 400)
 
   const priceId   = Deno.env.get(PLAN_ENV_MAP[plan])
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
+  if (!priceId || !stripeKey) return json({ error: 'Configuração indisponível' }, 503)
 
-  if (!priceId) {
-    console.error('[create-stripe-checkout] Price ID não configurado para plano:', plan)
-    return json({ error: 'Configuração de plano indisponível' }, 503)
-  }
-  if (!stripeKey) {
-    console.error('[create-stripe-checkout] STRIPE_SECRET_KEY não configurada')
-    return json({ error: 'Serviço indisponível' }, 503)
-  }
-
-  // ── 4. Criar Stripe Checkout Session (REST API direta — sem SDK) ──────────
+  // ── 4. Criar Checkout Session ─────────────────────────────────────────────
   const params = new URLSearchParams()
   params.set('mode', 'subscription')
   params.set('line_items[0][price]', priceId)
   params.set('line_items[0][quantity]', '1')
   params.set('customer_email', user.email ?? '')
   params.set('client_reference_id', user.id)
-  // metadata na session (disponível em checkout.session.completed)
   params.set('metadata[user_id]',    user.id)
   params.set('metadata[user_email]', user.email ?? '')
   params.set('metadata[plan_name]',  plan)
-  // metadata na subscription (disponível em events futuros da assinatura)
   params.set('subscription_data[metadata][user_id]',    user.id)
   params.set('subscription_data[metadata][user_email]', user.email ?? '')
   params.set('subscription_data[metadata][plan_name]',  plan)
@@ -129,23 +105,18 @@ Deno.serve(async (req: Request) => {
       body:   params.toString(),
       signal: AbortSignal.timeout(15_000),
     })
-  } catch (err) {
-    console.error('[create-stripe-checkout] Timeout/rede ao chamar Stripe:', err)
+  } catch {
     return json({ error: 'Erro de conexão com gateway de pagamento' }, 502)
   }
 
   if (!stripeRes.ok) {
-    const errText = await stripeRes.text()
-    console.error('[create-stripe-checkout] Stripe API error:', stripeRes.status, errText)
+    console.error('[create-stripe-checkout] Stripe error:', await stripeRes.text())
     return json({ error: 'Erro ao criar sessão de pagamento' }, 502)
   }
 
   const session = await stripeRes.json()
-  if (!session.url) {
-    console.error('[create-stripe-checkout] Stripe não retornou URL na sessão')
-    return json({ error: 'URL de checkout não retornada' }, 502)
-  }
+  if (!session.url) return json({ error: 'URL não retornada pelo Stripe' }, 502)
 
-  console.log('[create-stripe-checkout] Sessão criada — user:', user.id.slice(0, 8), 'plano:', plan)
+  console.log('[create-stripe-checkout] OK — user:', user.id.slice(0, 8), 'plano:', plan)
   return json({ url: session.url })
 })
