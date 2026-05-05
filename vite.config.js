@@ -24,7 +24,13 @@ export default defineConfig({
         // Supabase JS em chunk próprio — cacheado separado entre páginas.
         // Vite 8 (Rolldown) exige função em vez de objeto para manualChunks.
         manualChunks: (id) => {
-          if (id.includes('@supabase/supabase-js') || id.includes('node_modules/@supabase')) {
+          // supabase-client.js (wrapper de configuração) entra no mesmo chunk
+          // do vendor para evitar chunk separado de 0.6 kB que pode 404 em CDN.
+          if (
+            id.includes('@supabase/supabase-js') ||
+            id.includes('node_modules/@supabase') ||
+            id.includes('supabase-client.js')
+          ) {
             return 'vendor-supabase';
           }
         },
