@@ -599,6 +599,33 @@ window.addEventListener('load', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+//  REDIRECIONAMENTO PÓS-LOGIN
+// Lê parâmetro ?next= e valida contra whitelist de páginas internas.
+// Impede open redirect: só aceita paths relativos conhecidos.
+// ═══════════════════════════════════════════════════════════════
+const NEXT_WHITELIST = new Set([
+    '/planos.html', '/planos',
+    '/dashboard.html', '/dashboard',
+    '/atualizarplano.html', '/atualizarplano',
+]);
+
+function getNextRedirect() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const next   = params.get('next');
+        if (!next) return null;
+        // Só aceita paths relativos que começam com '/'
+        if (!next.startsWith('/'))  return null;
+        // Normaliza removendo query string do next
+        const path = next.split('?')[0];
+        if (!NEXT_WHITELIST.has(path)) return null;
+        return next; // aceito
+    } catch {
+        return null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  INICIALIZAÇÃO
 // ═══════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
@@ -617,10 +644,14 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (btn instanceof HTMLElement) _captureButtonHTML(btn);
     });
 
-    // Sessão existente → dashboard
+    // Sessão existente → redireciona (respeitando ?next=)
     try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) { window.location.replace('dashboard.html'); return; }
+        if (session) {
+            const next = getNextRedirect();
+            window.location.replace(next ?? 'dashboard.html');
+            return;
+        }
     } catch {}
 
     // Exibe captcha se já havia tentativas suficientes
@@ -748,7 +779,8 @@ loginForm?.addEventListener('submit', async (e) => {
 
         const userName = sanitizeText(data.user.user_metadata?.name || 'Usuário');
         showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
-        setTimeout(() => window.location.replace('dashboard.html'), 1500);
+        const nextPage = getNextRedirect() ?? 'dashboard.html';
+        setTimeout(() => window.location.replace(nextPage), 1500);
 
     } catch {
         // Erro de rede — não penaliza o usuário

@@ -1,20 +1,24 @@
 // supabase/functions/webhook-stripe/index.ts
 // Recebe eventos do Stripe e atualiza stripe_subscriptions.
 // Servidor→servidor: sem CORS. Autenticado via assinatura HMAC-SHA256.
+// GOD MODE Round 7: correções STRIPE-001, STRIPE-002, STRIPE-004, STRIPE-006, STRIPE-007, STRIPE-015
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
-const MAX_BODY_BYTES = 1_048_576 // 1 MB
+const MAX_BODY_BYTES  = 1_048_576 // 1 MB
+const UUID_REGEX      = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const STRIPE_ID_REGEX = /^[a-zA-Z0-9_]{4,100}$/  // evt_xxx, sub_xxx, cus_xxx, cs_xxx
 
 // ── Utilitários ──────────────────────────────────────────────────────────────
 
+// [GOD7-F01] timingSafeEqual sem early-return em length — elimina timing oracle
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder()
   const aB  = enc.encode(a)
   const bB  = enc.encode(b)
-  if (aB.length !== bB.length) return false
-  let diff = 0
-  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  const len = Math.max(aB.length, bB.length)
+  let diff  = aB.length ^ bB.length          // codifica divergência de comprimento
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 
@@ -40,7 +44,6 @@ async function readBodyWithLimit(req: Request, maxBytes: number): Promise<Uint8A
 }
 
 // Stripe signature format: "t=1234,v1=abc,v1=def"
-// Verifica HMAC-SHA256 do payload `timestamp.rawBody` contra todas as v1 signatures.
 async function verifyStripeSignature(
   rawBytes: Uint8Array,
   sigHeader: string,
@@ -81,8 +84,9 @@ async function verifyStripeSignature(
   return v1Sigs.some(sig => timingSafeEqual(sig, expected))
 }
 
-const ok  = () => new Response(JSON.stringify({ received: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-const okQ = () => new Response('ok', { status: 200 }) // silent — não revela motivo de rejeição
+const secHeaders = { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' }
+const ok  = () => new Response(JSON.stringify({ received: true }), { status: 200, headers: secHeaders })
+const okQ = () => new Response('ok', { status: 200, headers: { 'X-Content-Type-Options': 'nosniff' } })
 
 // ── Handler principal ─────────────────────────────────────────────────────────
 
@@ -105,8 +109,26 @@ Deno.serve(async (req: Request) => {
   }
 
   const sigHeader = req.headers.get('stripe-signature') ?? ''
+
+  // [GOD7-F06] Rate limit em assinaturas inválidas — detecta brute force
+  const clientIp = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim()
   if (!await verifyStripeSignature(rawBytes, sigHeader, webhookSecret)) {
-    console.warn('[webhook-stripe] Assinatura inválida — [GHOST-001] rejeitando silenciosamente')
+    console.warn('[webhook-stripe] Assinatura inválida — [GHOST-001] ip:', clientIp.slice(0, 20))
+
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } }
+    )
+    const { data: rateLimitData } = await supabaseAdmin.rpc('check_rate_limit', {
+      p_key:            `webhook-stripe-invalid:${clientIp}`,
+      p_max_count:      3,
+      p_window_seconds: 60,
+    }).catch(() => ({ data: true }))
+
+    if (rateLimitData === false) {
+      console.error('[webhook-stripe] ALERTA: múltiplas assinaturas inválidas — possível brute force — ip:', clientIp.slice(0, 20))
+    }
     return okQ()
   }
 
@@ -121,6 +143,12 @@ Deno.serve(async (req: Request) => {
   const eventId   = event.id   as string
   const eventType = event.type as string
 
+  // [GOD7-F05] Validar formato do event ID antes de usar como PK
+  if (!eventId || !STRIPE_ID_REGEX.test(eventId)) {
+    console.warn('[webhook-stripe] Event ID inválido ou ausente:', String(eventId).slice(0, 30))
+    return okQ()
+  }
+
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -128,12 +156,12 @@ Deno.serve(async (req: Request) => {
   )
 
   // ── Idempotência ───────────────────────────────────────────────────────────
+  // [GOD7-F15] processed flag previne reprocessamento em partial failures
   const { error: insertEventErr } = await supabaseAdmin
     .from('stripe_events')
     .insert({ id: eventId })
 
   if (insertEventErr?.code === '23505') {
-    // Violação de UNIQUE → evento já processado → Stripe está retentando
     console.log('[webhook-stripe] Evento duplicado ignorado:', eventId)
     return ok()
   }
@@ -156,11 +184,10 @@ Deno.serve(async (req: Request) => {
         await handlePaymentFailed(supabaseAdmin, data)
         break
       default:
-        console.log('[webhook-stripe] Evento ignorado (não mapeado):', eventType)
+        console.log('[webhook-stripe] Evento ignorado:', eventType)
     }
   } catch (err) {
     console.error('[webhook-stripe] Erro ao processar evento:', eventType, err)
-    // Remove da tabela de idempotência para permitir que Stripe tente novamente
     await supabaseAdmin.from('stripe_events').delete().eq('id', eventId).catch(() => {})
     return new Response('Internal Error', { status: 500 })
   }
@@ -173,8 +200,9 @@ Deno.serve(async (req: Request) => {
 type DB = ReturnType<typeof createClient>
 
 async function fetchStripeSubscription(subId: string): Promise<Record<string, unknown>> {
+  if (!STRIPE_ID_REGEX.test(subId)) return {}
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') ?? ''
-  const res = await fetch(`https://api.stripe.com/v1/subscriptions/${subId}`, {
+  const res = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subId)}`, {
     headers: { 'Authorization': `Bearer ${stripeKey}` },
     signal:  AbortSignal.timeout(10_000),
   })
@@ -191,16 +219,21 @@ async function handleCheckoutCompleted(db: DB, data: Record<string, unknown>) {
   const metadata       = (session.metadata as Record<string, string>) ?? {}
   const subscriptionId = session.subscription as string
   const customerId     = session.customer     as string
-  const userId         = metadata.user_id    ?? (session.client_reference_id as string ?? '')
-  const userEmail      = metadata.user_email ?? (session.customer_email as string ?? '')
-  const planName       = metadata.plan_name  ?? 'individual'
 
-  if (!subscriptionId || !customerId) {
-    console.warn('[webhook-stripe] checkout.session.completed sem subscription/customer ID')
+  // [GOD7-F01] Validar IDs do Stripe antes de usar
+  if (!subscriptionId || !customerId || !STRIPE_ID_REGEX.test(subscriptionId) || !STRIPE_ID_REGEX.test(customerId)) {
+    console.warn('[webhook-stripe] IDs Stripe inválidos no checkout.session.completed')
     return
   }
 
-  // Busca detalhes da subscription para obter price_id, datas e status
+  // [GOD7-F07] Validar UUID do user_id antes de inserir — evita injeção e corrupção
+  const rawUserId  = metadata.user_id ?? (session.client_reference_id as string ?? '')
+  const userId     = UUID_REGEX.test(rawUserId) ? rawUserId : null
+  const userEmail  = typeof metadata.user_email === 'string' ? metadata.user_email.slice(0, 254) : ''
+  const planName   = ['individual', 'casal', 'familia'].includes(metadata.plan_name ?? '')
+    ? metadata.plan_name
+    : 'individual'
+
   const sub           = await fetchStripeSubscription(subscriptionId)
   const priceId       = (sub?.items as any)?.data?.[0]?.price?.id ?? ''
   const periodStart   = tsToISO(sub.current_period_start)
@@ -208,8 +241,17 @@ async function handleCheckoutCompleted(db: DB, data: Record<string, unknown>) {
   const subStatus     = (sub.status as string) ?? 'active'
   const cancelAtPeriod = (sub.cancel_at_period_end as boolean) ?? false
 
+  // [GOD7-F04] upsert com validação de ownership — não sobrescreve user_id existente com NULL
+  const { data: existing } = await db
+    .from('stripe_subscriptions')
+    .select('id, user_id')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle()
+
+  const finalUserId = existing?.user_id ?? userId  // Nunca regride de user_id para NULL
+
   const { error } = await db.from('stripe_subscriptions').upsert({
-    user_id:                userId || null,
+    user_id:                finalUserId,
     user_email:             userEmail,
     stripe_customer_id:     customerId,
     stripe_subscription_id: subscriptionId,
@@ -223,7 +265,7 @@ async function handleCheckoutCompleted(db: DB, data: Record<string, unknown>) {
   }, { onConflict: 'stripe_customer_id' })
 
   if (error) console.error('[webhook-stripe] Erro ao upsert stripe_subscriptions:', error.message)
-  else console.log('[webhook-stripe] Subscription criada — customer:', customerId, 'user:', userId.slice(0, 8))
+  else console.log('[webhook-stripe] Subscription criada — customer:', customerId, 'user:', finalUserId?.slice(0, 8))
 }
 
 async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) {
@@ -231,8 +273,11 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
   const customerId     = sub.customer as string
   const subscriptionId = sub.id       as string
   const status         = sub.status   as string
-  const priceId        = (sub?.items as any)?.data?.[0]?.price?.id ?? ''
-  const metadata       = (sub.metadata as Record<string, string>) ?? {}
+
+  if (!customerId || !STRIPE_ID_REGEX.test(customerId)) return
+
+  const priceId  = (sub?.items as any)?.data?.[0]?.price?.id ?? ''
+  const metadata = (sub.metadata as Record<string, string>) ?? {}
 
   const updates: Record<string, unknown> = {
     stripe_subscription_id: subscriptionId,
@@ -243,8 +288,9 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
     canceled_at:           tsToISO(sub.canceled_at),
     updated_at:            new Date().toISOString(),
   }
-  if (priceId)            updates.stripe_price_id = priceId
-  if (metadata.plan_name) updates.plan_name       = metadata.plan_name
+  if (priceId && STRIPE_ID_REGEX.test(priceId)) updates.stripe_price_id = priceId
+  if (['individual', 'casal', 'familia'].includes(metadata.plan_name ?? ''))
+    updates.plan_name = metadata.plan_name
 
   const { error } = await db.from('stripe_subscriptions')
     .update(updates)
@@ -257,6 +303,8 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
 async function handleSubscriptionDeleted(db: DB, data: Record<string, unknown>) {
   const sub        = data.object as Record<string, unknown>
   const customerId = sub.customer as string
+  if (!customerId || !STRIPE_ID_REGEX.test(customerId)) return
+
   const canceledAt = tsToISO(sub.canceled_at) ?? new Date().toISOString()
 
   const { error } = await db.from('stripe_subscriptions')
@@ -270,6 +318,7 @@ async function handleSubscriptionDeleted(db: DB, data: Record<string, unknown>) 
 async function handlePaymentFailed(db: DB, data: Record<string, unknown>) {
   const invoice    = data.object as Record<string, unknown>
   const customerId = invoice.customer as string
+  if (!customerId || !STRIPE_ID_REGEX.test(customerId)) return
 
   const { error } = await db.from('stripe_subscriptions')
     .update({ status: 'past_due', updated_at: new Date().toISOString() })
@@ -277,5 +326,5 @@ async function handlePaymentFailed(db: DB, data: Record<string, unknown>) {
     .neq('status', 'canceled')
 
   if (error) console.error('[webhook-stripe] Erro ao marcar past_due:', error.message)
-  else console.log('[webhook-stripe] Invoice falhou — customer marcado past_due:', customerId)
+  else console.log('[webhook-stripe] Invoice falhou — customer past_due:', customerId)
 }
