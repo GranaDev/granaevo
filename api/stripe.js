@@ -1,7 +1,6 @@
-// /api/stripe.js — Proxy unificado para operações Stripe
-// action=checkout → create-stripe-checkout EF
-// action=portal   → stripe-portal EF
-// GOD MODE Round 7: STRIPE-005, STRIPE-008, STRIPE-009, STRIPE-011, STRIPE-012, STRIPE-013
+// /api/stripe.js — Proxy unificado Stripe
+// checkout: NÃO requer JWT — usuário paga antes de criar conta
+// portal:   REQUER JWT — gerenciar assinatura existente
 
 import { checkRate } from './_rate-limit.js'
 
@@ -18,7 +17,6 @@ const ALLOWED_ORIGINS = new Set([
 ])
 
 const VALID_PLANS   = new Set(['individual', 'casal', 'familia'])
-// [GOD7-F11] Whitelist explícita de actions — previne SSRF se novas keys forem adicionadas
 const VALID_ACTIONS = new Set(['checkout', 'portal'])
 const RATE_LIMITS   = { checkout: 5, portal: 10 }
 const EF_URLS       = {
@@ -33,7 +31,6 @@ export default async function handler(req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Vary', 'Origin')
 
-  // [GOD7-F12] OPTIONS com validação de Origin — não vaza CORS headers para domínios inválidos
   if (req.method === 'OPTIONS') {
     if (!ALLOWED_ORIGINS.has(origin)) return res.status(403).end()
     res.setHeader('Access-Control-Allow-Origin', origin)
@@ -50,15 +47,10 @@ export default async function handler(req, res) {
   if (!_SUPABASE_URL || !ANON_KEY || !PROXY_SECRET)
     return res.status(503).json({ error: 'Serviço indisponível' })
 
-  // [GOD7-F09] Validar Content-Type obrigatório
   const contentType = req.headers['content-type'] ?? ''
   if (!contentType.includes('application/json'))
     return res.status(415).json({ error: 'Content-Type deve ser application/json' })
 
-  const authHeader = req.headers['authorization'] ?? ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
-
-  // [GOD7-F13] Timeout em body para prevenir slow-loris DoS
   let raw = ''
   try {
     raw = await new Promise((resolve, reject) => {
@@ -74,57 +66,65 @@ export default async function handler(req, res) {
     })
   } catch (e) {
     if (e.message === 'TOO_LARGE') return res.status(413).json({ error: 'Body muito grande' })
-    if (e.message === 'TIMEOUT')   return res.status(408).json({ error: 'Timeout no envio do body' })
+    if (e.message === 'TIMEOUT')   return res.status(408).json({ error: 'Timeout' })
     return res.status(400).json({ error: 'Body inválido' })
   }
 
-  // [GOD7-F08] Parse seguro — sem prototype pollution
   let body
   try {
     const parsed = JSON.parse(raw)
-    // Extrai apenas as keys necessárias — nunca espalha o objeto completo
-    body = { action: parsed?.action, plan: parsed?.plan }
+    body = { action: parsed?.action, plan: parsed?.plan, email: parsed?.email }
   } catch {
     return res.status(400).json({ error: 'JSON inválido' })
   }
 
   const action = typeof body.action === 'string' ? body.action : ''
-
-  // [GOD7-F11] Validação de action via Set — sem SSRF mesmo se EF_URLS crescer
   if (!VALID_ACTIONS.has(action))
     return res.status(400).json({ error: 'action inválida. Use: checkout ou portal' })
 
+  const authHeader = req.headers['authorization'] ?? ''
+
+  // Portal SEMPRE requer autenticação
+  if (action === 'portal') {
+    if (!authHeader.startsWith('Bearer '))
+      return res.status(401).json({ error: 'Portal requer autenticação' })
+  }
+
+  // Checkout: valida plano
   if (action === 'checkout') {
     const plan = typeof body.plan === 'string' ? body.plan.toLowerCase() : ''
     if (!VALID_PLANS.has(plan))
       return res.status(400).json({ error: 'Plano inválido. Use: individual, casal ou familia' })
   }
 
-  // [GOD7-F05] Rate limit por JWT prefix (mais robusto que IP puro)
-  // IP como camada adicional — Vercel injeta x-real-ip confiável
   const ip = req.headers['x-real-ip']
     ?? (req.headers['x-forwarded-for'] ?? '').split(',')[0].trim()
     ?? 'unknown'
+
   if (!(await checkRate(`stripe-${action}:${ip}`, RATE_LIMITS[action]))) {
     res.setHeader('Retry-After', '60')
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
 
+  // Monta payload para a Edge Function
   const efPayload = action === 'checkout'
-    ? { plan: (body.plan ?? '').toLowerCase() }
+    ? { plan: (body.plan ?? '').toLowerCase(), email: body.email ?? '' }
     : {}
+
+  const efHeaders = {
+    'Content-Type':   'application/json',
+    'apikey':         ANON_KEY,
+    'x-proxy-secret': PROXY_SECRET,
+  }
+  // Passa JWT se disponível (melhora rastreamento, mas não é obrigatório para checkout)
+  if (authHeader.startsWith('Bearer ')) efHeaders['Authorization'] = authHeader
 
   try {
     const r = await fetch(EF_URLS[action], {
       method:  'POST',
-      headers: {
-        'Content-Type':   'application/json',
-        'Authorization':  authHeader,
-        'apikey':         ANON_KEY,
-        'x-proxy-secret': PROXY_SECRET,
-      },
-      body:   JSON.stringify(efPayload),
-      signal: AbortSignal.timeout(20_000),
+      headers: efHeaders,
+      body:    JSON.stringify(efPayload),
+      signal:  AbortSignal.timeout(20_000),
     })
     res.setHeader('Content-Type', 'application/json')
     return res.status(r.status).send(await r.text())

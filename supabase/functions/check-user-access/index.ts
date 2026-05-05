@@ -181,9 +181,39 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!stripeSub) {
+      // ── 9. Auto-vinculação por email (compra anônima → criou conta depois) ──
+      // Usuário pagou sem estar logado → subscription tem user_id=null + user_email.
+      // Na primeira autenticação, vinculamos automaticamente pelo email.
+      if (userEmail) {
+        const { data: emailSub, error: emailErr } = await supabaseAdmin
+          .from('stripe_subscriptions')
+          .select('id, status, current_period_end')
+          .eq('user_email', userEmail)
+          .is('user_id', null)
+          .in('status', ['active', 'trialing'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (!emailErr && emailSub) {
+          if (!emailSub.current_period_end || new Date(emailSub.current_period_end) >= new Date()) {
+            // Vincula user_id à subscription
+            await supabaseAdmin
+              .from('stripe_subscriptions')
+              .update({ user_id: userId, updated_at: new Date().toISOString() })
+              .eq('id', emailSub.id)
+            console.log('[check-user-access] Auto-vinculação Stripe por email para:', userId.slice(0, 8))
+            // Concede acesso
+            if (userEmail) {
+              try { await supabaseAdmin.rpc('clear_login_lockout', { p_identifier: userEmail, p_identifier_type: 'email' }) }
+              catch { /* silencioso */ }
+            }
+            return json({ hasAccess: true }, 200, corsHeaders)
+          }
+        }
+      }
+
       console.log('[check-user-access] Sem subscription ativa (Cakto ou Stripe) para:', userId.slice(0, 8))
-      // [GHOST-004] record_failed_login NÃO deve ser chamado aqui.
-      // Ausência de subscription não é falha de autenticação — é falha de autorização de negócio.
       return deny()
     }
 

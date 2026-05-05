@@ -70,37 +70,34 @@ async function iniciarCheckout(rawPlanName) {
     setTimeout(() => { checkoutLock = false; }, 3000);
     trackEvent('Plan', 'checkout_click', plan);
 
-    // Verifica sessão — se não logado, salva o plano e redireciona para login
-    const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
-    if (!session?.access_token) {
-        try { sessionStorage.setItem('ge_pending_plan', plan); } catch {}
-        window.location.href = `/login.html?next=${encodeURIComponent(window.location.pathname)}`;
-        return;
-    }
+    const btn = document.querySelector(`.btn-plan[data-plan="${rawPlanName}"]`);
+    const btnText = btn?.querySelector('.btn-text');
+    if (btnText) btnText.textContent = 'Aguarde...';
+    if (btn)    btn.disabled = true;
 
     try {
-        const btn = document.querySelector(`.btn-plan[data-plan="${rawPlanName}"]`);
-        if (btn) { btn.querySelector('.btn-text').textContent = 'Aguarde...'; btn.disabled = true; }
+        // Sessão é opcional — se logado, melhora rastreamento.
+        // Nunca bloqueia o checkout por falta de login.
+        const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+        const body = { action: 'checkout', plan };
+        if (session?.user?.email) body.email = session.user.email;
 
         const res = await fetch('/api/stripe', {
             method:  'POST',
-            headers: {
-                'Content-Type':  'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ action: 'checkout', plan }),
+            headers,
+            body: JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok || !data.url) throw new Error(data.error ?? 'URL não retornada');
         safeRedirect(data.url);
     } catch (err) {
         checkoutLock = false;
-        const btn = document.querySelector(`.btn-plan[data-plan="${rawPlanName}"]`);
-        if (btn) {
-            const span = btn.querySelector('.btn-text');
-            if (span) span.textContent = 'Começar Agora';
-            btn.disabled = false;
-        }
+        if (btnText) btnText.textContent = 'Começar Agora';
+        if (btn)    btn.disabled = false;
         alert('Não foi possível iniciar o pagamento. Tente novamente em instantes.');
     }
 }
@@ -674,20 +671,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Bind dos botões de checkout
     bindCheckoutButtons();
-
-    // Auto-checkout: se o usuário voltou do login com um plano pendente,
-    // dispara o checkout automaticamente sem precisar clicar de novo.
-    try {
-        const pending = sessionStorage.getItem('ge_pending_plan');
-        if (pending && ['individual', 'casal', 'familia'].includes(pending)) {
-            sessionStorage.removeItem('ge_pending_plan');
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.access_token) {
-                // Pequeno delay para o DOM estar pronto
-                setTimeout(() => iniciarCheckout(pending), 300);
-            }
-        }
-    } catch {}
 
     // Inicia carousel no mobile
     if (window.innerWidth < 768) {

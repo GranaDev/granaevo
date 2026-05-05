@@ -1,5 +1,7 @@
 // supabase/functions/create-stripe-checkout/index.ts
-// Chamada via /api/stripe (proxy Vercel). Requer proxy secret + JWT válido.
+// JWT OPCIONAL — suporta checkout anônimo (paga antes, cria conta depois).
+// Se JWT presente: vincula user_id imediatamente.
+// Se ausente: subscription fica com user_id=null, vinculada por email em check-user-access.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
@@ -19,9 +21,9 @@ function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder()
   const aB  = enc.encode(a)
   const bB  = enc.encode(b)
-  if (aB.length !== bB.length) return false
-  let diff = 0
-  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  const len = Math.max(aB.length, bB.length)
+  let diff  = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 
@@ -44,54 +46,77 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405)
 
-  // ── 1. Proxy secret ───────────────────────────────────────────────────────
+  // ── 1. Proxy secret obrigatório ───────────────────────────────────────────
   const proxySecret = Deno.env.get('PROXY_SECRET')
   if (!proxySecret) return json({ error: 'Serviço indisponível' }, 503)
   if (!timingSafeEqual(req.headers.get('x-proxy-secret') ?? '', proxySecret))
     return json({ error: 'Não autorizado' }, 401)
 
-  // ── 2. JWT ────────────────────────────────────────────────────────────────
+  // ── 2. JWT OPCIONAL — melhora rastreamento mas não bloqueia checkout ──────
+  let userId    = ''
+  let userEmail = ''
+
   const authHeader = req.headers.get('Authorization') ?? ''
-  if (!authHeader.startsWith('Bearer ')) return json({ error: 'Não autorizado' }, 401)
-  const token = authHeader.slice(7).trim()
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim()
+    if (token.length > 20) {
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } }
+      )
+      const { data: { user } } = await supabaseAdmin.auth.getUser(token).catch(() => ({ data: { user: null } }))
+      if (user?.id) {
+        userId    = user.id
+        userEmail = user.email ?? ''
+      }
+    }
+  }
 
-  const supabaseAdmin = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } }
-  )
-
-  const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token)
-  if (userErr || !user?.id) return json({ error: 'Sessão inválida' }, 401)
-
-  // ── 3. Plano ──────────────────────────────────────────────────────────────
+  // ── 3. Validar plano ──────────────────────────────────────────────────────
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
 
   const plan = (body.plan as string ?? '').toLowerCase().trim()
   if (!plan || !PLAN_ENV_MAP[plan]) return json({ error: 'Plano inválido' }, 400)
 
+  // Email do body como fallback (anônimo)
+  if (!userEmail && typeof body.email === 'string') {
+    const raw = body.email.toLowerCase().trim()
+    if (raw.includes('@') && raw.length <= 254) userEmail = raw
+  }
+
   const priceId   = Deno.env.get(PLAN_ENV_MAP[plan])
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
   if (!priceId || !stripeKey) return json({ error: 'Configuração indisponível' }, 503)
 
   // ── 4. Criar Checkout Session ─────────────────────────────────────────────
+  // success_url: logado → dashboard; anônimo → planos com mensagem de sucesso
+  const successUrl = userId
+    ? 'https://granaevo.com/dashboard.html?stripe=success'
+    : 'https://granaevo.com/planos.html?stripe_paid=1'
+
   const params = new URLSearchParams()
   params.set('mode', 'subscription')
   params.set('line_items[0][price]', priceId)
   params.set('line_items[0][quantity]', '1')
-  params.set('customer_email', user.email ?? '')
-  params.set('client_reference_id', user.id)
-  params.set('metadata[user_id]',    user.id)
-  params.set('metadata[user_email]', user.email ?? '')
-  params.set('metadata[plan_name]',  plan)
-  params.set('subscription_data[metadata][user_id]',    user.id)
-  params.set('subscription_data[metadata][user_email]', user.email ?? '')
-  params.set('subscription_data[metadata][plan_name]',  plan)
-  params.set('success_url', 'https://granaevo.com/dashboard.html?stripe=success')
+  params.set('success_url', successUrl)
   params.set('cancel_url',  'https://granaevo.com/planos.html')
   params.set('locale', 'pt-BR')
   params.set('allow_promotion_codes', 'true')
+
+  if (userEmail) params.set('customer_email', userEmail)
+  if (userId)    params.set('client_reference_id', userId)
+
+  // Metadata para o webhook — user_id pode ser vazio (anônimo)
+  params.set('metadata[user_id]',    userId)
+  params.set('metadata[user_email]', userEmail)
+  params.set('metadata[plan_name]',  plan)
+  if (userId) {
+    params.set('subscription_data[metadata][user_id]',    userId)
+    params.set('subscription_data[metadata][user_email]', userEmail)
+  }
+  params.set('subscription_data[metadata][plan_name]', plan)
 
   let stripeRes: Response
   try {
@@ -117,6 +142,7 @@ Deno.serve(async (req: Request) => {
   const session = await stripeRes.json()
   if (!session.url) return json({ error: 'URL não retornada pelo Stripe' }, 502)
 
-  console.log('[create-stripe-checkout] OK — user:', user.id.slice(0, 8), 'plano:', plan)
+  const logCtx = userId ? `user:${userId.slice(0, 8)}` : `anon:${userEmail.slice(0, 10) || 'no-email'}`
+  console.log('[create-stripe-checkout] OK —', logCtx, 'plano:', plan)
   return json({ url: session.url })
 })
