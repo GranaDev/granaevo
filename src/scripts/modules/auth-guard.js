@@ -454,11 +454,7 @@ const SubscriptionChecker = (() => {
 
     /**
      * [FIX-VUL-3] + [FIX-REPORT-5]
-     * Auto-link exige:
-     *   (a) email_confirmed_at presente no JWT
-     *   (b) emails coincidem (case-insensitive) — verificado pelo chamador
-     *   (c) .eq('user_email', subscriptionEmail) no UPDATE — guard duplo
-     *       contra race condition entre abas tentando vincular ao mesmo tempo
+     * Auto-link Cakto — vincula subscription.user_id ao usuário autenticado.
      */
     async function _autoLink(subscriptionId, userId, sessionEmail, subscriptionEmail) {
         if (!sessionEmail || !subscriptionEmail) return;
@@ -475,9 +471,32 @@ const SubscriptionChecker = (() => {
                 })
                 .eq('id', subscriptionId)
                 .is('user_id', null)
-                .eq('user_email', subscriptionEmail); // [FIX-REPORT-5]
+                .eq('user_email', subscriptionEmail);
         } catch {
             // Não crítico — tentará novamente na próxima verificação
+        }
+    }
+
+    /**
+     * Auto-link Stripe — vincula stripe_subscriptions.user_id ao usuário autenticado.
+     * Requer RLS policy "stripe_sub_update_claim" (user_id IS NULL + email match).
+     */
+    async function _autoLinkStripe(subscriptionId, userId, sessionEmail, subscriptionEmail) {
+        if (!sessionEmail || !subscriptionEmail) return;
+        if (sessionEmail.toLowerCase() !== subscriptionEmail.toLowerCase()) return;
+
+        try {
+            await supabase
+                .from('stripe_subscriptions')
+                .update({
+                    user_id:    userId,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', subscriptionId)
+                .is('user_id', null)
+                .eq('user_email', subscriptionEmail.toLowerCase());
+        } catch {
+            // Não crítico — check-user-access EF também faz o link via service role
         }
     }
 
@@ -512,6 +531,33 @@ const SubscriptionChecker = (() => {
                     _cacheUser = userId;
                     _cacheExp  = Date.now() + CACHE_TTL;
                     return _cache;
+                }
+
+                // ── 1.5: Stripe — busca por user_id (assinatura recorrente) ──
+                const { data: stripeSub, error: stripeErr } = await supabase
+                    .from('stripe_subscriptions')
+                    .select('id, plan_name, status, current_period_end')
+                    .eq('user_id', userId)
+                    .in('status', ['active', 'trialing'])
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (!stripeErr && stripeSub) {
+                    // Período ainda válido ou sem data de expiração definida
+                    if (!stripeSub.current_period_end ||
+                        new Date(stripeSub.current_period_end) >= new Date()) {
+                        _cache = Object.freeze({
+                            subscription: stripeSub,
+                            isGuest:      false,
+                            ownerId:      userId,
+                            planName:     stripeSub.plan_name || 'Individual',
+                            ownerEmail:   null,
+                        });
+                        _cacheUser = userId;
+                        _cacheExp  = Date.now() + CACHE_TTL;
+                        return _cache;
+                    }
                 }
 
                 // ── 2. Fallback por email (user_id = NULL) ────────────
@@ -577,6 +623,47 @@ const SubscriptionChecker = (() => {
                             planName:     emailSub.plans?.name || 'Individual',
                             ownerEmail:   null,
                         });
+                    }
+
+                    // ── 2.5: Stripe — busca por email (primeiro login após compra anônima) ─
+                    // user_id ainda é NULL: compra foi feita sem login.
+                    // RLS "stripe_sub_select_by_email" permite esta leitura.
+                    const { data: stripeEmailSub, error: stripeEmailErr } = await supabase
+                        .from('stripe_subscriptions')
+                        .select('id, plan_name, status, current_period_end, user_email')
+                        .is('user_id', null)
+                        .eq('user_email', sessionEmail.toLowerCase())
+                        .in('status', ['active', 'trialing'])
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+
+                    if (!stripeEmailErr && stripeEmailSub) {
+                        if (!stripeEmailSub.current_period_end ||
+                            new Date(stripeEmailSub.current_period_end) >= new Date()) {
+
+                            const emailConfirmedStripe = !!authUser?.email_confirmed_at;
+                            if (emailConfirmedStripe) {
+                                // Auto-link em background (RLS "stripe_sub_update_claim")
+                                _autoLinkStripe(
+                                    stripeEmailSub.id,
+                                    userId,
+                                    sessionEmail,
+                                    stripeEmailSub.user_email,
+                                );
+                                _cache     = null;
+                                _cacheUser = null;
+                                _cacheExp  = 0;
+                            }
+
+                            return Object.freeze({
+                                subscription: stripeEmailSub,
+                                isGuest:      false,
+                                ownerId:      userId,
+                                planName:     stripeEmailSub.plan_name || 'Individual',
+                                ownerEmail:   null,
+                            });
+                        }
                     }
                 }
 
