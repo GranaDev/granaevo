@@ -32,7 +32,7 @@
  *               password_created no banco e retorna password_exists.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
 // ──────────────────────────────────────────────────────────────────────────────
 // CORS — restrito às origens conhecidas (proxy Vercel + domínios da aplicação)

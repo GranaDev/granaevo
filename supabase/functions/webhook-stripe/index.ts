@@ -233,7 +233,7 @@ async function handleCheckoutCompleted(db: DB, data: Record<string, unknown>) {
   const rawEmail        = (typeof metadata.user_email === 'string' && metadata.user_email)
     ? metadata.user_email
     : (typeof customerDetails.email === 'string' ? customerDetails.email : '')
-  const userEmail = rawEmail.slice(0, 254)
+  const userEmail = rawEmail.toLowerCase().trim().slice(0, 254)
   const planName   = ['individual', 'casal', 'familia'].includes(metadata.plan_name ?? '')
     ? metadata.plan_name
     : 'individual'
