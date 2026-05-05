@@ -70,16 +70,17 @@ async function iniciarCheckout(rawPlanName) {
     setTimeout(() => { checkoutLock = false; }, 3000);
     trackEvent('Plan', 'checkout_click', plan);
 
-    // Verifica sessão — se não logado, manda para login e volta aqui depois
+    // Verifica sessão — se não logado, salva o plano e redireciona para login
     const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
     if (!session?.access_token) {
+        try { sessionStorage.setItem('ge_pending_plan', plan); } catch {}
         window.location.href = `/login.html?next=${encodeURIComponent(window.location.pathname)}`;
         return;
     }
 
     try {
         const btn = document.querySelector(`.btn-plan[data-plan="${rawPlanName}"]`);
-        if (btn) { btn.textContent = 'Aguarde...'; btn.disabled = true; }
+        if (btn) { btn.querySelector('.btn-text').textContent = 'Aguarde...'; btn.disabled = true; }
 
         const res = await fetch('/api/stripe', {
             method:  'POST',
@@ -93,11 +94,14 @@ async function iniciarCheckout(rawPlanName) {
         if (!res.ok || !data.url) throw new Error(data.error ?? 'URL não retornada');
         safeRedirect(data.url);
     } catch (err) {
-        console.error('[GranaEvo] Erro no checkout Stripe:', err.message);
         checkoutLock = false;
         const btn = document.querySelector(`.btn-plan[data-plan="${rawPlanName}"]`);
-        if (btn) { btn.textContent = 'Começar agora'; btn.disabled = false; }
-        alert('Não foi possível iniciar o pagamento. Tente novamente.');
+        if (btn) {
+            const span = btn.querySelector('.btn-text');
+            if (span) span.textContent = 'Começar Agora';
+            btn.disabled = false;
+        }
+        alert('Não foi possível iniciar o pagamento. Tente novamente em instantes.');
     }
 }
 
@@ -663,13 +667,27 @@ document.addEventListener('keydown', (e) => {
 // ==========================================
 // INITIALIZATION
 // ==========================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     // Inicializa arrays com os nós reais do DOM
     planCardsArray = Array.from(document.querySelectorAll('.plan-card'));
     totalSlides    = planCardsArray.length;
 
     // Bind dos botões de checkout
     bindCheckoutButtons();
+
+    // Auto-checkout: se o usuário voltou do login com um plano pendente,
+    // dispara o checkout automaticamente sem precisar clicar de novo.
+    try {
+        const pending = sessionStorage.getItem('ge_pending_plan');
+        if (pending && ['individual', 'casal', 'familia'].includes(pending)) {
+            sessionStorage.removeItem('ge_pending_plan');
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+                // Pequeno delay para o DOM estar pronto
+                setTimeout(() => iniciarCheckout(pending), 300);
+            }
+        }
+    } catch {}
 
     // Inicia carousel no mobile
     if (window.innerWidth < 768) {

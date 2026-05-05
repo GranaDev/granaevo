@@ -611,15 +611,18 @@ const NEXT_WHITELIST = new Set([
 
 function getNextRedirect() {
     try {
+        // Prioridade 1: parâmetro ?next= na URL
         const params = new URLSearchParams(window.location.search);
         const next   = params.get('next');
-        if (!next) return null;
-        // Só aceita paths relativos que começam com '/'
-        if (!next.startsWith('/'))  return null;
-        // Normaliza removendo query string do next
-        const path = next.split('?')[0];
-        if (!NEXT_WHITELIST.has(path)) return null;
-        return next; // aceito
+        if (next && next.startsWith('/') && NEXT_WHITELIST.has(next.split('?')[0])) {
+            return next;
+        }
+        // Prioridade 2: plano pendente no sessionStorage (fluxo via primeiroacesso)
+        const pending = sessionStorage.getItem('ge_pending_plan');
+        if (pending && ['individual', 'casal', 'familia'].includes(pending)) {
+            return '/planos.html';
+        }
+        return null;
     } catch {
         return null;
     }
