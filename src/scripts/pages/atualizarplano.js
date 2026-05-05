@@ -331,12 +331,9 @@ function _parsearESanitizarSVG(svgString) {
 //
 // Valida: protocolo https + hostname whitelist + pathname esperado + query length.
 // Impede open redirect mesmo que a resposta do backend seja manipulada.
-// Domínios autorizados para redirecionamento de pagamento.
-// Cakto: pagamentos vitálicio existentes.
-// Stripe: novas assinaturas recorrentes.
 const _DOMINIOS_PAGAMENTO_PERMITIDOS = new Set([
-    'pay.cakto.com.br',
     'checkout.stripe.com',
+    'billing.stripe.com',
 ]);
 
 function _validarUrlPagamento(url) {

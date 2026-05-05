@@ -23,55 +23,17 @@ const CONFIG = {
     plans: ['Individual', 'Casal', 'Família'],
 
     // Domínios permitidos para redirecionamento (whitelist)
-    allowedRedirectDomains: ['pay.cakto.com.br', 'checkout.stripe.com'],
+    allowedRedirectDomains: ['checkout.stripe.com'],
 
     // Normalização de data-plan → chave canônica
     planNameMap: {
-        'individual': 'Individual',
-        'casal':      'Casal',
-        'familia':    'Família'
+        'individual': 'individual',
+        'casal':      'casal',
+        'familia':    'familia'
     }
 };
 
-// ==========================================
-// CHECKOUT — REDIRECIONAMENTO SEGURO
-// ==========================================
-const CHECKOUT_URLS = Object.freeze({
-    'Individual': 'https://pay.cakto.com.br/figw38w_731973',
-    'Casal':      'https://pay.cakto.com.br/rmq8b33_731974',
-    'Família':    'https://pay.cakto.com.br/4x7ii5i_731976'
-});
-
 let checkoutLock = false;
-
-// ── Stripe Checkout (usuários logados) ──────────────────────────────────────
-// Chama /api/create-checkout com o JWT da sessão ativa.
-// Retorna a URL da Stripe Checkout Session e redireciona.
-// Se o usuário não estiver logado, redireciona para login com parâmetro de retorno.
-async function iniciarCheckoutStripe(plan) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-        window.location.href = `/login.html?next=${encodeURIComponent('/planos.html')}`;
-        return;
-    }
-
-    try {
-        const res = await fetch('/api/create-checkout', {
-            method:  'POST',
-            headers: {
-                'Content-Type':  'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ plan }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.url) throw new Error(data.error ?? 'URL não retornada');
-        safeRedirect(data.url);
-    } catch (err) {
-        console.error('[GranaEvo] Erro no checkout Stripe:', err.message);
-        alert('Não foi possível iniciar o pagamento. Tente novamente.');
-    }
-}
 
 function safeRedirect(url) {
     let parsed;
@@ -98,22 +60,44 @@ async function iniciarCheckout(rawPlanName) {
         return;
     }
 
-    const normalized = CONFIG.planNameMap[rawPlanName?.toLowerCase()] ?? rawPlanName;
-    if (!Object.prototype.hasOwnProperty.call(CHECKOUT_URLS, normalized)) {
+    const plan = CONFIG.planNameMap[rawPlanName?.toLowerCase()];
+    if (!plan) {
         console.error('[GranaEvo] Plano desconhecido bloqueado:', rawPlanName);
         return;
     }
 
     checkoutLock = true;
     setTimeout(() => { checkoutLock = false; }, 3000);
-    trackEvent('Plan', 'checkout_click', normalized);
+    trackEvent('Plan', 'checkout_click', plan);
 
-    // Tenta Stripe se o usuário estiver logado; caso contrário usa Cakto.
+    // Verifica sessão — se não logado, manda para login e volta aqui depois
     const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
-    if (session?.access_token) {
-        await iniciarCheckoutStripe(rawPlanName?.toLowerCase());
-    } else {
-        safeRedirect(CHECKOUT_URLS[normalized]);
+    if (!session?.access_token) {
+        window.location.href = `/login.html?next=${encodeURIComponent(window.location.pathname)}`;
+        return;
+    }
+
+    try {
+        const btn = document.querySelector(`.btn-plan[data-plan="${rawPlanName}"]`);
+        if (btn) { btn.textContent = 'Aguarde...'; btn.disabled = true; }
+
+        const res = await fetch('/api/create-checkout', {
+            method:  'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ plan }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.error ?? 'URL não retornada');
+        safeRedirect(data.url);
+    } catch (err) {
+        console.error('[GranaEvo] Erro no checkout Stripe:', err.message);
+        checkoutLock = false;
+        const btn = document.querySelector(`.btn-plan[data-plan="${rawPlanName}"]`);
+        if (btn) { btn.textContent = 'Começar agora'; btn.disabled = false; }
+        alert('Não foi possível iniciar o pagamento. Tente novamente.');
     }
 }
 
