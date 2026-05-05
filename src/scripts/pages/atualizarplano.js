@@ -331,10 +331,12 @@ function _parsearESanitizarSVG(svgString) {
 //
 // Valida: protocolo https + hostname whitelist + pathname esperado + query length.
 // Impede open redirect mesmo que a resposta do backend seja manipulada.
-// [SEC-FIX] Whitelist corrigida: gateway de pagamento é Cakto (pay.cakto.com.br).
-// 'checkout.stripe.com' e 'pay.granaevo.com' removidos — domínios nunca usados em produção.
+// Domínios autorizados para redirecionamento de pagamento.
+// Cakto: pagamentos vitálicio existentes.
+// Stripe: novas assinaturas recorrentes.
 const _DOMINIOS_PAGAMENTO_PERMITIDOS = new Set([
     'pay.cakto.com.br',
+    'checkout.stripe.com',
 ]);
 
 function _validarUrlPagamento(url) {

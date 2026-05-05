@@ -1,7 +1,9 @@
 // ==========================================
 // GRANAEVO PLANOS — planos.js
-// Versão Segura v5 | AbortController Carousel Fix
+// Versão Segura v6 | Stripe Checkout
 // ==========================================
+
+import { supabase } from '../services/supabase-client.js?v=2';
 
 // ==========================================
 // CONFIGURAÇÕES
@@ -21,7 +23,7 @@ const CONFIG = {
     plans: ['Individual', 'Casal', 'Família'],
 
     // Domínios permitidos para redirecionamento (whitelist)
-    allowedRedirectDomains: ['pay.cakto.com.br'],
+    allowedRedirectDomains: ['pay.cakto.com.br', 'checkout.stripe.com'],
 
     // Normalização de data-plan → chave canônica
     planNameMap: {
@@ -42,6 +44,35 @@ const CHECKOUT_URLS = Object.freeze({
 
 let checkoutLock = false;
 
+// ── Stripe Checkout (usuários logados) ──────────────────────────────────────
+// Chama /api/create-checkout com o JWT da sessão ativa.
+// Retorna a URL da Stripe Checkout Session e redireciona.
+// Se o usuário não estiver logado, redireciona para login com parâmetro de retorno.
+async function iniciarCheckoutStripe(plan) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+        window.location.href = `/login.html?next=${encodeURIComponent('/planos.html')}`;
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/create-checkout', {
+            method:  'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ plan }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.error ?? 'URL não retornada');
+        safeRedirect(data.url);
+    } catch (err) {
+        console.error('[GranaEvo] Erro no checkout Stripe:', err.message);
+        alert('Não foi possível iniciar o pagamento. Tente novamente.');
+    }
+}
+
 function safeRedirect(url) {
     let parsed;
     try {
@@ -61,21 +92,29 @@ function safeRedirect(url) {
     window.location.href = url;
 }
 
-function iniciarCheckout(rawPlanName) {
+async function iniciarCheckout(rawPlanName) {
     if (checkoutLock) {
         console.warn('[GranaEvo] Checkout bloqueado — aguarde antes de tentar novamente.');
         return;
     }
+
     const normalized = CONFIG.planNameMap[rawPlanName?.toLowerCase()] ?? rawPlanName;
     if (!Object.prototype.hasOwnProperty.call(CHECKOUT_URLS, normalized)) {
         console.error('[GranaEvo] Plano desconhecido bloqueado:', rawPlanName);
         return;
     }
-    const checkoutUrl = CHECKOUT_URLS[normalized];
+
     checkoutLock = true;
-    setTimeout(() => { checkoutLock = false; }, 2000);
+    setTimeout(() => { checkoutLock = false; }, 3000);
     trackEvent('Plan', 'checkout_click', normalized);
-    safeRedirect(checkoutUrl);
+
+    // Tenta Stripe se o usuário estiver logado; caso contrário usa Cakto.
+    const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
+    if (session?.access_token) {
+        await iniciarCheckoutStripe(rawPlanName?.toLowerCase());
+    } else {
+        safeRedirect(CHECKOUT_URLS[normalized]);
+    }
 }
 
 function bindCheckoutButtons() {

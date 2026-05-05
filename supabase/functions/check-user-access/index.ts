@@ -122,7 +122,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── 6. Verificar subscription ativa ─────────────────────────────────────
+    // ── 6. Verificar subscription ativa (Cakto/vitálicio) ────────────────────
     const { data: subscription, error: subError } = await supabaseAdmin
       .from('subscriptions')
       .select('id, is_active, payment_status, expires_at')
@@ -132,44 +132,79 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
 
     if (subError) {
-      console.error('[check-user-access] Erro ao consultar subscriptions:', subError.message)
+      console.error('[check-user-access] Erro ao consultar subscriptions (Cakto):', subError.message)
       return deny()
     }
 
-    if (!subscription) {
-      console.log('[check-user-access] Sem subscription ativa para:', userId.slice(0, 8))
-      // [GHOST-004] record_failed_login NÃO deve ser chamado aqui.
-      // Ausência de subscription não é uma falha de autenticação — é uma
-      // falha de autorização de negócio. Usar record_failed_login aqui
-      // causava lockout progressivo em usuários legítimos sem plano ativo,
-      // bloqueando a conta por 15min/1h/24h desnecessariamente.
-      // O lockout progressivo é reservado exclusivamente para brute-force
-      // de credenciais (via login.js ou ataques diretos ao Supabase Auth).
-      return deny()
-    }
-
-    // ── 7. Verificar expiração ────────────────────────────────────────────────
-    if (subscription.expires_at) {
-      const expired = new Date(subscription.expires_at) < new Date()
-      if (expired) {
-        console.log('[check-user-access] Subscription expirada para:', userId.slice(0, 8))
-        return deny()
+    // ── 7. Checar validade da subscription Cakto ──────────────────────────────
+    let caktoOk = false
+    if (subscription) {
+      if (!subscription.expires_at) {
+        caktoOk = true // vitálicio — sem data de expiração
+      } else {
+        caktoOk = new Date(subscription.expires_at) >= new Date()
+        if (!caktoOk) {
+          console.log('[check-user-access] Subscription Cakto expirada para:', userId.slice(0, 8))
+        }
       }
     }
 
-    // Login bem-sucedido — limpa lockout acumulado
-    // rpc() retorna PostgrestFilterBuilder (thenable, não Promise completo)
-    // .catch() não existe nesse objeto — usar try/catch convencional
+    if (caktoOk) {
+      // Acesso concedido via Cakto/vitálicio
+      if (userEmail) {
+        try {
+          await supabaseAdmin.rpc('clear_login_lockout', {
+            p_identifier:      userEmail,
+            p_identifier_type: 'email',
+          })
+        } catch { /* falha silenciosa */ }
+      }
+      console.log('[check-user-access] Acesso concedido (Cakto) para:', userId.slice(0, 8))
+      return json({ hasAccess: true }, 200, corsHeaders)
+    }
+
+    // ── 8. Verificar subscription ativa (Stripe/recorrente) ──────────────────
+    // [STRIPE-MIGRATION] Consulta stripe_subscriptions como segunda fonte de verdade.
+    // status 'active' e 'trialing' concedem acesso; 'past_due' e 'canceled' negam.
+    const { data: stripeSub, error: stripeErr } = await supabaseAdmin
+      .from('stripe_subscriptions')
+      .select('id, status, current_period_end')
+      .eq('user_id', userId)
+      .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (stripeErr) {
+      console.error('[check-user-access] Erro ao consultar stripe_subscriptions:', stripeErr.message)
+      return deny()
+    }
+
+    if (!stripeSub) {
+      console.log('[check-user-access] Sem subscription ativa (Cakto ou Stripe) para:', userId.slice(0, 8))
+      // [GHOST-004] record_failed_login NÃO deve ser chamado aqui.
+      // Ausência de subscription não é falha de autenticação — é falha de autorização de negócio.
+      return deny()
+    }
+
+    // Proteção extra: valida current_period_end mesmo com status 'active'
+    // (o webhook pode ter atrasado a atualização do status)
+    if (stripeSub.current_period_end && new Date(stripeSub.current_period_end) < new Date()) {
+      console.log('[check-user-access] Período Stripe expirado para:', userId.slice(0, 8))
+      return deny()
+    }
+
+    // Acesso concedido via Stripe
     if (userEmail) {
       try {
         await supabaseAdmin.rpc('clear_login_lockout', {
           p_identifier:      userEmail,
           p_identifier_type: 'email',
         })
-      } catch { /* falha silenciosa — não crítica para o fluxo de login */ }
+      } catch { /* falha silenciosa */ }
     }
 
-    console.log('[check-user-access] Acesso concedido para:', userId.slice(0, 8))
+    console.log('[check-user-access] Acesso concedido (Stripe) para:', userId.slice(0, 8))
     return json({ hasAccess: true }, 200, corsHeaders)
 
   } catch (error: any) {
