@@ -4449,7 +4449,7 @@ window.addEventListener('beforeunload', () => {
     if (payload.length > 4_900_000) return;
 
     // fetch com keepalive suporta headers — substitui sendBeacon que não suporta Authorization
-    fetch('/api/save-user-data', {
+    fetch('/api/user-data', {
         method:    'POST',
         keepalive: true,
         headers: {

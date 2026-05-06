@@ -8,7 +8,7 @@ const MAX_QUEUE_DEPTH    = 3;
 const RPC_TIMEOUT_MS     = 15_000;
 const DEBOUNCE_DELAY_MS  = 800;
 const IS_DEV             = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-const SUPABASE_BEACON_URL = `${window.location.origin}/api/save-user-data`;
+const SUPABASE_BEACON_URL = `${window.location.origin}/api/user-data`;
 
 // ========== VALIDADORES ==========
 
@@ -175,7 +175,7 @@ class DataManager {
             const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
             let resp;
             try {
-                resp = await fetch('/api/get-user-data', {
+                resp = await fetch('/api/user-data', {
                     headers: { 'Authorization': `Bearer ${token}` },
                     signal,
                 });
@@ -349,7 +349,7 @@ class DataManager {
             let saveResp;
             try {
                 const saveToken = await this.#getAuthToken();
-                saveResp = await fetch('/api/save-user-data', {
+                saveResp = await fetch('/api/user-data', {
                     method:  'POST',
                     headers: {
                         'Content-Type':  'application/json',
@@ -562,7 +562,7 @@ class DataManager {
             let resp;
             try {
                 const initToken = await this.#getAuthToken();
-                resp = await fetch('/api/save-user-data', {
+                resp = await fetch('/api/user-data', {
                     method:  'POST',
                     headers: {
                         'Content-Type':  'application/json',
