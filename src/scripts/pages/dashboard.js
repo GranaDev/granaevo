@@ -931,43 +931,92 @@ async function verificarLogin() {
                 }
 
             } else {
-                _log.info('[VERIFICAR LOGIN] Sem assinatura própria. Verificando membership...');
+                _log.info('[VERIFICAR LOGIN] Sem assinatura Cakto. Verificando Stripe...');
 
-                const { data: membership, error: memberError } = await supabase
-                    .from('account_members')
-                    .select('owner_user_id, owner_email')
-                    .eq('member_user_id', session.user.id)
-                    .eq('is_active', true)
+                // ── Stripe por user_id (assinatura já vinculada) ──────────────
+                const { data: stripeSub } = await supabase
+                    .from('stripe_subscriptions')
+                    .select('plan_name, status, current_period_end')
+                    .eq('user_id', session.user.id)
+                    .in('status', ['active', 'trialing'])
+                    .order('created_at', { ascending: false })
+                    .limit(1)
                     .maybeSingle();
 
-                if (memberError || !membership) {
-                    _log.warn('[VERIFICAR LOGIN] Sem assinatura e sem membership ativo.');
-                    await supabase.auth.signOut();
-                    window.location.href = 'login.html?erro=sem_plano';
-                    return;
+                if (stripeSub && (!stripeSub.current_period_end ||
+                    new Date(stripeSub.current_period_end) >= new Date())) {
+                    planName = stripeSub.plan_name || 'Individual';
+                    _log.info('[VERIFICAR LOGIN] Assinatura Stripe por user_id encontrada');
                 }
 
-                const { data: ownerSub, error: ownerSubError } = await supabase
-                    .from('subscriptions')
-                    .select('plans(name)')
-                    .eq('user_id', membership.owner_user_id)
-                    .eq('payment_status', 'approved')
-                    .eq('is_active', true)
-                    .or(`expires_at.is.null,expires_at.gt.${agora}`)
-                    .maybeSingle();
+                // ── Stripe por email (primeiro login — user_id ainda NULL) ─────
+                if (!planName) {
+                    const emailLower = session.user.email.toLowerCase();
+                    const { data: stripeEmailSub } = await supabase
+                        .from('stripe_subscriptions')
+                        .select('id, plan_name, status, current_period_end, user_email')
+                        .is('user_id', null)
+                        .eq('user_email', emailLower)
+                        .in('status', ['active', 'trialing'])
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
 
-                if (ownerSubError || !ownerSub) {
-                    _log.warn('[VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
-                    await supabase.auth.signOut();
-                    window.location.href = 'login.html?erro=plano_dono_inativo';
-                    return;
+                    if (stripeEmailSub && (!stripeEmailSub.current_period_end ||
+                        new Date(stripeEmailSub.current_period_end) >= new Date())) {
+                        planName = stripeEmailSub.plan_name || 'Individual';
+                        _log.info('[VERIFICAR LOGIN] Assinatura Stripe por email. Auto-link...');
+                        // Auto-link em background — RLS "stripe_sub_update_claim"
+                        supabase
+                            .from('stripe_subscriptions')
+                            .update({ user_id: session.user.id, updated_at: new Date().toISOString() })
+                            .eq('id', stripeEmailSub.id)
+                            .is('user_id', null)
+                            .eq('user_email', stripeEmailSub.user_email)
+                            .then(() => {})
+                            .catch(() => {});
+                    }
                 }
 
-                planName = ownerSub.plans?.name ?? '';
-                effectiveUserId = membership.owner_user_id;
-                effectiveEmail  = membership.owner_email;
-                isGuest = true;
-                _log.info('[VERIFICAR LOGIN] Acesso como convidado autorizado');
+                if (!planName) {
+                    _log.info('[VERIFICAR LOGIN] Sem Stripe. Verificando membership...');
+
+                    const { data: membership, error: memberError } = await supabase
+                        .from('account_members')
+                        .select('owner_user_id, owner_email')
+                        .eq('member_user_id', session.user.id)
+                        .eq('is_active', true)
+                        .maybeSingle();
+
+                    if (memberError || !membership) {
+                        _log.warn('[VERIFICAR LOGIN] Sem assinatura e sem membership ativo.');
+                        await supabase.auth.signOut();
+                        window.location.href = 'login.html?erro=sem_plano';
+                        return;
+                    }
+
+                    const { data: ownerSub, error: ownerSubError } = await supabase
+                        .from('subscriptions')
+                        .select('plans(name)')
+                        .eq('user_id', membership.owner_user_id)
+                        .eq('payment_status', 'approved')
+                        .eq('is_active', true)
+                        .or(`expires_at.is.null,expires_at.gt.${agora}`)
+                        .maybeSingle();
+
+                    if (ownerSubError || !ownerSub) {
+                        _log.warn('[VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
+                        await supabase.auth.signOut();
+                        window.location.href = 'login.html?erro=plano_dono_inativo';
+                        return;
+                    }
+
+                    planName = ownerSub.plans?.name ?? '';
+                    effectiveUserId = membership.owner_user_id;
+                    effectiveEmail  = membership.owner_email;
+                    isGuest = true;
+                    _log.info('[VERIFICAR LOGIN] Acesso como convidado autorizado');
+                }
             }
         }
 
