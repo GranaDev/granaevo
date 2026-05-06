@@ -856,177 +856,37 @@ async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
     const protectedContent = document.querySelector('[data-protected-content]');
 
+    if (authLoading) authLoading.style.display = 'flex';
+
+    // AuthGuard.protect() é a fonte de verdade: verifica sessão, token, fingerprint,
+    // assinatura Cakto + Stripe + membership, e fallback para /api/check-user-access.
+    // Redireciona automaticamente em caso de falha — não há lógica duplicada aqui.
+    const userData = await AuthGuard.protect({
+        requirePlan:     true,
+        allowGuest:      true,
+        guestCanUpgrade: false,
+        redirectOnFail:  true,
+        loadingElementId: 'authLoading',
+    });
+
+    if (!userData) return; // AuthGuard já disparou o redirect
+
     try {
-        _log.info('[VERIFICAR LOGIN] Iniciando verificação...');
+        _log.info('[VERIFICAR LOGIN] AuthGuard OK. isGuest:', userData.isGuest);
 
-        if (authLoading) authLoading.style.display = 'flex';
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { window.location.href = 'login.html'; return; }
 
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-        if (sessionError || !session) {
-            _log.warn('[VERIFICAR LOGIN] Sessão não encontrada. Redirecionando...');
-            window.location.href = 'login.html';
-            return;
-        }
-
-        _log.info('[VERIFICAR LOGIN] Sessão autenticada com sucesso');
-        _log.info('[VERIFICAR LOGIN] Buscando assinatura...');
-
-        let planName = '';
-        let effectiveUserId = session.user.id;
-        let effectiveEmail = session.user.email;
-        let isGuest = false;
-
-        const agora = new Date().toISOString();
-
-        const { data: subscription, error: subError } = await supabase
-            .from('subscriptions')
-            .select('plans(name)')
-            .eq('user_id', session.user.id)
-            .eq('payment_status', 'approved')
-            .eq('is_active', true)
-            .or(`expires_at.is.null,expires_at.gt.${agora}`)
-            .maybeSingle();
-
-        if (!subError && subscription) {
-            planName = subscription.plans?.name ?? '';
-            _log.info('[VERIFICAR LOGIN] Assinatura própria encontrada');
-        } else {
-            _log.info('[VERIFICAR LOGIN] Sem assinatura por user_id. Tentando fallback por email...');
-
-            const { data: subByEmail, error: subEmailError } = await supabase
-                .from('subscriptions')
-                .select('id, plans(name)')
-                .eq('user_email', session.user.email)
-                .eq('payment_status', 'approved')
-                .eq('is_active', true)
-                .or(`expires_at.is.null,expires_at.gt.${agora}`)
-                .maybeSingle();
-
-            if (!subEmailError && subByEmail) {
-                planName = subByEmail.plans?.name ?? '';
-                _log.info('[VERIFICAR LOGIN] Assinatura encontrada por email');
-
-                _log.info('[VERIFICAR LOGIN] Solicitando vínculo server-side...');
-                try {
-                    const linkResponse = await fetch(
-                        '/api/link-subscription',
-                        {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type':  'application/json',
-                                'Authorization': `Bearer ${session.access_token}`,
-                            },
-                            body: JSON.stringify({ subscription_id: subByEmail.id }),
-                        }
-                    );
-
-                    if (!linkResponse.ok) {
-                        _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico). Status:', linkResponse.status);
-                    } else {
-                        _log.info('[VERIFICAR LOGIN] Solicitação de vínculo enviada ao servidor');
-                    }
-                } catch (linkErr) {
-                    _log.info('[VERIFICAR LOGIN] Vínculo não realizado nesta sessão (não crítico)');
-                }
-
-            } else {
-                _log.info('[VERIFICAR LOGIN] Sem assinatura Cakto. Verificando Stripe...');
-
-                // ── Stripe por user_id (assinatura já vinculada) ──────────────
-                const { data: stripeSub } = await supabase
-                    .from('stripe_subscriptions')
-                    .select('plan_name, status, current_period_end')
-                    .eq('user_id', session.user.id)
-                    .in('status', ['active', 'trialing'])
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
-
-                if (stripeSub && (!stripeSub.current_period_end ||
-                    new Date(stripeSub.current_period_end) >= new Date())) {
-                    planName = stripeSub.plan_name || 'Individual';
-                    _log.info('[VERIFICAR LOGIN] Assinatura Stripe por user_id encontrada');
-                }
-
-                // ── Stripe por email (primeiro login — user_id ainda NULL) ─────
-                if (!planName) {
-                    const emailLower = session.user.email.toLowerCase();
-                    const { data: stripeEmailSub } = await supabase
-                        .from('stripe_subscriptions')
-                        .select('id, plan_name, status, current_period_end, user_email')
-                        .is('user_id', null)
-                        .eq('user_email', emailLower)
-                        .in('status', ['active', 'trialing'])
-                        .order('created_at', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
-
-                    if (stripeEmailSub && (!stripeEmailSub.current_period_end ||
-                        new Date(stripeEmailSub.current_period_end) >= new Date())) {
-                        planName = stripeEmailSub.plan_name || 'Individual';
-                        _log.info('[VERIFICAR LOGIN] Assinatura Stripe por email. Auto-link...');
-                        // Auto-link em background — RLS "stripe_sub_update_claim"
-                        supabase
-                            .from('stripe_subscriptions')
-                            .update({ user_id: session.user.id, updated_at: new Date().toISOString() })
-                            .eq('id', stripeEmailSub.id)
-                            .is('user_id', null)
-                            .eq('user_email', stripeEmailSub.user_email)
-                            .then(() => {})
-                            .catch(() => {});
-                    }
-                }
-
-                if (!planName) {
-                    _log.info('[VERIFICAR LOGIN] Sem Stripe. Verificando membership...');
-
-                    const { data: membership, error: memberError } = await supabase
-                        .from('account_members')
-                        .select('owner_user_id, owner_email')
-                        .eq('member_user_id', session.user.id)
-                        .eq('is_active', true)
-                        .maybeSingle();
-
-                    if (memberError || !membership) {
-                        _log.warn('[VERIFICAR LOGIN] Sem assinatura e sem membership ativo.');
-                        await supabase.auth.signOut();
-                        window.location.href = 'login.html?erro=sem_plano';
-                        return;
-                    }
-
-                    const { data: ownerSub, error: ownerSubError } = await supabase
-                        .from('subscriptions')
-                        .select('plans(name)')
-                        .eq('user_id', membership.owner_user_id)
-                        .eq('payment_status', 'approved')
-                        .eq('is_active', true)
-                        .or(`expires_at.is.null,expires_at.gt.${agora}`)
-                        .maybeSingle();
-
-                    if (ownerSubError || !ownerSub) {
-                        _log.warn('[VERIFICAR LOGIN] Assinatura do dono inválida ou revogada.');
-                        await supabase.auth.signOut();
-                        window.location.href = 'login.html?erro=plano_dono_inativo';
-                        return;
-                    }
-
-                    planName = ownerSub.plans?.name ?? '';
-                    effectiveUserId = membership.owner_user_id;
-                    effectiveEmail  = membership.owner_email;
-                    isGuest = true;
-                    _log.info('[VERIFICAR LOGIN] Acesso como convidado autorizado');
-                }
-            }
-        }
+        const effectiveUserId = userData.effectiveUserId;
+        const effectiveEmail  = userData.ownerEmail || userData.email;
 
         usuarioLogado = {
-            userId:  session.user.id,
-            nome:    session.user.user_metadata?.name || session.user.email.split('@')[0],
-            email:   session.user.email,
-            plano:   planName,
+            userId:  userData.userId,
+            nome:    userData.nome,
+            email:   userData.email,
+            plano:   userData.plano,
             perfis:  [],
-            isGuest: isGuest,
+            isGuest: userData.isGuest,
         };
 
         _log.info('[VERIFICAR LOGIN] Usuário inicializado. isGuest:', usuarioLogado.isGuest);
