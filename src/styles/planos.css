@@ -1922,6 +1922,19 @@ button, a { touch-action: manipulation; }
 .signup-link { color: #10b981; text-decoration: none; font-weight: 600; }
 .signup-link:hover { text-decoration: underline; }
 
+/* Honeypot anti-bot — nunca visível ao usuário humano */
+.ge-hp {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    tab-index: -1;
+}
+
 @media (max-width: 480px) {
     .signup-modal-card { padding: 1.75rem 1.25rem; border-radius: 16px; }
     .signup-title      { font-size: 1.125rem; }

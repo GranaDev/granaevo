@@ -83,7 +83,6 @@ Deno.serve(async (req) => {
 
     // [SEC-FIX] Escapa dados do pagador antes de interpolar no HTML
     const safeName     = escapeHtml(name)
-    const safeEmail    = escapeHtml(email)
     const safePlanName = escapeHtml(planName)
 
     console.log('📧 Enviando email de boas-vindas para:', email)
@@ -616,8 +615,7 @@ Deno.serve(async (req) => {
           <span class="greeting-eyebrow">Conta Ativada ✦</span>
           <div class="greeting-name">Olá, ${safeName}! 👋</div>
           <p class="greeting-text">
-            Sua conta foi ativada com <strong>sucesso</strong> e o pagamento confirmado. 
-            Bem-vindo(a) à comunidade GranaEvo — o lugar onde sua relação com o dinheiro muda de verdade.
+            Bem-vindo(a) ao GranaEvo. O primeiro passo para o controle dos seus gastos começa agora — e você acabou de dar esse passo.
           </p>
         </div>
 
@@ -642,11 +640,9 @@ Deno.serve(async (req) => {
 
         <!-- CTA -->
         <div class="cta-section">
-          <div class="cta-sub">Clique abaixo para configurar sua senha e entrar na plataforma</div>
-          <a href="https://granaevo.com/primeiroacesso.html" class="cta-btn">
-            Cadastrar nova senha →
-          </a>
-          <div class="cta-note">Leva menos de 2 minutos ✓</div>
+          <div class="cta-sub">Sua conta está pronta. Clique abaixo para acessar a plataforma</div>
+          <a href="https://granaevo.com/login.html" class="cta-btn">Acessar minha conta →</a>
+          <div class="cta-note">Acesso imediato ✓</div>
         </div>
 
         <div class="divider"></div>
@@ -702,15 +698,6 @@ Deno.serve(async (req) => {
           </div>
         </div>
 
-        <!-- Credentials -->
-        <div class="credentials-box">
-          <div class="cred-label">🔑 Seu acesso</div>
-          <div class="cred-text">
-            Use o email abaixo para fazer login após configurar sua senha:<br><br>
-            <span class="cred-email">${safeEmail}</span><br><br>
-            Guarde este email — ele é seu identificador permanente na plataforma.
-          </div>
-        </div>
 
       </div><!-- /body-content -->
 

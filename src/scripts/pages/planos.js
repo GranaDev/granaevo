@@ -122,6 +122,15 @@ const SignupModal = (() => {
             const password = pwdInput()?.value || '';
             const confirm  = confInput()?.value || '';
 
+            // Verificação de honeypot no browser (campos ocultos)
+            const hpEmail = document.getElementById('_ge_hp_email')?.value || '';
+            const hpUrl   = document.getElementById('_ge_hp_url')?.value   || '';
+            if (hpEmail || hpUrl) {
+                // Bot preencheu campo oculto — silencia sem feedback
+                setLoading(false);
+                return;
+            }
+
             // Validações básicas
             if (!email || !/^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
                 showAlert('error', 'Digite um email válido.');
@@ -142,40 +151,53 @@ const SignupModal = (() => {
             setLoading(true);
 
             try {
-                // 1. Cria conta no Supabase
-                const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
-                    email,
-                    password,
-                    options: { data: { plan: _pendingPlan } },
-                });
-
-                if (signUpErr) {
-                    // Email já cadastrado → sugere login
-                    const msg = signUpErr.message.toLowerCase();
-                    if (msg.includes('already registered') || msg.includes('user already')) {
-                        showAlert('error', 'Este email já está cadastrado. Faça login para continuar.');
-                        return;
-                    }
-                    throw signUpErr;
+                // 1. Cria conta via proxy server-side (rate-limited, com honeypot e validações)
+                let createRes;
+                try {
+                    createRes = await fetch('/api/create-account', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({
+                            email,
+                            password,
+                            plan: _pendingPlan || 'individual',
+                            _hp_email: '',
+                            _hp_url:   '',
+                        }),
+                    });
+                } catch {
+                    throw new Error('NETWORK');
                 }
 
-                // 2. Garante sessão (com email confirmation desativado, signUp já loga)
-                let session = signUpData?.session;
-                if (!session) {
-                    const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-                    if (signInErr) throw signInErr;
-                    session = signInData.session;
+                if (createRes.status === 409) {
+                    // Email já cadastrado
+                    showAlert('error', 'Este email já está cadastrado. Faça login para continuar.');
+                    return;
                 }
 
+                if (createRes.status === 429) {
+                    showAlert('error', 'Muitas tentativas. Aguarde antes de tentar novamente.');
+                    return;
+                }
+
+                if (!createRes.ok) {
+                    throw new Error('CREATE_FAILED');
+                }
+
+                // 2. Obtém sessão via signInWithPassword (conta já confirmada pelo proxy)
+                const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+                if (signInErr) throw signInErr;
+
+                const session = signInData?.session;
                 if (!session?.access_token) {
                     throw new Error('Sessão não estabelecida após cadastro.');
                 }
 
-                // 3. Fecha modal e inicia checkout com JWT (usuário já está logado)
+                // 3. Fecha modal e inicia checkout com JWT
                 close();
                 await _checkoutComSessao(session, _pendingPlan || 'individual');
 
-            } catch (err) {
+            } catch {
                 showAlert('error', 'Erro ao criar conta. Verifique sua conexão e tente novamente.');
             } finally {
                 setLoading(false);

@@ -91,4 +91,24 @@ export async function checkRate(key, max) {
   return allowed
 }
 
+/**
+ * Verifica se a chave está dentro do limite com janela de tempo customizável.
+ * Usa Redis quando disponível (EXPIRE com NX); cai para in-memory com janela de 60s no fallback.
+ * @param {string} key         Chave única (ex: `create-account:127.0.0.1`)
+ * @param {number} max         Número máximo de requisições na janela
+ * @param {number} windowSecs  Tamanho da janela em segundos (ex: 3600 para 1 hora)
+ * @returns {Promise<boolean>} true se permitido, false se bloqueado
+ */
+export async function checkRateWindow(key, max, windowSecs) {
+  const allowed = await (USE_REDIS
+    ? _checkRedis(key, max, windowSecs)
+    : _checkMemory(key, max))          // fallback in-memory usa janela fixa de 60s
+  if (!allowed) {
+    import('./_alert.js').then(({ trackSecurityEvent }) => {
+      trackSecurityEvent('rate_limit_burst', { key }).catch(() => {})
+    }).catch(() => {})
+  }
+  return allowed
+}
+
 export const isRedisEnabled = USE_REDIS
