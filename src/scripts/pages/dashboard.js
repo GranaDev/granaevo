@@ -284,11 +284,11 @@ function atualizarReferenciasGlobais() {
     });
 }
 
-// Limites por plano
+// Limites por plano — aceita qualquer capitalização (Stripe guarda lowercase)
 const limitesPlano = {
-    "Individual": 1,
-    "Casal": 2,
-    "Família": 4
+    "Individual": 1, "individual": 1,
+    "Casal": 2,      "casal": 2,
+    "Família": 4,    "familia": 4, "Família": 4,
 };
 
 // Constantes de banco — compartilhadas via _ctx com módulos lazy-loaded
@@ -1184,25 +1184,11 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
 
         _log.info('[_criarPerfilHandler] effectiveUserId:', effectiveUserId.slice(0, 8) + '...');
 
-        // ── Verificação de permissão via RPC ──────────────────────────────
-        _log.info('[_criarPerfilHandler] Verificando permissão RPC...');
+        // ── Verificação de limite do plano ────────────────────────────────
+        const limiteLocal = limitesPlano[usuarioLogado.plano] ?? 1;
+        _log.info('[_criarPerfilHandler] Plano:', usuarioLogado.plano, '| Limite:', limiteLocal, '| Perfis:', usuarioLogado.perfis.length);
 
-        const { data: podeCrear, error: rpcError } = await supabase.rpc('can_create_profile');
-
-        if (rpcError) {
-            _log.warn('[_criarPerfilHandler] RPC can_create_profile falhou, usando verificação local. Erro:', rpcError.message);
-
-            const limitesLocais = { "Individual": 1, "Casal": 2, "Família": 4 };
-            const limiteLocal = limitesLocais[usuarioLogado.plano] ?? 1;
-
-            if (usuarioLogado.perfis.length >= limiteLocal) {
-                mostrarPopupLimite();
-                fecharPopup();
-                return;
-            }
-
-            _log.info('[_criarPerfilHandler] Verificação local aprovada. Prosseguindo com criação...');
-        } else if (!podeCrear) {
+        if (usuarioLogado.perfis.length >= limiteLocal) {
             mostrarPopupLimite();
             fecharPopup();
             return;

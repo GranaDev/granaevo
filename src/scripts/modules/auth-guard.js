@@ -438,6 +438,12 @@ const Fingerprint = {
 //  [FIX-REPORT-1] Query filtrada por sessionEmail (.ilike)
 //  [FIX-REPORT-5] _autoLink com .eq('user_email') — guard duplo contra race
 // ═══════════════════════════════════════════════════════════════
+// Normaliza plan_name do Stripe (lowercase) para formato do app (capitalized)
+function _normalizePlanName(raw) {
+    const map = { individual: 'Individual', casal: 'Casal', familia: 'Família' };
+    return map[(raw || '').toLowerCase()] || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : 'Individual');
+}
+
 const SubscriptionChecker = (() => {
     let _cache      = null;
     let _cacheUser  = null;
@@ -551,7 +557,7 @@ const SubscriptionChecker = (() => {
                             subscription: stripeSub,
                             isGuest:      false,
                             ownerId:      userId,
-                            planName:     stripeSub.plan_name || 'Individual',
+                            planName:     _normalizePlanName(stripeSub.plan_name),
                             ownerEmail:   null,
                         });
                         _cacheUser = userId;
@@ -660,7 +666,7 @@ const SubscriptionChecker = (() => {
                                 subscription: stripeEmailSub,
                                 isGuest:      false,
                                 ownerId:      userId,
-                                planName:     stripeEmailSub.plan_name || 'Individual',
+                                planName:     _normalizePlanName(stripeEmailSub.plan_name),
                                 ownerEmail:   null,
                             });
                         }
