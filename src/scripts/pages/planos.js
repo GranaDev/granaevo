@@ -88,18 +88,64 @@ const SignupModal = (() => {
         _pendingPlan = null;
     }
 
+    // Avalia força da senha com base nos 3 requisitos obrigatórios
+    function _checkStrength(password) {
+        const hasMin   = password.length >= 8;
+        const hasUpper = /[A-Z]/.test(password);
+        const hasNum   = /[0-9]/.test(password);
+        const met      = [hasMin, hasUpper, hasNum].filter(Boolean).length;
+
+        if (!password) return { level: 0, label: '', hasMin, hasUpper, hasNum };
+        if (met === 3 && password.length >= 12) return { level: 3, label: 'Senha forte',  hasMin, hasUpper, hasNum };
+        if (met === 3)                           return { level: 2, label: 'Senha média',  hasMin, hasUpper, hasNum };
+        if (met >= 1)                            return { level: 1, label: 'Senha fraca',  hasMin, hasUpper, hasNum };
+        return                                          { level: 0, label: 'Muito fraca', hasMin, hasUpper, hasNum };
+    }
+
+    function _updateStrengthBar(password) {
+        const fill   = document.getElementById('signupStrengthFill');
+        const text   = document.getElementById('signupStrengthText');
+        const reqMin = document.getElementById('reqMin');
+        const reqUpper = document.getElementById('reqUpper');
+        const reqNum   = document.getElementById('reqNum');
+        if (!fill || !text) return;
+
+        const { level, label, hasMin, hasUpper, hasNum } = _checkStrength(password);
+
+        fill.className = 'signup-strength-fill' + (
+            level === 3 ? ' signup-str-strong' :
+            level === 2 ? ' signup-str-medium' :
+            level === 1 ? ' signup-str-weak'   : ''
+        );
+        text.textContent = label;
+
+        // Atualiza indicadores de requisitos
+        reqMin?.classList.toggle('met',   hasMin);
+        reqUpper?.classList.toggle('met', hasUpper);
+        reqNum?.classList.toggle('met',   hasNum);
+    }
+
     function init() {
         // Fecha ao clicar no backdrop
         backdrop()?.addEventListener('click', close);
         closeBtn()?.addEventListener('click', close);
 
-        // Toggle visibilidade da senha
+        // Toggle visibilidade da senha — mantém foco e cursor no input
         toggleBtn()?.addEventListener('click', () => {
             const p = pwdInput();
-            if (p) p.type = p.type === 'password' ? 'text' : 'password';
+            if (!p) return;
+            const pos = p.selectionStart;
+            p.type = p.type === 'password' ? 'text' : 'password';
+            // Restaura posição do cursor após troca de tipo
+            requestAnimationFrame(() => { try { p.setSelectionRange(pos, pos); } catch {} });
         });
 
-        // Validação inline de confirmação de senha
+        // Barra de força em tempo real
+        pwdInput()?.addEventListener('input', () => {
+            _updateStrengthBar(pwdInput()?.value || '');
+        });
+
+        // Valida confirmação inline
         confInput()?.addEventListener('input', () => {
             const pwd  = pwdInput()?.value || '';
             const conf = confInput()?.value || '';
@@ -111,6 +157,9 @@ const SignupModal = (() => {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && modal()?.classList.contains('open')) close();
         });
+
+        // Limpa barra ao abrir (reset do form)
+        const origOpen = open;
 
         // Submit do formulário
         form()?.addEventListener('submit', async (e) => {
@@ -126,19 +175,30 @@ const SignupModal = (() => {
             const hpEmail = document.getElementById('_ge_hp_email')?.value || '';
             const hpUrl   = document.getElementById('_ge_hp_url')?.value   || '';
             if (hpEmail || hpUrl) {
-                // Bot preencheu campo oculto — silencia sem feedback
                 setLoading(false);
                 return;
             }
 
-            // Validações básicas
+            // Validação de email
             if (!email || !/^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
                 showAlert('error', 'Digite um email válido.');
                 emailInput()?.focus();
                 return;
             }
-            if (password.length < 10) {
-                showAlert('error', 'A senha deve ter no mínimo 10 caracteres.');
+
+            // Validação de senha — 3 requisitos obrigatórios
+            if (password.length < 8) {
+                showAlert('error', 'A senha deve ter no mínimo 8 caracteres.');
+                pwdInput()?.focus();
+                return;
+            }
+            if (!/[A-Z]/.test(password)) {
+                showAlert('error', 'A senha deve ter pelo menos uma letra maiúscula.');
+                pwdInput()?.focus();
+                return;
+            }
+            if (!/[0-9]/.test(password)) {
+                showAlert('error', 'A senha deve ter pelo menos um número.');
                 pwdInput()?.focus();
                 return;
             }

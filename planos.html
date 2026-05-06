@@ -654,16 +654,30 @@
                     <label for="signupPassword">Senha</label>
                     <div class="signup-input-wrap">
                         <input type="password" id="signupPassword" name="password"
-                            placeholder="Mínimo 10 caracteres"
+                            placeholder="Mínimo 8 caracteres"
                             autocomplete="new-password"
                             maxlength="128"
-                            required aria-required="true">
+                            required aria-required="true"
+                            aria-describedby="signupStrengthText">
                         <button type="button" id="signupTogglePwd" class="signup-eye" aria-label="Mostrar senha">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                                 <circle cx="12" cy="12" r="3"/>
                             </svg>
                         </button>
+                    </div>
+                    <!-- Barra de força da senha -->
+                    <div class="signup-strength" aria-live="polite">
+                        <div class="signup-strength-bar" aria-hidden="true">
+                            <div id="signupStrengthFill" class="signup-strength-fill"></div>
+                        </div>
+                        <span id="signupStrengthText" class="signup-strength-text"></span>
+                    </div>
+                    <!-- Requisitos visuais -->
+                    <div class="signup-pwd-reqs" aria-hidden="true">
+                        <span class="signup-pwd-req" id="reqMin">Mínimo 8 caracteres</span>
+                        <span class="signup-pwd-req" id="reqUpper">Pelo menos uma letra maiúscula</span>
+                        <span class="signup-pwd-req" id="reqNum">Pelo menos um número</span>
                     </div>
                 </div>
 

@@ -93,8 +93,14 @@ export default async function handler(req, res) {
   if (!email || !EMAIL_RE.test(email))
     return res.status(400).json({ error: 'Email inválido.' })
 
-  if (!password || password.length < 10 || password.length > 128)
-    return res.status(400).json({ error: 'A senha deve ter entre 10 e 128 caracteres.' })
+  if (!password || password.length < 8 || password.length > 128)
+    return res.status(400).json({ error: 'A senha deve ter entre 8 e 128 caracteres.' })
+
+  if (!/[A-Z]/.test(password))
+    return res.status(400).json({ error: 'A senha deve ter pelo menos uma letra maiúscula.' })
+
+  if (!/[0-9]/.test(password))
+    return res.status(400).json({ error: 'A senha deve ter pelo menos um número.' })
 
   if (!VALID_PLANS.has(plan))
     return res.status(400).json({ error: 'Plano inválido.' })

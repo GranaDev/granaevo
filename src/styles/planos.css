@@ -1846,8 +1846,11 @@ button, a { touch-action: manipulation; }
 }
 .signup-input-wrap { position: relative; }
 
+/* Cobre email, password E text (quando olho revela senha — browser aplica
+   fundo branco em input[type="text"] se não estiver no seletor) */
 .signup-field input[type="email"],
-.signup-field input[type="password"] {
+.signup-field input[type="password"],
+.signup-field input[type="text"] {
     width: 100%;
     padding: 0.8125rem 1rem;
     background: rgba(255,255,255,0.04);
@@ -1858,6 +1861,11 @@ button, a { touch-action: manipulation; }
     font-family: inherit;
     transition: border-color 0.2s, box-shadow 0.2s;
     -webkit-appearance: none;
+    appearance: none;
+}
+/* Inputs com botão de olho precisam de espaço à direita */
+.signup-input-wrap input {
+    padding-right: 2.75rem;
 }
 .signup-field input:focus {
     outline: none;
@@ -1866,21 +1874,63 @@ button, a { touch-action: manipulation; }
 }
 .signup-field input::placeholder { color: #475569; }
 
+/* Olho — background transparent explícito evita fundo padrão do browser */
 .signup-eye {
     position: absolute;
     right: 0.75rem;
     top: 50%;
     transform: translateY(-50%);
-    background: none;
+    background: transparent;
     border: none;
     color: #64748b;
     cursor: pointer;
     padding: 0.25rem;
     display: flex;
     align-items: center;
+    -webkit-appearance: none;
+    appearance: none;
+    line-height: 1;
 }
 .signup-eye:hover { color: #10b981; }
-.signup-eye svg   { width: 18px; height: 18px; }
+.signup-eye svg   { width: 18px; height: 18px; pointer-events: none; }
+
+/* ── Barra de força da senha ── */
+.signup-strength       { margin-top: 0.5rem; }
+.signup-strength-bar   { height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; margin-bottom: 0.375rem; }
+.signup-strength-fill  { height: 100%; width: 0%; border-radius: 2px; transition: width 0.3s ease, background-color 0.3s ease; }
+.signup-str-weak       { width: 33%;  background: #ef4444; }
+.signup-str-medium     { width: 66%;  background: #f59e0b; }
+.signup-str-strong     { width: 100%; background: #10b981; }
+.signup-strength-text  { font-size: 0.6875rem; font-weight: 600; color: #64748b; display: block; }
+.signup-str-weak   + .signup-strength-text,
+.signup-str-medium + .signup-strength-text  { color: #64748b; }
+
+/* Requisitos da senha */
+.signup-pwd-reqs {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.signup-pwd-req {
+    font-size: 0.6875rem;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    transition: color 0.2s;
+}
+.signup-pwd-req::before {
+    content: '○';
+    font-size: 0.625rem;
+    flex-shrink: 0;
+}
+.signup-pwd-req.met {
+    color: #10b981;
+}
+.signup-pwd-req.met::before {
+    content: '●';
+}
 
 .signup-field-error {
     font-size: 0.8125rem;
