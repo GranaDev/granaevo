@@ -1875,6 +1875,12 @@ button, a { touch-action: manipulation; }
 }
 .signup-field input::placeholder { color: #475569; }
 
+/* Esconde o botão nativo de revelar senha do Edge/Chrome — evita conflito com nosso olho */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+    display: none;
+}
+
 /* Olho — background transparent explícito evita fundo padrão do browser */
 .signup-eye {
     position: absolute;
