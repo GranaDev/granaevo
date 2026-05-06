@@ -6,6 +6,215 @@
 import { supabase } from '../services/supabase-client.js?v=2';
 
 // ==========================================
+// MODAL DE CADASTRO PRÉ-CHECKOUT
+// Novo fluxo: usuário cria conta aqui mesmo, depois paga no Stripe.
+// Elimina a necessidade do "Primeiro Acesso" para novos usuários Stripe.
+// ==========================================
+
+const PLAN_LABELS = {
+    individual: { name: 'Individual', price: 'R$19,99/mês' },
+    casal:      { name: 'Casal',      price: 'R$34,99/mês' },
+    familia:    { name: 'Família',    price: 'R$54,99/mês' },
+};
+
+let _pendingPlan = null; // plano aguardando cadastro
+
+const SignupModal = (() => {
+    const modal       = () => document.getElementById('signupModal');
+    const backdrop    = () => document.getElementById('signupModalBackdrop');
+    const form        = () => document.getElementById('signupForm');
+    const emailInput  = () => document.getElementById('signupEmail');
+    const pwdInput    = () => document.getElementById('signupPassword');
+    const confInput   = () => document.getElementById('signupConfirmPassword');
+    const submitBtn   = () => document.getElementById('signupSubmitBtn');
+    const alertBox    = () => document.getElementById('signupAlert');
+    const alertMsg    = () => document.getElementById('signupAlertMsg');
+    const pwdError    = () => document.getElementById('signupPwdError');
+    const planBadge   = () => document.getElementById('signupPlanBadge');
+    const toggleBtn   = () => document.getElementById('signupTogglePwd');
+    const closeBtn    = () => document.getElementById('signupModalClose');
+
+    function showAlert(type, msg) {
+        const box = alertBox();
+        if (!box) return;
+        box.className = `signup-alert show-${type}`;
+        const m = alertMsg();
+        if (m) m.textContent = msg;
+    }
+
+    function hideAlert() {
+        const box = alertBox();
+        if (box) box.className = 'signup-alert';
+    }
+
+    function showPwdError(msg) {
+        const el = pwdError();
+        if (!el) return;
+        el.textContent = msg;
+        el.classList.toggle('show', !!msg);
+    }
+
+    function setLoading(loading) {
+        const btn = submitBtn();
+        if (!btn) return;
+        btn.disabled = loading;
+        const span = btn.querySelector('.btn-text');
+        if (span) span.textContent = loading ? 'Aguarde...' : 'Continuar para pagamento';
+    }
+
+    function open(plan) {
+        _pendingPlan = plan;
+        const m = modal();
+        if (!m) return;
+        // Atualiza badge do plano
+        const badge = planBadge();
+        if (badge && PLAN_LABELS[plan]) {
+            badge.textContent = `${PLAN_LABELS[plan].name} · ${PLAN_LABELS[plan].price}`;
+        }
+        hideAlert();
+        showPwdError('');
+        const f = form();
+        if (f) f.reset();
+        m.classList.add('open');
+        m.setAttribute('aria-hidden', 'false');
+        setTimeout(() => emailInput()?.focus(), 100);
+    }
+
+    function close() {
+        const m = modal();
+        if (!m) return;
+        m.classList.remove('open');
+        m.setAttribute('aria-hidden', 'true');
+        _pendingPlan = null;
+    }
+
+    function init() {
+        // Fecha ao clicar no backdrop
+        backdrop()?.addEventListener('click', close);
+        closeBtn()?.addEventListener('click', close);
+
+        // Toggle visibilidade da senha
+        toggleBtn()?.addEventListener('click', () => {
+            const p = pwdInput();
+            if (p) p.type = p.type === 'password' ? 'text' : 'password';
+        });
+
+        // Validação inline de confirmação de senha
+        confInput()?.addEventListener('input', () => {
+            const pwd  = pwdInput()?.value || '';
+            const conf = confInput()?.value || '';
+            if (conf && conf !== pwd) showPwdError('As senhas não coincidem.');
+            else showPwdError('');
+        });
+
+        // Fecha com Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal()?.classList.contains('open')) close();
+        });
+
+        // Submit do formulário
+        form()?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideAlert();
+            showPwdError('');
+
+            const email    = (emailInput()?.value || '').trim().toLowerCase();
+            const password = pwdInput()?.value || '';
+            const confirm  = confInput()?.value || '';
+
+            // Validações básicas
+            if (!email || !/^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+                showAlert('error', 'Digite um email válido.');
+                emailInput()?.focus();
+                return;
+            }
+            if (password.length < 10) {
+                showAlert('error', 'A senha deve ter no mínimo 10 caracteres.');
+                pwdInput()?.focus();
+                return;
+            }
+            if (password !== confirm) {
+                showPwdError('As senhas não coincidem.');
+                confInput()?.focus();
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                // 1. Cria conta no Supabase
+                const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: { data: { plan: _pendingPlan } },
+                });
+
+                if (signUpErr) {
+                    // Email já cadastrado → sugere login
+                    const msg = signUpErr.message.toLowerCase();
+                    if (msg.includes('already registered') || msg.includes('user already')) {
+                        showAlert('error', 'Este email já está cadastrado. Faça login para continuar.');
+                        return;
+                    }
+                    throw signUpErr;
+                }
+
+                // 2. Garante sessão (com email confirmation desativado, signUp já loga)
+                let session = signUpData?.session;
+                if (!session) {
+                    const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+                    if (signInErr) throw signInErr;
+                    session = signInData.session;
+                }
+
+                if (!session?.access_token) {
+                    throw new Error('Sessão não estabelecida após cadastro.');
+                }
+
+                // 3. Fecha modal e inicia checkout com JWT (usuário já está logado)
+                close();
+                await _checkoutComSessao(session, _pendingPlan || 'individual');
+
+            } catch (err) {
+                showAlert('error', 'Erro ao criar conta. Verifique sua conexão e tente novamente.');
+            } finally {
+                setLoading(false);
+            }
+        });
+    }
+
+    return { open, close, init };
+})();
+
+// Inicia checkout aproveitando sessão já existente (JWT no header)
+async function _checkoutComSessao(session, plan) {
+    const btn     = document.querySelector(`.btn-plan[data-plan="${plan}"]`);
+    const btnText = btn?.querySelector('.btn-text');
+    if (btnText) btnText.textContent = 'Aguarde...';
+    if (btn)    btn.disabled = true;
+
+    try {
+        const headers = {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+        };
+        const body = {
+            action: 'checkout',
+            plan,
+            email: session.user?.email || '',
+        };
+        const res  = await fetch('/api/stripe', { method: 'POST', headers, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.error ?? 'URL não retornada');
+        safeRedirect(data.url);
+    } catch {
+        if (btnText) btnText.textContent = 'Começar Agora';
+        if (btn)    btn.disabled = false;
+        alert('Não foi possível iniciar o pagamento. Tente novamente em instantes.');
+    }
+}
+
+// ==========================================
 // CONFIGURAÇÕES
 // ==========================================
 const CONFIG = {
@@ -70,34 +279,20 @@ async function iniciarCheckout(rawPlanName) {
     setTimeout(() => { checkoutLock = false; }, 3000);
     trackEvent('Plan', 'checkout_click', plan);
 
-    const btn = document.querySelector(`.btn-plan[data-plan="${rawPlanName}"]`);
-    const btnText = btn?.querySelector('.btn-text');
-    if (btnText) btnText.textContent = 'Aguarde...';
-    if (btn)    btn.disabled = true;
-
     try {
-        // Sessão é opcional — se logado, melhora rastreamento.
-        // Nunca bloqueia o checkout por falta de login.
+        // Verifica se usuário já está logado
         const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: {} }));
 
-        const headers = { 'Content-Type': 'application/json' };
-        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-
-        const body = { action: 'checkout', plan };
-        if (session?.user?.email) body.email = session.user.email;
-
-        const res = await fetch('/api/stripe', {
-            method:  'POST',
-            headers,
-            body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.url) throw new Error(data.error ?? 'URL não retornada');
-        safeRedirect(data.url);
-    } catch (err) {
+        if (session?.access_token) {
+            // Já logado → checkout direto sem modal
+            await _checkoutComSessao(session, plan);
+        } else {
+            // Não logado → abre modal para criar conta primeiro
+            checkoutLock = false;
+            SignupModal.open(plan);
+        }
+    } catch {
         checkoutLock = false;
-        if (btnText) btnText.textContent = 'Começar Agora';
-        if (btn)    btn.disabled = false;
         alert('Não foi possível iniciar o pagamento. Tente novamente em instantes.');
     }
 }
@@ -668,6 +863,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Inicializa arrays com os nós reais do DOM
     planCardsArray = Array.from(document.querySelectorAll('.plan-card'));
     totalSlides    = planCardsArray.length;
+
+    // Inicializa modal de cadastro pré-checkout
+    SignupModal.init();
 
     // Bind dos botões de checkout
     bindCheckoutButtons();

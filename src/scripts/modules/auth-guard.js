@@ -997,6 +997,40 @@ const AuthGuard = (() => {
                 if (requirePlan) {
                     subData = await SubscriptionChecker.getActive(user.id);
 
+                    // [STRIPE-FALLBACK] Checks locais falharam — verifica via API autoritativa.
+                    // Cobre: primeiro login Stripe, propagação de auto-link pendente,
+                    // e qualquer divergência entre RLS cliente e lógica server-side.
+                    if (!subData.subscription) {
+                        try {
+                            const r = await fetch('/api/check-user-access', {
+                                method:  'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${session.access_token}`,
+                                },
+                                body:   JSON.stringify({ user_id: user.id }),
+                                signal: AbortSignal.timeout(8_000),
+                            });
+                            if (r.ok) {
+                                const api = await r.json();
+                                if (api.locked) throw _err('RATE_LIMITED', api.message || 'Conta bloqueada.');
+                                if (api.hasAccess === true) {
+                                    subData = {
+                                        subscription: { id: 'api-verified' },
+                                        isGuest:      false,
+                                        ownerId:      user.id,
+                                        planName:     'Individual',
+                                        ownerEmail:   null,
+                                    };
+                                    // Invalida cache local para forçar re-sync no próximo acesso
+                                    SubscriptionChecker.invalidate();
+                                }
+                            }
+                        } catch (e) {
+                            if (e.code) throw e; // re-lança erros internos (RATE_LIMITED, etc.)
+                        }
+                    }
+
                     if (!subData.subscription) {
                         throw _err('NO_PLAN', 'Sem plano ativo.');
                     }
@@ -1065,7 +1099,12 @@ const AuthGuard = (() => {
                 }
 
                 if (redirectOnFail) {
-                    SafeRedirect.toLogin(code); // dedup via _isRedirecting
+                    // Sem plano → ir para planos (não faz sentido ir ao login)
+                    if (error?.code === 'NO_PLAN') {
+                        SafeRedirect.to('planos.html?retomar=1');
+                    } else {
+                        SafeRedirect.toLogin(code);
+                    }
                 }
 
                 return null;

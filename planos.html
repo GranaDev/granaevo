@@ -603,8 +603,94 @@
         </div>
     </footer>
 
+    <!-- Modal de cadastro pré-checkout (novo fluxo Stripe) -->
+    <div id="signupModal" class="signup-modal" role="dialog" aria-modal="true" aria-labelledby="signupModalTitle" aria-hidden="true">
+        <div class="signup-modal-backdrop" id="signupModalBackdrop"></div>
+        <div class="signup-modal-card">
+
+            <button type="button" id="signupModalClose" class="signup-modal-close" aria-label="Fechar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+
+            <!-- Marca -->
+            <div class="signup-brand">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="signup-logo" width="36" height="36">
+                <span class="signup-brand-name">GranaEvo</span>
+            </div>
+
+            <!-- Cabeçalho dinâmico (preenchido pelo JS) -->
+            <div class="signup-header">
+                <h2 id="signupModalTitle" class="signup-title">Criar conta</h2>
+                <p id="signupModalSub" class="signup-sub">Preencha seus dados para continuar ao pagamento</p>
+                <div id="signupPlanBadge" class="signup-plan-badge"></div>
+            </div>
+
+            <!-- Alerta -->
+            <div id="signupAlert" class="signup-alert" role="alert" aria-live="assertive" aria-atomic="true">
+                <p id="signupAlertMsg"></p>
+            </div>
+
+            <!-- Formulário -->
+            <form id="signupForm" novalidate>
+                <div class="signup-field">
+                    <label for="signupEmail">Email</label>
+                    <input type="email" id="signupEmail" name="email"
+                        placeholder="seu@email.com"
+                        autocomplete="email"
+                        maxlength="254"
+                        required aria-required="true"
+                        spellcheck="false">
+                </div>
+
+                <div class="signup-field">
+                    <label for="signupPassword">Senha</label>
+                    <div class="signup-input-wrap">
+                        <input type="password" id="signupPassword" name="password"
+                            placeholder="Mínimo 10 caracteres"
+                            autocomplete="new-password"
+                            maxlength="128"
+                            required aria-required="true">
+                        <button type="button" id="signupTogglePwd" class="signup-eye" aria-label="Mostrar senha">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="signup-field">
+                    <label for="signupConfirmPassword">Confirmar senha</label>
+                    <div class="signup-input-wrap">
+                        <input type="password" id="signupConfirmPassword" name="confirmPassword"
+                            placeholder="Repita a senha"
+                            autocomplete="new-password"
+                            maxlength="128"
+                            required aria-required="true">
+                    </div>
+                    <p id="signupPwdError" class="signup-field-error"></p>
+                </div>
+
+                <button type="submit" id="signupSubmitBtn" class="signup-submit-btn">
+                    <span class="btn-text">Continuar para pagamento</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </form>
+
+            <p class="signup-footer">
+                Já tem conta?
+                <a href="login.html" class="signup-link">Fazer login</a>
+            </p>
+
+        </div>
+    </div>
+
     <!-- type="module" — escopo completamente isolado -->
-    <script type="module" src="src/scripts/pages/planos.js?v=2"></script>
+    <script type="module" src="src/scripts/pages/planos.js?v=3"></script>
 
 </body>
 </html>
