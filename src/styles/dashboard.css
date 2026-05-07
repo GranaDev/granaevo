@@ -156,6 +156,64 @@ body::before {
     pointer-events: none;
 }
 
+/* ========== LOADING DE PERFIL (transição após seleção) ========== */
+.profile-loading {
+    position: fixed;
+    inset: 0;
+    background: #090a12;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001; /* acima de tudo */
+}
+.profile-loading.hidden {
+    display: none;
+}
+.pl-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+}
+.pl-logo-ring {
+    position: relative;
+    width: 90px;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.pl-logo {
+    width: 62px;
+    height: 62px;
+    border-radius: 16px;
+    object-fit: cover;
+    position: relative;
+    z-index: 1;
+}
+.pl-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2.5px solid rgba(16, 185, 129, 0.15);
+    border-top-color: #10b981;
+    animation: spin 0.85s linear infinite;
+}
+.pl-text {
+    color: #dff5ec;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-align: center;
+}
+.pl-sub {
+    color: #3f6e58;
+    font-size: 0.82rem;
+    margin: -16px 0 0;
+    text-align: center;
+}
+
 .loader { text-align: center; }
 
 .loader-logo {

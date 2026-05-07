@@ -1070,8 +1070,7 @@ function atualizarTelaPerfis() {
 
 
 async function entrarNoPerfil(index) {
-    const authLoading = document.getElementById('authLoading');
-    const loaderText  = document.getElementById('loaderText');
+    const profileLoading = document.getElementById('profileLoading');
 
     if (!Number.isInteger(index) || index < 0 || index >= usuarioLogado.perfis.length) {
         _log.error('PERFIL_IDX_001', `Índice inválido: ${index}`);
@@ -1080,8 +1079,10 @@ async function entrarNoPerfil(index) {
     }
 
     try {
-        if (loaderText)  loaderText.textContent     = 'Carregando dados...';
-        if (authLoading) authLoading.style.display  = 'flex';
+        // Mostra o overlay imediatamente e cede ao browser para pintar antes do async
+        if (profileLoading) profileLoading.classList.remove('hidden');
+        await new Promise(r => requestAnimationFrame(r));
+        await new Promise(r => requestAnimationFrame(r));
 
         perfilAtivo = usuarioLogado.perfis[index];
 
@@ -1115,8 +1116,7 @@ async function entrarNoPerfil(index) {
         _log.error('PERFIL_ENTER_001', e);
         alert('Erro ao carregar o perfil. Tente novamente.');
     } finally {
-        if (authLoading) authLoading.style.display  = 'none';
-        if (loaderText)  loaderText.textContent     = 'Verificando acesso...';
+        if (profileLoading) profileLoading.classList.add('hidden');
     }
 }
 
