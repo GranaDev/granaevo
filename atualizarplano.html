@@ -66,9 +66,12 @@
                 <div class="scene" id="cardScene">
                     <div class="sub-card" id="subCard" aria-live="polite">
                         <div class="card-shimmer"></div>
+                        <div class="card-glare" id="cardGlare"></div>
+
+                        <!-- Row 1: logo + status -->
                         <div class="card-top">
                             <div class="card-logo-wrap">
-                                <img src="/assets/icons/granaevo-logo.jpg" alt="" class="card-logo" width="40" height="40">
+                                <img src="/assets/icons/granaevo-logo.jpg" alt="" class="card-logo" width="38" height="38">
                             </div>
                             <div id="planStatusBadge" class="status-badge badge-loading">
                                 <span class="badge-dot"></span>
@@ -76,8 +79,27 @@
                             </div>
                         </div>
 
+                        <!-- Row 2: chip + contactless -->
+                        <div class="card-chip-row">
+                            <div class="card-chip" aria-hidden="true">
+                                <span class="chip-h"></span>
+                                <span class="chip-h"></span>
+                                <span class="chip-h"></span>
+                                <span class="chip-v"></span>
+                            </div>
+                            <div class="card-contactless" aria-hidden="true">
+                                <svg viewBox="0 0 28 28" fill="none">
+                                    <path d="M4 14A10 10 0 0 1 14 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                                    <path d="M8 14a6 6 0 0 1 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                                    <path d="M12 14a2 2 0 0 1 2-2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Plan name -->
                         <div class="card-plan-name" id="planName">—</div>
 
+                        <!-- Bottom meta -->
                         <div class="card-meta">
                             <div class="meta-item" id="nextBillingWrap">
                                 <span class="meta-label">Próxima cobrança</span>

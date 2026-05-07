@@ -57,35 +57,52 @@ function initTilt() {
     });
 }
 
-// Tilt on the 3D subscription card with a softer max
+// 3D tilt + dynamic glare on the subscription card
 function initCardTilt() {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     const scene = document.getElementById('cardScene');
     const card  = document.getElementById('subCard');
+    const glare = document.getElementById('cardGlare');
     if (!scene || !card) return;
 
-    const MAX = 14;
+    const MAX = 16;
 
     scene.addEventListener('mousemove', e => {
-        const r  = scene.getBoundingClientRect();
-        const x  = (e.clientX - r.left) / r.width  - 0.5;
-        const y  = (e.clientY - r.top)  / r.height - 0.5;
-        const rx = (-y * MAX).toFixed(2);
-        const ry = ( x * MAX).toFixed(2);
-        card.style.transform =
-            `rotateX(${rx}deg) rotateY(${ry}deg)`;
+        const r   = scene.getBoundingClientRect();
+        const nx  = (e.clientX - r.left) / r.width;   // 0–1
+        const ny  = (e.clientY - r.top)  / r.height;  // 0–1
+        const rx  = (-(ny - 0.5) * MAX).toFixed(2);
+        const ry  = ( (nx - 0.5) * MAX).toFixed(2);
+
+        card.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+
+        // Dynamic glare — radial highlight that follows mouse position on card face
+        if (glare) {
+            glare.style.background =
+                `radial-gradient(circle at ${(nx * 100).toFixed(1)}% ${(ny * 100).toFixed(1)}%, ` +
+                `rgba(255,255,255,.14) 0%, rgba(110,231,183,.06) 35%, transparent 65%)`;
+        }
+
+        // Shadow shifts with tilt to simulate real light source
+        const dy = (ny - 0.5) * 18;
         card.style.boxShadow =
-            `0 0 0 1px rgba(255,255,255,.2) inset,` +
-            `0 ${8 + y * 12}px ${40 + Math.abs(y) * 40}px rgba(0,0,0,.6),` +
-            `0 40px 80px rgba(67,97,238,.2)`;
+            `0 1px 0 rgba(110,231,183,.22) inset,` +
+            `0 -1px 0 rgba(0,0,0,.35) inset,` +
+            `0 ${4 + dy}px 6px rgba(0,0,0,.45),` +
+            `0 ${14 + dy * 1.2}px 30px rgba(0,0,0,.55),` +
+            `0 ${32 + dy * 1.5}px 64px rgba(0,0,0,.4),` +
+            `0 ${18 + dy}px 48px rgba(16,185,129,.18),` +
+            `0 ${52 + dy * 2}px 100px rgba(16,185,129,.1)`;
     }, { passive: true });
 
     scene.addEventListener('mouseleave', () => {
-        card.style.transition = 'transform .55s cubic-bezier(.22,1,.36,1), box-shadow .4s cubic-bezier(.22,1,.36,1)';
+        card.style.transition =
+            'transform .6s cubic-bezier(.22,1,.36,1), box-shadow .5s cubic-bezier(.22,1,.36,1)';
         card.style.transform  = '';
         card.style.boxShadow  = '';
-        setTimeout(() => { card.style.transition = ''; }, 600);
+        if (glare) glare.style.background = '';
+        setTimeout(() => { card.style.transition = ''; }, 650);
     }, { passive: true });
 }
 
