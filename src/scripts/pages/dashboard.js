@@ -1158,7 +1158,16 @@ function adicionarNovoPerfil() {
         btnCancelar.textContent = 'Cancelar';
 
         btnCancelar.addEventListener('click', fecharPopup);
-        btnCriar.addEventListener('click', () => _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis));
+        btnCriar.addEventListener('click', () => {
+            if (btnCriar.disabled) return;
+            btnCriar.disabled = true;
+            btnCriar.textContent = 'Criando...';
+            _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis)
+                .finally(() => {
+                    btnCriar.disabled = false;
+                    btnCriar.textContent = 'Criar Perfil';
+                });
+        });
 
         popup.appendChild(titulo);
         popup.appendChild(inputNome);
@@ -1339,11 +1348,12 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             .single();
 
         if (error) {
-            _log.error('PERFIL_INSERT_001', error);
-            if (error.code === '23505' || error.code === '23514' || error.code === '42501') {
+            // Loga detalhes completos no console (visível no DevTools mesmo em produção)
+            console.error('[PERFIL_INSERT] code:', error.code, '| message:', error.message, '| details:', error.details, '| hint:', error.hint);
+            if (error.code === '23505' || error.code === '23514' || error.code === '42501' || error.code === '42P17') {
                 mostrarPopupLimite();
             } else {
-                alert('Erro ao criar perfil. Tente novamente.');
+                alert(`Erro ao criar perfil (${error.code || 'HTTP 400'}): ${error.message || 'Tente novamente.'}`);
             }
             fecharPopup();
             return;
