@@ -335,20 +335,18 @@ const RateLimiter = (() => {
 const Fingerprint = {
 
     async generate(user) {
-        const canvasData = SecureCrypto.generateCanvasEntropy();
+        // Canvas REMOVIDO do fingerprint — browsers com proteção de privacidade
+        // (Firefox, Brave) randomizam canvas a cada page load, causando falsos
+        // positivos constantes de SESSION_HIJACK. O canvasSalt (sessionStorage)
+        // já garante unicidade por aba sem dependência do rendering engine.
         const canvasSalt = SecureCrypto.getCanvasSalt();
 
-        // [FIX-REPORT-2] Apenas sinais ESTÁVEIS mantidos.
-        // navigator.platform é estável (OS do hardware, não do browser).
-        // navigator.userAgent inclui versão do browser — pode mudar em update,
-        // mas a janela de 24h de sessão torna isso aceitável.
         const raw = [
             user.id,
             user.email,
             user.created_at,
             navigator.userAgent,
             navigator.platform,
-            canvasData,
             canvasSalt,
         ].join('::');
 
@@ -984,10 +982,13 @@ const AuthGuard = (() => {
                 }
 
                 // ── Passo 4: Fingerprint ──────────────────────────────
-                // [FIX-REPORT-2] validate() usa apenas sinais estáveis
+                // Mismatch tratado como "regenerar" em vez de SESSION_HIJACK.
+                // Canvas entropy é randomizada por Firefox/Brave/extensões de
+                // privacidade a cada page load — causaria falsos positivos
+                // constantes. A segurança real é garantida pelo JWT (validado
+                // pelo Supabase server-side) e pela verificação de assinatura.
                 if (!await Fingerprint.validate(user)) {
-                    await supabase.auth.signOut().catch(() => {});
-                    throw _err('SESSION_HIJACK', 'Fingerprint divergiu.');
+                    Fingerprint.clear(); // descarta fingerprint antigo, gera novo abaixo
                 }
 
                 // ── Passo 5: Idade da sessão ──────────────────────────
