@@ -116,6 +116,12 @@ function formatDate(isoOrTs) {
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function formatDateLong(isoOrTs) {
+    if (!isoOrTs) return '—';
+    const d = typeof isoOrTs === 'number' ? new Date(isoOrTs * 1000) : new Date(isoOrTs);
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
 function normalizePlanName(raw) {
     const map = { individual: 'Individual', casal: 'Casal', familia: 'Família' };
     return map[(raw || '').toLowerCase()] || raw || '—';
@@ -140,6 +146,8 @@ async function init() {
     setupPortalButton(session);
 }
 
+const _FIELDS = 'plan_name, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at';
+
 async function loadSubscription(session) {
     const userId    = session.user.id;
     const userEmail = (session.user.email || '').toLowerCase();
@@ -147,7 +155,7 @@ async function loadSubscription(session) {
     try {
         let { data: sub } = await supabase
             .from('stripe_subscriptions')
-            .select('plan_name, status, current_period_end, cancel_at_period_end, canceled_at')
+            .select(_FIELDS)
             .eq('user_id', userId)
             .in('status', ['active', 'trialing', 'past_due', 'canceled'])
             .order('created_at', { ascending: false })
@@ -157,7 +165,7 @@ async function loadSubscription(session) {
         if (!sub && userEmail) {
             const { data: byEmail } = await supabase
                 .from('stripe_subscriptions')
-                .select('plan_name, status, current_period_end, cancel_at_period_end, canceled_at')
+                .select(_FIELDS)
                 .ilike('user_email', userEmail)
                 .in('status', ['active', 'trialing', 'past_due', 'canceled'])
                 .order('created_at', { ascending: false })
@@ -168,6 +176,7 @@ async function loadSubscription(session) {
 
         if (!sub) { renderNoSubscription(); return; }
         renderSubscription(sub);
+        renderDetails(sub);
 
     } catch (err) {
         console.error('[atualizarplano] Erro ao carregar assinatura:', err);
@@ -222,6 +231,111 @@ function renderNoSubscription() {
     _setBadge('badge-cancel', 'Não encontrada');
     const planNameEl = document.getElementById('planName');
     if (planNameEl) planNameEl.textContent = 'Sem assinatura';
+}
+
+// ── Detail cards section ──────────────────────────────────────────
+function _makeCard(label, value, cls) {
+    const card = document.createElement('div');
+    card.className = 'detail-card' + (cls ? ' ' + cls : '');
+
+    const lEl = document.createElement('span');
+    lEl.className = 'dc-label';
+    lEl.textContent = label;
+
+    const vEl = document.createElement('span');
+    vEl.className = 'dc-value';
+    vEl.textContent = value;
+
+    card.append(lEl, vEl);
+    return card;
+}
+
+function _makePeriodCard(label, start, end) {
+    const card = document.createElement('div');
+    card.className = 'detail-card';
+
+    const lEl = document.createElement('span');
+    lEl.className = 'dc-label';
+    lEl.textContent = label;
+
+    const vEl = document.createElement('span');
+    vEl.className = 'dc-value dc-period';
+
+    const s = document.createElement('span'); s.textContent = start;
+    const sep = document.createElement('span'); sep.className = 'dc-sep'; sep.textContent = '→';
+    const e = document.createElement('span'); e.textContent = end;
+    vEl.append(s, sep, e);
+
+    card.append(lEl, vEl);
+    return card;
+}
+
+function renderDetails(sub) {
+    const section = document.getElementById('detailsSection');
+    const grid    = document.getElementById('detailsGrid');
+    if (!section || !grid) return;
+
+    grid.innerHTML = '';
+
+    const normalized = normalizePlanName(sub.plan_name);
+    const isCancelling = sub.cancel_at_period_end && sub.status !== 'canceled';
+    const isCanceled   = sub.status === 'canceled';
+    const isPastDue    = sub.status === 'past_due';
+    const isTrial      = sub.status === 'trialing';
+    const isActive     = sub.status === 'active';
+
+    // ── Card 1: Status ────────────────────────────────────────────
+    const statusMap = {
+        active:   { label: 'Ativa',              cls: 'ds-green' },
+        trialing: { label: 'Teste gratuito',      cls: 'ds-blue'  },
+        past_due: { label: 'Pagamento pendente',  cls: 'ds-amber' },
+        canceled: { label: 'Encerrada',           cls: 'ds-red'   },
+    };
+    const sm = statusMap[sub.status] || { label: sub.status, cls: '' };
+    const statusLabel = isCancelling ? 'Cancelamento agendado' : sm.label;
+    const statusCls   = isCancelling ? 'ds-amber' : sm.cls;
+    grid.appendChild(_makeCard('Status', statusLabel, statusCls));
+
+    // ── Card 2: Plano ─────────────────────────────────────────────
+    grid.appendChild(_makeCard('Plano', normalized));
+
+    // ── Card 3: Ciclo de cobrança ─────────────────────────────────
+    grid.appendChild(_makeCard('Ciclo de cobrança', 'Mensal'));
+
+    // ── Card 4: Período atual (start → end) ───────────────────────
+    const periodStart = sub.current_period_start ? formatDate(sub.current_period_start) : '—';
+    const periodEnd   = sub.current_period_end   ? formatDate(sub.current_period_end)   : '—';
+    grid.appendChild(_makePeriodCard('Período atual', periodStart, periodEnd));
+
+    // ── Card 5: Próxima cobrança / Acesso válido até ──────────────
+    let billingLabel, billingValue, billingCls;
+    if (isCancelling) {
+        billingLabel = 'Acesso válido até';
+        billingValue = periodEnd;
+        billingCls   = 'ds-amber';
+    } else if (isCanceled) {
+        billingLabel = 'Acesso válido até';
+        billingValue = periodEnd;
+        billingCls   = 'ds-red';
+    } else if (isPastDue) {
+        billingLabel = 'Venceu em';
+        billingValue = periodEnd;
+        billingCls   = 'ds-amber';
+    } else if (isTrial) {
+        billingLabel = 'Teste gratuito até';
+        billingValue = periodEnd;
+        billingCls   = 'ds-blue';
+    } else {
+        billingLabel = 'Próxima cobrança';
+        billingValue = isActive ? periodEnd : '—';
+        billingCls   = '';
+    }
+    grid.appendChild(_makeCard(billingLabel, billingValue, billingCls));
+
+    // ── Card 6: Membro desde ──────────────────────────────────────
+    grid.appendChild(_makeCard('Membro desde', formatDateLong(sub.created_at)));
+
+    section.hidden = false;
 }
 
 // ── Portal Stripe ─────────────────────────────────────────────────
