@@ -630,31 +630,22 @@ function goToSlide(index, animate = true) {
     setTimeout(() => { isTransitioning = false; }, 500);
 }
 
-// Reinicializar no resize (debounced)
+// v6: Resize handler — CSS scroll-snap needs no re-init
 let resizeTimer;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
         const track = document.getElementById('plansTrack');
-        if (window.innerWidth < 768) {
-            initCarousel();
-        } else {
-            // Limpa estado do carousel no desktop
-            if (carouselController) carouselController.abort();
-            if (track) {
-                track.style.transform  = '';
-                track.style.transition = '';
-            }
-            // FIX v5: reatualiza array antes de manipular os cards
-            planCardsArray = Array.from(document.querySelectorAll('.plan-card'));
-            planCardsArray.forEach(card => {
-                card.classList.remove('active-slide');
-                card.style.opacity         = '';
-                card.style.transform       = '';
-                card.style.transition      = '';
-                card.style.transitionDelay = '';
-            });
+        // Clear any leftover JS carousel transforms
+        if (track) {
+            track.style.transform  = '';
+            track.style.transition = '';
         }
+        planCardsArray = Array.from(document.querySelectorAll('.plan-card'));
+        planCardsArray.forEach(card => {
+            card.classList.remove('active-slide');
+            // Don't clear transform — managed by initPlanCardTilt
+        });
     }, 250);
 });
 
@@ -939,25 +930,99 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ==========================================
+// v6: SCROLL REVEAL via IntersectionObserver
+// ==========================================
+function initScrollAnimations() {
+    const targets = document.querySelectorAll('[data-reveal]');
+    if (!targets.length) return;
+
+    const io = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-revealed');
+                io.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.08, rootMargin: '0px 0px -24px 0px' });
+
+    targets.forEach(el => io.observe(el));
+}
+
+// ==========================================
+// v6: 3D CARD TILT (replaces flat translateY hover)
+// ==========================================
+function initPlanCardTilt() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        initDesktopHover();
+        return;
+    }
+
+    document.querySelectorAll('.plan-card').forEach(card => {
+        const MAX        = 7;
+        const isFeatured = card.classList.contains('featured');
+
+        card.addEventListener('mousemove', e => {
+            if (window.innerWidth < 768) return;
+            const r  = card.getBoundingClientRect();
+            const x  = (e.clientX - r.left) / r.width  - 0.5;
+            const y  = (e.clientY - r.top)  / r.height - 0.5;
+            const rx = (-y * MAX).toFixed(2);
+            const ry = ( x * MAX).toFixed(2);
+            const sc = isFeatured ? 1.06 : 1.03;
+            card.style.transform =
+                `perspective(1000px) rotateX(${rx}deg) rotateY(${ry}deg) ` +
+                `translateY(-8px) scale(${sc})`;
+        }, { passive: true });
+
+        card.addEventListener('mouseleave', () => {
+            if (window.innerWidth < 768) return;
+            card.style.transition = 'transform 0.48s cubic-bezier(.22,1,.36,1)';
+            card.style.transform  = isFeatured
+                ? 'scale(1.04) translateY(-4px)'
+                : '';
+            setTimeout(() => { card.style.transition = ''; }, 520);
+        }, { passive: true });
+    });
+}
+
+// ==========================================
+// v6: PARALLAX on hero background orbs
+// ==========================================
+function initParallax() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const orb1 = document.querySelector('.glow-orb-1');
+    const orb2 = document.querySelector('.glow-orb-2');
+    const orb3 = document.querySelector('.glow-orb-3');
+    let ticking = false;
+
+    window.addEventListener('scroll', () => {
+        if (ticking) return;
+        requestAnimationFrame(() => {
+            const sy = window.scrollY;
+            if (orb1) orb1.style.transform = `translateY(${(sy * 0.22).toFixed(1)}px)`;
+            if (orb2) orb2.style.transform = `translateY(${(-sy * 0.16).toFixed(1)}px)`;
+            if (orb3) orb3.style.transform = `translateY(${(sy * 0.10).toFixed(1)}px)`;
+            ticking = false;
+        });
+        ticking = true;
+    }, { passive: true });
+}
+
+// ==========================================
 // INITIALIZATION
 // ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Inicializa arrays com os nós reais do DOM
     planCardsArray = Array.from(document.querySelectorAll('.plan-card'));
     totalSlides    = planCardsArray.length;
 
-    // Inicializa modal de cadastro pré-checkout
     SignupModal.init();
-
-    // Bind dos botões de checkout
     bindCheckoutButtons();
 
-    // Inicia carousel no mobile
-    if (window.innerWidth < 768) {
-        initCarousel();
-    } else {
-        initDesktopHover();
-    }
+    // v6: CSS scroll-snap handles mobile — no JS carousel
+    initPlanCardTilt();
+    initScrollAnimations();
+    initParallax();
 
     setTimeout(() => {
         document.body.style.opacity = '1';

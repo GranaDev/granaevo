@@ -1996,3 +1996,168 @@ input[type="password"]::-ms-clear {
     .signup-modal-card { padding: 1.75rem 1.25rem; border-radius: 16px; }
     .signup-title      { font-size: 1.125rem; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   v6 — REDESIGN: Scroll Snap · 3D · Parallax · Scroll Reveal
+   Overrides existing carousel/card styles for modern experience
+══════════════════════════════════════════════════════════════════ */
+
+/* ── Scroll reveal — base invisible state ───────────────────────── */
+[data-reveal] {
+    opacity: 0;
+    transform: translateY(38px);
+    transition:
+        opacity  0.65s cubic-bezier(.22,1,.36,1),
+        transform 0.65s cubic-bezier(.22,1,.36,1);
+}
+[data-reveal].is-revealed {
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+}
+
+/* Plan cards override (v5 had opacity:1 !important — we need 0 now) */
+.plan-card[data-reveal] {
+    opacity: 0 !important;
+    transform: translateY(40px) !important;
+}
+.plan-card[data-reveal].is-revealed {
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+}
+.plan-card.featured[data-reveal].is-revealed {
+    transform: scale(1.04) translateY(-4px) !important;
+}
+
+/* Stagger plan cards */
+.plan-card:nth-child(1)[data-reveal] { transition-delay: 0s;    }
+.plan-card:nth-child(2)[data-reveal] { transition-delay: 0.13s; }
+.plan-card:nth-child(3)[data-reveal] { transition-delay: 0.26s; }
+
+/* Stagger benefit cards */
+.benefit-card:nth-child(1)[data-reveal] { transition-delay: 0s;    }
+.benefit-card:nth-child(2)[data-reveal] { transition-delay: 0.10s; }
+.benefit-card:nth-child(3)[data-reveal] { transition-delay: 0.20s; }
+.benefit-card:nth-child(4)[data-reveal] { transition-delay: 0.30s; }
+
+/* ── 3D tilt support ─────────────────────────────────────────────── */
+.plan-card {
+    transform-style: preserve-3d;
+    will-change: transform;
+    backface-visibility: hidden;
+}
+
+/* ── Parallax orbs ───────────────────────────────────────────────── */
+.glow-orb { will-change: transform; }
+
+/* ── Mobile: CSS scroll-snap replaces JS carousel ───────────────── */
+@media (max-width: 767px) {
+    /* Hide old carousel controls */
+    .carousel-controls,
+    .carousel-btn,
+    .carousel-indicators,
+    .indicator-dot { display: none !important; }
+
+    /* Scroll hint (replaces carousel buttons) */
+    .scroll-hint {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 18px;
+        font-size: 0.78rem;
+        color: var(--gray);
+        letter-spacing: 0.03em;
+    }
+    .scroll-hint-track {
+        width: 36px; height: 6px;
+        border-radius: 99px;
+        background: rgba(16,185,129,.15);
+        position: relative; overflow: hidden;
+    }
+    .scroll-hint-thumb {
+        position: absolute; top: 0; left: 0;
+        height: 100%; width: 40%;
+        border-radius: 99px;
+        background: var(--primary);
+        animation: hint-slide 1.8s cubic-bezier(.4,0,.2,1) infinite;
+    }
+    @keyframes hint-slide {
+        0%   { left: 0;   width: 40%; }
+        50%  { left: 60%; width: 40%; }
+        100% { left: 0;   width: 40%; }
+    }
+
+    /* Scroll-snap container */
+    .plans-carousel {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        scroll-snap-type: x mandatory !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+        padding: 0 !important;
+        border-radius: 0 !important;
+    }
+    .plans-carousel::-webkit-scrollbar { display: none; }
+
+    /* Track: flex row, no JS transforms */
+    .plans-track {
+        display: flex !important;
+        gap: 14px !important;
+        width: max-content !important;
+        padding: 8px 20px 20px !important;
+        transform: none !important;
+        transition: none !important;
+        will-change: auto !important;
+    }
+
+    /* Cards: 82vw, centered-ish, snap to start */
+    .plan-card {
+        flex: 0 0 82vw !important;
+        max-width: 310px !important;
+        min-width: 240px !important;
+        min-height: unset !important;
+        scroll-snap-align: start !important;
+        padding: 22px 18px !important;
+    }
+
+    /* Compact inner layout on mobile */
+    .plan-icon      { display: none !important; }
+    .plan-header    { text-align: left !important; margin-bottom: 14px !important; }
+    .plan-name      { font-size: 1.3rem !important; }
+    .plan-subtitle  { font-size: 0.8rem !important; }
+    .plan-pricing   { text-align: left !important; margin-bottom: 14px !important; padding-bottom: 14px !important; }
+    .plan-price     { justify-content: flex-start !important; }
+    .amount         { font-size: 2.5rem !important; }
+    .feature-item   { padding: 5px 0 !important; font-size: 0.85rem !important; }
+    .plan-features  { margin-bottom: 14px !important; }
+    .btn-plan       { min-height: 46px !important; font-size: 0.9rem !important; }
+    .plan-note      { font-size: 0.75rem !important; margin-top: 10px !important; padding-top: 10px !important; }
+
+    /* Featured card: same size on mobile, just highlighted */
+    .plan-card.featured {
+        transform: none !important;
+        box-shadow: 0 0 24px rgba(16,185,129,0.2) !important;
+    }
+}
+
+/* ── Remove notification everywhere ─────────────────────────────── */
+.purchase-notification { display: none !important; }
+
+/* ── Desktop: plan card improved hover ──────────────────────────── */
+@media (min-width: 768px) {
+    .plan-card {
+        cursor: default;
+        /* transitions managed by JS tilt for transform */
+        transition: box-shadow 0.3s ease, border-color 0.25s ease !important;
+    }
+    /* Featured card permanent elevation */
+    .plan-card.featured[data-reveal].is-revealed {
+        transform: scale(1.04) translateY(-4px) !important;
+    }
+}
+
+/* ── FAQ items reveal ────────────────────────────────────────────── */
+.faq-item[data-reveal]:nth-child(1) { transition-delay: 0s;    }
+.faq-item[data-reveal]:nth-child(2) { transition-delay: 0.08s; }
+.faq-item[data-reveal]:nth-child(3) { transition-delay: 0.16s; }
+.faq-item[data-reveal]:nth-child(4) { transition-delay: 0.24s; }

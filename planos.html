@@ -122,26 +122,11 @@
         </nav>
     </header>
 
-    <!-- Purchase Notification -->
-    <div class="purchase-notification" id="purchaseNotification" aria-live="polite" aria-atomic="true">
-        <div class="notification-content">
-            <div class="notification-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-            </div>
-            <div class="notification-text">
-                <span class="notification-name"></span>
-                <span class="notification-action">acabou de adquirir o <strong></strong></span>
-            </div>
-        </div>
-    </div>
 
     <!-- Hero Section -->
     <section class="hero-plans" aria-labelledby="heroTitle">
         <div class="container">
-            <div class="hero-plans-content">
+            <div class="hero-plans-content" data-reveal>
                 <div class="badge" aria-label="Assinatura mensal com acesso completo">
                     <span class="pulse-dot" aria-hidden="true"></span>
                     <span>Assinatura Mensal &bull; Cancele Quando Quiser</span>
@@ -187,34 +172,19 @@
     <section class="plans-section" id="plans" aria-labelledby="plansTitle">
         <div class="container">
 
-            <!-- Mobile Carousel Controls -->
-            <div class="carousel-controls mobile-only" aria-label="Controles do carrossel de planos">
-                <button
-                    class="carousel-btn prev"
-                    id="prevBtn"
-                    type="button"
-                    aria-label="Ver plano anterior">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </button>
-                <div class="carousel-indicators" id="carouselIndicators" role="tablist" aria-label="Selecionar plano"></div>
-                <button
-                    class="carousel-btn next"
-                    id="nextBtn"
-                    type="button"
-                    aria-label="Ver próximo plano">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </button>
+            <!-- Mobile scroll hint -->
+            <div class="scroll-hint mobile-only" aria-hidden="true">
+                <span class="scroll-hint-track">
+                    <span class="scroll-hint-thumb"></span>
+                </span>
+                <span>Deslize para ver os planos</span>
             </div>
 
-            <div class="plans-carousel" id="plansCarousel">
+            <div class="plans-carousel" id="plansCarousel" data-scroll-snap>
                 <div class="plans-track" id="plansTrack" role="list">
 
                     <!-- Plano Individual -->
-                    <div class="plan-card" data-plan="individual" role="listitem">
+                    <div class="plan-card" data-plan="individual" data-reveal role="listitem">
                         <div class="plan-header">
                             <div class="plan-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none">
@@ -275,7 +245,7 @@
                     </div>
 
                     <!-- Plano Casal - DESTAQUE -->
-                    <div class="plan-card featured" data-plan="casal" role="listitem">
+                    <div class="plan-card featured" data-plan="casal" data-reveal role="listitem">
                         <div class="plan-badge" aria-label="Mais popular">
                             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>
@@ -351,7 +321,7 @@
                     </div>
 
                     <!-- Plano Família -->
-                    <div class="plan-card" data-plan="familia" role="listitem">
+                    <div class="plan-card" data-plan="familia" data-reveal role="listitem">
                         <div class="plan-header">
                             <div class="plan-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none">
@@ -433,18 +403,18 @@
             </div>
 
             <div class="benefits-grid">
-                <div class="benefit-card">
+                <div class="benefit-card" data-reveal>
                     <div class="benefit-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                            <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </div>
-                    <h3>Acesso Vitalício</h3>
-                    <p>Pague uma vez e use para sempre, sem renovações.</p>
+                    <h3>Sem Fidelidade</h3>
+                    <p>Cancele quando quiser, sem multa e sem burocracia.</p>
                 </div>
 
-                <div class="benefit-card">
+                <div class="benefit-card" data-reveal>
                     <div class="benefit-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
@@ -452,10 +422,10 @@
                         </svg>
                     </div>
                     <h3>100% Seguro</h3>
-                    <p>Dados criptografados e protegidos com segurança bancária.</p>
+                    <p>Dados criptografados AES-256 e pagamentos via Stripe PCI-DSS.</p>
                 </div>
 
-                <div class="benefit-card">
+                <div class="benefit-card" data-reveal>
                     <div class="benefit-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/>
@@ -463,19 +433,19 @@
                             <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2"/>
                         </svg>
                     </div>
-                    <h3>Atualizações Gratuitas</h3>
-                    <p>Receba todas as novas funcionalidades sem custo adicional.</p>
+                    <h3>Sempre Atualizado</h3>
+                    <p>Novas funcionalidades incluídas na assinatura sem custo extra.</p>
                 </div>
 
-                <div class="benefit-card">
+                <div class="benefit-card" data-reveal>
                     <div class="benefit-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
                             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2"/>
                             <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2"/>
                         </svg>
                     </div>
-                    <h3>Garantia de 30 Dias</h3>
-                    <p>Não gostou? Devolvemos seu dinheiro sem perguntas.</p>
+                    <h3>Garantia de 7 Dias</h3>
+                    <p>Arrependeu? Solicitamos reembolso integral em até 7 dias da cobrança.</p>
                 </div>
             </div>
         </div>
@@ -598,7 +568,7 @@
             </div>
 
             <div class="footer-bottom">
-                <p>&copy; 2025 GranaEvo. Todos os direitos reservados.</p>
+                <p>&copy; 2026 GranaEvo. Todos os direitos reservados.</p>
             </div>
         </div>
     </footer>
