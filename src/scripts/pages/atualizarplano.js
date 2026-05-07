@@ -142,8 +142,10 @@ async function init() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
+    // Load basic info from Supabase immediately, then enrich with Stripe data
     await loadSubscription(session);
     setupPortalButton(session);
+    loadStripeDetails(session); // async, enriches UI when ready
 }
 
 const _FIELDS = 'plan_name, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at';
@@ -336,6 +338,194 @@ function renderDetails(sub) {
     grid.appendChild(_makeCard('Membro desde', formatDateLong(sub.created_at)));
 
     section.hidden = false;
+}
+
+// ── Stripe real-time details (subscription + invoices) ───────────
+function formatCurrency(amountCents, currency = 'brl') {
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency', currency: currency.toUpperCase(),
+        minimumFractionDigits: 2,
+    }).format(amountCents / 100);
+}
+
+function _showInvoiceSkeleton() {
+    const list = document.getElementById('invoicesList');
+    const sec  = document.getElementById('invoicesSection');
+    if (!list || !sec) return;
+    list.innerHTML = '';
+    for (let i = 0; i < 3; i++) {
+        const row = document.createElement('div');
+        row.className = 'inv-skeleton';
+        const b1 = document.createElement('div');
+        b1.className = 'skel-bar'; b1.style.width = '140px'; b1.style.height = '14px';
+        const b2 = document.createElement('div');
+        b2.className = 'skel-bar'; b2.style.width = '80px'; b2.style.height = '14px';
+        b2.style.marginLeft = 'auto';
+        row.append(b1, b2);
+        list.appendChild(row);
+    }
+    sec.hidden = false;
+}
+
+async function loadStripeDetails(session) {
+    _showInvoiceSkeleton();
+
+    try {
+        const { data: { session: fresh } } = await supabase.auth.getSession();
+        const token = fresh?.access_token || session.access_token;
+
+        const resp = await fetch('/api/stripe', {
+            method: 'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body:   JSON.stringify({ action: 'details' }),
+            signal: AbortSignal.timeout(20_000),
+        });
+
+        if (!resp.ok) {
+            console.warn('[atualizarplano] details HTTP', resp.status);
+            _renderInvoiceEmpty();
+            return;
+        }
+
+        const { subscription, invoices } = await resp.json();
+
+        // Update "Membro desde" with real Stripe date
+        _updateMemberSince(subscription);
+
+        // Update price card if available
+        _updatePriceCard(subscription);
+
+        // Render invoice list
+        _renderInvoices(invoices || []);
+
+    } catch (err) {
+        console.error('[atualizarplano] Erro ao buscar detalhes Stripe:', err);
+        _renderInvoiceEmpty();
+    }
+}
+
+function _updateMemberSince(subscription) {
+    if (!subscription) return;
+    // Use start_date (first invoice date) or created, whichever is earlier
+    const ts = subscription.start_date || subscription.created;
+    if (!ts) return;
+    // Find "Membro desde" card and update its value
+    document.querySelectorAll('.detail-card').forEach(card => {
+        const label = card.querySelector('.dc-label');
+        const value = card.querySelector('.dc-value');
+        if (label?.textContent === 'Membro desde' && value) {
+            value.textContent = formatDateLong(ts);
+        }
+    });
+}
+
+function _updatePriceCard(subscription) {
+    if (!subscription?.price?.unit_amount) return;
+    const amount   = formatCurrency(subscription.price.unit_amount, subscription.price.currency || 'brl');
+    const interval = subscription.price.interval === 'month' ? 'mês' : subscription.price.interval;
+    // Update Ciclo card to show the actual price
+    document.querySelectorAll('.detail-card').forEach(card => {
+        const label = card.querySelector('.dc-label');
+        const value = card.querySelector('.dc-value');
+        if (label?.textContent === 'Ciclo de cobrança' && value) {
+            value.textContent = `${amount} / ${interval}`;
+        }
+    });
+}
+
+function _renderInvoices(invoices) {
+    const list = document.getElementById('invoicesList');
+    const sec  = document.getElementById('invoicesSection');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!invoices.length) { _renderInvoiceEmpty(); return; }
+
+    const statusMap = {
+        paid:          { label: 'Pago',      cls: 'inv-paid'   },
+        open:          { label: 'Pendente',  cls: 'inv-open'   },
+        uncollectible: { label: 'Falhou',    cls: 'inv-failed' },
+        void:          { label: 'Cancelada', cls: 'inv-failed' },
+    };
+
+    for (const inv of invoices) {
+        const sm = statusMap[inv.status] || { label: inv.status, cls: '' };
+
+        const row = document.createElement('div');
+        row.className = 'inv-row';
+
+        // Left: date + period
+        const left = document.createElement('div');
+        left.className = 'inv-left';
+
+        const dateEl = document.createElement('span');
+        dateEl.className = 'inv-date';
+        dateEl.textContent = inv.number
+            ? `${formatDate(inv.created)} · ${inv.number}`
+            : formatDate(inv.created);
+        left.appendChild(dateEl);
+
+        if (inv.period_start && inv.period_end) {
+            const period = document.createElement('span');
+            period.className = 'inv-period';
+            const s = document.createElement('span'); s.textContent = formatDate(inv.period_start);
+            const sep = document.createElement('span'); sep.className = 'inv-period-sep'; sep.textContent = '→';
+            const e = document.createElement('span'); e.textContent = formatDate(inv.period_end);
+            period.append(s, sep, e);
+            left.appendChild(period);
+        }
+
+        row.appendChild(left);
+
+        // Amount
+        const amtEl = document.createElement('span');
+        amtEl.className = 'inv-amount';
+        const paid = inv.amount_paid > 0 ? inv.amount_paid : inv.amount_due;
+        amtEl.textContent = formatCurrency(paid || 0, inv.currency || 'brl');
+        row.appendChild(amtEl);
+
+        // Status badge
+        const badge = document.createElement('span');
+        badge.className = `inv-badge ${sm.cls}`;
+        badge.textContent = sm.label;
+        row.appendChild(badge);
+
+        // PDF link
+        const pdfUrl = inv.invoice_pdf || inv.hosted_invoice_url;
+        if (pdfUrl) {
+            const a = document.createElement('a');
+            a.className = 'inv-pdf';
+            a.href    = pdfUrl;
+            a.target  = '_blank';
+            a.rel     = 'noopener noreferrer';
+            a.setAttribute('aria-label', `Baixar fatura ${inv.number || formatDate(inv.created)}`);
+            a.innerHTML = `<svg viewBox="0 0 16 16" fill="none"><path d="M3 12l2-2m0 0l3 3 5-7M5 10V4M3 14h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+            row.appendChild(a);
+        } else {
+            const placeholder = document.createElement('div');
+            placeholder.style.width = '34px';
+            row.appendChild(placeholder);
+        }
+
+        list.appendChild(row);
+    }
+
+    if (sec) sec.hidden = false;
+}
+
+function _renderInvoiceEmpty() {
+    const list = document.getElementById('invoicesList');
+    const sec  = document.getElementById('invoicesSection');
+    if (!list) return;
+    list.innerHTML = '';
+    const empty = document.createElement('div');
+    empty.className = 'inv-empty';
+    empty.textContent = 'Nenhuma fatura encontrada.';
+    list.appendChild(empty);
+    if (sec) sec.hidden = false;
 }
 
 // ── Portal Stripe ─────────────────────────────────────────────────

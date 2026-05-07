@@ -17,11 +17,12 @@ const ALLOWED_ORIGINS = new Set([
 ])
 
 const VALID_PLANS   = new Set(['individual', 'casal', 'familia'])
-const VALID_ACTIONS = new Set(['checkout', 'portal'])
-const RATE_LIMITS   = { checkout: 5, portal: 10 }
+const VALID_ACTIONS = new Set(['checkout', 'portal', 'details'])
+const RATE_LIMITS   = { checkout: 5, portal: 10, details: 20 }
 const EF_URLS       = {
   checkout: `${_SUPABASE_URL}/functions/v1/create-stripe-checkout`,
   portal:   `${_SUPABASE_URL}/functions/v1/stripe-portal`,
+  details:  `${_SUPABASE_URL}/functions/v1/stripe-subscription-details`,
 }
 
 export default async function handler(req, res) {
@@ -84,10 +85,10 @@ export default async function handler(req, res) {
 
   const authHeader = req.headers['authorization'] ?? ''
 
-  // Portal SEMPRE requer autenticação
-  if (action === 'portal') {
+  // Portal e details SEMPRE requerem autenticação
+  if (action === 'portal' || action === 'details') {
     if (!authHeader.startsWith('Bearer '))
-      return res.status(401).json({ error: 'Portal requer autenticação' })
+      return res.status(401).json({ error: 'Autenticação obrigatória' })
   }
 
   // Checkout: valida plano
