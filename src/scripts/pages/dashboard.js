@@ -3471,6 +3471,11 @@ function bindEventos() {
         btnLogout.addEventListener('click', () => window.confirmarLogout?.());
     }
 
+    const btnGerenciarAssinatura = document.getElementById('btnGerenciarAssinatura');
+    if (btnGerenciarAssinatura) {
+        btnGerenciarAssinatura.addEventListener('click', () => window.gerenciarAssinatura?.());
+    }
+
     const btnExportarJSON = document.getElementById('btnExportarJSON');
     if (btnExportarJSON) {
         btnExportarJSON.addEventListener('click', exportarDadosJSON);
