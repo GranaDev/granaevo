@@ -4,279 +4,303 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
-    <title>Gerenciar Assinatura - GranaEvo</title>
+    <title>Gerenciar Assinatura — GranaEvo</title>
     <meta name="description" content="Gerencie sua assinatura GranaEvo: cancele, atualize o cartão ou altere seu plano.">
-
-    <!-- CSP enforced via vercel.json -->
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="src/styles/atualizarplano.css">
 </head>
 <body>
 
-    <!-- Loading -->
-    <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando">
-        <div class="loader">
-            <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" width="72" height="72" class="loader-logo">
-            <div class="loader-bar"><div class="loader-progress"></div></div>
-            <p class="loader-text">Carregando...</p>
+    <div class="loading-screen hidden" id="loadingScreen" role="status">
+        <div class="ls-inner">
+            <div class="ls-ring"></div>
+            <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="ls-logo" width="56" height="56">
         </div>
     </div>
 
-    <!-- Auth Loading -->
-    <div id="authLoading" class="auth-loading" role="status" aria-label="Verificando autenticação" style="display:none;">
+    <div id="authLoading" class="auth-overlay hidden" role="status" aria-label="Verificando autenticação">
         <div class="auth-spinner"></div>
     </div>
 
+    <!-- Ambient background -->
+    <div class="ambient" aria-hidden="true">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="grid-bg"></div>
+    </div>
+
     <!-- Header -->
-    <header class="header" id="header">
-        <nav class="nav-container" aria-label="Navegação">
-            <a href="dashboard.html" class="logo" aria-label="GranaEvo — voltar ao dashboard">
-                <img src="/assets/icons/granaevo-logo.jpg" alt="" class="logo-img" width="36" height="36">
-                <span class="logo-text">GranaEvo</span>
+    <header class="site-header" id="header">
+        <div class="header-inner">
+            <a href="dashboard.html" class="brand" aria-label="GranaEvo — voltar ao dashboard">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="" class="brand-img" width="34" height="34">
+                <span class="brand-name">GranaEvo</span>
             </a>
-            <a href="dashboard.html" class="btn-nav">← Voltar ao Dashboard</a>
-        </nav>
+            <a href="dashboard.html" class="back-btn" aria-label="Voltar ao Dashboard">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M12 4L6 10l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+        </div>
     </header>
 
-    <!-- Hero -->
-    <section class="hero-upgrade" aria-labelledby="heroTitle">
-        <div class="container">
-            <div class="hero-content">
-                <div class="badge" role="note">
-                    <span class="pulse-dot" aria-hidden="true"></span>
-                    <span>Assinatura Mensal · Cancele Quando Quiser</span>
+    <main class="main-content">
+
+        <!-- ── HERO ── -->
+        <section class="hero" aria-labelledby="pageTitle">
+            <div class="container">
+                <div class="hero-label">
+                    <span class="pulse-ring" aria-hidden="true"></span>
+                    <span>Assinatura Mensal Recorrente</span>
                 </div>
+                <h1 class="hero-title" id="pageTitle">Gerenciar<br><em>Assinatura</em></h1>
+                <p class="hero-sub">Visualize, altere e controle sua assinatura com total transparência.</p>
 
-                <h1 class="hero-title" id="heroTitle">
-                    Gerenciar
-                    <span class="gradient-text">Minha Assinatura</span>
-                </h1>
-
-                <p class="hero-description">
-                    Visualize, altere ou cancele sua assinatura com total controle e transparência.
-                </p>
-
-                <!-- Subscription Status Card -->
-                <div class="subscription-status-card" id="subscriptionCard" aria-live="polite">
-                    <div class="status-loading" id="statusLoading">
-                        <div class="spinner-sm"></div>
-                        <span>Carregando dados da assinatura...</span>
-                    </div>
-                    <div class="status-content" id="statusContent" hidden>
-                        <div class="status-row">
-                            <span class="status-label">Plano atual</span>
-                            <span class="status-value" id="planName">—</span>
+                <!-- 3D Subscription Card -->
+                <div class="scene" id="cardScene">
+                    <div class="sub-card" id="subCard" aria-live="polite">
+                        <div class="card-shimmer"></div>
+                        <div class="card-top">
+                            <div class="card-logo-wrap">
+                                <img src="/assets/icons/granaevo-logo.jpg" alt="" class="card-logo" width="40" height="40">
+                            </div>
+                            <div id="planStatusBadge" class="status-badge badge-loading">
+                                <span class="badge-dot"></span>
+                                <span id="planStatusText">Carregando</span>
+                            </div>
                         </div>
-                        <div class="status-row">
-                            <span class="status-label">Status</span>
-                            <span class="status-badge" id="planStatus">—</span>
+
+                        <div class="card-plan-name" id="planName">—</div>
+
+                        <div class="card-meta">
+                            <div class="meta-item" id="nextBillingWrap">
+                                <span class="meta-label">Próxima cobrança</span>
+                                <span class="meta-value" id="nextBilling">—</span>
+                            </div>
+                            <div class="meta-item meta-cancel" id="cancelWrap" hidden>
+                                <span class="meta-label">Acesso até</span>
+                                <span class="meta-value meta-cancel-date" id="cancelDate">—</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">Plano</span>
+                                <span class="meta-value" id="planType">—</span>
+                            </div>
                         </div>
-                        <div class="status-row" id="nextBillingRow">
-                            <span class="status-label">Próxima cobrança</span>
-                            <span class="status-value" id="nextBilling">—</span>
+
+                        <div class="card-glow"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── MANAGE ── -->
+        <section class="manage-section">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">O que você pode fazer</h2>
+                    <p class="section-sub">Todas as ações disponíveis no portal seguro do Stripe</p>
+                </div>
+
+                <div class="action-grid" id="actionGrid">
+
+                    <div class="action-card" data-tilt>
+                        <div class="ac-icon-wrap ac-blue">
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <rect x="2" y="6" width="20" height="13" rx="3" stroke="currentColor" stroke-width="1.75"/>
+                                <path d="M2 11h20" stroke="currentColor" stroke-width="1.75"/>
+                                <path d="M6 15h4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                            </svg>
                         </div>
-                        <div class="status-row cancel-notice" id="cancelNoticeRow" hidden>
-                            <span class="status-label">Acesso até</span>
-                            <span class="status-value cancel-date" id="cancelDate">—</span>
+                        <h3 class="ac-title">Método de Pagamento</h3>
+                        <p class="ac-desc">Atualize o cartão de crédito vinculado sem interrupção da assinatura.</p>
+                        <div class="ac-arrow">
+                            <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </div>
                     </div>
-                    <div class="status-error" id="statusError" hidden>
-                        <p>Não foi possível carregar os dados da assinatura.</p>
-                        <button type="button" class="btn-retry" id="btnRetry">Tentar novamente</button>
+
+                    <div class="action-card" data-tilt>
+                        <div class="ac-icon-wrap ac-purple">
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.75"/>
+                                <path d="M14 3v5h5M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <h3 class="ac-title">Histórico de Faturas</h3>
+                        <p class="ac-desc">Visualize e baixe todos os comprovantes de pagamento em PDF.</p>
+                        <div class="ac-arrow">
+                            <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
                     </div>
+
+                    <div class="action-card" data-tilt>
+                        <div class="ac-icon-wrap ac-cyan">
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <h3 class="ac-title">Alterar Plano</h3>
+                        <p class="ac-desc">Faça upgrade para Individual, Casal ou Família com proration automática.</p>
+                        <div class="ac-arrow">
+                            <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                    </div>
+
+                    <div class="action-card action-card-cancel" data-tilt>
+                        <div class="ac-icon-wrap ac-red">
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+                                <path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <h3 class="ac-title">Cancelar Assinatura</h3>
+                        <p class="ac-desc">Cancele a qualquer momento. Acesso mantido até o fim do período pago.</p>
+                        <div class="ac-arrow">
+                            <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                    </div>
+
                 </div>
-            </div>
-        </div>
-    </section>
 
-    <!-- Manage Section -->
-    <section class="manage-section" aria-labelledby="manageTitle">
-        <div class="container">
-            <h2 class="section-title" id="manageTitle">O que você pode fazer</h2>
-
-            <div class="manage-cards">
-
-                <div class="manage-card">
-                    <div class="manage-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
-                            <path d="M2 10h20" stroke="currentColor" stroke-width="2"/>
+                <!-- Portal CTA -->
+                <div class="cta-wrap">
+                    <button type="button" id="btnPortal" class="portal-btn">
+                        <span class="portal-btn-glow"></span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="portal-btn-icon">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
                         </svg>
-                    </div>
-                    <h3>Atualizar Cartão</h3>
-                    <p>Altere o cartão de crédito vinculado à sua assinatura sem interrupção.</p>
-                </div>
-
-                <div class="manage-card">
-                    <div class="manage-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/>
-                            <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="2"/>
-                            <line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/>
-                            <line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/>
+                        <span id="btnPortalText">Abrir portal de gerenciamento</span>
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" class="portal-btn-arrow">
+                            <path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                    </div>
-                    <h3>Histórico de Faturas</h3>
-                    <p>Visualize e baixe todas as suas faturas e comprovantes de pagamento.</p>
+                    </button>
+                    <p class="cta-note">Redirecionamento seguro via Stripe · SSL/TLS · PCI-DSS Nível 1</p>
                 </div>
-
-                <div class="manage-card">
-                    <div class="manage-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <h3>Mudar de Plano</h3>
-                    <p>Faça upgrade para Individual, Casal ou Família conforme sua necessidade.</p>
-                </div>
-
-                <div class="manage-card manage-card-cancel">
-                    <div class="manage-icon manage-icon-cancel" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none">
-                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                            <line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" stroke-width="2"/>
-                            <line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <h3>Cancelar Assinatura</h3>
-                    <p>Cancele a qualquer momento. Seu acesso continua até o fim do período pago.</p>
-                </div>
-
             </div>
+        </section>
 
-            <!-- Main CTA -->
-            <div class="portal-cta">
-                <button type="button" id="btnPortal" class="btn-portal" aria-busy="false">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                    <span id="btnPortalText">Gerenciar minha assinatura</span>
-                </button>
-                <p class="portal-note">Você será redirecionado para o portal seguro do Stripe</p>
-            </div>
-        </div>
-    </section>
+        <!-- ── POLICY ── -->
+        <section class="policy-section">
+            <div class="container">
+                <h2 class="section-title">Política de Cancelamento</h2>
 
-    <!-- Cancellation Policy -->
-    <section class="policy-section" aria-labelledby="policyTitle">
-        <div class="container">
-            <h2 class="section-title" id="policyTitle">Política de Cancelamento</h2>
-
-            <div class="policy-card">
-                <div class="policy-item">
-                    <div class="policy-icon" aria-hidden="true">✅</div>
-                    <div>
-                        <h3>Cancele quando quiser</h3>
-                        <p>Não há fidelidade ou multa por cancelamento. Cancele pelo portal a qualquer momento.</p>
+                <div class="policy-grid">
+                    <div class="policy-card">
+                        <div class="pc-accent pc-green"></div>
+                        <div class="pc-body">
+                            <div class="pc-icon">
+                                <svg viewBox="0 0 24 24" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="22,4 12,14 9,11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                            </div>
+                            <h3>Cancele quando quiser</h3>
+                            <p>Sem fidelidade, sem multa. Cancele diretamente no portal do Stripe a qualquer momento.</p>
+                        </div>
                     </div>
-                </div>
 
-                <div class="policy-item">
-                    <div class="policy-icon" aria-hidden="true">📅</div>
-                    <div>
-                        <h3>Acesso até o fim do período</h3>
-                        <p>Ao cancelar, seu acesso permanece ativo até o último dia do ciclo já pago. Nenhum valor é debitado após o cancelamento.</p>
+                    <div class="policy-card">
+                        <div class="pc-accent pc-blue"></div>
+                        <div class="pc-body">
+                            <div class="pc-icon">
+                                <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                            </div>
+                            <h3>Acesso garantido até o fim do ciclo</h3>
+                            <p>Ao cancelar, seu acesso permanece ativo até o último dia do período já pago.</p>
+                        </div>
                     </div>
-                </div>
 
-                <div class="policy-item">
-                    <div class="policy-icon" aria-hidden="true">💳</div>
-                    <div>
-                        <h3>Sem reembolso automático</h3>
-                        <p>Como o acesso continua até o fim do período pago, não realizamos reembolsos automáticos. Para situações excepcionais, entre em contato com o suporte em até 7 dias após a cobrança.</p>
+                    <div class="policy-card">
+                        <div class="pc-accent pc-amber"></div>
+                        <div class="pc-body">
+                            <div class="pc-icon">
+                                <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                            </div>
+                            <h3>Sem reembolso automático</h3>
+                            <p>O acesso continua até o fim do período. Para situações excepcionais, contate o suporte em até 7 dias da cobrança.</p>
+                        </div>
                     </div>
-                </div>
 
-                <div class="policy-item">
-                    <div class="policy-icon" aria-hidden="true">🔄</div>
-                    <div>
-                        <h3>Reativação gratuita</h3>
-                        <p>Cancelou e mudou de ideia? Reassine a qualquer momento pelo portal de planos, sem taxas adicionais.</p>
+                    <div class="policy-card">
+                        <div class="pc-accent pc-purple"></div>
+                        <div class="pc-body">
+                            <div class="pc-icon">
+                                <svg viewBox="0 0 24 24" fill="none"><path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </div>
+                            <h3>Reativação gratuita</h3>
+                            <p>Cancelou e mudou de ideia? Reassine pelos planos sem taxas adicionais ou penalidades.</p>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- FAQ -->
-    <section class="faq-section" aria-labelledby="faqTitle">
-        <div class="container">
-            <h2 class="section-title" id="faqTitle">Perguntas Frequentes</h2>
+        <!-- ── FAQ ── -->
+        <section class="faq-section">
+            <div class="container">
+                <h2 class="section-title">Perguntas Frequentes</h2>
 
-            <div class="faq-grid" role="list">
-
-                <div class="faq-item" role="listitem">
-                    <button type="button" class="faq-question-btn" aria-expanded="false" aria-controls="faq-1">
-                        <span>O que acontece com meus dados ao cancelar?</span>
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    </button>
-                    <div class="faq-answer" id="faq-1" hidden>
-                        <p>Seus dados financeiros (transações, metas, cartões) ficam salvos por 90 dias após o cancelamento. Se reassinar nesse prazo, tudo estará preservado.</p>
+                <div class="faq-list">
+                    <div class="faq-item">
+                        <button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-1">
+                            <span>O que acontece com meus dados ao cancelar?</span>
+                            <svg class="faq-chevron" viewBox="0 0 20 20" fill="none"><path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <div class="faq-body" id="faq-1" hidden>
+                            <p>Seus dados financeiros (transações, metas, cartões) ficam armazenados por 90 dias após o cancelamento. Reassinando dentro deste prazo, tudo é restaurado automaticamente.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-2">
+                            <span>Posso mudar de plano sem cancelar?</span>
+                            <svg class="faq-chevron" viewBox="0 0 20 20" fill="none"><path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <div class="faq-body" id="faq-2" hidden>
+                            <p>Sim. No portal do Stripe você pode alterar o plano a qualquer momento. A diferença do valor é calculada proporcionalmente (proration) ao tempo restante do ciclo — sem pagamento duplo.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-3">
+                            <span>Como atualizo o cartão de crédito?</span>
+                            <svg class="faq-chevron" viewBox="0 0 20 20" fill="none"><path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <div class="faq-body" id="faq-3" hidden>
+                            <p>Acesse "Abrir portal de gerenciamento" acima e, dentro do portal Stripe, selecione "Método de pagamento". A atualização é imediata e não interrompe a assinatura.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button type="button" class="faq-btn" aria-expanded="false" aria-controls="faq-4">
+                            <span>Serei cobrado novamente se cancelar antes do vencimento?</span>
+                            <svg class="faq-chevron" viewBox="0 0 20 20" fill="none"><path d="M5 8l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <div class="faq-body" id="faq-4" hidden>
+                            <p>Não. O cancelamento interrompe cobranças futuras imediatamente. Você não paga nenhuma taxa adicional e mantém o acesso até o fim do período já pago.</p>
+                        </div>
                     </div>
                 </div>
-
-                <div class="faq-item" role="listitem">
-                    <button type="button" class="faq-question-btn" aria-expanded="false" aria-controls="faq-2">
-                        <span>Posso mudar de plano sem cancelar?</span>
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    </button>
-                    <div class="faq-answer" id="faq-2" hidden>
-                        <p>Sim. Pelo portal do Stripe você pode alterar o plano a qualquer momento. A diferença do valor é calculada proporcionalmente ao tempo restante do ciclo.</p>
-                    </div>
-                </div>
-
-                <div class="faq-item" role="listitem">
-                    <button type="button" class="faq-question-btn" aria-expanded="false" aria-controls="faq-3">
-                        <span>Como atualizo meu cartão de crédito?</span>
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    </button>
-                    <div class="faq-answer" id="faq-3" hidden>
-                        <p>Clique em "Gerenciar minha assinatura" acima e, no portal seguro do Stripe, vá em "Método de pagamento". A troca é imediata.</p>
-                    </div>
-                </div>
-
-                <div class="faq-item" role="listitem">
-                    <button type="button" class="faq-question-btn" aria-expanded="false" aria-controls="faq-4">
-                        <span>Serei cobrado se cancelar antes do vencimento?</span>
-                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    </button>
-                    <div class="faq-answer" id="faq-4" hidden>
-                        <p>Não. O cancelamento interrompe as cobranças futuras. O último ciclo pago não é reembolsado, mas o acesso continua ativo até seu encerramento.</p>
-                    </div>
-                </div>
-
             </div>
-        </div>
-    </section>
+        </section>
+
+    </main>
 
     <!-- Footer -->
-    <footer class="footer" role="contentinfo">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-brand">
-                    <a href="dashboard.html" class="logo" aria-label="GranaEvo">
-                        <img src="/assets/icons/granaevo-logo.jpg" alt="" class="logo-img" width="32" height="32">
-                        <span class="logo-text">GranaEvo</span>
-                    </a>
-                    <p>Sua evolução financeira começa aqui</p>
-                </div>
-                <nav class="footer-links" aria-label="Links">
-                    <h4>Navegação</h4>
-                    <a href="dashboard.html">Dashboard</a>
-                    <a href="planos.html">Planos</a>
-                </nav>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; <span id="footerYear"></span> GranaEvo. Todos os direitos reservados.</p>
-            </div>
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <a href="dashboard.html" class="brand" aria-label="GranaEvo">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="" class="brand-img" width="28" height="28">
+                <span class="brand-name">GranaEvo</span>
+            </a>
+            <p class="footer-copy">&copy; <span id="footerYear"></span> GranaEvo. Todos os direitos reservados.</p>
+            <nav class="footer-links" aria-label="Links">
+                <a href="dashboard.html">Dashboard</a>
+                <a href="planos.html">Planos</a>
+            </nav>
         </div>
     </footer>
 
-    <script type="module" src="src/scripts/pages/atualizarplano.js?v=3"></script>
+    <script type="module" src="src/scripts/pages/atualizarplano.js?v=4"></script>
 </body>
 </html>

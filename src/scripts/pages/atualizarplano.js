@@ -1,13 +1,12 @@
 /**
- * GranaEvo — atualizarplano.js v3
+ * GranaEvo — atualizarplano.js v4
  * Gerenciamento de assinatura Stripe mensal.
- * Substitui lógica de upgrade vitalício (Cakto) pelo modelo recorrente.
  */
 
 import AuthGuard    from '../modules/auth-guard.js?v=2';
 import { supabase } from '../services/supabase-client.js?v=2';
 
-// ── Loading screen ────────────────────────────────────────────────────────────
+// ── Loading screen ────────────────────────────────────────────────
 window.addEventListener('load', () => {
     const ls = document.getElementById('loadingScreen');
     if (ls) setTimeout(() => ls.classList.add('hidden'), 800);
@@ -16,8 +15,14 @@ window.addEventListener('load', () => {
 const footerYearEl = document.getElementById('footerYear');
 if (footerYearEl) footerYearEl.textContent = new Date().getFullYear();
 
-// ── FAQ accordion ─────────────────────────────────────────────────────────────
-document.querySelectorAll('.faq-question-btn').forEach(btn => {
+// ── Header scroll ─────────────────────────────────────────────────
+const header = document.getElementById('header');
+window.addEventListener('scroll', () => {
+    header?.classList.toggle('scrolled', window.scrollY > 10);
+}, { passive: true });
+
+// ── FAQ accordion ─────────────────────────────────────────────────
+document.querySelectorAll('.faq-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const expanded = btn.getAttribute('aria-expanded') === 'true';
         const answerId = btn.getAttribute('aria-controls');
@@ -27,13 +32,67 @@ document.querySelectorAll('.faq-question-btn').forEach(btn => {
     });
 });
 
-// ── Header scroll ─────────────────────────────────────────────────────────────
-const header = document.getElementById('header');
-window.addEventListener('scroll', () => {
-    header?.classList.toggle('scrolled', window.scrollY > 10);
-}, { passive: true });
+// ── 3D tilt on [data-tilt] elements ──────────────────────────────
+function initTilt() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+    document.querySelectorAll('[data-tilt]').forEach(el => {
+        const MAX = 10;
+
+        el.addEventListener('mousemove', e => {
+            const r  = el.getBoundingClientRect();
+            const x  = (e.clientX - r.left) / r.width  - 0.5;
+            const y  = (e.clientY - r.top)  / r.height - 0.5;
+            const rx = (-y * MAX).toFixed(2);
+            const ry = ( x * MAX).toFixed(2);
+            el.style.transform =
+                `perspective(800px) rotateX(${rx}deg) rotateY(${ry}deg) scale3d(1.02,1.02,1.02)`;
+        }, { passive: true });
+
+        el.addEventListener('mouseleave', () => {
+            el.style.transition = 'transform .45s cubic-bezier(.22,1,.36,1)';
+            el.style.transform  = '';
+            setTimeout(() => { el.style.transition = ''; }, 500);
+        }, { passive: true });
+    });
+}
+
+// Tilt on the 3D subscription card with a softer max
+function initCardTilt() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const scene = document.getElementById('cardScene');
+    const card  = document.getElementById('subCard');
+    if (!scene || !card) return;
+
+    const MAX = 14;
+
+    scene.addEventListener('mousemove', e => {
+        const r  = scene.getBoundingClientRect();
+        const x  = (e.clientX - r.left) / r.width  - 0.5;
+        const y  = (e.clientY - r.top)  / r.height - 0.5;
+        const rx = (-y * MAX).toFixed(2);
+        const ry = ( x * MAX).toFixed(2);
+        card.style.transform =
+            `rotateX(${rx}deg) rotateY(${ry}deg)`;
+        card.style.boxShadow =
+            `0 0 0 1px rgba(255,255,255,.2) inset,` +
+            `0 ${8 + y * 12}px ${40 + Math.abs(y) * 40}px rgba(0,0,0,.6),` +
+            `0 40px 80px rgba(67,97,238,.2)`;
+    }, { passive: true });
+
+    scene.addEventListener('mouseleave', () => {
+        card.style.transition = 'transform .55s cubic-bezier(.22,1,.36,1), box-shadow .4s cubic-bezier(.22,1,.36,1)';
+        card.style.transform  = '';
+        card.style.boxShadow  = '';
+        setTimeout(() => { card.style.transition = ''; }, 600);
+    }, { passive: true });
+}
+
+initTilt();
+initCardTilt();
+
+// ── Helpers ───────────────────────────────────────────────────────
 function formatDate(isoOrTs) {
     if (!isoOrTs) return '—';
     const d = typeof isoOrTs === 'number' ? new Date(isoOrTs * 1000) : new Date(isoOrTs);
@@ -45,11 +104,11 @@ function normalizePlanName(raw) {
     return map[(raw || '').toLowerCase()] || raw || '—';
 }
 
-// ── Auth + subscription load ──────────────────────────────────────────────────
+// ── Auth + subscription load ──────────────────────────────────────
 async function init() {
     const userData = await AuthGuard.protect({
         requirePlan:      true,
-        allowGuest:       false, // convidados não gerenciam assinaturas
+        allowGuest:       false,
         guestCanUpgrade:  false,
         redirectOnFail:   true,
         loadingElementId: 'authLoading',
@@ -62,19 +121,13 @@ async function init() {
 
     await loadSubscription(session);
     setupPortalButton(session);
-    setupRetryButton(session);
 }
 
 async function loadSubscription(session) {
     const userId    = session.user.id;
     const userEmail = (session.user.email || '').toLowerCase();
 
-    const loading = document.getElementById('statusLoading');
-    const content = document.getElementById('statusContent');
-    const error   = document.getElementById('statusError');
-
     try {
-        // 1. Tenta por user_id
         let { data: sub } = await supabase
             .from('stripe_subscriptions')
             .select('plan_name, status, current_period_end, cancel_at_period_end, canceled_at')
@@ -84,9 +137,8 @@ async function loadSubscription(session) {
             .limit(1)
             .maybeSingle();
 
-        // 2. Fallback por email (user_id ainda não vinculado)
         if (!sub && userEmail) {
-            const { data: subByEmail } = await supabase
+            const { data: byEmail } = await supabase
                 .from('stripe_subscriptions')
                 .select('plan_name, status, current_period_end, cancel_at_period_end, canceled_at')
                 .ilike('user_email', userEmail)
@@ -94,81 +146,68 @@ async function loadSubscription(session) {
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
-            sub = subByEmail;
+            sub = byEmail;
         }
 
-        if (!sub) {
-            renderNoSubscription();
-            return;
-        }
-
+        if (!sub) { renderNoSubscription(); return; }
         renderSubscription(sub);
 
     } catch (err) {
         console.error('[atualizarplano] Erro ao carregar assinatura:', err);
-        if (loading) loading.hidden = true;
-        if (error)   error.hidden   = false;
+        _setBadge('badge-cancel', 'Erro ao carregar');
     }
 }
 
+// ── Render helpers ────────────────────────────────────────────────
+function _setBadge(cls, text) {
+    const badge   = document.getElementById('planStatusBadge');
+    const badgeTxt = document.getElementById('planStatusText');
+    if (badge)    badge.className = `status-badge ${cls}`;
+    if (badgeTxt) badgeTxt.textContent = text;
+}
+
 function renderSubscription(sub) {
-    const loading         = document.getElementById('statusLoading');
-    const content         = document.getElementById('statusContent');
     const planNameEl      = document.getElementById('planName');
-    const planStatusEl    = document.getElementById('planStatus');
+    const planTypeEl      = document.getElementById('planType');
     const nextBillingEl   = document.getElementById('nextBilling');
-    const nextBillingRow  = document.getElementById('nextBillingRow');
-    const cancelNoticeRow = document.getElementById('cancelNoticeRow');
+    const nextBillingWrap = document.getElementById('nextBillingWrap');
+    const cancelWrap      = document.getElementById('cancelWrap');
     const cancelDateEl    = document.getElementById('cancelDate');
 
-    if (loading) loading.hidden = true;
-    if (content) content.hidden = false;
-
-    if (planNameEl) planNameEl.textContent = normalizePlanName(sub.plan_name);
+    const normalized = normalizePlanName(sub.plan_name);
+    if (planNameEl) planNameEl.textContent = normalized;
+    if (planTypeEl) planTypeEl.textContent = normalized;
 
     const statusMap = {
-        active:   { text: 'Ativa',               cls: 'badge-active'  },
-        trialing: { text: 'Em teste gratuito',    cls: 'badge-trial'   },
-        past_due: { text: 'Pagamento pendente',   cls: 'badge-warn'    },
-        canceled: { text: 'Cancelada',            cls: 'badge-cancel'  },
+        active:   { text: 'Ativa',              cls: 'badge-active'  },
+        trialing: { text: 'Teste gratuito',      cls: 'badge-trial'   },
+        past_due: { text: 'Pgto. pendente',      cls: 'badge-warn'    },
+        canceled: { text: 'Cancelada',           cls: 'badge-cancel'  },
     };
     const s = statusMap[sub.status] || { text: sub.status, cls: '' };
 
     if (sub.cancel_at_period_end && sub.status !== 'canceled') {
-        // Agendado para cancelar no fim do período
-        if (planStatusEl) {
-            planStatusEl.textContent = 'Cancelamento agendado';
-            planStatusEl.className   = 'status-badge badge-warn';
-        }
-        if (nextBillingRow)  nextBillingRow.hidden  = true;
-        if (cancelNoticeRow) cancelNoticeRow.hidden  = false;
+        _setBadge('badge-warn', 'Cancelamento agendado');
+        if (nextBillingWrap) nextBillingWrap.hidden = true;
+        if (cancelWrap)      cancelWrap.hidden      = false;
         if (cancelDateEl)    cancelDateEl.textContent = formatDate(sub.current_period_end);
     } else {
-        if (planStatusEl) {
-            planStatusEl.textContent = s.text;
-            planStatusEl.className   = `status-badge ${s.cls}`;
-        }
-        if (sub.status !== 'canceled') {
-            if (nextBillingEl)  nextBillingEl.textContent = formatDate(sub.current_period_end);
+        _setBadge(s.cls, s.text);
+        if (sub.status === 'canceled') {
+            if (nextBillingWrap) nextBillingWrap.hidden = true;
         } else {
-            if (nextBillingRow) nextBillingRow.hidden = true;
+            if (nextBillingEl) nextBillingEl.textContent = formatDate(sub.current_period_end);
         }
     }
 }
 
 function renderNoSubscription() {
-    const loading  = document.getElementById('statusLoading');
-    const content  = document.getElementById('statusContent');
-    const statusEl = document.getElementById('planStatus');
-    if (loading) loading.hidden = true;
-    if (content) content.hidden = false;
-    if (statusEl) {
-        statusEl.textContent = 'Não encontrada';
-        statusEl.className   = 'status-badge badge-cancel';
-    }
+    _setBadge('badge-cancel', 'Não encontrada');
+    const planNameEl = document.getElementById('planName');
+    if (planNameEl) planNameEl.textContent = 'Sem assinatura';
 }
 
-// ── Portal Stripe ─────────────────────────────────────────────────────────────
+// ── Portal Stripe ─────────────────────────────────────────────────
 function setupPortalButton(session) {
     const btn     = document.getElementById('btnPortal');
     const btnText = document.getElementById('btnPortalText');
@@ -209,23 +248,10 @@ function setupPortalButton(session) {
             alert(`Não foi possível abrir o portal.\n\n${err.message}\n\nTente novamente em instantes.`);
             btn.disabled = false;
             btn.setAttribute('aria-busy', 'false');
-            if (btnText) btnText.textContent = 'Gerenciar minha assinatura';
+            if (btnText) btnText.textContent = 'Abrir portal de gerenciamento';
         }
     });
 }
 
-function setupRetryButton(session) {
-    const btn = document.getElementById('btnRetry');
-    if (!btn) return;
-    btn.addEventListener('click', async () => {
-        const error   = document.getElementById('statusError');
-        const loading = document.getElementById('statusLoading');
-        if (error)   error.hidden   = true;
-        if (loading) loading.hidden = false;
-        const { data: { session: fresh } } = await supabase.auth.getSession();
-        await loadSubscription(fresh || session);
-    });
-}
-
-// ── Start ─────────────────────────────────────────────────────────────────────
+// ── Start ─────────────────────────────────────────────────────────
 init();
