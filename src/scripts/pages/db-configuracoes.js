@@ -13,8 +13,9 @@ export function init(ctx) {
     window.abrirAlterarSenha = () => abrirAlterarSenha();
     window.enviarConvite    = () => enviarConvite();
     window.removerConvidado = (id) => removerConvidado(id);
-    window.trocarPerfil     = () => trocarPerfil();
-    window.comoUsar         = () => comoUsar();
+    window.trocarPerfil        = () => trocarPerfil();
+    window.comoUsar            = () => comoUsar();
+    window.gerenciarAssinatura = () => gerenciarAssinatura();
 }
 
 // ========== CONFIGURAÇÕES ==========
@@ -488,5 +489,10 @@ function trocarPerfil() {
 
 function comoUsar() {
     alert('Funcionalidade "Como usar o GranaEvo?" será implementada em breve!');
+}
+
+// Redireciona para a página de gerenciamento de assinatura (cancelar, trocar cartão, faturas)
+function gerenciarAssinatura() {
+    window.location.href = 'atualizarplano.html';
 }
 
