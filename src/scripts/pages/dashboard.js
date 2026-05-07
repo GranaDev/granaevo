@@ -1316,21 +1316,17 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 return;
             }
 
-            // ── FIX-3: Usa signedUrl retornada pelo servidor ───────────────
-            if (uploadData.signedUrl) {
+            // Salva o PATH no banco (não a signed URL) para que _resolverFotoPerfil
+            // possa renovar a URL automaticamente — signed URLs expiram em 7 dias.
+            if (uploadData.path) {
+                fotoUrl = uploadData.path; // path relativo: "{userId}/{ts}.ext"
+            } else if (uploadData.signedUrl) {
+                // Fallback legado: sem path na resposta — usa signed URL diretamente
                 fotoUrl = _sanitizeImgUrl(uploadData.signedUrl) || null;
             } else {
-                _log.warn('[_criarPerfilHandler] signedUrl ausente na resposta. Tentando createSignedUrl...');
-                const { data: signedData, error: signedError } = await supabase.storage
-                    .from('profile-photos')
-                    .createSignedUrl(nomeArquivo, 3600);
-
-                if (signedError || !signedData?.signedUrl) {
-                    _log.error('PERFIL_FOTO_002', signedError);
-                    alert('Erro ao processar a foto. Tente novamente.');
-                    return;
-                }
-                fotoUrl = _sanitizeImgUrl(signedData.signedUrl) || null;
+                _log.error('PERFIL_FOTO_002', 'path e signedUrl ausentes na resposta');
+                alert('Erro ao processar a foto. Tente novamente.');
+                return;
             }
         }
 
