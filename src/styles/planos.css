@@ -1998,27 +1998,107 @@ input[type="password"]::-ms-clear {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   v6 — REDESIGN: Scroll Snap · 3D · Parallax · Scroll Reveal
-   Overrides existing carousel/card styles for modern experience
+   v7 — PREMIUM REDESIGN
+   Animated Border · Spotlight · 3D Tilt · Scroll Reveal · Parallax
+   Compact Mobile · Hero Float · Moving Gradient Text
 ══════════════════════════════════════════════════════════════════ */
 
-/* ── Scroll reveal — base invisible state ───────────────────────── */
+/* ── @property: animatable CSS angle for conic-gradient ─────────── */
+@property --angle {
+    syntax: '<angle>';
+    inherits: false;
+    initial-value: 0deg;
+}
+
+@keyframes spin-border { to { --angle: 360deg; } }
+
+/* ── Moving gradient text animation ─────────────────────────────── */
+.hero-title .gradient-text {
+    background: linear-gradient(90deg,
+        var(--primary), var(--neon-green), var(--primary-light), var(--primary));
+    background-size: 250% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: text-flow 4s linear infinite;
+}
+@keyframes text-flow {
+    from { background-position: 0% center; }
+    to   { background-position: 250% center; }
+}
+
+/* ── Hero floating visual (CSS-only rings + orb) ────────────────── */
+.hero-float {
+    position: absolute;
+    right: -5%;
+    top: 50%;
+    transform: translateY(-55%);
+    width: min(44vw, 420px);
+    height: min(44vw, 420px);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.hf-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(16,185,129,0.12);
+}
+.hf-ring-1 { inset: 0;    animation: ring-breathe 5s ease-in-out infinite;            }
+.hf-ring-2 { inset: 14%;  animation: ring-breathe 5s ease-in-out infinite 0.8s;       }
+.hf-ring-3 { inset: 28%;  animation: ring-breathe 5s ease-in-out infinite 1.6s;       }
+
+@keyframes ring-breathe {
+    0%, 100% { transform: scale(1);    opacity: 0.35; border-color: rgba(16,185,129,.12); }
+    50%       { transform: scale(1.06); opacity: 0.65; border-color: rgba(16,185,129,.3);  }
+}
+
+.hf-orb {
+    position: absolute;
+    inset: 42%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(16,185,129,.7) 0%, transparent 70%);
+    filter: blur(18px);
+    animation: orb-breathe 3s ease-in-out infinite alternate;
+}
+@keyframes orb-breathe {
+    from { transform: scale(.75); opacity: .5; }
+    to   { transform: scale(1.3); opacity: 1;  }
+}
+
+.hf-line {
+    position: absolute;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(16,185,129,.35), transparent);
+    animation: line-slide 4s ease-in-out infinite;
+}
+.hf-line-1 { width: 65%; top: 38%; left: 17.5%; animation-delay: 0s;   }
+.hf-line-2 { width: 45%; top: 62%; left: 27.5%; animation-delay: 1.5s; }
+@keyframes line-slide {
+    0%, 100% { opacity: 0; transform: scaleX(0.4); }
+    50%       { opacity: 1; transform: scaleX(1);   }
+}
+
+/* ── Hide float on small screens ────────────────────────────────── */
+@media (max-width: 767px) { .hero-float { display: none; } }
+
+/* ── Scroll reveal base state ────────────────────────────────────── */
 [data-reveal] {
     opacity: 0;
-    transform: translateY(38px);
+    transform: translateY(36px);
     transition:
-        opacity  0.65s cubic-bezier(.22,1,.36,1),
-        transform 0.65s cubic-bezier(.22,1,.36,1);
+        opacity  0.7s cubic-bezier(.22,1,.36,1),
+        transform 0.7s cubic-bezier(.22,1,.36,1);
 }
 [data-reveal].is-revealed {
     opacity: 1 !important;
     transform: translateY(0) !important;
 }
 
-/* Plan cards override (v5 had opacity:1 !important — we need 0 now) */
+/* Plan card overrides (v5 set opacity:1 !important) */
 .plan-card[data-reveal] {
     opacity: 0 !important;
-    transform: translateY(40px) !important;
+    transform: translateY(44px) !important;
 }
 .plan-card[data-reveal].is-revealed {
     opacity: 1 !important;
@@ -2028,20 +2108,102 @@ input[type="password"]::-ms-clear {
     transform: scale(1.04) translateY(-4px) !important;
 }
 
-/* Stagger plan cards */
-.plan-card:nth-child(1)[data-reveal] { transition-delay: 0s;    }
-.plan-card:nth-child(2)[data-reveal] { transition-delay: 0.13s; }
-.plan-card:nth-child(3)[data-reveal] { transition-delay: 0.26s; }
-
-/* Stagger benefit cards */
+/* Stagger delays */
+.plan-card:nth-child(1)[data-reveal]    { transition-delay: 0s;    }
+.plan-card:nth-child(2)[data-reveal]    { transition-delay: 0.14s; }
+.plan-card:nth-child(3)[data-reveal]    { transition-delay: 0.28s; }
 .benefit-card:nth-child(1)[data-reveal] { transition-delay: 0s;    }
 .benefit-card:nth-child(2)[data-reveal] { transition-delay: 0.10s; }
 .benefit-card:nth-child(3)[data-reveal] { transition-delay: 0.20s; }
 .benefit-card:nth-child(4)[data-reveal] { transition-delay: 0.30s; }
 
-/* ── 3D tilt support ─────────────────────────────────────────────── */
+/* ── Spotlight: child div updated by JS via CSS custom props ─────── */
+.card-spot {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    background: radial-gradient(
+        500px circle at var(--mx, 50%) var(--my, 50%),
+        rgba(16,185,129,.13),
+        transparent 55%
+    );
+}
+.plan-card:hover .card-spot { opacity: 1; }
+
+/* Ensure card content sits above spotlight */
+.plan-header, .plan-pricing, .plan-features,
+.btn-plan, .plan-badge, .plan-note, .plan-savings,
+.plan-icon, .feature-item {
+    position: relative;
+    z-index: 2;
+}
+
+/* ── Featured card: animated conic-gradient border ───────────────── */
+/* Uses @property --angle to animate conic-gradient rotation */
+.plan-card.featured {
+    border: 2px solid transparent !important;
+    background-image:
+        linear-gradient(145deg,
+            rgba(10, 26, 18, 0.97) 0%,
+            rgba(13, 32, 22, 0.97) 100%),
+        conic-gradient(
+            from var(--angle),
+            transparent  10%,
+            #059669      30%,
+            #10b981      50%,
+            #34d399      65%,
+            #10b981      80%,
+            transparent  90%
+        ) !important;
+    background-origin: border-box, border-box !important;
+    background-clip: padding-box, border-box !important;
+    animation: spin-border 5s linear infinite !important;
+    box-shadow:
+        0 0 0 1px rgba(16,185,129,.06) inset,
+        0 20px 60px rgba(16,185,129,.18),
+        0 0 80px rgba(16,185,129,.06) !important;
+}
+
+/* Override ::before top-line — featured border is handled by background-clip */
+.plan-card.featured::before { display: none !important; }
+
+/* Reduced motion: static border instead */
+@media (prefers-reduced-motion: reduce) {
+    .plan-card.featured {
+        animation: none !important;
+        border-color: rgba(16,185,129,.5) !important;
+        background-image: linear-gradient(145deg, rgba(10,26,18,.97), rgba(13,32,22,.97)) !important;
+        background-clip: padding-box !important;
+    }
+    .hero-title .gradient-text {
+        animation: none !important;
+        background-position: 0% center;
+    }
+    .hf-ring, .hf-orb, .hf-line { animation: none !important; }
+}
+
+/* ── Non-featured cards: clean glass ────────────────────────────── */
+.plan-card:not(.featured) {
+    background: rgba(255,255,255,.035) !important;
+    border: 1px solid rgba(255,255,255,.07) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    transition: border-color .25s, box-shadow .35s !important;
+}
+.plan-card:not(.featured):hover {
+    border-color: rgba(16,185,129,.22) !important;
+    box-shadow:
+        0 12px 40px rgba(0,0,0,.35),
+        0 0 0 1px rgba(16,185,129,.12) !important;
+}
+
+/* ── 3D tilt: preserve-3d for perspective illusion ──────────────── */
 .plan-card {
-    transform-style: preserve-3d;
+    transform-style: preserve-3d !important;
     will-change: transform;
     backface-visibility: hidden;
 }
@@ -2049,45 +2211,51 @@ input[type="password"]::-ms-clear {
 /* ── Parallax orbs ───────────────────────────────────────────────── */
 .glow-orb { will-change: transform; }
 
-/* ── Mobile: CSS scroll-snap replaces JS carousel ───────────────── */
+/* ── Remove notification ─────────────────────────────────────────── */
+.purchase-notification { display: none !important; }
+
+/* ══════════════════════════════════════════════════════════════════
+   MOBILE v7 — Truly compact scroll-snap cards
+   Target: cards ≤ 260px wide, ≤ 340px tall
+══════════════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
-    /* Hide old carousel controls */
     .carousel-controls,
     .carousel-btn,
     .carousel-indicators,
     .indicator-dot { display: none !important; }
 
-    /* Scroll hint (replaces carousel buttons) */
+    /* ── Animated scroll hint ────────────────────────────────────── */
     .scroll-hint {
         display: flex;
         align-items: center;
+        gap: 9px;
         justify-content: center;
-        gap: 10px;
-        margin-bottom: 18px;
-        font-size: 0.78rem;
+        margin-bottom: 16px;
+        font-size: 0.75rem;
         color: var(--gray);
-        letter-spacing: 0.03em;
+        letter-spacing: 0.04em;
     }
     .scroll-hint-track {
-        width: 36px; height: 6px;
+        width: 32px; height: 5px;
         border-radius: 99px;
-        background: rgba(16,185,129,.15);
+        background: rgba(16,185,129,.14);
         position: relative; overflow: hidden;
+        flex-shrink: 0;
     }
     .scroll-hint-thumb {
         position: absolute; top: 0; left: 0;
-        height: 100%; width: 40%;
+        height: 100%; width: 38%;
         border-radius: 99px;
         background: var(--primary);
-        animation: hint-slide 1.8s cubic-bezier(.4,0,.2,1) infinite;
+        animation: hint-slide 1.8s ease-in-out infinite;
     }
     @keyframes hint-slide {
-        0%   { left: 0;   width: 40%; }
-        50%  { left: 60%; width: 40%; }
-        100% { left: 0;   width: 40%; }
+        0%   { left: 0;   }
+        50%  { left: 62%; }
+        100% { left: 0;   }
     }
 
-    /* Scroll-snap container */
+    /* ── Scroll container ────────────────────────────────────────── */
     .plans-carousel {
         overflow-x: auto !important;
         overflow-y: hidden !important;
@@ -2096,67 +2264,86 @@ input[type="password"]::-ms-clear {
         scrollbar-width: none !important;
         padding: 0 !important;
         border-radius: 0 !important;
+        cursor: grab;
     }
+    .plans-carousel:active { cursor: grabbing; }
     .plans-carousel::-webkit-scrollbar { display: none; }
 
-    /* Track: flex row, no JS transforms */
+    /* ── Track ───────────────────────────────────────────────────── */
     .plans-track {
         display: flex !important;
-        gap: 14px !important;
+        gap: 12px !important;
         width: max-content !important;
-        padding: 8px 20px 20px !important;
+        padding: 8px 5vw 20px !important;
         transform: none !important;
         transition: none !important;
         will-change: auto !important;
+        align-items: stretch !important;
     }
 
-    /* Cards: 82vw, centered-ish, snap to start */
+    /* ── Card: small, snap, compact ─────────────────────────────── */
     .plan-card {
-        flex: 0 0 82vw !important;
-        max-width: 310px !important;
-        min-width: 240px !important;
+        flex: 0 0 68vw !important;
+        max-width: 258px !important;
+        min-width: 210px !important;
         min-height: unset !important;
-        scroll-snap-align: start !important;
-        padding: 22px 18px !important;
+        scroll-snap-align: center !important;
+        padding: 18px 16px 16px !important;
+        border-radius: 16px !important;
+        overflow: hidden !important;
     }
 
-    /* Compact inner layout on mobile */
-    .plan-icon      { display: none !important; }
-    .plan-header    { text-align: left !important; margin-bottom: 14px !important; }
-    .plan-name      { font-size: 1.3rem !important; }
-    .plan-subtitle  { font-size: 0.8rem !important; }
-    .plan-pricing   { text-align: left !important; margin-bottom: 14px !important; padding-bottom: 14px !important; }
-    .plan-price     { justify-content: flex-start !important; }
-    .amount         { font-size: 2.5rem !important; }
-    .feature-item   { padding: 5px 0 !important; font-size: 0.85rem !important; }
-    .plan-features  { margin-bottom: 14px !important; }
-    .btn-plan       { min-height: 46px !important; font-size: 0.9rem !important; }
-    .plan-note      { font-size: 0.75rem !important; margin-top: 10px !important; padding-top: 10px !important; }
-
-    /* Featured card: same size on mobile, just highlighted */
+    /* Featured on mobile: no animated border (performance), just glow */
     .plan-card.featured {
         transform: none !important;
-        box-shadow: 0 0 24px rgba(16,185,129,0.2) !important;
+        animation: none !important;
+        border: 1px solid rgba(16,185,129,.45) !important;
+        background-image: linear-gradient(145deg, rgba(10,26,18,.97), rgba(13,32,22,.97)) !important;
+        background-clip: padding-box !important;
+        box-shadow: 0 0 28px rgba(16,185,129,.2) !important;
     }
+
+    /* Compact header */
+    .plan-icon                  { display: none !important; }
+    .plan-header                { text-align: left !important; margin-bottom: 10px !important; }
+    .plan-name                  { font-size: 1.1rem !important; margin-bottom: 3px !important; }
+    .plan-subtitle              { font-size: 0.74rem !important; }
+
+    /* Compact pricing */
+    .plan-pricing               { text-align: left !important; margin-bottom: 10px !important; padding-bottom: 10px !important; }
+    .plan-price                 { justify-content: flex-start !important; gap: 1px !important; margin-bottom: 4px !important; }
+    .currency                   { font-size: 0.82rem !important; margin-top: 0.35rem !important; }
+    .amount                     { font-size: 1.95rem !important; }
+    .cents                      { font-size: 0.92rem !important; margin-top: 0.45rem !important; }
+    .plan-period                { font-size: 0.68rem !important; margin-bottom: 4px !important; }
+    .plan-savings               { font-size: 0.65rem !important; padding: 2px 7px !important; }
+
+    /* Features: show only first 3, compact rows */
+    .feature-item               { padding: 3px 0 !important; font-size: 0.76rem !important; gap: 6px !important; }
+    .feature-item:nth-child(n+4){ display: none !important; }
+    .feature-item svg           { width: 13px !important; height: 13px !important; min-width: 13px !important; }
+    .plan-features              { margin-bottom: 12px !important; }
+
+    /* Button */
+    .btn-plan                   { min-height: 38px !important; padding: 8px 14px !important; font-size: 0.82rem !important; border-radius: 9px !important; }
+    .btn-plan svg               { width: 14px !important; height: 14px !important; }
+
+    /* Footer note */
+    .plan-note                  { display: none !important; }
+    .plan-badge                 { font-size: 0.66rem !important; padding: 3px 8px !important; right: 12px !important; }
 }
 
-/* ── Remove notification everywhere ─────────────────────────────── */
-.purchase-notification { display: none !important; }
-
-/* ── Desktop: plan card improved hover ──────────────────────────── */
+/* ── Desktop: featured permanent elevation ───────────────────────── */
 @media (min-width: 768px) {
-    .plan-card {
-        cursor: default;
-        /* transitions managed by JS tilt for transform */
-        transition: box-shadow 0.3s ease, border-color 0.25s ease !important;
-    }
-    /* Featured card permanent elevation */
     .plan-card.featured[data-reveal].is-revealed {
         transform: scale(1.04) translateY(-4px) !important;
     }
+    .plan-card {
+        cursor: default;
+    }
 }
 
-/* ── FAQ items reveal ────────────────────────────────────────────── */
+/* ── FAQ items stagger ───────────────────────────────────────────── */
 .faq-item[data-reveal]:nth-child(1) { transition-delay: 0s;    }
 .faq-item[data-reveal]:nth-child(2) { transition-delay: 0.08s; }
 .faq-item[data-reveal]:nth-child(3) { transition-delay: 0.16s; }

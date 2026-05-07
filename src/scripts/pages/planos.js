@@ -949,40 +949,95 @@ function initScrollAnimations() {
 }
 
 // ==========================================
-// v6: 3D CARD TILT (replaces flat translateY hover)
+// v7: SPOTLIGHT — mouse-following radial gradient
+// Uses CSS custom props (CSSOM, CSP-safe)
+// ==========================================
+function initSpotlight() {
+    document.querySelectorAll('.plan-card').forEach(card => {
+        card.addEventListener('mousemove', e => {
+            const r = card.getBoundingClientRect();
+            card.style.setProperty('--mx', `${(e.clientX - r.left).toFixed(0)}px`);
+            card.style.setProperty('--my', `${(e.clientY - r.top).toFixed(0)}px`);
+        }, { passive: true });
+    });
+}
+
+// ==========================================
+// v7: 3D CARD TILT — perspective + dynamic shadow
 // ==========================================
 function initPlanCardTilt() {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        initDesktopHover();
-        return;
-    }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) { initDesktopHover(); return; }
 
     document.querySelectorAll('.plan-card').forEach(card => {
-        const MAX        = 7;
+        const MAX        = 8;
         const isFeatured = card.classList.contains('featured');
 
         card.addEventListener('mousemove', e => {
             if (window.innerWidth < 768) return;
-            const r  = card.getBoundingClientRect();
-            const x  = (e.clientX - r.left) / r.width  - 0.5;
-            const y  = (e.clientY - r.top)  / r.height - 0.5;
-            const rx = (-y * MAX).toFixed(2);
-            const ry = ( x * MAX).toFixed(2);
-            const sc = isFeatured ? 1.06 : 1.03;
+            const r   = card.getBoundingClientRect();
+            const nx  = (e.clientX - r.left) / r.width  - 0.5;
+            const ny  = (e.clientY - r.top)  / r.height - 0.5;
+            const rx  = (-ny * MAX).toFixed(2);
+            const ry  = ( nx * MAX).toFixed(2);
+            const sc  = isFeatured ? 1.06 : 1.03;
+            const dy  = (ny * 12).toFixed(0);
+
             card.style.transform =
                 `perspective(1000px) rotateX(${rx}deg) rotateY(${ry}deg) ` +
-                `translateY(-8px) scale(${sc})`;
+                `translateY(-10px) scale(${sc})`;
+
+            if (!isFeatured) {
+                card.style.boxShadow =
+                    `0 ${14 + Number(dy)}px 40px rgba(0,0,0,.4),` +
+                    `0 0 0 1px rgba(16,185,129,.16)`;
+            }
         }, { passive: true });
 
         card.addEventListener('mouseleave', () => {
             if (window.innerWidth < 768) return;
-            card.style.transition = 'transform 0.48s cubic-bezier(.22,1,.36,1)';
-            card.style.transform  = isFeatured
-                ? 'scale(1.04) translateY(-4px)'
-                : '';
-            setTimeout(() => { card.style.transition = ''; }, 520);
+            card.style.transition = 'transform .5s cubic-bezier(.22,1,.36,1), box-shadow .4s ease';
+            card.style.transform  = isFeatured ? 'scale(1.04) translateY(-4px)' : '';
+            card.style.boxShadow  = '';
+            setTimeout(() => { card.style.transition = ''; }, 550);
         }, { passive: true });
     });
+}
+
+// ==========================================
+// v7: PRICE COUNTER — count up on first reveal
+// ==========================================
+function initPriceCounters() {
+    const cards = document.querySelectorAll('.plan-card');
+    const countered = new WeakSet();
+
+    const io = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting || countered.has(entry.target)) return;
+            const amountEl = entry.target.querySelector('.amount');
+            if (!amountEl) return;
+            const target = parseInt(amountEl.textContent, 10);
+            if (!target) return;
+            countered.add(entry.target);
+            const start = performance.now();
+            const dur   = 700;
+            function tick(now) {
+                const p = Math.min((now - start) / dur, 1);
+                const v = Math.round(p < 0.5
+                    ? 4 * p * p * p
+                    : 1 - Math.pow(-2 * p + 2, 3) / 2  // ease-in-out cubic
+                    ) * target;
+                amountEl.textContent = Math.round(p < 0.5
+                    ? target * (4 * p * p * p)
+                    : target * (1 - Math.pow(-2 * p + 2, 3) / 2));
+                if (p < 1) requestAnimationFrame(tick);
+                else amountEl.textContent = target;
+            }
+            requestAnimationFrame(tick);
+        });
+    }, { threshold: 0.3 });
+
+    cards.forEach(c => io.observe(c));
 }
 
 // ==========================================
@@ -1019,8 +1074,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     SignupModal.init();
     bindCheckoutButtons();
 
-    // v6: CSS scroll-snap handles mobile — no JS carousel
+    // v7: all new effects
+    initSpotlight();
     initPlanCardTilt();
+    initPriceCounters();
     initScrollAnimations();
     initParallax();
 
