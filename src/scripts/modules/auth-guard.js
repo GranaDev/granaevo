@@ -83,16 +83,30 @@ function _err(code, message) {
 //  [FIX-REPORT-3] + getRateLimitSecret() para secret persistente do rate log
 // ═══════════════════════════════════════════════════════════════
 const SecureCrypto = (() => {
-    // [FIX-VUL-10] Secret da sessão exclusivamente em memória
+    // Secret da sessão: persiste em sessionStorage dentro da mesma aba.
+    // sessionStorage sobrevive a page-refreshes mas é limpo ao fechar a aba,
+    // garantindo que um fingerprint salvo antes do reload continue verificável.
+    // Sem isso, cada reload gera secret novo → fingerprint mismatch → SESSION_HIJACK falso.
     let _sessionSecret = null;
+    const _SK_KEY = '_ge_sk'; // chave no sessionStorage — fora do SECURITY.KEYS por design
 
     function _getOrCreateSecret() {
         if (_sessionSecret) return _sessionSecret;
+        // Tenta restaurar da sessionStorage (sobrevive a reload na mesma aba)
+        try {
+            const stored = sessionStorage.getItem(_SK_KEY);
+            if (stored && /^[0-9a-f]{64}$/.test(stored)) {
+                _sessionSecret = stored;
+                return _sessionSecret;
+            }
+        } catch { /* sessionStorage bloqueado */ }
+        // Gera novo secret e persiste
         const arr = new Uint8Array(32);
         crypto.getRandomValues(arr);
         _sessionSecret = Array.from(arr)
             .map(b => b.toString(16).padStart(2, '0'))
             .join('');
+        try { sessionStorage.setItem(_SK_KEY, _sessionSecret); } catch { /* cheio */ }
         return _sessionSecret;
     }
 
@@ -228,8 +242,11 @@ function _canvasEntropy() {
         getRateLimitSecret:    _getOrCreateRateLimitSecret, // [FIX-REPORT-3]
         generateCanvasEntropy: _canvasEntropy,
         getCanvasSalt:         _getOrCreateCanvasSalt,
-        // [FIX-VUL-10] Invalida secret em memória no logout
-        clearSecret() { _sessionSecret = null; },
+        // Invalida secret em memória E sessionStorage no logout/hijack
+        clearSecret() {
+            _sessionSecret = null;
+            try { sessionStorage.removeItem(_SK_KEY); } catch { /* */ }
+        },
     };
 })();
 
