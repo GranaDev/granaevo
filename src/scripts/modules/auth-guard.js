@@ -7,7 +7,7 @@
  * ═══════════════════════════════════════════════════════════════
  */
 
-import { supabase } from '../services/supabase-client.js?v=2';
+import { supabase, clearRememberMe } from '../services/supabase-client.js?v=2';
 
 // ═══════════════════════════════════════════════════════════════
 //  TAB_ID — identificador único desta aba [FIX-REPORT-3]
@@ -1147,6 +1147,7 @@ const AuthGuard = (() => {
             SubscriptionChecker.invalidate();
             Fingerprint.clear();
             RateLimiter.clear();
+            clearRememberMe(); // limpa flag + token de localStorage/sessionStorage
 
             _broadcastLogout('LOGOUT');
 
@@ -1164,6 +1165,7 @@ const AuthGuard = (() => {
             SubscriptionChecker.invalidate();
             Fingerprint.clear();
             RateLimiter.clear();
+            clearRememberMe(); // limpa flag + token de localStorage/sessionStorage
 
             _broadcastLogout('FORCE_LOGOUT');
 

@@ -42,19 +42,69 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     throw new Error('Configuração do cliente Supabase indisponível.');
 }
 
-// [SEC-FIX] Adapter de sessionStorage em vez de localStorage.
-// Requisito de segurança: tokens não persistem entre sessões de browser.
-// sessionStorage é isolado por aba e limpo quando a aba fecha —
-// elimina o risco de roubo de token por XSS em scripts de terceiros
-// que leram localStorage de outras origens (via extension, etc.).
-//
-// Trade-off aceito: usuário precisa fazer login ao reabrir o browser/aba.
-// Para app financeiro pessoal, este comportamento é desejável.
-const _sessionStorageAdapter = {
-    getItem:    (key)        => { try { return sessionStorage.getItem(key);        } catch { return null; } },
-    setItem:    (key, value) => { try { sessionStorage.setItem(key, value);        } catch {} },
-    removeItem: (key)        => { try { sessionStorage.removeItem(key);            } catch {} },
+// Chave que persiste o estado "Lembrar de mim" no localStorage.
+// É apenas uma flag booleana — não contém tokens.
+const _REMEMBER_KEY = '_ge_remember';
+
+// Verifica se o usuário escolheu "Lembrar de mim" na última sessão de login.
+function _isRemembered() {
+    try { return localStorage.getItem(_REMEMBER_KEY) === '1'; } catch { return false; }
+}
+
+// Storage dinâmico: usa localStorage quando "Lembrar de mim" está ativo,
+// sessionStorage caso contrário (limpo ao fechar o browser).
+// removeItem sempre limpa de ambos para não deixar token órfão.
+const _dynamicStorageAdapter = {
+    getItem(key) {
+        try {
+            if (_isRemembered()) {
+                // Prioriza localStorage; sessionStorage como fallback de migração
+                const v = localStorage.getItem(key);
+                return v !== null ? v : sessionStorage.getItem(key);
+            }
+            return sessionStorage.getItem(key);
+        } catch { return null; }
+    },
+    setItem(key, value) {
+        try {
+            if (_isRemembered()) {
+                localStorage.setItem(key, value);
+                try { sessionStorage.removeItem(key); } catch {}
+            } else {
+                sessionStorage.setItem(key, value);
+                try { localStorage.removeItem(key); } catch {}
+            }
+        } catch {}
+    },
+    removeItem(key) {
+        try { localStorage.removeItem(key);   } catch {}
+        try { sessionStorage.removeItem(key); } catch {}
+    },
 };
+
+/**
+ * Define se a sessão deve persistir entre fechamentos do browser.
+ * Deve ser chamada ANTES de supabase.auth.signInWithPassword().
+ */
+export function setRememberMe(remember) {
+    try {
+        if (remember) {
+            localStorage.setItem(_REMEMBER_KEY, '1');
+        } else {
+            localStorage.removeItem(_REMEMBER_KEY);
+        }
+    } catch {}
+}
+
+/**
+ * Limpa o estado "Lembrar de mim" e remove a sessão persistida.
+ * Deve ser chamada em todos os caminhos de logout.
+ */
+export function clearRememberMe() {
+    try { localStorage.removeItem(_REMEMBER_KEY); } catch {}
+    try { localStorage.removeItem('ge_auth');      } catch {}
+    try { sessionStorage.removeItem('ge_auth');    } catch {}
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
@@ -62,6 +112,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         detectSessionInUrl: true,
         autoRefreshToken:   true,
         storageKey:         'ge_auth',
-        storage:            _sessionStorageAdapter,
+        storage:            _dynamicStorageAdapter,
     },
 });

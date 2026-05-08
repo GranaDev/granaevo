@@ -1,4 +1,4 @@
-import { supabase, SUPABASE_ANON_KEY } from '../services/supabase-client.js';
+import { supabase, SUPABASE_ANON_KEY, setRememberMe, clearRememberMe } from '../services/supabase-client.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  [TT-POLICY-1] TRUSTED TYPES — POLÍTICA granaevo-policy
@@ -737,8 +737,12 @@ loginForm?.addEventListener('submit', async (e) => {
         }
     }
 
-    const submitBtn = buttons.loginSubmit;
+    const submitBtn  = buttons.loginSubmit;
     setButtonLoading(submitBtn, 'Verificando...');
+
+    // Define o storage ANTES do signIn — o adapter usa essa flag ao salvar o token
+    const rememberChecked = document.getElementById('remember')?.checked ?? false;
+    setRememberMe(rememberChecked);
 
     try {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -763,6 +767,7 @@ loginForm?.addEventListener('submit', async (e) => {
         const { hasAccess } = checkAccessResult;
 
         if (!hasAccess) {
+            clearRememberMe();
             await supabase.auth.signOut();
             const lockMsg = checkAccessResult?.lockMessage;
             if (lockMsg) {
