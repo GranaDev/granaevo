@@ -1,811 +1,681 @@
 // ==========================================
-// GRANAEVO LANDING PAGE - JAVASCRIPT
-// Versão Segura — V5.0
-//
-// MELHORIAS APLICADAS NESTA VERSÃO (vs V4.0):
-// ─────────────────────────────────────────────────────────────────
-// [A]  API performance.timing (DEPRECATED) substituída pela
-//      Navigation Timing API Level 2 (PerformanceNavigationTiming).
-//      A API antiga foi removida de alguns browsers modernos.
-//
-// [B]  Trusted Types: todo o código que manipula DOM já é compatível.
-//      Não há innerHTML, document.write ou insertAdjacentHTML em
-//      nenhum ponto. Pronto para require-trusted-types-for 'script'.
-//
-// [C]  deepFreeze: proteção reforçada para arrays e objetos aninhados.
-//
-// [D]  sanitizeText: simplificada e corrigida. A versão anterior
-//      criava um <span> apenas para ler .textContent — redundante.
-//      document.createTextNode já realiza o escape; basta retornar
-//      a string tratada diretamente via textContent do nó.
-//
-// [E]  trackEvent: allowlist expandida com comentário explicando
-//      o modelo de segurança.
-//
-// [F]  Ripple: keyframe injetado via CSSStyleSheet.replace()
-//      (assíncrono, mais correto que replaceSync para não bloquear
-//      o thread principal).
-//
-// [G]  closeMobileMenu / openMobileMenu: extraídas para escopo
-//      de módulo mais cedo para garantir disponibilidade no keydown.
-//
-// MANTIDO DA V4.0:
-// ─────────────────────────────────────────────────────────────────
-// [1]  Testimonials: createElement + textContent, sem innerHTML
-// [2]  validateTestimonial(): validação estrutural + de tipos
-// [3]  TESTIMONIALS_DATA: imutável via deepFreeze
-// [4]  Console branding restrito a IS_DEV
-// [5]  counter animation: valores validados (isFinite, não-negativo)
-// [6]  Ripple effect: XY limitados aos bounds do elemento
-// [7]  Sem eval(), Function(), document.write(), insertAdjacentHTML()
-// [8]  Event listeners com passive: true onde cabível
-// [9]  Escape fecha menu (acessibilidade + UX)
-// [10] Strict mode via type="module" no HTML
+// GRANAEVO LANDING PAGE — V6.0
+// Seguro · Trusted Types · GSAP + ScrollTrigger
 // ==========================================
 
-'use strict'; // Redundante com module — explícito para clareza do leitor
+'use strict';
+
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+gsap.registerPlugin(ScrollTrigger);
 
 // ==========================================
 // AMBIENTE
 // ==========================================
 const IS_DEV = (
-    location.hostname === 'localhost'    ||
-    location.hostname === '127.0.0.1'   ||
+    location.hostname === 'localhost' ||
+    location.hostname === '127.0.0.1' ||
     location.hostname.endsWith('.local')
 );
 
 // ==========================================
-// UTILITÁRIOS DE SEGURANÇA
+// UTILITÁRIOS
 // ==========================================
-
-/**
- * Retorna a string segura para uso em textContent.
- * createTextNode faz o escape automático de qualquer HTML.
- * Não usa innerHTML em nenhum momento.
- *
- * [D] Versão simplificada: a versão anterior criava um <span>
- *     desnecessário. O nó de texto já expõe .nodeValue sem HTML.
- *
- * @param {unknown} value
- * @returns {string}
- */
 function sanitizeText(value) {
     if (typeof value !== 'string') return '';
-    // createTextNode escapa automaticamente < > & " ' etc.
     const node = document.createTextNode(value);
     return node.nodeValue ?? '';
 }
 
-/**
- * Valida que um objeto testimonial possui as propriedades esperadas,
- * todas do tipo string e com comprimento razoável.
- * Protege contra prototype pollution e dados malformados.
- *
- * @param {unknown} obj
- * @returns {boolean}
- */
-function validateTestimonial(obj) {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
-    if (!Object.prototype.hasOwnProperty.call(obj, 'stars'))  return false;
-    if (!Object.prototype.hasOwnProperty.call(obj, 'text'))   return false;
-    if (!Object.prototype.hasOwnProperty.call(obj, 'author')) return false;
-    if (typeof obj.stars  !== 'string' || obj.stars.length  > 20)  return false;
-    if (typeof obj.text   !== 'string' || obj.text.length   > 500) return false;
-    if (typeof obj.author !== 'string' || obj.author.length > 100) return false;
-    return true;
-}
-
-/**
- * Deep freeze recursivo — impede mutação de objetos e arrays de dados.
- * Protege contra ataques de prototype pollution em runtime.
- *
- * @param {object} obj
- * @returns {object}
- */
 function deepFreeze(obj) {
-    Object.getOwnPropertyNames(obj).forEach(name => {
-        const value = obj[name];
-        if (value && typeof value === 'object') {
-            deepFreeze(value);
-        }
-    });
+    if (obj === null || typeof obj !== 'object') return obj;
+    Object.getOwnPropertyNames(obj).forEach(name => deepFreeze(obj[name]));
     return Object.freeze(obj);
 }
 
 // ==========================================
-// DADOS IMUTÁVEIS DE DEPOIMENTOS
-// deepFreeze impede que qualquer código externo modifique o array.
+// DADOS — DEPOIMENTOS (imutável)
 // ==========================================
-const TESTIMONIALS_DATA = deepFreeze([
-    {
-        stars:  '★★★★★',
-        text:   'O GranaEvo mudou completamente minha relação com o dinheiro. Finalmente sei exatamente para onde vai cada centavo!',
-        author: 'Maria Silva'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Nunca mais fui pego de surpresa pela fatura do cartão. O controle é total e muito fácil de usar.',
-        author: 'João Santos'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Consegui economizar R$ 5.000 em 6 meses só organizando melhor meus gastos com o GranaEvo.',
-        author: 'Ana Costa'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Perfeito para casais! Agora eu e meu marido temos visão completa das nossas finanças juntos.',
-        author: 'Patricia Oliveira'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Interface super intuitiva. Até minha mãe de 65 anos conseguiu usar sem dificuldade!',
-        author: 'Carlos Pereira'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Vale cada centavo! O investimento se paga só na economia que você consegue fazer.',
-        author: 'Roberto Lima'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Tinha medo de apps financeiros, mas o GranaEvo é simples e seguro. Recomendo muito!',
-        author: 'Juliana Martins'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Os gráficos e relatórios me ajudaram a identificar gastos que eu nem sabia que tinha.',
-        author: 'Fernando Souza'
-    }
+const TESTIMONIALS = deepFreeze([
+    { name: 'Ana Lima', role: 'Designer · São Paulo', stars: 5, text: 'Finalmente entendo para onde meu dinheiro vai. O GranaEvo transformou minha relação com as finanças.' },
+    { name: 'Carlos Mendes', role: 'Dev · Belo Horizonte', stars: 5, text: 'Uso há 8 meses. A funcionalidade de cartões é simplesmente perfeita — nunca mais fatura surpresa.' },
+    { name: 'Juliana Costa', role: 'Professora · Curitiba', stars: 5, text: 'Consegui juntar para a viagem dos sonhos em 10 meses usando as metas do GranaEvo. Incrível.' },
+    { name: 'Pedro Alves', role: 'Empreendedor · RJ', stars: 5, text: 'Controlo as finanças do negócio e da família no mesmo app. Praticidade que não existia antes.' },
+    { name: 'Marina Santos', role: 'Advogada · Brasília', stars: 5, text: 'O dashboard me deu a visão que eu precisava. Reduz meus gastos supérfluos em 30% no primeiro mês.' },
+    { name: 'Lucas Ferreira', role: 'Engenheiro · Floripa', stars: 5, text: 'Interface linda, rápida e muito intuitiva. Melhor app de finanças que usei até hoje.' },
+    { name: 'Beatriz Rocha', role: 'Enfermeira · Salvador', stars: 5, text: 'Usei vários apps de finanças e o GranaEvo é diferente. Simples, visual e muito completo.' },
+    { name: 'Thiago Nunes', role: 'Contador · Porto Alegre', stars: 5, text: 'Recomendo para todos os meus clientes. A organização por categorias é excelente.' },
 ]);
+
+function validateTestimonial(t) {
+    return (
+        t && typeof t === 'object' &&
+        typeof t.name === 'string' && t.name.length > 0 && t.name.length <= 60 &&
+        typeof t.role === 'string' && t.role.length > 0 &&
+        typeof t.text === 'string' && t.text.length > 0 && t.text.length <= 300 &&
+        typeof t.stars === 'number' && t.stars >= 1 && t.stars <= 5 && Number.isInteger(t.stars)
+    );
+}
 
 // ==========================================
 // LOADING SCREEN
 // ==========================================
-window.addEventListener('load', () => {
-    const loadingScreen = document.getElementById('loadingScreen');
-    if (!loadingScreen) return;
-    setTimeout(() => {
-        loadingScreen.classList.add('hidden');
-    }, 1200);
-});
+function initLoadingScreen() {
+    const screen = document.getElementById('loadingScreen');
+    if (!screen) return;
 
-// ==========================================
-// SCROLL PROGRESS BAR
-// ==========================================
-const scrollProgress = document.getElementById('scrollProgress');
+    const hide = () => {
+        screen.classList.add('hidden');
+    };
 
-function updateScrollProgress() {
-    if (!scrollProgress) return;
-    const windowHeight   = window.innerHeight;
-    const documentHeight = document.documentElement.scrollHeight - windowHeight;
-    const scrolled       = window.scrollY;
-    const progress       = documentHeight > 0
-        ? Math.min((scrolled / documentHeight) * 100, 100)
-        : 0;
-    scrollProgress.style.width = `${progress}%`;
-    scrollProgress.setAttribute('aria-valuenow', Math.round(progress));
+    if (document.readyState === 'complete') {
+        setTimeout(hide, 400);
+    } else {
+        window.addEventListener('load', () => setTimeout(hide, 400), { once: true });
+    }
 }
 
-window.addEventListener('scroll', updateScrollProgress, { passive: true });
+// ==========================================
+// SCROLL PROGRESS
+// ==========================================
+function initScrollProgress() {
+    const bar = document.getElementById('scrollProgress');
+    if (!bar) return;
+
+    const update = () => {
+        const scrolled = window.scrollY;
+        const total = document.documentElement.scrollHeight - window.innerHeight;
+        const pct = total > 0 ? Math.round((scrolled / total) * 100) : 0;
+        bar.style.width = pct + '%';
+        bar.setAttribute('aria-valuenow', pct);
+    };
+
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+}
 
 // ==========================================
-// HEADER SCROLL EFFECT
+// HEADER SCROLL
 // ==========================================
-const header = document.getElementById('header');
-
-function handleHeaderScroll() {
+function initHeader() {
+    const header = document.getElementById('header');
     if (!header) return;
-    header.classList.toggle('scrolled', window.scrollY > 100);
-}
 
-window.addEventListener('scroll', handleHeaderScroll, { passive: true });
-
-// ==========================================
-// MOBILE MENU TOGGLE
-// [G] Funções declaradas antes dos event listeners para garantir
-//     disponibilidade quando o keydown é registrado logo abaixo.
-// ==========================================
-const mobileToggle = document.getElementById('mobileToggle');
-const navLinks      = document.getElementById('navLinks');
-
-function closeMobileMenu() {
-    if (!mobileToggle || !navLinks) return;
-    mobileToggle.classList.remove('active');
-    navLinks.classList.remove('active');
-    document.body.style.overflow = '';
-    mobileToggle.setAttribute('aria-expanded', 'false');
-    mobileToggle.setAttribute('aria-label',    'Abrir menu de navegação');
-}
-
-function openMobileMenu() {
-    if (!mobileToggle || !navLinks) return;
-    mobileToggle.classList.add('active');
-    navLinks.classList.add('active');
-    document.body.style.overflow = 'hidden';
-    mobileToggle.setAttribute('aria-expanded', 'true');
-    mobileToggle.setAttribute('aria-label',    'Fechar menu de navegação');
-}
-
-if (mobileToggle && navLinks) {
-    mobileToggle.addEventListener('click', () => {
-        mobileToggle.classList.contains('active')
-            ? closeMobileMenu()
-            : openMobileMenu();
-    });
-
-    // Fecha menu ao clicar em um link
-    navLinks.querySelectorAll('a').forEach(link => {
-        link.addEventListener('click', closeMobileMenu);
-    });
-
-    // Fecha menu ao clicar fora
-    document.addEventListener('click', (e) => {
-        if (
-            navLinks.classList.contains('active') &&
-            !navLinks.contains(e.target)          &&
-            !mobileToggle.contains(e.target)
-        ) {
-            closeMobileMenu();
-        }
-    });
-}
-
-// ==========================================
-// MOBILE CTA FLOATING BUTTON
-// ==========================================
-const mobileCTA = document.getElementById('mobileCTA');
-
-function handleMobileCTA() {
-    if (!mobileCTA) return;
-    const shouldShow = window.innerWidth < 768 && window.scrollY > 800;
-    mobileCTA.classList.toggle('visible', shouldShow);
-
-    // Acessibilidade: retira/restaura do tab order quando invisível
-    const link = mobileCTA.querySelector('a');
-    if (link) link.setAttribute('tabindex', shouldShow ? '0' : '-1');
-    mobileCTA.setAttribute('aria-hidden', String(!shouldShow));
-}
-
-if (mobileCTA) {
-    window.addEventListener('scroll', handleMobileCTA, { passive: true });
-    window.addEventListener('resize', handleMobileCTA, { passive: true });
-}
-
-// ==========================================
-// SMOOTH SCROLL
-// ==========================================
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function (e) {
-        const href = this.getAttribute('href');
-
-        // Ignora href vazio ou apenas "#"
-        if (!href || href === '#' || href.length === 1) return;
-
-        // Valida seletor — evita CSS injection via href
-        if (!/^#[a-zA-Z][\w-]*$/.test(href)) return;
-
-        const target = document.querySelector(href);
-        if (!target) return;
-
-        e.preventDefault();
-        const headerHeight   = header ? header.offsetHeight : 0;
-        const targetPosition = target.getBoundingClientRect().top + window.scrollY - headerHeight - 20;
-
-        window.scrollTo({ top: targetPosition, behavior: 'smooth' });
-    });
-});
-
-// ==========================================
-// PARTICLES CANVAS
-// ==========================================
-const canvas = document.getElementById('particlesCanvas');
-if (canvas) {
-    const ctx = canvas.getContext('2d');
-
-    function resizeCanvas() {
-        canvas.width  = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas, { passive: true });
-
-    // Cap de partículas baseado na área da tela.
-    // Sem isso, monitores 4K ou ultrawide gerariam uso excessivo de CPU
-    // porque o canvas ocupa toda a viewport e cada partícula precisa
-    // ser re-renderizada a cada frame (~60fps).
-    // Fórmula: 1 partícula por 14.000px² de área, mínimo 20, máximo 60.
-    const screenArea    = window.innerWidth * window.innerHeight;
-    const areaBased     = Math.floor(screenArea / 14000);
-    const particleCount = Math.max(20, Math.min(60, areaBased));
-
-    class Particle {
-        constructor() { this.reset(); }
-
-        reset() {
-            this.x       = Math.random() * canvas.width;
-            this.y       = Math.random() * canvas.height;
-            this.size    = Math.random() * 2 + 1;
-            this.speedX  = Math.random() * 0.5 - 0.25;
-            this.speedY  = Math.random() * 0.5 - 0.25;
-            this.opacity = Math.random() * 0.5 + 0.2;
-        }
-
-        update() {
-            this.x += this.speedX;
-            this.y += this.speedY;
-            if (this.x > canvas.width)  this.x = 0;
-            if (this.x < 0)             this.x = canvas.width;
-            if (this.y > canvas.height) this.y = 0;
-            if (this.y < 0)             this.y = canvas.height;
-        }
-
-        draw() {
-            ctx.fillStyle = `rgba(16, 185, 129, ${this.opacity})`;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-
-    const particles = Array.from({ length: particleCount }, () => new Particle());
-
-    function animateParticles() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        particles.forEach(p => { p.update(); p.draw(); });
-        requestAnimationFrame(animateParticles);
-    }
-
-    animateParticles();
-}
-
-// ==========================================
-// HERO STATS COUNTER ANIMATION
-// Valor validado: deve ser número finito e não-negativo.
-// ==========================================
-function animateCounter(element) {
-    const raw = parseFloat(element.getAttribute('data-count'));
-
-    // Rejeita NaN, Infinity, negativo
-    if (!Number.isFinite(raw) || raw < 0) {
-        element.textContent = '0';
-        return;
-    }
-
-    const target    = raw;
-    const duration  = 2000;
-    const increment = target / (duration / 16);
-    let current     = 0;
-
-    const updateCounter = () => {
-        current += increment;
-        if (current < target) {
-            element.textContent = Math.floor(current).toLocaleString('pt-BR');
-            requestAnimationFrame(updateCounter);
+    const update = () => {
+        if (window.scrollY > 40) {
+            header.classList.add('scrolled');
         } else {
-            element.textContent = target.toLocaleString('pt-BR');
+            header.classList.remove('scrolled');
         }
     };
 
-    updateCounter();
+    window.addEventListener('scroll', update, { passive: true });
+    update();
 }
 
-const statValues = document.querySelectorAll('.stat-value[data-count]');
+// ==========================================
+// MOBILE MENU
+// ==========================================
+function openMobileMenu(toggle, navLinks) {
+    toggle.setAttribute('aria-expanded', 'true');
+    navLinks.classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
 
-const counterObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting && entry.target.textContent === '0') {
-            animateCounter(entry.target);
+function closeMobileMenu(toggle, navLinks) {
+    toggle.setAttribute('aria-expanded', 'false');
+    navLinks.classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+function initMobileMenu() {
+    const toggle = document.getElementById('mobileToggle');
+    const navLinks = document.getElementById('navLinks');
+    if (!toggle || !navLinks) return;
+
+    toggle.addEventListener('click', () => {
+        const expanded = toggle.getAttribute('aria-expanded') === 'true';
+        if (expanded) {
+            closeMobileMenu(toggle, navLinks);
+        } else {
+            openMobileMenu(toggle, navLinks);
         }
     });
-}, { threshold: 0.5 });
 
-statValues.forEach(stat => counterObserver.observe(stat));
-
-// ==========================================
-// MINI CHART
-// ==========================================
-const miniChart = document.getElementById('miniChart');
-if (miniChart) {
-    const ctx = miniChart.getContext('2d');
-    miniChart.width  = miniChart.offsetWidth;
-    miniChart.height = miniChart.offsetHeight;
-
-    // Dados estáticos e tipados — sem entrada externa
-    const data    = Object.freeze([20, 45, 30, 60, 40, 70, 50, 80, 65, 90]);
-    const max     = Math.max(...data);
-    const padding = 10;
-    const width   = miniChart.width;
-    const height  = miniChart.height;
-    const stepX   = (width - padding * 2) / (data.length - 1);
-
-    ctx.strokeStyle = '#10b981';
-    ctx.lineWidth   = 2;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
-    gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
-
-    // Área preenchida
-    ctx.beginPath();
-    data.forEach((value, index) => {
-        const x = padding + index * stepX;
-        const y = height - padding - (value / max) * (height - padding * 2);
-        index === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.lineTo(width - padding, height - padding);
-    ctx.lineTo(padding,         height - padding);
-    ctx.closePath();
-    ctx.fillStyle = gradient;
-    ctx.fill();
-
-    // Linha do gráfico
-    ctx.beginPath();
-    data.forEach((value, index) => {
-        const x = padding + index * stepX;
-        const y = height - padding - (value / max) * (height - padding * 2);
-        index === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-}
-
-// ==========================================
-// TESTIMONIALS CAROUSEL
-// Sem innerHTML — usa apenas createElement e textContent.
-// Cada item é validado antes de renderizar.
-// Trusted Types compatível: nenhuma atribuição de HTML string.
-// ==========================================
-
-/**
- * Cria um card de depoimento de forma segura.
- * Nunca usa innerHTML. Todos os dados passam por textContent.
- *
- * @param {{ stars: string, text: string, author: string }} testimonial
- * @returns {HTMLElement}
- */
-function createTestimonialCard(testimonial) {
-    const card = document.createElement('div');
-    card.className = 'testimonial-card';
-
-    const stars = document.createElement('div');
-    stars.className = 'testimonial-stars';
-    stars.setAttribute('aria-label', 'Avaliação 5 estrelas');
-    stars.textContent = sanitizeText(testimonial.stars);
-
-    const text = document.createElement('p');
-    text.className = 'testimonial-text';
-    text.textContent = sanitizeText(testimonial.text);
-
-    const author = document.createElement('div');
-    author.className = 'testimonial-author';
-    author.textContent = sanitizeText(testimonial.author);
-
-    card.appendChild(stars);
-    card.appendChild(text);
-    card.appendChild(author);
-
-    return card;
-}
-
-function createTestimonialCards() {
-    const testimonialsTrack = document.getElementById('testimonialsTrack');
-    if (!testimonialsTrack) return;
-
-    // Duplica para efeito de carrossel infinito
-    const allTestimonials = [...TESTIMONIALS_DATA, ...TESTIMONIALS_DATA];
-
-    // DocumentFragment para uma única operação de DOM (performance)
-    const fragment = document.createDocumentFragment();
-
-    allTestimonials.forEach(testimonial => {
-        if (!validateTestimonial(testimonial)) {
-            if (IS_DEV) console.warn('GranaEvo: depoimento inválido ignorado', testimonial);
-            return;
-        }
-        fragment.appendChild(createTestimonialCard(testimonial));
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeMobileMenu(toggle, navLinks);
     });
 
-    // Limpa o container e insere tudo de uma vez (sem innerHTML)
-    while (testimonialsTrack.firstChild) {
-        testimonialsTrack.removeChild(testimonialsTrack.firstChild);
-    }
-    testimonialsTrack.appendChild(fragment);
-}
-
-createTestimonialCards();
-
-// ==========================================
-// INTERSECTION OBSERVER — REVEAL ANIMATIONS
-// ==========================================
-const observerOptions = {
-    threshold:   0.1,
-    rootMargin: '0px 0px -50px 0px'
-};
-
-const fadeObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            entry.target.classList.add('active');
-        }
-    });
-}, observerOptions);
-
-document.querySelectorAll('.problem-card, .feature-card, .timeline-item')
-    .forEach(el => {
-        el.classList.add('reveal');
-        fadeObserver.observe(el);
+    navLinks.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => closeMobileMenu(toggle, navLinks));
     });
 
-// ==========================================
-// PARALLAX EFFECT (DESKTOP ONLY)
-// ==========================================
-if (window.innerWidth >= 1024) {
-    const parallaxElements = document.querySelectorAll('[data-parallax]');
-
-    window.addEventListener('scroll', () => {
-        const scrolled = window.scrollY;
-        parallaxElements.forEach(element => {
-            const speed = parseFloat(element.getAttribute('data-parallax'));
-            if (!Number.isFinite(speed)) return;
-            // Limita o speed para evitar transformações extremas
-            const clampedSpeed = Math.max(-1, Math.min(1, speed));
-            element.style.transform = `translateY(${scrolled * clampedSpeed}px)`;
-        });
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 900) closeMobileMenu(toggle, navLinks);
     }, { passive: true });
 }
 
 // ==========================================
-// TILT EFFECT (DESKTOP ONLY)
+// PARTÍCULAS (Canvas 2D)
 // ==========================================
-if (window.innerWidth >= 1024) {
-    document.querySelectorAll('[data-tilt]').forEach(element => {
-        element.addEventListener('mousemove', (e) => {
-            const rect    = element.getBoundingClientRect();
-            const centerX = rect.width  / 2;
-            const centerY = rect.height / 2;
-            // Limita rotação para evitar inversões visuais
-            const rotateX = Math.max(-15, Math.min(15, (e.clientY - rect.top  - centerY) / 10));
-            const rotateY = Math.max(-15, Math.min(15, (centerX - (e.clientX - rect.left)) / 10));
-            element.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
+function initParticles() {
+    const canvas = document.getElementById('particlesCanvas');
+    if (!canvas || !canvas.getContext) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let W = 0, H = 0;
+    const particles = [];
+    const COUNT = window.innerWidth < 600 ? 40 : 70;
+    let animId = null;
+
+    function resize() {
+        W = canvas.width = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+    }
+
+    function createParticle() {
+        return {
+            x: Math.random() * W,
+            y: Math.random() * H,
+            r: Math.random() * 1.5 + 0.3,
+            vx: (Math.random() - 0.5) * 0.25,
+            vy: (Math.random() - 0.5) * 0.25,
+            opacity: Math.random() * 0.4 + 0.1,
+        };
+    }
+
+    function init() {
+        particles.length = 0;
+        for (let i = 0; i < COUNT; i++) {
+            particles.push(createParticle());
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, W, H);
+
+        particles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+
+            if (p.x < 0) p.x = W;
+            if (p.x > W) p.x = 0;
+            if (p.y < 0) p.y = H;
+            if (p.y > H) p.y = 0;
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(0, 229, 160, ${p.opacity})`;
+            ctx.fill();
         });
 
-        element.addEventListener('mouseleave', () => {
-            element.style.transform = '';
-        });
-    });
-}
-
-// ==========================================
-// BUTTON RIPPLE EFFECT
-// XY restringidos aos bounds do elemento para evitar overflow.
-//
-// [F] CSSStyleSheet.replace() assíncrono — não bloqueia o thread
-//     principal, ao contrário de replaceSync().
-// ==========================================
-(async () => {
-    try {
-        const rippleStyleSheet = new CSSStyleSheet();
-        await rippleStyleSheet.replace(`
-            @keyframes ripple {
-                to { transform: scale(2.5); opacity: 0; }
+        // Draw subtle connections
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                const dx = particles[i].x - particles[j].x;
+                const dy = particles[i].y - particles[j].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 100) {
+                    ctx.beginPath();
+                    ctx.moveTo(particles[i].x, particles[i].y);
+                    ctx.lineTo(particles[j].x, particles[j].y);
+                    ctx.strokeStyle = `rgba(0, 229, 160, ${(1 - dist / 100) * 0.06})`;
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                }
             }
-        `);
-        document.adoptedStyleSheets = [...document.adoptedStyleSheets, rippleStyleSheet];
-    } catch {
-        // Fallback silencioso: CSSStyleSheet não suportado (navegadores antigos)
-        // O efeito ripple não será exibido, mas a funcionalidade é mantida.
-        if (IS_DEV) console.warn('GranaEvo: CSSStyleSheet.replace() não suportado.');
+        }
+
+        animId = requestAnimationFrame(draw);
     }
-})();
 
-document.querySelectorAll('.btn-primary, .btn-secondary, .btn-nav, .btn-float')
-    .forEach(button => {
-        button.addEventListener('click', function (e) {
-            const rect = this.getBoundingClientRect();
-            const size = Math.max(rect.width, rect.height);
-            const rawX = e.clientX - rect.left  - size / 2;
-            const rawY = e.clientY - rect.top   - size / 2;
-            // Limita X e Y ao interior do botão
-            const x = Math.max(-size, Math.min(rawX, rect.width));
-            const y = Math.max(-size, Math.min(rawY, rect.height));
+    resize();
+    init();
+    draw();
 
-            const ripple = document.createElement('span');
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            resize();
+            init();
+        }, 200);
+    }, { passive: true });
+}
 
-            // Propriedades individuais — sem cssText (evita injeção)
-            ripple.style.position     = 'absolute';
-            ripple.style.width        = `${size}px`;
-            ripple.style.height       = `${size}px`;
-            ripple.style.borderRadius = '50%';
-            ripple.style.background   = 'rgba(255, 255, 255, 0.3)';
-            ripple.style.left         = `${x}px`;
-            ripple.style.top          = `${y}px`;
-            ripple.style.pointerEvents = 'none';
-            ripple.style.animation    = 'ripple 0.6s ease-out';
+// ==========================================
+// HERO ENTRANCE ANIMATIONS
+// ==========================================
+function initHeroAnimations() {
+    const badge = document.getElementById('heroBadge');
+    const title = document.querySelector('.hero-title');
+    const desc = document.querySelector('.hero-desc');
+    const actions = document.querySelector('.hero-actions');
+    const stats = document.querySelector('.hero-stats');
+    const phoneWrap = document.getElementById('phoneWrap');
 
-            this.style.position = 'relative';
-            this.style.overflow = 'hidden';
-            this.appendChild(ripple);
+    const delay = 0.3;
 
-            ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
+    if (badge) {
+        setTimeout(() => badge.classList.add('visible'), (delay) * 1000);
+    }
+    if (title) {
+        setTimeout(() => title.classList.add('visible'), (delay + 0.15) * 1000);
+    }
+    if (desc) {
+        setTimeout(() => desc.classList.add('visible'), (delay + 0.1) * 1000);
+    }
+    if (actions) {
+        setTimeout(() => actions.classList.add('visible'), (delay + 0.2) * 1000);
+    }
+    if (stats) {
+        setTimeout(() => stats.classList.add('visible'), (delay + 0.3) * 1000);
+    }
+    if (phoneWrap) {
+        phoneWrap.closest('.hero-visual')?.classList && setTimeout(() => {
+            phoneWrap.closest('.hero-visual').classList.add('visible');
+        }, (delay + 0.1) * 1000);
+    }
+
+    // Float badges
+    const fb1 = document.querySelector('.fb-1');
+    const fb2 = document.querySelector('.fb-2');
+    const fb3 = document.querySelector('.fb-3');
+
+    if (fb1) setTimeout(() => fb1.classList.add('visible'), (delay + 0.5) * 1000);
+    if (fb2) setTimeout(() => fb2.classList.add('visible'), (delay + 0.65) * 1000);
+    if (fb3) setTimeout(() => fb3.classList.add('visible'), (delay + 0.8) * 1000);
+}
+
+// ==========================================
+// SCROLL REVEALS
+// ==========================================
+function initScrollReveals() {
+    const reveals = document.querySelectorAll('.reveal');
+    if (!reveals.length) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+    reveals.forEach(el => observer.observe(el));
+}
+
+// ==========================================
+// COUNTER ANIMATION
+// ==========================================
+function animateCounter(el) {
+    const target = parseFloat(el.dataset.target);
+    if (!isFinite(target) || target < 0) return;
+
+    const isDecimal = el.dataset.decimal !== undefined;
+    const prefix = sanitizeText(el.dataset.prefix ?? '');
+    const suffix = sanitizeText(el.dataset.suffix ?? '');
+    const duration = 2000;
+    let start = null;
+
+    const step = (timestamp) => {
+        if (!start) start = timestamp;
+        const elapsed = timestamp - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const value = eased * target;
+
+        if (isDecimal) {
+            el.textContent = prefix + value.toFixed(1) + suffix;
+        } else {
+            el.textContent = prefix + Math.floor(value).toLocaleString('pt-BR') + suffix;
+        }
+
+        if (progress < 1) requestAnimationFrame(step);
+    };
+
+    requestAnimationFrame(step);
+}
+
+function initCounters() {
+    const counters = document.querySelectorAll('.counter');
+    if (!counters.length) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                animateCounter(entry.target);
+                observer.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.5 });
+
+    counters.forEach(el => observer.observe(el));
+}
+
+// ==========================================
+// HERO STATS COUNTER (disparo imediato após carga)
+// ==========================================
+function initHeroCounters() {
+    const hstats = document.querySelectorAll('.hstat-num');
+    if (!hstats.length) return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const el = entry.target;
+                const target = parseFloat(el.dataset.count);
+                if (!isFinite(target)) return;
+
+                const isDecimal = el.dataset.decimal !== undefined;
+                const duration = 1600;
+                let start = null;
+
+                const step = (timestamp) => {
+                    if (!start) start = timestamp;
+                    const progress = Math.min((timestamp - start) / duration, 1);
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    const value = eased * target;
+                    el.textContent = isDecimal ? value.toFixed(1) : Math.floor(value).toLocaleString('pt-BR');
+                    if (progress < 1) requestAnimationFrame(step);
+                };
+
+                requestAnimationFrame(step);
+                observer.unobserve(el);
+            }
+        });
+    }, { threshold: 0.7 });
+
+    hstats.forEach(el => observer.observe(el));
+}
+
+// ==========================================
+// 3D TILT — BENTO CARDS
+// ==========================================
+function initTiltEffect() {
+    const cards = document.querySelectorAll('.bento-card, .step-card');
+    const isTouchDevice = window.matchMedia('(hover: none)').matches;
+    if (isTouchDevice) return;
+
+    cards.forEach(card => {
+        card.addEventListener('mousemove', e => {
+            const rect = card.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width - 0.5;
+            const y = (e.clientY - rect.top) / rect.height - 0.5;
+
+            gsap.to(card, {
+                duration: 0.4,
+                rotationY: x * 6,
+                rotationX: -y * 6,
+                transformPerspective: 800,
+                transformOrigin: 'center center',
+                ease: 'power2.out',
+            });
+
+            card.style.setProperty('--mx', `${(x + 0.5) * 100}%`);
+            card.style.setProperty('--my', `${(y + 0.5) * 100}%`);
+        }, { passive: true });
+
+        card.addEventListener('mouseleave', () => {
+            gsap.to(card, {
+                duration: 0.5,
+                rotationY: 0,
+                rotationX: 0,
+                ease: 'elastic.out(1, 0.5)',
+            });
+        });
+    });
+}
+
+// ==========================================
+// WALLET HOVER — CARDS FLY OUT
+// ==========================================
+function initWalletEffect() {
+    const walletBody = document.getElementById('walletBody');
+    if (!walletBody) return;
+
+    const isTouchDevice = window.matchMedia('(hover: none)').matches;
+    const c1 = walletBody.querySelector('.wc1');
+    const c2 = walletBody.querySelector('.wc2');
+    const c3 = walletBody.querySelector('.wc3');
+    const hint = walletBody.closest('.wallet-wrap')?.querySelector('.wallet-hint');
+
+    if (!c1 || !c2 || !c3) return;
+
+    walletBody.addEventListener('mouseenter', () => {
+        if (hint) gsap.to(hint, { opacity: 0, duration: 0.2 });
+
+        gsap.to(c1, { x: -110, y: -80, rotation: -25, duration: 0.65, ease: 'back.out(1.8)' });
+        gsap.to(c2, { x: 0, y: -110, rotation: 0, duration: 0.65, ease: 'back.out(1.8)', delay: 0.06 });
+        gsap.to(c3, { x: 110, y: -80, rotation: 25, duration: 0.65, ease: 'back.out(1.8)', delay: 0.12 });
+
+        // Glow on wallet
+        gsap.to(walletBody, {
+            boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 50px rgba(0,229,160,0.12), inset 0 1px 0 rgba(0,229,160,0.1)',
+            duration: 0.3,
         });
     });
 
-// ==========================================
-// TRACK EVENTS
-//
-// [E] Modelo de segurança:
-// - category e action validados por allowlist de Sets frozen
-// - label validado por regex: só alfanumérico + _ e -
-// - Rejeita qualquer string que contenha HTML ou JS
-// ==========================================
+    walletBody.addEventListener('mouseleave', () => {
+        if (hint) gsap.to(hint, { opacity: 1, duration: 0.3, delay: 0.3 });
 
-// Allowlist de categorias e ações válidas
-const ALLOWED_CATEGORIES = Object.freeze(new Set(['CTA', 'Navigation', 'Feature']));
-const ALLOWED_ACTIONS    = Object.freeze(new Set(['click', 'view', 'scroll']));
+        gsap.to(c1, { x: 0, y: 0, rotation: 0, duration: 0.55, ease: 'power3.inOut' });
+        gsap.to(c2, { x: 0, y: -6, rotation: -3, duration: 0.55, ease: 'power3.inOut', delay: 0.04 });
+        gsap.to(c3, { x: 0, y: -12, rotation: 3, duration: 0.55, ease: 'power3.inOut', delay: 0.08 });
 
-/**
- * Dispara evento de analytics de forma blindada.
- * Não aceita strings arbitrárias — valida contra allowlist.
- *
- * @param {string} category
- * @param {string} action
- * @param {string} label
- */
-function trackEvent(category, action, label) {
-    if (typeof category !== 'string' ||
-        typeof action   !== 'string' ||
-        typeof label    !== 'string') return;
-
-    if (!ALLOWED_CATEGORIES.has(category)) return;
-    if (!ALLOWED_ACTIONS.has(action))      return;
-
-    // Label: apenas alfanumérico + underscores + hífens
-    if (!/^[a-zA-Z0-9_\-]{1,60}$/.test(label)) return;
-
-    if (typeof window.gtag === 'function') {
-        window.gtag('event', action, {
-            event_category: category,
-            event_label:    label
+        gsap.to(walletBody, {
+            boxShadow: '0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,229,160,0.04), inset 0 1px 0 rgba(0,229,160,0.08)',
+            duration: 0.4,
         });
-    }
+    });
 
-    if (typeof window.fbq === 'function') {
-        window.fbq('track', action, { category, label });
+    // Touch: tap to toggle
+    if (isTouchDevice) {
+        let open = false;
+        walletBody.addEventListener('click', () => {
+            open = !open;
+            if (open) {
+                if (hint) gsap.to(hint, { opacity: 0, duration: 0.2 });
+                gsap.to(c1, { x: -100, y: -70, rotation: -25, duration: 0.65, ease: 'back.out(1.8)' });
+                gsap.to(c2, { x: 0, y: -100, rotation: 0, duration: 0.65, ease: 'back.out(1.8)', delay: 0.06 });
+                gsap.to(c3, { x: 100, y: -70, rotation: 25, duration: 0.65, ease: 'back.out(1.8)', delay: 0.12 });
+            } else {
+                if (hint) gsap.to(hint, { opacity: 1, duration: 0.3 });
+                gsap.to(c1, { x: 0, y: 0, rotation: 0, duration: 0.55, ease: 'power3.inOut' });
+                gsap.to(c2, { x: 0, y: -6, rotation: -3, duration: 0.55, ease: 'power3.inOut', delay: 0.04 });
+                gsap.to(c3, { x: 0, y: -12, rotation: 3, duration: 0.55, ease: 'power3.inOut', delay: 0.08 });
+            }
+        });
     }
 }
 
-// Track cliques em CTAs
-document.querySelectorAll('.btn-primary').forEach(btn => {
-    btn.addEventListener('click', () => trackEvent('CTA', 'click', 'primary_button'));
-});
-document.querySelectorAll('.btn-secondary').forEach(btn => {
-    btn.addEventListener('click', () => trackEvent('CTA', 'click', 'secondary_button'));
-});
+// ==========================================
+// COIN → PIGGY — GSAP SCROLL
+// ==========================================
+function initPiggyAnimation() {
+    const section = document.getElementById('piggy-section');
+    const coin = document.getElementById('piggyCoin');
+    const bank = document.getElementById('piggyBank');
+    const tl = document.getElementById('piggyTL');
+    const tr = document.getElementById('piggyTR');
+    const slot = document.getElementById('coinSlot');
+
+    if (!section || !coin || !bank) return;
+
+    // Initial states
+    gsap.set(coin, { y: -80, opacity: 0, scale: 0.6 });
+    gsap.set(tl, { opacity: 0, x: -30 });
+    gsap.set(tr, { opacity: 0, x: 30 });
+    gsap.set(bank, { scale: 1 });
+
+    const timeline = gsap.timeline({
+        scrollTrigger: {
+            trigger: section,
+            start: 'top top',
+            end: 'bottom bottom',
+            scrub: 1.8,
+            pin: false,
+        },
+    });
+
+    timeline
+        // Coin appears and falls
+        .to(coin, { opacity: 1, scale: 1, y: 0, duration: 0.2, ease: 'power2.out' })
+        .to(coin, { y: 160, duration: 0.45, ease: 'none' }, '-=0.05')
+        // Side texts fade in during fall
+        .to(tl, { opacity: 1, x: 0, duration: 0.2 }, 0.2)
+        .to(tr, { opacity: 1, x: 0, duration: 0.2 }, 0.2)
+        // Coin enters slot (shrinks + fades)
+        .to(coin, { y: 190, scale: 0.05, opacity: 0, duration: 0.12, ease: 'power2.in' }, '-=0.08')
+        // Piggy bounces
+        .to(bank, { scale: 1.07, duration: 0.06, ease: 'power2.out' }, '-=0.02')
+        .to(bank, { scale: 1, duration: 0.12, ease: 'elastic.out(1.5, 0.4)' })
+        // Slot glows
+        .to(slot ?? {}, { attr: { opacity: 0.9 }, duration: 0.1 }, '-=0.1')
+        .to(slot ?? {}, { attr: { opacity: 0.25 }, duration: 0.2 });
+}
 
 // ==========================================
-// PERFORMANCE MONITORING
-//
-// [A] API performance.timing foi DEPRECADA.
-//     Substituída pela Navigation Timing API Level 2:
-//     PerformanceNavigationTiming (getEntriesByType).
-//
-//     Comparação:
-//     ANTES (deprecated):
-//         performance.timing.loadEventEnd - performance.timing.navigationStart
-//     DEPOIS (correto):
-//         navEntry.loadEventEnd - navEntry.startTime
-//
-//     Referência: https://developer.mozilla.org/en-US/docs/Web/API/PerformanceNavigationTiming
+// DEPOIMENTOS — CARROSSEL
 // ==========================================
-window.addEventListener('load', () => {
+function initTestimonials() {
+    const track = document.getElementById('testimonialsTrack');
+    if (!track) return;
+
+    // Double the array for seamless loop
+    const allTestimonials = [...TESTIMONIALS, ...TESTIMONIALS];
+
+    allTestimonials.forEach(t => {
+        if (!validateTestimonial(t)) return;
+
+        const card = document.createElement('div');
+        card.className = 'testimonial-card';
+
+        const stars = document.createElement('div');
+        stars.className = 'testimonial-stars';
+        stars.textContent = '★'.repeat(t.stars);
+
+        const text = document.createElement('p');
+        text.className = 'testimonial-text';
+        text.textContent = sanitizeText(`"${t.text}"`);
+
+        const author = document.createElement('div');
+        author.className = 'testimonial-author';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'testimonial-avatar';
+        avatar.textContent = sanitizeText(t.name.charAt(0));
+
+        const info = document.createElement('div');
+
+        const name = document.createElement('div');
+        name.className = 'testimonial-name';
+        name.textContent = sanitizeText(t.name);
+
+        const role = document.createElement('div');
+        role.className = 'testimonial-role';
+        role.textContent = sanitizeText(t.role);
+
+        info.appendChild(name);
+        info.appendChild(role);
+        author.appendChild(avatar);
+        author.appendChild(info);
+
+        card.appendChild(stars);
+        card.appendChild(text);
+        card.appendChild(author);
+
+        track.appendChild(card);
+    });
+}
+
+// ==========================================
+// MOBILE CTA VISIBILITY
+// ==========================================
+function initMobileCTA() {
+    const cta = document.getElementById('mobileCTA');
+    if (!cta) return;
+
+    const heroSection = document.getElementById('hero');
+
+    const update = () => {
+        if (!heroSection) {
+            cta.setAttribute('aria-hidden', 'false');
+            return;
+        }
+        const heroBottom = heroSection.getBoundingClientRect().bottom;
+        if (heroBottom < 0) {
+            cta.setAttribute('aria-hidden', 'false');
+        } else {
+            cta.setAttribute('aria-hidden', 'true');
+        }
+    };
+
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+}
+
+// ==========================================
+// PROBLEM CARDS — MOUSE TRACKING
+// ==========================================
+function initProblemCards() {
+    const cards = document.querySelectorAll('.problem-card');
+    const isTouchDevice = window.matchMedia('(hover: none)').matches;
+    if (isTouchDevice) return;
+
+    cards.forEach(card => {
+        card.addEventListener('mousemove', e => {
+            const rect = card.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) * 100;
+            const y = ((e.clientY - rect.top) / rect.height) * 100;
+            card.style.setProperty('--mx', `${x}%`);
+            card.style.setProperty('--my', `${y}%`);
+        }, { passive: true });
+    });
+}
+
+// ==========================================
+// PERFORMANCE TRACKING (dev only)
+// ==========================================
+function trackPerformance() {
     if (!IS_DEV) return;
-
-    // PerformanceObserver: forma reativa e não-deprecada
     try {
-        const observer = new PerformanceObserver((list) => {
-            const entries = list.getEntriesByType('navigation');
-            if (!entries.length) return;
-
-            const navEntry    = entries[0];
-            const pageLoadMs  = Math.round(navEntry.loadEventEnd - navEntry.startTime);
-            const domReadyMs  = Math.round(navEntry.domContentLoadedEventEnd - navEntry.startTime);
-            const ttfbMs      = Math.round(navEntry.responseStart - navEntry.requestStart);
-
-            if (pageLoadMs > 0) {
-                console.log(`⚡ Página carregada em ${pageLoadMs}ms`);
-                console.log(`   DOM pronto em ${domReadyMs}ms`);
-                console.log(`   TTFB: ${ttfbMs}ms`);
-                if (pageLoadMs > 3000) console.warn('⚠️ Tempo de carregamento alto (> 3s)');
-                if (ttfbMs > 600)      console.warn('⚠️ TTFB alto (> 600ms) — verificar servidor');
-            }
-
-            observer.disconnect();
-        });
-
-        observer.observe({ type: 'navigation', buffered: true });
-
-    } catch {
-        // Fallback para browsers sem PerformanceObserver
-        const entries = performance.getEntriesByType?.('navigation') ?? [];
-        if (entries.length) {
-            const ms = Math.round(entries[0].loadEventEnd - entries[0].startTime);
-            if (ms > 0) {
-                console.log(`⚡ Página carregada em ${ms}ms`);
-                if (ms > 3000) console.warn('⚠️ Tempo de carregamento alto');
-            }
+        const nav = performance.getEntriesByType('navigation')[0];
+        if (nav && nav.loadEventEnd > 0) {
+            const load = Math.round(nav.loadEventEnd - nav.fetchStart);
+            console.info(`%c GranaEvo LP %c loaded in ${load}ms`, 'background:#00e5a0;color:#040c08;font-weight:800;padding:2px 8px;border-radius:4px', 'color:#00e5a0');
         }
-    }
-});
-
-// ==========================================
-// CONSOLE BRANDING
-// Restrito ao ambiente de desenvolvimento.
-// Não expõe tecnologia, versão ou stack em produção.
-// ==========================================
-if (IS_DEV) {
-    console.log(
-        '%c🚀 GranaEvo Landing Page',
-        'background: #10b981; color: white; padding: 12px 24px; border-radius: 8px; font-weight: bold; font-size: 16px;'
-    );
-    console.log(
-        '%c✔ Sistema Seguro Ativo — Modo Desenvolvimento',
-        'color: #10b981; font-weight: bold; font-size: 14px;'
-    );
+    } catch (_) { /* ignore */ }
 }
 
 // ==========================================
-// ACESSIBILIDADE — KEYBOARD NAVIGATION
+// INIT
 // ==========================================
-
-// Fechar menu com Escape
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && navLinks?.classList.contains('active')) {
-        closeMobileMenu();
-        mobileToggle?.focus(); // Devolve foco ao botão de menu
-    }
-});
-
-// Botão de menu com teclado
-if (mobileToggle) {
-    mobileToggle.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            mobileToggle.click();
-        }
-    });
+function init() {
+    initLoadingScreen();
+    initScrollProgress();
+    initHeader();
+    initMobileMenu();
+    initParticles();
+    initHeroAnimations();
+    initScrollReveals();
+    initHeroCounters();
+    initCounters();
+    initTiltEffect();
+    initWalletEffect();
+    initPiggyAnimation();
+    initTestimonials();
+    initMobileCTA();
+    initProblemCards();
+    trackPerformance();
 }
 
-// ==========================================
-// ONLINE / OFFLINE STATUS
-// ==========================================
-window.addEventListener('online',  () => { if (IS_DEV) console.log('✔ Conexão restaurada'); });
-window.addEventListener('offline', () => { if (IS_DEV) console.warn('⚠ Conexão perdida'); });
-
-// ==========================================
-// SCROLL RESTORATION
-// ==========================================
-if ('scrollRestoration' in history) {
-    history.scrollRestoration = 'manual';
-}
-
-// ==========================================
-// INITIALIZATION
-// ==========================================
-document.addEventListener('DOMContentLoaded', () => {
-    if (IS_DEV) console.log('✔ DOM carregado');
-    // Animação inicial suave
-    setTimeout(() => { document.body.style.opacity = '1'; }, 100);
-});
-
-// ==========================================
-// SERVICE WORKER (RESERVADO PARA IMPLEMENTAÇÃO FUTURA)
-// ==========================================
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        // Registrar o SW quando estiver pronto:
-        // navigator.serviceWorker.register('/sw.js');
-    });
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
 }
