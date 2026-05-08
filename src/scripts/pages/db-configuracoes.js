@@ -1,5 +1,6 @@
 // db-configuracoes.js — Seção de Configurações (lazy-loaded)
 import { supabase } from '../services/supabase-client.js?v=2';
+import { iniciarTutorial } from '../modules/tutorial.js';
 let _ctx = null;
 
 // Proxies para utilitários de dashboard.js disponíveis via _ctx após init()
@@ -488,7 +489,7 @@ function trocarPerfil() {
 }
 
 function comoUsar() {
-    alert('Funcionalidade "Como usar o GranaEvo?" será implementada em breve!');
+    iniciarTutorial();
 }
 
 // Redireciona para a página de gerenciamento de assinatura (cancelar, trocar cartão, faturas)
