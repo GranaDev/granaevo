@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
     <meta name="description" content="Controle suas finanças com inteligência. O GranaEvo é o app que transforma sua relação com o dinheiro.">
-    <meta name="theme-color" content="#00e5a0">
+    <meta name="theme-color" content="#10b981">
 
     <!--
         ============================================================
@@ -63,12 +63,23 @@
         require-trusted-types-for 'script';
     ">
 
+    <!--
+        TRUSTED TYPES: bloqueia DOM XSS via innerHTML, document.write, etc.
+        Se você usar bibliotecas de terceiros que usam innerHTML,
+        será necessário criar uma policy explícita com createPolicy().
+    -->
+
     <!-- Anti-MIME-Sniffing -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
 
     <!-- Referrer Policy -->
     <meta name="referrer" content="strict-origin-when-cross-origin">
 
+    <!--
+        Permissions Policy — desabilita APIs sensíveis não utilizadas.
+        X-Frame-Options e frame-ancestors foram REMOVIDOS daqui —
+        só funcionam via HTTP header (vercel.json já os aplica).
+    -->
     <meta http-equiv="Permissions-Policy" content="
         camera=(),
         microphone=(),
@@ -81,62 +92,117 @@
         run-ad-auction=()
     ">
 
-    <title>GranaEvo — Evolua Sua Relação Com O Dinheiro</title>
+    <!--
+        X-Frame-Options via <meta> NÃO é suportado por nenhum browser
+        moderno — gera aviso no console e é ignorado. REMOVIDO.
+        Proteção real: HTTP header "X-Frame-Options: DENY" no vercel.json.
+    -->
 
+    <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
+
+    <!--
+        Google Fonts: preconnect com crossorigin correto.
+        NOTA: SRI (integrity) não é viável para a CSS do Google Fonts
+        porque o conteúdo é gerado dinamicamente por user-agent.
+        Para máxima segurança, baixe e sirva as fontes localmente.
+    -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
 
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
         rel="stylesheet"
         referrerpolicy="no-referrer"
         crossorigin="anonymous"
     >
 
+    <!-- CSS local -->
     <link rel="stylesheet" href="src/styles/landingpage.css">
 </head>
 
 <body>
 
-    <!-- Loading Screen -->
+    <!-- Loading Screen com Logo -->
     <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando página">
         <div class="loader">
             <div class="loader-logo">
-                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" crossorigin="anonymous" loading="eager">
+                <!--
+                    crossorigin="anonymous": evita leaks via canvas fingerprinting.
+                    Requer que o servidor envie CORS headers para a imagem.
+                    Se a imagem for local (same-origin), funciona sem configuração extra.
+                -->
+                <img
+                    src="/assets/icons/granaevo-logo.jpg"
+                    alt="GranaEvo"
+                    class="logo-img-loader"
+                    crossorigin="anonymous"
+                    loading="eager"
+                >
             </div>
-            <div class="loader-bar"><div class="loader-progress"></div></div>
+            <div class="loader-bar">
+                <div class="loader-progress"></div>
+            </div>
+            <p class="loader-text">Carregando...</p>
         </div>
     </div>
 
     <!-- Scroll Progress -->
-    <div class="scroll-progress" id="scrollProgress" role="progressbar" aria-label="Progresso de leitura" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+    <div
+        class="scroll-progress"
+        id="scrollProgress"
+        role="progressbar"
+        aria-label="Progresso de leitura"
+        aria-valuenow="0"
+        aria-valuemin="0"
+        aria-valuemax="100"
+    ></div>
 
-    <!-- Background decorativo -->
-    <div class="site-bg" aria-hidden="true">
+    <!-- Animated Background (puramente decorativo — aria-hidden) -->
+    <div class="animated-bg" aria-hidden="true">
+        <div class="grid-overlay"></div>
         <canvas id="particlesCanvas"></canvas>
-        <div class="bg-grid"></div>
-        <div class="bg-orb bg-orb-1"></div>
-        <div class="bg-orb bg-orb-2"></div>
+        <div class="glow-orb glow-orb-1"></div>
+        <div class="glow-orb glow-orb-2"></div>
+        <div class="glow-orb glow-orb-3"></div>
     </div>
 
-    <!-- ================================================ HEADER ================================================ -->
+    <!-- Header -->
     <header class="header" id="header">
-        <nav class="nav" role="navigation" aria-label="Navegação principal">
-            <a href="#" class="nav-logo" aria-label="GranaEvo — página inicial">
-                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="nav-logo-img" crossorigin="anonymous" loading="eager">
-                <span class="nav-logo-text">GranaEvo</span>
+        <nav class="nav-container" role="navigation" aria-label="Navegação principal">
+            <a href="#" class="logo" aria-label="GranaEvo — página inicial">
+                <img
+                    src="/assets/icons/granaevo-logo.jpg"
+                    alt="GranaEvo"
+                    class="logo-img"
+                    crossorigin="anonymous"
+                    loading="eager"
+                >
+                <span class="logo-text">GranaEvo</span>
             </a>
 
             <div class="nav-links" id="navLinks" role="menubar">
                 <a href="#recursos" class="nav-link" role="menuitem">Recursos</a>
-                <a href="#cartoes" class="nav-link" role="menuitem">Cartões</a>
                 <a href="#como-funciona" class="nav-link" role="menuitem">Como Funciona</a>
                 <a href="#depoimentos" class="nav-link" role="menuitem">Depoimentos</a>
-                <a href="login.html" class="nav-link" role="menuitem">Entrar</a>
-                <a href="planos.html" class="nav-cta" role="menuitem">Começar grátis</a>
+                <!--
+                    Links internos: rel="noopener noreferrer" não é necessário aqui pois
+                    não usam target="_blank". Aplicado apenas em links externos abertos
+                    em nova aba para prevenir tabnabbing attack.
+                    REGRA: qualquer link com target="_blank" DEVE ter:
+                    rel="noopener noreferrer"
+                -->
+                <a href="login.html" class="nav-link" role="menuitem">Login</a>
+                <a href="planos.html" class="btn-nav" role="menuitem">Começar Agora</a>
             </div>
 
-            <button class="nav-toggle" id="mobileToggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="navLinks" type="button">
+            <button
+                class="mobile-toggle"
+                id="mobileToggle"
+                aria-label="Abrir menu de navegação"
+                aria-expanded="false"
+                aria-controls="navLinks"
+                type="button"
+            >
                 <span class="hamburger-line"></span>
                 <span class="hamburger-line"></span>
                 <span class="hamburger-line"></span>
@@ -144,93 +210,131 @@
         </nav>
     </header>
 
-    <!-- Mobile CTA flutuante -->
+    <!-- Mobile CTA Floating -->
     <div class="mobile-cta-float" id="mobileCTA" aria-hidden="true">
-        <a href="planos.html" class="btn-float" tabindex="-1" aria-label="Começar grátis">
-            <span>Começar grátis</span>
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <a
+            href="planos.html"
+            class="btn-float"
+            tabindex="-1"
+            aria-label="Começar Agora — acesso rápido"
+        >
+            <span>Começar Agora</span>
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
         </a>
     </div>
 
-    <!-- ================================================ HERO ================================================ -->
+    <!-- ================================================
+         HERO SECTION
+    ================================================ -->
     <section class="hero" id="hero" aria-labelledby="hero-title">
-        <div class="container hero-container">
-
-            <!-- Texto -->
-            <div class="hero-text">
-                <div class="hero-badge" id="heroBadge">
-                    <span class="hero-pulse" aria-hidden="true"></span>
-                    Controle financeiro inteligente
-                </div>
-
-                <h1 class="hero-title" id="hero-title">
-                    Sua grana,<br>
-                    <em class="title-em">evoluindo</em><br>
-                    todo dia
-                </h1>
-
-                <p class="hero-desc">
-                    GranaEvo é o sistema completo de controle financeiro para brasileiros.
-                    Cartões, metas e gastos — tudo em um só lugar, em tempo real.
-                </p>
-
-                <div class="hero-actions">
-                    <a href="planos.html" class="btn btn-primary">
-                        Começar grátis
-                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-                    </a>
-                    <a href="login.html" class="btn btn-ghost">Já tenho conta</a>
-                </div>
-
-                <div class="hero-stats" aria-label="Estatísticas do GranaEvo">
-                    <div class="hstat">
-                        <div class="hstat-num" data-count="4.9" data-decimal="true">0</div>
-                        <div class="hstat-label">Avaliação ★</div>
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text" data-parallax="0.1">
+                    <div class="badge" role="note">
+                        <span class="pulse-dot" aria-hidden="true"></span>
+                        <span>Revolucionando o Controle Financeiro</span>
                     </div>
-                    <div class="hstat-sep" aria-hidden="true"></div>
-                    <div class="hstat">
-                        <div class="hstat-num" data-count="10000">0</div>
-                        <div class="hstat-label">Usuários ativos</div>
-                    </div>
-                    <div class="hstat-sep" aria-hidden="true"></div>
-                    <div class="hstat">
-                        <div class="hstat-num" data-count="120">0</div>
-                        <div class="hstat-label">Milhões economizados</div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Visual: Phone mockup -->
-            <div class="hero-visual" aria-hidden="true">
-                <div class="phone-wrap" id="phoneWrap">
-                    <div class="phone-glow"></div>
-                    <div class="phone">
-                        <div class="phone-island"></div>
-                        <div class="phone-screen">
-                            <img src="/assets/icons/Dashboard.gif" alt="" loading="eager">
+                    <h1 class="hero-title" id="hero-title">
+                        Domine Suas Finanças<br>
+                        <span class="gradient-text">Com Inteligência</span>
+                    </h1>
+
+                    <p class="hero-description">
+                        Controle total de gastos, metas inteligentes e análises em tempo real.
+                        Transforme seus hábitos financeiros em 30 dias.
+                    </p>
+
+                    <div class="hero-buttons">
+                        <a href="planos.html" class="btn-primary">
+                            <span>Começar AGORA!</span>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </a>
+                        <a href="login.html" class="btn-secondary">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                                <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 7L13 10L8 13V7Z" fill="currentColor"/>
+                            </svg>
+                            <span>Login</span>
+                        </a>
+                    </div>
+
+                    <div class="hero-stats" aria-label="Estatísticas do GranaEvo">
+                        <div class="stat-item">
+                            <div class="stat-value" data-count="4.9" aria-label="Avaliação 4.9 estrelas">0</div>
+                            <div class="stat-label">Avaliação ★</div>
                         </div>
-                        <div class="phone-btn-side"></div>
-                    </div>
-                    <!-- Floating metric badges -->
-                    <div class="float-badge fb-1">
-                        <div class="fb-icon">💰</div>
-                        <div class="fb-info">
-                            <div class="fb-val">R$ 5.240</div>
-                            <div class="fb-lbl">Saldo atual</div>
+                        <div class="stat-divider" aria-hidden="true"></div>
+                        <div class="stat-item">
+                            <div class="stat-value" data-count="10000" aria-label="10 mil usuários ativos">0</div>
+                            <div class="stat-label">Usuários Ativos</div>
+                        </div>
+                        <div class="stat-divider" aria-hidden="true"></div>
+                        <div class="stat-item">
+                            <div class="stat-value" data-count="120" aria-label="120 milhões economizados">0</div>
+                            <div class="stat-label">Milhões Economizados</div>
                         </div>
                     </div>
-                    <div class="float-badge fb-2">
-                        <div class="fb-icon">📈</div>
-                        <div class="fb-info">
-                            <div class="fb-val">+23%</div>
-                            <div class="fb-lbl">Este mês</div>
-                        </div>
-                    </div>
-                    <div class="float-badge fb-3">
-                        <div class="fb-icon">✅</div>
-                        <div class="fb-info">
-                            <div class="fb-val">3/5</div>
-                            <div class="fb-lbl">Metas ativas</div>
+                </div>
+
+                <div class="hero-visual" data-parallax="0.05" aria-hidden="true">
+                    <div class="dashboard-mockup" data-tilt>
+                        <div class="mockup-glow"></div>
+                        <div class="mockup-card">
+                            <div class="mockup-header">
+                                <div class="mockup-dots">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                                <span class="mockup-title">Painel Financeiro</span>
+                                <span class="mockup-badge">Fev 2026</span>
+                            </div>
+
+                            <div class="balance-card">
+                                <div class="balance-label">Saldo Previsto</div>
+                                <div class="balance-amount">R$ 5.240</div>
+                                <div class="balance-trend">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+                                        <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                    <span>+23% este mês</span>
+                                </div>
+                            </div>
+
+                            <div class="mockup-stats">
+                                <div class="stat-box stat-income">
+                                    <div class="stat-icon">
+                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                                            <path d="M10 4V16M10 4L6 8M10 4L14 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Receitas</span>
+                                        <span class="stat-value">R$ 8.500</span>
+                                    </div>
+                                </div>
+
+                                <div class="stat-box stat-expense">
+                                    <div class="stat-icon">
+                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                                            <path d="M10 16V4M10 16L6 12M10 16L14 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                    </div>
+                                    <div class="stat-info">
+                                        <span class="stat-label">Despesas</span>
+                                        <span class="stat-value">R$ 3.260</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mockup-chart">
+                                <canvas id="miniChart" aria-label="Gráfico de evolução financeira"></canvas>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -238,76 +342,72 @@
         </div>
     </section>
 
-    <!-- ================================================ MARQUEE ================================================ -->
-    <div class="marquee-section" aria-hidden="true">
-        <div class="marquee-track">
-            <span class="mq-item"><span class="mq-dot">✦</span> Dashboard</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Cartões</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Metas</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Gráficos</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Alertas</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Reservas</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Relatórios</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Extratos</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Multi-perfil</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Segurança</span>
-            <!-- duplicado para loop infinito -->
-            <span class="mq-item"><span class="mq-dot">✦</span> Dashboard</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Cartões</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Metas</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Gráficos</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Alertas</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Reservas</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Relatórios</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Extratos</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Multi-perfil</span>
-            <span class="mq-item"><span class="mq-dot">✦</span> Segurança</span>
-        </div>
-    </div>
-
-    <!-- ================================================ PROBLEMA ================================================ -->
+    <!-- ================================================
+         PROBLEM SECTION
+    ================================================ -->
     <section class="problem-section" id="problema" aria-labelledby="problem-title">
         <div class="container">
-            <div class="section-header reveal">
-                <span class="section-tag">O Problema</span>
+            <div class="section-header">
+                <span class="section-badge">O Problema</span>
                 <h2 class="section-title" id="problem-title">Você está cansado disso?</h2>
-                <p class="section-sub">Esses são os desafios que impedem você de ter controle financeiro real</p>
+                <p class="section-subtitle">Esses são os desafios que impedem você de ter controle financeiro</p>
             </div>
+
             <div class="problem-grid">
-                <div class="problem-card reveal">
+                <div class="problem-card" data-tilt>
                     <div class="problem-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
                     </div>
                     <h3>Dinheiro Desaparece</h3>
                     <p>Você recebe o salário mas não sabe para onde ele foi até o fim do mês</p>
                 </div>
-                <div class="problem-card reveal">
+
+                <div class="problem-card" data-tilt>
                     <div class="problem-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 10H21M7 3V8M17 3V8" stroke="currentColor" stroke-width="2"/></svg>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 10H21" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 3V8M17 3V8" stroke="currentColor" stroke-width="2"/>
+                        </svg>
                     </div>
                     <h3>Fatura Surpresa</h3>
-                    <p>O cartão sempre vem maior do que o esperado e você não entende o porquê</p>
+                    <p>O cartão sempre vem maior do que você esperava e você não sabe o porquê</p>
                 </div>
-                <div class="problem-card reveal">
+
+                <div class="problem-card" data-tilt>
                     <div class="problem-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 7V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 7V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="12" cy="16" r="1" fill="currentColor"/>
+                        </svg>
                     </div>
                     <h3>Metas Impossíveis</h3>
-                    <p>Quer economizar mas nunca sobra nada no final do mês</p>
+                    <p>Quer economizar mas nunca sobra dinheiro no final do mês</p>
                 </div>
-                <div class="problem-card reveal">
+
+                <div class="problem-card" data-tilt>
                     <div class="problem-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none"><path d="M3 3V18H21M7 14L10 10L14 14L20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M3 3V18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M7 14L10 10L14 14L20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
                     </div>
-                    <h3>Sem Visão Clara</h3>
-                    <p>Não tem ideia de quanto gasta por categoria ou onde cortar custos</p>
+                    <h3>Sem Visão</h3>
+                    <p>Não tem ideia de quanto gasta em cada categoria ou onde cortar custos</p>
                 </div>
             </div>
-            <div class="solution-box reveal" role="note">
+
+            <div class="solution-box" role="note">
                 <div class="solution-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
                 </div>
-                <div>
+                <div class="solution-content">
                     <h3>O problema não é o quanto você ganha</h3>
                     <p>É como você controla. O GranaEvo te dá visão total e controle inteligente de cada centavo.</p>
                 </div>
@@ -315,301 +415,228 @@
         </div>
     </section>
 
-    <!-- ================================================ CARTEIRA 3D ================================================ -->
-    <section class="wallet-section" id="cartoes" aria-labelledby="wallet-title">
-        <div class="container wallet-container">
-
-            <!-- Visual -->
-            <div class="wallet-visual" aria-hidden="true">
-                <div class="wallet-wrap">
-                    <div class="wallet" id="walletBody">
-                        <div class="wallet-flap"></div>
-                        <div class="wallet-clasp"></div>
-                        <div class="wallet-brand">GRANAEVO</div>
-                        <div class="wcard wc1">
-                            <div class="wc-chip"></div>
-                            <div class="wc-num">•••• •••• •••• 4821</div>
-                            <div class="wc-name">JOÃO SILVA</div>
-                            <div class="wc-circles"><span class="wc-circle wc-c1"></span><span class="wc-circle wc-c2"></span></div>
-                        </div>
-                        <div class="wcard wc2">
-                            <div class="wc-chip"></div>
-                            <div class="wc-num">•••• •••• •••• 7734</div>
-                            <div class="wc-name">JOÃO SILVA</div>
-                            <div class="wc-circles"><span class="wc-circle" style="background:#9c27b0"></span><span class="wc-circle" style="background:#f5c842;margin-left:-8px"></span></div>
-                        </div>
-                        <div class="wcard wc3">
-                            <div class="wc-chip"></div>
-                            <div class="wc-num">•••• •••• •••• 1190</div>
-                            <div class="wc-name">JOÃO SILVA</div>
-                            <div class="wc-circles"><span class="wc-circle" style="background:#f44336"></span><span class="wc-circle" style="background:#ff9800;margin-left:-8px"></span></div>
-                        </div>
-                    </div>
-                    <p class="wallet-hint">passe o mouse sobre a carteira</p>
-                </div>
-            </div>
-
-            <!-- Texto -->
-            <div class="wallet-text reveal" id="wallet-title">
-                <span class="section-tag">● controle de cartões</span>
-                <h2>Todos os seus cartões,<br><em>um único painel</em></h2>
-                <p>Visualize faturas, limites e gastos por cartão em tempo real. Sem surpresas no final do mês, nunca mais.</p>
-                <ul class="feat-list">
-                    <li>Fatura detalhada por cartão</li>
-                    <li>Alertas de limite próximo</li>
-                    <li>Vencimentos nunca esquecidos</li>
-                    <li>Histórico completo de gastos</li>
-                </ul>
-                <a href="planos.html" class="btn btn-primary btn-sm">Ver planos →</a>
-            </div>
-        </div>
-    </section>
-
-    <!-- ================================================ MOEDA → PORQUINHO ================================================ -->
-    <section id="piggy-section" class="piggy-section" aria-label="Animação de economia">
-        <div class="piggy-sticky">
-            <div class="piggy-label">
-                <h2>Cada centavo <em>no lugar certo</em></h2>
-                <p>Do registro ao porquinho — tudo organizado automaticamente.</p>
-            </div>
-            <div class="piggy-stage">
-                <div class="piggy-hint-left" id="piggyTL" aria-hidden="true">
-                    <h3>Registre tudo</h3>
-                    <p>Adicione qualquer gasto em segundos, com categorização automática.</p>
-                </div>
-                <div class="piggy-scene-center">
-                    <div class="piggy-coin" id="piggyCoin" aria-hidden="true">
-                        <div class="coin-spinner">
-                            <div class="coin-face">R$</div>
-                        </div>
-                    </div>
-                    <div class="piggy-bank" id="piggyBank" aria-hidden="true">
-                        <svg class="piggy-svg" width="220" height="200" viewBox="0 0 220 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <ellipse cx="100" cy="120" rx="80" ry="68" fill="#0f2d1e" stroke="#00e5a0" stroke-width="1.5"/>
-                            <ellipse cx="162" cy="90" rx="38" ry="35" fill="#0f2d1e" stroke="#00e5a0" stroke-width="1.5"/>
-                            <ellipse cx="192" cy="98" rx="18" ry="14" fill="#0d2518" stroke="#00e5a0" stroke-width="1.2"/>
-                            <circle cx="187" cy="97" r="3.5" fill="#00e5a0" opacity="0.6"/>
-                            <circle cx="196" cy="97" r="3.5" fill="#00e5a0" opacity="0.6"/>
-                            <circle cx="152" cy="80" r="5" fill="#00e5a0" opacity="0.8"/>
-                            <circle cx="153" cy="79" r="2" fill="#040c08"/>
-                            <ellipse cx="150" cy="60" rx="12" ry="8" fill="#0a2218" stroke="#00e5a0" stroke-width="1.2"/>
-                            <ellipse cx="150" cy="62" rx="7" ry="4" fill="#00e5a0" opacity="0.2"/>
-                            <rect x="42" y="172" width="22" height="22" rx="8" fill="#0d2518" stroke="#00e5a0" stroke-width="1.2"/>
-                            <rect x="72" y="178" width="22" height="18" rx="8" fill="#0d2518" stroke="#00e5a0" stroke-width="1.2"/>
-                            <rect x="112" y="178" width="22" height="18" rx="8" fill="#0d2518" stroke="#00e5a0" stroke-width="1.2"/>
-                            <rect x="142" y="172" width="22" height="22" rx="8" fill="#0d2518" stroke="#00e5a0" stroke-width="1.2"/>
-                            <path d="M22 110 Q6 100 10 88 Q14 76 24 84 Q30 90 20 98" stroke="#00e5a0" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-                            <rect id="coinSlot" x="76" y="52" width="48" height="8" rx="4" fill="#00e5a0" opacity="0.25" stroke="#00e5a0" stroke-width="1.5"/>
-                            <text x="100" y="130" text-anchor="middle" font-family="Syne,sans-serif" font-size="28" font-weight="800" fill="#00e5a0" opacity="0.12">R$</text>
-                        </svg>
-                    </div>
-                </div>
-                <div class="piggy-hint-right" id="piggyTR" aria-hidden="true">
-                    <h3>Economize com metas</h3>
-                    <p>Defina objetivos e veja seu dinheiro crescer em tempo real.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ================================================ FEATURES BENTO ================================================ -->
+    <!-- ================================================
+         FEATURES SECTION
+    ================================================ -->
     <section class="features-section" id="recursos" aria-labelledby="features-title">
         <div class="container">
-            <div class="section-header reveal">
-                <span class="section-tag">● funcionalidades</span>
-                <h2 class="section-title" id="features-title">Tudo que sua <em>vida financeira</em> precisa</h2>
+            <div class="section-header">
+                <span class="section-badge">Recursos</span>
+                <h2 class="section-title" id="features-title">Tudo que você precisa</h2>
+                <p class="section-subtitle">Ferramentas poderosas para organizar sua vida financeira</p>
             </div>
-            <div class="bento-grid">
-                <div class="bento-card bc-main reveal">
-                    <div class="bc-content">
-                        <span class="bc-tag">Dashboard</span>
-                        <h3>Visão completa das suas finanças</h3>
-                        <p>Saldo, entradas, saídas e reservas em tempo real</p>
+
+            <div class="features-grid">
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M3 3V18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M18 9L13 14L10 11L7 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
                     </div>
-                    <div class="bc-media">
-                        <img src="/assets/icons/Dashboard.gif" alt="Dashboard GranaEvo" loading="lazy">
-                    </div>
+                    <h3>Dashboard Completo</h3>
+                    <p>Visualize todas suas finanças de forma clara. Entradas, saídas, saldo e reservas em tempo real.</p>
                 </div>
-                <div class="bento-card reveal">
-                    <div class="bc-content">
-                        <span class="bc-tag">Cartões</span>
-                        <h3>Controle de Cartões</h3>
-                        <p>Faturas, limites e vencimentos em dia</p>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 10H21" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 3V8M17 3V8" stroke="currentColor" stroke-width="2"/>
+                        </svg>
                     </div>
-                    <div class="bc-media bc-media-sm">
-                        <img src="/assets/icons/Cartoes.gif" alt="" loading="lazy">
-                    </div>
+                    <h3>Controle de Cartões</h3>
+                    <p>Nunca mais seja pego de surpresa. Acompanhe todos os gastos e parcelas do seu cartão.</p>
                 </div>
-                <div class="bento-card reveal">
-                    <div class="bc-content">
-                        <span class="bc-tag">Metas</span>
-                        <h3>Reservas e Metas</h3>
-                        <p>Crie objetivos e acompanhe o progresso</p>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 6V12L16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
                     </div>
-                    <div class="bc-media bc-media-sm">
-                        <img src="/assets/icons/Reservas.gif" alt="" loading="lazy">
-                    </div>
+                    <h3>Metas e Reservas</h3>
+                    <p>Crie objetivos financeiros e acompanhe seu progresso com gráficos intuitivos.</p>
                 </div>
-                <div class="bento-card reveal">
-                    <div class="bc-content">
-                        <span class="bc-tag">Gráficos</span>
-                        <h3>Análises Visuais</h3>
-                        <p>Entenda seus hábitos financeiros com gráficos</p>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="16" cy="17" r="3" stroke="currentColor" stroke-width="2"/>
+                            <path d="M13 7H20M5 16H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
                     </div>
-                    <div class="bc-media bc-media-sm">
-                        <img src="/assets/icons/Graficos.gif" alt="" loading="lazy">
-                    </div>
+                    <h3>Múltiplos Perfis</h3>
+                    <p>Perfeito para casais e famílias. Cada um com seu controle individual ou compartilhado.</p>
                 </div>
-                <div class="bento-card reveal">
-                    <div class="bc-content">
-                        <span class="bc-tag">Extratos</span>
-                        <h3>Extrato Detalhado</h3>
-                        <p>Histórico completo de todas as movimentações</p>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 11V7C7 4.79086 8.79086 3 11 3H13C15.2091 3 17 4.79086 17 7V11" stroke="currentColor" stroke-width="2"/>
+                        </svg>
                     </div>
-                    <div class="bc-media bc-media-sm">
-                        <img src="/assets/icons/Extrato.gif" alt="" loading="lazy">
-                    </div>
+                    <h3>100% Seguro</h3>
+                    <p>Seus dados são criptografados e nunca compartilhados com terceiros.</p>
                 </div>
-                <div class="bento-card reveal">
-                    <div class="bc-content">
-                        <span class="bc-tag">Relatórios</span>
-                        <h3>Relatórios Completos</h3>
-                        <p>Análise avançada e exportação dos seus dados</p>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
                     </div>
-                    <div class="bc-media bc-media-sm">
-                        <img src="/assets/icons/Relatorios.gif" alt="" loading="lazy">
-                    </div>
+                    <h3>Automação Completa</h3>
+                    <p>Configure contas fixas e deixe o sistema trabalhar para você.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ================================================ STATS ================================================ -->
-    <section class="stats-section" aria-label="Estatísticas do GranaEvo">
-        <div class="container">
-            <div class="stats-grid">
-                <div class="stat-block reveal">
-                    <div class="stat-big counter" data-target="10" data-suffix="k+">0</div>
-                    <div class="stat-lbl">usuários confiam no GranaEvo</div>
-                </div>
-                <div class="stat-block reveal">
-                    <div class="stat-big counter" data-target="97" data-suffix="%">0</div>
-                    <div class="stat-lbl">de satisfação dos clientes</div>
-                </div>
-                <div class="stat-block reveal">
-                    <div class="stat-big counter" data-prefix="R$" data-target="120" data-suffix="M+">0</div>
-                    <div class="stat-lbl">em gastos gerenciados</div>
-                </div>
-                <div class="stat-block reveal">
-                    <div class="stat-big counter" data-target="4.9" data-decimal="true">0</div>
-                    <div class="stat-lbl">estrelas nas lojas de apps</div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ================================================ COMO FUNCIONA ================================================ -->
+    <!-- ================================================
+         HOW IT WORKS
+    ================================================ -->
     <section class="how-section" id="como-funciona" aria-labelledby="how-title">
         <div class="container">
-            <div class="section-header reveal">
-                <span class="section-tag">Como Funciona</span>
+            <div class="section-header">
+                <span class="section-badge">Como Funciona</span>
                 <h2 class="section-title" id="how-title">Simples como deve ser</h2>
-                <p class="section-sub">Comece em minutos e veja resultados em dias</p>
+                <p class="section-subtitle">Comece em minutos e veja resultados em dias</p>
             </div>
-            <div class="steps-grid" role="list">
-                <div class="step-card reveal" role="listitem">
-                    <div class="step-num" aria-hidden="true">01</div>
-                    <div class="step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7C7 4.79 8.79 3 11 3H13C15.21 3 17 4.79 17 7V11" stroke="currentColor" stroke-width="2"/></svg>
+
+            <div class="timeline" role="list">
+                <div class="timeline-item" role="listitem">
+                    <div class="timeline-dot" aria-hidden="true">1</div>
+                    <div class="timeline-content">
+                        <h3>Selecione um Plano</h3>
+                        <p>Escolha o plano ideal para você. Em poucos minutos, o acesso é liberado!</p>
                     </div>
-                    <h3>Selecione um Plano</h3>
-                    <p>Escolha o plano ideal para você. Em poucos minutos o acesso é liberado.</p>
                 </div>
-                <div class="step-card reveal" role="listitem">
-                    <div class="step-num" aria-hidden="true">02</div>
-                    <div class="step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+
+                <div class="timeline-item" role="listitem">
+                    <div class="timeline-dot" aria-hidden="true">2</div>
+                    <div class="timeline-content">
+                        <h3>Registre Transações</h3>
+                        <p>Adicione suas entradas e saídas de forma simples e rápida.</p>
                     </div>
-                    <h3>Registre Transações</h3>
-                    <p>Adicione suas entradas e saídas de forma simples e rápida.</p>
                 </div>
-                <div class="step-card reveal" role="listitem">
-                    <div class="step-num" aria-hidden="true">03</div>
-                    <div class="step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none"><path d="M3 3V18H21M7 14L10 10L14 14L20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+
+                <div class="timeline-item" role="listitem">
+                    <div class="timeline-dot" aria-hidden="true">3</div>
+                    <div class="timeline-content">
+                        <h3>Acompanhe e Evolua</h3>
+                        <p>Veja relatórios, estabeleça metas e tome decisões inteligentes.</p>
                     </div>
-                    <h3>Acompanhe e Evolua</h3>
-                    <p>Veja relatórios, establece metas e tome decisões inteligentes.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ================================================ DEPOIMENTOS ================================================ -->
-    <section class="testimonials-section" id="depoimentos" aria-labelledby="test-title">
+    <!-- ================================================
+         TESTIMONIALS
+    ================================================ -->
+    <section class="testimonials-section" id="depoimentos" aria-labelledby="testimonials-title">
         <div class="container">
-            <div class="section-header reveal">
-                <span class="section-tag">Depoimentos</span>
-                <h2 class="section-title" id="test-title">Quem usa, <em>aprova</em></h2>
-                <p class="section-sub">Veja o que nossos usuários dizem</p>
+            <div class="section-header">
+                <span class="section-badge">Depoimentos</span>
+                <h2 class="section-title" id="testimonials-title">Quem usa, aprova</h2>
+                <p class="section-subtitle">Veja o que nossos usuários dizem</p>
             </div>
         </div>
+
         <div class="testimonials-carousel" aria-label="Carrossel de depoimentos" role="region">
+            <!--
+                Preenchido via JS com createElement/textContent (sem innerHTML).
+                Nenhum dado vem de input externo — dados são hardcoded e tipados.
+                Trusted Types compatível — nenhuma atribuição de HTML string.
+            -->
             <div class="testimonials-track" id="testimonialsTrack" aria-live="off"></div>
         </div>
     </section>
 
-    <!-- ================================================ CTA ================================================ -->
+    <!-- ================================================
+         CTA SECTION
+    ================================================ -->
     <section class="cta-section" aria-labelledby="cta-title">
         <div class="container">
-            <div class="cta-box reveal">
-                <div class="cta-glow" aria-hidden="true"></div>
-                <h2 id="cta-title">Pronto para <em>evoluir</em><br>suas finanças?</h2>
-                <p>Junte-se a mais de 10 mil brasileiros que já transformaram sua relação com o dinheiro.</p>
-                <a href="planos.html" class="btn btn-primary btn-large">
-                    <span>Começar agora</span>
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-                </a>
-                <span class="cta-note">✓ Compre uma vez, acesso vitalício</span>
+            <div class="cta-box">
+                <div class="cta-content">
+                    <h2 id="cta-title">Pronto para transformar suas finanças?</h2>
+                    <p>Junte-se a milhares de pessoas que já organizaram sua vida financeira</p>
+                    <a href="planos.html" class="btn-primary btn-large">
+                        <span>Começar Agora!!</span>
+                        <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                            <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </a>
+                    <span class="cta-note">✓ Compre uma vez, tenha acesso vitalício</span>
+                </div>
             </div>
         </div>
     </section>
 
-    <!-- ================================================ FOOTER ================================================ -->
+    <!-- ================================================
+         FOOTER
+    ================================================ -->
     <footer class="footer" role="contentinfo">
         <div class="container">
             <div class="footer-content">
                 <div class="footer-brand">
-                    <a href="#" class="nav-logo" aria-label="GranaEvo — início">
-                        <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="nav-logo-img" crossorigin="anonymous" loading="lazy">
-                        <span class="nav-logo-text">GranaEvo</span>
+                    <a href="#" class="logo" aria-label="GranaEvo — início">
+                        <img
+                            src="/assets/icons/granaevo-logo.jpg"
+                            alt="GranaEvo"
+                            class="logo-img"
+                            crossorigin="anonymous"
+                            loading="lazy"
+                        >
+                        <span class="logo-text">GranaEvo</span>
                     </a>
-                    <p>Sua evolução financeira começa aqui.</p>
+                    <p>Sua evolução financeira começa aqui</p>
                 </div>
+
                 <div class="footer-links">
                     <h4>Produto</h4>
                     <a href="#recursos">Recursos</a>
                     <a href="planos.html">Planos</a>
                     <a href="#como-funciona">Como Funciona</a>
                 </div>
+
                 <div class="footer-links">
                     <h4>Suporte</h4>
+                    <!--
+                        NOTA: Links externos com target="_blank" DEVEM conter
+                        rel="noopener noreferrer" para prevenir tabnabbing.
+                    -->
                     <a href="#">Contato</a>
                     <a href="#">FAQ</a>
                 </div>
+
                 <div class="footer-links">
                     <h4>Legal</h4>
                     <a href="termos.html">Termos de Uso</a>
                     <a href="#">Privacidade</a>
                 </div>
             </div>
+
             <div class="footer-bottom">
                 <p>&copy; 2026 GranaEvo. Todos os direitos reservados.</p>
             </div>
         </div>
     </footer>
 
-    <script type="module" src="src/scripts/pages/script.js?v=3"></script>
+    <!--
+        type="module":
+        - Isola escopo (sem poluição do window)
+        - Ativa strict mode automaticamente
+        - Defer implícito (não bloqueia renderização)
+        - Confiável via script-src 'self' no vercel.json
+    -->
+    <script type="module" src="src/scripts/pages/script.js?v=2"></script>
 
 </body>
 </html>
