@@ -11,6 +11,7 @@ export function init(ctx) {
     window.abrirDetalhesTransacao   = (t) => abrirDetalhesTransacao(t);
     window.atualizarTiposDinamicos  = () => atualizarTiposDinamicos();
     bindFiltrosMovimentacoes();
+    atualizarMovimentacoesUI(); // renderiza imediatamente ao abrir a seção pela primeira vez
 }
 
 // ========== TRANSAÇÕES ==========
