@@ -231,18 +231,27 @@ function validarUserData(userData) {
     // ✅ Arrays de dados expostos como cópias congeladas (somente leitura)
     //    Necessário para graficos.js (script não-módulo que lê window.transacoes etc.)
     //    Retorna shallow-frozen copies — código externo lê mas não muta o array original
-    _def('transacoes', () =>
-        Object.freeze(transacoes.map(t => Object.freeze(Object.assign({}, t))))
-    );
-    _def('metas', () =>
-        Object.freeze(metas.map(m => Object.freeze(Object.assign({}, m))))
-    );
-    _def('contasFixas', () =>
-        Object.freeze(contasFixas.map(c => Object.freeze(Object.assign({}, c))))
-    );
-    _def('cartoesCredito', () =>
-        Object.freeze(cartoesCredito.map(c => Object.freeze(Object.assign({}, c))))
-    );
+
+    // Cache das cópias congeladas — invalidado sempre que os dados mudam
+    // Evita recriar N objetos a cada acesso externo (graficos.js, etc.)
+    let _cache = { tx: null, mt: null, cf: null, cc: null };
+
+    _def('transacoes', () => {
+        if (!_cache.tx) _cache.tx = Object.freeze(transacoes.map(t => Object.freeze(Object.assign({}, t))));
+        return _cache.tx;
+    });
+    _def('metas', () => {
+        if (!_cache.mt) _cache.mt = Object.freeze(metas.map(m => Object.freeze(Object.assign({}, m))));
+        return _cache.mt;
+    });
+    _def('contasFixas', () => {
+        if (!_cache.cf) _cache.cf = Object.freeze(contasFixas.map(c => Object.freeze(Object.assign({}, c))));
+        return _cache.cf;
+    });
+    _def('cartoesCredito', () => {
+        if (!_cache.cc) _cache.cc = Object.freeze(cartoesCredito.map(c => Object.freeze(Object.assign({}, c))));
+        return _cache.cc;
+    });
 
     // ✅ usuarioLogado expõe apenas plano e perfis simplificados — graficos.js precisa do plano
     _def('usuarioLogado', () => Object.freeze({
@@ -516,6 +525,7 @@ async function carregarDadosPerfil(perfilId) {
             metas          = [];
             contasFixas    = [];
             cartoesCredito = [];
+            if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
 
             // ✅ nextIds mantidos apenas para cartões — cartão ainda usa ID local
             nextCartaoId = 1;
@@ -528,6 +538,7 @@ async function carregarDadosPerfil(perfilId) {
         metas          = Array.isArray(perfilData.metas)          ? perfilData.metas          : [];
         contasFixas    = Array.isArray(perfilData.contasFixas)    ? perfilData.contasFixas    : [];
         cartoesCredito = Array.isArray(perfilData.cartoesCredito) ? perfilData.cartoesCredito : [];
+        if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
 
         const idsCartoesNumericos = cartoesCredito
             .map(c => typeof c.id === 'number' ? c.id : parseInt(c.id, 10))
@@ -552,6 +563,7 @@ async function carregarDadosPerfil(perfilId) {
         metas          = [];
         contasFixas    = [];
         cartoesCredito = [];
+        if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
         atualizarReferenciasGlobais();
     }
 }
@@ -706,6 +718,10 @@ let _saveDebounceTimer   = null;
 let _saveDebounceResolve = null;
 
 async function salvarDados() {
+    // Invalidar cache de cópias congeladas — dados foram modificados
+    if (typeof _cache !== 'undefined') {
+        _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null;
+    }
     atualizarReferenciasGlobais();
 
     if (!perfilAtivo) {
@@ -1450,10 +1466,10 @@ let _domMobileNav = null;
 
 function _makeCtx() {
     return Object.defineProperties({}, {
-        transacoes:          { get: () => transacoes,          set: v => { transacoes = v; },          enumerable: true },
-        metas:               { get: () => metas,               set: v => { metas = v; },               enumerable: true },
-        cartoesCredito:      { get: () => cartoesCredito,      set: v => { cartoesCredito = v; },      enumerable: true },
-        contasFixas:         { get: () => contasFixas,         set: v => { contasFixas = v; },         enumerable: true },
+        transacoes:          { get: () => transacoes,          set: v => { transacoes = v;     if (typeof _cache !== 'undefined') _cache.tx = null; }, enumerable: true },
+        metas:               { get: () => metas,               set: v => { metas = v;          if (typeof _cache !== 'undefined') _cache.mt = null; }, enumerable: true },
+        cartoesCredito:      { get: () => cartoesCredito,      set: v => { cartoesCredito = v; if (typeof _cache !== 'undefined') _cache.cc = null; }, enumerable: true },
+        contasFixas:         { get: () => contasFixas,         set: v => { contasFixas = v;    if (typeof _cache !== 'undefined') _cache.cf = null; }, enumerable: true },
         perfilAtivo:         { get: () => perfilAtivo,         set: v => { perfilAtivo = v; },         enumerable: true },
         usuarioLogado:       { get: () => usuarioLogado,       set: v => { usuarioLogado = v; },       enumerable: true },
         filtroMovAtivo:      { get: () => filtroMovAtivo,      set: v => { filtroMovAtivo = v; },      enumerable: true },
@@ -2609,6 +2625,7 @@ function abrirContaFixaForm(editId = null) {
                 : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
             contasFixas.push({ id: novoId, descricao: desc, valor, vencimento: venc, pago: false });
+            if (typeof _cache !== 'undefined') _cache.cf = null;
             salvarDados();
             atualizarListaContasFixas();
             fecharPopup();
@@ -2794,6 +2811,7 @@ function pagarContaFixa(id, valorPago) {
             hora:        dh.hora,
             contaFixaId: id
         });
+        if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.cf = null; _cache.cc = null; }
 
         // ── FATURA DE CARTÃO ──────────────────────────────────────────────
         if (conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {

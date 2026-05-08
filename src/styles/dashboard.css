@@ -5,7 +5,7 @@
 /* ========== UTILITÁRIOS — sem unsafe-inline ========== */
 .js-hidden      { display: none !important; }
 .text-secondary { color: var(--text-secondary, #b0b3c1); }
-.promo-bloco         { margin-top: 32px; cursor: pointer; display: flex; align-items: stretch; gap: 28px; text-align: left; position: relative; overflow: hidden; transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s; }
+.promo-bloco         { margin-top: 32px; cursor: pointer; display: flex; align-items: stretch; gap: 28px; text-align: left; position: relative; overflow: hidden; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
 .promo-titulo        { margin-bottom: 6px; color: var(--text-primary, #fff); font-size: 1.35rem; font-weight: 700; }
 .promo-desc          { color: var(--text-secondary, #b0b3c1); font-size: 0.85rem; margin-bottom: 0; }
 .promo-ilustracao    { flex-shrink: 0; width: 270px; align-self: stretch; background: url('/assets/icons/Icon_onde_foi.png') center/130% no-repeat; position: relative; z-index: 2; transform: scale(1.08); transform-origin: left center; }
@@ -106,7 +106,6 @@ body::before {
         radial-gradient(circle at 80% 70%, rgba(102, 187, 106, 0.06), transparent 40%);
     pointer-events: none;
     z-index: 0;
-    animation: pulseGlow 15s ease-in-out infinite;
 }
 
 @keyframes pulseGlow {
@@ -325,7 +324,6 @@ body::before {
         radial-gradient(circle at 80% 70%, rgba(102, 187, 106, 0.06), transparent 40%);
     pointer-events: none;
     z-index: 0;
-    animation: pulseGlow 15s ease-in-out infinite;
 }
 
 .perfis-container {
@@ -429,7 +427,7 @@ body::before {
     justify-content: center;
     font-size: 4rem;
     color: var(--text-muted);
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     box-shadow: var(--shadow-md);
     overflow: hidden;
 }
@@ -627,7 +625,7 @@ body::before {
     border: 2px solid var(--primary);
     object-fit: cover;
     cursor: pointer;
-    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 4px 16px rgba(67,160,71,0.35);
     flex-shrink: 0;
 }
@@ -690,7 +688,7 @@ body::before {
     border-radius: 10px;
     cursor: pointer;
     font-size: 0.78rem;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     border: 1px solid rgba(67,160,71,0.3);
     font-weight: 600;
 }
@@ -762,7 +760,6 @@ body::before {
 .nav-btn.active::before {
     height: 100%;
     box-shadow: 0 0 12px rgba(0,255,136,0.8), 0 0 24px rgba(0,255,136,0.4);
-    animation: neonPulseBar 2.5s ease-in-out infinite;
 }
 
 .nav-btn:hover {
@@ -799,7 +796,7 @@ body::before {
 }
 
 .nav-icon i {
-    transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), filter 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.2s ease, filter 0.2s ease, transform 0.2s ease;
     color: inherit;
 }
 
@@ -865,7 +862,7 @@ body::before {
     height: 38px;
     cursor: pointer;
     z-index: 10001;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     display: none;
     box-shadow: 0 4px 12px rgba(67,160,71,0.4);
     align-items: center;
@@ -882,7 +879,7 @@ body::before {
     width: 20px; height: 2px;
     background: white;
     position: relative;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease;
 }
 
 .hamburger::before,
@@ -892,7 +889,7 @@ body::before {
     width: 100%; height: 2px;
     background: white;
     left: 0;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease;
 }
 
 .hamburger::before { top: -6px; }
@@ -1038,8 +1035,6 @@ body::before {
 
 .card {
     background: rgba(30, 40, 35, 0.3);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(67, 160, 71, 0.15);
     border-radius: 16px;
     padding: 20px 22px;
@@ -1047,7 +1042,7 @@ body::before {
     display: flex;
     align-items: center;
     gap: 0;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
     animation: fadeIn 0.5s ease-out backwards;
@@ -1257,7 +1252,7 @@ body::before {
     display: flex;
     align-items: center;
     gap: 7px;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     white-space: nowrap;
 }
 
@@ -1281,7 +1276,7 @@ body::before {
     display: flex;
     align-items: center;
     gap: 8px;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     white-space: nowrap;
 }
 
@@ -1345,7 +1340,8 @@ body::before {
     cursor: pointer;
     font-weight: 600;
     font-size: 0.95rem;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    touch-action: manipulation;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     box-shadow: 0 8px 24px rgba(67, 160, 71, 0.3),
                 0 0 20px rgba(67, 160, 71, 0.2);
     position: relative;
@@ -1535,7 +1531,7 @@ body::before {
     color: var(--danger);
     border: 1px solid rgba(255, 75, 75, 0.38);
     text-shadow: 0 0 6px rgba(255, 75, 75, 0.45);
-    animation: pulseVencido 2s ease-in-out infinite;
+    box-shadow: 0 0 6px rgba(255, 75, 75, 0.3);
 }
 
 @keyframes pulseVencido {
@@ -1571,7 +1567,8 @@ body::before {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.7px;
-    transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    touch-action: manipulation;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     box-shadow:
         0 2px 12px rgba(67, 160, 71, 0.34),
         0 0 12px rgba(67, 160, 71, 0.14);
@@ -1669,7 +1666,6 @@ body::before {
 
 .alertas-icon {
     font-size: 2.5rem;
-    animation: pulseAlert 2s infinite;
 }
 
 .alertas-title-group h3 {
@@ -1697,7 +1693,7 @@ body::before {
     border-radius: 12px;
     padding: 16px;
     border-left: 4px solid #ff4b4b;
-    transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     cursor: pointer;
 }
 
@@ -1764,7 +1760,7 @@ body::before {
     border-radius: 10px;
     font-weight: 600;
     cursor: pointer;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     margin-top: 8px;
 }
 
@@ -1807,7 +1803,7 @@ body::before {
     border-radius: 16px;
     border: 1px solid rgba(67, 160, 71, 0.15);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .transaction-form:hover {
@@ -1864,7 +1860,7 @@ body::before {
     font-size: 0.95rem;
     font-weight: 500;
     cursor: pointer;
-    transition: color 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(67, 160, 71, 0.1);
 }
 
@@ -2077,7 +2073,7 @@ select.form-input option:checked {
     align-items: center;
     gap: 16px;
     cursor: pointer;
-    transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
 }
@@ -2099,7 +2095,7 @@ select.form-input option:checked {
     justify-content: center;
     font-size: 1.05rem;
     flex-shrink: 0;
-    transition: color 0.22s, background-color 0.22s, border-color 0.22s, box-shadow 0.22s, opacity 0.22s, transform 0.22s;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .mov-icon-badge.entrada {
@@ -2442,7 +2438,7 @@ select.form-input option:checked {
     padding: 24px;
     min-height: 400px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .reservas-sidebar:hover {
@@ -2476,7 +2472,7 @@ select.form-input option:checked {
     backdrop-filter: blur(8px);
     cursor: pointer;
     color: var(--text-primary);
-    transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     border: 1px solid rgba(67, 160, 71, 0.15);
     position: relative;
     overflow: hidden;
@@ -2534,7 +2530,7 @@ select.form-input option:checked {
     padding: 32px;
     min-height: 400px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .reservas-main:hover {
@@ -3135,7 +3131,6 @@ select.form-input option:checked {
     display: inline-block;
     margin-top: 8px;
     border-left: 3px solid var(--warning);
-    animation: pulseGlow 2s ease-in-out infinite;
 }
 
 .cartao-cc-add {
@@ -3153,7 +3148,7 @@ select.form-input option:checked {
     font-weight: 700;
     color: rgba(67, 160, 71, 0.6);
     cursor: pointer;
-    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
 }
@@ -3264,7 +3259,7 @@ select.form-input option:checked {
     padding: 20px;
     min-width: 220px;
     flex-shrink: 0;
-    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
 }
@@ -3345,7 +3340,7 @@ select.form-input option:checked {
     cursor: pointer;
     font-size: 0.95rem;
     font-weight: 600;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tipo-btn:hover {
@@ -3411,7 +3406,7 @@ select.form-input option:checked {
     padding: 40px;
     margin-top: 32px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .relatorio-resultado:hover {
@@ -3432,7 +3427,7 @@ select.form-input option:checked {
     border-radius: 12px;
     padding: 24px;
     text-align: center;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .relatorio-card:hover {
@@ -3469,7 +3464,7 @@ select.form-input option:checked {
     border-radius: 16px;
     padding: 28px;
     text-align: center;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
 }
@@ -3545,7 +3540,7 @@ select.form-input option:checked {
     background: var(--gradient-dark);
     border: 1px solid var(--border);
     border-radius: 12px;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     animation: slideInUp 0.4s ease-out backwards;
 }
 
@@ -3637,7 +3632,7 @@ select.form-input option:checked {
     justify-content: space-between;
     align-items: center;
     gap: 16px;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .relatorio-item:hover {
@@ -3676,7 +3671,7 @@ select.form-input option:checked {
     padding: 24px;
     border-radius: 16px;
     cursor: pointer;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     display: flex;
     align-items: center;
     gap: 20px;
@@ -3773,7 +3768,7 @@ select.form-input option:checked {
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
     font-size: 0.95rem;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .popup input:focus {
@@ -3789,7 +3784,7 @@ select.form-input option:checked {
     border: none;
     font-weight: 600;
     cursor: pointer;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .btn-cancelar {
@@ -3812,7 +3807,7 @@ select.form-input option:checked {
     cursor: pointer;
     border: none;
     border-radius: 12px;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .btn-excluir:hover {
@@ -3861,11 +3856,8 @@ select.form-input option:checked {
     overflow: hidden;
     border: 2px solid transparent;
     background-clip: padding-box;
-    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5),
-                0 0 100px rgba(67, 160, 71, 0.15),
-                inset 0 2px 0 rgba(255, 255, 255, 0.15),
-                inset 0 -1px 0 rgba(0, 0, 0, 0.3);
-    transition: color 0.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .page-header-premium::before {
@@ -3882,7 +3874,6 @@ select.form-input option:checked {
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     opacity: 0.7;
-    animation: borderShift 4s ease-in-out infinite;
     background-size: 200% 200%;
 }
 
@@ -3891,57 +3882,11 @@ select.form-input option:checked {
     50%       { background-position: 100% 50%; }
 }
 
-.page-header-premium::after {
-    content: '';
-    position: absolute;
-    top: -50%;
-    right: -30%;
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(circle,
-        rgba(67, 160, 71, 0.25) 0%,
-        rgba(102, 187, 106, 0.15) 30%,
-        transparent 70%);
-    pointer-events: none;
-    animation: floatLight 25s ease-in-out infinite;
-    filter: blur(60px);
-}
 
-@keyframes floatLight {
-    0%, 100% { transform: translate(0, 0) scale(1);     opacity: 0.6; }
-    33%       { transform: translate(-100px, 50px) scale(1.1); opacity: 0.8; }
-    66%       { transform: translate(50px, -80px) scale(0.9);  opacity: 0.7; }
-}
-
-.page-header-premium .particle-1,
-.page-header-premium .particle-2,
-.page-header-premium .particle-3 {
-    position: absolute;
-    width: 4px;
-    height: 4px;
-    background: rgba(67, 160, 71, 0.6);
-    border-radius: 50%;
-    pointer-events: none;
-    box-shadow: 0 0 20px rgba(67, 160, 71, 0.8);
-}
-
-.page-header-premium .particle-1 { top: 20%; left: 15%; animation: floatParticle 8s ease-in-out infinite; }
-.page-header-premium .particle-2 { top: 60%; right: 20%; animation: floatParticle 10s ease-in-out infinite 2s; }
-.page-header-premium .particle-3 { bottom: 30%; left: 70%; animation: floatParticle 12s ease-in-out infinite 4s; }
-
-@keyframes floatParticle {
-    0%, 100% { transform: translate(0, 0);      opacity: 0.3; }
-    25%       { transform: translate(30px, -30px);  opacity: 0.7; }
-    50%       { transform: translate(-20px, -50px); opacity: 1; }
-    75%       { transform: translate(40px, -20px);  opacity: 0.5; }
-}
 
 .page-header-premium:hover {
     border-color: rgba(67, 160, 71, 0.5);
-    box-shadow: 0 35px 100px rgba(0, 0, 0, 0.6),
-                0 0 120px rgba(67, 160, 71, 0.25),
-                inset 0 2px 0 rgba(255, 255, 255, 0.2),
-                inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 30px rgba(67, 160, 71, 0.12);
     transform: translateY(-2px);
 }
 
@@ -3988,7 +3933,7 @@ select.form-input option:checked {
 .breadcrumb-premium a {
     color: rgba(255, 255, 255, 0.8);
     text-decoration: none;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.2s ease, color 0.2s ease;
     position: relative;
     padding: 4px 8px;
     border-radius: 6px;
@@ -4021,7 +3966,6 @@ select.form-input option:checked {
     gap: 12px;
     letter-spacing: -0.5px;
     line-height: 1.2;
-    animation: titleGlow 3s ease-in-out infinite;
 }
 
 @keyframes titleGlow {
@@ -4071,7 +4015,7 @@ select.form-input option:checked {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -4156,7 +4100,7 @@ select.form-input option:checked {
     backdrop-filter: blur(10px);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.15);
-    transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     min-width: 140px;
 }
 
@@ -4484,7 +4428,7 @@ select.form-input option:checked {
         border: 2px solid var(--primary);
         object-fit: cover;
         box-shadow: 0 0 12px rgba(67, 160, 71, 0.45);
-        transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
         display: block;
     }
 
@@ -4504,7 +4448,7 @@ select.form-input option:checked {
         border: 2px solid var(--primary);
         box-shadow: 0 0 12px rgba(67, 160, 71, 0.45);
         cursor: pointer;
-        transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
     .mobile-profile-btn:active .mobile-user-photo,
@@ -4562,7 +4506,7 @@ select.form-input option:checked {
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
         -webkit-tap-highlight-color: transparent;
     }
 
@@ -4634,7 +4578,7 @@ select.form-input option:checked {
         cursor: pointer;
         padding: 6px 2px 4px;
         border-radius: 14px;
-        transition: color 0.22s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
         position: relative;
         overflow: hidden;
         -webkit-tap-highlight-color: transparent;
@@ -4687,7 +4631,7 @@ select.form-input option:checked {
     .mobile-nav-icon-img {
         width: 28px; height: 28px;
         object-fit: contain;
-        transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.2s ease, opacity 0.2s ease;
         filter: grayscale(0.5) brightness(0.6) opacity(0.75);
     }
 
@@ -4711,7 +4655,7 @@ select.form-input option:checked {
         color: rgba(255, 255, 255, 0.35);
         letter-spacing: 0.4px;
         text-transform: uppercase;
-        transition: color 0.22s, background-color 0.22s, border-color 0.22s, box-shadow 0.22s, opacity 0.22s, transform 0.22s;
+        transition: color 0.2s ease;
         white-space: nowrap;
     }
 
@@ -4724,7 +4668,7 @@ select.form-input option:checked {
     .mobile-nav-icon-fa {
         font-size: 22px;
         color: rgba(255, 255, 255, 0.38);
-        transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: color 0.2s ease, transform 0.2s ease;
         line-height: 1;
     }
 
@@ -4952,7 +4896,7 @@ select.form-input option:checked {
     display: flex;
     align-items: center;
     gap: 8px;
-    transition: color 0.3s, background-color 0.3s, border-color 0.3s, box-shadow 0.3s, opacity 0.3s, transform 0.3s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     box-shadow: 0 4px 12px rgba(67,160,71,0.3);
 }
 
@@ -5229,7 +5173,7 @@ select.form-input option:checked {
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: color 0.22s, background-color 0.22s, border-color 0.22s, box-shadow 0.22s, opacity 0.22s, transform 0.22s;
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     -webkit-tap-highlight-color: transparent;
     font-family: 'DM Sans', sans-serif;
     min-height: 130px;
@@ -5290,7 +5234,7 @@ select.form-input option:checked {
     position: relative;
     overflow: hidden;
     border: 2px solid transparent;
-    transition: color 0.22s cubic-bezier(0.4,0,0.2,1), background-color 0.22s cubic-bezier(0.4,0,0.2,1), border-color 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.22s cubic-bezier(0.4,0,0.2,1), transform 0.22s cubic-bezier(0.4,0,0.2,1);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -5676,7 +5620,6 @@ select.form-input option:checked {
     align-items: center;
     justify-content: center;
     box-shadow: 0 2px 8px rgba(255, 75, 75, 0.5);
-    animation: pulseAlert 2s infinite;
     pointer-events: none;
     z-index: 2;
 }
@@ -5708,7 +5651,7 @@ select.form-input option:checked {
     cursor: pointer;
     color: rgba(255, 255, 255, 0.75);
     font-size: 1.1rem;
-    transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     -webkit-tap-highlight-color: transparent;
 }
 
@@ -5730,7 +5673,6 @@ select.form-input option:checked {
     border: 2px solid rgba(10, 13, 22, 0.97);
     box-shadow: 0 0 6px rgba(255, 75, 75, 0.7);
     display: none;
-    animation: pulseAlert 2s infinite;
     pointer-events: none;
 }
 
@@ -7294,7 +7236,7 @@ select.form-input option:checked {
     border: 2px solid var(--primary);
     box-shadow: 0 4px 16px rgba(67, 160, 71, 0.35);
     cursor: pointer;
-    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .sidebar:hover .user-photo-fallback {
     width: clamp(56px, 5vw, 72px);
@@ -7851,7 +7793,23 @@ select.form-input option:checked {
     text-align: right;
 }
 
-/* ========== REDUÇÃO DE MOVIMENTO ========== */
+/* ========== TOUCH-ACTION — botões sem delay de 300ms ========== */
+button,
+[role="button"],
+.btn-primary,
+.btn-outline,
+.btn-periodo,
+.btn-header-premium,
+.conta-btn,
+.tipo-btn,
+.cartao-cc-add,
+.mobile-nav-item {
+    touch-action: manipulation;
+}
+
+/* ==========================================
+   PREFERS-REDUCED-MOTION — Acessibilidade
+   ========================================== */
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -7862,4 +7820,8 @@ select.form-input option:checked {
         scroll-behavior: auto !important;
     }
     #particles-canvas { display: none; }
+
+    .loader-progress {
+        animation-duration: 0.3s !important;
+    }
 }
