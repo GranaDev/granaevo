@@ -2588,25 +2588,33 @@ function atualizarListaContasFixas() {
             div.appendChild(header);
             div.appendChild(info);
 
-            if (status !== 'Pago') {
-                const actions  = document.createElement('div');
-                actions.className = 'conta-actions';
+            const contaId = c.id;
+            if (contaId === null || contaId === undefined || contaId === '') return;
 
+            const actions = document.createElement('div');
+            actions.className = 'conta-actions';
+
+            if (!estaPago) {
                 const btnPagar = document.createElement('button');
                 btnPagar.className   = 'conta-btn';
                 btnPagar.textContent = 'Pagar';
-
-                const contaId = c.id;
-                if (contaId === null || contaId === undefined || contaId === '') return;
-
                 btnPagar.addEventListener('click', (e) => {
                     e.stopPropagation();
                     abrirPopupPagarContaFixa(contaId);
                 });
-
                 actions.appendChild(btnPagar);
-                div.appendChild(actions);
+            } else {
+                const btnAntecipar = document.createElement('button');
+                btnAntecipar.className   = 'conta-btn conta-btn-antecipar';
+                btnAntecipar.textContent = 'Antecipar';
+                btnAntecipar.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    abrirPopupAnteciparContaFixa(contaId);
+                });
+                actions.appendChild(btnAntecipar);
             }
+
+            div.appendChild(actions);
         }
 
         header.appendChild(title);
@@ -2678,11 +2686,17 @@ function abrirContaFixaForm(editId = null) {
         const conta = contasFixas.find(c => c.id === editId);
         if(!conta) return;
 
+        // Verifica se já está pago (vencimento em mês futuro)
+        const _hojeStr = new Date().toISOString().slice(0, 7);
+        const _vencMes = conta.vencimento ? conta.vencimento.slice(0, 7) : null;
+        const _jaPago  = _vencMes && _vencMes > _hojeStr;
+
         criarPopup(`
             <h3>Editar Conta Fixa</h3>
             <input type="text" id="descContaFixa" class="form-input" maxlength="100"><br>
             <input type="number" id="valorContaFixa" class="form-input" step="0.01" min="0"><br>
             <input type="date" id="vencContaFixa" class="form-input"><br>
+            ${_jaPago ? '<button class="btn-warning" id="anteciparContaBtn">⚡ Antecipar pagamento</button>' : ''}
             <button class="btn-primary" id="salvarEditContaFixa">Salvar</button>
             <button class="btn-excluir" id="excluirContaFixa">Excluir</button>
             <button class="btn-cancelar" id="cancelarContaFixa">Cancelar</button>
@@ -2694,6 +2708,13 @@ function abrirContaFixaForm(editId = null) {
         document.getElementById('vencContaFixa').value  = conta.vencimento;
 
         document.getElementById('cancelarContaFixa').onclick = () => fecharPopup();
+
+        if (_jaPago) {
+            document.getElementById('anteciparContaBtn').onclick = () => {
+                fecharPopup();
+                abrirPopupAnteciparContaFixa(editId);
+            };
+        }
 
         document.getElementById('salvarEditContaFixa').onclick = () => {
             const desc     = document.getElementById('descContaFixa').value.trim();
@@ -2786,6 +2807,116 @@ function abrirPopupPagarContaFixa(id) {
             }
         };
     };
+}
+
+function abrirPopupAnteciparContaFixa(id) {
+    const conta = contasFixas.find(c => c.id === id);
+    if (!conta) return;
+
+    // O próximo vencimento após a antecipação
+    const proximoVenc = _avancarMes(conta.vencimento);
+
+    criarPopup(`
+        <h3>⚡ Antecipar Pagamento</h3>
+        <div id="popupDescricaoAnt" style="color: var(--text-secondary);"></div>
+        <div id="popupProxVencAnt" style="margin-bottom:12px;"></div>
+        <div id="popupValorAnt" style="margin-bottom:12px;"></div>
+        <div style="color: var(--warning); margin-bottom:8px;">O valor está correto?</div>
+        <button class="btn-primary" id="simValorAnt">Sim</button>
+        <button class="btn-warning" id="naoValorAnt">Não</button>
+        <button class="btn-cancelar" id="cancelarAnt">Cancelar</button>
+        <div id="ajusteValorAnt" style="display:none; margin-top:14px;">
+            <input type="number" id="novoValorAnt" class="form-input" step="0.01" min="0"><br>
+            <button class="btn-primary" id="confirmNovoValorAnt" style="margin-top:8px;">Confirmar novo valor</button>
+        </div>
+    `);
+
+    document.getElementById('popupDescricaoAnt').textContent = conta.descricao;
+    document.getElementById('popupProxVencAnt').textContent  = `Antecipando para: ${formatarDataBR(proximoVenc)}`;
+    document.getElementById('popupValorAnt').textContent     = `Valor: ${formatBRL(conta.valor)}`;
+    document.getElementById('novoValorAnt').value            = conta.valor;
+
+    document.getElementById('cancelarAnt').onclick = () => fecharPopup();
+
+    document.getElementById('simValorAnt').onclick = () => {
+        anteciparContaFixa(id, conta.valor);
+        fecharPopup();
+    };
+
+    document.getElementById('naoValorAnt').onclick = () => {
+        document.getElementById('ajusteValorAnt').style.display = 'block';
+        document.getElementById('simValorAnt').disabled = true;
+        document.getElementById('naoValorAnt').disabled = true;
+
+        document.getElementById('confirmNovoValorAnt').onclick = () => {
+            const valStr    = document.getElementById('novoValorAnt').value;
+            const novoValor = parseFloat(valStr);
+            if (!valStr || isNaN(novoValor) || novoValor <= 0 || novoValor > 9999999) {
+                return alert('Digite um valor válido!');
+            }
+            const valorFinal = parseFloat(novoValor.toFixed(2));
+            if (confirm(`Confirma a antecipação de ${formatBRL(valorFinal)}?`)) {
+                anteciparContaFixa(id, valorFinal);
+                fecharPopup();
+            }
+        };
+    };
+}
+
+function anteciparContaFixa(id, valorPago) {
+    const conta = contasFixas.find(c => c.id === id);
+    if (!conta) return;
+
+    if (conta._processando) {
+        alert('Aguarde, pagamento em andamento...');
+        return;
+    }
+    conta._processando = true;
+
+    const valorSeguro = parseFloat(valorPago);
+    if (!isFinite(valorSeguro) || valorSeguro <= 0 || valorSeguro > 9_999_999) {
+        alert('Valor de pagamento inválido.');
+        conta._processando = false;
+        return;
+    }
+
+    let snapshotTransacoes  = [];
+    let snapshotContasFixas = [];
+
+    try {
+        snapshotTransacoes  = structuredClone(transacoes);
+        snapshotContasFixas = structuredClone(contasFixas);
+
+        const dh = agoraDataHora();
+        const descricaoSegura = String(conta.descricao || '').slice(0, 100);
+
+        transacoes.push({
+            categoria:   'saida',
+            tipo:        'Conta Fixa',
+            descricao:   `${descricaoSegura} (antecipação)`,
+            valor:       parseFloat(valorSeguro.toFixed(2)),
+            data:        dh.data,
+            hora:        dh.hora,
+            contaFixaId: id
+        });
+        if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.cf = null; }
+
+        conta.vencimento    = _avancarMes(conta.vencimento);
+        conta.pago          = true;
+        conta.dataPagamento = new Date().toISOString().slice(0, 10);
+
+        salvarDados();
+        atualizarTudo();
+        conta._processando = false;
+        alert(`✅ Antecipação registrada! Próximo vencimento: ${formatarDataBR(conta.vencimento)}`);
+
+    } catch (erro) {
+        console.error('❌ Erro na antecipação, revertendo:', erro);
+        rollbackArray(transacoes,  snapshotTransacoes);
+        rollbackArray(contasFixas, snapshotContasFixas);
+        conta._processando = false;
+        alert('❌ Erro ao processar antecipação. Nenhuma alteração foi salva.');
+    }
 }
 
 // ✅ Rollback seguro: limpa e repopula sem substituir a referência do array

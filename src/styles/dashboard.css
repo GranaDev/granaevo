@@ -1596,6 +1596,23 @@ body::before {
 .conta-btn:hover::before { opacity: 1; }
 .conta-btn:active { transform: scale(0.96); }
 
+.conta-btn-antecipar {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.05));
+    border-color: rgba(251, 191, 36, 0.35);
+    color: #fbbf24;
+}
+
+.conta-btn-antecipar::before {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.25), rgba(251, 191, 36, 0.08));
+}
+
+.conta-btn-antecipar:hover {
+    box-shadow:
+        0 4px 18px rgba(251, 191, 36, 0.4),
+        0 0 24px rgba(251, 191, 36, 0.15);
+    border-color: rgba(251, 191, 36, 0.6);
+}
+
 .empty-state {
     grid-column: 1 / -1;
     text-align: center;
