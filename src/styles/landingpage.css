@@ -1249,6 +1249,32 @@ button {
 
 .pui-nav-on { color: #10b981; }
 
+.pui-nav-img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    opacity: 0.3;
+    filter: grayscale(1);
+}
+
+.pui-nav-on .pui-nav-img {
+    opacity: 1;
+    filter: none;
+}
+
+/* Bill status badge */
+.pui-bill-badge {
+    font-size: 8px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 5px;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+}
+
+.pui-badge-pago    { background: rgba(16,185,129,0.15); color: #10b981; }
+.pui-badge-pendente{ background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.45); }
+
 /* ── Glows ────────────────────────────────── */
 .phone-3d-glow {
     position: absolute;
