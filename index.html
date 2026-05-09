@@ -1,52 +1,52 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
-    <meta name="description" content="Controle suas finanÃ§as com inteligÃªncia. O GranaEvo Ã© o app que transforma sua relaÃ§Ã£o com o dinheiro.">
+    <meta name="description" content="Controle suas finanças com inteligência. O GranaEvo é o app que transforma sua relação com o dinheiro.">
     <meta name="theme-color" content="#10b981">
 
     <!--
         ============================================================
-        SECURITY HEADERS (meta equivalents â€” camada extra de defesa)
+        SECURITY HEADERS (meta equivalents — camada extra de defesa)
 
-        LIMITAÃ‡Ã•ES IMPORTANTES:
-        â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        [A] frame-ancestors 'none'  â†’ IGNORADO via <meta>. REMOVIDO.
+        LIMITAÇÕES IMPORTANTES:
+        ─────────────────────────────────────────────────────────────
+        [A] frame-ancestors 'none'  → IGNORADO via <meta>. REMOVIDO.
             Protegido via HTTP header no vercel.json:
             "Content-Security-Policy: frame-ancestors 'none'"
 
-        [B] X-Frame-Options via <meta> â†’ IGNORADO por todos os browsers
+        [B] X-Frame-Options via <meta> → IGNORADO por todos os browsers
             modernos. REMOVIDO. Protegido via HTTP header no vercel.json:
             "X-Frame-Options: DENY"
 
-        [C] A CSP real e completa estÃ¡ no vercel.json (HTTP header).
-            Este <meta> Ã© apenas defesa em profundidade â€” o browser
-            aplica a polÃ­tica MAIS restritiva entre header e meta.
+        [C] A CSP real e completa está no vercel.json (HTTP header).
+            Este <meta> é apenas defesa em profundidade — o browser
+            aplica a política MAIS restritiva entre header e meta.
             Por isso ambos devem ser consistentes.
 
         SOBRE O CLOUDFLARE BEACON:
-        â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        ─────────────────────────────────────────────────────────────
         O Cloudflare injeta beacon.min.js automaticamente via proxy.
-        Por isso static.cloudflareinsights.com estÃ¡ liberado no
+        Por isso static.cloudflareinsights.com está liberado no
         script-src e cloudflareinsights.com no connect-src,
         tanto aqui quanto no vercel.json.
 
         SOBRE O INLINE SCRIPT:
-        â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        O Cloudflare tambÃ©m injeta um inline script ao fazer proxy.
+        ─────────────────────────────────────────────────────────────
+        O Cloudflare também injeta um inline script ao fazer proxy.
         O hash sha256 abaixo corresponde exatamente a esse script.
-        Se o hash mudar (apÃ³s atualizaÃ§Ã£o do Cloudflare), o novo hash
-        aparecerÃ¡ na mensagem de erro do console â€” basta substituir
+        Se o hash mudar (após atualização do Cloudflare), o novo hash
+        aparecerá na mensagem de erro do console — basta substituir
         aqui e no vercel.json.
         Hash atual: sha256-GL6A4jS7qMll1kMeDRcLJpoLrZk+ljJKJwKhAdGmTs8=
         ============================================================
     -->
 
     <!--
-        META CSP: camada extra de defesa (nÃ£o substitui o HTTP header).
-        A CSP real e completa estÃ¡ no vercel.json.
+        META CSP: camada extra de defesa (não substitui o HTTP header).
+        A CSP real e completa está no vercel.json.
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
@@ -65,8 +65,8 @@
 
     <!--
         TRUSTED TYPES: bloqueia DOM XSS via innerHTML, document.write, etc.
-        Se vocÃª usar bibliotecas de terceiros que usam innerHTML,
-        serÃ¡ necessÃ¡rio criar uma policy explÃ­cita com createPolicy().
+        Se você usar bibliotecas de terceiros que usam innerHTML,
+        será necessário criar uma policy explícita com createPolicy().
     -->
 
     <!-- Anti-MIME-Sniffing -->
@@ -76,9 +76,9 @@
     <meta name="referrer" content="strict-origin-when-cross-origin">
 
     <!--
-        Permissions Policy â€” desabilita APIs sensÃ­veis nÃ£o utilizadas.
-        X-Frame-Options e frame-ancestors foram REMOVIDOS daqui â€”
-        sÃ³ funcionam via HTTP header (vercel.json jÃ¡ os aplica).
+        Permissions Policy — desabilita APIs sensíveis não utilizadas.
+        X-Frame-Options e frame-ancestors foram REMOVIDOS daqui —
+        só funcionam via HTTP header (vercel.json já os aplica).
     -->
     <meta http-equiv="Permissions-Policy" content="
         camera=(),
@@ -93,18 +93,18 @@
     ">
 
     <!--
-        X-Frame-Options via <meta> NÃƒO Ã© suportado por nenhum browser
-        moderno â€” gera aviso no console e Ã© ignorado. REMOVIDO.
-        ProteÃ§Ã£o real: HTTP header "X-Frame-Options: DENY" no vercel.json.
+        X-Frame-Options via <meta> NÃO é suportado por nenhum browser
+        moderno — gera aviso no console e é ignorado. REMOVIDO.
+        Proteção real: HTTP header "X-Frame-Options: DENY" no vercel.json.
     -->
 
-    <title>GranaEvo - Domine Suas FinanÃ§as Com InteligÃªncia</title>
+    <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
 
     <!--
         Google Fonts: preconnect com crossorigin correto.
-        NOTA: SRI (integrity) nÃ£o Ã© viÃ¡vel para a CSS do Google Fonts
-        porque o conteÃºdo Ã© gerado dinamicamente por user-agent.
-        Para mÃ¡xima seguranÃ§a, baixe e sirva as fontes localmente.
+        NOTA: SRI (integrity) não é viável para a CSS do Google Fonts
+        porque o conteúdo é gerado dinamicamente por user-agent.
+        Para máxima segurança, baixe e sirva as fontes localmente.
     -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
@@ -123,13 +123,13 @@
 <body>
 
     <!-- Loading Screen com Logo -->
-    <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando pÃ¡gina">
+    <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando página">
         <div class="loader">
             <div class="loader-logo">
                 <!--
                     crossorigin="anonymous": evita leaks via canvas fingerprinting.
                     Requer que o servidor envie CORS headers para a imagem.
-                    Se a imagem for local (same-origin), funciona sem configuraÃ§Ã£o extra.
+                    Se a imagem for local (same-origin), funciona sem configuração extra.
                 -->
                 <img
                     src="/assets/icons/granaevo-logo.jpg"
@@ -157,7 +157,7 @@
         aria-valuemax="100"
     ></div>
 
-    <!-- Animated Background (puramente decorativo â€” aria-hidden) -->
+    <!-- Animated Background (puramente decorativo — aria-hidden) -->
     <div class="animated-bg" aria-hidden="true">
         <div class="grid-overlay"></div>
         <canvas id="particlesCanvas"></canvas>
@@ -168,8 +168,8 @@
 
     <!-- Header -->
     <header class="header" id="header">
-        <nav class="nav-container" role="navigation" aria-label="NavegaÃ§Ã£o principal">
-            <a href="#" class="logo" aria-label="GranaEvo â€” pÃ¡gina inicial">
+        <nav class="nav-container" role="navigation" aria-label="Navegação principal">
+            <a href="#" class="logo" aria-label="GranaEvo — página inicial">
                 <img
                     src="/assets/icons/granaevo-logo.jpg"
                     alt="GranaEvo"
@@ -184,21 +184,21 @@
                 <a href="#recursos" class="nav-link" role="menuitem">Recursos</a>
                 <a href="#como-funciona" class="nav-link" role="menuitem">Como Funciona</a>
                 <!--
-                    Links internos: rel="noopener noreferrer" nÃ£o Ã© necessÃ¡rio aqui pois
-                    nÃ£o usam target="_blank". Aplicado apenas em links externos abertos
+                    Links internos: rel="noopener noreferrer" não é necessário aqui pois
+                    não usam target="_blank". Aplicado apenas em links externos abertos
                     em nova aba para prevenir tabnabbing attack.
                     REGRA: qualquer link com target="_blank" DEVE ter:
                     rel="noopener noreferrer"
                 -->
                 <a href="#faq" class="nav-link" role="menuitem">FAQ</a>
                 <a href="login.html" class="nav-link" role="menuitem">Login</a>
-                <a href="planos.html" class="btn-nav" role="menuitem">ComeÃ§ar Agora</a>
+                <a href="planos.html" class="btn-nav" role="menuitem">Começar Agora</a>
             </div>
 
             <button
                 class="mobile-toggle"
                 id="mobileToggle"
-                aria-label="Abrir menu de navegaÃ§Ã£o"
+                aria-label="Abrir menu de navegação"
                 aria-expanded="false"
                 aria-controls="navLinks"
                 type="button"
@@ -216,9 +216,9 @@
             href="planos.html"
             class="btn-float"
             tabindex="-1"
-            aria-label="ComeÃ§ar Agora â€” acesso rÃ¡pido"
+            aria-label="Começar Agora — acesso rápido"
         >
-            <span>ComeÃ§ar Agora</span>
+            <span>Começar Agora</span>
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
@@ -238,18 +238,18 @@
                     </div>
 
                     <h1 class="hero-title" id="hero-title">
-                        Domine Suas FinanÃ§as<br>
-                        <span class="gradient-text">Com InteligÃªncia</span>
+                        Domine Suas Finanças<br>
+                        <span class="gradient-text">Com Inteligência</span>
                     </h1>
 
                     <p class="hero-description">
-                        Controle total de gastos, metas inteligentes e anÃ¡lises em tempo real.
-                        Transforme seus hÃ¡bitos financeiros em 30 dias.
+                        Controle total de gastos, metas inteligentes e análises em tempo real.
+                        Transforme seus hábitos financeiros em 30 dias.
                     </p>
 
                     <div class="hero-buttons">
                         <a href="planos.html" class="btn-primary">
-                            <span>ComeÃ§ar AGORA!</span>
+                            <span>Começar AGORA!</span>
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                                 <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
@@ -263,109 +263,133 @@
                         </a>
                     </div>
 
-                    <div class="hero-stats" aria-label="EstatÃ­sticas do GranaEvo">
-                        <div class="stat-item">
-                            <div class="stat-value" data-count="4.9" aria-label="AvaliaÃ§Ã£o 4.9 estrelas">0</div>
-                            <div class="stat-label">AvaliaÃ§Ã£o â˜…</div>
-                        </div>
-                        <div class="stat-divider" aria-hidden="true"></div>
-                        <div class="stat-item">
-                            <div class="stat-value" data-count="10000" aria-label="10 mil usuÃ¡rios ativos">0</div>
-                            <div class="stat-label">UsuÃ¡rios Ativos</div>
-                        </div>
-                        <div class="stat-divider" aria-hidden="true"></div>
-                        <div class="stat-item">
-                            <div class="stat-value" data-count="120" aria-label="120 milhÃµes economizados">0</div>
-                            <div class="stat-label">MilhÃµes Economizados</div>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="hero-visual" data-parallax="0.05" aria-hidden="true">
                     <div class="phone-3d-wrapper" id="phone3DWrapper">
+
+                        <!-- Phone body -->
                         <div class="phone-3d-device" id="phone3DDevice">
 
-                            <!-- Side buttons -->
+                            <!-- Physical side buttons -->
                             <div class="pbtn pbtn-vol-up"></div>
                             <div class="pbtn pbtn-vol-down"></div>
                             <div class="pbtn pbtn-power"></div>
 
-                            <!-- Phone glass front -->
+                            <!-- Glass screen + frame -->
                             <div class="phone-glass">
+                                <!-- Dynamic Island -->
                                 <div class="phone-pill"></div>
+
+                                <!-- App UI -->
                                 <div class="pui">
+                                    <!-- Status bar -->
                                     <div class="pui-bar">
                                         <span>9:41</span>
                                         <div class="pui-bar-icons">
-                                            <svg width="14" height="10" viewBox="0 0 14 10" fill="white"><rect x="0" y="5.5" width="2.5" height="4.5" rx=".8" opacity=".4"/><rect x="3.5" y="3" width="2.5" height="7" rx=".8" opacity=".65"/><rect x="7" y="1" width="2.5" height="9" rx=".8" opacity=".85"/><rect x="10.5" y="0" width="2.5" height="10" rx=".8"/></svg>
-                                            <svg width="16" height="12" viewBox="0 0 16 12" fill="white"><path d="M8 2.5C5.5 2.5 3.2 3.5 1.5 5.2l1.5 1.5C4.2 5.5 6 4.7 8 4.7s3.8.8 5 2l1.5-1.5C12.8 3.5 10.5 2.5 8 2.5z" opacity=".4"/><path d="M8 6c-1.4 0-2.7.6-3.6 1.5l1.5 1.5c.5-.5 1.3-.8 2.1-.8s1.6.3 2.1.8l1.5-1.5C10.7 6.6 9.4 6 8 6z" opacity=".75"/><circle cx="8" cy="11" r="1.3"/></svg>
-                                            <svg width="26" height="13" viewBox="0 0 26 13" fill="none"><rect x=".5" y=".5" width="21" height="12" rx="3" stroke="white" stroke-opacity=".35"/><rect x="2" y="2" width="16" height="9" rx="1.8" fill="white"/><path d="M23 4.5v4a2.5 2.5 0 000-4z" fill="white" opacity=".4"/></svg>
+                                            <svg width="13" height="10" viewBox="0 0 13 10" fill="currentColor"><rect x="0" y="5" width="2" height="5" rx="1" opacity="0.4"/><rect x="3.5" y="3" width="2" height="7" rx="1" opacity="0.65"/><rect x="7" y="1" width="2" height="9" rx="1" opacity="0.85"/><rect x="10.5" y="0" width="2" height="10" rx="1"/></svg>
+                                            <svg width="13" height="10" viewBox="0 0 13 10" fill="currentColor"><path d="M6.5 2C4.3 2 2.3 2.9.8 4.4l1.2 1.2C3.1 4.5 4.7 3.8 6.5 3.8S9.9 4.5 11 5.6l1.2-1.2C10.7 2.9 8.7 2 6.5 2z" opacity="0.5"/><path d="M6.5 5.5C5.4 5.5 4.4 6 3.7 6.7l1.2 1.2c.4-.4 1-.6 1.6-.6s1.2.2 1.6.6l1.2-1.2C8.6 6 7.6 5.5 6.5 5.5z"/><circle cx="6.5" cy="9.5" r="1"/></svg>
+                                            <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".5" y=".5" width="18" height="10" rx="2.5" stroke="currentColor" stroke-opacity="0.35"/><rect x="2" y="2" width="13" height="7" rx="1.5" fill="currentColor"/><path d="M20 3.5v4a2 2 0 000-4z" fill="currentColor" opacity="0.4"/></svg>
                                         </div>
                                     </div>
+
+                                    <!-- Header -->
                                     <div class="pui-head">
-                                        <div class="pui-av">L</div>
-                                        <span class="pui-brand">GranaEvo</span>
+                                        <div class="pui-av">G</div>
+                                        <div class="pui-brand">GranaEvo</div>
                                         <div class="pui-head-actions">
-                                            <div class="pui-ic"><svg viewBox="0 0 18 18" fill="none" width="13" height="13"><path d="M9 1.5A5 5 0 004 6.5c0 3.5-1.5 4.5-1.5 4.5h13S14 10 14 6.5A5 5 0 009 1.5z" stroke="white" stroke-width="1.4"/><path d="M10.5 14.5a1.8 1.8 0 01-3 0" stroke="white" stroke-width="1.4" stroke-linecap="round"/></svg></div>
-                                            <div class="pui-ic"><svg viewBox="0 0 18 18" fill="none" width="13" height="13"><circle cx="9" cy="6.5" r="2.8" stroke="white" stroke-width="1.4"/><path d="M3 16c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5" stroke="white" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+                                            <div class="pui-ic">
+                                                <svg viewBox="0 0 20 20" fill="none" width="13" height="13"><path d="M10 2a6 6 0 00-6 6c0 4-2 5-2 5h16s-2-1-2-5a6 6 0 00-6-6z" stroke="currentColor" stroke-width="1.5"/><path d="M11.7 16a2 2 0 01-3.4 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    <!-- Balance -->
                                     <div class="pui-balance">
-                                        <div class="pui-bal-lbl">Saldo disponivel</div>
-                                        <div class="pui-bal-val">R$&nbsp;3.847<span class="pui-bal-dec">,20</span></div>
-                                        <div class="pui-bal-trend">
-                                            <svg viewBox="0 0 12 12" width="10" height="10" fill="none"><path d="M6 10V2M6 2L2 6M6 2l4 4" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>
-                                            <span>+8,4% este mes</span>
-                                        </div>
+                                        <div class="pui-bal-lbl">Saldo disponível</div>
+                                        <div class="pui-bal-val">R$ 3.847<span class="pui-bal-dec">,20</span></div>
                                     </div>
+
+                                    <!-- 3 stat pills -->
                                     <div class="pui-pills">
                                         <div class="pui-pill pui-pill-g">
-                                            <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 11V3M7 3L3.5 6.5M7 3l3.5 3.5" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg></div>
-                                            <div class="pui-pill-txt"><span class="pui-pill-lbl">Entradas</span><span class="pui-pill-val">R$ 5.200</span></div>
+                                            <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 11V3M7 3L3.5 6.5M7 3L10.5 6.5" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+                                            <div class="pui-pill-txt">
+                                                <span class="pui-pill-lbl">Entradas</span>
+                                                <span class="pui-pill-val">R$&nbsp;8.300</span>
+                                            </div>
                                         </div>
                                         <div class="pui-pill pui-pill-r">
-                                            <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 3v8M7 11L3.5 7.5M7 11l3.5-3.5" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round"/></svg></div>
-                                            <div class="pui-pill-txt"><span class="pui-pill-lbl">Saidas</span><span class="pui-pill-val">R$ 1.352</span></div>
+                                            <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 3v8M7 11L3.5 7.5M7 11L10.5 7.5" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+                                            <div class="pui-pill-txt">
+                                                <span class="pui-pill-lbl">Saídas</span>
+                                                <span class="pui-pill-val">R$&nbsp;3.450</span>
+                                            </div>
                                         </div>
                                         <div class="pui-pill pui-pill-y">
-                                            <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M2 11h10M7 3v6M4.5 6L7 3l2.5 3" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-                                            <div class="pui-pill-txt"><span class="pui-pill-lbl">Reservas</span><span class="pui-pill-val">R$ 820</span></div>
+                                            <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M2 11h10M7 3v6M4.5 5.5L7 3l2.5 2.5" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                                            <div class="pui-pill-txt">
+                                                <span class="pui-pill-lbl">Reservas</span>
+                                                <span class="pui-pill-val">R$&nbsp;3.500</span>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    <!-- Contas Fixas -->
                                     <div class="pui-bills">
                                         <div class="pui-bills-hdr">
-                                            <svg viewBox="0 0 14 14" fill="none" width="11" height="11"><rect x="2" y="6" width="10" height="7" rx="1.5" stroke="#10b981" stroke-width="1.4"/><path d="M4 6V4.5a3 3 0 016 0V6" stroke="#10b981" stroke-width="1.4" stroke-linecap="round"/></svg>
-                                            <span>Contas Fixas</span>
+                                            <svg viewBox="0 0 14 14" fill="none" width="11" height="11"><rect x="2" y="6" width="10" height="7" rx="1.5" stroke="#10b981" stroke-width="1.4"/><path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="#10b981" stroke-width="1.4" stroke-linecap="round"/></svg>
+                                            Contas Fixas
                                         </div>
                                         <div class="pui-bill">
                                             <div class="pui-bill-av" style="background:#e50914">N</div>
-                                            <div class="pui-bill-info"><span>Netflix</span><span class="pui-bill-sub">streaming . pago</span></div>
-                                            <span class="pui-bill-amt pui-paid">R$ 39,90</span>
+                                            <div class="pui-bill-info">
+                                                <span>Netflix</span>
+                                                <span class="pui-bill-sub">mensal</span>
+                                            </div>
+                                            <span class="pui-bill-amt pui-pending">R$&nbsp;39,50</span>
                                         </div>
                                         <div class="pui-bill">
-                                            <div class="pui-bill-av" style="background:#1565c0">A</div>
-                                            <div class="pui-bill-info"><span>Academia</span><span class="pui-bill-sub">saude . pago</span></div>
-                                            <span class="pui-bill-amt pui-paid">R$ 79,90</span>
+                                            <div class="pui-bill-av" style="background:#3b82f6">A</div>
+                                            <div class="pui-bill-info">
+                                                <span>Academia</span>
+                                                <span class="pui-bill-sub">mensal</span>
+                                            </div>
+                                            <span class="pui-bill-amt pui-paid">R$&nbsp;83,30</span>
                                         </div>
                                         <div class="pui-bill">
-                                            <div class="pui-bill-av" style="background:#00695c">I</div>
-                                            <div class="pui-bill-info"><span>Internet</span><span class="pui-bill-sub">venc. 15/06</span></div>
-                                            <span class="pui-bill-amt pui-pending">R$ 109,90</span>
+                                            <div class="pui-bill-av" style="background:#10b981">I</div>
+                                            <div class="pui-bill-info">
+                                                <span>Internet</span>
+                                                <span class="pui-bill-sub">mensal</span>
+                                            </div>
+                                            <span class="pui-bill-amt pui-paid">R$&nbsp;129,90</span>
                                         </div>
                                     </div>
+
+                                    <!-- Bottom nav -->
                                     <div class="pui-nav">
                                         <div class="pui-nav-it pui-nav-on">
-                                            <svg viewBox="0 0 20 20" fill="currentColor" width="17" height="17"><path d="M10 2.5L2.5 9v9h5V13h5v5h5V9L10 2.5z"/></svg>
-                                            <span>Home</span>
+                                            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 2L2 9h2v9h5v-5h2v5h5V9h2L10 2z"/></svg>
                                         </div>
-                                        <div class="pui-nav-it"><svg viewBox="0 0 20 20" fill="none" width="17" height="17"><path d="M5 16V8M10 16V4M15 16v-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
-                                        <div class="pui-nav-it"><svg viewBox="0 0 20 20" fill="none" width="17" height="17"><circle cx="10" cy="10" r="3.5" stroke="currentColor" stroke-width="1.6"/><path d="M10 1v2.5M10 16.5V19M1 10h2.5M16.5 10H19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
-                                        <div class="pui-nav-it"><svg viewBox="0 0 20 20" fill="none" width="17" height="17"><path d="M3 3v14h14M6 14l3-4 3 3 4-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-                                        <div class="pui-nav-it"><svg viewBox="0 0 20 20" fill="none" width="17" height="17"><circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+                                        <div class="pui-nav-it">
+                                            <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><rect x="3" y="3" width="6" height="14" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="8" width="6" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>
+                                        </div>
+                                        <div class="pui-nav-it">
+                                            <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M10 3V1M10 19v-2M3 10H1M19 10h-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                        </div>
+                                        <div class="pui-nav-it">
+                                            <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M3 17V9l7-6 7 6v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><rect x="7" y="12" width="6" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
+                                        </div>
+                                        <div class="pui-nav-it">
+                                            <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Glow effects -->
                         <div class="phone-glow-ring" aria-hidden="true"></div>
                         <div class="phone-3d-glow" aria-hidden="true"></div>
                     </div>
@@ -381,8 +405,8 @@
         <div class="container">
             <div class="section-header">
                 <span class="section-badge">O Problema</span>
-                <h2 class="section-title" id="problem-title">VocÃª estÃ¡ cansado disso?</h2>
-                <p class="section-subtitle">Esses sÃ£o os desafios que impedem vocÃª de ter controle financeiro</p>
+                <h2 class="section-title" id="problem-title">Você está cansado disso?</h2>
+                <p class="section-subtitle">Esses são os desafios que impedem você de ter controle financeiro</p>
             </div>
 
             <div class="problem-grid">
@@ -394,7 +418,7 @@
                         </svg>
                     </div>
                     <h3>Dinheiro Desaparece</h3>
-                    <p>VocÃª recebe o salÃ¡rio mas nÃ£o sabe para onde ele foi atÃ© o fim do mÃªs</p>
+                    <p>Você recebe o salário mas não sabe para onde ele foi até o fim do mês</p>
                 </div>
 
                 <div class="problem-card" data-tilt>
@@ -406,7 +430,7 @@
                         </svg>
                     </div>
                     <h3>Fatura Surpresa</h3>
-                    <p>O cartÃ£o sempre vem maior do que vocÃª esperava e vocÃª nÃ£o sabe o porquÃª</p>
+                    <p>O cartão sempre vem maior do que você esperava e você não sabe o porquê</p>
                 </div>
 
                 <div class="problem-card" data-tilt>
@@ -417,8 +441,8 @@
                             <circle cx="12" cy="16" r="1" fill="currentColor"/>
                         </svg>
                     </div>
-                    <h3>Metas ImpossÃ­veis</h3>
-                    <p>Quer economizar mas nunca sobra dinheiro no final do mÃªs</p>
+                    <h3>Metas Impossíveis</h3>
+                    <p>Quer economizar mas nunca sobra dinheiro no final do mês</p>
                 </div>
 
                 <div class="problem-card" data-tilt>
@@ -428,8 +452,8 @@
                             <path d="M7 14L10 10L14 14L20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </div>
-                    <h3>Sem VisÃ£o</h3>
-                    <p>NÃ£o tem ideia de quanto gasta em cada categoria ou onde cortar custos</p>
+                    <h3>Sem Visão</h3>
+                    <p>Não tem ideia de quanto gasta em cada categoria ou onde cortar custos</p>
                 </div>
             </div>
 
@@ -440,8 +464,8 @@
                     </svg>
                 </div>
                 <div class="solution-content">
-                    <h3>O problema nÃ£o Ã© o quanto vocÃª ganha</h3>
-                    <p>Ã‰ como vocÃª controla. O GranaEvo te dÃ¡ visÃ£o total e controle inteligente de cada centavo.</p>
+                    <h3>O problema não é o quanto você ganha</h3>
+                    <p>É como você controla. O GranaEvo te dá visão total e controle inteligente de cada centavo.</p>
                 </div>
             </div>
         </div>
@@ -454,7 +478,7 @@
         <div class="container">
             <div class="section-header">
                 <span class="section-badge">Recursos</span>
-                <h2 class="section-title" id="features-title">Tudo que vocÃª precisa</h2>
+                <h2 class="section-title" id="features-title">Tudo que você precisa</h2>
                 <p class="section-subtitle">Ferramentas poderosas para organizar sua vida financeira</p>
             </div>
 
@@ -467,7 +491,7 @@
                         </svg>
                     </div>
                     <h3>Dashboard Completo</h3>
-                    <p>Visualize todas suas finanÃ§as de forma clara. Entradas, saÃ­das, saldo e reservas em tempo real.</p>
+                    <p>Visualize todas suas finanças de forma clara. Entradas, saídas, saldo e reservas em tempo real.</p>
                 </div>
 
                 <div class="feature-card" data-tilt>
@@ -478,8 +502,8 @@
                             <path d="M7 3V8M17 3V8" stroke="currentColor" stroke-width="2"/>
                         </svg>
                     </div>
-                    <h3>Controle de CartÃµes</h3>
-                    <p>Nunca mais seja pego de surpresa. Acompanhe todos os gastos e parcelas do seu cartÃ£o.</p>
+                    <h3>Controle de Cartões</h3>
+                    <p>Nunca mais seja pego de surpresa. Acompanhe todos os gastos e parcelas do seu cartão.</p>
                 </div>
 
                 <div class="feature-card" data-tilt>
@@ -490,7 +514,7 @@
                         </svg>
                     </div>
                     <h3>Metas e Reservas</h3>
-                    <p>Crie objetivos financeiros e acompanhe seu progresso com grÃ¡ficos intuitivos.</p>
+                    <p>Crie objetivos financeiros e acompanhe seu progresso com gráficos intuitivos.</p>
                 </div>
 
                 <div class="feature-card" data-tilt>
@@ -501,8 +525,8 @@
                             <path d="M13 7H20M5 16H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </div>
-                    <h3>MÃºltiplos Perfis</h3>
-                    <p>Perfeito para casais e famÃ­lias. Cada um com seu controle individual ou compartilhado.</p>
+                    <h3>Múltiplos Perfis</h3>
+                    <p>Perfeito para casais e famílias. Cada um com seu controle individual ou compartilhado.</p>
                 </div>
 
                 <div class="feature-card" data-tilt>
@@ -513,7 +537,7 @@
                         </svg>
                     </div>
                     <h3>100% Seguro</h3>
-                    <p>Seus dados sÃ£o criptografados e nunca compartilhados com terceiros.</p>
+                    <p>Seus dados são criptografados e nunca compartilhados com terceiros.</p>
                 </div>
 
                 <div class="feature-card" data-tilt>
@@ -522,8 +546,8 @@
                             <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </div>
-                    <h3>AutomaÃ§Ã£o Completa</h3>
-                    <p>Configure contas fixas e deixe o sistema trabalhar para vocÃª.</p>
+                    <h3>Automação Completa</h3>
+                    <p>Configure contas fixas e deixe o sistema trabalhar para você.</p>
                 </div>
             </div>
         </div>
@@ -545,15 +569,15 @@
                     <div class="timeline-dot" aria-hidden="true">1</div>
                     <div class="timeline-content">
                         <h3>Selecione um Plano</h3>
-                        <p>Escolha o plano ideal para vocÃª. Em poucos minutos, o acesso Ã© liberado!</p>
+                        <p>Escolha o plano ideal para você. Em poucos minutos, o acesso é liberado!</p>
                     </div>
                 </div>
 
                 <div class="timeline-item" role="listitem">
                     <div class="timeline-dot" aria-hidden="true">2</div>
                     <div class="timeline-content">
-                        <h3>Registre TransaÃ§Ãµes</h3>
-                        <p>Adicione suas entradas e saÃ­das de forma simples e rÃ¡pida.</p>
+                        <h3>Registre Transações</h3>
+                        <p>Adicione suas entradas e saídas de forma simples e rápida.</p>
                     </div>
                 </div>
 
@@ -561,7 +585,7 @@
                     <div class="timeline-dot" aria-hidden="true">3</div>
                     <div class="timeline-content">
                         <h3>Acompanhe e Evolua</h3>
-                        <p>Veja relatÃ³rios, estabeleÃ§a metas e tome decisÃµes inteligentes.</p>
+                        <p>Veja relatórios, estabeleça metas e tome decisões inteligentes.</p>
                     </div>
                 </div>
             </div>
@@ -575,8 +599,8 @@
         <div class="container">
             <div class="section-header">
                 <span class="section-badge">FAQ</span>
-                <h2 class="section-title" id="faq-lp-title">DÃºvidas Frequentes</h2>
-                <p class="section-subtitle">Tudo que vocÃª precisa saber antes de comeÃ§ar</p>
+                <h2 class="section-title" id="faq-lp-title">Dúvidas Frequentes</h2>
+                <p class="section-subtitle">Tudo que você precisa saber antes de começar</p>
             </div>
 
             <div class="faq-lp-grid" role="list">
@@ -588,7 +612,7 @@
                         </svg>
                     </button>
                     <div class="faq-lp-answer">
-                        <p>Sim! O GranaEvo Ã© 100% responsivo e funciona perfeitamente em celulares, tablets e computadores â€” sem precisar instalar nada.</p>
+                        <p>Sim! O GranaEvo é 100% responsivo e funciona perfeitamente em celulares, tablets e computadores — sem precisar instalar nada.</p>
                     </div>
                 </div>
 
@@ -600,43 +624,43 @@
                         </svg>
                     </button>
                     <div class="faq-lp-answer">
-                        <p>A cobranÃ§a Ã© mensal e automÃ¡tica. VocÃª pode cancelar a qualquer momento pelo painel, sem multa nem burocracia. O acesso continua atÃ© o fim do perÃ­odo pago.</p>
+                        <p>A cobrança é mensal e automática. Você pode cancelar a qualquer momento pelo painel, sem multa nem burocracia. O acesso continua até o fim do período pago.</p>
                     </div>
                 </div>
 
                 <div class="faq-lp-item" role="listitem">
                     <button class="faq-lp-question" aria-expanded="false" type="button">
-                        <span>Meus dados financeiros estÃ£o seguros?</span>
+                        <span>Meus dados financeiros estão seguros?</span>
                         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </button>
                     <div class="faq-lp-answer">
-                        <p>Absolutamente. Usamos criptografia AES-256, autenticaÃ§Ã£o segura e nunca compartilhamos seus dados com terceiros. Conformidade total com a LGPD.</p>
+                        <p>Absolutamente. Usamos criptografia AES-256, autenticação segura e nunca compartilhamos seus dados com terceiros. Conformidade total com a LGPD.</p>
                     </div>
                 </div>
 
                 <div class="faq-lp-item" role="listitem">
                     <button class="faq-lp-question" aria-expanded="false" type="button">
-                        <span>Posso usar com meu cÃ´njuge ou famÃ­lia?</span>
+                        <span>Posso usar com meu cônjuge ou família?</span>
                         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </button>
                     <div class="faq-lp-answer">
-                        <p>Sim! Temos planos Casal (2 perfis) e FamÃ­lia (4 perfis). Cada membro tem seu controle individual, com visÃ£o compartilhada das finanÃ§as da casa.</p>
+                        <p>Sim! Temos planos Casal (2 perfis) e Família (4 perfis). Cada membro tem seu controle individual, com visão compartilhada das finanças da casa.</p>
                     </div>
                 </div>
 
                 <div class="faq-lp-item" role="listitem">
                     <button class="faq-lp-question" aria-expanded="false" type="button">
-                        <span>HÃ¡ garantia de reembolso?</span>
+                        <span>Há garantia de reembolso?</span>
                         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </button>
                     <div class="faq-lp-answer">
-                        <p>Sim. Garantia de 7 dias em cada cobranÃ§a mensal. Se nÃ£o gostar por qualquer motivo, devolvemos 100% do valor â€” sem perguntas.</p>
+                        <p>Sim. Garantia de 7 dias em cada cobrança mensal. Se não gostar por qualquer motivo, devolvemos 100% do valor — sem perguntas.</p>
                     </div>
                 </div>
 
@@ -648,7 +672,7 @@
                         </svg>
                     </button>
                     <div class="faq-lp-answer">
-                        <p>Sim! VocÃª pode fazer upgrade do plano a qualquer momento, pagando apenas a diferenÃ§a. O downgrade entra em vigor no prÃ³ximo ciclo.</p>
+                        <p>Sim! Você pode fazer upgrade do plano a qualquer momento, pagando apenas a diferença. O downgrade entra em vigor no próximo ciclo.</p>
                     </div>
                 </div>
             </div>
@@ -662,15 +686,15 @@
         <div class="container">
             <div class="cta-box">
                 <div class="cta-content">
-                    <h2 id="cta-title">Pronto para transformar suas finanÃ§as?</h2>
-                    <p>Junte-se a milhares de pessoas que jÃ¡ organizaram sua vida financeira</p>
+                    <h2 id="cta-title">Pronto para transformar suas finanças?</h2>
+                    <p>Junte-se a milhares de pessoas que já organizaram sua vida financeira</p>
                     <a href="planos.html" class="btn-primary btn-large">
-                        <span>ComeÃ§ar Agora!!</span>
+                        <span>Começar Agora!!</span>
                         <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                             <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </a>
-                    <span class="cta-note">âœ“ Assine e cancele quando quiser Â· Garantia de 7 dias</span>
+                    <span class="cta-note">✓ Assine e cancele quando quiser · Garantia de 7 dias</span>
                 </div>
             </div>
         </div>
@@ -683,7 +707,7 @@
         <div class="container">
             <div class="footer-content">
                 <div class="footer-brand">
-                    <a href="#" class="logo" aria-label="GranaEvo â€” inÃ­cio">
+                    <a href="#" class="logo" aria-label="GranaEvo — início">
                         <img
                             src="/assets/icons/granaevo-logo.jpg"
                             alt="GranaEvo"
@@ -693,7 +717,7 @@
                         >
                         <span class="logo-text">GranaEvo</span>
                     </a>
-                    <p>Sua evoluÃ§Ã£o financeira comeÃ§a aqui</p>
+                    <p>Sua evolução financeira começa aqui</p>
                 </div>
 
                 <div class="footer-links">
@@ -728,10 +752,10 @@
 
     <!--
         type="module":
-        - Isola escopo (sem poluiÃ§Ã£o do window)
+        - Isola escopo (sem poluição do window)
         - Ativa strict mode automaticamente
-        - Defer implÃ­cito (nÃ£o bloqueia renderizaÃ§Ã£o)
-        - ConfiÃ¡vel via script-src 'self' no vercel.json
+        - Defer implícito (não bloqueia renderização)
+        - Confiável via script-src 'self' no vercel.json
     -->
     <script type="module" src="src/scripts/pages/script.js?v=2"></script>
 
