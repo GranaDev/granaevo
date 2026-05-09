@@ -2,10 +2,10 @@ User-agent: *
 Allow: /
 Allow: /planos
 Allow: /termos
+Allow: /privacidade
 
 # Rotas autenticadas — sem conteúdo indexável
 Disallow: /dashboard
-Disallow: /primeiroacesso
 Disallow: /convidados
 Disallow: /atualizarplano
 Disallow: /login

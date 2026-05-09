@@ -1065,6 +1065,21 @@ function initParallax() {
 }
 
 // ==========================================
+// SCROLL INICIAL — FEATURED CARD NO MOBILE
+// Garante que o card "Casal" (featured) fique
+// visível no centro ao carregar a página.
+// ==========================================
+function scrollToFeaturedCard() {
+    if (window.innerWidth >= 768) return;
+    const carousel = document.getElementById('plansCarousel');
+    const featured = document.querySelector('.plan-card.featured');
+    if (!carousel || !featured) return;
+    // Scroll suave até o card featured
+    const scrollLeft = featured.offsetLeft - (carousel.clientWidth - featured.offsetWidth) / 2;
+    carousel.scrollLeft = Math.max(0, scrollLeft);
+}
+
+// ==========================================
 // INITIALIZATION
 // ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1083,6 +1098,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setTimeout(() => {
         document.body.style.opacity = '1';
+        scrollToFeaturedCard();
     }, 100);
 });
 

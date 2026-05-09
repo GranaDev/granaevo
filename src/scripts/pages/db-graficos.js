@@ -47,10 +47,13 @@ function inicializarGraficos() {
 }
 
 function atualizarGraficos() {
-    if (typeof gerarGraficos === 'function') {
+    if (window.GraficosGranaEvo?.gerar) {
+        window.GraficosGranaEvo.gerar();
+    } else if (typeof gerarGraficos === 'function') {
+        // fallback para versões anteriores do graficos.js
         gerarGraficos();
     } else {
-        _ctx.mostrarNotificacao('Módulo de gráficos não carregado.', 'error');
+        _ctx.mostrarNotificacao('Módulo de gráficos não carregado. Atualize a página e tente novamente.', 'error');
     }
 }
 

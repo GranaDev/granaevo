@@ -484,6 +484,7 @@ function abrirAlterarSenha() {
 window.abrirAlterarSenha = abrirAlterarSenha;
 
 function trocarPerfil() {
+    try { sessionStorage.removeItem('ge_perfil_id'); } catch (_) {}
     _ctx.salvarDados();
     _ctx.mostrarSelecaoPerfis();
 }

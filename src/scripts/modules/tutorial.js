@@ -243,7 +243,7 @@ function _renderCard(p, idx) {
       <button class="tut-pular-tudo" type="button">Pular tutorial</button>
       <div class="tut-nav">
         <button class="tut-voltar" type="button" ${primeiro ? 'disabled' : ''}>Voltar</button>
-        <button class="tut-avancar" type="button">${ultimo ? 'Concluir' : 'Pular'}</button>
+        <button class="tut-avancar" type="button">${ultimo ? 'Concluir' : 'Prosseguir'}</button>
       </div>
     </div>
   `;

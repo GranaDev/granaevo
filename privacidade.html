@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
+    <title>Política de Privacidade - GranaEvo</title>
+    <meta name="description" content="Política de Privacidade do GranaEvo — como coletamos, usamos e protegemos seus dados pessoais em conformidade com a LGPD.">
+
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self';
+        style-src 'self' https://fonts.googleapis.com;
+        font-src https://fonts.gstatic.com;
+        img-src 'self' data:;
+        connect-src 'self';
+        frame-ancestors 'none';
+        base-uri 'self';
+        form-action 'self';
+    ">
+
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="src/styles/termos.css">
+</head>
+<body>
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loader">
+            <div class="loader-logo">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="80" height="80">
+            </div>
+            <div class="loader-bar">
+                <div class="loader-progress"></div>
+            </div>
+            <p class="loader-text">Carregando...</p>
+        </div>
+    </div>
+
+    <div class="animated-bg">
+        <div class="grid-overlay"></div>
+        <canvas id="particlesCanvas"></canvas>
+        <div class="glow-orb glow-orb-1"></div>
+        <div class="glow-orb glow-orb-2"></div>
+        <div class="glow-orb glow-orb-3"></div>
+    </div>
+
+    <header class="header">
+        <nav class="nav-container">
+            <a href="index.html" class="logo">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img" width="36" height="36" loading="lazy">
+                <span class="logo-text">GranaEvo</span>
+            </a>
+
+            <a href="index.html" class="btn-back">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M13 7L7 13M7 7L13 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Voltar
+            </a>
+        </nav>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+
+            <div class="page-header">
+                <div class="badge">
+                    <span class="pulse-dot"></span>
+                    <span>Documento Legal</span>
+                </div>
+                <h1 class="page-title">
+                    Política de<br>
+                    <span class="gradient-text">Privacidade</span>
+                </h1>
+                <p class="page-subtitle">
+                    Como coletamos, usamos e protegemos seus dados pessoais — conforme a LGPD (Lei nº 13.709/2018)
+                </p>
+                <p class="last-update">Última atualização: <strong id="updateDate">Maio de 2026</strong></p>
+            </div>
+
+            <div class="terms-content">
+
+                <!-- 01 -->
+                <article class="term-section">
+                    <div class="section-number">01</div>
+                    <h2 class="section-title">IDENTIFICAÇÃO DO CONTROLADOR</h2>
+                    <div class="section-content">
+                        <p>A <strong>GranaEvo</strong> é a plataforma responsável pelo tratamento dos seus dados pessoais (<em>controlador</em>, nos termos do art. 5º, VI, da LGPD).</p>
+                        <div class="highlight-box">
+                            <h3>Dados de contato do controlador</h3>
+                            <ul>
+                                <li><strong>Plataforma:</strong> GranaEvo</li>
+                                <li><strong>Site:</strong> granaevo.com</li>
+                                <li><strong>E-mail do encarregado (DPO):</strong> <a href="mailto:privacidade@granaevo.com">privacidade@granaevo.com</a></li>
+                                <li><strong>Suporte geral:</strong> <a href="mailto:suporte@granaevo.com">suporte@granaevo.com</a></li>
+                            </ul>
+                        </div>
+                        <p>Para exercer qualquer direito previsto nesta Política ou na LGPD, entre em contato pelo e-mail do encarregado acima.</p>
+                    </div>
+                </article>
+
+                <!-- 02 -->
+                <article class="term-section">
+                    <div class="section-number">02</div>
+                    <h2 class="section-title">DADOS PESSOAIS COLETADOS</h2>
+                    <div class="section-content">
+                        <p>O GranaEvo coleta e processa as seguintes categorias de dados pessoais:</p>
+
+                        <div class="highlight-box">
+                            <h3>Dados de cadastro e autenticação</h3>
+                            <ul>
+                                <li>Endereço de e-mail (identificação e autenticação);</li>
+                                <li>Senha (armazenada em hash bcrypt — nunca em texto puro);</li>
+                                <li>Tokens JWT de sessão (duração controlada, armazenados em memória).</li>
+                            </ul>
+                        </div>
+
+                        <div class="highlight-box">
+                            <h3>Dados de perfil</h3>
+                            <ul>
+                                <li>Nome do perfil (escolhido pelo usuário);</li>
+                                <li>Foto de perfil (opcional — processada e convertida para WebP antes do armazenamento);</li>
+                                <li>Tipo de plano contratado (Individual, Casal ou Família).</li>
+                            </ul>
+                        </div>
+
+                        <div class="highlight-box">
+                            <h3>Dados financeiros (inseridos pelo usuário)</h3>
+                            <ul>
+                                <li>Transações financeiras: descrição, valor, categoria, tipo e data;</li>
+                                <li>Contas fixas: nome, valor, vencimento e status de pagamento;</li>
+                                <li>Cartões de crédito: nome do banco, limite, vencimento e compras lançadas;</li>
+                                <li>Reservas e metas financeiras: nome, valor-alvo e aportes registrados;</li>
+                                <li>Rendas mensais e demais dados inseridos manualmente pelo usuário.</li>
+                            </ul>
+                            <p class="warning-text">Atenção: o GranaEvo <strong>não acessa</strong> contas bancárias, aplicativos de pagamento, extratos ou qualquer dado financeiro externo. Todos os dados são inseridos manualmente pelo próprio usuário.</p>
+                        </div>
+
+                        <div class="highlight-box">
+                            <h3>Dados de assinatura e pagamento</h3>
+                            <ul>
+                                <li>ID de assinatura Stripe (referência interna — os dados do cartão de crédito ficam exclusivamente com a Stripe);</li>
+                                <li>Status da assinatura (ativa, cancelada, em atraso);</li>
+                                <li>Histórico de cobranças (data e valor — sem dados do cartão).</li>
+                            </ul>
+                        </div>
+
+                        <div class="highlight-box">
+                            <h3>Dados técnicos e de uso</h3>
+                            <ul>
+                                <li>Logs de auditoria internos (ações do usuário dentro da plataforma — sem conteúdo financeiro);</li>
+                                <li>Registros de rate-limiting (endereço IP ou chave de sessão — apenas para prevenção de abuso);</li>
+                                <li>Nonces de convite (tokens de uso único para convite de perfis).</li>
+                            </ul>
+                        </div>
+
+                        <p><strong>Dados que NÃO coletamos:</strong> dados sensíveis (saúde, biometria, origem racial), dados de menores de 18 anos, dados bancários ou de cartões de crédito (estes são tratados exclusivamente pela Stripe).</p>
+                    </div>
+                </article>
+
+                <!-- 03 -->
+                <article class="term-section">
+                    <div class="section-number">03</div>
+                    <h2 class="section-title">FINALIDADES E BASES LEGAIS (LGPD, ART. 7º)</h2>
+                    <div class="section-content">
+                        <p>Cada tratamento de dados possui uma finalidade específica e uma base legal correspondente:</p>
+
+                        <div class="highlight-box">
+                            <h3>Execução do contrato (art. 7º, V)</h3>
+                            <ul>
+                                <li>Autenticar o usuário e manter a sessão ativa;</li>
+                                <li>Armazenar e exibir os dados financeiros inseridos pelo usuário;</li>
+                                <li>Processar a assinatura e controlar o acesso à plataforma;</li>
+                                <li>Gerenciar perfis e convites dentro do plano contratado.</li>
+                            </ul>
+                        </div>
+
+                        <div class="highlight-box">
+                            <h3>Cumprimento de obrigação legal (art. 7º, II)</h3>
+                            <ul>
+                                <li>Retenção de registros por 90 dias após o encerramento, conforme política interna e possíveis obrigações fiscais;</li>
+                                <li>Atendimento a eventual requisição judicial ou de autoridade regulatória.</li>
+                            </ul>
+                        </div>
+
+                        <div class="highlight-box">
+                            <h3>Legítimo interesse (art. 7º, IX)</h3>
+                            <ul>
+                                <li>Rate limiting e prevenção de abuso, fraude e ataques à plataforma;</li>
+                                <li>Logs de auditoria internos para segurança e diagnóstico de falhas;</li>
+                                <li>Monitoramento de uptime e estabilidade do serviço.</li>
+                            </ul>
+                        </div>
+
+                        <div class="highlight-box">
+                            <h3>Consentimento (art. 7º, I)</h3>
+                            <ul>
+                                <li>Envio de e-mails de boas-vindas, confirmação de conta e redefinição de senha (comunicações transacionais, não marketing).</li>
+                            </ul>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- 04 -->
+                <article class="term-section">
+                    <div class="section-number">04</div>
+                    <h2 class="section-title">COMPARTILHAMENTO COM TERCEIROS</h2>
+                    <div class="section-content">
+                        <p>O GranaEvo não vende, aluga ou cede seus dados pessoais a terceiros para fins comerciais. O compartilhamento ocorre exclusivamente com os <strong>operadores essenciais</strong> à prestação do serviço:</p>
+
+                        <div class="highlight-box">
+                            <h3>Operadores e suas funções</h3>
+                            <ul>
+                                <li><strong>Supabase (PostgreSQL + Auth):</strong> banco de dados principal e autenticação. Dados armazenados em servidores AWS com criptografia em repouso. Política de privacidade: <em>supabase.com/privacy</em>.</li>
+                                <li><strong>Stripe:</strong> processamento de pagamentos e gestão de assinaturas (PCI-DSS Nível 1). O GranaEvo não armazena dados de cartão — estes ficam exclusivamente com a Stripe. Política: <em>stripe.com/privacy</em>.</li>
+                                <li><strong>Vercel:</strong> hospedagem da aplicação web e funções serverless. Política: <em>vercel.com/legal/privacy-policy</em>.</li>
+                                <li><strong>Cloudflare:</strong> proteção contra DDoS, CDN e análise de tráfego (Cloudflare Insights). Pode processar endereços IP de forma anonimizada. Política: <em>cloudflare.com/privacypolicy</em>.</li>
+                                <li><strong>Google reCAPTCHA:</strong> usado na página de login para prevenção de bots. Pode coletar sinais comportamentais anônimos. Política: <em>policies.google.com/privacy</em>.</li>
+                            </ul>
+                        </div>
+
+                        <p>Todos os operadores foram escolhidos por adotarem práticas de segurança e privacidade compatíveis com a LGPD e/ou regulamentações equivalentes (GDPR, CCPA).</p>
+                    </div>
+                </article>
+
+                <!-- 05 -->
+                <article class="term-section">
+                    <div class="section-number">05</div>
+                    <h2 class="section-title">TRANSFERÊNCIA INTERNACIONAL DE DADOS</h2>
+                    <div class="section-content">
+                        <p>Parte dos dados pode ser processada em servidores localizados fora do Brasil, especialmente pelos operadores Supabase (AWS us-east-1), Vercel e Cloudflare.</p>
+                        <p>Essas transferências são realizadas com as salvaguardas previstas no art. 33 da LGPD, pois os operadores adotam padrões equivalentes de proteção (GDPR, SOC 2, ISO 27001) e possuem cláusulas contratuais adequadas.</p>
+                        <p>Os dados financeiros inseridos pelo usuário residem no banco de dados Supabase com criptografia AES-256 em repouso e transmissão exclusiva via TLS 1.2+.</p>
+                    </div>
+                </article>
+
+                <!-- 06 -->
+                <article class="term-section">
+                    <div class="section-number">06</div>
+                    <h2 class="section-title">PRAZO DE RETENÇÃO E EXCLUSÃO</h2>
+                    <div class="section-content">
+                        <div class="highlight-box">
+                            <h3>Retenção durante a assinatura ativa</h3>
+                            <p>Todos os dados são mantidos enquanto a assinatura estiver ativa ou em período de graça.</p>
+                        </div>
+
+                        <div class="highlight-box">
+                            <h3>Após o encerramento da assinatura</h3>
+                            <ul>
+                                <li>Os dados pessoais e financeiros são preservados por <strong>90 dias corridos</strong> após o último acesso pago, permitindo a reativação com restauração completa;</li>
+                                <li>Após 90 dias sem reativação, <strong>todos os dados são excluídos permanentemente</strong> de forma automatizada e irreversível;</li>
+                                <li>Logs de auditoria de segurança podem ser retidos por até 12 meses, em forma anonimizada, para fins de prevenção de fraude.</li>
+                            </ul>
+                        </div>
+
+                        <div class="warning-box">
+                            <p>A exclusão é irreversível. Recomendamos exportar seus dados antes de cancelar a assinatura.</p>
+                        </div>
+
+                        <div class="highlight-box">
+                            <h3>Cookies e armazenamento local</h3>
+                            <ul>
+                                <li><strong>sessionStorage:</strong> usado para manter o perfil selecionado durante a sessão do navegador. Limpo ao fechar a aba.</li>
+                                <li><strong>localStorage:</strong> não utilizado pelo GranaEvo para dados pessoais.</li>
+                                <li><strong>Cookies:</strong> o GranaEvo não utiliza cookies de rastreamento. A Cloudflare pode definir cookies técnicos de segurança (ex: cf_clearance) sem finalidade analítica.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- 07 -->
+                <article class="term-section">
+                    <div class="section-number">07</div>
+                    <h2 class="section-title">MEDIDAS DE SEGURANÇA TÉCNICA</h2>
+                    <div class="section-content">
+                        <p>O GranaEvo adota as seguintes medidas técnicas e organizacionais para proteger seus dados:</p>
+                        <ul>
+                            <li><strong>Criptografia em repouso:</strong> AES-256 no banco de dados Supabase;</li>
+                            <li><strong>Criptografia em trânsito:</strong> TLS 1.2+ em todas as comunicações;</li>
+                            <li><strong>Autenticação:</strong> tokens JWT de curta duração via Supabase Auth;</li>
+                            <li><strong>Controle de acesso:</strong> Row Level Security (RLS) no PostgreSQL — cada usuário acessa apenas seus próprios dados;</li>
+                            <li><strong>Senhas:</strong> armazenadas exclusivamente em hash bcrypt, nunca em texto puro;</li>
+                            <li><strong>Fotos de perfil:</strong> sanitizadas e convertidas para WebP antes do armazenamento, eliminando metadados EXIF;</li>
+                            <li><strong>Rate limiting:</strong> proteção contra ataques de força bruta e enumeração;</li>
+                            <li><strong>Proteção contra bots:</strong> Google reCAPTCHA na página de autenticação;</li>
+                            <li><strong>CSP e headers de segurança:</strong> Content-Security-Policy estrito, HSTS, X-Frame-Options e outros headers em todas as páginas.</li>
+                        </ul>
+                        <p>Nenhum sistema é absolutamente inviolável. Em caso de incidente de segurança com impacto relevante aos titulares, notificaremos a ANPD e os usuários afetados conforme os prazos previstos na LGPD.</p>
+                    </div>
+                </article>
+
+                <!-- 08 -->
+                <article class="term-section">
+                    <div class="section-number">08</div>
+                    <h2 class="section-title">DIREITOS DO TITULAR (LGPD, ART. 18)</h2>
+                    <div class="section-content">
+                        <p>Você, como titular dos dados pessoais, possui os seguintes direitos garantidos pela LGPD:</p>
+
+                        <div class="highlight-box">
+                            <h3>Seus direitos</h3>
+                            <ul>
+                                <li><strong>Confirmação e acesso:</strong> saber quais dados pessoais tratamos sobre você;</li>
+                                <li><strong>Correção:</strong> solicitar a atualização de dados incompletos, inexatos ou desatualizados;</li>
+                                <li><strong>Anonimização, bloqueio ou eliminação:</strong> de dados desnecessários ou tratados em desconformidade com a lei;</li>
+                                <li><strong>Portabilidade:</strong> receber seus dados em formato estruturado para transferência a outro controlador;</li>
+                                <li><strong>Eliminação:</strong> solicitar a exclusão antecipada de todos os seus dados (antes dos 90 dias);</li>
+                                <li><strong>Revogação do consentimento:</strong> retirar consentimento para tratamentos baseados nessa base legal;</li>
+                                <li><strong>Oposição:</strong> se opor a tratamentos realizados com base em legítimo interesse;</li>
+                                <li><strong>Informação sobre compartilhamento:</strong> obter informações sobre com quais entidades seus dados são compartilhados;</li>
+                                <li><strong>Revisão de decisões automatizadas:</strong> solicitar revisão humana de decisões tomadas exclusivamente com base em tratamento automatizado.</li>
+                            </ul>
+                        </div>
+
+                        <p>Para exercer qualquer um desses direitos, entre em contato com nosso encarregado em <a href="mailto:privacidade@granaevo.com">privacidade@granaevo.com</a>. Responderemos em até <strong>15 dias úteis</strong>, conforme prazo razoável.</p>
+
+                        <p>Caso não fique satisfeito com nossa resposta, você pode apresentar reclamação à <strong>Autoridade Nacional de Proteção de Dados (ANPD)</strong> em <em>gov.br/anpd</em>.</p>
+                    </div>
+                </article>
+
+                <!-- 09 -->
+                <article class="term-section">
+                    <div class="section-number">09</div>
+                    <h2 class="section-title">MENORES DE IDADE</h2>
+                    <div class="section-content">
+                        <p>O GranaEvo é destinado exclusivamente a pessoas com <strong>18 anos ou mais</strong>. Não coletamos intencionalmente dados pessoais de menores de 18 anos.</p>
+                        <p>Caso identificarmos que um usuário é menor de 18 anos, sua conta será encerrada e seus dados excluídos imediatamente.</p>
+                        <p>Se você é responsável legal por um menor que possua conta no GranaEvo, entre em contato conosco em <a href="mailto:privacidade@granaevo.com">privacidade@granaevo.com</a>.</p>
+                    </div>
+                </article>
+
+                <!-- 10 -->
+                <article class="term-section">
+                    <div class="section-number">10</div>
+                    <h2 class="section-title">ALTERAÇÕES DESTA POLÍTICA</h2>
+                    <div class="section-content">
+                        <p>Esta Política de Privacidade pode ser atualizada periodicamente para refletir mudanças na lei, nas práticas da plataforma ou nos serviços oferecidos.</p>
+                        <p>Alterações relevantes serão comunicadas por e-mail com antecedência mínima de <strong>15 dias</strong>, com a data de vigência claramente indicada.</p>
+                        <p>A versão mais recente estará sempre disponível em <strong>granaevo.com/privacidade</strong>. O uso continuado da plataforma após a data de vigência constitui aceitação das novas condições.</p>
+                    </div>
+                </article>
+
+                <!-- 11 -->
+                <article class="term-section">
+                    <div class="section-number">11</div>
+                    <h2 class="section-title">LEI APLICÁVEL E FORO</h2>
+                    <div class="section-content">
+                        <p>Esta Política é regida pelas leis da República Federativa do Brasil, especialmente pela Lei Geral de Proteção de Dados (Lei nº 13.709/2018) e pelo Código de Defesa do Consumidor (Lei nº 8.078/1990).</p>
+                        <p>Para dirimir quaisquer controvérsias decorrentes desta Política, fica eleito o foro da comarca de domicílio do usuário consumidor.</p>
+                    </div>
+                </article>
+
+            </div>
+
+            <div class="contact-section">
+                <div class="contact-box">
+                    <h3>Dúvidas sobre Privacidade?</h3>
+                    <p>Entre em contato com nosso Encarregado de Proteção de Dados (DPO) para exercer seus direitos ou tirar dúvidas sobre o tratamento dos seus dados pessoais.</p>
+                    <a href="mailto:privacidade@granaevo.com" class="btn-contact" rel="noopener noreferrer">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M2 6L10 11L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        privacidade@granaevo.com
+                    </a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <p>&copy; 2026 GranaEvo. Todos os direitos reservados.</p>
+                <div class="footer-links">
+                    <a href="index.html">Início</a>
+                    <a href="planos.html">Planos</a>
+                    <a href="termos.html">Termos de Uso</a>
+                    <a href="login.html">Login</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="src/scripts/pages/termos.js?v=2" defer></script>
+</body>
+</html>

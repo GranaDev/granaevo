@@ -792,6 +792,39 @@ if ('scrollRestoration' in history) {
 }
 
 // ==========================================
+// FAQ ACCORDION — LANDING PAGE
+// ==========================================
+document.querySelectorAll('.faq-lp-item').forEach(item => {
+    const btn    = item.querySelector('.faq-lp-question');
+    const answer = item.querySelector('.faq-lp-answer');
+    if (!btn || !answer) return;
+
+    btn.addEventListener('click', () => {
+        const isActive = item.classList.contains('active');
+
+        // Fecha todos os outros
+        document.querySelectorAll('.faq-lp-item').forEach(other => {
+            if (other !== item) {
+                other.classList.remove('active');
+                const a = other.querySelector('.faq-lp-answer');
+                if (a) a.style.maxHeight = null;
+                other.querySelector('.faq-lp-question')?.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        if (!isActive) {
+            item.classList.add('active');
+            answer.style.maxHeight = `${answer.scrollHeight}px`;
+            btn.setAttribute('aria-expanded', 'true');
+        } else {
+            item.classList.remove('active');
+            answer.style.maxHeight = null;
+            btn.setAttribute('aria-expanded', 'false');
+        }
+    });
+});
+
+// ==========================================
 // INITIALIZATION
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {

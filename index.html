@@ -183,7 +183,6 @@
             <div class="nav-links" id="navLinks" role="menubar">
                 <a href="#recursos" class="nav-link" role="menuitem">Recursos</a>
                 <a href="#como-funciona" class="nav-link" role="menuitem">Como Funciona</a>
-                <a href="#depoimentos" class="nav-link" role="menuitem">Depoimentos</a>
                 <!--
                     Links internos: rel="noopener noreferrer" não é necessário aqui pois
                     não usam target="_blank". Aplicado apenas em links externos abertos
@@ -191,6 +190,7 @@
                     REGRA: qualquer link com target="_blank" DEVE ter:
                     rel="noopener noreferrer"
                 -->
+                <a href="#faq" class="nav-link" role="menuitem">FAQ</a>
                 <a href="login.html" class="nav-link" role="menuitem">Login</a>
                 <a href="planos.html" class="btn-nav" role="menuitem">Começar Agora</a>
             </div>
@@ -537,24 +537,89 @@
     </section>
 
     <!-- ================================================
-         TESTIMONIALS
+         FAQ SECTION
     ================================================ -->
-    <section class="testimonials-section" id="depoimentos" aria-labelledby="testimonials-title">
+    <section class="faq-lp-section" id="faq" aria-labelledby="faq-lp-title">
         <div class="container">
             <div class="section-header">
-                <span class="section-badge">Depoimentos</span>
-                <h2 class="section-title" id="testimonials-title">Quem usa, aprova</h2>
-                <p class="section-subtitle">Veja o que nossos usuários dizem</p>
+                <span class="section-badge">FAQ</span>
+                <h2 class="section-title" id="faq-lp-title">Dúvidas Frequentes</h2>
+                <p class="section-subtitle">Tudo que você precisa saber antes de começar</p>
             </div>
-        </div>
 
-        <div class="testimonials-carousel" aria-label="Carrossel de depoimentos" role="region">
-            <!--
-                Preenchido via JS com createElement/textContent (sem innerHTML).
-                Nenhum dado vem de input externo — dados são hardcoded e tipados.
-                Trusted Types compatível — nenhuma atribuição de HTML string.
-            -->
-            <div class="testimonials-track" id="testimonialsTrack" aria-live="off"></div>
+            <div class="faq-lp-grid" role="list">
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>O GranaEvo funciona no celular?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Sim! O GranaEvo é 100% responsivo e funciona perfeitamente em celulares, tablets e computadores — sem precisar instalar nada.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Como funciona a assinatura?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>A cobrança é mensal e automática. Você pode cancelar a qualquer momento pelo painel, sem multa nem burocracia. O acesso continua até o fim do período pago.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Meus dados financeiros estão seguros?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Absolutamente. Usamos criptografia AES-256, autenticação segura e nunca compartilhamos seus dados com terceiros. Conformidade total com a LGPD.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Posso usar com meu cônjuge ou família?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Sim! Temos planos Casal (2 perfis) e Família (4 perfis). Cada membro tem seu controle individual, com visão compartilhada das finanças da casa.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Há garantia de reembolso?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Sim. Garantia de 7 dias em cada cobrança mensal. Se não gostar por qualquer motivo, devolvemos 100% do valor — sem perguntas.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Posso trocar de plano depois?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Sim! Você pode fazer upgrade do plano a qualquer momento, pagando apenas a diferença. O downgrade entra em vigor no próximo ciclo.</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -573,7 +638,7 @@
                             <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </a>
-                    <span class="cta-note">✓ Compre uma vez, tenha acesso vitalício</span>
+                    <span class="cta-note">✓ Assine e cancele quando quiser · Garantia de 7 dias</span>
                 </div>
             </div>
         </div>
@@ -612,14 +677,14 @@
                         NOTA: Links externos com target="_blank" DEVEM conter
                         rel="noopener noreferrer" para prevenir tabnabbing.
                     -->
-                    <a href="#">Contato</a>
-                    <a href="#">FAQ</a>
+                    <a href="mailto:suporte@granaevo.com">Contato</a>
+                    <a href="#faq">FAQ</a>
                 </div>
 
                 <div class="footer-links">
                     <h4>Legal</h4>
                     <a href="termos.html">Termos de Uso</a>
-                    <a href="#">Privacidade</a>
+                    <a href="privacidade.html">Privacidade</a>
                 </div>
             </div>
 

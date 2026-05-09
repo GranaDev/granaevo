@@ -2863,8 +2863,8 @@ select.form-input option:checked {
 
 @media (max-width: 768px) {
     .charts-container { flex-direction: column; gap: 12px; }
-    .chart-section    { padding: 12px; }
-    .chart-wrapper    { width: 100%; max-width: 280px; }
+    .chart-section    { padding: 12px; align-items: center; }
+    .chart-wrapper    { width: 100%; max-width: 300px; margin: 0 auto; }
     .chart-wrapper canvas { max-width: 100%; height: auto !important; }
 }
 

@@ -617,11 +617,6 @@ function getNextRedirect() {
         if (next && next.startsWith('/') && NEXT_WHITELIST.has(next.split('?')[0])) {
             return next;
         }
-        // Prioridade 2: plano pendente no sessionStorage (fluxo via primeiroacesso)
-        const pending = sessionStorage.getItem('ge_pending_plan');
-        if (pending && ['individual', 'casal', 'familia'].includes(pending)) {
-            return '/planos.html';
-        }
         return null;
     } catch {
         return null;

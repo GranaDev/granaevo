@@ -938,8 +938,25 @@ async function verificarLogin() {
             throw new Error("Não foi possível carregar os dados do usuário.");
         }
 
-        _log.info('[VERIFICAR LOGIN] Login completo. Mostrando seleção de perfis.');
-        mostrarSelecaoPerfis();
+        _log.info('[VERIFICAR LOGIN] Login completo. Verificando perfil salvo na sessão...');
+
+        // Tenta restaurar o perfil selecionado anteriormente (sem forçar re-seleção a cada refresh)
+        let perfilRestaurado = false;
+        try {
+            const idSalvo = sessionStorage.getItem('ge_perfil_id');
+            if (idSalvo && usuarioLogado.perfis.length > 0) {
+                const idx = usuarioLogado.perfis.findIndex(p => String(p.id) === String(idSalvo));
+                if (idx !== -1) {
+                    _log.info('[VERIFICAR LOGIN] Restaurando perfil salvo:', idSalvo);
+                    perfilRestaurado = true;
+                    await entrarNoPerfil(idx);
+                }
+            }
+        } catch (_) {}
+
+        if (!perfilRestaurado) {
+            mostrarSelecaoPerfis();
+        }
 
     } catch (e) {
         _log.error('LOGIN_CRIT_001', e);
@@ -1101,6 +1118,9 @@ async function entrarNoPerfil(index) {
         await new Promise(r => requestAnimationFrame(r));
 
         perfilAtivo = usuarioLogado.perfis[index];
+
+        // Persiste a seleção — restaurada automaticamente em refreshes da sessão
+        try { sessionStorage.setItem('ge_perfil_id', perfilAtivo.id); } catch (_) {}
 
         await carregarDadosPerfil(perfilAtivo.id);
         atualizarReferenciasGlobais();
@@ -2439,6 +2459,16 @@ function atualizarListaContasFixas() {
 
     const hojeISO = new Date().toISOString().slice(0, 10);
 
+    // Auto-reset: contas marcadas como pagas cujo vencimento já chegou voltam para Pendente
+    let precisaSalvar = false;
+    contasFixas.forEach(c => {
+        if (c.pago && typeof c.vencimento === 'string' && c.vencimento <= hojeISO) {
+            c.pago = false;
+            precisaSalvar = true;
+        }
+    });
+    if (precisaSalvar) salvarDados();
+
     const containerContas = document.createElement('div');
     containerContas.className = 'contas-grid';
 
@@ -2886,13 +2916,14 @@ function pagarContaFixa(id, valorPago) {
         }
 
         // ── CONTA RECORRENTE (sem parcelas) ──────────────────────────────
+        // Avança para o próximo vencimento e mantém pago=true até lá
         conta.vencimento = _avancarMes(conta.vencimento);
-        conta.pago = false;
+        conta.pago = true;
 
         salvarDados();
         atualizarTudo();
         conta._processando = false;
-        alert('✅ Pagamento realizado e vencimento atualizado para o próximo mês!');
+        alert('✅ Pagamento realizado! A conta volta para "Pendente" no próximo vencimento.');
 
     } catch (erro) {
         console.error('❌ Erro no pagamento, revertendo estado:', erro);

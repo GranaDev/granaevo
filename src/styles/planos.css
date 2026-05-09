@@ -920,6 +920,21 @@ button, a { touch-action: manipulation; }
     margin-bottom: var(--sp-6);
 }
 
+@keyframes icon-float {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-5px); }
+}
+
+@keyframes icon-pulse-glow {
+    0%, 100% { box-shadow: 0 0 0px rgba(16, 185, 129, 0); border-color: var(--primary-20); }
+    50%       { box-shadow: 0 0 18px rgba(16, 185, 129, 0.35); border-color: rgba(16, 185, 129, 0.5); }
+}
+
+@keyframes icon-spin-slow {
+    0%   { transform: translateY(-5px) rotate(0deg); }
+    100% { transform: translateY(-5px) rotate(360deg); }
+}
+
 .plan-icon {
     width: 56px;
     height: 56px;
@@ -930,19 +945,23 @@ button, a { touch-action: manipulation; }
     align-items: center;
     justify-content: center;
     margin: 0 auto var(--sp-4);
-    transition: background var(--t-base) ease, border-color var(--t-base) ease, transform var(--t-base) var(--ease-spring), box-shadow var(--t-base) ease;
+    animation: icon-float 3s ease-in-out infinite, icon-pulse-glow 3s ease-in-out infinite;
     transition:
         background var(--t-base) ease,
         border-color var(--t-base) ease,
-        transform var(--t-base) var(--ease-spring),
+        transform 0.3s var(--ease-spring),
         box-shadow var(--t-base) ease;
 }
 
+.plan-card:nth-child(2) .plan-icon { animation-delay: -1s; }
+.plan-card:nth-child(3) .plan-icon { animation-delay: -2s; }
+
 .plan-card:hover .plan-icon {
+    animation: none;
     background: var(--primary);
     border-color: var(--primary);
-    transform: scale(1.1) rotate(-6deg);
-    box-shadow: 0 0 24px rgba(16, 185, 129, 0.50);
+    transform: scale(1.12) rotate(-6deg);
+    box-shadow: 0 0 28px rgba(16, 185, 129, 0.55);
 }
 
 .plan-icon svg {
@@ -2272,9 +2291,9 @@ input[type="password"]::-ms-clear {
     /* ── Track ───────────────────────────────────────────────────── */
     .plans-track {
         display: flex !important;
-        gap: 12px !important;
+        gap: 16px !important;
         width: max-content !important;
-        padding: 8px 5vw 20px !important;
+        padding: 8px 11vw 20px !important;
         transform: none !important;
         transition: none !important;
         will-change: auto !important;
@@ -2283,11 +2302,12 @@ input[type="password"]::-ms-clear {
 
     /* ── Card: small, snap, compact ─────────────────────────────── */
     .plan-card {
-        flex: 0 0 68vw !important;
-        max-width: 258px !important;
-        min-width: 210px !important;
+        flex: 0 0 78vw !important;
+        max-width: 300px !important;
+        min-width: 230px !important;
         min-height: unset !important;
         scroll-snap-align: center !important;
+        scroll-snap-stop: always !important;
         padding: 18px 16px 16px !important;
         border-radius: 16px !important;
         overflow: hidden !important;

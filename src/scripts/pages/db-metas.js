@@ -1,6 +1,40 @@
 // db-metas.js — Seção de Metas/Reservas (lazy-loaded)
 let _ctx = null;
 
+// ===== CDI automático =====
+const _CDI_CACHE_KEY = '_ge_cdi_v1';
+const _CDI_FALLBACK  = 10.5;
+let   _cdiAnual      = _CDI_FALLBACK;
+
+async function _fetchCDI() {
+    try {
+        const cached = localStorage.getItem(_CDI_CACHE_KEY);
+        if (cached) {
+            const { val, ts } = JSON.parse(cached);
+            if (Date.now() - ts < 86_400_000) { _cdiAnual = val; return val; }
+        }
+    } catch {}
+    try {
+        // Série 4389 = CDI anualizado (% a.a.). Séries auxiliares: 4189 = Meta Selic
+        const res  = await fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json');
+        const json = await res.json();
+        const val  = parseFloat(json[0]?.valor?.replace(',', '.'));
+        if (Number.isFinite(val) && val > 0) {
+            _cdiAnual = val;
+            try { localStorage.setItem(_CDI_CACHE_KEY, JSON.stringify({ val, ts: Date.now() })); } catch {}
+            _atualizarLabelCDI(val);
+            return val;
+        }
+    } catch {}
+    return null;
+}
+
+function _atualizarLabelCDI(val) {
+    document.querySelectorAll('[data-cdi-rate]').forEach(el => {
+        el.textContent = `CDI atual: ${val.toFixed(2).replace('.', ',')}% a.a.`;
+    });
+}
+
 // Proxies para utilitários de dashboard.js disponíveis via _ctx após init()
 const formatBRL     = (...a) => _ctx.formatBRL(...a);
 const _sanitizeText = (...a) => _ctx._sanitizeText(...a);
@@ -14,6 +48,7 @@ export function init(ctx) {
     window.abrirRetiradaForm      = (id) => abrirRetiradaForm(id);
     window.abrirAnaliseDisciplina = () => abrirAnaliseDisciplina();
     window.renderMetaVisual       = () => renderMetaVisual();
+    _fetchCDI();
     renderMetasList();
 
     // search + filter listeners (elementos podem não existir em mobile — guarda com ?.)
@@ -151,7 +186,11 @@ function abrirMetaForm(editId = null) {
         const spanCdiPct = document.createElement('span');
         spanCdiPct.style.cssText = 'font-size:0.82rem; color:var(--text-muted);';
         spanCdiPct.textContent = '% do CDI';
-        rowCdiTaxa.appendChild(inpCdiPct); rowCdiTaxa.appendChild(spanCdiPct);
+        const spanCdiRate = document.createElement('span');
+        spanCdiRate.setAttribute('data-cdi-rate', '');
+        spanCdiRate.style.cssText = 'font-size:0.78rem; color:var(--primary); margin-left:4px;';
+        spanCdiRate.textContent = `CDI atual: ${_cdiAnual.toFixed(2).replace('.', ',')}% a.a.`;
+        rowCdiTaxa.appendChild(inpCdiPct); rowCdiTaxa.appendChild(spanCdiPct); rowCdiTaxa.appendChild(spanCdiRate);
 
         const rowCdiPer = document.createElement('div');
         rowCdiPer.style.cssText = 'display:flex; gap:16px;';
@@ -280,7 +319,7 @@ function abrirMetaForm(editId = null) {
             if (tipoR === 'cdi') {
                 const pct = parseFloat(document.getElementById('metaCdiPct').value) || 100;
                 const per = document.querySelector('input[name="periodoRendCdi"]:checked')?.value || 'mes';
-                const taxaAnual = 10.5 * pct / 100;
+                const taxaAnual = _cdiAnual * pct / 100;
                 r = per === 'ano'
                     ? Math.pow(1 + taxaAnual / 100, 1/12) - 1
                     : taxaAnual / 100 / 12;
@@ -405,7 +444,7 @@ function abrirMetaForm(editId = null) {
                 if (!Number.isFinite(pct) || pct <= 0 || pct > 200) return alert('Digite uma porcentagem válida do CDI (1–200).');
                 cdiPct = pct;
                 rendimentoPeriodo = document.querySelector('input[name="periodoRendCdi"]:checked')?.value || 'mes';
-                const taxaAnual = 10.5 * pct / 100;
+                const taxaAnual = _cdiAnual * pct / 100;
                 taxaJuros = rendimentoPeriodo === 'ano'
                     ? parseFloat(((Math.pow(1 + taxaAnual / 100, 1/12) - 1) * 100).toFixed(6))
                     : parseFloat((taxaAnual / 12).toFixed(6));
@@ -764,11 +803,11 @@ function calcularProjecaoConclusao(meta) {
     const monthly = meta.monthly || {};
     const valoresHistorico = Object.values(monthly).filter(v => v > 0);
     
-    // Precisa de pelo menos 2 meses com dados
-    if(valoresHistorico.length < 2) {
+    // Precisa de pelo menos 1 mês com dados para projetar
+    if(valoresHistorico.length < 1) {
         return {
             temHistorico: false,
-            mesesComDados: valoresHistorico.length
+            mesesComDados: 0
         };
     }
     
@@ -1228,7 +1267,7 @@ function renderMetaVisual() {
         const subInsuf            = document.createElement('div');
         subInsuf.style.fontSize   = '0.85rem';
         subInsuf.style.color      = 'var(--text-secondary)';
-        subInsuf.textContent      = 'Continue guardando por mais alguns meses para calcular a projeção de conclusão.'; // ✅ texto estático
+        subInsuf.textContent      = 'Faça o primeiro aporte para calcular a projeção de conclusão.'; // ✅ texto estático
 
         colInsuf.appendChild(tituloInsuf);
         colInsuf.appendChild(subInsuf);

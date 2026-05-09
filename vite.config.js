@@ -14,7 +14,7 @@ export default defineConfig({
         main:           'index.html',
         planos:         'planos.html',
         login:          'login.html',
-        primeiroacesso: 'primeiroacesso.html',
+        privacidade:    'privacidade.html',
         dashboard:      'dashboard.html',
         convidados:     'convidados.html',
         atualizarplano: 'atualizarplano.html',

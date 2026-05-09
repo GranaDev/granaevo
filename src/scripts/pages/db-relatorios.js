@@ -160,6 +160,16 @@ function popularFiltrosRelatorio() {
 }
 
 function setupBotoesRelatorio() {
+    // Conecta o botão de exportar (sem inline onclick)
+    const btnExportar = document.getElementById('btnExportarRelatorio');
+    if (btnExportar) {
+        const newBtnExp = btnExportar.cloneNode(true);
+        btnExportar.parentNode.replaceChild(newBtnExp, btnExportar);
+        newBtnExp.addEventListener('click', () => {
+            _ctx.mostrarNotificacao('Exportação de relatórios em breve! Enquanto isso, use a impressão do navegador (Ctrl+P).', 'info');
+        });
+    }
+
     const btnIndividual = document.querySelector('.tipo-relatorio-btns [data-tipo="individual"]');
     const btnCasal = document.querySelector('.tipo-relatorio-btns [data-tipo="casal"]');
     const btnFamilia = document.querySelector('.tipo-relatorio-btns [data-tipo="familia"]');
