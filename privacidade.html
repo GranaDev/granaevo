@@ -30,12 +30,18 @@
     <link rel="stylesheet" href="src/styles/termos.css">
 </head>
 <body>
-    <div class="loading-screen" id="loadingScreen">
+    <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando página">
         <div class="loader">
             <div class="loader-logo">
-                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="80" height="80">
+                <img
+                    src="/assets/icons/granaevo-logo.jpg"
+                    alt="GranaEvo"
+                    class="logo-img-loader"
+                    crossorigin="anonymous"
+                    loading="eager"
+                >
             </div>
-            <div class="loader-bar">
+            <div class="loader-bar" aria-hidden="true">
                 <div class="loader-progress"></div>
             </div>
             <p class="loader-text">Carregando...</p>
