@@ -1228,9 +1228,9 @@ button {
 /* Bottom nav */
 .pui-nav {
     display: flex;
-    justify-content: space-around;
+    justify-content: space-between;
     align-items: center;
-    padding: 8px 0 18px;
+    padding: 8px 18px 18px;
     border-top: 1px solid rgba(255,255,255,0.06);
     flex-shrink: 0;
 }
@@ -1240,18 +1240,19 @@ button {
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    font-size: 7.5px;
+    font-size: 7px;
     font-weight: 700;
     letter-spacing: 0.02em;
     color: rgba(255,255,255,0.25);
     text-transform: uppercase;
+    min-width: 0;
 }
 
 .pui-nav-on { color: #10b981; }
 
 .pui-nav-img {
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
     object-fit: contain;
     opacity: 0.3;
     filter: grayscale(1);
@@ -1262,18 +1263,113 @@ button {
     filter: none;
 }
 
-/* Bill status badge */
-.pui-bill-badge {
-    font-size: 8px;
+/* Contas fixas mini-cards grid (phone mockup) */
+.pui-contas {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.pui-contas-hd {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 13px 6px;
+    font-size: 11px;
     font-weight: 700;
-    padding: 2px 5px;
-    border-radius: 5px;
-    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.88);
+}
+
+.pui-contas-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 0 10px 8px;
+    overflow: hidden;
+}
+
+.pui-cc {
+    background: rgba(10, 22, 14, 0.75);
+    border: 1px solid rgba(67, 160, 71, 0.22);
+    border-radius: 11px;
+    padding: 7px 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+        0 0 0 1px rgba(67,160,71,0.07),
+        0 3px 10px rgba(0,0,0,0.4);
+}
+
+.pui-cc::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 15%;
+    right: 15%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(67,160,71,0.85), transparent);
+    box-shadow: 0 0 5px rgba(67,160,71,0.4);
+}
+
+.pui-cc:last-child { grid-column: span 2; }
+
+.pui-cc-hd {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 3px;
+}
+
+.pui-cc-nm {
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.9);
+    text-shadow: 0 0 6px rgba(67,160,71,0.2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pui-cc-st {
+    font-size: 7px;
+    font-weight: 700;
+    padding: 1.5px 4px;
+    border-radius: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
     flex-shrink: 0;
 }
 
-.pui-badge-pago    { background: rgba(16,185,129,0.15); color: #10b981; }
-.pui-badge-pendente{ background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.45); }
+.pui-cc-pago {
+    background: rgba(0,255,153,0.14);
+    color: #00ff99;
+    border: 1px solid rgba(0,255,153,0.35);
+    box-shadow: 0 0 5px rgba(0,255,153,0.1);
+}
+
+.pui-cc-pendente {
+    background: rgba(255,209,102,0.14);
+    color: #ffd166;
+    border: 1px solid rgba(255,209,102,0.35);
+}
+
+.pui-cc-vl {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #fff;
+}
+
+.pui-cc-sb {
+    font-size: 8px;
+    color: rgba(255,255,255,0.3);
+}
 
 /* ── Glows ────────────────────────────────── */
 .phone-3d-glow {
