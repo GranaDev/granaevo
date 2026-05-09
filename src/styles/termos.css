@@ -47,7 +47,25 @@ body {
     overflow-x: hidden;
 }
 
-/* Loading Screen */
+/* ── Loading Screen ─────────────────────────────────────────── */
+
+/* Dismiss automático via CSS — não depende de JavaScript.
+   A animação esconde o loader após 1.8s independentemente do JS. */
+@keyframes ge-loader-dismiss {
+    0%, 75% { opacity: 1; visibility: visible; }
+    100%    { opacity: 0; visibility: hidden; pointer-events: none; }
+}
+
+@keyframes ge-loader-bar {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+}
+
+@keyframes ge-loader-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.7; }
+}
+
 .loading-screen {
     position: fixed;
     inset: 0;
@@ -56,37 +74,45 @@ body {
     align-items: center;
     justify-content: center;
     z-index: 10000;
-    transition: opacity 0.5s ease, visibility 0.5s ease;
+    /* Dismiss automático em 1.8s (1.2s visível + 0.6s fade) */
+    animation: ge-loader-dismiss 1.8s ease forwards;
 }
 
+/* JS adiciona .hidden quando quiser — cancela a animação CSS e some na hora */
 .loading-screen.hidden {
+    animation: none;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
 }
 
 .loader {
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
 }
 
 .loader-logo {
-    margin: 0 auto 1.25rem;
-    display: flex;
-    justify-content: center;
+    margin-bottom: 1.25rem;
 }
 
 .logo-img-loader {
-    width: 80px;
-    height: 80px;
+    width: 96px;
+    height: 96px;
     border-radius: 20px;
     object-fit: cover;
-    animation: pulse 2s ease-in-out infinite;
+    animation: ge-loader-pulse 1.8s ease-in-out infinite;
 }
 
-.loader-text {
-    margin-top: 0.75rem;
-    font-size: 0.875rem;
-    color: var(--gray-light);
+.loader-bar {
+    width: 180px;
+    height: 3px;
+    background: rgba(16, 185, 129, 0.2);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    margin: 0 auto;
 }
 
 .loader-progress {
@@ -97,7 +123,13 @@ body {
     width: 40%;
     background: var(--primary);
     border-radius: 10px;
-    animation: loading 1.5s ease-in-out infinite;
+    animation: ge-loader-bar 1.4s ease-in-out infinite;
+}
+
+.loader-text {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--gray-light);
 }
 
 .logo-img {
@@ -105,25 +137,6 @@ body {
     height: 36px;
     border-radius: 8px;
     object-fit: cover;
-}
-
-.loader-bar {
-    width: 180px;
-    height: 3px;
-    background: rgba(16, 185, 129, 0.2);
-    border-radius: 10px;
-    overflow: hidden;
-    position: relative;
-}
-
-@keyframes loading {
-    0%   { transform: translateX(-100%); }
-    100% { transform: translateX(350%); }
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-    50%       { opacity: 0.8; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
 }
 
 /* Animated Background */
