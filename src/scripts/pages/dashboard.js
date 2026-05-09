@@ -2457,13 +2457,15 @@ function atualizarListaContasFixas() {
         return;
     }
 
-    const hojeISO = new Date().toISOString().slice(0, 10);
+    const hojeISO  = new Date().toISOString().slice(0, 10);
+    const mesAtual = hojeISO.slice(0, 7); // 'YYYY-MM'
 
-    // Auto-reset: contas marcadas como pagas cujo vencimento já chegou voltam para Pendente
+    // Auto-reset: quando o vencimento chega, zera pago e dataPagamento para o novo ciclo
     let precisaSalvar = false;
     contasFixas.forEach(c => {
-        if (c.pago && typeof c.vencimento === 'string' && c.vencimento <= hojeISO) {
+        if ((c.pago || c.dataPagamento) && typeof c.vencimento === 'string' && c.vencimento <= hojeISO) {
             c.pago = false;
+            c.dataPagamento = null;
             precisaSalvar = true;
         }
     });
@@ -2475,10 +2477,13 @@ function atualizarListaContasFixas() {
     contasFixas.forEach(c => {
         const vencimentoValido = typeof c.vencimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.vencimento);
 
+        // Considera pago se: flag pago=true OU dataPagamento bate com o mês atual
+        const estaPago = c.pago || (c.dataPagamento && c.dataPagamento.slice(0, 7) === mesAtual);
+
         let status      = 'Pendente';
         let statusClass = 'status-pendente';
 
-        if (c.pago) {
+        if (estaPago) {
             status      = 'Pago';
             statusClass = 'status-pago';
         } else if (vencimentoValido && c.vencimento < hojeISO) {
@@ -2882,8 +2887,9 @@ function pagarContaFixa(id, valorPago) {
                 return sum + (isFinite(p) && p > 0 ? p : 0);
             }, 0);
 
-            conta.vencimento = _avancarMes(conta.vencimento);
-            conta.pago = false;
+            conta.vencimento    = _avancarMes(conta.vencimento);
+            conta.pago          = true;
+            conta.dataPagamento = new Date().toISOString().slice(0, 10);
 
             salvarDados();
             atualizarTudo();
@@ -2902,8 +2908,9 @@ function pagarContaFixa(id, valorPago) {
 
             if (conta.parcelaAtual < conta.totalParcelas) {
                 conta.parcelaAtual++;
-                conta.vencimento = _avancarMes(conta.vencimento);
-                conta.pago = false;
+                conta.vencimento    = _avancarMes(conta.vencimento);
+                conta.pago          = true;
+                conta.dataPagamento = new Date().toISOString().slice(0, 10);
             } else {
                 contasFixas = contasFixas.filter(c => c.id !== conta.id);
             }
@@ -2916,9 +2923,10 @@ function pagarContaFixa(id, valorPago) {
         }
 
         // ── CONTA RECORRENTE (sem parcelas) ──────────────────────────────
-        // Avança para o próximo vencimento e mantém pago=true até lá
-        conta.vencimento = _avancarMes(conta.vencimento);
-        conta.pago = true;
+        // Avança para o próximo vencimento e guarda data do pagamento
+        conta.vencimento    = _avancarMes(conta.vencimento);
+        conta.pago          = true;
+        conta.dataPagamento = new Date().toISOString().slice(0, 10);
 
         salvarDados();
         atualizarTudo();
