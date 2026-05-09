@@ -282,60 +282,137 @@
                 </div>
 
                 <div class="hero-visual" data-parallax="0.05" aria-hidden="true">
-                    <div class="dashboard-mockup" data-tilt>
-                        <div class="mockup-glow"></div>
-                        <div class="mockup-card">
-                            <div class="mockup-header">
-                                <div class="mockup-dots">
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                </div>
-                                <span class="mockup-title">Painel Financeiro</span>
-                                <span class="mockup-badge">Fev 2026</span>
-                            </div>
+                    <div class="phone-3d-wrapper" id="phone3DWrapper">
 
-                            <div class="balance-card">
-                                <div class="balance-label">Saldo Previsto</div>
-                                <div class="balance-amount">R$ 5.240</div>
-                                <div class="balance-trend">
-                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
-                                        <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                    </svg>
-                                    <span>+23% este mês</span>
-                                </div>
-                            </div>
+                        <!-- Phone body -->
+                        <div class="phone-3d-device" id="phone3DDevice">
+                            <div class="phone-3d-frame">
+                                <!-- Physical buttons -->
+                                <div class="phone-btn-vol-up"></div>
+                                <div class="phone-btn-vol-down"></div>
+                                <div class="phone-btn-power"></div>
 
-                            <div class="mockup-stats">
-                                <div class="stat-box stat-income">
-                                    <div class="stat-icon">
-                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
-                                            <path d="M10 4V16M10 4L6 8M10 4L14 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                        </svg>
-                                    </div>
-                                    <div class="stat-info">
-                                        <span class="stat-label">Receitas</span>
-                                        <span class="stat-value">R$ 8.500</span>
+                                <!-- Screen area -->
+                                <div class="phone-3d-screen">
+                                    <!-- Dynamic Island -->
+                                    <div class="phone-island"></div>
+
+                                    <!-- App UI -->
+                                    <div class="phone-ui">
+                                        <!-- Status bar -->
+                                        <div class="pui-statusbar">
+                                            <span>9:41</span>
+                                            <div class="pui-statusbar-icons">
+                                                <svg width="13" height="10" viewBox="0 0 13 10" fill="currentColor"><rect x="0" y="5" width="2" height="5" rx="1" opacity="0.4"/><rect x="3.5" y="3" width="2" height="7" rx="1" opacity="0.65"/><rect x="7" y="1" width="2" height="9" rx="1" opacity="0.85"/><rect x="10.5" y="0" width="2" height="10" rx="1"/></svg>
+                                                <svg width="13" height="10" viewBox="0 0 13 10" fill="currentColor"><path d="M6.5 2C4.3 2 2.3 2.9.8 4.4l1.2 1.2C3.1 4.5 4.7 3.8 6.5 3.8S9.9 4.5 11 5.6l1.2-1.2C10.7 2.9 8.7 2 6.5 2z" opacity="0.5"/><path d="M6.5 5.5C5.4 5.5 4.4 6 3.7 6.7l1.2 1.2c.4-.4 1-.6 1.6-.6s1.2.2 1.6.6l1.2-1.2C8.6 6 7.6 5.5 6.5 5.5z"/><circle cx="6.5" cy="9.5" r="1"/></svg>
+                                                <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".5" y=".5" width="18" height="10" rx="2.5" stroke="currentColor" stroke-opacity="0.35"/><rect x="2" y="2" width="13" height="7" rx="1.5" fill="currentColor"/><path d="M20 3.5v4a2 2 0 000-4z" fill="currentColor" opacity="0.4"/></svg>
+                                            </div>
+                                        </div>
+
+                                        <!-- Header -->
+                                        <div class="pui-header">
+                                            <div class="pui-avatar">G</div>
+                                            <span class="pui-app-name">GranaEvo</span>
+                                            <div class="pui-header-icons">
+                                                <div class="pui-header-icon">
+                                                    <svg viewBox="0 0 20 20" fill="none" width="14" height="14"><path d="M10 2a6 6 0 00-6 6c0 4-2 5-2 5h16s-2-1-2-5a6 6 0 00-6-6z" stroke="currentColor" stroke-width="1.5"/><path d="M11.7 16a2 2 0 01-3.4 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                                </div>
+                                                <div class="pui-header-icon">
+                                                    <svg viewBox="0 0 20 20" fill="none" width="14" height="14"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.22 3.22l1.42 1.42M15.36 15.36l1.42 1.42M3.22 16.78l1.42-1.42M15.36 4.64l1.42-1.42" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Balance -->
+                                        <div class="pui-balance">
+                                            <div class="pui-balance-label">Saldo disponível</div>
+                                            <div class="pui-balance-value">R$ 8.520<span class="pui-balance-cents">,30</span></div>
+                                        </div>
+
+                                        <!-- 3 stat cards -->
+                                        <div class="pui-cards">
+                                            <div class="pui-card pui-card-green">
+                                                <div class="pui-card-icon">
+                                                    <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 13V3M8 3L4 7M8 3L12 7" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>
+                                                </div>
+                                                <div class="pui-card-label">Entradas</div>
+                                                <div class="pui-card-value">R$ 8.300</div>
+                                            </div>
+                                            <div class="pui-card pui-card-red">
+                                                <div class="pui-card-icon">
+                                                    <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 3v10M8 13L4 9M8 13L12 9" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round"/></svg>
+                                                </div>
+                                                <div class="pui-card-label">Saídas</div>
+                                                <div class="pui-card-value">R$ 3.450</div>
+                                            </div>
+                                            <div class="pui-card pui-card-yellow">
+                                                <div class="pui-card-icon">
+                                                    <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M3 13h10M8 3v7M5 7l3-4 3 4" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                                </div>
+                                                <div class="pui-card-label">Reservas</div>
+                                                <div class="pui-card-value">R$ 3.500</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Contas Fixas -->
+                                        <div class="pui-section">
+                                            <div class="pui-section-header">
+                                                <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><rect x="3" y="7" width="10" height="8" rx="1.5" stroke="#10b981" stroke-width="1.5"/><path d="M5 7V5a3 3 0 016 0v2" stroke="#10b981" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                                Contas Fixas
+                                            </div>
+                                            <div class="pui-bill-item">
+                                                <div class="pui-bill-icon pui-bill-icon-red">N</div>
+                                                <div class="pui-bill-info">
+                                                    <span class="pui-bill-name">Netflix</span>
+                                                    <span class="pui-bill-sub">mensal</span>
+                                                </div>
+                                                <span class="pui-bill-val">R$ 39,50</span>
+                                            </div>
+                                            <div class="pui-bill-item">
+                                                <div class="pui-bill-icon pui-bill-icon-blue">A</div>
+                                                <div class="pui-bill-info">
+                                                    <span class="pui-bill-name">Academia</span>
+                                                    <span class="pui-bill-sub">mensal</span>
+                                                </div>
+                                                <span class="pui-bill-val">R$ 83,30</span>
+                                            </div>
+                                            <div class="pui-bill-item">
+                                                <div class="pui-bill-icon pui-bill-icon-green">I</div>
+                                                <div class="pui-bill-info">
+                                                    <span class="pui-bill-name">Internet</span>
+                                                    <span class="pui-bill-sub">mensal</span>
+                                                </div>
+                                                <span class="pui-bill-val">R$ 129,90</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Bottom nav -->
+                                        <div class="pui-bottomnav">
+                                            <div class="pui-nav-item pui-nav-active">
+                                                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M10 2L2 9h2v9h5v-5h2v5h5V9h2L10 2z"/></svg>
+                                                <span>HOME</span>
+                                            </div>
+                                            <div class="pui-nav-item">
+                                                <svg viewBox="0 0 20 20" fill="none" width="18" height="18"><rect x="3" y="3" width="6" height="14" rx="1.5" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="8" width="6" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/></svg>
+                                            </div>
+                                            <div class="pui-nav-item">
+                                                <svg viewBox="0 0 20 20" fill="none" width="18" height="18"><circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M10 3V1M10 19v-2M3 10H1M19 10h-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                            </div>
+                                            <div class="pui-nav-item">
+                                                <svg viewBox="0 0 20 20" fill="none" width="18" height="18"><path d="M3 17V9l7-6 7 6v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><rect x="7" y="12" width="6" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>
+                                            </div>
+                                            <div class="pui-nav-item">
+                                                <svg viewBox="0 0 20 20" fill="none" width="18" height="18"><circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-
-                                <div class="stat-box stat-expense">
-                                    <div class="stat-icon">
-                                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
-                                            <path d="M10 16V4M10 16L6 12M10 16L14 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                        </svg>
-                                    </div>
-                                    <div class="stat-info">
-                                        <span class="stat-label">Despesas</span>
-                                        <span class="stat-value">R$ 3.260</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="mockup-chart">
-                                <canvas id="miniChart" aria-label="Gráfico de evolução financeira"></canvas>
                             </div>
                         </div>
+
+                        <!-- Glow base -->
+                        <div class="phone-3d-glow" aria-hidden="true"></div>
+                        <div class="phone-3d-base" aria-hidden="true"></div>
                     </div>
                 </div>
             </div>

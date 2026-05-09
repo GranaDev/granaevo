@@ -404,53 +404,54 @@ const counterObserver = new IntersectionObserver((entries) => {
 statValues.forEach(stat => counterObserver.observe(stat));
 
 // ==========================================
-// MINI CHART
+// 3D PHONE TILT — mouse-follow interaction
 // ==========================================
-const miniChart = document.getElementById('miniChart');
-if (miniChart) {
-    const ctx = miniChart.getContext('2d');
-    miniChart.width  = miniChart.offsetWidth;
-    miniChart.height = miniChart.offsetHeight;
+(function initPhoneTilt() {
+    const wrapper = document.getElementById('phone3DWrapper');
+    const device  = document.getElementById('phone3DDevice');
+    if (!wrapper || !device) return;
 
-    // Dados estáticos e tipados — sem entrada externa
-    const data    = Object.freeze([20, 45, 30, 60, 40, 70, 50, 80, 65, 90]);
-    const max     = Math.max(...data);
-    const padding = 10;
-    const width   = miniChart.width;
-    const height  = miniChart.height;
-    const stepX   = (width - padding * 2) / (data.length - 1);
+    // Ângulos base da animação CSS
+    const BASE_X = 10;
+    const BASE_Y = -14;
+    const RANGE  = 10; // graus máximos de desvio do mouse
 
-    ctx.strokeStyle = '#10b981';
-    ctx.lineWidth   = 2;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
+    let rafId = null;
+    let targetX = BASE_X;
+    let targetY = BASE_Y;
+    let currentX = BASE_X;
+    let currentY = BASE_Y;
 
-    const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
-    gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+    function lerp(a, b, t) { return a + (b - a) * t; }
 
-    // Área preenchida
-    ctx.beginPath();
-    data.forEach((value, index) => {
-        const x = padding + index * stepX;
-        const y = height - padding - (value / max) * (height - padding * 2);
-        index === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.lineTo(width - padding, height - padding);
-    ctx.lineTo(padding,         height - padding);
-    ctx.closePath();
-    ctx.fillStyle = gradient;
-    ctx.fill();
+    function animate() {
+        currentX = lerp(currentX, targetX, 0.08);
+        currentY = lerp(currentY, targetY, 0.08);
+        device.style.transform = `rotateX(${currentX.toFixed(2)}deg) rotateY(${currentY.toFixed(2)}deg)`;
+        rafId = requestAnimationFrame(animate);
+    }
 
-    // Linha do gráfico
-    ctx.beginPath();
-    data.forEach((value, index) => {
-        const x = padding + index * stepX;
-        const y = height - padding - (value / max) * (height - padding * 2);
-        index === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-}
+    wrapper.addEventListener('mouseenter', () => {
+        device.style.animation = 'none'; // pausa o float ao interagir
+        animate();
+    }, { passive: true });
+
+    wrapper.addEventListener('mousemove', (e) => {
+        const rect = wrapper.getBoundingClientRect();
+        const nx   = (e.clientX - rect.left)  / rect.width  - 0.5; // -0.5..+0.5
+        const ny   = (e.clientY - rect.top)   / rect.height - 0.5;
+        targetY = BASE_Y + nx * RANGE * 2;
+        targetX = BASE_X - ny * RANGE;
+    }, { passive: true });
+
+    wrapper.addEventListener('mouseleave', () => {
+        cancelAnimationFrame(rafId);
+        device.style.animation = ''; // retoma o float
+        device.style.transform  = '';
+        currentX = BASE_X;
+        currentY = BASE_Y;
+    }, { passive: true });
+}());
 
 // ==========================================
 // TESTIMONIALS CAROUSEL
