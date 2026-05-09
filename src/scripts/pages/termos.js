@@ -7,15 +7,32 @@
 
 /* ------------------------------------------
    1. LOADING SCREEN
+   Três estratégias para garantir que o loading
+   desapareça mesmo em mobile com conexão lenta.
    ------------------------------------------ */
-window.addEventListener('load', () => {
-    const loadingScreen = document.getElementById('loadingScreen');
-    if (!loadingScreen) return;
+(function initLoadingScreen() {
+    const DELAY = 600; // ms de polimento visual
 
-    setTimeout(() => {
-        loadingScreen.classList.add('hidden');
-    }, 1000);
-});
+    function hideLoader() {
+        const el = document.getElementById('loadingScreen');
+        if (!el || el.classList.contains('hidden')) return;
+        el.classList.add('hidden');
+    }
+
+    // Estratégia 1: DOM pronto (mais rápido, não espera imagens)
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => setTimeout(hideLoader, DELAY), { once: true });
+    } else {
+        // DOM já estava pronto quando o script executou
+        setTimeout(hideLoader, DELAY);
+    }
+
+    // Estratégia 2: todos os recursos carregados
+    window.addEventListener('load', hideLoader, { once: true });
+
+    // Estratégia 3: fallback absoluto — nunca deixa travar por mais de 3s
+    setTimeout(hideLoader, 3000);
+}());
 
 
 /* ------------------------------------------
