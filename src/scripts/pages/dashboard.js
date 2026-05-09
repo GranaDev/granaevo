@@ -2477,8 +2477,16 @@ function atualizarListaContasFixas() {
     contasFixas.forEach(c => {
         const vencimentoValido = typeof c.vencimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.vencimento);
 
-        // Considera pago se: flag pago=true OU dataPagamento bate com o mês atual
-        const estaPago = c.pago || (c.dataPagamento && c.dataPagamento.slice(0, 7) === mesAtual);
+        // Considera pago se:
+        // 1. pago=true (novo código)
+        // 2. dataPagamento é do mês atual (novo código)
+        // 3. vencimento é em mês FUTURO — indica que o ciclo atual já foi pago
+        //    (tanto para dados antigos quanto novos)
+        const vencMes = vencimentoValido ? c.vencimento.slice(0, 7) : null;
+        const estaPago =
+            c.pago === true ||
+            (c.dataPagamento && c.dataPagamento.slice(0, 7) === mesAtual) ||
+            (vencMes !== null && vencMes > mesAtual);
 
         let status      = 'Pendente';
         let statusClass = 'status-pendente';
