@@ -2542,22 +2542,30 @@ function atualizarListaContasFixas() {
             div.appendChild(header);
             div.appendChild(info);
 
-            if (status !== 'Pago') {
-                const actions  = document.createElement('div');
-                actions.className = 'conta-actions';
+            const actionsFatura = document.createElement('div');
+            actionsFatura.className = 'conta-actions';
 
+            if (status !== 'Pago') {
                 const btnPagar = document.createElement('button');
                 btnPagar.className   = 'conta-btn';
                 btnPagar.textContent = 'Pagar Fatura';
-
                 btnPagar.addEventListener('click', (e) => {
                     e.stopPropagation();
                     abrirPopupPagarContaFixa(c.id);
                 });
-
-                actions.appendChild(btnPagar);
-                div.appendChild(actions);
+                actionsFatura.appendChild(btnPagar);
+            } else {
+                const btnAntecipar = document.createElement('button');
+                btnAntecipar.className   = 'conta-btn conta-btn-antecipar';
+                btnAntecipar.textContent = 'Antecipar';
+                btnAntecipar.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    abrirPopupAnteciparContaFixa(c.id);
+                });
+                actionsFatura.appendChild(btnAntecipar);
             }
+
+            div.appendChild(actionsFatura);
 
         } else {
             const _icConta = document.createElement('i');
@@ -2882,10 +2890,12 @@ function anteciparContaFixa(id, valorPago) {
 
     let snapshotTransacoes  = [];
     let snapshotContasFixas = [];
+    let snapshotCartoes     = [];
 
     try {
         snapshotTransacoes  = structuredClone(transacoes);
         snapshotContasFixas = structuredClone(contasFixas);
+        snapshotCartoes     = structuredClone(cartoesCredito);
 
         const dh = agoraDataHora();
         const descricaoSegura = String(conta.descricao || '').slice(0, 100);
@@ -2899,8 +2909,57 @@ function anteciparContaFixa(id, valorPago) {
             hora:        dh.hora,
             contaFixaId: id
         });
-        if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.cf = null; }
+        if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.cf = null; _cache.cc = null; }
 
+        // ── FATURA DE CARTÃO ─────────────────────────────────────────────
+        if (conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
+            const cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
+
+            conta.compras.forEach(compra => {
+                if (typeof compra.parcelaAtual  !== 'number' || !isFinite(compra.parcelaAtual))  return;
+                if (typeof compra.totalParcelas !== 'number' || !isFinite(compra.totalParcelas)) return;
+                if (typeof compra.valorParcela  !== 'number' || !isFinite(compra.valorParcela))  return;
+                if (compra.parcelaAtual < 1 || compra.totalParcelas < 1) return;
+                if (compra.valorParcela <= 0 || compra.valorParcela > 9_999_999) return;
+
+                if (compra.parcelaAtual <= compra.totalParcelas) {
+                    compra.parcelaAtual++;
+                    if (cartaoRef) {
+                        const parcela = parseFloat(compra.valorParcela);
+                        cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
+                        if (cartaoRef.usado < 0) cartaoRef.usado = 0;
+                    }
+                }
+            });
+
+            conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
+
+            if (conta.compras.length === 0) {
+                contasFixas = contasFixas.filter(c => c.id !== id);
+                salvarDados();
+                atualizarTudo();
+                conta._processando = false;
+                alert('✅ Antecipação concluída! Todas as parcelas foram quitadas.');
+                return;
+            }
+
+            conta.valor = conta.compras.reduce((sum, c) => {
+                const p = parseFloat(c.valorParcela);
+                return sum + (isFinite(p) && p > 0 ? p : 0);
+            }, 0);
+
+            conta.vencimento    = _avancarMes(conta.vencimento);
+            conta.pago          = true;
+            conta.dataPagamento = new Date().toISOString().slice(0, 10);
+
+            salvarDados();
+            atualizarTudo();
+            conta._processando = false;
+            alert(`✅ Fatura antecipada! Próxima: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
+            return;
+        }
+
+        // ── CONTA RECORRENTE / PARCELAS ──────────────────────────────────
         conta.vencimento    = _avancarMes(conta.vencimento);
         conta.pago          = true;
         conta.dataPagamento = new Date().toISOString().slice(0, 10);
@@ -2914,6 +2973,7 @@ function anteciparContaFixa(id, valorPago) {
         console.error('❌ Erro na antecipação, revertendo:', erro);
         rollbackArray(transacoes,  snapshotTransacoes);
         rollbackArray(contasFixas, snapshotContasFixas);
+        rollbackArray(cartoesCredito, snapshotCartoes);
         conta._processando = false;
         alert('❌ Erro ao processar antecipação. Nenhuma alteração foi salva.');
     }
