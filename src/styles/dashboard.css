@@ -1289,6 +1289,40 @@ body::before {
 .btn-periodo i.fa-chevron-down {
     font-size: 0.7rem;
     opacity: 0.7;
+    transition: transform 0.2s ease;
+}
+
+.btn-periodo[aria-expanded="true"] i.fa-chevron-down {
+    transform: rotate(180deg);
+}
+
+/* Botão mobile de período — aparece abaixo do saldo hero */
+.btn-periodo-mobile {
+    display: none;
+    margin-top: 12px;
+    font-size: 0.82rem;
+    padding: 8px 14px;
+}
+
+@media (max-width: 768px) {
+    .btn-periodo-mobile {
+        display: inline-flex;
+    }
+}
+
+/* Dropdown do seletor de mês */
+#dashMesDropdown {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(67,160,71,0.4) transparent;
+}
+
+#dashMesDropdown::-webkit-scrollbar {
+    width: 4px;
+}
+
+#dashMesDropdown::-webkit-scrollbar-thumb {
+    background: rgba(67,160,71,0.4);
+    border-radius: 4px;
 }
 
 @media (max-width: 768px) {

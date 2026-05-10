@@ -38,6 +38,9 @@ let _cachedAuthToken = null; // token cacheado para beforeunload (fetch+keepaliv
 // possam invalidá-lo. Sem isso o getter retorna o array vazio do boot para sempre.
 let _cache = { tx: null, mt: null, cf: null, cc: null };
 
+// Filtro de mês do dashboard (null = mês atual)
+let _dashMesFiltro = null; // { mes: '05', ano: '2026' } | null
+
 // Estado compartilhado com módulos lazy-loaded via _ctx
 let _movPaginaAtual  = 1;
 let _movVisivelCache = [];
@@ -1930,6 +1933,157 @@ function iniciarRenovacaoFotos() {
 }
 
 // ========== DASHBOARD - RESUMO E CONTAS FIXAS ==========
+// ========== SISTEMA DE FECHAMENTO DE MÊS — FILTRO DO DASHBOARD ==========
+
+const _NOMES_MESES_DASH = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                           'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function _getMesAnoAtual() {
+    const hoje = new Date();
+    return {
+        mes: String(hoje.getMonth() + 1).padStart(2, '0'),
+        ano: String(hoje.getFullYear()),
+    };
+}
+
+// Retorna array { mes, ano } de todos os meses com transações, mais recente primeiro
+function _getMesesDisponiveis() {
+    const vistos = new Set();
+    transacoes.forEach(t => {
+        if (t.data && /^\d{2}\/\d{2}\/\d{4}$/.test(t.data)) {
+            const parts = t.data.split('/');
+            vistos.add(`${parts[1]}/${parts[2]}`);
+        }
+    });
+    // Garante o mês atual sempre presente
+    const { mes: ma, ano: aa } = _getMesAnoAtual();
+    vistos.add(`${ma}/${aa}`);
+
+    return Array.from(vistos)
+        .sort((a, b) => {
+            const [ma2, aa2] = a.split('/').map(Number);
+            const [mb, ab]   = b.split('/').map(Number);
+            return ab !== aa2 ? ab - aa2 : mb - ma2;
+        })
+        .map(k => { const [m, a] = k.split('/'); return { mes: m, ano: a }; });
+}
+
+// Filtra transações por mes/ano (DD/MM/YYYY)
+function _filtrarTransacoesMes(mes, ano) {
+    const sufixo = `/${mes}/${ano}`;
+    return transacoes.filter(t => typeof t.data === 'string' && t.data.endsWith(sufixo));
+}
+
+// Retorna label legível do filtro atual
+function _labelMesDash(filtro) {
+    if (!filtro) return 'Mês atual';
+    const { mes, ano } = filtro;
+    const { mes: ma, ano: aa } = _getMesAnoAtual();
+    if (mes === ma && ano === aa) return 'Mês atual';
+    return `${_NOMES_MESES_DASH[parseInt(mes, 10) - 1]} ${ano}`;
+}
+
+// Atualiza o label do botão (desktop + mobile)
+function _atualizarLabelBtnMes() {
+    const label = _labelMesDash(_dashMesFiltro);
+    ['labelPeriodoDashboard', 'labelPeriodoDashMobile'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = label;
+    });
+}
+
+// Abre/fecha o dropdown do seletor de mês
+function _abrirSeletorMesDash(btnRef) {
+    // Remove dropdown existente se for o mesmo botão
+    const existente = document.getElementById('dashMesDropdown');
+    if (existente) { existente.remove(); return; }
+
+    const meses = _getMesesDisponiveis();
+    const { mes: ma, ano: aa } = _getMesAnoAtual();
+
+    const dropdown = document.createElement('div');
+    dropdown.id = 'dashMesDropdown';
+    dropdown.style.cssText = `
+        position: absolute; z-index: 9999; min-width: 200px;
+        background: #1a1d2e; border: 1px solid rgba(67,160,71,0.35);
+        border-radius: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+        overflow: hidden; max-height: 320px; overflow-y: auto;
+    `;
+
+    // Posiciona relativo ao botão
+    const rect = btnRef.getBoundingClientRect();
+    dropdown.style.top  = `${rect.bottom + window.scrollY + 6}px`;
+    dropdown.style.left = `${rect.left   + window.scrollX}px`;
+
+    function criarOpcao(label, mes, ano, isAtivo) {
+        const li = document.createElement('button');
+        li.type = 'button';
+        li.style.cssText = `
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            padding: 11px 16px; background: none; border: none; cursor: pointer;
+            color: ${isAtivo ? '#10b981' : 'rgba(255,255,255,0.82)'};
+            font-size: 0.9rem; font-weight: ${isAtivo ? '700' : '500'};
+            text-align: left; transition: background 0.12s;
+        `;
+        li.addEventListener('mouseenter', () => { li.style.background = 'rgba(255,255,255,0.06)'; });
+        li.addEventListener('mouseleave', () => { li.style.background = ''; });
+        if (isAtivo) {
+            const dot = document.createElement('span');
+            dot.style.cssText = 'width:7px; height:7px; border-radius:50%; background:#10b981; flex-shrink:0;';
+            li.appendChild(dot);
+        }
+        li.appendChild(document.createTextNode(label));
+        li.addEventListener('click', () => {
+            _dashMesFiltro = (mes === ma && ano === aa) ? null : { mes, ano };
+            _atualizarLabelBtnMes();
+            atualizarDashboardResumo();
+            dropdown.remove();
+        });
+        return li;
+    }
+
+    // Opção "Mês atual" sempre no topo
+    const isMesAtual = !_dashMesFiltro || (_dashMesFiltro.mes === ma && _dashMesFiltro.ano === aa);
+    dropdown.appendChild(criarOpcao('Mês atual', ma, aa, isMesAtual));
+
+    // Divisor
+    const div = document.createElement('div');
+    div.style.cssText = 'height:1px; background:rgba(255,255,255,0.07); margin:4px 0;';
+    dropdown.appendChild(div);
+
+    // Meses históricos (excluindo o atual)
+    meses.filter(m => !(m.mes === ma && m.ano === aa)).forEach(({ mes, ano }) => {
+        const lbl   = `${_NOMES_MESES_DASH[parseInt(mes, 10) - 1]} ${ano}`;
+        const ativo = _dashMesFiltro?.mes === mes && _dashMesFiltro?.ano === ano;
+        dropdown.appendChild(criarOpcao(lbl, mes, ano, ativo));
+    });
+
+    document.body.appendChild(dropdown);
+
+    // Fecha ao clicar fora
+    const fechar = (e) => {
+        if (!dropdown.contains(e.target) && e.target !== btnRef && !btnRef.contains(e.target)) {
+            dropdown.remove();
+            document.removeEventListener('click', fechar, true);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', fechar, true), 0);
+
+    // Fecha com Escape
+    const fecharEsc = (e) => { if (e.key === 'Escape') { dropdown.remove(); document.removeEventListener('keydown', fecharEsc); } };
+    document.addEventListener('keydown', fecharEsc);
+}
+
+// Inicializa o botão de seleção de mês (desktop + mobile)
+function _initBtnPeriodoDash() {
+    ['btnPeriodoDashboard', 'btnPeriodoDashMobile'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener('click', () => _abrirSeletorMesDash(btn));
+    });
+    _atualizarLabelBtnMes();
+}
+
 function atualizarDashboardResumo() {
     let totalEntradas = 0, totalSaidas = 0, totalReservas = 0;
     let corrupcaoDetectada = false;
@@ -1953,26 +2107,58 @@ function atualizarDashboardResumo() {
         return n;
     };
 
+    // ── Determina o mês filtrado ──────────────────────────────────────────
+    const filtroMes = _dashMesFiltro ?? _getMesAnoAtual();
+    const txMes = _filtrarTransacoesMes(filtroMes.mes, filtroMes.ano);
+
+    // Mês anterior para comparação
+    let mesAnterior = parseInt(filtroMes.mes, 10) - 1;
+    let anoAnterior = parseInt(filtroMes.ano, 10);
+    if (mesAnterior < 1) { mesAnterior = 12; anoAnterior--; }
+    const txMesAnt = _filtrarTransacoesMes(
+        String(mesAnterior).padStart(2, '0'),
+        String(anoAnterior)
+    );
+
+    // ── Entradas/Saídas do mês selecionado ───────────────────────────────
+    txMes.forEach((t, i) => {
+        const valor = toValorSeguro(t.valor, `transacao[${i}] id=${t.id}`);
+        if (t.categoria === 'entrada')          totalEntradas += valor;
+        else if (t.categoria === 'saida')        totalSaidas   += valor;
+    });
+
+    // ── Saldo = acumulado de TODAS as transações (não filtrado por mês) ──
+    let saldoTotal = 0;
     transacoes.forEach((t, i) => {
         const valor = toValorSeguro(t.valor, `transacao[${i}] id=${t.id}`);
-
-        if (t.categoria === 'entrada') {
-            totalEntradas += valor;
-        } else if (t.categoria === 'saida') {
-            totalSaidas += valor;
-        } else if (t.categoria === 'reserva') {
+        if      (t.categoria === 'entrada')           saldoTotal += valor;
+        else if (t.categoria === 'saida')             saldoTotal -= valor;
+        else if (t.categoria === 'reserva')           saldoTotal -= valor;
+        else if (t.categoria === 'retirada_reserva')  saldoTotal += valor;
+        else if (t.categoria === 'reserva') {
             totalReservas += valor;
         } else if (t.categoria === 'retirada_reserva') {
             totalReservas -= valor;
-            if (totalReservas < 0) {
-                console.warn('[DASHBOARD] totalReservas ficou negativo após retirada — possível corrupção.');
-                corrupcaoDetectada = true;
-                totalReservas = 0;
-            }
+            if (totalReservas < 0) { corrupcaoDetectada = true; totalReservas = 0; }
         }
     });
 
-    const saldo = totalEntradas - totalSaidas - totalReservas;
+    // ── Entradas/Saídas do mês anterior (para %) ─────────────────────────
+    let entAnt = 0, saiAnt = 0;
+    txMesAnt.forEach((t, i) => {
+        const valor = toValorSeguro(t.valor, `mesAnt transacao[${i}]`);
+        if (t.categoria === 'entrada') entAnt += valor;
+        else if (t.categoria === 'saida') saiAnt += valor;
+    });
+
+    // ── % de variação ─────────────────────────────────────────────────────
+    function _pct(atual, anterior) {
+        if (anterior === 0) return atual > 0 ? '+100%' : '—';
+        const v = ((atual - anterior) / anterior * 100).toFixed(1);
+        return (parseFloat(v) >= 0 ? '+' : '') + v + '%';
+    }
+
+    const saldo = saldoTotal;
 
     const totalReservasCalc = metas.reduce((s, m, i) => {
         return s + toValorSeguro(m.saved, `meta[${i}] id=${m.id}`);
@@ -2003,6 +2189,24 @@ function atualizarDashboardResumo() {
     }
     if (heroSaldoEl) heroSaldoEl.dataset.valor = formatBRL(saldo);
     if (reservasEl)  reservasEl.textContent    = formatBRL(totalReservasCalc);
+
+    // ── % variação vs mês anterior ───────────────────────────────────────
+    const elPctEnt  = document.getElementById('percentEntradas');
+    const elPctSai  = document.getElementById('percentSaidas');
+    const elPctSld  = document.getElementById('percentSaldo');
+    const nomeMesAnt = _NOMES_MESES_DASH[mesAnterior - 1];
+
+    if (elPctEnt) elPctEnt.textContent = `${_pct(totalEntradas, entAnt)} vs ${nomeMesAnt}`;
+    if (elPctSai) elPctSai.textContent = `${_pct(totalSaidas, saiAnt)} vs ${nomeMesAnt}`;
+    if (elPctSld) elPctSld.textContent = 'Saldo acumulado total';
+
+    // ── Card labels com mês quando em modo histórico ──────────────────────
+    const labelEntEl = document.querySelector('#cardEntradasDashboard .card-label');
+    const labelSaiEl = document.querySelector('#cardSaidasDashboard .card-label');
+    const isMesAtualView = !_dashMesFiltro;
+    const suffixo = isMesAtualView ? '' : ` · ${_NOMES_MESES_DASH[parseInt(filtroMes.mes,10)-1]}`;
+    if (labelEntEl) labelEntEl.textContent = `Entradas${suffixo}`;
+    if (labelSaiEl) labelSaiEl.textContent = `Saídas${suffixo}`;
 }
 
 // ========== SISTEMA DE NOTIFICAÇÕES DE VENCIMENTO ==========
@@ -4657,6 +4861,7 @@ document.addEventListener('DOMContentLoaded', () => {
     verificarLogin();
     bindEventos();
     setupSidebarToggle();
+    _initBtnPeriodoDash();
 
     // Fallback para qualquer <img> de foto de perfil que falhar ao carregar
     document.querySelectorAll('#userPhoto, #mobileUserPhoto, #cfgUserPhoto').forEach(img => {
