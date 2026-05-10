@@ -33,6 +33,11 @@ let _effectiveEmail  = null;
 let _allProfilesData = []; // cache local de todos os perfis — fonte de verdade para o save
 let _cachedAuthToken = null; // token cacheado para beforeunload (fetch+keepalive)
 
+// Cache de cópias congeladas para window.transacoes / metas / contasFixas / cartoesCredito
+// Declarado no escopo do módulo para que salvarDados() e atualizarReferenciasGlobais()
+// possam invalidá-lo. Sem isso o getter retorna o array vazio do boot para sempre.
+let _cache = { tx: null, mt: null, cf: null, cc: null };
+
 // Estado compartilhado com módulos lazy-loaded via _ctx
 let _movPaginaAtual  = 1;
 let _movVisivelCache = [];
@@ -232,10 +237,7 @@ function validarUserData(userData) {
     //    Necessário para graficos.js (script não-módulo que lê window.transacoes etc.)
     //    Retorna shallow-frozen copies — código externo lê mas não muta o array original
 
-    // Cache das cópias congeladas — invalidado sempre que os dados mudam
-    // Evita recriar N objetos a cada acesso externo (graficos.js, etc.)
-    let _cache = { tx: null, mt: null, cf: null, cc: null };
-
+    // _cache está no escopo do módulo — compartilhado com salvarDados() e atualizarReferenciasGlobais()
     _def('transacoes', () => {
         if (!_cache.tx) _cache.tx = Object.freeze(transacoes.map(t => Object.freeze(Object.assign({}, t))));
         return _cache.tx;
@@ -291,6 +293,8 @@ function atualizarReferenciasGlobais() {
             ),
         }),
     });
+    // Invalida cache das cópias congeladas — dados mudaram (load ou save)
+    _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null;
 }
 
 // Limites por plano — aceita qualquer capitalização (Stripe guarda lowercase)
