@@ -1659,7 +1659,7 @@ function mostrarTela(tela) {
         if (periodoSel) periodoSel.style.display = 'none';
 
         if (!_dbLoaded.transacoes) {
-            import('./db-transacoes.js?v=5').then(m => {
+            import('./db-transacoes.js?v=6').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.transacoes = true;
             });

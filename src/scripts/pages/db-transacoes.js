@@ -912,32 +912,185 @@ function renderizarOrcamentos() {
         body.appendChild(barWrap);
         body.appendChild(valRow);
 
-        // Botão editar
-        const btnEdit = document.createElement('button');
-        btnEdit.className = 'orc-card-edit';
-        btnEdit.type = 'button';
-        btnEdit.setAttribute('aria-label', `Editar orçamento de ${tipo}`);
-        const editI = document.createElement('i');
-        editI.className = 'fas fa-pen';
-        editI.setAttribute('aria-hidden', 'true');
-        btnEdit.appendChild(editI);
-        btnEdit.addEventListener('click', (e) => { e.stopPropagation(); abrirModalOrcamento(tipo); });
-
         card.appendChild(iconeWrap);
         card.appendChild(body);
-        card.appendChild(btnEdit);
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', `Ver detalhes de ${tipo}`);
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', () => abrirDetalheOrcamento(tipo));
+        card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirDetalheOrcamento(tipo); } });
         grid.appendChild(card);
     });
 
     section.appendChild(grid);
 }
 
+// Abre popup de DETALHE ao clicar num card — lista de compras + opções
+function abrirDetalheOrcamento(tipo) {
+    const orc    = _ctx.orcamentos || {};
+    const cfg    = orc[tipo];
+    if (!cfg) return;
+
+    const limite = parseFloat(cfg.limite) || 0;
+    const gasto  = _gastoMesAtualPorTipo(tipo);
+    const pct    = limite > 0 ? Math.min((gasto / limite) * 100, 999) : 0;
+    const cor    = _corOrcamento(pct);
+    const pctBar = Math.min(pct, 100);
+
+    // Transações do mês nessa categoria
+    const hoje = new Date();
+    const txMes = _ctx.transacoes
+        .filter(t => {
+            if (t.tipo !== tipo) return false;
+            if (t.categoria !== 'saida' && t.categoria !== 'saida_credito') return false;
+            const iso = _ctx.dataParaISO(t.data || '');
+            if (!iso) return false;
+            const d = new Date(iso + 'T00:00:00');
+            return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+        })
+        .slice()
+        .reverse();
+
+    const popupEl = document.createElement('div');
+    popupEl.className = 'orc-detalhe-wrap';
+
+    // — Cabeçalho do popup —
+    const hdr = document.createElement('div');
+    hdr.className = 'orc-detalhe-hdr';
+
+    const hdrLeft = document.createElement('div');
+    hdrLeft.className = 'orc-detalhe-hdr-left';
+    const hdrIcon = document.createElement('div');
+    hdrIcon.className = 'orc-card-icon';
+    const hdrI = document.createElement('i');
+    hdrI.className = `fas ${_obterIconeTransacao('saida', tipo)}`;
+    hdrI.setAttribute('aria-hidden', 'true');
+    hdrIcon.appendChild(hdrI);
+    const hdrTitle = document.createElement('div');
+    const hdrName = document.createElement('strong');
+    hdrName.textContent = tipo;
+    const hdrSub = document.createElement('div');
+    hdrSub.className = 'orc-detalhe-sub';
+    hdrSub.textContent = `${formatBRL(gasto)} / ${formatBRL(limite)}`;
+    hdrSub.style.color = cor;
+    hdrTitle.appendChild(hdrName);
+    hdrTitle.appendChild(hdrSub);
+    hdrLeft.appendChild(hdrIcon);
+    hdrLeft.appendChild(hdrTitle);
+
+    const hdrPct = document.createElement('span');
+    hdrPct.className = 'orc-detalhe-pct';
+    hdrPct.style.color = cor;
+    hdrPct.textContent = `${pct >= 999 ? '+999' : pct.toFixed(0)}%`;
+
+    hdr.appendChild(hdrLeft);
+    hdr.appendChild(hdrPct);
+
+    // — Barra de progresso —
+    const barWrap = document.createElement('div');
+    barWrap.className = 'orc-bar-wrap';
+    barWrap.style.marginBottom = '16px';
+    const barFill = document.createElement('div');
+    barFill.className = 'orc-bar-fill';
+    barFill.style.width = pctBar.toFixed(1) + '%';
+    barFill.style.background = cor;
+    barWrap.appendChild(barFill);
+
+    // — Lista de compras —
+    const listTitle = document.createElement('div');
+    listTitle.className = 'orc-detalhe-list-title';
+    listTitle.textContent = txMes.length > 0
+        ? `${txMes.length} lançamento${txMes.length > 1 ? 's' : ''} este mês`
+        : 'Nenhum lançamento este mês';
+
+    const list = document.createElement('div');
+    list.className = 'orc-detalhe-list';
+
+    if (txMes.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'orc-detalhe-empty';
+        empty.textContent = 'Nenhuma transação nesta categoria no mês atual.';
+        list.appendChild(empty);
+    } else {
+        txMes.forEach(t => {
+            const row = document.createElement('div');
+            row.className = 'orc-detalhe-row';
+
+            const left = document.createElement('div');
+            left.className = 'orc-detalhe-row-left';
+            const desc = document.createElement('span');
+            desc.className = 'orc-detalhe-desc';
+            desc.textContent = _ctx._sanitizeText(t.descricao || '');
+            const date = document.createElement('span');
+            date.className = 'orc-detalhe-date';
+            date.textContent = _ctx._sanitizeText(t.data || '');
+            left.appendChild(desc);
+            left.appendChild(date);
+
+            const val = document.createElement('span');
+            val.className = 'orc-detalhe-val';
+            val.textContent = `- ${formatBRL(parseFloat(t.valor) || 0)}`;
+
+            row.appendChild(left);
+            row.appendChild(val);
+            list.appendChild(row);
+        });
+    }
+
+    // — Ações —
+    const acoes = document.createElement('div');
+    acoes.className = 'orc-detalhe-acoes';
+
+    const btnEditar = document.createElement('button');
+    btnEditar.className = 'btn-primary';
+    btnEditar.type = 'button';
+    btnEditar.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i> Editar limite';
+    btnEditar.addEventListener('click', () => {
+        _ctx.fecharPopup();
+        setTimeout(() => abrirModalOrcamento(tipo), 120);
+    });
+
+    const btnRemover = document.createElement('button');
+    btnRemover.className = 'btn-excluir';
+    btnRemover.type = 'button';
+    btnRemover.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i> Remover';
+    btnRemover.addEventListener('click', () => {
+        if (!confirm(`Remover o orçamento de "${tipo}"?`)) return;
+        const novo = Object.assign({}, _ctx.orcamentos);
+        delete novo[tipo];
+        _ctx.orcamentos = novo;
+        _ctx.salvarDados();
+        renderizarOrcamentos();
+        _ctx.fecharPopup();
+        _ctx.mostrarNotificacao(`Orçamento de ${tipo} removido.`, 'info');
+    });
+
+    const btnFechar = document.createElement('button');
+    btnFechar.className = 'btn-cancelar';
+    btnFechar.type = 'button';
+    btnFechar.textContent = 'Fechar';
+    btnFechar.addEventListener('click', () => _ctx.fecharPopup());
+
+    acoes.appendChild(btnEditar);
+    acoes.appendChild(btnRemover);
+    acoes.appendChild(btnFechar);
+
+    _ctx.criarPopupDOM((box) => {
+        box.appendChild(hdr);
+        box.appendChild(barWrap);
+        box.appendChild(listTitle);
+        box.appendChild(list);
+        box.appendChild(acoes);
+    });
+}
+
+// Abre modal para ADICIONAR novo orçamento ou EDITAR limite de um existente
 function abrirModalOrcamento(tipoEditar) {
-    const orc        = _ctx.orcamentos || {};
-    const editando   = tipoEditar !== null;
+    const orc         = _ctx.orcamentos || {};
+    const editando    = tipoEditar !== null;
     const limiteAtual = editando && orc[tipoEditar] ? orc[tipoEditar].limite : '';
 
-    // Filtra tipos que ainda não têm orçamento (se adicionando novo)
     const tiposDisponiveis = editando
         ? [tipoEditar]
         : _TIPOS_ORCAMENTO.filter(t => !Object.prototype.hasOwnProperty.call(orc, t));
@@ -948,37 +1101,23 @@ function abrirModalOrcamento(tipoEditar) {
     }
 
     _ctx.criarPopup(`
-        <h3>${editando ? 'Editar Orçamento' : 'Novo Orçamento'}</h3>
+        <h3>${editando ? 'Editar Limite' : 'Novo Orçamento'}</h3>
         <div class="edit-tx-form">
             <label class="edit-tx-label" for="orcTipoSelect">Categoria</label>
-            <select id="orcTipoSelect" class="form-input">
-                ${tiposDisponiveis.map(t => `<option value="${t}"${editando ? ' selected' : ''}>${t}</option>`).join('')}
+            <select id="orcTipoSelect" class="form-input" ${editando ? 'disabled' : ''}>
+                ${tiposDisponiveis.map(t => `<option value="${t}">${t}</option>`).join('')}
             </select>
             <label class="edit-tx-label" for="orcLimiteInput">Limite mensal (R$)</label>
             <input type="number" id="orcLimiteInput" class="form-input" step="0.01" min="1" max="10000000" placeholder="Ex: 800,00" value="${limiteAtual}">
         </div>
-        ${editando ? '<button class="btn-excluir" id="orcExcluirBtn" type="button">Remover orçamento</button>' : ''}
         <button class="btn-primary" id="orcSalvarBtn" type="button">Salvar</button>
         <button class="btn-cancelar" id="orcCancelarBtn" type="button">Cancelar</button>
     `);
 
     document.getElementById('orcCancelarBtn').addEventListener('click', () => _ctx.fecharPopup());
 
-    if (editando) {
-        document.getElementById('orcExcluirBtn').addEventListener('click', () => {
-            if (!confirm(`Remover o orçamento de "${tipoEditar}"?`)) return;
-            const novo = Object.assign({}, _ctx.orcamentos);
-            delete novo[tipoEditar];
-            _ctx.orcamentos = novo;
-            _ctx.salvarDados();
-            renderizarOrcamentos();
-            _ctx.fecharPopup();
-            _ctx.mostrarNotificacao(`Orçamento de ${tipoEditar} removido.`, 'info');
-        });
-    }
-
     document.getElementById('orcSalvarBtn').addEventListener('click', () => {
-        const tipoSel  = document.getElementById('orcTipoSelect').value;
+        const tipoSel   = editando ? tipoEditar : document.getElementById('orcTipoSelect').value;
         const limiteStr = document.getElementById('orcLimiteInput').value;
         const limite    = parseFloat(parseFloat(limiteStr).toFixed(2));
 

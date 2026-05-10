@@ -8483,36 +8483,131 @@ button,
     font-size: 0.76rem;
 }
 
-.orc-card-edit {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 26px;
-    height: 26px;
-    border-radius: 7px;
+.orc-card:hover {
+    border-color: rgba(67,160,71,0.3);
     background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.08);
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-    cursor: pointer;
+}
+
+/* Popup de detalhe do orçamento */
+.orc-detalhe-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.orc-detalhe-hdr {
     display: flex;
     align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.15s, background 0.15s;
+    justify-content: space-between;
+    margin-bottom: 12px;
 }
 
-.orc-card:hover .orc-card-edit {
-    opacity: 1;
+.orc-detalhe-hdr-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-.orc-card-edit:hover {
-    background: rgba(255,255,255,0.12);
+.orc-detalhe-sub {
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-top: 2px;
+}
+
+.orc-detalhe-pct {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+.orc-detalhe-list-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+.orc-detalhe-list {
+    max-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.orc-detalhe-empty {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    padding: 12px 0;
+    text-align: center;
+}
+
+.orc-detalhe-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.03);
+    gap: 8px;
+}
+
+.orc-detalhe-row:hover {
+    background: rgba(255,255,255,0.06);
+}
+
+.orc-detalhe-row-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.orc-detalhe-desc {
+    font-size: 0.85rem;
+    font-weight: 500;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+.orc-detalhe-date {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+}
+
+.orc-detalhe-val {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--danger);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.orc-detalhe-acoes {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.orc-detalhe-acoes .btn-primary,
+.orc-detalhe-acoes .btn-excluir,
+.orc-detalhe-acoes .btn-cancelar {
+    flex: 1;
+    min-width: 90px;
+    font-size: 0.82rem;
+    padding: 10px 12px;
 }
 
 @media (max-width: 768px) {
     .orc-grid { grid-template-columns: 1fr 1fr; }
-    .orc-card-edit { opacity: 1; }
     .orc-card-name { max-width: 80px; }
+    .orc-detalhe-desc { max-width: 130px; }
 }
