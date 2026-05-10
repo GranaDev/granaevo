@@ -222,11 +222,42 @@ function setupBotoesRelatorio() {
         _ctx.tipoRelatorioAtivo = 'familia';
         newBtnIndividual.classList.remove('active');
         newBtnCasal.classList.remove('active');
+        newBtnFamilia.classList.remove('active');
+        newBtnPatrimonio?.classList.remove('active');
         newBtnFamilia.classList.add('active');
         perfilSelector.classList.remove('show');
         const resultado = document.getElementById('relatorioResultado');
         if (resultado) resultado.classList.add('js-hidden');
         _ctx.popularFiltrosRelatorio();
+    });
+
+    // ── Histórico Patrimonial ────────────────────────────────────────────
+    const btnPatrimonio = document.querySelector('.tipo-relatorio-btns [data-tipo="patrimonio"]');
+    if (btnPatrimonio) {
+        const newBtnPatrimonio = btnPatrimonio.cloneNode(true);
+        btnPatrimonio.parentNode.replaceChild(newBtnPatrimonio, btnPatrimonio);
+
+        newBtnPatrimonio.addEventListener('click', function () {
+            _ctx.tipoRelatorioAtivo = 'patrimonio';
+            newBtnIndividual.classList.remove('active');
+            newBtnCasal.classList.remove('active');
+            newBtnFamilia.classList.remove('active');
+            newBtnPatrimonio.classList.add('active');
+            perfilSelector.classList.remove('show');
+            // Esconde seletores de mês/ano — não necessários para histórico
+            const periodRow = document.querySelector('.rel-period-row');
+            if (periodRow) periodRow.style.display = 'none';
+            const resultado = document.getElementById('relatorioResultado');
+            if (resultado) resultado.classList.add('js-hidden');
+        });
+    }
+
+    // Restaura seletores ao trocar para outro tipo
+    [newBtnIndividual, newBtnCasal, newBtnFamilia].forEach(btn => {
+        btn.addEventListener('click', () => {
+            const periodRow = document.querySelector('.rel-period-row');
+            if (periodRow) periodRow.style.display = '';
+        }, true);
     });
 }
 
@@ -254,6 +285,16 @@ async function gerarRelatorio() {
         return alert('Ano inválido.');
     }
     
+    // Histórico patrimonial não precisa de mês/ano
+    if (_ctx.tipoRelatorioAtivo === 'patrimonio') {
+        const resultado = document.getElementById('relatorioResultado');
+        if (resultado) {
+            resultado.classList.remove('js-hidden');
+            gerarHistoricoPatrimonial(resultado);
+        }
+        return;
+    }
+
     _ctx._gerandoRelatorio = true;
     try {
         if (_ctx.tipoRelatorioAtivo === 'individual') {
@@ -2520,6 +2561,157 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
 }
 
 window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
+
+// ========== HISTÓRICO PATRIMONIAL ==========
+
+function gerarHistoricoPatrimonial(container) {
+    const tx    = _ctx.transacoes || [];
+    const metas = _ctx.metas      || [];
+
+    const _mNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+    // Coleta meses com dados
+    const mesesSet = new Set();
+    tx.forEach(t => {
+        if (typeof t.data === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(t.data)) {
+            const p = t.data.split('/');
+            mesesSet.add(`${p[2]}-${p[1]}`);
+        }
+    });
+    metas.forEach(m => {
+        if (m.monthly && typeof m.monthly === 'object') {
+            Object.keys(m.monthly).forEach(k => { if (/^\d{4}-\d{2}$/.test(k)) mesesSet.add(k); });
+        }
+    });
+
+    const meses = Array.from(mesesSet).sort();
+
+    if (meses.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:48px;color:var(--text-secondary)"><i class="fas fa-info-circle" style="font-size:2rem;margin-bottom:12px;display:block"></i>Sem dados de transações para gerar o histórico.</div>';
+        return;
+    }
+
+    // Calcula dados por mês
+    let saldoCum = 0;
+    const linhas = [];
+
+    meses.forEach(mesAno => {
+        const [ano, mes] = mesAno.split('-');
+        const sufixo = `/${mes}/${ano}`;
+        let entMes = 0, saiMes = 0;
+
+        tx.filter(t => typeof t.data === 'string' && t.data.endsWith(sufixo)).forEach(t => {
+            const v = parseFloat(t.valor) || 0;
+            if      (t.categoria === 'entrada')           { entMes += v; saldoCum += v; }
+            else if (t.categoria === 'saida')             { saiMes += v; saldoCum -= v; }
+            else if (t.categoria === 'reserva')           { saldoCum -= v; }
+            else if (t.categoria === 'retirada_reserva')  { saldoCum += v; }
+        });
+
+        let resAcum = 0;
+        metas.forEach(m => {
+            if (m.monthly && typeof m.monthly === 'object') {
+                Object.entries(m.monthly).forEach(([k, v]) => {
+                    if (/^\d{4}-\d{2}$/.test(k) && k <= mesAno) resAcum += (parseFloat(v) || 0);
+                });
+            }
+        });
+
+        linhas.push({
+            mesAno,
+            label:      `${_mNomes[parseInt(mes,10)-1]} ${ano}`,
+            entradas:   entMes,
+            saidas:     saiMes,
+            saldo:      parseFloat(saldoCum.toFixed(2)),
+            reservas:   parseFloat(Math.max(0, resAcum).toFixed(2)),
+            patrimonio: parseFloat((saldoCum + Math.max(0, resAcum)).toFixed(2)),
+        });
+    });
+
+    // Métricas de resumo
+    const ultimo    = linhas[linhas.length - 1];
+    const primeiro  = linhas[0];
+    const variacao  = ultimo.patrimonio - primeiro.patrimonio;
+    const melhorMes = linhas.reduce((a, b) => (b.entradas - b.saidas > a.entradas - a.saidas ? b : a));
+    const piorMes   = linhas.reduce((a, b) => (b.saidas - b.entradas > a.saidas - a.entradas ? b : a));
+
+    const fmt = v => _ctx.formatBRL ? _ctx.formatBRL(v) : `R$ ${v.toFixed(2).replace('.', ',')}`;
+    const corV = variacao >= 0 ? 'var(--success)' : 'var(--danger)';
+
+    // Barra de progresso relativa ao maior patrimônio
+    const maxPatr = Math.max(...linhas.map(l => l.patrimonio), 1);
+
+    let linhasHTML = linhas.map((l, i) => {
+        const pct    = Math.max(0, Math.min(100, (l.patrimonio / maxPatr) * 100));
+        const delta  = i > 0 ? l.patrimonio - linhas[i-1].patrimonio : 0;
+        const corD   = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--text-muted)';
+        const icD    = delta > 0 ? 'arrow-up' : delta < 0 ? 'arrow-down' : 'minus';
+        return `
+            <tr class="rel-patr-row">
+                <td class="rel-patr-mes">${_ctx.sanitizeHTML ? _ctx.sanitizeHTML(l.label) : l.label}</td>
+                <td style="color:var(--success)">${fmt(l.entradas)}</td>
+                <td style="color:var(--danger)">${fmt(l.saidas)}</td>
+                <td>${fmt(l.saldo)}</td>
+                <td style="color:var(--warning)">${fmt(l.reservas)}</td>
+                <td>
+                    <div class="rel-patr-bar-wrap">
+                        <div class="rel-patr-bar" style="width:${pct.toFixed(1)}%"></div>
+                    </div>
+                    <span style="font-weight:700;color:var(--primary)">${fmt(l.patrimonio)}</span>
+                    ${i > 0 ? `<span style="font-size:0.75rem;color:${corD};margin-left:6px"><i class="fas fa-${icD}"></i></span>` : ''}
+                </td>
+            </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="rel-patrimonio-wrap">
+            <div class="rel-patrimonio-header">
+                <h2><i class="fas fa-chart-area"></i> Histórico Patrimonial</h2>
+                <p>Evolução do seu patrimônio mês a mês — saldo disponível + total em reservas</p>
+            </div>
+
+            <div class="rel-patrimonio-cards">
+                <div class="rel-patr-card">
+                    <div class="rel-patr-card-label">Patrimônio Atual</div>
+                    <div class="rel-patr-card-value" style="color:var(--primary)">${fmt(ultimo.patrimonio)}</div>
+                </div>
+                <div class="rel-patr-card">
+                    <div class="rel-patr-card-label">Variação Total</div>
+                    <div class="rel-patr-card-value" style="color:${corV}">
+                        ${variacao >= 0 ? '+' : ''}${fmt(variacao)}
+                    </div>
+                </div>
+                <div class="rel-patr-card">
+                    <div class="rel-patr-card-label">Melhor Mês</div>
+                    <div class="rel-patr-card-value" style="color:var(--success);font-size:1rem">${melhorMes.label}</div>
+                    <div style="font-size:0.78rem;color:var(--text-secondary)">+${fmt(melhorMes.entradas - melhorMes.saidas)}</div>
+                </div>
+                <div class="rel-patr-card">
+                    <div class="rel-patr-card-label">Mês com Mais Saídas</div>
+                    <div class="rel-patr-card-value" style="color:var(--danger);font-size:1rem">${piorMes.label}</div>
+                    <div style="font-size:0.78rem;color:var(--text-secondary)">${fmt(piorMes.saidas)} saídas</div>
+                </div>
+            </div>
+
+            <div class="rel-patrimonio-table-wrap">
+                <table class="rel-patrimonio-table">
+                    <thead>
+                        <tr>
+                            <th>Mês</th>
+                            <th>Entradas</th>
+                            <th>Saídas</th>
+                            <th>Saldo</th>
+                            <th>Reservas</th>
+                            <th>Patrimônio</th>
+                        </tr>
+                    </thead>
+                    <tbody>${linhasHTML}</tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
 
 // ========== BANCO DE DICAS SOBRE CARTÕES ==========
 
