@@ -39,6 +39,104 @@ function _atualizarLabelCDI(val) {
 const formatBRL     = (...a) => _ctx.formatBRL(...a);
 const _sanitizeText = (...a) => _ctx._sanitizeText(...a);
 
+// ===== Funções financeiras (escopo de módulo — usadas no form E na projeção) =====
+function fvComposto(pv, pmt, r, n) {
+    if (r <= 0) return pv + pmt * n;
+    return pv * Math.pow(1 + r, n) + pmt * ((Math.pow(1 + r, n) - 1) / r);
+}
+function mesesParaMeta(pv, obj, pmt, r) {
+    for (let n = 1; n <= 600; n++) {
+        if (fvComposto(pv, pmt, r, n) >= obj) return n;
+    }
+    return null;
+}
+function aporteNecessario(pv, obj, r, n) {
+    if (n <= 0) return null;
+    const fv = obj - pv * Math.pow(1 + r, n);
+    if (r <= 0) return fv / n;
+    const fator = Math.pow(1 + r, n) - 1;
+    if (fator <= 0) return null;
+    return fv * r / fator;
+}
+
+// Retorna taxa diária efetiva para uma meta com rendimento
+// Para CDI: sempre usa o _cdiAnual atual (não o salvo em taxaJuros)
+// Para personalizado: taxaJuros está em % mensal efetivo
+function _taxaDiaria(meta) {
+    if (meta.tipoRendimento === 'cdi' && (meta.cdiPct || 0) > 0) {
+        const taxaAa = _cdiAnual * meta.cdiPct / 100;
+        return Math.pow(1 + taxaAa / 100, 1 / 365) - 1;
+    }
+    if (meta.tipoRendimento === 'personalizado' && (meta.taxaJuros || 0) > 0) {
+        // taxaJuros = % mensal efetivo; converte para diário via anualização
+        const taxaAa = (Math.pow(1 + meta.taxaJuros / 100, 12) - 1) * 100;
+        return Math.pow(1 + taxaAa / 100, 1 / 365) - 1;
+    }
+    return 0;
+}
+
+// Retorna taxa mensal efetiva para projeções
+function _taxaMensal(meta) {
+    if (meta.tipoRendimento === 'cdi' && (meta.cdiPct || 0) > 0) {
+        const taxaAa = _cdiAnual * meta.cdiPct / 100;
+        return Math.pow(1 + taxaAa / 100, 1 / 12) - 1;
+    }
+    if (meta.tipoRendimento === 'personalizado' && (meta.taxaJuros || 0) > 0) {
+        return meta.taxaJuros / 100;
+    }
+    return 0;
+}
+
+// Aplica juros compostos diários em todas as metas com rendimento
+// Chamado automaticamente ao abrir a tela de reservas
+async function aplicarRendimentosDiarios() {
+    await _fetchCDI();
+
+    const hojeISO = new Date().toISOString().slice(0, 10);
+    const mesKey  = hojeISO.slice(0, 7);
+    let houveMudanca = false;
+
+    (_ctx.metas || []).forEach(meta => {
+        if (!meta.tipoRendimento || meta.tipoRendimento === 'sem_rendimento') return;
+        if (!meta.saved || meta.saved <= 0) return;
+
+        const rDiario = _taxaDiaria(meta);
+        if (rDiario <= 0) return;
+
+        // Primeira vez: marca o ponto de início, sem creditar rendimento ainda
+        if (!meta.lastRendimento) {
+            meta.lastRendimento = hojeISO;
+            houveMudanca = true;
+            return;
+        }
+
+        const dias = Math.floor(
+            (new Date(hojeISO) - new Date(meta.lastRendimento)) / 86_400_000
+        );
+        if (dias < 1) return;
+
+        // Juros compostos: FV = PV × (1 + r)^d - PV
+        const rendimento = meta.saved * (Math.pow(1 + rDiario, dias) - 1);
+
+        // Atualiza lastRendimento mesmo se rendimento mínimo (evita re-contagem)
+        meta.lastRendimento = hojeISO;
+        houveMudanca = true;
+
+        if (rendimento < 0.01) return; // menos de R$0,01 — não credita ainda
+
+        const rendSeguro = parseFloat(rendimento.toFixed(2));
+        meta.saved       = parseFloat((meta.saved + rendSeguro).toFixed(2));
+        meta.monthly     = meta.monthly || {};
+        meta.monthly[mesKey] = parseFloat(
+            ((meta.monthly[mesKey] || 0) + rendSeguro).toFixed(2)
+        );
+    });
+
+    if (houveMudanca) {
+        _ctx.salvarDados();
+    }
+}
+
 export function init(ctx) {
     _ctx = ctx;
     window._dbMetas = { renderMetasList };
@@ -48,8 +146,8 @@ export function init(ctx) {
     window.abrirRetiradaForm      = (id) => abrirRetiradaForm(id);
     window.abrirAnaliseDisciplina = () => abrirAnaliseDisciplina();
     window.renderMetaVisual       = () => renderMetaVisual();
-    _fetchCDI();
-    renderMetasList();
+    // Aplica rendimentos acumulados (busca CDI atual internamente) e renderiza
+    aplicarRendimentosDiarios().then(() => renderMetasList());
 
     // search + filter listeners (elementos podem não existir em mobile — guarda com ?.)
     document.getElementById('metaSearchInput')?.addEventListener('input', () => {
@@ -287,25 +385,7 @@ function abrirMetaForm(editId = null) {
         const bsI = document.createElement('i'); bsI.className = 'fas fa-calculator';
         btnSimular.appendChild(bsI); btnSimular.appendChild(document.createTextNode(' Ver Projeção'));
 
-        // Funções de cálculo financeiro (usadas também no clique)
-        function fvComposto(pv, pmt, r, n) {
-            if (r <= 0) return pv + pmt * n;
-            return pv * Math.pow(1 + r, n) + pmt * (Math.pow(1 + r, n) - 1) / r;
-        }
-        function mesesParaMeta(pv, obj, pmt, r) {
-            for (let n = 1; n <= 600; n++) {
-                if (fvComposto(pv, pmt, r, n) >= obj) return n;
-            }
-            return null;
-        }
-        function aporteNecessario(pv, obj, r, n) {
-            if (n <= 0) return null;
-            const fv = obj - pv * Math.pow(1 + r, n);
-            if (r <= 0) return fv / n;
-            const fator = Math.pow(1 + r, n) - 1;
-            if (fator <= 0) return null;
-            return fv * r / fator;
-        }
+        // fvComposto / mesesParaMeta / aporteNecessario usam escopo do módulo
 
         btnSimular.addEventListener('click', () => {
             const obj     = parseFloat(document.getElementById('metaObj').value) || 0;
@@ -783,89 +863,72 @@ function selecionarMeta(id) {
 
 // ========== CÁLCULO DE PROJEÇÃO DE CONCLUSÃO DA META ==========
 function calcularProjecaoConclusao(meta) {
-    const saved = Number(meta.saved || 0);
+    const saved    = Number(meta.saved    || 0);
     const objetivo = Number(meta.objetivo || 0);
-    const falta = Math.max(0, objetivo - saved);
-    
-    // Se já atingiu a meta
-    if(saved >= objetivo) {
-        return {
-            temHistorico: true,
-            concluida: true,
-            dataEstimada: '🎉 Meta Concluída!',
-            mediaMensal: 0,
-            mesesRestantes: 0,
-            mesesComDados: 0
-        };
+    const falta    = Math.max(0, objetivo - saved);
+
+    if (saved >= objetivo) {
+        return { temHistorico: true, concluida: true, dataEstimada: '🎉 Meta Concluída!', mediaMensal: 0, mesesRestantes: 0, mesesComDados: 0 };
     }
-    
-    // Calcular média mensal baseado no histórico
-    const monthly = meta.monthly || {};
+
+    const monthly          = meta.monthly || {};
     const valoresHistorico = Object.values(monthly).filter(v => v > 0);
-    
-    // Precisa de pelo menos 1 mês com dados para projetar
-    if(valoresHistorico.length < 1) {
-        return {
-            temHistorico: false,
-            mesesComDados: 0
-        };
+
+    if (valoresHistorico.length < 1) {
+        return { temHistorico: false, mesesComDados: 0 };
     }
-    
-    // Calcular média mensal
+
+    // Média mensal histórica (inclui rendimentos já acumulados)
     const mediaMensal = valoresHistorico.reduce((sum, v) => sum + v, 0) / valoresHistorico.length;
-    
-    // Se a média é zero ou negativa, não há projeção
-    if(mediaMensal <= 0) {
-        return {
-            temHistorico: false,
-            mesesComDados: valoresHistorico.length
-        };
+    if (mediaMensal <= 0) {
+        return { temHistorico: false, mesesComDados: valoresHistorico.length };
     }
-    
-    // Calcular meses restantes
-    const mesesRestantes = Math.ceil(falta / mediaMensal);
-    
-    // Calcular data estimada
-    const hoje = new Date();
-    const dataEstimada = new Date(hoje.getFullYear(), hoje.getMonth() + mesesRestantes, 1);
-    const dataFormatada = dataEstimada.toLocaleDateString('pt-BR', { 
-        month: 'long', 
-        year: 'numeric' 
-    });
-    
-    // Gerar sugestões e avisos
-    let sugestao = null;
-    let avisoAjuste = null;
-    
-    // Se a média é muito baixa (meta levará mais de 2 anos)
-    if(mesesRestantes > 24) {
+
+    // Taxa mensal efetiva usando CDI atual (para CDI metas sempre recalcula)
+    const r = _taxaMensal(meta);
+
+    // PMT: usa aporte recorrente configurado ou média histórica
+    const pmt = (meta.aporteRecorrente && meta.valorAporte > 0)
+        ? meta.valorAporte
+        : mediaMensal;
+
+    // Projeção com juros compostos (FV = PV(1+r)^n + PMT*((1+r)^n-1)/r)
+    const mesesRestantes = mesesParaMeta(saved, objetivo, pmt, r) ?? Math.ceil(falta / mediaMensal);
+
+    const hoje        = new Date();
+    const dtEstimada  = new Date(hoje.getFullYear(), hoje.getMonth() + mesesRestantes, 1);
+    const dataFormatada = dtEstimada.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+    // Rendimento total estimado até a conclusão
+    const fvFinal    = fvComposto(saved, pmt, r, mesesRestantes);
+    const rendEstim  = r > 0 ? Math.max(0, fvFinal - (saved + pmt * mesesRestantes)) : 0;
+
+    let sugestao = null, avisoAjuste = null;
+    if (mesesRestantes > 24) {
         avisoAjuste = 'No ritmo atual, esta meta levará mais de 2 anos. Considere aumentar o valor mensal.';
-        const valorNecessario = Math.ceil(falta / 12); // Para concluir em 1 ano
-        sugestao = `Guardando ${formatBRL(valorNecessario)}/mês, você conclui em aproximadamente 1 ano.`;
-    }
-    // Se está indo bem (menos de 6 meses)
-    else if(mesesRestantes <= 6) {
+        const apNecessario = aporteNecessario(saved, objetivo, r, 12);
+        const apStr = apNecessario > 0 ? formatBRL(Math.ceil(apNecessario)) : null;
+        sugestao = apStr ? `Guardando ${apStr}/mês, você conclui em aproximadamente 1 ano.` : null;
+    } else if (mesesRestantes <= 6) {
         sugestao = 'Você está em um ótimo ritmo! Continue assim para alcançar sua meta em breve.';
-    }
-    // Ritmo moderado (6 a 12 meses)
-    else if(mesesRestantes <= 12) {
+    } else if (mesesRestantes <= 12) {
         sugestao = 'Bom progresso! Mantenha a disciplina para concluir dentro do prazo estimado.';
+    } else {
+        const apNecessario = aporteNecessario(saved, objetivo, r, 12);
+        const apStr = apNecessario > 0 ? formatBRL(Math.ceil(apNecessario)) : null;
+        sugestao = apStr ? `Para concluir em 1 ano, tente guardar ${apStr}/mês.` : null;
     }
-    // Ritmo lento (12 a 24 meses)
-    else {
-        const valorSugerido = Math.ceil(falta / 12);
-        sugestao = `Para concluir em 1 ano, tente guardar ${formatBRL(valorSugerido)}/mês.`;
-    }
-    
+
     return {
-        temHistorico: true,
-        concluida: false,
-        mediaMensal: mediaMensal,
-        mesesRestantes: mesesRestantes,
-        dataEstimada: dataFormatada.charAt(0).toUpperCase() + dataFormatada.slice(1),
-        mesesComDados: valoresHistorico.length,
-        sugestao: sugestao,
-        avisoAjuste: avisoAjuste
+        temHistorico:   true,
+        concluida:      false,
+        mediaMensal,
+        mesesRestantes,
+        rendEstimado:   rendEstim > 0.01 ? rendEstim : 0,
+        dataEstimada:   dataFormatada.charAt(0).toUpperCase() + dataFormatada.slice(1),
+        mesesComDados:  valoresHistorico.length,
+        sugestao,
+        avisoAjuste,
     };
 }
 
@@ -1277,12 +1340,11 @@ function renderMetaVisual() {
         details.appendChild(cardInsuf);
     }
     
-    // ── Compound interest info if meta has taxaJuros
-    if (meta.taxaJuros && meta.taxaJuros > 0) {
-        const r = meta.taxaJuros / 100;
+    // ── Compound interest info — usa taxa mensal calculada em tempo real
+    const _rMensal = _taxaMensal(meta);
+    if (_rMensal > 0) {
+        const r = _rMensal;
         const aporte = Number(meta.valorAporte || 0);
-        const fvComposto = (pv, pmt, rate, n) =>
-            rate <= 0 ? pv + pmt * n : pv * Math.pow(1 + rate, n) + pmt * (Math.pow(1 + rate, n) - 1) / rate;
 
         const cardRendim              = document.createElement('div');
         cardRendim.style.background   = 'rgba(0,255,153,0.06)';
@@ -1309,7 +1371,10 @@ function renderMetaVisual() {
             cardRendim.appendChild(row);
         }
 
-        addRendRow('Taxa mensal', `${meta.taxaJuros.toFixed(4)}%`, '#00ff99');
+        const taxaLabel = meta.tipoRendimento === 'cdi'
+            ? `${(r * 100).toFixed(4)}% (${meta.cdiPct}% CDI · ${_cdiAnual.toFixed(2)}% a.a.)`
+            : `${(r * 100).toFixed(4)}%/mês`;
+        addRendRow('Taxa mensal efetiva', taxaLabel, '#00ff99');
         if (aporte > 0) {
             const fv12 = fvComposto(saved, aporte, r, 12);
             const rend12 = Math.max(0, fv12 - (saved + aporte * 12));

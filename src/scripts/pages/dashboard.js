@@ -622,6 +622,9 @@ const _validators = {
         if (m.valorAporte !== undefined && m.valorAporte !== null) {
             if (typeof m.valorAporte !== 'number' || m.valorAporte < 0 || m.valorAporte > 99999999) return false;
         }
+        if (m.lastRendimento !== undefined && m.lastRendimento !== null) {
+            if (typeof m.lastRendimento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(m.lastRendimento)) return false;
+        }
         return true;
     },
     contaFixa(c) {
@@ -700,6 +703,7 @@ const _ALLOWED_KEYS = Object.freeze({
         'monthly', 'historicoRetiradas',
         'prazo', 'tipoRendimento', 'taxaJuros', 'cdiPct',
         'rendimentoPeriodo', 'aporteRecorrente', 'valorAporte',
+        'lastRendimento',
     ]),
     contaFixa: Object.freeze([
         'id', 'descricao', 'valor', 'vencimento', 'pago',
