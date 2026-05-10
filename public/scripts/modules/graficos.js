@@ -862,6 +862,8 @@ function renderizarTodosGraficos(transacoes) {
     }
 
     const dados = processarDadosGraficos(transacoes);
+    let dadosPatr = { meses: [], labels: [], saldos: [], reservas: [], totais: [] };
+    try { dadosPatr = _calcPatrimonioHistorico(); } catch(e) { console.warn('patrimônio:', e); }
 
     _setSafeHTML(container, `
         <div class="graficos-grid">
@@ -872,12 +874,16 @@ function renderizarTodosGraficos(transacoes) {
         </div>
         ${renderizarRankingCategorias(dados)}
         ${renderizarTendencias(dados)}
+        ${renderizarSecaoPatrimonio(dadosPatr)}
     `);
 
     setTimeout(() => {
         criarGraficoPizza('pizzaGastosChart', dados);
         setTimeout(() => { criarGraficoBarras('barrasCategoriasChart', dados); }, 150);
         setTimeout(() => { criarGraficoLinha('linhaEvolucaoChart', dados); }, 300);
+        if (dadosPatr.meses.length > 0) {
+            setTimeout(() => { criarGraficoPatrimonio('patrimonioChart', dadosPatr); }, 450);
+        }
     }, 100);
 }
 
@@ -1900,6 +1906,195 @@ function formatarMoeda(valor) {
 function navegarPara(pagina) {
     const btn = document.querySelector(`[data-page="${pagina}"]`);
     if (btn) btn.click();
+}
+
+// ========== HISTÓRICO PATRIMONIAL ==========
+
+function _calcPatrimonioHistorico() {
+    const txTodas = UserStore.getTransacoes();
+    const metas   = Array.isArray(window.metas) ? [...window.metas] : [];
+
+    // Coleta todos os YYYY-MM com dados
+    const mesesSet = new Set();
+    txTodas.forEach(t => {
+        if (typeof t.data === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(t.data)) {
+            const p = t.data.split('/');
+            mesesSet.add(`${p[2]}-${p[1]}`);
+        }
+    });
+    metas.forEach(m => {
+        if (m.monthly && typeof m.monthly === 'object') {
+            Object.keys(m.monthly).forEach(k => { if (/^\d{4}-\d{2}$/.test(k)) mesesSet.add(k); });
+        }
+    });
+
+    const meses = Array.from(mesesSet).sort();
+    if (meses.length === 0) return { meses: [], labels: [], saldos: [], reservas: [], totais: [] };
+
+    // Acumula saldo mês a mês
+    let saldoCum = 0;
+    const saldos = [], reservasTotais = [], totais = [];
+
+    meses.forEach(mesAno => {
+        const [ano, mes] = mesAno.split('-');
+        const sufixo = `/${mes}/${ano}`;
+        txTodas.filter(t => typeof t.data === 'string' && t.data.endsWith(sufixo)).forEach(t => {
+            const v = parseFloat(t.valor) || 0;
+            if      (t.categoria === 'entrada')           saldoCum += v;
+            else if (t.categoria === 'saida')             saldoCum -= v;
+            else if (t.categoria === 'reserva')           saldoCum -= v;
+            else if (t.categoria === 'retirada_reserva')  saldoCum += v;
+        });
+        saldos.push(parseFloat(saldoCum.toFixed(2)));
+
+        // Reservas acumuladas até este mês (soma de todos os meta.monthly <= mesAno)
+        let resAcum = 0;
+        metas.forEach(m => {
+            if (m.monthly && typeof m.monthly === 'object') {
+                Object.entries(m.monthly).forEach(([k, v]) => {
+                    if (/^\d{4}-\d{2}$/.test(k) && k <= mesAno) resAcum += (parseFloat(v) || 0);
+                });
+            }
+        });
+        reservasTotais.push(parseFloat(Math.max(0, resAcum).toFixed(2)));
+        totais.push(parseFloat((saldoCum + Math.max(0, resAcum)).toFixed(2)));
+    });
+
+    // Labels legíveis (Jan/2025)
+    const _mNomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const labels = meses.map(m => {
+        const [a, mn] = m.split('-');
+        return `${_mNomes[parseInt(mn,10)-1]}/${a}`;
+    });
+
+    return { meses, labels, saldos, reservas: reservasTotais, totais };
+}
+
+function renderizarSecaoPatrimonio(d) {
+    if (!d || d.meses.length < 1) return '';
+
+    const semGrafico = d.meses.length < 2;
+
+    const ultimo  = d.totais[d.totais.length - 1];
+    const primeiro = d.totais[0];
+    const variacao = ultimo - primeiro;
+    const varPct   = primeiro !== 0 ? ((variacao / Math.abs(primeiro)) * 100).toFixed(1) : '—';
+    const corVar   = variacao >= 0 ? 'var(--success)' : 'var(--danger)';
+    const iconVar  = variacao >= 0 ? 'arrow-up' : 'arrow-down';
+
+    return `
+        <div class="patrimonio-section">
+            <div class="grafico-titulo-container">
+                <h3 class="grafico-titulo"><i class="fas fa-chart-area"></i> Evolução Patrimonial</h3>
+                <p style="color:var(--text-secondary);font-size:0.82rem;margin-top:4px;">
+                    Saldo disponível + Total em reservas ao longo do tempo
+                </p>
+            </div>
+            <div class="patrimonio-summary-cards">
+                <div class="patrimonio-card">
+                    <div class="patrimonio-card-label">Patrimônio Atual</div>
+                    <div class="patrimonio-card-value" style="color:var(--primary);">${formatarMoeda(ultimo)}</div>
+                </div>
+                <div class="patrimonio-card">
+                    <div class="patrimonio-card-label">Variação Total</div>
+                    <div class="patrimonio-card-value" style="color:${corVar};">
+                        <i class="fas fa-${iconVar}"></i>
+                        ${formatarMoeda(Math.abs(variacao))}
+                        ${varPct !== '—' ? `<span style="font-size:0.8em;opacity:0.7">(${variacao >= 0 ? '+' : '-'}${varPct}%)</span>` : ''}
+                    </div>
+                </div>
+                <div class="patrimonio-card">
+                    <div class="patrimonio-card-label">Meses Registrados</div>
+                    <div class="patrimonio-card-value">${d.meses.length}</div>
+                </div>
+            </div>
+            ${semGrafico
+                ? `<p style="text-align:center;color:rgba(255,255,255,0.4);font-size:0.85rem;padding:16px 0">
+                      <i class="fas fa-info-circle"></i> Registre transações em 2+ meses para ver o gráfico de evolução.
+                   </p>`
+                : `<div class="grafico-wrapper"><canvas id="patrimonioChart" aria-label="Gráfico de evolução patrimonial"></canvas></div>`
+            }
+        </div>
+    `;
+}
+
+function criarGraficoPatrimonio(canvasId, d) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !window.Chart) return;
+
+    if (graficosInstances[canvasId]) {
+        graficosInstances[canvasId].destroy();
+        delete graficosInstances[canvasId];
+    }
+
+    const ctx = canvas.getContext('2d');
+    graficosInstances[canvasId] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: d.labels,
+            datasets: [
+                {
+                    label: 'Patrimônio Total',
+                    data: d.totais,
+                    borderColor: 'rgba(67,160,71,1)',
+                    backgroundColor: 'rgba(67,160,71,0.08)',
+                    borderWidth: 2.5,
+                    pointBackgroundColor: 'rgba(67,160,71,1)',
+                    pointRadius: 4,
+                    fill: true,
+                    tension: 0.4,
+                },
+                {
+                    label: 'Saldo Disponível',
+                    data: d.saldos,
+                    borderColor: 'rgba(100,180,255,0.85)',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    pointRadius: 3,
+                    borderDash: [5,4],
+                    tension: 0.4,
+                },
+                {
+                    label: 'Total em Reservas',
+                    data: d.reservas,
+                    borderColor: 'rgba(251,191,36,0.85)',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    pointRadius: 3,
+                    borderDash: [3,3],
+                    tension: 0.4,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    labels: { color: 'rgba(255,255,255,0.75)', font: { size: 12 }, boxWidth: 16 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(ctx.parsed.y)}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: 'rgba(255,255,255,0.5)', maxTicksLimit: 12 },
+                    grid:  { color: 'rgba(255,255,255,0.05)' }
+                },
+                y: {
+                    ticks: {
+                        color: 'rgba(255,255,255,0.5)',
+                        callback: v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',notation:'compact'}).format(v)
+                    },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                }
+            }
+        }
+    });
 }
 
 // ========== NAMESPACE PÚBLICO (ÚNICO — R6: retrocompat global removida) ==========
