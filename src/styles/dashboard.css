@@ -1296,18 +1296,19 @@ body::before {
     transform: rotate(180deg);
 }
 
-/* Botão mobile de período — aparece abaixo do saldo hero */
-.btn-periodo-mobile {
-    display: none;
-    margin-top: 12px;
-    font-size: 0.82rem;
-    padding: 8px 14px;
+/* Linha superior do saldo hero mobile: label à esquerda, botão mês à direita */
+.saldo-hero-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
 }
 
-@media (max-width: 768px) {
-    .btn-periodo-mobile {
-        display: inline-flex;
-    }
+/* Botão mobile de período — sempre inline dentro do saldo-hero-top-row */
+.btn-periodo-mobile {
+    font-size: 0.8rem;
+    padding: 6px 12px;
+    gap: 6px;
 }
 
 /* Dropdown do seletor de mês */
