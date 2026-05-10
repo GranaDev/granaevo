@@ -862,7 +862,8 @@ function renderizarTodosGraficos(transacoes) {
     }
 
     const dados = processarDadosGraficos(transacoes);
-    const dadosPatr = _calcPatrimonioHistorico();
+    let dadosPatr = { meses: [], labels: [], saldos: [], reservas: [], totais: [] };
+    try { dadosPatr = _calcPatrimonioHistorico(); } catch(e) { console.warn('patrimônio:', e); }
 
     _setSafeHTML(container, `
         <div class="graficos-grid">
@@ -1970,14 +1971,9 @@ function _calcPatrimonioHistorico() {
 }
 
 function renderizarSecaoPatrimonio(d) {
-    if (!d || d.meses.length < 2) {
-        return `<div class="patrimonio-section">
-            <div class="grafico-titulo-container">
-                <h3 class="grafico-titulo"><i class="fas fa-chart-area"></i> Evolução Patrimonial</h3>
-            </div>
-            <div class="empty-state-grafico"><i class="fas fa-info-circle"></i> Registre transações em pelo menos 2 meses para ver a evolução.</div>
-        </div>`;
-    }
+    if (!d || d.meses.length < 1) return '';
+
+    const semGrafico = d.meses.length < 2;
 
     const ultimo  = d.totais[d.totais.length - 1];
     const primeiro = d.totais[0];
@@ -2012,9 +2008,12 @@ function renderizarSecaoPatrimonio(d) {
                     <div class="patrimonio-card-value">${d.meses.length}</div>
                 </div>
             </div>
-            <div class="grafico-wrapper">
-                <canvas id="patrimonioChart" aria-label="Gráfico de evolução patrimonial"></canvas>
-            </div>
+            ${semGrafico
+                ? `<p style="text-align:center;color:rgba(255,255,255,0.4);font-size:0.85rem;padding:16px 0">
+                      <i class="fas fa-info-circle"></i> Registre transações em 2+ meses para ver o gráfico de evolução.
+                   </p>`
+                : `<div class="grafico-wrapper"><canvas id="patrimonioChart" aria-label="Gráfico de evolução patrimonial"></canvas></div>`
+            }
         </div>
     `;
 }

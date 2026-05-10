@@ -244,11 +244,14 @@ function setupBotoesRelatorio() {
             newBtnFamilia.classList.remove('active');
             newBtnPatrimonio.classList.add('active');
             perfilSelector.classList.remove('show');
-            // Esconde seletores de mês/ano — não necessários para histórico
             const periodRow = document.querySelector('.rel-period-row');
             if (periodRow) periodRow.style.display = 'none';
+            // Auto-gera sem precisar clicar em "Gerar Relatório"
             const resultado = document.getElementById('relatorioResultado');
-            if (resultado) resultado.classList.add('js-hidden');
+            if (resultado) {
+                resultado.classList.remove('js-hidden');
+                gerarHistoricoPatrimonial(resultado);
+            }
         });
     }
 
@@ -264,11 +267,21 @@ function setupBotoesRelatorio() {
 // _gerandoRelatorio é estado de dashboard.js, acessível via _ctx.
 
 async function gerarRelatorio() {
+    // Histórico patrimonial não precisa de mês/ano — tratado antes de qualquer validação
+    if (_ctx.tipoRelatorioAtivo === 'patrimonio') {
+        const resultado = document.getElementById('relatorioResultado');
+        if (resultado) {
+            resultado.classList.remove('js-hidden');
+            gerarHistoricoPatrimonial(resultado);
+        }
+        return;
+    }
+
     if (_ctx._gerandoRelatorio) return; // CORREÇÃO: Debounce de segurança
-    
+
     const mesEl = document.getElementById('mesRelatorio');
     const anoEl = document.getElementById('anoRelatorio');
-    
+
     if (!mesEl || !anoEl) return;
     
     const mes = mesEl.value;
@@ -285,16 +298,6 @@ async function gerarRelatorio() {
         return alert('Ano inválido.');
     }
     
-    // Histórico patrimonial não precisa de mês/ano
-    if (_ctx.tipoRelatorioAtivo === 'patrimonio') {
-        const resultado = document.getElementById('relatorioResultado');
-        if (resultado) {
-            resultado.classList.remove('js-hidden');
-            gerarHistoricoPatrimonial(resultado);
-        }
-        return;
-    }
-
     _ctx._gerandoRelatorio = true;
     try {
         if (_ctx.tipoRelatorioAtivo === 'individual') {
