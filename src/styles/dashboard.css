@@ -8315,3 +8315,204 @@ button,
     .rel-patrimonio-cards { grid-template-columns: 1fr 1fr; }
     .rel-patr-card-value  { font-size: 1rem; }
 }
+
+/* =====================================================
+   ORÇAMENTOS POR CATEGORIA — Transações
+   ===================================================== */
+.orc-section {
+    margin-bottom: 24px;
+}
+
+.orc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.orc-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.orc-title-wrap i {
+    color: var(--primary);
+    font-size: 1rem;
+}
+
+.orc-btn-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(67,160,71,0.12);
+    color: var(--primary);
+    border: 1px solid rgba(67,160,71,0.3);
+    border-radius: 10px;
+    padding: 7px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.orc-btn-add:hover {
+    background: rgba(67,160,71,0.22);
+    border-color: rgba(67,160,71,0.5);
+}
+
+.orc-empty {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px dashed rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 18px 20px;
+    color: var(--text-secondary);
+    font-size: 0.87rem;
+}
+
+.orc-empty i {
+    font-size: 1.3rem;
+    color: var(--primary);
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.orc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.orc-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 14px 16px;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.orc-card--warn {
+    border-color: rgba(255,193,7,0.35);
+    background: rgba(255,193,7,0.05);
+}
+
+.orc-card--over {
+    border-color: rgba(239,68,68,0.35);
+    background: rgba(239,68,68,0.05);
+}
+
+.orc-card-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: rgba(67,160,71,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.orc-card-icon i {
+    font-size: 0.95rem;
+    color: var(--primary);
+}
+
+.orc-card-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.orc-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+}
+
+.orc-card-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+}
+
+.orc-card-pct {
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.orc-bar-wrap {
+    height: 5px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.orc-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.5s ease;
+}
+
+.orc-card-vals {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.orc-card-limit {
+    color: var(--text-secondary);
+    font-weight: 400;
+    font-size: 0.76rem;
+}
+
+.orc-card-edit {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.orc-card:hover .orc-card-edit {
+    opacity: 1;
+}
+
+.orc-card-edit:hover {
+    background: rgba(255,255,255,0.12);
+    color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+    .orc-grid { grid-template-columns: 1fr 1fr; }
+    .orc-card-edit { opacity: 1; }
+    .orc-card-name { max-width: 80px; }
+}

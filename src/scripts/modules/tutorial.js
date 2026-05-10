@@ -48,6 +48,13 @@ const PASSOS = [
     pos: 'cima',
   },
   {
+    pagina: 'transacoes',
+    seletor: '#orcamentosSection',
+    titulo: `${ic('fa-wallet')} Orçamentos por Categoria`,
+    texto: 'Defina limites mensais para cada tipo de gasto — Mercado, Lazer, Farmácia... A barra fica <em style="color:var(--warning)">amarela</em> a 80% e <em style="color:var(--danger)">vermelha</em> ao estourar. Você recebe alerta automático.',
+    pos: 'baixo',
+  },
+  {
     pagina: 'reservas',
     seletor: '.reservas-sidebar',
     titulo: `${ic('fa-piggy-bank')} Reservas`,

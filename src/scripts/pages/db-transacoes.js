@@ -11,6 +11,7 @@ export function init(ctx) {
     window.abrirDetalhesTransacao   = (t) => abrirDetalhesTransacao(t);
     window.atualizarTiposDinamicos  = () => atualizarTiposDinamicos();
     bindFiltrosMovimentacoes();
+    renderizarOrcamentos();
     atualizarMovimentacoesUI(); // renderiza imediatamente ao abrir a seção pela primeira vez
 }
 
@@ -291,6 +292,8 @@ function lancarTransacao() {
         _ctx.salvarDados();
         _ctx.atualizarTudo();
         _ctx.fecharPopup();
+        _verificarAlertasOrcamento(categoria, tipoSalvo, valor);
+        renderizarOrcamentos();
 
         document.getElementById('selectCategoria').value    = '';
         document.getElementById('selectTipo').innerHTML     = '<option value="">Tipo</option>';
@@ -769,4 +772,242 @@ function excluirTransacao(t) {
 
 function abrirDetalhesTransacao(t) {
     editarTransacao(t);
+}
+
+// ========== ORÇAMENTOS POR CATEGORIA ==========
+
+const _TIPOS_ORCAMENTO = Object.freeze([
+    'Mercado','Farmácia','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
+    'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre',
+    'Ifood','Amazon','Outros',
+]);
+
+function _gastoMesAtualPorTipo(tipo) {
+    const hoje = new Date();
+    const mes  = hoje.getMonth();
+    const ano  = hoje.getFullYear();
+    return _ctx.transacoes
+        .filter(t => {
+            if (t.tipo !== tipo) return false;
+            if (t.categoria !== 'saida' && t.categoria !== 'saida_credito') return false;
+            const iso = _ctx.dataParaISO(t.data || '');
+            if (!iso) return false;
+            const d = new Date(iso + 'T00:00:00');
+            return d.getMonth() === mes && d.getFullYear() === ano;
+        })
+        .reduce((s, t) => s + (parseFloat(t.valor) || 0), 0);
+}
+
+function _corOrcamento(pct) {
+    if (pct >= 100) return 'var(--danger)';
+    if (pct >= 80)  return 'var(--warning)';
+    return 'var(--success)';
+}
+
+function renderizarOrcamentos() {
+    const section = document.getElementById('orcamentosSection');
+    if (!section) return;
+
+    const orc = _ctx.orcamentos || {};
+    const entradas = Object.entries(orc);
+
+    section.innerHTML = '';
+
+    // — Cabeçalho —
+    const header = document.createElement('div');
+    header.className = 'orc-header';
+
+    const titleWrap = document.createElement('div');
+    titleWrap.className = 'orc-title-wrap';
+    const icon = document.createElement('i');
+    icon.className = 'fas fa-wallet';
+    icon.setAttribute('aria-hidden', 'true');
+    const title = document.createElement('span');
+    title.textContent = 'Orçamentos do Mês';
+    titleWrap.appendChild(icon);
+    titleWrap.appendChild(title);
+
+    const btnAdd = document.createElement('button');
+    btnAdd.className = 'orc-btn-add';
+    btnAdd.type = 'button';
+    btnAdd.setAttribute('aria-label', 'Adicionar orçamento');
+    btnAdd.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Adicionar';
+    btnAdd.addEventListener('click', () => abrirModalOrcamento(null));
+
+    header.appendChild(titleWrap);
+    header.appendChild(btnAdd);
+    section.appendChild(header);
+
+    if (entradas.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'orc-empty';
+        empty.innerHTML = '<i class="fas fa-chart-pie"></i><span>Defina limites mensais por categoria para acompanhar seus gastos.</span>';
+        section.appendChild(empty);
+        return;
+    }
+
+    // — Grid de cards —
+    const grid = document.createElement('div');
+    grid.className = 'orc-grid';
+
+    entradas.forEach(([tipo, cfg]) => {
+        const limite = parseFloat(cfg.limite) || 0;
+        const gasto  = _gastoMesAtualPorTipo(tipo);
+        const pct    = limite > 0 ? Math.min((gasto / limite) * 100, 999) : 0;
+        const cor    = _corOrcamento(pct);
+        const pctBar = Math.min(pct, 100);
+
+        const card = document.createElement('div');
+        card.className = 'orc-card';
+        if (pct >= 100) card.classList.add('orc-card--over');
+        else if (pct >= 80) card.classList.add('orc-card--warn');
+
+        // Ícone da categoria
+        const iconeWrap = document.createElement('div');
+        iconeWrap.className = 'orc-card-icon';
+        const icEl = document.createElement('i');
+        icEl.className = `fas ${_obterIconeTransacao('saida', tipo)}`;
+        icEl.setAttribute('aria-hidden', 'true');
+        iconeWrap.appendChild(icEl);
+
+        // Corpo
+        const body = document.createElement('div');
+        body.className = 'orc-card-body';
+
+        const topRow = document.createElement('div');
+        topRow.className = 'orc-card-top';
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'orc-card-name';
+        nameEl.textContent = tipo;
+
+        const pctEl = document.createElement('span');
+        pctEl.className = 'orc-card-pct';
+        pctEl.style.color = cor;
+        pctEl.textContent = `${pct >= 999 ? '+999' : pct.toFixed(0)}%`;
+
+        topRow.appendChild(nameEl);
+        topRow.appendChild(pctEl);
+
+        const barWrap = document.createElement('div');
+        barWrap.className = 'orc-bar-wrap';
+        const barFill = document.createElement('div');
+        barFill.className = 'orc-bar-fill';
+        barFill.style.width = pctBar.toFixed(1) + '%';
+        barFill.style.background = cor;
+        barWrap.appendChild(barFill);
+
+        const valRow = document.createElement('div');
+        valRow.className = 'orc-card-vals';
+        const gastoEl = document.createElement('span');
+        gastoEl.style.color = cor;
+        gastoEl.textContent = formatBRL(gasto);
+        const limEl = document.createElement('span');
+        limEl.className = 'orc-card-limit';
+        limEl.textContent = `/ ${formatBRL(limite)}`;
+        valRow.appendChild(gastoEl);
+        valRow.appendChild(limEl);
+
+        body.appendChild(topRow);
+        body.appendChild(barWrap);
+        body.appendChild(valRow);
+
+        // Botão editar
+        const btnEdit = document.createElement('button');
+        btnEdit.className = 'orc-card-edit';
+        btnEdit.type = 'button';
+        btnEdit.setAttribute('aria-label', `Editar orçamento de ${tipo}`);
+        const editI = document.createElement('i');
+        editI.className = 'fas fa-pen';
+        editI.setAttribute('aria-hidden', 'true');
+        btnEdit.appendChild(editI);
+        btnEdit.addEventListener('click', (e) => { e.stopPropagation(); abrirModalOrcamento(tipo); });
+
+        card.appendChild(iconeWrap);
+        card.appendChild(body);
+        card.appendChild(btnEdit);
+        grid.appendChild(card);
+    });
+
+    section.appendChild(grid);
+}
+
+function abrirModalOrcamento(tipoEditar) {
+    const orc        = _ctx.orcamentos || {};
+    const editando   = tipoEditar !== null;
+    const limiteAtual = editando && orc[tipoEditar] ? orc[tipoEditar].limite : '';
+
+    // Filtra tipos que ainda não têm orçamento (se adicionando novo)
+    const tiposDisponiveis = editando
+        ? [tipoEditar]
+        : _TIPOS_ORCAMENTO.filter(t => !Object.prototype.hasOwnProperty.call(orc, t));
+
+    if (!editando && tiposDisponiveis.length === 0) {
+        _ctx.mostrarNotificacao('Você já definiu orçamentos para todas as categorias!', 'info');
+        return;
+    }
+
+    _ctx.criarPopup(`
+        <h3>${editando ? 'Editar Orçamento' : 'Novo Orçamento'}</h3>
+        <div class="edit-tx-form">
+            <label class="edit-tx-label" for="orcTipoSelect">Categoria</label>
+            <select id="orcTipoSelect" class="form-input">
+                ${tiposDisponiveis.map(t => `<option value="${t}"${editando ? ' selected' : ''}>${t}</option>`).join('')}
+            </select>
+            <label class="edit-tx-label" for="orcLimiteInput">Limite mensal (R$)</label>
+            <input type="number" id="orcLimiteInput" class="form-input" step="0.01" min="1" max="10000000" placeholder="Ex: 800,00" value="${limiteAtual}">
+        </div>
+        ${editando ? '<button class="btn-excluir" id="orcExcluirBtn" type="button">Remover orçamento</button>' : ''}
+        <button class="btn-primary" id="orcSalvarBtn" type="button">Salvar</button>
+        <button class="btn-cancelar" id="orcCancelarBtn" type="button">Cancelar</button>
+    `);
+
+    document.getElementById('orcCancelarBtn').addEventListener('click', () => _ctx.fecharPopup());
+
+    if (editando) {
+        document.getElementById('orcExcluirBtn').addEventListener('click', () => {
+            if (!confirm(`Remover o orçamento de "${tipoEditar}"?`)) return;
+            const novo = Object.assign({}, _ctx.orcamentos);
+            delete novo[tipoEditar];
+            _ctx.orcamentos = novo;
+            _ctx.salvarDados();
+            renderizarOrcamentos();
+            _ctx.fecharPopup();
+            _ctx.mostrarNotificacao(`Orçamento de ${tipoEditar} removido.`, 'info');
+        });
+    }
+
+    document.getElementById('orcSalvarBtn').addEventListener('click', () => {
+        const tipoSel  = document.getElementById('orcTipoSelect').value;
+        const limiteStr = document.getElementById('orcLimiteInput').value;
+        const limite    = parseFloat(parseFloat(limiteStr).toFixed(2));
+
+        if (!tipoSel) return alert('Selecione a categoria.');
+        if (!_TIPOS_ORCAMENTO.includes(tipoSel)) return alert('Categoria inválida.');
+        if (!isFinite(limite) || limite <= 0) return alert('Digite um limite válido.');
+        if (limite > 10_000_000) return alert('Limite muito alto.');
+
+        const novo = Object.assign({}, _ctx.orcamentos);
+        novo[tipoSel] = { limite };
+        _ctx.orcamentos = novo;
+        _ctx.salvarDados();
+        renderizarOrcamentos();
+        _ctx.fecharPopup();
+        _ctx.mostrarNotificacao(`Orçamento de ${tipoSel} definido em ${formatBRL(limite)}.`, 'success');
+    });
+}
+
+function _verificarAlertasOrcamento(categoria, tipo, valorAdicionado) {
+    if (categoria !== 'saida' && categoria !== 'saida_credito') return;
+    const orc = _ctx.orcamentos || {};
+    if (!Object.prototype.hasOwnProperty.call(orc, tipo)) return;
+    const limite = parseFloat(orc[tipo].limite) || 0;
+    if (limite <= 0) return;
+    const gasto = _gastoMesAtualPorTipo(tipo);
+    const pct   = (gasto / limite) * 100;
+    if (pct >= 100) {
+        _ctx.mostrarNotificacao(`⚠️ Limite de ${tipo} estourado! Gasto: ${formatBRL(gasto)} / ${formatBRL(limite)}`, 'error');
+    } else if (pct >= 80) {
+        _ctx.mostrarNotificacao(`Atenção: você usou ${pct.toFixed(0)}% do orçamento de ${tipo}.`, 'warning');
+    }
 }

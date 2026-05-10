@@ -28,6 +28,7 @@ let nextContaFixaId = 1;
 let metaSelecionadaId = null;
 let cartaoSelecionadoId = null;
 let tipoRelatorioAtivo = 'individual';
+let orcamentos = {}; // { 'Mercado': { limite: 800 }, 'Lazer': { limite: 300 }, ... }
 let _effectiveUserId = null;
 let _effectiveEmail  = null;
 let _allProfilesData = []; // cache local de todos os perfis — fonte de verdade para o save
@@ -545,6 +546,8 @@ async function carregarDadosPerfil(perfilId) {
         metas          = Array.isArray(perfilData.metas)          ? perfilData.metas          : [];
         contasFixas    = Array.isArray(perfilData.contasFixas)    ? perfilData.contasFixas    : [];
         cartoesCredito = Array.isArray(perfilData.cartoesCredito) ? perfilData.cartoesCredito : [];
+        orcamentos     = (perfilData.orcamentos && typeof perfilData.orcamentos === 'object' && !Array.isArray(perfilData.orcamentos))
+                         ? perfilData.orcamentos : {};
         if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
 
         const idsCartoesNumericos = cartoesCredito
@@ -682,6 +685,28 @@ function _sanitizeObject(obj, allowedKeys) {
         if (Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined) {
             clean[key] = obj[key];
         }
+    }
+    return clean;
+}
+
+// Sanitiza o objeto de orçamentos antes de persistir:
+// – aceita apenas tipos válidos de saída como chaves
+// – limite deve ser número finito positivo (máx 10 milhões)
+const _TIPOS_SAIDA_VALIDOS = Object.freeze([
+    'Mercado','Farmácia','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
+    'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre',
+    'Ifood','Amazon','Outros',
+]);
+function _sanitizarOrcamentos(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
+    const clean = Object.create(null);
+    for (const key of _TIPOS_SAIDA_VALIDOS) {
+        if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+        const v = obj[key];
+        if (!v || typeof v !== 'object') continue;
+        const limite = parseFloat(v.limite);
+        if (!isFinite(limite) || limite <= 0 || limite > 10_000_000) continue;
+        clean[key] = { limite: parseFloat(limite.toFixed(2)) };
     }
     return clean;
 }
@@ -842,6 +867,7 @@ async function salvarDados() {
                     metas:          metasSanitizadas,
                     contasFixas:    contasSanitizadas,
                     cartoesCredito: cartoesSanitizados,
+                    orcamentos:     _sanitizarOrcamentos(orcamentos),
                     nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
                     lastUpdate:     new Date().toISOString(),
                 };
@@ -1513,6 +1539,7 @@ function _makeCtx() {
         metaSelecionadaId:   { get: () => metaSelecionadaId,   set: v => { metaSelecionadaId = v; },   enumerable: true },
         cartaoSelecionadoId: { get: () => cartaoSelecionadoId, set: v => { cartaoSelecionadoId = v; }, enumerable: true },
         tipoRelatorioAtivo:  { get: () => tipoRelatorioAtivo,  set: v => { tipoRelatorioAtivo = v; },  enumerable: true },
+        orcamentos:          { get: () => orcamentos,          set: v => { orcamentos = v; },          enumerable: true },
         _effectiveUserId:    { get: () => _effectiveUserId,    set: v => { _effectiveUserId = v; },    enumerable: true },
         _effectiveEmail:     { get: () => _effectiveEmail,     set: v => { _effectiveEmail = v; },     enumerable: true },
         _movPaginaAtual:     { get: () => _movPaginaAtual,     set: v => { _movPaginaAtual = v; },     enumerable: true },
@@ -1632,7 +1659,7 @@ function mostrarTela(tela) {
         if (periodoSel) periodoSel.style.display = 'none';
 
         if (!_dbLoaded.transacoes) {
-            import('./db-transacoes.js?v=4').then(m => {
+            import('./db-transacoes.js?v=5').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.transacoes = true;
             });
