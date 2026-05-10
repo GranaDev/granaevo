@@ -3834,6 +3834,12 @@ function setupSidebarToggle() {
         mobileNotifBtn.addEventListener('click', () => abrirPainelNotificacoes());
     }
 
+    // ── Chat — em desenvolvimento
+    const chatNavBtn = document.getElementById('chatNavBtn');
+    if (chatNavBtn) {
+        chatNavBtn.addEventListener('click', () => mostrarNotificacao('Função em desenvolvimento', 'info'));
+    }
+
     // ── Fechar painel: botão X
     const btnFecharNotificacoes = document.getElementById('btnFecharNotificacoes');
     if (btnFecharNotificacoes) {

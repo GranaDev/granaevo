@@ -4716,12 +4716,17 @@ select.form-input option:checked {
         text-shadow: 0 0 8px rgba(102, 187, 106, 0.9);
     }
 
-    /* ── Ícone Font Awesome (Chat) ── */
+    /* ── Ícone Font Awesome (Chat) — mesmo tamanho visual dos GIFs (28px) ── */
     .mobile-nav-icon-fa {
-        font-size: 22px;
+        font-size: 17px;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         color: rgba(255, 255, 255, 0.38);
         transition: color 0.2s ease, transform 0.2s ease;
-        line-height: 1;
+        opacity: 0.75;
     }
 
     .mobile-nav-item.active .mobile-nav-icon-fa {
