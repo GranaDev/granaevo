@@ -8742,7 +8742,9 @@ button,
 .score-hist-lbl { font-size: 0.65rem; color: var(--text-muted); }
 
 @media (max-width: 600px) {
-    .score-hero { flex-direction: column; align-items: flex-start; }
+    .score-hero { flex-direction: column; align-items: center; text-align: center; }
+    .score-stats { justify-content: center; }
+    .score-hero-info { align-items: center; }
     .score-comp-bar-wrap { width: 60px; }
     .score-stats { gap: 10px; font-size: 0.78rem; }
 }

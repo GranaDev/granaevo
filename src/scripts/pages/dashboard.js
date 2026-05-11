@@ -1704,7 +1704,7 @@ function mostrarTela(tela) {
 
     if (tela === 'relatorios') {
         if (!_dbLoaded.relatorios) {
-            import('./db-relatorios.js?v=8').then(m => {
+            import('./db-relatorios.js?v=9').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.relatorios = true;
             });
@@ -4079,7 +4079,7 @@ const widgetOndeFoi = document.getElementById('widgetOndeFoiDinheiro');
 if (widgetOndeFoi) {
     widgetOndeFoi.addEventListener('click', () => {
         if (!_dbLoaded.relatorios) {
-            import('./db-relatorios.js?v=8').then(m => {
+            import('./db-relatorios.js?v=9').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.relatorios = true;
                 window.abrirWidgetOndeForDinheiro?.();

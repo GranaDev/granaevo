@@ -250,27 +250,7 @@ function setupBotoesRelatorio() {
             const resultado = document.getElementById('relatorioResultado');
             if (resultado) {
                 resultado.classList.remove('js-hidden');
-                gerarHistoricoPatrimonial(resultado);
-            }
-        });
-    }
-
-    // ── Score Financeiro ─────────────────────────────────────────────────
-    const btnScore = document.querySelector('.tipo-relatorio-btns [data-tipo="score"]');
-    if (btnScore) {
-        const newBtnScore = btnScore.cloneNode(true);
-        btnScore.parentNode.replaceChild(newBtnScore, btnScore);
-        newBtnScore.addEventListener('click', function () {
-            _ctx.tipoRelatorioAtivo = 'score';
-            [newBtnIndividual, newBtnCasal, newBtnFamilia, newBtnPatrimonio].forEach(b => b?.classList.remove('active'));
-            newBtnScore.classList.add('active');
-            perfilSelector.classList.remove('show');
-            const periodRow = document.querySelector('.rel-period-row');
-            if (periodRow) periodRow.style.display = 'none';
-            const resultado = document.getElementById('relatorioResultado');
-            if (resultado) {
-                resultado.classList.remove('js-hidden');
-                gerarScoreFinanceiro(resultado);
+                _gerarPatrimonioCompleto(resultado);
             }
         });
     }
@@ -287,15 +267,10 @@ function setupBotoesRelatorio() {
 // _gerandoRelatorio é estado de dashboard.js, acessível via _ctx.
 
 async function gerarRelatorio() {
-    // Histórico patrimonial e score não precisam de mês/ano
+    // Patrimônio + Score juntos — não precisam de mês/ano
     if (_ctx.tipoRelatorioAtivo === 'patrimonio') {
         const resultado = document.getElementById('relatorioResultado');
-        if (resultado) { resultado.classList.remove('js-hidden'); gerarHistoricoPatrimonial(resultado); }
-        return;
-    }
-    if (_ctx.tipoRelatorioAtivo === 'score') {
-        const resultado = document.getElementById('relatorioResultado');
-        if (resultado) { resultado.classList.remove('js-hidden'); gerarScoreFinanceiro(resultado); }
+        if (resultado) { resultado.classList.remove('js-hidden'); _gerarPatrimonioCompleto(resultado); }
         return;
     }
 
@@ -2739,6 +2714,21 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
 window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
 
 // ========== HISTÓRICO PATRIMONIAL ==========
+
+function _gerarPatrimonioCompleto(container) {
+    container.innerHTML = '';
+    // Score financeiro no topo
+    const scoreWrap = document.createElement('div');
+    scoreWrap.style.cssText = 'margin-bottom: 28px;';
+    gerarScoreFinanceiro(scoreWrap);
+    container.appendChild(scoreWrap);
+    // Divisor
+    const div = document.createElement('div');
+    div.style.cssText = 'border-top: 1px solid rgba(255,255,255,0.07); margin-bottom: 24px;';
+    container.appendChild(div);
+    // Histórico patrimonial abaixo
+    gerarHistoricoPatrimonial(container);
+}
 
 function gerarHistoricoPatrimonial(container) {
     const tx    = _ctx.transacoes || [];
