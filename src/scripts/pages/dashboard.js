@@ -29,6 +29,7 @@ let metaSelecionadaId = null;
 let cartaoSelecionadoId = null;
 let tipoRelatorioAtivo = 'individual';
 let orcamentos = {}; // { 'Mercado': { limite: 800 }, 'Lazer': { limite: 300 }, ... }
+let tiposPersonalizados = []; // tipos criados pelo usuário, ex: ['Academia em Casa', 'Delivery Especial']
 let _effectiveUserId = null;
 let _effectiveEmail  = null;
 let _allProfilesData = []; // cache local de todos os perfis — fonte de verdade para o save
@@ -546,8 +547,11 @@ async function carregarDadosPerfil(perfilId) {
         metas          = Array.isArray(perfilData.metas)          ? perfilData.metas          : [];
         contasFixas    = Array.isArray(perfilData.contasFixas)    ? perfilData.contasFixas    : [];
         cartoesCredito = Array.isArray(perfilData.cartoesCredito) ? perfilData.cartoesCredito : [];
-        orcamentos     = (perfilData.orcamentos && typeof perfilData.orcamentos === 'object' && !Array.isArray(perfilData.orcamentos))
-                         ? perfilData.orcamentos : {};
+        orcamentos          = (perfilData.orcamentos && typeof perfilData.orcamentos === 'object' && !Array.isArray(perfilData.orcamentos))
+                              ? perfilData.orcamentos : {};
+        tiposPersonalizados = Array.isArray(perfilData.tiposPersonalizados)
+                              ? perfilData.tiposPersonalizados.filter(t => typeof t === 'string' && t.length > 0 && t.length <= 60).slice(0, 50)
+                              : [];
         if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
 
         const idsCartoesNumericos = cartoesCredito
@@ -867,7 +871,8 @@ async function salvarDados() {
                     metas:          metasSanitizadas,
                     contasFixas:    contasSanitizadas,
                     cartoesCredito: cartoesSanitizados,
-                    orcamentos:     _sanitizarOrcamentos(orcamentos),
+                    orcamentos:          _sanitizarOrcamentos(orcamentos),
+                    tiposPersonalizados: tiposPersonalizados.filter(t => typeof t === 'string' && t.length > 0).slice(0, 50),
                     nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
                     lastUpdate:     new Date().toISOString(),
                 };
@@ -1539,7 +1544,8 @@ function _makeCtx() {
         metaSelecionadaId:   { get: () => metaSelecionadaId,   set: v => { metaSelecionadaId = v; },   enumerable: true },
         cartaoSelecionadoId: { get: () => cartaoSelecionadoId, set: v => { cartaoSelecionadoId = v; }, enumerable: true },
         tipoRelatorioAtivo:  { get: () => tipoRelatorioAtivo,  set: v => { tipoRelatorioAtivo = v; },  enumerable: true },
-        orcamentos:          { get: () => orcamentos,          set: v => { orcamentos = v; },          enumerable: true },
+        orcamentos:           { get: () => orcamentos,           set: v => { orcamentos = v; },           enumerable: true },
+        tiposPersonalizados:  { get: () => tiposPersonalizados,  set: v => { tiposPersonalizados = v; },  enumerable: true },
         _effectiveUserId:    { get: () => _effectiveUserId,    set: v => { _effectiveUserId = v; },    enumerable: true },
         _effectiveEmail:     { get: () => _effectiveEmail,     set: v => { _effectiveEmail = v; },     enumerable: true },
         _movPaginaAtual:     { get: () => _movPaginaAtual,     set: v => { _movPaginaAtual = v; },     enumerable: true },

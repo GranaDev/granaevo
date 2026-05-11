@@ -43,13 +43,34 @@ function atualizarTiposDinamicos() {
             tipoSelect.appendChild(o);
         });
     } else if(cat === 'saida' || cat === 'saida_credito') {
-        ['Mercado', 'Farmácia', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza', 'Presente', 
-         'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Shopee', 'Mercado Livre', 
-         'Ifood', 'Amazon', 'Outros', 'Transação Via Chat'].forEach(x => {
+        const tiposPadrao = ['Mercado', 'Farmácia', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza', 'Presente',
+         'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Shopee', 'Mercado Livre',
+         'Ifood', 'Amazon', 'Outros'];
+        const personalizados = _ctx.tiposPersonalizados || [];
+        [...tiposPadrao, ...personalizados].forEach(x => {
             const o = document.createElement('option');
             o.value = x;
             o.textContent = x;
             tipoSelect.appendChild(o);
+        });
+        // Opção para criar tipo personalizado
+        const oAdd = document.createElement('option');
+        oAdd.value = '__novo__'; oAdd.textContent = '+ Adicionar personalizado…';
+        tipoSelect.appendChild(oAdd);
+        tipoSelect.addEventListener('change', function handler() {
+            if (tipoSelect.value === '__novo__') {
+                const nome = prompt('Nome do tipo personalizado (máx 60 caracteres):');
+                if (!nome || !nome.trim()) { tipoSelect.value = ''; return; }
+                const sanitizado = nome.trim().slice(0, 60);
+                const atual = _ctx.tiposPersonalizados || [];
+                if (!atual.includes(sanitizado)) {
+                    _ctx.tiposPersonalizados = [...atual, sanitizado];
+                    _ctx.salvarDados();
+                }
+                tipoSelect.removeEventListener('change', handler);
+                atualizarTiposDinamicos();
+                tipoSelect.value = sanitizado;
+            }
         });
     } else if(cat === 'reserva') {
         const metasExistentes = _ctx.metas.filter(m => m.id !== 'emergency');
@@ -694,55 +715,138 @@ function atualizarMovimentacoesUI(resetPagina = true) {
 function editarTransacao(t) {
     if (!t) return;
 
-    _ctx.criarPopup(`
-        <h3>Editar Transação</h3>
-        <div class="edit-tx-form">
-            <label class="edit-tx-label" for="editDescricao">Descrição</label>
-            <input type="text" id="editDescricao" class="form-input" maxlength="300" placeholder="Descrição">
-            <label class="edit-tx-label" for="editValor">Valor (R$)</label>
-            <input type="number" id="editValor" class="form-input" step="0.01" min="0.01" placeholder="Valor">
-        </div>
-        <button class="btn-primary" id="salvarEditBtn">Salvar</button>
-        <button class="btn-excluir" id="excluirEditBtn">Excluir</button>
-        <button class="btn-cancelar" id="cancelarEditBtn">Cancelar</button>
-    `);
+    const _TIPOS_SAIDA   = ['Mercado','Farmácia','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
+        'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre','Ifood','Amazon','Outros'];
+    const _TIPOS_ENTRADA = ['Salário','Renda Extra','Outros Recebimentos'];
+    const _CATS_EDIT = [
+        { value: 'entrada',          label: 'Entrada' },
+        { value: 'saida',            label: 'Saída' },
+        { value: 'saida_credito',    label: 'Saída no Crédito' },
+        { value: 'reserva',          label: 'Reserva' },
+        { value: 'retirada_reserva', label: 'Retirada de Reserva' },
+    ];
 
-    document.getElementById('editDescricao').value = t.descricao || '';
-    document.getElementById('editValor').value     = t.valor     || '';
+    _ctx.criarPopupDOM((box) => {
+        const form = document.createElement('div');
+        form.className = 'edit-tx-form';
 
-    document.getElementById('cancelarEditBtn').addEventListener('click', () => _ctx.fecharPopup());
-    document.getElementById('excluirEditBtn').addEventListener('click', () => {
-        _ctx.fecharPopup();
-        excluirTransacao(t);
-    });
-
-    document.getElementById('salvarEditBtn').addEventListener('click', () => {
-        const novaDesc    = document.getElementById('editDescricao').value.trim();
-        const novoValorStr = document.getElementById('editValor').value;
-
-        if (!novaDesc) return alert('Digite a descrição.');
-        const novoValor = parseFloat(parseFloat(novoValorStr).toFixed(2));
-        if (!novoValorStr || !Number.isFinite(novoValor) || novoValor <= 0) return alert('Digite um valor válido.');
-
-        const diff = novoValor - Number(t.valor);
-        if (diff !== 0 && t.metaId) {
-            const meta = _ctx.metas.find(m => String(m.id) === String(t.metaId));
-            if (meta) {
-                const sinal = t.categoria === 'reserva' ? 1 : -1;
-                meta.saved = Number((Number(meta.saved || 0) + sinal * diff).toFixed(2));
-                const ym = _ctx.yearMonthKey(t.data);
-                meta.monthly = meta.monthly || {};
-                meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + sinal * diff).toFixed(2));
-            }
+        function _lbl(txt, forId) {
+            const l = document.createElement('label');
+            l.className = 'edit-tx-label'; l.htmlFor = forId; l.textContent = txt;
+            return l;
         }
 
-        t.descricao = novaDesc;
-        t.valor     = novoValor;
+        // Descrição
+        const inpDesc = document.createElement('input');
+        inpDesc.type = 'text'; inpDesc.id = 'editDescricao'; inpDesc.className = 'form-input';
+        inpDesc.maxLength = 300; inpDesc.placeholder = 'Descrição'; inpDesc.value = t.descricao || '';
+        form.appendChild(_lbl('Descrição', 'editDescricao')); form.appendChild(inpDesc);
 
-        _ctx.salvarDados();
-        _ctx.atualizarTudo();
-        _ctx.fecharPopup();
+        // Categoria (entrada/saída)
+        const selCat = document.createElement('select');
+        selCat.id = 'editCategoria'; selCat.className = 'form-input';
+        _CATS_EDIT.forEach(c => {
+            const o = document.createElement('option'); o.value = c.value; o.textContent = c.label;
+            if (c.value === t.categoria) o.selected = true;
+            selCat.appendChild(o);
+        });
+        form.appendChild(_lbl('Categoria', 'editCategoria')); form.appendChild(selCat);
+
+        // Tipo (subcategoria — dinâmico)
+        const selTipo = document.createElement('select');
+        selTipo.id = 'editTipo'; selTipo.className = 'form-input';
+
+        function _popularTipos(catVal) {
+            selTipo.innerHTML = '';
+            const lista = (catVal === 'entrada' || catVal === 'retirada_reserva')
+                ? _TIPOS_ENTRADA : _TIPOS_SAIDA;
+            const personalizados = _ctx.tiposPersonalizados || [];
+            [...lista, ...personalizados].forEach(tp => {
+                const o = document.createElement('option'); o.value = tp; o.textContent = tp;
+                if (tp === t.tipo) o.selected = true;
+                selTipo.appendChild(o);
+            });
+            // Opção especial para criar novo tipo
+            const oAdd = document.createElement('option');
+            oAdd.value = '__novo__'; oAdd.textContent = '+ Adicionar personalizado…';
+            selTipo.appendChild(oAdd);
+        }
+        selTipo.addEventListener('change', () => {
+            if (selTipo.value === '__novo__') {
+                const nome = prompt('Nome do tipo personalizado (máx 60 caracteres):');
+                if (!nome || !nome.trim()) { selTipo.value = t.tipo || selTipo.options[0]?.value; return; }
+                const sanitizado = nome.trim().slice(0, 60);
+                const atual = _ctx.tiposPersonalizados || [];
+                if (!atual.includes(sanitizado)) {
+                    _ctx.tiposPersonalizados = [...atual, sanitizado];
+                    _ctx.salvarDados();
+                }
+                _popularTipos(selCat.value);
+                selTipo.value = sanitizado;
+            }
+        });
+        _popularTipos(t.categoria);
+        selCat.addEventListener('change', () => _popularTipos(selCat.value));
+        form.appendChild(_lbl('Tipo', 'editTipo')); form.appendChild(selTipo);
+
+        // Valor
+        const inpValor = document.createElement('input');
+        inpValor.type = 'number'; inpValor.id = 'editValor'; inpValor.className = 'form-input';
+        inpValor.step = '0.01'; inpValor.min = '0.01'; inpValor.placeholder = 'Valor';
+        inpValor.value = t.valor || '';
+        form.appendChild(_lbl('Valor (R$)', 'editValor')); form.appendChild(inpValor);
+
+        // Título
+        const h3 = document.createElement('h3'); h3.textContent = 'Editar Transação';
+
+        // Botões
+        const btnSalvar = document.createElement('button');
+        btnSalvar.className = 'btn-primary'; btnSalvar.type = 'button'; btnSalvar.textContent = 'Salvar';
+        const btnExcluir = document.createElement('button');
+        btnExcluir.className = 'btn-excluir'; btnExcluir.type = 'button'; btnExcluir.textContent = 'Excluir';
+        const btnCancelar = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar'; btnCancelar.type = 'button'; btnCancelar.textContent = 'Cancelar';
+
+        box.appendChild(h3); box.appendChild(form);
+        box.appendChild(btnSalvar); box.appendChild(btnExcluir); box.appendChild(btnCancelar);
+
+        btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
+        btnExcluir.addEventListener('click', () => { _ctx.fecharPopup(); excluirTransacao(t); });
+
+        btnSalvar.addEventListener('click', () => {
+            const novaDesc     = inpDesc.value.trim();
+            const novoValorStr = inpValor.value;
+            const novaCat      = selCat.value;
+            const novoTipo     = selTipo.value;
+
+            if (!novaDesc) return alert('Digite a descrição.');
+            const novoValor = parseFloat(parseFloat(novoValorStr).toFixed(2));
+            if (!novoValorStr || !Number.isFinite(novoValor) || novoValor <= 0) return alert('Digite um valor válido.');
+
+            const diff = novoValor - Number(t.valor);
+            if (diff !== 0 && t.metaId) {
+                const meta = _ctx.metas.find(m => String(m.id) === String(t.metaId));
+                if (meta) {
+                    const sinal = t.categoria === 'reserva' ? 1 : -1;
+                    meta.saved = Number((Number(meta.saved || 0) + sinal * diff).toFixed(2));
+                    const ym = _ctx.yearMonthKey(t.data);
+                    meta.monthly = meta.monthly || {};
+                    meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + sinal * diff).toFixed(2));
+                }
+            }
+
+            t.descricao = novaDesc;
+            t.valor     = novoValor;
+            t.categoria = novaCat;
+            t.tipo      = novoTipo;
+
+            _ctx.salvarDados();
+            _ctx.atualizarTudo();
+            renderizarOrcamentos();
+            _ctx.fecharPopup();
+        });
     });
+
 }
 
 function excluirTransacao(t) {
@@ -1171,26 +1275,61 @@ const _CATEGORIAS_IMPORT = Object.freeze([
 ]);
 
 const _AUTO_CAT = Object.freeze([
+    // ── Entradas identificáveis PRIMEIRO (evita false-positives de sobrenomes) ─
+    [/pix.*receb|receb.*pix|transfer.*receb|pix recebido/i,          { cat: 'entrada', tipo: 'Renda Extra' }],
+    [/salario|holerite|pagto.*rh|folha.*pgto/i,                      { cat: 'entrada', tipo: 'Salário' }],
+    [/pix.*envia|envia.*pix|transfer.*envia/i,                       { cat: 'saida',   tipo: 'Outros' }],
+    // ── Food & delivery ────────────────────────────────────────────────────────
     [/ifood|rappi|uber.*eat|delivery/i,                              { cat: 'saida', tipo: 'Ifood' }],
-    [/mercado livre|mercadolivre|meli/i,                             { cat: 'saida', tipo: 'Mercado Livre' }],
+    [/restauran|lanchon|padaria|pizzar|hamburguer|burger|sushi|churrasc|bar e|snack/i, { cat: 'saida', tipo: 'Ifood' }],
+    // ── Marketplaces ───────────────────────────────────────────────────────────
+    [/mercado livre|mercadolivre|meli\b/i,                           { cat: 'saida', tipo: 'Mercado Livre' }],
     [/shopee/i,                                                      { cat: 'saida', tipo: 'Shopee' }],
     [/amazon/i,                                                      { cat: 'saida', tipo: 'Amazon' }],
-    [/mercado|supermercado|carrefour|extra |pao de acucar|atacad/i,  { cat: 'saida', tipo: 'Mercado' }],
-    [/farmacia|drogasil|ultrafarma|pacheco|droga|remedios/i,         { cat: 'saida', tipo: 'Farmácia' }],
-    [/uber|99pop|lyft|cabify|metro|onibus|combustivel|gasolina|posto/i, { cat: 'saida', tipo: 'Transporte' }],
-    [/netflix|spotify|prime|disney|hbo|youtube premium|twitch/i,     { cat: 'saida', tipo: 'Assinaturas' }],
-    [/academia|smartfit|bluefit|bodytech|gym/i,                      { cat: 'saida', tipo: 'Academia' }],
-    [/aluguel|condominio|iptu|agua |luz |gás |internet|tim |claro |vivo |oi /i, { cat: 'saida', tipo: 'Conta fixa' }],
-    [/salario|salário|holerite|pagamento.*rh|folha/i,                { cat: 'entrada', tipo: 'Salário' }],
-    [/renda|freelance|autonomo|transferencia.*recebida/i,            { cat: 'entrada', tipo: 'Renda Extra' }],
+    // ── Supermercado (word-boundary — evita sobrenomes "Mercado") ─────────────
+    [/supermercado|carrefour|atacad|hortifruti|pao de acucar|extra\b/i, { cat: 'saida', tipo: 'Mercado' }],
+    [/\bsuperm|\bmerced|\bprecito|\bdia\b.*super|sacolao/i,          { cat: 'saida', tipo: 'Mercado' }],
+    // ── Farmácia ───────────────────────────────────────────────────────────────
+    [/farmacia|drogasil|ultrafarma|pacheco|droga\b|remedios/i,       { cat: 'saida', tipo: 'Farmácia' }],
+    // ── Transporte ─────────────────────────────────────────────────────────────
+    [/\buber\b|99pop|cabify|combustivel|gasolina|ipiranga|shell\b|posto\b|auto.*posto/i, { cat: 'saida', tipo: 'Transporte' }],
+    [/\bmetro\b|onibus|passagem|bilhete/i,                           { cat: 'saida', tipo: 'Transporte' }],
+    // ── Assinaturas ────────────────────────────────────────────────────────────
+    [/netflix|spotify|\bprime\b|disney\+|hbo|youtube.*prem|twitch|apple.*one/i, { cat: 'saida', tipo: 'Assinaturas' }],
+    // ── Academia ───────────────────────────────────────────────────────────────
+    [/academia|smartfit|bluefit|bodytech|\bgym\b/i,                  { cat: 'saida', tipo: 'Academia' }],
+    // ── Contas fixas ───────────────────────────────────────────────────────────
+    [/aluguel|condominio|iptu|energia|enel\b|cemig\b|copel\b|internet|tim\b|claro\b|vivo\b|\boi\b/i, { cat: 'saida', tipo: 'Conta fixa' }],
+    // ── Renda extra genérica ────────────────────────────────────────────────────
+    [/renda|freelance|autonomo/i,                                    { cat: 'entrada', tipo: 'Renda Extra' }],
 ]);
 
 function _autoCategorizar(memo) {
-    const m = String(memo || '').toLowerCase();
+    // Normaliza: remove acentos para casar mesmo com encoding quebrado
+    // Ex: "TransferÃncia" → "Transferencia" → casa com /transfer.*receb/
+    const m = String(memo || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accent combining chars
+        .replace(/[^\w\s]/g, ' ')                          // símbolos → espaço
+        .toLowerCase();
     for (const [re, res] of _AUTO_CAT) {
         if (re.test(m)) return res;
     }
     return null;
+}
+
+// Remove prefixos bancários genéricos para deixar a descrição mais limpa
+function _limparDescricao(raw) {
+    return String(raw || '')
+        .replace(/^compra no d[eé]bito\s*[-–]\s*/i, '')
+        .replace(/^compra no cr[eé]dito\s*[-–]\s*/i, '')
+        .replace(/^compra\s*[-–]\s*/i, '')
+        .replace(/^pagamento\s*[-–]\s*/i, '')
+        .replace(/^transfer[eê]ncia\s*[-–]\s*/i, '')
+        .replace(/^pix\s*[-–]\s*/i, '')
+        .replace(/\s*\/\s*\d{2}\.\d{2}\.\d{4}.*$/, '') // remove data no final
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 200);
 }
 
 // ── Parser OFX (SGML — formato exportado por bancos brasileiros) ──────────
@@ -1232,7 +1371,7 @@ function _parseOFX(texto) {
 
         return {
             _fitid:    t.FITID || '',
-            descricao: memo.slice(0, 200),
+            descricao: _limparDescricao(memo),
             valor,
             data,
             categoria: auto?.cat ?? (isCredit ? 'entrada' : 'saida'),
@@ -1280,7 +1419,7 @@ function _parseCSV(texto) {
 
         txs.push({
             _fitid:    `csv_${i}_${rawAmt}_${rawDate}`,
-            descricao: memo,
+            descricao: _limparDescricao(memo),
             valor:     Math.abs(rawAmt),
             data,
             categoria: auto?.cat ?? (isPos ? 'entrada' : 'saida'),
@@ -1315,14 +1454,52 @@ function _renderRevisao(txs, container) {
         return;
     }
 
+    const totalDup = txs.filter(t => t._dup).length;
+
     const info = document.createElement('div');
     info.className = 'imp-info-bar';
-    const totalDup = txs.filter(t => t._dup).length;
-    info.textContent = `${txs.length} transação(ões) encontrada(s)${totalDup > 0 ? ` · ${totalDup} possível(is) duplicata(s) marcada(s)` : ''} — revise e confirme.`;
+    info.textContent = `${txs.length} transação(ões) encontrada(s)${totalDup > 0 ? ` · ${totalDup} possível(is) duplicata(s)` : ''} — revise e confirme.`;
     container.appendChild(info);
+
+    // — Barra de filtro —
+    const filtroWrap = document.createElement('div');
+    filtroWrap.className = 'imp-filtro-bar';
+
+    const inputBusca = document.createElement('input');
+    inputBusca.type        = 'text';
+    inputBusca.className   = 'form-input imp-busca';
+    inputBusca.placeholder = '🔍 Buscar descrição…';
+
+    const selFiltro = document.createElement('select');
+    selFiltro.className = 'form-input imp-filtro-cat';
+    const optTodas = document.createElement('option');
+    optTodas.value = ''; optTodas.textContent = 'Todas as categorias';
+    selFiltro.appendChild(optTodas);
+    [...new Set(txs.map(t => t.tipo))].sort().forEach(tipo => {
+        const o = document.createElement('option'); o.value = tipo; o.textContent = tipo;
+        selFiltro.appendChild(o);
+    });
+
+    filtroWrap.appendChild(inputBusca);
+    filtroWrap.appendChild(selFiltro);
+    container.appendChild(filtroWrap);
 
     const lista = document.createElement('div');
     lista.className = 'imp-lista';
+
+    function _aplicarFiltro() {
+        const q   = inputBusca.value.toLowerCase().trim();
+        const cat = selFiltro.value;
+        lista.querySelectorAll('.imp-row').forEach(row => {
+            const idx = parseInt(row.dataset.idx, 10);
+            const tx  = txs[idx];
+            const matchQ   = !q   || tx.descricao.toLowerCase().includes(q);
+            const matchCat = !cat || tx.tipo === cat;
+            row.style.display = (matchQ && matchCat) ? '' : 'none';
+        });
+    }
+    inputBusca.addEventListener('input',  _aplicarFiltro);
+    selFiltro.addEventListener('change', _aplicarFiltro);
 
     txs.forEach((tx, idx) => {
         const row = document.createElement('div');
@@ -1481,7 +1658,17 @@ function abrirImportarExtrato() {
             const reader = new FileReader();
             reader.onload = (e) => {
                 dropZone.classList.remove('imp-drop-zone--loading');
-                const texto = e.target.result;
+
+                // Auto-detecta encoding: lê header ASCII para checar CHARSET,
+                // depois decodifica com TextDecoder (UTF-8 ou windows-1252).
+                const buf = e.target.result;
+                const headerSlice = buf.slice(0, Math.min(1024, buf.byteLength));
+                const headerAscii = new TextDecoder('ascii', { fatal: false }).decode(headerSlice);
+                const charsetMatch = headerAscii.match(/CHARSET[:\s]+(\S+)/i);
+                const declaredUtf8 = /utf-?8/i.test(charsetMatch?.[1] || '');
+                const hasBOM = (new Uint8Array(buf, 0, 3)).join(',') === '239,187,191';
+                const encoding = (declaredUtf8 || hasBOM) ? 'utf-8' : 'windows-1252';
+                const texto = new TextDecoder(encoding, { fatal: false }).decode(buf);
 
                 try {
                     txsParsed = ext === 'ofx' ? _parseOFX(texto) : _parseCSV(texto);
@@ -1503,7 +1690,7 @@ function abrirImportarExtrato() {
                 dropZone.classList.remove('imp-drop-zone--loading');
                 _ctx.mostrarNotificacao('Não foi possível ler o arquivo.', 'error');
             };
-            reader.readAsText(file, 'latin1'); // OFX usa latin1; CSV geralmente também
+            reader.readAsArrayBuffer(file);
         }
 
         fileInput.addEventListener('change', (e) => { processarArquivo(e.target.files[0]); });

@@ -8807,6 +8807,15 @@ button,
 .imp-drop-text { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
 .imp-drop-hint { font-size: 0.75rem; color: var(--text-secondary); }
 
+.imp-filtro-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.imp-busca    { flex: 1; min-width: 140px; font-size: 0.82rem; padding: 7px 10px; }
+.imp-filtro-cat { flex: 0 0 160px; font-size: 0.8rem; padding: 7px 10px; }
+
 .imp-info-bar {
     background: rgba(76,166,255,0.08);
     border: 1px solid rgba(76,166,255,0.18);
