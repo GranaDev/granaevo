@@ -3772,6 +3772,9 @@ select.form-input option:checked {
     }
 }
 
+/* Oculta scrollbar WebKit em todos os wrappers de popup com scroll */
+.popup *::-webkit-scrollbar { display: none; }
+
 .popup {
     position: fixed;
     top: 50%;

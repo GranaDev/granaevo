@@ -2106,7 +2106,8 @@ function abrirWidgetOndeForDinheiro() {
 
         // ── Wrapper scroll
         const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'max-height:82vh; overflow-y:auto; overflow-x:hidden; padding-right:4px;';
+        wrapper.style.cssText = 'max-height:82vh; overflow-y:auto; overflow-x:hidden; scrollbar-width:none; padding-right:0;';
+        wrapper.style.msOverflowStyle = 'none';
 
         // ── Título
         const titulo = document.createElement('h3');
@@ -2596,7 +2597,7 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
     }
 
     _ctx.criarPopup(`
-        <div style="max-height:82vh; overflow-y:auto; overflow-x:hidden; padding-right:6px;">
+        <div style="max-height:82vh; overflow-y:auto; overflow-x:hidden; scrollbar-width:none; -ms-overflow-style:none; padding-right:0;">
             <button id="btnFecharCartaoRelatorio" style="position:sticky; top:0; float:right; margin-bottom:8px; background:#ff4b4b; border:none; color:#fff; width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:1.1rem; font-weight:700; z-index:10; box-shadow:0 2px 8px rgba(255,75,75,0.4); display:flex; align-items:center; justify-content:center;">
                 <i class="fas fa-xmark"></i>
             </button>
