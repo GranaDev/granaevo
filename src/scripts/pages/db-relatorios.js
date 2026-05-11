@@ -2718,17 +2718,22 @@ window.abrirDetalhesCartaoRelatorio = abrirDetalhesCartaoRelatorio;
 
 function _gerarPatrimonioCompleto(container) {
     container.innerHTML = '';
+
     // Score financeiro no topo
     const scoreWrap = document.createElement('div');
     scoreWrap.style.cssText = 'margin-bottom: 28px;';
     gerarScoreFinanceiro(scoreWrap);
     container.appendChild(scoreWrap);
+
     // Divisor
-    const div = document.createElement('div');
-    div.style.cssText = 'border-top: 1px solid rgba(255,255,255,0.07); margin-bottom: 24px;';
-    container.appendChild(div);
-    // Histórico patrimonial abaixo
-    gerarHistoricoPatrimonial(container);
+    const divisor = document.createElement('div');
+    divisor.style.cssText = 'border-top: 1px solid rgba(255,255,255,0.07); margin-bottom: 24px;';
+    container.appendChild(divisor);
+
+    // Histórico patrimonial — passamos um filho separado para evitar sobrescrever o score
+    const patrimonioWrap = document.createElement('div');
+    container.appendChild(patrimonioWrap);
+    gerarHistoricoPatrimonial(patrimonioWrap);
 }
 
 function gerarHistoricoPatrimonial(container) {
