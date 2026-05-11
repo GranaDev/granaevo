@@ -10,7 +10,15 @@ export function init(ctx) {
     window.lancarTransacao          = () => lancarTransacao();
     window.abrirDetalhesTransacao   = (t) => abrirDetalhesTransacao(t);
     window.atualizarTiposDinamicos  = () => atualizarTiposDinamicos();
-    window.abrirImportarExtrato     = () => abrirImportarExtrato();
+
+    // Botão importar extrato — via addEventListener (CSP não permite inline onclick)
+    const btnImport = document.getElementById('btnImportarExtrato');
+    if (btnImport) {
+        const newBtn = btnImport.cloneNode(true);
+        btnImport.parentNode.replaceChild(newBtn, btnImport);
+        newBtn.addEventListener('click', () => abrirImportarExtrato());
+    }
+
     bindFiltrosMovimentacoes();
     renderizarOrcamentos();
     atualizarMovimentacoesUI();
