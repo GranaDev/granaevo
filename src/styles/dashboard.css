@@ -8611,3 +8611,262 @@ button,
     .orc-card-name { max-width: 80px; }
     .orc-detalhe-desc { max-width: 130px; }
 }
+
+/* =====================================================
+   SCORE FINANCEIRO — Relatórios
+   ===================================================== */
+.score-wrap { display: flex; flex-direction: column; gap: 20px; padding: 4px 0; }
+
+.score-hero {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 20px;
+    padding: 24px;
+}
+
+.score-ring-wrap { position: relative; flex-shrink: 0; }
+
+.score-ring-inner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+
+.score-num  { font-size: 1.9rem; font-weight: 900; letter-spacing: -1px; line-height: 1; }
+.score-letra { font-size: 0.85rem; font-weight: 700; }
+
+.score-hero-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.score-nivel { font-size: 1.2rem; font-weight: 800; }
+.score-desc  { font-size: 0.8rem; color: var(--text-secondary); }
+
+.score-stats {
+    display: flex;
+    gap: 14px;
+    margin-top: 8px;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+.score-stats div { display: flex; flex-direction: column; gap: 2px; }
+.score-stats small { font-size: 0.68rem; color: var(--text-muted); font-weight: 400; }
+
+.score-sec-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.score-comp-sec, .score-hist-sec {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 18px 20px;
+}
+
+.score-comp-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.score-comp-row:last-child { border-bottom: none; }
+
+.score-comp-left { flex: 1; min-width: 0; }
+.score-comp-name { display: block; font-size: 0.87rem; font-weight: 600; color: var(--text-primary); }
+.score-comp-dica { display: block; font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
+
+.score-comp-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.score-comp-bar-wrap {
+    width: 80px;
+    height: 6px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 99px;
+    overflow: hidden;
+}
+.score-comp-bar { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
+
+.score-comp-pts {
+    font-size: 0.88rem;
+    font-weight: 800;
+    min-width: 44px;
+    text-align: right;
+}
+.score-comp-pts small { font-size: 0.65rem; font-weight: 400; opacity: 0.6; }
+
+.score-hist-grid {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    height: 90px;
+}
+
+.score-hist-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+}
+
+.score-hist-bar-wrap {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(255,255,255,0.04);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.score-hist-bar { width: 100%; border-radius: 6px; transition: height 0.5s ease; }
+
+.score-hist-val { font-size: 0.7rem; font-weight: 700; }
+.score-hist-lbl { font-size: 0.65rem; color: var(--text-muted); }
+
+@media (max-width: 600px) {
+    .score-hero { flex-direction: column; align-items: flex-start; }
+    .score-comp-bar-wrap { width: 60px; }
+    .score-stats { gap: 10px; font-size: 0.78rem; }
+}
+
+/* =====================================================
+   IMPORTADOR DE EXTRATO — Transações
+   ===================================================== */
+.tx-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.btn-import-extrato {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(67,160,71,0.1);
+    color: var(--primary);
+    border: 1px solid rgba(67,160,71,0.28);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s, border-color 0.2s;
+}
+.btn-import-extrato:hover {
+    background: rgba(67,160,71,0.2);
+    border-color: rgba(67,160,71,0.45);
+}
+
+.imp-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 2px dashed rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 28px 20px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    text-align: center;
+    margin-bottom: 14px;
+}
+.imp-drop-zone:hover, .imp-drop-zone--over {
+    border-color: var(--primary);
+    background: rgba(67,160,71,0.06);
+}
+.imp-drop-zone--loading { opacity: 0.6; pointer-events: none; }
+
+.imp-drop-icon { font-size: 2rem; color: var(--primary); opacity: 0.7; }
+.imp-drop-text { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+.imp-drop-hint { font-size: 0.75rem; color: var(--text-secondary); }
+
+.imp-info-bar {
+    background: rgba(76,166,255,0.08);
+    border: 1px solid rgba(76,166,255,0.18);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.imp-lista { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
+
+.imp-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 130px 90px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    border: 1px solid transparent;
+}
+.imp-row--dup { border-color: rgba(255,193,7,0.2); background: rgba(255,193,7,0.04); }
+
+.imp-chk { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); }
+
+.imp-row-info { min-width: 0; }
+.imp-row-desc {
+    font-size: 0.83rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.imp-row-meta { font-size: 0.72rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.imp-dup-badge {
+    background: rgba(255,193,7,0.15);
+    color: var(--warning);
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 0.68rem;
+    font-weight: 600;
+}
+
+.imp-cat-sel { font-size: 0.78rem; padding: 4px 8px; }
+
+.imp-row-valor { font-size: 0.85rem; font-weight: 700; text-align: right; }
+.imp-row-valor--entrada { color: var(--success); }
+.imp-row-valor--saida   { color: var(--danger); }
+
+.imp-acoes {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    margin-top: 4px;
+}
+.imp-acoes .btn-primary, .imp-acoes .btn-cancelar { flex: 1; min-width: 120px; }
+
+@media (max-width: 600px) {
+    .imp-row { grid-template-columns: 24px 1fr 80px; }
+    .imp-row-valor { display: none; }
+    .tx-title-row { flex-direction: column; align-items: flex-start; }
+}

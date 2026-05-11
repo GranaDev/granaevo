@@ -10,9 +10,10 @@ export function init(ctx) {
     window.lancarTransacao          = () => lancarTransacao();
     window.abrirDetalhesTransacao   = (t) => abrirDetalhesTransacao(t);
     window.atualizarTiposDinamicos  = () => atualizarTiposDinamicos();
+    window.abrirImportarExtrato     = () => abrirImportarExtrato();
     bindFiltrosMovimentacoes();
     renderizarOrcamentos();
-    atualizarMovimentacoesUI(); // renderiza imediatamente ao abrir a seção pela primeira vez
+    atualizarMovimentacoesUI();
 }
 
 // ========== TRANSAÇÕES ==========
@@ -293,6 +294,7 @@ function lancarTransacao() {
         _ctx.atualizarTudo();
         _ctx.fecharPopup();
         _verificarAlertasOrcamento(categoria, tipoSalvo, valor);
+        _ctx.verificarAnomaliaGasto?.(tipoSalvo, valor);
         renderizarOrcamentos();
 
         document.getElementById('selectCategoria').value    = '';
@@ -1149,4 +1151,415 @@ function _verificarAlertasOrcamento(categoria, tipo, valorAdicionado) {
     } else if (pct >= 80) {
         _ctx.mostrarNotificacao(`Atenção: você usou ${pct.toFixed(0)}% do orçamento de ${tipo}.`, 'warning');
     }
+}
+
+// ========== IMPORTADOR DE EXTRATO OFX/CSV ==========
+// Processamento 100% local — arquivo nunca sai do browser
+
+const _CATEGORIAS_IMPORT = Object.freeze([
+    'Mercado','Farmácia','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
+    'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre',
+    'Ifood','Amazon','Outros','Salário','Renda Extra','Outros Recebimentos',
+]);
+
+const _AUTO_CAT = Object.freeze([
+    [/ifood|rappi|uber.*eat|delivery/i,                              { cat: 'saida', tipo: 'Ifood' }],
+    [/mercado livre|mercadolivre|meli/i,                             { cat: 'saida', tipo: 'Mercado Livre' }],
+    [/shopee/i,                                                      { cat: 'saida', tipo: 'Shopee' }],
+    [/amazon/i,                                                      { cat: 'saida', tipo: 'Amazon' }],
+    [/mercado|supermercado|carrefour|extra |pao de acucar|atacad/i,  { cat: 'saida', tipo: 'Mercado' }],
+    [/farmacia|drogasil|ultrafarma|pacheco|droga|remedios/i,         { cat: 'saida', tipo: 'Farmácia' }],
+    [/uber|99pop|lyft|cabify|metro|onibus|combustivel|gasolina|posto/i, { cat: 'saida', tipo: 'Transporte' }],
+    [/netflix|spotify|prime|disney|hbo|youtube premium|twitch/i,     { cat: 'saida', tipo: 'Assinaturas' }],
+    [/academia|smartfit|bluefit|bodytech|gym/i,                      { cat: 'saida', tipo: 'Academia' }],
+    [/aluguel|condominio|iptu|agua |luz |gás |internet|tim |claro |vivo |oi /i, { cat: 'saida', tipo: 'Conta fixa' }],
+    [/salario|salário|holerite|pagamento.*rh|folha/i,                { cat: 'entrada', tipo: 'Salário' }],
+    [/renda|freelance|autonomo|transferencia.*recebida/i,            { cat: 'entrada', tipo: 'Renda Extra' }],
+]);
+
+function _autoCategorizar(memo) {
+    const m = String(memo || '').toLowerCase();
+    for (const [re, res] of _AUTO_CAT) {
+        if (re.test(m)) return res;
+    }
+    return null;
+}
+
+// ── Parser OFX (SGML — formato exportado por bancos brasileiros) ──────────
+function _parseOFX(texto) {
+    const linhas = texto.replace(/\r/g, '').split('\n');
+    const txs = [];
+    let cur = null;
+
+    const get = (tag) => {
+        const re = new RegExp(`<${tag}>([^<\\n]+)`, 'i');
+        const m  = texto.match(re);
+        return m ? m[1].trim() : null;
+    };
+
+    for (const linha of linhas) {
+        const l = linha.trim();
+        if (l === '<STMTTRN>') { cur = {}; continue; }
+        if (l === '</STMTTRN>' && cur) { txs.push(cur); cur = null; continue; }
+        if (!cur) continue;
+        const m = l.match(/^<([^>]+)>(.+)$/);
+        if (!m) continue;
+        const [, tag, val] = m;
+        cur[tag.toUpperCase()] = val.trim();
+    }
+
+    return txs.map(t => {
+        const rawAmt  = parseFloat(t.TRNAMT || '0');
+        const isCredit = rawAmt > 0 || (t.TRNTYPE || '').toUpperCase() === 'CREDIT';
+        const valor   = Math.abs(rawAmt);
+
+        // DTPOSTED: 20260510120000[-3:BRT] → DD/MM/YYYY
+        const dt = (t.DTPOSTED || '').replace(/\[.*\]/, '').trim();
+        const data = dt.length >= 8
+            ? `${dt.slice(6,8)}/${dt.slice(4,6)}/${dt.slice(0,4)}`
+            : null;
+
+        const memo = t.MEMO || t.NAME || '';
+        const auto = _autoCategorizar(memo);
+
+        return {
+            _fitid:    t.FITID || '',
+            descricao: memo.slice(0, 200),
+            valor,
+            data,
+            categoria: auto?.cat ?? (isCredit ? 'entrada' : 'saida'),
+            tipo:      auto?.tipo ?? (isCredit ? 'Outros Recebimentos' : 'Outros'),
+            _isCredit: isCredit,
+        };
+    }).filter(t => t.valor > 0 && t.data);
+}
+
+// ── Parser CSV genérico (detecta Nubank e formato padrão) ────────────────
+function _parseCSV(texto) {
+    const linhas = texto.replace(/\r/g, '').split('\n').filter(l => l.trim());
+    if (linhas.length < 2) return [];
+
+    const headers = linhas[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
+
+    // Detecta colunas
+    const iData  = headers.findIndex(h => /data|date/i.test(h));
+    const iDesc  = headers.findIndex(h => /descri|memo|narrat|hist/i.test(h));
+    const iValor = headers.findIndex(h => /valor|amount|value/i.test(h));
+    if (iData < 0 || iDesc < 0 || iValor < 0) return [];
+
+    const txs = [];
+    for (let i = 1; i < linhas.length; i++) {
+        const cols = linhas[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        if (cols.length <= Math.max(iData, iDesc, iValor)) continue;
+
+        const rawAmt  = parseFloat((cols[iValor] || '0').replace(',', '.'));
+        if (!isFinite(rawAmt) || rawAmt === 0) continue;
+
+        // Tenta converter data para DD/MM/YYYY
+        const rawDate = cols[iData] || '';
+        let data = null;
+        if (/^\d{4}-\d{2}-\d{2}/.test(rawDate)) {
+            const [y,m,d] = rawDate.split('-');
+            data = `${d.slice(0,2)}/${m}/${y}`;
+        } else if (/^\d{2}\/\d{2}\/\d{4}/.test(rawDate)) {
+            data = rawDate.slice(0, 10);
+        }
+        if (!data) continue;
+
+        const memo  = (cols[iDesc] || '').slice(0, 200);
+        const auto  = _autoCategorizar(memo);
+        const isPos = rawAmt > 0;
+
+        txs.push({
+            _fitid:    `csv_${i}_${rawAmt}_${rawDate}`,
+            descricao: memo,
+            valor:     Math.abs(rawAmt),
+            data,
+            categoria: auto?.cat ?? (isPos ? 'entrada' : 'saida'),
+            tipo:      auto?.tipo ?? (isPos ? 'Outros Recebimentos' : 'Outros'),
+            _isCredit: isPos,
+        });
+    }
+    return txs;
+}
+
+// ── Deduplicação: detecta provável duplicata por data+valor+sinal ─────────
+function _isDuplicata(tx) {
+    const existentes = _ctx.transacoes || [];
+    return existentes.some(e => {
+        if (typeof e.data !== 'string' || !e.valor) return false;
+        // Converte DD/MM/YYYY para comparação
+        const eISO = _ctx.dataParaISO(e.data);
+        const tISO = _ctx.dataParaISO(tx.data);
+        if (!eISO || !tISO || eISO !== tISO) return false;
+        return Math.abs(parseFloat(e.valor) - tx.valor) < 0.01;
+    });
+}
+
+// ── Tela de revisão ──────────────────────────────────────────────────────
+function _renderRevisao(txs, container) {
+    container.innerHTML = '';
+    if (txs.length === 0) {
+        const p = document.createElement('p');
+        p.style.cssText = 'text-align:center; color:var(--text-secondary); padding:24px;';
+        p.textContent = 'Nenhuma transação válida encontrada no arquivo.';
+        container.appendChild(p);
+        return;
+    }
+
+    const info = document.createElement('div');
+    info.className = 'imp-info-bar';
+    const totalDup = txs.filter(t => t._dup).length;
+    info.textContent = `${txs.length} transação(ões) encontrada(s)${totalDup > 0 ? ` · ${totalDup} possível(is) duplicata(s) marcada(s)` : ''} — revise e confirme.`;
+    container.appendChild(info);
+
+    const lista = document.createElement('div');
+    lista.className = 'imp-lista';
+
+    txs.forEach((tx, idx) => {
+        const row = document.createElement('div');
+        row.className = 'imp-row' + (tx._dup ? ' imp-row--dup' : '');
+        row.dataset.idx = String(idx);
+
+        // Checkbox
+        const chk = document.createElement('input');
+        chk.type    = 'checkbox';
+        chk.className = 'imp-chk';
+        chk.checked = !tx._dup;
+        chk.id      = `imp_chk_${idx}`;
+        chk.addEventListener('change', () => { tx._incluir = chk.checked; });
+        tx._incluir = !tx._dup;
+
+        const info2 = document.createElement('div');
+        info2.className = 'imp-row-info';
+
+        const desc = document.createElement('div');
+        desc.className = 'imp-row-desc';
+        desc.textContent = _ctx._sanitizeText(tx.descricao);
+
+        const meta = document.createElement('div');
+        meta.className = 'imp-row-meta';
+        meta.textContent = tx.data;
+        if (tx._dup) {
+            const badge = document.createElement('span');
+            badge.className = 'imp-dup-badge';
+            badge.textContent = '⚠️ Duplicata provável';
+            meta.appendChild(badge);
+        }
+
+        // Select de categoria
+        const sel = document.createElement('select');
+        sel.className = 'form-input imp-cat-sel';
+        _CATEGORIAS_IMPORT.forEach(c => {
+            const o = document.createElement('option');
+            o.value = c; o.textContent = c;
+            if (c === tx.tipo) o.selected = true;
+            sel.appendChild(o);
+        });
+        sel.addEventListener('change', () => { tx.tipo = sel.value; });
+
+        const valor = document.createElement('div');
+        valor.className = `imp-row-valor ${tx._isCredit ? 'imp-row-valor--entrada' : 'imp-row-valor--saida'}`;
+        valor.textContent = `${tx._isCredit ? '+' : '-'} ${formatBRL(tx.valor)}`;
+
+        info2.appendChild(desc);
+        info2.appendChild(meta);
+
+        row.appendChild(chk);
+        row.appendChild(info2);
+        row.appendChild(sel);
+        row.appendChild(valor);
+        lista.appendChild(row);
+    });
+
+    container.appendChild(lista);
+}
+
+// ── Modal principal de importação ────────────────────────────────────────
+function abrirImportarExtrato() {
+    let txsParsed = [];
+
+    _ctx.criarPopupDOM((box) => {
+        box.style.cssText = 'max-width:560px; width:97%;';
+
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'max-height:85vh; overflow-y:auto; overflow-x:hidden;';
+
+        // — Título —
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:4px;';
+        const tI = document.createElement('i'); tI.className = 'fas fa-file-import'; tI.style.color = 'var(--primary)';
+        titulo.appendChild(tI);
+        titulo.appendChild(document.createTextNode('Importar Extrato'));
+
+        const sub = document.createElement('p');
+        sub.style.cssText = 'color:var(--text-muted); font-size:0.8rem; margin-bottom:16px;';
+        sub.textContent = 'Arquivo processado localmente — nenhum dado é enviado ao servidor.';
+
+        // — Drop zone —
+        const dropZone = document.createElement('label');
+        dropZone.className = 'imp-drop-zone';
+        dropZone.htmlFor   = 'imp-file-input';
+        dropZone.innerHTML = `<i class="fas fa-cloud-arrow-up imp-drop-icon"></i><div class="imp-drop-text">Clique ou arraste o arquivo aqui</div><div class="imp-drop-hint">Formatos aceitos: .OFX (todos os bancos) · .CSV (Nubank, inter, padrão)</div>`;
+
+        const fileInput = document.createElement('input');
+        fileInput.type    = 'file';
+        fileInput.id      = 'imp-file-input';
+        fileInput.accept  = '.ofx,.csv,.OFX,.CSV';
+        fileInput.style.display = 'none';
+
+        // — Container de revisão —
+        const revisaoWrap = document.createElement('div');
+        revisaoWrap.id = 'imp-revisao';
+
+        // — Botões de ação —
+        const acoes = document.createElement('div');
+        acoes.className = 'imp-acoes';
+        acoes.style.display = 'none';
+
+        const btnSelAll = document.createElement('button');
+        btnSelAll.className = 'orc-btn-add';
+        btnSelAll.type = 'button';
+        btnSelAll.textContent = 'Selecionar tudo';
+        btnSelAll.addEventListener('click', () => {
+            revisaoWrap.querySelectorAll('.imp-chk').forEach(c => { c.checked = true; txsParsed[parseInt(c.id.split('_')[2])]._ = true; });
+            txsParsed.forEach(t => { t._incluir = true; });
+        });
+
+        const btnDesAll = document.createElement('button');
+        btnDesAll.className = 'orc-btn-add';
+        btnDesAll.style.background = 'rgba(255,75,75,0.1)';
+        btnDesAll.style.borderColor = 'rgba(255,75,75,0.3)';
+        btnDesAll.style.color = 'var(--danger)';
+        btnDesAll.type = 'button';
+        btnDesAll.textContent = 'Desmarcar duplicatas';
+        btnDesAll.addEventListener('click', () => {
+            txsParsed.forEach((t, i) => {
+                if (t._dup) {
+                    const chk = revisaoWrap.querySelector(`#imp_chk_${i}`);
+                    if (chk) { chk.checked = false; }
+                    t._incluir = false;
+                }
+            });
+        });
+
+        const btnConfirmar = document.createElement('button');
+        btnConfirmar.className = 'btn-primary';
+        btnConfirmar.type = 'button';
+        btnConfirmar.id   = 'imp-btn-confirmar';
+        btnConfirmar.textContent = 'Lançar selecionadas';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar';
+        btnCancelar.type = 'button';
+        btnCancelar.textContent = 'Cancelar';
+        btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
+
+        acoes.appendChild(btnSelAll);
+        acoes.appendChild(btnDesAll);
+        acoes.appendChild(btnConfirmar);
+        acoes.appendChild(btnCancelar);
+
+        // — Processar arquivo —
+        function processarArquivo(file) {
+            if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!['ofx','csv'].includes(ext)) {
+                _ctx.mostrarNotificacao('Formato não suportado. Use .ofx ou .csv', 'error');
+                return;
+            }
+            dropZone.classList.add('imp-drop-zone--loading');
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                dropZone.classList.remove('imp-drop-zone--loading');
+                const texto = e.target.result;
+
+                try {
+                    txsParsed = ext === 'ofx' ? _parseOFX(texto) : _parseCSV(texto);
+                } catch (err) {
+                    _ctx.mostrarNotificacao('Erro ao ler o arquivo. Verifique o formato.', 'error');
+                    return;
+                }
+
+                // Marca duplicatas
+                txsParsed.forEach(t => { t._dup = _isDuplicata(t); });
+
+                _renderRevisao(txsParsed, revisaoWrap);
+                const sel = txsParsed.filter(t => t._incluir).length;
+                btnConfirmar.textContent = `Lançar ${sel} transação(ões)`;
+                acoes.style.display = 'flex';
+                dropZone.querySelector('.imp-drop-text').textContent = `✅ ${file.name} — ${txsParsed.length} transações`;
+            };
+            reader.onerror = () => {
+                dropZone.classList.remove('imp-drop-zone--loading');
+                _ctx.mostrarNotificacao('Não foi possível ler o arquivo.', 'error');
+            };
+            reader.readAsText(file, 'latin1'); // OFX usa latin1; CSV geralmente também
+        }
+
+        fileInput.addEventListener('change', (e) => { processarArquivo(e.target.files[0]); });
+
+        // Drag & drop
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('imp-drop-zone--over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('imp-drop-zone--over'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('imp-drop-zone--over');
+            processarArquivo(e.dataTransfer.files[0]);
+        });
+
+        // Atualiza contador ao marcar/desmarcar
+        revisaoWrap.addEventListener('change', () => {
+            const sel = txsParsed.filter(t => t._incluir).length;
+            btnConfirmar.textContent = `Lançar ${sel} transação(ões)`;
+        });
+
+        // — Confirmar lançamento —
+        btnConfirmar.addEventListener('click', () => {
+            const selecionadas = txsParsed.filter(t => t._incluir);
+            if (selecionadas.length === 0) {
+                _ctx.mostrarNotificacao('Nenhuma transação selecionada.', 'warning');
+                return;
+            }
+
+            let lancadas = 0;
+            selecionadas.forEach(tx => {
+                const cat = ['entrada','saida','reserva','retirada_reserva'].includes(tx.categoria) ? tx.categoria : 'saida';
+                const tipo = _CATEGORIAS_IMPORT.includes(tx.tipo) ? tx.tipo : 'Outros';
+                const valor = parseFloat(parseFloat(tx.valor).toFixed(2));
+                if (!isFinite(valor) || valor <= 0 || valor > 10_000_000) return;
+                if (!/^\d{2}\/\d{2}\/\d{4}$/.test(tx.data)) return;
+
+                _ctx.transacoes.push({
+                    categoria: cat,
+                    tipo,
+                    descricao: _ctx._sanitizeText(tx.descricao).slice(0, 300) || 'Importado do extrato',
+                    valor,
+                    data:  tx.data,
+                    hora:  '00:00:00',
+                    metaId: null,
+                });
+                lancadas++;
+            });
+
+            if (lancadas > 0) {
+                _ctx.salvarDados();
+                _ctx.atualizarTudo();
+                renderizarOrcamentos();
+                _ctx.fecharPopup();
+                _ctx.mostrarNotificacao(`✅ ${lancadas} transaç${lancadas === 1 ? 'ão lançada' : 'ões lançadas'} com sucesso!`, 'success');
+            } else {
+                _ctx.mostrarNotificacao('Nenhuma transação válida para lançar.', 'error');
+            }
+        });
+
+        wrap.appendChild(titulo);
+        wrap.appendChild(sub);
+        wrap.appendChild(dropZone);
+        wrap.appendChild(fileInput);
+        wrap.appendChild(revisaoWrap);
+        box.appendChild(wrap);
+        box.appendChild(acoes);
+    });
 }

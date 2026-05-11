@@ -1559,7 +1559,8 @@ function _makeCtx() {
         _SAVE_LIMITS:        { value: _SAVE_LIMITS,        enumerable: true },
         _ALLOWED_KEYS:       { value: _ALLOWED_KEYS,       enumerable: true },
         _sessionNonce:       { get: () => _sessionNonce,   enumerable: true },
-        _notificacaoControl: { get: () => _notificacaoControl, enumerable: true },
+        _notificacaoControl:        { get: () => _notificacaoControl, enumerable: true },
+        verificarAnomaliaGasto:     { value: (tipo, v) => _notificacaoControl.verificarAnomaliaGasto(tipo, v), enumerable: true },
         _log:                { get: () => _log,            enumerable: true },
         // Utility functions
         formatBRL:           { value: (...a) => formatBRL(...a),           enumerable: true },
@@ -1659,7 +1660,7 @@ function mostrarTela(tela) {
         if (periodoSel) periodoSel.style.display = 'none';
 
         if (!_dbLoaded.transacoes) {
-            import('./db-transacoes.js?v=6').then(m => {
+            import('./db-transacoes.js?v=7').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.transacoes = true;
             });
@@ -1703,7 +1704,7 @@ function mostrarTela(tela) {
 
     if (tela === 'relatorios') {
         if (!_dbLoaded.relatorios) {
-            import('./db-relatorios.js?v=7').then(m => {
+            import('./db-relatorios.js?v=8').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.relatorios = true;
             });
@@ -2536,21 +2537,79 @@ function renderizarPainelAlertas() {
 
 // Controle inteligente de notificações nativas — por categoria, sem spam
 const _notificacaoControl = {
-    _CHAVE: 'granaevo_notif_ctrl_v2',
+    _CHAVE:   'granaevo_notif_ctrl_v2',
+    _sessao:  0, // notificações disparadas nesta sessão (reset a cada load)
+    _MAX_SESSAO: 3,
     _get()  { try { return JSON.parse(localStorage.getItem(this._CHAVE) || '{}'); } catch { return {}; } },
     _save(d) { try { localStorage.setItem(this._CHAVE, JSON.stringify(d)); } catch {} },
-    // Limites: vencidas 3x/semana (48h), hoje 1x/dia, em3Dias 1x/dia, proximos 1x/semana
-    _limites: { vencidas: 48 * 3600000, hoje: 86400000, em3Dias: 86400000, proximos: 7 * 86400000 },
+    _limites: {
+        vencidas:         48 * 3600000,
+        hoje:             86400000,
+        em3Dias:          86400000,
+        proximos:         7 * 86400000,
+        resumoSemanal:    7 * 86400000,
+        anomaliaGasto:    48 * 3600000,
+    },
     podeEnviar(tipo) {
+        if (this._sessao >= this._MAX_SESSAO) return false;
         return Date.now() - (this._get()[tipo] || 0) > (this._limites[tipo] ?? 86400000);
     },
-    marcar(tipo) { const d = this._get(); d[tipo] = Date.now(); this._save(d); }
+    marcar(tipo) {
+        this._sessao++;
+        const d = this._get(); d[tipo] = Date.now(); this._save(d);
+    },
+    // Notifica anomalia de gasto (chamado após salvar transação)
+    verificarAnomaliaGasto(tipo, valorNovo) {
+        if (!tipo || this._sessao >= this._MAX_SESSAO) return;
+        if (!this.podeEnviar('anomaliaGasto')) return;
+        const hoje = new Date();
+        const mes  = hoje.getMonth() + 1, ano = hoje.getFullYear();
+        const sufixo = `/${String(mes).padStart(2,'0')}/${ano}`;
+        const txMes = (window.transacoes || []).filter(t =>
+            t.tipo === tipo && typeof t.data === 'string' && t.data.endsWith(sufixo) &&
+            (t.categoria === 'saida' || t.categoria === 'saida_credito')
+        );
+        const totalMes = txMes.reduce((s,t) => s + (parseFloat(t.valor)||0), 0);
+        // Média dos 3 meses anteriores
+        let media3m = 0; let mesesComDados = 0;
+        for (let i = 1; i <= 3; i++) {
+            let m3 = mes - i; let a3 = ano;
+            if (m3 <= 0) { m3 += 12; a3--; }
+            const sf3 = `/${String(m3).padStart(2,'0')}/${a3}`;
+            const txAntes = (window.transacoes || []).filter(t =>
+                t.tipo === tipo && typeof t.data === 'string' && t.data.endsWith(sf3)
+            ).reduce((s,t) => s + (parseFloat(t.valor)||0), 0);
+            if (txAntes > 0) { media3m += txAntes; mesesComDados++; }
+        }
+        if (mesesComDados < 2) return; // sem histórico suficiente
+        const mediaReal = media3m / mesesComDados;
+        if (totalMes > mediaReal * 1.5 && totalMes - mediaReal > 50) {
+            mostrarNotificacao(`⚠️ ${tipo}: ${formatBRL(totalMes)} este mês — ${Math.round(((totalMes-mediaReal)/mediaReal)*100)}% acima da sua média`, 'warning');
+            this.marcar('anomaliaGasto');
+        }
+    },
 };
 
 function verificacaoAutomaticaVencimentos() {
     const alertas = verificarVencimentos();
     if(!alertas) return;
     atualizarBadgeVencimentos();
+
+    // Resumo semanal (segunda-feira, 1x/semana)
+    const diaSemana = new Date().getDay(); // 0=dom, 1=seg
+    if (diaSemana === 1 && _notificacaoControl.podeEnviar('resumoSemanal')) {
+        const hoje = new Date();
+        const mes  = hoje.getMonth()+1, ano = hoje.getFullYear();
+        const sufixo = `/${String(mes).padStart(2,'0')}/${ano}`;
+        const txMes  = transacoes.filter(t => typeof t.data === 'string' && t.data.endsWith(sufixo));
+        const ent    = txMes.filter(t => t.categoria === 'entrada').reduce((s,t) => s+(parseFloat(t.valor)||0), 0);
+        const sai    = txMes.filter(t => t.categoria === 'saida' || t.categoria === 'saida_credito').reduce((s,t) => s+(parseFloat(t.valor)||0), 0);
+        if (ent + sai > 0) {
+            const poup = ent > 0 ? ((ent-sai)/ent*100).toFixed(1) : 0;
+            enviarNotificacaoNativa('Resumo semanal 📊', `Entradas: ${formatBRL(ent)} · Saídas: ${formatBRL(sai)} · Poupança: ${poup}%`, 'info');
+            _notificacaoControl.marcar('resumoSemanal');
+        }
+    }
 
     if(alertas.vencidas.length > 0 && _notificacaoControl.podeEnviar('vencidas')) {
         const nomes = alertas.vencidas.slice(0, 2).map(c => c.descricao).join(', ');
@@ -4020,7 +4079,7 @@ const widgetOndeFoi = document.getElementById('widgetOndeFoiDinheiro');
 if (widgetOndeFoi) {
     widgetOndeFoi.addEventListener('click', () => {
         if (!_dbLoaded.relatorios) {
-            import('./db-relatorios.js?v=7').then(m => {
+            import('./db-relatorios.js?v=8').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.relatorios = true;
                 window.abrirWidgetOndeForDinheiro?.();

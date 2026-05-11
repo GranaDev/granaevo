@@ -255,6 +255,26 @@ function setupBotoesRelatorio() {
         });
     }
 
+    // ── Score Financeiro ─────────────────────────────────────────────────
+    const btnScore = document.querySelector('.tipo-relatorio-btns [data-tipo="score"]');
+    if (btnScore) {
+        const newBtnScore = btnScore.cloneNode(true);
+        btnScore.parentNode.replaceChild(newBtnScore, btnScore);
+        newBtnScore.addEventListener('click', function () {
+            _ctx.tipoRelatorioAtivo = 'score';
+            [newBtnIndividual, newBtnCasal, newBtnFamilia, newBtnPatrimonio].forEach(b => b?.classList.remove('active'));
+            newBtnScore.classList.add('active');
+            perfilSelector.classList.remove('show');
+            const periodRow = document.querySelector('.rel-period-row');
+            if (periodRow) periodRow.style.display = 'none';
+            const resultado = document.getElementById('relatorioResultado');
+            if (resultado) {
+                resultado.classList.remove('js-hidden');
+                gerarScoreFinanceiro(resultado);
+            }
+        });
+    }
+
     // Restaura seletores ao trocar para outro tipo
     [newBtnIndividual, newBtnCasal, newBtnFamilia].forEach(btn => {
         btn.addEventListener('click', () => {
@@ -267,13 +287,15 @@ function setupBotoesRelatorio() {
 // _gerandoRelatorio é estado de dashboard.js, acessível via _ctx.
 
 async function gerarRelatorio() {
-    // Histórico patrimonial não precisa de mês/ano — tratado antes de qualquer validação
+    // Histórico patrimonial e score não precisam de mês/ano
     if (_ctx.tipoRelatorioAtivo === 'patrimonio') {
         const resultado = document.getElementById('relatorioResultado');
-        if (resultado) {
-            resultado.classList.remove('js-hidden');
-            gerarHistoricoPatrimonial(resultado);
-        }
+        if (resultado) { resultado.classList.remove('js-hidden'); gerarHistoricoPatrimonial(resultado); }
+        return;
+    }
+    if (_ctx.tipoRelatorioAtivo === 'score') {
+        const resultado = document.getElementById('relatorioResultado');
+        if (resultado) { resultado.classList.remove('js-hidden'); gerarScoreFinanceiro(resultado); }
         return;
     }
 
@@ -1855,6 +1877,118 @@ function processarAnaliseOndeForDinheiro() {
     }
 
     container.appendChild(insightDiv);
+
+    // ── Projeção de fim de mês ──────────────────────────────────────────────
+    if (analise.projecao !== null && analise.diaHoje < analise.diasMes) {
+        const cardProj = document.createElement('div');
+        cardProj.style.cssText = 'background:rgba(76,166,255,0.08); border:1px solid rgba(76,166,255,0.2); border-radius:16px; padding:16px; margin-top:12px;';
+        const projTit = document.createElement('div');
+        projTit.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#4ca6ff;';
+        const projI = document.createElement('i'); projI.className = 'fas fa-chart-line';
+        projTit.appendChild(projI); projTit.appendChild(document.createTextNode(' Projeção de Fim de Mês'));
+        const projRow = document.createElement('div');
+        projRow.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;';
+        function _miniStat(lbl, val, cor) {
+            const c = document.createElement('div');
+            c.style.cssText = 'background:rgba(255,255,255,0.04); border-radius:10px; padding:10px 8px; text-align:center;';
+            const v = document.createElement('div'); v.style.cssText = `font-size:1rem; font-weight:700; color:${cor}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;`;
+            v.textContent = val;
+            const l = document.createElement('div'); l.style.cssText = 'font-size:0.68rem; color:var(--text-muted); margin-top:3px; text-transform:uppercase; letter-spacing:0.04em;';
+            l.textContent = lbl;
+            c.appendChild(v); c.appendChild(l); return c;
+        }
+        const diasRestantes = analise.diasMes - analise.diaHoje;
+        const mediaDiaria   = analise.totalGastos / analise.diaHoje;
+        projRow.appendChild(_miniStat('Gasto até hoje', formatBRL(analise.totalGastos), '#ff4b4b'));
+        projRow.appendChild(_miniStat('Projeção total', formatBRL(analise.projecao), '#ffd166'));
+        projRow.appendChild(_miniStat(`${diasRestantes} dias restantes`, formatBRL(mediaDiaria) + '/dia', '#4ecdc4'));
+        cardProj.appendChild(projTit); cardProj.appendChild(projRow);
+        container.appendChild(cardProj);
+    }
+
+    // ── Taxa de poupança ──────────────────────────────────────────────────
+    if (analise.taxaPoupanca !== null && analise.totalEntradas > 0) {
+        const tp   = Math.max(-999, analise.taxaPoupanca);
+        const corT = tp >= 20 ? '#4ecdc4' : tp >= 0 ? '#ffd166' : '#ff4b4b';
+        const lblT = tp >= 20 ? '✅ Meta de 20% atingida!' : tp >= 0 ? `⚠️ Meta: 20% — você poupou ${tp.toFixed(1)}%` : '❌ Gastos superaram as entradas';
+        const cardTp = document.createElement('div');
+        cardTp.style.cssText = 'background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:16px; margin-top:12px; display:flex; align-items:center; gap:14px;';
+        const ringWrap = document.createElement('div');
+        ringWrap.style.cssText = `position:relative; width:60px; height:60px; flex-shrink:0;`;
+        const pctClamped = Math.max(0, Math.min(100, tp));
+        const circ = 2 * Math.PI * 26;
+        const dashFill = (pctClamped / 100) * circ;
+        ringWrap.innerHTML = `<svg width="60" height="60" viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="6"/><circle cx="30" cy="30" r="26" fill="none" stroke="${corT}" stroke-width="6" stroke-dasharray="${dashFill.toFixed(1)} ${circ.toFixed(1)}" stroke-dashoffset="${(circ/4).toFixed(1)}" stroke-linecap="round"/></svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:800;color:${corT}">${tp >= 0 ? tp.toFixed(0) : '–'}%</div>`;
+        const tpBody = document.createElement('div');
+        const tpTitle = document.createElement('div');
+        tpTitle.style.cssText = 'font-size:0.9rem; font-weight:700; color:var(--text-primary); margin-bottom:4px;';
+        tpTitle.textContent = 'Taxa de Poupança';
+        const tpSub = document.createElement('div');
+        tpSub.style.cssText = `font-size:0.82rem; color:${corT};`;
+        tpSub.textContent = lblT;
+        const tpDetail = document.createElement('div');
+        tpDetail.style.cssText = 'font-size:0.76rem; color:var(--text-muted); margin-top:4px;';
+        tpDetail.textContent = `Entradas: ${formatBRL(analise.totalEntradas)} · Saídas: ${formatBRL(analise.totalGastos)}`;
+        tpBody.appendChild(tpTitle); tpBody.appendChild(tpSub); tpBody.appendChild(tpDetail);
+        cardTp.appendChild(ringWrap); cardTp.appendChild(tpBody);
+        container.appendChild(cardTp);
+    }
+
+    // ── Comparação vs mês anterior ────────────────────────────────────────
+    if (analise.comparacao && analise.comparacao.some(c => c.anterior > 0)) {
+        const cardComp = document.createElement('div');
+        cardComp.style.cssText = 'background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:16px; margin-top:12px;';
+        const compTit = document.createElement('div');
+        compTit.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted);';
+        const compI = document.createElement('i'); compI.className = 'fas fa-arrows-left-right'; compI.style.color = 'var(--primary)';
+        compTit.appendChild(compI); compTit.appendChild(document.createTextNode(' vs Mês Anterior'));
+        cardComp.appendChild(compTit);
+        const compGrid = document.createElement('div');
+        compGrid.style.cssText = 'display:flex; flex-direction:column; gap:6px;';
+        let shown = 0;
+        analise.comparacao.forEach(c => {
+            if (c.anterior === 0 || c.delta === null || shown >= 5) return;
+            shown++;
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:rgba(255,255,255,0.03); border-radius:8px;';
+            const lbl = document.createElement('span');
+            lbl.style.cssText = 'font-size:0.83rem; color:var(--text-primary); font-weight:500;';
+            lbl.textContent = _ctx._sanitizeText(c.tipo);
+            const right = document.createElement('div');
+            right.style.cssText = 'display:flex; align-items:center; gap:8px;';
+            const val = document.createElement('span');
+            val.style.cssText = 'font-size:0.8rem; color:var(--text-secondary);';
+            val.textContent = formatBRL(c.atual);
+            const badge = document.createElement('span');
+            const sinal = c.delta > 0 ? '+' : '';
+            const corD  = c.delta > 15 ? '#ff4b4b' : c.delta < -15 ? '#4ecdc4' : '#ffd166';
+            badge.style.cssText = `font-size:0.72rem; font-weight:700; color:${corD}; background:rgba(255,255,255,0.06); padding:2px 7px; border-radius:10px;`;
+            badge.textContent = `${sinal}${c.delta.toFixed(0)}%`;
+            right.appendChild(val); right.appendChild(badge);
+            row.appendChild(lbl); row.appendChild(right);
+            compGrid.appendChild(row);
+        });
+        cardComp.appendChild(compGrid);
+        container.appendChild(cardComp);
+    }
+
+    // ── Anomalias ────────────────────────────────────────────────────────
+    if (analise.anomalias && analise.anomalias.length > 0) {
+        const cardAnom = document.createElement('div');
+        cardAnom.style.cssText = 'background:rgba(255,75,75,0.07); border:1px solid rgba(255,75,75,0.2); border-radius:16px; padding:16px; margin-top:12px;';
+        const anomTit = document.createElement('div');
+        anomTit.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#ff4b4b;';
+        const anomI = document.createElement('i'); anomI.className = 'fas fa-triangle-exclamation';
+        anomTit.appendChild(anomI); anomTit.appendChild(document.createTextNode(' Gastos Anômalos (vs 3 meses)'));
+        cardAnom.appendChild(anomTit);
+        analise.anomalias.slice(0, 3).forEach(a => {
+            const p = document.createElement('p');
+            p.style.cssText = 'font-size:0.83rem; color:var(--text-secondary); margin-bottom:6px; line-height:1.5;';
+            p.textContent = `⚠️ ${_ctx._sanitizeText(a.tipo)}: ${formatBRL(a.atual)} este mês — ${a.delta.toFixed(0)}% acima da sua média (${formatBRL(a.media)}/mês).`;
+            cardAnom.appendChild(p);
+        });
+        container.appendChild(cardAnom);
+    }
 }
 
 // ========== GERAR ANÁLISE "ONDE FOI MEU DINHEIRO?" ==========
@@ -1865,74 +1999,113 @@ function gerarAnaliseOndeForDinheiro(mes, ano) {
 
     const periodoSelecionado = `${ano}-${mes}`;
 
-    const transacoesPeriodo = _ctx.transacoes.filter(t => {
+    const _txPeriodo = (m, a, cat) => _ctx.transacoes.filter(t => {
         if (!t || typeof t !== 'object') return false;
-        const dataISO = _ctx.sanitizeDate(_ctx.dataParaISO(t.data));
-        if (!dataISO) return false;
-        return dataISO.startsWith(periodoSelecionado) && t.categoria === 'saida';
+        const iso = _ctx.sanitizeDate(_ctx.dataParaISO(t.data));
+        if (!iso) return false;
+        if (cat && t.categoria !== cat) return false;
+        return iso.startsWith(`${a}-${m}`);
     });
 
-    if (transacoesPeriodo.length === 0) {
-        return {
-            temDados: false,
-            mensagem: `Não há gastos registrados em ${getMesNome(mes)} de ${ano}.`
-        };
+    const txSaida    = _txPeriodo(mes, ano, 'saida');
+    const txEntrada  = _txPeriodo(mes, ano, 'entrada');
+
+    if (txSaida.length === 0 && txEntrada.length === 0) {
+        return { temDados: false, mensagem: `Não há movimentações registradas em ${getMesNome(mes)} de ${ano}.` };
     }
 
+    // Mês anterior
+    const mesN   = parseInt(mes, 10);
+    const anoN   = parseInt(ano, 10);
+    const mesAnt = mesN === 1 ? 12 : mesN - 1;
+    const anoAnt = mesN === 1 ? anoN - 1 : anoN;
+    const mesAntStr = String(mesAnt).padStart(2, '0');
+    const anoAntStr = String(anoAnt);
+    const txSaidaAnt = _txPeriodo(mesAntStr, anoAntStr, 'saida');
+
+    // Categorias do período
     const categorias = safeCategorias();
-    transacoesPeriodo.forEach(t => {
+    txSaida.forEach(t => {
         if (t.tipo && typeof t.tipo === 'string' && t.tipo.length < 100) {
-            const tipoKey = t.tipo.trim();
-            categorias[tipoKey] = (categorias[tipoKey] || 0) + _ctx.sanitizeNumber(t.valor);
+            const k = t.tipo.trim();
+            categorias[k] = (categorias[k] || 0) + _ctx.sanitizeNumber(t.valor);
         }
     });
 
-    const totalGastos         = Object.values(categorias).reduce((sum, v) => sum + v, 0);
-    const categoriasOrdenadas = Object.entries(categorias).sort((a, b) => b[1] - a[1]);
-    const top3                = categoriasOrdenadas.slice(0, 3);
-
-    // ✅ CORREÇÃO: retorna partes estruturadas em vez de HTML concatenado.
-    //    O caller monta o DOM via textContent, sem risco de double-escaping.
-    const narrativaPartes = [];
-
-    narrativaPartes.push({
-        tipo:  'texto',
-        texto: `Em ${getMesNome(mes)} de ${ano}, você realizou ${transacoesPeriodo.length} transação(ões) de saída. `
+    // Categorias mês anterior
+    const catAnt = safeCategorias();
+    txSaidaAnt.forEach(t => {
+        if (t.tipo && typeof t.tipo === 'string' && t.tipo.length < 100) {
+            const k = t.tipo.trim();
+            catAnt[k] = (catAnt[k] || 0) + _ctx.sanitizeNumber(t.valor);
+        }
     });
 
-    if (top3[0]) {
-        const percTop = ((top3[0][1] / totalGastos) * 100).toFixed(0);
-        narrativaPartes.push({
-            tipo:       'destaque',
-            prefixo:    'Seu maior gasto foi em ',
-            destaque:   top3[0][0],
-            sufixo:     `, representando ${percTop}% do total. `
-        });
-    }
-    if (top3[1]) {
-        narrativaPartes.push({
-            tipo:     'destaque',
-            prefixo:  'Em segundo lugar, gastos com ',
-            destaque: top3[1][0],
-            sufixo:   '. '
-        });
-    }
-    if (top3[2]) {
-        narrativaPartes.push({
-            tipo:     'destaque',
-            prefixo:  'E em terceiro, ',
-            destaque: top3[2][0],
-            sufixo:   '.'
+    // Média de 3 meses anteriores por categoria (para anomalias)
+    const cat3m = safeCategorias();
+    for (let i = 1; i <= 3; i++) {
+        let m3 = mesN - i; let a3 = anoN;
+        if (m3 <= 0) { m3 += 12; a3--; }
+        const m3s = String(m3).padStart(2, '0');
+        _txPeriodo(m3s, String(a3), 'saida').forEach(t => {
+            if (t.tipo && typeof t.tipo === 'string' && t.tipo.length < 100) {
+                const k = t.tipo.trim();
+                cat3m[k] = (cat3m[k] || 0) + _ctx.sanitizeNumber(t.valor) / 3;
+            }
         });
     }
 
+    const totalGastos    = Object.values(categorias).reduce((s, v) => s + v, 0);
+    const totalEntradas  = txEntrada.reduce((s, t) => s + _ctx.sanitizeNumber(t.valor), 0);
+    const totalGastosAnt = Object.values(catAnt).reduce((s, v) => s + v, 0);
+    const taxaPoupanca   = totalEntradas > 0 ? ((totalEntradas - totalGastos) / totalEntradas) * 100 : null;
+
+    // Dias do mês e projeção
+    const hoje    = new Date();
+    const diaHoje = (parseInt(ano, 10) === hoje.getFullYear() && parseInt(mes, 10) === hoje.getMonth() + 1)
+                    ? hoje.getDate() : null;
+    const diasMes = new Date(parseInt(ano, 10), parseInt(mes, 10), 0).getDate();
+    const projecao = diaHoje && diaHoje > 0
+                     ? (totalGastos / diaHoje) * diasMes : null;
+
+    // Comparação vs mês anterior (delta por categoria)
+    const comparacao = [];
+    Object.entries(categorias).forEach(([k, v]) => {
+        const prev  = catAnt[k] || 0;
+        const delta = prev > 0 ? ((v - prev) / prev) * 100 : null;
+        comparacao.push({ tipo: k, atual: v, anterior: prev, delta });
+    });
+    comparacao.sort((a, b) => (b.delta ?? -Infinity) - (a.delta ?? -Infinity));
+
+    // Anomalias (>60% acima da média dos 3 meses anteriores)
+    const anomalias = [];
+    Object.entries(categorias).forEach(([k, v]) => {
+        const media = cat3m[k] || 0;
+        if (media > 10 && v > media * 1.6) {
+            anomalias.push({ tipo: k, atual: v, media, delta: ((v - media) / media) * 100 });
+        }
+    });
+    anomalias.sort((a, b) => b.delta - a.delta);
+
+    const categoriasOrdenadas = Object.entries(categorias).sort((a, b) => b[1] - a[1]);
+    const top3 = categoriasOrdenadas.slice(0, 3);
+
+    const narrativaPartes = [];
+    narrativaPartes.push({ tipo: 'texto', texto: `Em ${getMesNome(mes)} de ${ano}, você realizou ${txSaida.length} transação(ões) de saída. ` });
+    if (top3[0]) {
+        const percTop = ((top3[0][1] / totalGastos) * 100).toFixed(0);
+        narrativaPartes.push({ tipo: 'destaque', prefixo: 'Seu maior gasto foi em ', destaque: top3[0][0], sufixo: `, representando ${percTop}% do total. ` });
+    }
+    if (top3[1]) narrativaPartes.push({ tipo: 'destaque', prefixo: 'Em segundo lugar, gastos com ', destaque: top3[1][0], sufixo: '. ' });
+    if (top3[2]) narrativaPartes.push({ tipo: 'destaque', prefixo: 'E em terceiro, ', destaque: top3[2][0], sufixo: '.' });
+
     return {
-        temDados:        true,
-        totalGastos,
-        totalTransacoes: transacoesPeriodo.length,
-        categorias:      categoriasOrdenadas,
-        top3,
-        narrativaPartes  // ✅ estruturado — sem HTML misturado com dados
+        temDados: true,
+        totalGastos, totalEntradas, totalGastosAnt, taxaPoupanca,
+        totalTransacoes: txSaida.length,
+        categorias: categoriasOrdenadas, top3,
+        comparacao, anomalias, projecao, diaHoje, diasMes,
+        narrativaPartes,
     };
 }
 
@@ -2714,6 +2887,195 @@ function gerarHistoricoPatrimonial(container) {
             </div>
         </div>
     `;
+}
+
+// ========== SCORE FINANCEIRO ==========
+
+function _calcScore(tx, metas, cartoes, orcamentos) {
+    const hoje    = new Date();
+    const mesAtual = hoje.getMonth() + 1;
+    const anoAtual = hoje.getFullYear();
+    const sufixo   = `/${String(mesAtual).padStart(2,'0')}/${anoAtual}`;
+
+    const txMes = tx.filter(t => typeof t.data === 'string' && t.data.endsWith(sufixo));
+    const entradas = txMes.filter(t => t.categoria === 'entrada').reduce((s,t) => s + (parseFloat(t.valor)||0), 0);
+    const saidas   = txMes.filter(t => t.categoria === 'saida' || t.categoria === 'saida_credito').reduce((s,t) => s + (parseFloat(t.valor)||0), 0);
+    const reservas = txMes.filter(t => t.categoria === 'reserva').reduce((s,t) => s + (parseFloat(t.valor)||0), 0);
+
+    // C1: Taxa de poupança (0-200)
+    const taxaPoup = entradas > 0 ? ((entradas - saidas) / entradas) * 100 : 0;
+    const c1 = Math.round(Math.max(0, Math.min(200, (taxaPoup / 30) * 200)));
+
+    // C2: Orçamentos cumpridos (0-200)
+    const orcEntries = Object.entries(orcamentos || {});
+    let c2 = 100;
+    if (orcEntries.length > 0) {
+        let dentro = 0;
+        orcEntries.forEach(([tipo, cfg]) => {
+            const gasto = txMes.filter(t => t.tipo === tipo && (t.categoria === 'saida' || t.categoria === 'saida_credito')).reduce((s,t) => s + (parseFloat(t.valor)||0), 0);
+            if (gasto <= (parseFloat(cfg.limite)||0)) dentro++;
+        });
+        c2 = Math.round((dentro / orcEntries.length) * 200);
+    }
+
+    // C3: Utilização do cartão (0-150)
+    let c3 = 150;
+    if (cartoes && cartoes.length > 0) {
+        const totalLim  = cartoes.reduce((s,c) => s + (parseFloat(c.limite)||0), 0);
+        const totalUsado = cartoes.reduce((s,c) => s + (parseFloat(c.usado)||0), 0);
+        const util = totalLim > 0 ? totalUsado / totalLim : 0;
+        c3 = Math.round(Math.max(0, (1 - util * 1.5) * 150));
+    }
+
+    // C4: Consistência de reservas — meses consecutivos com aporte (0-200)
+    let c4 = 0;
+    if (metas && metas.length > 0) {
+        const todosMs = new Set();
+        metas.forEach(m => { if (m.monthly) Object.keys(m.monthly).forEach(k => { if (/^\d{4}-\d{2}$/.test(k) && parseFloat(m.monthly[k]) > 0) todosMs.add(k); }); });
+        const msOrds = Array.from(todosMs).sort().reverse();
+        let streak = 0;
+        const refMs = `${anoAtual}-${String(mesAtual).padStart(2,'0')}`;
+        for (let i = 0; i < msOrds.length; i++) {
+            const m = parseInt(msOrds[i].split('-')[1],10), a = parseInt(msOrds[i].split('-')[0],10);
+            const refM = parseInt(refMs.split('-')[1],10),  refA = parseInt(refMs.split('-')[0],10);
+            const diffMs = (refA - a) * 12 + (refM - m);
+            if (diffMs === streak) streak++; else break;
+        }
+        c4 = Math.min(200, streak * 40);
+    }
+
+    // C5: Equilíbrio despesas/renda (0-250)
+    const ratio = entradas > 0 ? saidas / entradas : 1;
+    const c5 = Math.round(Math.max(0, Math.min(250, (1 - ratio) * 250)));
+
+    const score = Math.min(1000, c1 + c2 + c3 + c4 + c5);
+    const nivel = score >= 850 ? { letra: 'A', nome: 'Excelente', cor: '#4ecdc4' }
+                : score >= 700 ? { letra: 'B', nome: 'Muito Bom', cor: '#4ca6ff' }
+                : score >= 550 ? { letra: 'C', nome: 'Bom', cor: '#ffd166' }
+                : score >= 400 ? { letra: 'D', nome: 'Regular', cor: '#ff9f43' }
+                :                { letra: 'E', nome: 'Atenção', cor: '#ff4b4b' };
+
+    return { score, nivel, componentes: [
+        { nome: 'Taxa de Poupança', pts: c1, max: 200, dica: taxaPoup >= 20 ? 'Parabéns! Acima de 20%.' : `Você poupou ${taxaPoup.toFixed(1)}%. Meta: 20%.` },
+        { nome: 'Orçamentos',       pts: c2, max: 200, dica: orcEntries.length === 0 ? 'Defina orçamentos para pontuar aqui.' : `${orcEntries.length} categoria${orcEntries.length>1?'s':''} monitorada${orcEntries.length>1?'s':''}.` },
+        { nome: 'Cartões',          pts: c3, max: 150, dica: cartoes?.length === 0 ? 'Sem cartões cadastrados.' : 'Mantenha utilização abaixo de 50%.'},
+        { nome: 'Reservas',         pts: c4, max: 200, dica: c4 >= 200 ? 'Consistência máxima!' : 'Aporte em metas todo mês para aumentar.' },
+        { nome: 'Equilíbrio',       pts: c5, max: 250, dica: ratio < 0.7 ? 'Ótimo equilíbrio!' : `${(ratio*100).toFixed(0)}% da renda vai para despesas.` },
+    ], entradas, saidas, reservas, taxaPoup };
+}
+
+function gerarScoreFinanceiro(container) {
+    const tx       = _ctx.transacoes   || [];
+    const metas    = _ctx.metas        || [];
+    const cartoes  = _ctx.cartoesCredito || [];
+    const orcamentos = _ctx.orcamentos || {};
+
+    const { score, nivel, componentes, entradas, saidas, taxaPoup } = _calcScore(tx, metas, cartoes, orcamentos);
+
+    // Histórico mensal de score (últimos 6 meses)
+    const hoje  = new Date();
+    const hist  = [];
+    for (let i = 5; i >= 0; i--) {
+        const d   = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+        const m   = d.getMonth() + 1, a = d.getFullYear();
+        const ms  = String(m).padStart(2,'0');
+        // Mini-score simplificado para histórico (só poupança + equilíbrio)
+        const sfx = `/${ms}/${a}`;
+        const txMs = tx.filter(t => typeof t.data === 'string' && t.data.endsWith(sfx));
+        const ent  = txMs.filter(t => t.categoria === 'entrada').reduce((s,t) => s+(parseFloat(t.valor)||0), 0);
+        const sai  = txMs.filter(t => t.categoria === 'saida' || t.categoria === 'saida_credito').reduce((s,t) => s+(parseFloat(t.valor)||0), 0);
+        if (ent + sai === 0) { hist.push({ label: `${ms}/${a}`, score: null }); continue; }
+        const { score: sc } = _calcScore(txMs.length > 0 ? tx.filter(t => typeof t.data === 'string' && t.data.endsWith(sfx)) : [], metas, cartoes, orcamentos);
+        hist.push({ label: ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m-1], score: sc });
+    }
+
+    container.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'score-wrap';
+
+    // — Hero do score —
+    const hero = document.createElement('div');
+    hero.className = 'score-hero';
+    const circ = 2 * Math.PI * 54;
+    const fill  = (score / 1000) * circ;
+    hero.innerHTML = `
+        <div class="score-ring-wrap">
+            <svg width="140" height="140" viewBox="0 0 140 140">
+                <circle cx="70" cy="70" r="54" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10"/>
+                <circle cx="70" cy="70" r="54" fill="none" stroke="${nivel.cor}" stroke-width="10"
+                    stroke-dasharray="${fill.toFixed(1)} ${circ.toFixed(1)}"
+                    stroke-dashoffset="${(circ/4).toFixed(1)}" stroke-linecap="round"/>
+            </svg>
+            <div class="score-ring-inner">
+                <div class="score-num" style="color:${nivel.cor}">${score}</div>
+                <div class="score-letra" style="color:${nivel.cor}">${nivel.letra}</div>
+            </div>
+        </div>
+        <div class="score-hero-info">
+            <div class="score-nivel" style="color:${nivel.cor}">${nivel.nome}</div>
+            <div class="score-desc">Score do mês atual</div>
+            <div class="score-stats">
+                <div><span style="color:var(--success)">+${formatBRL(entradas)}</span><br><small>entradas</small></div>
+                <div><span style="color:var(--danger)">-${formatBRL(saidas)}</span><br><small>saídas</small></div>
+                <div><span style="color:${taxaPoup>=20?'var(--success)':'var(--warning)'}">${taxaPoup.toFixed(1)}%</span><br><small>poupado</small></div>
+            </div>
+        </div>`;
+    wrap.appendChild(hero);
+
+    // — Componentes —
+    const compSec = document.createElement('div');
+    compSec.className = 'score-comp-sec';
+    const compTitle = document.createElement('div');
+    compTitle.className = 'score-sec-title';
+    compTitle.textContent = 'Detalhamento';
+    compSec.appendChild(compTitle);
+    componentes.forEach(c => {
+        const pct = Math.round((c.pts / c.max) * 100);
+        const cor = pct >= 80 ? '#4ecdc4' : pct >= 50 ? '#ffd166' : '#ff4b4b';
+        const row = document.createElement('div');
+        row.className = 'score-comp-row';
+        row.innerHTML = `
+            <div class="score-comp-left">
+                <span class="score-comp-name">${c.nome}</span>
+                <span class="score-comp-dica">${_ctx._sanitizeText(c.dica)}</span>
+            </div>
+            <div class="score-comp-right">
+                <div class="score-comp-bar-wrap">
+                    <div class="score-comp-bar" style="width:${pct}%; background:${cor};"></div>
+                </div>
+                <span class="score-comp-pts" style="color:${cor}">${c.pts}<small>/${c.max}</small></span>
+            </div>`;
+        compSec.appendChild(row);
+    });
+    wrap.appendChild(compSec);
+
+    // — Histórico mensal —
+    const histSec = document.createElement('div');
+    histSec.className = 'score-hist-sec';
+    const histTitle = document.createElement('div');
+    histTitle.className = 'score-sec-title';
+    histTitle.textContent = 'Evolução (6 meses)';
+    histSec.appendChild(histTitle);
+    const histGrid = document.createElement('div');
+    histGrid.className = 'score-hist-grid';
+    const maxHist = Math.max(...hist.map(h => h.score || 0), 1);
+    hist.forEach(h => {
+        const col = document.createElement('div');
+        col.className = 'score-hist-col';
+        const pct  = h.score !== null ? Math.max(4, (h.score / 1000) * 100) : 0;
+        const cor  = h.score === null ? 'rgba(255,255,255,0.08)' : h.score >= 700 ? '#4ecdc4' : h.score >= 400 ? '#ffd166' : '#ff4b4b';
+        col.innerHTML = `
+            <div class="score-hist-bar-wrap">
+                <div class="score-hist-bar" style="height:${pct}%; background:${cor};"></div>
+            </div>
+            <div class="score-hist-val" style="color:${cor}">${h.score !== null ? h.score : '–'}</div>
+            <div class="score-hist-lbl">${h.label}</div>`;
+        histGrid.appendChild(col);
+    });
+    histSec.appendChild(histGrid);
+    wrap.appendChild(histSec);
+
+    container.appendChild(wrap);
 }
 
 // ========== BANCO DE DICAS SOBRE CARTÕES ==========
