@@ -797,6 +797,10 @@ async function salvarDados() {
 
         _saveDebounceResolve = resolve;
 
+        // urgente = true → save imediato (orçamentos, tipos personalizados, config leve)
+        // urgente = false → debounce 2s (transações em volume)
+        const delay = (arguments[0] === true) ? 0 : 2_000;
+
         _saveDebounceTimer = setTimeout(async () => {
             _saveDebounceTimer   = null;
             _saveDebounceResolve = null;
@@ -906,7 +910,7 @@ async function salvarDados() {
                 _log.error('SAVE_005', e);
                 resolve(false);
             }
-        }, 2_000);
+        }, delay);
     });
 }
 
@@ -1594,6 +1598,7 @@ function _makeCtx() {
         confirmarAcao:       { value: (...a) => confirmarAcao(...a),       enumerable: true },
         mostrarNotificacao:  { value: (...a) => mostrarNotificacao(...a),  enumerable: true },
         salvarDados:         { value: (...a) => salvarDados(...a),         enumerable: true },
+        salvarDadosUrgente:  { value: () => salvarDados(true),            enumerable: true },
         _throttledSave:      { value: (...a) => _throttledSave(...a),      enumerable: true },
         atualizarDashboardResumo:  { value: (...a) => atualizarDashboardResumo(...a),  enumerable: true },
         atualizarTudo:             { value: (...a) => atualizarTudo(...a),             enumerable: true },
@@ -1666,7 +1671,7 @@ function mostrarTela(tela) {
         if (periodoSel) periodoSel.style.display = 'none';
 
         if (!_dbLoaded.transacoes) {
-            import('./db-transacoes.js?v=7').then(m => {
+            import('./db-transacoes.js?v=8').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.transacoes = true;
             });

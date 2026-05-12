@@ -65,7 +65,7 @@ function atualizarTiposDinamicos() {
                 const atual = _ctx.tiposPersonalizados || [];
                 if (!atual.includes(sanitizado)) {
                     _ctx.tiposPersonalizados = [...atual, sanitizado];
-                    _ctx.salvarDados();
+                    _ctx.salvarDadosUrgente();
                 }
                 tipoSelect.removeEventListener('change', handler);
                 atualizarTiposDinamicos();
@@ -779,7 +779,7 @@ function editarTransacao(t) {
                 const atual = _ctx.tiposPersonalizados || [];
                 if (!atual.includes(sanitizado)) {
                     _ctx.tiposPersonalizados = [...atual, sanitizado];
-                    _ctx.salvarDados();
+                    _ctx.salvarDadosUrgente();
                 }
                 _popularTipos(selCat.value);
                 selTipo.value = sanitizado;
@@ -1174,7 +1174,7 @@ function abrirDetalheOrcamento(tipo) {
         const novo = Object.assign({}, _ctx.orcamentos);
         delete novo[tipo];
         _ctx.orcamentos = novo;
-        _ctx.salvarDados();
+        _ctx.salvarDadosUrgente();
         renderizarOrcamentos();
         _ctx.fecharPopup();
         _ctx.mostrarNotificacao(`Orçamento de ${tipo} removido.`, 'info');
@@ -1243,7 +1243,7 @@ function abrirModalOrcamento(tipoEditar) {
         const novo = Object.assign({}, _ctx.orcamentos);
         novo[tipoSel] = { limite };
         _ctx.orcamentos = novo;
-        _ctx.salvarDados();
+        _ctx.salvarDadosUrgente();
         renderizarOrcamentos();
         _ctx.fecharPopup();
         _ctx.mostrarNotificacao(`Orçamento de ${tipoSel} definido em ${formatBRL(limite)}.`, 'success');
