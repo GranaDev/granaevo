@@ -40,10 +40,10 @@ export default async function handler(req, res) {
     return res.status(204).end()
   }
 
-  const corsOrigin = ALLOWED_ORIGINS.has(origin) ? origin : [...ALLOWED_ORIGINS][0]
-  res.setHeader('Access-Control-Allow-Origin', corsOrigin)
-
+  // [GOD6-L01] Valida origin antes de definir CORS header — header antes da check
+  // vazava um domínio permitido para origins não-autorizadas (cosmético mas confuso).
   if (!ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Forbidden' })
+  res.setHeader('Access-Control-Allow-Origin', origin)
   if (req.method !== 'POST')        return res.status(405).json({ error: 'Method Not Allowed' })
   if (!_SUPABASE_URL || !ANON_KEY || !PROXY_SECRET)
     return res.status(503).json({ error: 'Serviço indisponível' })

@@ -9,6 +9,22 @@ const MAX_BODY_BYTES  = 1_048_576 // 1 MB
 const UUID_REGEX      = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const STRIPE_ID_REGEX = /^[a-zA-Z0-9_]{4,100}$/  // evt_xxx, sub_xxx, cus_xxx, cs_xxx
 
+// [GOD6-L02] Rate limit in-memory para assinaturas inválidas — evita DB flood.
+// Map: ip → { count, windowStart }. Máx 3 hits por 60s por IP.
+const _invalidSigRL = new Map<string, { count: number; windowStart: number }>()
+const _RL_MAX = 3, _RL_WINDOW = 60_000
+
+function _checkInvalidSigRL(ip: string): 'ok' | 'alert' | 'blocked' {
+  const now = Date.now()
+  const rec = _invalidSigRL.get(ip)
+  if (!rec || now - rec.windowStart > _RL_WINDOW) {
+    _invalidSigRL.set(ip, { count: 1, windowStart: now })
+    return 'ok'
+  }
+  rec.count++
+  return rec.count > _RL_MAX ? 'blocked' : rec.count === _RL_MAX ? 'alert' : 'ok'
+}
+
 // ── Utilitários ──────────────────────────────────────────────────────────────
 
 // [GOD7-F01] timingSafeEqual sem early-return em length — elimina timing oracle
@@ -110,23 +126,14 @@ Deno.serve(async (req: Request) => {
 
   const sigHeader = req.headers.get('stripe-signature') ?? ''
 
-  // [GOD7-F06] Rate limit em assinaturas inválidas — detecta brute force
+  // [GOD6-L02] Rate limit in-memory para assinaturas inválidas — sem DB query por hit.
+  // Substituiu RPC check_rate_limit que criava 1 DB round-trip por request inválido.
   const clientIp = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim()
   if (!await verifyStripeSignature(rawBytes, sigHeader, webhookSecret)) {
-    console.warn('[webhook-stripe] Assinatura inválida — [GHOST-001] ip:', clientIp.slice(0, 20))
-
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } }
-    )
-    const { data: rateLimitData } = await supabaseAdmin.rpc('check_rate_limit', {
-      p_key:            `webhook-stripe-invalid:${clientIp}`,
-      p_max_count:      3,
-      p_window_seconds: 60,
-    }).catch(() => ({ data: true }))
-
-    if (rateLimitData === false) {
+    const rlResult = _checkInvalidSigRL(clientIp)
+    if (rlResult === 'alert') {
+      console.warn('[webhook-stripe] Assinatura inválida — [GHOST-001] ip:', clientIp.slice(0, 20))
+    } else if (rlResult === 'blocked') {
       console.error('[webhook-stripe] ALERTA: múltiplas assinaturas inválidas — possível brute force — ip:', clientIp.slice(0, 20))
     }
     return okQ()

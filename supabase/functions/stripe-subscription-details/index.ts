@@ -65,16 +65,36 @@ Deno.serve(async (req: Request) => {
   if (userErr || !user?.id) return json({ error: 'Sessão inválida' }, 401)
 
   // ── 3. IDs do Stripe salvos no nosso banco ───────────────────────────────────
-  const { data: row, error: rowErr } = await supabaseAdmin
+  // [GOD6-M01] Queries separadas em vez de .or() com email interpolado —
+  // evita PostgREST filter injection se o email contiver vírgula ou parêntese.
+  const STATUSES = ['active', 'trialing', 'past_due', 'canceled']
+
+  // Primeira tentativa: por user_id (mais específico)
+  let { data: row, error: rowErr } = await supabaseAdmin
     .from('stripe_subscriptions')
     .select('stripe_customer_id, stripe_subscription_id')
-    .or(`user_id.eq.${user.id},user_email.ilike.${(user.email ?? '').toLowerCase()}`)
-    .in('status', ['active', 'trialing', 'past_due', 'canceled'])
+    .eq('user_id', user.id)
+    .in('status', STATUSES)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
   if (rowErr) return json({ error: 'Erro interno' }, 500)
+
+  // Fallback: por email (anônimos ainda não vinculados por user_id)
+  if (!row?.stripe_customer_id && user.email) {
+    const { data: rowByEmail, error: rowEmailErr } = await supabaseAdmin
+      .from('stripe_subscriptions')
+      .select('stripe_customer_id, stripe_subscription_id')
+      .eq('user_email', user.email.toLowerCase().trim())
+      .in('status', STATUSES)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (rowEmailErr) return json({ error: 'Erro interno' }, 500)
+    row = rowByEmail
+  }
+
   if (!row?.stripe_customer_id) return json({ error: 'Nenhuma assinatura encontrada' }, 404)
 
   const customerId     = row.stripe_customer_id

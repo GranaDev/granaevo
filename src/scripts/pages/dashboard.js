@@ -343,8 +343,9 @@ const BANCO_ICON = Object.freeze({
     'Alelo':           '/assets/icons/cards/alelo-4096.png',
 });
 
-// Constantes Chart.js — compartilhadas via _ctx
-const _CHARTJS_SRC       = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
+// [GOD6-M02] Chart.js hospedado localmente — remove cdn.jsdelivr.net do CSP.
+// Arquivo: public/scripts/vendor/chart.umd.min.js (SRI verificado no download).
+const _CHARTJS_SRC       = '/scripts/vendor/chart.umd.min.js';
 const _CHARTJS_INTEGRITY = 'sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt';
 
 // ========== FUNÇÕES DE FORMATAÇÃO ==========

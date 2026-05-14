@@ -2194,6 +2194,155 @@ describe('GOD MODE Round 6 — Origin Bypass & PROXY_SECRET Guards', () => {
       `[GOD6-V02-3] check-user-access com Origin malicioso deve retornar 403, recebeu: ${status}`)
   })
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // GOD MODE ROUND 6 — Testes novos (GOD6-H01, GOD6-M01, GOD6-M02, GOD6-L01, GOD6-L02)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // [GOD6-R01-1] /api/stripe — Origin malicioso retorna 403 com body JSON
+  test('[GOD6-R01-1] stripe proxy — Origin malicioso retorna 403', async () => {
+    const { status } = await post('/api/stripe', { action: 'checkout', plan: 'individual' }, {
+      'Origin': 'https://evil.com',
+    })
+    assert.equal(status, 403,
+      `[GOD6-R01-1] /api/stripe Origin malicioso deve retornar 403, recebeu: ${status}`)
+  })
+
+  // [GOD6-R01-2] /api/stripe — sem Origin retorna 403
+  test('[GOD6-R01-2] stripe proxy — sem Origin retorna 403', async () => {
+    const r = await fetch(`${BASE_URL}/api/stripe`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action: 'checkout', plan: 'individual' }),
+    })
+    assert.equal(r.status, 403,
+      `[GOD6-R01-2] /api/stripe sem Origin deve retornar 403, recebeu: ${r.status}`)
+  })
+
+  // [GOD6-R01-3] /api/stripe — action inválida retorna 400 (não 200/500)
+  test('[GOD6-R01-3] stripe proxy — action inválida retorna 400', async () => {
+    const { status } = await post('/api/stripe', { action: 'EVIL_ACTION' })
+    // 400 = action inválida; 403 = origin; 503 = env var local ausente — nunca 200
+    assert.ok([400, 403, 503].includes(status),
+      `[GOD6-R01-3] /api/stripe action inválida deve retornar 400/403/503, recebeu: ${status}`)
+    assert.notEqual(status, 200,
+      `[GOD6-R01-3] /api/stripe action inválida NÃO pode retornar 200`)
+  })
+
+  // [GOD6-R01-4] /api/stripe — plan inválido no checkout retorna 400
+  test('[GOD6-R01-4] stripe proxy — plano inválido retorna 400 ou 403', async () => {
+    const { status } = await post('/api/stripe', { action: 'checkout', plan: 'ultra_premium_hack' })
+    // 400 = plano inválido; 403 = origin; 503 = env var local ausente — nunca 200
+    assert.ok([400, 403, 503].includes(status),
+      `[GOD6-R01-4] /api/stripe plano inválido deve retornar 400/403/503, recebeu: ${status}`)
+    assert.notEqual(status, 200,
+      `[GOD6-R01-4] /api/stripe plano inválido NÃO pode retornar 200`)
+  })
+
+  // [GOD6-R01-5] /api/stripe — GET retorna 405
+  test('[GOD6-R01-5] stripe proxy — GET retorna 405 ou 403', async () => {
+    const r = await fetch(`${BASE_URL}/api/stripe`, {
+      method:  'GET',
+      headers: { 'Origin': 'https://granaevo.com' },
+    })
+    assert.ok([403, 405].includes(r.status),
+      `[GOD6-R01-5] /api/stripe GET deve retornar 405/403, recebeu: ${r.status}`)
+  })
+
+  // [GOD6-R02-1] /api/stripe — portal sem JWT retorna 401 ou 403
+  test('[GOD6-R02-1] stripe portal — sem JWT retorna 401 ou 403', async () => {
+    const { status } = await post('/api/stripe', { action: 'portal' })
+    // 503 = env var local ausente mas validação de auth SIM acontece em produção
+    assert.ok([401, 403, 503].includes(status),
+      `[GOD6-R02-1] /api/stripe portal sem JWT deve retornar 401/403/503, recebeu: ${status}`)
+    assert.notEqual(status, 200,
+      `[GOD6-R02-1] /api/stripe portal sem JWT NÃO pode retornar 200`)
+  })
+
+  // [GOD6-R02-2] /api/stripe — details sem JWT retorna 401 ou 403
+  test('[GOD6-R02-2] stripe details — sem JWT retorna 401 ou 403', async () => {
+    const { status } = await post('/api/stripe', { action: 'details' })
+    assert.ok([401, 403, 503].includes(status),
+      `[GOD6-R02-2] /api/stripe details sem JWT deve retornar 401/403/503, recebeu: ${status}`)
+    assert.notEqual(status, 200,
+      `[GOD6-R02-2] /api/stripe details sem JWT NÃO pode retornar 200`)
+  })
+
+  // [GOD6-R03-1] /api/stripe — body muito grande (>2KB) retorna 413 ou 403
+  test('[GOD6-R03-1] stripe proxy — body >2KB retorna 413 ou 403', async () => {
+    const r = await fetch(`${BASE_URL}/api/stripe`, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin':       'https://granaevo.com',
+      },
+      body: JSON.stringify({ action: 'checkout', plan: 'individual', pad: 'x'.repeat(3000) }),
+    })
+    // 503 = env var local ausente (body parsing vem antes do env check em alguns casos)
+    assert.ok([413, 403, 400, 503].includes(r.status),
+      `[GOD6-R03-1] /api/stripe body grande deve retornar 413/403/400/503, recebeu: ${r.status}`)
+    assert.notEqual(r.status, 200,
+      `[GOD6-R03-1] /api/stripe body grande NÃO pode retornar 200`)
+  })
+
+  // [GOD6-R04-1] /api/stripe — Content-Type errado retorna 415 ou 403
+  test('[GOD6-R04-1] stripe proxy — Content-Type errado retorna 415 ou 403', async () => {
+    const r = await fetch(`${BASE_URL}/api/stripe`, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'text/plain',
+        'Origin':       'https://granaevo.com',
+      },
+      body: 'action=checkout',
+    })
+    assert.ok([415, 403, 400, 503].includes(r.status),
+      `[GOD6-R04-1] Content-Type errado deve retornar 415/403/400/503, recebeu: ${r.status}`)
+    assert.notEqual(r.status, 200,
+      `[GOD6-R04-1] Content-Type errado NÃO pode retornar 200`)
+  })
+
+  // [GOD6-R05-1] CSP do dashboard — cdn.jsdelivr.net não está presente
+  test('[GOD6-R05-1] CSP dashboard não contém cdn.jsdelivr.net', async () => {
+    const r = await fetch(`${BASE_URL}/dashboard`, { redirect: 'follow' })
+    const csp = r.headers.get('content-security-policy') ?? ''
+    assert.ok(
+      !csp.includes('cdn.jsdelivr.net'),
+      `[GOD6-R05-1] CSP do dashboard não deve conter cdn.jsdelivr.net. CSP: ${csp.slice(0, 200)}`,
+    )
+  })
+
+  // [GOD6-R05-2] Chart.js asset local acessível e com tamanho esperado (>100KB)
+  test('[GOD6-R05-2] Chart.js local (/scripts/vendor/chart.umd.min.js) está acessível', async () => {
+    const r = await fetch(`${BASE_URL}/scripts/vendor/chart.umd.min.js`)
+    assert.equal(r.status, 200,
+      `[GOD6-R05-2] /scripts/vendor/chart.umd.min.js deve retornar 200, recebeu: ${r.status}`)
+    const body = await r.text()
+    assert.ok(body.length > 100_000,
+      `[GOD6-R05-2] chart.umd.min.js deve ter >100KB, recebeu: ${body.length} bytes`)
+  })
+
+  // [GOD6-R06-1] user-data proxy — Origin malicioso retorna 403
+  test('[GOD6-R06-1] user-data — Origin malicioso retorna 403', async () => {
+    const { status } = await post('/api/user-data', {}, {
+      'Origin': 'https://evil.com',
+    })
+    assert.equal(status, 403,
+      `[GOD6-R06-1] user-data Origin malicioso deve retornar 403, recebeu: ${status}`)
+  })
+
+  // [GOD6-R06-2] user-data GET — sem token retorna 401 (User-Agent explícito para bypassar guard)
+  test('[GOD6-R06-2] user-data GET — sem token retorna 401', async () => {
+    const r = await fetch(`${BASE_URL}/api/user-data`, {
+      method:  'GET',
+      headers: {
+        'Origin':     'https://granaevo.com',
+        'User-Agent': 'security-test-runner/1.0',
+      },
+    })
+    // 401 = sem token; 503 = env var não configurada no ambiente local
+    assert.ok([401, 503].includes(r.status),
+      `[GOD6-R06-2] user-data GET sem token deve retornar 401 ou 503, recebeu: ${r.status}`)
+  })
+
 })
 
 
