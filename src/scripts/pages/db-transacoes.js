@@ -46,31 +46,12 @@ function atualizarTiposDinamicos() {
         const tiposPadrao = ['Mercado', 'Farmácia', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza', 'Presente',
          'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Shopee', 'Mercado Livre',
          'Ifood', 'Amazon', 'Outros'];
-        const personalizados = _ctx.tiposPersonalizados || [];
+        const personalizados = (_ctx.tiposPersonalizados || []).filter(t => typeof t === 'string' && t.trim());
         [...tiposPadrao, ...personalizados].forEach(x => {
             const o = document.createElement('option');
             o.value = x;
             o.textContent = x;
             tipoSelect.appendChild(o);
-        });
-        // Opção para criar tipo personalizado
-        const oAdd = document.createElement('option');
-        oAdd.value = '__novo__'; oAdd.textContent = '+ Adicionar personalizado…';
-        tipoSelect.appendChild(oAdd);
-        tipoSelect.addEventListener('change', function handler() {
-            if (tipoSelect.value === '__novo__') {
-                const nome = prompt('Nome do tipo personalizado (máx 60 caracteres):');
-                if (!nome || !nome.trim()) { tipoSelect.value = ''; return; }
-                const sanitizado = nome.trim().slice(0, 60);
-                const atual = _ctx.tiposPersonalizados || [];
-                if (!atual.includes(sanitizado)) {
-                    _ctx.tiposPersonalizados = [...atual, sanitizado];
-                    _ctx.salvarDadosUrgente();
-                }
-                tipoSelect.removeEventListener('change', handler);
-                atualizarTiposDinamicos();
-                tipoSelect.value = sanitizado;
-            }
         });
     } else if(cat === 'reserva') {
         const metasExistentes = _ctx.metas.filter(m => m.id !== 'emergency');
@@ -760,31 +741,13 @@ function editarTransacao(t) {
             selTipo.innerHTML = '';
             const lista = (catVal === 'entrada' || catVal === 'retirada_reserva')
                 ? _TIPOS_ENTRADA : _TIPOS_SAIDA;
-            const personalizados = _ctx.tiposPersonalizados || [];
+            const personalizados = (_ctx.tiposPersonalizados || []).filter(tp => typeof tp === 'string' && tp.trim());
             [...lista, ...personalizados].forEach(tp => {
                 const o = document.createElement('option'); o.value = tp; o.textContent = tp;
                 if (tp === t.tipo) o.selected = true;
                 selTipo.appendChild(o);
             });
-            // Opção especial para criar novo tipo
-            const oAdd = document.createElement('option');
-            oAdd.value = '__novo__'; oAdd.textContent = '+ Adicionar personalizado…';
-            selTipo.appendChild(oAdd);
         }
-        selTipo.addEventListener('change', () => {
-            if (selTipo.value === '__novo__') {
-                const nome = prompt('Nome do tipo personalizado (máx 60 caracteres):');
-                if (!nome || !nome.trim()) { selTipo.value = t.tipo || selTipo.options[0]?.value; return; }
-                const sanitizado = nome.trim().slice(0, 60);
-                const atual = _ctx.tiposPersonalizados || [];
-                if (!atual.includes(sanitizado)) {
-                    _ctx.tiposPersonalizados = [...atual, sanitizado];
-                    _ctx.salvarDadosUrgente();
-                }
-                _popularTipos(selCat.value);
-                selTipo.value = sanitizado;
-            }
-        });
         _popularTipos(t.categoria);
         selCat.addEventListener('change', () => _popularTipos(selCat.value));
         form.appendChild(_lbl('Tipo', 'editTipo')); form.appendChild(selTipo);
@@ -1317,9 +1280,73 @@ function _autoCategorizar(memo) {
     return null;
 }
 
-// Remove prefixos bancários genéricos para deixar a descrição mais limpa
+// Corrige mojibake: UTF-8 lido como Windows-1252 (comum em OFX de bancos BR)
+function _fixMojibake(s) {
+    return s
+        .replace(/Ã£/g, 'ã').replace(/Ã¡/g, 'á').replace(/Ã©/g, 'é')
+        .replace(/Ãª/g, 'ê').replace(/Ã³/g, 'ó').replace(/Ã§/g, 'ç')
+        .replace(/Ã­/g, 'í').replace(/Ã´/g, 'ô').replace(/Ãº/g, 'ú')
+        .replace(/Ãã/g, 'ã').replace(/Ãà/g, 'à')
+        .replace(/Ã£/g, 'ã').replace(/Ãª/g, 'ê')
+        .replace(/Ãº/g, 'ú').replace(/Â /g, ' ')
+        .replace(/â€™/g, "'").replace(/â€œ/g, '"').replace(/â€/g, '"');
+}
+
+// Capitaliza nome (ex: "JOAO DA SILVA" → "Joao da Silva")
+function _capitalizarNome(s) {
+    const minusculas = new Set(['da','de','do','das','dos','e','em','na','no']);
+    return s.toLowerCase().split(/\s+/).map((w, i) =>
+        (i === 0 || !minusculas.has(w)) ? w.charAt(0).toUpperCase() + w.slice(1) : w
+    ).join(' ');
+}
+
+// Remove dados sensíveis/desnecessários da descrição bancária
 function _limparDescricao(raw) {
-    return String(raw || '')
+    let s = _fixMojibake(String(raw || ''));
+
+    // Remove CNPJ (XX.XXX.XXX/XXXX-XX) e CPF (XXX.XXX.XXX-XX)
+    s = s.replace(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g, '')
+         .replace(/\d{3}\.\d{3}\.\d{3}-\d{2}/g, '')
+         .replace(/\b\d{14}\b/g, '');   // CNPJ sem pontuação
+
+    // Remove agência, conta, NSU, referência (padrões comuns)
+    s = s.replace(/\bAg[eê]ncia?\.?\s*:?\s*\d+[\d.\-]*/gi, '')
+         .replace(/\bConta\.?\s*:?\s*\d+[\d.\-]*/gi, '')
+         .replace(/\b(NSU|Ref|Doc|Op)\.?\s*:?\s*[\dA-Z]+/gi, '');
+
+    // Remove sequências numéricas longas isoladas (≥6 dígitos), ex: "10.573.521/"
+    s = s.replace(/\b\d[\d.\/\-]{5,}\b/g, '');
+
+    // ── Formata PIX enviado ────────────────────────────────────────────────
+    const pixEnvMatch = s.match(
+        /pix\s+(?:enviado|envi[a]?do\s+pelo\s+pix|marketplace)\s*[-–:]\s*([^-–\n]{3,60})/i
+    ) || s.match(/transfer[eê]ncia\s+(?:enviada?|via\s+pix|pelo\s+pix)\s*[-–:]\s*([^-–\n]{3,60})/i);
+
+    if (pixEnvMatch) {
+        const nome = pixEnvMatch[1].replace(/\s*[-–].*$/, '').trim();
+        if (nome.length > 2) return `PIX - ${_capitalizarNome(nome)}`.slice(0, 120);
+    }
+
+    // ── Formata PIX recebido ───────────────────────────────────────────────
+    const pixRecMatch = s.match(
+        /pix\s+(?:recebido?|receb\.?)\s+(?:de\s+)?([^-–\n]{3,60})/i
+    );
+    if (pixRecMatch) {
+        const nome = pixRecMatch[1].replace(/\s*[-–].*$/, '').trim();
+        if (nome.length > 2) return `PIX - ${_capitalizarNome(nome)}`.slice(0, 120);
+    }
+
+    // ── Formata transferência genérica ─────────────────────────────────────
+    const transfMatch = s.match(
+        /transfer[eê]ncia\s*[-–:]\s*([^-–\n]{3,60})/i
+    );
+    if (transfMatch) {
+        const nome = transfMatch[1].replace(/\s*[-–].*$/, '').trim();
+        if (nome.length > 2) return `Transferência - ${_capitalizarNome(nome)}`.slice(0, 120);
+    }
+
+    // ── Limpeza genérica ───────────────────────────────────────────────────
+    return s
         .replace(/^compra no d[eé]bito\s*[-–]\s*/i, '')
         .replace(/^compra no cr[eé]dito\s*[-–]\s*/i, '')
         .replace(/^compra\s*[-–]\s*/i, '')
@@ -1327,6 +1354,7 @@ function _limparDescricao(raw) {
         .replace(/^transfer[eê]ncia\s*[-–]\s*/i, '')
         .replace(/^pix\s*[-–]\s*/i, '')
         .replace(/\s*\/\s*\d{2}\.\d{2}\.\d{4}.*$/, '') // remove data no final
+        .replace(/\s*[-–]\s*$/, '')                     // remove traço solto no final
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 200);

@@ -145,6 +145,7 @@ async function init() {
     // Load basic info from Supabase immediately, then enrich with Stripe data
     await loadSubscription(session);
     setupPortalButton(session);
+    setupPlanChangeCard(session);
     loadStripeDetails(session); // async, enriches UI when ready
 }
 
@@ -179,6 +180,7 @@ async function loadSubscription(session) {
         if (!sub) { renderNoSubscription(); return; }
         renderSubscription(sub);
         renderDetails(sub);
+        _checkCancellationNotification(sub);
 
     } catch (err) {
         console.error('[atualizarplano] Erro ao carregar assinatura:', err);
@@ -203,6 +205,7 @@ function renderSubscription(sub) {
     const cancelDateEl    = document.getElementById('cancelDate');
 
     const normalized = normalizePlanName(sub.plan_name);
+    _currentPlanSlug = (sub.plan_name || '').toLowerCase().trim();
     if (planNameEl) planNameEl.textContent = normalized;
     if (planTypeEl) planTypeEl.textContent = normalized;
 
@@ -526,6 +529,200 @@ function _renderInvoiceEmpty() {
     empty.textContent = 'Nenhuma fatura encontrada.';
     list.appendChild(empty);
     if (sec) sec.hidden = false;
+}
+
+// ── Notificação de cancelamento ───────────────────────────────────
+function _checkCancellationNotification(sub) {
+    const isCancelling = sub.cancel_at_period_end && sub.status !== 'canceled'
+    const isCanceled   = sub.status === 'canceled'
+    if (!isCancelling && !isCanceled) return
+
+    const storageKey = `ge_cancel_notif_${sub.status}_${sub.current_period_end ?? ''}`
+    if (localStorage.getItem(storageKey)) return
+    localStorage.setItem(storageKey, '1')
+
+    const periodEndFmt = sub.current_period_end
+        ? new Date(sub.current_period_end).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+        : null
+
+    const msg = isCancelling
+        ? `Cancelamento agendado — acesso garantido até ${periodEndFmt ?? 'o fim do ciclo'}.`
+        : `Assinatura encerrada${periodEndFmt ? ` em ${periodEndFmt}` : ''}.`
+
+    _showToast(msg, isCanceled ? 'error' : 'warning')
+}
+
+function _showToast(msg, type = 'info') {
+    const colors = {
+        info:    'linear-gradient(135deg,#1e3a5f,#1e4080)',
+        success: 'linear-gradient(135deg,#064e35,#065f46)',
+        warning: 'linear-gradient(135deg,#78350f,#92400e)',
+        error:   'linear-gradient(135deg,#7f1d1d,#991b1b)',
+    }
+    const el = document.createElement('div')
+    el.style.cssText = [
+        'position:fixed', 'bottom:24px', 'right:24px', 'z-index:9999',
+        'max-width:380px', 'padding:14px 20px', 'border-radius:12px',
+        `background:${colors[type] ?? colors.info}`,
+        'color:#f1f5f9', 'font-size:14px', 'font-weight:500',
+        'box-shadow:0 8px 32px rgba(0,0,0,0.5)',
+        'border:1px solid rgba(255,255,255,0.1)',
+        'line-height:1.5', 'transition:opacity .3s ease',
+    ].join(';')
+    el.textContent = msg
+    document.body.appendChild(el)
+    setTimeout(() => {
+        el.style.opacity = '0'
+        setTimeout(() => el.remove(), 320)
+    }, 5000)
+}
+
+// ── Modal alterar plano ───────────────────────────────────────────
+let _currentPlanSlug = ''
+
+function _openPlanModal(session) {
+    const overlay = document.createElement('div')
+    overlay.id = 'planModalOverlay'
+    overlay.style.cssText = [
+        'position:fixed', 'inset:0', 'z-index:10000',
+        'background:rgba(6,8,16,0.85)', 'backdrop-filter:blur(6px)',
+        'display:flex', 'align-items:center', 'justify-content:center',
+        'padding:16px',
+    ].join(';')
+
+    const modal = document.createElement('div')
+    modal.style.cssText = [
+        'background:linear-gradient(160deg,#0d1117 0%,#111827 100%)',
+        'border:1px solid rgba(16,185,129,0.2)', 'border-radius:20px',
+        'padding:32px', 'max-width:520px', 'width:100%',
+        'box-shadow:0 32px 64px rgba(0,0,0,0.7)',
+        'max-height:90vh', 'overflow-y:auto',
+    ].join(';')
+
+    const plans = [
+        { slug: 'individual', label: 'Individual', desc: 'Para uso pessoal — controle total das suas finanças.' },
+        { slug: 'casal',      label: 'Casal',      desc: 'Para 2 pessoas — finanças compartilhadas com privacidade.' },
+        { slug: 'familia',    label: 'Família',    desc: 'Para até 5 pessoas — visão consolidada da família.' },
+    ]
+
+    modal.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+        <h2 style="font-size:20px;font-weight:800;color:#f1f5f9;letter-spacing:-0.3px;">Alterar Plano</h2>
+        <button id="planModalClose" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:20px;padding:4px 8px;border-radius:6px;" aria-label="Fechar">✕</button>
+      </div>
+      <p style="font-size:14px;color:#64748b;margin-bottom:24px;line-height:1.6;">
+        Selecione o plano desejado. A diferença de valor é calculada proporcionalmente (proration) ao tempo restante do ciclo e cobrada imediatamente.
+      </p>
+      <div id="planOptionsList" style="display:flex;flex-direction:column;gap:12px;margin-bottom:28px;"></div>
+      <div style="display:flex;gap:12px;">
+        <button id="planModalCancel" style="flex:1;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;">Cancelar</button>
+        <button id="planModalConfirm" style="flex:2;padding:12px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;opacity:0.4;" disabled>Confirmar alteração</button>
+      </div>
+      <p id="planModalError" style="margin-top:12px;font-size:13px;color:#f87171;text-align:center;display:none;"></p>
+    `
+
+    const list = modal.querySelector('#planOptionsList')
+    let selectedPlan = ''
+
+    plans.forEach(p => {
+        const isCurrent = p.slug === _currentPlanSlug
+        const card = document.createElement('label')
+        card.style.cssText = [
+            'display:flex', 'align-items:flex-start', 'gap:14px', 'padding:16px 18px',
+            `background:${isCurrent ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)'}`,
+            `border:1px solid ${isCurrent ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.07)'}`,
+            'border-radius:12px', 'cursor:pointer', 'transition:border-color .2s',
+        ].join(';')
+
+        const radio = document.createElement('input')
+        radio.type    = 'radio'
+        radio.name    = 'planOption'
+        radio.value   = p.slug
+        radio.checked = isCurrent
+        radio.disabled = isCurrent
+        radio.style.cssText = 'margin-top:3px;accent-color:#10b981;width:16px;height:16px;flex-shrink:0;'
+
+        const textWrap = document.createElement('div')
+        textWrap.innerHTML = `
+          <div style="font-size:15px;font-weight:700;color:${isCurrent ? '#10b981' : '#e2e8f0'};margin-bottom:4px;">
+            ${p.label}${isCurrent ? ' <span style="font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:50px;padding:2px 8px;color:#10b981;">Atual</span>' : ''}
+          </div>
+          <div style="font-size:13px;color:#64748b;line-height:1.5;">${p.desc}</div>
+        `
+
+        radio.addEventListener('change', () => {
+            if (!isCurrent && radio.checked) {
+                selectedPlan = p.slug
+                const confirmBtn = modal.querySelector('#planModalConfirm') as HTMLButtonElement
+                confirmBtn.disabled = false
+                confirmBtn.style.opacity = '1'
+            }
+        })
+
+        card.appendChild(radio)
+        card.appendChild(textWrap)
+        list!.appendChild(card)
+    })
+
+    const closeModal = () => overlay.remove()
+    modal.querySelector('#planModalClose')!.addEventListener('click', closeModal)
+    modal.querySelector('#planModalCancel')!.addEventListener('click', closeModal)
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal() })
+
+    modal.querySelector('#planModalConfirm')!.addEventListener('click', async () => {
+        if (!selectedPlan) return
+        const confirmBtn  = modal.querySelector('#planModalConfirm') as HTMLButtonElement
+        const cancelBtn   = modal.querySelector('#planModalCancel') as HTMLButtonElement
+        const errorEl     = modal.querySelector('#planModalError') as HTMLElement
+        confirmBtn.disabled  = true
+        confirmBtn.textContent = 'Atualizando...'
+        cancelBtn.disabled   = true
+        errorEl.style.display = 'none'
+
+        try {
+            const { data: { session: fresh } } = await supabase.auth.getSession()
+            const token = fresh?.access_token || session.access_token
+
+            const resp = await fetch('/api/stripe', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body:    JSON.stringify({ action: 'updatePlan', newPlan: selectedPlan }),
+                signal:  AbortSignal.timeout(20_000),
+            })
+
+            const data = await resp.json().catch(() => ({}))
+            if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`)
+
+            closeModal()
+            _showToast(`Plano alterado para ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} com sucesso!`, 'success')
+            // Recarrega dados após 1.5s para refletir o novo plano
+            setTimeout(() => loadSubscription(session), 1500)
+
+        } catch (err: any) {
+            confirmBtn.disabled  = false
+            confirmBtn.textContent = 'Confirmar alteração'
+            cancelBtn.disabled   = false
+            errorEl.textContent    = err.message || 'Erro ao alterar plano. Tente novamente.'
+            errorEl.style.display  = 'block'
+        }
+    })
+
+    overlay.appendChild(modal)
+    document.body.appendChild(overlay)
+}
+
+function setupPlanChangeCard(session) {
+    // Wire no card "Alterar Plano" (3º card no action-grid)
+    const grid = document.getElementById('actionGrid')
+    if (!grid) return
+    const cards = grid.querySelectorAll('.action-card')
+    cards.forEach(card => {
+        const title = card.querySelector('.ac-title')
+        if (title?.textContent?.trim() === 'Alterar Plano') {
+            card.style.cursor = 'pointer'
+            card.addEventListener('click', () => _openPlanModal(session))
+        }
+    })
 }
 
 // ── Portal Stripe ─────────────────────────────────────────────────

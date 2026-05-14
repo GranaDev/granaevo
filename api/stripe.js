@@ -17,12 +17,13 @@ const ALLOWED_ORIGINS = new Set([
 ])
 
 const VALID_PLANS   = new Set(['individual', 'casal', 'familia'])
-const VALID_ACTIONS = new Set(['checkout', 'portal', 'details'])
-const RATE_LIMITS   = { checkout: 5, portal: 10, details: 20 }
+const VALID_ACTIONS = new Set(['checkout', 'portal', 'details', 'updatePlan'])
+const RATE_LIMITS   = { checkout: 5, portal: 10, details: 20, updatePlan: 3 }
 const EF_URLS       = {
-  checkout: `${_SUPABASE_URL}/functions/v1/create-stripe-checkout`,
-  portal:   `${_SUPABASE_URL}/functions/v1/stripe-portal`,
-  details:  `${_SUPABASE_URL}/functions/v1/stripe-subscription-details`,
+  checkout:   `${_SUPABASE_URL}/functions/v1/create-stripe-checkout`,
+  portal:     `${_SUPABASE_URL}/functions/v1/stripe-portal`,
+  details:    `${_SUPABASE_URL}/functions/v1/stripe-subscription-details`,
+  updatePlan: `${_SUPABASE_URL}/functions/v1/update-stripe-plan`,
 }
 
 export default async function handler(req, res) {
@@ -74,19 +75,19 @@ export default async function handler(req, res) {
   let body
   try {
     const parsed = JSON.parse(raw)
-    body = { action: parsed?.action, plan: parsed?.plan, email: parsed?.email }
+    body = { action: parsed?.action, plan: parsed?.plan, email: parsed?.email, newPlan: parsed?.newPlan }
   } catch {
     return res.status(400).json({ error: 'JSON inválido' })
   }
 
   const action = typeof body.action === 'string' ? body.action : ''
   if (!VALID_ACTIONS.has(action))
-    return res.status(400).json({ error: 'action inválida. Use: checkout ou portal' })
+    return res.status(400).json({ error: 'action inválida. Use: checkout, portal, details ou updatePlan' })
 
   const authHeader = req.headers['authorization'] ?? ''
 
-  // Portal e details SEMPRE requerem autenticação
-  if (action === 'portal' || action === 'details') {
+  // Portal, details e updatePlan SEMPRE requerem autenticação
+  if (action === 'portal' || action === 'details' || action === 'updatePlan') {
     if (!authHeader.startsWith('Bearer '))
       return res.status(401).json({ error: 'Autenticação obrigatória' })
   }
@@ -96,6 +97,13 @@ export default async function handler(req, res) {
     const plan = typeof body.plan === 'string' ? body.plan.toLowerCase() : ''
     if (!VALID_PLANS.has(plan))
       return res.status(400).json({ error: 'Plano inválido. Use: individual, casal ou familia' })
+  }
+
+  // updatePlan: valida novo plano
+  if (action === 'updatePlan') {
+    const newPlan = typeof body.newPlan === 'string' ? body.newPlan.toLowerCase() : ''
+    if (!VALID_PLANS.has(newPlan))
+      return res.status(400).json({ error: 'newPlan inválido. Use: individual, casal ou familia' })
   }
 
   const ip = req.headers['x-real-ip']
@@ -110,6 +118,8 @@ export default async function handler(req, res) {
   // Monta payload para a Edge Function
   const efPayload = action === 'checkout'
     ? { plan: (body.plan ?? '').toLowerCase(), email: body.email ?? '' }
+    : action === 'updatePlan'
+    ? { newPlan: (body.newPlan ?? '').toLowerCase() }
     : {}
 
   const efHeaders = {

@@ -306,15 +306,26 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
 
   if (!customerId || !STRIPE_ID_REGEX.test(customerId)) return
 
-  const priceId  = (sub?.items as any)?.data?.[0]?.price?.id ?? ''
-  const metadata = (sub.metadata as Record<string, string>) ?? {}
+  const priceId         = (sub?.items as any)?.data?.[0]?.price?.id ?? ''
+  const metadata        = (sub.metadata as Record<string, string>) ?? {}
+  const newCancelAtEnd  = (sub.cancel_at_period_end as boolean) ?? false
+
+  // Checa se cancel_at_period_end acabou de virar true para disparar email
+  const { data: existing } = await db
+    .from('stripe_subscriptions')
+    .select('cancel_at_period_end, user_email, plan_name, current_period_start')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle()
+
+  const wasCancelScheduled = existing?.cancel_at_period_end === true
+  const justScheduledCancel = newCancelAtEnd && !wasCancelScheduled
 
   const updates: Record<string, unknown> = {
     stripe_subscription_id: subscriptionId,
     status,
     current_period_start:  tsToISO(sub.current_period_start),
     current_period_end:    tsToISO(sub.current_period_end),
-    cancel_at_period_end:  (sub.cancel_at_period_end as boolean) ?? false,
+    cancel_at_period_end:  newCancelAtEnd,
     canceled_at:           tsToISO(sub.canceled_at),
     updated_at:            new Date().toISOString(),
   }
@@ -328,6 +339,26 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
 
   if (error) console.error('[webhook-stripe] Erro ao atualizar subscription:', error.message)
   else console.log('[webhook-stripe] Subscription atualizada:', subscriptionId, status)
+
+  // Envia email de cancelamento agendado (fire-and-forget)
+  if (justScheduledCancel && existing?.user_email) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const proxySecret = Deno.env.get('PROXY_SECRET') ?? ''
+    if (supabaseUrl && proxySecret) {
+      fetch(`${supabaseUrl}/functions/v1/send-cancellation-email`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-proxy-secret': proxySecret },
+        body: JSON.stringify({
+          email:       existing.user_email,
+          planName:    updates.plan_name ?? existing.plan_name ?? 'GranaEvo',
+          periodEnd:   updates.current_period_end,
+          periodStart: updates.current_period_start ?? existing.current_period_start,
+          isScheduled: true,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      }).catch(err => console.error('[webhook-stripe] Erro ao enviar cancel email (scheduled):', err?.message))
+    }
+  }
 }
 
 async function handleSubscriptionDeleted(db: DB, data: Record<string, unknown>) {
@@ -335,7 +366,16 @@ async function handleSubscriptionDeleted(db: DB, data: Record<string, unknown>) 
   const customerId = sub.customer as string
   if (!customerId || !STRIPE_ID_REGEX.test(customerId)) return
 
-  const canceledAt = tsToISO(sub.canceled_at) ?? new Date().toISOString()
+  const canceledAt  = tsToISO(sub.canceled_at) ?? new Date().toISOString()
+  const periodEnd   = tsToISO(sub.current_period_end)
+  const periodStart = tsToISO(sub.current_period_start)
+
+  // Recupera email antes de atualizar (ainda disponível na tabela)
+  const { data: existing } = await db
+    .from('stripe_subscriptions')
+    .select('user_email, plan_name')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle()
 
   const { error } = await db.from('stripe_subscriptions')
     .update({ status: 'canceled', canceled_at: canceledAt, updated_at: new Date().toISOString() })
@@ -343,6 +383,26 @@ async function handleSubscriptionDeleted(db: DB, data: Record<string, unknown>) 
 
   if (error) console.error('[webhook-stripe] Erro ao cancelar subscription:', error.message)
   else console.log('[webhook-stripe] Subscription cancelada — customer:', customerId)
+
+  // Envia email de cancelamento imediato (fire-and-forget)
+  if (existing?.user_email) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const proxySecret = Deno.env.get('PROXY_SECRET') ?? ''
+    if (supabaseUrl && proxySecret) {
+      fetch(`${supabaseUrl}/functions/v1/send-cancellation-email`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-proxy-secret': proxySecret },
+        body: JSON.stringify({
+          email:       existing.user_email,
+          planName:    existing.plan_name ?? 'GranaEvo',
+          periodEnd,
+          periodStart,
+          isScheduled: false,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      }).catch(err => console.error('[webhook-stripe] Erro ao enviar cancel email (deleted):', err?.message))
+    }
+  }
 }
 
 async function handlePaymentFailed(db: DB, data: Record<string, unknown>) {
