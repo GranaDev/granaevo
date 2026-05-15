@@ -1280,82 +1280,105 @@ function _autoCategorizar(memo) {
     return null;
 }
 
-// Corrige mojibake: UTF-8 lido como Windows-1252 (comum em OFX de bancos BR)
+// Corrige mojibake em OFX de bancos brasileiros.
+// Cobre DOIS cenários distintos:
+//   1. Full 2-byte: UTF-8 lido como Windows-1252 (ex: "Ãª" → "ê")
+//   2. Truncated 1-byte: banco só grava o 1º byte do UTF-8
+//      ê (0xC3 0xAA) → apenas 0xC3 → aparece como "Ã" seguido da próxima letra
+//      Ex: "TransferÃncia" (Ã+n) em vez de "TransferÃªncia" (Ã+ª) ou "Transferência"
 function _fixMojibake(s) {
     return s
+        // ── Caso 1: full 2-byte sequences ─────────────────────────────────────
         .replace(/Ã£/g, 'ã').replace(/Ã¡/g, 'á').replace(/Ã©/g, 'é')
         .replace(/Ãª/g, 'ê').replace(/Ã³/g, 'ó').replace(/Ã§/g, 'ç')
         .replace(/Ã­/g, 'í').replace(/Ã´/g, 'ô').replace(/Ãº/g, 'ú')
-        .replace(/Ãã/g, 'ã').replace(/Ãà/g, 'à')
-        .replace(/Ã£/g, 'ã').replace(/Ãª/g, 'ê')
-        .replace(/Ãº/g, 'ú').replace(/Â /g, ' ')
-        .replace(/â€™/g, "'").replace(/â€œ/g, '"').replace(/â€/g, '"');
+        .replace(/Ãà/g, 'à').replace(/Ã£/g, 'ã').replace(/Â /g, ' ')
+        // ── Caso 2: truncated 1-byte — palavras bancárias comuns ──────────────
+        // "Transfer" + qualquer char que não seja "e" ou "ê" + "ncia"
+        // → "TransferÃncia", "Transferencia" (sem acento) → sempre "Transferência"
+        .replace(/Transfer[^eê\s]ncia/gi, 'Transferência')
+        .replace(/Dep[^oó\s]sito/gi,      'Depósito')
+        .replace(/cobran[^cç\s]a/gi,      'Cobrança')
+        .replace(/recibo[^s\s]?/gi,       'Recibo')
+        // Smart quotes
+        .replace(/â€™/g, "'").replace(/â€œ/g, '"').replace(/â€\b/g, '"');
 }
 
-// Capitaliza nome (ex: "JOAO DA SILVA" → "Joao da Silva")
+// Capitaliza nomes: "JOAO DA SILVA" → "Joao da Silva"
 function _capitalizarNome(s) {
-    const minusculas = new Set(['da','de','do','das','dos','e','em','na','no']);
-    return s.toLowerCase().split(/\s+/).map((w, i) =>
-        (i === 0 || !minusculas.has(w)) ? w.charAt(0).toUpperCase() + w.slice(1) : w
-    ).join(' ');
+    const prep = new Set(['da','de','do','das','dos','e','em','na','no','por','para']);
+    return String(s || '').toLowerCase().split(/\s+/).map((w, i) =>
+        (i === 0 || !prep.has(w)) ? w.charAt(0).toUpperCase() + w.slice(1) : w
+    ).join(' ').trim();
 }
 
-// Remove dados sensíveis/desnecessários da descrição bancária
+// Limpa e formata descrição de extrato bancário.
+// Objetivo: PIX e Transferências → "PIX - Nome" ou "Transferência - Nome"
+// Remove CNPJ, CPF, agência, conta e sequências numéricas longas.
 function _limparDescricao(raw) {
-    let s = _fixMojibake(String(raw || ''));
+    let s = _fixMojibake(String(raw || '').trim());
 
-    // Remove CNPJ (XX.XXX.XXX/XXXX-XX) e CPF (XXX.XXX.XXX-XX)
-    s = s.replace(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g, '')
-         .replace(/\d{3}\.\d{3}\.\d{3}-\d{2}/g, '')
-         .replace(/\b\d{14}\b/g, '');   // CNPJ sem pontuação
+    // ── 1. Remove dados sensíveis ──────────────────────────────────────────
+    s = s
+        .replace(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g, '') // CNPJ xx.xxx.xxx/xxxx-xx
+        .replace(/\d{3}\.\d{3}\.\d{3}-\d{2}/g,         '') // CPF xxx.xxx.xxx-xx
+        .replace(/\bCNPJ\s*/gi,  '').replace(/\bCPF\s*/gi, '')
+        .replace(/\bAg\.?\s*\d[\d.\-]*/gi,    '') // Ag. 1234 / Agência 001
+        .replace(/\bConta\.?\s*\d[\d.\-]*/gi,  '') // Conta 12345-6
+        .replace(/\b(NSU|Ref\.?|Doc\.?)\s*:?\s*[\dA-Z-]+/gi, '');
 
-    // Remove agência, conta, NSU, referência (padrões comuns)
-    s = s.replace(/\bAg[eê]ncia?\.?\s*:?\s*\d+[\d.\-]*/gi, '')
-         .replace(/\bConta\.?\s*:?\s*\d+[\d.\-]*/gi, '')
-         .replace(/\b(NSU|Ref|Doc|Op)\.?\s*:?\s*[\dA-Z]+/gi, '');
+    // Remove sequências numéricas longas (≥6 dígitos com separadores), sem `\b` no fim
+    // para capturar padrões como "10.573.521/" onde "/" é o último char
+    s = s.replace(/\b\d[\d.\/\-]{5,}/g, '');
 
-    // Remove sequências numéricas longas isoladas (≥6 dígitos), ex: "10.573.521/"
-    s = s.replace(/\b\d[\d.\/\-]{5,}\b/g, '');
+    // Normaliza espaços e traços duplos gerados pelas remoções
+    s = s.replace(/\s*[-–]\s*[-–]+\s*/g, ' - ')
+         .replace(/\s{2,}/g, ' ')
+         .replace(/\s*[-–]\s*$/g, '')  // traço solto no final
+         .trim();
 
-    // ── Formata PIX enviado ────────────────────────────────────────────────
-    const pixEnvMatch = s.match(
-        /pix\s+(?:enviado|envi[a]?do\s+pelo\s+pix|marketplace)\s*[-–:]\s*([^-–\n]{3,60})/i
-    ) || s.match(/transfer[eê]ncia\s+(?:enviada?|via\s+pix|pelo\s+pix)\s*[-–:]\s*([^-–\n]{3,60})/i);
+    // ── 2. PIX ou Transferência: extrai nome via split por " - " ──────────
+    // Estratégia: qualquer transação que contenha "pix" ou começa com "transf"
+    // tem o nome da entidade na 1ª parte APÓS o primeiro separador " - ".
+    // Não dependemos do prefixo estar com encoding correto.
+    const hasPix  = /\bpix\b/i.test(s);
+    const hasTed  = /\b(ted|doc)\b/i.test(s);
+    const hasTransf = /^transf/i.test(s) || /\btransfer/i.test(s);
 
-    if (pixEnvMatch) {
-        const nome = pixEnvMatch[1].replace(/\s*[-–].*$/, '').trim();
-        if (nome.length > 2) return `PIX - ${_capitalizarNome(nome)}`.slice(0, 120);
+    if (hasPix || hasTed || hasTransf) {
+        const partes = s.split(/\s*[-–]\s*/);
+        // partes[0] = "Transferência enviada pelo Pix" / "Pix enviado" / etc.
+        // partes[1] = nome da entidade (o que queremos)
+        // partes[2...] = CNPJ/números (já removidos ou irrelevantes)
+        for (let i = 1; i < partes.length; i++) {
+            const parte = partes[i].trim();
+            if (parte.length < 3) continue;
+            if (/^\d/.test(parte)) continue;                          // começa com número
+            if (/^(CNPJ|CPF|Ag|Op|NSU|Ref)$/i.test(parte)) continue; // só sigla
+            const prefix = hasPix ? 'PIX' : (hasTed ? partes[0].trim().toUpperCase().split(' ')[0] : 'Transferência');
+            return `${prefix} - ${_capitalizarNome(parte)}`.slice(0, 120);
+        }
+
+        // Fallback: "Pix recebido de NOME" sem separador " - "
+        const deMatch = s.match(/(?:pix|transf\S*|ted|doc)\s+\S+\s+de\s+([^-–\n]{3,60})/i);
+        if (deMatch) {
+            const nome = deMatch[1].replace(/\s*[-–].*$/, '').trim();
+            if (nome.length > 2)
+                return `${hasPix ? 'PIX' : 'Transferência'} - ${_capitalizarNome(nome)}`.slice(0, 120);
+        }
     }
 
-    // ── Formata PIX recebido ───────────────────────────────────────────────
-    const pixRecMatch = s.match(
-        /pix\s+(?:recebido?|receb\.?)\s+(?:de\s+)?([^-–\n]{3,60})/i
-    );
-    if (pixRecMatch) {
-        const nome = pixRecMatch[1].replace(/\s*[-–].*$/, '').trim();
-        if (nome.length > 2) return `PIX - ${_capitalizarNome(nome)}`.slice(0, 120);
-    }
-
-    // ── Formata transferência genérica ─────────────────────────────────────
-    const transfMatch = s.match(
-        /transfer[eê]ncia\s*[-–:]\s*([^-–\n]{3,60})/i
-    );
-    if (transfMatch) {
-        const nome = transfMatch[1].replace(/\s*[-–].*$/, '').trim();
-        if (nome.length > 2) return `Transferência - ${_capitalizarNome(nome)}`.slice(0, 120);
-    }
-
-    // ── Limpeza genérica ───────────────────────────────────────────────────
+    // ── 3. Limpeza genérica (compras, saques, tarifas, etc.) ──────────────
     return s
-        .replace(/^compra no d[eé]bito\s*[-–]\s*/i, '')
+        .replace(/^compra no d[eé]bito\s*[-–]\s*/i,  '')
         .replace(/^compra no cr[eé]dito\s*[-–]\s*/i, '')
-        .replace(/^compra\s*[-–]\s*/i, '')
-        .replace(/^pagamento\s*[-–]\s*/i, '')
-        .replace(/^transfer[eê]ncia\s*[-–]\s*/i, '')
-        .replace(/^pix\s*[-–]\s*/i, '')
-        .replace(/\s*\/\s*\d{2}\.\d{2}\.\d{4}.*$/, '') // remove data no final
-        .replace(/\s*[-–]\s*$/, '')                     // remove traço solto no final
-        .replace(/\s+/g, ' ')
+        .replace(/^compra\s*[-–]\s*/i,                '')
+        .replace(/^pagamento\s*[-–]\s*/i,             '')
+        .replace(/^transfer\S*\s*[-–]\s*/i,           '')
+        .replace(/^pix\s*[-–]\s*/i,                   '')
+        .replace(/\s*\/\s*\d{2}\.\d{2}\.\d{4}.*$/,  '') // "/ 15.05.2026 ..."
+        .replace(/\s*[-–]\s*$/g,                      '')
+        .replace(/\s{2,}/g, ' ')
         .trim()
         .slice(0, 200);
 }
