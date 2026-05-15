@@ -668,30 +668,33 @@ function _openPlanModal(session) {
         radio.addEventListener('change', () => {
             if (!isCurrent && radio.checked) {
                 selectedPlan = p.slug
-                const confirmBtn = modal.querySelector('#planModalConfirm') as HTMLButtonElement
-                confirmBtn.disabled = false
-                confirmBtn.style.opacity = '1'
+                const confirmBtn = modal.querySelector('#planModalConfirm')
+                if (confirmBtn) {
+                    confirmBtn.disabled = false
+                    confirmBtn.style.opacity = '1'
+                }
             }
         })
 
         card.appendChild(radio)
         card.appendChild(textWrap)
-        list!.appendChild(card)
+        list.appendChild(card)
     })
 
     const closeModal = () => overlay.remove()
-    modal.querySelector('#planModalClose')!.addEventListener('click', closeModal)
-    modal.querySelector('#planModalCancel')!.addEventListener('click', closeModal)
+    modal.querySelector('#planModalClose').addEventListener('click', closeModal)
+    modal.querySelector('#planModalCancel').addEventListener('click', closeModal)
     overlay.addEventListener('click', e => { if (e.target === overlay) closeModal() })
 
-    modal.querySelector('#planModalConfirm')!.addEventListener('click', async () => {
+    const confirmBtnEl = modal.querySelector('#planModalConfirm')
+    const cancelBtnEl  = modal.querySelector('#planModalCancel')
+    const errorEl      = modal.querySelector('#planModalError')
+
+    confirmBtnEl.addEventListener('click', async () => {
         if (!selectedPlan) return
-        const confirmBtn  = modal.querySelector('#planModalConfirm') as HTMLButtonElement
-        const cancelBtn   = modal.querySelector('#planModalCancel') as HTMLButtonElement
-        const errorEl     = modal.querySelector('#planModalError') as HTMLElement
-        confirmBtn.disabled  = true
-        confirmBtn.textContent = 'Atualizando...'
-        cancelBtn.disabled   = true
+        confirmBtnEl.disabled  = true
+        confirmBtnEl.textContent = 'Atualizando...'
+        cancelBtnEl.disabled   = true
         errorEl.style.display = 'none'
 
         try {
@@ -705,18 +708,18 @@ function _openPlanModal(session) {
                 signal:  AbortSignal.timeout(20_000),
             })
 
-            const data = await resp.json().catch(() => ({}))
-            if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`)
+            const body = await resp.json().catch(() => ({}))
+            if (!resp.ok) throw new Error(body.error || `HTTP ${resp.status}`)
 
             closeModal()
-            _showToast(`Plano alterado para ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} com sucesso!`, 'success')
-            // Recarrega dados após 1.5s para refletir o novo plano
+            const planLabel = selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)
+            _showToast(`Plano alterado para ${planLabel} com sucesso!`, 'success')
             setTimeout(() => loadSubscription(session), 1500)
 
-        } catch (err: any) {
-            confirmBtn.disabled  = false
-            confirmBtn.textContent = 'Confirmar alteração'
-            cancelBtn.disabled   = false
+        } catch (err) {
+            confirmBtnEl.disabled  = false
+            confirmBtnEl.textContent = 'Confirmar alteração'
+            cancelBtnEl.disabled   = false
             errorEl.textContent    = err.message || 'Erro ao alterar plano. Tente novamente.'
             errorEl.style.display  = 'block'
         }
