@@ -404,6 +404,9 @@ async function loadStripeDetails(session) {
         // Render invoice list
         _renderInvoices(invoices || []);
 
+        // Notificação de cancelamento via Stripe direto (sem depender do webhook)
+        if (subscription) _checkCancellationNotification(subscription);
+
     } catch (err) {
         console.error('[atualizarplano] Erro ao buscar detalhes Stripe:', err);
         _renderInvoiceEmpty();
@@ -532,18 +535,30 @@ function _renderInvoiceEmpty() {
 }
 
 // ── Notificação de cancelamento ───────────────────────────────────
+// sub pode vir do banco (ISO string) ou do Stripe direto (Unix timestamp em segundos)
 function _checkCancellationNotification(sub) {
+    if (!sub) return
     const isCancelling = sub.cancel_at_period_end && sub.status !== 'canceled'
     const isCanceled   = sub.status === 'canceled'
     if (!isCancelling && !isCanceled) return
 
-    const storageKey = `ge_cancel_notif_${sub.status}_${sub.current_period_end ?? ''}`
+    // Converte Unix timestamp (Stripe) ou ISO string (banco) para Date
+    const rawEnd = sub.current_period_end
+    let periodEndDate = null
+    if (rawEnd) {
+        periodEndDate = typeof rawEnd === 'number'
+            ? new Date(rawEnd * 1000)   // Stripe retorna segundos
+            : new Date(rawEnd)          // Supabase retorna ISO string
+    }
+
+    const periodEndFmt = periodEndDate
+        ? periodEndDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+        : null
+
+    // Chave única por estado + data de vencimento — evita mostrar mais de uma vez
+    const storageKey = `ge_cancel_notif_${sub.status}_${periodEndDate?.toISOString().slice(0, 10) ?? 'nd'}`
     if (localStorage.getItem(storageKey)) return
     localStorage.setItem(storageKey, '1')
-
-    const periodEndFmt = sub.current_period_end
-        ? new Date(sub.current_period_end).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-        : null
 
     const msg = isCancelling
         ? `Cancelamento agendado — acesso garantido até ${periodEndFmt ?? 'o fim do ciclo'}.`

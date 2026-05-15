@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
 
   const params = new URLSearchParams()
   params.set('customer',   stripeSub.stripe_customer_id)
-  params.set('return_url', 'https://granaevo.com/dashboard.html')
+  params.set('return_url', 'https://granaevo.com/atualizarplano.html')
 
   let portalRes: Response
   try {
