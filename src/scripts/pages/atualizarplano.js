@@ -398,10 +398,10 @@ async function loadStripeDetails(session) {
 
         const { subscription, invoices } = await resp.json();
 
-        // Update "Membro desde" with real Stripe date
+        // Atualiza TODAS as datas da UI com dados autoritativos do Stripe
+        // (resolve o "—" em "Próxima cobrança" quando DB tem current_period_end NULL)
+        _updateDatesFromStripe(subscription);
         _updateMemberSince(subscription);
-
-        // Update price card if available
         _updatePriceCard(subscription);
 
         // Render invoice list
@@ -416,12 +416,65 @@ async function loadStripeDetails(session) {
     }
 }
 
+// Atualiza TODOS os campos de data na UI com os dados autoritativos do Stripe.
+// Resolve o "-" em "Próxima cobrança" quando o banco está com current_period_end NULL.
+function _updateDatesFromStripe(subscription) {
+    if (!subscription) return;
+
+    const periodEnd   = subscription.current_period_end;
+    const periodStart = subscription.current_period_start;
+    const cancelAtEnd = subscription.cancel_at_period_end;
+    const status      = subscription.status;
+    const isCanceled  = status === 'canceled';
+
+    if (!periodEnd) return;
+
+    const endFmt   = formatDate(periodEnd);
+    const startFmt = periodStart ? formatDate(periodStart) : null;
+
+    // Header principal da página
+    const nextBillingEl = document.getElementById('nextBilling');
+    const cancelDateEl  = document.getElementById('cancelDate');
+    if (nextBillingEl && !cancelAtEnd && !isCanceled) nextBillingEl.textContent = endFmt;
+    if (cancelDateEl && (cancelAtEnd || isCanceled))  cancelDateEl.textContent  = endFmt;
+
+    // Cards de detalhe — todos os rótulos que carregam datas de período
+    const DATE_LABELS = new Set([
+        'Próxima cobrança', 'Acesso válido até', 'Venceu em',
+        'Teste gratuito até', 'Ciclo de cobrança',
+    ]);
+    document.querySelectorAll('.detail-card').forEach(card => {
+        const labelEl = card.querySelector('.dc-label');
+        const valueEl = card.querySelector('.dc-value');
+        if (!labelEl || !valueEl) return;
+        const label = labelEl.textContent?.trim();
+
+        if (DATE_LABELS.has(label) && label !== 'Ciclo de cobrança') {
+            // Só sobrescreve se o valor atual for "—" (vindo do banco sem data)
+            if (valueEl.textContent === '—' || valueEl.textContent === '-') {
+                valueEl.textContent = endFmt;
+            }
+        }
+        if (label === 'Período atual' && startFmt) {
+            const spans = valueEl.querySelectorAll('span:not(.dc-sep)');
+            if (spans[0] && (spans[0].textContent === '—' || !spans[0].textContent.trim())) {
+                spans[0].textContent = startFmt;
+            }
+            if (spans[1] && (spans[1].textContent === '—' || !spans[1].textContent.trim())) {
+                spans[1].textContent = endFmt;
+            }
+        }
+        if (label === 'Membro desde' && !valueEl.textContent.match(/\d{2}\/\d{2}\/\d{4}/)) {
+            const ts = subscription.start_date || subscription.created;
+            if (ts) valueEl.textContent = formatDateLong(ts);
+        }
+    });
+}
+
 function _updateMemberSince(subscription) {
     if (!subscription) return;
-    // Use start_date (first invoice date) or created, whichever is earlier
     const ts = subscription.start_date || subscription.created;
     if (!ts) return;
-    // Find "Membro desde" card and update its value
     document.querySelectorAll('.detail-card').forEach(card => {
         const label = card.querySelector('.dc-label');
         const value = card.querySelector('.dc-value');
@@ -435,7 +488,6 @@ function _updatePriceCard(subscription) {
     if (!subscription?.price?.unit_amount) return;
     const amount   = formatCurrency(subscription.price.unit_amount, subscription.price.currency || 'brl');
     const interval = subscription.price.interval === 'month' ? 'mês' : subscription.price.interval;
-    // Update Ciclo card to show the actual price
     document.querySelectorAll('.detail-card').forEach(card => {
         const label = card.querySelector('.dc-label');
         const value = card.querySelector('.dc-value');
@@ -636,9 +688,9 @@ function _openPlanModal(session) {
     const modal = document.createElement('div')
     modal.style.cssText = [
         'background:linear-gradient(160deg,#0d1117 0%,#111827 100%)',
-        'border:1px solid rgba(16,185,129,0.2)', 'border-radius:20px',
-        'padding:32px', 'max-width:540px', 'width:100%',
-        'box-shadow:0 32px 80px rgba(0,0,0,0.8)',
+        'border:1px solid rgba(16,185,129,0.18)', 'border-radius:22px',
+        'padding:28px', 'max-width:560px', 'width:100%',
+        'box-shadow:0 40px 100px rgba(0,0,0,0.85)',
         'max-height:92vh', 'overflow-y:auto',
     ].join(';')
 
@@ -669,31 +721,56 @@ function _openPlanModal(session) {
         },
     ]
 
-    // Aviso de downgrade agendado (se houver)
-    const pendingNoticeHtml = _currentPendingPlan
-        ? `<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px 16px;margin-bottom:20px;display:flex;gap:10px;align-items:flex-start;">
-            <span style="font-size:18px;flex-shrink:0;">⏳</span>
-            <div>
-              <div style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:3px;">Alteração agendada</div>
-              <div style="font-size:13px;color:#94a3b8;line-height:1.5;">
-                Seu plano será alterado para <strong style="color:#f1f5f9;">${_planLabel(_currentPendingPlan)}</strong>
-                em <strong style="color:#f1f5f9;">${_fmtDateFromISO(_currentPendingEffectiveAt)}</strong>.
-                Você continua com acesso ao plano atual até essa data.
-              </div>
-            </div>
-          </div>`
+    // ── Dados do plano atual ──────────────────────────────────────
+    const currentPlanData = plans.find(p => p.slug === _currentPlanSlug)
+    const currentPrice    = currentPlanData?.price ?? 0
+
+    // Card do plano atual (topo do modal)
+    const pendingHtml = _currentPendingPlan
+        ? `<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;">
+             <span style="font-size:13px;">⏳</span>
+             <span style="font-size:12px;color:#fbbf24;font-weight:600;">
+               Alteração agendada para <strong>${_planLabel(_currentPendingPlan)}</strong>
+               em ${_fmtDateFromISO(_currentPendingEffectiveAt)}
+             </span>
+           </div>`
         : ''
+
+    const currentCardHtml = currentPlanData ? `
+      <div style="background:rgba(16,185,129,0.07);border:1.5px solid rgba(16,185,129,0.3);border-radius:14px;padding:16px 18px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+            <div style="color:#10b981;flex-shrink:0;opacity:.9;">${currentPlanData.icon}</div>
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+                <span style="font-size:16px;font-weight:800;color:#10b981;letter-spacing:-.3px;">${currentPlanData.label}</span>
+                <span style="font-size:10px;font-weight:700;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.35);border-radius:50px;padding:2px 8px;color:#10b981;letter-spacing:.4px;">ATIVO</span>
+              </div>
+              <div style="font-size:12px;color:#64748b;">${currentPlanData.tagline}</div>
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:20px;font-weight:900;color:#10b981;letter-spacing:-.8px;line-height:1;">${_fmtMoney(currentPlanData.price, 'brl')}</div>
+            <div style="font-size:10px;color:#475569;font-weight:500;margin-top:2px;">/mês</div>
+          </div>
+        </div>
+        ${pendingHtml}
+      </div>` : ''
 
     modal.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-        <h2 style="font-size:20px;font-weight:800;color:#f1f5f9;letter-spacing:-0.3px;margin:0;">Alterar Plano</h2>
-        <button id="planModalClose" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:20px;padding:4px 8px;border-radius:6px;line-height:1;" aria-label="Fechar">✕</button>
+        <h2 style="font-size:19px;font-weight:800;color:#f1f5f9;letter-spacing:-0.3px;margin:0;">Gerenciar Plano</h2>
+        <button id="planModalClose" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;cursor:pointer;font-size:16px;padding:6px 10px;border-radius:8px;line-height:1;" aria-label="Fechar">✕</button>
       </div>
-      ${pendingNoticeHtml}
-      <div id="planOptionsList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;"></div>
-      <div id="planPreviewBox" style="display:none;border-radius:12px;padding:16px 18px;margin-bottom:20px;"></div>
-      <div style="display:flex;gap:12px;">
-        <button id="planModalCancel" style="flex:1;padding:13px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;">Cancelar</button>
+
+      ${currentCardHtml}
+
+      <div style="font-size:11px;font-weight:700;color:#475569;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:12px;">Alterar para</div>
+
+      <div id="planOptionsList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;"></div>
+      <div id="planPreviewBox" style="display:none;border-radius:12px;padding:16px 18px;margin-bottom:18px;"></div>
+      <div style="display:flex;gap:10px;">
+        <button id="planModalCancel" style="flex:1;padding:13px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:#64748b;font-size:14px;font-weight:600;cursor:pointer;">Cancelar</button>
         <button id="planModalConfirm" style="flex:2;padding:13px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;opacity:0.4;transition:opacity .2s;" disabled>Selecione um plano</button>
       </div>
       <p id="planModalError" style="margin-top:12px;font-size:13px;color:#f87171;text-align:center;display:none;"></p>
@@ -871,104 +948,97 @@ function _openPlanModal(session) {
         const pRank        = PLAN_RANK_MODAL[p.slug] ?? 0
         const isUpgrade    = pRank > curRank
         const isDowngrade  = pRank < curRank
+        const priceDiff    = p.price - currentPrice
 
-        // Cores por estado
-        let borderColor, bgColor, nameColor, priceColor
-        if (isCurrent) {
-            borderColor = 'rgba(16,185,129,0.35)'; bgColor = 'rgba(16,185,129,0.06)';
-            nameColor   = '#10b981';                priceColor = '#10b981'
-        } else if (isPending) {
-            borderColor = 'rgba(245,158,11,0.3)';  bgColor = 'rgba(245,158,11,0.05)';
-            nameColor   = '#fbbf24';                priceColor = '#fbbf24'
-        } else if (isUpgrade) {
-            borderColor = 'rgba(255,255,255,0.09)'; bgColor = 'rgba(255,255,255,0.03)';
-            nameColor   = '#e2e8f0';                priceColor = '#34d399'
-        } else {
-            borderColor = 'rgba(255,255,255,0.09)'; bgColor = 'rgba(255,255,255,0.03)';
-            nameColor   = '#e2e8f0';                priceColor = '#94a3b8'
+        // Indicador de diferença de preço
+        let diffHtml = ''
+        if (!isCurrent && !isPending) {
+            if (priceDiff > 0) {
+                diffHtml = `<span style="font-size:11px;font-weight:700;color:#34d399;">↑ +${_fmtMoney(priceDiff,'brl')}/mês</span>`
+            } else if (priceDiff < 0) {
+                diffHtml = `<span style="font-size:11px;font-weight:700;color:#fbbf24;">↓ Economize ${_fmtMoney(Math.abs(priceDiff),'brl')}/mês</span>`
+            }
         }
+        if (isPending) {
+            diffHtml = `<span style="font-size:11px;font-weight:700;color:#fbbf24;">⏳ Agendado</span>`
+        }
+
+        // Cores
+        let borderColor = isCurrent ? 'rgba(16,185,129,0.35)'
+                        : isPending  ? 'rgba(245,158,11,0.25)'
+                        : 'rgba(255,255,255,0.08)'
+        let bgColor     = isCurrent ? 'rgba(16,185,129,0.06)'
+                        : isPending  ? 'rgba(245,158,11,0.04)'
+                        : 'rgba(255,255,255,0.025)'
+        let nameColor   = isCurrent ? '#10b981' : isPending ? '#fbbf24' : '#e2e8f0'
+        let priceColor  = isCurrent ? '#10b981' : isUpgrade ? '#34d399' : isDowngrade ? '#94a3b8' : '#e2e8f0'
 
         const card = document.createElement('label')
         card.style.cssText = [
-            'display:flex', 'align-items:center', 'gap:12px', 'padding:14px 16px',
+            'display:flex', 'align-items:center', 'gap:14px', 'padding:16px 18px',
             `background:${bgColor}`,
             `border:1px solid ${borderColor}`,
             'border-radius:14px',
             `cursor:${isSelectable ? 'pointer' : 'default'}`,
-            'transition:border-color .2s, background .2s',
-            'position:relative',
+            'transition:border-color .2s, background .2s, transform .15s',
         ].join(';')
 
-        // Hover highlight para cards seleccionáveis
         if (isSelectable && !isCurrent) {
             card.addEventListener('mouseenter', () => {
-                card.style.borderColor = 'rgba(16,185,129,0.4)'
-                card.style.background  = 'rgba(16,185,129,0.05)'
+                if (!card.querySelector('input')?.checked) {
+                    card.style.borderColor = isUpgrade ? 'rgba(52,211,153,0.4)' : 'rgba(245,158,11,0.4)'
+                    card.style.background  = isUpgrade ? 'rgba(52,211,153,0.05)' : 'rgba(245,158,11,0.05)'
+                    card.style.transform   = 'translateY(-1px)'
+                }
             })
             card.addEventListener('mouseleave', () => {
-                const isChecked = card.querySelector('input[type=radio]')?.checked
-                if (!isChecked) {
+                if (!card.querySelector('input')?.checked) {
                     card.style.borderColor = borderColor
                     card.style.background  = bgColor
+                    card.style.transform   = ''
                 }
             })
         }
 
         const radio = document.createElement('input')
-        radio.type    = 'radio'
-        radio.name    = 'planOption'
-        radio.value   = p.slug
+        radio.type     = 'radio'
+        radio.name     = 'planOption'
+        radio.value    = p.slug
         radio.disabled = !isSelectable
-        radio.style.cssText = 'accent-color:#10b981;width:17px;height:17px;flex-shrink:0;cursor:inherit;'
+        radio.style.cssText = 'accent-color:#10b981;width:17px;height:17px;flex-shrink:0;cursor:inherit;margin-top:1px;'
 
-        // Badges
-        let badgeHtml = ''
-        if (isCurrent) {
-            badgeHtml += '<span style="font-size:10px;font-weight:700;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.35);border-radius:50px;padding:2px 8px;color:#10b981;letter-spacing:.3px;">ATUAL</span>'
-        }
-        if (isPending) {
-            badgeHtml += '<span style="font-size:10px;font-weight:700;background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);border-radius:50px;padding:2px 8px;color:#fbbf24;letter-spacing:.3px;">AGENDADO</span>'
-        }
-        if (isUpgrade && !isCurrent && !isPending) {
-            badgeHtml += '<span style="font-size:10px;font-weight:700;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.25);border-radius:50px;padding:2px 8px;color:#34d399;letter-spacing:.3px;">UPGRADE</span>'
-        }
-
-        // Ícone do plano
+        // Ícone
         const iconWrap = document.createElement('div')
-        iconWrap.style.cssText = [
-            `color:${nameColor}`,
-            'flex-shrink:0',
-            'opacity:.85',
-        ].join(';')
+        iconWrap.style.cssText = `color:${nameColor};flex-shrink:0;opacity:.9;`
         iconWrap.innerHTML = p.icon
 
         // Texto central
         const textWrap = document.createElement('div')
         textWrap.style.cssText = 'flex:1;min-width:0;'
         textWrap.innerHTML = `
-          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px;">
-            <span style="font-size:15px;font-weight:800;color:${nameColor};letter-spacing:-.2px;">${p.label}</span>
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:4px;">
+            <span style="font-size:15px;font-weight:800;color:${nameColor};letter-spacing:-.3px;">${p.label}</span>
             <span style="font-size:11px;color:#475569;font-weight:500;">${p.tagline}</span>
-            ${badgeHtml}
           </div>
-          <div style="font-size:12px;color:#475569;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.desc}</div>
+          <div style="font-size:12px;color:#475569;line-height:1.4;">${p.desc}</div>
         `
 
-        // Preço (lado direito)
+        // Lado direito: preço + diferença
         const priceWrap = document.createElement('div')
-        priceWrap.style.cssText = 'text-align:right;flex-shrink:0;'
+        priceWrap.style.cssText = 'text-align:right;flex-shrink:0;min-width:80px;'
         priceWrap.innerHTML = `
-          <div style="font-size:16px;font-weight:800;color:${priceColor};letter-spacing:-.5px;line-height:1.1;">${_fmtMoney(p.price, 'brl')}</div>
-          <div style="font-size:10px;color:#475569;font-weight:500;margin-top:2px;">/mês</div>
+          <div style="font-size:18px;font-weight:900;color:${priceColor};letter-spacing:-.8px;line-height:1.05;">${_fmtMoney(p.price, 'brl')}</div>
+          <div style="font-size:10px;color:#475569;font-weight:500;">/mês</div>
+          ${diffHtml ? `<div style="margin-top:4px;">${diffHtml}</div>` : ''}
         `
 
         radio.addEventListener('change', () => {
             if (!radio.checked) return
             selectedPlan = p.slug
-            // Atualiza borda do card selecionado
             list.querySelectorAll('label').forEach(lbl => {
                 lbl.style.borderColor = ''
                 lbl.style.background  = ''
+                lbl.style.transform   = ''
             })
             card.style.borderColor = 'rgba(16,185,129,0.55)'
             card.style.background  = 'rgba(16,185,129,0.08)'

@@ -97,8 +97,8 @@ Deno.serve(async (req: Request) => {
 
   if (!row?.stripe_customer_id) return json({ error: 'Nenhuma assinatura encontrada' }, 404)
 
-  const customerId     = row.stripe_customer_id
-  const subscriptionId = row.stripe_subscription_id ?? ''
+  const customerId         = row.stripe_customer_id
+  let   subscriptionId     = row.stripe_subscription_id ?? ''
 
   if (!STRIPE_ID_REGEX.test(customerId)) return json({ error: 'Erro interno' }, 500)
 
@@ -108,6 +108,40 @@ Deno.serve(async (req: Request) => {
   const stripeHeaders = {
     'Authorization': `Bearer ${stripeKey}`,
     'Stripe-Version': '2024-06-20',
+  }
+
+  // ── 3b. Se subscription_id ausente no banco, busca no Stripe via customer ─────
+  // Isso cobre o caso de webhook com timing issue que não gravou o subscription_id.
+  if (!subscriptionId || !STRIPE_ID_REGEX.test(subscriptionId)) {
+    try {
+      const listRes = await fetch(
+        `https://api.stripe.com/v1/subscriptions?customer=${encodeURIComponent(customerId)}&status=active&limit=1`,
+        { headers: stripeHeaders, signal: AbortSignal.timeout(8_000) },
+      )
+      if (listRes.ok) {
+        const listBody = await listRes.json() as { data: Record<string, unknown>[] }
+        const found    = listBody.data?.[0]
+        if (found?.id && STRIPE_ID_REGEX.test(found.id as string)) {
+          subscriptionId = found.id as string
+          // Atualiza o banco silenciosamente para próximas chamadas
+          supabaseAdmin
+            .from('stripe_subscriptions')
+            .update({
+              stripe_subscription_id: subscriptionId,
+              status:                 'active',
+              current_period_start:   found.current_period_start
+                ? new Date((found.current_period_start as number) * 1000).toISOString() : undefined,
+              current_period_end:     found.current_period_end
+                ? new Date((found.current_period_end   as number) * 1000).toISOString() : undefined,
+              updated_at:             new Date().toISOString(),
+            })
+            .eq('stripe_customer_id', customerId)
+            .catch(e => console.warn('[stripe-sub-details] Erro ao atualizar subscription_id:', e.message))
+        }
+      }
+    } catch (e) {
+      console.warn('[stripe-sub-details] Erro ao buscar subscription por customer:', (e as Error).message)
+    }
   }
 
   // ── 4. Detalhes da assinatura (data real de criação, valor, etc.) ─────────────
