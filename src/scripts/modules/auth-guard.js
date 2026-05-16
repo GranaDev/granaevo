@@ -874,32 +874,158 @@ function _broadcastLogout(type) {
 //  TELA CONGELADA — assinatura encerrada (dentro dos 90 dias de retenção)
 // ═══════════════════════════════════════════════════════════════
 function _renderFrozenOverlay(subData, guard) {
+    // ═══════════════════════════════════════════════════════════════
+    //  BLINDAGEM DE SEGURANÇA — NÍVEL EXTREMO
+    //  Impede qualquer bypass: remoção de DOM, navegação via history,
+    //  teclado, links, popstate, cliques por baixo da overlay, etc.
+    // ═══════════════════════════════════════════════════════════════
+
+    // Remove overlay anterior se existir
     document.getElementById('_ge_frozen_overlay')?.remove();
 
     const days     = subData.daysUntilDeletion ?? 0;
     const planName = subData.frozenPlanName    ?? 'GranaEvo';
     const daysText = days === 1 ? '1 dia' : `${days} dias`;
 
+    // ── 1. Trava scroll do body ───────────────────────────────────
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow            = 'hidden';
+    document.body.style.pointerEvents       = 'none';  // bloqueia cliques no body
+
+    // ── 2. Intercepta history API ─────────────────────────────────
+    // Guarda referências originais para restaurar no cleanup
+    const _origPushState    = history.pushState.bind(history);
+    const _origReplaceState = history.replaceState.bind(history);
+    // Substitui por no-ops — impede SPA navigation via JS
+    try {
+        history.pushState    = () => {};
+        history.replaceState = () => {};
+    } catch { /* já bloqueado ou CSP */ }
+
+    // ── 3. Bloqueia o botão Voltar ────────────────────────────────
+    _origPushState(null, '', window.location.href);
+    const _onPopState = () => {
+        _origPushState(null, '', window.location.href);
+    };
+    window.addEventListener('popstate', _onPopState);
+
+    // ── 4. Intercepta TODOS os cliques na fase de captura ─────────
+    // Permite apenas cliques dentro da overlay (_ge_frozen_overlay)
+    const _onCapture = (e) => {
+        if (!e.target.closest('#_ge_frozen_overlay')) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        }
+    };
+    document.addEventListener('click',       _onCapture, true);
+    document.addEventListener('mousedown',   _onCapture, true);
+    document.addEventListener('touchstart',  _onCapture, { capture: true, passive: false });
+    document.addEventListener('contextmenu', _onCapture, true);
+
+    // ── 5. Bloqueia teclado — teclas que navegam sem mouse ────────
+    const _BLOCKED_KEYS = new Set([
+        'Alt', 'F5',                       // atalhos de navegação
+        'ArrowLeft', 'ArrowRight',         // histórico no Firefox
+    ]);
+    const _onKeyDown = (e) => {
+        // Permite Tab/Enter/Space apenas dentro da overlay
+        if (!e.target.closest('#_ge_frozen_overlay')) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return;
+        }
+        // Bloqueia Alt+ArrowLeft (Voltar no browser) de qualquer lugar
+        if (_BLOCKED_KEYS.has(e.key) && (e.altKey || e.key === 'F5')) {
+            e.preventDefault();
+        }
+    };
+    document.addEventListener('keydown', _onKeyDown, true);
+    document.addEventListener('keyup',   _onKeyDown, true);
+
+    // ── 6. Trap de foco ──────────────────────────────────────────
+    // Mantém foco sempre dentro da overlay (impede Tab fora)
+    const _onFocusIn = (e) => {
+        if (!e.target.closest('#_ge_frozen_overlay')) {
+            e.preventDefault();
+            document.getElementById('_ge_frozen_logout')?.focus();
+        }
+    };
+    document.addEventListener('focusin', _onFocusIn, true);
+
+    // ── 7. MutationObserver — reinjeta se removida do DOM ─────────
+    let _reinjecting = false;
+    const _observer = new MutationObserver(() => {
+        if (_reinjecting) return;
+        if (!document.getElementById('_ge_frozen_overlay')) {
+            _reinjecting = true;
+            try { document.body.appendChild(overlay); }
+            finally { _reinjecting = false; }
+        }
+    });
+    _observer.observe(document.body, { childList: true });
+    // Observa também o html root (por se for feito um document.body = ...)
+    _observer.observe(document.documentElement, { childList: true });
+
+    // ── 8. Intervalo de verificação (redundância) ─────────────────
+    const _watchdogId = setInterval(() => {
+        if (!document.getElementById('_ge_frozen_overlay')) {
+            try { document.body.appendChild(overlay); } catch { /* */ }
+        }
+        // Garante pointer-events desabilitado no body
+        document.body.style.pointerEvents = 'none';
+    }, 800);
+
+    // ── 9. Visibilitychange — revalida ao voltar para a aba ───────
+    const _onVisible = () => {
+        if (document.visibilityState === 'visible') {
+            if (!document.getElementById('_ge_frozen_overlay')) {
+                try { document.body.appendChild(overlay); } catch { /* */ }
+            }
+        }
+    };
+    document.addEventListener('visibilitychange', _onVisible);
+
+    // ── cleanup: restaura tudo antes de navegar ou fazer logout ───
+    function _cleanup() {
+        _observer.disconnect();
+        clearInterval(_watchdogId);
+        window.removeEventListener('popstate',         _onPopState);
+        document.removeEventListener('click',          _onCapture,   true);
+        document.removeEventListener('mousedown',      _onCapture,   true);
+        document.removeEventListener('touchstart',     _onCapture,   true);
+        document.removeEventListener('contextmenu',    _onCapture,   true);
+        document.removeEventListener('keydown',        _onKeyDown,   true);
+        document.removeEventListener('keyup',          _onKeyDown,   true);
+        document.removeEventListener('focusin',        _onFocusIn,   true);
+        document.removeEventListener('visibilitychange', _onVisible);
+        document.documentElement.style.overflow = '';
+        document.body.style.overflow            = '';
+        document.body.style.pointerEvents       = '';
+        try {
+            history.pushState    = _origPushState;
+            history.replaceState = _origReplaceState;
+        } catch { /* */ }
+    }
+
+    // ── Cria a overlay ────────────────────────────────────────────
     const overlay = document.createElement('div');
     overlay.id = '_ge_frozen_overlay';
     overlay.style.cssText = [
-        'position:fixed', 'inset:0', 'z-index:99999',
+        'position:fixed', 'inset:0', 'z-index:2147483647',   // z-index máximo possível
         'background:linear-gradient(160deg,#060810 0%,#0d1117 55%,#060c14 100%)',
         'display:flex', 'align-items:center', 'justify-content:center',
         'padding:24px', 'font-family:system-ui,-apple-system,sans-serif',
-        'overflow-y:auto',
+        'overflow-y:auto', 'pointer-events:all',               // overlay tem pointer-events habilitado
     ].join(';');
 
     overlay.innerHTML = `
       <div style="max-width:460px;width:100%;text-align:center;padding:8px 0;">
 
-        <!-- Logo -->
         <div style="margin-bottom:36px;">
           <div style="font-size:26px;font-weight:900;color:#10b981;letter-spacing:-1px;line-height:1;">GranaEvo</div>
           <div style="font-size:11px;color:#334155;margin-top:6px;letter-spacing:2.5px;text-transform:uppercase;">Gestão Financeira</div>
         </div>
 
-        <!-- Ícone -->
         <div style="width:76px;height:76px;border-radius:50%;background:rgba(239,68,68,0.08);border:1.5px solid rgba(239,68,68,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 28px;">
           <svg style="width:34px;height:34px;color:#ef4444;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
             <rect x="3" y="11" width="18" height="11" rx="2"/>
@@ -907,18 +1033,15 @@ function _renderFrozenOverlay(subData, guard) {
           </svg>
         </div>
 
-        <!-- Título -->
         <h1 style="font-size:22px;font-weight:800;color:#f1f5f9;margin:0 0 12px;line-height:1.3;">
           Sua assinatura foi encerrada
         </h1>
 
-        <!-- Descrição -->
         <p style="font-size:14px;color:#94a3b8;margin:0 0 28px;line-height:1.75;">
           O acesso ao plano <strong style="color:#e2e8f0;">${planName}</strong> foi encerrado.
           Para continuar usando o GranaEvo, retome sua assinatura abaixo.
         </p>
 
-        <!-- Aviso de exclusão -->
         <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.22);border-radius:14px;padding:16px 20px;margin-bottom:32px;text-align:left;">
           <div style="display:flex;gap:10px;align-items:flex-start;">
             <span style="font-size:16px;flex-shrink:0;margin-top:1px;">⏳</span>
@@ -933,26 +1056,36 @@ function _renderFrozenOverlay(subData, guard) {
           </div>
         </div>
 
-        <!-- CTA principal -->
-        <a href="planos.html"
-           style="display:block;width:100%;padding:15px 20px;background:linear-gradient(135deg,#10b981,#059669);border-radius:12px;color:#fff;font-size:15px;font-weight:700;text-decoration:none;margin-bottom:10px;box-sizing:border-box;transition:opacity .2s;"
-           onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
+        <button id="_ge_frozen_retomar"
+                style="display:block;width:100%;padding:15px 20px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;box-sizing:border-box;">
           Retomar assinatura
-        </a>
+        </button>
 
-        <!-- Sair -->
         <button id="_ge_frozen_logout"
-                style="width:100%;padding:13px 20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;color:#64748b;font-size:14px;cursor:pointer;font-family:inherit;transition:color .2s;"
-                onmouseover="this.style.color='#94a3b8'" onmouseout="this.style.color='#64748b'">
+                style="width:100%;padding:13px 20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;color:#64748b;font-size:14px;cursor:pointer;font-family:inherit;">
           Sair da conta
         </button>
 
       </div>
     `;
 
+    // Adiciona ao DOM antes de configurar listeners da overlay
     document.body.appendChild(overlay);
-    document.getElementById('_ge_frozen_logout')
-        ?.addEventListener('click', () => guard.logout());
+
+    // CTA "Retomar" — cleanup + navega para planos
+    overlay.querySelector('#_ge_frozen_retomar')?.addEventListener('click', () => {
+        _cleanup();
+        window.location.href = 'planos.html';
+    });
+
+    // "Sair" — cleanup + logout
+    overlay.querySelector('#_ge_frozen_logout')?.addEventListener('click', () => {
+        _cleanup();
+        guard.logout();
+    });
+
+    // Foco inicial no botão principal
+    setTimeout(() => overlay.querySelector('#_ge_frozen_retomar')?.focus(), 50);
 }
 
 // ═══════════════════════════════════════════════════════════════

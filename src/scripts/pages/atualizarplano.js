@@ -643,9 +643,30 @@ function _openPlanModal(session) {
     ].join(';')
 
     const plans = [
-        { slug: 'individual', label: 'Individual', desc: 'Para uso pessoal — controle total das suas finanças.' },
-        { slug: 'casal',      label: 'Casal',      desc: 'Para 2 pessoas — finanças compartilhadas com privacidade.' },
-        { slug: 'familia',    label: 'Família',    desc: 'Para até 5 pessoas — visão consolidada da família.' },
+        {
+            slug:    'individual',
+            label:   'Individual',
+            price:   1999,
+            tagline: '1 perfil',
+            desc:    'Para uso pessoal — controle total das suas finanças.',
+            icon:    `<svg viewBox="0 0 24 24" fill="none" style="width:20px;height:20px;flex-shrink:0;"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+        },
+        {
+            slug:    'casal',
+            label:   'Casal',
+            price:   3499,
+            tagline: '2 perfis',
+            desc:    'Finanças compartilhadas com privacidade para o casal.',
+            icon:    `<svg viewBox="0 0 24 24" fill="none" style="width:20px;height:20px;flex-shrink:0;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+        },
+        {
+            slug:    'familia',
+            label:   'Família',
+            price:   5499,
+            tagline: 'Até 5 perfis',
+            desc:    'Visão consolidada de toda a família em um só lugar.',
+            icon:    `<svg viewBox="0 0 24 24" fill="none" style="width:20px;height:20px;flex-shrink:0;"><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.85" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+        },
     ]
 
     // Aviso de downgrade agendado (se houver)
@@ -840,56 +861,124 @@ function _openPlanModal(session) {
     }
 
     // ── Renderiza opções de plano ─────────────────────────────────
+    const PLAN_RANK_MODAL = { individual: 1, casal: 2, familia: 3 }
+    const curRank = PLAN_RANK_MODAL[_currentPlanSlug] ?? 0
+
     plans.forEach(p => {
-        const isCurrent   = p.slug === _currentPlanSlug
-        const isPending   = p.slug === _currentPendingPlan && _currentPendingPlan !== ''
-        // Se há um downgrade agendado, o usuário pode selecionar o plano atual para cancelar
+        const isCurrent    = p.slug === _currentPlanSlug
+        const isPending    = p.slug === _currentPendingPlan && _currentPendingPlan !== ''
         const isSelectable = !isCurrent || (_currentPendingPlan !== '' && isCurrent)
+        const pRank        = PLAN_RANK_MODAL[p.slug] ?? 0
+        const isUpgrade    = pRank > curRank
+        const isDowngrade  = pRank < curRank
+
+        // Cores por estado
+        let borderColor, bgColor, nameColor, priceColor
+        if (isCurrent) {
+            borderColor = 'rgba(16,185,129,0.35)'; bgColor = 'rgba(16,185,129,0.06)';
+            nameColor   = '#10b981';                priceColor = '#10b981'
+        } else if (isPending) {
+            borderColor = 'rgba(245,158,11,0.3)';  bgColor = 'rgba(245,158,11,0.05)';
+            nameColor   = '#fbbf24';                priceColor = '#fbbf24'
+        } else if (isUpgrade) {
+            borderColor = 'rgba(255,255,255,0.09)'; bgColor = 'rgba(255,255,255,0.03)';
+            nameColor   = '#e2e8f0';                priceColor = '#34d399'
+        } else {
+            borderColor = 'rgba(255,255,255,0.09)'; bgColor = 'rgba(255,255,255,0.03)';
+            nameColor   = '#e2e8f0';                priceColor = '#94a3b8'
+        }
 
         const card = document.createElement('label')
         card.style.cssText = [
-            'display:flex', 'align-items:flex-start', 'gap:14px', 'padding:14px 16px',
-            `background:${isCurrent ? 'rgba(16,185,129,0.07)' : isPending ? 'rgba(245,158,11,0.05)' : 'rgba(255,255,255,0.03)'}`,
-            `border:1px solid ${isCurrent ? 'rgba(16,185,129,0.3)' : isPending ? 'rgba(245,158,11,0.25)' : 'rgba(255,255,255,0.07)'}`,
-            'border-radius:12px',
+            'display:flex', 'align-items:center', 'gap:12px', 'padding:14px 16px',
+            `background:${bgColor}`,
+            `border:1px solid ${borderColor}`,
+            'border-radius:14px',
             `cursor:${isSelectable ? 'pointer' : 'default'}`,
-            'transition:border-color .2s',
+            'transition:border-color .2s, background .2s',
+            'position:relative',
         ].join(';')
+
+        // Hover highlight para cards seleccionáveis
+        if (isSelectable && !isCurrent) {
+            card.addEventListener('mouseenter', () => {
+                card.style.borderColor = 'rgba(16,185,129,0.4)'
+                card.style.background  = 'rgba(16,185,129,0.05)'
+            })
+            card.addEventListener('mouseleave', () => {
+                const isChecked = card.querySelector('input[type=radio]')?.checked
+                if (!isChecked) {
+                    card.style.borderColor = borderColor
+                    card.style.background  = bgColor
+                }
+            })
+        }
 
         const radio = document.createElement('input')
         radio.type    = 'radio'
         radio.name    = 'planOption'
         radio.value   = p.slug
         radio.disabled = !isSelectable
-        radio.style.cssText = 'margin-top:3px;accent-color:#10b981;width:16px;height:16px;flex-shrink:0;'
+        radio.style.cssText = 'accent-color:#10b981;width:17px;height:17px;flex-shrink:0;cursor:inherit;'
 
-        // Badge ao lado do nome
+        // Badges
         let badgeHtml = ''
-        if (isCurrent && !_currentPendingPlan) {
-            badgeHtml = '<span style="font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:50px;padding:2px 8px;color:#10b981;margin-left:6px;">Atual</span>'
-        } else if (isCurrent && _currentPendingPlan) {
-            badgeHtml = '<span style="font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:50px;padding:2px 8px;color:#10b981;margin-left:6px;">Atual</span>'
+        if (isCurrent) {
+            badgeHtml += '<span style="font-size:10px;font-weight:700;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.35);border-radius:50px;padding:2px 8px;color:#10b981;letter-spacing:.3px;">ATUAL</span>'
         }
         if (isPending) {
-            badgeHtml += `<span style="font-size:11px;font-weight:600;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);border-radius:50px;padding:2px 8px;color:#fbbf24;margin-left:4px;">Agendado</span>`
+            badgeHtml += '<span style="font-size:10px;font-weight:700;background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);border-radius:50px;padding:2px 8px;color:#fbbf24;letter-spacing:.3px;">AGENDADO</span>'
+        }
+        if (isUpgrade && !isCurrent && !isPending) {
+            badgeHtml += '<span style="font-size:10px;font-weight:700;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.25);border-radius:50px;padding:2px 8px;color:#34d399;letter-spacing:.3px;">UPGRADE</span>'
         }
 
+        // Ícone do plano
+        const iconWrap = document.createElement('div')
+        iconWrap.style.cssText = [
+            `color:${nameColor}`,
+            'flex-shrink:0',
+            'opacity:.85',
+        ].join(';')
+        iconWrap.innerHTML = p.icon
+
+        // Texto central
         const textWrap = document.createElement('div')
+        textWrap.style.cssText = 'flex:1;min-width:0;'
         textWrap.innerHTML = `
-          <div style="font-size:15px;font-weight:700;color:${isCurrent ? '#10b981' : isPending ? '#fbbf24' : '#e2e8f0'};margin-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
-            ${p.label}${badgeHtml}
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px;">
+            <span style="font-size:15px;font-weight:800;color:${nameColor};letter-spacing:-.2px;">${p.label}</span>
+            <span style="font-size:11px;color:#475569;font-weight:500;">${p.tagline}</span>
+            ${badgeHtml}
           </div>
-          <div style="font-size:13px;color:#64748b;line-height:1.5;">${p.desc}</div>
+          <div style="font-size:12px;color:#475569;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.desc}</div>
+        `
+
+        // Preço (lado direito)
+        const priceWrap = document.createElement('div')
+        priceWrap.style.cssText = 'text-align:right;flex-shrink:0;'
+        priceWrap.innerHTML = `
+          <div style="font-size:16px;font-weight:800;color:${priceColor};letter-spacing:-.5px;line-height:1.1;">${_fmtMoney(p.price, 'brl')}</div>
+          <div style="font-size:10px;color:#475569;font-weight:500;margin-top:2px;">/mês</div>
         `
 
         radio.addEventListener('change', () => {
             if (!radio.checked) return
             selectedPlan = p.slug
+            // Atualiza borda do card selecionado
+            list.querySelectorAll('label').forEach(lbl => {
+                lbl.style.borderColor = ''
+                lbl.style.background  = ''
+            })
+            card.style.borderColor = 'rgba(16,185,129,0.55)'
+            card.style.background  = 'rgba(16,185,129,0.08)'
             _fetchPreview(p.slug)
         })
 
         card.appendChild(radio)
+        card.appendChild(iconWrap)
         card.appendChild(textWrap)
+        card.appendChild(priceWrap)
         list.appendChild(card)
     })
 
