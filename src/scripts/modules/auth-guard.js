@@ -688,6 +688,40 @@ const SubscriptionChecker = (() => {
                     }
                 }
 
+                // ── 2.6: Estado "congelado" — cancelado há menos de 90 dias ──────
+                // Se não há plano ativo mas existe uma assinatura Stripe cancelada
+                // dentro do período de 90 dias de retenção de dados, retorna um
+                // estado especial que exibe a tela de assinatura encerrada.
+                try {
+                    const { data: frozenSub } = await supabase
+                        .from('stripe_subscriptions')
+                        .select('plan_name, current_period_end')
+                        .eq('user_id', userId)
+                        .eq('status', 'canceled')
+                        .order('updated_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+
+                    if (frozenSub?.current_period_end) {
+                        const daysSince =
+                            (Date.now() - new Date(frozenSub.current_period_end).getTime()) / 86_400_000;
+                        if (daysSince <= 90) {
+                            return {
+                                subscription:      null,
+                                isGuest:           false,
+                                ownerId:           userId,
+                                planName:          null,
+                                ownerEmail:        null,
+                                isFrozen:          true,
+                                daysUntilDeletion: Math.max(1, Math.ceil(90 - daysSince)),
+                                frozenPlanName:    _normalizePlanName(frozenSub.plan_name),
+                            };
+                        }
+                    }
+                } catch {
+                    // Não bloqueia o fluxo — segue para verificação de convidado
+                }
+
                 // ── 3. Verifica se é convidado ────────────────────────
                 // Política RLS: member_can_read_own_membership
                 const { data: member, error: memErr } = await supabase
@@ -837,6 +871,91 @@ function _broadcastLogout(type) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  TELA CONGELADA — assinatura encerrada (dentro dos 90 dias de retenção)
+// ═══════════════════════════════════════════════════════════════
+function _renderFrozenOverlay(subData, guard) {
+    document.getElementById('_ge_frozen_overlay')?.remove();
+
+    const days     = subData.daysUntilDeletion ?? 0;
+    const planName = subData.frozenPlanName    ?? 'GranaEvo';
+    const daysText = days === 1 ? '1 dia' : `${days} dias`;
+
+    const overlay = document.createElement('div');
+    overlay.id = '_ge_frozen_overlay';
+    overlay.style.cssText = [
+        'position:fixed', 'inset:0', 'z-index:99999',
+        'background:linear-gradient(160deg,#060810 0%,#0d1117 55%,#060c14 100%)',
+        'display:flex', 'align-items:center', 'justify-content:center',
+        'padding:24px', 'font-family:system-ui,-apple-system,sans-serif',
+        'overflow-y:auto',
+    ].join(';');
+
+    overlay.innerHTML = `
+      <div style="max-width:460px;width:100%;text-align:center;padding:8px 0;">
+
+        <!-- Logo -->
+        <div style="margin-bottom:36px;">
+          <div style="font-size:26px;font-weight:900;color:#10b981;letter-spacing:-1px;line-height:1;">GranaEvo</div>
+          <div style="font-size:11px;color:#334155;margin-top:6px;letter-spacing:2.5px;text-transform:uppercase;">Gestão Financeira</div>
+        </div>
+
+        <!-- Ícone -->
+        <div style="width:76px;height:76px;border-radius:50%;background:rgba(239,68,68,0.08);border:1.5px solid rgba(239,68,68,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 28px;">
+          <svg style="width:34px;height:34px;color:#ef4444;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+
+        <!-- Título -->
+        <h1 style="font-size:22px;font-weight:800;color:#f1f5f9;margin:0 0 12px;line-height:1.3;">
+          Sua assinatura foi encerrada
+        </h1>
+
+        <!-- Descrição -->
+        <p style="font-size:14px;color:#94a3b8;margin:0 0 28px;line-height:1.75;">
+          O acesso ao plano <strong style="color:#e2e8f0;">${planName}</strong> foi encerrado.
+          Para continuar usando o GranaEvo, retome sua assinatura abaixo.
+        </p>
+
+        <!-- Aviso de exclusão -->
+        <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.22);border-radius:14px;padding:16px 20px;margin-bottom:32px;text-align:left;">
+          <div style="display:flex;gap:10px;align-items:flex-start;">
+            <span style="font-size:16px;flex-shrink:0;margin-top:1px;">⏳</span>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:5px;">Seus dados estão salvos</div>
+              <div style="font-size:13px;color:#94a3b8;line-height:1.65;">
+                Todas as suas informações permanecem seguras por mais
+                <strong style="color:#fbbf24;">${daysText}</strong>.
+                Após esse prazo, os dados serão excluídos permanentemente e não poderão ser recuperados.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CTA principal -->
+        <a href="planos.html"
+           style="display:block;width:100%;padding:15px 20px;background:linear-gradient(135deg,#10b981,#059669);border-radius:12px;color:#fff;font-size:15px;font-weight:700;text-decoration:none;margin-bottom:10px;box-sizing:border-box;transition:opacity .2s;"
+           onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
+          Retomar assinatura
+        </a>
+
+        <!-- Sair -->
+        <button id="_ge_frozen_logout"
+                style="width:100%;padding:13px 20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;color:#64748b;font-size:14px;cursor:pointer;font-family:inherit;transition:color .2s;"
+                onmouseover="this.style.color='#94a3b8'" onmouseout="this.style.color='#64748b'">
+          Sair da conta
+        </button>
+
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    document.getElementById('_ge_frozen_logout')
+        ?.addEventListener('click', () => guard.logout());
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  GUARD PRINCIPAL
 //  [FIX-EXTRA-1]   Mutex _protecting — impede protect() concorrente
 //  [FIX-EXTRA-2]   _isRedirecting em SafeRedirect — dedup de redirects
@@ -875,7 +994,11 @@ const AuthGuard = (() => {
                 const sub = await SubscriptionChecker.getActive(session.user.id);
 
                 if (!sub.subscription) {
-                    _publicAPI.forceLogout('NO_PLAN');
+                    // Contas congeladas (canceladas dentro dos 90 dias) não são
+                    // forçadas ao logout — a overlay já está visível.
+                    if (!sub.isFrozen) {
+                        _publicAPI.forceLogout('NO_PLAN');
+                    }
                     return;
                 }
 
@@ -1024,7 +1147,9 @@ const AuthGuard = (() => {
                     // [STRIPE-FALLBACK] Checks locais falharam — verifica via API autoritativa.
                     // Cobre: primeiro login Stripe, propagação de auto-link pendente,
                     // e qualquer divergência entre RLS cliente e lógica server-side.
-                    if (!subData.subscription) {
+                    // Contas "congeladas" (canceladas dentro de 90 dias) pulam este
+                    // fallback — o estado frozen já é conclusivo.
+                    if (!subData.subscription && !subData.isFrozen) {
                         try {
                             const r = await fetch('/api/check-user-access', {
                                 method:  'POST',
@@ -1056,6 +1181,12 @@ const AuthGuard = (() => {
                     }
 
                     if (!subData.subscription) {
+                        // Conta cancelada dentro dos 90 dias de retenção → tela congelada
+                        if (subData.isFrozen) {
+                            if (loader) loader.classList.add('hidden');
+                            _renderFrozenOverlay(subData, _publicAPI);
+                            return null; // finally libera o mutex
+                        }
                         throw _err('NO_PLAN', 'Sem plano ativo.');
                     }
 

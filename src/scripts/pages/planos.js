@@ -379,16 +379,106 @@ async function iniciarCheckout(rawPlanName) {
     }
 }
 
+// ── Seleção visual de plano ───────────────────────────────────────────────────
+// Quando o usuário clica em um card (ou botão), o card fica "selecionado":
+// borda verde mais espessa, outros cards ficam levemente esmaecidos, e o
+// texto do botão muda para "Assinar plano X →" antes de abrir o checkout.
+// ─────────────────────────────────────────────────────────────────────────────
+const PLAN_DISPLAY = { individual: 'Individual', casal: 'Casal', familia: 'Família' };
+let _selectedPlanCard = null;
+
+function _selectCard(plan) {
+    if (_selectedPlanCard === plan) return;
+    _selectedPlanCard = plan;
+
+    document.querySelectorAll('.plan-card[data-plan]').forEach(card => {
+        const cardPlan  = card.dataset.plan;
+        const isChosen  = cardPlan === plan;
+        const btn       = card.querySelector('.btn-plan');
+        const btnText   = btn?.querySelector('.btn-text');
+
+        if (isChosen) {
+            card.style.outline = '2px solid rgba(16,185,129,0.7)';
+            card.style.outlineOffset = '2px';
+            card.style.transform = 'translateY(-4px) scale(1.012)';
+            card.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1), outline .2s, opacity .2s';
+            card.style.opacity = '1';
+            card.style.boxShadow = '0 16px 48px rgba(16,185,129,0.18), 0 4px 16px rgba(0,0,0,0.5)';
+            if (btnText) btnText.textContent = `Assinar ${PLAN_DISPLAY[cardPlan] ?? cardPlan}`;
+        } else {
+            card.style.outline = 'none';
+            card.style.outlineOffset = '0';
+            card.style.transform = '';
+            card.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1), opacity .2s';
+            card.style.opacity = '0.6';
+            card.style.boxShadow = '';
+            if (btnText) btnText.textContent = 'Começar Agora';
+        }
+    });
+}
+
+function _clearCardSelection() {
+    _selectedPlanCard = null;
+    document.querySelectorAll('.plan-card[data-plan]').forEach(card => {
+        card.style.outline = 'none';
+        card.style.outlineOffset = '0';
+        card.style.transform = '';
+        card.style.opacity = '1';
+        card.style.boxShadow = '';
+        const btnText = card.querySelector('.btn-plan .btn-text');
+        if (btnText) btnText.textContent = 'Começar Agora';
+    });
+}
+
 function bindCheckoutButtons() {
+    // Bind nos botões de checkout
     document.querySelectorAll('.btn-plan[data-plan]').forEach(btn => {
-        // Remove listener anterior clonando apenas o botão (não o track inteiro)
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
         newBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            iniciarCheckout(newBtn.dataset.plan);
+            const plan = newBtn.dataset.plan;
+            _selectCard(plan);
+            iniciarCheckout(plan);
         });
     });
+
+    // Bind nos cards inteiros (clique fora do botão seleciona o card)
+    document.querySelectorAll('.plan-card[data-plan]').forEach(card => {
+        card.style.cursor = 'pointer';
+        card.style.transition = 'transform .3s cubic-bezier(.22,1,.36,1), opacity .2s';
+
+        card.addEventListener('click', (e) => {
+            // Ignora se o clique foi no botão (ele tem seu próprio handler)
+            if (e.target.closest('.btn-plan')) return;
+            const plan = card.dataset.plan;
+            if (_selectedPlanCard === plan) {
+                // Segundo clique no mesmo card → inicia checkout
+                iniciarCheckout(plan);
+            } else {
+                _selectCard(plan);
+            }
+        });
+
+        // Hover: leve destaque se nenhum card está selecionado
+        card.addEventListener('mouseenter', () => {
+            if (_selectedPlanCard && _selectedPlanCard !== card.dataset.plan) return;
+            if (!_selectedPlanCard) {
+                card.style.transform = 'translateY(-2px)';
+            }
+        });
+        card.addEventListener('mouseleave', () => {
+            if (_selectedPlanCard === card.dataset.plan) return;
+            card.style.transform = '';
+        });
+    });
+
+    // Clique fora dos cards desseleciona
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.plan-card') && _selectedPlanCard) {
+            _clearCardSelection();
+        }
+    }, { passive: true });
 }
 
 // ==========================================
