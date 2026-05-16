@@ -1,5 +1,10 @@
 // supabase/functions/update-stripe-plan/index.ts
-// Altera o plano (price) de uma assinatura Stripe existente.
+// Altera o plano de uma assinatura Stripe existente.
+//
+// Upgrade (plano mais caro): cobrança proporcional imediata via always_invoice.
+// Downgrade (plano mais barato): agendado para o fim do ciclo atual (estilo Netflix).
+// Cancel pending: cancela um downgrade agendado (reverte o preço no Stripe).
+//
 // Requer proxy secret + JWT válido.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
@@ -12,6 +17,7 @@ const ALLOWED_ORIGINS = [
 
 const STRIPE_ID_REGEX = /^[a-zA-Z0-9_]{4,100}$/
 const VALID_PLANS     = new Set(['individual', 'casal', 'familia'])
+const PLAN_RANK: Record<string, number> = { individual: 1, casal: 2, familia: 3 }
 
 const PLAN_ENV_MAP: Record<string, string> = {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
@@ -38,6 +44,19 @@ function getCorsHeaders(req: Request): Record<string, string> {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin',
   }
+}
+
+async function stripePost(url: string, stripeKey: string, params: URLSearchParams): Promise<Response> {
+  return fetch(url, {
+    method:  'POST',
+    headers: {
+      'Authorization':  `Bearer ${stripeKey}`,
+      'Content-Type':   'application/x-www-form-urlencoded',
+      'Stripe-Version': '2024-06-20',
+    },
+    body:   params.toString(),
+    signal: AbortSignal.timeout(15_000),
+  })
 }
 
 Deno.serve(async (req: Request) => {
@@ -68,21 +87,20 @@ Deno.serve(async (req: Request) => {
   const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token)
   if (userErr || !user?.id) return json({ error: 'Sessão inválida' }, 401)
 
-  // ── 3. Valida plano ───────────────────────────────────────────────────────
+  // ── 3. Valida body ────────────────────────────────────────────────────────
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
 
   const newPlan = ((body.newPlan as string) ?? '').toLowerCase().trim()
   if (!VALID_PLANS.has(newPlan)) return json({ error: 'Plano inválido' }, 400)
 
-  const newPriceEnvKey = PLAN_ENV_MAP[newPlan]
-  const newPriceId     = Deno.env.get(newPriceEnvKey) ?? ''
-  if (!newPriceId) return json({ error: `Price ID não configurado para plano "${newPlan}"` }, 503)
+  const newPriceId = Deno.env.get(PLAN_ENV_MAP[newPlan]) ?? ''
+  if (!newPriceId) return json({ error: `Price ID não configurado para "${newPlan}"` }, 503)
 
   // ── 4. Busca assinatura do usuário ────────────────────────────────────────
   const { data: stripeSub, error: subErr } = await supabaseAdmin
     .from('stripe_subscriptions')
-    .select('stripe_customer_id, stripe_subscription_id, plan_name, status')
+    .select('stripe_customer_id, stripe_subscription_id, plan_name, status, current_period_end, pending_plan_name')
     .eq('user_id', user.id)
     .in('status', ['active', 'trialing'])
     .order('created_at', { ascending: false })
@@ -95,14 +113,21 @@ Deno.serve(async (req: Request) => {
   if (!STRIPE_ID_REGEX.test(stripeSub.stripe_subscription_id))
     return json({ error: 'Erro interno' }, 500)
 
-  // Verifica se já é o mesmo plano
-  if ((stripeSub.plan_name ?? '').toLowerCase() === newPlan)
+  const currentPlan = (stripeSub.plan_name ?? '').toLowerCase()
+  const currentRank = PLAN_RANK[currentPlan] ?? 0
+  const newRank     = PLAN_RANK[newPlan]     ?? 0
+  const isUpgrade   = newRank > currentRank
+  const isDowngrade = newRank < currentRank
+  const isSamePlan  = currentPlan === newPlan
+
+  // ── 5. Valida que o plano realmente muda (ou cancela downgrade agendado) ──
+  if (isSamePlan && !stripeSub.pending_plan_name)
     return json({ error: `Você já está no plano ${newPlan}` }, 409)
 
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
   if (!stripeKey) return json({ error: 'Configuração indisponível' }, 503)
 
-  // ── 5. Busca subscription items no Stripe ─────────────────────────────────
+  // ── 6. Busca subscription items no Stripe ─────────────────────────────────
   let stripeSubData: Record<string, unknown>
   try {
     const r = await fetch(
@@ -118,51 +143,186 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Erro de conexão com gateway de pagamento' }, 502)
   }
 
-  const items = (stripeSubData?.items as any)?.data as any[]
+  const items  = (stripeSubData?.items as any)?.data as any[]
   if (!items || items.length === 0) return json({ error: 'Itens da assinatura não encontrados' }, 502)
 
   const itemId = items[0]?.id as string
   if (!itemId || !STRIPE_ID_REGEX.test(itemId))
     return json({ error: 'Erro interno — item ID inválido' }, 500)
 
-  // ── 6. Atualiza subscription no Stripe ────────────────────────────────────
-  const params = new URLSearchParams()
-  params.set(`items[0][id]`,    itemId)
-  params.set(`items[0][price]`, newPriceId)
-  params.set('proration_behavior', 'always_invoice')
-  params.set('metadata[plan_name]', newPlan)
+  const subUrl = `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(stripeSub.stripe_subscription_id)}`
 
-  let updateRes: Response
-  try {
-    updateRes = await fetch(
-      `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(stripeSub.stripe_subscription_id)}`,
-      {
-        method:  'POST',
-        headers: {
-          'Authorization':  `Bearer ${stripeKey}`,
-          'Content-Type':   'application/x-www-form-urlencoded',
-          'Stripe-Version': '2024-06-20',
-        },
-        body:   params.toString(),
-        signal: AbortSignal.timeout(15_000),
+  // ── 7a. Cancelar downgrade agendado ───────────────────────────────────────
+  // O usuário selecionou o próprio plano atual para reverter um downgrade agendado.
+  if (isSamePlan && stripeSub.pending_plan_name) {
+    const currentPriceId = Deno.env.get(PLAN_ENV_MAP[currentPlan]) ?? ''
+    if (!currentPriceId) return json({ error: 'Configuração indisponível' }, 503)
+
+    const cancelParams = new URLSearchParams()
+    cancelParams.set(`items[0][id]`,    itemId)
+    cancelParams.set(`items[0][price]`, currentPriceId)
+    cancelParams.set('proration_behavior', 'none')
+    cancelParams.set('metadata[plan_name]', currentPlan)
+
+    let revertRes: Response
+    try {
+      revertRes = await stripePost(subUrl, stripeKey, cancelParams)
+    } catch {
+      return json({ error: 'Erro de conexão ao reverter plano' }, 502)
+    }
+
+    if (!revertRes.ok) {
+      console.error('[update-stripe-plan] Stripe revert error:', await revertRes.text())
+      return json({ error: 'Erro ao reverter plano no Stripe' }, 502)
+    }
+
+    await supabaseAdmin
+      .from('stripe_subscriptions')
+      .update({ pending_plan_name: null, pending_plan_effective_at: null, updated_at: new Date().toISOString() })
+      .eq('stripe_subscription_id', stripeSub.stripe_subscription_id)
+
+    console.log(`[update-stripe-plan] Downgrade agendado cancelado — user: ${user.id.slice(0, 8)} plano: ${currentPlan}`)
+    return json({ success: true, newPlan: currentPlan, action: 'cancelled_pending' })
+  }
+
+  // ── 7b. Upgrade: cobrança proporcional imediata ───────────────────────────
+  if (isUpgrade) {
+    const params = new URLSearchParams()
+    params.set(`items[0][id]`,        itemId)
+    params.set(`items[0][price]`,     newPriceId)
+    params.set('proration_behavior',  'always_invoice')
+    params.set('metadata[plan_name]', newPlan)
+
+    let updateRes: Response
+    try {
+      updateRes = await stripePost(subUrl, stripeKey, params)
+    } catch {
+      return json({ error: 'Erro de conexão ao atualizar plano' }, 502)
+    }
+
+    if (!updateRes.ok) {
+      console.error('[update-stripe-plan] Stripe upgrade error:', await updateRes.text())
+      return json({ error: 'Erro ao atualizar plano no Stripe. Verifique seu método de pagamento.' }, 502)
+    }
+
+    // ── Verifica se o pagamento da invoice de proration foi aprovado ──────
+    // O Stripe atualiza a subscription mesmo que o pagamento falhe.
+    // Precisamos verificar o status do payment_intent da invoice antes de
+    // confirmar o upgrade no banco — e reverter se o pagamento foi recusado.
+    let paymentFailed = false
+    let latestInvoiceId = ''
+    try {
+      const updatedSub = await updateRes.json() as Record<string, unknown>
+      latestInvoiceId  = (updatedSub.latest_invoice as string) ?? ''
+
+      if (latestInvoiceId && STRIPE_ID_REGEX.test(latestInvoiceId)) {
+        // Expande o payment_intent para verificar status em uma única chamada
+        const invRes = await fetch(
+          `https://api.stripe.com/v1/invoices/${encodeURIComponent(latestInvoiceId)}?expand%5B%5D=payment_intent`,
+          { headers: { 'Authorization': `Bearer ${stripeKey}` }, signal: AbortSignal.timeout(10_000) }
+        )
+
+        if (invRes.ok) {
+          const invoice  = await invRes.json() as Record<string, unknown>
+          const invStatus = invoice.status as string
+          const pi        = invoice.payment_intent as Record<string, unknown> | null | undefined
+          const piStatus  = pi?.status as string | undefined
+
+          // Pagamento definitivamente recusado (falha imediata de cartão)
+          if (invStatus !== 'paid' && (piStatus === 'requires_payment_method' || piStatus === 'canceled')) {
+            paymentFailed = true
+          }
+        }
       }
-    )
-  } catch {
-    return json({ error: 'Erro de conexão ao atualizar plano' }, 502)
+    } catch {
+      // Não é possível verificar — prossegue otimisticamente
+      // O webhook invoice.payment_failed cuidará da falha caso ocorra
+    }
+
+    if (paymentFailed) {
+      // Reverte a subscription para o plano anterior
+      const revertPriceId = Deno.env.get(PLAN_ENV_MAP[currentPlan]) ?? ''
+      if (revertPriceId) {
+        const rp = new URLSearchParams()
+        rp.set(`items[0][id]`,        itemId)
+        rp.set(`items[0][price]`,     revertPriceId)
+        rp.set('proration_behavior',  'none')
+        rp.set('metadata[plan_name]', currentPlan)
+        await stripePost(subUrl, stripeKey, rp).catch(() => {})
+      }
+
+      // Cancela (void) a invoice de proration que falhou para não gerar cobranças futuras
+      if (latestInvoiceId) {
+        await fetch(`https://api.stripe.com/v1/invoices/${encodeURIComponent(latestInvoiceId)}/void`, {
+          method:  'POST',
+          headers: { 'Authorization': `Bearer ${stripeKey}`, 'Stripe-Version': '2024-06-20' },
+          signal:  AbortSignal.timeout(8_000),
+        }).catch(() => {})
+      }
+
+      console.error(`[update-stripe-plan] Pagamento recusado — user: ${user.id.slice(0, 8)} ${currentPlan}→${newPlan}`)
+      return json({
+        error:  'Pagamento recusado pelo seu banco. Verifique seu método de pagamento cadastrado e tente novamente.',
+        code:   'payment_failed',
+      }, 402)
+    }
+
+    // Pagamento aprovado — atualiza o banco
+    await supabaseAdmin
+      .from('stripe_subscriptions')
+      .update({
+        plan_name:                 newPlan,
+        pending_plan_name:         null,
+        pending_plan_effective_at: null,
+        updated_at:                new Date().toISOString(),
+      })
+      .eq('stripe_subscription_id', stripeSub.stripe_subscription_id)
+
+    console.log(`[update-stripe-plan] Upgrade concluído — user: ${user.id.slice(0, 8)} ${currentPlan}→${newPlan}`)
+    return json({ success: true, newPlan, action: 'upgraded' })
   }
 
-  if (!updateRes.ok) {
-    const errText = await updateRes.text()
-    console.error('[update-stripe-plan] Stripe error:', errText)
-    return json({ error: 'Erro ao atualizar plano no Stripe' }, 502)
+  // ── 7c. Downgrade: agendado para o fim do ciclo atual (estilo Netflix) ────
+  if (isDowngrade) {
+    const params = new URLSearchParams()
+    params.set(`items[0][id]`,       itemId)
+    params.set(`items[0][price]`,    newPriceId)
+    params.set('proration_behavior', 'none')
+    // Mantém o plan_name atual nos metadados para que o webhook NÃO altere
+    // o plano imediatamente — a troca ocorre apenas na próxima renovação.
+    params.set('metadata[plan_name]', currentPlan)
+
+    let updateRes: Response
+    try {
+      updateRes = await stripePost(subUrl, stripeKey, params)
+    } catch {
+      return json({ error: 'Erro de conexão ao agendar downgrade' }, 502)
+    }
+
+    if (!updateRes.ok) {
+      console.error('[update-stripe-plan] Stripe downgrade error:', await updateRes.text())
+      return json({ error: 'Erro ao agendar alteração de plano no Stripe' }, 502)
+    }
+
+    // Agenda a troca no banco — plan_name permanece o atual até a renovação
+    const periodEndISO = stripeSub.current_period_end
+      ? new Date(stripeSub.current_period_end).toISOString()
+      : ((stripeSubData.current_period_end as number)
+          ? new Date((stripeSubData.current_period_end as number) * 1000).toISOString()
+          : null)
+
+    await supabaseAdmin
+      .from('stripe_subscriptions')
+      .update({
+        pending_plan_name:         newPlan,
+        pending_plan_effective_at: periodEndISO,
+        updated_at:                new Date().toISOString(),
+      })
+      .eq('stripe_subscription_id', stripeSub.stripe_subscription_id)
+
+    console.log(`[update-stripe-plan] Downgrade agendado — user: ${user.id.slice(0, 8)} ${currentPlan}→${newPlan} em ${periodEndISO}`)
+    return json({ success: true, newPlan, action: 'downgrade_scheduled', effectiveAt: periodEndISO })
   }
 
-  // ── 7. Atualiza plan_name no banco ────────────────────────────────────────
-  await supabaseAdmin
-    .from('stripe_subscriptions')
-    .update({ plan_name: newPlan, updated_at: new Date().toISOString() })
-    .eq('stripe_subscription_id', stripeSub.stripe_subscription_id)
-
-  console.log(`[update-stripe-plan] Plano atualizado — user: ${user.id.slice(0, 8)} → ${newPlan}`)
-  return json({ success: true, newPlan })
+  return json({ error: 'Nenhuma alteração necessária' }, 400)
 })

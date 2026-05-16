@@ -149,7 +149,7 @@ async function init() {
     loadStripeDetails(session); // async, enriches UI when ready
 }
 
-const _FIELDS = 'plan_name, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at';
+const _FIELDS = 'plan_name, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, pending_plan_name, pending_plan_effective_at';
 
 async function loadSubscription(session) {
     const userId    = session.user.id;
@@ -205,7 +205,10 @@ function renderSubscription(sub) {
     const cancelDateEl    = document.getElementById('cancelDate');
 
     const normalized = normalizePlanName(sub.plan_name);
-    _currentPlanSlug = (sub.plan_name || '').toLowerCase().trim();
+    _currentPlanSlug           = (sub.plan_name || '').toLowerCase().trim();
+    _currentPendingPlan        = (sub.pending_plan_name || '').toLowerCase().trim();
+    _currentPendingEffectiveAt = sub.pending_plan_effective_at || null;
+
     if (planNameEl) planNameEl.textContent = normalized;
     if (planTypeEl) planTypeEl.textContent = normalized;
 
@@ -593,14 +596,39 @@ function _showToast(msg, type = 'info') {
 }
 
 // ── Modal alterar plano ───────────────────────────────────────────
-let _currentPlanSlug = ''
+let _currentPlanSlug             = ''
+let _currentPendingPlan          = ''
+let _currentPendingEffectiveAt   = null
 
+// ── Helpers do modal ──────────────────────────────────────────────
+function _fmtMoney(cents, currency = 'brl') {
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency', currency: currency.toUpperCase(),
+        minimumFractionDigits: 2,
+    }).format(cents / 100)
+}
+
+function _fmtDateFromTs(unixTs) {
+    if (!unixTs) return '—'
+    return new Date(unixTs * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+function _fmtDateFromISO(iso) {
+    if (!iso) return '—'
+    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+function _planLabel(slug) {
+    return { individual: 'Individual', casal: 'Casal', familia: 'Família' }[slug] || slug
+}
+
+// ── Modal principal de alteração de plano ─────────────────────────
 function _openPlanModal(session) {
     const overlay = document.createElement('div')
     overlay.id = 'planModalOverlay'
     overlay.style.cssText = [
         'position:fixed', 'inset:0', 'z-index:10000',
-        'background:rgba(6,8,16,0.85)', 'backdrop-filter:blur(6px)',
+        'background:rgba(6,8,16,0.88)', 'backdrop-filter:blur(8px)',
         'display:flex', 'align-items:center', 'justify-content:center',
         'padding:16px',
     ].join(';')
@@ -609,9 +637,9 @@ function _openPlanModal(session) {
     modal.style.cssText = [
         'background:linear-gradient(160deg,#0d1117 0%,#111827 100%)',
         'border:1px solid rgba(16,185,129,0.2)', 'border-radius:20px',
-        'padding:32px', 'max-width:520px', 'width:100%',
-        'box-shadow:0 32px 64px rgba(0,0,0,0.7)',
-        'max-height:90vh', 'overflow-y:auto',
+        'padding:32px', 'max-width:540px', 'width:100%',
+        'box-shadow:0 32px 80px rgba(0,0,0,0.8)',
+        'max-height:92vh', 'overflow-y:auto',
     ].join(';')
 
     const plans = [
@@ -620,60 +648,244 @@ function _openPlanModal(session) {
         { slug: 'familia',    label: 'Família',    desc: 'Para até 5 pessoas — visão consolidada da família.' },
     ]
 
+    // Aviso de downgrade agendado (se houver)
+    const pendingNoticeHtml = _currentPendingPlan
+        ? `<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px 16px;margin-bottom:20px;display:flex;gap:10px;align-items:flex-start;">
+            <span style="font-size:18px;flex-shrink:0;">⏳</span>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#fbbf24;margin-bottom:3px;">Alteração agendada</div>
+              <div style="font-size:13px;color:#94a3b8;line-height:1.5;">
+                Seu plano será alterado para <strong style="color:#f1f5f9;">${_planLabel(_currentPendingPlan)}</strong>
+                em <strong style="color:#f1f5f9;">${_fmtDateFromISO(_currentPendingEffectiveAt)}</strong>.
+                Você continua com acesso ao plano atual até essa data.
+              </div>
+            </div>
+          </div>`
+        : ''
+
     modal.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
-        <h2 style="font-size:20px;font-weight:800;color:#f1f5f9;letter-spacing:-0.3px;">Alterar Plano</h2>
-        <button id="planModalClose" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:20px;padding:4px 8px;border-radius:6px;" aria-label="Fechar">✕</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h2 style="font-size:20px;font-weight:800;color:#f1f5f9;letter-spacing:-0.3px;margin:0;">Alterar Plano</h2>
+        <button id="planModalClose" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:20px;padding:4px 8px;border-radius:6px;line-height:1;" aria-label="Fechar">✕</button>
       </div>
-      <p style="font-size:14px;color:#64748b;margin-bottom:24px;line-height:1.6;">
-        Selecione o plano desejado. A diferença de valor é calculada proporcionalmente (proration) ao tempo restante do ciclo e cobrada imediatamente.
-      </p>
-      <div id="planOptionsList" style="display:flex;flex-direction:column;gap:12px;margin-bottom:28px;"></div>
+      ${pendingNoticeHtml}
+      <div id="planOptionsList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;"></div>
+      <div id="planPreviewBox" style="display:none;border-radius:12px;padding:16px 18px;margin-bottom:20px;"></div>
       <div style="display:flex;gap:12px;">
-        <button id="planModalCancel" style="flex:1;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;">Cancelar</button>
-        <button id="planModalConfirm" style="flex:2;padding:12px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;opacity:0.4;" disabled>Confirmar alteração</button>
+        <button id="planModalCancel" style="flex:1;padding:13px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#94a3b8;font-size:14px;font-weight:600;cursor:pointer;">Cancelar</button>
+        <button id="planModalConfirm" style="flex:2;padding:13px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;opacity:0.4;transition:opacity .2s;" disabled>Selecione um plano</button>
       </div>
       <p id="planModalError" style="margin-top:12px;font-size:13px;color:#f87171;text-align:center;display:none;"></p>
     `
 
-    const list = modal.querySelector('#planOptionsList')
-    let selectedPlan = ''
+    const list        = modal.querySelector('#planOptionsList')
+    const previewBox  = modal.querySelector('#planPreviewBox')
+    const confirmBtn  = modal.querySelector('#planModalConfirm')
+    const cancelBtn   = modal.querySelector('#planModalCancel')
+    const errorEl     = modal.querySelector('#planModalError')
 
+    let selectedPlan   = ''
+    let previewData    = null
+    let previewLoading = false
+
+    // ── Renderiza o preview de valor ──────────────────────────────
+    function _renderPreview(data) {
+        previewData = data
+        previewBox.innerHTML = ''
+        previewBox.style.display = 'block'
+
+        if (data.type === 'upgrade') {
+            const amountDue = data.amountDue ?? 0
+            const newMonthly = data.newPlanUnitAmount ?? 0
+            const currency   = data.currency ?? 'brl'
+            const renewal    = _fmtDateFromTs(data.periodEnd)
+
+            previewBox.style.background = 'rgba(16,185,129,0.06)'
+            previewBox.style.border     = '1px solid rgba(16,185,129,0.25)'
+            previewBox.innerHTML = `
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#10b981;margin-bottom:10px;">Resumo do upgrade</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:13px;color:#94a3b8;">Cobrado agora (proporcional):</span>
+                <span style="font-size:16px;font-weight:800;color:#f1f5f9;">${_fmtMoney(amountDue, currency)}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <span style="font-size:13px;color:#94a3b8;">Próxima renovação (${renewal}):</span>
+                <span style="font-size:14px;font-weight:700;color:#f1f5f9;">${_fmtMoney(newMonthly, currency)}<span style="font-size:12px;font-weight:400;color:#64748b;">/mês</span></span>
+              </div>
+              <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;color:#64748b;line-height:1.5;">
+                O valor proporcional é calculado automaticamente pelo Stripe com base nos dias restantes do seu ciclo atual. A cobrança é realizada imediatamente no cartão cadastrado.
+              </div>
+            `
+            confirmBtn.disabled    = false
+            confirmBtn.style.opacity = '1'
+            confirmBtn.textContent = amountDue > 0
+                ? `Confirmar e pagar ${_fmtMoney(amountDue, currency)}`
+                : 'Confirmar upgrade'
+
+        } else if (data.type === 'downgrade') {
+            const newMonthly  = data.newPlanUnitAmount ?? 0
+            const currency    = data.currency ?? 'brl'
+            const effectiveAt = _fmtDateFromTs(data.periodEnd)
+
+            previewBox.style.background = 'rgba(245,158,11,0.06)'
+            previewBox.style.border     = '1px solid rgba(245,158,11,0.25)'
+            previewBox.innerHTML = `
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#fbbf24;margin-bottom:10px;">Resumo do downgrade</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:13px;color:#94a3b8;">Sem cobrança imediata</span>
+                <span style="font-size:16px;font-weight:800;color:#f1f5f9;">R$ 0,00</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <span style="font-size:13px;color:#94a3b8;">Novo valor a partir de ${effectiveAt}:</span>
+                <span style="font-size:14px;font-weight:700;color:#f1f5f9;">${_fmtMoney(newMonthly, currency)}<span style="font-size:12px;font-weight:400;color:#64748b;">/mês</span></span>
+              </div>
+              <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;color:#64748b;line-height:1.5;">
+                Você continua com todos os benefícios do plano atual até <strong style="color:#94a3b8;">${effectiveAt}</strong>. Nenhum valor é cobrado ou estornado agora.
+              </div>
+            `
+            confirmBtn.disabled    = false
+            confirmBtn.style.opacity = '1'
+            confirmBtn.textContent = `Agendar para ${effectiveAt}`
+
+        } else if (data.type === 'cancel_pending') {
+            previewBox.style.background = 'rgba(99,102,241,0.06)'
+            previewBox.style.border     = '1px solid rgba(99,102,241,0.25)'
+            previewBox.innerHTML = `
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#818cf8;margin-bottom:10px;">Cancelar alteração agendada</div>
+              <div style="font-size:13px;color:#94a3b8;line-height:1.6;">
+                O downgrade para <strong style="color:#f1f5f9;">${_planLabel(data.pendingPlan)}</strong> será cancelado.
+                Você permanecerá no plano <strong style="color:#10b981;">${_planLabel(data.currentPlan)}</strong> normalmente.
+              </div>
+            `
+            confirmBtn.disabled    = false
+            confirmBtn.style.opacity = '1'
+            confirmBtn.textContent = 'Cancelar alteração agendada'
+            confirmBtn.style.background = 'linear-gradient(135deg,#6366f1,#4f46e5)'
+
+        } else if (data.type === 'already_scheduled') {
+            const effectiveAt = _fmtDateFromISO(data.pendingEffectiveAt)
+            previewBox.style.background = 'rgba(255,255,255,0.03)'
+            previewBox.style.border     = '1px solid rgba(255,255,255,0.07)'
+            previewBox.innerHTML = `
+              <div style="font-size:13px;color:#64748b;line-height:1.6;">
+                Este plano já está agendado para entrar em vigor em <strong style="color:#94a3b8;">${effectiveAt}</strong>.
+                Nenhuma ação adicional é necessária.
+              </div>
+            `
+            confirmBtn.disabled    = true
+            confirmBtn.style.opacity = '0.3'
+            confirmBtn.textContent = 'Já agendado'
+        }
+    }
+
+    function _showPreviewLoading() {
+        previewBox.style.display    = 'block'
+        previewBox.style.background = 'rgba(255,255,255,0.03)'
+        previewBox.style.border     = '1px solid rgba(255,255,255,0.07)'
+        previewBox.innerHTML = `
+          <div style="display:flex;align-items:center;gap:10px;color:#64748b;font-size:13px;">
+            <div style="width:14px;height:14px;border:2px solid #10b981;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;"></div>
+            Calculando valor proporcional...
+          </div>
+        `
+        if (!document.getElementById('planModalSpinStyle')) {
+            const st = document.createElement('style')
+            st.id = 'planModalSpinStyle'
+            st.textContent = '@keyframes spin{to{transform:rotate(360deg)}}'
+            document.head.appendChild(st)
+        }
+        confirmBtn.disabled    = true
+        confirmBtn.style.opacity = '0.4'
+        confirmBtn.textContent = 'Calculando...'
+    }
+
+    function _hidePreview() {
+        previewBox.style.display = 'none'
+        previewBox.innerHTML     = ''
+        previewData = null
+        confirmBtn.disabled    = true
+        confirmBtn.style.opacity = '0.4'
+        confirmBtn.textContent = 'Selecione um plano'
+        confirmBtn.style.background = 'linear-gradient(135deg,#10b981,#059669)'
+    }
+
+    async function _fetchPreview(slug) {
+        previewLoading = true
+        _showPreviewLoading()
+        errorEl.style.display = 'none'
+        try {
+            const { data: { session: fresh } } = await supabase.auth.getSession()
+            const token = fresh?.access_token || session.access_token
+            const resp = await fetch('/api/stripe', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body:    JSON.stringify({ action: 'previewPlan', newPlan: slug }),
+                signal:  AbortSignal.timeout(20_000),
+            })
+            const data = await resp.json().catch(() => ({}))
+            if (!resp.ok) throw new Error(data.error || `Erro ${resp.status}`)
+            _renderPreview(data)
+        } catch (err) {
+            // Preview falhou: ainda permite confirmar mas avisa
+            previewBox.style.display    = 'block'
+            previewBox.style.background = 'rgba(248,113,113,0.05)'
+            previewBox.style.border     = '1px solid rgba(248,113,113,0.2)'
+            previewBox.innerHTML = `<div style="font-size:13px;color:#f87171;line-height:1.5;">Não foi possível calcular o valor exato agora. Você pode confirmar assim mesmo — o Stripe calculará e cobrará o valor correto automaticamente.</div>`
+            confirmBtn.disabled    = false
+            confirmBtn.style.opacity = '1'
+            confirmBtn.textContent = 'Confirmar alteração'
+        } finally {
+            previewLoading = false
+        }
+    }
+
+    // ── Renderiza opções de plano ─────────────────────────────────
     plans.forEach(p => {
-        const isCurrent = p.slug === _currentPlanSlug
+        const isCurrent   = p.slug === _currentPlanSlug
+        const isPending   = p.slug === _currentPendingPlan && _currentPendingPlan !== ''
+        // Se há um downgrade agendado, o usuário pode selecionar o plano atual para cancelar
+        const isSelectable = !isCurrent || (_currentPendingPlan !== '' && isCurrent)
+
         const card = document.createElement('label')
         card.style.cssText = [
-            'display:flex', 'align-items:flex-start', 'gap:14px', 'padding:16px 18px',
-            `background:${isCurrent ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)'}`,
-            `border:1px solid ${isCurrent ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.07)'}`,
-            'border-radius:12px', 'cursor:pointer', 'transition:border-color .2s',
+            'display:flex', 'align-items:flex-start', 'gap:14px', 'padding:14px 16px',
+            `background:${isCurrent ? 'rgba(16,185,129,0.07)' : isPending ? 'rgba(245,158,11,0.05)' : 'rgba(255,255,255,0.03)'}`,
+            `border:1px solid ${isCurrent ? 'rgba(16,185,129,0.3)' : isPending ? 'rgba(245,158,11,0.25)' : 'rgba(255,255,255,0.07)'}`,
+            'border-radius:12px',
+            `cursor:${isSelectable ? 'pointer' : 'default'}`,
+            'transition:border-color .2s',
         ].join(';')
 
         const radio = document.createElement('input')
         radio.type    = 'radio'
         radio.name    = 'planOption'
         radio.value   = p.slug
-        radio.checked = isCurrent
-        radio.disabled = isCurrent
+        radio.disabled = !isSelectable
         radio.style.cssText = 'margin-top:3px;accent-color:#10b981;width:16px;height:16px;flex-shrink:0;'
+
+        // Badge ao lado do nome
+        let badgeHtml = ''
+        if (isCurrent && !_currentPendingPlan) {
+            badgeHtml = '<span style="font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:50px;padding:2px 8px;color:#10b981;margin-left:6px;">Atual</span>'
+        } else if (isCurrent && _currentPendingPlan) {
+            badgeHtml = '<span style="font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:50px;padding:2px 8px;color:#10b981;margin-left:6px;">Atual</span>'
+        }
+        if (isPending) {
+            badgeHtml += `<span style="font-size:11px;font-weight:600;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);border-radius:50px;padding:2px 8px;color:#fbbf24;margin-left:4px;">Agendado</span>`
+        }
 
         const textWrap = document.createElement('div')
         textWrap.innerHTML = `
-          <div style="font-size:15px;font-weight:700;color:${isCurrent ? '#10b981' : '#e2e8f0'};margin-bottom:4px;">
-            ${p.label}${isCurrent ? ' <span style="font-size:11px;font-weight:600;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:50px;padding:2px 8px;color:#10b981;">Atual</span>' : ''}
+          <div style="font-size:15px;font-weight:700;color:${isCurrent ? '#10b981' : isPending ? '#fbbf24' : '#e2e8f0'};margin-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+            ${p.label}${badgeHtml}
           </div>
           <div style="font-size:13px;color:#64748b;line-height:1.5;">${p.desc}</div>
         `
 
         radio.addEventListener('change', () => {
-            if (!isCurrent && radio.checked) {
-                selectedPlan = p.slug
-                const confirmBtn = modal.querySelector('#planModalConfirm')
-                if (confirmBtn) {
-                    confirmBtn.disabled = false
-                    confirmBtn.style.opacity = '1'
-                }
-            }
+            if (!radio.checked) return
+            selectedPlan = p.slug
+            _fetchPreview(p.slug)
         })
 
         card.appendChild(radio)
@@ -683,19 +895,20 @@ function _openPlanModal(session) {
 
     const closeModal = () => overlay.remove()
     modal.querySelector('#planModalClose').addEventListener('click', closeModal)
-    modal.querySelector('#planModalCancel').addEventListener('click', closeModal)
+    cancelBtn.addEventListener('click', closeModal)
     overlay.addEventListener('click', e => { if (e.target === overlay) closeModal() })
 
-    const confirmBtnEl = modal.querySelector('#planModalConfirm')
-    const cancelBtnEl  = modal.querySelector('#planModalCancel')
-    const errorEl      = modal.querySelector('#planModalError')
+    // ── Confirmar ─────────────────────────────────────────────────
+    confirmBtn.addEventListener('click', async () => {
+        if (!selectedPlan || confirmBtn.disabled) return
 
-    confirmBtnEl.addEventListener('click', async () => {
-        if (!selectedPlan) return
-        confirmBtnEl.disabled  = true
-        confirmBtnEl.textContent = 'Atualizando...'
-        cancelBtnEl.disabled   = true
-        errorEl.style.display = 'none'
+        const planToSend = (previewData?.type === 'cancel_pending') ? _currentPlanSlug : selectedPlan
+
+        const prevText = confirmBtn.textContent
+        confirmBtn.disabled    = true
+        confirmBtn.textContent = 'Processando...'
+        cancelBtn.disabled     = true
+        errorEl.style.display  = 'none'
 
         try {
             const { data: { session: fresh } } = await supabase.auth.getSession()
@@ -704,24 +917,41 @@ function _openPlanModal(session) {
             const resp = await fetch('/api/stripe', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body:    JSON.stringify({ action: 'updatePlan', newPlan: selectedPlan }),
-                signal:  AbortSignal.timeout(20_000),
+                body:    JSON.stringify({ action: 'updatePlan', newPlan: planToSend }),
+                signal:  AbortSignal.timeout(25_000),
             })
 
-            const body = await resp.json().catch(() => ({}))
-            if (!resp.ok) throw new Error(body.error || `HTTP ${resp.status}`)
+            const resBody = await resp.json().catch(() => ({}))
+            if (!resp.ok) {
+                const msg = resBody.error || `Erro ${resp.status}`
+                const isPaymentFail = resp.status === 402 || resBody.code === 'payment_failed'
+                throw Object.assign(new Error(msg), { isPaymentFail })
+            }
 
             closeModal()
-            const planLabel = selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)
-            _showToast(`Plano alterado para ${planLabel} com sucesso!`, 'success')
+
+            if (resBody.action === 'cancelled_pending') {
+                _showToast(`Alteração agendada cancelada. Você permanece no plano ${_planLabel(_currentPlanSlug)}.`, 'info')
+            } else if (resBody.action === 'downgrade_scheduled') {
+                const effectiveAt = resBody.effectiveAt ? _fmtDateFromISO(resBody.effectiveAt) : '—'
+                _showToast(`Plano ${_planLabel(planToSend)} agendado para ${effectiveAt}. Sem cobrança agora.`, 'info')
+            } else {
+                _showToast(`Plano alterado para ${_planLabel(planToSend)} com sucesso!`, 'success')
+            }
+
             setTimeout(() => loadSubscription(session), 1500)
 
         } catch (err) {
-            confirmBtnEl.disabled  = false
-            confirmBtnEl.textContent = 'Confirmar alteração'
-            cancelBtnEl.disabled   = false
-            errorEl.textContent    = err.message || 'Erro ao alterar plano. Tente novamente.'
-            errorEl.style.display  = 'block'
+            confirmBtn.disabled    = false
+            confirmBtn.textContent = prevText
+            cancelBtn.disabled     = false
+            if (err.isPaymentFail) {
+                errorEl.innerHTML = `<strong>Pagamento recusado.</strong> ${err.message}`
+                errorEl.style.color = '#f87171'
+            } else {
+                errorEl.textContent = err.message || 'Erro ao alterar plano. Tente novamente.'
+            }
+            errorEl.style.display = 'block'
         }
     })
 

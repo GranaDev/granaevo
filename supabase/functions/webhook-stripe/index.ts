@@ -310,14 +310,14 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
   const metadata        = (sub.metadata as Record<string, string>) ?? {}
   const newCancelAtEnd  = (sub.cancel_at_period_end as boolean) ?? false
 
-  // Checa se cancel_at_period_end acabou de virar true para disparar email
+  // Busca dados atuais incluindo downgrade agendado
   const { data: existing } = await db
     .from('stripe_subscriptions')
-    .select('cancel_at_period_end, user_email, plan_name, current_period_start')
+    .select('cancel_at_period_end, user_email, plan_name, current_period_start, pending_plan_name, pending_plan_effective_at')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
-  const wasCancelScheduled = existing?.cancel_at_period_end === true
+  const wasCancelScheduled  = existing?.cancel_at_period_end === true
   const justScheduledCancel = newCancelAtEnd && !wasCancelScheduled
 
   const updates: Record<string, unknown> = {
@@ -330,8 +330,29 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
     updated_at:            new Date().toISOString(),
   }
   if (priceId && STRIPE_ID_REGEX.test(priceId)) updates.stripe_price_id = priceId
-  if (['individual', 'casal', 'familia'].includes(metadata.plan_name ?? ''))
+
+  // ── Lógica de plan_name: trata downgrade agendado na renovação ────────────
+  // Se há um downgrade pendente E o novo period_start atingiu (ou passou) a
+  // data de vigência → aplica o plano agendado e limpa o pending.
+  // Caso contrário, usa o plan_name dos metadados normalmente.
+  const pendingPlan      = existing?.pending_plan_name as string | undefined
+  const pendingEffectAt  = existing?.pending_plan_effective_at as string | undefined
+  const newPeriodStartTs = sub.current_period_start as number
+
+  if (pendingPlan && pendingEffectAt && typeof newPeriodStartTs === 'number') {
+    const effectiveUnix = Math.floor(new Date(pendingEffectAt).getTime() / 1000)
+    if (newPeriodStartTs >= effectiveUnix) {
+      // Novo ciclo de faturamento iniciou — aplica o plano agendado
+      updates.plan_name              = pendingPlan
+      updates.pending_plan_name      = null
+      updates.pending_plan_effective_at = null
+      console.log(`[webhook-stripe] Downgrade agendado aplicado: ${existing?.plan_name}→${pendingPlan} customer: ${customerId}`)
+    }
+    // Se ainda não chegou a data, não altera plan_name (mantém plano atual)
+  } else if (['individual', 'casal', 'familia'].includes(metadata.plan_name ?? '')) {
+    // Sem downgrade pendente: usa o metadata do Stripe normalmente
     updates.plan_name = metadata.plan_name
+  }
 
   const { error } = await db.from('stripe_subscriptions')
     .update(updates)

@@ -17,13 +17,14 @@ const ALLOWED_ORIGINS = new Set([
 ])
 
 const VALID_PLANS   = new Set(['individual', 'casal', 'familia'])
-const VALID_ACTIONS = new Set(['checkout', 'portal', 'details', 'updatePlan'])
-const RATE_LIMITS   = { checkout: 5, portal: 10, details: 20, updatePlan: 3 }
+const VALID_ACTIONS = new Set(['checkout', 'portal', 'details', 'updatePlan', 'previewPlan'])
+const RATE_LIMITS   = { checkout: 5, portal: 10, details: 20, updatePlan: 3, previewPlan: 10 }
 const EF_URLS       = {
-  checkout:   `${_SUPABASE_URL}/functions/v1/create-stripe-checkout`,
-  portal:     `${_SUPABASE_URL}/functions/v1/stripe-portal`,
-  details:    `${_SUPABASE_URL}/functions/v1/stripe-subscription-details`,
-  updatePlan: `${_SUPABASE_URL}/functions/v1/update-stripe-plan`,
+  checkout:    `${_SUPABASE_URL}/functions/v1/create-stripe-checkout`,
+  portal:      `${_SUPABASE_URL}/functions/v1/stripe-portal`,
+  details:     `${_SUPABASE_URL}/functions/v1/stripe-subscription-details`,
+  updatePlan:  `${_SUPABASE_URL}/functions/v1/update-stripe-plan`,
+  previewPlan: `${_SUPABASE_URL}/functions/v1/preview-stripe-plan`,
 }
 
 export default async function handler(req, res) {
@@ -86,8 +87,8 @@ export default async function handler(req, res) {
 
   const authHeader = req.headers['authorization'] ?? ''
 
-  // Portal, details e updatePlan SEMPRE requerem autenticação
-  if (action === 'portal' || action === 'details' || action === 'updatePlan') {
+  // Portal, details, updatePlan e previewPlan SEMPRE requerem autenticação
+  if (action === 'portal' || action === 'details' || action === 'updatePlan' || action === 'previewPlan') {
     if (!authHeader.startsWith('Bearer '))
       return res.status(401).json({ error: 'Autenticação obrigatória' })
   }
@@ -99,8 +100,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Plano inválido. Use: individual, casal ou familia' })
   }
 
-  // updatePlan: valida novo plano
-  if (action === 'updatePlan') {
+  // updatePlan e previewPlan: valida novo plano
+  if (action === 'updatePlan' || action === 'previewPlan') {
     const newPlan = typeof body.newPlan === 'string' ? body.newPlan.toLowerCase() : ''
     if (!VALID_PLANS.has(newPlan))
       return res.status(400).json({ error: 'newPlan inválido. Use: individual, casal ou familia' })
@@ -118,7 +119,7 @@ export default async function handler(req, res) {
   // Monta payload para a Edge Function
   const efPayload = action === 'checkout'
     ? { plan: (body.plan ?? '').toLowerCase(), email: body.email ?? '' }
-    : action === 'updatePlan'
+    : action === 'updatePlan' || action === 'previewPlan'
     ? { newPlan: (body.newPlan ?? '').toLowerCase() }
     : {}
 
