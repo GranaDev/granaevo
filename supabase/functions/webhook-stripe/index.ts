@@ -310,10 +310,10 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
   const metadata        = (sub.metadata as Record<string, string>) ?? {}
   const newCancelAtEnd  = (sub.cancel_at_period_end as boolean) ?? false
 
-  // Busca dados atuais incluindo downgrade agendado
+  // Busca dados atuais incluindo downgrade agendado e remoções de perfis pendentes
   const { data: existing } = await db
     .from('stripe_subscriptions')
-    .select('cancel_at_period_end, user_email, plan_name, current_period_start, pending_plan_name, pending_plan_effective_at')
+    .select('cancel_at_period_end, user_email, plan_name, current_period_start, pending_plan_name, pending_plan_effective_at, pending_profile_removals')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
@@ -343,10 +343,30 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
     const effectiveUnix = Math.floor(new Date(pendingEffectAt).getTime() / 1000)
     if (newPeriodStartTs >= effectiveUnix) {
       // Novo ciclo de faturamento iniciou — aplica o plano agendado
-      updates.plan_name              = pendingPlan
-      updates.pending_plan_name      = null
+      updates.plan_name                 = pendingPlan
+      updates.pending_plan_name         = null
       updates.pending_plan_effective_at = null
+      updates.pending_profile_removals  = null
+
       console.log(`[webhook-stripe] Downgrade agendado aplicado: ${existing?.plan_name}→${pendingPlan} customer: ${customerId}`)
+
+      // ── Desativa os perfis agendados para remoção ────────────────────────────
+      // Executado APÓS o ciclo de faturamento renovar, garantindo que o usuário
+      // teve acesso ao plano atual até o último momento pago.
+      const profileRemovals = existing?.pending_profile_removals as string[] | null
+      if (Array.isArray(profileRemovals) && profileRemovals.length > 0) {
+        db.from('account_members')
+          .update({ is_active: false })
+          .in('id', profileRemovals)
+          .then(({ error: profileErr }) => {
+            if (profileErr) {
+              console.error(`[webhook-stripe] Erro ao desativar perfis agendados — customer: ${customerId}:`, profileErr.message)
+            } else {
+              console.log(`[webhook-stripe] ${profileRemovals.length} perfis desativados — customer: ${customerId}`)
+            }
+          })
+          .catch((e: Error) => console.error('[webhook-stripe] Exceção ao desativar perfis:', e.message))
+      }
     }
     // Se ainda não chegou a data, não altera plan_name (mantém plano atual)
   } else if (['individual', 'casal', 'familia'].includes(metadata.plan_name ?? '')) {

@@ -17,7 +17,8 @@ const ALLOWED_ORIGINS = [
 
 const STRIPE_ID_REGEX = /^[a-zA-Z0-9_]{4,100}$/
 const VALID_PLANS     = new Set(['individual', 'casal', 'familia'])
-const PLAN_RANK: Record<string, number> = { individual: 1, casal: 2, familia: 3 }
+const PLAN_RANK:   Record<string, number> = { individual: 1, casal: 2, familia: 3 }
+const PLAN_LIMITS: Record<string, number> = { individual: 1, casal: 2, familia: 5 }
 
 const PLAN_ENV_MAP: Record<string, string> = {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
@@ -152,17 +153,50 @@ Deno.serve(async (req: Request) => {
     ? Math.floor(new Date(stripeSub.current_period_end).getTime() / 1000)
     : null
 
-  // ── Downgrade: sem cobrança imediata ──────────────────────────────────────
+  // ── Downgrade: sem cobrança imediata + verifica necessidade de remover perfis ─
   if (isDowngrade) {
-    const newPrice = await fetchStripePrice(newPriceId, stripeKey)
+    const newPrice  = await fetchStripePrice(newPriceId, stripeKey)
+    const newLimit  = PLAN_LIMITS[newPlan] ?? 1
+
+    // Busca membros ativos do usuário (guest accounts vinculados à conta)
+    let members: { id: string; name: string; email: string }[] = []
+    let requiresProfileRemoval = false
+    let excessCount = 0
+
+    try {
+      const { data: memberRows } = await supabaseAdmin
+        .from('account_members')
+        .select('id, member_name, member_email')
+        .eq('owner_user_id', user.id)
+        .eq('is_active', true)
+
+      const activeMembers = memberRows ?? []
+      // +1 para contar o próprio dono da conta
+      const totalProfiles = activeMembers.length + 1
+      excessCount         = Math.max(0, totalProfiles - newLimit)
+      requiresProfileRemoval = excessCount > 0
+
+      members = activeMembers.map(m => ({
+        id:    m.id    as string,
+        name:  (m.member_name  as string) || 'Convidado',
+        email: (m.member_email as string) || '',
+      }))
+    } catch (e) {
+      console.warn('[preview-stripe-plan] Erro ao buscar membros:', (e as Error).message)
+    }
+
     return json({
-      type:             'downgrade',
-      amountDue:        0,
-      currency:         newPrice?.currency ?? 'brl',
+      type:                  'downgrade',
+      amountDue:             0,
+      currency:              newPrice?.currency ?? 'brl',
       currentPlan,
       newPlan,
-      newPlanUnitAmount: newPrice?.unitAmount ?? 0,
+      newPlanUnitAmount:     newPrice?.unitAmount ?? 0,
       periodEnd,
+      requiresProfileRemoval,
+      excessCount,
+      newPlanLimit:          newLimit,
+      members,
     })
   }
 

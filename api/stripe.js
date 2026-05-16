@@ -76,7 +76,13 @@ export default async function handler(req, res) {
   let body
   try {
     const parsed = JSON.parse(raw)
-    body = { action: parsed?.action, plan: parsed?.plan, email: parsed?.email, newPlan: parsed?.newPlan }
+    body = {
+      action:           parsed?.action,
+      plan:             parsed?.plan,
+      email:            parsed?.email,
+      newPlan:          parsed?.newPlan,
+      profilesToRemove: Array.isArray(parsed?.profilesToRemove) ? parsed.profilesToRemove : [],
+    }
   } catch {
     return res.status(400).json({ error: 'JSON inválido' })
   }
@@ -119,7 +125,9 @@ export default async function handler(req, res) {
   // Monta payload para a Edge Function
   const efPayload = action === 'checkout'
     ? { plan: (body.plan ?? '').toLowerCase(), email: body.email ?? '' }
-    : action === 'updatePlan' || action === 'previewPlan'
+    : action === 'updatePlan'
+    ? { newPlan: (body.newPlan ?? '').toLowerCase(), profilesToRemove: body.profilesToRemove ?? [] }
+    : action === 'previewPlan'
     ? { newPlan: (body.newPlan ?? '').toLowerCase() }
     : {}
 

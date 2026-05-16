@@ -17,7 +17,8 @@ const ALLOWED_ORIGINS = [
 
 const STRIPE_ID_REGEX = /^[a-zA-Z0-9_]{4,100}$/
 const VALID_PLANS     = new Set(['individual', 'casal', 'familia'])
-const PLAN_RANK: Record<string, number> = { individual: 1, casal: 2, familia: 3 }
+const PLAN_RANK:   Record<string, number> = { individual: 1, casal: 2, familia: 3 }
+const PLAN_LIMITS: Record<string, number> = { individual: 1, casal: 2, familia: 5 }
 
 const PLAN_ENV_MAP: Record<string, string> = {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
@@ -91,8 +92,18 @@ Deno.serve(async (req: Request) => {
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
 
-  const newPlan = ((body.newPlan as string) ?? '').toLowerCase().trim()
+  const newPlan          = ((body.newPlan as string) ?? '').toLowerCase().trim()
+  const profilesToRemove = Array.isArray(body.profilesToRemove)
+    ? (body.profilesToRemove as string[]).filter(s => typeof s === 'string' && s.length > 0)
+    : []
+
   if (!VALID_PLANS.has(newPlan)) return json({ error: 'Plano inválido' }, 400)
+  // UUIDs de account_members — validação básica de formato
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (profilesToRemove.some(id => !UUID_RE.test(id)))
+    return json({ error: 'IDs de perfis inválidos' }, 400)
+  if (profilesToRemove.length > 10)
+    return json({ error: 'Número de perfis inválido' }, 400)
 
   const newPriceId = Deno.env.get(PLAN_ENV_MAP[newPlan]) ?? ''
   if (!newPriceId) return json({ error: `Price ID não configurado para "${newPlan}"` }, 503)
@@ -284,10 +295,58 @@ Deno.serve(async (req: Request) => {
 
   // ── 7c. Downgrade: agendado para o fim do ciclo atual (estilo Netflix) ────
   if (isDowngrade) {
+    // ── Valida remoção de perfis (server-side, anti-fraude) ───────────────
+    const newLimit     = PLAN_LIMITS[newPlan] ?? 1
+    let validatedRemovals: string[] = []
+
+    try {
+      const { count: memberCount } = await supabaseAdmin
+        .from('account_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('owner_user_id', user.id)
+        .eq('is_active', true)
+
+      const totalProfiles  = (memberCount ?? 0) + 1  // +1 para o dono
+      const excessProfiles = Math.max(0, totalProfiles - newLimit)
+
+      if (excessProfiles > 0) {
+        // Há perfis em excesso — a seleção de remoção é obrigatória
+        if (profilesToRemove.length < excessProfiles) {
+          return json({
+            error: `Selecione ${excessProfiles} perfil${excessProfiles > 1 ? 's' : ''} para remover antes de fazer o downgrade.`,
+            code: 'profile_removal_required',
+            excessCount: excessProfiles,
+          }, 400)
+        }
+
+        // Valida que cada ID pertence a um membro ativo DESTA conta
+        const { data: validMembers, error: memberErr } = await supabaseAdmin
+          .from('account_members')
+          .select('id')
+          .eq('owner_user_id', user.id)
+          .eq('is_active', true)
+          .in('id', profilesToRemove)
+
+        if (memberErr || !validMembers) return json({ error: 'Erro ao validar perfis' }, 500)
+        if (validMembers.length !== profilesToRemove.length)
+          return json({ error: 'Um ou mais perfis selecionados são inválidos' }, 400)
+
+        // Confere que a remoção não excede o que é necessário
+        const remainingAfter = totalProfiles - profilesToRemove.length
+        if (remainingAfter > newLimit)
+          return json({ error: 'Remova mais perfis para compatibilidade com o novo plano' }, 400)
+
+        validatedRemovals = profilesToRemove
+      }
+    } catch (e) {
+      console.error('[update-stripe-plan] Erro ao validar perfis:', (e as Error).message)
+      return json({ error: 'Erro interno ao verificar perfis' }, 500)
+    }
+
     const params = new URLSearchParams()
-    params.set(`items[0][id]`,       itemId)
-    params.set(`items[0][price]`,    newPriceId)
-    params.set('proration_behavior', 'none')
+    params.set(`items[0][id]`,        itemId)
+    params.set(`items[0][price]`,     newPriceId)
+    params.set('proration_behavior',  'none')
     // Mantém o plan_name atual nos metadados para que o webhook NÃO altere
     // o plano imediatamente — a troca ocorre apenas na próxima renovação.
     params.set('metadata[plan_name]', currentPlan)
@@ -314,14 +373,21 @@ Deno.serve(async (req: Request) => {
     await supabaseAdmin
       .from('stripe_subscriptions')
       .update({
-        pending_plan_name:         newPlan,
-        pending_plan_effective_at: periodEndISO,
-        updated_at:                new Date().toISOString(),
+        pending_plan_name:          newPlan,
+        pending_plan_effective_at:  periodEndISO,
+        pending_profile_removals:   validatedRemovals.length > 0 ? validatedRemovals : null,
+        updated_at:                 new Date().toISOString(),
       })
       .eq('stripe_subscription_id', stripeSub.stripe_subscription_id)
 
-    console.log(`[update-stripe-plan] Downgrade agendado — user: ${user.id.slice(0, 8)} ${currentPlan}→${newPlan} em ${periodEndISO}`)
-    return json({ success: true, newPlan, action: 'downgrade_scheduled', effectiveAt: periodEndISO })
+    console.log(`[update-stripe-plan] Downgrade agendado — user: ${user.id.slice(0, 8)} ${currentPlan}→${newPlan} em ${periodEndISO} perfis a remover: ${validatedRemovals.length}`)
+    return json({
+      success:     true,
+      newPlan,
+      action:      'downgrade_scheduled',
+      effectiveAt: periodEndISO,
+      profileRemovalsScheduled: validatedRemovals.length,
+    })
   }
 
   return json({ error: 'Nenhuma alteração necessária' }, 400)
