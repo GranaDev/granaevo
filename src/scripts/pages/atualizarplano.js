@@ -781,7 +781,7 @@ function _openPlanModal(session) {
     }
 
     function _setHtml(html) {
-        modal.innerHTML = html
+        modal.innerHTML = `<div class="gm-step-wrap">${html}</div>`
         modal.querySelector('[data-close]')?.addEventListener('click', _close)
     }
 
@@ -1027,18 +1027,51 @@ function _openPlanModal(session) {
           </label>`).join('')
 
         _setHtml(`
-          ${_hdr(`Remover Perfis — ${excessCount} necessário${excessCount > 1 ? 's' : ''}`, true)}
+          ${_hdr(`Perfis para remover — ${excessCount} necessário${excessCount > 1 ? 's' : ''}`, true)}
+
           <div class="gm-danger-box">
             <div class="gm-danger-title">⚠️ Redução de perfis necessária</div>
             <div class="gm-danger-text">
               O plano <strong>${_planLabel(_selectedPlan)}</strong> permite até
               <strong>${newPlanLimit} perfil${newPlanLimit > 1 ? 's' : ''}</strong>.
-              Selecione <strong>${excessCount} perfil${excessCount > 1 ? 's' : ''}</strong> para
-              desativar quando o novo plano entrar em vigor. Você continua com acesso total até a próxima renovação.
+              Selecione <strong>${excessCount} perfil${excessCount > 1 ? 's' : ''}</strong> para desativar
+              na próxima renovação. Você mantém acesso completo até lá.
             </div>
           </div>
+
           <div class="gm-members-list">${membersHtml}</div>
+
           <p id="profileInfo" class="gm-profile-info">Selecione ${excessCount} perfil${excessCount > 1 ? 's' : ''} para continuar</p>
+
+          <div class="gm-backup-box">
+            <div class="gm-backup-title">🔒 Política de backup — seus dados estão protegidos</div>
+            <div class="gm-tl">
+              <div class="gm-tl-node"><div class="gm-tl-dot gm-tl-dot--now"></div><span class="gm-tl-lbl">Agora</span></div>
+              <div class="gm-tl-line"></div>
+              <div class="gm-tl-node"><div class="gm-tl-dot gm-tl-dot--mid"></div><span class="gm-tl-lbl">Renovação</span></div>
+              <div class="gm-tl-line"></div>
+              <div class="gm-tl-node"><div class="gm-tl-dot gm-tl-dot--mid"></div><span class="gm-tl-lbl">90 dias</span></div>
+              <div class="gm-tl-line"></div>
+              <div class="gm-tl-node"><div class="gm-tl-dot gm-tl-dot--end"></div><span class="gm-tl-lbl">Exclusão</span></div>
+            </div>
+            <div class="gm-backup-text">
+              Os perfis selecionados serão <strong>desativados</strong> — não excluídos imediatamente.
+              Todos os dados ficam em backup por <strong>90 dias</strong> a partir da renovação.
+              Se você retornar ao plano <strong>${_planLabel(_currentPlanSlug)}</strong> ou superior
+              dentro desse período, os perfis são <strong>restaurados automaticamente</strong>,
+              sem nenhuma ação sua. Após 90 dias, os dados são excluídos permanentemente.
+            </div>
+          </div>
+
+          <label class="gm-agree">
+            <input type="checkbox" id="agreeCheck">
+            <span class="gm-agree-txt">
+              <strong>Declaro que li e estou de acordo</strong> com a remoção dos perfis selecionados
+              e com a <strong>política de retenção de dados por 90 dias</strong>, após os quais
+              os dados serão excluídos permanentemente.
+            </span>
+          </label>
+
           <div class="gm-btn-group">
             <button data-back class="gm-btn-secondary">← Voltar</button>
             <button id="profilesContinue" disabled class="gm-btn-primary">Continuar →</button>
@@ -1048,6 +1081,13 @@ function _openPlanModal(session) {
         modal.querySelector('[data-back]')?.addEventListener('click', _renderStep1)
         const continueBtn = modal.querySelector('#profilesContinue')
         const infoEl      = modal.querySelector('#profileInfo')
+        const agreeCheck  = modal.querySelector('#agreeCheck')
+
+        function _updateContinue() {
+            const profilesOk = _selectedForRemoval.size >= excessCount
+            const agreed     = agreeCheck?.checked ?? false
+            if (continueBtn) continueBtn.disabled = !(profilesOk && agreed)
+        }
 
         modal.querySelectorAll('.member-option input[type=checkbox]').forEach(cb => {
             cb.addEventListener('change', () => {
@@ -1061,7 +1101,6 @@ function _openPlanModal(session) {
                 }
                 const count = _selectedForRemoval.size
                 const ok    = count >= excessCount
-                if (continueBtn) continueBtn.disabled = !ok
                 if (infoEl) {
                     infoEl.textContent = ok
                         ? `✓ ${count} perfil${count > 1 ? 's' : ''} selecionado${count > 1 ? 's' : ''}`
@@ -1069,9 +1108,11 @@ function _openPlanModal(session) {
                     if (ok) infoEl.classList.add('pi-ok')
                     else    infoEl.classList.remove('pi-ok')
                 }
+                _updateContinue()
             })
         })
 
+        agreeCheck?.addEventListener('change', _updateContinue)
         continueBtn?.addEventListener('click', _renderStep3)
     }
 
@@ -1231,24 +1272,93 @@ function _openPlanModal(session) {
                 return
             }
 
-            // ── Sucesso ───────────────────────────────────────────
-            _close()
-            if (data.action === 'downgrade_scheduled') {
-                const d        = _fmtDateFromISO(data.effectiveAt)
-                const profNote = (data.profileRemovalsScheduled > 0)
-                    ? ` ${data.profileRemovalsScheduled} perfil${data.profileRemovalsScheduled > 1 ? 's' : ''} será desativado na mesma data.` : ''
-                _showToast(`Plano ${_planLabel(planToSend)} agendado para ${d}.${profNote}`, 'info')
-            } else if (data.action === 'cancelled_pending') {
-                _showToast(`Alteração agendada cancelada. Você permanece no plano ${_planLabel(_currentPlanSlug)}.`, 'info')
-            } else {
-                _showToast(`Upgrade para ${_planLabel(planToSend)} realizado com sucesso!`, 'success')
-            }
-            setTimeout(() => loadSubscription(session), 1500)
+            // ── Sucesso: mostra recibo ────────────────────────────
+            _renderReceipt(planToSend, data)
 
         } catch (err) {
             btn.disabled = false; btn.innerHTML = prevLabel
             if (errorEl) { errorEl.textContent = err.message || 'Erro de conexão. Tente novamente.'; errorEl.classList.add('visible') }
         }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // RECIBO — tela de confirmação animada após sucesso
+    // ════════════════════════════════════════════════════════════
+    function _renderReceipt(planToSend, data) {
+        const isUpgrade   = _previewData?.type === 'upgrade'
+        const isDowngrade = _previewData?.type === 'downgrade'
+        const curData     = plans.find(p => p.slug === _currentPlanSlug)
+        const newData     = plans.find(p => p.slug === planToSend)
+
+        const now = new Date().toLocaleDateString('pt-BR', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        })
+        const ref = `GE-${Date.now().toString(36).toUpperCase().slice(-8)}`
+
+        let title, sub, rows
+
+        if (isUpgrade) {
+            title = 'Upgrade realizado!'
+            sub   = `Bem-vindo ao plano ${_planLabel(planToSend)}`
+            rows  = [
+                { k: 'Plano anterior',    v: _planLabel(_currentPlanSlug) },
+                { k: 'Novo plano',        v: _planLabel(planToSend),                                    c: 'gm-receipt-val--green' },
+                { k: 'Cobrado agora',     v: _fmtMoney(_previewData?.amountDue ?? 0, _previewData?.currency || 'brl'), c: 'gm-receipt-val--big' },
+                { k: 'Próxima renovação', v: _fmtDateFromTs(_previewData?.periodEnd) },
+                { k: 'Novo valor mensal', v: _fmtMoney(newData?.price ?? 0, 'brl') },
+            ]
+        } else if (isDowngrade) {
+            const effectDate = _fmtDateFromISO(data.effectiveAt) || _fmtDateFromTs(_previewData?.periodEnd)
+            title = 'Downgrade agendado!'
+            sub   = 'Você mantém todos os benefícios até a renovação'
+            rows  = [
+                { k: 'Plano atual',         v: _planLabel(_currentPlanSlug) },
+                { k: 'Novo plano em',       v: effectDate,                        c: 'gm-receipt-val--amber' },
+                { k: 'Cobrança imediata',   v: 'Nenhuma' },
+                { k: 'Novo valor mensal',   v: _fmtMoney(newData?.price ?? 0, 'brl') },
+                ...(data.profileRemovalsScheduled > 0
+                    ? [{ k: 'Perfis desativados em', v: effectDate, c: 'gm-receipt-val--amber' }] : []),
+            ]
+        } else {
+            title = 'Alteração cancelada!'
+            sub   = `Você permanece no plano ${_planLabel(_currentPlanSlug)}`
+            rows  = [
+                { k: 'Plano mantido', v: _planLabel(_currentPlanSlug), c: 'gm-receipt-val--green' },
+                { k: 'Alteração',     v: 'Agendamento cancelado' },
+            ]
+        }
+
+        const rowsHtml = rows.map(r => `
+          <div class="gm-receipt-row">
+            <span class="gm-receipt-key">${r.k}</span>
+            <span class="gm-receipt-val ${r.c || ''}">${r.v}</span>
+          </div>`).join('')
+
+        _setHtml(`
+          <div class="gm-receipt">
+            <div class="gm-receipt-icon">
+              <svg class="gm-receipt-svg" viewBox="0 0 52 52" fill="none">
+                <circle class="gm-receipt-circle" cx="26" cy="26" r="25"/>
+                <path class="gm-receipt-tick" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+              </svg>
+              <div class="gm-receipt-pulse"></div>
+            </div>
+            <div class="gm-receipt-title">${title}</div>
+            <div class="gm-receipt-sub">${sub}</div>
+            <div class="gm-receipt-card">
+              <div class="gm-receipt-head">Comprovante da transação</div>
+              ${rowsHtml}
+            </div>
+            <div class="gm-receipt-ref">${now} · Ref: ${ref}</div>
+            <button id="receiptClose" class="gm-receipt-close">Concluído ✓</button>
+          </div>
+        `)
+
+        modal.querySelector('#receiptClose')?.addEventListener('click', () => {
+            _close()
+            setTimeout(() => loadSubscription(session), 500)
+        })
     }
 
     // ════════════════════════════════════════════════════════════
