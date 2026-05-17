@@ -436,6 +436,23 @@ async function loadStripeDetails(session) {
                 pending_plan_name:         _currentPendingPlan        || null,
                 pending_plan_effective_at: _currentPendingEffectiveAt || null,
             });
+
+            // Atualiza também o cartão 3D no topo da página
+            const isCancelAtEnd = subscription?.cancel_at_period_end ?? false
+            const dateFmt       = formatDate(derivedPeriodEnd)
+            const nextBillingEl = document.getElementById('nextBilling')
+            const cancelDateEl  = document.getElementById('cancelDate')
+            const cancelWrap    = document.getElementById('cancelWrap')
+            const nextWrap      = document.getElementById('nextBillingWrap')
+            if (isCancelAtEnd) {
+                if (cancelDateEl)  cancelDateEl.textContent = dateFmt
+                if (cancelWrap)    cancelWrap.hidden         = false
+                if (nextWrap)      nextWrap.hidden           = true
+            } else {
+                if (nextBillingEl && (nextBillingEl.textContent === '—' || !nextBillingEl.textContent.trim())) {
+                    nextBillingEl.textContent = dateFmt
+                }
+            }
         }
 
         _updateMemberSince(subscription);
@@ -688,6 +705,34 @@ function _showToast(msg, type = 'info') {
 let _currentPlanSlug             = ''
 let _currentPendingPlan          = ''
 let _currentPendingEffectiveAt   = null
+
+// Catálogo de planos (preços em centavos)
+const plans = [
+    {
+        slug:    'individual',
+        label:   'Individual',
+        price:   1999,
+        tagline: '1 perfil de usuário',
+        desc:    'Controle total das suas finanças pessoais. Dashboard completo, metas e relatórios.',
+        icon:    `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>`,
+    },
+    {
+        slug:    'casal',
+        label:   'Casal',
+        price:   3499,
+        tagline: '2 perfis de usuário',
+        desc:    'Finanças compartilhadas para dois. Metas em conjunto e visão unificada do orçamento.',
+        icon:    `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="15" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6"/><path d="M22 20c0-3.3-3.1-6-7-6"/><path d="M9 14c1-.4 2.1-.7 3-.7s2 .3 3 .7"/></svg>`,
+    },
+    {
+        slug:    'familia',
+        label:   'Família',
+        price:   5499,
+        tagline: '4 perfis de usuário',
+        desc:    'Gestão financeira familiar completa. Até 4 membros com dashboards individuais.',
+        icon:    `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="7" r="3"/><circle cx="16" cy="7" r="3"/><path d="M2 19c0-3 2.7-5 6-5h8c3.3 0 6 2 6 5"/><circle cx="12" cy="14" r="2"/><path d="M9 19c0-1.7 1.3-3 3-3s3 1.3 3 3"/></svg>`,
+    },
+]
 
 // ── Modal de Alteração de Plano (CSP-safe: zero inline styles) ────────
 function _openPlanModal(session) {
