@@ -437,7 +437,8 @@ async function loadStripeDetails(session) {
                 pending_plan_effective_at: _currentPendingEffectiveAt || null,
             });
 
-            _derivedPeriodEnd = derivedPeriodEnd  // expõe para o modal usar como fallback
+            _derivedPeriodEnd   = derivedPeriodEnd    // expõe para o modal usar como fallback
+            _derivedPeriodStart = derivedPeriodStart  // expõe para cálculo de proration local
 
             // Atualiza o cartão 3D no topo da página — preenche AMBOS os elementos
             // independentemente de qual esteja visível (show/hide já definido em renderSubscription)
@@ -699,6 +700,7 @@ let _currentPlanSlug             = ''
 let _currentPendingPlan          = ''
 let _currentPendingEffectiveAt   = null
 let _derivedPeriodEnd            = null  // Unix timestamp — fallback para data da alteração agendada
+let _derivedPeriodStart          = null  // Unix timestamp — fallback para cálculo de proration
 
 // ── Helpers do modal ─────────────────────────────────────────────
 function _fmtMoney(cents, currency = 'brl') {
@@ -961,6 +963,39 @@ function _openPlanModal(session) {
         if (!preview) {
             _showToast('Erro ao calcular valores. Tente novamente.', 'error')
             return
+        }
+
+        // ── Fallback de proration local ───────────────────────────
+        // O Edge Function calcula com dados do banco. Se o banco tem datas null,
+        // amountDue volta 0. Recalculamos aqui com os dados reais da Stripe
+        // usando a fórmula idêntica à do Stripe: round(fração×novo) - round(fração×atual)
+        if (preview.type === 'upgrade' && preview.amountDue === 0 && _derivedPeriodEnd) {
+            const nowSecs   = Math.floor(Date.now() / 1000)
+            const endSecs   = _derivedPeriodEnd
+            const startSecs = _derivedPeriodStart ?? (endSecs - 30 * 24 * 3600)
+            const totalSecs = endSecs - startSecs
+            const remaining = Math.max(0, endSecs - nowSecs)
+            const fraction  = totalSecs > 0 ? remaining / totalSecs : 0
+
+            if (fraction > 0) {
+                const curPlanData = plans.find(p => p.slug === _currentPlanSlug)
+                const newPlanData = plans.find(p => p.slug === planSlug)
+                if (curPlanData && newPlanData) {
+                    const credit = Math.round(curPlanData.price * fraction)
+                    const charge = Math.round(newPlanData.price * fraction)
+                    preview.amountDue    = Math.max(0, charge - credit)
+                    preview.creditAmount = credit
+                    preview.chargeAmount = charge
+                    preview.periodEnd    = endSecs
+                    preview.currency     = preview.currency || 'brl'
+                    console.log(`[modal] proration local: fraction=${fraction.toFixed(4)} amountDue=${preview.amountDue}`)
+                }
+            }
+        }
+
+        // Para downgrade/cancel_pending, garante que periodEnd está preenchido
+        if ((preview.type === 'downgrade' || preview.type === 'cancel_pending') && !preview.periodEnd && _derivedPeriodEnd) {
+            preview.periodEnd = _derivedPeriodEnd
         }
 
         _selectedPlan = planSlug
