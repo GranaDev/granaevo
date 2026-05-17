@@ -1464,7 +1464,9 @@ function _openPlanModal(session) {
                 { k: 'Novo valor mensal', v: _fmtMoney(newData?.price ?? 0, 'brl') },
             ]
         } else if (isDowngrade) {
-            const effectDate = _fmtDateFromISO(data.effectiveAt) || _fmtDateFromTs(_previewData?.periodEnd)
+            const effectDate = data.effectiveAt
+                ? _fmtDateFromISO(data.effectiveAt)
+                : _fmtDateFromTs(_previewData?.periodEnd)
             title = 'Downgrade agendado!'
             sub   = 'Você mantém todos os benefícios até a renovação'
             rows  = [
