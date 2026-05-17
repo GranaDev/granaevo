@@ -17,14 +17,15 @@ const ALLOWED_ORIGINS = new Set([
 ])
 
 const VALID_PLANS   = new Set(['individual', 'casal', 'familia'])
-const VALID_ACTIONS = new Set(['checkout', 'portal', 'details', 'updatePlan', 'previewPlan'])
-const RATE_LIMITS   = { checkout: 5, portal: 10, details: 20, updatePlan: 3, previewPlan: 10 }
+const VALID_ACTIONS = new Set(['checkout', 'portal', 'details', 'updatePlan', 'previewPlan', 'changeRemovalList'])
+const RATE_LIMITS   = { checkout: 5, portal: 10, details: 20, updatePlan: 3, previewPlan: 10, changeRemovalList: 5 }
 const EF_URLS       = {
-  checkout:    `${_SUPABASE_URL}/functions/v1/create-stripe-checkout`,
-  portal:      `${_SUPABASE_URL}/functions/v1/stripe-portal`,
-  details:     `${_SUPABASE_URL}/functions/v1/stripe-subscription-details`,
-  updatePlan:  `${_SUPABASE_URL}/functions/v1/update-stripe-plan`,
-  previewPlan: `${_SUPABASE_URL}/functions/v1/preview-stripe-plan`,
+  checkout:          `${_SUPABASE_URL}/functions/v1/create-stripe-checkout`,
+  portal:            `${_SUPABASE_URL}/functions/v1/stripe-portal`,
+  details:           `${_SUPABASE_URL}/functions/v1/stripe-subscription-details`,
+  updatePlan:        `${_SUPABASE_URL}/functions/v1/update-stripe-plan`,
+  previewPlan:       `${_SUPABASE_URL}/functions/v1/preview-stripe-plan`,
+  changeRemovalList: `${_SUPABASE_URL}/functions/v1/update-stripe-plan`,
 }
 
 export default async function handler(req, res) {
@@ -93,8 +94,9 @@ export default async function handler(req, res) {
 
   const authHeader = req.headers['authorization'] ?? ''
 
-  // Portal, details, updatePlan e previewPlan SEMPRE requerem autenticação
-  if (action === 'portal' || action === 'details' || action === 'updatePlan' || action === 'previewPlan') {
+  // Ações autenticadas (todas exceto checkout)
+  const AUTHED_ACTIONS = new Set(['portal', 'details', 'updatePlan', 'previewPlan', 'changeRemovalList'])
+  if (AUTHED_ACTIONS.has(action)) {
     if (!authHeader.startsWith('Bearer '))
       return res.status(401).json({ error: 'Autenticação obrigatória' })
   }
@@ -113,6 +115,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'newPlan inválido. Use: individual, casal ou familia' })
   }
 
+  // changeRemovalList: valida array de perfis
+  if (action === 'changeRemovalList') {
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const profiles = body.profilesToRemove ?? []
+    if (!Array.isArray(profiles) || profiles.length > 10 || profiles.some(id => !UUID_RE.test(id)))
+      return res.status(400).json({ error: 'profilesToRemove inválido' })
+  }
+
   const ip = req.headers['x-real-ip']
     ?? (req.headers['x-forwarded-for'] ?? '').split(',')[0].trim()
     ?? 'unknown'
@@ -129,6 +139,8 @@ export default async function handler(req, res) {
     ? { newPlan: (body.newPlan ?? '').toLowerCase(), profilesToRemove: body.profilesToRemove ?? [] }
     : action === 'previewPlan'
     ? { newPlan: (body.newPlan ?? '').toLowerCase() }
+    : action === 'changeRemovalList'
+    ? { action: 'changeRemovalList', profilesToRemove: body.profilesToRemove ?? [] }
     : {}
 
   const efHeaders = {

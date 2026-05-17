@@ -313,7 +313,7 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
   // Busca dados atuais incluindo downgrade agendado e remoções de perfis pendentes
   const { data: existing } = await db
     .from('stripe_subscriptions')
-    .select('cancel_at_period_end, user_email, plan_name, current_period_start, pending_plan_name, pending_plan_effective_at, pending_profile_removals')
+    .select('user_id, cancel_at_period_end, user_email, plan_name, current_period_start, pending_plan_name, pending_plan_effective_at, pending_profile_removals')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
@@ -350,22 +350,50 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
 
       console.log(`[webhook-stripe] Downgrade agendado aplicado: ${existing?.plan_name}→${pendingPlan} customer: ${customerId}`)
 
-      // ── Desativa os perfis agendados para remoção ────────────────────────────
+      // ── Desativa os perfis agendados e ativa seus backups ────────────────────
       // Executado APÓS o ciclo de faturamento renovar, garantindo que o usuário
       // teve acesso ao plano atual até o último momento pago.
       const profileRemovals = existing?.pending_profile_removals as string[] | null
-      if (Array.isArray(profileRemovals) && profileRemovals.length > 0) {
+      const ownerUserId     = existing?.user_id as string | null
+      if (Array.isArray(profileRemovals) && profileRemovals.length > 0 && ownerUserId) {
+        // 1. Desativa membros em account_members
         db.from('account_members')
-          .update({ is_active: false })
+          .update({ is_active: false, updated_at: new Date().toISOString() })
           .in('id', profileRemovals)
+          .eq('owner_user_id', ownerUserId)
           .then(({ error: profileErr }) => {
             if (profileErr) {
-              console.error(`[webhook-stripe] Erro ao desativar perfis agendados — customer: ${customerId}:`, profileErr.message)
+              console.error(`[webhook-stripe] Erro ao desativar perfis — customer: ${customerId}:`, profileErr.message)
             } else {
               console.log(`[webhook-stripe] ${profileRemovals.length} perfis desativados — customer: ${customerId}`)
             }
           })
           .catch((e: Error) => console.error('[webhook-stripe] Exceção ao desativar perfis:', e.message))
+
+        // 2. Ativa os backups correspondentes com prazo de 90 dias
+        const now90    = new Date()
+        now90.setDate(now90.getDate() + 90)
+        const expiresAt = now90.toISOString()
+        const activatedAt = new Date().toISOString()
+
+        db.from('profile_backups')
+          .update({
+            status:           'active',
+            activated_at:     activatedAt,
+            backup_expires_at: expiresAt,
+            updated_at:       activatedAt,
+          })
+          .eq('owner_user_id', ownerUserId)
+          .eq('status', 'pending')
+          .in('original_member_id', profileRemovals)
+          .then(({ error: backupErr }) => {
+            if (backupErr) {
+              console.error(`[webhook-stripe] Erro ao ativar backups — customer: ${customerId}:`, backupErr.message)
+            } else {
+              console.log(`[webhook-stripe] Backups ativados (90 dias) — customer: ${customerId} expires: ${expiresAt}`)
+            }
+          })
+          .catch((e: Error) => console.error('[webhook-stripe] Exceção ao ativar backups:', e.message))
       }
     }
     // Se ainda não chegou a data, não altera plan_name (mantém plano atual)

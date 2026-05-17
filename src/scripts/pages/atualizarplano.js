@@ -149,7 +149,7 @@ async function init() {
     loadStripeDetails(session); // async, enriches UI when ready
 }
 
-const _FIELDS = 'plan_name, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, pending_plan_name, pending_plan_effective_at';
+const _FIELDS = 'plan_name, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, pending_plan_name, pending_plan_effective_at, pending_profile_removals';
 
 async function loadSubscription(session) {
     const userId    = session.user.id;
@@ -208,6 +208,7 @@ function renderSubscription(sub) {
     _currentPlanSlug           = (sub.plan_name || '').toLowerCase().trim();
     _currentPendingPlan        = (sub.pending_plan_name || '').toLowerCase().trim();
     _currentPendingEffectiveAt = sub.pending_plan_effective_at || null;
+    _currentPendingRemovals    = Array.isArray(sub.pending_profile_removals) ? sub.pending_profile_removals : [];
 
     if (planNameEl) planNameEl.textContent = normalized;
     if (planTypeEl) planTypeEl.textContent = normalized;
@@ -699,6 +700,7 @@ function _showToast(msg, type = 'info') {
 let _currentPlanSlug             = ''
 let _currentPendingPlan          = ''
 let _currentPendingEffectiveAt   = null
+let _currentPendingRemovals      = []    // UUIDs dos perfis agendados para remoção
 let _derivedPeriodEnd            = null  // Unix timestamp — fallback para data da alteração agendada
 let _derivedPeriodStart          = null  // Unix timestamp — fallback para cálculo de proration
 
@@ -936,9 +938,17 @@ function _openPlanModal(session) {
               </div>`
         }).join('')
 
+        // Botão "Alterar perfil que será excluído" — visível quando há downgrade com remoções agendadas
+        const changeRemovalBtn = (_currentPendingPlan && _currentPendingRemovals.length > 0)
+            ? `<button id="changeRemovalBtn" class="gm-change-removal-btn">
+                 ✏️ Alterar perfil que será excluído no downgrade
+               </button>`
+            : ''
+
         _setHtml(`
           ${_hdr('Gerenciar Plano')}
           ${currentBanner}
+          ${changeRemovalBtn}
           <div class="gm-section-label">Alterar para:</div>
           ${cardsHtml}
           <button data-close class="gm-cancel-btn">Cancelar</button>
@@ -947,6 +957,151 @@ function _openPlanModal(session) {
         modal.querySelectorAll('.modal-plan-card').forEach(card => {
             card.addEventListener('click', () => _onPlanSelect(card.dataset.plan, card))
         })
+
+        modal.querySelector('#changeRemovalBtn')?.addEventListener('click', _renderChangeRemoval)
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // ALTERAR PERFIL QUE SERÁ EXCLUÍDO NO DOWNGRADE AGENDADO
+    // ════════════════════════════════════════════════════════════
+    async function _renderChangeRemoval() {
+        // Carrega membros ativos do backend (via previewPlan do plano target)
+        let members      = []
+        let excessCount  = 1
+        let newPlanLimit = 1
+
+        _setHtml(`
+          ${_hdr('Alterar perfil a remover', true)}
+          <div class="gm-step-loading"><span class="gm-spin"></span> Carregando perfis...</div>
+        `)
+        modal.querySelector('[data-back]')?.addEventListener('click', _renderStep1)
+
+        try {
+            const token = await _getToken()
+            const resp  = await fetch('/api/stripe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body:   JSON.stringify({ action: 'previewPlan', newPlan: _currentPendingPlan }),
+                signal: AbortSignal.timeout(15_000),
+            })
+            const data = await resp.json().catch(() => ({}))
+            if (resp.ok && data.members?.length) {
+                members      = data.members
+                excessCount  = data.excessCount  ?? 1
+                newPlanLimit = data.newPlanLimit  ?? 1
+            }
+        } catch { /* mostra lista vazia com mensagem */ }
+
+        const selectedIds = new Set(_currentPendingRemovals)
+
+        const membersHtml = members.map(m => {
+            const isCurrentlySelected = selectedIds.has(m.id)
+            return `
+              <label class="member-option ${isCurrentlySelected ? 'mo-checked' : ''}" data-id="${m.id}">
+                <input type="checkbox" class="mo-cb" value="${m.id}" ${isCurrentlySelected ? 'checked' : ''}>
+                <div class="mo-info">
+                  <div class="mo-name">${m.name}</div>
+                  <div class="mo-email">${m.email}</div>
+                </div>
+                <div class="mo-dot"></div>
+              </label>`
+        }).join('')
+
+        const noMembersHtml = members.length === 0
+            ? `<div class="gm-danger-text">Não foi possível carregar os perfis. Tente novamente.</div>` : ''
+
+        _setHtml(`
+          ${_hdr('Alterar perfil a remover', true)}
+          <div class="gm-danger-box">
+            <div class="gm-danger-title">✏️ Alterar seleção de perfis</div>
+            <div class="gm-danger-text">
+              Selecione quais perfis serão desativados quando o plano
+              <strong>${_planLabel(_currentPendingPlan)}</strong> entrar em vigor.
+              O backup anterior será substituído. Dados ficam salvos por <strong>90 dias</strong>.
+            </div>
+          </div>
+          ${noMembersHtml}
+          <div class="gm-members-list">${membersHtml}</div>
+          <p id="changeInfo" class="gm-profile-info">
+            Selecione ${excessCount} perfil${excessCount > 1 ? 's' : ''} para remover
+          </p>
+          <div class="gm-btn-group">
+            <button data-back class="gm-btn-secondary">← Voltar</button>
+            <button id="confirmChangeBtn" disabled class="gm-btn-primary">Confirmar alteração</button>
+          </div>
+        `)
+
+        modal.querySelector('[data-back]')?.addEventListener('click', _renderStep1)
+
+        const confirmBtn = modal.querySelector('#confirmChangeBtn')
+        const infoEl     = modal.querySelector('#changeInfo')
+        const newSelected = new Set(_currentPendingRemovals)
+
+        function _updateConfirm() {
+            const ok = newSelected.size >= excessCount
+            if (confirmBtn) confirmBtn.disabled = !ok
+            if (infoEl) {
+                const count = newSelected.size
+                infoEl.textContent = ok
+                    ? `✓ ${count} perfil${count > 1 ? 's' : ''} selecionado${count > 1 ? 's' : ''}`
+                    : `Selecione mais ${excessCount - count} perfil${excessCount - count > 1 ? 's' : ''}`
+                if (ok) infoEl.classList.add('pi-ok')
+                else    infoEl.classList.remove('pi-ok')
+            }
+        }
+
+        modal.querySelectorAll('.member-option input[type=checkbox]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const lbl = cb.closest('.member-option')
+                if (cb.checked) {
+                    newSelected.add(cb.value)
+                    lbl?.classList.add('mo-checked')
+                } else {
+                    newSelected.delete(cb.value)
+                    lbl?.classList.remove('mo-checked')
+                }
+                _updateConfirm()
+            })
+        })
+
+        _updateConfirm()
+
+        confirmBtn?.addEventListener('click', () => _doChangeRemoval([...newSelected]))
+    }
+
+    async function _doChangeRemoval(newProfilesToRemove) {
+        const btn = modal.querySelector('#confirmChangeBtn')
+        if (!btn || btn.disabled) return
+        btn.disabled  = true
+        btn.innerHTML = `<span class="gm-spin-loading"><span class="gm-spin"></span> Salvando...</span>`
+
+        try {
+            const token = await _getToken()
+            const resp  = await fetch('/api/stripe', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body:    JSON.stringify({ action: 'changeRemovalList', profilesToRemove: newProfilesToRemove }),
+                signal:  AbortSignal.timeout(20_000),
+            })
+            const data = await resp.json().catch(() => ({}))
+
+            if (!resp.ok) {
+                btn.disabled  = false
+                btn.innerHTML = 'Confirmar alteração'
+                _showToast(data.error || 'Erro ao alterar seleção. Tente novamente.', 'error')
+                return
+            }
+
+            // Atualiza variável local para refletir nova seleção
+            _currentPendingRemovals = newProfilesToRemove
+            _showToast('Seleção de perfis atualizada com sucesso.', 'success')
+            _renderStep1()
+
+        } catch (err) {
+            btn.disabled  = false
+            btn.innerHTML = 'Confirmar alteração'
+            _showToast('Erro de conexão. Tente novamente.', 'error')
+        }
     }
 
     async function _onPlanSelect(planSlug, cardEl) {

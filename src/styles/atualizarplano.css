@@ -1182,6 +1182,23 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .gm-danger-text  { font-size:13px; color:#94a3b8; line-height:1.65; }
 .gm-members-list { display:flex; flex-direction:column; gap:10px; margin-bottom:18px; }
 
+/* ── Botão alterar perfil a remover ──────────────────────────── */
+.gm-change-removal-btn {
+    width:100%; padding:11px 16px; margin-bottom:14px;
+    background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25);
+    border-radius:10px; color:#fbbf24; font-size:13px; font-weight:600;
+    cursor:pointer; font-family:inherit; text-align:left;
+    transition:background .2s, border-color .2s;
+}
+.gm-change-removal-btn:hover { background:rgba(245,158,11,.14); border-color:rgba(245,158,11,.4); }
+
+/* ── Step loading state ──────────────────────────────────────── */
+.gm-step-loading {
+    display:flex; align-items:center; gap:10px;
+    justify-content:center; padding:32px 0;
+    color:#64748b; font-size:14px;
+}
+
 .member-option {
     display:flex; align-items:center; gap:14px; padding:14px 16px;
     background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08);
