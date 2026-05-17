@@ -666,37 +666,8 @@ let _currentPlanSlug             = ''
 let _currentPendingPlan          = ''
 let _currentPendingEffectiveAt   = null
 
-// ── Helpers do modal ──────────────────────────────────────────────
-function _fmtMoney(cents, currency = 'brl') {
-    return new Intl.NumberFormat('pt-BR', {
-        style: 'currency', currency: currency.toUpperCase(),
-        minimumFractionDigits: 2,
-    }).format(cents / 100)
-}
-
-function _fmtDateFromTs(unixTs) {
-    if (!unixTs) return '—'
-    return new Date(unixTs * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-}
-
-function _fmtDateFromISO(iso) {
-    if (!iso) return '—'
-    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-}
-
-function _planLabel(slug) {
-    return { individual: 'Individual', casal: 'Casal', familia: 'Família' }[slug] || slug
-}
-
+// ── Modal de Alteração de Plano (CSP-safe: zero inline styles) ────────
 function _openPlanModal(session) {
-
-    // ── Keyframe spinner (injeta uma única vez) ───────────────────
-    if (!document.getElementById('_ge_spin_style')) {
-        const st = document.createElement('style')
-        st.id = '_ge_spin_style'
-        st.textContent = '@keyframes _ge_spin{to{transform:rotate(360deg)}}'
-        document.head.appendChild(st)
-    }
 
     // ── Estado ────────────────────────────────────────────────────
     let _selectedPlan       = ''
@@ -707,11 +678,9 @@ function _openPlanModal(session) {
     // ── DOM base ──────────────────────────────────────────────────
     const overlay = document.createElement('div')
     overlay.id = 'planModalOverlay'
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(6,8,16,0.9);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:16px;'
 
     const modal = document.createElement('div')
     modal.id = 'planModalInner'
-    modal.style.cssText = 'background:linear-gradient(160deg,#0d1117 0%,#0f172a 100%);border:1px solid rgba(16,185,129,0.18);border-radius:22px;padding:28px;max-width:560px;width:100%;box-shadow:0 40px 100px rgba(0,0,0,0.85);max-height:92vh;overflow-y:auto;'
 
     overlay.appendChild(modal)
     overlay.addEventListener('click', e => { if (e.target === overlay) _close() })
@@ -732,17 +701,17 @@ function _openPlanModal(session) {
 
     function _hdr(title, withBack = false) {
         return `
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              ${withBack ? `<button data-back style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;cursor:pointer;font-size:13px;padding:7px 12px;border-radius:8px;font-family:inherit;">← Voltar</button>` : ''}
-              <h2 style="font-size:19px;font-weight:800;color:#f1f5f9;letter-spacing:-.3px;margin:0;">${title}</h2>
+          <div class="gm-hdr">
+            <div class="gm-hdr-left">
+              ${withBack ? `<button data-back class="gm-btn-back">← Voltar</button>` : ''}
+              <h2 class="gm-title">${title}</h2>
             </div>
-            <button data-close style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;cursor:pointer;font-size:16px;padding:6px 10px;border-radius:8px;line-height:1;" aria-label="Fechar">✕</button>
+            <button data-close class="gm-btn-close" aria-label="Fechar">✕</button>
           </div>`
     }
 
     function _spin16() {
-        return `<div style="width:16px;height:16px;border:2px solid rgba(255,255,255,0.25);border-top-color:#fff;border-radius:50%;animation:_ge_spin .7s linear infinite;flex-shrink:0;"></div>`
+        return `<span class="gm-spin"></span>`
     }
 
     // ── Fetch preview ─────────────────────────────────────────────
@@ -798,91 +767,81 @@ function _openPlanModal(session) {
         const RANK     = { individual: 1, casal: 2, familia: 3 }
         const curRank  = RANK[_currentPlanSlug] ?? 0
 
-        // Banner plano atual
         const pendingHtml = _currentPendingPlan
-            ? `<div style="margin-top:10px;padding:8px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;font-size:12px;color:#fbbf24;line-height:1.5;">
+            ? `<div class="gm-pending-notice">
                  ⏳ Alteração agendada para <strong>${_planLabel(_currentPendingPlan)}</strong> em ${_fmtDateFromISO(_currentPendingEffectiveAt)}
                </div>` : ''
 
         const currentBanner = curData ? `
-          <div style="background:rgba(16,185,129,0.07);border:1.5px solid rgba(16,185,129,0.3);border-radius:14px;padding:16px 18px;margin-bottom:22px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-              <div style="display:flex;align-items:center;gap:12px;">
-                <div style="color:#10b981;opacity:.9;">${curData.icon}</div>
+          <div class="gm-current-banner">
+            <div class="gm-current-row">
+              <div class="gm-current-left">
+                <div class="gm-current-icon">${curData.icon}</div>
                 <div>
-                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                    <span style="font-size:16px;font-weight:800;color:#10b981;">${curData.label}</span>
-                    <span style="font-size:10px;font-weight:700;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.3);border-radius:50px;padding:2px 8px;color:#10b981;letter-spacing:.4px;">ATIVO</span>
+                  <div class="gm-current-name-row">
+                    <span class="gm-current-name">${curData.label}</span>
+                    <span class="gm-current-active-badge">ATIVO</span>
                   </div>
-                  <div style="font-size:12px;color:#64748b;margin-top:2px;">${curData.tagline}</div>
+                  <div class="gm-current-tagline">${curData.tagline}</div>
                 </div>
               </div>
-              <div style="text-align:right;">
-                <div style="font-size:20px;font-weight:900;color:#10b981;letter-spacing:-1px;line-height:1;">${_fmtMoney(curData.price,'brl')}</div>
-                <div style="font-size:10px;color:#475569;">/mês</div>
+              <div class="gm-current-price-wrap">
+                <div class="gm-current-price">${_fmtMoney(curData.price,'brl')}</div>
+                <div class="gm-current-mo">/mês</div>
               </div>
             </div>
             ${pendingHtml}
           </div>` : ''
 
-        // Cards dos planos disponíveis
         const available = plans.filter(p => p.slug !== _currentPlanSlug || _currentPendingPlan)
         const cardsHtml = available.map(p => {
-            const pRank    = RANK[p.slug] ?? 0
-            const isUp     = pRank > curRank
-            const diff     = p.price - curPrice
-            const isPend   = p.slug === _currentPendingPlan
+            const pRank      = RANK[p.slug] ?? 0
+            const isUp       = pRank > curRank
+            const diff       = p.price - curPrice
+            const isPend     = p.slug === _currentPendingPlan
             const isCancPend = p.slug === _currentPlanSlug && !!_currentPendingPlan
 
             let diffHtml = ''
             if (!isPend && !isCancPend) {
-                if (diff > 0)      diffHtml = `<div style="font-size:12px;font-weight:700;color:#34d399;margin-top:6px;">↑ Upgrade · +${_fmtMoney(diff,'brl')}/mês</div>`
-                else if (diff < 0) diffHtml = `<div style="font-size:12px;font-weight:700;color:#fbbf24;margin-top:6px;">↓ Downgrade · Economize ${_fmtMoney(Math.abs(diff),'brl')}/mês</div>`
+                if (diff > 0)      diffHtml = `<div class="mpc-diff mpc-diff--up">↑ Upgrade · +${_fmtMoney(diff,'brl')}/mês</div>`
+                else if (diff < 0) diffHtml = `<div class="mpc-diff mpc-diff--down">↓ Downgrade · Economize ${_fmtMoney(Math.abs(diff),'brl')}/mês</div>`
             }
-            if (isPend)      diffHtml = `<div style="font-size:12px;font-weight:700;color:#fbbf24;margin-top:6px;">⏳ Já agendado</div>`
-            if (isCancPend)  diffHtml = `<div style="font-size:12px;font-weight:700;color:#818cf8;margin-top:6px;">↩ Cancelar alteração agendada</div>`
+            if (isPend)      diffHtml = `<div class="mpc-diff mpc-diff--pend">⏳ Já agendado</div>`
+            if (isCancPend)  diffHtml = `<div class="mpc-diff mpc-diff--cancel-pend">↩ Cancelar alteração agendada</div>`
 
-            // Separa R$ XX,YY para exibição grande
-            const brlStr = (p.price / 100).toFixed(2)
+            const brlStr    = (p.price / 100).toFixed(2)
             const [intP, decP] = brlStr.split('.')
-            const hoverBorder  = isUp ? 'rgba(52,211,153,0.5)' : 'rgba(245,158,11,0.5)'
-            const btnStyle     = isUp
-                ? 'background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.3);color:#34d399;'
-                : isCancPend
-                ? 'background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);color:#818cf8;'
-                : 'background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);color:#fbbf24;'
+            const cardMod   = isCancPend ? 'mpc--cancel' : isUp ? 'mpc--up' : 'mpc--down'
+            const btnMod    = isCancPend ? 'mpc-btn--cancel' : isUp ? 'mpc-btn--up' : 'mpc-btn--down'
 
             return `
-              <div class="modal-plan-card" data-plan="${p.slug}"
-                style="background:linear-gradient(160deg,#0d1117,#111827);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:20px;cursor:pointer;transition:border-color .2s,transform .2s,box-shadow .2s;position:relative;overflow:hidden;margin-bottom:12px;"
-                onmouseenter="this.style.borderColor='${hoverBorder}';this.style.transform='translateY(-2px)';this.style.boxShadow='0 12px 32px rgba(0,0,0,0.5)'"
-                onmouseleave="this.style.borderColor='rgba(255,255,255,0.08)';this.style.transform='';this.style.boxShadow=''">
-                <div style="position:absolute;top:-60px;right:-60px;width:160px;height:160px;background:radial-gradient(circle,rgba(16,185,129,0.06),transparent);border-radius:50%;pointer-events:none;"></div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;">
-                  <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">
-                    <div style="color:#e2e8f0;opacity:.85;flex-shrink:0;">${p.icon}</div>
+              <div class="modal-plan-card ${cardMod}" data-plan="${p.slug}">
+                <div class="mpc-glow"></div>
+                <div class="mpc-body">
+                  <div class="mpc-left">
+                    <div class="mpc-icon">${p.icon}</div>
                     <div>
-                      <h3 style="font-size:17px;font-weight:800;color:#f1f5f9;margin:0 0 3px;letter-spacing:-.3px;">${p.label}</h3>
-                      <p style="font-size:12px;color:#64748b;margin:0;">${p.tagline}</p>
+                      <h3 class="mpc-name">${p.label}</h3>
+                      <p class="mpc-tag">${p.tagline}</p>
                     </div>
                   </div>
-                  <div style="text-align:right;flex-shrink:0;">
-                    <div style="display:flex;align-items:baseline;gap:2px;justify-content:flex-end;">
-                      <span style="font-size:13px;color:#94a3b8;font-weight:600;">R$</span>
-                      <span style="font-size:30px;font-weight:900;color:#f1f5f9;letter-spacing:-1.5px;line-height:1;">${intP}</span>
-                      <span style="font-size:16px;font-weight:700;color:#f1f5f9;">,${decP}</span>
+                  <div class="mpc-price-col">
+                    <div class="mpc-price-row">
+                      <span class="mpc-cur">R$</span>
+                      <span class="mpc-int">${intP}</span>
+                      <span class="mpc-dec">,${decP}</span>
                     </div>
-                    <div style="font-size:10px;color:#64748b;">/mês</div>
+                    <div class="mpc-mo">/mês</div>
                   </div>
                 </div>
                 ${diffHtml}
-                <p style="font-size:12px;color:#475569;line-height:1.5;margin:10px 0 14px;">${p.desc}</p>
-                <div style="width:100%;padding:11px;${btnStyle}border-radius:10px;font-size:13px;font-weight:700;text-align:center;box-sizing:border-box;">
+                <p class="mpc-desc">${p.desc}</p>
+                <div class="mpc-btn ${btnMod}">
                   ${isCancPend ? 'Cancelar alteração agendada' : `Selecionar ${p.label} →`}
                 </div>
-                <div class="card-spinner" style="display:none;position:absolute;inset:0;background:rgba(6,8,16,0.8);border-radius:16px;flex-direction:column;align-items:center;justify-content:center;gap:8px;">
-                  <div style="width:24px;height:24px;border:2.5px solid rgba(16,185,129,0.3);border-top-color:#10b981;border-radius:50%;animation:_ge_spin .7s linear infinite;"></div>
-                  <span style="font-size:12px;color:#10b981;font-weight:600;">Calculando...</span>
+                <div class="card-spinner">
+                  <div class="cs-ring"></div>
+                  <span class="cs-txt">Calculando...</span>
                 </div>
               </div>`
         }).join('')
@@ -890,9 +849,9 @@ function _openPlanModal(session) {
         _setHtml(`
           ${_hdr('Gerenciar Plano')}
           ${currentBanner}
-          <div style="font-size:11px;font-weight:700;color:#475569;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:14px;">Alterar para:</div>
+          <div class="gm-section-label">Alterar para:</div>
           ${cardsHtml}
-          <button data-close style="width:100%;padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;color:#64748b;font-size:14px;cursor:pointer;font-family:inherit;margin-top:4px;">Cancelar</button>
+          <button data-close class="gm-cancel-btn">Cancelar</button>
         `)
 
         modal.querySelectorAll('.modal-plan-card').forEach(card => {
@@ -903,12 +862,12 @@ function _openPlanModal(session) {
     async function _onPlanSelect(planSlug, cardEl) {
         if (_fetchingPreview) return
         const spinner = cardEl.querySelector('.card-spinner')
-        if (spinner) spinner.style.display = 'flex'
+        if (spinner) spinner.classList.add('active')
         cardEl.style.pointerEvents = 'none'
 
         const preview = await _fetchPreview(planSlug)
 
-        if (spinner) spinner.style.display = 'none'
+        if (spinner) spinner.classList.remove('active')
         cardEl.style.pointerEvents = ''
 
         if (!preview) {
@@ -935,31 +894,31 @@ function _openPlanModal(session) {
         _selectedForRemoval = new Set()
 
         const membersHtml = members.map(m => `
-          <label class="member-option" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;cursor:pointer;transition:border-color .2s;">
-            <input type="checkbox" value="${m.id}" style="width:17px;height:17px;accent-color:#ef4444;flex-shrink:0;cursor:inherit;">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:14px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.name}</div>
-              <div style="font-size:12px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.email}</div>
+          <label class="member-option" data-id="${m.id}">
+            <input type="checkbox" class="mo-cb" value="${m.id}">
+            <div class="mo-info">
+              <div class="mo-name">${m.name}</div>
+              <div class="mo-email">${m.email}</div>
             </div>
-            <div style="width:10px;height:10px;border-radius:50%;background:rgba(52,211,153,0.5);flex-shrink:0;"></div>
+            <div class="mo-dot"></div>
           </label>`).join('')
 
         _setHtml(`
           ${_hdr(`Remover Perfis — ${excessCount} necessário${excessCount > 1 ? 's' : ''}`, true)}
-          <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);border-radius:12px;padding:14px 16px;margin-bottom:20px;">
-            <div style="font-size:13px;font-weight:700;color:#f87171;margin-bottom:5px;">⚠️ Redução de perfis necessária</div>
-            <div style="font-size:13px;color:#94a3b8;line-height:1.65;">
-              O plano <strong style="color:#f1f5f9;">${_planLabel(_selectedPlan)}</strong> permite até
-              <strong style="color:#f1f5f9;">${newPlanLimit} perfil${newPlanLimit > 1 ? 's' : ''}</strong>.
-              Selecione <strong style="color:#f87171;">${excessCount} perfil${excessCount > 1 ? 's' : ''}</strong> para
+          <div class="gm-danger-box">
+            <div class="gm-danger-title">⚠️ Redução de perfis necessária</div>
+            <div class="gm-danger-text">
+              O plano <strong>${_planLabel(_selectedPlan)}</strong> permite até
+              <strong>${newPlanLimit} perfil${newPlanLimit > 1 ? 's' : ''}</strong>.
+              Selecione <strong>${excessCount} perfil${excessCount > 1 ? 's' : ''}</strong> para
               desativar quando o novo plano entrar em vigor. Você continua com acesso total até a próxima renovação.
             </div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;">${membersHtml}</div>
-          <p id="profileInfo" style="font-size:12px;color:#64748b;text-align:center;margin-bottom:16px;">Selecione ${excessCount} perfil${excessCount > 1 ? 's' : ''} para continuar</p>
-          <div style="display:flex;gap:10px;">
-            <button data-back style="flex:1;padding:13px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:#64748b;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">← Voltar</button>
-            <button id="profilesContinue" disabled style="flex:2;padding:13px;background:linear-gradient(135deg,#10b981,#059669);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;opacity:0.4;font-family:inherit;">Continuar →</button>
+          <div class="gm-members-list">${membersHtml}</div>
+          <p id="profileInfo" class="gm-profile-info">Selecione ${excessCount} perfil${excessCount > 1 ? 's' : ''} para continuar</p>
+          <div class="gm-btn-group">
+            <button data-back class="gm-btn-secondary">← Voltar</button>
+            <button id="profilesContinue" disabled class="gm-btn-primary">Continuar →</button>
           </div>
         `)
 
@@ -967,29 +926,25 @@ function _openPlanModal(session) {
         const continueBtn = modal.querySelector('#profilesContinue')
         const infoEl      = modal.querySelector('#profileInfo')
 
-        modal.querySelectorAll('.member-option').forEach(lbl => {
-            lbl.addEventListener('mouseenter', () => { lbl.style.borderColor = 'rgba(239,68,68,0.4)' })
-            lbl.addEventListener('mouseleave', () => { lbl.style.borderColor = lbl.querySelector('input').checked ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)' })
-        })
-
         modal.querySelectorAll('.member-option input[type=checkbox]').forEach(cb => {
             cb.addEventListener('change', () => {
                 const lbl = cb.closest('.member-option')
                 if (cb.checked) {
                     _selectedForRemoval.add(cb.value)
-                    if (lbl) lbl.style.borderColor = 'rgba(239,68,68,0.5)'
+                    lbl?.classList.add('mo-checked')
                 } else {
                     _selectedForRemoval.delete(cb.value)
-                    if (lbl) lbl.style.borderColor = 'rgba(255,255,255,0.08)'
+                    lbl?.classList.remove('mo-checked')
                 }
                 const count = _selectedForRemoval.size
                 const ok    = count >= excessCount
-                if (continueBtn) { continueBtn.disabled = !ok; continueBtn.style.opacity = ok ? '1' : '0.4' }
+                if (continueBtn) continueBtn.disabled = !ok
                 if (infoEl) {
                     infoEl.textContent = ok
                         ? `✓ ${count} perfil${count > 1 ? 's' : ''} selecionado${count > 1 ? 's' : ''}`
                         : `Selecione mais ${excessCount - count} perfil${excessCount - count > 1 ? 's' : ''}`
-                    infoEl.style.color = ok ? '#10b981' : '#64748b'
+                    if (ok) infoEl.classList.add('pi-ok')
+                    else    infoEl.classList.remove('pi-ok')
                 }
             })
         })
@@ -1011,77 +966,75 @@ function _openPlanModal(session) {
         const isDowngrade = _previewData.type === 'downgrade'
         const isCancPend  = _previewData.type === 'cancel_pending'
 
-        // Comparativo visual
         const compHtml = `
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;">
-            <div style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:16px;text-align:center;">
-              <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Plano Atual</div>
-              <div style="color:#64748b;opacity:.7;margin-bottom:6px;">${curData.icon}</div>
-              <div style="font-size:15px;font-weight:800;color:#64748b;">${curData.label}</div>
-              <div style="font-size:18px;font-weight:900;color:#475569;letter-spacing:-1px;">${_fmtMoney(curData.price,'brl')}</div>
-              <div style="font-size:10px;color:#475569;">/mês</div>
+          <div class="gm-compare">
+            <div class="gm-compare-plan">
+              <div class="gm-cmp-label">Plano Atual</div>
+              <div class="gm-cmp-icon gm-cmp-icon--cur">${curData.icon}</div>
+              <div class="gm-cmp-name gm-cmp-name--cur">${curData.label}</div>
+              <div class="gm-cmp-price gm-cmp-price--cur">${_fmtMoney(curData.price,'brl')}</div>
+              <div class="gm-cmp-mo gm-cmp-mo--cur">/mês</div>
             </div>
-            <div style="font-size:22px;color:#10b981;flex-shrink:0;">→</div>
-            <div style="flex:1;background:rgba(16,185,129,0.07);border:1.5px solid rgba(16,185,129,0.3);border-radius:13px;padding:16px;text-align:center;">
-              <div style="font-size:10px;color:#10b981;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Novo Plano</div>
-              <div style="color:#10b981;margin-bottom:6px;">${newData.icon}</div>
-              <div style="font-size:15px;font-weight:800;color:#10b981;">${newData.label}</div>
-              <div style="font-size:18px;font-weight:900;color:#10b981;letter-spacing:-1px;">${_fmtMoney(newData.price,'brl')}</div>
-              <div style="font-size:10px;color:#34d399;">/mês</div>
+            <div class="gm-compare-arrow">→</div>
+            <div class="gm-compare-plan gm-compare-plan--new">
+              <div class="gm-cmp-label gm-cmp-label--new">Novo Plano</div>
+              <div class="gm-cmp-icon gm-cmp-icon--new">${newData.icon}</div>
+              <div class="gm-cmp-name gm-cmp-name--new">${newData.label}</div>
+              <div class="gm-cmp-price gm-cmp-price--new">${_fmtMoney(newData.price,'brl')}</div>
+              <div class="gm-cmp-mo gm-cmp-mo--new">/mês</div>
             </div>
           </div>`
 
-        // Detalhes financeiros
         let detailsHtml = ''
         if (isUpgrade) {
             const charge  = _previewData.amountDue ?? 0
             const cur     = _previewData.currency   || 'brl'
             const renewal = _fmtDateFromTs(_previewData.periodEnd)
             detailsHtml = `
-              <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:16px;margin-bottom:18px;">
-                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#10b981;margin-bottom:12px;">Resumo do Upgrade</div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                  <span style="font-size:13px;color:#94a3b8;">💳 Cobrado agora (proporcional):</span>
-                  <span style="font-size:17px;font-weight:800;color:#f1f5f9;">${_fmtMoney(charge, cur)}</span>
+              <div class="gm-box-up">
+                <div class="gm-box-heading gm-box-heading--up">Resumo do Upgrade</div>
+                <div class="gm-pay-row">
+                  <span class="gm-pay-label">💳 Cobrado agora (proporcional):</span>
+                  <span class="gm-pay-value">${_fmtMoney(charge, cur)}</span>
                 </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                  <span style="font-size:13px;color:#94a3b8;">📅 Próxima renovação (${renewal}):</span>
-                  <span style="font-size:14px;font-weight:700;color:#f1f5f9;">${_fmtMoney(newData.price,'brl')}<span style="font-size:11px;color:#64748b;">/mês</span></span>
+                <div class="gm-pay-row">
+                  <span class="gm-pay-label">📅 Próxima renovação (${renewal}):</span>
+                  <span class="gm-pay-value gm-pay-value--sm">${_fmtMoney(newData.price,'brl')}<span class="gm-pay-sub">/mês</span></span>
                 </div>
-                <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);font-size:11px;color:#64748b;line-height:1.5;">
+                <div class="gm-box-divider">
                   Calculado pelo Stripe com base nos dias restantes do ciclo atual. O cartão cadastrado será cobrado imediatamente.
                 </div>
               </div>`
         } else if (isDowngrade) {
             const effectiveAt = _fmtDateFromTs(_previewData.periodEnd)
             const profileNote = _selectedForRemoval.size > 0
-                ? `<div style="margin-top:8px;font-size:12px;color:#fbbf24;line-height:1.5;">⚠️ ${_selectedForRemoval.size} perfil${_selectedForRemoval.size > 1 ? 's' : ''} será desativado em ${effectiveAt}.</div>` : ''
+                ? `<div class="gm-pay-profile-note">⚠️ ${_selectedForRemoval.size} perfil${_selectedForRemoval.size > 1 ? 's' : ''} será desativado em ${effectiveAt}.</div>` : ''
             detailsHtml = `
-              <div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:16px;margin-bottom:18px;">
-                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#fbbf24;margin-bottom:12px;">Resumo do Downgrade</div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                  <span style="font-size:13px;color:#94a3b8;">💰 Cobrança imediata:</span>
-                  <span style="font-size:15px;font-weight:800;color:#f1f5f9;">Nenhuma</span>
+              <div class="gm-box-down">
+                <div class="gm-box-heading gm-box-heading--down">Resumo do Downgrade</div>
+                <div class="gm-pay-row">
+                  <span class="gm-pay-label">💰 Cobrança imediata:</span>
+                  <span class="gm-pay-value gm-pay-value--md">Nenhuma</span>
                 </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                  <span style="font-size:13px;color:#94a3b8;">📅 Novo plano em vigor em:</span>
-                  <span style="font-size:13px;font-weight:700;color:#fbbf24;">${effectiveAt}</span>
+                <div class="gm-pay-row">
+                  <span class="gm-pay-label">📅 Novo plano em vigor em:</span>
+                  <span class="gm-pay-note-date">${effectiveAt}</span>
                 </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                  <span style="font-size:13px;color:#94a3b8;">💳 Novo valor a partir de ${effectiveAt}:</span>
-                  <span style="font-size:14px;font-weight:700;color:#f1f5f9;">${_fmtMoney(newData.price,'brl')}<span style="font-size:11px;color:#64748b;">/mês</span></span>
+                <div class="gm-pay-row">
+                  <span class="gm-pay-label">💳 Novo valor a partir de ${effectiveAt}:</span>
+                  <span class="gm-pay-value gm-pay-value--sm">${_fmtMoney(newData.price,'brl')}<span class="gm-pay-sub">/mês</span></span>
                 </div>
                 ${profileNote}
-                <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);font-size:11px;color:#64748b;line-height:1.5;">
+                <div class="gm-box-divider">
                   Você mantém todos os benefícios do plano atual até ${effectiveAt}. Sem cobrança ou estorno agora.
                 </div>
               </div>`
         } else if (isCancPend) {
             detailsHtml = `
-              <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.25);border-radius:12px;padding:16px;margin-bottom:18px;">
-                <div style="font-size:13px;color:#94a3b8;line-height:1.65;">
-                  O agendamento de downgrade para <strong style="color:#f1f5f9;">${_planLabel(_previewData.pendingPlan)}</strong> será cancelado.
-                  Você permanecerá normalmente no plano <strong style="color:#10b981;">${_planLabel(_currentPlanSlug)}</strong>.
+              <div class="gm-box-canc">
+                <div class="gm-box-canc-text">
+                  O agendamento de downgrade para <strong>${_planLabel(_previewData.pendingPlan)}</strong> será cancelado.
+                  Você permanecerá normalmente no plano <strong>${_planLabel(_currentPlanSlug)}</strong>.
                 </div>
               </div>`
         }
@@ -1092,18 +1045,16 @@ function _openPlanModal(session) {
             ? `Confirmar agendamento para ${_fmtDateFromTs(_previewData.periodEnd)}`
             : 'Cancelar alteração agendada'
 
-        const confirmBg = isCancPend
-            ? 'linear-gradient(135deg,#6366f1,#4f46e5)'
-            : 'linear-gradient(135deg,#10b981,#059669)'
+        const confirmMod = isCancPend ? 'gm-confirm-btn--indigo' : 'gm-confirm-btn--green'
 
         _setHtml(`
           ${_hdr('Confirmar Alteração', true)}
           ${compHtml}
           ${detailsHtml}
-          <button id="planConfirmBtn" style="width:100%;padding:15px;background:${confirmBg};border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;transition:opacity .2s;">
+          <button id="planConfirmBtn" class="gm-confirm-btn ${confirmMod}">
             ${confirmLabel}
           </button>
-          <p id="planConfirmError" style="font-size:13px;color:#f87171;text-align:center;display:none;margin-top:8px;"></p>
+          <p id="planConfirmError" class="gm-confirm-error"></p>
         `)
 
         const backFn = (_selectedForRemoval.size > 0 && _previewData.requiresProfileRemoval)
@@ -1120,11 +1071,10 @@ function _openPlanModal(session) {
         const errorEl = modal.querySelector('#planConfirmError')
         if (!btn || btn.disabled) return
 
-        const prevLabel   = btn.innerHTML
-        btn.disabled      = true
-        btn.style.opacity = '0.7'
-        btn.innerHTML     = `<span style="display:flex;align-items:center;justify-content:center;gap:8px;">${_spin16()} Processando...</span>`
-        if (errorEl) errorEl.style.display = 'none'
+        const prevLabel = btn.innerHTML
+        btn.disabled    = true
+        btn.innerHTML   = `<span class="gm-spin-loading">${_spin16()} Processando...</span>`
+        errorEl?.classList.remove('visible')
 
         try {
             const token      = await _getToken()
@@ -1152,8 +1102,8 @@ function _openPlanModal(session) {
                     _renderStep2()
                     _showToast(data.error || 'Selecione os perfis para remover.', 'warning')
                 } else {
-                    btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = prevLabel
-                    if (errorEl) { errorEl.textContent = data.error || 'Erro ao alterar plano. Tente novamente.'; errorEl.style.display = 'block' }
+                    btn.disabled = false; btn.innerHTML = prevLabel
+                    if (errorEl) { errorEl.textContent = data.error || 'Erro ao alterar plano. Tente novamente.'; errorEl.classList.add('visible') }
                 }
                 return
             }
@@ -1173,8 +1123,8 @@ function _openPlanModal(session) {
             setTimeout(() => loadSubscription(session), 1500)
 
         } catch (err) {
-            btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = prevLabel
-            if (errorEl) { errorEl.textContent = err.message || 'Erro de conexão. Tente novamente.'; errorEl.style.display = 'block' }
+            btn.disabled = false; btn.innerHTML = prevLabel
+            if (errorEl) { errorEl.textContent = err.message || 'Erro de conexão. Tente novamente.'; errorEl.classList.add('visible') }
         }
     }
 
@@ -1184,18 +1134,18 @@ function _openPlanModal(session) {
     function _renderPaymentError() {
         _setHtml(`
           ${_hdr('Pagamento Recusado')}
-          <div style="text-align:center;padding:12px 0 8px;">
-            <div style="width:72px;height:72px;background:rgba(239,68,68,0.1);border:1.5px solid rgba(239,68,68,0.3);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
-              <svg style="width:32px;height:32px;color:#ef4444;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div class="gm-error-center">
+            <div class="gm-error-icon">
+              <svg class="gm-error-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             </div>
-            <h3 style="font-size:18px;font-weight:800;color:#f1f5f9;margin:0 0 10px;">Não foi possível realizar o pagamento</h3>
-            <p style="font-size:14px;color:#94a3b8;line-height:1.7;margin-bottom:24px;">
+            <h3 class="gm-error-title">Não foi possível realizar o pagamento</h3>
+            <p class="gm-error-desc">
               Seu banco recusou a cobrança. O plano NÃO foi alterado.<br>Verifique se o cartão está válido e com limite disponível.
             </p>
-            <button id="openPortalBtn" style="width:100%;padding:14px;background:linear-gradient(135deg,#3b82f6,#2563eb);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px;">
+            <button id="openPortalBtn" class="gm-portal-btn">
               Clique aqui para atualizar seu método de pagamento
             </button>
-            <button data-back style="width:100%;padding:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;color:#64748b;font-size:14px;cursor:pointer;font-family:inherit;">
+            <button data-back class="gm-try-other-btn">
               ← Tentar com outro plano
             </button>
           </div>
@@ -1207,6 +1157,8 @@ function _openPlanModal(session) {
     // ── Inicia na etapa 1 ─────────────────────────────────────────
     _renderStep1()
 }
+
+
 
 
 
