@@ -437,22 +437,13 @@ async function loadStripeDetails(session) {
                 pending_plan_effective_at: _currentPendingEffectiveAt || null,
             });
 
-            // Atualiza também o cartão 3D no topo da página
-            const isCancelAtEnd = subscription?.cancel_at_period_end ?? false
+            // Atualiza o cartão 3D no topo da página — preenche AMBOS os elementos
+            // independentemente de qual esteja visível (show/hide já definido em renderSubscription)
             const dateFmt       = formatDate(derivedPeriodEnd)
             const nextBillingEl = document.getElementById('nextBilling')
             const cancelDateEl  = document.getElementById('cancelDate')
-            const cancelWrap    = document.getElementById('cancelWrap')
-            const nextWrap      = document.getElementById('nextBillingWrap')
-            if (isCancelAtEnd) {
-                if (cancelDateEl)  cancelDateEl.textContent = dateFmt
-                if (cancelWrap)    cancelWrap.hidden         = false
-                if (nextWrap)      nextWrap.hidden           = true
-            } else {
-                if (nextBillingEl && (nextBillingEl.textContent === '—' || !nextBillingEl.textContent.trim())) {
-                    nextBillingEl.textContent = dateFmt
-                }
-            }
+            if (nextBillingEl) nextBillingEl.textContent = dateFmt
+            if (cancelDateEl)  cancelDateEl.textContent  = dateFmt
         }
 
         _updateMemberSince(subscription);
@@ -705,6 +696,28 @@ function _showToast(msg, type = 'info') {
 let _currentPlanSlug             = ''
 let _currentPendingPlan          = ''
 let _currentPendingEffectiveAt   = null
+
+// ── Helpers do modal ─────────────────────────────────────────────
+function _fmtMoney(cents, currency = 'brl') {
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency', currency: currency.toUpperCase(),
+        minimumFractionDigits: 2,
+    }).format(cents / 100)
+}
+
+function _fmtDateFromTs(ts) {
+    if (!ts) return '—'
+    return new Date(ts * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+function _fmtDateFromISO(iso) {
+    if (!iso) return '—'
+    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+function _planLabel(slug) {
+    return { individual: 'Individual', casal: 'Casal', familia: 'Família' }[slug] || slug || '—'
+}
 
 // Catálogo de planos (preços em centavos)
 const plans = [
