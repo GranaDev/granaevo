@@ -147,39 +147,87 @@ Deno.serve(async (req: Request) => {
   // ── 4. Detalhes da assinatura (data real de criação, valor, etc.) ─────────────
   let subscription: Record<string, unknown> | null = null
 
+  function extractSubscription(raw: Record<string, unknown>): Record<string, unknown> {
+    const items    = (raw.items as { data: Record<string, unknown>[] })?.data ?? []
+    const priceRaw = items[0]?.price as Record<string, unknown> | undefined
+    return {
+      id:                   raw.id,
+      status:               raw.status,
+      created:              raw.created,
+      start_date:           raw.start_date,
+      current_period_start: raw.current_period_start,
+      current_period_end:   raw.current_period_end,
+      cancel_at_period_end: raw.cancel_at_period_end,
+      canceled_at:          raw.canceled_at,
+      trial_start:          raw.trial_start,
+      trial_end:            raw.trial_end,
+      price: priceRaw ? {
+        unit_amount: priceRaw.unit_amount,
+        currency:    priceRaw.currency,
+        interval:    (priceRaw.recurring as Record<string, unknown>)?.interval ?? 'month',
+      } : null,
+    }
+  }
+
   if (subscriptionId && STRIPE_ID_REGEX.test(subscriptionId)) {
     try {
       const res = await fetch(
-        `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+        `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}?expand[]=items.data.price`,
         { headers: stripeHeaders, signal: AbortSignal.timeout(10_000) },
       )
       if (res.ok) {
-        const raw = await res.json() as Record<string, unknown>
-        // Extrai apenas o que precisamos — não expõe dados sensíveis
-        const items   = (raw.items as { data: Record<string, unknown>[] })?.data ?? []
-        const priceRaw = items[0]?.price as Record<string, unknown> | undefined
-        subscription = {
-          id:                   raw.id,
-          status:               raw.status,
-          created:              raw.created,        // Unix timestamp — data real de assinatura
-          start_date:           raw.start_date,     // Unix timestamp — início do primeiro ciclo
-          current_period_start: raw.current_period_start,
-          current_period_end:   raw.current_period_end,
-          cancel_at_period_end: raw.cancel_at_period_end,
-          canceled_at:          raw.canceled_at,
-          trial_start:          raw.trial_start,
-          trial_end:            raw.trial_end,
-          price: priceRaw ? {
-            unit_amount: priceRaw.unit_amount,
-            currency:    priceRaw.currency,
-            interval:    (priceRaw.recurring as Record<string, unknown>)?.interval ?? 'month',
-          } : null,
-        }
+        subscription = extractSubscription(await res.json() as Record<string, unknown>)
       } else {
         console.warn('[stripe-sub-details] Stripe subscription fetch falhou:', res.status)
       }
     } catch (e) {
       console.error('[stripe-sub-details] Erro ao buscar subscription:', (e as Error).message)
+    }
+  }
+
+  // ── 4b. Reconciliação: subscription salva pode apontar para assinatura errada ──
+  // Caso: banco tem sub_XXX (Individual cancelada) mas usuário está na sub_YYY (Casal ativa).
+  // Se a assinatura não for active/trialing ou não tiver current_period_end, busca a real.
+  const isHealthy = (s: Record<string, unknown> | null): boolean =>
+    s !== null &&
+    (s.status === 'active' || s.status === 'trialing') &&
+    s.current_period_end != null
+
+  if (!isHealthy(subscription)) {
+    console.warn('[stripe-sub-details] Subscription não saudável (status:', subscription?.status,
+      '/ period_end:', subscription?.current_period_end, ') — reconciliando via customer listing...')
+    try {
+      const listRes = await fetch(
+        `https://api.stripe.com/v1/subscriptions?customer=${encodeURIComponent(customerId)}&status=active&limit=1&expand[]=data.items.data.price`,
+        { headers: stripeHeaders, signal: AbortSignal.timeout(8_000) },
+      )
+      if (listRes.ok) {
+        const listBody = await listRes.json() as { data: Record<string, unknown>[] }
+        const found    = listBody.data?.[0]
+        if (found?.id && STRIPE_ID_REGEX.test(found.id as string)) {
+          const newId = found.id as string
+          subscription  = extractSubscription(found)
+          if (newId !== subscriptionId) {
+            subscriptionId = newId
+            console.log('[stripe-sub-details] Subscription reconciliada:', newId)
+            supabaseAdmin
+              .from('stripe_subscriptions')
+              .update({
+                stripe_subscription_id: newId,
+                status:               'active',
+                current_period_start: found.current_period_start
+                  ? new Date((found.current_period_start as number) * 1000).toISOString() : undefined,
+                current_period_end:   found.current_period_end
+                  ? new Date((found.current_period_end   as number) * 1000).toISOString() : undefined,
+                updated_at:           new Date().toISOString(),
+              })
+              .eq('stripe_customer_id', customerId)
+              .catch(e => console.warn('[stripe-sub-details] Erro ao salvar reconciliação:', (e as Error).message))
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[stripe-sub-details] Erro ao reconciliar:', (e as Error).message)
     }
   }
 
