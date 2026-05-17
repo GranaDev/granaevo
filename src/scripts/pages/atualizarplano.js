@@ -437,6 +437,8 @@ async function loadStripeDetails(session) {
                 pending_plan_effective_at: _currentPendingEffectiveAt || null,
             });
 
+            _derivedPeriodEnd = derivedPeriodEnd  // expõe para o modal usar como fallback
+
             // Atualiza o cartão 3D no topo da página — preenche AMBOS os elementos
             // independentemente de qual esteja visível (show/hide já definido em renderSubscription)
             const dateFmt       = formatDate(derivedPeriodEnd)
@@ -696,6 +698,7 @@ function _showToast(msg, type = 'info') {
 let _currentPlanSlug             = ''
 let _currentPendingPlan          = ''
 let _currentPendingEffectiveAt   = null
+let _derivedPeriodEnd            = null  // Unix timestamp — fallback para data da alteração agendada
 
 // ── Helpers do modal ─────────────────────────────────────────────
 function _fmtMoney(cents, currency = 'brl') {
@@ -848,9 +851,13 @@ function _openPlanModal(session) {
         const RANK     = { individual: 1, casal: 2, familia: 3 }
         const curRank  = RANK[_currentPlanSlug] ?? 0
 
+        // Data da alteração agendada: usa ISO do banco → fallback para derivedPeriodEnd da Stripe
+        const pendingDateStr = _currentPendingEffectiveAt
+            ? _fmtDateFromISO(_currentPendingEffectiveAt)
+            : (_derivedPeriodEnd ? _fmtDateFromTs(_derivedPeriodEnd) : '—')
         const pendingHtml = _currentPendingPlan
             ? `<div class="gm-pending-notice">
-                 ⏳ Alteração agendada para <strong>${_planLabel(_currentPendingPlan)}</strong> em ${_fmtDateFromISO(_currentPendingEffectiveAt)}
+                 ⏳ Alteração agendada para <strong>${_planLabel(_currentPendingPlan)}</strong> em ${pendingDateStr}
                </div>` : ''
 
         const currentBanner = curData ? `

@@ -1291,3 +1291,46 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
     background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
     border-radius:12px; color:#64748b; font-size:14px; cursor:pointer; font-family:inherit;
 }
+
+/* ── Modal responsividade ────────────────────────────────────────── */
+@media (max-width: 600px) {
+    #planModalOverlay  { padding:0; align-items:flex-end; }
+    #planModalInner    { border-radius:20px 20px 0 0; max-height:90vh; padding:22px 18px 28px; }
+
+    .gm-title          { font-size:16px; }
+    .gm-current-banner { padding:12px 14px; }
+    .gm-current-name   { font-size:14px; }
+    .gm-current-price  { font-size:17px; }
+
+    .modal-plan-card   { padding:14px; }
+    .mpc-name          { font-size:15px; }
+    .mpc-int           { font-size:24px; }
+    .mpc-dec           { font-size:14px; }
+    .mpc-desc          { font-size:11px; margin:8px 0 10px; }
+    .mpc-btn           { font-size:12px; padding:9px; }
+
+    .gm-compare        { gap:8px; }
+    .gm-compare-plan   { padding:12px 10px; }
+    .gm-cmp-price      { font-size:15px; }
+    .gm-cmp-name       { font-size:13px; }
+    .gm-compare-arrow  { font-size:18px; }
+
+    .gm-pay-row        { flex-direction:column; align-items:flex-start; gap:2px; margin-bottom:10px; }
+    .gm-pay-value      { font-size:15px; }
+    .gm-pay-label      { font-size:12px; }
+
+    .gm-confirm-btn    { font-size:14px; padding:13px; }
+    .gm-btn-group      { flex-direction:column; }
+    .gm-btn-secondary,
+    .gm-btn-primary    { flex:unset; width:100%; }
+
+    .gm-members-list   { gap:8px; }
+    .member-option     { padding:11px 12px; gap:10px; }
+    .mo-name           { font-size:13px; }
+    .mo-email          { font-size:11px; }
+
+    .gm-error-icon     { width:56px; height:56px; }
+    .gm-error-svg      { width:24px; height:24px; }
+    .gm-error-title    { font-size:16px; }
+    .gm-error-desc     { font-size:13px; }
+}

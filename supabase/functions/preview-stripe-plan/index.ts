@@ -102,7 +102,7 @@ Deno.serve(async (req: Request) => {
   // ── 4. Busca assinatura no banco ──────────────────────────────────────────
   const { data: stripeSub, error: subErr } = await supabaseAdmin
     .from('stripe_subscriptions')
-    .select('stripe_subscription_id, plan_name, stripe_price_id, current_period_start, current_period_end, pending_plan_name, pending_plan_effective_at')
+    .select('stripe_customer_id, stripe_subscription_id, plan_name, stripe_price_id, current_period_start, current_period_end, pending_plan_name, pending_plan_effective_at')
     .eq('user_id', user.id)
     .in('status', ['active', 'trialing'])
     .order('created_at', { ascending: false })
@@ -148,9 +148,46 @@ Deno.serve(async (req: Request) => {
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
   if (!stripeKey) return json({ error: 'Configuração indisponível' }, 503)
 
+  const stripeHeaders = { 'Authorization': `Bearer ${stripeKey}`, 'Stripe-Version': '2024-06-20' }
+
+  // ── Reconciliação de datas: se o banco não tem period_start/end, busca do Stripe ──
+  // Garante que o cálculo de proration nunca resulte em zero por dados desatualizados.
+  let periodStartIso: string | null = stripeSub.current_period_start ?? null
+  let periodEndIso:   string | null = stripeSub.current_period_end   ?? null
+
+  if (!periodEndIso || !periodStartIso) {
+    try {
+      const subRes = await fetch(
+        `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(stripeSub.stripe_subscription_id)}`,
+        { headers: stripeHeaders, signal: AbortSignal.timeout(8_000) }
+      )
+      if (subRes.ok) {
+        const sub = await subRes.json() as Record<string, unknown>
+        if (sub.current_period_start) periodStartIso = new Date((sub.current_period_start as number) * 1000).toISOString()
+        if (sub.current_period_end)   periodEndIso   = new Date((sub.current_period_end   as number) * 1000).toISOString()
+      }
+    } catch { /* segue para fallback */ }
+
+    // Fallback: lista subscriptions ativas do customer
+    if ((!periodEndIso || !periodStartIso) && stripeSub.stripe_customer_id && STRIPE_ID_REGEX.test(stripeSub.stripe_customer_id)) {
+      try {
+        const listRes = await fetch(
+          `https://api.stripe.com/v1/subscriptions?customer=${encodeURIComponent(stripeSub.stripe_customer_id)}&status=active&limit=1`,
+          { headers: stripeHeaders, signal: AbortSignal.timeout(8_000) }
+        )
+        if (listRes.ok) {
+          const list = await listRes.json() as { data: Record<string, unknown>[] }
+          const found = list.data?.[0]
+          if (found?.current_period_start) periodStartIso = new Date((found.current_period_start as number) * 1000).toISOString()
+          if (found?.current_period_end)   periodEndIso   = new Date((found.current_period_end   as number) * 1000).toISOString()
+        }
+      } catch { /* sem dados */ }
+    }
+  }
+
   // Timestamp unix do fim do período atual
-  const periodEnd = stripeSub.current_period_end
-    ? Math.floor(new Date(stripeSub.current_period_end).getTime() / 1000)
+  const periodEnd = periodEndIso
+    ? Math.floor(new Date(periodEndIso).getTime() / 1000)
     : null
 
   // ── Downgrade: sem cobrança imediata + verifica necessidade de remover perfis ─
@@ -204,8 +241,8 @@ Deno.serve(async (req: Request) => {
   // Stripe usa: amountDue = round(fraction * newPrice) - round(fraction * oldPrice)
   // onde fraction = segundos_restantes / segundos_totais_do_ciclo
   const nowSecs    = Math.floor(Date.now() / 1000)
-  const startSecs  = stripeSub.current_period_start
-    ? Math.floor(new Date(stripeSub.current_period_start).getTime() / 1000)
+  const startSecs  = periodStartIso
+    ? Math.floor(new Date(periodStartIso).getTime() / 1000)
     : 0
   const endSecs    = periodEnd ?? 0
   const totalSecs  = endSecs - startSecs
