@@ -399,17 +399,40 @@ async function loadStripeDetails(session) {
         const { subscription, invoices } = await resp.json();
 
         // Re-renderiza os cards de detalhe com dados autoritativos do Stripe.
-        // Isso resolve Período Atual e Próxima Cobrança mostrando "—" quando
-        // current_period_start / current_period_end estão NULL no banco.
-        if (subscription?.current_period_end) {
+        // Fallback em cadeia: subscription.period_end → invoice mais recente paga → +30 dias.
+        let derivedPeriodEnd   = subscription?.current_period_end   ?? null
+        let derivedPeriodStart = subscription?.current_period_start ?? null
+        let derivedCreated     = subscription?.start_date || subscription?.created || null
+
+        if (!derivedPeriodEnd && Array.isArray(invoices) && invoices.length) {
+            // Fallback 1: usa period_end da invoice paga mais recente (= próxima cobrança)
+            const lastPaid = invoices.find(inv => inv.status === 'paid' && inv.period_end)
+            if (lastPaid) {
+                derivedPeriodEnd   = lastPaid.period_end
+                if (!derivedPeriodStart) derivedPeriodStart = lastPaid.period_start
+                if (!derivedCreated)     derivedCreated     = lastPaid.created
+            }
+        }
+
+        if (!derivedPeriodEnd && Array.isArray(invoices) && invoices.length) {
+            // Fallback 2: data da última invoice + 30 dias
+            const lastAny = invoices.find(inv => inv.created)
+            if (lastAny) {
+                derivedPeriodEnd   = lastAny.created + 30 * 24 * 3600
+                if (!derivedPeriodStart) derivedPeriodStart = lastAny.created
+                if (!derivedCreated)     derivedCreated     = lastAny.created
+            }
+        }
+
+        if (derivedPeriodEnd) {
             renderDetails({
                 plan_name:                 _currentPlanSlug,
-                status:                    subscription.status    ?? 'active',
-                current_period_start:      subscription.current_period_start,
-                current_period_end:        subscription.current_period_end,
-                cancel_at_period_end:      subscription.cancel_at_period_end ?? false,
-                canceled_at:               subscription.canceled_at ?? null,
-                created_at:                subscription.start_date || subscription.created,
+                status:                    subscription?.status             ?? 'active',
+                current_period_start:      derivedPeriodStart,
+                current_period_end:        derivedPeriodEnd,
+                cancel_at_period_end:      subscription?.cancel_at_period_end ?? false,
+                canceled_at:               subscription?.canceled_at          ?? null,
+                created_at:                derivedCreated,
                 pending_plan_name:         _currentPendingPlan        || null,
                 pending_plan_effective_at: _currentPendingEffectiveAt || null,
             });
