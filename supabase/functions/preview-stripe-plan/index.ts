@@ -18,7 +18,7 @@ const ALLOWED_ORIGINS = [
 const STRIPE_ID_REGEX = /^[a-zA-Z0-9_]{4,100}$/
 const VALID_PLANS     = new Set(['individual', 'casal', 'familia'])
 const PLAN_RANK:   Record<string, number> = { individual: 1, casal: 2, familia: 3 }
-const PLAN_LIMITS: Record<string, number> = { individual: 1, casal: 2, familia: 5 }
+const PLAN_LIMITS: Record<string, number> = { individual: 1, casal: 2, familia: 4 }
 
 const PLAN_ENV_MAP: Record<string, string> = {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
@@ -192,34 +192,38 @@ Deno.serve(async (req: Request) => {
 
   // ── Downgrade: sem cobrança imediata + verifica necessidade de remover perfis ─
   if (isDowngrade) {
-    const newPrice  = await fetchStripePrice(newPriceId, stripeKey)
-    const newLimit  = PLAN_LIMITS[newPlan] ?? 1
+    const newPrice = await fetchStripePrice(newPriceId, stripeKey)
+    const newLimit = PLAN_LIMITS[newPlan] ?? 1
 
-    // Busca membros ativos do usuário (guest accounts vinculados à conta)
+    // Busca perfis ativos do usuário na tabela profiles (perfis próprios do usuário)
     let members: { id: string; name: string; email: string }[] = []
     let requiresProfileRemoval = false
     let excessCount = 0
 
     try {
-      const { data: memberRows } = await supabaseAdmin
-        .from('account_members')
-        .select('id, member_name, member_email')
-        .eq('owner_user_id', user.id)
+      const { data: profileRows, error: profErr } = await supabaseAdmin
+        .from('profiles')
+        .select('id, name, photo_url')
+        .eq('user_id', user.id)
         .eq('is_active', true)
+        .order('id', { ascending: true })
 
-      const activeMembers = memberRows ?? []
-      // +1 para contar o próprio dono da conta
-      const totalProfiles = activeMembers.length + 1
-      excessCount         = Math.max(0, totalProfiles - newLimit)
+      if (profErr) throw profErr
+
+      const activeProfiles = profileRows ?? []
+      const totalProfiles  = activeProfiles.length
+      excessCount          = Math.max(0, totalProfiles - newLimit)
       requiresProfileRemoval = excessCount > 0
 
-      members = activeMembers.map(m => ({
-        id:    m.id    as string,
-        name:  (m.member_name  as string) || 'Convidado',
-        email: (m.member_email as string) || '',
+      // Retorna todos os perfis para o usuário escolher quais remover
+      // (exceto o primeiro — assumindo que o usuário quer manter o perfil principal)
+      members = activeProfiles.map(p => ({
+        id:    String(p.id),
+        name:  (p.name as string) || 'Perfil',
+        email: (p.photo_url as string) || '',  // reaproveitamos o campo email para photo_url no frontend
       }))
     } catch (e) {
-      console.warn('[preview-stripe-plan] Erro ao buscar membros:', (e as Error).message)
+      console.warn('[preview-stripe-plan] Erro ao buscar perfis:', (e as Error).message)
     }
 
     return json({

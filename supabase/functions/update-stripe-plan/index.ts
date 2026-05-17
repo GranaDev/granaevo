@@ -17,11 +17,11 @@ const ALLOWED_ORIGINS = [
   'https://www.granaevo.com',
 ]
 
-const STRIPE_ID_REGEX = /^[a-zA-Z0-9_]{4,100}$/
-const UUID_RE         = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const VALID_PLANS     = new Set(['individual', 'casal', 'familia'])
+const STRIPE_ID_REGEX  = /^[a-zA-Z0-9_]{4,100}$/
+const PROFILE_ID_RE    = /^\d{1,10}$/  // IDs inteiros da tabela profiles
+const VALID_PLANS      = new Set(['individual', 'casal', 'familia'])
 const PLAN_RANK:   Record<string, number> = { individual: 1, casal: 2, familia: 3 }
-const PLAN_LIMITS: Record<string, number> = { individual: 1, casal: 2, familia: 5 }
+const PLAN_LIMITS: Record<string, number> = { individual: 1, casal: 2, familia: 4 }
 
 const PLAN_ENV_MAP: Record<string, string> = {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
@@ -66,6 +66,7 @@ async function stripePost(url: string, stripeKey: string, params: URLSearchParam
 type DB = ReturnType<typeof createClient>
 
 // ── Cria backups para os perfis que serão removidos no downgrade ──────────────
+// profileIds: strings de IDs inteiros da tabela profiles (ex: ["6", "34"])
 async function createProfileBackups(
   db: DB,
   ownerUserId: string,
@@ -77,25 +78,29 @@ async function createProfileBackups(
 ): Promise<void> {
   if (profileIds.length === 0) return
 
-  // Busca dados completos dos membros para o snapshot
-  const { data: members, error } = await db
-    .from('account_members')
+  const intIds = profileIds.map(id => parseInt(id, 10)).filter(n => !isNaN(n))
+  if (intIds.length === 0) return
+
+  // Busca dados completos dos perfis para o snapshot
+  const { data: profiles, error } = await db
+    .from('profiles')
     .select('*')
-    .in('id', profileIds)
-    .eq('owner_user_id', ownerUserId)
+    .in('id', intIds)
+    .eq('user_id', ownerUserId)
     .eq('is_active', true)
 
-  if (error || !members?.length) {
-    console.error('[update-stripe-plan] Erro ao buscar membros para backup:', error?.message)
+  if (error || !profiles?.length) {
+    console.error('[update-stripe-plan] Erro ao buscar perfis para backup:', error?.message)
     return
   }
 
-  const backups = members.map((m: Record<string, unknown>) => ({
+  const backups = profiles.map((p: Record<string, unknown>) => ({
     owner_user_id:          ownerUserId,
-    original_member_id:     m.id as string,
-    member_name:            (m.member_name as string) || null,
-    member_email:           (m.member_email as string) || null,
-    member_data:            m,  // snapshot completo
+    original_member_id:     String(p.id),
+    source_table:           'profiles',
+    member_name:            (p.name as string) || null,
+    member_email:           null,
+    member_data:            p,  // snapshot completo
     scheduled_removal_at:   scheduledAt,
     status:                 'pending',
     original_plan:          currentPlan,
@@ -103,10 +108,9 @@ async function createProfileBackups(
     stripe_subscription_id: subscriptionId,
   }))
 
-  // upsert: se já existe pending/active para este membro, sobrescreve (changeRemovalList)
   const { error: backupErr } = await db
     .from('profile_backups')
-    .upsert(backups, { onConflict: 'owner_user_id,original_member_id' })
+    .upsert(backups, { onConflict: 'owner_user_id,original_member_id,source_table' })
 
   if (backupErr) {
     console.error('[update-stripe-plan] Erro ao criar backups:', backupErr.message)
@@ -129,42 +133,42 @@ async function cancelPendingBackups(db: DB, ownerUserId: string): Promise<void> 
 
 // ── Restaura perfis de backups ativos (quando usuário faz upgrade de volta) ────
 async function restoreActiveBackups(db: DB, ownerUserId: string): Promise<number> {
-  // Busca backups ativos deste usuário
   const { data: activeBackups, error: fetchErr } = await db
     .from('profile_backups')
-    .select('id, original_member_id')
+    .select('id, original_member_id, source_table')
     .eq('owner_user_id', ownerUserId)
     .eq('status', 'active')
 
   if (fetchErr || !activeBackups?.length) return 0
 
-  const memberIds = activeBackups.map((b: Record<string, unknown>) => b.original_member_id as string)
-
-  // Reativa os membros em account_members
-  const { error: reactivateErr } = await db
-    .from('account_members')
-    .update({ is_active: true, updated_at: new Date().toISOString() })
-    .in('id', memberIds)
-    .eq('owner_user_id', ownerUserId)
-
-  if (reactivateErr) {
-    console.error('[update-stripe-plan] Erro ao reativar membros:', reactivateErr.message)
-    return 0
+  // Restaura perfis da tabela profiles (IDs inteiros)
+  const profileBackups = activeBackups.filter((b: Record<string, unknown>) => b.source_table === 'profiles')
+  if (profileBackups.length > 0) {
+    const intIds = profileBackups.map((b: Record<string, unknown>) => parseInt(b.original_member_id as string, 10))
+    await db.from('profiles')
+      .update({ is_active: true, updated_at: new Date().toISOString() })
+      .in('id', intIds)
+      .eq('user_id', ownerUserId)
   }
 
-  // Marca backups como restaurados
+  // Restaura membros da tabela account_members (UUIDs)
+  const memberBackups = activeBackups.filter((b: Record<string, unknown>) => b.source_table === 'account_members')
+  if (memberBackups.length > 0) {
+    const uuids = memberBackups.map((b: Record<string, unknown>) => b.original_member_id as string)
+    await db.from('account_members')
+      .update({ is_active: true, updated_at: new Date().toISOString() })
+      .in('id', uuids)
+      .eq('owner_user_id', ownerUserId)
+  }
+
+  // Marca todos os backups como restaurados
   const backupIds = activeBackups.map((b: Record<string, unknown>) => b.id as string)
-  const { error: restoreErr } = await db
-    .from('profile_backups')
+  await db.from('profile_backups')
     .update({ status: 'restored', updated_at: new Date().toISOString() })
     .in('id', backupIds)
 
-  if (restoreErr) {
-    console.error('[update-stripe-plan] Erro ao marcar backups como restored:', restoreErr.message)
-  }
-
-  console.log(`[update-stripe-plan] ${memberIds.length} perfil(s) restaurado(s) — user: ${ownerUserId.slice(0, 8)}`)
-  return memberIds.length
+  console.log(`[update-stripe-plan] ${activeBackups.length} perfil(s) restaurado(s) — user: ${ownerUserId.slice(0, 8)}`)
+  return activeBackups.length
 }
 
 Deno.serve(async (req: Request) => {
@@ -206,6 +210,9 @@ Deno.serve(async (req: Request) => {
     ? (body.profilesToRemove as string[]).filter(s => typeof s === 'string' && UUID_RE.test(s))
     : []
 
+  // Valida IDs como inteiros positivos (tabela profiles usa INTEGER como PK)
+  if (profilesToRemove.some(id => !PROFILE_ID_RE.test(String(id))))
+    return json({ error: 'IDs de perfis inválidos' }, 400)
   if (profilesToRemove.length > 10)
     return json({ error: 'Número de perfis inválido' }, 400)
 
@@ -239,16 +246,16 @@ Deno.serve(async (req: Request) => {
     const targetPlan = stripeSub.pending_plan_name as string
     const newLimit   = PLAN_LIMITS[targetPlan] ?? 1
 
-    // Conta perfis ativos do usuário
-    const { count: memberCount, error: cntErr } = await supabaseAdmin
-      .from('account_members')
+    // Conta perfis ativos do usuário na tabela profiles
+    const { count: profileCount, error: cntErr } = await supabaseAdmin
+      .from('profiles')
       .select('*', { count: 'exact', head: true })
-      .eq('owner_user_id', user.id)
+      .eq('user_id', user.id)
       .eq('is_active', true)
 
     if (cntErr) return json({ error: 'Erro ao verificar perfis' }, 500)
 
-    const totalProfiles  = (memberCount ?? 0) + 1
+    const totalProfiles  = profileCount ?? 0
     const excessProfiles = Math.max(0, totalProfiles - newLimit)
 
     if (profilesToRemove.length < excessProfiles) {
@@ -259,16 +266,17 @@ Deno.serve(async (req: Request) => {
       }, 400)
     }
 
-    // Valida propriedade de cada perfil (anti-fraude: não pode remover perfis de outros)
-    const { data: validMembers, error: memberErr } = await supabaseAdmin
-      .from('account_members')
+    // Anti-fraude: valida que os IDs são perfis ativos DESTE usuário
+    const intIds = profilesToRemove.map(id => parseInt(id, 10))
+    const { data: validProfiles, error: profileErr } = await supabaseAdmin
+      .from('profiles')
       .select('id')
-      .eq('owner_user_id', user.id)
+      .eq('user_id', user.id)
       .eq('is_active', true)
-      .in('id', profilesToRemove)
+      .in('id', intIds)
 
-    if (memberErr || !validMembers) return json({ error: 'Erro ao validar perfis' }, 500)
-    if (validMembers.length !== profilesToRemove.length)
+    if (profileErr || !validProfiles) return json({ error: 'Erro ao validar perfis' }, 500)
+    if (validProfiles.length !== profilesToRemove.length)
       return json({ error: 'Um ou mais perfis selecionados são inválidos' }, 400)
 
     const remainingAfter = totalProfiles - profilesToRemove.length
@@ -482,13 +490,16 @@ Deno.serve(async (req: Request) => {
     let validatedRemovals: string[] = []
 
     try {
-      const { count: memberCount } = await supabaseAdmin
-        .from('account_members')
+      // Conta perfis ativos do usuário na tabela profiles (perfis próprios)
+      const { count: profileCount, error: countErr } = await supabaseAdmin
+        .from('profiles')
         .select('*', { count: 'exact', head: true })
-        .eq('owner_user_id', user.id)
+        .eq('user_id', user.id)
         .eq('is_active', true)
 
-      const totalProfiles  = (memberCount ?? 0) + 1
+      if (countErr) throw countErr
+
+      const totalProfiles  = profileCount ?? 0
       const excessProfiles = Math.max(0, totalProfiles - newLimit)
 
       if (excessProfiles > 0) {
@@ -500,16 +511,17 @@ Deno.serve(async (req: Request) => {
           }, 400)
         }
 
-        // Anti-fraude: valida que os IDs pertencem a membros ativos DESTA conta
-        const { data: validMembers, error: memberErr } = await supabaseAdmin
-          .from('account_members')
+        // Anti-fraude: valida que os IDs pertencem a perfis ativos DESTE usuário
+        const intIds = profilesToRemove.map(id => parseInt(id, 10))
+        const { data: validProfiles, error: profileErr } = await supabaseAdmin
+          .from('profiles')
           .select('id')
-          .eq('owner_user_id', user.id)
+          .eq('user_id', user.id)
           .eq('is_active', true)
-          .in('id', profilesToRemove)
+          .in('id', intIds)
 
-        if (memberErr || !validMembers) return json({ error: 'Erro ao validar perfis' }, 500)
-        if (validMembers.length !== profilesToRemove.length)
+        if (profileErr || !validProfiles) return json({ error: 'Erro ao validar perfis' }, 500)
+        if (validProfiles.length !== profilesToRemove.length)
           return json({ error: 'Um ou mais perfis selecionados são inválidos' }, 400)
 
         const remainingAfter = totalProfiles - profilesToRemove.length

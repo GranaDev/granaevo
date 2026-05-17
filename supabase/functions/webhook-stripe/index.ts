@@ -356,19 +356,22 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
       const profileRemovals = existing?.pending_profile_removals as string[] | null
       const ownerUserId     = existing?.user_id as string | null
       if (Array.isArray(profileRemovals) && profileRemovals.length > 0 && ownerUserId) {
-        // 1. Desativa membros em account_members
-        db.from('account_members')
-          .update({ is_active: false, updated_at: new Date().toISOString() })
-          .in('id', profileRemovals)
-          .eq('owner_user_id', ownerUserId)
-          .then(({ error: profileErr }) => {
-            if (profileErr) {
-              console.error(`[webhook-stripe] Erro ao desativar perfis — customer: ${customerId}:`, profileErr.message)
-            } else {
-              console.log(`[webhook-stripe] ${profileRemovals.length} perfis desativados — customer: ${customerId}`)
-            }
-          })
-          .catch((e: Error) => console.error('[webhook-stripe] Exceção ao desativar perfis:', e.message))
+        // 1. Desativa perfis na tabela profiles (IDs inteiros)
+        const intIds = profileRemovals.map(id => parseInt(id, 10)).filter(n => !isNaN(n))
+        if (intIds.length > 0) {
+          db.from('profiles')
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .in('id', intIds)
+            .eq('user_id', ownerUserId)
+            .then(({ error: profileErr }) => {
+              if (profileErr) {
+                console.error(`[webhook-stripe] Erro ao desativar perfis — customer: ${customerId}:`, profileErr.message)
+              } else {
+                console.log(`[webhook-stripe] ${intIds.length} perfis desativados (profiles) — customer: ${customerId}`)
+              }
+            })
+            .catch((e: Error) => console.error('[webhook-stripe] Exceção ao desativar perfis:', e.message))
+        }
 
         // 2. Ativa os backups correspondentes com prazo de 90 dias
         const now90    = new Date()

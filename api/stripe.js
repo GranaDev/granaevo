@@ -115,11 +115,11 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'newPlan inválido. Use: individual, casal ou familia' })
   }
 
-  // changeRemovalList: valida array de perfis
+  // changeRemovalList: valida array de IDs inteiros (tabela profiles)
   if (action === 'changeRemovalList') {
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const PROFILE_ID_RE = /^\d{1,10}$/
     const profiles = body.profilesToRemove ?? []
-    if (!Array.isArray(profiles) || profiles.length > 10 || profiles.some(id => !UUID_RE.test(id)))
+    if (!Array.isArray(profiles) || profiles.length > 10 || profiles.some(id => !PROFILE_ID_RE.test(String(id))))
       return res.status(400).json({ error: 'profilesToRemove inválido' })
   }
 
