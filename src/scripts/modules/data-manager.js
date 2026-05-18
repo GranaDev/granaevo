@@ -90,6 +90,10 @@ class DataManager {
     #debounceResolve = null;
     #debouncePending = null;
 
+    // Último count de perfis carregado do banco — usado pelo guarda anti-reset.
+    // Atualizado em loadUserData(); zerado em reset().
+    #lastKnownProfileCount = 0;
+
     // ── Getter público — somente leitura ─────────────────────────────────────
     get userId() {
         return this.#userId;
@@ -141,12 +145,13 @@ class DataManager {
                 this.#debounceResolve = null;
             }
         }
-        this.#userId       = null;
-        this.#userEmail    = null;
-        this.#isSaving     = false;
-        this.#lastSaveTime = null;
-        this.#queueDepth   = 0;
-        this.#saveQueue    = Promise.resolve();
+        this.#userId               = null;
+        this.#userEmail            = null;
+        this.#isSaving             = false;
+        this.#lastSaveTime         = null;
+        this.#queueDepth           = 0;
+        this.#saveQueue            = Promise.resolve();
+        this.#lastKnownProfileCount = 0;
         if (IS_DEV) console.log('🔒 [DATA-MANAGER] Estado limpo — usuário deslogado');
     }
 
@@ -223,6 +228,9 @@ class DataManager {
                 }
             }
             userData.profiles = validProfiles;
+
+            // Atualiza referência para o guarda anti-reset no próximo save
+            this.#lastKnownProfileCount = userData.profiles.length;
 
             if (IS_DEV) {
                 console.log('✅ [DATA-MANAGER] Dados carregados:', {
@@ -306,6 +314,19 @@ class DataManager {
     async #doSaveUserData(profilesData) {
         if (!this.#userId) {
             console.error('❌ [DATA-MANAGER] Não é possível salvar: UserID não definido');
+            return false;
+        }
+
+        // Guarda anti-reset: bloqueia save que zeraria dados existentes.
+        // Cenário coberto: bug no frontend esvaziou o array em memória e o
+        // debounce-save tentaria sobrescrever dados reais com array vazio.
+        // Não bloqueia deleção legítima de 1 perfil (threshold > 1).
+        if (this.#lastKnownProfileCount > 1 && profilesData.length === 0) {
+            console.error(
+                `❌ [DATA-MANAGER] BLOQUEIO ANTI-RESET: save de 0 perfis rejeitado ` +
+                `(último load: ${this.#lastKnownProfileCount} perfis). ` +
+                `Use restauração de backup se os dados foram perdidos.`
+            );
             return false;
         }
 
