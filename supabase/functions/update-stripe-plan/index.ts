@@ -23,7 +23,8 @@ const PROFILE_ID_RE    = /^\d{1,10}$/  // IDs inteiros da tabela profiles
 const VALID_PLANS      = new Set(['individual', 'casal', 'familia'])
 const PLAN_RANK:   Record<string, number> = { individual: 1, casal: 2, familia: 3 }
 const PLAN_LIMITS: Record<string, number> = { individual: 1, casal: 2, familia: 4 }
-const GUEST_LIMITS: Record<string, number> = { individual: 0, casal: 1, familia: 3 }
+const GUEST_LIMITS:       Record<string, number> = { individual: 0, casal: 1, familia: 3 }
+const PLAN_PRICES_CENTS:  Record<string, number> = { individual: 1999, casal: 3499, familia: 5499 }
 
 const PLAN_ENV_MAP: Record<string, string> = {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
@@ -173,6 +174,24 @@ async function restoreActiveBackups(db: DB, ownerUserId: string): Promise<number
   return activeBackups.length
 }
 
+// ── Dispara email de confirmação de mudança de plano (fire-and-forget) ────────
+// Falhas de email são silenciosas — nunca bloqueiam a resposta ao cliente.
+async function _fireEmail(payload: Record<string, unknown>): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const proxySecret = Deno.env.get('PROXY_SECRET') ?? ''
+    if (!supabaseUrl || !proxySecret) return
+    await fetch(`${supabaseUrl}/functions/v1/send-plan-change-email`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-proxy-secret': proxySecret },
+      body:    JSON.stringify(payload),
+      signal:  AbortSignal.timeout(15_000),
+    })
+  } catch (e) {
+    console.error('[update-stripe-plan] Erro ao enviar email de mudança de plano:', (e as Error).message)
+  }
+}
+
 Deno.serve(async (req: Request) => {
   const cors = getCorsHeaders(req)
   const json = (body: unknown, status = 200) =>
@@ -245,7 +264,7 @@ Deno.serve(async (req: Request) => {
   // ── 4. Busca assinatura do usuário ────────────────────────────────────────
   const { data: stripeSub, error: subErr } = await supabaseAdmin
     .from('stripe_subscriptions')
-    .select('stripe_customer_id, stripe_subscription_id, plan_name, status, current_period_end, pending_plan_name, pending_profile_removals')
+    .select('stripe_customer_id, stripe_subscription_id, plan_name, status, current_period_end, pending_plan_name, pending_profile_removals, user_email')
     .eq('user_id', user.id)
     .in('status', ['active', 'trialing'])
     .order('created_at', { ascending: false })
@@ -472,8 +491,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Verifica se o pagamento foi aprovado ──────────────────────────────
-    let paymentFailed = false
+    let paymentFailed   = false
     let latestInvoiceId = ''
+    let amountDue       = 0   // valor cobrado agora (proporcional)
     try {
       const updatedSub = await updateRes.json() as Record<string, unknown>
       latestInvoiceId  = (updatedSub.latest_invoice as string) ?? ''
@@ -484,10 +504,12 @@ Deno.serve(async (req: Request) => {
           { headers: { 'Authorization': `Bearer ${stripeKey}` }, signal: AbortSignal.timeout(10_000) }
         )
         if (invRes.ok) {
-          const invoice  = await invRes.json() as Record<string, unknown>
+          const invoice   = await invRes.json() as Record<string, unknown>
           const invStatus = invoice.status as string
           const pi        = invoice.payment_intent as Record<string, unknown> | null | undefined
           const piStatus  = pi?.status as string | undefined
+          // Extrai valor cobrado (em centavos) — usado no email de confirmação
+          amountDue = typeof invoice.amount_paid === 'number' ? invoice.amount_paid : 0
           if (invStatus !== 'paid' && (piStatus === 'requires_payment_method' || piStatus === 'canceled')) {
             paymentFailed = true
           }
@@ -529,13 +551,29 @@ Deno.serve(async (req: Request) => {
       .eq('stripe_subscription_id', stripeSub.stripe_subscription_id)
 
     // ── Restaura perfis de backups ativos (downgrade anterior revertido) ───
-    // Fire-and-forget: não bloqueia a resposta. Falha silenciosa é aceitável
-    // pois o webhook pode tentar de novo, e os dados do membro não são perdidos.
-    restoreActiveBackups(supabaseAdmin, user.id).catch(e =>
+    const _upgradeRestoredCount = await restoreActiveBackups(supabaseAdmin, user.id).catch(e => {
       console.error('[update-stripe-plan] Erro ao restaurar backups:', (e as Error).message)
-    )
+      return 0
+    })
 
     console.log(`[update-stripe-plan] Upgrade concluído — user: ${user.id.slice(0, 8)} ${currentPlan}→${newPlan}`)
+
+    // Fire-and-forget: envia email de confirmação de upgrade
+    const _upgradeEmail = stripeSub.user_email ?? user.email ?? ''
+    if (_upgradeEmail) {
+      _fireEmail({
+        action:           'upgrade',
+        email:            _upgradeEmail,
+        name:             (user.user_metadata?.name as string) || _upgradeEmail.split('@')[0],
+        oldPlan:          currentPlan,
+        newPlan,
+        amountDue,
+        newMonthlyAmount: PLAN_PRICES_CENTS[newPlan] ?? 0,
+        profilesRestored: _upgradeRestoredCount,
+        currency:         'brl',
+      }).catch(() => {})
+    }
+
     return json({ success: true, newPlan, action: 'upgraded' })
   }
 
@@ -688,6 +726,53 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(`[update-stripe-plan] Downgrade agendado — user: ${user.id.slice(0, 8)} ${currentPlan}→${newPlan} em ${periodEndISO} perfis: ${validatedRemovals.length} convidados: ${validatedMemberRemovals.length}`)
+
+    // Fire-and-forget: envia email de confirmação de downgrade com detalhes dos itens removidos
+    const _downgradeEmail = stripeSub.user_email ?? user.email ?? ''
+    if (_downgradeEmail && periodEndISO) {
+      ;(async () => {
+        try {
+          // Busca nomes dos perfis agendados para remoção
+          let profilesRemovedNames: string[] = []
+          if (validatedRemovals.length > 0) {
+            const intIds = validatedRemovals.map(id => parseInt(id, 10)).filter(n => !isNaN(n))
+            const { data: profileRows } = await supabaseAdmin
+              .from('profiles')
+              .select('name')
+              .eq('user_id', user.id)
+              .in('id', intIds)
+            profilesRemovedNames = (profileRows ?? []).map(p => (p.name as string) || 'Perfil')
+          }
+
+          // Busca emails dos convidados agendados para remoção
+          let membersRemovedEmails: string[] = []
+          if (validatedMemberRemovals.length > 0) {
+            const { data: memberRows } = await supabaseAdmin
+              .from('account_members')
+              .select('member_email')
+              .eq('owner_user_id', user.id)
+              .in('id', validatedMemberRemovals)
+            membersRemovedEmails = (memberRows ?? []).map(m => (m.member_email as string) || '').filter(Boolean)
+          }
+
+          await _fireEmail({
+            action:           'downgrade',
+            email:            _downgradeEmail,
+            name:             (user.user_metadata?.name as string) || _downgradeEmail.split('@')[0],
+            oldPlan:          currentPlan,
+            newPlan,
+            effectiveAt:      periodEndISO,
+            newMonthlyAmount: PLAN_PRICES_CENTS[newPlan] ?? 0,
+            profilesRemoved:  profilesRemovedNames,
+            membersRemoved:   membersRemovedEmails,
+            currency:         'brl',
+          })
+        } catch (e) {
+          console.error('[update-stripe-plan] Erro ao preparar email de downgrade:', (e as Error).message)
+        }
+      })()
+    }
+
     return json({
       success:                  true,
       newPlan,
