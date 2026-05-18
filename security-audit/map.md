@@ -1,5 +1,74 @@
 # GranaEvo — Security Surface Map
-Gerado em: 2026-05-18 | GOD MODE + GOD EYES Round 8
+Gerado em: 2026-05-18 | God Eyes Round 9 (auditoria completa pós-features)
+
+## Rotas de API (api/)
+| Arquivo | Auth | Rate Limit | Proxy Secret |
+|---------|------|------------|--------------|
+| api/check-email.js | Não | Sim | Sim |
+| api/check-user-access.js | JWT Bearer | Sim 20/min | Sim |
+| api/create-account.js | Não | Sim | Sim |
+| api/csp-report.js | Não | Sim | Não |
+| api/reset-password.js | Não | Sim | Sim |
+| api/send-guest-invite.js | JWT Bearer | Sim 5/min | Sim |
+| api/stripe.js | JWT (exceto checkout) | Sim por action | Sim |
+| api/upload-profile-photo.js | JWT Bearer | Sim | Sim |
+| api/user-data.js | JWT Bearer | Sim | Sim |
+| api/verify-invite.js | Não | Sim 5/min | Sim |
+| api/verify-recaptcha.js | Não | Sim | Sim |
+
+## Edge Functions (supabase/functions/)
+| Função | JWT | Proxy Secret | Notas |
+|--------|-----|--------------|-------|
+| check-user-access | Sim | Sim | Lockout progressivo |
+| confirm-user-email | Sim + subscriptionId | Sim | Anti-replay 10min |
+| create-stripe-checkout | Não | Sim | Checkout anônimo |
+| preview-stripe-plan | Sim | Sim | Guest block |
+| send-access-revoked-email | Não (S2S) | Sim | |
+| send-guest-invite | Sim | Sim | Limite por plano |
+| update-stripe-plan | Sim | Sim | Guest block |
+| verify-guest-invite | Não (proxy secret) | Sim | Nonce+lockout |
+| webhook-cakto | HMAC | — | |
+| webhook-stripe | HMAC | — | |
+
+## Tabelas (RLS)
+| Tabela | RLS | FORCE | Políticas |
+|--------|-----|-------|-----------|
+| user_data | ✓ | ✓ | SELECT own |
+| subscriptions | ✓ | ✓ | SELECT own |
+| payment_events | ✓ | ✓ | Nenhuma (service_role only) |
+| terms_acceptance | ✓ | ✓ | SELECT + INSERT own |
+| account_members | ✓ | ✓ | SELECT (owner ou membro) |
+| guest_invitations | ✓ | ✓ | SELECT own |
+| password_reset_codes | ✓ | ✓ | Nenhuma (service_role only) |
+| invite_rate_limit | ✓ | ✓ | Nenhuma (service_role only) |
+| invite_nonces | ✓ | ✓ | Nenhuma (service_role only) |
+| fraud_logs | ✓ | ✓ | Nenhuma (service_role only) |
+| stripe_subscriptions | ✓ | ✓ | SELECT (own+email), UPDATE claim |
+| stripe_events | ✓ | Não | Nenhuma (service_role only) |
+| profile_backups | ✓ | Não | SELECT own |
+| profiles | ✓ | ✓ | SELECT+INSERT+UPDATE own; SELECT como guest |
+
+## Funções SECURITY DEFINER
+| Função | Acesso | Seguro |
+|--------|--------|--------|
+| get_auth_user_by_email | service_role only | ✓ |
+| check_rate_limit | service_role only | ✓ |
+| record_failed_login | service_role only | ✓ |
+| clear_login_lockout | service_role only | ✓ |
+| check_login_lockout | service_role only | ✓ |
+| can_create_profile | authenticated | ✓ (retorna boolean, usa auth.uid()) |
+| purge_expired_cancelled_accounts | service_role only | ✓ |
+| cleanup_invite_tables | service_role only | ✓ |
+
+## Views
+| View | security_invoker | Status |
+|------|-----------------|--------|
+| active_profile_backups | true | ✓ |
+
+## .env
+- `.env.local` presente localmente com SUPABASE_ANON_KEY + VERCEL_OIDC_TOKEN
+- **NÃO rastreado pelo git** (confirmado) ✓
+- `.gitignore` bloqueia `.env` e `.env.*` ✓
 
 ---
 

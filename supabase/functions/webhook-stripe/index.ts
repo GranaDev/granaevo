@@ -401,19 +401,54 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
       // ── 2. Desativa convidados (account_members) agendados ───────────────────
       // Proteção: nunca desativa o próprio dono (neq member_user_id = ownerUserId)
       if (Array.isArray(memberRemovals) && memberRemovals.length > 0 && ownerUserId) {
-        db.from('account_members')
-          .update({ is_active: false, updated_at: new Date().toISOString() })
-          .eq('owner_user_id', ownerUserId)
-          .neq('member_user_id', ownerUserId)
-          .in('id', memberRemovals)
-          .then(({ error: memberErr }) => {
+        ;(async () => {
+          try {
+            // Busca emails antes de desativar para enviar notificações
+            const { data: memberRows } = await db
+              .from('account_members')
+              .select('id, member_email, member_user_id')
+              .eq('owner_user_id', ownerUserId)
+              .neq('member_user_id', ownerUserId)
+              .in('id', memberRemovals)
+
+            // Desativa os membros
+            const { error: memberErr } = await db
+              .from('account_members')
+              .update({ is_active: false, updated_at: new Date().toISOString() })
+              .eq('owner_user_id', ownerUserId)
+              .neq('member_user_id', ownerUserId)
+              .in('id', memberRemovals)
+
             if (memberErr) {
               console.error(`[webhook-stripe] Erro ao desativar convidados — customer: ${customerId}:`, memberErr.message)
             } else {
               console.log(`[webhook-stripe] ${memberRemovals.length} convidado(s) desativados — customer: ${customerId}`)
+
+              // Envia email de revogação para cada convidado desativado (fire-and-forget)
+              const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+              const proxySecret = Deno.env.get('PROXY_SECRET') ?? ''
+              const ownerEmail  = existing?.user_email as string | undefined
+              if (supabaseUrl && proxySecret && Array.isArray(memberRows)) {
+                for (const m of memberRows) {
+                  const guestEmail = (m.member_email as string | null) ?? ''
+                  if (!guestEmail) continue
+                  fetch(`${supabaseUrl}/functions/v1/send-access-revoked-email`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-proxy-secret': proxySecret },
+                    body: JSON.stringify({
+                      email:      guestEmail,
+                      ownerEmail: ownerEmail ?? '',
+                      reason:     'downgrade',
+                    }),
+                    signal: AbortSignal.timeout(10_000),
+                  }).catch(e => console.error('[webhook-stripe] Erro ao enviar email revogação:', (e as Error).message))
+                }
+              }
             }
-          })
-          .catch((e: Error) => console.error('[webhook-stripe] Exceção ao desativar convidados:', e.message))
+          } catch (e) {
+            console.error('[webhook-stripe] Exceção ao desativar convidados:', (e as Error).message)
+          }
+        })()
       }
     }
     // Se ainda não chegou a data, não altera plan_name (mantém plano atual)

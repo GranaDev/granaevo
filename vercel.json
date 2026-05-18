@@ -77,7 +77,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://www.google.com; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://www.google-analytics.com https://analytics.google.com https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self' https://www.googletagmanager.com https://connect.facebook.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://www.google.com; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://www.google-analytics.com https://analytics.google.com https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -97,7 +97,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co data:; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com https://api.bcb.gov.br; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co data:; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com https://api.bcb.gov.br; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -127,7 +127,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -137,7 +137,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },

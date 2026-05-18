@@ -8,10 +8,14 @@ const EDGE_URL       = `${_SUPABASE_URL}/functions/v1/send-guest-invite`
 const ANON_KEY       = process.env.SUPABASE_ANON_KEY
 const PROXY_SECRET   = process.env.PROXY_SECRET ?? ''
 // Suporta múltiplas origens separadas por vírgula (www e não-www)
-const ALLOWED_ORIGINS = new Set(
-  (process.env.ALLOWED_ORIGIN ?? 'https://www.granaevo.com,https://granaevo.com')
-    .split(',').map(s => s.trim()).filter(Boolean)
-)
+const ALLOWED_ORIGINS = new Set([
+  'https://www.granaevo.com',
+  'https://granaevo.com',
+  'https://granaevo.vercel.app',
+  ...(process.env.ALLOWED_ORIGIN
+    ? process.env.ALLOWED_ORIGIN.split(',').map(s => s.trim()).filter(Boolean)
+    : []),
+])
 const MAX_BODY_BYTES = 4096
 const RATE_MAX       = 5
 

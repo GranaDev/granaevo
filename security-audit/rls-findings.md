@@ -1,8 +1,123 @@
 # God Eyes — Auditoria RLS
-Data: 2026-05-17 | Round 7
+Data: 2026-05-18 | Round 9
 
-> **Nota:** O Supabase CLI requer SUPABASE_DB_PASSWORD que não está disponível localmente.
-> As queries 2.1–2.9 foram respondidas com base na análise completa das 21 migrations aplicadas.
+> **Método:** psql indisponível localmente (Docker necessário). Análise baseada nas 23 migrations aplicadas + leitura dos arquivos SQL. Todos os resultados foram cross-referenciados com o código das Edge Functions.
+
+---
+
+## 2.1 — Tabelas sem RLS habilitado
+**Resultado esperado:** NENHUMA linha (todas as tabelas têm RLS habilitado)
+**Status: ✅ OK**
+
+Todas as tabelas de dados do schema `public` têm RLS habilitado conforme migrations:
+- `20260426200000_rls_all_tables.sql` → user_data, subscriptions, payment_events, terms_acceptance, account_members, guest_invitations, password_reset_codes, invite_rate_limit, invite_nonces, fraud_logs
+- `20260504000000_stripe_subscriptions.sql` → stripe_subscriptions, stripe_events
+- `20260506000003_fix_profiles_rls.sql` → profiles
+- `20260517000002_profile_backups.sql` → profile_backups
+
+---
+
+## 2.2 — Tabelas com RLS ativo mas sem políticas
+**Resultado:** stripe_events, login_lockouts, edge_rate_limits, profile_backups (apenas INSERT/UPDATE/DELETE)
+**Status: ✅ OK — Intencional**
+
+Para tabelas internas (sem acesso externo desejado), ausência de políticas = deny-by-default para todos os roles. `service_role` bypassa RLS por definição. Essa é a configuração correta para essas tabelas.
+
+**Atenção:** `stripe_events` tem RLS habilitado mas **sem FORCE ROW LEVEL SECURITY**. Isso significa que o role `postgres` (owner) contorna o RLS. Na prática, apenas `service_role` acessa esta tabela. **Classificação: BAIXO**
+
+---
+
+## 2.3 — Todas as políticas
+**Status: ✅ OK — revisadas individualmente**
+
+| Tabela | Política | CMD | QUAL | WITH CHECK |
+|--------|----------|-----|------|------------|
+| user_data | user_data_owner_select | SELECT | user_id = auth.uid() | — |
+| subscriptions | subscriptions_owner_select | SELECT | user_id = auth.uid() | — |
+| terms_acceptance | terms_owner_select | SELECT | user_id = auth.uid() | — |
+| terms_acceptance | terms_owner_insert | INSERT | — | user_id = auth.uid() |
+| account_members | account_members_owner_select | SELECT | owner_user_id=uid OR member_user_id=uid | — |
+| guest_invitations | guest_invitations_owner_select | SELECT | owner_user_id = auth.uid() | — |
+| stripe_subscriptions | stripe_sub_select_own | SELECT | auth.uid() = user_id | — |
+| stripe_subscriptions | stripe_sub_select_by_email | SELECT | lower(user_email)=lower(jwt->>email) | — |
+| stripe_subscriptions | stripe_sub_update_claim | UPDATE | user_id IS NULL AND email match | auth.uid() = user_id |
+| profile_backups | profile_backups_select_own | SELECT | auth.uid() = owner_user_id | — |
+| profiles | profiles_select_own | SELECT | user_id = auth.uid() | — |
+| profiles | profiles_select_as_guest | SELECT | user_id IN (account_members.owner_user_id WHERE member=uid) | — |
+| profiles | profiles_insert_own | INSERT | — | user_id = auth.uid() |
+| profiles | profiles_update_own | UPDATE | user_id = auth.uid() | user_id = auth.uid() |
+
+---
+
+## 2.4 — UPDATE sem WITH CHECK (CRÍTICO se existir)
+**Resultado: ✅ NENHUM PROBLEMA**
+
+O único UPDATE policy é `stripe_sub_update_claim` que TEM WITH CHECK:
+```sql
+WITH CHECK (auth.uid() = user_id)
+```
+O `profiles_update_own` também tem WITH CHECK. Nenhum UPDATE sem WITH CHECK.
+
+---
+
+## 2.5 — Views sem security_invoker
+**Resultado: ✅ OK**
+
+Única view: `active_profile_backups` com `WITH (security_invoker = true)` — conforme migrations.
+Não há outras views no schema public.
+
+---
+
+## 2.6 — Funções SECURITY DEFINER
+**Status: ✅ OK — todas revisadas**
+
+Todas as funções SECURITY DEFINER têm:
+- `SET search_path = extensions, public` (previne search_path injection)
+- REVOKE de PUBLIC/anon/authenticated
+- GRANT apenas para service_role (exceto `can_create_profile` que é authenticated)
+
+`can_create_profile()` concede acesso a `authenticated` e é SECURITY DEFINER. **Análise:**
+- Retorna apenas boolean (não expõe dados)
+- Usa `auth.uid()` e `auth.jwt()->>email` para escopo automático ao usuário corrente
+- Acessa stripe_subscriptions, subscriptions, account_members — mas dados filtrados pelo uid do caller
+- **Classificação: BAIXO** — risco mínimo, comportamento intencional
+
+---
+
+## 2.7 — Tabelas no Realtime
+**Status: ⚠️ NÃO VERIFICÁVEL SEM PSQL**
+
+Não foi possível executar a query via CLI. Recomendação: verificar no Supabase Dashboard → Database → Replication. Nenhuma tabela deveria estar publicada para Realtime além das explicitamente necessárias.
+
+**Ação recomendada:** Confirmar manualmente quais tabelas estão em `supabase_realtime`.
+
+---
+
+## 2.8 — Storage buckets
+**Status: ⚠️ NÃO VERIFICÁVEL SEM PSQL**
+
+`upload-profile-photo` Edge Function usa Storage (validação MIME + tamanho no servidor ✓).
+Verificar manualmente: Dashboard → Storage → se algum bucket é `public = true`.
+
+---
+
+## 2.9 — Permissões do role anon
+**Status: ✅ OK — baseado nas migrations**
+
+Tabelas internas: REVOKE ALL FROM anon aplicado explicitamente.
+Tabelas de dados: sem GRANT para anon (RLS deny-by-default).
+`stripe_subscriptions`: REVOKE ALL FROM anon aplicado explicitamente.
+
+Não há evidência de GRANT de acesso a dados sensíveis para o role `anon`.
+
+---
+
+## Resumo RLS
+- Tabelas auditadas via migrations: **14**
+- Problemas CRÍTICOS: **0**
+- Problemas ALTOS: **0**
+- Problemas MÉDIOS: **0**
+- Observações BAIXO: **2** (stripe_events sem FORCE, Realtime não verificado)
 > Para verificação definitiva em produção, execute as queries manualmente no SQL Editor do Supabase Dashboard.
 
 ---
