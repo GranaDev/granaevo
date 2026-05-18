@@ -1,9 +1,14 @@
-// /api/user-data.js — Proxy unificado: GET (carregar) + POST (salvar)
-// Consolida get-user-data.js + save-user-data.js em uma única Serverless Function
-// para respeitar o limite de 12 funções do plano Hobby da Vercel.
+// /api/user-data.js — Proxy unificado: GET (carregar) + POST (salvar) + backup
+// Consolida get-user-data.js + save-user-data.js + user-data-backup em uma única
+// Serverless Function para respeitar o limite de 12 funções do plano Hobby da Vercel.
+//
+// Rotas de backup (sem endpoint extra):
+//   GET  ?backup=1          → lista últimos 5 snapshots (metadados)
+//   POST { action:"restore", snapshot_date:"YYYY-MM-DD" } → restaura snapshot
 
 const GET_EDGE_URL         = process.env.SUPABASE_GET_DATA_EDGE_URL;
 const SAVE_EDGE_URL        = process.env.SUPABASE_EDGE_URL;
+const BACKUP_EDGE_URL      = process.env.SUPABASE_BACKUP_EDGE_URL;
 const SUPABASE_ANON_KEY    = process.env.SUPABASE_ANON_KEY;
 const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN;
 const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF;
@@ -18,26 +23,28 @@ const ALLOWED_ORIGINS = [
     'https://granaevo.vercel.app',
 ].filter(Boolean);
 
-const RL_MAX_IP_GET    = 20;
-const RL_MAX_IP_POST   = 10;
-const RL_MAX_USER_POST = 8;
-const RL_WINDOW_MS     = 60_000;
-const MAX_STORE_SIZE   = 10_000;
-const MAX_BODY_BYTES   = 5_242_880;
-const MAX_PROFILES     = 200;
-const MAX_JSON_DEPTH   = 8;
-const MAX_KEYS_OBJ     = 50;
+const RL_MAX_IP_GET      = 20;
+const RL_MAX_IP_POST     = 10;
+const RL_MAX_USER_POST   = 8;
+const RL_WINDOW_MS       = 60_000;
+const RL_RESTORE_MAX     = 3;
+const RL_RESTORE_WIN_MS  = 3_600_000;
+const MAX_STORE_SIZE     = 10_000;
+const MAX_BODY_BYTES     = 5_242_880;
+const MAX_PROFILES       = 200;
+const MAX_JSON_DEPTH     = 8;
+const MAX_KEYS_OBJ       = 50;
 
 // ── Rate limit store compartilhado ───────────────────────────
 const rlStore = new Map();
 
-function checkRL(key, max) {
+function checkRL(key, max, windowMs = RL_WINDOW_MS) {
     const now = Date.now();
     const rec = rlStore.get(key);
-    if (!rec || now - rec.t > RL_WINDOW_MS) {
+    if (!rec || now - rec.t > windowMs) {
         if (!rec && rlStore.size >= MAX_STORE_SIZE) {
             for (const [k, r] of rlStore) {
-                if (now - r.t > RL_WINDOW_MS) rlStore.delete(k);
+                if (now - r.t > windowMs) rlStore.delete(k);
                 if (rlStore.size < MAX_STORE_SIZE) break;
             }
             if (rlStore.size >= MAX_STORE_SIZE) return false;
@@ -120,7 +127,31 @@ export default async function handler(req, res) {
 
     const userId = extractUserId(token);
 
-    // ── GET: encaminha direto ─────────────────────────────────
+    // ── GET ?backup=1: lista snapshots (metadados) ───────────────
+    if (req.method === 'GET' && req.query?.backup === '1') {
+        if (!BACKUP_EDGE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
+        let edgeRes;
+        try {
+            edgeRes = await fetch(BACKUP_EDGE_URL, {
+                method: 'GET',
+                headers: {
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                },
+                signal: AbortSignal.timeout(10_000),
+            });
+        } catch (e) {
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
+            return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
+        }
+        return res.status(edgeRes.status)
+                  .setHeader('Content-Type', 'application/json')
+                  .send(await edgeRes.text());
+    }
+
+    // ── GET: encaminha direto (carregar dados) ────────────────
     if (req.method === 'GET') {
         let edgeRes;
         try {
@@ -158,6 +189,55 @@ export default async function handler(req, res) {
     try { parsed = JSON.parse(raw); }
     catch { return res.status(400).json({ error: 'Body deve ser JSON válido' }); }
 
+    // ── POST { action:"restore" }: restaura snapshot ──────────
+    if (parsed?.action === 'restore') {
+        if (!BACKUP_EDGE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
+        if (typeof parsed?.snapshot_date !== 'string' ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(parsed.snapshot_date))
+            return res.status(400).json({ error: 'snapshot_date inválido (esperado YYYY-MM-DD)' });
+
+        if (!checkRL(`ip:${ip}:restore`, RL_RESTORE_MAX, RL_RESTORE_WIN_MS)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Limite de restaurações atingido. Aguarde 1 hora.' });
+        }
+        if (userId && !checkRL(`uid:${userId}:restore`, RL_RESTORE_MAX, RL_RESTORE_WIN_MS)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Limite de restaurações atingido. Aguarde 1 hora.' });
+        }
+
+        let edgeRes;
+        try {
+            edgeRes = await fetch(BACKUP_EDGE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type':    'application/json',
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                },
+                body: JSON.stringify({ action: 'restore', snapshot_date: parsed.snapshot_date }),
+                signal: AbortSignal.timeout(15_000),
+            });
+        } catch (e) {
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
+            return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
+        }
+
+        if (edgeRes.status === 200 && userId && REDIS_URL && REDIS_TOKEN) {
+            fetch(`${REDIS_URL}/del/gd:${userId}`, {
+                method:  'POST',
+                headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+                signal:  AbortSignal.timeout(2_000),
+            }).catch(() => {});
+        }
+
+        return res.status(edgeRes.status)
+                  .setHeader('Content-Type', 'application/json')
+                  .send(await edgeRes.text());
+    }
+
+    // ── POST (salvar dados): valida profiles ──────────────────
     const { depth, maxKeys } = analyzeJson(parsed);
     if (depth > MAX_JSON_DEPTH)   return res.status(400).json({ error: 'JSON muito profundo' });
     if (maxKeys > MAX_KEYS_OBJ)   return res.status(400).json({ error: 'JSON com muitas chaves' });
