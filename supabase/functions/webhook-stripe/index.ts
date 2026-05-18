@@ -310,10 +310,10 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
   const metadata        = (sub.metadata as Record<string, string>) ?? {}
   const newCancelAtEnd  = (sub.cancel_at_period_end as boolean) ?? false
 
-  // Busca dados atuais incluindo downgrade agendado e remoções de perfis pendentes
+  // Busca dados atuais incluindo downgrade agendado e remoções pendentes
   const { data: existing } = await db
     .from('stripe_subscriptions')
-    .select('user_id, cancel_at_period_end, user_email, plan_name, current_period_start, pending_plan_name, pending_plan_effective_at, pending_profile_removals')
+    .select('user_id, cancel_at_period_end, user_email, plan_name, current_period_start, pending_plan_name, pending_plan_effective_at, pending_profile_removals, pending_member_removals')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
@@ -347,16 +347,16 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
       updates.pending_plan_name         = null
       updates.pending_plan_effective_at = null
       updates.pending_profile_removals  = null
+      updates.pending_member_removals   = null
 
       console.log(`[webhook-stripe] Downgrade agendado aplicado: ${existing?.plan_name}→${pendingPlan} customer: ${customerId}`)
 
-      // ── Desativa os perfis agendados e ativa seus backups ────────────────────
-      // Executado APÓS o ciclo de faturamento renovar, garantindo que o usuário
-      // teve acesso ao plano atual até o último momento pago.
       const profileRemovals = existing?.pending_profile_removals as string[] | null
+      const memberRemovals  = existing?.pending_member_removals  as string[] | null
       const ownerUserId     = existing?.user_id as string | null
+
+      // ── 1. Desativa perfis agendados e ativa backups de 90 dias ─────────────
       if (Array.isArray(profileRemovals) && profileRemovals.length > 0 && ownerUserId) {
-        // 1. Desativa perfis na tabela profiles (IDs inteiros)
         const intIds = profileRemovals.map(id => parseInt(id, 10)).filter(n => !isNaN(n))
         if (intIds.length > 0) {
           db.from('profiles')
@@ -367,24 +367,23 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
               if (profileErr) {
                 console.error(`[webhook-stripe] Erro ao desativar perfis — customer: ${customerId}:`, profileErr.message)
               } else {
-                console.log(`[webhook-stripe] ${intIds.length} perfis desativados (profiles) — customer: ${customerId}`)
+                console.log(`[webhook-stripe] ${intIds.length} perfis desativados — customer: ${customerId}`)
               }
             })
             .catch((e: Error) => console.error('[webhook-stripe] Exceção ao desativar perfis:', e.message))
         }
 
-        // 2. Ativa os backups correspondentes com prazo de 90 dias
-        const now90    = new Date()
+        const now90 = new Date()
         now90.setDate(now90.getDate() + 90)
-        const expiresAt = now90.toISOString()
+        const expiresAt   = now90.toISOString()
         const activatedAt = new Date().toISOString()
 
         db.from('profile_backups')
           .update({
-            status:           'active',
-            activated_at:     activatedAt,
+            status:            'active',
+            activated_at:      activatedAt,
             backup_expires_at: expiresAt,
-            updated_at:       activatedAt,
+            updated_at:        activatedAt,
           })
           .eq('owner_user_id', ownerUserId)
           .eq('status', 'pending')
@@ -397,6 +396,24 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
             }
           })
           .catch((e: Error) => console.error('[webhook-stripe] Exceção ao ativar backups:', e.message))
+      }
+
+      // ── 2. Desativa convidados (account_members) agendados ───────────────────
+      // Proteção: nunca desativa o próprio dono (neq member_user_id = ownerUserId)
+      if (Array.isArray(memberRemovals) && memberRemovals.length > 0 && ownerUserId) {
+        db.from('account_members')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq('owner_user_id', ownerUserId)
+          .neq('member_user_id', ownerUserId)
+          .in('id', memberRemovals)
+          .then(({ error: memberErr }) => {
+            if (memberErr) {
+              console.error(`[webhook-stripe] Erro ao desativar convidados — customer: ${customerId}:`, memberErr.message)
+            } else {
+              console.log(`[webhook-stripe] ${memberRemovals.length} convidado(s) desativados — customer: ${customerId}`)
+            }
+          })
+          .catch((e: Error) => console.error('[webhook-stripe] Exceção ao desativar convidados:', e.message))
       }
     }
     // Se ainda não chegou a data, não altera plan_name (mantém plano atual)

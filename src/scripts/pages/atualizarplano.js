@@ -604,14 +604,16 @@ function _renderInvoices(invoices) {
         row.appendChild(badge);
 
         // PDF link
-        const pdfUrl = inv.invoice_pdf || inv.hosted_invoice_url;
-        if (pdfUrl) {
+        // Valida que pdfUrl é HTTPS antes de usar como href (bloqueia javascript: e data: URLs)
+        const rawPdfUrl = inv.invoice_pdf || inv.hosted_invoice_url;
+        const safePdfUrl = (typeof rawPdfUrl === 'string' && /^https:\/\//i.test(rawPdfUrl)) ? rawPdfUrl : null;
+        if (safePdfUrl) {
             const a = document.createElement('a');
             a.className = 'inv-pdf';
-            a.href    = pdfUrl;
+            a.href    = safePdfUrl;
             a.target  = '_blank';
             a.rel     = 'noopener noreferrer';
-            a.setAttribute('aria-label', `Baixar fatura ${inv.number || formatDate(inv.created)}`);
+            a.setAttribute('aria-label', `Baixar fatura ${_esc(String(inv.number || formatDate(inv.created)))}`);
             a.innerHTML = `<svg viewBox="0 0 16 16" fill="none"><path d="M3 12l2-2m0 0l3 3 5-7M5 10V4M3 14h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
             row.appendChild(a);
         } else {
@@ -705,6 +707,17 @@ let _derivedPeriodEnd            = null  // Unix timestamp — fallback para dat
 let _derivedPeriodStart          = null  // Unix timestamp — fallback para cálculo de proration
 
 // ── Helpers do modal ─────────────────────────────────────────────
+
+// Escapa caracteres HTML — usada em TODOS os dados externos antes de innerHTML
+function _esc(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;')
+}
+
 function _fmtMoney(cents, currency = 'brl') {
     return new Intl.NumberFormat('pt-BR', {
         style: 'currency', currency: currency.toUpperCase(),
@@ -723,7 +736,8 @@ function _fmtDateFromISO(iso) {
 }
 
 function _planLabel(slug) {
-    return { individual: 'Individual', casal: 'Casal', familia: 'Família' }[slug] || slug || '—'
+    // Nunca retorna o slug bruto — previne XSS se slug vier de fonte externa
+    return { individual: 'Individual', casal: 'Casal', familia: 'Família' }[slug] || '—'
 }
 
 // Catálogo de planos (preços em centavos)
@@ -758,10 +772,11 @@ const plans = [
 function _openPlanModal(session) {
 
     // ── Estado ────────────────────────────────────────────────────
-    let _selectedPlan       = ''
-    let _previewData        = null
-    let _selectedForRemoval = new Set()
-    let _fetchingPreview    = false
+    let _selectedPlan             = ''
+    let _previewData              = null
+    let _selectedForRemoval       = new Set()  // IDs de profiles (inteiros)
+    let _selectedGuestsForRemoval = new Set()  // IDs de account_members (UUIDs)
+    let _fetchingPreview          = false
 
     // ── DOM base ──────────────────────────────────────────────────
     const overlay = document.createElement('div')
@@ -846,9 +861,10 @@ function _openPlanModal(session) {
     // ETAPA 1 — Seleção de plano (cards estilo planos.html)
     // ════════════════════════════════════════════════════════════
     function _renderStep1() {
-        _selectedPlan = ''
-        _previewData  = null
-        _selectedForRemoval = new Set()
+        _selectedPlan             = ''
+        _previewData              = null
+        _selectedForRemoval       = new Set()
+        _selectedGuestsForRemoval = new Set()
 
         const curData  = plans.find(p => p.slug === _currentPlanSlug)
         const curPrice = curData?.price ?? 0
@@ -962,17 +978,17 @@ function _openPlanModal(session) {
     }
 
     // ════════════════════════════════════════════════════════════
-    // ALTERAR PERFIL QUE SERÁ EXCLUÍDO NO DOWNGRADE AGENDADO
+    // ALTERAR PERFIS/CONVIDADOS QUE SERÃO EXCLUÍDOS NO DOWNGRADE AGENDADO
     // ════════════════════════════════════════════════════════════
     async function _renderChangeRemoval() {
-        // Carrega membros ativos do backend (via previewPlan do plano target)
-        let members      = []
-        let excessCount  = 1
-        let newPlanLimit = 1
+        let members         = []
+        let guests          = []
+        let excessCount     = 0
+        let excessGuestCount = 0
 
         _setHtml(`
-          ${_hdr('Alterar perfil a remover', true)}
-          <div class="gm-step-loading"><span class="gm-spin"></span> Carregando perfis...</div>
+          ${_hdr('Alterar seleção de itens', true)}
+          <div class="gm-step-loading"><span class="gm-spin"></span> Carregando...</div>
         `)
         modal.querySelector('[data-back]')?.addEventListener('click', _renderStep1)
 
@@ -985,46 +1001,69 @@ function _openPlanModal(session) {
                 signal: AbortSignal.timeout(15_000),
             })
             const data = await resp.json().catch(() => ({}))
-            if (resp.ok && data.members?.length) {
-                members      = data.members
-                excessCount  = data.excessCount  ?? 1
-                newPlanLimit = data.newPlanLimit  ?? 1
+            if (resp.ok) {
+                members          = data.members          ?? []
+                guests           = data.guests           ?? []
+                excessCount      = data.excessCount      ?? 0
+                excessGuestCount = data.excessGuestCount ?? 0
             }
         } catch { /* mostra lista vazia com mensagem */ }
 
-        const selectedIds = new Set(_currentPendingRemovals)
+        const selProfIds   = new Set(_currentPendingRemovals)
+        // TODO: carregar pending_member_removals via API se necessário
+        const selGuestIds  = new Set()
 
-        const membersHtml = members.map(m => {
-            const isCurrentlySelected = selectedIds.has(m.id)
+        const profilesHtml = members.map(m => {
+            const checked = selProfIds.has(String(m.id))
             return `
-              <label class="member-option ${isCurrentlySelected ? 'mo-checked' : ''}" data-id="${m.id}">
-                <input type="checkbox" class="mo-cb" value="${m.id}" ${isCurrentlySelected ? 'checked' : ''}>
+              <label class="member-option ${checked ? 'mo-checked' : ''}" data-id="${_esc(String(m.id))}">
+                <input type="checkbox" class="mo-cb-profile" value="${_esc(String(m.id))}" ${checked ? 'checked' : ''}>
                 <div class="mo-info">
-                  <div class="mo-name">${m.name}</div>
-                  <div class="mo-email">${m.email}</div>
+                  <div class="mo-name">${_esc(m.name)}</div>
+                  <div class="mo-email">${_esc(m.email)}</div>
                 </div>
                 <div class="mo-dot"></div>
               </label>`
         }).join('')
 
-        const noMembersHtml = members.length === 0
-            ? `<div class="gm-danger-text">Não foi possível carregar os perfis. Tente novamente.</div>` : ''
+        const guestsHtml = guests.map(g => {
+            const checked = selGuestIds.has(String(g.id))
+            return `
+              <label class="member-option ${checked ? 'mo-checked' : ''}" data-id="${_esc(String(g.id))}">
+                <input type="checkbox" class="mo-cb-guest" value="${_esc(String(g.id))}" ${checked ? 'checked' : ''}>
+                <div class="mo-info">
+                  <div class="mo-name">Convidado</div>
+                  <div class="mo-email">${_esc(g.email)}</div>
+                </div>
+                <div class="mo-dot mo-dot--guest"></div>
+              </label>`
+        }).join('')
+
+        const profileSection = members.length > 0 ? `
+          <div class="gm-section-label">Perfis (selecione ${excessCount}):</div>
+          <div class="gm-members-list">${profilesHtml}</div>` : ''
+
+        const guestSection = guests.length > 0 && excessGuestCount > 0 ? `
+          <div class="gm-section-label gm-section-label--warn">Convidados a remover (selecione ${excessGuestCount}):</div>
+          <div class="gm-members-list">${guestsHtml}</div>` : ''
+
+        const noItemsHtml = (members.length === 0 && guests.length === 0)
+            ? `<div class="gm-danger-text">Não foi possível carregar os itens. Tente novamente.</div>` : ''
 
         _setHtml(`
-          ${_hdr('Alterar perfil a remover', true)}
+          ${_hdr('Alterar seleção de itens', true)}
           <div class="gm-danger-box">
-            <div class="gm-danger-title">✏️ Alterar seleção de perfis</div>
+            <div class="gm-danger-title">✏️ Alterar seleção do downgrade agendado</div>
             <div class="gm-danger-text">
-              Selecione quais perfis serão desativados quando o plano
+              Altere quais itens serão desativados quando o plano
               <strong>${_planLabel(_currentPendingPlan)}</strong> entrar em vigor.
-              O backup anterior será substituído. Dados ficam salvos por <strong>90 dias</strong>.
+              Dados ficam salvos por <strong>90 dias</strong>.
             </div>
           </div>
-          ${noMembersHtml}
-          <div class="gm-members-list">${membersHtml}</div>
-          <p id="changeInfo" class="gm-profile-info">
-            Selecione ${excessCount} perfil${excessCount > 1 ? 's' : ''} para remover
-          </p>
+          ${noItemsHtml}
+          ${profileSection}
+          ${guestSection}
+          <p id="changeInfo" class="gm-profile-info">Faça sua seleção para continuar</p>
           <div class="gm-btn-group">
             <button data-back class="gm-btn-secondary">← Voltar</button>
             <button id="confirmChangeBtn" disabled class="gm-btn-primary">Confirmar alteração</button>
@@ -1033,43 +1072,49 @@ function _openPlanModal(session) {
 
         modal.querySelector('[data-back]')?.addEventListener('click', _renderStep1)
 
-        const confirmBtn = modal.querySelector('#confirmChangeBtn')
-        const infoEl     = modal.querySelector('#changeInfo')
-        const newSelected = new Set(_currentPendingRemovals)
+        const confirmBtn    = modal.querySelector('#confirmChangeBtn')
+        const infoEl        = modal.querySelector('#changeInfo')
+        const newProfSel    = new Set(_currentPendingRemovals)
+        const newGuestSel   = new Set()
 
         function _updateConfirm() {
-            const ok = newSelected.size >= excessCount
+            const pOk = excessCount === 0      || newProfSel.size  >= excessCount
+            const gOk = excessGuestCount === 0 || newGuestSel.size >= excessGuestCount
+            const ok  = pOk && gOk
             if (confirmBtn) confirmBtn.disabled = !ok
             if (infoEl) {
-                const count = newSelected.size
+                const total = newProfSel.size + newGuestSel.size
                 infoEl.textContent = ok
-                    ? `✓ ${count} perfil${count > 1 ? 's' : ''} selecionado${count > 1 ? 's' : ''}`
-                    : `Selecione mais ${excessCount - count} perfil${excessCount - count > 1 ? 's' : ''}`
+                    ? `✓ ${total} item${total > 1 ? 's' : ''} selecionado${total > 1 ? 's' : ''}`
+                    : 'Faça sua seleção para continuar'
                 if (ok) infoEl.classList.add('pi-ok')
                 else    infoEl.classList.remove('pi-ok')
             }
         }
 
-        modal.querySelectorAll('.member-option input[type=checkbox]').forEach(cb => {
+        modal.querySelectorAll('.mo-cb-profile').forEach(cb => {
             cb.addEventListener('change', () => {
                 const lbl = cb.closest('.member-option')
-                if (cb.checked) {
-                    newSelected.add(cb.value)
-                    lbl?.classList.add('mo-checked')
-                } else {
-                    newSelected.delete(cb.value)
-                    lbl?.classList.remove('mo-checked')
-                }
+                if (cb.checked) { newProfSel.add(cb.value); lbl?.classList.add('mo-checked') }
+                else             { newProfSel.delete(cb.value); lbl?.classList.remove('mo-checked') }
+                _updateConfirm()
+            })
+        })
+
+        modal.querySelectorAll('.mo-cb-guest').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const lbl = cb.closest('.member-option')
+                if (cb.checked) { newGuestSel.add(cb.value); lbl?.classList.add('mo-checked') }
+                else             { newGuestSel.delete(cb.value); lbl?.classList.remove('mo-checked') }
                 _updateConfirm()
             })
         })
 
         _updateConfirm()
-
-        confirmBtn?.addEventListener('click', () => _doChangeRemoval([...newSelected]))
+        confirmBtn?.addEventListener('click', () => _doChangeRemoval([...newProfSel], [...newGuestSel]))
     }
 
-    async function _doChangeRemoval(newProfilesToRemove) {
+    async function _doChangeRemoval(newProfilesToRemove, newMembersToRemove = []) {
         const btn = modal.querySelector('#confirmChangeBtn')
         if (!btn || btn.disabled) return
         btn.disabled  = true
@@ -1080,7 +1125,11 @@ function _openPlanModal(session) {
             const resp  = await fetch('/api/stripe', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body:    JSON.stringify({ action: 'changeRemovalList', profilesToRemove: newProfilesToRemove }),
+                body:    JSON.stringify({
+                    action:           'changeRemovalList',
+                    profilesToRemove: newProfilesToRemove,
+                    membersToRemove:  newMembersToRemove,
+                }),
                 signal:  AbortSignal.timeout(20_000),
             })
             const data = await resp.json().catch(() => ({}))
@@ -1092,12 +1141,11 @@ function _openPlanModal(session) {
                 return
             }
 
-            // Atualiza variável local para refletir nova seleção
             _currentPendingRemovals = newProfilesToRemove
-            _showToast('Seleção de perfis atualizada com sucesso.', 'success')
+            _showToast('Seleção atualizada com sucesso.', 'success')
             _renderStep1()
 
-        } catch (err) {
+        } catch {
             btn.disabled  = false
             btn.innerHTML = 'Confirmar alteração'
             _showToast('Erro de conexão. Tente novamente.', 'error')
@@ -1156,7 +1204,10 @@ function _openPlanModal(session) {
         _selectedPlan = planSlug
         _previewData  = preview
 
-        if (preview.requiresProfileRemoval && preview.members?.length) {
+        const needsStep2 =
+            (preview.requiresProfileRemoval && preview.members?.length > 0) ||
+            (preview.requiresGuestRemoval   && preview.guests?.length   > 0)
+        if (needsStep2) {
             _renderStep2()
         } else {
             _renderStep3()
@@ -1164,39 +1215,74 @@ function _openPlanModal(session) {
     }
 
     // ════════════════════════════════════════════════════════════
-    // ETAPA 2 — Seleção de perfis para remover (downgrade com excesso)
+    // ETAPA 2 — Seleção de perfis E convidados para remover no downgrade
     // ════════════════════════════════════════════════════════════
     function _renderStep2() {
         if (!_previewData) return
-        const { members = [], excessCount = 1, newPlanLimit = 1 } = _previewData
-        _selectedForRemoval = new Set()
+        const {
+            members = [], excessCount = 0, newPlanLimit = 1,
+            guests = [], excessGuestCount = 0,
+        } = _previewData
+        _selectedForRemoval       = new Set()
+        _selectedGuestsForRemoval = new Set()
 
-        const membersHtml = members.map(m => `
-          <label class="member-option" data-id="${m.id}">
-            <input type="checkbox" class="mo-cb" value="${m.id}">
+        const needProfiles = excessCount > 0 && members.length > 0
+        const needGuests   = excessGuestCount > 0 && guests.length > 0
+
+        const profilesHtml = members.map(m => `
+          <label class="member-option" data-id="${_esc(m.id)}">
+            <input type="checkbox" class="mo-cb-profile" value="${_esc(m.id)}">
             <div class="mo-info">
-              <div class="mo-name">${m.name}</div>
-              <div class="mo-email">${m.email}</div>
+              <div class="mo-name">${_esc(m.name)}</div>
+              <div class="mo-email">${_esc(m.email)}</div>
             </div>
             <div class="mo-dot"></div>
           </label>`).join('')
 
+        const guestsHtml = guests.map(g => `
+          <label class="member-option" data-id="${_esc(g.id)}">
+            <input type="checkbox" class="mo-cb-guest" value="${_esc(g.id)}">
+            <div class="mo-info">
+              <div class="mo-name">Convidado</div>
+              <div class="mo-email">${_esc(g.email)}</div>
+            </div>
+            <div class="mo-dot mo-dot--guest"></div>
+          </label>`).join('')
+
+        const profileSection = needProfiles ? `
+          <div class="gm-section-label">
+            Perfis para desativar (selecione ${excessCount}):
+          </div>
+          <div class="gm-members-list">${profilesHtml}</div>` : ''
+
+        const guestSection = needGuests ? `
+          <div class="gm-section-label gm-section-label--warn">
+            ⚠️ Convidados para remover (selecione ${excessGuestCount}):
+          </div>
+          <div class="gm-members-list">${guestsHtml}</div>` : ''
+
+        const infoInitial = [
+            needProfiles ? `${excessCount} perfil${excessCount > 1 ? 's' : ''}` : '',
+            needGuests   ? `${excessGuestCount} convidado${excessGuestCount > 1 ? 's' : ''}` : '',
+        ].filter(Boolean).join(' e ')
+
         _setHtml(`
-          ${_hdr(`Perfis para remover — ${excessCount} necessário${excessCount > 1 ? 's' : ''}`, true)}
+          ${_hdr('Redução de itens necessária', true)}
 
           <div class="gm-danger-box">
-            <div class="gm-danger-title">⚠️ Redução de perfis necessária</div>
+            <div class="gm-danger-title">⚠️ Selecione o que será removido no downgrade</div>
             <div class="gm-danger-text">
               O plano <strong>${_planLabel(_selectedPlan)}</strong> permite até
-              <strong>${newPlanLimit} perfil${newPlanLimit > 1 ? 's' : ''}</strong>.
-              Selecione <strong>${excessCount} perfil${excessCount > 1 ? 's' : ''}</strong> para desativar
-              na próxima renovação. Você mantém acesso completo até lá.
+              <strong>${newPlanLimit} perfil${newPlanLimit > 1 ? 's' : ''}</strong>
+              ${needGuests ? `e <strong>0 convidado${excessGuestCount > 1 ? 's' : ''}</strong>` : ''}.
+              Selecione o que será desativado na próxima renovação. Você mantém acesso completo até lá.
             </div>
           </div>
 
-          <div class="gm-members-list">${membersHtml}</div>
+          ${profileSection}
+          ${guestSection}
 
-          <p id="profileInfo" class="gm-profile-info">Selecione ${excessCount} perfil${excessCount > 1 ? 's' : ''} para continuar</p>
+          <p id="profileInfo" class="gm-profile-info">Selecione ${infoInitial} para continuar</p>
 
           <div class="gm-backup-box">
             <div class="gm-backup-title">🔒 Política de backup — seus dados estão protegidos</div>
@@ -1210,18 +1296,19 @@ function _openPlanModal(session) {
               <div class="gm-tl-node"><div class="gm-tl-dot gm-tl-dot--end"></div><span class="gm-tl-lbl">Exclusão</span></div>
             </div>
             <div class="gm-backup-text">
-              Os perfis selecionados serão <strong>desativados</strong> — não excluídos imediatamente.
-              Todos os dados ficam em backup por <strong>90 dias</strong> a partir da renovação.
+              Perfis selecionados serão <strong>desativados</strong> — não excluídos imediatamente.
+              Dados ficam em backup por <strong>90 dias</strong> a partir da renovação.
+              ${needGuests ? `Convidados perdem acesso na renovação. Podem ser reinvitados a qualquer momento.` : ''}
               Se você retornar ao plano <strong>${_planLabel(_currentPlanSlug)}</strong> ou superior
-              dentro desse período, os perfis são <strong>restaurados automaticamente</strong>,
-              sem nenhuma ação sua. Após 90 dias, os dados são excluídos permanentemente.
+              dentro de 90 dias, os perfis são <strong>restaurados automaticamente</strong>.
+              Após 90 dias, os dados são excluídos permanentemente.
             </div>
           </div>
 
           <label class="gm-agree">
             <input type="checkbox" id="agreeCheck">
             <span class="gm-agree-txt">
-              <strong>Declaro que li e estou de acordo</strong> com a remoção dos perfis selecionados
+              <strong>Declaro que li e estou de acordo</strong> com a remoção dos itens selecionados
               e com a <strong>política de retenção de dados por 90 dias</strong>, após os quais
               os dados serão excluídos permanentemente.
             </span>
@@ -1239,12 +1326,33 @@ function _openPlanModal(session) {
         const agreeCheck  = modal.querySelector('#agreeCheck')
 
         function _updateContinue() {
-            const profilesOk = _selectedForRemoval.size >= excessCount
+            const profilesOk = !needProfiles || _selectedForRemoval.size >= excessCount
+            const guestsOk   = !needGuests   || _selectedGuestsForRemoval.size >= excessGuestCount
             const agreed     = agreeCheck?.checked ?? false
-            if (continueBtn) continueBtn.disabled = !(profilesOk && agreed)
+            if (continueBtn) continueBtn.disabled = !(profilesOk && guestsOk && agreed)
+            if (infoEl) {
+                const pOk = !needProfiles || _selectedForRemoval.size >= excessCount
+                const gOk = !needGuests   || _selectedGuestsForRemoval.size >= excessGuestCount
+                if (pOk && gOk) {
+                    const total = _selectedForRemoval.size + _selectedGuestsForRemoval.size
+                    infoEl.textContent = `✓ ${total} item${total > 1 ? 's' : ''} selecionado${total > 1 ? 's' : ''}`
+                    infoEl.classList.add('pi-ok')
+                } else {
+                    const missing = [
+                        needProfiles && _selectedForRemoval.size < excessCount
+                            ? `${excessCount - _selectedForRemoval.size} perfil${excessCount - _selectedForRemoval.size > 1 ? 's' : ''}`
+                            : '',
+                        needGuests && _selectedGuestsForRemoval.size < excessGuestCount
+                            ? `${excessGuestCount - _selectedGuestsForRemoval.size} convidado${excessGuestCount - _selectedGuestsForRemoval.size > 1 ? 's' : ''}`
+                            : '',
+                    ].filter(Boolean).join(' e ')
+                    infoEl.textContent = `Selecione mais ${missing}`
+                    infoEl.classList.remove('pi-ok')
+                }
+            }
         }
 
-        modal.querySelectorAll('.member-option input[type=checkbox]').forEach(cb => {
+        modal.querySelectorAll('.mo-cb-profile').forEach(cb => {
             cb.addEventListener('change', () => {
                 const lbl = cb.closest('.member-option')
                 if (cb.checked) {
@@ -1254,14 +1362,19 @@ function _openPlanModal(session) {
                     _selectedForRemoval.delete(cb.value)
                     lbl?.classList.remove('mo-checked')
                 }
-                const count = _selectedForRemoval.size
-                const ok    = count >= excessCount
-                if (infoEl) {
-                    infoEl.textContent = ok
-                        ? `✓ ${count} perfil${count > 1 ? 's' : ''} selecionado${count > 1 ? 's' : ''}`
-                        : `Selecione mais ${excessCount - count} perfil${excessCount - count > 1 ? 's' : ''}`
-                    if (ok) infoEl.classList.add('pi-ok')
-                    else    infoEl.classList.remove('pi-ok')
+                _updateContinue()
+            })
+        })
+
+        modal.querySelectorAll('.mo-cb-guest').forEach(cb => {
+            cb.addEventListener('change', () => {
+                const lbl = cb.closest('.member-option')
+                if (cb.checked) {
+                    _selectedGuestsForRemoval.add(cb.value)
+                    lbl?.classList.add('mo-checked')
+                } else {
+                    _selectedGuestsForRemoval.delete(cb.value)
+                    lbl?.classList.remove('mo-checked')
                 }
                 _updateContinue()
             })
@@ -1326,8 +1439,9 @@ function _openPlanModal(session) {
               </div>`
         } else if (isDowngrade) {
             const effectiveAt = _fmtDateFromTs(_previewData.periodEnd)
-            const profileNote = _selectedForRemoval.size > 0
-                ? `<div class="gm-pay-profile-note">⚠️ ${_selectedForRemoval.size} perfil${_selectedForRemoval.size > 1 ? 's' : ''} será desativado em ${effectiveAt}.</div>` : ''
+            const totalRemoval = _selectedForRemoval.size + _selectedGuestsForRemoval.size
+            const profileNote = totalRemoval > 0
+                ? `<div class="gm-pay-profile-note">⚠️ ${totalRemoval} item${totalRemoval > 1 ? 's' : ''} (perfis/convidados) será desativado em ${effectiveAt}.</div>` : ''
             detailsHtml = `
               <div class="gm-box-down">
                 <div class="gm-box-heading gm-box-heading--down">Resumo do Downgrade</div>
@@ -1376,7 +1490,8 @@ function _openPlanModal(session) {
           <p id="planConfirmError" class="gm-confirm-error"></p>
         `)
 
-        const backFn = (_selectedForRemoval.size > 0 && _previewData.requiresProfileRemoval)
+        const backFn = ((_selectedForRemoval.size > 0 || _selectedGuestsForRemoval.size > 0) &&
+            (_previewData.requiresProfileRemoval || _previewData.requiresGuestRemoval))
             ? _renderStep2 : _renderStep1
         modal.querySelector('[data-back]')?.addEventListener('click', backFn)
         modal.querySelector('#planConfirmBtn')?.addEventListener('click', _doConfirm)
@@ -1406,6 +1521,7 @@ function _openPlanModal(session) {
                     action:           'updatePlan',
                     newPlan:          planToSend,
                     profilesToRemove: [..._selectedForRemoval],
+                    membersToRemove:  [..._selectedGuestsForRemoval],
                 }),
                 signal: AbortSignal.timeout(30_000),
             })
@@ -1476,6 +1592,8 @@ function _openPlanModal(session) {
                 { k: 'Novo valor mensal',   v: _fmtMoney(newData?.price ?? 0, 'brl') },
                 ...(data.profileRemovalsScheduled > 0
                     ? [{ k: 'Perfis desativados em', v: effectDate, c: 'gm-receipt-val--amber' }] : []),
+                ...(data.memberRemovalsScheduled > 0
+                    ? [{ k: 'Convidados removidos em', v: effectDate, c: 'gm-receipt-val--amber' }] : []),
             ]
         } else {
             title = 'Alteração cancelada!'

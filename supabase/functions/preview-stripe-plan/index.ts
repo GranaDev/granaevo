@@ -19,6 +19,7 @@ const STRIPE_ID_REGEX = /^[a-zA-Z0-9_]{4,100}$/
 const VALID_PLANS     = new Set(['individual', 'casal', 'familia'])
 const PLAN_RANK:   Record<string, number> = { individual: 1, casal: 2, familia: 3 }
 const PLAN_LIMITS: Record<string, number> = { individual: 1, casal: 2, familia: 4 }
+const GUEST_LIMITS: Record<string, number> = { individual: 0, casal: 1, familia: 3 }
 
 const PLAN_ENV_MAP: Record<string, string> = {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
@@ -88,6 +89,20 @@ Deno.serve(async (req: Request) => {
 
   const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token)
   if (userErr || !user?.id) return json({ error: 'Sessão inválida' }, 401)
+
+  // ── 2b. Anti-convidado: apenas o titular pode visualizar mudanças de plano ─
+  const { data: guestRow } = await supabaseAdmin
+    .from('account_members')
+    .select('id')
+    .eq('member_user_id', user.id)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+
+  if (guestRow) {
+    console.warn(`[preview-stripe-plan] GUEST_BLOCKED — user: ${user.id.slice(0, 8)}`)
+    return json({ error: 'Acesso negado. Apenas o titular da conta pode gerenciar o plano.', code: 'GUEST_BLOCKED' }, 403)
+  }
 
   // ── 3. Valida plano ───────────────────────────────────────────────────────
   let body: Record<string, unknown>
@@ -190,12 +205,13 @@ Deno.serve(async (req: Request) => {
     ? Math.floor(new Date(periodEndIso).getTime() / 1000)
     : null
 
-  // ── Downgrade: sem cobrança imediata + verifica necessidade de remover perfis ─
+  // ── Downgrade: sem cobrança imediata + verifica necessidade de remover perfis/convidados ─
   if (isDowngrade) {
-    const newPrice = await fetchStripePrice(newPriceId, stripeKey)
-    const newLimit = PLAN_LIMITS[newPlan] ?? 1
+    const newPrice  = await fetchStripePrice(newPriceId, stripeKey)
+    const newLimit  = PLAN_LIMITS[newPlan] ?? 1
+    const guestLimit = GUEST_LIMITS[newPlan] ?? 0
 
-    // Busca perfis ativos do usuário na tabela profiles (perfis próprios do usuário)
+    // Busca perfis ativos do usuário (tabela profiles)
     let members: { id: string; name: string; email: string }[] = []
     let requiresProfileRemoval = false
     let excessCount = 0
@@ -211,19 +227,41 @@ Deno.serve(async (req: Request) => {
       if (profErr) throw profErr
 
       const activeProfiles = profileRows ?? []
-      const totalProfiles  = activeProfiles.length
-      excessCount          = Math.max(0, totalProfiles - newLimit)
+      excessCount          = Math.max(0, activeProfiles.length - newLimit)
       requiresProfileRemoval = excessCount > 0
-
-      // Retorna todos os perfis para o usuário escolher quais remover
-      // (exceto o primeiro — assumindo que o usuário quer manter o perfil principal)
       members = activeProfiles.map(p => ({
         id:    String(p.id),
         name:  (p.name as string) || 'Perfil',
-        email: (p.photo_url as string) || '',  // reaproveitamos o campo email para photo_url no frontend
+        email: (p.photo_url as string) || '',  // photo_url exibido como avatar no frontend
       }))
     } catch (e) {
       console.warn('[preview-stripe-plan] Erro ao buscar perfis:', (e as Error).message)
+    }
+
+    // Busca convidados ativos do usuário (tabela account_members)
+    let guests: { id: string; memberId: string; email: string }[] = []
+    let requiresGuestRemoval = false
+    let excessGuestCount = 0
+
+    try {
+      const { data: guestRows, error: guestErr } = await supabaseAdmin
+        .from('account_members')
+        .select('id, member_user_id, member_email')
+        .eq('owner_user_id', user.id)
+        .eq('is_active', true)
+
+      if (guestErr) throw guestErr
+
+      const activeGuests = guestRows ?? []
+      excessGuestCount   = Math.max(0, activeGuests.length - guestLimit)
+      requiresGuestRemoval = excessGuestCount > 0
+      guests = activeGuests.map(g => ({
+        id:       g.id as string,
+        memberId: g.member_user_id as string,
+        email:    (g.member_email as string) || (g.member_user_id as string),
+      }))
+    } catch (e) {
+      console.warn('[preview-stripe-plan] Erro ao buscar convidados:', (e as Error).message)
     }
 
     return json({
@@ -238,6 +276,10 @@ Deno.serve(async (req: Request) => {
       excessCount,
       newPlanLimit:          newLimit,
       members,
+      requiresGuestRemoval,
+      excessGuestCount,
+      guestLimit,
+      guests,
     })
   }
 

@@ -18,10 +18,12 @@ const ALLOWED_ORIGINS = [
 ]
 
 const STRIPE_ID_REGEX  = /^[a-zA-Z0-9_]{4,100}$/
+const UUID_RE          = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const PROFILE_ID_RE    = /^\d{1,10}$/  // IDs inteiros da tabela profiles
 const VALID_PLANS      = new Set(['individual', 'casal', 'familia'])
 const PLAN_RANK:   Record<string, number> = { individual: 1, casal: 2, familia: 3 }
 const PLAN_LIMITS: Record<string, number> = { individual: 1, casal: 2, familia: 4 }
+const GUEST_LIMITS: Record<string, number> = { individual: 0, casal: 1, familia: 3 }
 
 const PLAN_ENV_MAP: Record<string, string> = {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
@@ -199,22 +201,46 @@ Deno.serve(async (req: Request) => {
   const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token)
   if (userErr || !user?.id) return json({ error: 'Sessão inválida' }, 401)
 
+  // ── 2b. Anti-convidado: apenas o titular pode gerenciar o plano ───────────
+  // Convidados têm entrada em account_members.member_user_id mas não têm
+  // stripe_subscriptions própria — bloqueio duplo, defense-in-depth.
+  const { data: guestRow } = await supabaseAdmin
+    .from('account_members')
+    .select('id')
+    .eq('member_user_id', user.id)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+
+  if (guestRow) {
+    console.warn(`[update-stripe-plan] GUEST_BLOCKED — user: ${user.id.slice(0, 8)}`)
+    return json({ error: 'Acesso negado. Apenas o titular da conta pode gerenciar o plano.', code: 'GUEST_BLOCKED' }, 403)
+  }
+
   // ── 3. Valida body ────────────────────────────────────────────────────────
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
 
   // action pode ser 'changeRemovalList' (enviado pelo proxy para esta função)
-  const incomingAction   = typeof body.action === 'string' ? body.action : ''
-  const newPlan          = ((body.newPlan as string) ?? '').toLowerCase().trim()
-  const profilesToRemove = Array.isArray(body.profilesToRemove)
-    ? (body.profilesToRemove as string[]).filter(s => typeof s === 'string' && UUID_RE.test(s))
+  const incomingAction = typeof body.action === 'string' ? body.action : ''
+  const newPlan        = ((body.newPlan as string) ?? '').toLowerCase().trim()
+
+  // IDs inteiros de profiles a remover — filtro defensivo (PROFILE_ID_RE)
+  const profilesToRemove: string[] = Array.isArray(body.profilesToRemove)
+    ? (body.profilesToRemove as unknown[]).filter(
+        (s): s is string => typeof s === 'string' && PROFILE_ID_RE.test(s)
+      )
     : []
 
-  // Valida IDs como inteiros positivos (tabela profiles usa INTEGER como PK)
-  if (profilesToRemove.some(id => !PROFILE_ID_RE.test(String(id))))
-    return json({ error: 'IDs de perfis inválidos' }, 400)
-  if (profilesToRemove.length > 10)
-    return json({ error: 'Número de perfis inválido' }, 400)
+  // UUIDs de account_members a remover — filtro defensivo (UUID_RE)
+  const membersToRemove: string[] = Array.isArray(body.membersToRemove)
+    ? (body.membersToRemove as unknown[]).filter(
+        (s): s is string => typeof s === 'string' && UUID_RE.test(s)
+      )
+    : []
+
+  if (profilesToRemove.length > 10 || membersToRemove.length > 10)
+    return json({ error: 'Número de itens inválido' }, 400)
 
   // ── 4. Busca assinatura do usuário ────────────────────────────────────────
   const { data: stripeSub, error: subErr } = await supabaseAdmin
@@ -283,6 +309,36 @@ Deno.serve(async (req: Request) => {
     if (remainingAfter > newLimit)
       return json({ error: 'Remova mais perfis para compatibilidade com o novo plano' }, 400)
 
+    // Valida membersToRemove: UUIDs de account_members do dono, nunca o próprio dono
+    let validatedMemberRemovals: string[] = []
+    if (membersToRemove.length > 0) {
+      const guestLimit = GUEST_LIMITS[targetPlan] ?? 0
+
+      const { data: validMembers, error: mErr } = await supabaseAdmin
+        .from('account_members')
+        .select('id')
+        .eq('owner_user_id', user.id)
+        .eq('is_active', true)
+        .neq('member_user_id', user.id)  // proteção: nunca remove o dono
+        .in('id', membersToRemove)
+
+      if (mErr || !validMembers) return json({ error: 'Erro ao validar convidados' }, 500)
+      if (validMembers.length !== membersToRemove.length)
+        return json({ error: 'Um ou mais convidados selecionados são inválidos' }, 400)
+
+      const { count: guestCount } = await supabaseAdmin
+        .from('account_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('owner_user_id', user.id)
+        .eq('is_active', true)
+
+      const remainingGuests = (guestCount ?? 0) - membersToRemove.length
+      if (remainingGuests > guestLimit)
+        return json({ error: 'Remova mais convidados para compatibilidade com o novo plano' }, 400)
+
+      validatedMemberRemovals = membersToRemove
+    }
+
     const periodEndISO = stripeSub.current_period_end
       ? new Date(stripeSub.current_period_end).toISOString()
       : new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()
@@ -300,12 +356,13 @@ Deno.serve(async (req: Request) => {
       .from('stripe_subscriptions')
       .update({
         pending_profile_removals: profilesToRemove.length > 0 ? profilesToRemove : null,
+        pending_member_removals:  validatedMemberRemovals.length > 0 ? validatedMemberRemovals : null,
         updated_at: new Date().toISOString(),
       })
       .eq('stripe_subscription_id', stripeSub.stripe_subscription_id)
 
-    console.log(`[update-stripe-plan] changeRemovalList — user: ${user.id.slice(0, 8)} ${profilesToRemove.length} perfis`)
-    return json({ success: true, action: 'removal_list_updated', profilesToRemove })
+    console.log(`[update-stripe-plan] changeRemovalList — user: ${user.id.slice(0, 8)} perfis: ${profilesToRemove.length} convidados: ${validatedMemberRemovals.length}`)
+    return json({ success: true, action: 'removal_list_updated', profilesToRemove, membersToRemove: validatedMemberRemovals })
   }
 
   // ── Validação de plano (para as demais ações) ─────────────────────────────
@@ -535,6 +592,54 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Erro interno ao verificar perfis' }, 500)
     }
 
+    // Valida convidados a remover (account_members) — nunca permite remover o dono
+    let validatedMemberRemovals: string[] = []
+    if (membersToRemove.length > 0) {
+      try {
+        const guestLimit = GUEST_LIMITS[newPlan] ?? 0
+
+        const { count: guestCount } = await supabaseAdmin
+          .from('account_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('owner_user_id', user.id)
+          .eq('is_active', true)
+
+        const excessGuests = Math.max(0, (guestCount ?? 0) - guestLimit)
+
+        if (excessGuests > 0) {
+          if (membersToRemove.length < excessGuests) {
+            return json({
+              error: `Selecione ${excessGuests} convidado${excessGuests > 1 ? 's' : ''} para remover antes do downgrade.`,
+              code:  'guest_removal_required',
+              excessCount: excessGuests,
+            }, 400)
+          }
+
+          // Proteção: nunca permite remover o próprio dono
+          const { data: validMembers, error: mErr } = await supabaseAdmin
+            .from('account_members')
+            .select('id')
+            .eq('owner_user_id', user.id)
+            .eq('is_active', true)
+            .neq('member_user_id', user.id)
+            .in('id', membersToRemove)
+
+          if (mErr || !validMembers) return json({ error: 'Erro ao validar convidados' }, 500)
+          if (validMembers.length !== membersToRemove.length)
+            return json({ error: 'Um ou mais convidados selecionados são inválidos' }, 400)
+
+          const remainingGuests = (guestCount ?? 0) - membersToRemove.length
+          if (remainingGuests > guestLimit)
+            return json({ error: 'Remova mais convidados para compatibilidade com o novo plano' }, 400)
+
+          validatedMemberRemovals = membersToRemove
+        }
+      } catch (e) {
+        console.error('[update-stripe-plan] Erro ao validar convidados:', (e as Error).message)
+        return json({ error: 'Erro interno ao verificar convidados' }, 500)
+      }
+    }
+
     // Atualiza plano no Stripe (adiado para renovação)
     const params = new URLSearchParams()
     params.set(`items[0][id]`,        itemId)
@@ -567,12 +672,12 @@ Deno.serve(async (req: Request) => {
         pending_plan_name:          newPlan,
         pending_plan_effective_at:  periodEndISO,
         pending_profile_removals:   validatedRemovals.length > 0 ? validatedRemovals : null,
+        pending_member_removals:    validatedMemberRemovals.length > 0 ? validatedMemberRemovals : null,
         updated_at:                 new Date().toISOString(),
       })
       .eq('stripe_subscription_id', stripeSub.stripe_subscription_id)
 
     // ── Cria backups dos perfis que serão removidos ───────────────────────
-    // Cancela backups pendentes anteriores (caso esteja alterando downgrade já agendado)
     if (validatedRemovals.length > 0 && periodEndISO) {
       await cancelPendingBackups(supabaseAdmin, user.id)
       await createProfileBackups(
@@ -582,13 +687,14 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    console.log(`[update-stripe-plan] Downgrade agendado — user: ${user.id.slice(0, 8)} ${currentPlan}→${newPlan} em ${periodEndISO} perfis: ${validatedRemovals.length}`)
+    console.log(`[update-stripe-plan] Downgrade agendado — user: ${user.id.slice(0, 8)} ${currentPlan}→${newPlan} em ${periodEndISO} perfis: ${validatedRemovals.length} convidados: ${validatedMemberRemovals.length}`)
     return json({
       success:                  true,
       newPlan,
       action:                   'downgrade_scheduled',
       effectiveAt:              periodEndISO,
       profileRemovalsScheduled: validatedRemovals.length,
+      memberRemovalsScheduled:  validatedMemberRemovals.length,
     })
   }
 

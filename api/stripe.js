@@ -83,6 +83,7 @@ export default async function handler(req, res) {
       email:            parsed?.email,
       newPlan:          parsed?.newPlan,
       profilesToRemove: Array.isArray(parsed?.profilesToRemove) ? parsed.profilesToRemove : [],
+      membersToRemove:  Array.isArray(parsed?.membersToRemove)  ? parsed.membersToRemove  : [],
     }
   } catch {
     return res.status(400).json({ error: 'JSON inválido' })
@@ -115,12 +116,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'newPlan inválido. Use: individual, casal ou familia' })
   }
 
-  // changeRemovalList: valida array de IDs inteiros (tabela profiles)
+  // changeRemovalList: valida arrays de perfis (inteiros) e convidados (UUIDs)
   if (action === 'changeRemovalList') {
     const PROFILE_ID_RE = /^\d{1,10}$/
+    const UUID_RE_PROXY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const profiles = body.profilesToRemove ?? []
+    const members  = body.membersToRemove  ?? []
     if (!Array.isArray(profiles) || profiles.length > 10 || profiles.some(id => !PROFILE_ID_RE.test(String(id))))
       return res.status(400).json({ error: 'profilesToRemove inválido' })
+    if (!Array.isArray(members) || members.length > 10 || members.some(id => !UUID_RE_PROXY.test(String(id))))
+      return res.status(400).json({ error: 'membersToRemove inválido' })
   }
 
   const ip = req.headers['x-real-ip']
@@ -136,11 +141,11 @@ export default async function handler(req, res) {
   const efPayload = action === 'checkout'
     ? { plan: (body.plan ?? '').toLowerCase(), email: body.email ?? '' }
     : action === 'updatePlan'
-    ? { newPlan: (body.newPlan ?? '').toLowerCase(), profilesToRemove: body.profilesToRemove ?? [] }
+    ? { newPlan: (body.newPlan ?? '').toLowerCase(), profilesToRemove: body.profilesToRemove ?? [], membersToRemove: body.membersToRemove ?? [] }
     : action === 'previewPlan'
     ? { newPlan: (body.newPlan ?? '').toLowerCase() }
     : action === 'changeRemovalList'
-    ? { action: 'changeRemovalList', profilesToRemove: body.profilesToRemove ?? [] }
+    ? { action: 'changeRemovalList', profilesToRemove: body.profilesToRemove ?? [], membersToRemove: body.membersToRemove ?? [] }
     : {}
 
   const efHeaders = {
