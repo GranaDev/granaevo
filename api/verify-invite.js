@@ -66,8 +66,31 @@ export default async function handler(req, res) {
   let body
   try { body = JSON.parse(raw) } catch { return res.status(400).json({ error: 'JSON inválido' }) }
 
-  if (typeof body?.email !== 'string' || typeof body?.code !== 'string') {
+  // Valida campos obrigatórios e extrai apenas o que a EF precisa.
+  // Previne que campos extras ou tipos inesperados cheguem à Edge Function.
+  if (typeof body?.email !== 'string' || !body.email.trim()) {
     return res.status(400).json({ error: 'Parâmetros inválidos' })
+  }
+  const codeRaw = body?.code
+  if (typeof codeRaw !== 'string' && typeof codeRaw !== 'number') {
+    return res.status(400).json({ error: 'Parâmetros inválidos' })
+  }
+
+  // Monta payload explícito — nunca encaminha body cru (evita campos extras não esperados)
+  const stepRaw = typeof body?.step === 'string' ? body.step : 'verify'
+  if (stepRaw !== 'verify' && stepRaw !== 'create') {
+    return res.status(400).json({ error: 'step inválido' })
+  }
+
+  const safePayload = {
+    step:  stepRaw,
+    email: body.email,
+    code:  String(codeRaw),
+    ...(stepRaw === 'create' && {
+      password:      typeof body?.password      === 'string'  ? body.password      : '',
+      acceptedTerms: typeof body?.acceptedTerms === 'boolean' ? body.acceptedTerms : false,
+    }),
+    nonce: typeof body?.nonce === 'string' ? body.nonce : undefined,
   }
 
   let upstream
@@ -82,7 +105,7 @@ export default async function handler(req, res) {
         'x-proxy-secret':  PROXY_SECRET,
         'x-forwarded-for': ip,
       },
-      body:   raw,
+      body:   JSON.stringify(safePayload),
       signal: AbortSignal.timeout(15_000),
     })
   } catch {

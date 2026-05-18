@@ -141,8 +141,16 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: "Você não pode convidar seu próprio email." }, 400);
   }
 
+  // Mapeamento de plan_name do Stripe (lowercase) para nome de plano da UI
+  const STRIPE_PLAN_MAP: Record<string, string> = {
+    individual: "Individual",
+    casal:      "Casal",
+    familia:    "Família",
+  };
+
   try {
     // ── 7. Verificar plano do dono ────────────────────────────────────────
+    // Tenta primeiro Cakto (subscriptions), depois Stripe (stripe_subscriptions).
     const { data: sub, error: subError } = await supabaseAdmin
       .from("subscriptions")
       .select("plans(name)")
@@ -151,12 +159,31 @@ Deno.serve(async (req: Request) => {
       .eq("is_active", true)
       .maybeSingle();
 
-    if (subError || !sub) {
+    let planName: string | null = null;
+
+    if (!subError && sub) {
+      planName = (sub as any).plans?.name ?? null;
+    } else {
+      // Fallback: verifica assinatura Stripe ativa
+      const { data: stripeSub, error: stripeErr } = await supabaseAdmin
+        .from("stripe_subscriptions")
+        .select("plan_name, status")
+        .eq("user_id", user.id)
+        .in("status", ["active", "trialing"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!stripeErr && stripeSub?.plan_name) {
+        planName = STRIPE_PLAN_MAP[stripeSub.plan_name.toLowerCase()] ?? null;
+      }
+    }
+
+    if (!planName) {
       console.error("[send-guest-invite] Assinatura não encontrada:", subError?.message);
       return json({ success: false, error: "Assinatura não encontrada ou inativa." }, 403);
     }
 
-    const planName: string = (sub as any).plans.name;
     const guestLimit = GUEST_LIMITS[planName] ?? 0;
 
     if (guestLimit === 0) {

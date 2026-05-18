@@ -38,9 +38,13 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 // ==========================================
-// CORS — permite apenas a origem do site
+// CORS — permite origens do site (www e non-www)
 // ==========================================
-const ALLOWED_ORIGIN = 'https://www.granaevo.com';
+const ALLOWED_ORIGINS = new Set([
+    'https://www.granaevo.com',
+    'https://granaevo.com',
+    'https://granaevo.vercel.app',
+]);
 
 // [GOD5-M01/M02] timing-safe compare para proxy secret
 function timingSafeEqualStr(a: string, b: string): boolean {
@@ -53,12 +57,17 @@ function timingSafeEqualStr(a: string, b: string): boolean {
     return diff === 0
 }
 
-const corsHeaders = {
-    'Access-Control-Allow-Origin':  ALLOWED_ORIGIN,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Max-Age':       '86400',
-};
+function getCorsHeaders(req: Request): Record<string, string> {
+    const origin  = req.headers.get('origin') ?? ''
+    const allowed = ALLOWED_ORIGINS.has(origin) ? origin : 'https://www.granaevo.com'
+    return {
+        'Access-Control-Allow-Origin':  allowed,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Access-Control-Max-Age':       '86400',
+        'Vary':                         'Origin',
+    }
+}
 
 // Tempo máximo em ms após a criação do usuário para aceitar a confirmação.
 // Impede replay de requisições antigas.
@@ -68,6 +77,7 @@ const MAX_USER_AGE_MS = 10 * 60 * 1000; // 10 minutos
 // HANDLER PRINCIPAL
 // ==========================================
 Deno.serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req)
 
     // Preflight CORS — deve retornar 200 com os headers corretos.
     // A versão anterior retornava 'ok' sem Access-Control-Allow-Methods,
@@ -81,7 +91,7 @@ Deno.serve(async (req) => {
 
     // Apenas POST é aceito.
     if (req.method !== 'POST') {
-        return jsonResponse(405, { success: false, error: 'Método não permitido.' });
+        return jsonResponse(405, { success: false, error: 'Método não permitido.' }, corsHeaders);
     }
 
     // [GOD5-M02] Proxy secret obrigatório — fail-closed.
@@ -90,12 +100,12 @@ Deno.serve(async (req) => {
     const proxySecret = Deno.env.get('PROXY_SECRET')
     if (!proxySecret) {
         console.error('[confirm-user-email] PROXY_SECRET não configurada — requisição bloqueada')
-        return jsonResponse(500, { success: false, error: 'Configuração interna inválida.' })
+        return jsonResponse(500, { success: false, error: 'Configuração interna inválida.' }, corsHeaders)
     }
     const receivedSecret = req.headers.get('x-proxy-secret') ?? ''
     if (!timingSafeEqualStr(receivedSecret, proxySecret)) {
         console.warn('[confirm-user-email] Proxy secret inválido — chamada direta bloqueada')
-        return jsonResponse(401, { success: false, error: 'Operação não autorizada.' })
+        return jsonResponse(401, { success: false, error: 'Operação não autorizada.' }, corsHeaders)
     }
 
     // ── Parse do body ────────────────────────────────────────────────────
@@ -103,22 +113,22 @@ Deno.serve(async (req) => {
     try {
         body = await req.json();
     } catch {
-        return jsonResponse(400, { success: false, error: 'Body JSON inválido.' });
+        return jsonResponse(400, { success: false, error: 'Body JSON inválido.' }, corsHeaders);
     }
 
     const { userId, email, subscriptionId } = body ?? {};
 
     // ── Validação básica dos parâmetros de entrada ───────────────────────
     if (!userId || typeof userId !== 'string' || !isValidUUID(userId)) {
-        return jsonResponse(400, { success: false, error: 'userId inválido.' });
+        return jsonResponse(400, { success: false, error: 'userId inválido.' }, corsHeaders);
     }
 
     if (!email || typeof email !== 'string' || !isValidEmail(email)) {
-        return jsonResponse(400, { success: false, error: 'email inválido.' });
+        return jsonResponse(400, { success: false, error: 'email inválido.' }, corsHeaders);
     }
 
     if (!subscriptionId || typeof subscriptionId !== 'string') {
-        return jsonResponse(400, { success: false, error: 'subscriptionId inválido.' });
+        return jsonResponse(400, { success: false, error: 'subscriptionId inválido.' }, corsHeaders);
     }
 
     const normalizedEmail = email.toLowerCase().trim();
@@ -147,23 +157,23 @@ Deno.serve(async (req) => {
         if (subError || !subscription) {
             console.error('[confirm-user-email] subscription não encontrada:', subError?.message);
             // Resposta genérica — não revela se o ID existe ou não.
-            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' });
+            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' }, corsHeaders);
         }
 
         if (subscription.user_email.toLowerCase().trim() !== normalizedEmail) {
             console.error('[confirm-user-email] email não bate com a subscription');
-            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' });
+            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' }, corsHeaders);
         }
 
         if (!subscription.is_active || subscription.payment_status !== 'approved') {
             console.error('[confirm-user-email] subscription inativa ou pagamento não aprovado');
-            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' });
+            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' }, corsHeaders);
         }
 
         // ── VALIDAÇÃO 2: password_created = false (uso único, anti-replay) ──
         if (subscription.password_created === true) {
             console.warn('[confirm-user-email] tentativa de replay — password_created já é true');
-            return jsonResponse(409, { success: false, error: 'Conta já ativada. Faça o login.' });
+            return jsonResponse(409, { success: false, error: 'Conta já ativada. Faça o login.' }, corsHeaders);
         }
 
         // ── VALIDAÇÃO 3: userId existe no Auth e email confere ───────────
@@ -171,12 +181,12 @@ Deno.serve(async (req) => {
 
         if (userError || !authUser?.user) {
             console.error('[confirm-user-email] usuário não encontrado no Auth:', userError?.message);
-            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' });
+            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' }, corsHeaders);
         }
 
         if (authUser.user.email?.toLowerCase().trim() !== normalizedEmail) {
             console.error('[confirm-user-email] email do Auth não bate com o informado');
-            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' });
+            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' }, corsHeaders);
         }
 
         // ── VALIDAÇÃO 4: Anti-replay temporal — usuário criado há ≤ 10 min ──
@@ -185,7 +195,7 @@ Deno.serve(async (req) => {
 
         if (ageMs > MAX_USER_AGE_MS) {
             console.warn(`[confirm-user-email] usuário criado há ${Math.round(ageMs / 60000)} min — fora da janela de 10 min`);
-            return jsonResponse(403, { success: false, error: 'Janela de ativação expirada. Contate o suporte.' });
+            return jsonResponse(403, { success: false, error: 'Janela de ativação expirada. Contate o suporte.' }, corsHeaders);
         }
 
         // ── ETAPA 1: Marca password_created = true ANTES de confirmar ────
@@ -198,7 +208,7 @@ Deno.serve(async (req) => {
 
         if (updateError) {
             console.error('[confirm-user-email] falha ao marcar password_created:', updateError.message);
-            return jsonResponse(500, { success: false, error: 'Erro interno. Tente novamente.' });
+            return jsonResponse(500, { success: false, error: 'Erro interno. Tente novamente.' }, corsHeaders);
         }
 
         // ── ETAPA 2: Confirma o email via Admin API ───────────────────────
@@ -215,7 +225,7 @@ Deno.serve(async (req) => {
                 .eq('id', subscriptionId);
 
             console.error('[confirm-user-email] erro ao confirmar email no Auth:', confirmError.message);
-            return jsonResponse(500, { success: false, error: 'Erro ao ativar conta. Tente novamente.' });
+            return jsonResponse(500, { success: false, error: 'Erro ao ativar conta. Tente novamente.' }, corsHeaders);
         }
 
         console.log('✅ [confirm-user-email] email confirmado com sucesso para userId:', userId);
@@ -223,11 +233,11 @@ Deno.serve(async (req) => {
         return jsonResponse(200, {
             success: true,
             message: 'Email confirmado e conta ativada com sucesso.',
-        });
+        }, corsHeaders);
 
     } catch (err) {
         console.error('[confirm-user-email] exceção não tratada:', err?.message);
-        return jsonResponse(500, { success: false, error: 'Erro interno inesperado.' });
+        return jsonResponse(500, { success: false, error: 'Erro interno inesperado.' }, corsHeaders);
     }
 });
 
@@ -237,13 +247,13 @@ Deno.serve(async (req) => {
 
 /**
  * Retorna uma Response JSON com os headers CORS incluídos.
- * Sempre usa os mesmos corsHeaders para consistência.
+ * Recebe os corsHeaders como parâmetro para suportar CORS dinâmico por origin.
  */
-function jsonResponse(status, body) {
+function jsonResponse(status, body, headers: Record<string, string> = {}) {
     return new Response(JSON.stringify(body), {
         status,
         headers: {
-            ...corsHeaders,
+            ...headers,
             'Content-Type': 'application/json',
         },
     });
