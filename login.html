@@ -177,7 +177,7 @@
 
                     <form class="login-form" id="loginForm" novalidate autocomplete="on">
                         <!-- honeypot: bots preenchem, humanos não veem -->
-                        <div aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;" tabindex="-1">
+                        <div aria-hidden="true" class="honeypot-field" tabindex="-1">
                             <label for="_ge_confirm_email">Confirmar email</label>
                             <input type="email" id="_ge_confirm_email" name="confirm_email" autocomplete="off" tabindex="-1" value="">
                             <label for="_ge_phone">Telefone</label>
@@ -261,8 +261,7 @@
                              aria-label="Verificação de segurança"
                              aria-live="polite">
                             <div class="captcha-label">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"
-                                     style="width:16px;height:16px;stroke:var(--error-red);flex-shrink:0;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
                                 Verificação de segurança necessária
@@ -391,8 +390,7 @@
                              aria-label="Verificação de segurança para código"
                              aria-live="polite">
                             <div class="captcha-label">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"
-                                     style="width:16px;height:16px;stroke:var(--error-red);flex-shrink:0;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 </svg>
                                 Muitas tentativas — resolva a verificação
@@ -432,7 +430,7 @@
                     </div>
 
                     <h2 class="form-title">Nova senha</h2>
-                    <p class="form-subtitle">Digite sua nova senha (mínimo 8 caracteres, letras e números)</p>
+                    <p class="form-subtitle">Digite sua nova senha (mínimo 10 caracteres, letras e números)</p>
 
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="form-group">

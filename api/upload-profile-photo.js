@@ -64,6 +64,8 @@ function _checkLimit(key, max) {
   return true
 }
 
+// Decodifica JWT sem verificar assinatura — APENAS para rate limiting por userId.
+// Nunca usar para autenticação/autorização. Auth real: Edge Function via auth.getUser(token).
 function _extractUserId(token) {
   try {
     const parts = token.split('.')
@@ -118,15 +120,15 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'Limite de uploads por IP atingido. Aguarde 1 hora.' })
   }
 
-  // ── 5. Rate limit por userId ───────────────────────────────────────────────
-  const userId = _extractUserId(authHeader.slice(7))
-  if (userId && !_checkLimit(`upload:uid:${userId}`, RATE_MAX_USER)) {
-    trackSecurityEvent('upload_abuse', { ip, reason: 'rate_limit_user', uid: userId?.slice(0, 8) }).catch(() => {})
+  // ── 4b. Rate limit por userId (cobre IPs rotativos) ───────────────────────
+  const userId = _extractUserId(authHeader.slice(7).trim())
+  if (userId && !_checkLimit(`upload:user:${userId}`, RATE_MAX_USER)) {
+    trackSecurityEvent('upload_abuse', { ip, reason: 'rate_limit_user', userId }).catch(() => {})
     res.setHeader('Retry-After', '3600')
     return res.status(429).json({ error: 'Limite de uploads por conta atingido. Aguarde 1 hora.' })
   }
 
-  // ── 6. Lê body com limite de tamanho ──────────────────────────────────────
+  // ── 5. Lê body com limite de tamanho ──────────────────────────────────────
   let buffer
   try {
     buffer = await new Promise((resolve, reject) => {
@@ -172,7 +174,7 @@ export default async function handler(req, res) {
 
   // Rastrear rejeições da EF (MIME inválido, magic bytes falhou, tamanho)
   if (edgeResponse.status === 400 || edgeResponse.status === 415) {
-    trackSecurityEvent('upload_abuse', { ip, reason: 'ef_rejected', status: edgeResponse.status, uid: userId?.slice(0, 8) ?? 'unknown' }).catch(() => {})
+    trackSecurityEvent('upload_abuse', { ip, reason: 'ef_rejected', status: edgeResponse.status }).catch(() => {})
   }
 
   res.status(edgeResponse.status)

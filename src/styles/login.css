@@ -1543,6 +1543,17 @@ body {
     gap: 12px;
 }
 
+/* Honeypot — posicionado fora do viewport; invisível para humanos */
+.honeypot-field {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    pointer-events: none;
+}
+
 .captcha-label {
     display: flex;
     align-items: center;
@@ -1552,6 +1563,14 @@ body {
     color: var(--error-red);
     letter-spacing: 0.3px;
     pointer-events: none; /* [1] label puramente informativo */
+}
+
+/* Ícone de escudo dentro do label do captcha */
+.captcha-label svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    stroke: var(--error-red);
 }
 
 .g-recaptcha {

@@ -65,12 +65,12 @@ function getCorsHeaders(req: Request): Record<string, string> {
 
 // [NOVO-004] timing-safe compare — proxy secret para verificar convite
 function timingSafeEqualInvite(a: string, b: string): boolean {
-    const enc  = new TextEncoder()
-    const aB   = enc.encode(a)
-    const bB   = enc.encode(b)
-    if (aB.length !== bB.length) return false
-    let diff   = 0
-    for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+    const enc = new TextEncoder()
+    const aB  = enc.encode(a)
+    const bB  = enc.encode(b)
+    const len = Math.max(aB.length, bB.length)
+    let diff  = aB.length ^ bB.length
+    for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
     return diff === 0
 }
 

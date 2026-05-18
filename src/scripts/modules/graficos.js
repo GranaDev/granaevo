@@ -103,8 +103,13 @@ function _setSafeHTML(element, html) {
     template.innerHTML = html;
     const frag = template.content;
 
-    // Remove todos os <script>
-    frag.querySelectorAll('script').forEach(s => s.remove());
+    // Remove tags estruturalmente perigosas (execução de código ou exfiltração)
+    const _TAGS_BLOQUEADAS = ['script','iframe','frame','object','embed','applet',
+                              'link','meta','base','form','svg','math'];
+    _TAGS_BLOQUEADAS.forEach(tag => frag.querySelectorAll(tag).forEach(s => s.remove()));
+
+    // Esquemas URI perigosos — bloqueados em qualquer atributo
+    const _URI_PERIGOSOS = /^\s*(javascript|vbscript|data|blob|file):/i;
 
     // Remove todos os elementos perigosos
     frag.querySelectorAll('*').forEach(el => {
@@ -113,18 +118,17 @@ function _setSafeHTML(element, html) {
             if (el.hasAttribute(attr)) el.removeAttribute(attr);
         });
 
-        // Varredura extra: qualquer atributo que começa com "on"
+        // Varredura catch-all: qualquer atributo que começa com "on"
         Array.from(el.attributes).forEach(attr => {
             if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
         });
 
-        // Remove src/href com javascript:
-        ['src', 'href', 'action', 'formaction', 'data'].forEach(attr => {
+        // Remove URIs perigosos em atributos que aceitam URLs
+        ['src', 'href', 'action', 'formaction', 'data', 'srcdoc', 'poster',
+         'background', 'code', 'codebase', 'usemap', 'longdesc'].forEach(attr => {
             if (el.hasAttribute(attr)) {
                 const val = el.getAttribute(attr);
-                if (/^\s*javascript:/i.test(val) || /^\s*vbscript:/i.test(val)) {
-                    el.removeAttribute(attr);
-                }
+                if (_URI_PERIGOSOS.test(val)) el.removeAttribute(attr);
             }
         });
     });

@@ -883,9 +883,12 @@ function _renderFrozenOverlay(subData, guard) {
     // Remove overlay anterior se existir
     document.getElementById('_ge_frozen_overlay')?.remove();
 
-    const days     = subData.daysUntilDeletion ?? 0;
-    const planName = subData.frozenPlanName    ?? 'GranaEvo';
-    const daysText = days === 1 ? '1 dia' : `${days} dias`;
+    const days         = subData.daysUntilDeletion ?? 0;
+    const _rawPlanName = subData.frozenPlanName ?? '';
+    // Whitelist — nunca interpola string arbitrária em innerHTML
+    const _PLAN_WL     = { individual: 'Individual', casal: 'Casal', familia: 'Família' };
+    const planName     = _PLAN_WL[_rawPlanName?.toLowerCase?.()] ?? 'GranaEvo';
+    const daysText     = days === 1 ? '1 dia' : `${days} dias`;
 
     // ── 1. Trava scroll do body ───────────────────────────────────
     document.documentElement.style.overflow = 'hidden';

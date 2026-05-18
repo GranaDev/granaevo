@@ -66,8 +66,8 @@ export default async function handler(req, res) {
 
     // CORS preflight
     if (req.method === 'OPTIONS') {
-        const o = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-        res.setHeader('Access-Control-Allow-Origin', o);
+        if (!ALLOWED_ORIGINS.includes(origin)) return res.status(403).end();
+        res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
         res.setHeader('Access-Control-Max-Age', '86400');
@@ -231,6 +231,8 @@ function extractToken(cookieHeader, projectRef) {
     return null;
 }
 
+// Decodifica JWT sem verificar assinatura — APENAS para rate limiting por userId.
+// Nunca usar para autenticação/autorização. Auth real: Edge Function via auth.getUser(token).
 function extractUserId(token) {
     try {
         const parts = token.split('.');

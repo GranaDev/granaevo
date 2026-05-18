@@ -3528,7 +3528,11 @@ function sanitizarHTMLPopup(html) {
     const doc    = parser.parseFromString(html, 'text/html');
 
     // ✅ Tags estruturalmente perigosas — removidas completamente
-    const tagsProibidas = ['script', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form', 'svg'];
+    const tagsProibidas = [
+        'script', 'iframe', 'frame', 'object', 'embed', 'applet',
+        'link', 'meta', 'base', 'form', 'svg', 'math',
+        'template', 'slot', 'portal',  // shadow DOM / portais — vetor de bypass
+    ];
     tagsProibidas.forEach(tag => {
         doc.querySelectorAll(tag).forEach(el => el.remove());
     });

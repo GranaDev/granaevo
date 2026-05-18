@@ -60,14 +60,14 @@ function getCors(req: Request): Record<string, string> {
   };
 }
 
-// ─── timing-safe compare (prevenção de timing oracle no proxy secret) ─────────
+// ─── timing-safe compare — sem early-return em length (elimina timing oracle) ──
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder()
   const aB  = enc.encode(a)
   const bB  = enc.encode(b)
-  if (aB.length !== bB.length) return false
-  let diff = 0
-  for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i]
+  const len = Math.max(aB.length, bB.length)
+  let diff  = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 
