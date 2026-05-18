@@ -1,13 +1,16 @@
 // /api/check-user-access.js — Proxy para check-user-access Edge Function
-// Requer sessão autenticada (JWT do usuário no Authorization header).
+// Requer JWT válido no Authorization header.
+// O proxy NÃO lê nem usa dados do body — toda autenticação é via JWT,
+// validado server-side pela Edge Function com supabaseAdmin.auth.getUser().
+// Isso elimina o vetor de log poisoning via user_id manipulável no body.
 
 import { checkRate } from './_rate-limit.js'
 import { trackSecurityEvent } from './_alert.js'
 
-const EDGE_URL    = `${process.env.SUPABASE_URL}/functions/v1/check-user-access`
-const ANON_KEY    = process.env.SUPABASE_ANON_KEY ?? ''
+const EDGE_URL     = `${process.env.SUPABASE_URL}/functions/v1/check-user-access`
+const ANON_KEY     = process.env.SUPABASE_ANON_KEY ?? ''
 const PROXY_SECRET = process.env.PROXY_SECRET ?? ''
-const RATE_MAX    = 20
+const RATE_MAX     = 20
 
 const ALLOWED_ORIGINS = [
   process.env.ALLOWED_ORIGIN,
@@ -30,12 +33,12 @@ export default async function handler(req, res) {
     return res.status(204).end()
   }
 
-  if (!allowedOrigin) return res.status(403).json({ error: 'Forbidden' })
-  if (req.method !== 'POST')                    return res.status(405).json({ error: 'Method Not Allowed' })
-  if (!EDGE_URL || !ANON_KEY || !PROXY_SECRET)  return res.status(503).json({ error: 'Serviço indisponível' })
+  if (!allowedOrigin)                          return res.status(403).json({ error: 'Forbidden' })
+  if (req.method !== 'POST')                   return res.status(405).json({ error: 'Method Not Allowed' })
+  if (!EDGE_URL || !ANON_KEY || !PROXY_SECRET) return res.status(503).json({ error: 'Serviço indisponível' })
 
   const authHeader = req.headers['authorization'] ?? ''
-  if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
+  if (!authHeader.startsWith('Bearer '))       return res.status(401).json({ error: 'Unauthorized' })
 
   const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
     .toString().split(',')[0].trim()
@@ -45,49 +48,35 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
 
-  let raw = ''
-  try {
-    raw = await new Promise((resolve, reject) => {
-      const chunks = []; let total = 0
-      req.on('data', c => {
-        total += c.length
-        if (total > 4096) { req.destroy(); return reject(new Error('TOO_LARGE')) }
-        chunks.push(c)
-      })
-      req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
-      req.on('error', reject)
-    })
-  } catch (e) {
-    return res.status(e.message === 'TOO_LARGE' ? 413 : 400).json({ error: 'Body inválido' })
-  }
-
-  let body
-  try { body = JSON.parse(raw) } catch { return res.status(400).json({ error: 'JSON inválido' }) }
-
-  if (typeof body?.user_id !== 'string') {
-    return res.status(400).json({ error: 'user_id obrigatório' })
-  }
+  // Drena o body sem ler — evita hang em conexões que enviam corpo.
+  // O proxy não usa nenhum dado do body: a EF autentica exclusivamente via JWT.
+  await new Promise(resolve => {
+    req.on('data', () => {})
+    req.on('end', resolve)
+    req.on('error', resolve)  // erro de leitura ignorado — body é irrelevante
+  })
 
   try {
     const r = await fetch(EDGE_URL, {
       method:  'POST',
       headers: {
-        'Content-Type':   'application/json',
-        'Authorization':  authHeader,
-        'apikey':         ANON_KEY,
-        'x-proxy-secret': PROXY_SECRET,
+        'Content-Type':    'application/json',
+        'Authorization':   authHeader,   // JWT validado pela EF via auth.getUser()
+        'apikey':          ANON_KEY,
+        'x-proxy-secret':  PROXY_SECRET,
+        'x-forwarded-for': ip,           // IP real para lockout progressivo na EF
       },
-      body:   JSON.stringify({ user_id: body.user_id }),
+      body:   '{}',  // body vazio — EF não usa dados do proxy, apenas o JWT
       signal: AbortSignal.timeout(10_000),
     })
 
-    // Lockout progressivo — possível credential stuffing
+    // Tracking baseado em IP — user_id verificado é responsabilidade da EF,
+    // não do proxy. Isso previne log poisoning via body manipulado.
     if (r.status === 429) {
-      trackSecurityEvent('login_lockout', { ip, user_id: body.user_id?.slice?.(0, 8) }).catch(() => {})
+      trackSecurityEvent('login_lockout', { ip }).catch(() => {})
     }
-    // JWT inválido/expirado retornado pela EF — possível JWT forgery
     if (r.status === 401) {
-      trackSecurityEvent('jwt_forgery', { ip, user_id: body.user_id?.slice?.(0, 8) }).catch(() => {})
+      trackSecurityEvent('jwt_forgery', { ip }).catch(() => {})
     }
 
     res.setHeader('Content-Type', 'application/json')
