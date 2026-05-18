@@ -9,13 +9,15 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 }
 
+// [GOD8-M01] Sem early-return em length — elimina timing oracle que vaza comprimento do secret.
+// Padrão idêntico ao webhook-stripe e às 7 EFs corrigidas no Round 7.
 function timingSafeEqual(a: string, b: string): boolean {
-  const enc    = new TextEncoder()
-  const aBytes = enc.encode(a)
-  const bBytes = enc.encode(b)
-  if (aBytes.length !== bBytes.length) return false
-  let diff = 0
-  for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i]
+  const enc  = new TextEncoder()
+  const aB   = enc.encode(a)
+  const bB   = enc.encode(b)
+  const len  = Math.max(aB.length, bB.length)
+  let diff   = aB.length ^ bB.length   // codifica divergência de comprimento sem early-return
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }
 
