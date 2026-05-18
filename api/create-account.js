@@ -1,11 +1,14 @@
-// /api/create-account.js — Proxy seguro de criação de conta via Supabase Admin API
+// /api/create-account.js — Proxy seguro de criação de conta
 // Rate limit: 3 criações por IP por hora.
-// NÃO usa supabase.auth.signUp() diretamente do browser — evita enumeração e abuso.
+// NÃO usa service_role key — delega criação à Edge Function create-user-account
+// via proxy secret. A service_role fica exclusivamente nos secrets do Supabase.
 
 import { checkRateWindow } from './_rate-limit.js'
 
 const SUPABASE_URL      = process.env.SUPABASE_URL      ?? ''
-const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+const ANON_KEY          = process.env.SUPABASE_ANON_KEY ?? ''
+const PROXY_SECRET      = process.env.PROXY_SECRET      ?? ''
+const EDGE_URL          = `${SUPABASE_URL}/functions/v1/create-user-account`
 const ALLOWED_ORIGINS   = new Set([
   'https://www.granaevo.com',
   'https://granaevo.com',
@@ -42,7 +45,7 @@ export default async function handler(req, res) {
   // Validações de método e origem
   if (!ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ error: 'Forbidden' })
   if (req.method !== 'POST')        return res.status(405).json({ error: 'Method Not Allowed' })
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY)
+  if (!SUPABASE_URL || !ANON_KEY || !PROXY_SECRET)
     return res.status(503).json({ error: 'Serviço indisponível' })
 
   // Content-Type
@@ -115,35 +118,27 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'Muitas tentativas. Aguarde antes de criar uma nova conta.' })
   }
 
-  // Cria usuário via Supabase Admin API (SERVICE_ROLE_KEY — nunca exposta ao browser)
+  // Delega criação à Edge Function — service_role fica nos secrets do Supabase,
+  // nunca em variáveis de ambiente do Vercel.
   try {
-    const adminRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    const efRes = await fetch(EDGE_URL, {
       method:  'POST',
       headers: {
-        'Content-Type':  'application/json',
-        'apikey':        SERVICE_ROLE_KEY,
-        'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+        'Content-Type':   'application/json',
+        'apikey':         ANON_KEY,
+        'x-proxy-secret': PROXY_SECRET,
       },
-      body: JSON.stringify({
-        email,
-        password,
-        email_confirm: true,        // Confirma email imediatamente (sem link)
-        user_metadata: { plan },
-      }),
-      signal: AbortSignal.timeout(10_000),
+      body:   JSON.stringify({ email, password, plan }),
+      signal: AbortSignal.timeout(15_000),
     })
 
-    // Email já cadastrado (Supabase retorna 422)
-    if (adminRes.status === 422) {
-      return res.status(409).json({ error: 'email_exists' })
-    }
-
-    if (!adminRes.ok) {
-      // Não vaza detalhes internos ao browser
-      return res.status(500).json({ error: 'Não foi possível criar a conta. Tente novamente.' })
-    }
-
-    return res.status(200).json({ ok: true })
+    // Repassa a resposta da EF diretamente ao frontend — status e body preservados:
+    // 200 { ok: true }            → conta criada
+    // 409 { error: 'email_exists' } → email já cadastrado
+    // 500 / 502                   → erros genéricos (sem vazar detalhes internos)
+    const body = await efRes.text()
+    res.setHeader('Content-Type', 'application/json')
+    return res.status(efRes.status).send(body)
   } catch {
     return res.status(502).json({ error: 'Serviço temporariamente indisponível.' })
   }
