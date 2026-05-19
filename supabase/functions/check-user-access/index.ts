@@ -239,6 +239,61 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // ── 10. Verificar se é usuário convidado (account_members) ──────────────
+      // Convidados não têm subscription própria — o acesso deles depende de
+      // estarem ativos em account_members E o dono ter subscription vigente.
+      const { data: memberEntry } = await supabaseAdmin
+        .from('account_members')
+        .select('id, owner_user_id')
+        .eq('member_user_id', userId)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (memberEntry?.owner_user_id) {
+        const ownerUserId = memberEntry.owner_user_id
+
+        // Verifica subscription Cakto do dono
+        const { data: ownerCakto } = await supabaseAdmin
+          .from('subscriptions')
+          .select('id, expires_at')
+          .eq('user_id', ownerUserId)
+          .eq('is_active', true)
+          .eq('payment_status', 'approved')
+          .maybeSingle()
+
+        const ownerCaktoOk = ownerCakto
+          ? (!ownerCakto.expires_at || new Date(ownerCakto.expires_at) >= new Date())
+          : false
+
+        if (ownerCaktoOk) {
+          console.log('[check-user-access] Acesso concedido (convidado / dono Cakto) para:', userId.slice(0, 8))
+          return json({ hasAccess: true }, 200, corsHeaders)
+        }
+
+        // Verifica subscription Stripe do dono
+        const { data: ownerStripe } = await supabaseAdmin
+          .from('stripe_subscriptions')
+          .select('id, status, current_period_end')
+          .eq('user_id', ownerUserId)
+          .in('status', ['active', 'trialing'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        const ownerStripeOk = ownerStripe
+          ? (!ownerStripe.current_period_end || new Date(ownerStripe.current_period_end) >= new Date())
+          : false
+
+        if (ownerStripeOk) {
+          console.log('[check-user-access] Acesso concedido (convidado / dono Stripe) para:', userId.slice(0, 8))
+          return json({ hasAccess: true }, 200, corsHeaders)
+        }
+
+        // Dono sem plano ativo — bloqueia o convidado também
+        console.log('[check-user-access] Convidado bloqueado — dono sem subscription ativa:', userId.slice(0, 8))
+        return deny()
+      }
+
       console.log('[check-user-access] Sem subscription ativa (Cakto ou Stripe) para:', userId.slice(0, 8))
       return deny()
     }
