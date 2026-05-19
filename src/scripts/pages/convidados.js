@@ -31,6 +31,7 @@ let _verifiedEmail    = '';
 let _verifiedCode     = '';
 let _ownerName        = '';     // [FIX-⚠️6]  exibido só na Etapa 3
 let _invitationId     = '';     // ref da URL — vincula verify ao convite específico
+let _createToken      = '';     // [CR-01+HR-02] HMAC emitido pelo servidor no step=verify
 let _verifyCooldown   = false;  // [FIX-⚠️5]
 let _verifyController = null;   // [FIX-REL-6] AbortController do verify
 let _createController = null;   // [FIX-REL-6] AbortController do create
@@ -227,6 +228,7 @@ async function verificarCodigo() {
         _verifiedEmail = email;
         _verifiedCode  = code;
         _ownerName     = result.ownerName || '';  // [FIX-⚠️6] exibido só na Etapa 3
+        _createToken   = result.createToken || ''; // [CR-01+HR-02] HMAC server-side
 
         _attemptCount = 0;  // reset ao verificar com sucesso [FIX-R04]
 
@@ -315,8 +317,9 @@ async function criarConta() {
                 code:         _verifiedCode,
                 password,
                 acceptedTerms: true,
-                invitationId: _invitationId || undefined,
-                nonce:        _gerarNonce(),
+                invitationId:  _invitationId || undefined,
+                createToken:   _createToken  || undefined,
+                nonce:         _gerarNonce(),
             }),
             signal: _createController.signal,
         });
@@ -327,12 +330,15 @@ async function criarConta() {
 
         const result = await response.json();
         if (!result.success) {
-            throw new Error(result.error || 'Erro ao criar conta. Tente novamente.');
+            // Mensagem genérica — nunca expõe result.error do servidor
+            // (evita enumeração de contas via "email já cadastrado", etc.)
+            throw new Error('Erro ao criar conta. Tente novamente.');
         }
 
         // [FIX-VUL-A] Zera estado sensível imediatamente após uso
         _verifiedCode  = '';
         _verifiedEmail = '';
+        _createToken   = '';
 
         // [FIX-A03] Limpa campos de senha do DOM antes de ir para Etapa 3
         _limparFormularioStep2();

@@ -61,6 +61,7 @@ function getCorsHeaders(req: Request): Record<string, string> {
         'Access-Control-Allow-Origin':  allowed,
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-proxy-secret',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Vary': 'Origin',  // [MED-04] evita cache poisoning em CDN com ACAO dinâmico
     }
 }
 
@@ -73,6 +74,54 @@ function timingSafeEqualInvite(a: string, b: string): boolean {
     let diff  = aB.length ^ bB.length
     for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
     return diff === 0
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HMAC STEP TOKEN [CR-01 + HR-02]
+//  Emitido pelo servidor no step=verify, exigido no step=create.
+//  Vincula os dois passos server-side sem depender de estado no DB.
+//  Formato: base64(invId:timestamp).hexHMAC — TTL de 5 minutos.
+// ═══════════════════════════════════════════════════════════════
+const STEP_TOKEN_TTL_MS = 5 * 60 * 1_000
+
+async function _getHmacKey(secret: string): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(secret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign', 'verify'],
+    )
+}
+
+async function generateStepToken(invitationId: string, proxySecret: string): Promise<string> {
+    const payload = `${invitationId}:${Date.now()}`
+    const key     = await _getHmacKey(proxySecret)
+    const sig     = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
+    const sigHex  = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
+    return `${btoa(payload)}.${sigHex}`
+}
+
+async function verifyStepToken(
+    token: string,
+    expectedInvId: string,
+    proxySecret: string,
+): Promise<boolean> {
+    try {
+        const dot = token.lastIndexOf('.')
+        if (dot < 1) return false
+        const b64payload = token.slice(0, dot)
+        const sigHex     = token.slice(dot + 1)
+        let payload: string
+        try { payload = atob(b64payload) } catch { return false }
+        const [tokenInvId, tsStr] = payload.split(':')
+        if (tokenInvId !== expectedInvId) return false
+        const ts = parseInt(tsStr, 10)
+        if (isNaN(ts) || Date.now() - ts > STEP_TOKEN_TTL_MS) return false
+        const key         = await _getHmacKey(proxySecret)
+        const expectedSig = new Uint8Array(sigHex.match(/.{2}/g)!.map(b => parseInt(b, 16)))
+        return crypto.subtle.verify('HMAC', key, expectedSig, new TextEncoder().encode(payload))
+    } catch { return false }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -116,9 +165,9 @@ function jsonErr(corsHeaders: Record<string, string>, message: string, status = 
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  RATE LIMIT [OPT-01]
-//  Janela deslizante de 15 min, máximo MAX_ATTEMPTS_RATE_LIMIT.
-//  Usa UPSERT: incrementa se janela ativa, recria se expirada.
+//  RATE LIMIT [CR-02 — atômico via check_rate_limit RPC]
+//  Substitui a implementação TOCTOU anterior (3 round-trips com
+//  race condition) por uma única chamada SQL atômica via UPSERT.
 //  Retorna true se o limite foi atingido (deve bloquear).
 // ═══════════════════════════════════════════════════════════════
 async function isRateLimited(
@@ -126,54 +175,19 @@ async function isRateLimited(
     identifier: string,
     type: 'ip' | 'email'
 ): Promise<boolean> {
-    // Busca janela atual
-    const { data: existing } = await supabase
-        .from('invite_rate_limit')
-        .select('id, attempt_count, expires_at')
-        .eq('identifier', identifier)
-        .eq('identifier_type', type)
-        .maybeSingle()
-
-    const now = new Date()
-
-    if (existing) {
-        // Janela expirada — recria do zero
-        if (new Date(existing.expires_at) < now) {
-            await supabase
-                .from('invite_rate_limit')
-                .update({
-                    attempt_count: 1,
-                    window_start:  now.toISOString(),
-                    expires_at:    new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
-                })
-                .eq('id', existing.id)
-            return false
-        }
-
-        // Janela ativa — já atingiu o limite?
-        if (existing.attempt_count >= MAX_ATTEMPTS_RATE_LIMIT) {
-            return true
-        }
-
-        // Incrementa
-        await supabase
-            .from('invite_rate_limit')
-            .update({ attempt_count: existing.attempt_count + 1 })
-            .eq('id', existing.id)
+    const key = `invite:${type}:${identifier}`
+    const { data, error } = await supabase.rpc('check_rate_limit', {
+        p_key:            key,
+        p_max:            MAX_ATTEMPTS_RATE_LIMIT,
+        p_window_seconds: 15 * 60,  // 15 minutos
+    })
+    if (error) {
+        // fail-open em erro de DB — não bloqueia o usuário por instabilidade
+        console.error('[verify-guest-invite] rate limit RPC error:', error.message)
         return false
     }
-
-    // Primeira tentativa — cria registro
-    await supabase
-        .from('invite_rate_limit')
-        .insert({
-            identifier,
-            identifier_type: type,
-            attempt_count:   1,
-            window_start:    now.toISOString(),
-            expires_at:      new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
-        })
-    return false
+    // check_rate_limit retorna true se DENTRO do limite → isRateLimited = NOT data
+    return data === false
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -278,9 +292,10 @@ Deno.serve(async (req) => {
         catch { return respond(jsonErr(corsHeaders, 'Body JSON inválido.', 400)) }
 
         // Desestrutura payload — ipAddress e userAgent descartados [FIX-EF-3]
-        const { step, email, code, password, acceptedTerms, nonce, invitationId } = parsed as {
+        const { step, email, code, password, acceptedTerms, nonce, invitationId, createToken } = parsed as {
             step?: string; email?: string; code?: string | number
-            password?: string; acceptedTerms?: boolean; nonce?: string; invitationId?: string
+            password?: string; acceptedTerms?: boolean; nonce?: string
+            invitationId?: string; createToken?: string
         }
 
         // ── Validações básicas de entrada ─────────────────────────
@@ -409,10 +424,14 @@ Deno.serve(async (req) => {
         //  STEP: verify
         // ════════════════════════════════════════════════════════
         if (step === 'verify') {
+            // [CR-01+HR-02] Emite HMAC createToken — step=create só prossegue
+            // com este token válido, vinculando os dois passos server-side.
+            const createToken = await generateStepToken(invitation.id, proxySecret)
             return respond(jsonOk(corsHeaders, {
-                success:   true,
-                guestName: invitation.guest_name,   // [BUG-01]
-                ownerName: invitation.owner_name ?? '',
+                success:     true,
+                guestName:   invitation.guest_name,
+                ownerName:   invitation.owner_name ?? '',
+                createToken,
             }))
         }
 
@@ -420,6 +439,16 @@ Deno.serve(async (req) => {
         //  STEP: create
         // ════════════════════════════════════════════════════════
         if (step === 'create') {
+
+            // [CR-01+HR-02] Valida HMAC createToken emitido no step=verify
+            // Sem token válido, step=create não pode ser chamado diretamente.
+            if (!createToken || typeof createToken !== 'string') {
+                return respond(jsonErr(corsHeaders, 'Fluxo inválido. Verifique o código primeiro.', 400))
+            }
+            const tokenOk = await verifyStepToken(createToken, invitation.id, proxySecret)
+            if (!tokenOk) {
+                return respond(jsonErr(corsHeaders, 'Sessão expirada. Verifique o código novamente.', 400))
+            }
 
             // [FIX-EF-2] Comprimento alinhado com frontend: 10–128 chars
             if (!password || password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {

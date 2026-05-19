@@ -189,13 +189,17 @@ Deno.serve(async (req) => {
     // [GOD4-003] Alinhado com verify-guest-invite (PASSWORD_MIN = 10).
     // Antes aceitava 8 chars — inconsistência com o fluxo de convite.
     if (action === 'reset_password') {
-      if (
-        typeof newPassword !== 'string' ||
-        newPassword.length < 10          ||
-        newPassword.length > 128
-      ) {
+      if (typeof newPassword !== 'string') {
         return json({ status: 'error', message: 'A senha deve ter no mínimo 10 caracteres.' }, 400)
       }
+      // [HR-05] Strip null bytes — alguns bcrypt truncam no \x00, gerando senha
+      // com comprimento aparente maior que o hash real que é armazenado.
+      const cleanedPassword = newPassword.replace(/\x00/g, '')
+      if (cleanedPassword.length < 10 || cleanedPassword.length > 128) {
+        return json({ status: 'error', message: 'A senha deve ter no mínimo 10 caracteres.' }, 400)
+      }
+      // Sobrescreve para uso no updateUserById abaixo
+      ;(body as Record<string, unknown>).newPassword = cleanedPassword
     }
 
     const normalizedEmail = email.toLowerCase().trim()
@@ -338,10 +342,12 @@ Deno.serve(async (req) => {
       return json({ status: 'error', message: 'Erro interno. Tente novamente.' }, 500)
     }
 
-    // Atualiza a senha via Admin API
+    // Atualiza a senha via Admin API — usa body.newPassword que pode ter sido
+    // sobrescrito pelo strip de null bytes na validação acima
+    const finalPassword = (body as Record<string, unknown>).newPassword as string
     const { error: updateError } = await supabase.auth.admin.updateUserById(
       resolvedUserId,
-      { password: newPassword as string },
+      { password: finalPassword },
     )
 
     if (updateError) {

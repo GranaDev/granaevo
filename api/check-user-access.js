@@ -23,17 +23,21 @@ export default async function handler(req, res) {
   const origin        = req.headers['origin'] ?? ''
   const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : null
 
-  res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('Access-Control-Allow-Origin', allowedOrigin ?? ALLOWED_ORIGINS[0])
-  res.setHeader('Vary', 'Origin')
-
+  // [CR-06] Preflight OPTIONS não exige origin válida (browser envia antes da req real)
   if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin',  allowedOrigin ?? ALLOWED_ORIGINS[0])
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    res.setHeader('Vary', 'Origin')
     return res.status(204).end()
   }
 
-  if (!allowedOrigin)                          return res.status(403).json({ error: 'Forbidden' })
+  // [CR-06] CORS e Cache-Control apenas após validar origin — não vaza header em 403
+  if (!allowedOrigin) return res.status(403).json({ error: 'Forbidden' })
+
+  res.setHeader('Cache-Control', 'no-store')
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
+  res.setHeader('Vary', 'Origin')
   if (req.method !== 'POST')                   return res.status(405).json({ error: 'Method Not Allowed' })
   if (!EDGE_URL || !ANON_KEY || !PROXY_SECRET) return res.status(503).json({ error: 'Serviço indisponível' })
 

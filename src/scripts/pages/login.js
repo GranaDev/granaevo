@@ -555,7 +555,7 @@ async function checkUserAccess() {
                 'Content-Type':  'application/json',
                 'Authorization': authHeader,
             },
-            body: JSON.stringify({ user_id: session.user.id }),
+            body: JSON.stringify({}),
             signal: AbortSignal.timeout(8_000),
         });
 

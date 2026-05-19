@@ -70,6 +70,14 @@ export default async function handler(req, res) {
   if (typeof body?.guestEmail !== 'string' || typeof body?.guestName !== 'string') {
     return res.status(400).json({ error: 'guestEmail e guestName são obrigatórios' })
   }
+  // [MED-03] Validação de formato de email no proxy — evita invocar EF com payload inválido
+  const _emailRe = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/
+  if (!body.guestEmail.trim() || !_emailRe.test(body.guestEmail.trim())) {
+    return res.status(400).json({ error: 'guestEmail inválido' })
+  }
+  if (!body.guestName.trim() || body.guestName.trim().length < 2) {
+    return res.status(400).json({ error: 'guestName inválido' })
+  }
 
   let upstream
   try {

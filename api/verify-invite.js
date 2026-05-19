@@ -86,6 +86,10 @@ export default async function handler(req, res) {
     ? body.invitationId.replace(/[^a-zA-Z0-9\-_]/g, '').slice(0, 64)
     : undefined
 
+  const createTokenRaw = typeof body?.createToken === 'string'
+    ? body.createToken.slice(0, 512)   // limita tamanho — token real < 200 chars
+    : undefined
+
   const safePayload = {
     step:  stepRaw,
     email: body.email,
@@ -93,6 +97,7 @@ export default async function handler(req, res) {
     ...(stepRaw === 'create' && {
       password:      typeof body?.password      === 'string'  ? body.password      : '',
       acceptedTerms: typeof body?.acceptedTerms === 'boolean' ? body.acceptedTerms : false,
+      ...(createTokenRaw ? { createToken: createTokenRaw } : {}),
     }),
     ...(invIdRaw ? { invitationId: invIdRaw } : {}),
     nonce: typeof body?.nonce === 'string' ? body.nonce : undefined,

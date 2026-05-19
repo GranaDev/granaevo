@@ -1293,7 +1293,7 @@ const AuthGuard = (() => {
                                     'Content-Type': 'application/json',
                                     'Authorization': `Bearer ${session.access_token}`,
                                 },
-                                body:   JSON.stringify({ user_id: user.id }),
+                                body:   JSON.stringify({}),
                                 signal: AbortSignal.timeout(8_000),
                             });
                             if (r.ok) {

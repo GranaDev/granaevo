@@ -30,25 +30,29 @@ function _checkMemory(key, max, windowMs = _DEFAULT_WINDOW) {
   if (!r || now - r.t > windowMs) {
     // Aplica cap antes de inserir nova chave
     if (!r && _store.size >= _MAX_STORE) {
-      // Limpa entradas expiradas usando a janela correta
+      // Limpa entradas expiradas usando a janela correta de cada chave
       for (const [k, v] of _store) {
-        if (now - v.t > windowMs) _store.delete(k)
+        if (now - v.t > (v.w ?? _DEFAULT_WINDOW)) _store.delete(k)
         if (_store.size < _MAX_STORE) break
       }
       // Se ainda cheio após limpeza, rejeita novo IP
       if (_store.size >= _MAX_STORE) return false
     }
-    _store.set(key, { c: 1, t: now })
+    // [MED-02] Armazena a janela junto à entrada — cleanup usa janela real da chave
+    _store.set(key, { c: 1, t: now, w: windowMs })
     return true
   }
   if (r.c >= max) return false
   r.c++; return true
 }
 
-// Limpa entradas expiradas periodicamente para evitar memory leak
+// [MED-02] Cleanup usa a janela armazenada por chave — não mais _DEFAULT_WINDOW fixo.
+// Antes, chaves com windowSecs=3600 eram limpas após 2min, resetando rate limits longos.
 setInterval(() => {
   const now = Date.now()
-  for (const [k, v] of _store) { if (now - v.t > _DEFAULT_WINDOW * 2) _store.delete(k) }
+  for (const [k, v] of _store) {
+    if (now - v.t > (v.w ?? _DEFAULT_WINDOW) * 2) _store.delete(k)
+  }
 }, 120_000)
 
 // ── Upstash Redis (sliding window INCR + EXPIRE) ──────────────────────────────
