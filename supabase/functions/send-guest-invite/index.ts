@@ -226,14 +226,22 @@ Deno.serve(async (req: Request) => {
     const oneDayAgo = new Date(Date.now() - 86_400_000).toISOString();
     const { data: recentInvites } = await supabaseAdmin
       .from("guest_invitations")
-      .select("id")
+      .select("id, created_at")
       .eq("owner_user_id", user.id)
-      .gte("created_at", oneDayAgo);
+      .gte("created_at", oneDayAgo)
+      .order("created_at", { ascending: true });
 
     if ((recentInvites?.length ?? 0) >= 4) {
+      // Calcula quando o convite mais antigo expira para informar o tempo de espera
+      const oldestCreatedAt = recentInvites?.[0]?.created_at
+      const retryAfterMs    = oldestCreatedAt
+        ? new Date(oldestCreatedAt).getTime() + 86_400_000 - Date.now()
+        : 86_400_000
+      const retryAfterSecs  = Math.ceil(Math.max(0, retryAfterMs) / 1000)
       return json({
-        success: false,
-        error: "Você atingiu o limite de 4 convites em 24h. Tente novamente mais tarde.",
+        success:           false,
+        error:             'INVITE_RATE_LIMIT',
+        retry_after_secs:  retryAfterSecs,
       }, 429);
     }
 

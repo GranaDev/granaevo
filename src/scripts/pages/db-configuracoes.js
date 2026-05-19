@@ -341,6 +341,13 @@ async function enviarConvite() {
                 document.getElementById('btnFecharLimite').addEventListener('click', _ctx.fecharPopup);
                 return;
             }
+            if (err === 'INVITE_RATE_LIMIT') {
+                const secs  = typeof result.retry_after_secs === 'number' ? result.retry_after_secs : 3600;
+                const horas = Math.floor(secs / 3600);
+                const mins  = Math.ceil((secs % 3600) / 60);
+                const tempo = horas > 0 ? `${horas}h ${mins}min` : `${mins} minuto(s)`;
+                throw new Error(`Limite de convites atingido. Tente novamente em ${tempo}.`);
+            }
             throw new Error('Não foi possível enviar o convite. Tente novamente.');
         }
 

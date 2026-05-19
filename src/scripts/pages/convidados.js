@@ -330,8 +330,11 @@ async function criarConta() {
 
         const result = await response.json();
         if (!result.success) {
-            // Mensagem genérica — nunca expõe result.error do servidor
-            // (evita enumeração de contas via "email já cadastrado", etc.)
+            // Erros de fluxo/sessão: mostrar instrução clara para o usuário
+            // Não expõe result.error diretamente (evita enumeração de contas)
+            if (response.status === 400) {
+                throw new Error('Sua sessão expirou. Volte e verifique o código novamente.');
+            }
             throw new Error('Erro ao criar conta. Tente novamente.');
         }
 

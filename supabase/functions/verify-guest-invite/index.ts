@@ -82,7 +82,7 @@ function timingSafeEqualInvite(a: string, b: string): boolean {
 //  Vincula os dois passos server-side sem depender de estado no DB.
 //  Formato: base64(invId:timestamp).hexHMAC — TTL de 5 minutos.
 // ═══════════════════════════════════════════════════════════════
-const STEP_TOKEN_TTL_MS = 5 * 60 * 1_000
+const STEP_TOKEN_TTL_MS = 15 * 60 * 1_000
 
 async function _getHmacKey(secret: string): Promise<CryptoKey> {
     return crypto.subtle.importKey(
