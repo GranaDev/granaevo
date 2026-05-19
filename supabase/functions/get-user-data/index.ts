@@ -135,12 +135,28 @@ Deno.serve(async (req: Request) => {
 
   const userId = user.id
 
+  // ── 4. Resolver ID efetivo — convidados lêem dados do dono ──────────────
+  // Um convidado (account_members) não tem user_data próprio; seus dados
+  // são os do dono. O EF resolve isso server-side via account_members.
+  let effectiveUserId = userId
+  const { data: memberEntry } = await supabaseAdmin
+    .from('account_members')
+    .select('owner_user_id')
+    .eq('member_user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (memberEntry?.owner_user_id) {
+    effectiveUserId = memberEntry.owner_user_id
+    console.log('[get-user-data] Convidado — resolvendo para dono:', effectiveUserId.slice(0, 8))
+  }
+
   try {
-    // ── 4. Buscar dados do banco ─────────────────────────────────────────────
+    // ── 5. Buscar dados do banco ─────────────────────────────────────────────
     const { data, error } = await supabaseAdmin
       .from('user_data')
       .select('data_json')
-      .eq('user_id', userId)
+      .eq('user_id', effectiveUserId)
       .single()
 
     if (error?.code === 'PGRST116') {
@@ -153,13 +169,14 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: 'NOT_FOUND' }, 404, corsHeaders)
     }
 
-    // ── 5. Descriptografar se necessário (lazy migration) ────────────────────
+    // ── 6. Descriptografar se necessário (lazy migration) ────────────────────
+    // Chave derivada do effectiveUserId — dados criptografados com a chave do dono
     let dataJson = data.data_json as Record<string, unknown>
 
     if (typeof dataJson._enc === 'string') {
-      const plaintext = await decryptData(dataJson._enc, userId)
+      const plaintext = await decryptData(dataJson._enc, effectiveUserId)
       if (!plaintext) {
-        console.error('[get-user-data] Falha ao descriptografar para userId:', userId.slice(0, 8))
+        console.error('[get-user-data] Falha ao descriptografar para userId:', effectiveUserId.slice(0, 8))
         return json({ success: false, error: 'Erro ao descriptografar dados' }, 500, corsHeaders)
       }
       try {

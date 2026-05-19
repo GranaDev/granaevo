@@ -733,8 +733,8 @@ const SubscriptionChecker = (() => {
 
                 if (memErr || !member) return EMPTY;
 
-                // Política RLS: guest_can_view_owner_subscription
-                const { data: ownerSub, error: ownerErr } = await supabase
+                // Verifica subscription Cakto do dono
+                const { data: ownerSub } = await supabase
                     .from('subscriptions')
                     .select('id, plans(name), is_active, payment_status, expires_at')
                     .eq('user_id', member.owner_user_id)
@@ -742,17 +742,34 @@ const SubscriptionChecker = (() => {
                     .eq('is_active', true)
                     .maybeSingle();
 
-                if (ownerErr || !ownerSub) return EMPTY;
+                let finalSub      = ownerSub;
+                let finalPlanName = ownerSub?.plans?.name || null;
 
-                if (ownerSub.expires_at && new Date(ownerSub.expires_at) < new Date()) {
-                    return EMPTY;
+                const caktoExpired = ownerSub?.expires_at && new Date(ownerSub.expires_at) < new Date();
+                if (!ownerSub || caktoExpired) {
+                    // Dono pode ter plano Stripe — verifica stripe_subscriptions
+                    const { data: ownerStripe } = await supabase
+                        .from('stripe_subscriptions')
+                        .select('id, plan_name, status, current_period_end')
+                        .eq('user_id', member.owner_user_id)
+                        .in('status', ['active', 'trialing'])
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+
+                    if (!ownerStripe) return EMPTY;
+                    if (ownerStripe.current_period_end && new Date(ownerStripe.current_period_end) < new Date()) {
+                        return EMPTY;
+                    }
+                    finalSub      = ownerStripe;
+                    finalPlanName = _normalizePlanName(ownerStripe.plan_name);
                 }
 
                 _cache = Object.freeze({
-                    subscription: ownerSub,
+                    subscription: finalSub,
                     isGuest:      true,
                     ownerId:      member.owner_user_id,
-                    planName:     ownerSub.plans?.name || 'Individual',
+                    planName:     finalPlanName || 'Individual',
                     ownerEmail:   member.owner_email,
                 });
                 _cacheUser = userId;

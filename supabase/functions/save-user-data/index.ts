@@ -120,8 +120,27 @@ Deno.serve(async (req: Request) => {
   const userId    = user.id
   const userEmail = user.email ?? ''
 
+  // ── 4. Resolver ID efetivo — convidados salvam nos dados do dono ─────────
+  // O save opera sempre no registro do dono. O convidado nunca cria
+  // um registro separado — isso garantiria que o save do convidado
+  // apareça para o dono e vice-versa.
+  let effectiveUserId    = userId
+  let effectiveUserEmail = userEmail
+  const { data: memberEntry } = await supabaseAdmin
+    .from('account_members')
+    .select('owner_user_id, owner_email')
+    .eq('member_user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (memberEntry?.owner_user_id) {
+    effectiveUserId    = memberEntry.owner_user_id
+    effectiveUserEmail = memberEntry.owner_email ?? userEmail
+    console.log('[save-user-data] Convidado — salvando no registro do dono:', effectiveUserId.slice(0, 8))
+  }
+
   try {
-    // ── 4. Ler e validar corpo ───────────────────────────────────────────────
+    // ── 5. Ler e validar corpo ───────────────────────────────────────────────
     let body: { profiles?: unknown }
     try {
       body = await req.json()
@@ -138,10 +157,11 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: 'Número de perfis excede o limite de 200' }, 400, corsHeaders)
     }
 
-    // ── 5. Montar payload e criptografar ────────────────────────────────────
+    // ── 6. Montar payload e criptografar ────────────────────────────────────
+    // Usa effectiveUserId/Email — para convidados, isso é o ID/email do dono
     const dataToSave = {
       version:  '1.0',
-      user:     { userId, email: userEmail },
+      user:     { userId: effectiveUserId, email: effectiveUserEmail },
       profiles,
       metadata: {
         lastSync:      new Date().toISOString(),
@@ -149,18 +169,16 @@ Deno.serve(async (req: Request) => {
       },
     }
 
-    const encrypted   = await encryptData(JSON.stringify(dataToSave), userId)
+    const encrypted   = await encryptData(JSON.stringify(dataToSave), effectiveUserId)
     const dataToStore = encrypted ? { _enc: encrypted } : dataToSave
 
     const now = new Date().toISOString()
 
-    // ── 6. INSERT ou UPDATE — funciona independente de constraints ──────────
-    // Tenta UPDATE primeiro; se nenhuma linha for afetada, faz INSERT.
-    // Evita depender de UNIQUE constraint para onConflict.
+    // ── 7. INSERT ou UPDATE — funciona independente de constraints ──────────
     const { data: existing, error: selectErr } = await supabaseAdmin
       .from('user_data')
       .select('user_id')
-      .eq('user_id', userId)
+      .eq('user_id', effectiveUserId)
       .maybeSingle()
 
     if (selectErr) {
@@ -171,8 +189,8 @@ Deno.serve(async (req: Request) => {
     if (existing) {
       const { error: updateErr } = await supabaseAdmin
         .from('user_data')
-        .update({ email: userEmail, data_json: dataToStore, last_modified: now })
-        .eq('user_id', userId)
+        .update({ email: effectiveUserEmail, data_json: dataToStore, last_modified: now })
+        .eq('user_id', effectiveUserId)
       if (updateErr) {
         console.error('[save-user-data] Erro no UPDATE:', updateErr.message)
         throw updateErr
@@ -180,7 +198,7 @@ Deno.serve(async (req: Request) => {
     } else {
       const { error: insertErr } = await supabaseAdmin
         .from('user_data')
-        .insert({ user_id: userId, email: userEmail, data_json: dataToStore, last_modified: now })
+        .insert({ user_id: effectiveUserId, email: effectiveUserEmail, data_json: dataToStore, last_modified: now })
       if (insertErr) {
         console.error('[save-user-data] Erro no INSERT:', insertErr.message)
         throw insertErr
