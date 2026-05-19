@@ -12,7 +12,6 @@
     { "source": "/dashboard",      "destination": "/dashboard.html"      },
     { "source": "/termos",         "destination": "/termos.html"         },
     { "source": "/privacidade",    "destination": "/privacidade.html"    },
-    { "source": "/convidados",     "destination": "/convidados.html"     },
     { "source": "/atualizarplano", "destination": "/atualizarplano.html" }
   ],
 
@@ -167,8 +166,10 @@
     {
       "source": "/convidados",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, private" },
-        { "key": "Pragma",        "value": "no-cache"                                      }
+        { "key": "Cache-Control",    "value": "no-store, no-cache, must-revalidate, private" },
+        { "key": "Pragma",           "value": "no-cache"                                      },
+        { "key": "Surrogate-Control","value": "no-store"                                      },
+        { "key": "CDN-Cache-Control","value": "no-store"                                      }
       ]
     },
 
