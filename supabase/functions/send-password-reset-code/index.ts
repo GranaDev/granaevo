@@ -172,8 +172,7 @@ Deno.serve(async (req) => {
         console.log('[send-reset-code] Email não encontrado em Cakto nem Stripe:', normalizedEmail)
         return neutralResponse(corsHeaders)
       }
-      // Stripe user encontrado — continua para geração do código
-      // user_name será string vazia (nenhum nome disponível para Stripe)
+      console.log('[send-reset-code] Stripe user encontrado — seguindo para envio de código')
     } else if (subscription.payment_status !== 'approved') {
       console.log('[send-reset-code] Pagamento não aprovado:', normalizedEmail)
       return neutralResponse(corsHeaders)
@@ -749,7 +748,7 @@ Deno.serve(async (req) => {
       <div class="body-content">
 
         <span class="greeting-eyebrow">Verificação de identidade ✦</span>
-        <div class="greeting-name">Olá, ${escapeHtml(subscription.user_name || 'Usuário')}! 👋</div>
+        <div class="greeting-name">Olá, ${escapeHtml(subscription?.user_name || 'Usuário')}! 👋</div>
         <p class="intro-text">
           Recebemos uma solicitação para <strong>redefinir a senha</strong> da sua conta GranaEvo.
           Use o código abaixo para concluir o processo.
@@ -850,15 +849,16 @@ Deno.serve(async (req) => {
     })
 
     if (!emailResponse.ok) {
-      const errorData = await emailResponse.json()
-      console.error('[send-reset-code] Erro Resend:', errorData)
+      let errorData: unknown
+      try { errorData = await emailResponse.json() } catch { errorData = await emailResponse.text() }
+      console.error('[send-reset-code] Erro Resend HTTP', emailResponse.status, ':', JSON.stringify(errorData))
       return new Response(
         JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       )
     }
 
-    console.log('[send-reset-code] Email enviado com sucesso')
+    console.log('[send-reset-code] Email aceito pelo Resend (HTTP', emailResponse.status, ') para:', normalizedEmail)
 
     return new Response(
       JSON.stringify({

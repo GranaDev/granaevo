@@ -11,7 +11,9 @@
     { "source": "/login",          "destination": "/login.html"          },
     { "source": "/dashboard",      "destination": "/dashboard.html"      },
     { "source": "/termos",         "destination": "/termos.html"         },
-    { "source": "/privacidade",    "destination": "/privacidade.html"    }
+    { "source": "/privacidade",    "destination": "/privacidade.html"    },
+    { "source": "/convidados",     "destination": "/convidados.html"     },
+    { "source": "/atualizarplano", "destination": "/atualizarplano.html" }
   ],
 
   "headers": [
