@@ -39,6 +39,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 const MAX_ATTEMPTS_PER_INVITE = 5    // tentativas por convite
 const MAX_ATTEMPTS_RATE_LIMIT = 10   // tentativas por IP/email na janela
 const PASSWORD_MIN            = 10   // [FIX-EF-2] alinhado com frontend
+const PASSWORD_MAX            = 128  // previne DoS via bcrypt com senhas longas
 const MIN_RESP_MS             = 400  // [FIX-EF-7] tempo mínimo de resposta
 const TERMS_VERSION           = '1.0'
 
@@ -277,9 +278,9 @@ Deno.serve(async (req) => {
         catch { return respond(jsonErr(corsHeaders, 'Body JSON inválido.', 400)) }
 
         // Desestrutura payload — ipAddress e userAgent descartados [FIX-EF-3]
-        const { step, email, code, password, acceptedTerms, nonce } = parsed as {
+        const { step, email, code, password, acceptedTerms, nonce, invitationId } = parsed as {
             step?: string; email?: string; code?: string | number
-            password?: string; acceptedTerms?: boolean; nonce?: string
+            password?: string; acceptedTerms?: boolean; nonce?: string; invitationId?: string
         }
 
         // ── Validações básicas de entrada ─────────────────────────
@@ -348,7 +349,12 @@ Deno.serve(async (req) => {
         // [BUG-01] guest_email / guest_name (schema real)
         // [OPT-02] usa índice composto idx_guest_inv_email_used_expires
         // [FIX-EF-1] select explícito — nunca select('*')
-        const { data: invitation, error: invError } = await supabaseAdmin
+        // Sanitiza invitationId se presente — apenas alfanumérico + hífen + underscore
+        const invIdSafe = typeof invitationId === 'string'
+            ? invitationId.replace(/[^a-zA-Z0-9\-_]/g, '').slice(0, 64)
+            : null
+
+        let query = supabaseAdmin
             .from('guest_invitations')
             .select([
                 'id',
@@ -362,9 +368,14 @@ Deno.serve(async (req) => {
                 'used',
                 'expires_at',
             ].join(', '))
-            .eq('guest_email', emailNorm)          // [BUG-01]
+            .eq('guest_email', emailNorm)
             .eq('used', false)
             .gt('expires_at', new Date().toISOString())
+
+        // Se invitationId presente, vincula a busca a esse convite específico
+        if (invIdSafe) query = query.eq('id', invIdSafe)
+
+        const { data: invitation, error: invError } = await query
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle()
@@ -410,11 +421,11 @@ Deno.serve(async (req) => {
         // ════════════════════════════════════════════════════════
         if (step === 'create') {
 
-            // [FIX-EF-2] Mínimo alinhado com frontend: 10 chars
-            if (!password || password.length < PASSWORD_MIN) {
+            // [FIX-EF-2] Comprimento alinhado com frontend: 10–128 chars
+            if (!password || password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
                 return respond(jsonErr(
                     corsHeaders,
-                    `A senha deve ter no mínimo ${PASSWORD_MIN} caracteres.`
+                    `A senha deve ter entre ${PASSWORD_MIN} e ${PASSWORD_MAX} caracteres.`
                 ))
             }
 

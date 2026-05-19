@@ -16,7 +16,7 @@ const ALLOWED_ORIGINS = new Set([
     : []),
 ])
 const MAX_BODY_BYTES = 8192
-const RATE_MAX       = 5
+const RATE_MAX       = 3
 
 export default async function handler(req, res) {
   const origin     = req.headers['origin'] ?? ''
@@ -82,6 +82,10 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'step inválido' })
   }
 
+  const invIdRaw = typeof body?.invitationId === 'string'
+    ? body.invitationId.replace(/[^a-zA-Z0-9\-_]/g, '').slice(0, 64)
+    : undefined
+
   const safePayload = {
     step:  stepRaw,
     email: body.email,
@@ -90,6 +94,7 @@ export default async function handler(req, res) {
       password:      typeof body?.password      === 'string'  ? body.password      : '',
       acceptedTerms: typeof body?.acceptedTerms === 'boolean' ? body.acceptedTerms : false,
     }),
+    ...(invIdRaw ? { invitationId: invIdRaw } : {}),
     nonce: typeof body?.nonce === 'string' ? body.nonce : undefined,
   }
 

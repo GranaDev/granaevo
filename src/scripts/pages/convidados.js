@@ -9,10 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 //  CONFIGURAÇÃO
 // ═══════════════════════════════════════════════════════════════
-const SUPABASE_URL      = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo';
-
-// Chama proxy interno — Edge Function URL nunca exposta ao browser
+// Proxy interno — Edge Function nunca exposta diretamente ao browser
 const VERIFY_ENDPOINT = '/api/verify-invite';
 
 // ═══════════════════════════════════════════════════════════════
@@ -33,6 +30,7 @@ const SECURITY = Object.freeze({
 let _verifiedEmail    = '';
 let _verifiedCode     = '';
 let _ownerName        = '';     // [FIX-⚠️6]  exibido só na Etapa 3
+let _invitationId     = '';     // ref da URL — vincula verify ao convite específico
 let _verifyCooldown   = false;  // [FIX-⚠️5]
 let _verifyController = null;   // [FIX-REL-6] AbortController do verify
 let _createController = null;   // [FIX-REL-6] AbortController do create
@@ -50,16 +48,12 @@ function _gerarNonce() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  HEADERS PADRÃO PARA FETCH  [FIX-A04]
-//  Authorization: Bearer garante que o gateway Supabase rejeite
-//  requisições sem a chave anon antes de chegar à Edge Function.
+//  HEADERS PADRÃO PARA FETCH
+//  O proxy Vercel (/api/verify-invite) adiciona suas próprias
+//  credenciais antes de repassar à Edge Function.
 // ═══════════════════════════════════════════════════════════════
 function _buildHeaders() {
-    return {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'apikey':         SUPABASE_ANON_KEY,
-    };
+    return { 'Content-Type': 'application/json' };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -101,13 +95,13 @@ document.addEventListener('DOMContentLoaded', () => {
     _bindEventos();
 });
 
-// [FIX-VUL-E] Parâmetro 'ref' sanitizado e nunca inserido no DOM
+// Lê e armazena o invitationId da URL — sanitizado, nunca inserido no DOM
 function _lerRefUrl() {
     try {
         const params = new URLSearchParams(window.location.search);
         const ref    = params.get('ref');
         if (ref) {
-            const refSanitized = String(ref).replace(/[^a-zA-Z0-9\-_]/g, '');
+            _invitationId = String(ref).replace(/[^a-zA-Z0-9\-_]/g, '').slice(0, 64);
         }
     } catch {
         // Silencioso — parâmetro inválido ignorado
@@ -206,12 +200,13 @@ async function verificarCodigo() {
 
         const response = await fetch(VERIFY_ENDPOINT, {
             method:  'POST',
-            headers: _buildHeaders(),     // [FIX-A04]
+            headers: _buildHeaders(),
             body:    JSON.stringify({
-                step:  'verify',
+                step:         'verify',
                 email,
                 code,
-                nonce: _gerarNonce(),    // [FIX-R03]
+                invitationId: _invitationId || undefined,
+                nonce:        _gerarNonce(),
             }),
             signal: _verifyController.signal,
         });
@@ -313,15 +308,15 @@ async function criarConta() {
 
         const response = await fetch(VERIFY_ENDPOINT, {
             method:  'POST',
-            headers: _buildHeaders(),    // [FIX-A04]
+            headers: _buildHeaders(),
             body:    JSON.stringify({
-                step:          'create',
-                email:         _verifiedEmail,
-                code:          _verifiedCode,
+                step:         'create',
+                email:        _verifiedEmail,
+                code:         _verifiedCode,
                 password,
                 acceptedTerms: true,
-                nonce:         _gerarNonce(),  // [FIX-R03]
-                // [FIX-⚠️12] userAgent removido — facilmente falsificável
+                invitationId: _invitationId || undefined,
+                nonce:        _gerarNonce(),
             }),
             signal: _createController.signal,
         });
