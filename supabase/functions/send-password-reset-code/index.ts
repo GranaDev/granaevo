@@ -224,6 +224,13 @@ Deno.serve(async (req) => {
     })
     const codeDigits   = code.split('')
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
+    if (!resendApiKey) {
+      console.error('[send-reset-code] RESEND_API_KEY não configurada — email bloqueado')
+      return new Response(
+        JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
 
     const emailResponse = await fetch('https://api.resend.com/emails', {
       method: 'POST',

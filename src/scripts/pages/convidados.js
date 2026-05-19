@@ -343,7 +343,15 @@ async function criarConta() {
         // [FIX-A03] Limpa campos de senha do DOM antes de ir para Etapa 3
         _limparFormularioStep2();
 
-        // [FIX-⚠️6] ownerName exibido agora — conta criada com sucesso
+        // Mensagem do step3 varia: novo cadastro vs reativação de acesso
+        const step3Title = document.getElementById('step3Title');
+        const step3Desc  = document.getElementById('step3Desc');
+        if (result.reactivated) {
+            if (step3Title) step3Title.textContent = 'Acesso restaurado!';
+            if (step3Desc)  step3Desc.textContent  = 'Seu acesso à conta foi reativado. Faça login com seu email e senha.';
+        }
+
+        // [FIX-⚠️6] ownerName exibido agora — conta criada/reativada com sucesso
         if (_ownerName) {
             // textContent: nunca innerHTML com dado externo [FIX-⚠️13]
             document.getElementById('ownerNameDisplay').textContent = _ownerName;

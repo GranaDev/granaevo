@@ -1,5 +1,160 @@
-# God Eyes — Correções
-Data: 2026-05-18 | Round 9
+# GranaEvo — Correcoes por Finding
+Data: 2026-05-19 | Auditoria Completa
+
+## FINDING MEDIO — timingSafeEqual com early-return em save-user-data e get-user-data
+
+### Problema (save-user-data/index.ts e get-user-data/index.ts, linha ~57)
+```typescript
+// ATUAL — revela tamanho do secret via timing
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc    = new TextEncoder()
+  const aBytes = enc.encode(a)
+  const bBytes = enc.encode(b)
+  if (aBytes.length !== bBytes.length) return false  // early-return vaza tamanho
+  let diff = 0
+  for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i]
+  return diff === 0
+}
+```
+
+### Correcao
+```typescript
+// CORRIGIDO — max-length XOR sem early-return (igual a check-user-access)
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc  = new TextEncoder()
+  const aB   = enc.encode(a)
+  const bB   = enc.encode(b)
+  const len  = Math.max(aB.length, bB.length)
+  let diff   = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
+  return diff === 0
+}
+```
+
+### Como testar
+Medir o tempo de resposta com proxy secrets de tamanhos diferentes (ex: 10 chars vs 64 chars).
+Apos a correcao, ambos devem ter tempo de resposta estatisticamente identico.
+
+### Impacto Real
+MUITO BAIXO: o tamanho do PROXY_SECRET e determinado por quem configura o ambiente.
+Atacantes que tentam brute-force do proxy secret ja precisam ter acesso de rede direto
+as Edge Functions (bypassando o proxy Vercel), o que e detectado pelos logs do Supabase.
+
+---
+
+## FINDING MEDIO — Tabelas auxiliares sem RLS confirmado
+
+### Problema
+As seguintes tabelas criadas em migrations recentes nao tem RLS explicitamente definido
+no codigo das migrations (verificado):
+- pending_plan_changes (20260515000001)
+- pending_profile_removals (20260516000001)
+- profile_backups (20260517000002)
+- pending_member_removals (20260518000001)
+
+Se estas tabelas nao tem RLS habilitado E sao acessiveis via authenticated/anon,
+usuarios poderiam ler/escrever dados de outros usuarios.
+
+### Como verificar
+Rodar no Supabase SQL Editor:
+```sql
+SELECT tablename, rowsecurity
+FROM pg_tables
+WHERE schemaname = 'public'
+  AND tablename IN (
+    'pending_plan_changes',
+    'pending_profile_removals',
+    'profile_backups',
+    'pending_member_removals'
+  );
+```
+
+### Correcao (se RLS nao habilitado)
+```sql
+-- Para tabelas internas (sem acesso do frontend):
+ALTER TABLE public.pending_plan_changes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pending_plan_changes FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.pending_plan_changes FROM anon;
+REVOKE ALL ON TABLE public.pending_plan_changes FROM authenticated;
+GRANT ALL ON TABLE public.pending_plan_changes TO service_role;
+
+-- Repetir para pending_profile_removals, profile_backups, pending_member_removals
+```
+
+### Como testar
+Tentar SELECT com authenticated role via Supabase client (anon key + JWT valido):
+```javascript
+const { data, error } = await supabase.from('pending_plan_changes').select('*')
+// Deve retornar: error com code PGRST301 (nenhuma linha visivel) ou 42501 (permissao negada)
+```
+
+---
+
+## FINDING BAIXO — CORS cosmético em send-guest-invite.js e verify-invite.js
+
+### Problema
+Quando a origin nao esta na ALLOWED_ORIGINS, corsOrigin assume [...ALLOWED_ORIGINS][0]
+antes da validacao de origem. O header Access-Control-Allow-Origin e setado com um
+dominio valido mesmo para origins invalidas. A requisicao e bloqueada com 403 logo apos,
+portanto sem impacto de seguranca.
+
+### Correcao
+```javascript
+// send-guest-invite.js e verify-invite.js — antes do OPTIONS handler
+const corsOrigin = ALLOWED_ORIGINS.has(origin) ? origin : null
+
+// No header ACAO, usar corsOrigin apenas se nao-null
+if (corsOrigin) {
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin)
+}
+res.setHeader('Vary', 'Origin')
+```
+
+### Impacto
+ZERO — o 403 e retornado antes de qualquer dado sensivel. E apenas cosmético.
+
+---
+
+## ANALISE DA MIGRATION 20260519000001 — guest_rls_policies.sql
+
+### Verificacao das politicas
+
+**subscriptions_guest_select_owner:**
+```sql
+USING (
+  user_id IN (
+    SELECT owner_user_id
+    FROM public.account_members
+    WHERE member_user_id = auth.uid()
+      AND is_active = true
+  )
+)
+```
+- Pode ser burlada? NAO — member_user_id = auth.uid() garante que apenas o convidado
+  autenticado pode executar. A subquery retorna apenas o owner_user_id do PROPRIO convidado.
+- Um usuario malicioso poderia criar uma entrada em account_members para si mesmo?
+  NAO — account_members nao tem INSERT policy para authenticated; INSERT e exclusivo
+  do service_role (via verify-guest-invite EF).
+
+**stripe_sub_select_as_guest:**
+- Mesmo analise — seguro.
+
+**account_members_owner_update:**
+```sql
+USING     (owner_user_id = auth.uid())
+WITH CHECK (owner_user_id = auth.uid())
+```
+- Privilege escalation guest->owner? NAO — USING garante que apenas o dono pode
+  executar UPDATE. WITH CHECK garante que owner_user_id nao pode ser alterado.
+- Um convidado poderia fazer UPDATE em seu proprio vinculo? NAO — member_user_id = auth.uid()
+  nao esta no USING clause. Apenas o dono (owner_user_id = auth.uid()) pode executar UPDATE.
+  Portanto convidados NAO podem se auto-promover para dono, nem desativar outros convidados.
+
+**Convidado vendo dados de outro dono?**
+A subquery em account_members e filtrada por member_user_id = auth.uid(). Isso garante
+que cada convidado so ve os dados do SEU dono. Impossivel cruzar dados entre contas.
+
+**Conclusao: Migration 20260519000001 e SEGURA.**
 
 ---
 

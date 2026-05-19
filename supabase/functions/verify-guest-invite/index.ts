@@ -462,26 +462,69 @@ Deno.serve(async (req) => {
                 return respond(jsonErr(corsHeaders, 'Você precisa aceitar os Termos de Uso.'))
             }
 
-            // ── Revalida: email já é membro ativo? ────────────────
-            const { data: existingMember } = await supabaseAdmin
+            // ── Revalida: email já é membro ATIVO de outra conta? ──
+            // Bloqueia dual-membership entre contas diferentes.
+            // Não bloqueia re-invite do mesmo dono (is_active=false é ok).
+            const { data: activeMember } = await supabaseAdmin
                 .from('account_members')
-                .select('id')
+                .select('id, owner_user_id')
                 .eq('member_email', emailNorm)
                 .eq('is_active', true)
                 .maybeSingle()
 
-            if (existingMember) {
+            if (activeMember) {
                 return respond(jsonErr(
                     corsHeaders,
-                    'Este email já é convidado de outra conta. Entre em contato com o suporte.'
+                    'Este email já é convidado ativo de uma conta. Entre em contato com o suporte.'
                 ))
             }
 
-            // ── Revalida: email já usou convite? ──────────────────
+            // ── Re-invite: membro desativado deste dono? ──────────
+            // Se o dono removeu o convidado anteriormente (is_active=false),
+            // reativa o vínculo sem criar novo usuário Auth.
+            const { data: inactiveMember } = await supabaseAdmin
+                .from('account_members')
+                .select('id, member_user_id')
+                .eq('member_email', emailNorm)
+                .eq('owner_user_id', invitation.owner_user_id)
+                .eq('is_active', false)
+                .maybeSingle()
+
+            if (inactiveMember) {
+                const { error: reactivateErr } = await supabaseAdmin
+                    .from('account_members')
+                    .update({
+                        is_active:  true,
+                        removed_at: null,
+                        joined_at:  new Date().toISOString(),
+                    })
+                    .eq('id', inactiveMember.id)
+
+                if (reactivateErr) {
+                    console.error('[verify-guest-invite] Erro ao reativar membro:', reactivateErr)
+                    return respond(jsonErr(corsHeaders, 'Erro ao restaurar acesso. Tente novamente.'))
+                }
+
+                await supabaseAdmin
+                    .from('guest_invitations')
+                    .update({ used: true, used_at: new Date().toISOString() })
+                    .eq('id', invitation.id)
+
+                console.log('✅ Membro reativado:', emailNorm, '→ dono:', invitation.owner_user_id)
+
+                return respond(jsonOk(corsHeaders, {
+                    success:     true,
+                    reactivated: true,
+                    message:     'Acesso restaurado! Faça login com sua senha atual.',
+                }))
+            }
+
+            // ── Revalida: email já usou convite (não é re-invite)? ─
+            // Chega aqui somente se NÃO é um re-invite do mesmo dono.
             const { data: usedInvite } = await supabaseAdmin
                 .from('guest_invitations')
                 .select('id')
-                .eq('guest_email', emailNorm)       // [BUG-01]
+                .eq('guest_email', emailNorm)
                 .eq('used', true)
                 .limit(1)
                 .maybeSingle()
@@ -489,7 +532,7 @@ Deno.serve(async (req) => {
             if (usedInvite) {
                 return respond(jsonErr(
                     corsHeaders,
-                    'Este email já aceitou um convite anteriormente. Tente fazer login diretamente.'
+                    'Este email já possui login cadastrado. Se esqueceu sua senha, use a recuperação de senha na tela de login.'
                 ))
             }
 

@@ -1,5 +1,160 @@
-# God Eyes — Achados de Código
-Data: 2026-05-18 | Round 9 — Análise completa pós-features (convites + emails + downgrade)
+# GranaEvo — Achados de Codigo (Analise Estatica)
+Data: 2026-05-19 | Auditoria Completa
+
+## API Routes (api/*.js)
+
+### check-user-access.js
+- Autentica antes de logica: SIM — passa JWT para EF que chama getUser()
+- Usa user_id do body: NAO — body e drenado e descartado; EF usa JWT
+- Valida inputs: N/A (sem body critico)
+- Rate limit: SIM — checkRate('check-access:IP', 20) via _rate-limit.js
+- CORS: SIM — ALLOWED_ORIGINS validada, origin check antes de CORS header
+- Proxy secret: SIM — repassado para EF via x-proxy-secret
+- FINDING MEDIO: Preflight OPTIONS nao valida origin (intencional por design — browsers enviam preflight antes da requisicao real). Risco baixo pois o header ACAO retorna o primeiro allowed origin quando origin e null/invalida.
+
+### user-data.js
+- Autentica antes de logica: SIM — extrai token do Bearer header ou cookie; valida na EF via getUser()
+- Usa user_id do body: NAO — userId extraido do JWT (sem verificacao de assinatura) APENAS para rate limiting. Auth real feita pela EF.
+- Valida inputs: SIM — MAX_BODY_BYTES 5MB, MAX_JSON_DEPTH 8, MAX_KEYS_OBJ 50, MAX_PROFILES 200
+- Rate limit: SIM — por IP (GET:20, POST:10) e por userId (POST:8) por janela de 60s
+- CORS: SIM — ALLOWED_ORIGINS + Sec-Fetch-Site/Mode/Dest verificados
+- Rate limit restaurar: SIM — 3 restauracoes por hora por IP e por userId
+- FINDING BAIXO: extractUserId decodifica JWT sem verificar assinatura — aceitavel pois e explicitamente documentado como sendo apenas para rate limiting; auth real e feita na EF.
+
+### create-account.js
+- Autentica antes de logica: N/A — endpoint publico (criacao de conta)
+- Valida inputs: SIM — email regex, senha 8-128 chars, plano em whitelist, tamanho maximo 2048 bytes
+- Rate limit: SIM — 3 criacoes por IP por hora via checkRateWindow()
+- Honeypot: SIM — _hp_email e _hp_url verificados server-side
+- CORS: SIM
+- Sem service_role key: SIM — delega para EF via proxy secret
+
+### send-guest-invite.js
+- Autentica antes de logica: SIM — Bearer token obrigatorio; EF valida com getUser()
+- Valida inputs: SIM — email regex, guestName 2-100 chars, body limit 4096 bytes
+- Rate limit: SIM — 5 req/min por IP
+- CORS: SIM
+- FINDING BAIXO: Para origens nao na whitelist, corsOrigin assume o primeiro item da lista em vez de retornar 403. A validacao de origem real acontece logo apos (linha 38), portanto sem impacto de seguranca — e apenas um CORS header cosmético incorreto para origens invalidas antes do 403.
+
+### verify-invite.js
+- Autentica antes de logica: N/A — endpoint publico (aceite de convite por nao-usuario)
+- Valida inputs: SIM — email, code, step, invitationId sanitizado, createToken limitado, body limit 8192 bytes
+- Rate limit: SIM — 3 req/min por IP
+- CORS: SIM
+- Proxy secret: SIM — repassado para EF
+- FINDING BAIXO: mesmo CORS cosmético que send-guest-invite.js
+
+### stripe.js
+- Autentica antes de logica: SIM para acoes portal/details/updatePlan/previewPlan/changeRemovalList; checkout e intencioalmente publico
+- Valida inputs: SIM — action em whitelist, plano em whitelist, UUIDs validados com regex para membersToRemove
+- Rate limit: SIM — por acao e IP
+- CORS: SIM — origin check ANTES do CORS header (correcao GOD6-L01 aplicada)
+
+### upload-profile-photo.js
+- Autentica antes de logica: SIM — Bearer token obrigatorio
+- Valida inputs: SIM — Content-Type multipart, body limit 6MB, MIME e magic bytes validados pela EF
+- Rate limit: SIM — 20/hora por IP, 10/hora por userId
+- CORS: SIM
+- FINDING BAIXO: OPTIONS preflight nao valida origin — mesma situacao de check-user-access.js (por design)
+
+### reset-password.js / check-email.js / verify-recaptcha.js / queue-email.js
+- Todos: rate limit, CORS, validacao de input, proxy secret — CORRETO
+- FINDING INFO: queue-email.js exige origin nao-vazia (linha 58) — protecao extra contra ferramentas sem browser que nao enviam Origin
+
+## Edge Functions (Supabase Deno)
+
+### check-user-access/index.ts
+- Proxy secret: SIM — timingSafeEqual antes de qualquer logica (fail-closed se PROXY_SECRET ausente)
+- JWT validacao: SIM — supabaseAdmin.auth.getUser(token) — valida assinatura ES256 via JWKS
+- Inputs validados: SIM — token length >= 20
+- Lockout progressivo: SIM — check_login_lockout RPC antes de consultar subscriptions
+- Convidado: SIM — verifica account_members + subscription do dono (Cakto e Stripe)
+- Logs: user_id truncado (primeiros 8 chars) — sem exposicao de UUID completo
+- Erro generico: SIM — catch retorna deny(500) sem stack trace
+- timingSafeEqual: previne timing oracle no proxy secret (max-length loop via XOR)
+
+### save-user-data/index.ts
+- Proxy secret: SIM — timingSafeEqual (mas com early-return em length != — diferente de check-user-access!)
+- JWT validacao: SIM — supabaseAdmin.auth.getUser(token)
+- Resolucao de convidado: SIM — effectiveUserId = owner_user_id para convidados
+- Criptografia: SIM — AES-256-GCM HKDF por usuario
+- FINDING MEDIO: timingSafeEqual em save-user-data tem early-return em aBytes.length !== bBytes.length (linha 57). Isso revela o tamanho do PROXY_SECRET via timing. O proxy secret tem tamanho fixo em producao (tipicamente 32+ chars), portanto o atacante ja sabe o tamanho esperado. Risco: MUITO BAIXO (tamanho e publico de fato). Recomendacao: alinhar com a implementacao de check-user-access que usa XOR sem early-return.
+
+### get-user-data/index.ts
+- Mesmo padrao que save-user-data: mesmo FINDING MEDIO de timingSafeEqual
+
+### verify-guest-invite/index.ts
+- Proxy secret: SIM — timingSafeEqualInvite usa max-length XOR (correto, sem early-return)
+- Nonce: SIM — criado com expires_at explicito + consumido atomicamente
+- Rate limit: SIM — por IP e por email via RPC atomica check_rate_limit
+- HMAC step token: SIM — vincula step=verify ao step=create server-side
+- Hash de codigo: SIM — SHA-256 do codigo 6 digitos
+- Tempo minimo de resposta: SIM — MIN_RESP_MS = 400ms (anti-timing)
+- Rollback de usuario orfao: SIM — deleteUser se insert em account_members falhar
+- User-id fora do response: SIM [FIX-EF-4]
+- FINDING INFO: usuario criado com auth.admin.createUser(email_confirm: true) — email nao confirmado por padrao para convidados. Convidado ja validou email indiretamente (recebeu o convite + codigo). Design correto.
+
+### send-guest-invite/index.ts
+- Proxy secret: SIM — timingSafeEqualInvite (max-length XOR)
+- JWT validacao: SIM — supabaseAdmin.auth.getUser(token)
+- Verificacao de plano: SIM — verifica subscription Cakto e Stripe antes de criar convite
+- Limite de membros: SIM — GUEST_LIMITS por plano
+- Rate limit de convites: SIM — max 4 em 24h por owner
+- HTML do email: SIM — escapeHtml() aplicado em todos os campos do usuario (guestName, ownerName, planName, invId)
+- inviteUrl usa encodeURIComponent para invId
+- Sem codigo no banco: SIM — apenas code_hash armazenado
+
+## Frontend (src/scripts/)
+
+### supabase-client.js
+- service_role key exposta: NAO — apenas SUPABASE_URL e SUPABASE_ANON_KEY (intencioalmente publicas)
+- auth.admin: NAO
+- FINDING INFO: SUPABASE_ANON_KEY hardcoded no bundle. Isso e INTENCIONAL — anon key e projetada para ser publica. A seguranca e garantida pelo RLS no Supabase. Documentado no proprio arquivo.
+
+### auth-guard.js
+- Verificacao de plano no frontend: SIM — mas como FALLBACK complementar; a verificacao autoritativa e feita via /api/check-user-access (server-side)
+- Usa user_id do cliente para auth: NAO — apenas userId derivado do session object do Supabase SDK
+- supabase.auth.admin: NAO
+- Redirect seguro: SIM — SafeRedirect._isSafe() valida same-origin e blocklist de esquemas perigosos
+- FINDING MEDIO: A verificacao de plano no SubscriptionChecker.getActive() e feita via queries Supabase diretamente do frontend. Se um usuário manipular o RLS ou tiver um JWT valido com role indevida, poderia burlar esta verificacao. MITIGACAO: A verificacao autoritativa e o endpoint /api/check-user-access que usa service_role + auth.getUser(). O frontend usa as queries RLS como cache/UX — o acesso real aos dados e controlado server-side pelas Edge Functions. RISCO: BAIXO.
+- FINDING BAIXO: _renderFrozenOverlay usa overlay.innerHTML com template literal que interpola planName e daysText. planName vem de uma whitelist (_PLAN_WL) e daysText e construido de um numero inteiro — sem entrada do usuario. SEGURO.
+
+### dashboard.js / outros pages
+- service_role key: NAO encontrada em nenhum arquivo
+- auth.admin: NAO
+- innerHTML com dados externos: Maioria usa textContent. Casos de innerHTML:
+  - graficos.js: usa _sanitize() antes de innerHTML
+  - db-relatorios.js: usa _sanitizarHTMLRelatorio() (DOMParser-based)
+  - dashboard.js: usa sanitizarHTMLPopup() (DOMParser-based)
+  - auth-guard.js overlay: usa whitelist para planName, inteiro para daysText
+  - tutorial.js linha 242: innerHTML com template — verificacao necessaria
+- CONFIRMADO SEGURO: tutorial.js linha 242 usa innerHTML com conteudo de PASSOS (array de constantes definidas estaticamente no modulo, sem entrada do usuario). p.titulo e p.texto sao strings literais do codigo-fonte. Sem risco de XSS.
+
+## vercel.json
+
+### Headers de Seguranca
+- X-Frame-Options: DENY — SIM
+- X-Content-Type-Options: nosniff — SIM
+- X-XSS-Protection: 0 — SIM (correto — desabilita XSS filter legado que causa problemas)
+- HSTS: max-age=63072000; includeSubDomains; preload — SIM (2 anos)
+- Referrer-Policy: strict-origin-when-cross-origin — SIM
+- Permissions-Policy: restrictiva — SIM
+- Cross-Origin-Opener-Policy: same-origin-allow-popups — SIM (permite popups para OAuth)
+- Cross-Origin-Resource-Policy: same-origin — SIM
+- Cross-Origin-Embedder-Policy: unsafe-none — NOTA: necessario por restricoes de terceiros (Cloudflare Insights, reCAPTCHA)
+
+### CSP por rota
+- Todas as rotas sensíveis tem CSP especifico (dashboard, login, convidados, atualizarplano)
+- Rotas estaticas (termos, privacidade, /) tem CSP restritivo
+- /api/*: CSP default-src 'none' — correto para endpoints de API
+- FINDING MEDIO: CSP ausente para a rota /atualizarplano nas rotas de HTML (rewrite nao tem entrada de rota HTML para atualizarplano com CSP proprio — mas vercel.json linha 140 tem CSP para /atualizarplano). VERIFICADO — ha CSP em /atualizarplano.
+- FINDING INFO: dashboard CSP inclui 'unsafe-inline' em style-src (necessario para chart.js inline styles). Nao e ideal mas e pratico.
+
+### Cache Control
+- /api/*: no-store, no-cache, must-revalidate, private — CORRETO
+- /dashboard: no-store — CORRETO
+- /convidados: no-store + CDN-Cache-Control + Surrogate-Control — CORRETO
+- /atualizarplano: no-store — CORRETO
 
 ---
 
