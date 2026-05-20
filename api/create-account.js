@@ -125,6 +125,7 @@ export default async function handler(req, res) {
       method:  'POST',
       headers: {
         'Content-Type':   'application/json',
+        'Authorization':  `Bearer ${ANON_KEY}`,
         'apikey':         ANON_KEY,
         'x-proxy-secret': PROXY_SECRET,
       },
