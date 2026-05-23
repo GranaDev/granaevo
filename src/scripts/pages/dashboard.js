@@ -944,12 +944,14 @@ async function verificarLogin() {
         const effectiveEmail  = userData.ownerEmail || userData.email;
 
         usuarioLogado = {
-            userId:  userData.userId,
-            nome:    userData.nome,
-            email:   userData.email,
-            plano:   userData.plano,
-            perfis:  [],
-            isGuest: userData.isGuest,
+            userId:          userData.userId,
+            effectiveUserId: effectiveUserId,
+            nome:            userData.nome,
+            email:           userData.email,
+            plano:           userData.plano,
+            perfis:          [],
+            isGuest:         userData.isGuest,
+            ownerEmail:      userData.ownerEmail || null,
         };
 
         _log.info('[VERIFICAR LOGIN] Usuário inicializado. isGuest:', usuarioLogado.isGuest);
