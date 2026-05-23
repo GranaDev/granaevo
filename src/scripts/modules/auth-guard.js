@@ -474,31 +474,6 @@ const SubscriptionChecker = (() => {
     });
 
     /**
-     * [FIX-VUL-3] + [FIX-REPORT-5]
-     * Auto-link Cakto — vincula subscription.user_id ao usuário autenticado.
-     */
-    async function _autoLink(subscriptionId, userId, sessionEmail, subscriptionEmail) {
-        if (!sessionEmail || !subscriptionEmail) return;
-        if (sessionEmail.toLowerCase() !== subscriptionEmail.toLowerCase()) return;
-
-        try {
-            await supabase
-                .from('subscriptions')
-                .update({
-                    user_id:             userId,
-                    password_created:    true,
-                    password_created_at: new Date().toISOString(),
-                    updated_at:          new Date().toISOString(),
-                })
-                .eq('id', subscriptionId)
-                .is('user_id', null)
-                .eq('user_email', subscriptionEmail);
-        } catch {
-            // Não crítico — tentará novamente na próxima verificação
-        }
-    }
-
-    /**
      * Auto-link Stripe — vincula stripe_subscriptions.user_id ao usuário autenticado.
      * Requer RLS policy "stripe_sub_update_claim" (user_id IS NULL + email match).
      */
@@ -528,33 +503,9 @@ const SubscriptionChecker = (() => {
             }
 
             try {
-                // ── 1. Busca por user_id (caminho principal) ──────────
-                // Política RLS: auth.uid() = user_id
-                const { data: ownSub, error: ownErr } = await supabase
-                    .from('subscriptions')
-                    .select('id, plans(name), is_active, payment_status, expires_at, user_id')
-                    .eq('user_id', userId)
-                    .eq('payment_status', 'approved')
-                    .eq('is_active', true)
-                    .maybeSingle();
-
-                if (!ownErr && ownSub) {
-                    if (ownSub.expires_at && new Date(ownSub.expires_at) < new Date()) {
-                        return EMPTY;
-                    }
-                    _cache = Object.freeze({
-                        subscription: ownSub,
-                        isGuest:      false,
-                        ownerId:      userId,
-                        planName:     ownSub.plans?.name || 'Individual',
-                        ownerEmail:   null,
-                    });
-                    _cacheUser = userId;
-                    _cacheExp  = Date.now() + CACHE_TTL;
-                    return _cache;
-                }
-
-                // ── 1.5: Stripe — busca por user_id (assinatura recorrente) ──
+                // ── 1. Stripe — busca por user_id (inclui Cakto migrados) ────
+                // Todos os planos agora em stripe_subscriptions. Cakto migrado
+                // aparece como status='active' + current_period_end=2099.
                 const { data: stripeSub, error: stripeErr } = await supabase
                     .from('stripe_subscriptions')
                     .select('id, plan_name, status, current_period_end')
@@ -582,73 +533,13 @@ const SubscriptionChecker = (() => {
                 }
 
                 // ── 2. Fallback por email (user_id = NULL) ────────────
-                // [FIX-REPORT-1] Obtém email da sessão ANTES da query para
-                // filtrar no banco — dupla defesa além do RLS.
-                // Mover getUser() para cá também elimina a segunda chamada
-                // que existia mais abaixo para verificar email_confirmed_at.
+                // Compra feita sem login ou Cakto migrado sem user_id vinculado.
                 const { data: authData } = await supabase.auth.getUser();
                 const authUser     = authData?.user;
                 const sessionEmail = authUser?.email;
 
                 if (sessionEmail) {
-                    // [FIX-REPORT-1] .ilike filtra no servidor pelo email da sessão
-                    // [FIX-VUL-11]  Sem .limit — buscamos todas para detectar duplicatas
-                    const { data: emailSubs, error: emailErr } = await supabase
-                        .from('subscriptions')
-                        .select('id, plans(name), is_active, payment_status, expires_at, user_id, user_email')
-                        .is('user_id', null)
-                        .eq('payment_status', 'approved')
-                        .eq('is_active', true)
-                        .ilike('user_email', sessionEmail); // [FIX-REPORT-1]
-
-                    if (!emailErr && emailSubs && emailSubs.length > 0) {
-                        // [FIX-VUL-11] Duplicata → nega acesso por segurança
-                        if (emailSubs.length > 1) {
-                            console.error(
-                                '[AUTH GUARD] Múltiplas subscriptions não vinculadas encontradas. ' +
-                                'Acesso negado por segurança.'
-                            );
-                            return EMPTY;
-                        }
-
-                        const emailSub = emailSubs[0];
-
-                        if (emailSub.expires_at && new Date(emailSub.expires_at) < new Date()) {
-                            return EMPTY;
-                        }
-
-                        // [FIX-VUL-3] Verifica confirmação de email e correspondência
-                        const emailConfirmed    = !!authUser?.email_confirmed_at;
-                        const subscriptionEmail = emailSub.user_email || '';
-
-                        const emailMatch =
-                            sessionEmail &&
-                            subscriptionEmail &&
-                            sessionEmail.toLowerCase() === subscriptionEmail.toLowerCase();
-
-                        if (!emailMatch) return EMPTY;
-
-                        if (emailConfirmed) {
-                            // Auto-link em background — não bloqueia o fluxo
-                            _autoLink(emailSub.id, userId, sessionEmail, subscriptionEmail);
-                            // Invalida cache para forçar nova busca após link
-                            _cache     = null;
-                            _cacheUser = null;
-                            _cacheExp  = 0;
-                        }
-
-                        return Object.freeze({
-                            subscription: emailSub,
-                            isGuest:      false,
-                            ownerId:      userId,
-                            planName:     emailSub.plans?.name || 'Individual',
-                            ownerEmail:   null,
-                        });
-                    }
-
-                    // ── 2.5: Stripe — busca por email (primeiro login após compra anônima) ─
-                    // user_id ainda é NULL: compra foi feita sem login.
-                    // RLS "stripe_sub_select_by_email" permite esta leitura.
+                    // Stripe by email (inclui Cakto migrados sem user_id)
                     const { data: stripeEmailSub, error: stripeEmailErr } = await supabase
                         .from('stripe_subscriptions')
                         .select('id, plan_name, status, current_period_end, user_email')
@@ -723,7 +614,6 @@ const SubscriptionChecker = (() => {
                 }
 
                 // ── 3. Verifica se é convidado ────────────────────────
-                // Política RLS: member_can_read_own_membership
                 const { data: member, error: memErr } = await supabase
                     .from('account_members')
                     .select('id, owner_user_id, owner_email, is_active')
@@ -733,37 +623,23 @@ const SubscriptionChecker = (() => {
 
                 if (memErr || !member) return EMPTY;
 
-                // Verifica subscription Cakto do dono
-                const { data: ownerSub } = await supabase
-                    .from('subscriptions')
-                    .select('id, plans(name), is_active, payment_status, expires_at')
+                // Verifica subscription do dono (todos em stripe_subscriptions)
+                const { data: ownerStripe } = await supabase
+                    .from('stripe_subscriptions')
+                    .select('id, plan_name, status, current_period_end')
                     .eq('user_id', member.owner_user_id)
-                    .eq('payment_status', 'approved')
-                    .eq('is_active', true)
+                    .in('status', ['active', 'trialing'])
+                    .order('created_at', { ascending: false })
+                    .limit(1)
                     .maybeSingle();
 
-                let finalSub      = ownerSub;
-                let finalPlanName = ownerSub?.plans?.name || null;
-
-                const caktoExpired = ownerSub?.expires_at && new Date(ownerSub.expires_at) < new Date();
-                if (!ownerSub || caktoExpired) {
-                    // Dono pode ter plano Stripe — verifica stripe_subscriptions
-                    const { data: ownerStripe } = await supabase
-                        .from('stripe_subscriptions')
-                        .select('id, plan_name, status, current_period_end')
-                        .eq('user_id', member.owner_user_id)
-                        .in('status', ['active', 'trialing'])
-                        .order('created_at', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
-
-                    if (!ownerStripe) return EMPTY;
-                    if (ownerStripe.current_period_end && new Date(ownerStripe.current_period_end) < new Date()) {
-                        return EMPTY;
-                    }
-                    finalSub      = ownerStripe;
-                    finalPlanName = _normalizePlanName(ownerStripe.plan_name);
+                if (!ownerStripe) return EMPTY;
+                if (ownerStripe.current_period_end && new Date(ownerStripe.current_period_end) < new Date()) {
+                    return EMPTY;
                 }
+
+                const finalSub      = ownerStripe;
+                const finalPlanName = _normalizePlanName(ownerStripe.plan_name);
 
                 _cache = Object.freeze({
                     subscription: finalSub,
@@ -1317,13 +1193,25 @@ const AuthGuard = (() => {
                                 const api = await r.json();
                                 if (api.locked) throw _err('RATE_LIMITED', api.message || 'Conta bloqueada.');
                                 if (api.hasAccess === true) {
-                                    subData = {
-                                        subscription: { id: 'api-verified' },
-                                        isGuest:      false,
-                                        ownerId:      user.id,
-                                        planName:     'Individual',
-                                        ownerEmail:   null,
-                                    };
+                                    if (api.isGuest && api.ownerId) {
+                                        // Convidado identificado pelo fallback — usa dados do dono
+                                        subData = {
+                                            subscription: { id: 'api-verified' },
+                                            isGuest:      true,
+                                            ownerId:      api.ownerId,
+                                            planName:     _normalizePlanName(api.planName) || 'Individual',
+                                            ownerEmail:   api.ownerEmail || null,
+                                        };
+                                    } else {
+                                        // Assinante direto
+                                        subData = {
+                                            subscription: { id: 'api-verified' },
+                                            isGuest:      false,
+                                            ownerId:      user.id,
+                                            planName:     'Individual',
+                                            ownerEmail:   null,
+                                        };
+                                    }
                                     // Invalida cache local para forçar re-sync no próximo acesso
                                     SubscriptionChecker.invalidate();
                                 }

@@ -141,160 +141,54 @@ Deno.serve(async (req) => {
       )
     }
 
-    // ── Busca subscription ───────────────────────────────────────────────────
-    const { data: subscriptions, error: subError } = await supabaseAdmin
-      .from('subscriptions')
-      .select(`
-        id,
-        user_id,
-        plan_id,
-        payment_status,
-        password_created,
-        user_name,
-        user_email,
-        is_active,
-        plans(name)
-      `)
+    // ── Busca subscription ativa (stripe_subscriptions — inclui Cakto migrados)
+    const { data: stripeSub, error: subError } = await supabaseAdmin
+      .from('stripe_subscriptions')
+      .select('id, user_id, user_email, plan_name, status, current_period_end')
       .eq('user_email', normalizedEmail)
-      .eq('is_active', true)
+      .in('status', ['active', 'trialing'])
       .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
     if (subError) {
-      console.error('[check-email-status] Erro ao buscar subscription:', subError.message)
+      console.error('[check-email-status] Erro ao buscar stripe_subscriptions:', subError.message)
       throw subError
     }
 
-    // ── Email não encontrado em Cakto — verifica Stripe ─────────────────────
-    if (!subscriptions || subscriptions.length === 0) {
-      // [STRIPE-MIGRATION] Usuários novos têm subscription em stripe_subscriptions,
-      // não em subscriptions (Cakto). Verifica a segunda tabela antes de negar.
-      const { data: stripeSubList } = await supabaseAdmin
-        .from('stripe_subscriptions')
-        .select('id, user_id, user_email, plan_name, status, current_period_end')
-        .eq('user_email', normalizedEmail)
-        .in('status', ['active', 'trialing'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      if (!stripeSubList || stripeSubList.length === 0) {
-        return new Response(
-          JSON.stringify({ status: 'not_found' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        )
-      }
-
-      const stripeSub = stripeSubList[0]
-
-      // Período expirado → nega (webhook pode estar atrasado)
-      if (stripeSub.current_period_end && new Date(stripeSub.current_period_end) < new Date()) {
-        return new Response(
-          JSON.stringify({ status: 'not_found' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        )
-      }
-
-      // Usuário Stripe já tem conta criada (user_id vinculado)
-      if (stripeSub.user_id) {
-        return new Response(
-          JSON.stringify({ status: 'password_exists', needs_link: false, data: null }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        )
-      }
-
-      // Usuário Stripe sem conta — pode criar senha
-      // is_stripe=true sinaliza ao primeiroacesso.js que não precisa chamar link-subscription
-      return new Response(
-        JSON.stringify({
-          status: 'ready',
-          data: {
-            subscription_id: stripeSub.id,
-            user_name:       'Usuário',
-            plan_name:       stripeSub.plan_name ?? 'GranaEvo',
-            email:           normalizedEmail,
-            is_stripe:       true,
-          },
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      )
-    }
-
-    const subscription = subscriptions[0]
-
-    // ── Pagamento não aprovado ───────────────────────────────────────────────
-    // [SEC-FIX] Mesmo status que not_found — impede distinguir "email cadastrado
-    // sem pagamento" de "email não existe". Ambos retornam 'not_found'.
-    if (subscription.payment_status !== 'approved') {
+    if (!stripeSub) {
       return new Response(
         JSON.stringify({ status: 'not_found' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
-    // ── [FIX-01] Senha já criada ─────────────────────────────────────────────
-    // Verifica se o user_id está vinculado (pode estar NULL por falha anterior).
-    if (subscription.password_created) {
-      const needsLink = !subscription.user_id
-      let needsLinkConfirmed = needsLink
-
-      // Dupla verificação: mesmo com user_id preenchido, confirma que o
-      // usuário realmente existe no Auth (registro pode ter corrompido).
-      if (!needsLink && subscription.user_id) {
-        const { data: authUser, error: authErr } = await supabaseAdmin
-          .auth.admin.getUserById(subscription.user_id)
-        if (authErr || !authUser?.user) {
-          // user_id aponta para usuário inexistente — sinaliza para revincular.
-          needsLinkConfirmed = true
-        }
-      }
-
+    // Período expirado → nega (webhook pode ter atrasado a atualização do status)
+    if (stripeSub.current_period_end && new Date(stripeSub.current_period_end) < new Date()) {
       return new Response(
-        JSON.stringify({
-          status: 'password_exists',
-          needs_link: needsLinkConfirmed,
-          data: needsLinkConfirmed ? {
-            subscription_id: subscription.id,
-            email: normalizedEmail,
-          } : null,
-        }),
+        JSON.stringify({ status: 'not_found' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
-    // ── [FIX-02] password_created = false, mas user_id já preenchido ─────────
-    // signUp funcionou mas o UPDATE de password_created falhou.
-    // Corrige aqui no backend antes de devolver qualquer resposta.
-    if (!subscription.password_created && subscription.user_id) {
-      console.warn(`[check-email-status] Corrigindo password_created para subscription ${subscription.id}`)
-
-      await supabaseAdmin
-        .from('subscriptions')
-        .update({
-          password_created:    true,
-          password_created_at: new Date().toISOString(),
-          updated_at:          new Date().toISOString(),
-        })
-        .eq('id', subscription.id)
-
-      // Retorna como se a senha já existisse — usuário deve fazer login.
+    // Usuário já tem conta criada (user_id vinculado) → só precisa fazer login
+    if (stripeSub.user_id) {
       return new Response(
-        JSON.stringify({
-          status: 'password_exists',
-          needs_link: false,
-          data: null,
-        }),
+        JSON.stringify({ status: 'password_exists', needs_link: false, data: null }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
-    // ── Tudo OK — pode criar senha ───────────────────────────────────────────
+    // Usuário sem conta — pode criar senha (link via link-user-subscription)
     return new Response(
       JSON.stringify({
         status: 'ready',
         data: {
-          subscription_id: subscription.id,
-          user_name:       subscription.user_name || 'Usuário',
-          plan_name:       subscription.plans?.name || 'Plano não identificado',
+          subscription_id: stripeSub.id,
+          user_name:       'Usuário',
+          plan_name:       stripeSub.plan_name ?? 'GranaEvo',
           email:           normalizedEmail,
+          is_stripe:       true,
         },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }

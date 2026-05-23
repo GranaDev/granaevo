@@ -349,13 +349,6 @@ authorization_url_path = "/oauth/consent"
 allow_dynamic_registration = false
 
 # ── Edge Functions — verify_jwt=false para endpoints públicos/externos ──────
-# Funções chamadas por serviços externos (Cakto) ou sem JWT de usuário
-[functions.webhook-cakto]
-verify_jwt = false
-
-[functions.process-cakto-payment]
-verify_jwt = false
-
 [functions.verify-and-reset-password]
 verify_jwt = false
 
@@ -368,8 +361,6 @@ verify_jwt = false
 [functions.confirm-user-email]
 verify_jwt = false
 
-[functions.verify-cakto-payment]
-verify_jwt = false
 
 [functions.verify-guest-invite]
 verify_jwt = false

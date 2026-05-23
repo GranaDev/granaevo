@@ -118,75 +118,68 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // ── 6. Busca subscription e valida ownership ──────────────────────────
-    const { data: sub, error: subErr } = await supabaseAdmin
-      .from("subscriptions")
-      .select("id, user_id, user_email, payment_status, is_active")
-      .eq("id", subscription_id)
+    // Tabela `subscriptions` (Cakto) foi migrada para stripe_subscriptions e arquivada.
+    // Esta função agora vincula stripe_subscriptions sem user_id ao usuário autenticado.
+    // O subscription_id ainda é aceito no body mas não é usado (legado do fluxo Cakto).
+
+    // ── 6. Busca stripe_subscription vinculável (user_id null, mesmo email) ──
+    const { data: stripeSub, error: stripeErr } = await supabaseAdmin
+      .from("stripe_subscriptions")
+      .select("id, user_id, user_email, status")
+      .eq("user_email", verifiedEmail)
+      .is("user_id", null)
+      .in("status", ["active", "trialing"])
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
-    if (subErr) {
-      console.error("[link-user-subscription] Erro ao buscar subscription:", subErr.code);
+    if (stripeErr) {
+      console.error("[link-user-subscription] Erro ao buscar stripe_subscriptions:", stripeErr.message);
       return json({ success: false, message: "Erro ao verificar assinatura." }, 500);
     }
 
-    if (!sub) {
-      return json({ success: false, message: "Assinatura não encontrada." }, 404);
-    }
+    if (!stripeSub) {
+      // Verifica se já está vinculada (user_id preenchido)
+      const { data: alreadyLinked } = await supabaseAdmin
+        .from("stripe_subscriptions")
+        .select("id")
+        .eq("user_id", verifiedUserId)
+        .in("status", ["active", "trialing"])
+        .limit(1)
+        .maybeSingle();
 
-    // [SEC-FIX GHOST-004] Email mismatch retorna 404 (não 403) — impede enumeração
-    // de subscription UUIDs via diferença entre "não encontrado" e "não autorizado".
-    // Um atacante com JWT válido poderia testar UUIDs e saber quais existem via 403.
-    if (sub.user_email?.toLowerCase().trim() !== verifiedEmail) {
-      console.warn("[link-user-subscription] Email JWT não confere com a subscription (retorno 404 intencional).");
+      if (alreadyLinked) {
+        return json({ success: true, already_linked: true });
+      }
+      console.log("[link-user-subscription] Nenhuma assinatura para vincular:", verifiedEmail);
       return json({ success: false, message: "Assinatura não encontrada." }, 404);
-    }
-
-    if (sub.payment_status !== "approved" || !sub.is_active) {
-      return json({ success: false, message: "Assinatura inativa ou pagamento não aprovado." }, 403);
     }
 
     // ── 7. Idempotência ────────────────────────────────────────────────────
-    if (sub.user_id === verifiedUserId) {
+    if (stripeSub.user_id === verifiedUserId) {
       return json({ success: true, already_linked: true });
-    }
-
-    if (sub.user_id && sub.user_id !== verifiedUserId) {
-      console.warn("[link-user-subscription] Tentativa de revínculo para outro userId bloqueada.");
-      return json({ success: false, message: "Assinatura já vinculada a outro usuário." }, 409);
     }
 
     // ── 8. Confirma email se necessário ───────────────────────────────────
     if (!user.email_confirmed_at) {
       const { error: confirmErr } = await supabaseAdmin.auth.admin.updateUserById(
-        verifiedUserId,
-        { email_confirm: true }
+        verifiedUserId, { email_confirm: true },
       );
-      if (confirmErr) {
-        console.warn("[link-user-subscription] Falha ao confirmar email:", confirmErr.message);
-      }
+      if (confirmErr) console.warn("[link-user-subscription] Falha ao confirmar email:", confirmErr.message);
     }
 
-    // ── 9. Vincula subscription ao userId verificado ───────────────────────
+    // ── 9. Vincula stripe_subscription ao userId verificado ───────────────
     const { error: updateErr } = await supabaseAdmin
-      .from("subscriptions")
-      .update({
-        user_id:             verifiedUserId,
-        password_created:    true,
-        password_created_at: new Date().toISOString(),
-        updated_at:          new Date().toISOString(),
-      })
-      .eq("id", subscription_id);
+      .from("stripe_subscriptions")
+      .update({ user_id: verifiedUserId, updated_at: new Date().toISOString() })
+      .eq("id", stripeSub.id);
 
     if (updateErr) {
-      console.error("[link-user-subscription] Erro ao atualizar subscription:", updateErr.message);
+      console.error("[link-user-subscription] Erro ao vincular:", updateErr.message);
       return json({ success: false, message: "Erro ao vincular assinatura. Tente novamente." }, 500);
     }
 
-    console.log(
-      `[link-user-subscription] Vinculado: ${verifiedUserId.slice(0, 8)}... → sub ${subscription_id.slice(0, 8)}...`
-    );
-
+    console.log(`[link-user-subscription] Vinculado: ${verifiedUserId.slice(0, 8)} → stripe_sub ${stripeSub.id.slice(0, 8)}`);
     return json({ success: true, already_linked: false });
 
   } catch (err) {

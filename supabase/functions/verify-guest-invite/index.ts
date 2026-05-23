@@ -1,59 +1,35 @@
 /**
- * GranaEvo — verify-guest-invite/index.ts  (v2 — revisão completa)
+ * GranaEvo — verify-guest-invite
  *
- * ═══════════════════════════════════════════════════════════════
- *  CORREÇÕES APLICADAS
- * ═══════════════════════════════════════════════════════════════
+ * Fluxo:
+ *   step=verify → valida email + código (hash SHA-256) → retorna guestName/ownerName
+ *   step=create → valida código novamente + cria conta Auth + vincula account_members
  *
- * [BUG-01]  member_email / member_name corrigidos para guest_email /
- *           guest_name — alinhado com o schema real da tabela
- *           guest_invitations. A query anterior retornava vazio
- *           silenciosamente em 100% das verificações.
- *
- * [BUG-02]  Validação real de nonce implementada via tabela
- *           invite_nonces. Cada nonce é aceito exatamente uma vez
- *           dentro do TTL de 2 minutos. Bloqueia replay attacks e
- *           automação simples sem estado.
- *
- * [OPT-01]  Rate limit por IP e por email via invite_rate_limit.
- *           Janela deslizante de 15 minutos, máximo 10 tentativas.
- *           Independente do verification_attempts por convite —
- *           bloqueia atacantes que rodam emails diferentes.
- *
- * [OPT-02]  Query principal agora usa guest_email (índice composto
- *           idx_guest_inv_email_used_expires criado no banco).
- *
- * [OPT-03]  terms_version incluído no insert de terms_acceptance.
- *
- * [MANT]    Todas as correções da versão anterior mantidas:
- *           FIX-DB-2, FIX-EF-1..7, hash SHA-256, IP do header,
- *           CORS restrito, tempo de resposta uniforme, rollback
- *           de usuário órfão, userId fora do response.
+ * Segurança:
+ *   - Proxy secret (previne chamada direta bypassando Vercel)
+ *   - Rate limit por IP e email (check_rate_limit RPC)
+ *   - Código armazenado como SHA-256 — nunca em texto puro
+ *   - Convite expira em 12h e é marcado used=true após uso (anti-replay)
+ *   - Limite de 5 tentativas erradas por convite (anti-brute-force)
+ *   - Resposta com delay mínimo 400ms (anti-timing)
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
-// ═══════════════════════════════════════════════════════════════
-//  CONSTANTES
-// ═══════════════════════════════════════════════════════════════
-const MAX_ATTEMPTS_PER_INVITE = 5    // tentativas por convite
-const MAX_ATTEMPTS_RATE_LIMIT = 10   // tentativas por IP/email na janela
-const PASSWORD_MIN            = 10   // [FIX-EF-2] alinhado com frontend
-const PASSWORD_MAX            = 128  // previne DoS via bcrypt com senhas longas
-const MIN_RESP_MS             = 400  // [FIX-EF-7] tempo mínimo de resposta
-const TERMS_VERSION           = '1.0'
-
-// [FIX-EF-5] Origens permitidas — domínios de produção reais
-// [NOVO-006] Removido app.granaevo.com (subdomínio inexistente)
 const ALLOWED_ORIGINS = new Set([
     'https://granaevo.com',
     'https://www.granaevo.com',
     'https://granaevo.vercel.app',
 ])
+const MIN_RESP_MS             = 400
+const PASSWORD_MIN            = 10
+const PASSWORD_MAX            = 128
+const MAX_ATTEMPTS_PER_INVITE = 5
+const MAX_RATE_LIMIT          = 10
+const TERMS_VERSION           = '1.0'
 
-// ═══════════════════════════════════════════════════════════════
-//  CORS [FIX-EF-5]
-// ═══════════════════════════════════════════════════════════════
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function getCorsHeaders(req: Request): Record<string, string> {
     const origin  = req.headers.get('origin') ?? ''
     const allowed = ALLOWED_ORIGINS.has(origin) ? origin : ''
@@ -61,12 +37,11 @@ function getCorsHeaders(req: Request): Record<string, string> {
         'Access-Control-Allow-Origin':  allowed,
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-proxy-secret',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Vary': 'Origin',  // [MED-04] evita cache poisoning em CDN com ACAO dinâmico
+        'Vary': 'Origin',
     }
 }
 
-// [NOVO-004] timing-safe compare — proxy secret para verificar convite
-function timingSafeEqualInvite(a: string, b: string): boolean {
+function timingSafeEqual(a: string, b: string): boolean {
     const enc = new TextEncoder()
     const aB  = enc.encode(a)
     const bB  = enc.encode(b)
@@ -76,69 +51,6 @@ function timingSafeEqualInvite(a: string, b: string): boolean {
     return diff === 0
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  HMAC STEP TOKEN [CR-01 + HR-02]
-//  Emitido pelo servidor no step=verify, exigido no step=create.
-//  Vincula os dois passos server-side sem depender de estado no DB.
-//  Formato: base64(invId:timestamp).hexHMAC — TTL de 5 minutos.
-// ═══════════════════════════════════════════════════════════════
-const STEP_TOKEN_TTL_MS = 15 * 60 * 1_000
-
-async function _getHmacKey(secret: string): Promise<CryptoKey> {
-    return crypto.subtle.importKey(
-        'raw',
-        new TextEncoder().encode(secret),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign', 'verify'],
-    )
-}
-
-async function generateStepToken(invitationId: string, proxySecret: string): Promise<string> {
-    const payload = `${invitationId}:${Date.now()}`
-    const key     = await _getHmacKey(proxySecret)
-    const sig     = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
-    const sigHex  = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
-    return `${btoa(payload)}.${sigHex}`
-}
-
-async function verifyStepToken(
-    token: string,
-    expectedInvId: string,
-    proxySecret: string,
-): Promise<boolean> {
-    try {
-        const dot = token.lastIndexOf('.')
-        if (dot < 1) return false
-        const b64payload = token.slice(0, dot)
-        const sigHex     = token.slice(dot + 1)
-        let payload: string
-        try { payload = atob(b64payload) } catch { return false }
-        const [tokenInvId, tsStr] = payload.split(':')
-        if (tokenInvId !== expectedInvId) return false
-        const ts = parseInt(tsStr, 10)
-        if (isNaN(ts) || Date.now() - ts > STEP_TOKEN_TTL_MS) return false
-        const key         = await _getHmacKey(proxySecret)
-        const expectedSig = new Uint8Array(sigHex.match(/.{2}/g)!.map(b => parseInt(b, 16)))
-        return crypto.subtle.verify('HMAC', key, expectedSig, new TextEncoder().encode(payload))
-    } catch { return false }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  HASH SHA-256 [FIX-DB-2]
-// ═══════════════════════════════════════════════════════════════
-async function hashCode(code: string): Promise<string> {
-    const normalized = code.trim().toLowerCase()
-    const encoded    = new TextEncoder().encode(normalized)
-    const buffer     = await crypto.subtle.digest('SHA-256', encoded)
-    return Array.from(new Uint8Array(buffer))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('')
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  IP REAL DO CLIENTE [FIX-EF-3]
-// ═══════════════════════════════════════════════════════════════
 function getClientIp(req: Request): string {
     return (
         req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
@@ -147,247 +59,109 @@ function getClientIp(req: Request): string {
     )
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  RESPONSE HELPERS
-// ═══════════════════════════════════════════════════════════════
-function jsonOk(corsHeaders: Record<string, string>, body: Record<string, unknown>) {
-    return new Response(
-        JSON.stringify(body),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    )
+async function hashCode(code: string): Promise<string> {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code.trim().toLowerCase()))
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-function jsonErr(corsHeaders: Record<string, string>, message: string, status = 400) {
-    return new Response(
-        JSON.stringify({ success: false, error: message }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status }
-    )
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  RATE LIMIT [CR-02 — atômico via check_rate_limit RPC]
-//  Substitui a implementação TOCTOU anterior (3 round-trips com
-//  race condition) por uma única chamada SQL atômica via UPSERT.
-//  Retorna true se o limite foi atingido (deve bloquear).
-// ═══════════════════════════════════════════════════════════════
-async function isRateLimited(
-    supabase: ReturnType<typeof createClient>,
-    identifier: string,
-    type: 'ip' | 'email'
-): Promise<boolean> {
-    const key = `invite:${type}:${identifier}`
-    const { data, error } = await supabase.rpc('check_rate_limit', {
-        p_key:            key,
-        p_max:            MAX_ATTEMPTS_RATE_LIMIT,
-        p_window_seconds: 15 * 60,  // 15 minutos
+function ok(cors: Record<string, string>, body: Record<string, unknown>) {
+    return new Response(JSON.stringify(body), {
+        headers: { ...cors, 'Content-Type': 'application/json' },
+        status: 200,
     })
-    if (error) {
-        // fail-open em erro de DB — não bloqueia o usuário por instabilidade
-        console.error('[verify-guest-invite] rate limit RPC error:', error.message)
-        return false
-    }
-    // check_rate_limit retorna true se DENTRO do limite → isRateLimited = NOT data
-    return data === false
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  VALIDAÇÃO DE NONCE [BUG-02]
-//  Verifica: existe + não foi usado + não expirou.
-//  Marca como usado imediatamente (atômico via update com filtro).
-//  Retorna true se o nonce é válido e foi consumido com sucesso.
-// ═══════════════════════════════════════════════════════════════
-async function consumeNonce(
-    supabase: ReturnType<typeof createClient>,
-    nonce: string
-): Promise<boolean> {
-    if (!nonce || typeof nonce !== 'string' || nonce.length < 8) return false
-
-    // Tenta marcar como usado em uma única operação
-    // O filtro used=false + expires_at > now() garante atomicidade suficiente
-    const { data, error } = await supabase
-        .from('invite_nonces')
-        .update({ used: true })
-        .eq('nonce', nonce)
-        .eq('used', false)
-        .gt('expires_at', new Date().toISOString())
-        .select('id')
-        .maybeSingle()
-
-    if (error || !data) {
-        // Nonce inexistente, já usado ou expirado — registra para diagnóstico
-        console.warn('[INVITE] Nonce inválido ou reutilizado:', nonce.slice(0, 8) + '...')
-        return false
-    }
-
-    return true
+function err(cors: Record<string, string>, message: string, status = 400) {
+    return new Response(JSON.stringify({ success: false, error: message }), {
+        headers: { ...cors, 'Content-Type': 'application/json' },
+        status,
+    })
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  HANDLER PRINCIPAL
-// ═══════════════════════════════════════════════════════════════
+// ── Handler ───────────────────────────────────────────────────────────────────
+
 Deno.serve(async (req) => {
-    const corsHeaders = getCorsHeaders(req)
+    const cors = getCorsHeaders(req)
 
-    // Preflight CORS
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders })
-    }
+    if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
-    // [FIX-EF-7] Tempo mínimo de resposta — dificulta timing attacks
     const startTime = Date.now()
     async function respond(res: Response): Promise<Response> {
         const elapsed = Date.now() - startTime
-        if (elapsed < MIN_RESP_MS) {
-            await new Promise(r => setTimeout(r, MIN_RESP_MS - elapsed))
-        }
+        if (elapsed < MIN_RESP_MS) await new Promise(r => setTimeout(r, MIN_RESP_MS - elapsed))
         return res
     }
 
-    // [GOD5-M01] fail-closed: sem PROXY_SECRET configurado, bloqueia tudo.
+    // 1. Verifica proxy secret — bloqueia chamadas diretas à edge function
     const proxySecret = Deno.env.get('PROXY_SECRET')
     if (!proxySecret) {
-        console.error('[verify-guest-invite] PROXY_SECRET não configurada — requisição bloqueada')
-        return respond(jsonErr(corsHeaders, 'Configuração interna inválida.', 500))
+        console.error('[verify-guest-invite] PROXY_SECRET ausente')
+        return respond(err(cors, 'Configuração interna inválida.', 500))
     }
-    const received = req.headers.get('x-proxy-secret') ?? ''
-    if (!timingSafeEqualInvite(received, proxySecret)) {
-        console.warn('[verify-guest-invite] Proxy secret inválido — chamada direta bloqueada')
-        return respond(jsonErr(corsHeaders, 'Requisição inválida.', 400))
+    if (!timingSafeEqual(req.headers.get('x-proxy-secret') ?? '', proxySecret)) {
+        console.warn('[verify-guest-invite] Proxy secret inválido')
+        return respond(err(cors, 'Requisição inválida.', 400))
     }
 
     try {
-        const supabaseUrl   = Deno.env.get('SUPABASE_URL')!
-        const serviceKey    = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-        const supabaseAdmin = createClient(supabaseUrl, serviceKey)
-
-        // Limpeza assíncrona de nonces e rate limits expirados
-        // Não aguarda — não bloqueia a resposta, erro ignorado intencionalmente
-        supabaseAdmin.rpc('cleanup_invite_tables').then(() => {}).catch(() => {})
-
-        // [FIX-EF-3] IP real do header da requisição
+        const supabaseAdmin = createClient(
+            Deno.env.get('SUPABASE_URL')!,
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+        )
         const clientIp = getClientIp(req)
 
-        // [SEC-FIX R4-003] Limite de tamanho de body antes do parse JSON.
-        // verify-guest-invite é chamado direto do browser — sem proxy Vercel.
-        const MAX_BODY_BYTES = 8_192 // 8 KB suficiente para todos os campos
-        const rawBody = await (async () => {
-            const reader = req.body?.getReader()
-            if (!reader) return ''
-            const chunks: Uint8Array[] = []
-            let total = 0
-            while (true) {
-                const { done, value } = await reader.read()
-                if (done || !value) break
-                total += value.byteLength
-                if (total > MAX_BODY_BYTES) throw Object.assign(new Error('TOO_LARGE'), { status: 413 })
-                chunks.push(value)
-            }
-            return new TextDecoder().decode(
-                chunks.reduce((a, b) => { const m = new Uint8Array(a.length + b.length); m.set(a); m.set(b, a.length); return m }, new Uint8Array())
-            )
-        })()
-
+        // 2. Parse body
         let parsed: Record<string, unknown>
-        try { parsed = JSON.parse(rawBody) }
-        catch { return respond(jsonErr(corsHeaders, 'Body JSON inválido.', 400)) }
+        try { parsed = await req.json() }
+        catch { return respond(err(cors, 'Requisição inválida.')) }
 
-        // Desestrutura payload — ipAddress e userAgent descartados [FIX-EF-3]
-        const { step, email, code, password, acceptedTerms, nonce, invitationId, createToken } = parsed as {
+        const {
+            step, email, code, password, acceptedTerms, invitationId
+        } = parsed as {
             step?: string; email?: string; code?: string | number
-            password?: string; acceptedTerms?: boolean; nonce?: string
-            invitationId?: string; createToken?: string
+            password?: string; acceptedTerms?: boolean; invitationId?: string
         }
 
-        // ── Validações básicas de entrada ─────────────────────────
-        // [SEC-FIX R4-006] Remove null bytes antes de qualquer processamento.
+        // 3. Validação de entrada
         const emailNorm = (email ?? '').replace(/\x00/g, '').toLowerCase().trim()
-
-        if (!emailNorm || !code) {
-            return respond(jsonErr(corsHeaders, 'Email e código são obrigatórios.'))
+        if (!emailNorm || !/^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/.test(emailNorm)) {
+            return respond(err(cors, 'Email inválido.'))
         }
-
-        if (!/^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/.test(emailNorm)) {
-            return respond(jsonErr(corsHeaders, 'Email inválido.'))
-        }
-
-        const codeTrimmed = String(code).trim()
+        const codeTrimmed = String(code ?? '').trim()
         if (!/^\d{6}$/.test(codeTrimmed)) {
-            return respond(jsonErr(corsHeaders, 'Código inválido.'))
+            return respond(err(cors, 'Código inválido.'))
         }
 
-        // ── [OPT-01] Rate limit por IP ────────────────────────────
-        const ipLimited = await isRateLimited(supabaseAdmin, clientIp, 'ip')
-        if (ipLimited) {
-            return respond(jsonErr(
-                corsHeaders,
-                'Muitas tentativas. Aguarde 15 minutos antes de tentar novamente.',
-                429
-            ))
-        }
+        // 4. Rate limit por IP (fail-open em erro de DB)
+        const { data: ipOk } = await supabaseAdmin.rpc('check_rate_limit', {
+            p_key: `invite:ip:${clientIp}`,
+            p_max: MAX_RATE_LIMIT,
+            p_window_seconds: 15 * 60,
+        })
+        if (ipOk === false) return respond(err(cors, 'Muitas tentativas. Aguarde 15 minutos.', 429))
 
-        // ── [OPT-01] Rate limit por email ─────────────────────────
-        const emailLimited = await isRateLimited(supabaseAdmin, emailNorm, 'email')
-        if (emailLimited) {
-            return respond(jsonErr(
-                corsHeaders,
-                'Muitas tentativas para este email. Aguarde 15 minutos.',
-                429
-            ))
-        }
+        // 5. Rate limit por email
+        const { data: emailOk } = await supabaseAdmin.rpc('check_rate_limit', {
+            p_key: `invite:email:${emailNorm}`,
+            p_max: MAX_RATE_LIMIT,
+            p_window_seconds: 15 * 60,
+        })
+        if (emailOk === false) return respond(err(cors, 'Muitas tentativas para este email.', 429))
 
-        // ── [BUG-02] Validação de nonce ───────────────────────────
-        // Nonce é obrigatório — requests sem nonce são rejeitados.
-        // O frontend sempre envia nonce; ausência indica automação.
-        if (!nonce) {
-            return respond(jsonErr(corsHeaders, 'Requisição inválida.', 400))
-        }
-
-        // Registra o nonce com TTL explícito de 2 minutos antes de consumir.
-        // [SEC-FIX GOD-002] expires_at agora sempre definido no insert — sem depender
-        // do DEFAULT do banco. consumeNonce filtra por expires_at > NOW(), portanto
-        // sem este campo o nonce nunca seria consumido (NULL > timestamp = NULL/false).
-        const nonceExpiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString()
-        await supabaseAdmin
-            .from('invite_nonces')
-            .insert({ nonce, expires_at: nonceExpiresAt })
-            .then(() => {})  // ignora erro de duplicata — consumeNonce tratará
-
-        const nonceValido = await consumeNonce(supabaseAdmin, nonce)
-        if (!nonceValido) {
-            return respond(jsonErr(corsHeaders, 'Requisição inválida ou expirada. Tente novamente.', 400))
-        }
-
-        // ── [FIX-DB-2] Hash do código para comparação ─────────────
+        // 6. Hash do código para comparação no banco
         const codeHash = await hashCode(codeTrimmed)
 
-        // ── Buscar convite válido ─────────────────────────────────
-        // [BUG-01] guest_email / guest_name (schema real)
-        // [OPT-02] usa índice composto idx_guest_inv_email_used_expires
-        // [FIX-EF-1] select explícito — nunca select('*')
-        // Sanitiza invitationId se presente — apenas alfanumérico + hífen + underscore
+        // 7. Busca convite válido (não usado, não expirado)
         const invIdSafe = typeof invitationId === 'string'
             ? invitationId.replace(/[^a-zA-Z0-9\-_]/g, '').slice(0, 64)
             : null
 
         let query = supabaseAdmin
             .from('guest_invitations')
-            .select([
-                'id',
-                'owner_user_id',
-                'owner_email',
-                'owner_name',
-                'guest_name',
-                'guest_email',
-                'code_hash',
-                'verification_attempts',
-                'used',
-                'expires_at',
-            ].join(', '))
+            .select('id, owner_user_id, owner_email, owner_name, guest_name, guest_email, code_hash, verification_attempts, used, expires_at')
             .eq('guest_email', emailNorm)
             .eq('used', false)
             .gt('expires_at', new Date().toISOString())
-
-        // Se invitationId presente, vincula a busca a esse convite específico
         if (invIdSafe) query = query.eq('id', invIdSafe)
 
         const { data: invitation, error: invError } = await query
@@ -395,93 +169,58 @@ Deno.serve(async (req) => {
             .limit(1)
             .maybeSingle()
 
-        // Resposta genérica — não diferencia "não encontrado" de "expirado"
         if (invError || !invitation) {
-            return respond(jsonErr(corsHeaders, 'Código inválido ou expirado.'))
+            console.warn('[verify-guest-invite] Convite não encontrado para', emailNorm.slice(0, 10))
+            return respond(err(cors, 'Código inválido ou expirado.'))
         }
 
-        // ── Rate limit por convite ────────────────────────────────
+        // 8. Limite de tentativas erradas por convite
         if ((invitation.verification_attempts ?? 0) >= MAX_ATTEMPTS_PER_INVITE) {
-            return respond(jsonErr(
-                corsHeaders,
-                'Muitas tentativas incorretas. Este convite foi bloqueado por segurança.'
-            ))
+            return respond(err(cors, 'Muitas tentativas incorretas. Este convite foi bloqueado por segurança.'))
         }
 
-        // ── Verificar código via hash [FIX-DB-2] ─────────────────
+        // 9. Verifica código (hash SHA-256)
         if (invitation.code_hash !== codeHash) {
             await supabaseAdmin
                 .from('guest_invitations')
-                .update({
-                    verification_attempts: (invitation.verification_attempts ?? 0) + 1,
-                })
+                .update({ verification_attempts: (invitation.verification_attempts ?? 0) + 1 })
                 .eq('id', invitation.id)
-
-            return respond(jsonErr(corsHeaders, 'Código inválido ou expirado.'))
+            console.warn('[verify-guest-invite] Código incorreto para convite', invitation.id.slice(0, 8))
+            return respond(err(cors, 'Código inválido ou expirado.'))
         }
 
-        // ════════════════════════════════════════════════════════
-        //  STEP: verify
-        // ════════════════════════════════════════════════════════
+        // ── STEP: verify ──────────────────────────────────────────────────────
         if (step === 'verify') {
-            // [CR-01+HR-02] Emite HMAC createToken — step=create só prossegue
-            // com este token válido, vinculando os dois passos server-side.
-            const createToken = await generateStepToken(invitation.id, proxySecret)
-            return respond(jsonOk(corsHeaders, {
-                success:     true,
-                guestName:   invitation.guest_name,
-                ownerName:   invitation.owner_name ?? '',
-                createToken,
+            return respond(ok(cors, {
+                success:   true,
+                guestName: invitation.guest_name,
+                ownerName: invitation.owner_name ?? '',
             }))
         }
 
-        // ════════════════════════════════════════════════════════
-        //  STEP: create
-        // ════════════════════════════════════════════════════════
+        // ── STEP: create ──────────────────────────────────────────────────────
         if (step === 'create') {
 
-            // [CR-01+HR-02] Valida HMAC createToken emitido no step=verify
-            // Sem token válido, step=create não pode ser chamado diretamente.
-            if (!createToken || typeof createToken !== 'string') {
-                return respond(jsonErr(corsHeaders, 'Fluxo inválido. Verifique o código primeiro.', 400))
-            }
-            const tokenOk = await verifyStepToken(createToken, invitation.id, proxySecret)
-            if (!tokenOk) {
-                return respond(jsonErr(corsHeaders, 'Sessão expirada. Verifique o código novamente.', 400))
-            }
-
-            // [FIX-EF-2] Comprimento alinhado com frontend: 10–128 chars
             if (!password || password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
-                return respond(jsonErr(
-                    corsHeaders,
-                    `A senha deve ter entre ${PASSWORD_MIN} e ${PASSWORD_MAX} caracteres.`
-                ))
+                return respond(err(cors, `A senha deve ter entre ${PASSWORD_MIN} e ${PASSWORD_MAX} caracteres.`))
             }
-
             if (!acceptedTerms) {
-                return respond(jsonErr(corsHeaders, 'Você precisa aceitar os Termos de Uso.'))
+                return respond(err(cors, 'Aceite os Termos de Uso para continuar.'))
             }
 
-            // ── Revalida: email já é membro ATIVO de outra conta? ──
-            // Bloqueia dual-membership entre contas diferentes.
-            // Não bloqueia re-invite do mesmo dono (is_active=false é ok).
+            // Verifica se já é membro ativo (de qualquer conta)
             const { data: activeMember } = await supabaseAdmin
                 .from('account_members')
-                .select('id, owner_user_id')
+                .select('id')
                 .eq('member_email', emailNorm)
                 .eq('is_active', true)
                 .maybeSingle()
 
             if (activeMember) {
-                return respond(jsonErr(
-                    corsHeaders,
-                    'Este email já é convidado ativo de uma conta. Entre em contato com o suporte.'
-                ))
+                return respond(err(cors, 'Este email já é convidado ativo em uma conta.'))
             }
 
-            // ── Re-invite: membro desativado deste dono? ──────────
-            // Se o dono removeu o convidado anteriormente (is_active=false),
-            // reativa o vínculo sem criar novo usuário Auth.
+            // Re-invite: membro desativado do mesmo dono → reativa sem criar nova conta
             const { data: inactiveMember } = await supabaseAdmin
                 .from('account_members')
                 .select('id, member_user_id')
@@ -493,16 +232,12 @@ Deno.serve(async (req) => {
             if (inactiveMember) {
                 const { error: reactivateErr } = await supabaseAdmin
                     .from('account_members')
-                    .update({
-                        is_active:  true,
-                        removed_at: null,
-                        joined_at:  new Date().toISOString(),
-                    })
+                    .update({ is_active: true, removed_at: null, joined_at: new Date().toISOString() })
                     .eq('id', inactiveMember.id)
 
                 if (reactivateErr) {
                     console.error('[verify-guest-invite] Erro ao reativar membro:', reactivateErr)
-                    return respond(jsonErr(corsHeaders, 'Erro ao restaurar acesso. Tente novamente.'))
+                    return respond(err(cors, 'Erro ao restaurar acesso. Tente novamente.'))
                 }
 
                 await supabaseAdmin
@@ -510,18 +245,15 @@ Deno.serve(async (req) => {
                     .update({ used: true, used_at: new Date().toISOString() })
                     .eq('id', invitation.id)
 
-                console.log('✅ Membro reativado:', emailNorm, '→ dono:', invitation.owner_user_id)
-
-                return respond(jsonOk(corsHeaders, {
+                return respond(ok(cors, {
                     success:     true,
                     reactivated: true,
                     message:     'Acesso restaurado! Faça login com sua senha atual.',
                 }))
             }
 
-            // ── Revalida: email já usou convite (não é re-invite)? ─
-            // Chega aqui somente se NÃO é um re-invite do mesmo dono.
-            const { data: usedInvite } = await supabaseAdmin
+            // Verifica se já existe conta com este email (convite usado anteriormente)
+            const { data: usedBefore } = await supabaseAdmin
                 .from('guest_invitations')
                 .select('id')
                 .eq('guest_email', emailNorm)
@@ -529,47 +261,35 @@ Deno.serve(async (req) => {
                 .limit(1)
                 .maybeSingle()
 
-            if (usedInvite) {
-                return respond(jsonErr(
-                    corsHeaders,
-                    'Este email já possui login cadastrado. Se esqueceu sua senha, use a recuperação de senha na tela de login.'
-                ))
+            if (usedBefore) {
+                return respond(err(cors, 'Este email já possui login cadastrado. Use a recuperação de senha se necessário.'))
             }
 
-            // ── Criar usuário no Supabase Auth ────────────────────
+            // Cria usuário no Supabase Auth
             const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
                 email:         emailNorm,
                 password,
                 email_confirm: true,
                 user_metadata: {
-                    name:          invitation.guest_name,   // [BUG-01]
+                    name:          invitation.guest_name,
                     is_guest:      true,
                     owner_user_id: invitation.owner_user_id,
                 },
             })
 
             if (createError) {
-                console.error('Erro ao criar usuário:', createError)
-                if (
-                    createError.message?.includes('already been registered') ||
-                    createError.message?.includes('already exists') ||
-                    createError.code === 'email_exists'
-                ) {
-                    return respond(jsonErr(
-                        corsHeaders,
-                        'Este email já possui login cadastrado. Se esqueceu sua senha, use a recuperação de senha na tela de login.'
-                    ))
+                console.error('[verify-guest-invite] Erro ao criar usuário:', createError.message)
+                if (createError.message?.includes('already') || createError.code === 'email_exists') {
+                    return respond(err(cors, 'Este email já possui login cadastrado. Use a recuperação de senha se necessário.'))
                 }
-                return respond(jsonErr(corsHeaders, 'Erro ao criar conta. Tente novamente.'))
+                return respond(err(cors, 'Erro ao criar conta. Tente novamente.'))
             }
 
             if (!newUser?.user) {
-                return respond(jsonErr(corsHeaders, 'Erro inesperado ao criar conta. Tente novamente.'))
+                return respond(err(cors, 'Erro inesperado. Tente novamente.'))
             }
 
-            console.log('✅ Usuário criado:', newUser.user.id, '→', emailNorm)
-
-            // ── Vincular em account_members ───────────────────────
+            // Vincula convidado ao dono em account_members
             const { error: memberError } = await supabaseAdmin
                 .from('account_members')
                 .insert({
@@ -577,24 +297,20 @@ Deno.serve(async (req) => {
                     owner_email:    invitation.owner_email,
                     member_user_id: newUser.user.id,
                     member_email:   emailNorm,
-                    member_name:    invitation.guest_name,   // [BUG-01]
+                    member_name:    invitation.guest_name,
                     invitation_id:  invitation.id,
                     joined_at:      new Date().toISOString(),
                     is_active:      true,
                 })
 
             if (memberError) {
-                console.error('Erro ao inserir account_member:', memberError)
-                // Rollback: remove usuário criado para não deixar órfão
+                console.error('[verify-guest-invite] Erro ao vincular membro:', memberError.message)
+                // Rollback: remove usuário criado para não deixar órfão no Auth
                 await supabaseAdmin.auth.admin.deleteUser(newUser.user.id)
-                return respond(jsonErr(corsHeaders, 'Erro ao vincular conta ao dono. Tente novamente.'))
+                return respond(err(cors, 'Erro ao vincular conta ao anfitrião. Tente novamente.'))
             }
 
-            console.log('✅ Membro vinculado ao dono:', invitation.owner_email)
-
-            // ── Registrar aceite de termos ────────────────────────
-            // [OPT-03] terms_version incluído
-            // [FIX-EF-3] IP do header — user_agent não salvo
+            // Registra aceite de termos
             await supabaseAdmin
                 .from('terms_acceptance')
                 .insert({
@@ -602,37 +318,31 @@ Deno.serve(async (req) => {
                     email:         emailNorm,
                     accepted:      true,
                     ip_address:    clientIp,
-                    user_agent:    null,         // [FIX-EF-3] não confiável — descartado
-                    terms_version: TERMS_VERSION, // [OPT-03]
+                    user_agent:    null,
+                    terms_version: TERMS_VERSION,
                 })
                 .then(({ error }) => {
-                    if (error) console.warn('Aviso: erro ao salvar terms_acceptance:', error.message)
+                    if (error) console.warn('[verify-guest-invite] terms_acceptance error:', error.message)
                 })
 
-            // ── Marcar convite como usado [ANTI-REPLAY] ───────────
+            // Marca convite como usado (anti-replay)
             await supabaseAdmin
                 .from('guest_invitations')
-                .update({
-                    used:    true,
-                    used_at: new Date().toISOString(),
-                })
+                .update({ used: true, used_at: new Date().toISOString() })
                 .eq('id', invitation.id)
 
-            // [FIX-EF-4] userId fora do response — não expõe UUID interno
-            return respond(jsonOk(corsHeaders, {
+            console.log('[verify-guest-invite] Conta criada:', newUser.user.id.slice(0, 8), '→ dono:', invitation.owner_user_id.slice(0, 8))
+
+            return respond(ok(cors, {
                 success: true,
-                message: 'Conta criada com sucesso! Você já pode fazer login.',
+                message: 'Conta criada com sucesso! Faça login para acessar.',
             }))
         }
 
-        return respond(jsonErr(corsHeaders, 'Step inválido. Use "verify" ou "create".'))
+        return respond(err(cors, 'Step inválido. Use "verify" ou "create".'))
 
     } catch (error: unknown) {
-        const e = error as { status?: number; message?: string }
-        if (e?.status === 413) {
-            return respond(jsonErr(corsHeaders, 'Requisição muito grande.', 413))
-        }
-        console.error('❌ verify-guest-invite:', error)
-        return respond(jsonErr(corsHeaders, 'Erro interno. Tente novamente em instantes.', 500))
+        console.error('[verify-guest-invite] Erro inesperado:', error)
+        return respond(err(cors, 'Erro interno. Tente novamente.', 500))
     }
 })

@@ -146,37 +146,11 @@ Deno.serve(async (req) => {
     );
 
     try {
-        // ── VALIDAÇÃO 1: Subscription existe, pertence ao email e está aprovada ──
-        // [GOD5-L03] Corrigido: coluna era 'email' (inexistente) — a tabela usa 'user_email'.
-        const { data: subscription, error: subError } = await supabaseAdmin
-            .from('subscriptions')
-            .select('id, user_email, is_active, payment_status, password_created')
-            .eq('id', subscriptionId)
-            .single();
+        // Tabela `subscriptions` (Cakto) foi arquivada. Todas as assinaturas agora
+        // estão em stripe_subscriptions. Esta função confirma o email diretamente
+        // via auth.admin, sem mais dependência do fluxo Cakto.
 
-        if (subError || !subscription) {
-            console.error('[confirm-user-email] subscription não encontrada:', subError?.message);
-            // Resposta genérica — não revela se o ID existe ou não.
-            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' }, corsHeaders);
-        }
-
-        if (subscription.user_email.toLowerCase().trim() !== normalizedEmail) {
-            console.error('[confirm-user-email] email não bate com a subscription');
-            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' }, corsHeaders);
-        }
-
-        if (!subscription.is_active || subscription.payment_status !== 'approved') {
-            console.error('[confirm-user-email] subscription inativa ou pagamento não aprovado');
-            return jsonResponse(403, { success: false, error: 'Operação não autorizada.' }, corsHeaders);
-        }
-
-        // ── VALIDAÇÃO 2: password_created = false (uso único, anti-replay) ──
-        if (subscription.password_created === true) {
-            console.warn('[confirm-user-email] tentativa de replay — password_created já é true');
-            return jsonResponse(409, { success: false, error: 'Conta já ativada. Faça o login.' }, corsHeaders);
-        }
-
-        // ── VALIDAÇÃO 3: userId existe no Auth e email confere ───────────
+        // ── VALIDAÇÃO: userId existe no Auth e email confere ─────────────
         const { data: authUser, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
 
         if (userError || !authUser?.user) {
@@ -189,51 +163,33 @@ Deno.serve(async (req) => {
             return jsonResponse(403, { success: false, error: 'Operação não autorizada.' }, corsHeaders);
         }
 
-        // ── VALIDAÇÃO 4: Anti-replay temporal — usuário criado há ≤ 10 min ──
-        const createdAt    = new Date(authUser.user.created_at).getTime();
-        const ageMs        = Date.now() - createdAt;
+        // Se email já confirmado, é idempotente — retorna sucesso
+        if (authUser.user.email_confirmed_at) {
+            console.log('[confirm-user-email] email já confirmado para userId:', userId);
+            return jsonResponse(200, { success: true, message: 'Email confirmado e conta ativada com sucesso.' }, corsHeaders);
+        }
+
+        // ── Anti-replay temporal — usuário criado há ≤ 10 min ───────────
+        const createdAt = new Date(authUser.user.created_at).getTime();
+        const ageMs     = Date.now() - createdAt;
 
         if (ageMs > MAX_USER_AGE_MS) {
-            console.warn(`[confirm-user-email] usuário criado há ${Math.round(ageMs / 60000)} min — fora da janela de 10 min`);
+            console.warn(`[confirm-user-email] usuário criado há ${Math.round(ageMs / 60000)} min — fora da janela`);
             return jsonResponse(403, { success: false, error: 'Janela de ativação expirada. Contate o suporte.' }, corsHeaders);
         }
 
-        // ── ETAPA 1: Marca password_created = true ANTES de confirmar ────
-        // Feito antes para garantir idempotência: se a confirmação abaixo
-        // falhar e a requisição for repetida, esta validação bloqueará replay.
-        const { error: updateError } = await supabaseAdmin
-            .from('subscriptions')
-            .update({ password_created: true })
-            .eq('id', subscriptionId);
-
-        if (updateError) {
-            console.error('[confirm-user-email] falha ao marcar password_created:', updateError.message);
-            return jsonResponse(500, { success: false, error: 'Erro interno. Tente novamente.' }, corsHeaders);
-        }
-
-        // ── ETAPA 2: Confirma o email via Admin API ───────────────────────
-        const { data: updatedUser, error: confirmError } = await supabaseAdmin.auth.admin.updateUserById(
-            userId,
-            { email_confirm: true }
+        // ── Confirma o email via Admin API ────────────────────────────────
+        const { error: confirmError } = await supabaseAdmin.auth.admin.updateUserById(
+            userId, { email_confirm: true },
         );
 
         if (confirmError) {
-            // Tenta reverter o password_created para permitir nova tentativa.
-            await supabaseAdmin
-                .from('subscriptions')
-                .update({ password_created: false })
-                .eq('id', subscriptionId);
-
-            console.error('[confirm-user-email] erro ao confirmar email no Auth:', confirmError.message);
+            console.error('[confirm-user-email] erro ao confirmar email:', confirmError.message);
             return jsonResponse(500, { success: false, error: 'Erro ao ativar conta. Tente novamente.' }, corsHeaders);
         }
 
-        console.log('✅ [confirm-user-email] email confirmado com sucesso para userId:', userId);
-
-        return jsonResponse(200, {
-            success: true,
-            message: 'Email confirmado e conta ativada com sucesso.',
-        }, corsHeaders);
+        console.log('✅ [confirm-user-email] email confirmado para userId:', userId);
+        return jsonResponse(200, { success: true, message: 'Email confirmado e conta ativada com sucesso.' }, corsHeaders);
 
     } catch (err) {
         console.error('[confirm-user-email] exceção não tratada:', err?.message);

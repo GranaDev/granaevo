@@ -149,38 +149,24 @@ Deno.serve(async (req: Request) => {
   };
 
   try {
-    // ── 7. Verificar plano do dono ────────────────────────────────────────
-    // Tenta primeiro Cakto (subscriptions), depois Stripe (stripe_subscriptions).
-    const { data: sub, error: subError } = await supabaseAdmin
-      .from("subscriptions")
-      .select("plans(name)")
+    // ── 7. Verificar plano do dono (stripe_subscriptions — inclui Cakto migrados)
+    const { data: stripeSub, error: stripeErr } = await supabaseAdmin
+      .from("stripe_subscriptions")
+      .select("plan_name, status")
       .eq("user_id", user.id)
-      .eq("payment_status", "approved")
-      .eq("is_active", true)
+      .in("status", ["active", "trialing"])
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     let planName: string | null = null;
 
-    if (!subError && sub) {
-      planName = (sub as any).plans?.name ?? null;
-    } else {
-      // Fallback: verifica assinatura Stripe ativa
-      const { data: stripeSub, error: stripeErr } = await supabaseAdmin
-        .from("stripe_subscriptions")
-        .select("plan_name, status")
-        .eq("user_id", user.id)
-        .in("status", ["active", "trialing"])
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!stripeErr && stripeSub?.plan_name) {
-        planName = STRIPE_PLAN_MAP[stripeSub.plan_name.toLowerCase()] ?? null;
-      }
+    if (!stripeErr && stripeSub?.plan_name) {
+      planName = STRIPE_PLAN_MAP[stripeSub.plan_name.toLowerCase()] ?? stripeSub.plan_name ?? null;
     }
 
     if (!planName) {
-      console.error("[send-guest-invite] Assinatura não encontrada:", subError?.message);
+      console.error("[send-guest-invite] Assinatura não encontrada:", stripeErr?.message);
       return json({ success: false, error: "Assinatura não encontrada ou inativa." }, 403);
     }
 

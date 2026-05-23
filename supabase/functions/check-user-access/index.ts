@@ -123,75 +123,9 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── 6. Verificar subscription ativa (Cakto/vitálicio) ────────────────────
-    const { data: subscription, error: subError } = await supabaseAdmin
-      .from('subscriptions')
-      .select('id, is_active, payment_status, expires_at')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-      .eq('payment_status', 'approved')
-      .maybeSingle()
-
-    if (subError) {
-      console.error('[check-user-access] Erro ao consultar subscriptions (Cakto):', subError.message)
-      return deny()
-    }
-
-    // ── 7. Checar validade da subscription Cakto ──────────────────────────────
-    let caktoOk = false
-    if (subscription) {
-      if (!subscription.expires_at) {
-        caktoOk = true // vitálicio — sem data de expiração
-      } else {
-        caktoOk = new Date(subscription.expires_at) >= new Date()
-        if (!caktoOk) {
-          console.log('[check-user-access] Subscription Cakto expirada para:', userId.slice(0, 8))
-        }
-      }
-    }
-
-    // ── 7b. Auto-vinculação Cakto por email (substitui link-subscription) ────
-    // Usuário criou conta via primeiroacesso mas a vinculação falhou.
-    // Na primeira autenticação, vinculamos automaticamente pelo email.
-    if (!caktoOk && userEmail) {
-      const { data: emailCaktoSub } = await supabaseAdmin
-        .from('subscriptions')
-        .select('id, is_active, payment_status, expires_at')
-        .eq('user_email', userEmail)
-        .eq('is_active', true)
-        .eq('payment_status', 'approved')
-        .is('user_id', null)
-        .maybeSingle()
-
-      if (emailCaktoSub) {
-        const caktoExpired = emailCaktoSub.expires_at && new Date(emailCaktoSub.expires_at) < new Date()
-        if (!caktoExpired) {
-          await supabaseAdmin.from('subscriptions')
-            .update({ user_id: userId, updated_at: new Date().toISOString() })
-            .eq('id', emailCaktoSub.id)
-          caktoOk = true
-          console.log('[check-user-access] Auto-vinculação Cakto por email para:', userId.slice(0, 8))
-        }
-      }
-    }
-
-    if (caktoOk) {
-      // Acesso concedido via Cakto/vitálicio
-      if (userEmail) {
-        try {
-          await supabaseAdmin.rpc('clear_login_lockout', {
-            p_identifier:      userEmail,
-            p_identifier_type: 'email',
-          })
-        } catch { /* falha silenciosa */ }
-      }
-      console.log('[check-user-access] Acesso concedido (Cakto) para:', userId.slice(0, 8))
-      return json({ hasAccess: true }, 200, corsHeaders)
-    }
-
-    // ── 8. Verificar subscription ativa (Stripe/recorrente) ──────────────────
-    // [STRIPE-MIGRATION] Consulta stripe_subscriptions como segunda fonte de verdade.
-    // status 'active' e 'trialing' concedem acesso; 'past_due' e 'canceled' negam.
+    // ── 6. Verificar subscription ativa (stripe_subscriptions) ──────────────
+    // Cakto users foram migrados para stripe_subscriptions com status='active'
+    // e current_period_end='2099-12-31'. Não há mais tabela `subscriptions`.
     const { data: stripeSub, error: stripeErr } = await supabaseAdmin
       .from('stripe_subscriptions')
       .select('id, status, current_period_end')
@@ -244,7 +178,7 @@ Deno.serve(async (req: Request) => {
       // estarem ativos em account_members E o dono ter subscription vigente.
       const { data: memberEntry } = await supabaseAdmin
         .from('account_members')
-        .select('id, owner_user_id')
+        .select('id, owner_user_id, owner_email')
         .eq('member_user_id', userId)
         .eq('is_active', true)
         .maybeSingle()
@@ -252,28 +186,10 @@ Deno.serve(async (req: Request) => {
       if (memberEntry?.owner_user_id) {
         const ownerUserId = memberEntry.owner_user_id
 
-        // Verifica subscription Cakto do dono
-        const { data: ownerCakto } = await supabaseAdmin
-          .from('subscriptions')
-          .select('id, expires_at')
-          .eq('user_id', ownerUserId)
-          .eq('is_active', true)
-          .eq('payment_status', 'approved')
-          .maybeSingle()
-
-        const ownerCaktoOk = ownerCakto
-          ? (!ownerCakto.expires_at || new Date(ownerCakto.expires_at) >= new Date())
-          : false
-
-        if (ownerCaktoOk) {
-          console.log('[check-user-access] Acesso concedido (convidado / dono Cakto) para:', userId.slice(0, 8))
-          return json({ hasAccess: true }, 200, corsHeaders)
-        }
-
-        // Verifica subscription Stripe do dono
+        // Verifica subscription do dono (todos os planos agora em stripe_subscriptions)
         const { data: ownerStripe } = await supabaseAdmin
           .from('stripe_subscriptions')
-          .select('id, status, current_period_end')
+          .select('id, status, current_period_end, plan_name')
           .eq('user_id', ownerUserId)
           .in('status', ['active', 'trialing'])
           .order('created_at', { ascending: false })
@@ -285,16 +201,21 @@ Deno.serve(async (req: Request) => {
           : false
 
         if (ownerStripeOk) {
-          console.log('[check-user-access] Acesso concedido (convidado / dono Stripe) para:', userId.slice(0, 8))
-          return json({ hasAccess: true }, 200, corsHeaders)
+          console.log('[check-user-access] Acesso concedido (convidado) para:', userId.slice(0, 8))
+          return json({
+            hasAccess:  true,
+            isGuest:    true,
+            ownerId:    ownerUserId,
+            planName:   ownerStripe?.plan_name ?? 'individual',
+            ownerEmail: memberEntry.owner_email ?? null,
+          }, 200, corsHeaders)
         }
 
-        // Dono sem plano ativo — bloqueia o convidado também
         console.log('[check-user-access] Convidado bloqueado — dono sem subscription ativa:', userId.slice(0, 8))
         return deny()
       }
 
-      console.log('[check-user-access] Sem subscription ativa (Cakto ou Stripe) para:', userId.slice(0, 8))
+      console.log('[check-user-access] Sem subscription ativa para:', userId.slice(0, 8))
       return deny()
     }
 

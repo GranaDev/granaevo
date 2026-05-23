@@ -29,24 +29,12 @@ const SECURITY = Object.freeze({
 // ═══════════════════════════════════════════════════════════════
 let _verifiedEmail    = '';
 let _verifiedCode     = '';
-let _ownerName        = '';     // [FIX-⚠️6]  exibido só na Etapa 3
-let _invitationId     = '';     // ref da URL — vincula verify ao convite específico
-let _createToken      = '';     // [CR-01+HR-02] HMAC emitido pelo servidor no step=verify
-let _verifyCooldown   = false;  // [FIX-⚠️5]
-let _verifyController = null;   // [FIX-REL-6] AbortController do verify
-let _createController = null;   // [FIX-REL-6] AbortController do create
-let _attemptCount     = 0;      // [FIX-R04]  contador de tentativas na sessão
-
-// ═══════════════════════════════════════════════════════════════
-//  NONCE CRIPTOGRÁFICO  [FIX-R03]
-//  Gera 16 bytes aleatórios via CSPRNG do browser.
-//  Incluso em cada request — backend deve validar unicidade + TTL.
-// ═══════════════════════════════════════════════════════════════
-function _gerarNonce() {
-    const buf = new Uint8Array(16);
-    crypto.getRandomValues(buf);
-    return Array.from(buf, b => b.toString(16).padStart(2, '0')).join('');
-}
+let _ownerName        = '';
+let _invitationId     = '';
+let _verifyCooldown   = false;
+let _verifyController = null;
+let _createController = null;
+let _attemptCount     = 0;
 
 // ═══════════════════════════════════════════════════════════════
 //  HEADERS PADRÃO PARA FETCH
@@ -207,7 +195,6 @@ async function verificarCodigo() {
                 email,
                 code,
                 invitationId: _invitationId || undefined,
-                nonce:        _gerarNonce(),
             }),
             signal: _verifyController.signal,
         });
@@ -227,8 +214,7 @@ async function verificarCodigo() {
         // Código válido — armazena estado para Etapa 2
         _verifiedEmail = email;
         _verifiedCode  = code;
-        _ownerName     = result.ownerName || '';  // [FIX-⚠️6] exibido só na Etapa 3
-        _createToken   = result.createToken || ''; // [CR-01+HR-02] HMAC server-side
+        _ownerName     = result.ownerName || '';
 
         _attemptCount = 0;  // reset ao verificar com sucesso [FIX-R04]
 
@@ -318,8 +304,6 @@ async function criarConta() {
                 password,
                 acceptedTerms: true,
                 invitationId:  _invitationId || undefined,
-                createToken:   _createToken  || undefined,
-                nonce:         _gerarNonce(),
             }),
             signal: _createController.signal,
         });
@@ -338,10 +322,9 @@ async function criarConta() {
             throw new Error('Erro ao criar conta. Tente novamente.');
         }
 
-        // [FIX-VUL-A] Zera estado sensível imediatamente após uso
+        // Zera estado sensível imediatamente após uso
         _verifiedCode  = '';
         _verifiedEmail = '';
-        _createToken   = '';
 
         // [FIX-A03] Limpa campos de senha do DOM antes de ir para Etapa 3
         _limparFormularioStep2();
