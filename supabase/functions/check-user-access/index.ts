@@ -1,4 +1,26 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { createClient }         from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { CURRENT_TERMS_VERSION } from '../_shared/terms.ts'
+
+// ---------------------------------------------------------------------------
+// checkNeedsTermsAcceptance — verifica se o usuário aceitou a versão corrente
+// dos Termos de Uso. Fail-open: erro de banco não bloqueia acesso.
+// ---------------------------------------------------------------------------
+async function checkNeedsTermsAcceptance(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const { data } = await admin
+      .from('terms_acceptance')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('terms_version', CURRENT_TERMS_VERSION)
+      .maybeSingle()
+    return !data // true = ainda precisa aceitar
+  } catch {
+    return false // fail-open: não bloqueia acesso em caso de erro de DB
+  }
+}
 
 // ---------------------------------------------------------------------------
 // timing-safe compare (prevents timing oracle on proxy secret)
@@ -168,7 +190,8 @@ Deno.serve(async (req: Request) => {
               try { await supabaseAdmin.rpc('clear_login_lockout', { p_identifier: userEmail, p_identifier_type: 'email' }) }
               catch { /* silencioso */ }
             }
-            return json({ hasAccess: true }, 200, corsHeaders)
+            const needsTerms1 = await checkNeedsTermsAcceptance(supabaseAdmin, userId)
+            return json({ hasAccess: true, needsTermsAcceptance: needsTerms1 }, 200, corsHeaders)
           }
         }
       }
@@ -202,12 +225,14 @@ Deno.serve(async (req: Request) => {
 
         if (ownerStripeOk) {
           console.log('[check-user-access] Acesso concedido (convidado) para:', userId.slice(0, 8))
+          const needsTerms2 = await checkNeedsTermsAcceptance(supabaseAdmin, userId)
           return json({
-            hasAccess:  true,
-            isGuest:    true,
-            ownerId:    ownerUserId,
-            planName:   ownerStripe?.plan_name ?? 'individual',
-            ownerEmail: memberEntry.owner_email ?? null,
+            hasAccess:            true,
+            needsTermsAcceptance: needsTerms2,
+            isGuest:              true,
+            ownerId:              ownerUserId,
+            planName:             ownerStripe?.plan_name ?? 'individual',
+            ownerEmail:           memberEntry.owner_email ?? null,
           }, 200, corsHeaders)
         }
 
@@ -237,7 +262,8 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('[check-user-access] Acesso concedido (Stripe) para:', userId.slice(0, 8))
-    return json({ hasAccess: true }, 200, corsHeaders)
+    const needsTerms3 = await checkNeedsTermsAcceptance(supabaseAdmin, userId)
+    return json({ hasAccess: true, needsTermsAcceptance: needsTerms3 }, 200, corsHeaders)
 
   } catch (error: any) {
     console.error('[check-user-access] Erro inesperado:', error?.message)

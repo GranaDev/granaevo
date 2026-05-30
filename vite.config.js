@@ -17,8 +17,9 @@ export default defineConfig({
         privacidade:    'privacidade.html',
         dashboard:      'dashboard.html',
         convidados:     'convidados.html',
-        atualizarplano: 'atualizarplano.html',
-        termos:         'termos.html',
+        atualizarplano:   'atualizarplano.html',
+        termos:           'termos.html',
+        'aceitar-termos': 'aceitar-termos.html',
       },
       output: {
         // Supabase JS em chunk próprio — cacheado separado entre páginas.

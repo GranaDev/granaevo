@@ -80,20 +80,24 @@ function _extractUserId(token) {
  * @param {import('@vercel/node').VercelResponse} res
  */
 export default async function handler(req, res) {
-  const origin = req.headers['origin'] ?? ''
+  const origin  = req.headers['origin'] ?? ''
+  const allowed = ALLOWED_ORIGINS.has(origin)
 
   res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS.has(origin) ? origin : [...ALLOWED_ORIGINS][0])
   res.setHeader('Vary', 'Origin')
 
   if (req.method === 'OPTIONS') {
+    if (!allowed) return res.status(403).end()
+    res.setHeader('Access-Control-Allow-Origin', origin)
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     return res.status(204).end()
   }
 
+  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : [...ALLOWED_ORIGINS][0])
+
   // ── 1. Validações estruturais ──────────────────────────────────────────────
-  if (!ALLOWED_ORIGINS.has(origin))                         return res.status(403).json({ error: 'Forbidden' })
+  if (!allowed)                                             return res.status(403).json({ error: 'Forbidden' })
   if (req.method !== 'POST')                                return res.status(405).json({ error: 'Method Not Allowed' })
   if (!EDGE_URL || !ANON_KEY || !PROXY_SECRET)             return res.status(503).json({ error: 'Serviço indisponível' })
 

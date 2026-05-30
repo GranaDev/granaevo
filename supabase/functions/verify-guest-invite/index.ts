@@ -14,7 +14,8 @@
  *   - Resposta com delay mínimo 400ms (anti-timing)
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { createClient }         from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { CURRENT_TERMS_VERSION } from '../_shared/terms.ts'
 
 const ALLOWED_ORIGINS = new Set([
     'https://granaevo.com',
@@ -26,7 +27,6 @@ const PASSWORD_MIN            = 10
 const PASSWORD_MAX            = 128
 const MAX_ATTEMPTS_PER_INVITE = 5
 const MAX_RATE_LIMIT          = 10
-const TERMS_VERSION           = '1.0'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -319,7 +319,7 @@ Deno.serve(async (req) => {
                     accepted:      true,
                     ip_address:    clientIp,
                     user_agent:    null,
-                    terms_version: TERMS_VERSION,
+                    terms_version: CURRENT_TERMS_VERSION,
                 })
                 .then(({ error }) => {
                     if (error) console.warn('[verify-guest-invite] terms_acceptance error:', error.message)

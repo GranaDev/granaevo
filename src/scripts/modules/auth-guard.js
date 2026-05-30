@@ -37,6 +37,7 @@ const SECURITY = Object.freeze({
         rateLog:         '_ge_rl',   // agora em localStorage [FIX-REPORT-3]
         rateLimitSecret: '_ge_rls',  // chave persistente para assinar rate log [FIX-REPORT-3]
         canvasSalt:      '_ge_cs',   // entropia pública (sessionStorage)
+        termsCache:      '_ge_tv',   // flag binária: servidor confirmou termos aceitos nesta sessão
     }),
 
     ERROR_URL_MAP: Object.freeze({
@@ -1173,12 +1174,18 @@ const AuthGuard = (() => {
                 if (requirePlan) {
                     subData = await SubscriptionChecker.getActive(user.id);
 
-                    // [STRIPE-FALLBACK] Checks locais falharam — verifica via API autoritativa.
-                    // Cobre: primeiro login Stripe, propagação de auto-link pendente,
-                    // e qualquer divergência entre RLS cliente e lógica server-side.
-                    // Contas "congeladas" (canceladas dentro de 90 dias) pulam este
-                    // fallback — o estado frozen já é conclusivo.
-                    if (!subData.subscription && !subData.isFrozen) {
+                    // [STRIPE-FALLBACK + TERMS-CHECK] Consulta a API autoritativa quando:
+                    //   (a) checks locais de subscription falharam, OU
+                    //   (b) termos ainda não confirmados nesta sessão de browser.
+                    //
+                    // Termos: o servidor é a autoridade. _ge_tv é apenas uma flag
+                    // binária no sessionStorage que evita round-trips repetidos.
+                    // Ela é limpa no logout e ao fechar o browser (sessionStorage).
+                    // Contas "congeladas" pulam esta verificação — o estado frozen
+                    // já é conclusivo e o redirect de termos não é aplicável.
+                    const _termsConfirmed = !!sessionStorage.getItem(SECURITY.KEYS.termsCache);
+
+                    if ((!subData.subscription && !subData.isFrozen) || !_termsConfirmed) {
                         try {
                             const r = await fetch('/api/check-user-access', {
                                 method:  'POST',
@@ -1192,29 +1199,45 @@ const AuthGuard = (() => {
                             if (r.ok) {
                                 const api = await r.json();
                                 if (api.locked) throw _err('RATE_LIMITED', api.message || 'Conta bloqueada.');
+
                                 if (api.hasAccess === true) {
-                                    if (api.isGuest && api.ownerId) {
-                                        // Convidado identificado pelo fallback — usa dados do dono
-                                        subData = {
-                                            subscription: { id: 'api-verified' },
-                                            isGuest:      true,
-                                            ownerId:      api.ownerId,
-                                            planName:     _normalizePlanName(api.planName) || 'Individual',
-                                            ownerEmail:   api.ownerEmail || null,
-                                        };
-                                    } else {
-                                        // Assinante direto
-                                        subData = {
-                                            subscription: { id: 'api-verified' },
-                                            isGuest:      false,
-                                            ownerId:      user.id,
-                                            planName:     'Individual',
-                                            ownerEmail:   null,
-                                        };
+                                    // Verificação de termos — servidor é a autoridade (VUL-008 FIX)
+                                    if (api.needsTermsAcceptance === true) {
+                                        if (loader) loader.classList.add('hidden');
+                                        SafeRedirect.to('aceitar-termos.html');
+                                        return null;
                                     }
-                                    // Invalida cache local para forçar re-sync no próximo acesso
-                                    SubscriptionChecker.invalidate();
+
+                                    // Termos OK — cacheia nesta sessão para evitar round-trip futuro
+                                    try { sessionStorage.setItem(SECURITY.KEYS.termsCache, '1'); } catch { /* */ }
+
+                                    if (!subData.subscription && !subData.isFrozen) {
+                                        // Subscription não encontrada localmente — usa resultado da API
+                                        if (api.isGuest && api.ownerId) {
+                                            // Convidado identificado pelo fallback — usa dados do dono
+                                            subData = {
+                                                subscription: { id: 'api-verified' },
+                                                isGuest:      true,
+                                                ownerId:      api.ownerId,
+                                                planName:     _normalizePlanName(api.planName) || 'Individual',
+                                                ownerEmail:   api.ownerEmail || null,
+                                            };
+                                        } else {
+                                            // Assinante direto
+                                            subData = {
+                                                subscription: { id: 'api-verified' },
+                                                isGuest:      false,
+                                                ownerId:      user.id,
+                                                planName:     'Individual',
+                                                ownerEmail:   null,
+                                            };
+                                        }
+                                        // Invalida cache local para forçar re-sync no próximo acesso
+                                        SubscriptionChecker.invalidate();
+                                    }
                                 }
+                                // api.hasAccess === false → subscription inválida, NO_PLAN
+                                // tratará abaixo sem alterar o termsCache
                             }
                         } catch (e) {
                             if (e.code) throw e; // re-lança erros internos (RATE_LIMITED, etc.)

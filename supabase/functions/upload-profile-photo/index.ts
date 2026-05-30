@@ -13,7 +13,9 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.2";
 
-// ─── Magic bytes de cada formato permitido ────────────────────────────────────
+// ─── Magic bytes — apenas formatos rasterizados sem suporte a scripts ─────────
+// GIF removido: suporta animação e embute metadados; políglotas podem combinar
+// GIF89a com JS válido (gif-polyglot attack). Use JPEG/PNG/WebP.
 const MAGIC: Record<string, (buf: Uint8Array) => boolean> = {
   "image/jpeg": (b) => b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF,
 
@@ -24,10 +26,6 @@ const MAGIC: Record<string, (buf: Uint8Array) => boolean> = {
   "image/webp": (b) =>
     b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
     b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50,
-
-  "image/gif": (b) =>
-    b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38 &&
-    (b[4] === 0x39 || b[4] === 0x37) && b[5] === 0x61,
 };
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -35,8 +33,99 @@ const EXT_MAP: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png":  "png",
   "image/webp": "webp",
-  "image/gif":  "gif",
 };
+
+// ─── Metadata strippers — remove EXIF/XMP/GPS antes do upload ────────────────
+
+// Remove segmentos APP1 (EXIF/XMP) do JPEG, preserva todos os outros.
+// VUL-001 FIX: sem strip, coordenadas GPS ficam expostas via EXIF.
+function stripJpegExif(jpeg: Uint8Array): Uint8Array {
+  try {
+    if (jpeg.length < 4 || jpeg[0] !== 0xFF || jpeg[1] !== 0xD8) return jpeg
+    const parts: Uint8Array[] = [jpeg.slice(0, 2)] // SOI
+    let pos = 2
+    while (pos + 1 < jpeg.length) {
+      if (jpeg[pos] !== 0xFF) { parts.push(jpeg.slice(pos)); break }
+      const marker = jpeg[pos + 1]
+      if (marker === 0xFF) { pos++; continue }
+      // Marcadores sem comprimento (SOI/EOI/RST)
+      if (marker === 0xD8 || marker === 0xD9 || (marker >= 0xD0 && marker <= 0xD7)) {
+        parts.push(jpeg.slice(pos, pos + 2))
+        pos += 2
+        if (marker === 0xD9) break
+        continue
+      }
+      if (pos + 4 > jpeg.length) break
+      const length = ((jpeg[pos + 2] << 8) | jpeg[pos + 3]) & 0xFFFF
+      if (length < 2) break
+      const segEnd = pos + 2 + length
+      if (segEnd > jpeg.length) break
+      if (marker !== 0xE1) parts.push(jpeg.slice(pos, segEnd)) // Skip APP1 (EXIF/XMP)
+      pos = segEnd
+      if (marker === 0xDA) { parts.push(jpeg.slice(segEnd)); break } // SOS: dados raw
+    }
+    const totalLen = parts.reduce((s, p) => s + p.length, 0)
+    const out = new Uint8Array(totalLen)
+    let off = 0
+    for (const p of parts) { out.set(p, off); off += p.length }
+    return out
+  } catch { return jpeg }
+}
+
+// Remove chunks tEXt, iTXt, zTXt, tIME do PNG (transportam metadados/EXIF).
+function stripPngMetadata(png: Uint8Array): Uint8Array {
+  try {
+    const SIG = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    for (let i = 0; i < 8; i++) if (png[i] !== SIG[i]) return png
+    const STRIP = new Set(['tEXt', 'iTXt', 'zTXt', 'tIME'])
+    const parts: Uint8Array[] = [png.slice(0, 8)]
+    let pos = 8
+    while (pos + 12 <= png.length) {
+      const dataLen = ((png[pos] << 24) | (png[pos+1] << 16) | (png[pos+2] << 8) | png[pos+3]) >>> 0
+      const chunkEnd = pos + 12 + dataLen
+      if (chunkEnd > png.length) break
+      const type = String.fromCharCode(png[pos+4], png[pos+5], png[pos+6], png[pos+7])
+      if (!STRIP.has(type)) parts.push(png.slice(pos, chunkEnd))
+      pos = chunkEnd
+      if (type === 'IEND') break
+    }
+    const totalLen = parts.reduce((s, p) => s + p.length, 0)
+    const out = new Uint8Array(totalLen)
+    let off = 0
+    for (const p of parts) { out.set(p, off); off += p.length }
+    return out
+  } catch { return png }
+}
+
+// Remove chunks EXIF e XMP do WebP VP8X. Recalcula File Size no cabeçalho RIFF.
+function stripWebpMetadata(webp: Uint8Array): Uint8Array {
+  try {
+    if (webp.length < 12) return webp
+    if (webp[0]!==0x52||webp[1]!==0x49||webp[2]!==0x46||webp[3]!==0x46) return webp
+    if (webp[8]!==0x57||webp[9]!==0x45||webp[10]!==0x42||webp[11]!==0x50) return webp
+    if (webp.length < 20 || String.fromCharCode(webp[12],webp[13],webp[14],webp[15]) !== 'VP8X') return webp
+    const STRIP = new Set(['EXIF', 'XMP '])
+    const kept: Uint8Array[] = []
+    let pos = 12, totalKept = 0
+    while (pos + 8 <= webp.length) {
+      const type = String.fromCharCode(webp[pos],webp[pos+1],webp[pos+2],webp[pos+3])
+      const size = (webp[pos+4]|(webp[pos+5]<<8)|(webp[pos+6]<<16)|(webp[pos+7]<<24)) >>> 0
+      const padded = size + (size & 1)
+      const chunkEnd = pos + 8 + padded
+      if (chunkEnd > webp.length) break
+      if (!STRIP.has(type)) { kept.push(webp.slice(pos, chunkEnd)); totalKept += chunkEnd - pos }
+      pos = chunkEnd
+    }
+    const fileSize = 4 + totalKept // 'WEBP' (4) + chunks
+    const out = new Uint8Array(12 + totalKept)
+    out[0]=0x52;out[1]=0x49;out[2]=0x46;out[3]=0x46
+    out[4]=fileSize&0xFF;out[5]=(fileSize>>8)&0xFF;out[6]=(fileSize>>16)&0xFF;out[7]=(fileSize>>24)&0xFF
+    out[8]=0x57;out[9]=0x45;out[10]=0x42;out[11]=0x50
+    let off = 12
+    for (const p of kept) { out.set(p, off); off += p.length }
+    return out
+  } catch { return webp }
+}
 
 // URL assinada válida por 7 dias — tempo suficiente para o usuário usar o app
 // sem a foto quebrar. O ideal futuro é tornar o bucket público para fotos.
@@ -202,7 +291,7 @@ Deno.serve(async (req: Request) => {
   const mime = file.type.toLowerCase();
   if (!MAGIC[mime]) {
     return json({
-      error: "Tipo de arquivo não permitido. Use JPEG, PNG, WebP ou GIF.",
+      error: "Tipo de arquivo não permitido. Use JPEG, PNG ou WebP.",
     }, 415);
   }
 
@@ -225,6 +314,20 @@ Deno.serve(async (req: Request) => {
     }, 415);
   }
 
+  // ── 9b. Strip de metadados EXIF/XMP/GPS (VUL-001 FIX) ────────────────────
+  // Remove coordenadas GPS, timestamps, dados de câmera e qualquer payload
+  // oculto em metadados antes de persistir no storage.
+  let cleanBuffer: Uint8Array
+  if (mime === 'image/jpeg') {
+    cleanBuffer = stripJpegExif(buffer)
+  } else if (mime === 'image/png') {
+    cleanBuffer = stripPngMetadata(buffer)
+  } else if (mime === 'image/webp') {
+    cleanBuffer = stripWebpMetadata(buffer)
+  } else {
+    cleanBuffer = buffer
+  }
+
   // ── 10. Upload via service_role (bypassa RLS) ─────────────────────────────
   //
   // Arquivo salvo em {effectiveUserId}/{timestamp}.{ext}
@@ -236,7 +339,7 @@ Deno.serve(async (req: Request) => {
 
   const { error: uploadError } = await supabaseAdmin.storage
     .from("profile-photos")
-    .upload(filePath, buffer, {
+    .upload(filePath, cleanBuffer, {
       contentType:  mime,
       cacheControl: "max-age=3600",
       upsert:       true, // evita erro de conflito em re-tentativas

@@ -80,10 +80,11 @@ Deno.serve(async (req: Request) => {
   const plan = (body.plan as string ?? '').toLowerCase().trim()
   if (!plan || !PLAN_ENV_MAP[plan]) return json({ error: 'Plano inválido' }, 400)
 
-  // Email do body como fallback (anônimo)
+  // Email do body como fallback (anônimo) — VUL-003 FIX: regex em vez de raw.includes('@')
+  const _EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/
   if (!userEmail && typeof body.email === 'string') {
     const raw = body.email.toLowerCase().trim()
-    if (raw.includes('@') && raw.length <= 254) userEmail = raw
+    if (raw.length <= 254 && _EMAIL_RE.test(raw)) userEmail = raw
   }
 
   const priceId   = Deno.env.get(PLAN_ENV_MAP[plan])

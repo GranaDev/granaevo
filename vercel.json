@@ -12,7 +12,8 @@
     { "source": "/dashboard",      "destination": "/dashboard.html"      },
     { "source": "/termos",         "destination": "/termos.html"         },
     { "source": "/privacidade",    "destination": "/privacidade.html"    },
-    { "source": "/atualizarplano", "destination": "/atualizarplano.html" }
+    { "source": "/atualizarplano", "destination": "/atualizarplano.html" },
+    { "source": "/aceitar-termos", "destination": "/aceitar-termos.html" }
   ],
 
   "headers": [
@@ -144,6 +145,16 @@
     },
 
     {
+      "source": "/aceitar-termos",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self'; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+        }
+      ]
+    },
+
+    {
       "source": "/api/(.*)",
       "headers": [
         { "key": "Cache-Control",           "value": "no-store, no-cache, must-revalidate, private" },
@@ -175,6 +186,14 @@
 
     {
       "source": "/atualizarplano",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, private" },
+        { "key": "Pragma",        "value": "no-cache"                                      }
+      ]
+    },
+
+    {
+      "source": "/aceitar-termos",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, private" },
         { "key": "Pragma",        "value": "no-cache"                                      }
