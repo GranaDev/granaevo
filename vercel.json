@@ -5,15 +5,16 @@
   "installCommand": "npm ci",
 
   "rewrites": [
-    { "source": "/",               "destination": "/index.html"          },
-    { "source": "/landingpage",    "destination": "/index.html"          },
-    { "source": "/planos",         "destination": "/planos.html"         },
-    { "source": "/login",          "destination": "/login.html"          },
-    { "source": "/dashboard",      "destination": "/dashboard.html"      },
-    { "source": "/termos",         "destination": "/termos.html"         },
-    { "source": "/privacidade",    "destination": "/privacidade.html"    },
-    { "source": "/atualizarplano", "destination": "/atualizarplano.html" },
-    { "source": "/aceitar-termos", "destination": "/aceitar-termos.html" }
+    { "source": "/",                  "destination": "/index.html"          },
+    { "source": "/landingpage",       "destination": "/index.html"          },
+    { "source": "/planos",            "destination": "/planos.html"         },
+    { "source": "/login",             "destination": "/login.html"          },
+    { "source": "/dashboard",         "destination": "/dashboard.html"      },
+    { "source": "/termos",            "destination": "/termos.html"         },
+    { "source": "/privacidade",       "destination": "/privacidade.html"    },
+    { "source": "/atualizarplano",    "destination": "/atualizarplano.html" },
+    { "source": "/aceitar-termos",    "destination": "/aceitar-termos.html" },
+    { "source": "/api/csp-report",    "destination": "/api/user-data"       }
   ],
 
   "headers": [

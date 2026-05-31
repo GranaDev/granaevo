@@ -65,11 +65,47 @@ setInterval(() => {
 // ── Handler principal ─────────────────────────────────────────
 export default async function handler(req, res) {
     const origin = req.headers['origin'] ?? '';
+    const ct     = req.headers['content-type'] ?? '';
 
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
+
+    // ── CSP Report handler (consolidado de csp-report.js) ─────
+    // Detectado por Content-Type antes de qualquer outra lógica.
+    // O vercel.json redireciona /api/csp-report → /api/user-data via rewrite.
+    if (req.method === 'POST' && (ct.includes('application/csp-report') || ct.includes('application/reports+json'))) {
+        if (req.method !== 'POST') return res.status(405).end();
+        const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
+            .toString().split(',')[0].trim();
+        if (!checkRL(`csp-report:${ip}`, 30)) return res.status(429).end();
+        let raw = '';
+        try {
+            raw = await new Promise((resolve, reject) => {
+                const chunks = []; let total = 0;
+                req.on('data', chunk => {
+                    total += chunk.length;
+                    if (total > 4096) { req.destroy(); return reject(new Error('TOO_LARGE')); }
+                    chunks.push(chunk);
+                });
+                req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+                req.on('error', reject);
+            });
+        } catch { return res.status(413).end(); }
+        let report;
+        try { const parsed = JSON.parse(raw); report = parsed['csp-report'] ?? parsed; }
+        catch { return res.status(400).end(); }
+        console.warn(JSON.stringify({
+            ts: new Date().toISOString(), level: 'warn', event: 'csp_violation',
+            blocked_uri:  report['blocked-uri']        ?? report.blockedURI        ?? 'unknown',
+            violated:     report['violated-directive']  ?? report.violatedDirective  ?? 'unknown',
+            effective:    report['effective-directive'] ?? report.effectiveDirective ?? 'unknown',
+            document_uri: report['document-uri']        ?? report.documentURI        ?? 'unknown',
+            ip,
+        }));
+        return res.status(204).end();
+    }
 
     // CORS preflight
     if (req.method === 'OPTIONS') {
