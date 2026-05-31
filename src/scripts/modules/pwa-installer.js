@@ -60,6 +60,8 @@ function _setState(s) {
 
 /**
  * Inicializa o sistema PWA. Deve ser chamado uma vez no carregamento do módulo.
+ * O listener de beforeinstallprompt é registrado ANTES no dashboard.html (inline script)
+ * para não perder o evento por causa do lazy-loading deste módulo.
  */
 export function initPWA() {
   _browserType = _detectBrowser();
@@ -69,35 +71,43 @@ export function initPWA() {
                        window.navigator.standalone === true;
   if (isStandalone) { _setState('installed'); return; }
 
-  // Safari iOS: beforeinstallprompt não existe, mas suporta Add to Home Screen
-  // Firefox, Firefox Android: não suportam beforeinstallprompt mas o usuário ainda pode instalar
-  // → todos ficam em 'installable' com instruções manuais
-  if (_browserType !== 'chromium') {
-    _setState('installable');
-    return;
-  }
-
-  // Chrome/Edge/Samsung Internet: espera o evento nativo
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    _deferredPrompt = e;
-    _setState('installable');
-    _updateInstallButton();
-  });
-
-  window.addEventListener('appinstalled', () => {
+  // Escuta o evento de instalação concluída (capturado cedo no HTML)
+  document.addEventListener('ge:pwa-installed', () => {
     _deferredPrompt = null;
     _setState('installed');
     _updateInstallButton();
     _notify('GranaEvo instalado como app! 🎉', 'success');
   });
 
-  // Registra SW já foi feito pelo vite-plugin-pwa (registerSW.js injetado no HTML)
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(() => {
-      // SW ativo — pode não disparar beforeinstallprompt mas o app está cacheado
-    }).catch(() => {});
+  // Safari iOS / Firefox: sem beforeinstallprompt → instruções manuais
+  if (_browserType !== 'chromium') {
+    _setState('installable');
+    return;
   }
+
+  // Chromium: verifica se o prompt já foi capturado pelo listener antecipado no HTML
+  if (window.__pwaInstallPrompt) {
+    _deferredPrompt = window.__pwaInstallPrompt;
+    _setState('installable');
+    return;
+  }
+
+  // Ainda não veio → escuta o evento customizado disparado pelo listener do HTML
+  document.addEventListener('ge:pwa-ready', () => {
+    _deferredPrompt = window.__pwaInstallPrompt;
+    _setState('installable');
+    _updateInstallButton();
+  }, { once: true });
+
+  // Fallback: se após 4s o evento não veio, o Chrome pode já ter exibido
+  // o mini-banner automaticamente (ou o usuário já instalou antes).
+  // Ainda mostramos o botão com instruções alternativas.
+  setTimeout(() => {
+    if (_state === 'pending') {
+      _setState('installable');
+      _updateInstallButton();
+    }
+  }, 4000);
 }
 
 /**

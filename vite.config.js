@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => ({
         display:          'standalone',
         orientation:      'portrait-primary',
         lang:             'pt-BR',
-        start_url:        '/dashboard.html',
+        start_url:        '/dashboard',
         scope:            '/',
         id:               '/',
         icons: [
