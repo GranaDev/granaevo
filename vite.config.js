@@ -59,52 +59,38 @@ export default defineConfig(({ mode }) => ({
         categories: ['finance', 'productivity'],
       },
       workbox: {
-        // Força o novo SW a assumir imediatamente (sem esperar fechar abas)
-        skipWaiting:  true,
-        clientsClaim: true,
-        // Estratégia: cache assets estáticos (JS/CSS/imagens) forever, HTML network-first
-        globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff2}'],
-        // Ignorar ícones PWA do glob — vite-plugin-pwa os adiciona via manifest sem hash.
-        // Sem isso, o mesmo URL aparece duas vezes: com e sem ?__WB_REVISION__ → conflito.
-        globIgnores: [
-          '**/pwa-192.png',
-          '**/pwa-512.png',
-          'workbox-*.js',
-          'sw.js',
-        ],
-        // Não cachear páginas de auth — sempre buscar do servidor
-        navigateFallbackDenylist: [/^\/login/, /^\/api\//],
-        runtimeCaching: [
-          {
-            // Assets de fontes do Google: cache por 1 ano
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler:    'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Font Awesome CDN: cache por 30 dias
-            urlPattern: /^https:\/\/cdnjs\.cloudflare\.com\/.*/i,
-            handler:    'CacheFirst',
-            options: {
-              cacheName: 'cdnjs-cache',
-              expiration: { maxEntries: 5, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Supabase Storage (avatares): stale-while-revalidate
-            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
-            handler:    'StaleWhileRevalidate',
-            options: {
-              cacheName: 'supabase-storage-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
-            },
-          },
-        ],
+        // ─── ESTRATÉGIA CONSERVADORA ────────────────────────────────────────────
+        // Problema anterior: cachear HTML, CDN e Supabase causou:
+        //   1. Ícones Font Awesome sumindo (resposta opaca do CDN ficou em cache corrompido)
+        //   2. Dados financeiros não atualizando (HTML/JS servido do cache, não do servidor)
+        //
+        // Regra: SOMENTE cachear assets do build com hash de conteúdo (JS/CSS).
+        // Tudo mais — HTML, CDN externo, Supabase API — passa diretamente pela rede.
+        // ────────────────────────────────────────────────────────────────────────
+
+        // Força ativação imediata sem esperar o usuário fechar abas
+        skipWaiting:          true,
+        clientsClaim:         true,
+        // Remove entradas de precache antigas automaticamente
+        cleanupOutdatedCaches: true,
+
+        // SOMENTE os assets do build (JS e CSS com hash de conteúdo).
+        // HTML EXCLUÍDO intencionalmente: sempre buscar HTML fresco do servidor
+        //   garante que o usuário sempre receba a versão mais nova do app.
+        // Imagens, woff2, CDN EXCLUÍDOS: browser HTTP cache é suficiente e
+        //   não tem risco de resposta opaca corrompida.
+        globPatterns: ['assets/**/*.{js,css}'],
+        globIgnores:  ['workbox-*.js', 'sw.js'],
+
+        // Sem navigate fallback (não interceptar navegação HTML)
+        navigateFallback: null,
+
+        // Sem runtime caching de recursos externos.
+        // Font Awesome (cdnjs): browser HTTP cache com Cache-Control do CDN ✓
+        // Google Fonts: browser HTTP cache ✓
+        // Supabase API: sempre rede para dados financeiros frescos ✓
+        // Supabase Storage (avatares): browser HTTP cache ✓
+        runtimeCaching: [],
       },
       // Dev mode: sem SW em desenvolvimento (evita conflito com HMR)
       devOptions: {
