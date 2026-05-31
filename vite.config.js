@@ -59,11 +59,19 @@ export default defineConfig(({ mode }) => ({
         categories: ['finance', 'productivity'],
       },
       workbox: {
+        // Força o novo SW a assumir imediatamente (sem esperar fechar abas)
+        skipWaiting:  true,
+        clientsClaim: true,
         // Estratégia: cache assets estáticos (JS/CSS/imagens) forever, HTML network-first
         globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff2}'],
-        // Ignorar ícones PWA do glob — eles são referenciados pelo manifest sem hash
-        // (adicioná-los aqui causaria entrada duplicada: com e sem ?__WB_REVISION__)
-        globIgnores: ['**/pwa-192.png', '**/pwa-512.png'],
+        // Ignorar ícones PWA do glob — vite-plugin-pwa os adiciona via manifest sem hash.
+        // Sem isso, o mesmo URL aparece duas vezes: com e sem ?__WB_REVISION__ → conflito.
+        globIgnores: [
+          '**/pwa-192.png',
+          '**/pwa-512.png',
+          'workbox-*.js',
+          'sw.js',
+        ],
         // Não cachear páginas de auth — sempre buscar do servidor
         navigateFallbackDenylist: [/^\/login/, /^\/api\//],
         runtimeCaching: [
