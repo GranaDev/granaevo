@@ -1,7 +1,11 @@
 // db-configuracoes.js — Seção de Configurações (lazy-loaded)
 import { supabase } from '../services/supabase-client.js?v=2';
 import { iniciarTutorial } from '../modules/tutorial.js';
+import { initPWA, initInstallButton } from '../modules/pwa-installer.js';
 let _ctx = null;
+
+// Inicializa PWA logo que o módulo é carregado (uma vez, independente de ctx)
+initPWA();
 
 // Proxies para utilitários de dashboard.js disponíveis via _ctx após init()
 const sanitizeHTML       = (...a) => _ctx.sanitizeHTML(...a);
@@ -17,6 +21,22 @@ export function init(ctx) {
     window.trocarPerfil        = () => trocarPerfil();
     window.comoUsar            = () => comoUsar();
     window.gerenciarAssinatura = () => gerenciarAssinatura();
+    // Inicializa botão de instalação do PWA na seção de Configurações
+    initInstallButton();
+    // Atualiza status de cache offline
+    _updateOfflineStatus();
+}
+
+function _updateOfflineStatus() {
+    const el = document.getElementById('offlineStatusText');
+    if (!el) return;
+    if (!('serviceWorker' in navigator)) {
+        el.textContent = 'Navegador sem suporte a modo offline';
+        return;
+    }
+    navigator.serviceWorker.ready
+        .then(() => { el.textContent = '✅ Cache ativo — app funciona offline'; })
+        .catch(() => { el.textContent = 'Service Worker não registrado'; });
 }
 
 // ========== CONFIGURAÇÕES ==========

@@ -61,6 +61,9 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         // Estratégia: cache assets estáticos (JS/CSS/imagens) forever, HTML network-first
         globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff2}'],
+        // Ignorar ícones PWA do glob — eles são referenciados pelo manifest sem hash
+        // (adicioná-los aqui causaria entrada duplicada: com e sem ?__WB_REVISION__)
+        globIgnores: ['**/pwa-192.png', '**/pwa-512.png'],
         // Não cachear páginas de auth — sempre buscar do servidor
         navigateFallbackDenylist: [/^\/login/, /^\/api\//],
         runtimeCaching: [

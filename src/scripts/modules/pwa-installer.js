@@ -142,8 +142,10 @@ function _updateInstallButton() {
 }
 
 function _showInstallSuccess() {
-  // Toast de sucesso (usa o sistema de toast existente se disponível)
-  if (typeof window.showToast === 'function') {
+  // Usa o sistema de notificação do dashboard se disponível
+  if (typeof window.mostrarNotificacao === 'function') {
+    window.mostrarNotificacao('GranaEvo instalado como app! 🎉', 'success');
+  } else if (typeof window.showToast === 'function') {
     window.showToast('GranaEvo instalado com sucesso! 🎉', 'success');
   } else {
     console.info('[PWA] App instalado com sucesso!');
