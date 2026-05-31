@@ -1,0 +1,239 @@
+/* === Section Common + Problem + Features === */
+/* ==========================================
+   SECTION COMMON STYLES
+   ========================================== */
+.section-header {
+    text-align: center;
+    max-width: 100%;
+    margin: 0 auto 2.5rem;
+    padding: 0 1rem;
+}
+
+.section-badge {
+    display: inline-block;
+    padding: 0.4375rem 1rem;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 50px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 1rem;
+}
+
+.section-title {
+    font-size: 1.875rem;
+    font-weight: 900;
+    line-height: 1.2;
+    margin-bottom: 0.875rem;
+    padding: 0 0.5rem;
+}
+
+.section-subtitle {
+    font-size: 1rem;
+    color: var(--gray);
+    line-height: 1.7;
+    padding: 0 0.5rem;
+}
+
+/* ==========================================
+   PROBLEM SECTION
+   ========================================== */
+.problem-section {
+    position: relative;
+    padding: 4rem 0;
+}
+
+.problem-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+}
+
+.problem-card {
+    background: rgba(19, 20, 31, 0.6);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(239, 68, 68, 0.1);
+    border-radius: 16px;
+    padding: 1.75rem 1.5rem;
+    text-align: center;
+    transition: color var(--transition-smooth), background-color var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth), opacity var(--transition-smooth), transform var(--transition-smooth);
+    position: relative;
+    overflow: hidden;
+}
+
+.problem-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--danger), transparent);
+    opacity: 0;
+    transition: opacity var(--transition);
+}
+
+.problem-card:active {
+    transform: scale(0.98);
+}
+
+.problem-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 1rem;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--danger);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
+}
+
+.problem-icon svg {
+    width: 26px;
+    height: 26px;
+    stroke-width: 2;
+}
+
+.problem-card h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.625rem;
+}
+
+.problem-card p {
+    color: var(--gray);
+    line-height: 1.7;
+    font-size: 0.9375rem;
+}
+
+.solution-box {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(52, 211, 153, 0.1));
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 20px;
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1.25rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.solution-box::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.1), transparent 70%);
+    animation: pulse 3s ease-in-out infinite;
+}
+
+.solution-icon {
+    width: 70px;
+    height: 70px;
+    background: var(--primary);
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--dark);
+    box-shadow: var(--neon-glow-strong);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.solution-icon svg {
+    width: 36px;
+    height: 36px;
+    stroke-width: 2;
+}
+
+.solution-content h3 {
+    font-size: 1.375rem;
+    font-weight: 800;
+    margin-bottom: 0.625rem;
+}
+
+.solution-content p {
+    font-size: 0.9375rem;
+    color: var(--gray-light);
+    line-height: 1.7;
+}
+
+/* ==========================================
+   FEATURES SECTION
+   ========================================== */
+.features-section {
+    position: relative;
+    padding: 4rem 0;
+}
+
+.features-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+.feature-card {
+    background: rgba(19, 20, 31, 0.6);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 1.75rem 1.5rem;
+    transition: color var(--transition-smooth), background-color var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth), opacity var(--transition-smooth), transform var(--transition-smooth);
+    position: relative;
+    overflow: hidden;
+}
+
+.feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    opacity: 0;
+    transition: opacity var(--transition);
+}
+
+.feature-card:active {
+    transform: scale(0.98);
+}
+
+.feature-icon {
+    width: 52px;
+    height: 52px;
+    background: rgba(16, 185, 129, 0.1);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+    margin-bottom: 1rem;
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
+}
+
+.feature-icon svg {
+    width: 26px;
+    height: 26px;
+    stroke-width: 2;
+}
+
+.feature-card h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.625rem;
+}
+
+.feature-card p {
+    color: var(--gray);
+    line-height: 1.7;
+    font-size: 0.9375rem;
+}
+

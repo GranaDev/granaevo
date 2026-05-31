@@ -1,0 +1,385 @@
+/* === Animations + Performance + Responsive + Reduce Motion === */
+/* ==========================================
+   ANIMATIONS & INTERACTIONS
+   ========================================== */
+.reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: color 0.8s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.8s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.8s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.reveal.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+[data-tilt] {
+    transform-style: preserve-3d;
+    transition: transform 0.1s ease-out;
+}
+
+[data-parallax] {
+    transition: transform 0.1s ease-out;
+}
+
+/* ==========================================
+   PERFORMANCE OPTIMIZATIONS
+   ========================================== */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+img, svg {
+    user-select: none;
+}
+
+/* ==========================================
+   SCROLLBAR
+   ========================================== */
+@media (min-width: 1024px) {
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: var(--dark);
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: var(--primary);
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb:active {
+        background: var(--primary-light);
+    }
+}
+
+@media (max-width: 1023px) {
+    body::-webkit-scrollbar {
+        display: none;
+    }
+    
+    body {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+}
+
+::selection {
+    background: var(--primary);
+    color: var(--dark);
+}
+
+:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 3px;
+}
+
+/* ==========================================
+   RESPONSIVE - TABLET (768px+)
+   ========================================== */
+@media (min-width: 768px) {
+    html {
+        font-size: 17px;
+    }
+    
+    .container {
+        padding: 0 2rem;
+    }
+
+    .nav-links {
+        display: flex;
+        gap: 2rem;
+        align-items: center;
+    }
+
+    .mobile-toggle {
+        display: none;
+    }
+    
+    .logo {
+        font-size: 1.25rem;
+    }
+    
+    .logo-img {
+        width: 44px;
+        height: 44px;
+    }
+    
+    .btn-nav {
+        padding: 0.875rem 2rem;
+        font-size: 0.9375rem;
+    }
+
+    .hero {
+        padding: 8rem 0 5rem;
+    }
+
+    .hero-title {
+        font-size: 2.75rem;
+        line-height: 1.15;
+    }
+    
+    .hero-description {
+        font-size: 1.0625rem;
+        padding: 0;
+        max-width: 600px;
+    }
+
+    .hero-buttons {
+        flex-direction: row;
+        justify-content: center;
+        gap: 1rem;
+        padding: 0;
+    }
+    
+    .btn-primary,
+    .btn-secondary {
+        width: auto;
+    }
+    
+    .hero-stats {
+        grid-template-columns: 1fr 1px 1fr 1px 1fr;
+        padding: 1.25rem 1rem;
+        max-width: 100%;
+    }
+
+    .stat-divider {
+        display: block;
+        width: 1px;
+        height: 50px;
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .stat-value {
+        font-size: 1.875rem;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        max-width: 160px;
+    }
+
+    .hero-visual {
+        padding: 0;
+    }
+
+    .dashboard-mockup {
+        max-width: 420px;
+    }
+
+    .section-title {
+        font-size: 2.5rem;
+    }
+    
+    .section-subtitle {
+        font-size: 1.125rem;
+    }
+
+    .problem-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.25rem;
+    }
+
+    .solution-box {
+        flex-direction: row;
+        text-align: left;
+        padding: 2.5rem 2rem;
+    }
+
+    .features-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.25rem;
+    }
+    
+    .timeline {
+        padding-left: 2rem;
+    }
+    
+    .timeline-dot {
+        width: 50px;
+        height: 50px;
+        left: -2.625rem;
+        font-size: 1.25rem;
+    }
+
+    .testimonial-card {
+        width: 340px;
+        padding: 2rem 1.75rem;
+    }
+    
+    .cta-box {
+        padding: 3.5rem 2.5rem;
+    }
+
+    .cta-box h2 {
+        font-size: 2.5rem;
+    }
+    
+    .cta-box p {
+        font-size: 1.125rem;
+    }
+
+    .footer-content {
+        grid-template-columns: 2fr 1fr 1fr 1fr;
+        gap: 2.5rem;
+    }
+    
+    .footer-brand {
+        text-align: left;
+    }
+    
+    .footer-brand .logo {
+        justify-content: flex-start;
+    }
+    
+    .footer-links {
+        text-align: left;
+    }
+}
+
+/* ==========================================
+   RESPONSIVE - DESKTOP (1024px+)
+   ========================================== */
+@media (min-width: 1024px) {
+    .container {
+        padding: 0 3rem;
+    }
+    
+    .btn-nav {
+        padding: 0.875rem 2.25rem;
+        font-size: 1rem;
+    }
+
+    .hero-content {
+        grid-template-columns: 1.1fr 1fr;
+        gap: 4rem;
+    }
+
+    .hero-text {
+        text-align: left;
+    }
+
+    .hero-title {
+        font-size: 3.5rem;
+    }
+
+    .hero-buttons {
+        justify-content: flex-start;
+    }
+
+    .hero-stats {
+        justify-content: flex-start;
+    }
+    
+    .dashboard-mockup {
+        max-width: 500px;
+    }
+
+    .problem-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.5rem;
+    }
+
+    .features-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+    }
+
+    .section-title {
+        font-size: 3rem;
+    }
+    
+    .cta-box h2 {
+        font-size: 3rem;
+    }
+    
+    /* Hover effects desktop */
+    .mockup-card:hover {
+        transform: translateY(-10px) scale(1.02);
+        box-shadow: 0 30px 80px rgba(16, 185, 129, 0.3);
+    }
+    
+    .problem-card:hover {
+        transform: translateY(-8px);
+        border-color: rgba(239, 68, 68, 0.3);
+        box-shadow: 0 20px 60px rgba(239, 68, 68, 0.15);
+    }
+    
+    .problem-card:hover::before {
+        opacity: 1;
+    }
+    
+    .problem-card:hover .problem-icon {
+        background: var(--danger);
+        color: var(--white);
+        transform: scale(1.1) rotate(5deg);
+    }
+    
+    .feature-card:hover {
+        transform: translateY(-8px);
+        border-color: rgba(16, 185, 129, 0.3);
+        box-shadow: 0 20px 60px rgba(16, 185, 129, 0.15);
+    }
+    
+    .feature-card:hover::before {
+        opacity: 1;
+    }
+    
+    .feature-card:hover .feature-icon {
+        background: var(--primary);
+        color: var(--dark);
+        box-shadow: var(--neon-glow);
+        transform: scale(1.1) rotate(-5deg);
+    }
+    
+    .timeline-item:hover .timeline-dot {
+        transform: scale(1.2) rotate(360deg);
+    }
+    
+    .timeline-item:hover .timeline-content {
+        transform: translateX(10px);
+        border-color: rgba(16, 185, 129, 0.3);
+        box-shadow: 0 10px 40px rgba(16, 185, 129, 0.1);
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--neon-glow-strong);
+    }
+    
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: var(--primary);
+        transform: translateY(-2px);
+    }
+    
+    .logo:hover .logo-img {
+        transform: scale(1.1);
+    }
+    
+    .footer-links a:hover {
+        color: var(--primary);
+        padding-left: 5px;
+    }
+}
+
+/* ==========================================
+   REDUCE MOTION
+   ========================================== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    
+    .testimonials-track {
+        animation-duration: 60s !important;
+    }
+}

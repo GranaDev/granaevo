@@ -277,19 +277,28 @@ Deno.serve(async (req: Request) => {
     // ── 13. Enviar email via Resend ───────────────────────────────────────
     const emailHtml = buildInviteEmail(guestName, ownerName, planName, invitation.id);
 
-    const emailRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendKey}`,
-        "Content-Type":  "application/json",
-      },
-      body: JSON.stringify({
-        from:    "GranaEvo <noreply@granaevo.com>",
-        to:      [guestEmail],
-        subject: `🎉 ${ownerName} te convidou para o GranaEvo!`,
-        html:    emailHtml,
-      }),
-    });
+    let emailRes: Response;
+    try {
+      emailRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendKey}`,
+          "Content-Type":  "application/json",
+        },
+        body: JSON.stringify({
+          from:    "GranaEvo <noreply@granaevo.com>",
+          to:      [guestEmail],
+          subject: `🎉 ${ownerName} te convidou para o GranaEvo!`,
+          html:    emailHtml,
+        }),
+        signal: AbortSignal.timeout(8_000), // [PERF] 8s — Resend geralmente < 2s
+      });
+    } catch (fetchErr) {
+      const isTimeout = fetchErr instanceof Error && fetchErr.name === 'TimeoutError';
+      console.error("[send-guest-invite] Resend fetch falhou:", isTimeout ? 'timeout 8s' : String(fetchErr));
+      await supabaseAdmin.from("guest_invitations").delete().eq("id", invitation.id);
+      return json({ success: false, error: "Serviço de email indisponível. Tente novamente." }, 503);
+    }
 
     if (!emailRes.ok) {
       const errText = await emailRes.text();

@@ -1236,3 +1236,39 @@
         font-size: 1.6rem;
     }
 }
+/* ==========================================
+   PRINT STYLES — @media print
+   ========================================== */
+@media print {
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
+
+    .graficos-filtros,
+    .btn-primary,
+    .btn-cancelar,
+    .sidebar,
+    .header,
+    .bottom-nav {
+        display: none !important;
+    }
+
+    .grafico-container,
+    .chart-wrapper {
+        background: #ffffff !important;
+        border: 1pt solid #cccccc !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /* Cada gráfico em página própria em relatórios longos */
+    .grafico-section + .grafico-section {
+        page-break-before: always;
+    }
+
+    canvas {
+        max-width: 100% !important;
+    }
+}

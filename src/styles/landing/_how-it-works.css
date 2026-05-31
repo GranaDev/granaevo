@@ -1,0 +1,76 @@
+/* === How It Works - Timeline === */
+/* ==========================================
+   HOW IT WORKS - TIMELINE
+   ========================================== */
+.how-section {
+    position: relative;
+    padding: 4rem 0;
+}
+
+.timeline {
+    position: relative;
+    max-width: 100%;
+    margin: 0 auto;
+    padding-left: 1.75rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, transparent, var(--primary), transparent);
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 2.5rem;
+}
+
+.timeline-item:last-child {
+    padding-bottom: 0;
+}
+
+.timeline-dot {
+    position: absolute;
+    left: -2.375rem;
+    top: 0;
+    width: 44px;
+    height: 44px;
+    background: var(--primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 1.125rem;
+    color: var(--dark);
+    box-shadow: var(--neon-glow-strong);
+    z-index: 2;
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
+}
+
+.timeline-content {
+    background: rgba(19, 20, 31, 0.6);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 14px;
+    padding: 1.5rem 1.25rem;
+    transition: color var(--transition-smooth), background-color var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth), opacity var(--transition-smooth), transform var(--transition-smooth);
+}
+
+.timeline-content h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--white);
+}
+
+.timeline-content p {
+    color: var(--gray);
+    line-height: 1.7;
+    font-size: 0.9375rem;
+}
+

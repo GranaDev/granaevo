@@ -1,10 +1,76 @@
 /**
- * GranaEvo — auth-guard.js
+ * @module auth-guard
+ * @description GranaEvo — Sistema de proteção de sessão e autorização
  * Versão 3.0 — Relatório de segurança aplicado integralmente
+ *
+ * ═══════════════════════════════════════════════════════════════
+ *  ARQUITETURA INTERNA (módulos na closure)
+ * ═══════════════════════════════════════════════════════════════
+ *
+ *  ┌─────────────────────────────────────────────────────────┐
+ *  │  SecureCrypto — HMAC-SHA256 via SubtleCrypto            │
+ *  │    • sign(data, hexSecret) → hmacHex                    │
+ *  │    • verify(data, mac, hexSecret) → boolean             │
+ *  │    • getSessionSecret() / getRateLimitSecret()          │
+ *  │    • generateCanvasEntropy() / getCanvasSalt()          │
+ *  ├─────────────────────────────────────────────────────────┤
+ *  │  RateLimiter — Sliding window via localStorage          │
+ *  │    • isAllowed() → boolean  (max 15/min, multi-aba)     │
+ *  │    • clear()                                             │
+ *  ├─────────────────────────────────────────────────────────┤
+ *  │  Fingerprint — Session fingerprinting                   │
+ *  │    • generate(user) / store(user) / validate(user)      │
+ *  │    • writeIntegrityStamp(uid) / readIntegrityStamp()    │
+ *  │    • markSessionStart() / isSessionExpiredByAge()       │
+ *  ├─────────────────────────────────────────────────────────┤
+ *  │  SubscriptionChecker — Cache de plano (5min TTL)        │
+ *  │    • getActive(userId) → SubscriptionData               │
+ *  │    • invalidate()                                        │
+ *  ├─────────────────────────────────────────────────────────┤
+ *  │  SafeRedirect — Redirecionamento seguro com whitelist   │
+ *  │    • to(url) / toLogin(reason)                          │
+ *  ├─────────────────────────────────────────────────────────┤
+ *  │  BroadcastChannel — Sincronização entre abas            │
+ *  │    • _broadcastLogout(type) / _initBroadcastChannel()   │
+ *  ├─────────────────────────────────────────────────────────┤
+ *  │  FrozenOverlay — Overlay de conta cancelada             │
+ *  │    • _renderFrozenOverlay(guard) — focus-trap + watchdog│
+ *  └─────────────────────────────────────────────────────────┘
+ *
+ * ═══════════════════════════════════════════════════════════════
+ *  API PÚBLICA: export default AuthGuard
+ * ═══════════════════════════════════════════════════════════════
+ *
+ *  AuthGuard.protect(options)     → Promise<UserData|null>
+ *  AuthGuard.logout(reason?)      → Promise<void>
+ *  AuthGuard.forceLogout(reason?) → Promise<void>
+ *  AuthGuard.getUser()            → UserData|null
+ *  AuthGuard.isReady()            → boolean
+ *  AuthGuard.isGuest()            → boolean
+ *  AuthGuard.getCurrentPlan()     → string|null
+ *  AuthGuard.refreshSubscription()→ void
  *
  * ═══════════════════════════════════════════════════════════════
  *  REGISTRO COMPLETO DE CORREÇÕES DE SEGURANÇA
  * ═══════════════════════════════════════════════════════════════
+ *
+ * @typedef {Object} UserData
+ * @property {string}      id          - UUID do usuário (auth.uid())
+ * @property {string}      email       - Email do usuário
+ * @property {string|null} plano       - Nome do plano ativo ('Individual'|'Casal'|'Família'|null)
+ * @property {boolean}     isGuest     - true se é conta convidada
+ * @property {string|null} ownerId     - UUID do dono da conta (para convidados)
+ * @property {string|null} ownerEmail  - Email do dono da conta (para convidados)
+ *
+ * @typedef {Object} ProtectOptions
+ * @property {boolean}   [requirePlan=true]       - Exige plano ativo para acessar
+ * @property {boolean}   [allowGuest=true]        - Permite acesso de convidados
+ * @property {boolean}   [guestCanUpgrade=false]  - Convidado pode acessar páginas de upgrade
+ * @property {string[]}  [upgradePagePatterns]    - Padrões de URL considerados páginas de upgrade
+ * @property {Function}  [onSuccess]              - Callback ao autenticar com sucesso
+ * @property {Function}  [onFail]                 - Callback ao falhar (antes do redirect)
+ * @property {boolean}   [redirectOnFail=true]    - Redireciona para login ao falhar
+ * @property {string}    [loadingElementId]       - ID do elemento de loading a ocultar
  */
 
 import { supabase, clearRememberMe } from '../services/supabase-client.js?v=2';
@@ -1079,8 +1145,21 @@ const AuthGuard = (() => {
 
     const _publicAPI = {
         /**
-         * AuthGuard.protect(options)
-         * Chame no topo de cada página protegida.
+         * Verifica autenticação e autorização da página atual.
+         * Deve ser chamado no topo de cada página protegida antes de renderizar conteúdo.
+         *
+         * Fluxo interno:
+         *  1. Rate limit (max 15/min por conjunto de abas)
+         *  2. Recuperar sessão Supabase
+         *  3. Refresh de token se < 10min para expirar
+         *  4. Fingerprint: validar / regenerar
+         *  5. Idade da sessão (max 24h)
+         *  6. Integrity stamp HMAC
+         *  7. Verificar plano ativo (via check-user-access EF)
+         *  8. Verificar termos de uso (LGPD)
+         *
+         * @param {ProtectOptions} [options={}] - Opções de proteção da página
+         * @returns {Promise<UserData|null>} Dados do usuário autenticado, ou null se falhou
          */
         async protect(options = {}) {
             const {
@@ -1370,11 +1449,34 @@ const AuthGuard = (() => {
             SafeRedirect.toLogin(reason); // dedup via _isRedirecting
         },
 
+        /**
+         * Retorna uma cópia dos dados do usuário autenticado.
+         * @returns {UserData|null} Dados do usuário, ou null se não autenticado
+         */
         getUser()        { return _user ? { ..._user } : null; },
+
+        /**
+         * Indica se o AuthGuard concluiu a verificação de autenticação.
+         * @returns {boolean} true após protect() concluir com sucesso
+         */
         isReady()        { return _ready; },
+
+        /**
+         * Indica se o usuário atual é uma conta convidada (não titular).
+         * @returns {boolean} true se convidado, false se titular ou não autenticado
+         */
         isGuest()        { return _user?.isGuest ?? false; },
+
+        /**
+         * Retorna o nome do plano ativo do usuário (ou do dono, se convidado).
+         * @returns {'Individual'|'Casal'|'Família'|null} Nome do plano, ou null
+         */
         getCurrentPlan() { return _user?.plano ?? null; },
 
+        /**
+         * Invalida o cache de subscription, forçando nova consulta na próxima protect().
+         * Chame após ações que alteram o plano (upgrade, downgrade, cancelamento).
+         */
         refreshSubscription() {
             SubscriptionChecker.invalidate();
             try { _broadcastChannel?.postMessage({ type: 'SUBSCRIPTION_INVALIDATED' }); }

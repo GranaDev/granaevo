@@ -8884,3 +8884,148 @@ button,
     .imp-row-valor { display: none; }
     .tx-title-row { flex-direction: column; align-items: flex-start; }
 }
+
+/* ==========================================
+   PRINT STYLES — @media print
+   ========================================== */
+@media print {
+    /* Ocultar elementos de navegação e interação */
+    .sidebar,
+    .sidebar-overlay,
+    .header,
+    .bottom-nav,
+    .btn-primary,
+    .btn-cancelar,
+    .btn-danger,
+    .fab-btn,
+    .modal-overlay,
+    .toast-container,
+    #cookieBanner,
+    .tut-backdrop,
+    .tut-card,
+    .tut-spotlight,
+    [data-page]:not(.page.active) {
+        display: none !important;
+    }
+
+    /* Layout de impressão */
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-size: 11pt;
+    }
+
+    .main-content,
+    .page-content {
+        margin: 0 !important;
+        padding: 8mm !important;
+        max-width: 100% !important;
+    }
+
+    /* Cards ficam brancos na impressão */
+    .card,
+    .card-saldo,
+    .transacao-item,
+    .resumo-card {
+        background: #ffffff !important;
+        border: 1pt solid #cccccc !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+    }
+
+    /* Tabelas e listas não quebram no meio */
+    table,
+    .transacao-item,
+    .meta-card {
+        break-inside: avoid;
+    }
+
+    /* Cabeçalho de impressão */
+    body::before {
+        content: 'GranaEvo — Relatório Financeiro';
+        display: block;
+        text-align: center;
+        font-size: 14pt;
+        font-weight: bold;
+        margin-bottom: 8mm;
+        border-bottom: 1pt solid #000;
+        padding-bottom: 4mm;
+    }
+
+    /* Links não mostram URL */
+    a::after {
+        content: none !important;
+    }
+
+    /* Cores forçadas para impressão */
+    .valor-entrada,
+    .text-success { color: #157347 !important; }
+    .valor-saida,
+    .text-danger  { color: #dc3545 !important; }
+}
+
+/* ==========================================
+   DELTA INDICATORS — ▲/▼ com cores
+   ========================================== */
+.card-percent.pct--up      { color: #10b981; }
+.card-percent.pct--down    { color: #ef4444; }
+.card-percent.pct--neutral { color: #9ca3af; }
+
+/* ==========================================
+   SKELETON LOADERS
+   Aplique .skeleton a qualquer elemento para
+   ativar o shimmer animado durante o carregamento.
+   ========================================== */
+@keyframes skeletonShimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position:  400px 0; }
+}
+
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(255,255,255,0.04) 25%,
+        rgba(255,255,255,0.12) 50%,
+        rgba(255,255,255,0.04) 75%
+    );
+    background-size: 800px 100%;
+    animation: skeletonShimmer 1.5s ease-in-out infinite;
+    border-radius: 6px;
+    color: transparent !important;
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Skeleton para valores monetários nos cards */
+.card-value.skeleton  { min-height: 1.8rem; min-width: 120px; display: inline-block; }
+.card-percent.skeleton{ min-height: 1rem;   min-width: 80px;  display: inline-block; }
+
+/* Skeleton para itens de lista (transações, contas fixas) */
+.skeleton-row {
+    height: 52px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+}
+
+/* Skeleton para gráficos: placeholder de altura fixa */
+.skeleton-chart {
+    height: 240px;
+    border-radius: 12px;
+}
+
+/* ==========================================
+   CFG-ITEM INSTALADO (PWA)
+   ========================================== */
+.cfg-item--installed {
+    opacity: 0.7;
+    cursor: default;
+}
+.cfg-item--installed .cfg-item-icon i { color: #10b981; }
+.cfg-item-icon--emerald {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10b981;
+}
+.cfg-item-icon--gray {
+    background: rgba(107, 114, 128, 0.12);
+    color: #6b7280;
+}

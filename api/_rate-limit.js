@@ -15,16 +15,29 @@ const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
 const USE_REDIS   = !!(REDIS_URL && REDIS_TOKEN)
 
+// Detecta ambiente de produção
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' ||
+                      process.env.VERCEL_ENV === 'production'
+
+// Avisa se Redis não está configurado em produção (log visível no Vercel)
+if (IS_PRODUCTION && !USE_REDIS) {
+  console.warn('[RATE-LIMIT] ⚠️  Redis não configurado em produção! Rate limiting multi-instância ' +
+    'não funcionará. Configure UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN.')
+}
+
 // ── Fallback in-memory ────────────────────────────────────────────────────────
 const _store          = new Map()
 const _DEFAULT_WINDOW = 60_000  // janela padrão para checkRate()
-// [FINAL-M02] Cap no tamanho do Map — sem limite, um DDoS com IPs únicos esgotava
-// a memória da instância serverless. 10k entradas = ~1MB, seguro para qualquer escala.
-const _MAX_STORE = 10_000
+// Cap reduzido: 5k entradas ~512KB — mais conservador em memória serverless
+const _MAX_STORE = 5_000
 
 // windowMs: permite que checkRateWindow() repasse sua janela customizada.
-// Sem este parâmetro o fallback sempre usava 60s — ignorando janelas de 1h+.
 function _checkMemory(key, max, windowMs = _DEFAULT_WINDOW) {
+  // Log de fallback em produção para visibilidade de operação
+  if (IS_PRODUCTION) {
+    console.warn(`[RATE-LIMIT] Usando fallback in-memory para key="${key}" — Redis indisponível ou não configurado.`)
+  }
+
   const now = Date.now()
   const r   = _store.get(key)
   if (!r || now - r.t > windowMs) {
@@ -38,7 +51,7 @@ function _checkMemory(key, max, windowMs = _DEFAULT_WINDOW) {
       // Se ainda cheio após limpeza, rejeita novo IP
       if (_store.size >= _MAX_STORE) return false
     }
-    // [MED-02] Armazena a janela junto à entrada — cleanup usa janela real da chave
+    // Armazena a janela junto à entrada — cleanup usa janela real da chave
     _store.set(key, { c: 1, t: now, w: windowMs })
     return true
   }
@@ -46,14 +59,14 @@ function _checkMemory(key, max, windowMs = _DEFAULT_WINDOW) {
   r.c++; return true
 }
 
-// [MED-02] Cleanup usa a janela armazenada por chave — não mais _DEFAULT_WINDOW fixo.
-// Antes, chaves com windowSecs=3600 eram limpas após 2min, resetando rate limits longos.
+// Cleanup mais agressivo: a cada 30s (era 120s)
+// Reduz acúmulo de entradas em casos de pico de tráfego
 setInterval(() => {
   const now = Date.now()
   for (const [k, v] of _store) {
     if (now - v.t > (v.w ?? _DEFAULT_WINDOW) * 2) _store.delete(k)
   }
-}, 120_000)
+}, 30_000)
 
 // ── Upstash Redis (sliding window INCR + EXPIRE) ──────────────────────────────
 async function _checkRedis(key, max, windowSecs = 60) {
@@ -68,29 +81,28 @@ async function _checkRedis(key, max, windowSecs = 60) {
       method:  'POST',
       headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
       body:    JSON.stringify(pipeline),
-      signal:  AbortSignal.timeout(3_000), // [GOD5-L01] evita hang se Redis for lento
+      signal:  AbortSignal.timeout(3_000), // evita hang se Redis for lento
     })
-    if (!res.ok) return _checkMemory(key, max, windowMs) // fallback mantém janela correta
+    if (!res.ok) return _checkMemory(key, max, windowMs)
     const data = await res.json()
     const count = data?.[0]?.result ?? 1
     return count <= max
   } catch {
-    return _checkMemory(key, max, windowMs) // fallback mantém janela correta
+    return _checkMemory(key, max, windowMs)
   }
 }
 
 // ── API pública ───────────────────────────────────────────────────────────────
+
 /**
- * Verifica se a chave está dentro do limite.
- * Quando bloqueado, registra automaticamente o evento de segurança.
- * @param {string} key   Chave única (ex: `send:127.0.0.1`)
- * @param {number} max   Número máximo de requisições por janela
+ * Verifica se a chave está dentro do limite (janela padrão de 60s).
+ * @param {string} key  Chave única (ex: `send:127.0.0.1`)
+ * @param {number} max  Número máximo de requisições por janela
  * @returns {Promise<boolean>} true se permitido, false se bloqueado
  */
 export async function checkRate(key, max) {
   const allowed = await (USE_REDIS ? _checkRedis(key, max) : _checkMemory(key, max))
   if (!allowed) {
-    // Fire-and-forget: track burst para detectar scan/botnet via alertas
     import('./_alert.js').then(({ trackSecurityEvent }) => {
       trackSecurityEvent('rate_limit_burst', { key }).catch(() => {})
     }).catch(() => {})
@@ -100,7 +112,6 @@ export async function checkRate(key, max) {
 
 /**
  * Verifica se a chave está dentro do limite com janela de tempo customizável.
- * Usa Redis quando disponível (EXPIRE com NX); cai para in-memory respeitando windowSecs.
  * @param {string} key         Chave única (ex: `create-account:127.0.0.1`)
  * @param {number} max         Número máximo de requisições na janela
  * @param {number} windowSecs  Tamanho da janela em segundos (ex: 3600 para 1 hora)
@@ -110,7 +121,7 @@ export async function checkRateWindow(key, max, windowSecs) {
   const windowMs = (windowSecs ?? 60) * 1_000
   const allowed  = await (USE_REDIS
     ? _checkRedis(key, max, windowSecs)
-    : _checkMemory(key, max, windowMs))  // repassa a janela correta ao fallback
+    : _checkMemory(key, max, windowMs))
   if (!allowed) {
     import('./_alert.js').then(({ trackSecurityEvent }) => {
       trackSecurityEvent('rate_limit_burst', { key }).catch(() => {})
@@ -119,4 +130,26 @@ export async function checkRateWindow(key, max, windowSecs) {
   return allowed
 }
 
+/**
+ * Verifica rate limit combinado por IP e por userId.
+ * Bloqueia se QUALQUER um dos dois exceder o limite.
+ * Ideal para endpoints como upload de foto (proteção dupla).
+ *
+ * @param {string} ip          Endereço IP do cliente
+ * @param {string|null} userId UUID do usuário autenticado (ou null para anon)
+ * @param {number} max         Número máximo de requisições na janela
+ * @param {number} windowSecs  Tamanho da janela em segundos
+ * @returns {Promise<boolean>} true se permitido, false se bloqueado por qualquer chave
+ */
+export async function checkRateWithUser(ip, userId, max, windowSecs = 60) {
+  const [ipOk, userOk] = await Promise.all([
+    checkRateWindow(`ip:${ip}`, max, windowSecs),
+    userId
+      ? checkRateWindow(`user:${userId}`, max, windowSecs)
+      : Promise.resolve(true),
+  ])
+  return ipOk && userOk
+}
+
+/** true se Redis está configurado e sendo utilizado */
 export const isRedisEnabled = USE_REDIS

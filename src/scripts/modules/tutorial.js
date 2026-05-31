@@ -1,16 +1,34 @@
 /**
- * tutorial.js — Sistema de Tutorial Interativo do GranaEvo
+ * @module tutorial
+ * @description Sistema de tutorial interativo do GranaEvo.
+ *
+ * Uso:
+ *   import { iniciarTutorial } from './tutorial.js';
+ *   iniciarTutorial();                        // tutorial padrão (Individual)
+ *   iniciarTutorial({ plano: 'Casal' });      // tutorial com steps de convidados
+ *   iniciarTutorial({ isGuest: true });       // tutorial simplificado para convidados
+ *
+ * @typedef {'Individual'|'Casal'|'Família'} PlanoNome
+ *
+ * @typedef {Object} TutorialPerfil
+ * @property {PlanoNome} [plano='Individual'] - Plano do usuário
+ * @property {boolean}   [isGuest=false]      - Se é conta convidada
+ *
+ * @typedef {Object} Passo
+ * @property {string|null}   pagina    - ID da página interna (ex: 'dashboard')
+ * @property {string|null}   [seletor] - Seletor CSS do elemento destacado
+ * @property {string[]}      [seletores] - Múltiplos seletores (união do rect)
+ * @property {string}        titulo    - Título do passo (HTML permitido via ic())
+ * @property {string}        texto     - Texto do passo (HTML)
+ * @property {'centro'|'baixo'|'cima'|'direita'|'esquerda'} pos - Posição do card
+ * @property {boolean}       [ultimo]  - Marca o último passo
  */
 
-// ── Ícone helper ──────────────────────────────────────────────────────────────
+// ── Ícone helper ───────────────────────────────────────────────────────────────
 const ic = (cls) => `<i class="fas ${cls}"></i>`;
 
-// ── Passos do tutorial ─────────────────────────────────────────────────────────
-// seletor   : um único seletor CSS
-// seletores : array de seletores — spotlight cobre o rect unido de todos
-// pos       : 'centro' | 'baixo' | 'cima' | 'direita' | 'esquerda'
-
-const PASSOS = [
+// ── Passos base (comuns a todos os perfis) ─────────────────────────────────────
+const PASSOS_BASE = [
   {
     pagina: null,
     seletor: null,
@@ -19,7 +37,6 @@ const PASSOS = [
     pos: 'centro',
   },
   {
-    // No mobile o card de Saldo fica oculto e aparece no hero — cobre os dois
     pagina: 'dashboard',
     seletores: ['.saldo-hero-mobile', '.cards-grid'],
     titulo: `${ic('fa-chart-line')} Seu Painel Financeiro`,
@@ -82,47 +99,130 @@ const PASSOS = [
     texto: 'Gere relatórios completos com análise por categoria. Perfeito para entender <strong>onde foi seu dinheiro</strong> e planejar o próximo mês.',
     pos: 'baixo',
   },
+];
+
+// ── Passos específicos de planos com convidados ─────────────────────────────────
+const PASSOS_CONVIDADOS = [
   {
     pagina: 'configuracoes',
-    seletor: '.cfg-body',
-    titulo: `${ic('fa-cog')} Personalize Tudo`,
-    texto: 'Aqui você altera <strong>nome e senha</strong>, convida familiares, gerencia sua assinatura e pode reiniciar esse tutorial quando quiser.',
+    seletor: '.cfg-convidados, [data-section="convidados"]',
+    titulo: `${ic('fa-users')} Gerenciar Convidados`,
+    texto: 'No seu plano <strong>Casal/Família</strong>, você pode convidar membros para compartilhar o acesso. Envie o convite por email e compartilhe o código de 6 dígitos.',
     pos: 'cima',
-  },
-  {
-    pagina: null,
-    seletor: null,
-    titulo: `${ic('fa-check-circle')} Tudo pronto!`,
-    texto: 'Parabéns! Agora você domina o GranaEvo. Comece lançando suas primeiras transações e veja sua vida financeira se transformar.',
-    pos: 'centro',
-    ultimo: true,
   },
 ];
 
-// ── Estado ─────────────────────────────────────────────────────────────────────
+// ── Passos para convidados (versão simplificada) ────────────────────────────────
+const PASSOS_GUEST = [
+  {
+    pagina: null,
+    seletor: null,
+    titulo: `${ic('fa-star')} Bem-vindo ao GranaEvo!`,
+    texto: 'Você foi convidado para acessar o GranaEvo! Você tem acesso <strong>visualização</strong> das finanças. Vou te mostrar o que você pode fazer.',
+    pos: 'centro',
+  },
+  {
+    pagina: 'dashboard',
+    seletores: ['.saldo-hero-mobile', '.cards-grid'],
+    titulo: `${ic('fa-chart-line')} Painel Financeiro Compartilhado`,
+    texto: 'Aqui você vê o resumo financeiro da conta que você foi convidado a acessar. Os dados são atualizados em tempo real.',
+    pos: 'baixo',
+  },
+  {
+    pagina: 'transacoes',
+    seletor: '#listaMovimentacoes',
+    titulo: `${ic('fa-list')} Histórico de Transações`,
+    texto: 'Você pode visualizar todas as movimentações. Dependendo das permissões, pode adicionar ou editar transações.',
+    pos: 'cima',
+  },
+  {
+    pagina: 'graficos',
+    seletor: '.graficos-filtros',
+    titulo: `${ic('fa-chart-bar')} Análise Visual`,
+    texto: 'Visualize gráficos e análises financeiras. Uma forma visual de entender o fluxo de dinheiro.',
+    pos: 'baixo',
+  },
+];
+
+// ── Passo final (comum a todos) ─────────────────────────────────────────────────
+const PASSO_FINAL = {
+  pagina: 'configuracoes',
+  seletor: '.cfg-body',
+  titulo: `${ic('fa-cog')} Personalize Tudo`,
+  texto: 'Aqui você altera <strong>nome e senha</strong>, gerencia sua assinatura e pode reiniciar esse tutorial quando quiser.',
+  pos: 'cima',
+};
+
+const PASSO_CONCLUSAO = {
+  pagina: null,
+  seletor: null,
+  titulo: `${ic('fa-check-circle')} Tudo pronto!`,
+  texto: 'Parabéns! Agora você domina o GranaEvo. Comece lançando suas primeiras transações e veja sua vida financeira se transformar.',
+  pos: 'centro',
+  ultimo: true,
+};
+
+/**
+ * Monta a sequência de passos com base no perfil do usuário.
+ * @param {TutorialPerfil} perfil - Perfil do usuário
+ * @returns {Passo[]} Sequência de passos para o tutorial
+ */
+function montarPassos(perfil) {
+  const { plano = 'Individual', isGuest = false } = perfil;
+
+  // Tutorial simplificado para convidados
+  if (isGuest) {
+    return [...PASSOS_GUEST, PASSO_FINAL, PASSO_CONCLUSAO];
+  }
+
+  // Tutorial completo + steps de convidados para planos Casal/Família
+  const passos = [...PASSOS_BASE];
+  if (plano === 'Casal' || plano === 'Família') {
+    passos.push(...PASSOS_CONVIDADOS);
+  }
+  passos.push(PASSO_FINAL, PASSO_CONCLUSAO);
+  return passos;
+}
+
+// ── Estado ──────────────────────────────────────────────────────────────────────
+let _passos    = [];
 let _passo     = 0;
 let _backdrop  = null;
 let _spotlight = null;
 let _card      = null;
 let _ativo     = false;
 
-// ── API pública ────────────────────────────────────────────────────────────────
-export function iniciarTutorial() {
+// ── API pública ─────────────────────────────────────────────────────────────────
+
+/**
+ * Inicia o tutorial interativo.
+ * @param {TutorialPerfil} [perfil={}] - Perfil do usuário para personalizar os steps
+ */
+export function iniciarTutorial(perfil = {}) {
   if (_ativo) return;
-  _ativo = true;
-  _passo = 0;
+  _ativo  = true;
+  _passo  = 0;
+  _passos = montarPassos(perfil);
   _montar();
   _ir(0);
 }
 
-// ── Montagem / desmontagem ─────────────────────────────────────────────────────
+/**
+ * Reinicia o tutorial do zero.
+ * @param {TutorialPerfil} [perfil={}] - Perfil do usuário
+ */
+export function reiniciarTutorial(perfil = {}) {
+  _desmontar();
+  setTimeout(() => iniciarTutorial(perfil), 300);
+}
+
+// ── Montagem / desmontagem ──────────────────────────────────────────────────────
 function _montar() {
   _backdrop  = _criarEl('div', 'tut-backdrop');
   _spotlight = _criarEl('div', 'tut-spotlight tut-spot-oculto');
   _card      = _criarEl('div', 'tut-card');
   document.body.append(_backdrop, _spotlight, _card);
 
-  // Bloqueia scroll/swipe do usuário enquanto o tutorial está ativo
   _backdrop.addEventListener('touchstart', _pararEvento, { passive: false });
   _backdrop.addEventListener('touchmove',  _pararEvento, { passive: false });
   document.addEventListener('wheel', _pararRoda, { passive: false });
@@ -150,20 +250,18 @@ function _desmontar() {
 function _pararEvento(e) { e.preventDefault(); }
 function _pararRoda(e)   { if (!e.target.closest('.tut-card')) e.preventDefault(); }
 
-// ── Navegação entre passos ─────────────────────────────────────────────────────
+// ── Navegação entre passos ──────────────────────────────────────────────────────
 async function _ir(idx) {
   if (!_ativo) return;
-  const p = PASSOS[idx];
+  const p = _passos[idx];
   _passo = idx;
 
-  // Navegar para a página se necessário
   const paginaAtual = document.querySelector('.page.active')?.id?.replace('Page', '');
   if (p.pagina && paginaAtual !== p.pagina) {
     _navegarPara(p.pagina);
     await _esperar(320);
   }
 
-  // Resolver elemento representativo e rect do spotlight
   let alvo   = null;
   let spRect = null;
 
@@ -177,14 +275,12 @@ async function _ir(idx) {
     alvo = document.querySelector(p.seletor);
   }
 
-  // Scroll para o elemento e recalcular rect após scroll
   if (alvo) {
     alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
     await _esperar(380);
     spRect = p.seletores ? _unionRect(p.seletores) : alvo.getBoundingClientRect();
   }
 
-  // Posicionar spotlight
   if (spRect && spRect.height > 0) {
     _posSpotlight(spRect);
     _spotlight.classList.remove('tut-spot-oculto');
@@ -192,13 +288,12 @@ async function _ir(idx) {
     _spotlight.classList.add('tut-spot-oculto');
   }
 
-  // Renderizar e posicionar card
   _renderCard(p, idx);
   await _esperar(12);
   _posCard(spRect, p.pos);
 }
 
-// ── Spotlight ──────────────────────────────────────────────────────────────────
+// ── Spotlight ───────────────────────────────────────────────────────────────────
 function _posSpotlight(rect) {
   const pad = 10;
   Object.assign(_spotlight.style, {
@@ -210,7 +305,6 @@ function _posSpotlight(rect) {
   });
 }
 
-// Calcula o rect que envolve todos os elementos visiveis dos seletores
 function _unionRect(selectors) {
   let top = Infinity, left = Infinity, bottom = -Infinity, right = -Infinity;
   let any = false;
@@ -228,29 +322,30 @@ function _unionRect(selectors) {
   return any ? { top, left, bottom, right, width: right - left, height: bottom - top } : null;
 }
 
-// ── Card ───────────────────────────────────────────────────────────────────────
+// ── Card ────────────────────────────────────────────────────────────────────────
 function _renderCard(p, idx) {
-  const total   = PASSOS.length;
+  const total    = _passos.length;
   const primeiro = idx === 0;
   const ultimo   = idx === total - 1 || p.ultimo;
 
-  const dots = PASSOS.map((_, i) => {
+  // Indicador de progresso: dots com estados (feito/ativo/pendente)
+  const dots = _passos.map((_, i) => {
     const cls = i < idx ? 'tut-dot tut-done' : i === idx ? 'tut-dot tut-ativo' : 'tut-dot';
-    return `<span class="${cls}"></span>`;
+    return `<span class="${cls}" aria-hidden="true"></span>`;
   }).join('');
 
   _card.innerHTML = `
     <div class="tut-top">
-      <span class="tut-badge">Passo ${idx + 1} de ${total}</span>
-      <div class="tut-dots">${dots}</div>
+      <span class="tut-badge" aria-label="Passo ${idx + 1} de ${total}">Passo ${idx + 1} de ${total}</span>
+      <div class="tut-dots" role="progressbar" aria-valuenow="${idx + 1}" aria-valuemin="1" aria-valuemax="${total}">${dots}</div>
     </div>
     <h3 class="tut-titulo">${p.titulo}</h3>
     <p class="tut-texto">${p.texto}</p>
     <div class="tut-acoes">
-      <button class="tut-pular-tudo" type="button">Pular tutorial</button>
+      <button class="tut-pular-tudo" type="button" aria-label="Pular tutorial">Pular tutorial</button>
       <div class="tut-nav">
-        <button class="tut-voltar" type="button" ${primeiro ? 'disabled' : ''}>Voltar</button>
-        <button class="tut-avancar" type="button">${ultimo ? 'Concluir' : 'Prosseguir'}</button>
+        <button class="tut-voltar" type="button" ${primeiro ? 'disabled aria-disabled="true"' : ''} aria-label="Passo anterior">Voltar</button>
+        <button class="tut-avancar" type="button" aria-label="${ultimo ? 'Concluir tutorial' : 'Próximo passo'}">${ultimo ? 'Concluir' : 'Prosseguir'}</button>
       </div>
     </div>
   `;
@@ -258,6 +353,15 @@ function _renderCard(p, idx) {
   _card.querySelector('.tut-pular-tudo').onclick = _desmontar;
   _card.querySelector('.tut-voltar').onclick     = () => { if (!primeiro) _ir(_passo - 1); };
   _card.querySelector('.tut-avancar').onclick    = () => { ultimo ? _desmontar() : _ir(_passo + 1); };
+
+  // Navegação por teclado (Escape = pular, ← → = navegar)
+  _card.onkeydown = (e) => {
+    if (e.key === 'Escape')     { _desmontar(); return; }
+    if (e.key === 'ArrowRight' && !ultimo)  { _ir(_passo + 1); return; }
+    if (e.key === 'ArrowLeft'  && !primeiro){ _ir(_passo - 1); return; }
+  };
+  _card.setAttribute('tabindex', '0');
+  _card.focus();
 }
 
 function _posCard(spRect, pos) {
@@ -274,7 +378,6 @@ function _posCard(spRect, pos) {
     _card.style.right    = GAP + 'px';
     _card.style.width    = (vw - GAP * 2) + 'px';
 
-    // Se o elemento destacado está na metade inferior da tela, card vai pro topo
     const elCenter = spRect ? (spRect.top + spRect.height / 2) : 0;
     if (spRect && elCenter > window.innerHeight * 0.48) {
       _card.style.top    = (GAP + 8) + 'px';
@@ -286,12 +389,12 @@ function _posCard(spRect, pos) {
     return;
   }
 
-  // ── Desktop ──────────────────────────────────────────────────────────────────
-  const CW  = 340;
+  // ── Desktop ────────────────────────────────────────────────────────────────
+  const CW    = 340;
   const GAP_D = 20;
-  const vw  = window.innerWidth;
-  const vh  = window.innerHeight;
-  const ch  = _card.offsetHeight || 210;
+  const vw    = window.innerWidth;
+  const vh    = window.innerHeight;
+  const ch    = _card.offsetHeight || 210;
 
   let top = 0, left = 0, seta = '';
 
@@ -334,14 +437,14 @@ function _posCard(spRect, pos) {
   if (seta) _card.classList.add(seta);
 }
 
-// ── Navegação entre seções ─────────────────────────────────────────────────────
+// ── Navegação entre seções ──────────────────────────────────────────────────────
 function _navegarPara(pagina) {
   const btn = document.querySelector(`[data-page="${pagina}"]`);
   if (btn) { btn.click(); return; }
   if (pagina === 'configuracoes') document.getElementById('mobileSettingsBtn')?.click();
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────────
 function _criarEl(tag, cls) {
   const el = document.createElement(tag);
   el.className = cls;

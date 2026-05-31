@@ -8,7 +8,8 @@
  *   - Fire-and-forget: nunca bloqueia o request principal
  *   - Alerta exatamente na threshold (não a cada evento depois)
  *   - Degradação graciosa: sem Redis/Resend → silêncio
- *   - Janelas deslizantes por minuto agrupadas no threshold.window
+ *   - Dead-letter queue: alertas com falha são salvos no Redis para retry
+ *   - Log estruturado em cada evento para rastreabilidade no Vercel
  */
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL
@@ -17,10 +18,9 @@ const RESEND_KEY  = process.env.RESEND_API_KEY
 const ALERT_EMAILS = (process.env.SECURITY_ALERT_EMAIL ?? '')
   .split(',').map(e => e.trim()).filter(Boolean)
 
-// [GOD4-002] Emails pessoais removidos do código-fonte — usar SECURITY_ALERT_EMAIL env var.
-// Se a env var não estiver configurada, alertas são silenciosos (sem envio de email).
-// Isso é seguro: logs no Vercel e Supabase ainda registram todos os eventos.
 const ALERT_RECIPIENTS = ALERT_EMAILS
+const DEAD_LETTER_KEY  = 'alerts:dead_letter'
+const DEAD_LETTER_TTL  = 86_400 // 24 horas em segundos
 
 // Tipo de evento → { quantos eventos na janela disparam alerta, janela em segundos }
 const THRESHOLDS = {
@@ -41,6 +41,58 @@ const LABELS = {
   proxy_bypass:     '🔴 Tentativa de Acesso Direto às Edge Functions (bypass de proxy Vercel)',
 }
 
+// ── Dead-letter queue ─────────────────────────────────────────────────────────
+
+/** Salva alerta que falhou no Redis para retry posterior. */
+async function _saveDeadLetter(eventType, count, meta) {
+  if (!REDIS_URL || !REDIS_TOKEN) return
+  try {
+    const payload = JSON.stringify({ eventType, count, meta, timestamp: Date.now() })
+    await fetch(`${REDIS_URL}/pipeline`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify([
+        ['LPUSH', DEAD_LETTER_KEY, payload],
+        ['EXPIRE', DEAD_LETTER_KEY, DEAD_LETTER_TTL],
+        ['LTRIM', DEAD_LETTER_KEY, 0, 49], // máximo 50 itens no dead-letter
+      ]),
+      signal: AbortSignal.timeout(2_000),
+    })
+  } catch { /* silêncio — dead-letter não quebra o fluxo */ }
+}
+
+/** Tenta reenviar alertas do dead-letter queue (máx 5 por chamada). */
+async function _retryDeadLetter() {
+  if (!REDIS_URL || !REDIS_TOKEN || !RESEND_KEY || ALERT_RECIPIENTS.length === 0) return
+  try {
+    // Lê até 5 itens sem remover (LRANGE não é destrutivo)
+    const lrangeRes = await fetch(`${REDIS_URL}/lrange/${DEAD_LETTER_KEY}/0/4`, {
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+      signal:  AbortSignal.timeout(2_000),
+    })
+    if (!lrangeRes.ok) return
+    const { result: items } = await lrangeRes.json()
+    if (!Array.isArray(items) || items.length === 0) return
+
+    for (const raw of items) {
+      try {
+        const { eventType, count, meta } = JSON.parse(raw)
+        const delivered = await _sendAlert(eventType, count, meta, true)
+        if (delivered) {
+          // Remove exatamente este item do dead-letter
+          await fetch(`${REDIS_URL}/lrem/${DEAD_LETTER_KEY}/1/${encodeURIComponent(raw)}`, {
+            method:  'GET',
+            headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+            signal:  AbortSignal.timeout(1_000),
+          })
+        }
+      } catch { /* falha silenciosa por item */ }
+    }
+  } catch { /* silêncio */ }
+}
+
+// ── Core ──────────────────────────────────────────────────────────────────────
+
 /**
  * Registra um evento de segurança e envia alerta se o threshold for atingido.
  * Chamada fire-and-forget — nunca aguarde o retorno desta função.
@@ -51,12 +103,15 @@ const LABELS = {
 export async function trackSecurityEvent(eventType, meta = {}) {
   if (!REDIS_URL || !REDIS_TOKEN) return
 
-  const cfg     = THRESHOLDS[eventType]
+  const cfg = THRESHOLDS[eventType]
   if (!cfg) return
 
-  const window  = cfg.window
-  const bucket  = Math.floor(Date.now() / 1000 / window) // bucket por janela
-  const key     = `sec:alert:${eventType}:${bucket}`
+  // Tenta reenviar alertas do dead-letter em background (sem bloquear)
+  _retryDeadLetter().catch(() => {})
+
+  const window = cfg.window
+  const bucket = Math.floor(Date.now() / 1000 / window) // bucket por janela
+  const key    = `sec:alert:${eventType}:${bucket}`
 
   try {
     const pipeline = [
@@ -74,18 +129,40 @@ export async function trackSecurityEvent(eventType, meta = {}) {
     const data  = await res.json()
     const count = data?.[0]?.result ?? 0
 
-    // Alerta exatamente quando atinge o threshold — evita spam a cada evento seguinte
+    // Log estruturado — visível no Vercel Functions Logs
+    console.log(JSON.stringify({
+      level:     'security',
+      eventType,
+      count,
+      threshold: cfg.count,
+      window:    cfg.window,
+      meta,
+      timestamp: new Date().toISOString(),
+    }))
+
+    // Alerta exatamente quando atinge o threshold — evita spam
     if (count === cfg.count) {
-      await _sendAlert(eventType, count, meta)
+      const delivered = await _sendAlert(eventType, count, meta, false)
+      if (!delivered) {
+        await _saveDeadLetter(eventType, count, meta)
+      }
     }
   } catch { /* silêncio — monitoramento nunca quebra o fluxo principal */ }
 }
 
-async function _sendAlert(eventType, count, meta) {
-  if (!RESEND_KEY || ALERT_RECIPIENTS.length === 0) return
+/**
+ * Envia email de alerta via Resend.
+ * @param {string}  eventType   Tipo de evento de segurança
+ * @param {number}  count       Quantidade de ocorrências
+ * @param {object}  meta        Metadados do evento
+ * @param {boolean} isRetry     Se true, vem do dead-letter (inclui sufixo no subject)
+ * @returns {Promise<boolean>}  true se o email foi enviado com sucesso
+ */
+async function _sendAlert(eventType, count, meta, isRetry = false) {
+  if (!RESEND_KEY || ALERT_RECIPIENTS.length === 0) return false
 
   const label   = LABELS[eventType] ?? eventType
-  const subject = `[GranaEvo Security] ${label}`
+  const subject = `[GranaEvo Security]${isRetry ? ' [RETRY]' : ''} ${label}`
   const metaStr = Object.entries(meta)
     .map(([k, v]) => `  ${k}: ${v}`)
     .join('\n') || '  (sem metadados)'
@@ -97,6 +174,7 @@ async function _sendAlert(eventType, count, meta) {
     `Descrição:   ${label}`,
     `Ocorrências: ${count} na janela de ${THRESHOLDS[eventType]?.window ?? '?'}s`,
     `Timestamp:   ${new Date().toISOString()}`,
+    isRetry ? `Status:      REENVIO (falha original na dead-letter queue)` : '',
     ``,
     `Metadados:`,
     metaStr,
@@ -107,10 +185,10 @@ async function _sendAlert(eventType, count, meta) {
     `  Redis (Upstash): https://console.upstash.com`,
     ``,
     `— GranaEvo Security Monitor`,
-  ].join('\n')
+  ].filter(l => l !== '').join('\n')
 
   try {
-    await fetch('https://api.resend.com/emails', {
+    const emailRes = await fetch('https://api.resend.com/emails', {
       method:  'POST',
       headers: {
         'Authorization': `Bearer ${RESEND_KEY}`,
@@ -124,5 +202,17 @@ async function _sendAlert(eventType, count, meta) {
       }),
       signal: AbortSignal.timeout(5_000),
     })
-  } catch { /* falha no envio não quebra nada */ }
+
+    const delivered = emailRes.ok
+    console.log(JSON.stringify({
+      level:     'security_alert',
+      eventType,
+      delivered,
+      isRetry,
+      timestamp: new Date().toISOString(),
+    }))
+    return delivered
+  } catch {
+    return false
+  }
 }

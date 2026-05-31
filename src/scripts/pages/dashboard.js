@@ -2194,10 +2194,27 @@ function atualizarDashboardResumo() {
     });
 
     // ── % de variação ─────────────────────────────────────────────────────
-    function _pct(atual, anterior) {
-        if (anterior === 0) return atual > 0 ? '+100%' : '—';
-        const v = ((atual - anterior) / anterior * 100).toFixed(1);
-        return (parseFloat(v) >= 0 ? '+' : '') + v + '%';
+    /**
+     * Formata variação percentual com ▲/▼ e define classe CSS no elemento destino.
+     * @param {number} atual    - Valor do mês atual
+     * @param {number} anterior - Valor do mês anterior
+     * @param {HTMLElement} [el] - Elemento onde aplicar a classe de cor
+     * @returns {string} Texto formatado com seta e percentual
+     */
+    function _pct(atual, anterior, el) {
+        if (anterior === 0) {
+            if (el) { el.classList.remove('pct--up', 'pct--down', 'pct--neutral'); el.classList.add('pct--neutral'); }
+            return atual > 0 ? '▲ 100%' : '—';
+        }
+        const pct = ((atual - anterior) / anterior * 100);
+        const abs = Math.abs(pct).toFixed(1);
+        if (el) {
+            el.classList.remove('pct--up', 'pct--down', 'pct--neutral');
+            el.classList.add(pct > 0.5 ? 'pct--up' : pct < -0.5 ? 'pct--down' : 'pct--neutral');
+        }
+        if (pct > 0.5)  return `▲ ${abs}%`;
+        if (pct < -0.5) return `▼ ${abs}%`;
+        return `≈ ${abs}%`;
     }
 
     const saldo = saldoTotal;
@@ -2238,9 +2255,9 @@ function atualizarDashboardResumo() {
     const elPctSld  = document.getElementById('percentSaldo');
     const nomeMesAnt = _NOMES_MESES_DASH[mesAnterior - 1];
 
-    if (elPctEnt) elPctEnt.textContent = `${_pct(totalEntradas, entAnt)} vs ${nomeMesAnt}`;
-    if (elPctSai) elPctSai.textContent = `${_pct(totalSaidas, saiAnt)} vs ${nomeMesAnt}`;
-    if (elPctSld) elPctSld.textContent = 'Saldo acumulado total';
+    if (elPctEnt) elPctEnt.textContent = `${_pct(totalEntradas, entAnt, elPctEnt)} vs ${nomeMesAnt}`;
+    if (elPctSai) elPctSai.textContent = `${_pct(totalSaidas,  saiAnt, elPctSai)} vs ${nomeMesAnt}`;
+    if (elPctSld) { elPctSld.textContent = 'Saldo acumulado total'; elPctSld.classList.add('pct--neutral'); }
 
     // ── Card labels com mês quando em modo histórico ──────────────────────
     const labelEntEl = document.querySelector('#cardEntradasDashboard .card-label');

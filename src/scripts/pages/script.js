@@ -162,13 +162,22 @@ const TESTIMONIALS_DATA = deepFreeze([
 // ==========================================
 // LOADING SCREEN
 // ==========================================
-window.addEventListener('load', () => {
+function hideLoadingScreen() {
     const loadingScreen = document.getElementById('loadingScreen');
     if (!loadingScreen) return;
-    setTimeout(() => {
-        loadingScreen.classList.add('hidden');
-    }, 1200);
-});
+    loadingScreen.classList.add('hidden');
+    // Remove do DOM após a transição CSS terminar — não bloqueia o layout
+    loadingScreen.addEventListener('transitionend', () => loadingScreen.remove(), { once: true });
+    // Fallback: remove após 800ms caso transitionend não dispare (ex: display:none sem transição)
+    setTimeout(() => loadingScreen?.remove(), 800);
+}
+
+// Usa DOMContentLoaded + rAF para garantir que o browser pintou antes de esconder
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(hideLoadingScreen));
+} else {
+    requestAnimationFrame(hideLoadingScreen);
+}
 
 // ==========================================
 // SCROLL PROGRESS BAR

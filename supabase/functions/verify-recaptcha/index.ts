@@ -100,6 +100,7 @@ Deno.serve(async (req: Request) => {
           secret:   secretKey,
           response: token.trim(),
         }),
+        signal: AbortSignal.timeout(5_000), // [PERF] 5s — Google reCAPTCHA geralmente < 1s
       }
     )
 

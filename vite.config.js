@@ -1,9 +1,106 @@
 import { defineConfig } from 'vite';
+import { visualizer } from 'rollup-plugin-visualizer';
+import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig({
-  // Arquivos de public/ são copiados para dist/ na raiz.
-  // Referências em HTML/CSS usam /assets/... (sem o prefixo /public/).
+export default defineConfig(({ mode }) => ({
   publicDir: 'public',
+
+  plugins: [
+    // Gera dist/stats.html com mapa visual do bundle (tamanho gzip + brotli por módulo)
+    visualizer({
+      filename:   'dist/stats.html',
+      gzipSize:   true,
+      brotliSize: true,
+      open:       false,
+    }),
+
+    // PWA: Service Worker + Web App Manifest
+    // Ativa instalação como app nativo em iOS/Android/Desktop
+    VitePWA({
+      registerType: 'autoUpdate',
+      // Inclui o SW no build sem bloquear o carregamento inicial
+      injectRegister: 'script-defer',
+      // assets do SW ficam em /sw.js na raiz (mais fácil de referenciar)
+      filename: 'sw.js',
+      manifest: {
+        name:             'GranaEvo — Controle Financeiro',
+        short_name:       'GranaEvo',
+        description:      'Domine suas finanças com inteligência. Controle gastos, metas e investimentos.',
+        theme_color:      '#10b981',
+        background_color: '#0a0b14',
+        display:          'standalone',
+        orientation:      'portrait-primary',
+        lang:             'pt-BR',
+        start_url:        '/dashboard.html',
+        scope:            '/',
+        id:               '/',
+        icons: [
+          {
+            src:   '/assets/icons/pwa-192.png',
+            sizes: '192x192',
+            type:  'image/png',
+            purpose: 'any',
+          },
+          {
+            src:   '/assets/icons/pwa-512.png',
+            sizes: '512x512',
+            type:  'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+        shortcuts: [
+          {
+            name:       'Dashboard',
+            short_name: 'Home',
+            url:        '/dashboard.html',
+            icons:      [{ src: '/assets/icons/pwa-192.png', sizes: '192x192' }],
+          },
+        ],
+        categories: ['finance', 'productivity'],
+      },
+      workbox: {
+        // Estratégia: cache assets estáticos (JS/CSS/imagens) forever, HTML network-first
+        globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff2}'],
+        // Não cachear páginas de auth — sempre buscar do servidor
+        navigateFallbackDenylist: [/^\/login/, /^\/api\//],
+        runtimeCaching: [
+          {
+            // Assets de fontes do Google: cache por 1 ano
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler:    'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Font Awesome CDN: cache por 30 dias
+            urlPattern: /^https:\/\/cdnjs\.cloudflare\.com\/.*/i,
+            handler:    'CacheFirst',
+            options: {
+              cacheName: 'cdnjs-cache',
+              expiration: { maxEntries: 5, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Supabase Storage (avatares): stale-while-revalidate
+            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
+            handler:    'StaleWhileRevalidate',
+            options: {
+              cacheName: 'supabase-storage-cache',
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 },
+            },
+          },
+        ],
+      },
+      // Dev mode: sem SW em desenvolvimento (evita conflito com HMR)
+      devOptions: {
+        enabled: false,
+      },
+    }),
+  ],
 
   build: {
     // [CSP-FIX] Desabilita polyfill de modulepreload que injeta scripts data:URI
@@ -11,22 +108,24 @@ export default defineConfig({
     modulePreload: { polyfill: false },
     rollupOptions: {
       input: {
-        main:           'index.html',
-        planos:         'planos.html',
-        login:          'login.html',
-        privacidade:    'privacidade.html',
-        dashboard:      'dashboard.html',
-        convidados:     'convidados.html',
+        main:             'index.html',
+        planos:           'planos.html',
+        login:            'login.html',
+        privacidade:      'privacidade.html',
+        dashboard:        'dashboard.html',
+        convidados:       'convidados.html',
         atualizarplano:   'atualizarplano.html',
         termos:           'termos.html',
         'aceitar-termos': 'aceitar-termos.html',
       },
       output: {
-        // Supabase JS em chunk próprio — cacheado separado entre páginas.
-        // Vite 8 (Rolldown) exige função em vez de objeto para manualChunks.
         manualChunks: (id) => {
-          // supabase-client.js (wrapper de configuração) entra no mesmo chunk
-          // do vendor para evitar chunk separado de 0.6 kB que pode 404 em CDN.
+          // Chart.js em chunk próprio — compartilhado entre dashboard, graficos, relatorios
+          if (id.includes('node_modules/chart.js')) {
+            return 'vendor-charts';
+          }
+          // Supabase SDK em chunk próprio — cacheado separado entre páginas.
+          // supabase-client.js entra junto para evitar chunk de 0.6 kB que pode 404.
           if (
             id.includes('@supabase/supabase-js') ||
             id.includes('node_modules/@supabase') ||
@@ -37,24 +136,30 @@ export default defineConfig({
         },
       },
     },
-    target: 'es2020',
+    // esnext: tree shaking e output mais compacto que es2020
+    target: 'esnext',
     minify: 'terser',
     terserOptions: {
       compress: {
-        // Remove todos os console.* em produção — evita vazamento de logs
-        drop_console: true,
+        drop_console:  true,
         drop_debugger: true,
-        passes: 2,
+        passes:        2,
+        pure_getters:  true,
+        // Remove chamadas de log residuais
+        pure_funcs: ['console.log', 'console.info', 'console.debug'],
       },
       format: {
         comments: false,
       },
     },
     sourcemap: false,
-    chunkSizeWarningLimit: 600,
+    // Alerta quando qualquer chunk ultrapassa 200 KB comprimido — disciplina de bundle
+    chunkSizeWarningLimit: 200,
+    // Mostra tamanho gzip de cada chunk no output do build
+    reportCompressedSize: true,
     cssCodeSplit: true,
-    // Vite 8 usa LightningCSS por padrão — mais estrito que esbuild com !important
-    // em múltiplos valores de transition. Mantém esbuild para compatibilidade.
+    // Vite 8 usa LightningCSS por padrão — mantém esbuild para compatibilidade
+    // com !important em múltiplos valores de transition.
     cssMinify: 'esbuild',
   },
 
@@ -68,4 +173,4 @@ export default defineConfig({
     port: 4173,
     host: true,
   },
-});
+}));
