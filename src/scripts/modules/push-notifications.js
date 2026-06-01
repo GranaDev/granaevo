@@ -20,7 +20,8 @@
 // VITE_VAPID_PUBLIC_KEY no .env como variável pública (não é segredo)
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? ''
 
-const PUSH_SUBSCRIBE_URL = '/api/push-subscribe'
+// Consolidado em /api/user-data para respeitar o limite de 12 funções Vercel Hobby
+const PUSH_SUBSCRIBE_URL = '/api/user-data'
 const SESSION_KEY        = 'ge:push_subscribed'
 
 /** true se o browser suporta Web Push */
@@ -93,14 +94,14 @@ export async function unsubscribePush(authToken) {
     const subscription = await registration.pushManager.getSubscription()
     if (!subscription) return
 
-    // Notificar servidor primeiro
+    // Notificar servidor primeiro (POST com action — /api/user-data não aceita DELETE)
     await fetch(PUSH_SUBSCRIBE_URL, {
-      method:  'DELETE',
+      method:  'POST',
       headers: {
         'Content-Type':  'application/json',
         'Authorization': `Bearer ${authToken}`,
       },
-      body: JSON.stringify({ endpoint: subscription.endpoint }),
+      body: JSON.stringify({ action: 'push-unsubscribe', endpoint: subscription.endpoint }),
     })
 
     // Depois cancelar no browser
@@ -124,6 +125,7 @@ async function _saveSubscription(subscription, authToken) {
       'Authorization': `Bearer ${authToken}`,
     },
     body: JSON.stringify({
+      action:    'push-subscribe',
       endpoint,
       p256dh:    keys.p256dh,
       auth:      keys.auth,

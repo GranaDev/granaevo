@@ -1,10 +1,14 @@
-// /api/user-data.js — Proxy unificado: GET (carregar) + POST (salvar) + backup
-// Consolida get-user-data.js + save-user-data.js + user-data-backup em uma única
-// Serverless Function para respeitar o limite de 12 funções do plano Hobby da Vercel.
+// /api/user-data.js — Proxy unificado: GET (carregar) + POST (salvar) + backup + push
+// Consolida múltiplas operações em uma única Serverless Function
+// para respeitar o limite de 12 funções do plano Hobby da Vercel.
 //
-// Rotas de backup (sem endpoint extra):
-//   GET  ?backup=1          → lista últimos 5 snapshots (metadados)
-//   POST { action:"restore", snapshot_date:"YYYY-MM-DD" } → restaura snapshot
+// Rotas de backup:
+//   GET  ?backup=1                               → lista snapshots
+//   POST { action:"restore", snapshot_date }     → restaura snapshot
+//
+// Rotas de push notifications:
+//   POST { action:"push-subscribe", endpoint, p256dh, auth, userAgent? }
+//   POST { action:"push-unsubscribe", endpoint }
 
 import { logger } from './_logger.js'
 
@@ -13,6 +17,7 @@ const PATH = '/api/user-data'
 const GET_EDGE_URL         = process.env.SUPABASE_GET_DATA_EDGE_URL;
 const SAVE_EDGE_URL        = process.env.SUPABASE_EDGE_URL;
 const BACKUP_EDGE_URL      = process.env.SUPABASE_BACKUP_EDGE_URL;
+const SUPABASE_URL         = process.env.SUPABASE_URL ?? '';
 const SUPABASE_ANON_KEY    = process.env.SUPABASE_ANON_KEY;
 const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN;
 const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF;
@@ -274,6 +279,66 @@ export default async function handler(req, res) {
         return res.status(edgeRes.status)
                   .setHeader('Content-Type', 'application/json')
                   .send(await edgeRes.text());
+    }
+
+    // ── POST { action:"push-subscribe" | "push-unsubscribe" } ──
+    if (parsed?.action === 'push-subscribe' || parsed?.action === 'push-unsubscribe') {
+        const isSubscribe = parsed.action === 'push-subscribe'
+        const efName      = isSubscribe ? 'save-push-subscription' : 'delete-push-subscription'
+        const efUrl       = `${SUPABASE_URL}/functions/v1/${efName}`
+
+        if (!SUPABASE_URL) return res.status(503).json({ error: 'Serviço indisponível' })
+
+        // Rate limit específico para push (mais restritivo — operação de baixa frequência)
+        if (!checkRL(`push:${ip}`, 10)) {
+            res.setHeader('Retry-After', '60')
+            return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
+        }
+
+        // Validação dos campos obrigatórios
+        if (typeof parsed?.endpoint !== 'string' || !parsed.endpoint.startsWith('https://')) {
+            return res.status(400).json({ error: 'endpoint inválido' })
+        }
+        if (isSubscribe) {
+            if (typeof parsed.p256dh !== 'string' || parsed.p256dh.length < 10)
+                return res.status(400).json({ error: 'p256dh inválido' })
+            if (typeof parsed.auth !== 'string' || parsed.auth.length < 10)
+                return res.status(400).json({ error: 'auth inválido' })
+        }
+
+        // Payload seguro — anti-mass-assignment
+        const safePayload = isSubscribe
+            ? {
+                endpoint:  parsed.endpoint.slice(0, 512),
+                p256dh:    parsed.p256dh.slice(0, 256),
+                auth:      parsed.auth.slice(0, 64),
+                userAgent: typeof parsed.userAgent === 'string' ? parsed.userAgent.slice(0, 256) : undefined,
+              }
+            : { endpoint: parsed.endpoint.slice(0, 512) }
+
+        let efRes
+        try {
+            efRes = await fetch(efUrl, {
+                method:  'POST',
+                headers: {
+                    'Content-Type':    'application/json',
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                },
+                body:   JSON.stringify(safePayload),
+                signal: AbortSignal.timeout(10_000),
+            })
+        } catch (e) {
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502
+            logger.error('gateway_error', PATH, { action: parsed.action, ip, error: e?.message })
+            return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' })
+        }
+
+        return res.status(efRes.status)
+                  .setHeader('Content-Type', 'application/json')
+                  .send(await efRes.text())
     }
 
     // ── POST (salvar dados): valida profiles ──────────────────
