@@ -80,7 +80,7 @@ export default defineConfig(({ mode }) => ({
         // Imagens, woff2, CDN EXCLUÍDOS: browser HTTP cache é suficiente e
         //   não tem risco de resposta opaca corrompida.
         globPatterns: ['assets/**/*.{js,css}'],
-        globIgnores:  ['workbox-*.js', 'sw.js'],
+        globIgnores:  ['workbox-*.js', 'sw.js', 'stats.html'],
 
         // Sem navigate fallback (não interceptar navegação HTML)
         navigateFallback: null,
