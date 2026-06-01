@@ -138,6 +138,35 @@
     --bp-lg:  1024px;
     --bp-xl:  1280px;
     --bp-2xl: 1536px;
+
+    /* ── Aliases de compatibilidade — consumidos por dashboard.css e landing ── */
+    --primary:          var(--color-primary);
+    --primary-dark:     var(--color-primary-dark);
+    --primary-light:    var(--color-primary-light);
+    --neon-green:       var(--color-primary-neon);
+    --dark:             var(--color-bg);
+    --dark-card:        var(--color-bg-card);
+    --dark-soft:        var(--color-bg-soft);
+    --text-primary:     var(--color-text);
+    --text-secondary:   var(--color-text-lighter);
+    --text-muted:       var(--color-text-faint);
+    --gray:             var(--color-text-faint);
+    --gray-light:       var(--color-text-muted);
+    --gray-lighter:     var(--color-text-lighter);
+    --white:            #ffffff;
+    --danger:           var(--color-danger);
+    --warning:          var(--color-warning);
+    --success:          var(--color-success);
+    --border:           var(--color-border);
+    --secondary:        var(--color-bg-soft);
+    --secondary-light:  var(--color-bg-elevated);
+    --accent:           #6c63ff;
+    --accent-hover:     #8a84ff;
+    --backdrop:         rgba(30, 33, 48, 0.95);
+    --gradient-primary: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+    --gradient-dark:    linear-gradient(135deg, var(--color-bg-soft), var(--color-bg-elevated));
+    --neon-glow:        var(--shadow-neon);
+    --neon-glow-strong: var(--shadow-neon-strong);
   }
 
   /* ── Preferência: sem movimento ─────────────────────────────── */

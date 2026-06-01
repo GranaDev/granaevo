@@ -2,6 +2,9 @@
 // Controlado pelo parâmetro `step` no body: "send" | "verify_code" | "reset_password"
 
 import { checkRate } from './_rate-limit.js'
+import { logger }    from './_logger.js'
+
+const PATH = '/api/reset-password'
 
 const SUPABASE_URL = process.env.SUPABASE_URL    ?? ''
 const ANON_KEY     = process.env.SUPABASE_ANON_KEY ?? ''
@@ -65,6 +68,7 @@ export default async function handler(req, res) {
 
   const rateMax = RATE_LIMITS[step] ?? 5
   if (!(await checkRate(`reset-pw-${step}:${ip}`, rateMax))) {
+    logger.warn('rate_limit', PATH, { ip, step })
     res.setHeader('Retry-After', '60')
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
@@ -94,5 +98,8 @@ export default async function handler(req, res) {
     })
     res.setHeader('Content-Type', 'application/json')
     return res.status(r.status).send(await r.text())
-  } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+  } catch (err) {
+    logger.error('gateway_error', PATH, { ip, step, error: err?.message })
+    return res.status(502).json({ error: 'Gateway indisponível' })
+  }
 }

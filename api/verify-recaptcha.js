@@ -2,6 +2,9 @@
 // Oculta a URL real da Edge Function do frontend.
 
 import { checkRate } from './_rate-limit.js'
+import { logger }    from './_logger.js'
+
+const PATH = '/api/verify-recaptcha'
 
 const _SUPABASE_URL  = process.env.SUPABASE_URL ?? ''
 const EDGE_URL       = `${_SUPABASE_URL}/functions/v1/verify-recaptcha`
@@ -40,6 +43,7 @@ export default async function handler(req, res) {
     .toString().split(',')[0].trim()
 
   if (!(await checkRate(`verify-captcha:${ip}`, RATE_MAX))) {
+    logger.warn('rate_limit', PATH, { ip })
     res.setHeader('Retry-After', '60')
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
@@ -81,7 +85,8 @@ export default async function handler(req, res) {
     })
     res.setHeader('Content-Type', 'application/json')
     return res.status(r.status).send(await r.text())
-  } catch {
+  } catch (err) {
+    logger.error('gateway_error', PATH, { ip, error: err?.message })
     return res.status(502).json({ error: 'Gateway indisponível' })
   }
 }

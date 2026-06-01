@@ -4,8 +4,11 @@
 // validado server-side pela Edge Function com supabaseAdmin.auth.getUser().
 // Isso elimina o vetor de log poisoning via user_id manipulável no body.
 
-import { checkRate } from './_rate-limit.js'
+import { checkRate }          from './_rate-limit.js'
 import { trackSecurityEvent } from './_alert.js'
+import { logger }             from './_logger.js'
+
+const PATH = '/api/check-user-access'
 
 const EDGE_URL     = `${process.env.SUPABASE_URL}/functions/v1/check-user-access`
 const ANON_KEY     = process.env.SUPABASE_ANON_KEY ?? ''
@@ -48,6 +51,7 @@ export default async function handler(req, res) {
     .toString().split(',')[0].trim()
 
   if (!(await checkRate(`check-access:${ip}`, RATE_MAX))) {
+    logger.warn('rate_limit', PATH, { ip })
     res.setHeader('Retry-After', '60')
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
@@ -78,14 +82,17 @@ export default async function handler(req, res) {
     // não do proxy. Isso previne log poisoning via body manipulado.
     if (r.status === 429) {
       trackSecurityEvent('login_lockout', { ip }).catch(() => {})
+      logger.warn('login_lockout', PATH, { ip })
     }
     if (r.status === 401) {
       trackSecurityEvent('jwt_forgery', { ip }).catch(() => {})
+      logger.warn('jwt_forgery', PATH, { ip })
     }
 
     res.setHeader('Content-Type', 'application/json')
     return res.status(r.status).send(await r.text())
-  } catch {
+  } catch (err) {
+    logger.error('gateway_error', PATH, { ip, error: err?.message })
     return res.status(502).json({ error: 'Gateway indisponível' })
   }
 }

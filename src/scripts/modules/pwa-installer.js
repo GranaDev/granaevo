@@ -290,8 +290,53 @@ export function initInstallButton() {
 
   btn.addEventListener('click', async () => {
     if (_state === 'installed') return;
-    await promptInstall();
+    btn.disabled = true;
+    const icon = btn.querySelector('.cfg-item-icon i');
+    if (icon) { icon.className = 'fas fa-spinner fa-spin'; }
+
+    const result = await promptInstall();
+
+    if (result === 'accepted') {
+      if (icon) { icon.className = 'fas fa-check-circle'; }
+      btn.classList.add('cfg-item--installed');
+    } else {
+      btn.disabled = false;
+      if (icon) { icon.className = 'fas fa-download'; }
+    }
   });
+}
+
+/**
+ * Controla quando mostrar o prompt de instalação PWA.
+ * Lógica de engajamento progressivo:
+ *   - 1ª visita: aguarda 60s de uso antes de exibir banner
+ *   - 2ª visita: exibe após 10s
+ *   - 3ª+ visita: não interrompe (usuário já decidiu não instalar)
+ */
+export function shouldShowInstallPrompt() {
+  if (_state === 'installed' || _state === 'pending') return false;
+  const visits    = parseInt(sessionStorage.getItem('ge:pwa_visits') ?? '0', 10);
+  const newVisits = visits + 1;
+  sessionStorage.setItem('ge:pwa_visits', String(newVisits));
+
+  if (newVisits === 1) {
+    // Primeira visita: mostrar prompt após 60s de engajamento
+    setTimeout(() => _showBannerIfNotInstalled(), 60_000);
+    return false;
+  }
+  if (newVisits === 2) {
+    // Segunda visita: mostrar após 10s
+    setTimeout(() => _showBannerIfNotInstalled(), 10_000);
+    return false;
+  }
+  // Terceira+ visita: não interromper
+  return false;
+}
+
+function _showBannerIfNotInstalled() {
+  if (_state === 'installed') return;
+  // Dispara evento customizado para o dashboard mostrar um banner suave
+  document.dispatchEvent(new CustomEvent('ge:pwa-show-banner'));
 }
 
 function _updateInstallButton() {

@@ -2,6 +2,9 @@
 // Requer sessão autenticada (JWT do usuário), não usa anon key como auth principal.
 
 import { checkRate } from './_rate-limit.js'
+import { logger }    from './_logger.js'
+
+const PATH = '/api/send-guest-invite'
 
 const _SUPABASE_URL  = process.env.SUPABASE_URL ?? ''
 const EDGE_URL       = `${_SUPABASE_URL}/functions/v1/send-guest-invite`
@@ -49,6 +52,7 @@ export default async function handler(req, res) {
     .toString().split(',')[0].trim()
 
   if (!(await checkRate(`guest-invite:${ip}`, RATE_MAX))) {
+    logger.warn('rate_limit', PATH, { ip })
     res.setHeader('Retry-After', '60')
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
@@ -96,7 +100,8 @@ export default async function handler(req, res) {
       body:   JSON.stringify({ guestName: body.guestName, guestEmail: body.guestEmail }),
       signal: AbortSignal.timeout(15_000),
     })
-  } catch {
+  } catch (err) {
+    logger.error('gateway_error', PATH, { ip, error: err?.message })
     return res.status(502).json({ error: 'Gateway temporariamente indisponível' })
   }
 

@@ -43,10 +43,11 @@ function _clonarDados(origem) {
 // SVG remoto bloqueado (pode conter JS embutido)
 // Aceita: data:image/*, caminhos relativos, HTTPS raster em domínio permitido
 const _DOMINIOS_FOTO_PERMITIDOS = Object.freeze([
+    // Supabase Storage — projeto atual
+    'fvrhqqeofqedmhadzzqw.supabase.co',
+    // CDN próprio (futuro)
     'cdn.granaevo.com',
     'images.granaevo.com',
-    'storage.googleapis.com',
-    'firebasestorage.googleapis.com'
 ]);
 
 function _fotoSegura(fotoRaw, inicialFallback) {

@@ -3,6 +3,9 @@
 // portal:   REQUER JWT — gerenciar assinatura existente
 
 import { checkRate } from './_rate-limit.js'
+import { logger }    from './_logger.js'
+
+const PATH = '/api/stripe'
 
 const _SUPABASE_URL   = process.env.SUPABASE_URL ?? ''
 const ANON_KEY        = process.env.SUPABASE_ANON_KEY ?? ''
@@ -133,6 +136,7 @@ export default async function handler(req, res) {
     ?? 'unknown'
 
   if (!(await checkRate(`stripe-${action}:${ip}`, RATE_LIMITS[action]))) {
+    logger.warn('rate_limit', PATH, { ip, action })
     res.setHeader('Retry-After', '60')
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
@@ -165,7 +169,8 @@ export default async function handler(req, res) {
     })
     res.setHeader('Content-Type', 'application/json')
     return res.status(r.status).send(await r.text())
-  } catch {
+  } catch (err) {
+    logger.error('gateway_error', PATH, { ip, action, error: err?.message })
     return res.status(502).json({ error: 'Gateway indisponível' })
   }
 }

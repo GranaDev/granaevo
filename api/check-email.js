@@ -2,6 +2,9 @@
 // Rate limit distribuído (Upstash Redis) + Origin check + body limit
 
 import { checkRate } from './_rate-limit.js'
+import { logger }    from './_logger.js'
+
+const PATH = '/api/check-email'
 
 const _SUPABASE_URL  = process.env.SUPABASE_URL ?? ''
 const EDGE_URL       = `${_SUPABASE_URL}/functions/v1/check-email-status`
@@ -42,6 +45,7 @@ export default async function handler(req, res) {
     .toString().split(',')[0].trim()
 
   if (!(await checkRate(`chk-email:${ip}`, RATE_MAX))) {
+    logger.warn('rate_limit', PATH, { ip })
     res.setHeader('Retry-After', '60')
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
@@ -76,5 +80,8 @@ export default async function handler(req, res) {
     })
     res.setHeader('Content-Type', 'application/json')
     return res.status(r.status).send(await r.text())
-  } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+  } catch (err) {
+    logger.error('gateway_error', PATH, { ip, error: err?.message })
+    return res.status(502).json({ error: 'Gateway indisponível' })
+  }
 }

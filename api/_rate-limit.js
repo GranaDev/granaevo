@@ -21,8 +21,11 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production' ||
 
 // Avisa se Redis não está configurado em produção (log visível no Vercel)
 if (IS_PRODUCTION && !USE_REDIS) {
-  console.warn('[RATE-LIMIT] ⚠️  Redis não configurado em produção! Rate limiting multi-instância ' +
-    'não funcionará. Configure UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN.')
+  console.warn(JSON.stringify({
+    level: 'warn', event: 'redis_not_configured', path: '/api/_rate-limit',
+    timestamp: new Date().toISOString(),
+    reason: 'Rate limiting multi-instância inativo. Configure UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN.',
+  }))
 }
 
 // ── Fallback in-memory ────────────────────────────────────────────────────────
@@ -35,7 +38,10 @@ const _MAX_STORE = 5_000
 function _checkMemory(key, max, windowMs = _DEFAULT_WINDOW) {
   // Log de fallback em produção para visibilidade de operação
   if (IS_PRODUCTION) {
-    console.warn(`[RATE-LIMIT] Usando fallback in-memory para key="${key}" — Redis indisponível ou não configurado.`)
+    console.warn(JSON.stringify({
+      level: 'warn', event: 'rate_limit_fallback_memory', path: '/api/_rate-limit',
+      timestamp: new Date().toISOString(), key,
+    }))
   }
 
   const now = Date.now()

@@ -4,6 +4,9 @@
 // via proxy secret. A service_role fica exclusivamente nos secrets do Supabase.
 
 import { checkRateWindow } from './_rate-limit.js'
+import { logger }          from './_logger.js'
+
+const PATH = '/api/create-account'
 
 const SUPABASE_URL      = process.env.SUPABASE_URL      ?? ''
 const ANON_KEY          = process.env.SUPABASE_ANON_KEY ?? ''
@@ -114,6 +117,7 @@ export default async function handler(req, res) {
     ?? 'unknown').toString().trim()
 
   if (!(await checkRateWindow(`create-account:${ip}`, 3, 3600))) {
+    logger.warn('rate_limit', PATH, { ip, window: 3600 })
     res.setHeader('Retry-After', '3600')
     return res.status(429).json({ error: 'Muitas tentativas. Aguarde antes de criar uma nova conta.' })
   }
@@ -140,7 +144,8 @@ export default async function handler(req, res) {
     const body = await efRes.text()
     res.setHeader('Content-Type', 'application/json')
     return res.status(efRes.status).send(body)
-  } catch {
+  } catch (err) {
+    logger.error('gateway_error', PATH, { ip, error: err?.message })
     return res.status(502).json({ error: 'Serviço temporariamente indisponível.' })
   }
 }

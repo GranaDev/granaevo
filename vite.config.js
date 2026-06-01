@@ -91,6 +91,8 @@ export default defineConfig(({ mode }) => ({
         // Supabase API: sempre rede para dados financeiros frescos ✓
         // Supabase Storage (avatares): browser HTTP cache ✓
         runtimeCaching: [],
+        // Injeta handler de push events no Service Worker
+        importScripts: ['/sw-push-handler.js'],
       },
       // Dev mode: sem SW em desenvolvimento (evita conflito com HMR)
       devOptions: {

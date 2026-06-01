@@ -17,6 +17,9 @@
  */
 
 import { checkRate } from './_rate-limit.js'
+import { logger }    from './_logger.js'
+
+const PATH = '/api/queue-email'
 
 const QSTASH_TOKEN = process.env.QSTASH_TOKEN
 const SUPABASE_URL = process.env.SUPABASE_URL       ?? ''
@@ -110,15 +113,11 @@ export default async function handler(req, res) {
       if (!qRes.ok) throw new Error(`QStash HTTP ${qRes.status}`)
       return res.status(202).json({ queued: true, type })
     } catch (err) {
-      // QStash falhou — fallback para envio síncrono
-      console.error('[queue-email] QStash error, falling back:', err?.message)
+      logger.error('qstash_failed_fallback', PATH, { type, error: err?.message })
     }
   }
 
   // ── Fallback: envio síncrono direto ──────────────────────────────────────
-  // [SEC-FIX GOD-001] proxy secret incluído — send-welcome-email e send-guest-invite
-  // exigem x-proxy-secret para bloquear chamadas diretas. Sem este header o fallback
-  // falharia silenciosamente durante indisponibilidade do QStash.
   try {
     const r = await fetch(targetUrl, {
       method:  'POST',
@@ -133,5 +132,8 @@ export default async function handler(req, res) {
     })
     res.setHeader('Content-Type', 'application/json')
     return res.status(r.status).send(await r.text())
-  } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+  } catch (err) {
+    logger.error('gateway_error', PATH, { type, error: err?.message })
+    return res.status(502).json({ error: 'Gateway indisponível' })
+  }
 }

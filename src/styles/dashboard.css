@@ -1,3 +1,6 @@
+/* Design tokens — fonte única de verdade para cores, espaçamento e tipografia */
+@import './_tokens.css';
+
 /* Font Awesome self-hosted via npm — sem dependência de CDN externo */
 @import '@fortawesome/fontawesome-free/css/all.min.css';
 
@@ -8,56 +11,123 @@
 /* ========== UTILITÁRIOS — sem unsafe-inline ========== */
 .js-hidden      { display: none !important; }
 .text-secondary { color: var(--text-secondary, #b0b3c1); }
-.promo-bloco         { margin-top: 32px; cursor: pointer; display: flex; align-items: stretch; gap: 28px; text-align: left; position: relative; overflow: hidden; transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
-.promo-titulo        { margin-bottom: 6px; color: var(--text-primary, #fff); font-size: 1.35rem; font-weight: 700; }
-.promo-desc          { color: var(--text-secondary, #b0b3c1); font-size: 0.85rem; margin-bottom: 0; }
-.promo-ilustracao    { flex-shrink: 0; width: 270px; align-self: stretch; background: url('/assets/icons/Icon_onde_foi.png') center/130% no-repeat; position: relative; z-index: 2; transform: scale(1.08); transform-origin: left center; }
-.promo-conteudo      { flex: 1; min-width: 0; position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: space-between; }
-.promo-text-top      { display: flex; flex-direction: column; }
-.promo-features      { display: flex; gap: 20px; flex-wrap: nowrap; align-items: flex-start; }
-.promo-feature-item  { display: flex; align-items: flex-start; gap: 10px; }
-.promo-feature-icon  { width: 30px; height: 30px; border-radius: 50%; background: rgba(67,160,71,0.15); border: 1px solid rgba(67,160,71,0.35); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #4caf50; }
-.promo-feature-title { display: block; color: #fff; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
-.promo-feature-sub   { display: block; color: var(--text-secondary, #b0b3c1); font-size: 0.72rem; white-space: nowrap; }
-.promo-acao          { flex-shrink: 0; display: flex; align-items: center; position: relative; z-index: 1; }
-.promo-trend-icon    { position: absolute; top: 16px; right: 20px; color: #4caf50; z-index: 1; }
-.promo-btn           { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 0.9rem; padding: 11px 20px; }
+.promo-bloco {
+    margin-top: 32px;
+    cursor: pointer;
+    display: flex;
+    align-items: stretch;
+    gap: 28px;
+    text-align: left;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.promo-titulo {
+    margin-bottom: 6px;
+    color: var(--text-primary);
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+.promo-desc {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+.promo-ilustracao {
+    flex-shrink: 0;
+    width: 270px;
+    align-self: stretch;
+    background: url('/assets/icons/Icon_onde_foi.png') center/130% no-repeat;
+    position: relative;
+    z-index: 2;
+    transform: scale(1.08);
+    transform-origin: left center;
+}
+.promo-conteudo {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.promo-text-top {
+    display: flex;
+    flex-direction: column;
+}
+.promo-features {
+    display: flex;
+    gap: 20px;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+}
+.promo-feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+.promo-feature-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--color-primary);
+}
+.promo-feature-title {
+    display: block;
+    color: var(--color-text);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.promo-feature-sub {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+.promo-acao {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+.promo-trend-icon {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    color: var(--color-primary);
+    z-index: 1;
+}
+.promo-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    font-size: 0.9rem;
+    padding: 11px 20px;
+}
 .btn-no-events       { pointer-events: none; }
 .grafico-titulo { color: var(--text-primary, #fff); margin-bottom: 16px; text-align: center; }
 .mt-20          { margin-top: 20px; }
 
-/* ========== RESET E VARIÁVEIS ========== */
+/* ========== RESET ========== */
+/* Tokens de cor/espaçamento em src/styles/_tokens.css (importado no topo) */
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
-:root {
-    --primary: #43a047;
-    --primary-dark: #2e7d32;
-    --primary-light: #66bb6a;
-    --secondary: #1e2130;
-    --secondary-light: #2a2d3e;
-    --accent: #6c63ff;
-    --accent-hover: #8a84ff;
-    --success: #00ff99;
-    --danger: #ff4b4b;
-    --warning: #ffd166;
-    --text-primary: #ffffff;
-    --text-secondary: #b0b3c1;
-    --text-muted: #6c7a89;
-    --border: rgba(255, 255, 255, 0.08);
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.15);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.2);
-    --gradient-primary: linear-gradient(135deg, var(--primary), var(--primary-light));
-    --gradient-dark: linear-gradient(135deg, #1a1d2e, #2a2d3e);
-    --backdrop: rgba(30, 33, 48, 0.95);
-}
-
 body {
-    font-family: 'DM Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'DM Sans', 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
     background: #0a0e1a;
     color: var(--text-primary);
     min-height: 100vh;
@@ -9031,4 +9101,25 @@ button,
 .cfg-item-icon--gray {
     background: rgba(107, 114, 128, 0.12);
     color: #6b7280;
+}
+
+/* ========== ACESSIBILIDADE — FOCO DE TECLADO (WCAG 2.1 AA) ========== */
+:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm, 4px);
+}
+
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 0;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15);
 }

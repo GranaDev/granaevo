@@ -6,6 +6,10 @@
 //   GET  ?backup=1          → lista últimos 5 snapshots (metadados)
 //   POST { action:"restore", snapshot_date:"YYYY-MM-DD" } → restaura snapshot
 
+import { logger } from './_logger.js'
+
+const PATH = '/api/user-data'
+
 const GET_EDGE_URL         = process.env.SUPABASE_GET_DATA_EDGE_URL;
 const SAVE_EDGE_URL        = process.env.SUPABASE_EDGE_URL;
 const BACKUP_EDGE_URL      = process.env.SUPABASE_BACKUP_EDGE_URL;
@@ -96,14 +100,13 @@ export default async function handler(req, res) {
         let report;
         try { const parsed = JSON.parse(raw); report = parsed['csp-report'] ?? parsed; }
         catch { return res.status(400).end(); }
-        console.warn(JSON.stringify({
-            ts: new Date().toISOString(), level: 'warn', event: 'csp_violation',
+        logger.warn('csp_violation', PATH, {
             blocked_uri:  report['blocked-uri']        ?? report.blockedURI        ?? 'unknown',
             violated:     report['violated-directive']  ?? report.violatedDirective  ?? 'unknown',
             effective:    report['effective-directive'] ?? report.effectiveDirective ?? 'unknown',
             document_uri: report['document-uri']        ?? report.documentURI        ?? 'unknown',
             ip,
-        }));
+        });
         return res.status(204).end();
     }
 
