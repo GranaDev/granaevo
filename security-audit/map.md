@@ -1,35 +1,56 @@
-# GranaEvo — Mapa de Arquivos da Auditoria
-Data: 2026-05-19
+# Security Audit — Mapa do Codebase
+Data: 2026-06-04 (God Mode + God Eyes Ultra)
 
-## Arquivos de API (Vercel Serverless)
-| Arquivo | Funcao |
-|---------|--------|
-| api/check-user-access.js | Proxy para check-user-access EF |
-| api/check-email.js | Proxy para check-email-status EF |
-| api/create-account.js | Proxy para create-user-account EF |
-| api/queue-email.js | Fila de emails via QStash |
-| api/reset-password.js | Proxy unificado reset de senha |
-| api/send-guest-invite.js | Proxy para send-guest-invite EF |
-| api/stripe.js | Proxy unificado Stripe |
-| api/upload-profile-photo.js | Proxy para upload de foto |
-| api/verify-invite.js | Proxy para verify-guest-invite EF |
-| api/verify-recaptcha.js | Proxy para verify-recaptcha EF |
-| api/csp-report.js | Endpoint de relatorio CSP |
-| api/_rate-limit.js | Modulo de rate limiting (Redis + in-memory) |
-| api/_alert.js | Modulo de rastreamento de eventos de seguranca |
+## Rotas de API (Vercel Serverless Functions)
+| Arquivo | Auth | Rate Limit | Status |
+|---------|------|-----------|--------|
+| api/stripe.js | JWT (autenticado) / público (checkout) | ✅ Redis+memory | Auditado |
+| api/user-data.js | JWT obrigatório | ✅ Redis+memory | Auditado |
+| api/upload-profile-photo.js | JWT obrigatório | ✅ Redis distribuído | Auditado |
+| api/send-guest-invite.js | JWT obrigatório | ✅ 5/min IP | Auditado |
+| api/check-user-access.js | JWT obrigatório | ✅ 20/min IP | Auditado |
+| api/create-account.js | Público | ✅ 3/hora IP | Auditado |
+| api/reset-password.js | Público | ✅ 3-10/min IP | Auditado |
+| api/check-email.js | Público | n/a | Auditado (parcial) |
+| api/accept-terms.js | n/a | n/a | Não auditado — proxy simples |
+| api/verify-recaptcha.js | Público | n/a | Não auditado — proxy simples |
+| api/verify-invite.js | Público | n/a | Não auditado — proxy simples |
+| api/queue-email.js | n/a | n/a | Não auditado |
+| api/_rate-limit.js | (módulo) | — | Auditado |
+| api/_logger.js | (módulo) | — | Auditado — sanitização anti-CRLF |
+| api/_alert.js | (módulo) | — | Auditado parcial |
 
-## Edge Functions (Supabase Deno)
-27 funcoes mapeadas — principais auditadas: check-user-access, get-user-data, save-user-data,
-send-guest-invite, verify-guest-invite, upload-profile-photo.
+## Edge Functions (Supabase)
+| Função | Auth | PROXY_SECRET | Status |
+|--------|------|-------------|--------|
+| check-user-access | auth.getUser(JWT) | ✅ timingSafeEqual | Auditado |
+| save-user-data | auth.getUser(JWT) | ✅ timingSafeEqual | Auditado |
+| get-user-data | auth.getUser(JWT) | ✅ timingSafeEqual | Auditado |
+| create-user-account | PROXY_SECRET only | ✅ timingSafeEqual | Auditado |
+| webhook-stripe | HMAC-SHA256 Stripe | — | Auditado |
+| upload-profile-photo | auth.getUser(JWT) | ✅ timingSafeEqual | Auditado |
+| save-push-subscription | auth.getUser(JWT) | ⚠️ impl. diferente | Auditado — ver MED-02, MED-03 |
+| delete-push-subscription | auth.getUser(JWT) | n/a | Parcial |
+| verify-guest-invite | PROXY_SECRET | ✅ timingSafeEqual | Auditado |
+| create-stripe-checkout | PROXY_SECRET+JWT op. | n/a | Não auditado |
+| stripe-portal | auth.getUser(JWT) | n/a | Não auditado |
+| update-stripe-plan | auth.getUser(JWT) | n/a | Não auditado |
+| verify-and-reset-password | PROXY_SECRET | n/a | Não auditado |
 
-## Migrations SQL (33 arquivos, ordem cronologica)
-Periodo: 20260417 a 20260519.
-Migration mais recente: 20260519000001_guest_rls_policies.sql
+## Arquivos .env*
+| Arquivo | Commitado? | Risco |
+|---------|-----------|-------|
+| .env.local | ❌ gitignore (.env.*) | VERCEL_OIDC_TOKEN expirado presente — ver LOW-02 |
 
-## Frontend (src/scripts — 20 arquivos)
-Principal: auth-guard.js, supabase-client.js, data-manager.js, dashboard.js, convidados.js.
+## Migrations Supabase (52 arquivos)
+- RLS habilitada em todas as tabelas de dados
+- Políticas SELECT/INSERT/UPDATE/DELETE com WITH CHECK
+- Funções SECURITY DEFINER com SET search_path
+- Cron jobs para limpeza de lockouts, rate limits, nonces
+- stripe_events para idempotência de webhooks
+- feature_flags com SECURITY INVOKER
 
-## Configuracoes
-- vercel.json: headers de seguranca completos (CSP por rota, HSTS, X-Frame-Options, etc.)
-- vite.config.js: sourcemap=false, drop_console=true em producao
-- .env.local: nao commitado (confirmado por .gitignore implicito)
+## Frontend
+- supabase-client.js: armazenamento dinâmico (localStorage/sessionStorage conforme "lembrar")
+- auth-guard.js: fingerprint HMAC-SHA256, rate limit, subscription check, safe redirect
+- Todos os redirects passam por SafeRedirect._isSafe() com blocklist de esquemas

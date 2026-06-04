@@ -149,7 +149,7 @@ async function init() {
     loadStripeDetails(session); // async, enriches UI when ready
 }
 
-const _FIELDS = 'plan_name, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, pending_plan_name, pending_plan_effective_at, pending_profile_removals';
+const _FIELDS = 'plan_name, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, pending_plan_name, pending_plan_effective_at, pending_profile_removals, pending_member_removals';
 
 async function loadSubscription(session) {
     const userId    = session.user.id;
@@ -208,7 +208,8 @@ function renderSubscription(sub) {
     _currentPlanSlug           = (sub.plan_name || '').toLowerCase().trim();
     _currentPendingPlan        = (sub.pending_plan_name || '').toLowerCase().trim();
     _currentPendingEffectiveAt = sub.pending_plan_effective_at || null;
-    _currentPendingRemovals    = Array.isArray(sub.pending_profile_removals) ? sub.pending_profile_removals : [];
+    _currentPendingRemovals       = Array.isArray(sub.pending_profile_removals) ? sub.pending_profile_removals : [];
+    _currentPendingMemberRemovals = Array.isArray(sub.pending_member_removals) ? sub.pending_member_removals : [];
 
     if (planNameEl) planNameEl.textContent = normalized;
     if (planTypeEl) planTypeEl.textContent = normalized;
@@ -703,6 +704,7 @@ let _currentPlanSlug             = ''
 let _currentPendingPlan          = ''
 let _currentPendingEffectiveAt   = null
 let _currentPendingRemovals      = []    // UUIDs dos perfis agendados para remoção
+let _currentPendingMemberRemovals = []   // IDs dos convidados agendados para remoção
 let _derivedPeriodEnd            = null  // Unix timestamp — fallback para data da alteração agendada
 let _derivedPeriodStart          = null  // Unix timestamp — fallback para cálculo de proration
 
@@ -1010,8 +1012,7 @@ function _openPlanModal(session) {
         } catch { /* mostra lista vazia com mensagem */ }
 
         const selProfIds   = new Set(_currentPendingRemovals)
-        // TODO: carregar pending_member_removals via API se necessário
-        const selGuestIds  = new Set()
+        const selGuestIds  = new Set(_currentPendingMemberRemovals)
 
         const profilesHtml = members.map(m => {
             const checked = selProfIds.has(String(m.id))

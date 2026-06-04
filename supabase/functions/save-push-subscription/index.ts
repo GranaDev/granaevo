@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
 const PROXY_SECRET = Deno.env.get('PROXY_SECRET') ?? ''
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
@@ -86,18 +86,11 @@ Deno.serve(async (req: Request) => {
 })
 
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    // Faz a comparação completa mesmo assim para evitar timing attacks por tamanho
-    const dummy = b.padEnd(a.length, '\0')
-    let diff = 0
-    for (let i = 0; i < a.length; i++) {
-      diff |= a.charCodeAt(i) ^ dummy.charCodeAt(i)
-    }
-    return false
-  }
-  let diff = 0
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  }
+  const enc = new TextEncoder()
+  const aB  = enc.encode(a)
+  const bB  = enc.encode(b)
+  const len = Math.max(aB.length, bB.length)
+  let diff  = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
   return diff === 0
 }

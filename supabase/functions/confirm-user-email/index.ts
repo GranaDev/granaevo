@@ -35,7 +35,7 @@
  * o header Access-Control-Allow-Methods, causando falha no preflight.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2';
 
 // ==========================================
 // CORS — permite origens do site (www e non-www)

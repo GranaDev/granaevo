@@ -52,6 +52,9 @@
        e só existia para compensar o conflito que agora não existe mais).
    ========================================== */
 
+/* Tokens globais — fonte única de verdade para cores, espaçamento e tipografia */
+@import '../_tokens.css';
+
 /* ==========================================
    RESET E CONFIGURAÇÕES
    ========================================== */
@@ -64,18 +67,21 @@
 }
 
 :root {
-    --primary-dark: #0a1628;
+    /* Cores específicas do login (fundo azul escuro, não compartilhado com dashboard) */
+    --primary-dark:   #0a1628;
     --secondary-dark: #0f2744;
-    --accent-green: #10b981;
-    --accent-emerald: #059669;
-    --neon-green: #6ee7b7;
-    --neon-cyan: #06b6d4;
-    --neon-teal: #14b8a6;
-    --glass-bg: rgba(15, 39, 68, 0.4);
-    --glass-border: rgba(16, 185, 129, 0.3);
-    --success-green: #10b981;
-    --error-red: #ef4444;
-    --info-blue: #06b6d4;
+    --neon-cyan:      #06b6d4;
+    --neon-teal:      #14b8a6;
+    --glass-bg:       rgba(15, 39, 68, 0.4);
+    --glass-border:   rgba(16, 185, 129, 0.3);
+    --info-blue:      #06b6d4;
+
+    /* Aliases que apontam para tokens globais — sem hardcode duplicado */
+    --accent-green:   var(--color-primary);
+    --accent-emerald: var(--color-primary-dark);
+    --neon-green:     var(--color-primary-neon);
+    --success-green:  var(--color-success);
+    --error-red:      var(--color-danger);
 }
 
 /* ==========================================

@@ -729,6 +729,12 @@ const SubscriptionChecker = (() => {
             _cacheUser = null;
             _cacheExp  = 0;
         },
+
+        // Retorna true se o cache já expirou ou não existe — útil para o monitor
+        // evitar queries desnecessárias quando o TTL de 5min ainda é válido.
+        isCacheExpired() {
+            return !_cache || Date.now() >= _cacheExp;
+        },
     };
 })();
 
@@ -843,12 +849,14 @@ function _renderFrozenOverlay(subData, guard) {
     // Remove overlay anterior se existir
     document.getElementById('_ge_frozen_overlay')?.remove();
 
-    const days         = subData.daysUntilDeletion ?? 0;
+    // Garante que days seja sempre um inteiro seguro (evita "NaN dias" se daysUntilDeletion vier como NaN)
+    const _rawDays     = subData.daysUntilDeletion;
+    const days         = Number.isInteger(_rawDays) && _rawDays >= 0 ? _rawDays : 0;
     const _rawPlanName = subData.frozenPlanName ?? '';
     // Whitelist — nunca interpola string arbitrária em innerHTML
     const _PLAN_WL     = { individual: 'Individual', casal: 'Casal', familia: 'Família' };
     const planName     = _PLAN_WL[_rawPlanName?.toLowerCase?.()] ?? 'GranaEvo';
-    const daysText     = days === 1 ? '1 dia' : `${days} dias`;
+    const daysText     = days === 0 ? 'muito pouco tempo' : days === 1 ? '1 dia' : `${days} dias`;
 
     // ── 1. Trava scroll do body ───────────────────────────────────
     document.documentElement.style.overflow = 'hidden';
@@ -1086,7 +1094,11 @@ const AuthGuard = (() => {
                     return;
                 }
 
-                SubscriptionChecker.invalidate();
+                // Só invalida o cache se o TTL de 5min já expirou —
+                // evita query desnecessária ao banco em cada tick do monitor.
+                if (SubscriptionChecker.isCacheExpired()) {
+                    SubscriptionChecker.invalidate();
+                }
                 const sub = await SubscriptionChecker.getActive(session.user.id);
 
                 if (!sub.subscription) {
@@ -1568,5 +1580,4 @@ document.addEventListener('visibilitychange', async () => {
 // ═══════════════════════════════════════════════════════════════
 //  EXPORTS
 // ═══════════════════════════════════════════════════════════════
-export { AuthGuard, SubscriptionChecker, SafeRedirect };
 export default AuthGuard;

@@ -1,0 +1,376 @@
+﻿    padding: 14px 20px;
+    margin-top: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 14px;
+    color: var(--text-secondary, #a0aec0);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.btn-load-more:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: var(--text-primary, #fff);
+}
+
+.mov-item {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.mov-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateX(4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.mov-icon-badge {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    flex-shrink: 0;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mov-icon-badge.entrada {
+    background: rgba(0, 255, 153, 0.14);
+    color: #00ff99;
+    border: 1px solid rgba(0, 255, 153, 0.22);
+}
+
+.mov-icon-badge.saida {
+    background: rgba(255, 75, 75, 0.14);
+    color: #ff4b4b;
+    border: 1px solid rgba(255, 75, 75, 0.22);
+}
+
+.mov-icon-badge.reserva {
+    background: rgba(255, 209, 102, 0.14);
+    color: #ffd166;
+    border: 1px solid rgba(255, 209, 102, 0.22);
+}
+
+.mov-icon-badge.retirada_reserva {
+    background: rgba(255, 149, 0, 0.14);
+    color: #ff9500;
+    border: 1px solid rgba(255, 149, 0, 0.22);
+}
+
+.mov-item:hover .mov-icon-badge {
+    transform: scale(1.06);
+}
+
+.mov-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.mov-right {
+    font-weight: 700;
+    font-size: 1.1rem;
+    min-width: 120px;
+    text-align: right;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.mov-tipo {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+}
+
+.mov-desc {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mov-data {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.entrada          { color: #00ff99; }
+.saida            { color: #ff4b4b; }
+.reserva          { color: #ffd166; }
+.retirada_reserva { color: #ff9500; }
+
+@media (max-width: 768px) {
+    .mov-item {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 10px 12px;
+        gap: 10px;
+        margin-bottom: 6px;
+        border-radius: 12px;
+    }
+
+    .mov-item:hover { transform: none; }
+
+    .mov-icon-badge {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        border-radius: 9px;
+        font-size: 0.82rem;
+    }
+
+    .mov-tipo  { font-size: 0.82rem; }
+    .mov-desc  { font-size: 0.72rem; white-space: nowrap; }
+    .mov-right { font-size: 0.86rem; min-width: 78px; }
+    .mov-data  { display: none; }
+}
+
+/* ========== TRANSAÃ‡Ã•ES â€” HEADER SIMPLES ========== */
+.tx-page-header {
+    padding: 24px 0 20px;
+}
+
+.tx-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.tx-breadcrumb a {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.tx-breadcrumb a:hover { color: var(--primary-light); }
+
+.tx-breadcrumb span:last-child { color: var(--text-secondary); }
+
+.tx-page-title {
+    font-size: 1.65rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 4px;
+    line-height: 1.2;
+}
+
+.tx-page-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* ========== TRANSAÃ‡Ã•ES â€” TABELA ========== */
+.mov-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.mov-table thead tr {
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.mov-table thead th {
+    padding: 11px 14px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    white-space: nowrap;
+}
+
+.mov-table thead th:last-child { text-align: center; }
+
+.mov-table tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    transition: background 0.15s;
+}
+
+.mov-table tbody tr:last-child { border-bottom: none; }
+
+.mov-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+
+.mov-table tbody td {
+    padding: 13px 14px;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+.td-data {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.td-cal-icon {
+    margin-right: 6px;
+    font-size: 0.72rem;
+    opacity: 0.5;
+}
+
+.td-desc { max-width: 240px; }
+
+.td-desc-main {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.td-desc-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.td-tipo {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+
+.tipo-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border-radius: 50%;
+    font-size: 0.6rem;
+    flex-shrink: 0;
+}
+
+.tipo-icon-entrada          { background: rgba(67, 160, 71, 0.2);   color: #66bb6a; }
+.tipo-icon-saida            { background: rgba(255, 75, 75, 0.15);  color: #ff7070; }
+.tipo-icon-reserva          { background: rgba(255, 209, 102, 0.2); color: #ffd166; }
+.tipo-icon-retirada_reserva { background: rgba(255, 149, 0, 0.2);  color: #ff9500; }
+
+.td-valor {
+    font-weight: 600;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.val-entrada          { color: var(--primary-light); }
+.val-saida            { color: #ff6b6b; }
+.val-reserva          { color: #ffd166; }
+.val-retirada_reserva { color: #ff9500; }
+
+.td-acoes {
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* ========== TRANSAÃ‡Ã•ES â€” BADGES ========== */
+.cat-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+.cat-entrada          { background: rgba(67,160,71,0.15);  color: #66bb6a; border: 1px solid rgba(67,160,71,0.3); }
+.cat-saida            { background: rgba(255,75,75,0.13);  color: #ff7070; border: 1px solid rgba(255,75,75,0.3); }
+.cat-reserva          { background: rgba(108,99,255,0.14); color: #9d97ff; border: 1px solid rgba(108,99,255,0.3); }
+.cat-retirada_reserva { background: rgba(255,209,102,0.13);color: #ffd166; border: 1px solid rgba(255,209,102,0.3); }
+
+/* ========== TRANSAÃ‡Ã•ES â€” BOTÃ•ES DE AÃ‡ÃƒO ========== */
+.btn-tx-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: background 0.15s, color 0.15s, transform 0.1s;
+    margin: 0 2px;
+}
+
+.btn-tx-action:hover { transform: translateY(-1px); }
+
+.btn-tx-edit          { background: rgba(108,99,255,0.14); color: #9d97ff; }
+.btn-tx-edit:hover    { background: rgba(108,99,255,0.3);  color: #fff; }
+.btn-tx-del           { background: rgba(255,75,75,0.12);  color: #ff7070; }
+.btn-tx-del:hover     { background: rgba(255,75,75,0.28);  color: #fff; }
+
+/* ========== TRANSAÃ‡Ã•ES â€” MODAL EDITAR ========== */
+.edit-tx-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+    margin: 16px 0;
+}
+
+.edit-tx-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+}
+
+/* Desktop: tabela visÃ­vel, cards ocultos */
+.mov-cards { display: none; }
+
+@media (max-width: 640px) {
+    .mov-table { display: none; }
+    .mov-cards { display: flex; flex-direction: column; gap: 0; }
+}
+
+/* ========== RESERVAS/METAS ========== */

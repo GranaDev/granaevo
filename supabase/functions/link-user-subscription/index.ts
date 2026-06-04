@@ -7,7 +7,7 @@
  * O Admin client usa SERVICE_ROLE_KEY (aceita pelo gateway) e delega
  * a validação do token ES256 ao servidor Auth via JWKS.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2';
 
 const ALLOWED_ORIGINS = [
   "https://granaevo.vercel.app",

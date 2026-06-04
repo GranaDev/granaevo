@@ -10,6 +10,7 @@
 //   POST { action:"push-subscribe", endpoint, p256dh, auth, userAgent? }
 //   POST { action:"push-unsubscribe", endpoint }
 
+import { checkRate, checkRateWindow } from './_rate-limit.js'
 import { logger } from './_logger.js'
 
 const PATH = '/api/user-data'
@@ -35,41 +36,18 @@ const ALLOWED_ORIGINS = [
 const RL_MAX_IP_GET      = 20;
 const RL_MAX_IP_POST     = 10;
 const RL_MAX_USER_POST   = 8;
-const RL_WINDOW_MS       = 60_000;
 const RL_RESTORE_MAX     = 3;
-const RL_RESTORE_WIN_MS  = 3_600_000;
-const MAX_STORE_SIZE     = 10_000;
+const RL_RESTORE_WIN_SECS = 3_600;
 const MAX_BODY_BYTES     = 5_242_880;
 const MAX_PROFILES       = 200;
 const MAX_JSON_DEPTH     = 8;
 const MAX_KEYS_OBJ       = 50;
 
-// ── Rate limit store compartilhado ───────────────────────────
-const rlStore = new Map();
-
-function checkRL(key, max, windowMs = RL_WINDOW_MS) {
-    const now = Date.now();
-    const rec = rlStore.get(key);
-    if (!rec || now - rec.t > windowMs) {
-        if (!rec && rlStore.size >= MAX_STORE_SIZE) {
-            for (const [k, r] of rlStore) {
-                if (now - r.t > windowMs) rlStore.delete(k);
-                if (rlStore.size < MAX_STORE_SIZE) break;
-            }
-            if (rlStore.size >= MAX_STORE_SIZE) return false;
-        }
-        rlStore.set(key, { n: 1, t: now });
-        return true;
-    }
-    if (rec.n >= max) return false;
-    rec.n++;
-    return true;
+// checkRL usa _rate-limit.js (Redis distribuído quando disponível, in-memory fallback).
+// Elimina o rlStore Map local que não persiste entre instâncias serverless da Vercel.
+async function checkRL(key, max, windowSecs = 60) {
+    return checkRateWindow(key, max, windowSecs);
 }
-
-setInterval(() => {
-    const now = Date.now();
-    for (const [k, r] of rlStore) if (now - r.t > RL_WINDOW_MS * 2) rlStore.delete(k);
-}, RL_WINDOW_MS * 5);
 
 // ── Handler principal ─────────────────────────────────────────
 export default async function handler(req, res) {
@@ -88,7 +66,7 @@ export default async function handler(req, res) {
         if (req.method !== 'POST') return res.status(405).end();
         const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
             .toString().split(',')[0].trim();
-        if (!checkRL(`csp-report:${ip}`, 30)) return res.status(429).end();
+        if (!await checkRL(`csp-report:${ip}`, 30)) return res.status(429).end();
         let raw = '';
         try {
             raw = await new Promise((resolve, reject) => {
@@ -158,7 +136,7 @@ export default async function handler(req, res) {
 
     // Rate limit IP
     const rlMax = req.method === 'GET' ? RL_MAX_IP_GET : RL_MAX_IP_POST;
-    if (!checkRL(`ip:${ip}`, rlMax)) {
+    if (!await checkRL(`ip:${ip}`, rlMax)) {
         res.setHeader('Retry-After', '60');
         return res.status(429).json({ error: 'Muitas requisições. Aguarde um momento.' });
     }
@@ -240,11 +218,11 @@ export default async function handler(req, res) {
             !/^\d{4}-\d{2}-\d{2}$/.test(parsed.snapshot_date))
             return res.status(400).json({ error: 'snapshot_date inválido (esperado YYYY-MM-DD)' });
 
-        if (!checkRL(`ip:${ip}:restore`, RL_RESTORE_MAX, RL_RESTORE_WIN_MS)) {
+        if (!await checkRL(`ip:${ip}:restore`, RL_RESTORE_MAX, RL_RESTORE_WIN_SECS)) {
             res.setHeader('Retry-After', '3600');
             return res.status(429).json({ error: 'Limite de restaurações atingido. Aguarde 1 hora.' });
         }
-        if (userId && !checkRL(`uid:${userId}:restore`, RL_RESTORE_MAX, RL_RESTORE_WIN_MS)) {
+        if (userId && !await checkRL(`uid:${userId}:restore`, RL_RESTORE_MAX, RL_RESTORE_WIN_SECS)) {
             res.setHeader('Retry-After', '3600');
             return res.status(429).json({ error: 'Limite de restaurações atingido. Aguarde 1 hora.' });
         }
@@ -290,7 +268,7 @@ export default async function handler(req, res) {
         if (!SUPABASE_URL) return res.status(503).json({ error: 'Serviço indisponível' })
 
         // Rate limit específico para push (mais restritivo — operação de baixa frequência)
-        if (!checkRL(`push:${ip}`, 10)) {
+        if (!await checkRL(`push:${ip}`, 10)) {
             res.setHeader('Retry-After', '60')
             return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
         }
@@ -352,7 +330,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `Limite de ${MAX_PROFILES} perfis excedido` });
 
     // Rate limit por userId (segunda camada — cobre IPs rotativos)
-    if (userId && !checkRL(`uid:${userId}`, RL_MAX_USER_POST)) {
+    if (userId && !await checkRL(`uid:${userId}`, RL_MAX_USER_POST)) {
         res.setHeader('Retry-After', '60');
         return res.status(429).json({ error: 'Muitas requisições. Aguarde um momento.' });
     }

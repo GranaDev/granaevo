@@ -456,11 +456,14 @@ class DataManager {
         }
     }
 
-    // ============================ //
-    //  SALVAMENTO IMEDIATO BEACON  //
-    // ============================ //
+    // ============================================================= //
+    //  SALVAMENTO IMEDIATO (beforeunload / troca de aba)           //
+    //  Usa fetch com keepalive=true para manter o JWT no header.   //
+    //  navigator.sendBeacon não suporta headers customizados,      //
+    //  então retornaria 401 — abordagem correta é keepalive.       //
+    // ============================================================= //
 
-    saveImmediate(profilesData) {
+    async saveImmediate(profilesData) {
         if (!this.#userId) return false;
 
         if (this.#debounceTimer !== null) {
@@ -475,7 +478,7 @@ class DataManager {
 
         const validation = validateProfilesArray(profilesData);
         if (!validation.ok) {
-            console.error(`❌ [BEACON] ${validation.error} — beacon cancelado`);
+            console.error(`❌ [SAVE-IMMEDIATE] ${validation.error} — cancelado`);
             return false;
         }
 
@@ -483,28 +486,47 @@ class DataManager {
         try {
             payload = JSON.stringify({ profiles: profilesData });
         } catch (serErr) {
-            console.error('❌ [BEACON] Falha ao serializar:', serErr?.message);
+            console.error('❌ [SAVE-IMMEDIATE] Falha ao serializar:', serErr?.message);
             return false;
         }
 
+        // keepalive tem limite de ~64KB no browser; acima disso não envia.
         if (payload.length > 60_000) {
-            console.warn('⚠️ [BEACON] Payload excede 60KB — beacon cancelado');
+            console.warn('⚠️ [SAVE-IMMEDIATE] Payload excede 60KB — abortado');
             return false;
         }
 
-        const sent = navigator.sendBeacon(
-            SUPABASE_BEACON_URL,
-            new Blob([payload], { type: 'application/json' })
-        );
-
-        if (IS_DEV) {
-            console.log(sent
-                ? '✅ [BEACON] Enfileirado com sucesso'
-                : '❌ [BEACON] Browser recusou enfileirar beacon'
-            );
+        const token = await this.#getAuthToken();
+        if (!token) {
+            console.error('❌ [SAVE-IMMEDIATE] Sem token JWT — abortado');
+            return false;
         }
 
-        return sent;
+        try {
+            // keepalive: true garante que o browser completa o request mesmo após
+            // o unload da página — equivalente funcional ao sendBeacon com headers.
+            const resp = await fetch(SUPABASE_BEACON_URL, {
+                method:    'POST',
+                keepalive: true,
+                headers: {
+                    'Content-Type':  'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: payload,
+            });
+
+            if (IS_DEV) {
+                console.log(resp.ok
+                    ? '✅ [SAVE-IMMEDIATE] Enviado com sucesso'
+                    : `❌ [SAVE-IMMEDIATE] HTTP ${resp.status}`
+                );
+            }
+
+            return resp.ok;
+        } catch (err) {
+            if (IS_DEV) console.error('❌ [SAVE-IMMEDIATE] Erro de rede:', err?.message);
+            return false;
+        }
     }
 
     // ============================ //

@@ -207,11 +207,7 @@ export function iniciarTutorial(perfil = {}) {
   _ir(0);
 }
 
-/**
- * Reinicia o tutorial do zero.
- * @param {TutorialPerfil} [perfil={}] - Perfil do usuário
- */
-export function reiniciarTutorial(perfil = {}) {
+function reiniciarTutorial(perfil = {}) {
   _desmontar();
   setTimeout(() => iniciarTutorial(perfil), 300);
 }

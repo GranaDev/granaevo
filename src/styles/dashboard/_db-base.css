@@ -1,0 +1,371 @@
+﻿/* Design tokens â€” fonte Ãºnica de verdade para cores, espaÃ§amento e tipografia */
+@import './_tokens.css';
+
+/* Font Awesome self-hosted via npm â€” sem dependÃªncia de CDN externo */
+@import '@fortawesome/fontawesome-free/css/all.min.css';
+
+/* ==============================================
+   GRANAEVO - CSS COMPLETO E RESPONSIVO
+   ============================================== */
+
+/* ========== UTILITÃRIOS â€” sem unsafe-inline ========== */
+.js-hidden      { display: none !important; }
+.text-secondary { color: var(--text-secondary, #b0b3c1); }
+.promo-bloco {
+    margin-top: 32px;
+    cursor: pointer;
+    display: flex;
+    align-items: stretch;
+    gap: 28px;
+    text-align: left;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.promo-titulo {
+    margin-bottom: 6px;
+    color: var(--text-primary);
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+.promo-desc {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+.promo-ilustracao {
+    flex-shrink: 0;
+    width: 270px;
+    align-self: stretch;
+    background: url('/assets/icons/Icon_onde_foi.png') center/130% no-repeat;
+    position: relative;
+    z-index: 2;
+    transform: scale(1.08);
+    transform-origin: left center;
+}
+.promo-conteudo {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.promo-text-top {
+    display: flex;
+    flex-direction: column;
+}
+.promo-features {
+    display: flex;
+    gap: 20px;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+}
+.promo-feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+.promo-feature-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--color-primary);
+}
+.promo-feature-title {
+    display: block;
+    color: var(--color-text);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.promo-feature-sub {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+.promo-acao {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+.promo-trend-icon {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    color: var(--color-primary);
+    z-index: 1;
+}
+.promo-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    font-size: 0.9rem;
+    padding: 11px 20px;
+}
+.btn-no-events       { pointer-events: none; }
+.grafico-titulo { color: var(--text-primary, #fff); margin-bottom: 16px; text-align: center; }
+.mt-20          { margin-top: 20px; }
+
+/* ========== RESET ========== */
+/* Tokens de cor/espaÃ§amento em src/styles/_tokens.css (importado no topo) */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'DM Sans', 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0a0e1a;
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background:
+        radial-gradient(ellipse at top, rgba(67, 160, 71, 0.15), transparent 50%),
+        radial-gradient(ellipse at bottom, rgba(46, 125, 50, 0.1), transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ========== SISTEMA DE PARTÃCULAS DE FUNDO ========== */
+#particles-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+@media (max-width: 768px) {
+    #particles-canvas {
+        display: none !important;
+    }
+}
+
+/* ========== BACKGROUND OVERLAY ========== */
+.background-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background:
+        radial-gradient(circle at 20% 30%, rgba(67, 160, 71, 0.08), transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(102, 187, 106, 0.06), transparent 40%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+@keyframes pulseGlow {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.6; }
+}
+
+@media (max-width: 768px) {
+    .background-overlay {
+        animation: none !important;
+        opacity: 0.4 !important;
+    }
+
+    .particle-1,
+    .particle-2,
+    .particle-3 {
+        display: none !important;
+    }
+}
+
+/* Garantir que todo conteÃºdo fique acima do background */
+.sidebar,
+.main-content,
+.perfis-screen,
+.loading-screen,
+.modal-overlay,
+.popup {
+    position: relative;
+    z-index: 1;
+}
+
+/* ========== LOADING DE AUTENTICAÃ‡ÃƒO ========== */
+.loading-screen {
+    position: fixed;
+    inset: 0;
+    background: #090a12;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.loading-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* ========== LOADING DE PERFIL (transiÃ§Ã£o apÃ³s seleÃ§Ã£o) ========== */
+.profile-loading {
+    position: fixed;
+    inset: 0;
+    background: #090a12;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001; /* acima de tudo */
+}
+.profile-loading.hidden {
+    display: none;
+}
+.pl-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+}
+.pl-logo-ring {
+    position: relative;
+    width: 90px;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.pl-logo {
+    width: 62px;
+    height: 62px;
+    border-radius: 16px;
+    object-fit: cover;
+    position: relative;
+    z-index: 1;
+}
+.pl-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2.5px solid rgba(16, 185, 129, 0.15);
+    border-top-color: #10b981;
+    animation: spin 0.85s linear infinite;
+}
+.pl-text {
+    color: #dff5ec;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-align: center;
+}
+.pl-sub {
+    color: #3f6e58;
+    font-size: 0.82rem;
+    margin: -16px 0 0;
+    text-align: center;
+}
+
+.loader { text-align: center; }
+
+.loader-logo {
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 2rem;
+    position: relative;
+}
+
+.loader-logo::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 24px;
+    border: 2px solid transparent;
+    background: linear-gradient(135deg, #10b981, transparent) border-box;
+    -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: destination-out;
+    mask-composite: exclude;
+    animation: spin 3s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.logo-img-loader {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 16px;
+    box-shadow: 0 0 40px rgba(16, 185, 129, 0.6);
+    animation: logoFloat 2.5s ease-in-out infinite;
+}
+
+@keyframes logoFloat {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50%       { transform: translateY(-8px) scale(1.04); }
+}
+
+.loader-bar {
+    width: 220px;
+    height: 5px;
+    background: rgba(16, 185, 129, 0.12);
+    border-radius: 9999px;
+    overflow: hidden;
+    margin: 0 auto 1rem;
+}
+
+.loader-progress {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, #059669, #6ee7b7, #10b981);
+    background-size: 200% 100%;
+    border-radius: 9999px;
+    animation: loadProgress 1.4s ease-in-out forwards, shimmerBg 1.5s ease infinite;
+    box-shadow: 0 0 14px rgba(16, 185, 129, 0.7);
+}
+
+.loader-text {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #94a3b8;
+    letter-spacing: 0.03em;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes loadProgress {
+    0%   { width: 0%;   }
+    60%  { width: 75%;  }
+    100% { width: 100%; }
+}
+
+@keyframes shimmerBg {
+    0%   { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.6; }
+}
+

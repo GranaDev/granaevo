@@ -2,6 +2,7 @@
 import { supabase } from '../services/supabase-client.js?v=2';
 import { iniciarTutorial } from '../modules/tutorial.js';
 import { initPWA, initInstallButton } from '../modules/pwa-installer.js';
+import { isPushSupported, getPushPermission, requestPushPermission, unsubscribePush } from '../modules/push-notifications.js';
 let _ctx = null;
 
 // Inicializa PWA logo que o módulo é carregado (uma vez, independente de ctx)
@@ -25,6 +26,62 @@ export function init(ctx) {
     initInstallButton();
     // Atualiza status de cache offline
     _updateOfflineStatus();
+    // Inicializa botão de notificações push
+    _initPushButton();
+}
+
+function _initPushButton() {
+    const btn = document.getElementById('btnTogglePush');
+    const sub = document.getElementById('pushStatusText');
+    if (!btn || !sub) return;
+
+    if (!isPushSupported()) {
+        sub.textContent = 'Não suportado neste navegador';
+        btn.disabled = true;
+        return;
+    }
+
+    const perm = getPushPermission();
+    if (perm === 'granted') {
+        sub.textContent = 'Ativas — toque para desativar';
+    } else if (perm === 'denied') {
+        sub.textContent = 'Bloqueadas — reative nas configurações do browser';
+        btn.disabled = true;
+    } else {
+        sub.textContent = 'Desativadas — toque para ativar';
+    }
+
+    btn.addEventListener('click', async () => {
+        if (!_ctx?.accessToken && !_ctx?.session) return;
+        const token = _ctx?.session?.access_token ?? _ctx?.accessToken ?? '';
+        if (!token) return;
+
+        btn.disabled = true;
+        const currentPerm = getPushPermission();
+
+        if (currentPerm === 'granted') {
+            sub.textContent = 'Desativando...';
+            await unsubscribePush(token);
+            sub.textContent = 'Desativadas — toque para ativar';
+            _ctx?.mostrarNotificacao?.('Notificações push desativadas.', 'info');
+        } else {
+            sub.textContent = 'Aguardando permissão...';
+            const result = await requestPushPermission(token);
+            if (result === 'granted') {
+                sub.textContent = 'Ativas — toque para desativar';
+                _ctx?.mostrarNotificacao?.('Notificações push ativadas!', 'success');
+            } else if (result === 'denied') {
+                sub.textContent = 'Bloqueadas — reative nas configurações do browser';
+                btn.disabled = true;
+                _ctx?.mostrarNotificacao?.('Permissão negada pelo browser.', 'error');
+            } else {
+                sub.textContent = 'Desativadas — toque para ativar';
+                _ctx?.mostrarNotificacao?.('Não foi possível ativar notificações.', 'error');
+            }
+        }
+
+        btn.disabled = currentPerm !== 'granted' && getPushPermission() === 'denied';
+    });
 }
 
 function _updateOfflineStatus() {

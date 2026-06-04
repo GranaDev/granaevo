@@ -26,9 +26,9 @@ export default async function handler(req, res) {
   const origin        = req.headers['origin'] ?? ''
   const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : null
 
-  // [CR-06] Preflight OPTIONS não exige origin válida (browser envia antes da req real)
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin',  allowedOrigin ?? ALLOWED_ORIGINS[0])
+    if (!allowedOrigin) return res.status(403).end()
+    res.setHeader('Access-Control-Allow-Origin',  allowedOrigin)
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     res.setHeader('Vary', 'Origin')

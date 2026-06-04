@@ -1,0 +1,241 @@
+﻿    /* Sidebar */
+    .sidebar {
+        position: fixed;
+        width: 280px;
+        height: 100vh;
+        transform: translateX(-100%);
+        border-right: 1px solid var(--border);
+        border-bottom: none;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 10000;
+    }
+
+    .sidebar.open { transform: translateX(0); }
+
+    body.sidebar-open {
+        overflow: hidden;
+        position: fixed;
+        width: 100%;
+        height: 100vh;
+        touch-action: none;
+    }
+
+    body.sidebar-open::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 9999;
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    /* Main content */
+    .main-content {
+        margin-left: 0;
+        padding: 20px 16px;
+    }
+
+    /* Page header premium */
+    .page-header-premium {
+        margin-top: 85px;
+        padding: 24px 20px;
+        border-radius: 20px;
+    }
+
+    .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .header-title-group { width: 100%; }
+    .breadcrumb-premium { font-size: 12px; margin-bottom: 6px; }
+
+    .page-title-premium { font-size: 22px; gap: 10px; }
+    .page-title-premium i { font-size: 20px; }
+
+    .page-subtitle-premium { font-size: 13px; line-height: 1.5; }
+
+    .header-actions { width: 100%; gap: 10px; }
+
+    .btn-header-premium {
+        flex: 1;
+        justify-content: center;
+        padding: 10px 16px;
+        font-size: 13px;
+    }
+
+    .header-stats { width: 100%; gap: 12px; margin-top: 20px; }
+
+    .header-stat-item {
+        flex: 1;
+        min-width: calc(50% - 6px);
+        padding: 12px 16px;
+    }
+
+    .header-stat-value { font-size: 20px; }
+
+    /* Page title legacy */
+    .page-title { font-size: 1.5rem; }
+
+    /* Cards */
+    .card { padding: 20px; }
+    .card-icon  { font-size: 2rem; }
+    .card-value { font-size: 1.4rem; }
+
+    /* Section */
+    .section-box { padding: 20px; border-radius: 12px; }
+    .section-header { flex-direction: column; align-items: center; gap: 12px; }
+
+    /* Forms */
+    .transaction-form { grid-template-columns: 1fr; padding: 20px; }
+    .filtros-row { grid-template-columns: 1fr; }
+
+    /* Grids */
+    .comparacao-perfis  { grid-template-columns: 1fr; }
+    .config-grid        { grid-template-columns: 1fr; }
+    .cartoes-grid       { grid-template-columns: 1fr; gap: 16px; }
+
+    /* RelatÃ³rio item */
+    .relatorio-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    /* Tipo relatÃ³rio */
+    .tipo-relatorio-btns { flex-direction: column; gap: 12px; }
+    .tipo-btn { width: 100%; }
+}
+
+/* ========== MOBILE PEQUENO (480px) ========== */
+@media (max-width: 480px) {
+    body { font-size: 14px; }
+
+    .page-header-premium {
+        margin-top: 45px;
+        padding: 20px 16px;
+    }
+
+    .page-title-premium   { font-size: 20px; }
+    .page-title-premium i { font-size: 18px; }
+    .page-subtitle-premium { font-size: 12px; }
+
+    .header-stat-item { min-width: 100%; }
+    .btn-header-premium { width: 100%; padding: 10px 14px; }
+
+    .perfis-title  { font-size: 1.3rem; margin-bottom: 24px; }
+
+    .perfis-grid {
+        grid-template-columns: repeat(auto-fit, minmax(100px, 120px));
+        gap: 16px;
+    }
+
+    .perfil-foto {
+        width: 100px;
+        height: 100px;
+        font-size: 2.5rem;
+    }
+
+    .perfil-nome { font-size: 0.9rem; margin-top: 10px; }
+
+    .main-content { padding: 16px 12px; }
+
+    .page-title    { font-size: 1.3rem; }
+    .page-subtitle { font-size: 0.9rem; }
+
+    .cards-grid { gap: 10px; }
+
+    .card {
+        padding: 16px;
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .card-icon  { font-size: 2.5rem; margin-bottom: 8px; }
+    .card-value { font-size: 1.3rem; }
+
+    .section-box  { padding: 16px; }
+    .section-title { font-size: 1.1rem; }
+
+    .btn-primary { padding: 10px 20px; font-size: 0.9rem; }
+
+    .conta-card { padding: 16px; font-size: 0.9rem; }
+
+    .transaction-form { padding: 16px; gap: 12px; }
+
+    .form-input { padding: 12px 14px; font-size: 0.9rem; }
+
+    .mov-item  { padding: 16px; }
+    .mov-tipo  { font-size: 0.95rem; }
+    .mov-desc  { font-size: 0.85rem; }
+    .mov-right { font-size: 1rem; }
+
+    .reservas-sidebar,
+    .reservas-main { padding: 16px; }
+
+    .meta-item { padding: 16px; font-size: 0.9rem; }
+
+    .cartoes-grid  { grid-template-columns: 1fr; gap: 16px; }
+
+    .cartao-cc {
+        min-height: 160px;
+        padding: 20px 16px;
+    }
+
+    .cartao-cc-nome { font-size: 1.1rem; }
+
+    .cartao-bandeira {
+        width: 40px;
+        top: 16px;
+        right: 16px;
+    }
+
+    .cartao-cc-add {
+        min-height: 160px;
+        font-size: 2.5rem;
+    }
+
+    .filtros-box { padding: 16px; }
+
+    .graficos-grid { grid-template-columns: 1fr; gap: 16px; }
+
+    .grafico-card { padding: 20px; }
+
+    .relatorio-resultado { padding: 20px 16px; }
+
+    .relatorio-resumo {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .relatorio-card { padding: 16px; }
+
+    .config-card { padding: 16px; gap: 12px; }
+    .config-icon  { font-size: 1.5rem; min-width: 40px; }
+    .config-text h3 { font-size: 1rem; }
+    .config-text p  { font-size: 0.8rem; }
+
+    .popup { padding: 24px 20px; max-width: 95%; }
+    .popup h3 { font-size: 1.3rem; }
+    .popup input { padding: 12px 14px; font-size: 0.9rem; }
+    .popup button { padding: 10px 20px; font-size: 0.9rem; }
+}
+
+/* ========== MOBILE MUITO PEQUENO (360px) ========== */
+@media (max-width: 360px) {
+    .perfis-grid { grid-template-columns: 1fr; padding: 10px; }
+    .perfil-foto { width: 120px; height: 120px; }
+    .cards-grid  { grid-template-columns: 1fr; }
+    .sidebar     { width: 260px; }
+    .user-photo  { width: 80px; height: 80px; }
+    .logo-text   { font-size: 1.3rem; }
+}
+
+/* ================================================================
+   MOBILE TOPBAR + BOTTOM NAV â€” NOVO LAYOUT MOBILE
