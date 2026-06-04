@@ -1,44 +1,8 @@
 /**
- * GranaEvo — Dashboard CSS Entry Point
+ * GranaEvo — Dashboard CSS
  *
- * Módulos em src/styles/dashboard/:
- *   _db-base.css              — tokens, FA, reset, utils, background, loading
- *   _db-profiles.css          — seleção de perfil
- *   _db-sidebar.css           — sidebar desktop (expand-on-hover) + mobile
- *   _db-layout-cards.css      — layout principal + grid de cards resumo
- *   _db-section.css           — section-box, headers, botões
- *   _db-accounts.css          — contas fixas grid + painel de alertas
- *   _db-forms.css             — inputs de formulário + filtros de movimentações
- *   _db-transactions.css      — lista e tabela de movimentações
- *   _db-reservas.css          — reservas / metas
- *   _db-charts-reports-old.css — cartões legados, filtros gráficos, relatórios antigos
- *   _db-modal-utils.css       — modal/popup, scrollbar, classes utilitárias
- *   _db-header-premium.css    — header premium com stats
- *   _db-mobile-responsive.css — regras @media max-width bulk
- *   _db-mobile-nav.css        — topbar mobile + bottom nav
- *   _db-credit-cards.css      — layout premium de cartões de crédito
- *   _db-notifications.css     — painel e badge de notificações
- *   _db-reports.css           — relatórios redesign (mobile-first glassmorphism)
- *   _db-config.css            — configurações redesign
- *   _db-reports-desktop.css   — relatórios desktop duo-layout, toast, misc
+ * Importa o arquivo consolidado que contém todo o CSS do dashboard.
+ * Os módulos individuais (src/styles/dashboard/) estão disponíveis
+ * para referência e edição futura.
  */
-
-@import './dashboard/_db-base.css';
-@import './dashboard/_db-profiles.css';
-@import './dashboard/_db-sidebar.css';
-@import './dashboard/_db-layout-cards.css';
-@import './dashboard/_db-section.css';
-@import './dashboard/_db-accounts.css';
-@import './dashboard/_db-forms.css';
-@import './dashboard/_db-transactions.css';
-@import './dashboard/_db-reservas.css';
-@import './dashboard/_db-charts-reports-old.css';
-@import './dashboard/_db-modal-utils.css';
-@import './dashboard/_db-header-premium.css';
-@import './dashboard/_db-mobile-responsive.css';
-@import './dashboard/_db-mobile-nav.css';
-@import './dashboard/_db-credit-cards.css';
-@import './dashboard/_db-notifications.css';
-@import './dashboard/_db-reports.css';
-@import './dashboard/_db-config.css';
-@import './dashboard/_db-reports-desktop.css';
+@import './dashboard/_db-all.css';

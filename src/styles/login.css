@@ -53,7 +53,7 @@
    ========================================== */
 
 /* Tokens globais — fonte única de verdade para cores, espaçamento e tipografia */
-@import '../_tokens.css';
+@import './_tokens.css';
 
 /* ==========================================
    RESET E CONFIGURAÇÕES
