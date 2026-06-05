@@ -252,3 +252,13 @@
     }
 }
 
+
+/* ── Ícone laranja (reset/danger-soft) ─────────────────────────────── */
+.cfg-item-icon--orange { background: rgba(234, 88, 12, 0.15); color: #ea580c; }
+
+/* ── Botão de ação destrutiva suave (laranja, não vermelho) ─────────── */
+.cfg-item--danger-soft:hover {
+    background: rgba(234, 88, 12, 0.06) !important;
+    border-color: rgba(234, 88, 12, 0.2) !important;
+}
+.cfg-item--danger-soft .cfg-item-title { color: #ea580c; }

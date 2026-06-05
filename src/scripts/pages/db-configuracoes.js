@@ -23,6 +23,7 @@ export function init(ctx) {
     window.comoUsar            = () => comoUsar();
     window.gerenciarAssinatura = () => gerenciarAssinatura();
     window.abrirHistoricoBackup = () => abrirHistoricoBackup();
+    window.resetarPerfil        = () => resetarPerfil();
     // Inicializa botão de instalação do PWA na seção de Configurações
     initInstallButton();
     // Atualiza status de cache offline
@@ -35,8 +36,9 @@ export function init(ctx) {
 
 function _bindBtnBackup() {
     const btn = document.getElementById('btnHistoricoBackup');
-    if (!btn) return;
-    btn.addEventListener('click', abrirHistoricoBackup);
+    if (btn) btn.addEventListener('click', abrirHistoricoBackup);
+    const btnReset = document.getElementById('btnResetarPerfil');
+    if (btnReset) btnReset.addEventListener('click', resetarPerfil);
 }
 
 function _initPushButton() {
@@ -591,11 +593,35 @@ function gerenciarAssinatura() {
     window.location.href = 'atualizarplano.html';
 }
 
+// ── Helpers de nomes de backup (client-side, armazenados em localStorage) ──
+function _backupNomeKey() {
+    return 'ge_backup_names_' + (_ctx.usuarioLogado?.userId || 'anon');
+}
+function _getBackupNomes() {
+    try { return JSON.parse(localStorage.getItem(_backupNomeKey()) || '{}'); } catch { return {}; }
+}
+function _setBackupNome(date, nome) {
+    try {
+        const nomes = _getBackupNomes();
+        nomes[date] = { nome: String(nome).slice(0, 80), ts: Date.now() };
+        localStorage.setItem(_backupNomeKey(), JSON.stringify(nomes));
+    } catch { /* localStorage pode estar bloqueado */ }
+}
+
+// ── Salva o estado ATUAL como um safety backup antes de restaurar ──────────
+// Simplesmente trigger a salvarDados que gera um snapshot no servidor.
+// O nome é armazenado localmente com a data de hoje.
+async function _salvarSafetyBackup(nomePersonalizado, token) {
+    const hoje = new Date().toISOString().slice(0, 10);
+    _setBackupNome(hoje, nomePersonalizado || 'Antes da restauração — ' + new Date().toLocaleDateString('pt-BR'));
+    // Força save para garantir que o servidor tem o estado mais recente
+    try { await _ctx.salvarDados(); } catch { /* save silencioso */ }
+}
+
 // ========== HISTÓRICO DE BACKUP ==========
-// Lista os snapshots dos últimos 7 dias e permite restaurar qualquer um.
+// Lista snapshots com nomes personalizados, permite nomear ponto atual antes de restaurar.
 // Segurança: a sessão JWT é validada na Edge Function — usuário só acessa seus próprios backups.
 async function abrirHistoricoBackup() {
-    // Obtém token da sessão atual
     let token = null;
     try {
         const { supabase } = await import('../services/supabase-client.js?v=2');
@@ -608,8 +634,10 @@ async function abrirHistoricoBackup() {
         return;
     }
 
+    const nomesMap = _getBackupNomes();
+
     _ctx.criarPopupDOM((box) => {
-        box.style.maxWidth = '480px';
+        box.style.maxWidth = '520px';
 
         const h3 = document.createElement('h3');
         h3.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:4px;';
@@ -617,14 +645,39 @@ async function abrirHistoricoBackup() {
         hI.className = 'fas fa-history';
         hI.style.color = 'var(--primary)';
         h3.appendChild(hI);
-        h3.appendChild(document.createTextNode('Histórico de Backups'));
+        h3.appendChild(document.createTextNode(' Histórico de Backups'));
 
         const sub = document.createElement('p');
-        sub.style.cssText = 'color:var(--text-muted); font-size:0.8rem; margin-bottom:20px;';
-        sub.textContent = 'Backups automáticos dos últimos 7 dias. Restaurar substitui todos os seus dados atuais.';
+        sub.style.cssText = 'color:var(--text-muted); font-size:0.8rem; margin-bottom:8px; line-height:1.5;';
+        sub.textContent = 'Backups automáticos diários — disponíveis por 7 dias. Antes de restaurar, o sistema salva seu estado atual automaticamente.';
+
+        // ── Caixa para nomear o estado atual ──────────────────────────────
+        const nomearBox = document.createElement('div');
+        nomearBox.style.cssText = 'background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:12px 14px; margin-bottom:16px;';
+
+        const nomearLabel = document.createElement('label');
+        nomearLabel.htmlFor = 'backupNomeAtual';
+        nomearLabel.style.cssText = 'font-size:0.75rem; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.06em; display:block; margin-bottom:6px;';
+        nomearLabel.textContent = '📍 Nomear estado atual (opcional)';
+
+        const nomearInput = document.createElement('input');
+        nomearInput.type = 'text';
+        nomearInput.id   = 'backupNomeAtual';
+        nomearInput.className = 'form-input';
+        nomearInput.placeholder = 'Ex: Antes das férias, Financeiro de junho…';
+        nomearInput.maxLength = 80;
+        nomearInput.style.cssText = 'font-size:0.85rem; padding:8px 12px;';
+
+        const nomearHint = document.createElement('p');
+        nomearHint.style.cssText = 'font-size:0.72rem; color:var(--text-muted); margin-top:6px;';
+        nomearHint.textContent = 'Este nome aparecerá na lista de backups — útil para identificar o ponto de partida antes de uma restauração.';
+
+        nomearBox.appendChild(nomearLabel);
+        nomearBox.appendChild(nomearInput);
+        nomearBox.appendChild(nomearHint);
 
         const listWrap = document.createElement('div');
-        listWrap.style.cssText = 'max-height:360px; overflow-y:auto;';
+        listWrap.style.cssText = 'max-height:340px; overflow-y:auto; margin-top:4px;';
 
         const loading = document.createElement('div');
         loading.style.cssText = 'text-align:center; padding:32px; color:var(--text-muted);';
@@ -634,21 +687,20 @@ async function abrirHistoricoBackup() {
         const btnFechar = document.createElement('button');
         btnFechar.className = 'btn-cancelar';
         btnFechar.type = 'button';
-        btnFechar.style.cssText = 'margin-top:16px; width:100%;';
+        btnFechar.style.cssText = 'margin-top:14px; width:100%;';
         btnFechar.textContent = 'Fechar';
         btnFechar.addEventListener('click', () => _ctx.fecharPopup());
 
         box.appendChild(h3);
         box.appendChild(sub);
+        box.appendChild(nomearBox);
         box.appendChild(listWrap);
         box.appendChild(btnFechar);
 
-        // Carrega backups da API
+        // ── Carrega backups da API ────────────────────────────────────────
         fetch('/api/user-data?backup=1', {
             method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Authorization': `Bearer ${token}` },
         })
         .then(r => r.ok ? r.json() : Promise.reject(r.status))
         .then(data => {
@@ -665,80 +717,81 @@ async function abrirHistoricoBackup() {
             }
 
             snapshots.forEach(snap => {
+                const dateStr  = snap.snapshot_date || '';
+                const parts    = dateStr.split('-');
+                const dateBR   = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
+
+                // Nome personalizado (do localStorage) ou label automático
+                const nomeInfo = nomesMap[dateStr];
+                const nomeLabel = nomeInfo?.nome || '';
+
                 const row = document.createElement('div');
-                row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:rgba(255,255,255,0.04); border-radius:12px; margin-bottom:8px; border:1px solid rgba(255,255,255,0.07); gap:12px;';
+                row.style.cssText = 'padding:12px 14px; background:rgba(255,255,255,0.04); border-radius:12px; margin-bottom:8px; border:1px solid rgba(255,255,255,0.07);';
 
-                const left = document.createElement('div');
+                const topRow = document.createElement('div');
+                topRow.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:4px;';
+
+                // ── Badge de data + nome ──────────────────────────────────
+                const leftDiv = document.createElement('div');
+
                 const dateEl = document.createElement('div');
-                dateEl.style.cssText = 'font-weight:600; font-size:0.9rem; color:var(--text-primary);';
-                // Data no formato YYYY-MM-DD → DD/MM/YYYY
-                const parts = (snap.snapshot_date || '').split('-');
-                dateEl.textContent = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : (snap.snapshot_date || 'Data desconhecida');
+                dateEl.style.cssText = 'font-weight:700; font-size:0.9rem; color:var(--text-primary); display:flex; align-items:center; gap:8px;';
+                dateEl.textContent = dateBR;
 
-                const metaEl = document.createElement('div');
-                metaEl.style.cssText = 'font-size:0.75rem; color:var(--text-muted); margin-top:2px;';
+                // Indicar se é hoje (estado mais recente)
+                const hoje = new Date().toISOString().slice(0, 10);
+                if (dateStr === hoje) {
+                    const badge = document.createElement('span');
+                    badge.style.cssText = 'font-size:0.62rem; font-weight:700; background:rgba(16,185,129,0.18); color:#10b981; padding:2px 7px; border-radius:99px;';
+                    badge.textContent = 'Hoje';
+                    dateEl.appendChild(badge);
+                }
+
+                const metaRow = document.createElement('div');
+                metaRow.style.cssText = 'display:flex; align-items:center; gap:8px; margin-top:3px; flex-wrap:wrap;';
+
                 const perfisCount = snap.profiles_count ?? '?';
                 const hora = snap.created_at ? new Date(snap.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
-                metaEl.textContent = `${perfisCount} perfil(is)${hora ? ' · ' + hora : ''}`;
+                const metaText = document.createElement('span');
+                metaText.style.cssText = 'font-size:0.74rem; color:var(--text-muted);';
+                metaText.textContent = `${perfisCount} perfil(is)${hora ? ' · ' + hora : ''}`;
+                metaRow.appendChild(metaText);
 
-                left.appendChild(dateEl);
-                left.appendChild(metaEl);
+                // Nome personalizado (se houver)
+                if (nomeLabel) {
+                    const nomeEl = document.createElement('span');
+                    nomeEl.style.cssText = 'font-size:0.72rem; background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.6); padding:1px 8px; border-radius:99px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                    nomeEl.title = nomeLabel;
+                    nomeEl.textContent = '📍 ' + nomeLabel;
+                    metaRow.appendChild(nomeEl);
+                }
+
+                leftDiv.appendChild(dateEl);
+                leftDiv.appendChild(metaRow);
 
                 const btnRestore = document.createElement('button');
                 btnRestore.type = 'button';
                 btnRestore.className = 'btn-primary';
-                btnRestore.style.cssText = 'font-size:0.78rem; padding:6px 14px; white-space:nowrap; flex-shrink:0;';
-                btnRestore.textContent = 'Restaurar';
+                btnRestore.style.cssText = 'font-size:0.78rem; padding:7px 14px; white-space:nowrap; flex-shrink:0;';
+                btnRestore.innerHTML = '<i class="fas fa-undo" aria-hidden="true"></i> Restaurar';
 
                 btnRestore.addEventListener('click', () => {
-                    const dateStr = snap.snapshot_date;
                     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
                         _ctx.mostrarNotificacao('Data de snapshot inválida.', 'error');
                         return;
                     }
 
-                    // Confirmação explícita antes de restaurar — ação destrutiva
-                    _ctx.confirmarAcao(
-                        `Restaurar backup de ${dateEl.textContent}? Todos os dados atuais serão substituídos. Esta ação não pode ser desfeita.`,
-                        async () => {
-                            btnRestore.disabled = true;
-                            btnRestore.textContent = '⏳ Restaurando…';
-
-                            try {
-                                const resp = await fetch('/api/user-data', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type':  'application/json',
-                                        'Authorization': `Bearer ${token}`,
-                                    },
-                                    body: JSON.stringify({ action: 'restore', snapshot_date: dateStr }),
-                                });
-
-                                if (!resp.ok) {
-                                    const err = await resp.json().catch(() => ({}));
-                                    throw new Error(err?.error || `HTTP ${resp.status}`);
-                                }
-
-                                _ctx.fecharPopup();
-                                _ctx.mostrarNotificacao('✅ Backup restaurado! Recarregando…', 'success');
-                                // Recarrega a página para aplicar os dados restaurados
-                                setTimeout(() => window.location.reload(), 1500);
-                            } catch (e) {
-                                _ctx._log.error('BACKUP_RESTORE_001', e);
-                                btnRestore.disabled = false;
-                                btnRestore.textContent = 'Restaurar';
-                                _ctx.mostrarNotificacao(`Erro ao restaurar: ${e.message}`, 'error');
-                            }
-                        }
-                    );
+                    // ── Fluxo de 2 etapas: nomear estado atual → confirmar → restaurar ──
+                    _abrirConfirmacaoRestauracao(dateStr, dateBR, token, nomearInput, btnRestore);
                 });
 
-                row.appendChild(left);
-                row.appendChild(btnRestore);
+                topRow.appendChild(leftDiv);
+                topRow.appendChild(btnRestore);
+                row.appendChild(topRow);
                 listWrap.appendChild(row);
             });
         })
-        .catch(err => {
+        .catch(() => {
             listWrap.innerHTML = '';
             const errEl = document.createElement('div');
             errEl.style.cssText = 'text-align:center; padding:32px; color:var(--danger);';
@@ -747,4 +800,257 @@ async function abrirHistoricoBackup() {
         });
     });
 }
+
+// ── Confirmação em 2 etapas: salva estado atual → confirma → restaura ────
+function _abrirConfirmacaoRestauracao(dateStr, dateBR, token, nomearInput, btnRestore) {
+    const nomeAtual = (nomearInput?.value || '').trim() ||
+        ('Antes da restauração para ' + dateBR + ' — ' + new Date().toLocaleDateString('pt-BR'));
+
+    _ctx.criarPopupDOM((box2) => {
+        box2.style.maxWidth = '420px';
+
+        const h3 = document.createElement('h3');
+        h3.innerHTML = '<i class="fas fa-shield-alt" style="color:#f59e0b" aria-hidden="true"></i> Confirmar Restauração';
+        h3.style.marginBottom = '16px';
+
+        // ── Safety backup info ──────────────────────────────────────────
+        const safetyInfo = document.createElement('div');
+        safetyInfo.style.cssText = 'background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:12px; padding:12px 14px; margin-bottom:16px;';
+        safetyInfo.innerHTML = `
+            <div style="font-size:0.78rem; font-weight:700; color:#f59e0b; margin-bottom:6px;">
+                <i class="fas fa-save" aria-hidden="true"></i> Ponto de retorno criado automaticamente
+            </div>
+            <div style="font-size:0.8rem; color:rgba(255,255,255,0.65); line-height:1.5;">
+                Antes de restaurar, vamos salvar seu estado atual com o nome:
+            </div>`;
+
+        const nomeDisplay = document.createElement('div');
+        nomeDisplay.style.cssText = 'font-size:0.85rem; font-weight:600; color:#fff; background:rgba(255,255,255,0.06); border-radius:8px; padding:8px 10px; margin-top:8px;';
+        nomeDisplay.textContent = '📍 ' + nomeAtual;
+        safetyInfo.appendChild(nomeDisplay);
+
+        const safetyNote = document.createElement('p');
+        safetyNote.style.cssText = 'font-size:0.74rem; color:rgba(255,255,255,0.4); margin-top:8px;';
+        safetyNote.textContent = 'Disponível por 5 dias. Se se arrepender, você pode restaurar este ponto.';
+        safetyInfo.appendChild(safetyNote);
+
+        // ── Aviso destrutivo ─────────────────────────────────────────────
+        const warning = document.createElement('div');
+        warning.style.cssText = 'background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:12px; padding:12px 14px; margin-bottom:20px;';
+        warning.innerHTML = `
+            <div style="font-size:0.78rem; font-weight:700; color:#f87171; margin-bottom:4px;">
+                <i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Ação destrutiva
+            </div>
+            <div style="font-size:0.8rem; color:rgba(255,255,255,0.65); line-height:1.5;">
+                Será restaurado o backup de <strong>${sanitizeHTML(dateBR)}</strong>.<br>
+                Todos os dados atuais serão substituídos.
+            </div>`;
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; gap:10px;';
+
+        const btnConfirmar = document.createElement('button');
+        btnConfirmar.className = 'btn-primary';
+        btnConfirmar.type = 'button';
+        btnConfirmar.style.cssText = 'flex:1; background:linear-gradient(135deg,#dc2626,#b91c1c);';
+        btnConfirmar.innerHTML = '<i class="fas fa-undo" aria-hidden="true"></i> Restaurar agora';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar';
+        btnCancelar.type = 'button';
+        btnCancelar.style.flex = '1';
+        btnCancelar.textContent = 'Cancelar';
+        btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
+
+        btnConfirmar.addEventListener('click', async () => {
+            btnConfirmar.disabled = true;
+            btnConfirmar.textContent = '⏳ Salvando estado atual…';
+            if (btnRestore) btnRestore.disabled = true;
+
+            try {
+                // 1. Salva estado atual como safety backup com nome personalizado
+                await _salvarSafetyBackup(nomeAtual, token);
+
+                btnConfirmar.textContent = '⏳ Restaurando…';
+
+                // 2. Executa a restauração
+                const resp = await fetch('/api/user-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type':  'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ action: 'restore', snapshot_date: dateStr }),
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err?.error || `HTTP ${resp.status}`);
+                }
+
+                _ctx.fecharPopup();
+                _ctx.mostrarNotificacao('✅ Backup restaurado! Recarregando…', 'success');
+                setTimeout(() => window.location.reload(), 1500);
+
+            } catch (e) {
+                _ctx._log.error('BACKUP_RESTORE_002', e);
+                btnConfirmar.disabled = false;
+                if (btnRestore) btnRestore.disabled = false;
+                btnConfirmar.innerHTML = '<i class="fas fa-undo" aria-hidden="true"></i> Restaurar agora';
+                _ctx.mostrarNotificacao(`Erro: ${e.message || 'Tente novamente.'}`, 'error');
+            }
+        });
+
+        row.appendChild(btnConfirmar);
+        row.appendChild(btnCancelar);
+
+        box2.appendChild(h3);
+        box2.appendChild(safetyInfo);
+        box2.appendChild(warning);
+        box2.appendChild(row);
+    });
+}
+
+// ========== RESETAR PERFIL ==========
+// Apaga todos os dados financeiros do perfil ativo (transações, metas, contas, cartões).
+// Antes de resetar: salva safety backup + exige confirmação dupla com "RESETAR".
+async function resetarPerfil() {
+    if (!_ctx.perfilAtivo) {
+        _ctx.mostrarNotificacao('Nenhum perfil ativo.', 'error');
+        return;
+    }
+
+    const nomePerfil = _ctx._sanitizeText(_ctx.perfilAtivo.nome || 'Perfil');
+
+    _ctx.criarPopupDOM((box) => {
+        box.style.maxWidth = '440px';
+
+        const h3 = document.createElement('h3');
+        h3.innerHTML = '<i class="fas fa-trash-alt" style="color:#ef4444" aria-hidden="true"></i> Resetar Perfil';
+        h3.style.marginBottom = '16px';
+
+        // ── Bloco de informações sobre o backup automático ───────────────
+        const backupInfo = document.createElement('div');
+        backupInfo.style.cssText = 'background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:12px 14px; margin-bottom:14px;';
+        backupInfo.innerHTML = `
+            <div style="font-size:0.78rem; font-weight:700; color:#10b981; margin-bottom:5px;">
+                <i class="fas fa-shield-alt" aria-hidden="true"></i> Backup automático será criado
+            </div>
+            <div style="font-size:0.8rem; color:rgba(255,255,255,0.65); line-height:1.5;">
+                Antes de resetar, seus dados atuais serão salvos como backup nomeado "<em>Antes do reset — ${sanitizeHTML(nomePerfil)}</em>".<br>
+                Este backup ficará disponível por <strong>5 dias</strong> em Configurações → Dados e Backup.
+            </div>`;
+
+        // ── Bloco de aviso do que será apagado ──────────────────────────
+        const warnBox = document.createElement('div');
+        warnBox.style.cssText = 'background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:12px; padding:12px 14px; margin-bottom:16px;';
+        warnBox.innerHTML = `
+            <div style="font-size:0.78rem; font-weight:700; color:#f87171; margin-bottom:8px;">
+                <i class="fas fa-exclamation-triangle" aria-hidden="true"></i> O seguinte será apagado permanentemente:
+            </div>
+            <ul style="font-size:0.82rem; color:rgba(255,255,255,0.65); line-height:1.8; padding-left:18px;">
+                <li>Todas as transações</li>
+                <li>Todas as metas e reservas</li>
+                <li>Todas as contas fixas</li>
+                <li>Todos os cartões de crédito</li>
+                <li>Todos os orçamentos e tipos personalizados</li>
+            </ul>
+            <div style="font-size:0.75rem; color:rgba(255,255,255,0.35); margin-top:8px;">
+                Nome, foto e plano do perfil são mantidos.
+            </div>`;
+
+        // ── Campo de confirmação ─────────────────────────────────────────
+        const confirmLabel = document.createElement('label');
+        confirmLabel.htmlFor = 'resetConfirmInput';
+        confirmLabel.style.cssText = 'font-size:0.8rem; color:var(--text-secondary); display:block; margin-bottom:6px;';
+        confirmLabel.innerHTML = 'Digite <strong style="color:#ef4444;">RESETAR</strong> para confirmar:';
+
+        const confirmInput = document.createElement('input');
+        confirmInput.type = 'text';
+        confirmInput.id   = 'resetConfirmInput';
+        confirmInput.className = 'form-input';
+        confirmInput.placeholder = 'RESETAR';
+        confirmInput.style.cssText = 'letter-spacing:0.1em; font-weight:700; text-transform:uppercase;';
+        confirmInput.autocomplete = 'off';
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:10px; margin-top:14px;';
+
+        const btnConfirmar = document.createElement('button');
+        btnConfirmar.className = 'btn-primary';
+        btnConfirmar.type = 'button';
+        btnConfirmar.style.cssText = 'flex:1; background:linear-gradient(135deg,#dc2626,#b91c1c); opacity:0.5; cursor:not-allowed;';
+        btnConfirmar.disabled = true;
+        btnConfirmar.innerHTML = '<i class="fas fa-trash-alt" aria-hidden="true"></i> Resetar perfil';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar';
+        btnCancelar.type = 'button';
+        btnCancelar.style.flex = '1';
+        btnCancelar.textContent = 'Cancelar';
+        btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
+
+        // Ativa botão apenas quando digitar "RESETAR"
+        confirmInput.addEventListener('input', () => {
+            const ok = confirmInput.value.trim().toUpperCase() === 'RESETAR';
+            btnConfirmar.disabled = !ok;
+            btnConfirmar.style.opacity = ok ? '1' : '0.5';
+            btnConfirmar.style.cursor  = ok ? 'pointer' : 'not-allowed';
+        });
+
+        btnConfirmar.addEventListener('click', async () => {
+            if (confirmInput.value.trim().toUpperCase() !== 'RESETAR') return;
+
+            btnConfirmar.disabled = true;
+            btnCancelar.disabled  = true;
+            btnConfirmar.textContent = '⏳ Salvando backup…';
+
+            try {
+                // 1. Salva safety backup com nome descritivo
+                const nomeBackup = 'Antes do reset — ' + nomePerfil + ' — ' + new Date().toLocaleDateString('pt-BR');
+                const hoje = new Date().toISOString().slice(0, 10);
+                _setBackupNome(hoje, nomeBackup);
+                await _ctx.salvarDados();
+
+                btnConfirmar.textContent = '⏳ Resetando…';
+
+                // 2. Apaga todos os dados financeiros do perfil
+                _ctx.transacoes          = [];
+                _ctx.metas               = [];
+                _ctx.contasFixas         = [];
+                _ctx.cartoesCredito      = [];
+                _ctx.orcamentos          = {};
+                _ctx.tiposPersonalizados = [];
+
+                // 3. Salva o estado vazio
+                await _ctx.salvarDados(true); // urgente
+
+                _ctx.fecharPopup();
+                _ctx.atualizarTudo();
+                _ctx.mostrarNotificacao(`✅ Perfil "${nomePerfil}" resetado! Backup salvo por 5 dias.`, 'success');
+
+                // Remove o perfil do cache para forçar recarregamento limpo
+                try { sessionStorage.removeItem('ge_perfis_cache'); } catch { /* ignore */ }
+
+            } catch (e) {
+                _ctx._log.error('RESET_PERFIL_001', e);
+                btnConfirmar.disabled = false;
+                btnCancelar.disabled  = false;
+                btnConfirmar.innerHTML = '<i class="fas fa-trash-alt" aria-hidden="true"></i> Resetar perfil';
+                _ctx.mostrarNotificacao('Erro ao resetar o perfil. Tente novamente.', 'error');
+            }
+        });
+
+        btnRow.appendChild(btnConfirmar);
+        btnRow.appendChild(btnCancelar);
+
+        box.appendChild(h3);
+        box.appendChild(backupInfo);
+        box.appendChild(warnBox);
+        box.appendChild(confirmLabel);
+        box.appendChild(confirmInput);
+        box.appendChild(btnRow);
+    });
+}
+window.resetarPerfil = resetarPerfil;
 

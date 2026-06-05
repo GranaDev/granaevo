@@ -830,9 +830,10 @@ const _ALLOWED_KEYS = Object.freeze({
 });
 
 // ── Indicador de sincronização ─────────────────────────────────────────────
-// Exibe "Salvando…" durante o debounce e "Salvo ✓" ou "Erro ✗" após conclusão.
-// Atualiza tanto o badge mobile (#syncIndicator) quanto o desktop (#syncIndicatorDesktop).
-let _syncHideTimer = null;
+// Só exibe após o carregamento inicial estar completo (_syncReadyForDisplay = true).
+// Isso evita "Salvando…" no boot e nas navegações automáticas entre seções.
+let _syncHideTimer       = null;
+let _syncReadyForDisplay = false; // ativado após o primeiro save manual do usuário
 function _setSyncState(state) {
     // state: 'saving' | 'saved' | 'error' | 'hidden'
     const els = [
@@ -910,11 +911,13 @@ async function salvarDados() {
         // urgente = false → debounce 2s (transações em volume)
         const delay = (arguments[0] === true) ? 0 : 2_000;
 
-        _setSyncState('saving');
-
+        // Indicador só aparece quando o HTTP request começa (não durante debounce)
+        // e apenas após o carregamento inicial terminar.
         _saveDebounceTimer = setTimeout(async () => {
             _saveDebounceTimer   = null;
             _saveDebounceResolve = null;
+
+            if (_syncReadyForDisplay) _setSyncState('saving');
 
             try {
                 // ── 1. Filtrar itens inválidos pelo schema ──────────────────
@@ -1015,12 +1018,12 @@ async function salvarDados() {
 
                 const sucesso = await dataManager.saveUserData(profilesBase);
                 if (!sucesso) _log.error('SAVE_004', 'saveUserData retornou false');
-                _setSyncState(sucesso ? 'saved' : 'error');
+                if (_syncReadyForDisplay) _setSyncState(sucesso ? 'saved' : 'error');
                 resolve(!!sucesso);
 
             } catch (e) {
                 _log.error('SAVE_005', e);
-                _setSyncState('error');
+                if (_syncReadyForDisplay) _setSyncState('error');
                 resolve(false);
             }
         }, delay);
@@ -1306,6 +1309,9 @@ async function entrarNoPerfil(index) {
         iniciarAutoSave();
 
         await salvarDados();
+
+        // Ativa o indicador de sync somente após o save inicial de boot
+        _syncReadyForDisplay = true;
 
         // Onboarding automático para novos perfis (sem dados, primeira visita)
         _verificarOnboardingNovoPerfil();

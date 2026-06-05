@@ -1,4 +1,4 @@
-// db-relatorios.js — Seção de Relatórios (lazy-loaded)
+﻿// db-relatorios.js — Seção de Relatórios (lazy-loaded)
 import { dataManager } from '../modules/data-manager.js?v=8';
 let _ctx = null;
 
@@ -159,6 +159,45 @@ function popularFiltrosRelatorio() {
     _ctx._log.info('[popularFiltrosRelatorio] Filtros populados. Tipo ativo:', _ctx.tipoRelatorioAtivo);
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// SISTEMA DE EXPORTAÇÃO — PDF (HTML) · Excel (SpreadsheetML) · Apresentação
+// ══════════════════════════════════════════════════════════════════════════
+
+function _escapeXml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+const _escapeExport = _escapeXml;
+
+function _getPeriodInfo() {
+    const mesEl  = document.getElementById('mesRelatorio');
+    const anoEl  = document.getElementById('anoRelatorio');
+    const mesNum = (mesEl?.value || '').padStart(2, '0');
+    const anoNum = anoEl?.value || String(new Date().getFullYear());
+    const mesNome = mesEl?.options[mesEl.selectedIndex]?.text || '';
+    return { mesNum, anoNum, mesNome };
+}
+
+function _getTxsDoPeriodo() {
+    const { mesNum, anoNum } = _getPeriodInfo();
+    if (!mesNum || mesNum === '00' || !anoNum) return _ctx.transacoes;
+    const prefix = anoNum + '-' + mesNum;
+    return _ctx.transacoes.filter(t => {
+        const iso = _ctx.dataParaISO(t.data || '');
+        return iso ? iso.startsWith(prefix) : false;
+    });
+}
+
+function _fmtBRL(v) {
+    const n = parseFloat(v) || 0;
+    return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function _exportarRelatorio() {
     const resultado = document.getElementById('relatorioResultado');
     if (!resultado || resultado.classList.contains('js-hidden') || resultado.innerHTML.trim() === '') {
@@ -166,127 +205,434 @@ function _exportarRelatorio() {
         return;
     }
 
-    // ── Captura Canvas como imagens antes de imprimir ────────────────────
-    // window.print() não renderiza Canvas — convertemos para <img> data:URL
-    const canvases = resultado.querySelectorAll('canvas');
-    const canvasBackups = [];
-    canvases.forEach(canvas => {
-        try {
-            const dataUrl = canvas.toDataURL('image/png');
-            const img = document.createElement('img');
-            img.src = dataUrl;
-            img.style.cssText = `width:${canvas.offsetWidth}px; height:${canvas.offsetHeight}px; max-width:100%;`;
-            img.className = 'relatorio-canvas-img';
-            canvas.parentNode.insertBefore(img, canvas);
-            canvas.style.display = 'none';
-            canvasBackups.push({ canvas, img });
-        } catch { /* canvas CORS ou vazio — deixa como está */ }
+    _ctx.criarPopupDOM((box) => {
+        box.style.maxWidth = '420px';
+
+        const h3 = document.createElement('h3');
+        h3.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:6px;';
+        h3.innerHTML = '<i class="fas fa-share-alt" style="color:var(--primary)" aria-hidden="true"></i>';
+        h3.appendChild(document.createTextNode(' Exportar Relatório'));
+
+        const sub = document.createElement('p');
+        sub.style.cssText = 'color:var(--text-muted);font-size:0.82rem;margin-bottom:20px;';
+        sub.textContent = 'Escolha o formato de exportação:';
+
+        const opts = [
+            { icon:'fa-file-pdf',       color:'#ef4444', label:'PDF',                badge:'Recomendado',
+              desc:'Abre o relatório completo com gráficos em nova aba. Salve como PDF com Ctrl+P.',
+              fn: () => { _ctx.fecharPopup(); setTimeout(_exportPDF, 120); } },
+            { icon:'fa-file-excel',     color:'#16a34a', label:'Excel (.xls)',
+              desc:'Planilha com 4 abas: Resumo, Transações, Metas e Contas Fixas.',
+              fn: () => { _ctx.fecharPopup(); setTimeout(_exportExcel, 120); } },
+            { icon:'fa-file-powerpoint',color:'#ea580c', label:'Apresentação (.html)',
+              desc:'Slides financeiros interativos. Abra no browser (F11 = tela cheia) ou importe no PowerPoint.',
+              fn: () => { _ctx.fecharPopup(); setTimeout(_exportApresentacao, 120); } },
+        ];
+
+        const list = document.createElement('div');
+        list.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-bottom:14px;';
+
+        opts.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.style.cssText = 'display:flex;align-items:center;gap:14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px 16px;cursor:pointer;text-align:left;transition:background 0.18s,border-color 0.18s;width:100%;';
+
+            const iconDiv = document.createElement('div');
+            iconDiv.style.cssText = 'width:44px;height:44px;border-radius:12px;background:' + opt.color + '20;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.2rem;color:' + opt.color + ';';
+            iconDiv.innerHTML = '<i class="fas ' + opt.icon + '" aria-hidden="true"></i>';
+
+            const textDiv = document.createElement('div');
+            textDiv.style.cssText = 'flex:1;min-width:0;';
+
+            const labelRow = document.createElement('div');
+            labelRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:3px;';
+            const labelEl = document.createElement('span');
+            labelEl.style.cssText = 'font-weight:700;font-size:0.94rem;color:#fff;';
+            labelEl.textContent = opt.label;
+            labelRow.appendChild(labelEl);
+            if (opt.badge) {
+                const badgeEl = document.createElement('span');
+                badgeEl.style.cssText = 'font-size:0.65rem;font-weight:700;background:rgba(16,185,129,0.18);color:#10b981;padding:2px 7px;border-radius:20px;';
+                badgeEl.textContent = opt.badge;
+                labelRow.appendChild(badgeEl);
+            }
+            const descEl = document.createElement('div');
+            descEl.style.cssText = 'font-size:0.77rem;color:rgba(255,255,255,0.45);line-height:1.35;';
+            descEl.textContent = opt.desc;
+            textDiv.appendChild(labelRow);
+            textDiv.appendChild(descEl);
+
+            const arrow = document.createElement('div');
+            arrow.style.cssText = 'color:rgba(255,255,255,0.25);flex-shrink:0;';
+            arrow.innerHTML = '<i class="fas fa-chevron-right" aria-hidden="true"></i>';
+
+            btn.appendChild(iconDiv); btn.appendChild(textDiv); btn.appendChild(arrow);
+            btn.addEventListener('mouseenter', () => { btn.style.background='rgba(255,255,255,0.08)'; btn.style.borderColor=opt.color+'50'; });
+            btn.addEventListener('mouseleave', () => { btn.style.background='rgba(255,255,255,0.04)'; btn.style.borderColor='rgba(255,255,255,0.08)'; });
+            btn.addEventListener('click', opt.fn);
+            list.appendChild(btn);
+        });
+
+        const btnCancel = document.createElement('button');
+        btnCancel.className = 'btn-cancelar'; btnCancel.type = 'button';
+        btnCancel.style.width = '100%'; btnCancel.textContent = 'Cancelar';
+        btnCancel.addEventListener('click', () => _ctx.fecharPopup());
+
+        box.appendChild(h3); box.appendChild(sub); box.appendChild(list); box.appendChild(btnCancel);
     });
-
-    // ── Injeta estilo de impressão temporariamente ────────────────────────
-    const styleId = '__ge_print_style__';
-    let style = document.getElementById(styleId);
-    if (!style) {
-        style = document.createElement('style');
-        style.id = styleId;
-        document.head.appendChild(style);
-    }
-
-    style.textContent = `
-        @media print {
-            /* Oculta tudo exceto o relatório */
-            body > *:not(.relatorio-print-frame) { display: none !important; }
-            .relatorio-print-frame { display: block !important; position: static !important; }
-            .relatorio-print-frame * { visibility: visible !important; }
-
-            /* Layout de impressão */
-            @page { margin: 16mm 12mm; }
-            body { background: #fff !important; color: #111 !important; font-family: 'DM Sans', sans-serif !important; }
-
-            .rel-print-header { border-bottom: 2px solid #10b981; padding-bottom: 12px; margin-bottom: 20px; }
-            .rel-print-logo { font-size: 1.4rem; font-weight: 800; color: #10b981; }
-            .rel-print-meta { font-size: 0.8rem; color: #666; margin-top: 4px; }
-
-            /* Cards de resumo */
-            .relatorio-resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
-            .relatorio-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f9fafb !important; }
-            .relatorio-card-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
-            .relatorio-card-value { font-size: 1.3rem; font-weight: 700; }
-
-            /* Tabelas */
-            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 0.82rem; }
-            th { background: #f3f4f6 !important; color: #374151 !important; border-bottom: 2px solid #e5e7eb; padding: 8px 10px; text-align: left; }
-            td { border-bottom: 1px solid #e5e7eb; padding: 7px 10px; color: #374151 !important; }
-            tr:last-child td { border-bottom: none; }
-
-            /* Gráficos capturados como imagem */
-            .relatorio-canvas-img { max-width: 100%; height: auto; border-radius: 6px; margin: 8px 0; }
-
-            /* Oculta botões de ação dentro do relatório */
-            .rel-section-actions, .btn-exportar-rel, [role="button"] { display: none !important; }
-
-            /* Evita quebra de página dentro de seções */
-            .relatorio-section { page-break-inside: avoid; margin-bottom: 16px; }
-        }
-    `;
-
-    // ── Cria frame temporário de impressão ────────────────────────────────
-    const frame = document.createElement('div');
-    frame.className = 'relatorio-print-frame';
-    frame.style.cssText = 'display:none;';
-
-    // Cabeçalho de impressão
-    const mes = document.getElementById('mesRelatorio')?.options[document.getElementById('mesRelatorio')?.selectedIndex]?.text || '';
-    const ano = document.getElementById('anoRelatorio')?.value || '';
-    const perfil = _ctx.perfilAtivo?.nome || '';
-    const tipoLabel = { individual: 'Individual', casal: 'Casal', familia: 'Família', patrimonio: 'Visão Geral' };
-
-    frame.innerHTML = `
-        <div class="rel-print-header">
-            <div class="rel-print-logo">GranaEvo</div>
-            <div class="rel-print-meta">
-                Relatório ${tipoLabel[_ctx.tipoRelatorioAtivo] || ''} · ${mes} ${ano}
-                ${perfil ? ' · ' + _escapeExport(perfil) : ''}
-                · Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-            </div>
-        </div>
-    `;
-
-    // Clona o conteúdo do relatório
-    const clone = resultado.cloneNode(true);
-    // Remove elementos desnecessários na impressão
-    clone.querySelectorAll('button, .btn-primary, .btn-cancelar, .btn-excluir, [aria-label="Exportar"]').forEach(el => el.remove());
-    frame.appendChild(clone);
-    document.body.appendChild(frame);
-
-    // ── Imprime ───────────────────────────────────────────────────────────
-    setTimeout(() => {
-        window.print();
-
-        // Limpeza após impressão (curto delay para o diálogo de impressão aparecer)
-        const cleanup = () => {
-            frame.remove();
-            style.textContent = '';
-
-            // Restaura canvas originais
-            canvasBackups.forEach(({ canvas, img }) => {
-                canvas.style.display = '';
-                img.remove();
-            });
-        };
-
-        // afterprint não é confiável em todos os browsers — usa timeout como fallback
-        window.addEventListener('afterprint', cleanup, { once: true });
-        setTimeout(cleanup, 5000);
-    }, 150);
 }
 
-// ── Sanitização de HTML para uso no cabeçalho do export (isolado) ─────────
-function _escapeExport(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+// ── PDF: HTML standalone com gráficos embutidos ──────────────────────────
+function _exportPDF() {
+    const resultado = document.getElementById('relatorioResultado');
+    if (!resultado) return;
+    const { mesNome, anoNum, mesNum } = _getPeriodInfo();
+    const perfilNome = _escapeXml(_ctx.perfilAtivo?.nome || '');
+    const tipoLabel  = { individual:'Individual', casal:'Casal', familia:'Família', patrimonio:'Visão Geral' };
+    const tipo = tipoLabel[_ctx.tipoRelatorioAtivo] || '';
+    const geradoEm = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+
+    const canvasMap = new Map();
+    resultado.querySelectorAll('canvas').forEach(canvas => {
+        try { canvasMap.set(canvas, canvas.toDataURL('image/png')); } catch { }
+    });
+
+    const clone = resultado.cloneNode(true);
+    const origCanvases = [...resultado.querySelectorAll('canvas')];
+    [...clone.querySelectorAll('canvas')].forEach((c, idx) => {
+        const url = canvasMap.get(origCanvases[idx]);
+        if (url) {
+            const img = document.createElement('img');
+            img.src = url;
+            img.style.cssText = 'max-width:100%;height:auto;border-radius:8px;';
+            c.parentNode.replaceChild(img, c);
+        }
+    });
+    clone.querySelectorAll('button,.btn-primary,.btn-cancelar,.rel-header-actions').forEach(el => el.remove());
+
+    const html = '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n<meta charset="UTF-8">\n<title>GranaEvo — ' + _escapeXml(tipo) + ' ' + _escapeXml(mesNome) + ' ' + _escapeXml(anoNum) + '</title>\n' +
+`<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;color:#1a1a2e;font-size:15px;line-height:1.6}
+.ge-doc{max-width:960px;margin:0 auto;padding:32px 28px}
+.ge-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;padding-bottom:16px;border-bottom:3px solid #10b981;flex-wrap:wrap;gap:12px}
+.ge-logo{font-size:1.7rem;font-weight:900;color:#10b981;letter-spacing:-0.03em}.ge-logo span{color:#1a1a2e}
+.ge-meta{text-align:right;font-size:0.82rem;color:#6b7280;line-height:1.5}
+.ge-meta strong{color:#374151;font-size:0.9rem;display:block;margin-bottom:2px}
+.ge-btn{display:inline-flex;align-items:center;gap:8px;background:#10b981;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;margin-bottom:24px;font-family:inherit}
+.ge-btn:hover{background:#059669}
+.relatorio-resumo,.relatorio-cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}
+.relatorio-card{padding:16px;border-radius:12px;border:1px solid #e5e7eb;background:#f9fafb}
+.relatorio-card-label{font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#9ca3af;margin-bottom:6px}
+.relatorio-card-value{font-size:1.35rem;font-weight:800;color:#374151}
+.relatorio-section,.relatorio-bloco{margin-bottom:28px;page-break-inside:avoid}
+.relatorio-section-title,.relatorio-titulo,.section-title,.grafico-titulo{font-size:1rem;font-weight:700;color:#374151;padding-bottom:8px;border-bottom:2px solid #e5e7eb;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+table{width:100%;border-collapse:collapse;font-size:0.83rem;margin-bottom:4px}
+th{background:#f9fafb;color:#374151;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;padding:9px 12px;text-align:left;border-bottom:2px solid #e5e7eb}
+td{padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#374151}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even) td{background:#fafafa}
+.val-entrada,.text-success,.cor-entrada{color:#16a34a;font-weight:600}
+.val-saida,.text-danger,.cor-saida{color:#dc2626;font-weight:600}
+.val-reserva,.cor-reserva{color:#d97706;font-weight:600}
+.cat-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:700}
+.cat-entrada{background:#dcfce7;color:#16a34a}
+.cat-saida{background:#fee2e2;color:#dc2626}
+.cat-reserva{background:#fef9c3;color:#d97706}
+.grafico-container,.chart-wrapper,.grafico-wrapper{max-width:100%;overflow:hidden;text-align:center}
+img{max-width:100%;height:auto;border-radius:8px}
+.prog-bar-wrap{background:#e5e7eb;border-radius:99px;height:8px;margin:4px 0}
+.prog-bar{background:#10b981;height:8px;border-radius:99px}
+@media print{@page{margin:14mm 12mm}.ge-btn{display:none!important}body{font-size:13px}.relatorio-section,.relatorio-bloco{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="ge-doc">
+  <div class="ge-hdr">
+    <div><div class="ge-logo">Grana<span>Evo</span></div><div style="font-size:0.82rem;color:#6b7280;margin-top:4px;">Relatório Financeiro</div></div>
+    <div class="ge-meta"><strong>` + _escapeXml(tipo) + ' · ' + _escapeXml(mesNome) + ' ' + _escapeXml(anoNum) + `</strong>` +
+    (perfilNome ? 'Perfil: ' + perfilNome + '<br>' : '') +
+    'Gerado em: ' + _escapeXml(geradoEm) + `</div>
+  </div>
+  <button class="ge-btn" onclick="window.print()">&#128438; Salvar como PDF (Ctrl+P)</button>
+  ` + clone.innerHTML + `
+</div>
+</body>
+</html>`;
+
+    _downloadBlob(html, 'GranaEvo_' + anoNum + '-' + mesNum + '_' + (perfilNome || 'relatorio') + '.html', 'text/html;charset=utf-8');
+    _ctx.mostrarNotificacao('📄 Relatório HTML baixado! Abra o arquivo e pressione Ctrl+P → Salvar como PDF.', 'success');
+}
+
+// ── Excel: SpreadsheetML XML (.xls) ─────────────────────────────────────
+function _exportExcel() {
+    const { mesNome, anoNum, mesNum } = _getPeriodInfo();
+    const perfilNome = _ctx.perfilAtivo?.nome || 'Perfil';
+    const txs = _getTxsDoPeriodo();
+
+    const entradas = txs.filter(t => t.categoria === 'entrada').reduce((s, t) => s + Number(t.valor || 0), 0);
+    const saidas   = txs.filter(t => t.categoria === 'saida' || t.categoria === 'saida_credito').reduce((s, t) => s + Number(t.valor || 0), 0);
+    const reservas = txs.filter(t => t.categoria === 'reserva').reduce((s, t) => s + Number(t.valor || 0), 0);
+    const saldo    = entradas - saidas;
+
+    const catMap = {};
+    txs.filter(t => t.categoria === 'saida' || t.categoria === 'saida_credito').forEach(t => {
+        catMap[t.tipo || 'Outros'] = (catMap[t.tipo || 'Outros'] || 0) + Number(t.valor || 0);
+    });
+    const categorias = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+
+    const c = (type, val, style) => {
+        const s = style ? ' ss:StyleID="' + style + '"' : '';
+        return '<Cell' + s + '><Data ss:Type="' + type + '">' + _escapeXml(String(val)) + '</Data></Cell>';
+    };
+    const hdr = v => c('String', v, 'sHdr');
+    const num = (v, s) => c('Number', (parseFloat(v) || 0).toFixed(2), s || '');
+    const emptyR = (n) => '<Row><Cell ss:MergeAcross="' + (n-1) + '"><Data ss:Type="String"></Data></Cell></Row>';
+    const titleR = (t, n) => '<Row ss:Height="24"><Cell ss:MergeAcross="' + (n-1) + '" ss:StyleID="sTitle"><Data ss:Type="String">' + _escapeXml(t) + '</Data></Cell></Row>';
+
+    const _CAT_LBL = { entrada:'Entrada', saida:'Saída', saida_credito:'Crédito', reserva:'Reserva', retirada_reserva:'Retirada' };
+
+    const sheetResumo = `<Worksheet ss:Name="Resumo"><Table ss:DefaultColumnWidth="160">
+${titleR('GranaEvo — ' + mesNome + ' ' + anoNum + ' · ' + perfilNome, 3)}
+${emptyR(3)}
+<Row ss:Height="20">${hdr('INDICADOR')}${hdr('VALOR')}${hdr('DETALHE')}</Row>
+<Row>${c('String','Entradas')}${num(entradas,'sPos')}${c('String','Receitas do período')}</Row>
+<Row>${c('String','Saídas')}${num(saidas,'sNeg')}${c('String','Gastos do período')}</Row>
+<Row>${c('String','Saldo')}${num(saldo, saldo>=0?'sPos':'sNeg')}${c('String','Entradas − Saídas')}</Row>
+<Row>${c('String','Reservas')}${num(reservas,'sWarn')}${c('String','Aportes em metas')}</Row>
+${emptyR(3)}
+${titleR('Gastos por Categoria', 3)}
+${emptyR(3)}
+<Row ss:Height="20">${hdr('CATEGORIA')}${hdr('VALOR')}${hdr('% DO TOTAL')}</Row>
+${categorias.map(([cat, val]) => '<Row>' + c('String',cat) + num(val,'sNeg') + c('Number', saidas>0?((val/saidas)*100).toFixed(1):'0') + '</Row>').join('')}
+</Table></Worksheet>`;
+
+    const sheetTx = `<Worksheet ss:Name="Transações"><Table ss:DefaultColumnWidth="130">
+${titleR('Transações — ' + mesNome + ' ' + anoNum, 5)}
+${emptyR(5)}
+<Row ss:Height="20">${hdr('DATA')}${hdr('DESCRIÇÃO')}${hdr('CATEGORIA')}${hdr('TIPO')}${hdr('VALOR (R$)')}</Row>
+${txs.slice().reverse().map(t => {
+    const isPos = t.categoria === 'entrada' || t.categoria === 'retirada_reserva';
+    return '<Row>' + c('String',t.data||'') + c('String',t.descricao||'') + c('String',_CAT_LBL[t.categoria]||t.categoria) + c('String',t.tipo||'') + num(t.valor, isPos?'sPos':'sNeg') + '</Row>';
+}).join('')}
+</Table></Worksheet>`;
+
+    const sheetMetas = `<Worksheet ss:Name="Reservas e Metas"><Table ss:DefaultColumnWidth="140">
+${titleR('Reservas e Metas', 5)}
+${emptyR(5)}
+<Row ss:Height="20">${hdr('NOME')}${hdr('OBJETIVO (R$)')}${hdr('SALVO (R$)')}${hdr('PROGRESSO %')}${hdr('PRAZO')}</Row>
+${(_ctx.metas||[]).map(m => {
+    const pct = m.objetivo>0 ? Math.min(100,((m.saved||0)/m.objetivo)*100).toFixed(1) : '0';
+    return '<Row>' + c('String',m.descricao||'') + num(m.objetivo) + num(m.saved||0,'sPos') + c('Number',pct) + c('String',m.prazo||'Sem prazo') + '</Row>';
+}).join('')}
+</Table></Worksheet>`;
+
+    const sheetContas = `<Worksheet ss:Name="Contas Fixas"><Table ss:DefaultColumnWidth="150">
+${titleR('Contas Fixas', 4)}
+${emptyR(4)}
+<Row ss:Height="20">${hdr('DESCRIÇÃO')}${hdr('VALOR (R$)')}${hdr('VENCIMENTO')}${hdr('STATUS')}</Row>
+${(_ctx.contasFixas||[]).filter(c2=>c2.tipoContaFixa!=='fatura_cartao').map(cf => {
+    const venc = cf.vencimento ? cf.vencimento.split('-').reverse().join('/') : '';
+    return '<Row>' + c('String',cf.descricao||'') + num(cf.valor,'sNeg') + c('String',venc) + c('String',cf.pago?'Pago':'Pendente') + '</Row>';
+}).join('')}
+</Table></Worksheet>`;
+
+    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
+`<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+<Style ss:ID="sHdr"><Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="9"/><Interior ss:Color="#10b981" ss:Pattern="Solid"/></Style>
+<Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="13" ss:Color="#10b981"/></Style>
+<Style ss:ID="sPos"><Font ss:Color="#16a34a" ss:Bold="1"/><NumberFormat ss:Format='"R$ "#,##0.00'/></Style>
+<Style ss:ID="sNeg"><Font ss:Color="#dc2626" ss:Bold="1"/><NumberFormat ss:Format='"R$ "#,##0.00'/></Style>
+<Style ss:ID="sWarn"><Font ss:Color="#d97706" ss:Bold="1"/><NumberFormat ss:Format='"R$ "#,##0.00'/></Style>
+</Styles>
+` + sheetResumo + sheetTx + sheetMetas + sheetContas + '</Workbook>';
+
+    const nomArq = 'GranaEvo_' + anoNum + '-' + mesNum + '_' + perfilNome.replace(/\s+/g,'_') + '.xls';
+    _downloadBlob('﻿' + xml, nomArq, 'application/vnd.ms-excel;charset=utf-8');
+    _ctx.mostrarNotificacao('📊 Planilha Excel gerada! Abra o arquivo .xls no Excel ou Google Sheets.', 'success');
+}
+
+// ── Apresentação HTML interativa com slides financeiros ───────────────────
+function _exportApresentacao() {
+    const { mesNome, anoNum, mesNum } = _getPeriodInfo();
+    const perfilNome = _ctx.perfilAtivo?.nome || '';
+    const txs = _getTxsDoPeriodo();
+
+    const entradas = txs.filter(t => t.categoria==='entrada').reduce((s,t)=>s+Number(t.valor||0),0);
+    const saidas   = txs.filter(t => t.categoria==='saida'||t.categoria==='saida_credito').reduce((s,t)=>s+Number(t.valor||0),0);
+    const reservas = txs.filter(t => t.categoria==='reserva').reduce((s,t)=>s+Number(t.valor||0),0);
+    const saldo    = entradas - saidas;
+
+    const catMap = {};
+    txs.filter(t=>t.categoria==='saida'||t.categoria==='saida_credito').forEach(t=>{catMap[t.tipo||'Outros']=(catMap[t.tipo||'Outros']||0)+Number(t.valor||0);});
+    const top5 = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const maxV = top5[0]?.[1]||1;
+    const metas = (_ctx.metas||[]).slice(0,5);
+    const contas = (_ctx.contasFixas||[]).filter(c=>c.tipoContaFixa!=='fatura_cartao').slice(0,6);
+
+    const N = 5;
+    const slideHTML = (id, content) => '<section class="slide" id="s'+id+'" aria-label="Slide '+id+'">'+content+'</section>';
+    const slideTitles = ['Capa','Visão Geral','Gastos','Reservas','Contas Fixas'];
+
+    const slides = [
+        slideHTML(1,
+            '<div class="cov"><div class="cov-logo">GranaEvo</div><div class="cov-title">Relatório Financeiro</div>' +
+            '<div class="cov-period">'+_escapeXml(mesNome)+' '+_escapeXml(anoNum)+'</div>' +
+            (perfilNome?'<div class="cov-tag">'+_escapeXml(perfilNome)+'</div>':'')+
+            '<div class="cov-date">Gerado em '+new Date().toLocaleDateString('pt-BR')+'</div></div>'),
+
+        slideHTML(2,
+            '<div class="shdr"><span class="snum">02 / '+N+'</span><span class="slbl">Visão Geral</span></div>'+
+            '<h2 class="stit">Resumo Financeiro</h2>'+
+            '<div class="sgrid">'+
+            '<div class="scard green"><div class="sic">↑</div><div class="slabel">ENTRADAS</div><div class="sval">'+_escapeXml(_fmtBRL(entradas))+'</div></div>'+
+            '<div class="scard red"><div class="sic">↓</div><div class="slabel">SAÍDAS</div><div class="sval">'+_escapeXml(_fmtBRL(saidas))+'</div></div>'+
+            '<div class="scard '+(saldo>=0?'blue':'red')+'"><div class="sic">≡</div><div class="slabel">SALDO</div><div class="sval">'+_escapeXml(_fmtBRL(saldo))+'</div></div>'+
+            '<div class="scard yellow"><div class="sic">🏦</div><div class="slabel">RESERVAS</div><div class="sval">'+_escapeXml(_fmtBRL(reservas))+'</div></div>'+
+            '</div>'),
+
+        slideHTML(3,
+            '<div class="shdr"><span class="snum">03 / '+N+'</span><span class="slbl">Análise</span></div>'+
+            '<h2 class="stit">Top 5 Categorias de Gasto</h2>'+
+            '<div class="cats">'+(top5.length===0?'<p class="empty-msg">Nenhum gasto no período</p>':top5.map(([cat,val],i)=>{
+                const pct=Math.round((val/maxV)*100);
+                const ptotal=saidas>0?((val/saidas)*100).toFixed(1):'0';
+                return '<div class="crow"><span class="cnum">'+String(i+1).padStart(2,'0')+'</span>'+
+                '<div class="cinfo"><span class="cname">'+_escapeXml(cat)+'</span>'+
+                '<div class="cbar-w"><div class="cbar" data-w="'+pct+'"></div></div></div>'+
+                '<div class="cvals"><span class="cval">'+_escapeXml(_fmtBRL(val))+'</span><span class="cpct">'+ptotal+'%</span></div></div>';
+            }).join(''))+'</div>'),
+
+        slideHTML(4,
+            '<div class="shdr"><span class="snum">04 / '+N+'</span><span class="slbl">Reservas</span></div>'+
+            '<h2 class="stit">Progresso das Metas</h2>'+
+            '<div class="metas">'+(metas.length===0?'<p class="empty-msg">Nenhuma reserva criada</p>':metas.map(m=>{
+                const pct=m.objetivo>0?Math.min(100,((m.saved||0)/m.objetivo)*100):0;
+                return '<div class="mrow">'+
+                '<div class="minfo"><span class="mname">'+_escapeXml(m.descricao||'')+'</span>'+
+                '<div class="mbar-w"><div class="mbar" data-w="'+pct.toFixed(1)+'"></div></div></div>'+
+                '<div class="mvals"><span class="mval">'+_escapeXml(_fmtBRL(m.saved||0))+'</span><span class="mpct">'+pct.toFixed(0)+'%</span></div></div>';
+            }).join(''))+'</div>'),
+
+        slideHTML(5,
+            '<div class="shdr"><span class="snum">05 / '+N+'</span><span class="slbl">Obrigações</span></div>'+
+            '<h2 class="stit">Contas Fixas</h2>'+
+            '<div class="conts">'+(contas.length===0?'<p class="empty-msg">Nenhuma conta fixa</p>':contas.map(cf=>{
+                const venc=cf.vencimento?cf.vencimento.split('-').reverse().join('/'):'';
+                return '<div class="cont-row">'+
+                '<span class="cont-name">'+_escapeXml(cf.descricao||'')+'</span>'+
+                '<span class="cont-venc">'+_escapeXml(venc)+'</span>'+
+                '<span class="cont-val '+(cf.pago?'pago':'pend')+'">'+_escapeXml(_fmtBRL(cf.valor))+'</span>'+
+                '<span class="cont-st '+(cf.pago?'pago':'pend')+'">'+(cf.pago?'✓ Pago':'● Pendente')+'</span></div>';
+            }).join(''))+'</div>')
+    ];
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GranaEvo — Apresentação ${_escapeXml(mesNome)} ${_escapeXml(anoNum)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#09000f;color:#fff;overflow:hidden;height:100vh}
+.pres{width:100vw;height:100vh;position:relative}
+.slide{width:100%;height:100%;position:absolute;top:0;left:0;display:none;flex-direction:column;padding:52px 72px;background:linear-gradient(135deg,#0a0d16 0%,#0d1420 100%)}
+.slide.active{display:flex}
+.cov{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;gap:14px}
+.cov-logo{font-size:3rem;font-weight:900;color:#10b981;letter-spacing:-0.04em}
+.cov-title{font-size:1.8rem;font-weight:700;margin-top:6px}
+.cov-period{font-size:1.1rem;color:rgba(255,255,255,0.55)}
+.cov-tag{background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#10b981;padding:5px 18px;border-radius:99px;font-size:0.88rem;font-weight:600;margin-top:10px}
+.cov-date{font-size:0.75rem;color:rgba(255,255,255,0.28);margin-top:20px}
+.shdr{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.snum{font-size:0.72rem;font-weight:700;color:rgba(16,185,129,0.65);letter-spacing:0.08em}
+.slbl{font-size:0.72rem;color:rgba(255,255,255,0.32);letter-spacing:0.1em;text-transform:uppercase}
+.stit{font-size:1.75rem;font-weight:800;margin-bottom:28px;letter-spacing:-0.02em}
+.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.scard{padding:26px 18px;border-radius:18px;border:1px solid rgba(255,255,255,0.07);text-align:center}
+.scard.green{background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.22)}
+.scard.red{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.22)}
+.scard.blue{background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.22)}
+.scard.yellow{background:rgba(217,119,6,0.1);border-color:rgba(217,119,6,0.22)}
+.sic{font-size:1.3rem;margin-bottom:8px}
+.slabel{font-size:0.64rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.4);margin-bottom:7px}
+.sval{font-size:1.2rem;font-weight:800}
+.cats{display:flex;flex-direction:column;gap:16px}
+.crow{display:grid;grid-template-columns:36px 1fr 160px;align-items:center;gap:14px}
+.cnum{font-size:1.05rem;font-weight:800;color:rgba(16,185,129,0.55)}
+.cname{font-size:0.9rem;font-weight:600;display:block;margin-bottom:6px}
+.cbar-w{background:rgba(255,255,255,0.08);border-radius:99px;height:6px}
+.cbar{background:linear-gradient(90deg,#10b981,#34d399);height:6px;border-radius:99px;width:0;transition:width 0.5s ease}
+.cvals{text-align:right}
+.cval{display:block;font-weight:700;font-size:0.95rem}
+.cpct{font-size:0.72rem;color:rgba(255,255,255,0.38)}
+.metas{display:flex;flex-direction:column;gap:18px}
+.mrow{display:grid;grid-template-columns:1fr 160px;gap:14px;align-items:center}
+.mname{font-size:0.9rem;font-weight:600;display:block;margin-bottom:7px}
+.mbar-w{background:rgba(255,255,255,0.08);border-radius:99px;height:7px}
+.mbar{background:linear-gradient(90deg,#f59e0b,#fcd34d);height:7px;border-radius:99px;width:0;transition:width 0.5s ease}
+.mvals{text-align:right}
+.mval{display:block;font-weight:700;font-size:0.95rem}
+.mpct{font-size:0.75rem;color:rgba(255,255,255,0.38)}
+.conts{display:flex;flex-direction:column;gap:10px}
+.cont-row{display:grid;grid-template-columns:1fr 100px 130px 110px;align-items:center;gap:14px;background:rgba(255,255,255,0.04);border-radius:11px;padding:12px 16px;border:1px solid rgba(255,255,255,0.06)}
+.cont-name{font-weight:600;font-size:0.88rem}
+.cont-venc{font-size:0.8rem;color:rgba(255,255,255,0.4)}
+.cont-val,.cont-st{font-size:0.85rem;font-weight:700;text-align:right}
+.cont-val.pago,.cont-st.pago{color:#10b981}
+.cont-val.pend,.cont-st.pend{color:#f87171}
+.empty-msg{opacity:0.4;text-align:center;margin-top:60px;font-size:1rem}
+.nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:rgba(0,0,0,0.65);backdrop-filter:blur(14px);padding:9px 18px;border-radius:99px;border:1px solid rgba(255,255,255,0.08);z-index:100}
+.nbtn{background:none;border:none;color:rgba(255,255,255,0.65);cursor:pointer;font-size:1rem;padding:3px 6px;transition:color 0.2s}
+.nbtn:hover{color:#10b981}
+.ndot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,0.18);cursor:pointer;transition:background 0.2s}
+.ndot.a{background:#10b981}
+.ninfo{font-size:0.8rem;color:rgba(255,255,255,0.35);min-width:52px;text-align:center}
+.hint{position:fixed;top:16px;right:18px;font-size:0.7rem;color:rgba(255,255,255,0.2)}
+@media print{@page{size:1280px 720px;margin:0}body{overflow:visible;height:auto}.pres{width:1280px;height:auto}.slide{position:relative;display:flex!important;page-break-after:always;height:720px}.nav,.hint{display:none}}
+</style>
+</head>
+<body>
+<div class="pres">
+${slides.join('\n')}
+</div>
+<nav class="nav">
+<button class="nbtn" onclick="go(-1)" aria-label="Anterior">&#8592;</button>
+<div id="dots" style="display:flex;gap:6px;align-items:center"></div>
+<span class="ninfo" id="ni">1 / ${N}</span>
+<button class="nbtn" onclick="go(1)" aria-label="Próximo">&#8594;</button>
+</nav>
+<div class="hint">F11 = tela cheia &nbsp;&nbsp; ←→ = navegar &nbsp;&nbsp; Ctrl+P = imprimir slides</div>
+<script>
+var cur=0;
+var sls=document.querySelectorAll('.slide');
+var dotsEl=document.getElementById('dots');
+var ni=document.getElementById('ni');
+sls.forEach(function(_,i){var d=document.createElement('div');d.className='ndot'+(i===0?' a':'');d.onclick=function(){goTo(i);};dotsEl.appendChild(d);});
+function animate(n){sls[n].querySelectorAll('.cbar,.mbar').forEach(function(b){var w=b.getAttribute('data-w');b.style.width='0';setTimeout(function(){b.style.width=(w||'0')+'%';},80);});}
+function goTo(n){sls[cur].classList.remove('active');dotsEl.children[cur].classList.remove('a');cur=Math.max(0,Math.min(n,sls.length-1));sls[cur].classList.add('active');dotsEl.children[cur].classList.add('a');ni.textContent=(cur+1)+' / '+sls.length;animate(cur);}
+function go(d){goTo(cur+d);}
+document.addEventListener('keydown',function(e){if(e.key==='ArrowRight'||e.key==='ArrowDown')go(1);if(e.key==='ArrowLeft'||e.key==='ArrowUp')go(-1);});
+goTo(0);
+</script>
+</body>
+</html>`;
+
+    const fn = 'GranaEvo_Apresentacao_' + anoNum + '-' + mesNum + '_' + (perfilNome||'perfil').replace(/\s+/g,'_') + '.html';
+    _downloadBlob(html, fn, 'text/html;charset=utf-8');
+    _ctx.mostrarNotificacao('📊 Apresentação gerada! Abra o HTML no browser e pressione F11 para tela cheia.', 'success');
+}
+
+// ── Utilitário: baixa um Blob como arquivo ────────────────────────────────
+function _downloadBlob(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 function setupBotoesRelatorio() {
