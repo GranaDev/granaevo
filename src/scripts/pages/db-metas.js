@@ -1208,7 +1208,7 @@ function selecionarMeta(id) {
     _ctx.metaSelecionadaId = id;
     renderMetaVisual();
     const btnRetirar = document.getElementById('btnRetirar');
-    if(btnRetirar) btnRetirar.style.display = 'block';
+    if(btnRetirar) btnRetirar.classList.remove('js-hidden');
 }
 
 // ========== CÁLCULO DE PROJEÇÃO DE CONCLUSÃO DA META ==========
@@ -1304,7 +1304,7 @@ function renderMetaVisual() {
         const progressEl = document.getElementById('metaProgress');
         if(progressEl) progressEl.textContent = 'Selecione uma reserva';
         const btnRetirar = document.getElementById('btnRetirar');
-        if(btnRetirar) btnRetirar.style.display = 'none';
+        if(btnRetirar) btnRetirar.classList.add('js-hidden');
         return;
     }
     
@@ -1316,7 +1316,7 @@ function renderMetaVisual() {
         _notFound.textContent = 'Meta não encontrada';
         details.appendChild(_notFound);
         const btnRetirar = document.getElementById('btnRetirar');
-        if(btnRetirar) btnRetirar.style.display = 'none';
+        if(btnRetirar) btnRetirar.classList.add('js-hidden');
         return;
     }
     

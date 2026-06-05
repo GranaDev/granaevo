@@ -1102,10 +1102,41 @@ const AuthGuard = (() => {
                 const sub = await SubscriptionChecker.getActive(session.user.id);
 
                 if (!sub.subscription) {
-                    // Contas congeladas (canceladas dentro dos 90 dias) não são
-                    // forçadas ao logout — a overlay já está visível.
-                    if (!sub.isFrozen) {
-                        _publicAPI.forceLogout('NO_PLAN');
+                    if (sub.isFrozen) return; // overlay já visível — não faz nada
+
+                    // [FIX-LOGOUT] Não força logout imediatamente quando DB retorna vazio —
+                    // pode ser instabilidade momentânea do Supabase. Confirma com a API
+                    // autoritativa antes de desconectar o usuário.
+                    try {
+                        const rMon = await fetch('/api/check-user-access', {
+                            method:  'POST',
+                            headers: {
+                                'Content-Type':  'application/json',
+                                'Authorization': `Bearer ${session.access_token}`,
+                            },
+                            body:   JSON.stringify({}),
+                            signal: AbortSignal.timeout(8_000),
+                        });
+                        if (rMon.ok) {
+                            const apiMon = await rMon.json();
+                            if (apiMon.hasAccess === true) {
+                                // API confirma que o usuário tem acesso — DB estava instável.
+                                // Ignora este tick e reseta o contador de erros.
+                                _consecutiveErrors = 0;
+                                return;
+                            }
+                            // API confirmou: sem plano ativo → desconecta
+                            _publicAPI.forceLogout('NO_PLAN');
+                        } else if (rMon.status >= 500 || rMon.status === 429) {
+                            // Infra temporariamente indisponível — não desloga neste tick
+                            console.warn('[AUTH GUARD] Monitor: API indisponível (' + rMon.status + '), adiando verificação de plano');
+                        } else {
+                            // Resposta definitiva (4xx) — sem plano confirmado
+                            _publicAPI.forceLogout('NO_PLAN');
+                        }
+                    } catch {
+                        // Falha de rede — não desloga, tenta novamente no próximo tick (10 min)
+                        console.warn('[AUTH GUARD] Monitor: falha de rede na confirmação de plano, skip tick');
                     }
                     return;
                 }
@@ -1276,6 +1307,11 @@ const AuthGuard = (() => {
                     // já é conclusivo e o redirect de termos não é aplicável.
                     const _termsConfirmed = !!sessionStorage.getItem(SECURITY.KEYS.termsCache);
 
+                    // [FIX-LOGOUT] flag: API falhou por razão de infra (rede/timeout/5xx).
+                    // Quando true, não assume NO_PLAN — o JWT é válido e o usuário provavelmente
+                    // tem assinatura. O monitor verificará novamente em 10 minutos.
+                    let _apiCheckFailed = false;
+
                     if ((!subData.subscription && !subData.isFrozen) || !_termsConfirmed) {
                         try {
                             const r = await fetch('/api/check-user-access', {
@@ -1327,11 +1363,21 @@ const AuthGuard = (() => {
                                         SubscriptionChecker.invalidate();
                                     }
                                 }
-                                // api.hasAccess === false → subscription inválida, NO_PLAN
-                                // tratará abaixo sem alterar o termsCache
+                                // api.hasAccess === false → sem plano confirmado pela API
+                                // cai no if (!subData.subscription) abaixo → NO_PLAN
+                            } else if (r.status === 401) {
+                                // [FIX-LOGOUT] Token rejeitado de forma definitiva — erro real
+                                throw _err('TOKEN_INVALID', 'Token inválido na verificação de acesso.');
+                            } else {
+                                // [FIX-LOGOUT] 5xx, 429, 404 etc. — falha de infra, não assume NO_PLAN
+                                console.warn('[AUTH GUARD] check-user-access retornou', r.status, '— tratado como falha temporária de infra');
+                                _apiCheckFailed = true;
                             }
                         } catch (e) {
-                            if (e.code) throw e; // re-lança erros internos (RATE_LIMITED, etc.)
+                            if (e.code) throw e; // re-lança erros internos (RATE_LIMITED, TOKEN_INVALID, etc.)
+                            // [FIX-LOGOUT] Falha de rede, timeout, DNS — não assume NO_PLAN
+                            console.warn('[AUTH GUARD] Falha de rede em check-user-access:', e?.message || String(e));
+                            _apiCheckFailed = true;
                         }
                     }
 
@@ -1342,7 +1388,22 @@ const AuthGuard = (() => {
                             _renderFrozenOverlay(subData, _publicAPI);
                             return null; // finally libera o mutex
                         }
-                        throw _err('NO_PLAN', 'Sem plano ativo.');
+                        // [FIX-LOGOUT] Se a API falhou por infraestrutura (rede, timeout, 5xx),
+                        // concede acesso temporário em vez de redirecionar para planos.html.
+                        // O JWT já foi validado — o usuário é quem diz ser.
+                        // O monitor verificará o plano novamente em até 10 minutos.
+                        if (_apiCheckFailed) {
+                            console.warn('[AUTH GUARD] Plano não verificável (falha de infra) — acesso temporário concedido. Monitor verificará em 10min.');
+                            subData = {
+                                subscription: { id: 'temp-unverified' },
+                                isGuest:      false,
+                                ownerId:      user.id,
+                                planName:     'Individual',
+                                ownerEmail:   null,
+                            };
+                        } else {
+                            throw _err('NO_PLAN', 'Sem plano ativo.');
+                        }
                     }
 
                     if (subData.isGuest && !allowGuest) {
@@ -1514,13 +1575,23 @@ _initBroadcastChannel((type) => {
 supabase.auth.onAuthStateChange((event, session) => {
     switch (event) {
         case 'SIGNED_OUT':
-            AuthGuard._internalStop();
-            Fingerprint.clear();
-            SubscriptionChecker.invalidate();
-            RateLimiter.clear();
-            if (!window.location.href.includes('login.html')) {
-                SafeRedirect.toLogin('NO_SESSION'); // dedup via _isRedirecting
-            }
+            // [FIX-LOGOUT] O SDK pode disparar SIGNED_OUT espuriamente durante
+            // falha de rede no refresh automático de token. Aguarda 1s e re-verifica
+            // antes de reagir — evita logout falso por instabilidade momentânea.
+            setTimeout(async () => {
+                try {
+                    const { data } = await supabase.auth.getSession();
+                    if (data?.session) return; // sessão ainda ativa — evento espúrio, ignora
+                } catch { /* se a verificação falhar, prossegue com o logout */ }
+
+                AuthGuard._internalStop();
+                Fingerprint.clear();
+                SubscriptionChecker.invalidate();
+                RateLimiter.clear();
+                if (!window.location.href.includes('login.html')) {
+                    SafeRedirect.toLogin('NO_SESSION');
+                }
+            }, 1000);
             break;
         case 'TOKEN_REFRESHED':
             break;
