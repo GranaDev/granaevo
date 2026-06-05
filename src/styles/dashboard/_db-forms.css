@@ -195,6 +195,9 @@
 }
 
 .form-input {
+    /* Garante que selects nativos usem tema escuro em todos os browsers */
+    color-scheme: dark;
+
     width: 100%;
     padding: 14px 18px;
     border-radius: 14px;
@@ -208,6 +211,18 @@
     cursor: pointer;
     transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(67, 160, 71, 0.1);
+}
+
+/* Select .form-input — arrow customizado para remover o triângulo branco nativo */
+select.form-input {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2310b981' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"),
+        linear-gradient(135deg, rgba(30, 40, 35, 0.3) 0%, rgba(30, 40, 35, 0.3) 100%);
+    background-repeat: no-repeat;
+    background-position: right 14px center, left top;
+    padding-right: 38px;
 }
 
 .form-input:hover {
@@ -247,123 +262,218 @@ select.form-input option:checked {
     box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
-/* ========== FILTROS DE MOVIMENTAÃ‡Ã•ES ========== */
+/* ══════════════════════════════════════════════════════════════════════
+   FILTROS DE MOVIMENTAÇÕES — redesign glassmorphism sofisticado
+   ══════════════════════════════════════════════════════════════════════ */
+
 .mov-filtros-wrapper {
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
+    border-radius: 16px;
+    overflow: visible;
 }
 
+/* ── Botão-header do filtro ──────────────────────────────────────────── */
 .mov-filtros-header {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    gap: 10px;
+    padding: 12px 16px;
     width: 100%;
     text-align: left;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--gray-light);
-    font-size: 0.8125rem;
+    border-radius: 14px;
+    border: 1px solid rgba(67, 160, 71, 0.18);
+    background: linear-gradient(135deg,
+        rgba(30, 40, 35, 0.65) 0%,
+        rgba(18, 26, 22, 0.75) 100%);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.82rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
     cursor: pointer;
-    transition: background 0.18s, border-color 0.18s;
-    margin-bottom: 0;
+    transition: background 0.22s, border-color 0.22s, box-shadow 0.22s, transform 0.15s;
+    box-shadow:
+        0 2px 12px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    position: relative;
+}
+
+/* Borda esquerda verde como acento */
+.mov-filtros-header::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--primary, #10b981);
+    opacity: 0.7;
+    transition: opacity 0.2s, height 0.2s;
 }
 
 .mov-filtros-header:hover {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: rgba(16, 185, 129, 0.25);
+    background: linear-gradient(135deg,
+        rgba(30, 40, 35, 0.85) 0%,
+        rgba(18, 26, 22, 0.92) 100%);
+    border-color: rgba(67, 160, 71, 0.38);
+    box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(16, 185, 129, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+    color: #fff;
 }
 
+.mov-filtros-header:hover::before {
+    opacity: 1;
+    top: 15%;
+    bottom: 15%;
+}
+
+/* Quando o painel está aberto */
+.mov-filtros-wrapper.open .mov-filtros-header {
+    border-color: rgba(67, 160, 71, 0.42);
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+    background: linear-gradient(135deg,
+        rgba(30, 40, 35, 0.9) 0%,
+        rgba(18, 26, 22, 0.95) 100%);
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.2),
+        0 0 0 1px rgba(16, 185, 129, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* ── Ícone SVG do filtro ─────────────────────────────────────────────── */
+.mov-filtros-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    stroke: #10b981;
+    opacity: 0.85;
+}
+
+/* ── Texto "Filtrar" ─────────────────────────────────────────────────── */
+.mov-filtros-label {
+    line-height: 1;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* ── Label do filtro ativo ───────────────────────────────────────────── */
 .mov-filtros-ativo-label {
     margin-left: auto;
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     font-weight: 700;
-    color: var(--primary);
-    text-transform: none;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 3px 10px;
+    border-radius: 99px;
     letter-spacing: 0;
     white-space: nowrap;
+    transition: background 0.2s, border-color 0.2s;
 }
 
+/* ── Chevron animado ─────────────────────────────────────────────────── */
 .mov-filtros-chevron {
-    font-size: 0.7rem;
-    transition: transform 0.22s ease;
+    font-size: 0.68rem;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s;
     flex-shrink: 0;
-    color: var(--text-muted);
+    color: rgba(255, 255, 255, 0.35);
+    margin-left: 4px;
 }
 
 .mov-filtros-wrapper.open .mov-filtros-chevron {
     transform: rotate(180deg);
+    color: #10b981;
 }
 
-.mov-filtros-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    stroke: currentColor;
-}
-
-.mov-filtros-label {
-    line-height: 1;
-}
-
+/* ── Painel de filtros (ao abrir) ────────────────────────────────────── */
 .mov-filtros {
     display: none;
     flex-wrap: wrap;
-    gap: 0.5rem;
-    padding-top: 0.6rem;
+    gap: 7px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg,
+        rgba(18, 24, 20, 0.92) 0%,
+        rgba(12, 18, 14, 0.96) 100%);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(67, 160, 71, 0.18);
+    border-top: none;
+    border-bottom-left-radius: 14px;
+    border-bottom-right-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+    animation: filtroOpen 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes filtroOpen {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .mov-filtros-wrapper.open .mov-filtros {
     display: flex;
 }
 
+/* ── Pills dos filtros de período ────────────────────────────────────── */
 .mov-filtro-btn {
-    padding: 0.35rem 0.85rem;
+    padding: 6px 14px;
     border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.1);
-    background: rgba(255,255,255,0.04);
-    color: var(--gray-light);
-    font-size: 0.8125rem;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.8rem;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s;
+    transition: background 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s, transform 0.12s;
     white-space: nowrap;
     line-height: 1.4;
 }
 
 .mov-filtro-btn:hover {
-    background: rgba(16, 185, 129, 0.1);
-    border-color: rgba(16, 185, 129, 0.35);
-    color: var(--white);
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: rgba(255, 255, 255, 0.9);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(16, 185, 129, 0.15);
 }
 
-.mov-filtro-btn.active {
-    background: rgba(16, 185, 129, 0.15);
-    border-color: var(--primary);
-    color: var(--primary);
-    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25);
-    font-weight: 600;
+.mov-filtro-btn.active,
+.mov-filtro-btn[aria-pressed="true"] {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.18) 100%);
+    border-color: rgba(16, 185, 129, 0.55);
+    color: #10b981;
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2), 0 3px 12px rgba(16, 185, 129, 0.2);
+    font-weight: 700;
 }
 
+/* ── Seletor de período (mes/ano) ────────────────────────────────────── */
 .mov-periodo-selector {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.75rem;
+    gap: 8px;
+    margin-top: 10px;
     flex-wrap: wrap;
+    padding: 0 2px;
 }
 
 .mov-periodo-selector .form-input {
     flex: 1;
     min-width: 120px;
     max-width: 160px;
+    padding: 9px 14px;
+    font-size: 0.85rem;
 }
 
 .mov-periodo-selector .btn-primary {
-    padding: 0.45rem 1rem;
+    padding: 9px 16px;
     font-size: 0.875rem;
     white-space: nowrap;
 }

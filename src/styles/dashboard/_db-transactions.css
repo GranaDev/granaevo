@@ -374,6 +374,9 @@
 }
 
 /* ========== CABEÇALHO COM BUSCA ========== */
+/* ══════════════════════════════════════════════════════════════════════
+   CABEÇALHO DE MOVIMENTAÇÕES — título + busca
+   ══════════════════════════════════════════════════════════════════════ */
 .mov-header-row {
     display: flex;
     align-items: center;
@@ -384,26 +387,39 @@
 }
 .mov-header-row .section-title { margin-bottom: 0; }
 
+/* ── Caixa de busca textual — glassmorphism completo ─────────────────── */
 .mov-busca-wrap {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: linear-gradient(135deg,
+        rgba(30, 40, 35, 0.6) 0%,
+        rgba(18, 26, 22, 0.7) 100%);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    border: 1px solid rgba(67, 160, 71, 0.18);
     border-radius: 12px;
-    padding: 8px 14px;
+    padding: 9px 14px;
     min-width: 200px;
     max-width: 280px;
-    transition: border-color 0.2s, background 0.2s;
+    transition: border-color 0.22s, background 0.22s, box-shadow 0.22s, transform 0.15s;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
 }
 .mov-busca-wrap:focus-within {
-    border-color: rgba(67, 160, 71, 0.5);
-    background: rgba(67, 160, 71, 0.06);
+    border-color: rgba(16, 185, 129, 0.5);
+    background: linear-gradient(135deg,
+        rgba(30, 40, 35, 0.8) 0%,
+        rgba(16, 185, 129, 0.08) 100%);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12),
+                0 4px 16px rgba(0,0,0,0.25),
+                inset 0 1px 0 rgba(255,255,255,0.06);
+    transform: translateY(-1px);
 }
 .mov-busca-icon {
-    color: var(--text-muted);
+    color: #10b981;
     font-size: 0.8rem;
     flex-shrink: 0;
+    opacity: 0.8;
 }
 .mov-busca-input {
     flex: 1;
@@ -412,21 +428,29 @@
     outline: none;
     color: var(--text-primary);
     font-size: 0.85rem;
+    font-weight: 500;
     min-width: 0;
 }
-.mov-busca-input::placeholder { color: var(--text-muted); }
+.mov-busca-input::placeholder { color: rgba(255,255,255,0.28); }
 .mov-busca-clear {
-    background: none;
+    background: rgba(255,255,255,0.08);
     border: none;
-    color: var(--text-muted);
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    color: rgba(255,255,255,0.5);
     cursor: pointer;
-    padding: 0;
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     display: flex;
     align-items: center;
-    transition: color 0.2s;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
 }
-.mov-busca-clear:hover { color: var(--text-primary); }
+.mov-busca-clear:hover {
+    background: rgba(239,68,68,0.2);
+    color: #f87171;
+}
 
 /* ========== EMPTY STATE RICO ========== */
 .mov-empty-state {

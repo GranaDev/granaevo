@@ -205,19 +205,32 @@
     flex-wrap: wrap;
 }
 
+/* ── Campo de busca de reservas — glassmorphism escuro ───────────────── */
 .res-search-wrap {
     flex: 1;
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    background: linear-gradient(135deg,
+        rgba(30, 40, 35, 0.6) 0%,
+        rgba(18, 26, 22, 0.7) 100%);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    border: 1px solid rgba(67, 160, 71, 0.18);
+    border-radius: 10px;
     padding: 0 12px;
     min-width: 0;
+    transition: border-color 0.22s, box-shadow 0.22s, transform 0.15s;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
-.res-search-wrap i { color: var(--text-muted); font-size: 0.78rem; }
+.res-search-wrap:focus-within {
+    border-color: rgba(16, 185, 129, 0.5);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12), 0 4px 14px rgba(0,0,0,0.25);
+    transform: translateY(-1px);
+}
+
+.res-search-wrap i { color: #10b981; font-size: 0.78rem; opacity: 0.8; }
 
 .res-search-input {
     flex: 1;
@@ -225,21 +238,73 @@
     border: none;
     outline: none;
     color: var(--text-primary);
-    font-size: 0.85rem;
+    font-size: 0.84rem;
+    font-weight: 500;
     padding: 9px 0;
     min-width: 0;
 }
 
-.res-search-input::placeholder { color: var(--text-muted); }
+.res-search-input::placeholder { color: rgba(255,255,255,0.28); }
 
+/* ── Select de status — glassmorphism escuro igual ao form-input ─────── */
 .res-filter-select {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    color: var(--text-secondary);
-    font-size: 0.83rem;
-    padding: 8px 10px;
+    /* Força renderização escura do dropdown nativo em todos os browsers */
+    color-scheme: dark;
+
+    /* Remove aparência nativa e aplica estilo customizado */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+
+    /* Fundo com gradiente escuro glassmorphism */
+    background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2310b981' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        no-repeat right 10px center,
+        linear-gradient(135deg, rgba(30, 40, 35, 0.65) 0%, rgba(18, 26, 22, 0.75) 100%);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    border: 1px solid rgba(67, 160, 71, 0.2);
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 8px 32px 8px 12px;
     cursor: pointer;
+    transition: border-color 0.22s, box-shadow 0.22s, background 0.22s, transform 0.15s;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
+    min-width: 130px;
+}
+
+.res-filter-select:hover {
+    border-color: rgba(16, 185, 129, 0.4);
+    background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2310b981' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        no-repeat right 10px center,
+        linear-gradient(135deg, rgba(30, 40, 35, 0.85) 0%, rgba(16, 185, 129, 0.08) 100%);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12), 0 4px 14px rgba(0,0,0,0.25);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.res-filter-select:focus {
+    outline: none;
+    border-color: rgba(16, 185, 129, 0.55);
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18), 0 4px 18px rgba(0,0,0,0.3);
+    color: #fff;
+}
+
+/* Opções do dropdown (dark) */
+.res-filter-select option {
+    background: #1a2420;
+    color: #e2e8f0;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+}
+
+.res-filter-select option:checked {
+    background: #10b981;
+    color: #fff;
+    font-weight: 700;
 }
 
 /* ========== RESERVAS â€” META CARDS ========== */
