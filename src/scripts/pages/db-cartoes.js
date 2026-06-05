@@ -117,15 +117,37 @@ function _buildResumoCartao(cartao) {
     const faturasAbertas = _ctx.contasFixas.filter(c =>
         c.cartaoId === cartao.id && c.tipoContaFixa === 'fatura_cartao' && !c.pago
     );
-    const totalFatura   = faturasAbertas.reduce((s, f) => s + Number(f.valor || 0), 0);
-    const proxFatura    = faturasAbertas.slice().sort((a, b) => (a.vencimento || '').localeCompare(b.vencimento || ''))[0];
-    const vencTexto     = proxFatura?.vencimento ? `Vencimento: ${formatarDataBR(proxFatura.vencimento)}` : 'Sem fatura aberta';
-    const melhorDia     = ((cartao.fechamentoDia ?? 10) % 28) + 1;
-    const hoje          = new Date();
+    const totalFatura = faturasAbertas.reduce((s, f) => s + Number(f.valor || 0), 0);
+    const proxFatura  = faturasAbertas.slice().sort((a, b) => (a.vencimento || '').localeCompare(b.vencimento || ''))[0];
+    const hoje        = new Date();
+
+    // ── Previsão de fechamento ──────────────────────────────────────────
+    const diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia ?? 10;
     const diaVenc       = cartao.vencimentoDia || 1;
+
+    // Calcula próximo fechamento (quando param as compras da fatura atual)
+    let proxFecha = new Date(hoje.getFullYear(), hoje.getMonth(), diaFechamento);
+    if (proxFecha <= hoje) proxFecha = new Date(hoje.getFullYear(), hoje.getMonth() + 1, diaFechamento);
+    const diasAteFecha = Math.ceil((proxFecha - hoje) / 86400000);
+
+    // Calcula próximo vencimento (quando a fatura deve ser paga)
     let proxVenc = new Date(hoje.getFullYear(), hoje.getMonth(), diaVenc);
     if (proxVenc <= hoje) proxVenc = new Date(hoje.getFullYear(), hoje.getMonth() + 1, diaVenc);
-    const diasAteVenc   = Math.ceil((proxVenc - hoje) / 86400000);
+    const diasAteVenc = Math.ceil((proxVenc - hoje) / 86400000);
+
+    // Texto contextual do vencimento
+    const vencTexto = proxFatura?.vencimento
+        ? `Vence ${formatarDataBR(proxFatura.vencimento)} · ${diasAteVenc}d`
+        : `Próx. venc: dia ${diaVenc}`;
+
+    // Texto de fechamento com urgência
+    const fechaTexto = diasAteFecha <= 3
+        ? `⚠️ Fecha em ${diasAteFecha} dia${diasAteFecha !== 1 ? 's' : ''}!`
+        : `Fecha em ${diasAteFecha} dia${diasAteFecha !== 1 ? 's' : ''}`;
+    const fechaCls = diasAteFecha <= 3 ? 'cdes-stat--danger' : diasAteFecha <= 7 ? 'cdes-stat--warning' : '';
+
+    // Melhor dia de compra (logo após o fechamento — máximo de prazo)
+    const melhorDia = ((diaFechamento) % 28) + 1;
 
     const panel = document.createElement('div'); panel.className = 'cdes-resumo-panel';
     const title = document.createElement('div'); title.className = 'cdes-resumo-title'; title.textContent = 'Resumo do cartão';
@@ -133,9 +155,10 @@ function _buildResumoCartao(cartao) {
 
     const statsDiv = document.createElement('div'); statsDiv.className = 'cdes-resumo-stats';
     const statsDef = [
-        { icon: 'fa-file-invoice-dollar', label: 'FATURA ATUAL',         value: formatBRL(totalFatura),           sub: vencTexto,                                                    cls: 'cdes-stat--fatura' },
-        { icon: 'fa-percent',             label: 'LIMITE UTILIZADO',      value: `${percUsado.toFixed(0)}%`,       sub: `${formatBRL(cartao.usado || 0)} de ${formatBRL(cartao.limite)}`, cls: percUsado > 80 ? 'cdes-stat--danger' : percUsado > 50 ? 'cdes-stat--warning' : '' },
-        { icon: 'fa-calendar-day',        label: 'MELHOR DIA DE COMPRA',  value: String(melhorDia).padStart(2,'0'), sub: `Vence em ${diasAteVenc} dia${diasAteVenc !== 1 ? 's' : ''}`, cls: '' },
+        { icon: 'fa-file-invoice-dollar', label: 'FATURA ATUAL',    value: formatBRL(totalFatura), sub: vencTexto, cls: 'cdes-stat--fatura' },
+        { icon: 'fa-percent',             label: 'LIMITE UTILIZADO', value: `${percUsado.toFixed(0)}%`, sub: `${formatBRL(cartao.usado || 0)} de ${formatBRL(cartao.limite)}`, cls: percUsado > 80 ? 'cdes-stat--danger' : percUsado > 50 ? 'cdes-stat--warning' : '' },
+        { icon: 'fa-calendar-check',      label: 'FECHAMENTO',       value: `Dia ${diaFechamento}`, sub: fechaTexto, cls: fechaCls },
+        { icon: 'fa-calendar-day',        label: 'MELHOR DIA',       value: String(melhorDia).padStart(2,'0'), sub: 'Máximo prazo para compra', cls: '' },
     ];
     statsDef.forEach(s => {
         const box = document.createElement('div'); box.className = `cdes-resumo-stat ${s.cls}`;
@@ -287,10 +310,37 @@ function _buildMobileContent(container, cartaoAtivo) {
     header.appendChild(titulo); header.appendChild(btnAdd); container.appendChild(header);
 
     if (!cartaoAtivo) {
-        const empty = document.createElement('div'); empty.className = 'cartoes-empty-state';
-        const ei = document.createElement('div'); ei.style.fontSize = '3.5rem'; ei.textContent = '💳';
-        const et = document.createElement('p'); et.textContent = 'Nenhum cartão cadastrado. Adicione seu primeiro cartão!';
-        empty.appendChild(ei); empty.appendChild(et); container.appendChild(empty); return;
+        const empty = document.createElement('div');
+        empty.className = 'cartoes-empty-state';
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '56'); svg.setAttribute('height', '56');
+        svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '1.2');
+        svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.innerHTML = '<rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>';
+
+        const title = document.createElement('p');
+        title.className = 'cartoes-empty-title';
+        title.textContent = 'Nenhum cartão cadastrado';
+
+        const sub = document.createElement('p');
+        sub.className = 'cartoes-empty-sub';
+        sub.textContent = 'Adicione seu cartão de crédito para controlar faturas e parcelamentos.';
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-primary cartoes-empty-cta';
+        btn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Adicionar Cartão';
+        btn.addEventListener('click', () => abrirCartaoForm());
+
+        empty.appendChild(svg);
+        empty.appendChild(title);
+        empty.appendChild(sub);
+        empty.appendChild(btn);
+        container.appendChild(empty);
+        return;
     }
 
     const featuredWrapper = document.createElement('div'); featuredWrapper.className = 'cartao-featured-wrapper';

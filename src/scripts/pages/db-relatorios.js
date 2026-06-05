@@ -159,15 +159,143 @@ function popularFiltrosRelatorio() {
     _ctx._log.info('[popularFiltrosRelatorio] Filtros populados. Tipo ativo:', _ctx.tipoRelatorioAtivo);
 }
 
+function _exportarRelatorio() {
+    const resultado = document.getElementById('relatorioResultado');
+    if (!resultado || resultado.classList.contains('js-hidden') || resultado.innerHTML.trim() === '') {
+        _ctx.mostrarNotificacao('Gere o relatório antes de exportar.', 'warning');
+        return;
+    }
+
+    // ── Captura Canvas como imagens antes de imprimir ────────────────────
+    // window.print() não renderiza Canvas — convertemos para <img> data:URL
+    const canvases = resultado.querySelectorAll('canvas');
+    const canvasBackups = [];
+    canvases.forEach(canvas => {
+        try {
+            const dataUrl = canvas.toDataURL('image/png');
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.style.cssText = `width:${canvas.offsetWidth}px; height:${canvas.offsetHeight}px; max-width:100%;`;
+            img.className = 'relatorio-canvas-img';
+            canvas.parentNode.insertBefore(img, canvas);
+            canvas.style.display = 'none';
+            canvasBackups.push({ canvas, img });
+        } catch { /* canvas CORS ou vazio — deixa como está */ }
+    });
+
+    // ── Injeta estilo de impressão temporariamente ────────────────────────
+    const styleId = '__ge_print_style__';
+    let style = document.getElementById(styleId);
+    if (!style) {
+        style = document.createElement('style');
+        style.id = styleId;
+        document.head.appendChild(style);
+    }
+
+    style.textContent = `
+        @media print {
+            /* Oculta tudo exceto o relatório */
+            body > *:not(.relatorio-print-frame) { display: none !important; }
+            .relatorio-print-frame { display: block !important; position: static !important; }
+            .relatorio-print-frame * { visibility: visible !important; }
+
+            /* Layout de impressão */
+            @page { margin: 16mm 12mm; }
+            body { background: #fff !important; color: #111 !important; font-family: 'DM Sans', sans-serif !important; }
+
+            .rel-print-header { border-bottom: 2px solid #10b981; padding-bottom: 12px; margin-bottom: 20px; }
+            .rel-print-logo { font-size: 1.4rem; font-weight: 800; color: #10b981; }
+            .rel-print-meta { font-size: 0.8rem; color: #666; margin-top: 4px; }
+
+            /* Cards de resumo */
+            .relatorio-resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+            .relatorio-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f9fafb !important; }
+            .relatorio-card-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+            .relatorio-card-value { font-size: 1.3rem; font-weight: 700; }
+
+            /* Tabelas */
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 0.82rem; }
+            th { background: #f3f4f6 !important; color: #374151 !important; border-bottom: 2px solid #e5e7eb; padding: 8px 10px; text-align: left; }
+            td { border-bottom: 1px solid #e5e7eb; padding: 7px 10px; color: #374151 !important; }
+            tr:last-child td { border-bottom: none; }
+
+            /* Gráficos capturados como imagem */
+            .relatorio-canvas-img { max-width: 100%; height: auto; border-radius: 6px; margin: 8px 0; }
+
+            /* Oculta botões de ação dentro do relatório */
+            .rel-section-actions, .btn-exportar-rel, [role="button"] { display: none !important; }
+
+            /* Evita quebra de página dentro de seções */
+            .relatorio-section { page-break-inside: avoid; margin-bottom: 16px; }
+        }
+    `;
+
+    // ── Cria frame temporário de impressão ────────────────────────────────
+    const frame = document.createElement('div');
+    frame.className = 'relatorio-print-frame';
+    frame.style.cssText = 'display:none;';
+
+    // Cabeçalho de impressão
+    const mes = document.getElementById('mesRelatorio')?.options[document.getElementById('mesRelatorio')?.selectedIndex]?.text || '';
+    const ano = document.getElementById('anoRelatorio')?.value || '';
+    const perfil = _ctx.perfilAtivo?.nome || '';
+    const tipoLabel = { individual: 'Individual', casal: 'Casal', familia: 'Família', patrimonio: 'Visão Geral' };
+
+    frame.innerHTML = `
+        <div class="rel-print-header">
+            <div class="rel-print-logo">GranaEvo</div>
+            <div class="rel-print-meta">
+                Relatório ${tipoLabel[_ctx.tipoRelatorioAtivo] || ''} · ${mes} ${ano}
+                ${perfil ? ' · ' + _escapeExport(perfil) : ''}
+                · Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+        </div>
+    `;
+
+    // Clona o conteúdo do relatório
+    const clone = resultado.cloneNode(true);
+    // Remove elementos desnecessários na impressão
+    clone.querySelectorAll('button, .btn-primary, .btn-cancelar, .btn-excluir, [aria-label="Exportar"]').forEach(el => el.remove());
+    frame.appendChild(clone);
+    document.body.appendChild(frame);
+
+    // ── Imprime ───────────────────────────────────────────────────────────
+    setTimeout(() => {
+        window.print();
+
+        // Limpeza após impressão (curto delay para o diálogo de impressão aparecer)
+        const cleanup = () => {
+            frame.remove();
+            style.textContent = '';
+
+            // Restaura canvas originais
+            canvasBackups.forEach(({ canvas, img }) => {
+                canvas.style.display = '';
+                img.remove();
+            });
+        };
+
+        // afterprint não é confiável em todos os browsers — usa timeout como fallback
+        window.addEventListener('afterprint', cleanup, { once: true });
+        setTimeout(cleanup, 5000);
+    }, 150);
+}
+
+// ── Sanitização de HTML para uso no cabeçalho do export (isolado) ─────────
+function _escapeExport(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+}
+
 function setupBotoesRelatorio() {
     // Conecta o botão de exportar (sem inline onclick)
     const btnExportar = document.getElementById('btnExportarRelatorio');
     if (btnExportar) {
         const newBtnExp = btnExportar.cloneNode(true);
         btnExportar.parentNode.replaceChild(newBtnExp, btnExportar);
-        newBtnExp.addEventListener('click', () => {
-            _ctx.mostrarNotificacao('Exportação de relatórios em breve! Enquanto isso, use a impressão do navegador (Ctrl+P).', 'info');
-        });
+        newBtnExp.addEventListener('click', () => _exportarRelatorio());
     }
 
     const btnIndividual = document.querySelector('.tipo-relatorio-btns [data-tipo="individual"]');

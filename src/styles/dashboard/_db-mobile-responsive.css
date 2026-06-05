@@ -227,6 +227,124 @@
     .popup button { padding: 10px 20px; font-size: 0.9rem; }
 }
 
+/* ========== FAB — BOTÃO FLUTUANTE DE LANÇAMENTO RÁPIDO ========== */
+.fab-add-tx {
+    display: none; /* visível apenas em mobile */
+}
+
+@media (max-width: 768px) {
+    .fab-add-tx {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        bottom: 88px; /* acima do bottom-nav */
+        right: 20px;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: #fff;
+        border: none;
+        font-size: 1.4rem;
+        cursor: pointer;
+        box-shadow: 0 6px 24px rgba(16, 185, 129, 0.45);
+        z-index: 8000;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .fab-add-tx:active { transform: scale(0.92); }
+    .fab-add-tx.fab-open {
+        transform: rotate(45deg);
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        box-shadow: 0 6px 24px rgba(239, 68, 68, 0.4);
+    }
+    .fab-add-tx.js-hidden { display: none !important; }
+
+    /* Overlay */
+    .fab-form-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 8001;
+        backdrop-filter: blur(4px);
+    }
+
+    /* Mini formulário FAB */
+    .fab-form {
+        position: fixed;
+        bottom: 156px; /* acima do FAB */
+        right: 16px;
+        width: min(340px, calc(100vw - 32px));
+        background: rgba(18, 22, 36, 0.98);
+        border: 1px solid rgba(16, 185, 129, 0.25);
+        border-radius: 20px;
+        padding: 0;
+        z-index: 8002;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        overflow: hidden;
+        transform: translateY(20px) scale(0.95);
+        opacity: 0;
+        transition: transform 0.25s ease, opacity 0.25s ease;
+        pointer-events: none;
+    }
+    .fab-form.fab-form--open {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .fab-form-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 18px;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .fab-form-title {
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: #10b981;
+        letter-spacing: 0.02em;
+    }
+    .fab-form-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+    }
+    .fab-form-body {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 16px;
+    }
+    .fab-form-body .form-input { font-size: 0.88rem; }
+    .fab-form-body .btn-primary {
+        margin-top: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+}
+
+/* ========== FEEDBACK VISUAL DO FILTRO ATIVO ========== */
+.mov-filtros-ativo-label[data-active] {
+    animation: filtro-pulse 0.6s ease;
+}
+@keyframes filtro-pulse {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.12); color: #10b981; }
+    100% { transform: scale(1); }
+}
+.mov-filtro-btn[aria-pressed="true"] {
+    border-color: rgba(16, 185, 129, 0.5) !important;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+}
+
 /* ========== MOBILE MUITO PEQUENO (360px) ========== */
 @media (max-width: 360px) {
     .perfis-grid { grid-template-columns: 1fr; padding: 10px; }
@@ -238,4 +356,3 @@
 }
 
 /* ================================================================
-   MOBILE TOPBAR + BOTTOM NAV â€” NOVO LAYOUT MOBILE

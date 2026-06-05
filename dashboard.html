@@ -32,6 +32,8 @@
     <!-- ================================================================
          📦 Estilos da Aplicação
          ================================================================ -->
+    <!-- Preload do logo — aparece imediatamente na tela de loading (LCP crítico) -->
+    <link rel="preload" as="image" href="/assets/icons/granaevo-logo.jpg">
     <link rel="stylesheet" href="src/styles/dashboard.css?v=14">
     <link rel="stylesheet" href="src/styles/graficos.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -61,7 +63,7 @@
     <div class="loading-screen" id="authLoading" role="status" aria-label="Verificando acesso">
         <div class="loader">
             <div class="loader-logo">
-                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96" fetchpriority="high" decoding="async">
             </div>
             <div class="loader-bar" aria-hidden="true">
                 <div class="loader-progress"></div>
@@ -120,9 +122,10 @@
                     aria-hidden="true">U</div>
             </label>
 
-            <!-- Logo central -->
+            <!-- Logo central + indicador de sync -->
             <div class="mobile-topbar-center">
                 <span class="mobile-logo-text">GranaEvo</span>
+                <span class="sync-indicator" id="syncIndicator" aria-live="polite" aria-atomic="true"></span>
             </div>
 
             <!-- Notificações + Configurações (direito) -->
@@ -455,9 +458,26 @@
                 <div id="orcamentosSection" class="orc-section" aria-label="Orçamentos por categoria"></div>
 
                 <div class="section-box">
-                    <h2 class="section-title">
-                        <i class="fas fa-list" aria-hidden="true"></i> Movimentações
-                    </h2>
+                    <div class="mov-header-row">
+                        <h2 class="section-title">
+                            <i class="fas fa-list" aria-hidden="true"></i> Movimentações
+                        </h2>
+                        <!-- Campo de busca textual por descrição -->
+                        <div class="mov-busca-wrap">
+                            <i class="fas fa-search mov-busca-icon" aria-hidden="true"></i>
+                            <input
+                                type="search"
+                                id="movBuscaInput"
+                                class="mov-busca-input"
+                                placeholder="Buscar descrição…"
+                                maxlength="100"
+                                autocomplete="off"
+                                aria-label="Buscar transação por descrição">
+                            <button class="mov-busca-clear js-hidden" id="movBuscaClear" type="button" aria-label="Limpar busca">
+                                <i class="fas fa-times" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
 
                     <div class="mov-filtros-wrapper" id="movFiltrosWrapper">
                         <button class="mov-filtros-header" id="toggleFiltrosBtn" type="button" aria-expanded="false" aria-controls="movFiltros">
@@ -535,9 +555,14 @@
                     <div class="reservas-sidebar">
                         <div class="section-header">
                             <h3>Lista de Reservas</h3>
-                            <button class="btn-primary" id="btnNovaMeta" type="button">
-                                <i class="fas fa-plus" aria-hidden="true"></i> Nova Reserva
-                            </button>
+                            <div class="section-header-actions">
+                                <button class="btn-outline" id="btnJaPossuiReserva" type="button" title="Cadastre uma reserva que você já possui sem afetar seu saldo atual">
+                                    <i class="fas fa-wallet" aria-hidden="true"></i> Já possuo reservas
+                                </button>
+                                <button class="btn-primary" id="btnNovaMeta" type="button">
+                                    <i class="fas fa-plus" aria-hidden="true"></i> Nova Reserva
+                                </button>
+                            </div>
                         </div>
                         <div class="res-sidebar-filters">
                             <div class="res-search-wrap">
@@ -857,6 +882,21 @@
                             </div>
                         </div>
 
+                        <!-- ── SEÇÃO: DADOS E BACKUP ──────────────────────── -->
+                        <div class="cfg-section">
+                            <div class="cfg-section-label">Dados e Backup</div>
+                            <div class="cfg-list">
+                                <button class="cfg-item" id="btnHistoricoBackup" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--teal"><i class="fas fa-history" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Histórico de Backups</span>
+                                        <span class="cfg-item-sub">Restaure dados dos últimos 7 dias</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="cfg-section">
                             <div class="cfg-section-label">Sessão</div>
                             <div class="cfg-list">
@@ -909,6 +949,56 @@
             </button>
         </nav>
 
+    </div>
+
+    <!-- INDICADOR DE SYNC DESKTOP (canto inferior direito, acima do bottom-nav) -->
+    <div class="sync-indicator-desktop" id="syncIndicatorDesktop" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- FAB MOBILE — botão flutuante para lançar transação rápida -->
+    <button
+        class="fab-add-tx js-hidden"
+        id="fabAddTx"
+        type="button"
+        aria-label="Lançar transação rápida">
+        <i class="fas fa-plus" aria-hidden="true"></i>
+    </button>
+
+    <!-- MINI FORM FAB — formulário rápido de lançamento -->
+    <div class="fab-form-overlay js-hidden" id="fabFormOverlay" role="presentation"></div>
+    <div class="fab-form" id="fabForm" role="dialog" aria-modal="true" aria-label="Lançar transação rápida">
+        <div class="fab-form-header">
+            <span class="fab-form-title">Lançamento Rápido</span>
+            <button class="fab-form-close" id="fabFormClose" type="button" aria-label="Fechar">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="fab-form-body">
+            <select id="fabCategoria" class="form-input" aria-label="Categoria">
+                <option value="">Categoria</option>
+                <option value="entrada">Entrada</option>
+                <option value="saida">Saída</option>
+                <option value="saida_credito">Crédito</option>
+            </select>
+            <input
+                type="text"
+                id="fabDescricao"
+                class="form-input"
+                placeholder="Descrição"
+                maxlength="300"
+                aria-label="Descrição">
+            <input
+                type="number"
+                id="fabValor"
+                class="form-input"
+                placeholder="Valor (R$)"
+                step="0.01"
+                min="0.01"
+                max="99999999"
+                aria-label="Valor">
+            <button class="btn-primary" id="fabLancar" type="button">
+                <i class="fas fa-paper-plane" aria-hidden="true"></i> Lançar
+            </button>
+        </div>
     </div>
 
     <!-- PAINEL DE NOTIFICAÇÕES -->

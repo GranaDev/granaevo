@@ -587,5 +587,65 @@
     #btnRetirar  { width: 100%; padding: 12px; font-size: 0.9rem; margin-top: 12px; }
 }
 
+/* ========== EMPTY STATE — RESERVAS ========== */
+.reservas-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    text-align: center;
+    gap: 10px;
+    color: rgba(67, 160, 71, 0.3);
+}
+.reservas-empty-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+}
+.reservas-empty-sub {
+    font-size: 0.83rem;
+    color: var(--text-muted);
+    margin: 0;
+    max-width: 240px;
+    line-height: 1.5;
+}
+.reservas-empty-cta {
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+}
+
+/* ========== EMPTY STATE — CARTÕES ========== */
+.cartoes-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 24px;
+    text-align: center;
+    gap: 12px;
+    color: rgba(67, 160, 71, 0.3);
+}
+.cartoes-empty-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+}
+.cartoes-empty-sub {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    margin: 0;
+    max-width: 300px;
+    line-height: 1.5;
+}
+.cartoes-empty-cta {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
 /* ========== CARTÃ•ES DE CRÃ‰DITO ========== */
-.cartoes-grid {

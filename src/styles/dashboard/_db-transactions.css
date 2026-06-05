@@ -365,7 +365,7 @@
     margin-bottom: 2px;
 }
 
-/* Desktop: tabela visÃ­vel, cards ocultos */
+/* Desktop: tabela visível, cards ocultos */
 .mov-cards { display: none; }
 
 @media (max-width: 640px) {
@@ -373,4 +373,174 @@
     .mov-cards { display: flex; flex-direction: column; gap: 0; }
 }
 
-/* ========== RESERVAS/METAS ========== */
+/* ========== CABEÇALHO COM BUSCA ========== */
+.mov-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.mov-header-row .section-title { margin-bottom: 0; }
+
+.mov-busca-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 8px 14px;
+    min-width: 200px;
+    max-width: 280px;
+    transition: border-color 0.2s, background 0.2s;
+}
+.mov-busca-wrap:focus-within {
+    border-color: rgba(67, 160, 71, 0.5);
+    background: rgba(67, 160, 71, 0.06);
+}
+.mov-busca-icon {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+.mov-busca-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    min-width: 0;
+}
+.mov-busca-input::placeholder { color: var(--text-muted); }
+.mov-busca-clear {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+}
+.mov-busca-clear:hover { color: var(--text-primary); }
+
+/* ========== EMPTY STATE RICO ========== */
+.mov-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px;
+    text-align: center;
+    gap: 12px;
+}
+.mov-empty-icon {
+    color: rgba(67, 160, 71, 0.3);
+    margin-bottom: 8px;
+}
+.mov-empty-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+}
+.mov-empty-sub {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+    max-width: 280px;
+}
+.mov-empty-cta {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+/* ========== SENTINELA DE SCROLL + TOTAIS ========== */
+.mov-load-sentinela {
+    padding: 24px;
+    text-align: center;
+}
+.mov-load-info {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+.mov-load-total {
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    padding: 20px 0 8px;
+    margin: 0;
+}
+
+@media (max-width: 640px) {
+    .mov-busca-wrap { min-width: 0; max-width: none; flex: 1; }
+    .mov-header-row { flex-wrap: nowrap; }
+}
+
+/* ========== SWIPE ACTIONS (MOBILE) ========== */
+.mov-swipe-wrap {
+    position: relative;
+    overflow: hidden;
+    border-radius: 14px;
+}
+/* Ações reveladas pelo swipe — ficam atrás do item */
+.mov-swipe-actions {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    z-index: 0;
+}
+.mov-swipe-actions--left  { right: 0; padding-right: 8px; }
+.mov-swipe-actions--right { left: 0; padding-left: 8px; }
+
+.mov-swipe-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 68px;
+    height: 68px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    transition: opacity 0.2s;
+}
+.mov-swipe-btn i { font-size: 1.1rem; }
+.mov-swipe-btn--del {
+    background: linear-gradient(135deg, #ff4b4b, #c0392b);
+    color: #fff;
+}
+.mov-swipe-btn--edit {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    color: #fff;
+}
+
+/* O item deslizável fica acima das ações */
+.mov-item {
+    position: relative;
+    z-index: 1;
+    transition: transform 0.18s ease-out;
+    will-change: transform;
+}
+/* Feedback visual quando aberto */
+.mov-item.swipe-open-left  { box-shadow: -3px 0 12px rgba(255, 75, 75, 0.2); }
+.mov-item.swipe-open-right { box-shadow:  3px 0 12px rgba(59, 130, 246, 0.2); }
+

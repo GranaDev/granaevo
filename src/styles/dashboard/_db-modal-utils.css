@@ -176,7 +176,86 @@
     .grafico-card.full-width { grid-column: 1; }
 }
 
+/* ========== INDICADOR DE SINCRONIZAÇÃO ========== */
+/* Badge inline na topbar mobile */
+.sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 2px 8px;
+    border-radius: 20px;
+    transition: opacity 0.3s, transform 0.3s;
+    opacity: 0;
+    transform: translateY(4px);
+    pointer-events: none;
+    white-space: nowrap;
+}
+.sync-indicator[data-state] {
+    opacity: 1;
+    transform: translateY(0);
+}
+.sync-indicator[data-state="saving"] {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+.sync-indicator[data-state="saved"] {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.sync-indicator[data-state="error"] {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Versão desktop — canto inferior direito, acima do conteúdo */
+.sync-indicator-desktop {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 9000;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 20px;
+    transition: opacity 0.3s, transform 0.3s;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    white-space: nowrap;
+    backdrop-filter: blur(12px);
+}
+.sync-indicator-desktop[data-state] {
+    opacity: 1;
+    transform: translateY(0);
+}
+.sync-indicator-desktop[data-state="saving"] {
+    background: rgba(251, 191, 36, 0.18);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    box-shadow: 0 4px 16px rgba(251, 191, 36, 0.12);
+}
+.sync-indicator-desktop[data-state="saved"] {
+    background: rgba(16, 185, 129, 0.18);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.12);
+}
+.sync-indicator-desktop[data-state="error"] {
+    background: rgba(239, 68, 68, 0.18);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.12);
+}
+/* No mobile o desktop indicator fica acima do bottom nav */
+@media (max-width: 768px) {
+    .sync-indicator-desktop { bottom: 80px; right: 16px; font-size: 0.72rem; }
+}
+
 /* ============================================
    HEADERS PREMIUM V3.0 - LAYOUT LATERAL
    ============================================ */
-

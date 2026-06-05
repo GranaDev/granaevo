@@ -144,8 +144,9 @@ export function init(ctx) {
     window.removerMeta            = (id) => removerMeta(id);
     window.selecionarMeta         = (id) => selecionarMeta(id);
     window.abrirRetiradaForm      = (id) => abrirRetiradaForm(id);
-    window.abrirAnaliseDisciplina = () => abrirAnaliseDisciplina();
-    window.renderMetaVisual       = () => renderMetaVisual();
+    window.abrirAnaliseDisciplina    = () => abrirAnaliseDisciplina();
+    window.renderMetaVisual          = () => renderMetaVisual();
+    window.abrirFormReservaExistente = () => abrirFormReservaExistente();
     // Aplica rendimentos acumulados (busca CDI atual internamente) e renderiza
     aplicarRendimentosDiarios().then(() => renderMetasList());
 
@@ -157,6 +158,291 @@ export function init(ctx) {
     document.getElementById('metaStatusFilter')?.addEventListener('change', () => {
         _metaPagina = 1;
         renderMetasList();
+    });
+}
+
+// ========== CADASTRO DE RESERVA EXISTENTE ==========
+// Cria uma reserva com saldo inicial sem gerar transação de débito.
+// Ideal para novos usuários que já possuem reservas na vida real.
+function abrirFormReservaExistente() {
+    _ctx.criarPopupDOM((popup) => {
+        popup.style.cssText = 'max-width:480px; width:96%;';
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'max-height:84vh; overflow-y:auto; overflow-x:hidden; padding-right:4px;';
+
+        // ── Título ────────────────────────────────────────────────────────────
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'text-align:center; margin-bottom:14px; display:flex; align-items:center; justify-content:center; gap:10px; font-size:1.1rem;';
+        const tIcon = document.createElement('i');
+        tIcon.className = 'fas fa-wallet';
+        tIcon.setAttribute('aria-hidden', 'true');
+        tIcon.style.color = 'var(--primary)';
+        titulo.appendChild(tIcon);
+        titulo.appendChild(document.createTextNode(' Cadastrar Reserva Existente'));
+
+        // ── Nota informativa ─────────────────────────────────────────────────
+        const nota = document.createElement('div');
+        nota.style.cssText = 'background:rgba(67,160,71,0.08); border:1px solid rgba(67,160,71,0.2); border-radius:10px; padding:10px 14px; margin-bottom:14px; font-size:0.82rem; color:var(--text-secondary); line-height:1.5;';
+        const notaIcon = document.createElement('i');
+        notaIcon.className = 'fas fa-info-circle';
+        notaIcon.setAttribute('aria-hidden', 'true');
+        notaIcon.style.cssText = 'color:var(--primary); margin-right:6px;';
+        nota.appendChild(notaIcon);
+        nota.appendChild(document.createTextNode('O saldo informado será adicionado à reserva sem descontar do seu saldo no dashboard. Use para registrar reservas que você já possui na vida real.'));
+
+        // ── Helper: seção ─────────────────────────────────────────────────────
+        function secao(labelTxt) {
+            const sec = document.createElement('div');
+            sec.style.cssText = 'background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px 16px; margin-bottom:12px;';
+            if (labelTxt) {
+                const lbl = document.createElement('div');
+                lbl.style.cssText = 'font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:10px;';
+                lbl.textContent = labelTxt;
+                sec.appendChild(lbl);
+            }
+            return sec;
+        }
+
+        // ── Seção 1: Identificação ────────────────────────────────────────────
+        const secId = secao('Identificação');
+
+        const inpDesc = document.createElement('input');
+        inpDesc.className = 'form-input'; inpDesc.id = 'reExistDesc';
+        inpDesc.type = 'text'; inpDesc.maxLength = 200; inpDesc.autocomplete = 'off';
+        inpDesc.placeholder = 'Nome da reserva (ex: Caixinha Nubank, Poupança BB...)';
+        inpDesc.style.marginBottom = '10px';
+
+        const lblTipo = document.createElement('div');
+        lblTipo.style.cssText = 'font-size:0.83rem; color:var(--text-secondary); margin-bottom:6px;';
+        lblTipo.textContent = 'Onde está guardado?';
+
+        const selTipo = document.createElement('select');
+        selTipo.className = 'form-input'; selTipo.id = 'reExistTipo';
+
+        const TIPOS_VALIDOS = ['', 'caixinha', 'poupanca', 'cdb', 'lci_lca', 'tesouro_direto', 'renda_fixa', 'outro'];
+        [
+            { value: '',              label: 'Selecione...' },
+            { value: 'caixinha',      label: '📦 Caixinha (banco digital)' },
+            { value: 'poupanca',      label: '🏦 Poupança' },
+            { value: 'cdb',           label: '📊 CDB' },
+            { value: 'lci_lca',       label: '📋 LCI / LCA' },
+            { value: 'tesouro_direto',label: '🏛️ Tesouro Direto' },
+            { value: 'renda_fixa',    label: '📈 Renda Fixa (outros)' },
+            { value: 'outro',         label: '💰 Outro' },
+        ].forEach(t => {
+            const o = document.createElement('option');
+            o.value = t.value; o.textContent = t.label;
+            selTipo.appendChild(o);
+        });
+
+        secId.appendChild(inpDesc);
+        secId.appendChild(lblTipo);
+        secId.appendChild(selTipo);
+
+        // ── Seção 2: Saldos ───────────────────────────────────────────────────
+        const secSaldo = secao('Saldos');
+
+        const inpSaldo = document.createElement('input');
+        inpSaldo.className = 'form-input'; inpSaldo.id = 'reExistSaldo';
+        inpSaldo.type = 'number'; inpSaldo.step = '0.01'; inpSaldo.min = '0'; inpSaldo.max = '9999999';
+        inpSaldo.placeholder = 'Saldo atual (R$)';
+        inpSaldo.style.marginBottom = '10px';
+
+        const inpObj = document.createElement('input');
+        inpObj.className = 'form-input'; inpObj.id = 'reExistObj';
+        inpObj.type = 'number'; inpObj.step = '0.01'; inpObj.min = '0'; inpObj.max = '999999999';
+        inpObj.placeholder = 'Objetivo / meta (R$) — opcional';
+
+        secSaldo.appendChild(inpSaldo);
+        secSaldo.appendChild(inpObj);
+
+        // ── Seção 3: Rendimentos ──────────────────────────────────────────────
+        const secRend = secao('Rendimentos');
+
+        function criarRadioRend(value, labelTxt) {
+            const lbl = document.createElement('label');
+            lbl.style.cssText = 'display:flex; align-items:center; gap:8px; cursor:pointer; padding:7px 8px; border-radius:8px; margin-bottom:4px; transition:background 0.15s;';
+            lbl.addEventListener('mouseenter', () => { lbl.style.background = 'rgba(255,255,255,0.04)'; });
+            lbl.addEventListener('mouseleave', () => { lbl.style.background = ''; });
+            const radio = document.createElement('input');
+            radio.type = 'radio'; radio.name = 'reExistRendType'; radio.value = value;
+            radio.style.cssText = 'accent-color:var(--primary); cursor:pointer;';
+            if (value === 'sem_rendimento') radio.checked = true;
+            const span = document.createElement('span');
+            span.style.cssText = 'font-size:0.9rem; color:var(--text-primary);';
+            span.textContent = labelTxt;
+            lbl.appendChild(radio);
+            lbl.appendChild(span);
+            return lbl;
+        }
+
+        secRend.appendChild(criarRadioRend('sem_rendimento', '❌ Sem rendimento'));
+        secRend.appendChild(criarRadioRend('cdi',            '📈 % do CDI (Selic)'));
+        secRend.appendChild(criarRadioRend('personalizado',  '⚙️ Taxa personalizada'));
+
+        // Container CDI
+        const divCDI = document.createElement('div');
+        divCDI.id = 'reExistCDIWrap';
+        divCDI.style.cssText = 'display:none; margin-top:10px;';
+
+        const labelCDIInfo = document.createElement('div');
+        labelCDIInfo.style.cssText = 'font-size:0.78rem; color:var(--text-muted); margin-bottom:6px;';
+        labelCDIInfo.setAttribute('data-cdi-rate', '');
+        labelCDIInfo.textContent = `CDI atual: ${_cdiAnual.toFixed(2).replace('.', ',')}% a.a.`;
+
+        const inpCDI = document.createElement('input');
+        inpCDI.className = 'form-input'; inpCDI.id = 'reExistCDIPct';
+        inpCDI.type = 'number'; inpCDI.step = '1'; inpCDI.min = '1'; inpCDI.max = '200';
+        inpCDI.placeholder = '% do CDI (ex: 100 = 100% do CDI)';
+
+        divCDI.appendChild(labelCDIInfo);
+        divCDI.appendChild(inpCDI);
+        secRend.appendChild(divCDI);
+
+        // Container personalizado
+        const divCustom = document.createElement('div');
+        divCustom.id = 'reExistCustomWrap';
+        divCustom.style.cssText = 'display:none; margin-top:10px;';
+
+        const inpTaxa = document.createElement('input');
+        inpTaxa.className = 'form-input'; inpTaxa.id = 'reExistTaxa';
+        inpTaxa.type = 'number'; inpTaxa.step = '0.01'; inpTaxa.min = '0.01'; inpTaxa.max = '999';
+        inpTaxa.placeholder = 'Taxa (%)';
+        inpTaxa.style.marginBottom = '6px';
+
+        const selPeriodo = document.createElement('select');
+        selPeriodo.className = 'form-input'; selPeriodo.id = 'reExistPeriodo';
+        [{ v: 'mes', l: '% ao mês (a.m.)' }, { v: 'ano', l: '% ao ano (a.a.)' }].forEach(p => {
+            const o = document.createElement('option');
+            o.value = p.v; o.textContent = p.l;
+            selPeriodo.appendChild(o);
+        });
+
+        divCustom.appendChild(inpTaxa);
+        divCustom.appendChild(selPeriodo);
+        secRend.appendChild(divCustom);
+
+        // Conecta radios aos containers de input
+        secRend.querySelectorAll('input[name="reExistRendType"]').forEach(r => {
+            r.addEventListener('change', () => {
+                divCDI.style.display    = r.value === 'cdi'           ? '' : 'none';
+                divCustom.style.display = r.value === 'personalizado'  ? '' : 'none';
+            });
+        });
+
+        // ── Botões ─────────────────────────────────────────────────────────────
+        const rowBtns = document.createElement('div');
+        rowBtns.style.cssText = 'display:flex; gap:10px; margin-top:18px;';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar'; btnCancelar.type = 'button';
+        btnCancelar.textContent = 'Cancelar';
+        btnCancelar.style.flex = '1';
+        btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
+
+        const btnOk = document.createElement('button');
+        btnOk.className = 'btn-primary'; btnOk.type = 'button';
+        btnOk.style.cssText = 'flex:2; display:flex; align-items:center; justify-content:center; gap:6px;';
+        const iOk = document.createElement('i');
+        iOk.className = 'fas fa-check'; iOk.setAttribute('aria-hidden', 'true');
+        btnOk.appendChild(iOk);
+        btnOk.appendChild(document.createTextNode('Cadastrar Reserva'));
+
+        btnOk.addEventListener('click', () => {
+            // ── Validação: nome ───────────────────────────────────────────────
+            const descRaw = inpDesc.value.trim();
+            if (!descRaw)            return alert('Informe o nome da reserva.');
+            if (descRaw.length > 200) return alert('Nome muito longo (máx. 200 caracteres).');
+            const desc = _sanitizeText(descRaw);
+
+            // ── Validação: tipo ───────────────────────────────────────────────
+            const tipoVal = selTipo.value;
+            if (!TIPOS_VALIDOS.includes(tipoVal)) return alert('Tipo de reserva inválido.');
+
+            // ── Validação: saldo ──────────────────────────────────────────────
+            const saldoStr = inpSaldo.value;
+            const saldo    = parseFloat(saldoStr);
+            if (saldoStr === '' || !Number.isFinite(saldo) || saldo < 0 || saldo > 9_999_999) {
+                return alert('Informe um saldo válido (entre R$ 0,00 e R$ 9.999.999,00).');
+            }
+            const saldoSeguro = parseFloat(saldo.toFixed(2));
+
+            // ── Validação: objetivo ───────────────────────────────────────────
+            let objetivo = Math.max(saldoSeguro, 1);
+            const objStr = inpObj.value.trim();
+            if (objStr !== '') {
+                const objVal = parseFloat(objStr);
+                if (!Number.isFinite(objVal) || objVal < 0 || objVal > 999_999_999) {
+                    return alert('Objetivo inválido (entre R$ 0,00 e R$ 999.999.999,00).');
+                }
+                objetivo = parseFloat(objVal.toFixed(2));
+            }
+
+            // ── Validação: rendimento ─────────────────────────────────────────
+            const tipoR = document.querySelector('input[name="reExistRendType"]:checked')?.value ?? 'sem_rendimento';
+            if (!['sem_rendimento', 'cdi', 'personalizado'].includes(tipoR)) return alert('Tipo de rendimento inválido.');
+
+            let cdiPct           = null;
+            let taxaJuros        = null;
+            let rendimentoPeriodo = null;
+
+            if (tipoR === 'cdi') {
+                const cdiVal = parseFloat(inpCDI.value);
+                if (!Number.isFinite(cdiVal) || cdiVal < 1 || cdiVal > 200) {
+                    return alert('Informe a % do CDI entre 1% e 200%.');
+                }
+                cdiPct = parseFloat(cdiVal.toFixed(2));
+            }
+
+            if (tipoR === 'personalizado') {
+                const taxaVal = parseFloat(inpTaxa.value);
+                if (!Number.isFinite(taxaVal) || taxaVal <= 0 || taxaVal > 999) {
+                    return alert('Informe uma taxa entre 0,01% e 999%.');
+                }
+                taxaJuros = parseFloat(taxaVal.toFixed(4));
+                rendimentoPeriodo = selPeriodo.value === 'ano' ? 'ano' : 'mes';
+            }
+
+            // ── Criar reserva (sem transação de débito) ───────────────────────
+            const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+            _ctx.metas.push({
+                id:                 novoId,
+                descricao:          desc,
+                tipoReserva:        tipoVal || 'outro',
+                objetivo,
+                saved:              saldoSeguro,
+                monthly:            {},
+                prazo:              null,
+                tipoRendimento:     tipoR,
+                taxaJuros,
+                cdiPct,
+                rendimentoPeriodo,
+                aporteRecorrente:   false,
+                valorAporte:        null,
+                origemExistente:    true,
+            });
+
+            _ctx.salvarDados();
+            _ctx.renderMetasList();
+            _ctx.atualizarTudo();
+            _ctx.fecharPopup();
+        });
+
+        rowBtns.appendChild(btnCancelar);
+        rowBtns.appendChild(btnOk);
+
+        // ── Montagem ──────────────────────────────────────────────────────────
+        wrapper.appendChild(titulo);
+        wrapper.appendChild(nota);
+        wrapper.appendChild(secId);
+        wrapper.appendChild(secSaldo);
+        wrapper.appendChild(secRend);
+        wrapper.appendChild(rowBtns);
+        popup.appendChild(wrapper);
     });
 }
 
@@ -547,6 +833,9 @@ function abrirMetaForm(editId = null) {
             }
 
             if (isEdit) {
+                const aporteAnterior    = meta.aporteRecorrente;
+                const valorAporteAnterior = meta.valorAporte;
+
                 meta.descricao        = desc;
                 meta.objetivo         = objetivo;
                 meta.prazo            = prazo;
@@ -556,6 +845,9 @@ function abrirMetaForm(editId = null) {
                 meta.rendimentoPeriodo = rendimentoPeriodo;
                 meta.aporteRecorrente = aporteRecorrente;
                 meta.valorAporte      = valorAporte;
+
+                // Sincroniza conta fixa de aporte quando muda configuração
+                _sincronizarContaFixaAporte(meta, aporteRecorrente, valorAporte, aporteAnterior, valorAporteAnterior, desc);
             } else {
                 const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
                     ? crypto.randomUUID()
@@ -605,6 +897,52 @@ function abrirMetaForm(editId = null) {
     });
 }
 
+// Sincroniza a conta fixa de aporte recorrente ao editar uma meta.
+// Se o aporte foi ativado: cria conta fixa pendente para o próximo mês se não existir.
+// Se o aporte foi desativado: remove contas fixas de aporte NÃO pagas vinculadas a esta meta.
+// Se o valor mudou: atualiza o valor da conta fixa pendente.
+function _sincronizarContaFixaAporte(meta, aporteAtivo, valorAporte, aporteAnterior, valorAnterior, descMeta) {
+    const hoje = new Date();
+    const mm   = hoje.getMonth() + 2 > 12 ? 1 : hoje.getMonth() + 2;
+    const aa   = hoje.getMonth() + 2 > 12 ? hoje.getFullYear() + 1 : hoje.getFullYear();
+    const descContaFixa = `Aporte ${descMeta}`.slice(0, 200);
+
+    // Procura conta fixa de aporte já existente (não paga) para essa meta
+    const contaExistente = _ctx.contasFixas.find(c =>
+        !c.pago &&
+        c.descricao === descContaFixa &&
+        c.tipoContaFixa !== 'fatura_cartao'
+    );
+
+    if (aporteAtivo && valorAporte > 0) {
+        if (contaExistente) {
+            // Atualiza valor se mudou
+            if (contaExistente.valor !== valorAporte) {
+                contaExistente.valor = valorAporte;
+                _ctx.mostrarNotificacao(`Aporte de "${descMeta}" atualizado para ${_ctx.formatBRL(valorAporte)}.`, 'info');
+            }
+        } else if (!aporteAnterior) {
+            // Cria nova conta fixa de aporte (aporte foi ativado agora)
+            _ctx.contasFixas.push({
+                id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                descricao:  descContaFixa,
+                valor:      valorAporte,
+                vencimento: `${aa}-${String(mm).padStart(2,'0')}-01`,
+                pago:       false,
+            });
+            _ctx.mostrarNotificacao(`Aporte mensal de "${descMeta}" criado em Contas Fixas.`, 'success');
+        }
+    } else if (!aporteAtivo && aporteAnterior) {
+        // Remove conta fixa de aporte não paga (aporte foi desativado)
+        if (contaExistente) {
+            _ctx.contasFixas = _ctx.contasFixas.filter(c => c !== contaExistente);
+            _ctx.mostrarNotificacao(`Aporte mensal de "${descMeta}" removido das Contas Fixas.`, 'info');
+        }
+    }
+}
+
 const _META_POR_PAGINA = 5;
 let _metaPagina = 1;
 
@@ -624,10 +962,22 @@ function renderMetasList() {
     cont.innerHTML = '';
 
     if (_ctx.metas.length === 0) {
-        const p       = document.createElement('p');
-        p.className   = 'empty-state';
-        p.textContent = 'Nenhuma reserva criada.';
-        cont.appendChild(p);
+        const wrap = document.createElement('div');
+        wrap.className = 'reservas-empty-state';
+        wrap.innerHTML = `
+            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0H5m14 0H3m16 0h2M5 21H3"/>
+                <path d="M9 7h6M9 11h6M9 15h4"/>
+            </svg>
+            <p class="reservas-empty-title">Nenhuma reserva criada</p>
+            <p class="reservas-empty-sub">Crie sua primeira reserva — viagem, emergência ou qualquer objetivo financeiro.</p>`;
+        const btn = document.createElement('button');
+        btn.className = 'btn-primary reservas-empty-cta';
+        btn.type = 'button';
+        btn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Nova Reserva';
+        btn.addEventListener('click', () => document.getElementById('btnNovaMeta')?.click());
+        wrap.appendChild(btn);
+        cont.appendChild(wrap);
         return;
     }
 

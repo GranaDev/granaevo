@@ -22,12 +22,21 @@ export function init(ctx) {
     window.trocarPerfil        = () => trocarPerfil();
     window.comoUsar            = () => comoUsar();
     window.gerenciarAssinatura = () => gerenciarAssinatura();
+    window.abrirHistoricoBackup = () => abrirHistoricoBackup();
     // Inicializa botão de instalação do PWA na seção de Configurações
     initInstallButton();
     // Atualiza status de cache offline
     _updateOfflineStatus();
     // Inicializa botão de notificações push
     _initPushButton();
+    // Inicializa botão de backup nas configurações (binding dinâmico)
+    _bindBtnBackup();
+}
+
+function _bindBtnBackup() {
+    const btn = document.getElementById('btnHistoricoBackup');
+    if (!btn) return;
+    btn.addEventListener('click', abrirHistoricoBackup);
 }
 
 function _initPushButton() {
@@ -580,5 +589,162 @@ function comoUsar() {
 // Redireciona para a página de gerenciamento de assinatura (cancelar, trocar cartão, faturas)
 function gerenciarAssinatura() {
     window.location.href = 'atualizarplano.html';
+}
+
+// ========== HISTÓRICO DE BACKUP ==========
+// Lista os snapshots dos últimos 7 dias e permite restaurar qualquer um.
+// Segurança: a sessão JWT é validada na Edge Function — usuário só acessa seus próprios backups.
+async function abrirHistoricoBackup() {
+    // Obtém token da sessão atual
+    let token = null;
+    try {
+        const { supabase } = await import('../services/supabase-client.js?v=2');
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token ?? null;
+    } catch { /* ignore */ }
+
+    if (!token) {
+        _ctx.mostrarNotificacao('Sessão expirada. Faça login novamente.', 'error');
+        return;
+    }
+
+    _ctx.criarPopupDOM((box) => {
+        box.style.maxWidth = '480px';
+
+        const h3 = document.createElement('h3');
+        h3.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:4px;';
+        const hI = document.createElement('i');
+        hI.className = 'fas fa-history';
+        hI.style.color = 'var(--primary)';
+        h3.appendChild(hI);
+        h3.appendChild(document.createTextNode('Histórico de Backups'));
+
+        const sub = document.createElement('p');
+        sub.style.cssText = 'color:var(--text-muted); font-size:0.8rem; margin-bottom:20px;';
+        sub.textContent = 'Backups automáticos dos últimos 7 dias. Restaurar substitui todos os seus dados atuais.';
+
+        const listWrap = document.createElement('div');
+        listWrap.style.cssText = 'max-height:360px; overflow-y:auto;';
+
+        const loading = document.createElement('div');
+        loading.style.cssText = 'text-align:center; padding:32px; color:var(--text-muted);';
+        loading.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Carregando backups…';
+        listWrap.appendChild(loading);
+
+        const btnFechar = document.createElement('button');
+        btnFechar.className = 'btn-cancelar';
+        btnFechar.type = 'button';
+        btnFechar.style.cssText = 'margin-top:16px; width:100%;';
+        btnFechar.textContent = 'Fechar';
+        btnFechar.addEventListener('click', () => _ctx.fecharPopup());
+
+        box.appendChild(h3);
+        box.appendChild(sub);
+        box.appendChild(listWrap);
+        box.appendChild(btnFechar);
+
+        // Carrega backups da API
+        fetch('/api/user-data?backup=1', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        })
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(data => {
+            listWrap.innerHTML = '';
+
+            const snapshots = Array.isArray(data?.snapshots) ? data.snapshots : [];
+
+            if (snapshots.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'text-align:center; padding:32px; color:var(--text-muted);';
+                empty.innerHTML = '<i class="fas fa-box-open" style="font-size:2rem; display:block; margin-bottom:12px; opacity:0.4;"></i>Nenhum backup disponível ainda.<br><span style="font-size:0.78rem;">Backups automáticos são criados diariamente após o primeiro uso.</span>';
+                listWrap.appendChild(empty);
+                return;
+            }
+
+            snapshots.forEach(snap => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:rgba(255,255,255,0.04); border-radius:12px; margin-bottom:8px; border:1px solid rgba(255,255,255,0.07); gap:12px;';
+
+                const left = document.createElement('div');
+                const dateEl = document.createElement('div');
+                dateEl.style.cssText = 'font-weight:600; font-size:0.9rem; color:var(--text-primary);';
+                // Data no formato YYYY-MM-DD → DD/MM/YYYY
+                const parts = (snap.snapshot_date || '').split('-');
+                dateEl.textContent = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : (snap.snapshot_date || 'Data desconhecida');
+
+                const metaEl = document.createElement('div');
+                metaEl.style.cssText = 'font-size:0.75rem; color:var(--text-muted); margin-top:2px;';
+                const perfisCount = snap.profiles_count ?? '?';
+                const hora = snap.created_at ? new Date(snap.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+                metaEl.textContent = `${perfisCount} perfil(is)${hora ? ' · ' + hora : ''}`;
+
+                left.appendChild(dateEl);
+                left.appendChild(metaEl);
+
+                const btnRestore = document.createElement('button');
+                btnRestore.type = 'button';
+                btnRestore.className = 'btn-primary';
+                btnRestore.style.cssText = 'font-size:0.78rem; padding:6px 14px; white-space:nowrap; flex-shrink:0;';
+                btnRestore.textContent = 'Restaurar';
+
+                btnRestore.addEventListener('click', () => {
+                    const dateStr = snap.snapshot_date;
+                    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                        _ctx.mostrarNotificacao('Data de snapshot inválida.', 'error');
+                        return;
+                    }
+
+                    // Confirmação explícita antes de restaurar — ação destrutiva
+                    _ctx.confirmarAcao(
+                        `Restaurar backup de ${dateEl.textContent}? Todos os dados atuais serão substituídos. Esta ação não pode ser desfeita.`,
+                        async () => {
+                            btnRestore.disabled = true;
+                            btnRestore.textContent = '⏳ Restaurando…';
+
+                            try {
+                                const resp = await fetch('/api/user-data', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type':  'application/json',
+                                        'Authorization': `Bearer ${token}`,
+                                    },
+                                    body: JSON.stringify({ action: 'restore', snapshot_date: dateStr }),
+                                });
+
+                                if (!resp.ok) {
+                                    const err = await resp.json().catch(() => ({}));
+                                    throw new Error(err?.error || `HTTP ${resp.status}`);
+                                }
+
+                                _ctx.fecharPopup();
+                                _ctx.mostrarNotificacao('✅ Backup restaurado! Recarregando…', 'success');
+                                // Recarrega a página para aplicar os dados restaurados
+                                setTimeout(() => window.location.reload(), 1500);
+                            } catch (e) {
+                                _ctx._log.error('BACKUP_RESTORE_001', e);
+                                btnRestore.disabled = false;
+                                btnRestore.textContent = 'Restaurar';
+                                _ctx.mostrarNotificacao(`Erro ao restaurar: ${e.message}`, 'error');
+                            }
+                        }
+                    );
+                });
+
+                row.appendChild(left);
+                row.appendChild(btnRestore);
+                listWrap.appendChild(row);
+            });
+        })
+        .catch(err => {
+            listWrap.innerHTML = '';
+            const errEl = document.createElement('div');
+            errEl.style.cssText = 'text-align:center; padding:32px; color:var(--danger);';
+            errEl.innerHTML = '<i class="fas fa-exclamation-triangle" style="font-size:2rem; display:block; margin-bottom:12px;"></i>Não foi possível carregar os backups.<br><span style="font-size:0.78rem; color:var(--text-muted);">Tente novamente mais tarde.</span>';
+            listWrap.appendChild(errEl);
+        });
+    });
 }
 

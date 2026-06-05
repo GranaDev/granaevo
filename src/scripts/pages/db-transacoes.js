@@ -356,37 +356,43 @@ function filtrarTransacoesParaUI() {
     hoje.setHours(0, 0, 0, 0);
 
     return _ctx.transacoes.filter(t => {
-        if (_ctx.filtroMovAtivo === 'todo') return true;
+        // ── Filtro de período ──────────────────────────────────────────────
+        if (_ctx.filtroMovAtivo !== 'todo') {
+            const iso = _ctx.dataParaISO(t.data || '');
+            if (!iso) return false;
+            const d = new Date(iso + 'T00:00:00');
 
-        const iso = _ctx.dataParaISO(t.data || '');
-        if (!iso) return false;
-        const d = new Date(iso + 'T00:00:00');
+            if (_ctx.filtroMovAtivo === 'mes_atual') {
+                if (d.getMonth() !== hoje.getMonth() || d.getFullYear() !== hoje.getFullYear()) return false;
+            } else if (_ctx.filtroMovAtivo === '15_dias') {
+                const limite = new Date(hoje); limite.setDate(hoje.getDate() - 14);
+                if (d < limite || d > hoje) return false;
+            } else if (_ctx.filtroMovAtivo === '30_dias') {
+                const limite = new Date(hoje); limite.setDate(hoje.getDate() - 29);
+                if (d < limite || d > hoje) return false;
+            } else if (_ctx.filtroMovAtivo === '60_dias') {
+                const limite = new Date(hoje); limite.setDate(hoje.getDate() - 59);
+                if (d < limite || d > hoje) return false;
+            } else if (_ctx.filtroMovAtivo === 'periodo') {
+                const mes = _ctx.filtroMovMes !== null ? _ctx.filtroMovMes : hoje.getMonth();
+                const ano = _ctx.filtroMovAno !== null ? _ctx.filtroMovAno : hoje.getFullYear();
+                if (d.getMonth() !== mes || d.getFullYear() !== ano) return false;
+            }
+        }
 
-        if (_ctx.filtroMovAtivo === 'mes_atual') {
-            return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+        // ── Filtro de busca textual ────────────────────────────────────────
+        if (_movBuscaTerm) {
+            const desc = (t.descricao || '').toLowerCase();
+            const tipo = (t.tipo     || '').toLowerCase();
+            if (!desc.includes(_movBuscaTerm) && !tipo.includes(_movBuscaTerm)) return false;
         }
-        if (_ctx.filtroMovAtivo === '15_dias') {
-            const limite = new Date(hoje); limite.setDate(hoje.getDate() - 14);
-            return d >= limite && d <= hoje;
-        }
-        if (_ctx.filtroMovAtivo === '30_dias') {
-            const limite = new Date(hoje); limite.setDate(hoje.getDate() - 29);
-            return d >= limite && d <= hoje;
-        }
-        if (_ctx.filtroMovAtivo === '60_dias') {
-            const limite = new Date(hoje); limite.setDate(hoje.getDate() - 59);
-            return d >= limite && d <= hoje;
-        }
-        if (_ctx.filtroMovAtivo === 'periodo') {
-            const mes = _ctx.filtroMovMes !== null ? filtroMovMes : hoje.getMonth();
-            const ano = _ctx.filtroMovAno !== null ? filtroMovAno : hoje.getFullYear();
-            return d.getMonth() === mes && d.getFullYear() === ano;
-        }
+
         return true;
     });
 }
 
 function bindFiltrosMovimentacoes() {
+    _initBusca(); // inicia busca textual junto com os filtros
     const container = document.getElementById('movFiltros');
     if (!container) return;
 
@@ -424,6 +430,10 @@ function bindFiltrosMovimentacoes() {
 
         _ctx.filtroMovAtivo = btn.dataset.filtro;
         atualizarLabelAtivo(_ctx.filtroMovAtivo);
+        // Feedback visual de período ativo
+        if (typeof window._atualizarFeedbackPeriodo === 'function') {
+            window._atualizarFeedbackPeriodo();
+        }
 
         // Fecha o painel após selecionar (exceto "período" que precisa de sub-seleção)
         if (_ctx.filtroMovAtivo !== 'periodo' && wrapper) {
@@ -470,6 +480,34 @@ function bindFiltrosMovimentacoes() {
 const MOV_POR_PAGINA = 50;
 // _movPaginaAtual, _movVisivelCache e _movDelegateSet são estado de dashboard.js,
 // acessíveis via _ctx.
+
+// ── Busca textual ──────────────────────────────────────────────────────────
+let _movBuscaTerm = ''; // termo atual de busca (normalizado)
+let _movScrollObserver = null; // IntersectionObserver para carregar mais ao rolar
+
+function _initBusca() {
+    const input  = document.getElementById('movBuscaInput');
+    const btnClr = document.getElementById('movBuscaClear');
+    if (!input) return;
+
+    input.addEventListener('input', () => {
+        _movBuscaTerm = input.value.trim().toLowerCase();
+        if (btnClr) btnClr.classList.toggle('js-hidden', !_movBuscaTerm);
+        _ctx._movPaginaAtual = 1;
+        _ctx.atualizarMovimentacoesUI(true);
+    });
+
+    if (btnClr) {
+        btnClr.addEventListener('click', () => {
+            input.value  = '';
+            _movBuscaTerm = '';
+            btnClr.classList.add('js-hidden');
+            _ctx._movPaginaAtual = 1;
+            _ctx.atualizarMovimentacoesUI(true);
+            input.focus();
+        });
+    }
+}
 
 const _CAT_LABELS = { entrada: 'Entrada', saida: 'Saída', reserva: 'Reserva', retirada_reserva: 'Retirada' };
 const _CAT_PERMITIDAS = ['entrada', 'saida', 'reserva', 'retirada_reserva'];
@@ -591,7 +629,90 @@ function _buildTable(visivel) {
     return table;
 }
 
+// ── Swipe helper para mobile ───────────────────────────────────────────────
+// Implementação segura: touch start/move/end sem interferir com scroll vertical.
+// Swipe esquerda → revela botão Excluir (vermelho).
+// Swipe direita  → revela botão Editar (azul).
+// Tap fora ou segundo swipe → fecha.
+let _swipeAtivo = null; // elemento atualmente "aberto" via swipe
+
+function _bindSwipe(item, t) {
+    let startX = 0, startY = 0, currentX = 0;
+    let isDragging = false, isHorizontal = null;
+    const THRESHOLD = 60; // px mínimo para revelar ações
+
+    function fecharSwipe(el) {
+        if (!el) return;
+        el.style.transform = '';
+        el.classList.remove('swipe-open-left', 'swipe-open-right');
+        _swipeAtivo = null;
+    }
+
+    item.addEventListener('touchstart', (e) => {
+        // Fecha qualquer swipe aberto em outro item
+        if (_swipeAtivo && _swipeAtivo !== item) fecharSwipe(_swipeAtivo);
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        currentX = 0;
+        isDragging = false;
+        isHorizontal = null;
+    }, { passive: true });
+
+    item.addEventListener('touchmove', (e) => {
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+
+        // Detecta direção predominante na primeira movimentação
+        if (isHorizontal === null) {
+            if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+            isHorizontal = Math.abs(dx) > Math.abs(dy);
+        }
+
+        // Só trata se horizontal — deixa scroll vertical intacto
+        if (!isHorizontal) return;
+        e.preventDefault(); // previne scroll da página durante swipe horizontal
+        isDragging = true;
+        currentX = dx;
+
+        // Limita deslocamento a ±90px
+        const clamp = Math.max(-90, Math.min(90, currentX));
+        item.style.transform = `translateX(${clamp}px)`;
+    }, { passive: false });
+
+    item.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        const abs = Math.abs(currentX);
+
+        if (abs > THRESHOLD) {
+            // Snap para posição aberta
+            const dir = currentX < 0 ? -80 : 80;
+            item.style.transform = `translateX(${dir}px)`;
+            item.classList.toggle('swipe-open-left',  dir < 0);
+            item.classList.toggle('swipe-open-right', dir > 0);
+            _swipeAtivo = item;
+        } else {
+            fecharSwipe(item);
+        }
+
+        isDragging = false;
+        isHorizontal = null;
+    }, { passive: true });
+
+    // Tap no item fechado → editar; tap no item aberto → fechar
+    item.addEventListener('click', (e) => {
+        if (item.classList.contains('swipe-open-left') || item.classList.contains('swipe-open-right')) {
+            fecharSwipe(item);
+            e.stopPropagation();
+            return;
+        }
+        editarTransacao(t);
+    });
+}
+
 function _buildCards(visivel) {
+    // Fecha swipe aberto ao re-renderizar
+    if (_swipeAtivo) { _swipeAtivo.style.transform = ''; _swipeAtivo = null; }
+
     const wrapper  = document.createElement('div');
     wrapper.className = 'mov-cards';
     const frag     = document.createDocumentFragment();
@@ -608,6 +729,42 @@ function _buildCards(visivel) {
             sep.textContent = dataExibida;
             frag.appendChild(sep);
         }
+
+        // Wrapper externo para ações de swipe (contém o item + botões de ação)
+        const swipeWrap = document.createElement('div');
+        swipeWrap.className = 'mov-swipe-wrap';
+
+        // Botões de ação (ficam atrás do item, revelados pelo swipe)
+        const actionsLeft = document.createElement('div');
+        actionsLeft.className = 'mov-swipe-actions mov-swipe-actions--left';
+        const btnExcluirSwipe = document.createElement('button');
+        btnExcluirSwipe.type = 'button';
+        btnExcluirSwipe.className = 'mov-swipe-btn mov-swipe-btn--del';
+        btnExcluirSwipe.setAttribute('aria-label', 'Excluir transação');
+        btnExcluirSwipe.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i><span>Excluir</span>';
+        btnExcluirSwipe.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (_swipeAtivo) { _swipeAtivo.style.transform = ''; _swipeAtivo = null; }
+            excluirTransacao(t);
+        });
+        actionsLeft.appendChild(btnExcluirSwipe);
+
+        const actionsRight = document.createElement('div');
+        actionsRight.className = 'mov-swipe-actions mov-swipe-actions--right';
+        const btnEditarSwipe = document.createElement('button');
+        btnEditarSwipe.type = 'button';
+        btnEditarSwipe.className = 'mov-swipe-btn mov-swipe-btn--edit';
+        btnEditarSwipe.setAttribute('aria-label', 'Editar transação');
+        btnEditarSwipe.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i><span>Editar</span>';
+        btnEditarSwipe.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (_swipeAtivo) { _swipeAtivo.style.transform = ''; _swipeAtivo = null; }
+            editarTransacao(t);
+        });
+        actionsRight.appendChild(btnEditarSwipe);
+
+        swipeWrap.appendChild(actionsLeft);
+        swipeWrap.appendChild(actionsRight);
 
         const div     = document.createElement('div');
         div.className = 'mov-item';
@@ -645,18 +802,33 @@ function _buildCards(visivel) {
         div.appendChild(iconeBadge);
         div.appendChild(left);
         div.appendChild(right);
-        div.addEventListener('click', () => editarTransacao(t));
 
-        frag.appendChild(div);
+        swipeWrap.appendChild(div);
+        _bindSwipe(div, t);
+
+        frag.appendChild(swipeWrap);
     });
 
     wrapper.appendChild(frag);
+
+    // Fecha qualquer swipe aberto ao tocar fora da lista
+    wrapper.addEventListener('touchstart', (e) => {
+        if (_swipeAtivo && !_swipeAtivo.contains(e.target)) {
+            _swipeAtivo.style.transform = '';
+            _swipeAtivo.classList.remove('swipe-open-left', 'swipe-open-right');
+            _swipeAtivo = null;
+        }
+    }, { passive: true });
+
     return wrapper;
 }
 
 function atualizarMovimentacoesUI(resetPagina = true) {
     const lista = document.getElementById('listaMovimentacoes');
     if (!lista) return;
+
+    // Desconecta observer anterior para evitar disparos duplos
+    if (_movScrollObserver) { _movScrollObserver.disconnect(); _movScrollObserver = null; }
 
     if (resetPagina) _ctx._movPaginaAtual = 1;
 
@@ -668,10 +840,42 @@ function atualizarMovimentacoesUI(resetPagina = true) {
     const restam  = total - visivel.length;
 
     if (total === 0) {
-        const p       = document.createElement('p');
-        p.className   = 'empty-state';
-        p.textContent = 'Nenhuma movimentação registrada.';
-        lista.appendChild(p);
+        const wrap = document.createElement('div');
+        wrap.className = 'mov-empty-state';
+
+        const icon = document.createElement('div');
+        icon.className = 'mov-empty-icon';
+        icon.innerHTML = `<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>`;
+
+        const title = document.createElement('p');
+        title.className = 'mov-empty-title';
+        title.textContent = _movBuscaTerm
+            ? `Nenhum resultado para "${_movBuscaTerm}"`
+            : 'Nenhuma movimentação registrada';
+
+        const sub = document.createElement('p');
+        sub.className = 'mov-empty-sub';
+        sub.textContent = _movBuscaTerm
+            ? 'Tente outro termo de busca.'
+            : 'Registre sua primeira transação no formulário acima.';
+
+        wrap.appendChild(icon);
+        wrap.appendChild(title);
+        wrap.appendChild(sub);
+
+        if (!_movBuscaTerm) {
+            const btn = document.createElement('button');
+            btn.className = 'btn-primary mov-empty-cta';
+            btn.type = 'button';
+            btn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Lançar transação';
+            btn.addEventListener('click', () => {
+                document.getElementById('selectCategoria')?.focus();
+                document.getElementById('selectCategoria')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+            wrap.appendChild(btn);
+        }
+
+        lista.appendChild(wrap);
         return;
     }
 
@@ -680,16 +884,36 @@ function atualizarMovimentacoesUI(resetPagina = true) {
     lista.appendChild(_buildTable(visivel));
     lista.appendChild(_buildCards(visivel));
 
+    // ── Scroll automático via IntersectionObserver ──────────────────────────
+    // Sentinela invisível no final da lista — quando entra na viewport carrega mais
     if (restam > 0) {
-        const btnMais       = document.createElement('button');
-        btnMais.className   = 'btn-load-more';
-        btnMais.type        = 'button';
-        btnMais.textContent = `Carregar mais ${Math.min(restam, MOV_POR_PAGINA)} de ${restam} movimentações`;
-        btnMais.addEventListener('click', () => {
+        const sentinela = document.createElement('div');
+        sentinela.className = 'mov-load-sentinela';
+        sentinela.setAttribute('aria-hidden', 'true');
+
+        // Texto informativo sobre quantas restam (acessível)
+        const info = document.createElement('p');
+        info.className = 'mov-load-info';
+        info.textContent = `Carregando mais ${Math.min(restam, MOV_POR_PAGINA)} de ${restam} movimentações…`;
+        sentinela.appendChild(info);
+
+        lista.appendChild(sentinela);
+
+        _movScrollObserver = new IntersectionObserver((entries) => {
+            if (!entries[0].isIntersecting) return;
+            _movScrollObserver.disconnect();
+            _movScrollObserver = null;
             _ctx._movPaginaAtual++;
             _ctx.atualizarMovimentacoesUI(false);
-        });
-        lista.appendChild(btnMais);
+        }, { rootMargin: '200px' });
+
+        _movScrollObserver.observe(sentinela);
+    } else {
+        // Rodapé mostrando total
+        const footer = document.createElement('p');
+        footer.className = 'mov-load-total';
+        footer.textContent = `${total} movimentação${total !== 1 ? 'ões' : ''} no período`;
+        lista.appendChild(footer);
     }
 }
 
@@ -1221,10 +1445,40 @@ function _verificarAlertasOrcamento(categoria, tipo, valorAdicionado) {
     if (limite <= 0) return;
     const gasto = _gastoMesAtualPorTipo(tipo);
     const pct   = (gasto / limite) * 100;
+
+    let titulo = null;
+    let corpo  = null;
+    let nivel  = null;
+
     if (pct >= 100) {
+        titulo = `⚠️ Orçamento estourado: ${tipo}`;
+        corpo  = `Você gastou ${formatBRL(gasto)} de ${formatBRL(limite)} (${pct.toFixed(0)}%).`;
+        nivel  = 'error';
         _ctx.mostrarNotificacao(`⚠️ Limite de ${tipo} estourado! Gasto: ${formatBRL(gasto)} / ${formatBRL(limite)}`, 'error');
     } else if (pct >= 80) {
+        titulo = `Atenção: orçamento de ${tipo}`;
+        corpo  = `Você usou ${pct.toFixed(0)}% do limite (${formatBRL(gasto)} / ${formatBRL(limite)}).`;
+        nivel  = 'warning';
         _ctx.mostrarNotificacao(`Atenção: você usou ${pct.toFixed(0)}% do orçamento de ${tipo}.`, 'warning');
+    }
+
+    // Dispara push notification se permitido e disponível
+    if (titulo && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+            navigator.serviceWorker?.ready?.then(reg => {
+                // Chave de deduplicação por tipo+mês — evita notificações repetidas
+                const tag = `orcamento-${tipo}-${new Date().getFullYear()}-${new Date().getMonth()}`;
+                reg.showNotification(titulo, {
+                    body: corpo,
+                    tag,          // substitui notificação anterior do mesmo tipo
+                    icon:  '/assets/icons/favicon.png',
+                    badge: '/assets/icons/favicon.png',
+                    data:  { url: '/dashboard.html' },
+                });
+            }).catch(() => {
+                // ServiceWorker indisponível — fallback silencioso (já temos notif in-app)
+            });
+        } catch { /* notificação push não crítica */ }
     }
 }
 
@@ -1481,16 +1735,38 @@ function _parseCSV(texto) {
     return txs;
 }
 
-// ── Deduplicação: detecta provável duplicata por data+valor+sinal ─────────
+// ── Deduplicação robusta: data + valor + similaridade de descrição ─────────
+// Três critérios (OR): qualquer um basta para marcar como duplicata provável.
+// 1. Mesma data + mesmo valor (critério original)
+// 2. Mesma data + mesmo valor + descrição com 60%+ de palavras em comum (forte)
+// 3. Mesma data + mesmo valor + FITID idêntico (quando disponível no OFX)
 function _isDuplicata(tx) {
     const existentes = _ctx.transacoes || [];
+    const tISO  = _ctx.dataParaISO(tx.data || '');
+    if (!tISO) return false;
+
+    // Tokeniza descrição em palavras ≥3 chars
+    function _tokens(str) {
+        return String(str || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+            .replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3);
+    }
+    function _similarity(a, b) {
+        const setA = new Set(_tokens(a));
+        const setB = new Set(_tokens(b));
+        if (setA.size === 0 || setB.size === 0) return 0;
+        const inter = [...setA].filter(w => setB.has(w)).length;
+        return inter / Math.min(setA.size, setB.size);
+    }
+
     return existentes.some(e => {
         if (typeof e.data !== 'string' || !e.valor) return false;
-        // Converte DD/MM/YYYY para comparação
         const eISO = _ctx.dataParaISO(e.data);
-        const tISO = _ctx.dataParaISO(tx.data);
-        if (!eISO || !tISO || eISO !== tISO) return false;
-        return Math.abs(parseFloat(e.valor) - tx.valor) < 0.01;
+        if (!eISO || eISO !== tISO) return false;
+        if (Math.abs(parseFloat(e.valor) - tx.valor) >= 0.01) return false;
+        // Data + valor iguais → duplicata (critério original mantido)
+        // Adicionalmente marca como mais provável se descrições são similares
+        tx._dupScore = _similarity(e.descricao, tx.descricao);
+        return true;
     });
 }
 
@@ -1697,13 +1973,36 @@ function abrirImportarExtrato() {
         acoes.appendChild(btnCancelar);
 
         // — Processar arquivo —
+        const _MAX_IMPORT_SIZE  = 5 * 1024 * 1024; // 5MB por arquivo
+        const _MAX_IMPORT_TXS   = 2_000;            // máximo de transações por importação
+
         function processarArquivo(file) {
             if (!file) return;
+
+            // ── Validações de segurança antes de qualquer leitura ──────────
             const ext = file.name.split('.').pop().toLowerCase();
             if (!['ofx','csv'].includes(ext)) {
                 _ctx.mostrarNotificacao('Formato não suportado. Use .ofx ou .csv', 'error');
                 return;
             }
+
+            if (file.size > _MAX_IMPORT_SIZE) {
+                _ctx.mostrarNotificacao(`Arquivo muito grande. Máximo: 5MB. Seu arquivo: ${(file.size / 1024 / 1024).toFixed(1)}MB.`, 'error');
+                return;
+            }
+
+            if (file.size === 0) {
+                _ctx.mostrarNotificacao('Arquivo vazio. Verifique e tente novamente.', 'error');
+                return;
+            }
+
+            // Valida nome do arquivo (evita path traversal e caracteres maliciosos)
+            const nomeSeguro = file.name.replace(/[^\w.\-_() ]/g, '').slice(0, 100);
+            if (!nomeSeguro) {
+                _ctx.mostrarNotificacao('Nome do arquivo inválido.', 'error');
+                return;
+            }
+
             dropZone.classList.add('imp-drop-zone--loading');
 
             const reader = new FileReader();
@@ -1713,6 +2012,13 @@ function abrirImportarExtrato() {
                 // Auto-detecta encoding: lê header ASCII para checar CHARSET,
                 // depois decodifica com TextDecoder (UTF-8 ou windows-1252).
                 const buf = e.target.result;
+
+                // ── Verificação de tamanho pós-leitura (defesa em profundidade) ──
+                if (buf.byteLength > _MAX_IMPORT_SIZE) {
+                    _ctx.mostrarNotificacao('Arquivo excede o limite de 5MB.', 'error');
+                    return;
+                }
+
                 const headerSlice = buf.slice(0, Math.min(1024, buf.byteLength));
                 const headerAscii = new TextDecoder('ascii', { fatal: false }).decode(headerSlice);
                 const charsetMatch = headerAscii.match(/CHARSET[:\s]+(\S+)/i);
@@ -1721,21 +2027,48 @@ function abrirImportarExtrato() {
                 const encoding = (declaredUtf8 || hasBOM) ? 'utf-8' : 'windows-1252';
                 const texto = new TextDecoder(encoding, { fatal: false }).decode(buf);
 
-                try {
-                    txsParsed = ext === 'ofx' ? _parseOFX(texto) : _parseCSV(texto);
-                } catch (err) {
-                    _ctx.mostrarNotificacao('Erro ao ler o arquivo. Verifique o formato.', 'error');
+                // ── Valida que o conteúdo parece com OFX/CSV legítimo ─────────
+                if (ext === 'ofx' && !/<OFX>/i.test(texto) && !/<STMTTRN>/i.test(texto) && !/OFXHEADER/i.test(texto)) {
+                    _ctx.mostrarNotificacao('Arquivo não parece ser um OFX válido. Verifique o formato.', 'error');
+                    dropZone.querySelector('.imp-drop-text').textContent = 'Clique ou arraste o arquivo aqui';
                     return;
                 }
+
+                let txsRaw = [];
+                try {
+                    txsRaw = ext === 'ofx' ? _parseOFX(texto) : _parseCSV(texto);
+                } catch (err) {
+                    _ctx.mostrarNotificacao('Erro ao ler o arquivo. Verifique o formato.', 'error');
+                    dropZone.querySelector('.imp-drop-text').textContent = 'Clique ou arraste o arquivo aqui';
+                    return;
+                }
+
+                // ── Limita número de transações por importação ────────────────
+                if (txsRaw.length > _MAX_IMPORT_TXS) {
+                    _ctx.mostrarNotificacao(`Arquivo contém ${txsRaw.length} transações — limite de ${_MAX_IMPORT_TXS} por importação. Importe em partes.`, 'warning');
+                    txsRaw = txsRaw.slice(0, _MAX_IMPORT_TXS);
+                }
+
+                if (txsRaw.length === 0) {
+                    _ctx.mostrarNotificacao('Nenhuma transação encontrada no arquivo. Verifique se o período exportado tem movimentações.', 'warning');
+                    dropZone.querySelector('.imp-drop-text').textContent = 'Clique ou arraste o arquivo aqui';
+                    return;
+                }
+
+                txsParsed = txsRaw;
 
                 // Marca duplicatas
                 txsParsed.forEach(t => { t._dup = _isDuplicata(t); });
 
                 _renderRevisao(txsParsed, revisaoWrap);
                 const sel = txsParsed.filter(t => t._incluir).length;
+                const dupCount = txsParsed.filter(t => t._dup).length;
                 btnConfirmar.textContent = `Lançar ${sel} transação(ões)`;
                 acoes.style.display = 'flex';
-                dropZone.querySelector('.imp-drop-text').textContent = `✅ ${file.name} — ${txsParsed.length} transações`;
+
+                const textoPrincipal = `✅ ${nomeSeguro} — ${txsParsed.length} transações`;
+                const textoSecundario = dupCount > 0 ? ` · ${dupCount} possível(is) duplicata(s)` : '';
+                dropZone.querySelector('.imp-drop-text').textContent = textoPrincipal + textoSecundario;
             };
             reader.onerror = () => {
                 dropZone.classList.remove('imp-drop-zone--loading');

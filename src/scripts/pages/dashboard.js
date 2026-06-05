@@ -447,6 +447,39 @@ async function _resolverFotoPerfil(photo_url) {
 //    Para titulares: targetUserId === session.user.id (sem mudança de comportamento).
 //    Para convidados: targetUserId === owner_user_id (carrega perfis do dono da conta).
 //    A validação da sessão JWT continua — apenas a query usa o targetUserId.
+// Cache TTL de perfis: evita round-trip ao Supabase em refreshes da mesma sessão.
+// Apenas metadados (id, nome) — fotos não são cacheadas (signed URLs expiram).
+const _PERFIS_CACHE_KEY = 'ge_perfis_cache';
+const _PERFIS_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+function _lerCachePerfis(userId) {
+    try {
+        const raw = sessionStorage.getItem(_PERFIS_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (parsed?.userId !== userId) return null;
+        if (Date.now() - (parsed?.ts || 0) > _PERFIS_CACHE_TTL) return null;
+        if (!Array.isArray(parsed?.perfis)) return null;
+        return parsed.perfis;
+    } catch { return null; }
+}
+
+function _gravarCachePerfis(userId, perfis) {
+    try {
+        // Salva apenas id e nome — sem foto (signed URL expira, não faz sentido cachear)
+        const payload = {
+            userId,
+            ts:     Date.now(),
+            perfis: perfis.map(p => ({ id: p.id, nome: p.nome })),
+        };
+        sessionStorage.setItem(_PERFIS_CACHE_KEY, JSON.stringify(payload));
+    } catch { /* sessionStorage pode estar bloqueado em modo privativo */ }
+}
+
+function invalidarCachePerfis() {
+    try { sessionStorage.removeItem(_PERFIS_CACHE_KEY); } catch { /* ignore */ }
+}
+
 async function carregarPerfis(targetUserId = null) {
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -461,6 +494,25 @@ async function carregarPerfis(targetUserId = null) {
         const userIdSeguro = (targetUserId && typeof targetUserId === 'string' && targetUserId.length > 0)
             ? targetUserId
             : session.user.id;
+
+        // ── Cache hit: evita round-trip ao Supabase em refreshes rápidos ─────
+        // Apenas metadados (id, nome) — fotos resolvidas sempre frescos via _resolverFotoPerfil.
+        const cachedPerfis = _lerCachePerfis(userIdSeguro);
+        if (cachedPerfis && cachedPerfis.length > 0) {
+            _log.info('[carregarPerfis] Cache hit — pulando query ao Supabase');
+            // Resolve fotos frescos (signed URLs expiram — não cacheamos)
+            const perfisResolvidos = await Promise.all(
+                cachedPerfis.map(async (p) => {
+                    // photo_url não está no cache — passa null para usar placeholder
+                    const { url, storagePath } = await _resolverFotoPerfil(null);
+                    return { id: p.id, nome: p.nome, foto: url, _storagePath: storagePath };
+                })
+            );
+            usuarioLogado.perfis = perfisResolvidos;
+            // Busca fotos reais em background sem bloquear a UI
+            _recarregarFotosPerfisBackground(userIdSeguro);
+            return { sucesso: true, perfisEncontrados: true };
+        }
 
         const { data: perfis, error } = await supabase
             .from('profiles')
@@ -484,6 +536,7 @@ async function carregarPerfis(targetUserId = null) {
             );
 
             usuarioLogado.perfis = perfisResolvidos;
+            _gravarCachePerfis(userIdSeguro, perfisResolvidos);
             iniciarRenovacaoFotos();
             return { sucesso: true, perfisEncontrados: true };
         }
@@ -496,6 +549,29 @@ async function carregarPerfis(targetUserId = null) {
         usuarioLogado.perfis = [];
         return { sucesso: false, perfisEncontrados: false };
     }
+}
+
+// Busca fotos reais em background quando servido do cache (não bloqueia UI)
+async function _recarregarFotosPerfisBackground(userIdSeguro) {
+    try {
+        const { data: perfis, error } = await supabase
+            .from('profiles')
+            .select('id, name, photo_url')
+            .eq('user_id', userIdSeguro)
+            .order('id', { ascending: true });
+        if (error || !perfis?.length) return;
+
+        const perfisResolvidos = await Promise.all(
+            perfis.map(async (p) => {
+                const { url, storagePath } = await _resolverFotoPerfil(p.photo_url);
+                return { id: p.id, nome: _sanitizeText(p.name), foto: url, _storagePath: storagePath };
+            })
+        );
+        usuarioLogado.perfis = perfisResolvidos;
+        _gravarCachePerfis(userIdSeguro, perfisResolvidos);
+        atualizarTelaPerfis(); // Re-renderiza cards de perfil com fotos reais
+        iniciarRenovacaoFotos();
+    } catch { /* background — falha silenciosa */ }
 }
 
 // ========== CARREGAR DADOS DO PERFIL (CORRIGIDA) ==========
@@ -753,6 +829,38 @@ const _ALLOWED_KEYS = Object.freeze({
     ]),
 });
 
+// ── Indicador de sincronização ─────────────────────────────────────────────
+// Exibe "Salvando…" durante o debounce e "Salvo ✓" ou "Erro ✗" após conclusão.
+// Atualiza tanto o badge mobile (#syncIndicator) quanto o desktop (#syncIndicatorDesktop).
+let _syncHideTimer = null;
+function _setSyncState(state) {
+    // state: 'saving' | 'saved' | 'error' | 'hidden'
+    const els = [
+        document.getElementById('syncIndicator'),
+        document.getElementById('syncIndicatorDesktop'),
+    ].filter(Boolean);
+
+    if (_syncHideTimer) { clearTimeout(_syncHideTimer); _syncHideTimer = null; }
+
+    els.forEach(el => {
+        el.className = el.id === 'syncIndicator' ? 'sync-indicator' : 'sync-indicator-desktop';
+        el.removeAttribute('data-state');
+        if (state !== 'hidden') {
+            el.setAttribute('data-state', state);
+            el.textContent =
+                state === 'saving' ? '⏳ Salvando…'
+                : state === 'saved' ? '✓ Salvo'
+                : '✗ Erro';
+        } else {
+            el.textContent = '';
+        }
+    });
+
+    if (state === 'saved' || state === 'error') {
+        _syncHideTimer = setTimeout(() => _setSyncState('hidden'), 3000);
+    }
+}
+
 // ✅ Controle interno de debounce do salvarDados
 //    Declarado fora para persistir entre chamadas
 let _saveDebounceTimer   = null;
@@ -801,6 +909,8 @@ async function salvarDados() {
         // urgente = true → save imediato (orçamentos, tipos personalizados, config leve)
         // urgente = false → debounce 2s (transações em volume)
         const delay = (arguments[0] === true) ? 0 : 2_000;
+
+        _setSyncState('saving');
 
         _saveDebounceTimer = setTimeout(async () => {
             _saveDebounceTimer   = null;
@@ -905,10 +1015,12 @@ async function salvarDados() {
 
                 const sucesso = await dataManager.saveUserData(profilesBase);
                 if (!sucesso) _log.error('SAVE_004', 'saveUserData retornou false');
+                _setSyncState(sucesso ? 'saved' : 'error');
                 resolve(!!sucesso);
 
             } catch (e) {
                 _log.error('SAVE_005', e);
+                _setSyncState('error');
                 resolve(false);
             }
         }, delay);
@@ -1195,6 +1307,19 @@ async function entrarNoPerfil(index) {
 
         await salvarDados();
 
+        // Onboarding automático para novos perfis (sem dados, primeira visita)
+        _verificarOnboardingNovoPerfil();
+
+        // Mostra FAB na tela de dashboard após selecionar perfil
+        const fabEl = document.getElementById('fabAddTx');
+        if (fabEl) fabEl.classList.remove('js-hidden');
+
+        // Inicializa FAB na primeira seleção de perfil (uma única vez)
+        if (!window._fabIniciado) {
+            window._fabIniciado = true;
+            _initFab();
+        }
+
         mostrarTela('dashboard');
 
     } catch (e) {
@@ -1451,6 +1576,7 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
             foto: _sanitizeImgUrl(novoPerfil.photo_url),
         });
 
+        invalidarCachePerfis(); // Perfil novo → invalida cache para próximo carregamento
         fecharPopup();
         atualizarTelaPerfis();
         atualizarReferenciasGlobais();
@@ -2789,10 +2915,11 @@ function atualizarListaContasFixas() {
     const hojeISO  = new Date().toISOString().slice(0, 10);
     const mesAtual = hojeISO.slice(0, 7); // 'YYYY-MM'
 
-    // Auto-reset: quando o vencimento chega, zera pago e dataPagamento para o novo ciclo
+    // Auto-reset: ao entrar em um novo mês, zera o estado de pagamento do ciclo anterior.
+    // Critério: dataPagamento registrada em mês anterior ao atual → reinicia o ciclo.
     let precisaSalvar = false;
     contasFixas.forEach(c => {
-        if ((c.pago || c.dataPagamento) && typeof c.vencimento === 'string' && c.vencimento <= hojeISO) {
+        if (c.dataPagamento && c.dataPagamento.slice(0, 7) < mesAtual) {
             c.pago = false;
             c.dataPagamento = null;
             precisaSalvar = true;
@@ -2806,16 +2933,12 @@ function atualizarListaContasFixas() {
     contasFixas.forEach(c => {
         const vencimentoValido = typeof c.vencimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.vencimento);
 
-        // Considera pago se:
-        // 1. pago=true (novo código)
-        // 2. dataPagamento é do mês atual (novo código)
-        // 3. vencimento é em mês FUTURO — indica que o ciclo atual já foi pago
-        //    (tanto para dados antigos quanto novos)
         const vencMes = vencimentoValido ? c.vencimento.slice(0, 7) : null;
+        // Pago = pagou NESTE mês (dataPagamento do mês atual).
+        // Retrocompatibilidade: dados sem dataPagamento mas com pago=true e vencimento futuro.
         const estaPago =
-            c.pago === true ||
             (c.dataPagamento && c.dataPagamento.slice(0, 7) === mesAtual) ||
-            (vencMes !== null && vencMes > mesAtual);
+            (c.pago === true && !c.dataPagamento && vencMes !== null && vencMes > mesAtual);
 
         let status      = 'Pendente';
         let statusClass = 'status-pendente';
@@ -4020,6 +4143,11 @@ function bindEventos() {
     if(btnNovaMeta) {
         btnNovaMeta.addEventListener('click', () => window.abrirMetaForm?.());
     }
+
+    const btnJaPossuiReserva = document.getElementById('btnJaPossuiReserva');
+    if (btnJaPossuiReserva) {
+        btnJaPossuiReserva.addEventListener('click', () => window.abrirFormReservaExistente?.());
+    }
     
     const btnRetirar = document.getElementById('btnRetirar');
     if(btnRetirar) {
@@ -4914,6 +5042,181 @@ function desenharTopGastos(dados, label) {
         ctx.fillText(String(label).slice(0, 50), canvas.width / 2, canvas.height - 8);
     }
 }
+
+// ========== ONBOARDING AUTOMÁTICO PARA NOVOS USUÁRIOS ==========
+// Detecta perfil sem dados (transacoes.length === 0) na primeira visita e dispara tutorial.
+// Usa localStorage para não mostrar novamente após o primeiro onboarding.
+function _verificarOnboardingNovoPerfil() {
+    try {
+        if (!perfilAtivo) return;
+        const chaveVisto = `ge_onboard_${perfilAtivo.id}`;
+        if (localStorage.getItem(chaveVisto)) return; // já viu o tutorial
+
+        // Considera novo se não tem transações nem contas fixas
+        const ehNovo = transacoes.length === 0 && contasFixas.length === 0;
+        if (!ehNovo) {
+            // Marca como "visto" mesmo sem tutorial (usuário com dados pré-existentes)
+            localStorage.setItem(chaveVisto, '1');
+            return;
+        }
+
+        // Pequeno delay para garantir que a UI terminou de renderizar
+        setTimeout(() => {
+            localStorage.setItem(chaveVisto, '1');
+            // Mostra boas-vindas antes do tutorial completo
+            criarPopupDOM((box) => {
+                box.style.maxWidth = '400px';
+
+                const img = document.createElement('div');
+                img.style.cssText = 'font-size:3rem; text-align:center; margin-bottom:8px;';
+                img.textContent = '👋';
+
+                const h3 = document.createElement('h3');
+                h3.style.cssText = 'text-align:center; margin-bottom:8px;';
+                h3.textContent = 'Bem-vindo ao GranaEvo!';
+
+                const p = document.createElement('p');
+                p.style.cssText = 'text-align:center; color:var(--text-secondary); margin-bottom:20px; line-height:1.6;';
+                p.textContent = 'Seu painel financeiro está pronto. Quer um guia rápido de 2 minutos para aproveitar tudo?';
+
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; gap:10px; flex-wrap:wrap;';
+
+                const btnSim = document.createElement('button');
+                btnSim.className = 'btn-primary';
+                btnSim.type = 'button';
+                btnSim.style.flex = '1';
+                btnSim.innerHTML = '<i class="fas fa-play" aria-hidden="true"></i> Iniciar tour';
+                btnSim.addEventListener('click', () => {
+                    fecharPopup();
+                    // Tutorial ativado via db-configuracoes.js (lazy-loaded)
+                    setTimeout(() => window.comoUsar?.(), 300);
+                });
+
+                const btnNao = document.createElement('button');
+                btnNao.className = 'btn-cancelar';
+                btnNao.type = 'button';
+                btnNao.style.flex = '1';
+                btnNao.textContent = 'Explorar sozinho';
+                btnNao.addEventListener('click', fecharPopup);
+
+                row.appendChild(btnSim);
+                row.appendChild(btnNao);
+
+                box.appendChild(img);
+                box.appendChild(h3);
+                box.appendChild(p);
+                box.appendChild(row);
+            });
+        }, 800);
+
+    } catch { /* localStorage pode estar bloqueado — falha silenciosa */ }
+}
+
+// ========== FAB MOBILE — LANÇAMENTO RÁPIDO ==========
+function _initFab() {
+    const fab     = document.getElementById('fabAddTx');
+    const overlay = document.getElementById('fabFormOverlay');
+    const form    = document.getElementById('fabForm');
+    const btnClose = document.getElementById('fabFormClose');
+    const btnLancar = document.getElementById('fabLancar');
+
+    if (!fab || !form) return;
+
+    function abrirFab() {
+        fab.classList.add('fab-open');
+        overlay.classList.remove('js-hidden');
+        form.classList.remove('js-hidden');
+        form.classList.add('fab-form--open');
+        document.getElementById('fabCategoria')?.focus();
+    }
+
+    function fecharFab() {
+        fab.classList.remove('fab-open');
+        overlay.classList.add('js-hidden');
+        form.classList.add('js-hidden');
+        form.classList.remove('fab-form--open');
+        if (document.getElementById('fabCategoria')) document.getElementById('fabCategoria').value = '';
+        if (document.getElementById('fabDescricao')) document.getElementById('fabDescricao').value = '';
+        if (document.getElementById('fabValor'))     document.getElementById('fabValor').value = '';
+    }
+
+    fab.addEventListener('click', () => {
+        if (form.classList.contains('js-hidden')) abrirFab();
+        else fecharFab();
+    });
+
+    if (btnClose) btnClose.addEventListener('click', fecharFab);
+    if (overlay)  overlay.addEventListener('click', fecharFab);
+
+    if (btnLancar) {
+        btnLancar.addEventListener('click', () => {
+            const cat  = document.getElementById('fabCategoria')?.value || '';
+            const desc = (document.getElementById('fabDescricao')?.value || '').trim();
+            const valStr = document.getElementById('fabValor')?.value || '';
+            const valor  = parseFloat(parseFloat(valStr).toFixed(2));
+
+            if (!cat)                                          return mostrarNotificacao('Escolha a categoria.', 'warning');
+            if (!desc)                                         return mostrarNotificacao('Digite a descrição.', 'warning');
+            if (!isFinite(valor) || valor <= 0)               return mostrarNotificacao('Digite um valor válido.', 'warning');
+            if (valor > 99_999_999)                           return mostrarNotificacao('Valor muito alto.', 'warning');
+            if (!perfilAtivo)                                  return mostrarNotificacao('Nenhum perfil ativo.', 'error');
+
+            const dh = agoraDataHora();
+            // Para crédito sem cartão definido, converte para saida simples no FAB
+            const catFinal = cat === 'saida_credito' ? 'saida' : cat;
+
+            transacoes.push({
+                categoria: catFinal,
+                tipo:      catFinal === 'entrada' ? 'Renda Extra' : 'Outros',
+                descricao: _sanitizeText(desc).slice(0, 300),
+                valor,
+                data:      dh.data,
+                hora:      dh.hora,
+                metaId:    null,
+            });
+
+            salvarDados();
+            atualizarTudo();
+            fecharFab();
+            mostrarNotificacao('✅ Transação lançada!', 'success');
+        });
+    }
+
+    // Mostra o FAB apenas nas páginas relevantes (dashboard, transacoes)
+    document.querySelectorAll('.nav-btn[data-page], .mobile-nav-item[data-page]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const page = btn.dataset.page;
+            const mostrar = (page === 'dashboard' || page === 'transacoes') && !!perfilAtivo;
+            fab.classList.toggle('js-hidden', !mostrar);
+            if (!mostrar) fecharFab();
+        });
+    });
+}
+
+// Chama init do FAB depois que o perfil é selecionado
+const _fabInitOriginal = window.entrarNoPerfil;
+// Inicialização real feita em entrarNoPerfil após o perfil ser selecionado (ver chamada abaixo)
+
+// ========== FEEDBACK DE PERÍODO SELECIONADO NOS FILTROS =========
+// Aplica classe active com animação nos filtros de período para deixar claro qual está ativo
+function _atualizarFeedbackPeriodo() {
+    const btns = document.querySelectorAll('.mov-filtro-btn');
+    btns.forEach(btn => {
+        const isAtivo = btn.dataset.filtro === filtroMovAtivo;
+        btn.setAttribute('aria-pressed', String(isAtivo));
+    });
+    // Atualiza o cabeçalho do filtro com destaque visual
+    const headerLabel = document.getElementById('filtroAtivoLabel');
+    if (headerLabel) {
+        headerLabel.setAttribute('data-active', 'true');
+        clearTimeout(headerLabel._fadeTimer);
+        headerLabel._fadeTimer = setTimeout(() => headerLabel.removeAttribute('data-active'), 1200);
+    }
+}
+
+// Expor globalmente para ser chamado de db-transacoes.js
+window._atualizarFeedbackPeriodo = _atualizarFeedbackPeriodo;
 
 // ========== SALVAMENTO GARANTIDO AO SAIR ==========
 window.addEventListener('beforeunload', () => {
