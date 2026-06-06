@@ -1316,16 +1316,6 @@ async function entrarNoPerfil(index) {
         // Onboarding automático para novos perfis (sem dados, primeira visita)
         _verificarOnboardingNovoPerfil();
 
-        // Mostra FAB na tela de dashboard após selecionar perfil
-        const fabEl = document.getElementById('fabAddTx');
-        if (fabEl) fabEl.classList.remove('js-hidden');
-
-        // Inicializa FAB na primeira seleção de perfil (uma única vez)
-        if (!window._fabIniciado) {
-            window._fabIniciado = true;
-            _initFab();
-        }
-
         mostrarTela('dashboard');
 
     } catch (e) {
@@ -5118,91 +5108,6 @@ function _verificarOnboardingNovoPerfil() {
 
     } catch { /* localStorage pode estar bloqueado — falha silenciosa */ }
 }
-
-// ========== FAB MOBILE — LANÇAMENTO RÁPIDO ==========
-function _initFab() {
-    const fab     = document.getElementById('fabAddTx');
-    const overlay = document.getElementById('fabFormOverlay');
-    const form    = document.getElementById('fabForm');
-    const btnClose = document.getElementById('fabFormClose');
-    const btnLancar = document.getElementById('fabLancar');
-
-    if (!fab || !form) return;
-
-    function abrirFab() {
-        fab.classList.add('fab-open');
-        overlay.classList.remove('js-hidden');
-        form.classList.remove('js-hidden');
-        form.classList.add('fab-form--open');
-        document.getElementById('fabCategoria')?.focus();
-    }
-
-    function fecharFab() {
-        fab.classList.remove('fab-open');
-        overlay.classList.add('js-hidden');
-        form.classList.add('js-hidden');
-        form.classList.remove('fab-form--open');
-        if (document.getElementById('fabCategoria')) document.getElementById('fabCategoria').value = '';
-        if (document.getElementById('fabDescricao')) document.getElementById('fabDescricao').value = '';
-        if (document.getElementById('fabValor'))     document.getElementById('fabValor').value = '';
-    }
-
-    fab.addEventListener('click', () => {
-        if (form.classList.contains('js-hidden')) abrirFab();
-        else fecharFab();
-    });
-
-    if (btnClose) btnClose.addEventListener('click', fecharFab);
-    if (overlay)  overlay.addEventListener('click', fecharFab);
-
-    if (btnLancar) {
-        btnLancar.addEventListener('click', () => {
-            const cat  = document.getElementById('fabCategoria')?.value || '';
-            const desc = (document.getElementById('fabDescricao')?.value || '').trim();
-            const valStr = document.getElementById('fabValor')?.value || '';
-            const valor  = parseFloat(parseFloat(valStr).toFixed(2));
-
-            if (!cat)                                          return mostrarNotificacao('Escolha a categoria.', 'warning');
-            if (!desc)                                         return mostrarNotificacao('Digite a descrição.', 'warning');
-            if (!isFinite(valor) || valor <= 0)               return mostrarNotificacao('Digite um valor válido.', 'warning');
-            if (valor > 99_999_999)                           return mostrarNotificacao('Valor muito alto.', 'warning');
-            if (!perfilAtivo)                                  return mostrarNotificacao('Nenhum perfil ativo.', 'error');
-
-            const dh = agoraDataHora();
-            // Para crédito sem cartão definido, converte para saida simples no FAB
-            const catFinal = cat === 'saida_credito' ? 'saida' : cat;
-
-            transacoes.push({
-                categoria: catFinal,
-                tipo:      catFinal === 'entrada' ? 'Renda Extra' : 'Outros',
-                descricao: _sanitizeText(desc).slice(0, 300),
-                valor,
-                data:      dh.data,
-                hora:      dh.hora,
-                metaId:    null,
-            });
-
-            salvarDados();
-            atualizarTudo();
-            fecharFab();
-            mostrarNotificacao('✅ Transação lançada!', 'success');
-        });
-    }
-
-    // Mostra o FAB apenas nas páginas relevantes (dashboard, transacoes)
-    document.querySelectorAll('.nav-btn[data-page], .mobile-nav-item[data-page]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const page = btn.dataset.page;
-            const mostrar = (page === 'dashboard' || page === 'transacoes') && !!perfilAtivo;
-            fab.classList.toggle('js-hidden', !mostrar);
-            if (!mostrar) fecharFab();
-        });
-    });
-}
-
-// Chama init do FAB depois que o perfil é selecionado
-const _fabInitOriginal = window.entrarNoPerfil;
-// Inicialização real feita em entrarNoPerfil após o perfil ser selecionado (ver chamada abaixo)
 
 // ========== FEEDBACK DE PERÍODO SELECIONADO NOS FILTROS =========
 // Aplica classe active com animação nos filtros de período para deixar claro qual está ativo

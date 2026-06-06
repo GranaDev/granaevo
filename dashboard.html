@@ -962,53 +962,6 @@
     <!-- INDICADOR DE SYNC DESKTOP (canto inferior direito, acima do bottom-nav) -->
     <div class="sync-indicator-desktop" id="syncIndicatorDesktop" aria-live="polite" aria-atomic="true"></div>
 
-    <!-- FAB MOBILE — botão flutuante para lançar transação rápida -->
-    <button
-        class="fab-add-tx js-hidden"
-        id="fabAddTx"
-        type="button"
-        aria-label="Lançar transação rápida">
-        <i class="fas fa-plus" aria-hidden="true"></i>
-    </button>
-
-    <!-- MINI FORM FAB — formulário rápido de lançamento -->
-    <div class="fab-form-overlay js-hidden" id="fabFormOverlay" role="presentation"></div>
-    <div class="fab-form" id="fabForm" role="dialog" aria-modal="true" aria-label="Lançar transação rápida">
-        <div class="fab-form-header">
-            <span class="fab-form-title">Lançamento Rápido</span>
-            <button class="fab-form-close" id="fabFormClose" type="button" aria-label="Fechar">
-                <i class="fas fa-times" aria-hidden="true"></i>
-            </button>
-        </div>
-        <div class="fab-form-body">
-            <select id="fabCategoria" class="form-input" aria-label="Categoria">
-                <option value="">Categoria</option>
-                <option value="entrada">Entrada</option>
-                <option value="saida">Saída</option>
-                <option value="saida_credito">Crédito</option>
-            </select>
-            <input
-                type="text"
-                id="fabDescricao"
-                class="form-input"
-                placeholder="Descrição"
-                maxlength="300"
-                aria-label="Descrição">
-            <input
-                type="number"
-                id="fabValor"
-                class="form-input"
-                placeholder="Valor (R$)"
-                step="0.01"
-                min="0.01"
-                max="99999999"
-                aria-label="Valor">
-            <button class="btn-primary" id="fabLancar" type="button">
-                <i class="fas fa-paper-plane" aria-hidden="true"></i> Lançar
-            </button>
-        </div>
-    </div>
-
     <!-- PAINEL DE NOTIFICAÇÕES -->
     <div id="notificacoesOverlay" class="notificacoes-overlay js-hidden" role="presentation"></div>
     <aside id="notificacoesPanel" class="notificacoes-panel js-hidden" role="dialog" aria-modal="true" aria-label="Painel de notificações">
