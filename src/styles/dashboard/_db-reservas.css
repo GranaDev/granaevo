@@ -713,4 +713,133 @@
     gap: 8px;
 }
 
+/* ========== SELETOR DE PERÍODO DO GRÁFICO ========== */
+.meta-periodo-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.meta-periodo-btn {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(77,166,255,0.25);
+    background: rgba(77,166,255,0.06);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s, color 0.18s, border-color 0.18s;
+    white-space: nowrap;
+}
+
+.meta-periodo-btn:hover {
+    background: rgba(77,166,255,0.14);
+    color: var(--text-primary);
+}
+
+.meta-periodo-btn--active {
+    background: rgba(77,166,255,0.2);
+    border-color: #4da6ff;
+    color: #4da6ff;
+}
+
+/* ========== SIMULADOR DE APORTES ========== */
+.meta-sim-card {
+    background: rgba(16, 185, 129, 0.07);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: 14px;
+    padding: 16px;
+    margin-top: 14px;
+}
+
+.meta-sim-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--success);
+    margin-bottom: 6px;
+}
+
+.meta-sim-desc {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    line-height: 1.45;
+}
+
+.meta-sim-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 10px;
+    padding: 8px 14px;
+}
+
+.meta-sim-prefix,
+.meta-sim-suffix {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--success);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.meta-sim-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 1.05rem;
+    font-weight: 700;
+    min-width: 0;
+    text-align: center;
+    font-family: inherit;
+}
+
+.meta-sim-input::placeholder { color: var(--text-muted); font-weight: 400; }
+
+.meta-sim-result {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.meta-sim-result.meta-sim-hidden { display: none; }
+
+.meta-sim-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    gap: 8px;
+}
+
+.meta-sim-row-label {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.meta-sim-row-value {
+    font-size: 0.88rem;
+    font-weight: 700;
+    text-align: right;
+}
+
+.meta-sim-warn {
+    font-size: 0.82rem;
+    color: #fbbf24;
+    line-height: 1.5;
+    padding: 8px;
+    background: rgba(251,191,36,0.08);
+    border-radius: 8px;
+}
+
 /* ========== CARTÃ•ES DE CRÃ‰DITO ========== */

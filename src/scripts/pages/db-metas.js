@@ -1,5 +1,6 @@
 // db-metas.js — Seção de Metas/Reservas (lazy-loaded)
 let _ctx = null;
+let _metaLinePeriod = 'mensal'; // mensal | bimestral | trimestral | semestral | anual
 
 // ===== CDI automático =====
 const _CDI_CACHE_KEY = '_ge_cdi_v2';
@@ -1294,6 +1295,115 @@ function calcularProjecaoConclusao(meta) {
     };
 }
 
+function _desenharGraficoLinha(meta, ctxLine, line, period) {
+    const objetivo = Number(meta.objetivo || 0);
+    ctxLine.clearRect(0, 0, line.width, line.height);
+    const padding = 40;
+    const w = line.width  - padding * 2;
+    const h = line.height - padding * 2;
+    const now = new Date();
+
+    // Agrupa dados mensais por período solicitado
+    let buckets = []; // [{ label, value, keys }]
+
+    if (period === 'anual') {
+        // 3 anos completos
+        for (let y = now.getFullYear() - 2; y <= now.getFullYear(); y++) {
+            let total = 0;
+            for (let m = 1; m <= 12; m++) {
+                const key = `${y}-${String(m).padStart(2, '0')}`;
+                total += Number(meta.monthly?.[key] || 0);
+            }
+            buckets.push({ label: String(y), value: total });
+        }
+    } else {
+        // Últimos 12 meses, depois agrupa conforme period
+        const rawMonths = [];
+        for (let i = 11; i >= 0; i--) {
+            const d   = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            rawMonths.push({ key, label: d.toLocaleString('pt-BR', { month: 'short' }), year: d.getFullYear(), month: d.getMonth() + 1 });
+        }
+
+        const step = period === 'bimestral' ? 2 : period === 'trimestral' ? 3 : period === 'semestral' ? 6 : 1;
+        for (let i = 0; i < rawMonths.length; i += step) {
+            const slice = rawMonths.slice(i, i + step);
+            const total = slice.reduce((s, mk) => s + Number(meta.monthly?.[mk.key] || 0), 0);
+            const lbl   = step === 1 ? slice[0].label : `${slice[0].label}–${slice[slice.length - 1].label}`;
+            buckets.push({ label: lbl, value: total });
+        }
+    }
+
+    const values = buckets.map(b => b.value);
+    const maxV   = Math.max(...values, objetivo > 0 ? objetivo * 0.1 : 50, 50);
+
+    // Background
+    ctxLine.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctxLine.lineWidth   = 1;
+    ctxLine.strokeRect(padding, padding, w, h);
+
+    // Linha do objetivo
+    if (objetivo > 0 && objetivo <= maxV) {
+        const objY = padding + h - (objetivo / maxV) * h;
+        ctxLine.beginPath();
+        ctxLine.setLineDash([6, 4]);
+        ctxLine.strokeStyle = 'rgba(0,255,153,0.4)';
+        ctxLine.lineWidth   = 1;
+        ctxLine.moveTo(padding, objY);
+        ctxLine.lineTo(padding + w, objY);
+        ctxLine.stroke();
+        ctxLine.setLineDash([]);
+    }
+
+    // Área sob a linha (gradiente)
+    const points = buckets.map((b, i) => ({
+        x: padding + (buckets.length > 1 ? (i / (buckets.length - 1)) : 0.5) * w,
+        y: padding + h - (b.value / maxV) * h,
+        v: b.value,
+        month: b.label,
+    }));
+
+    if (points.length > 1) {
+        const grad = ctxLine.createLinearGradient(0, padding, 0, padding + h);
+        grad.addColorStop(0,   'rgba(77,166,255,0.25)');
+        grad.addColorStop(1,   'rgba(77,166,255,0)');
+        ctxLine.beginPath();
+        ctxLine.moveTo(points[0].x, padding + h);
+        points.forEach(p => ctxLine.lineTo(p.x, p.y));
+        ctxLine.lineTo(points[points.length - 1].x, padding + h);
+        ctxLine.closePath();
+        ctxLine.fillStyle = grad;
+        ctxLine.fill();
+    }
+
+    // Linha principal
+    ctxLine.beginPath();
+    points.forEach((p, i) => { if (i === 0) ctxLine.moveTo(p.x, p.y); else ctxLine.lineTo(p.x, p.y); });
+    ctxLine.strokeStyle = '#4da6ff';
+    ctxLine.lineWidth   = 2.5;
+    ctxLine.stroke();
+
+    // Pontos
+    points.forEach(p => {
+        ctxLine.beginPath();
+        ctxLine.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctxLine.fillStyle = '#fff';
+        ctxLine.fill();
+        ctxLine.beginPath();
+        ctxLine.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctxLine.fillStyle = '#4da6ff';
+        ctxLine.fill();
+    });
+
+    line._points = points;
+
+    // Labels de eixo X
+    ctxLine.fillStyle  = 'rgba(255,255,255,0.6)';
+    ctxLine.font       = '10px sans-serif';
+    ctxLine.textAlign  = 'center';
+    points.forEach(p => ctxLine.fillText(p.month, p.x, padding + h + 16));
+}
+
 function renderMetaVisual() {
     const details = document.getElementById('metaDetalhes');
     const donut = document.getElementById('donutChart');
@@ -1377,64 +1487,41 @@ function renderMetaVisual() {
     ctxDonut.textAlign='center';
     ctxDonut.fillText(`${perc}%`, cx, cy+6);
     
-    // Desenha gráfico de linha
-    ctxLine.clearRect(0,0,line.width,line.height);
-    const padding = 40;
-    const w = line.width - padding*2, h = line.height - padding*2;
-    
-    const months = [];
-    const points = [];
-    const now = new Date();
-    
-    for(let i=11;i>=0;i--){
-        const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-        const y = d.getFullYear();
-        const m = d.getMonth()+1;
-        const key = `${y}-${String(m).padStart(2,'0')}`;
-        months.push({ key, label: d.toLocaleString('pt-BR', {month:'short'}), month: m });
-    }
-    
-    const values = months.map(mk => Number(meta.monthly && meta.monthly[mk.key] ? meta.monthly[mk.key] : 0));
-    const maxV = Math.max(...values, objetivo, 50);
-    
-    ctxLine.strokeStyle = '#ccc';
-    ctxLine.lineWidth = 1;
-    ctxLine.strokeRect(padding, padding, w, h);
-    
-    ctxLine.beginPath();
-    values.forEach((v,i)=>{
-        const x = padding + (i/(values.length-1)) * w;
-        const y = padding + h - (v / maxV) * h;
-        if(i === 0) ctxLine.moveTo(x, y);
-        else ctxLine.lineTo(x, y);
-        points.push({x,y,v,month:months[i].label, key: months[i].key});
-    });
-    ctxLine.strokeStyle = '#4da6ff';
-    ctxLine.lineWidth = 2;
-    ctxLine.stroke();
-    
-    points.forEach(p=>{
-        ctxLine.beginPath();
-        ctxLine.arc(p.x,p.y,4,0,Math.PI*2);
-        ctxLine.fillStyle = '#fff';
-        ctxLine.fill();
-        ctxLine.beginPath();
-        ctxLine.arc(p.x,p.y,3,0,Math.PI*2);
-        ctxLine.fillStyle = '#4da6ff';
-        ctxLine.fill();
-    });
-    
-    line._points = points;
-    
-    ctxLine.fillStyle = '#ccc';
-    ctxLine.font = '11px sans-serif';
-    ctxLine.textAlign = 'center';
-    points.forEach(p=>{
-        ctxLine.fillText(p.month, p.x, padding + h + 16);
-    });
+    // Desenha gráfico de linha com suporte a períodos
+    _desenharGraficoLinha(meta, ctxLine, line, _metaLinePeriod);
     
     // ── Reconstrói details via DOM — zero dados do usuário em innerHTML
     details.innerHTML = '';
+
+    // ── Seletor de período para o gráfico de linha ─────────────────────────
+    const periodos = [
+        { key: 'mensal',     label: 'Mensal'    },
+        { key: 'bimestral',  label: 'Bimestral' },
+        { key: 'trimestral', label: 'Trimestral' },
+        { key: 'semestral',  label: 'Semestral'  },
+        { key: 'anual',      label: 'Anual'      },
+    ];
+    const periodoBar = document.createElement('div');
+    periodoBar.className = 'meta-periodo-bar';
+    periodos.forEach(p => {
+        const btn = document.createElement('button');
+        btn.type      = 'button';
+        btn.className = 'meta-periodo-btn' + (p.key === _metaLinePeriod ? ' meta-periodo-btn--active' : '');
+        btn.textContent = p.label;
+        btn.dataset.periodo = p.key;
+        btn.addEventListener('click', () => {
+            _metaLinePeriod = p.key;
+            // Atualiza botões ativos sem re-renderizar tudo
+            periodoBar.querySelectorAll('.meta-periodo-btn').forEach(b => {
+                b.classList.toggle('meta-periodo-btn--active', b.dataset.periodo === p.key);
+            });
+            // Redesenha apenas o canvas de linha
+            const lineCanvas = document.getElementById('lineChart');
+            if (lineCanvas) _desenharGraficoLinha(meta, lineCanvas.getContext('2d'), lineCanvas, _metaLinePeriod);
+        });
+        periodoBar.appendChild(btn);
+    });
+    details.appendChild(periodoBar);
 
     const falta = Math.max(0, Number(meta.objetivo || 0) - Number(meta.saved || 0));
     const concluida = Number(meta.saved || 0) >= Number(meta.objetivo || 1);
@@ -1794,6 +1881,122 @@ function renderMetaVisual() {
         }
 
         details.appendChild(cardTips);
+    }
+
+    // ── Widget simulador de aportes ─────────────────────────────────────────
+    if (saved < objetivo) {
+        const falta       = objetivo - saved;
+        const rMensal     = _taxaMensal(meta);
+        const aporteRec   = Number(meta.valorAporte || 0);
+
+        const cardSim             = document.createElement('div');
+        cardSim.className         = 'meta-sim-card';
+
+        const simTit              = document.createElement('div');
+        simTit.className          = 'meta-sim-title';
+        simTit.textContent        = '🧮 Simulador de Aportes';
+        cardSim.appendChild(simTit);
+
+        const simDesc             = document.createElement('div');
+        simDesc.className         = 'meta-sim-desc';
+        simDesc.textContent       = 'Simule quanto tempo levará para atingir sua meta com um aporte mensal.';
+        cardSim.appendChild(simDesc);
+
+        // Input row
+        const inputRow            = document.createElement('div');
+        inputRow.className        = 'meta-sim-input-row';
+
+        const prefixo             = document.createElement('span');
+        prefixo.className         = 'meta-sim-prefix';
+        prefixo.textContent       = 'R$';
+
+        const simInput            = document.createElement('input');
+        simInput.type             = 'text';
+        simInput.inputMode        = 'decimal';
+        simInput.className        = 'meta-sim-input';
+        simInput.placeholder      = aporteRec > 0 ? formatBRL(aporteRec).replace('R$ ','').replace('R$ ','') : '0,00';
+        simInput.setAttribute('aria-label', 'Aporte mensal para simulação');
+
+        const sufixo              = document.createElement('span');
+        sufixo.className          = 'meta-sim-suffix';
+        sufixo.textContent        = '/ mês';
+
+        inputRow.appendChild(prefixo);
+        inputRow.appendChild(simInput);
+        inputRow.appendChild(sufixo);
+        cardSim.appendChild(inputRow);
+
+        // Result area
+        const simResult           = document.createElement('div');
+        simResult.className       = 'meta-sim-result meta-sim-hidden';
+        cardSim.appendChild(simResult);
+
+        details.appendChild(cardSim);
+
+        let _simTimer = null;
+        function _atualizarSim() {
+            const raw = simInput.value.replace(/\./g,'').replace(',','.');
+            const pmt = parseFloat(raw) || 0;
+            if (pmt <= 0) { simResult.className = 'meta-sim-result meta-sim-hidden'; return; }
+
+            const n = mesesParaMeta(saved, objetivo, pmt, rMensal);
+            simResult.className   = 'meta-sim-result';
+            simResult.textContent = '';
+
+            function addRow(lbl, val, cor) {
+                const row = document.createElement('div');
+                row.className = 'meta-sim-row';
+                const l = document.createElement('span');
+                l.className   = 'meta-sim-row-label';
+                l.textContent = lbl;
+                const v = document.createElement('span');
+                v.className   = 'meta-sim-row-value';
+                v.style.color = cor || 'var(--text-primary)';
+                v.textContent = val;
+                row.appendChild(l); row.appendChild(v);
+                simResult.appendChild(row);
+            }
+
+            if (!isFinite(n) || n > 1200) {
+                const warn = document.createElement('div');
+                warn.className   = 'meta-sim-warn';
+                warn.textContent = '⚠️ O aporte está muito baixo — os rendimentos não superam o déficit. Aumente o valor mensal.';
+                simResult.appendChild(warn);
+                return;
+            }
+
+            const mesesInt  = Math.ceil(n);
+            const anos      = Math.floor(mesesInt / 12);
+            const mesesRes  = mesesInt % 12;
+            const tempo     = anos > 0
+                ? `${anos} ano${anos > 1 ? 's' : ''} e ${mesesRes} mês${mesesRes !== 1 ? 'es' : ''}`
+                : `${mesesInt} mês${mesesInt !== 1 ? 'es' : ''}`;
+
+            const fvFinal      = fvComposto(saved, pmt, rMensal, mesesInt);
+            const totalAportes = pmt * mesesInt;
+            const rendimentos  = Math.max(0, fvFinal - saved - totalAportes);
+
+            const dataChegada = new Date();
+            dataChegada.setMonth(dataChegada.getMonth() + mesesInt);
+            const dataStr = dataChegada.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+            addRow('Tempo estimado', tempo, '#00ff99');
+            addRow('Chegada em', dataStr, 'var(--text-secondary)');
+            addRow('Total de aportes', formatBRL(totalAportes), 'var(--text-primary)');
+            if (rMensal > 0) addRow('Rendimentos acumulados', `+${formatBRL(rendimentos)}`, '#00cc7a');
+            addRow('Saldo final projetado', formatBRL(fvFinal), 'var(--primary-light)');
+        }
+
+        simInput.addEventListener('input', () => {
+            clearTimeout(_simTimer);
+            _simTimer = setTimeout(_atualizarSim, 250);
+        });
+
+        // Pre-populate with recurring aporte if set
+        if (aporteRec > 0) {
+            simInput.value = String(aporteRec).replace('.', ',');
+            _atualizarSim();
+        }
     }
 
     if (!line._clickListenerRegistrado) {

@@ -19,6 +19,7 @@ export function init(ctx) {
         newBtn.addEventListener('click', () => abrirImportarExtrato());
     }
 
+    _initAutoCategorizar();
     bindFiltrosMovimentacoes();
     renderizarOrcamentos();
     atualizarMovimentacoesUI();
@@ -43,9 +44,9 @@ function atualizarTiposDinamicos() {
             tipoSelect.appendChild(o);
         });
     } else if(cat === 'saida' || cat === 'saida_credito') {
-        const tiposPadrao = ['Mercado', 'Farmácia', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza', 'Presente',
-         'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Shopee', 'Mercado Livre',
-         'Ifood', 'Amazon', 'Outros'];
+        const tiposPadrao = ['Mercado', 'Farmácia', 'Saúde', 'Eletrônico', 'Roupas', 'Assinaturas',
+         'Beleza', 'Presente', 'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte',
+         'Viagem', 'Pet', 'Shopee', 'Mercado Livre', 'Ifood', 'Amazon', 'Educação', 'Outros'];
         const personalizados = (_ctx.tiposPersonalizados || []).filter(t => typeof t === 'string' && t.trim());
         [...tiposPadrao, ...personalizados].forEach(x => {
             const o = document.createElement('option');
@@ -122,10 +123,25 @@ function atualizarCamposCredito() {
 }
 
 function lancarTransacao() {
-    const categoria = document.getElementById('selectCategoria').value;
-    const tipo      = document.getElementById('selectTipo').value;
+    let categoria = document.getElementById('selectCategoria').value;
     const descricao = document.getElementById('inputDescricao').value.trim();
-    const valorStr  = document.getElementById('inputValor').value;
+
+    // Auto-aplicar categoria se usuário não escolheu mas digitou uma descrição reconhecível
+    if (!categoria && descricao.length >= 3) {
+        const auto = _autoCatComAprendizado(descricao);
+        if (auto) {
+            document.getElementById('selectCategoria').value = auto.cat;
+            atualizarTiposDinamicos();
+            if (auto.tipo) document.getElementById('selectTipo').value = auto.tipo;
+            categoria = auto.cat;
+        }
+    }
+
+    let tipo      = document.getElementById('selectTipo').value;
+    const valorEl   = document.getElementById('inputValor');
+    // Suporte à máscara monetária: lê dataset.valorNumerico se disponível, senão parseia string
+    const valorStr  = valorEl.dataset?.valorNumerico
+        || valorEl.value.replace(/\./g, '').replace(',', '.');
 
     if(!categoria) return alert('Escolha Entrada, Saída ou Reserva.');
     if(categoria === 'reserva' && _ctx.metas.filter(m => m.id !== 'emergency').length === 0) {
@@ -235,6 +251,8 @@ function lancarTransacao() {
         atualizarTiposDinamicos();
         document.getElementById('inputDescricao').value = '';
         document.getElementById('inputValor').value     = '';
+        const _chipCC = document.getElementById('autocatChip');
+        if (_chipCC) { _chipCC.className = 'autocat-chip autocat-hidden'; _chipCC.textContent = ''; }
 
         alert("Compra lançada! A fatura do cartão foi atualizada.");
         return;
@@ -311,6 +329,8 @@ function lancarTransacao() {
         document.getElementById('selectTipo').innerHTML     = '<option value="">Tipo</option>';
         document.getElementById('inputDescricao').value     = '';
         document.getElementById('inputValor').value         = '';
+        const _chipNorm = document.getElementById('autocatChip');
+        if (_chipNorm) { _chipNorm.className = 'autocat-chip autocat-hidden'; _chipNorm.textContent = ''; }
     });
 }
 
@@ -347,6 +367,7 @@ function _obterIconeTransacao(categoria, tipo) {
     if (t.includes('saúde') || t.includes('médico') || t.includes('consulta')) return 'fa-stethoscope';
     if (t.includes('educação') || t.includes('curso') || t.includes('livro')) return 'fa-graduation-cap';
     if (t.includes('viagem') || t.includes('hotel') || t.includes('passagem')) return 'fa-plane';
+    if (t.includes('pet') || t.includes('veterinário') || t.includes('ração')) return 'fa-paw';
 
     return 'fa-arrow-up-right-dots';
 }
@@ -1102,6 +1123,7 @@ function _gastoMesAtualPorTipo(tipo) {
 function _corOrcamento(pct) {
     if (pct >= 100) return 'var(--danger)';
     if (pct >= 80)  return 'var(--warning)';
+    if (pct >= 50)  return '#f59e0b';
     return 'var(--success)';
 }
 
@@ -1460,6 +1482,11 @@ function _verificarAlertasOrcamento(categoria, tipo, valorAdicionado) {
         corpo  = `Você usou ${pct.toFixed(0)}% do limite (${formatBRL(gasto)} / ${formatBRL(limite)}).`;
         nivel  = 'warning';
         _ctx.mostrarNotificacao(`Atenção: você usou ${pct.toFixed(0)}% do orçamento de ${tipo}.`, 'warning');
+    } else if (pct >= 50) {
+        titulo = `📊 Metade do orçamento: ${tipo}`;
+        corpo  = `Você usou ${pct.toFixed(0)}% do limite (${formatBRL(gasto)} / ${formatBRL(limite)}).`;
+        nivel  = 'info';
+        _ctx.mostrarNotificacao(`Você usou ${pct.toFixed(0)}% do orçamento de ${tipo}.`, 'info');
     }
 
     // Dispara push notification se permitido e disponível
@@ -1467,7 +1494,7 @@ function _verificarAlertasOrcamento(categoria, tipo, valorAdicionado) {
         try {
             navigator.serviceWorker?.ready?.then(reg => {
                 // Chave de deduplicação por tipo+mês — evita notificações repetidas
-                const tag = `orcamento-${tipo}-${new Date().getFullYear()}-${new Date().getMonth()}`;
+                const tag = `orcamento-${tipo}-${new Date().getFullYear()}-${new Date().getMonth()}-${pct >= 100 ? '100' : pct >= 80 ? '80' : '50'}`;
                 reg.showNotification(titulo, {
                     body: corpo,
                     tag,          // substitui notificação anterior do mesmo tipo
@@ -1486,39 +1513,58 @@ function _verificarAlertasOrcamento(categoria, tipo, valorAdicionado) {
 // Processamento 100% local — arquivo nunca sai do browser
 
 const _CATEGORIAS_IMPORT = Object.freeze([
-    'Mercado','Farmácia','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
-    'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre',
-    'Ifood','Amazon','Outros','Salário','Renda Extra','Outros Recebimentos',
+    'Mercado','Farmácia','Saúde','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
+    'Conta fixa','Cartão','Academia','Lazer','Transporte','Viagem','Pet','Shopee','Mercado Livre',
+    'Ifood','Amazon','Educação','Outros','Salário','Renda Extra','Outros Recebimentos',
 ]);
 
 const _AUTO_CAT = Object.freeze([
     // ── Entradas identificáveis PRIMEIRO (evita false-positives de sobrenomes) ─
-    [/pix.*receb|receb.*pix|transfer.*receb|pix recebido/i,          { cat: 'entrada', tipo: 'Renda Extra' }],
-    [/salario|holerite|pagto.*rh|folha.*pgto/i,                      { cat: 'entrada', tipo: 'Salário' }],
-    [/pix.*envia|envia.*pix|transfer.*envia/i,                       { cat: 'saida',   tipo: 'Outros' }],
+    [/pix.*receb|receb.*pix|transfer.*receb|pix recebido/i,           { cat: 'entrada', tipo: 'Renda Extra' }],
+    [/salario|holerite|pagto.*rh|folha.*pgto/i,                       { cat: 'entrada', tipo: 'Salário' }],
+    [/pix.*envia|envia.*pix|transfer.*envia/i,                        { cat: 'saida',   tipo: 'Outros' }],
     // ── Food & delivery ────────────────────────────────────────────────────────
-    [/ifood|rappi|uber.*eat|delivery/i,                              { cat: 'saida', tipo: 'Ifood' }],
-    [/restauran|lanchon|padaria|pizzar|hamburguer|burger|sushi|churrasc|bar e|snack/i, { cat: 'saida', tipo: 'Ifood' }],
+    [/ifood|rappi|uber.*eat|delivery/i,                               { cat: 'saida', tipo: 'Ifood' }],
+    [/restauran|lanchon|padaria|pizzar|hamburguer|burger|sushi|churrasc|bar e|snack|lanche/i, { cat: 'saida', tipo: 'Ifood' }],
     // ── Marketplaces ───────────────────────────────────────────────────────────
-    [/mercado livre|mercadolivre|meli\b/i,                           { cat: 'saida', tipo: 'Mercado Livre' }],
-    [/shopee/i,                                                      { cat: 'saida', tipo: 'Shopee' }],
-    [/amazon/i,                                                      { cat: 'saida', tipo: 'Amazon' }],
-    // ── Supermercado (word-boundary — evita sobrenomes "Mercado") ─────────────
+    [/mercado livre|mercadolivre|meli\b/i,                            { cat: 'saida', tipo: 'Mercado Livre' }],
+    [/shopee/i,                                                       { cat: 'saida', tipo: 'Shopee' }],
+    [/amazon/i,                                                       { cat: 'saida', tipo: 'Amazon' }],
+    // ── Supermercado ─────────────────────────────────────────────────────────
     [/supermercado|carrefour|atacad|hortifruti|pao de acucar|extra\b/i, { cat: 'saida', tipo: 'Mercado' }],
-    [/\bsuperm|\bmerced|\bprecito|\bdia\b.*super|sacolao/i,          { cat: 'saida', tipo: 'Mercado' }],
-    // ── Farmácia ───────────────────────────────────────────────────────────────
-    [/farmacia|drogasil|ultrafarma|pacheco|droga\b|remedios/i,       { cat: 'saida', tipo: 'Farmácia' }],
-    // ── Transporte ─────────────────────────────────────────────────────────────
+    [/\bsuperm|\bmerced|\bprecito|\bdia\b.*super|sacolao/i,           { cat: 'saida', tipo: 'Mercado' }],
+    // ── Farmácia ──────────────────────────────────────────────────────────────
+    [/farmacia|drogasil|ultrafarma|pacheco|droga\b|remedios/i,        { cat: 'saida', tipo: 'Farmácia' }],
+    // ── Saúde ────────────────────────────────────────────────────────────────
+    [/medico|dentista|clinica|hospital|consulta|exame|plano.*saude|unimed|amil|bradesco.*saude|sulamerica|laboratorio/i, { cat: 'saida', tipo: 'Saúde' }],
+    // ── Educação ─────────────────────────────────────────────────────────────
+    [/faculdade|mensalidade.*escol|escola\b|universidade|\bcurso\b|livro|matricula|colegio|creche|udemy|alura/i, { cat: 'saida', tipo: 'Educação' }],
+    // ── Viagem ───────────────────────────────────────────────────────────────
+    [/passagem.*aerea|airbnb|booking\.com|decolar|latam|gol\b|azul\b|hotel|hospedagem|pousada/i, { cat: 'saida', tipo: 'Viagem' }],
+    // ── Roupas e moda ─────────────────────────────────────────────────────────
+    [/renner|\bcea\b|riachuelo|zara|hering|levis|\bpuma\b|nike\b|adidas|roupas|vestuario|calcado|sapato|tenis\b/i, { cat: 'saida', tipo: 'Roupas' }],
+    // ── Eletrônicos ───────────────────────────────────────────────────────────
+    [/kabum|casas bahia|magazine|magalu|informatica|notebook|celular|eletronico|terabyte/i, { cat: 'saida', tipo: 'Eletrônico' }],
+    // ── Pets ─────────────────────────────────────────────────────────────────
+    [/veterinario|petshop|racao|petz\b|cobasi|\bpet\b/i,              { cat: 'saida', tipo: 'Pet' }],
+    // ── Beleza ───────────────────────────────────────────────────────────────
+    [/salao|manicure|pedicure|barbearia|barbeiro|estetica|\bspa\b|cabelei/i, { cat: 'saida', tipo: 'Beleza' }],
+    // ── Lazer & entretenimento ────────────────────────────────────────────────
+    [/cinema|teatro|\bshow\b|evento|ingresso|sympla|bilheteria|parque|boliche|karaoke/i, { cat: 'saida', tipo: 'Lazer' }],
+    // ── Transporte ────────────────────────────────────────────────────────────
     [/\buber\b|99pop|cabify|combustivel|gasolina|ipiranga|shell\b|posto\b|auto.*posto/i, { cat: 'saida', tipo: 'Transporte' }],
-    [/\bmetro\b|onibus|passagem|bilhete/i,                           { cat: 'saida', tipo: 'Transporte' }],
-    // ── Assinaturas ────────────────────────────────────────────────────────────
-    [/netflix|spotify|\bprime\b|disney\+|hbo|youtube.*prem|twitch|apple.*one/i, { cat: 'saida', tipo: 'Assinaturas' }],
-    // ── Academia ───────────────────────────────────────────────────────────────
-    [/academia|smartfit|bluefit|bodytech|\bgym\b/i,                  { cat: 'saida', tipo: 'Academia' }],
-    // ── Contas fixas ───────────────────────────────────────────────────────────
+    [/\bmetro\b|onibus|bilhete.*unico|passagem.*onibus/i,             { cat: 'saida', tipo: 'Transporte' }],
+    // ── Assinaturas ───────────────────────────────────────────────────────────
+    [/netflix|spotify|\bprime\b|disney\+|hbo|youtube.*prem|twitch|apple.*one|globoplay|crunchyroll|deezer/i, { cat: 'saida', tipo: 'Assinaturas' }],
+    // ── Academia ─────────────────────────────────────────────────────────────
+    [/academia|smartfit|bluefit|bodytech|\bgym\b/i,                   { cat: 'saida', tipo: 'Academia' }],
+    // ── Seguros ──────────────────────────────────────────────────────────────
+    [/seguro\b|apolice|premio.*seguro/i,                              { cat: 'saida', tipo: 'Conta fixa' }],
+    // ── Contas fixas ─────────────────────────────────────────────────────────
     [/aluguel|condominio|iptu|energia|enel\b|cemig\b|copel\b|internet|tim\b|claro\b|vivo\b|\boi\b/i, { cat: 'saida', tipo: 'Conta fixa' }],
-    // ── Renda extra genérica ────────────────────────────────────────────────────
-    [/renda|freelance|autonomo/i,                                    { cat: 'entrada', tipo: 'Renda Extra' }],
+    [/conta.*agua|sabesp|saneamento|\bgas\b|comgas|ipva\b/i,          { cat: 'saida', tipo: 'Conta fixa' }],
+    // ── Renda extra genérica ───────────────────────────────────────────────
+    [/renda|freelance|autonomo/i,                                     { cat: 'entrada', tipo: 'Renda Extra' }],
 ]);
 
 function _autoCategorizar(memo) {
@@ -1526,12 +1572,169 @@ function _autoCategorizar(memo) {
     // Ex: "TransferÃncia" → "Transferencia" → casa com /transfer.*receb/
     const m = String(memo || '')
         .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accent combining chars
-        .replace(/[^\w\s]/g, ' ')                          // símbolos → espaço
+        .replace(/[^\w\s]/g, ' ')
         .toLowerCase();
     for (const [re, res] of _AUTO_CAT) {
         if (re.test(m)) return res;
     }
     return null;
+}
+
+function _autoCatComAprendizado(memo) {
+    const m = String(memo || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^\w\s]/g, ' ')
+        .toLowerCase()
+        .trim();
+    if (!m) return null;
+
+    // Verifica regras aprendidas do usuário (palavras-chave exatas)
+    try {
+        const uid = _ctx?.user?.id || 'anon';
+        const raw = localStorage.getItem(`ge_learned_cats_${uid}`);
+        if (raw) {
+            const learned = JSON.parse(raw);
+            if (Array.isArray(learned)) {
+                for (const rule of learned) {
+                    if (rule.keyword && m.includes(rule.keyword.toLowerCase())) {
+                        return { cat: rule.cat, tipo: rule.tipo, learned: true };
+                    }
+                }
+            }
+        }
+    } catch { /* localStorage pode estar bloqueado */ }
+
+    return _autoCategorizar(memo);
+}
+
+function _salvarRegrasAprendidas(keyword, cat, tipo) {
+    try {
+        const uid = _ctx?.user?.id || 'anon';
+        const key = `ge_learned_cats_${uid}`;
+        const raw = localStorage.getItem(key);
+        const learned = raw ? (JSON.parse(raw) || []) : [];
+        // Evita duplicação: atualiza se já existe keyword
+        const idx = learned.findIndex(r => r.keyword === keyword);
+        if (idx >= 0) {
+            learned[idx] = { keyword, cat, tipo };
+        } else {
+            // Máximo 200 regras — remove a mais antiga se necessário
+            if (learned.length >= 200) learned.shift();
+            learned.push({ keyword, cat, tipo });
+        }
+        localStorage.setItem(key, JSON.stringify(learned));
+    } catch { /* não crítico */ }
+}
+
+function _initAutoCategorizar() {
+    const inputDesc = document.getElementById('inputDescricao');
+    if (!inputDesc) return;
+
+    const chip = document.createElement('div');
+    chip.id = 'autocatChip';
+    chip.className = 'autocat-chip autocat-hidden';
+    chip.setAttribute('role', 'status');
+    chip.setAttribute('aria-live', 'polite');
+
+    const descContainer = inputDesc.closest('.form-field-icon');
+    if (!descContainer) return;
+    descContainer.insertAdjacentElement('afterend', chip);
+
+    let _debounceTimer = null;
+    let _lastSuggestion = null;
+    let _lastMemo = '';
+
+    const _catLabel = (cat) => ({ entrada: 'Entrada', saida: 'Saída', saida_credito: 'Crédito', reserva: 'Reserva' }[cat] || cat);
+
+    function hideChip() {
+        _lastSuggestion = null;
+        chip.className = 'autocat-chip autocat-hidden';
+        chip.textContent = '';
+    }
+
+    function applyAndHide(suggestion) {
+        const catSel  = document.getElementById('selectCategoria');
+        const tipoSel = document.getElementById('selectTipo');
+        if (!catSel) return;
+        catSel.value = suggestion.cat;
+        atualizarTiposDinamicos();
+        // selectTipo is repopulated synchronously inside atualizarTiposDinamicos
+        if (tipoSel && suggestion.tipo) tipoSel.value = suggestion.tipo;
+        hideChip();
+    }
+
+    function showChip(suggestion, memo) {
+        _lastSuggestion = suggestion;
+        _lastMemo       = memo;
+        chip.textContent = '';
+
+        const icon = document.createElement('span');
+        icon.className  = 'autocat-icon';
+        icon.textContent = suggestion.learned ? '🧠' : '⚡';
+
+        const label = document.createElement('span');
+        label.className  = 'autocat-label';
+        label.textContent = `${_catLabel(suggestion.cat)} · ${suggestion.tipo}`;
+
+        const btnAccept = document.createElement('button');
+        btnAccept.type      = 'button';
+        btnAccept.className = 'autocat-btn-accept';
+        btnAccept.textContent = 'Aceitar';
+        btnAccept.addEventListener('click', () => applyAndHide(suggestion));
+
+        const btnDismiss = document.createElement('button');
+        btnDismiss.type      = 'button';
+        btnDismiss.className = 'autocat-btn-dismiss';
+        btnDismiss.setAttribute('aria-label', 'Dispensar sugestão');
+        btnDismiss.textContent = '✕';
+        btnDismiss.addEventListener('click', () => hideChip());
+
+        chip.appendChild(icon);
+        chip.appendChild(label);
+        chip.appendChild(btnAccept);
+        chip.appendChild(btnDismiss);
+        chip.className = 'autocat-chip';
+    }
+
+    inputDesc.addEventListener('input', () => {
+        clearTimeout(_debounceTimer);
+        _debounceTimer = setTimeout(() => {
+            const memo    = inputDesc.value.trim();
+            const catSel  = document.getElementById('selectCategoria');
+            // Não sugere se usuário já escolheu categoria manualmente
+            if (catSel && catSel.value) { hideChip(); return; }
+            if (memo.length < 3) { hideChip(); return; }
+
+            const suggestion = _autoCatComAprendizado(memo);
+            if (suggestion) {
+                showChip(suggestion, memo);
+            } else {
+                hideChip();
+            }
+        }, 220);
+    });
+
+    // Aprender correção: quando usuário aceita sugestão mas depois altera manualmente o tipo
+    const tipoSel = document.getElementById('selectTipo');
+    if (tipoSel) {
+        tipoSel.addEventListener('change', () => {
+            if (_lastSuggestion && _lastMemo && tipoSel.value && tipoSel.value !== _lastSuggestion.tipo) {
+                const catSel = document.getElementById('selectCategoria');
+                const keyword = _lastMemo
+                    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                    .replace(/[^\w\s]/g, ' ')
+                    .toLowerCase()
+                    .trim()
+                    .split(/\s+/)
+                    .find(w => w.length >= 4) || _lastMemo.slice(0, 20);
+                if (keyword) _salvarRegrasAprendidas(keyword, catSel?.value || _lastSuggestion.cat, tipoSel.value);
+            }
+        });
+    }
+
+    // Oculta chip quando categoria é alterada manualmente
+    const catSel = document.getElementById('selectCategoria');
+    if (catSel) catSel.addEventListener('change', () => hideChip());
 }
 
 // Corrige mojibake em OFX de bancos brasileiros.

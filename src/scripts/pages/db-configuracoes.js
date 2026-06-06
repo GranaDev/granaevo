@@ -32,6 +32,8 @@ export function init(ctx) {
     _initPushButton();
     // Inicializa toggle de tema claro/escuro
     _initThemeToggle();
+    // Inicializa toggle de navegação por swipe
+    _initSwipeNavToggle();
     // Inicializa botão de backup nas configurações (binding dinâmico)
     _bindBtnBackup();
 }
@@ -124,6 +126,24 @@ function _initThemeToggle() {
         const current = document.documentElement.getAttribute('data-theme') === 'light';
         _applyTheme(!current);
     });
+}
+
+function _initSwipeNavToggle() {
+    const btn    = document.getElementById('btnToggleSwipeNav');
+    const toggle = document.getElementById('swipeNavToggle');
+    if (!btn) return;
+
+    const isOn = () => localStorage.getItem('ge_swipe_nav') === '1';
+
+    function _apply(on) {
+        localStorage.setItem('ge_swipe_nav', on ? '1' : '0');
+        btn.setAttribute('aria-pressed', String(on));
+        if (toggle) toggle.classList.toggle('cfg-toggle--on', on);
+    }
+
+    _apply(isOn()); // Aplica estado inicial
+
+    btn.addEventListener('click', () => _apply(!isOn()));
 }
 
 function _updateOfflineStatus() {

@@ -478,6 +478,78 @@ select.form-input option:checked {
     white-space: nowrap;
 }
 
+/* ========== AUTO-CATEGORIZAÇÃO CHIP ========== */
+@keyframes autocatSlideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.autocat-chip {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 12px;
+    animation: autocatSlideIn 0.22s ease;
+    font-size: 0.85rem;
+}
+
+.autocat-chip.autocat-hidden {
+    display: none;
+}
+
+.autocat-icon {
+    font-size: 1rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.autocat-label {
+    flex: 1;
+    font-weight: 600;
+    color: var(--success);
+    letter-spacing: 0.01em;
+}
+
+.autocat-btn-accept {
+    padding: 5px 14px;
+    background: var(--success);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.18s, transform 0.12s;
+    flex-shrink: 0;
+}
+
+.autocat-btn-accept:hover {
+    background: #059669;
+    transform: scale(1.03);
+}
+
+.autocat-btn-dismiss {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: color 0.15s, background 0.15s;
+}
+
+.autocat-btn-dismiss:hover {
+    color: var(--text-primary);
+    background: rgba(255,255,255,0.08);
+}
+
 /* ========== MOVIMENTAÃ‡Ã•ES ========== */
 .movimentacoes-list {
     display: flex;

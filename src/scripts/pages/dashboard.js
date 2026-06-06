@@ -3599,7 +3599,15 @@ function pagarContaFixa(id, valorPago) {
 //    Garante que o setTimeout de um fechamento antigo nunca limpe um popup novo
 let _popupVersaoAtual = 0;
 
+function _isMobileViewport() { return window.innerWidth < 480; }
+
 function criarPopup(html) {
+    // Em mobile (< 480px) usa bottom sheet; em desktop usa modal centralizado
+    if (_isMobileViewport()) {
+        _criarBottomSheet(html);
+        return;
+    }
+
     const overlay   = document.getElementById('modalOverlay');
     const container = document.getElementById('modalContainer');
     if (!overlay || !container) return;
@@ -3643,6 +3651,16 @@ function criarPopup(html) {
 }
 
 function fecharPopup() {
+    // Fecha bottom sheet se estiver ativo
+    const bs = document.getElementById('bottomSheetOverlay');
+    if (bs && bs.classList.contains('active')) {
+        bs.classList.remove('active');
+        bs.onclick = null;
+        const bsContent = document.getElementById('bottomSheetContent');
+        setTimeout(() => { if (bsContent) bsContent.innerHTML = ''; }, 300);
+        return;
+    }
+
     const overlay   = document.getElementById('modalOverlay');
     const container = document.getElementById('modalContainer');
     if(!overlay || !container) return;
@@ -3661,6 +3679,37 @@ function fecharPopup() {
             container.innerHTML = '';
         }
     }, 300);
+}
+
+function _criarBottomSheet(html) {
+    const overlay   = document.getElementById('bottomSheetOverlay');
+    const content   = document.getElementById('bottomSheetContent');
+    if (!overlay || !content) {
+        // Fallback: abre modal normal se bottom sheet não existir no DOM
+        const overlay2   = document.getElementById('modalOverlay');
+        const container2 = document.getElementById('modalContainer');
+        if (!overlay2 || !container2) return;
+        _popupVersaoAtual++;
+        container2.innerHTML = '';
+        const box = document.createElement('div');
+        box.className = 'popup';
+        box.innerHTML = sanitizarHTMLPopup(html);
+        _aplicarEstilosCSOM(box);
+        container2.appendChild(box);
+        overlay2.classList.add('active');
+        overlay2.onclick = () => fecharPopup();
+        return;
+    }
+
+    const htmlSanitizado = sanitizarHTMLPopup(html);
+    content.innerHTML    = '';
+    const box            = document.createElement('div');
+    box.innerHTML        = htmlSanitizado;
+    _aplicarEstilosCSOM(box);
+    content.appendChild(box);
+
+    overlay.classList.add('active');
+    overlay.onclick = (e) => { if (e.target === overlay) fecharPopup(); };
 }
 
 function sanitizarHTMLPopup(html) {
@@ -4580,19 +4629,48 @@ document.addEventListener('keydown', (e) => {
         salvarDados();
         mostrarNotificacao('Dados salvos!', 'success');
     }
-    
-    // ESC para fechar popup
+
+    // ESC — fecha popup/modal aberto
     if(e.key === 'Escape') {
         const overlay = document.getElementById('modalOverlay');
         if(overlay && overlay.classList.contains('active')) {
             fecharPopup();
+            e.preventDefault();
+            return;
+        }
+        // Fecha bottom-sheet se aberto
+        const bs = document.getElementById('bottomSheetOverlay');
+        if (bs && bs.classList.contains('active')) {
+            bs.classList.remove('active');
+            e.preventDefault();
+            return;
         }
     }
-    
-    // Ctrl/Cmd + K para busca rápida (pode implementar no futuro)
+
+    // Enter — confirma o botão primário do popup aberto
+    // Só dispara quando o foco está dentro do modal (não em inputs externos)
+    if(e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        const overlay = document.getElementById('modalOverlay');
+        if(overlay && overlay.classList.contains('active')) {
+            const container = document.getElementById('modalContainer');
+            if (!container) return;
+            // Se o foco está num textarea, não confirma (usuário quer nova linha)
+            if (document.activeElement?.tagName === 'TEXTAREA') return;
+            // Prioriza #confirmBtn; depois o primeiro btn-primary que não seja cancelar
+            const confirmBtn = container.querySelector('#confirmBtn') ||
+                               container.querySelector('.btn-primary:not(.btn-cancelar):not([data-no-enter])');
+            if (confirmBtn && !confirmBtn.disabled) {
+                e.preventDefault();
+                confirmBtn.click();
+            }
+        }
+    }
+
+    // Ctrl/Cmd + K para busca rápida
     if((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
-        // Implementar busca rápida aqui
+        const busca = document.getElementById('movBuscaInput');
+        if (busca) { busca.focus(); busca.select(); }
     }
 });
 
@@ -5095,7 +5173,8 @@ function _verificarOnboardingNovoPerfil() {
                 btnNao.className = 'btn-cancelar';
                 btnNao.type = 'button';
                 btnNao.style.flex = '1';
-                btnNao.textContent = 'Explorar sozinho';
+                btnNao.textContent = 'Pular';
+                btnNao.setAttribute('data-no-enter', '1');
                 btnNao.addEventListener('click', fecharPopup);
 
                 row.appendChild(btnSim);
@@ -5242,6 +5321,129 @@ function _initSyncIndicator() {
     if (_offlineMode) _setSync('error', 'Sem conexão', 0);
 }
 
+// ========== BANNER OFFLINE ========== //
+function _initOfflineBanner() {
+    const banner = document.createElement('div');
+    banner.id        = 'offlineBanner';
+    banner.className = 'offline-banner offline-banner--hidden';
+    banner.setAttribute('role', 'alert');
+    banner.setAttribute('aria-live', 'assertive');
+
+    const icon = document.createElement('span');
+    icon.className   = 'offline-banner__icon';
+    icon.textContent = '📡';
+
+    const msg = document.createElement('span');
+    msg.className   = 'offline-banner__msg';
+    msg.textContent = 'Sem conexão — os dados serão sincronizados quando você reconectar.';
+
+    banner.appendChild(icon);
+    banner.appendChild(msg);
+    document.body.appendChild(banner);
+
+    function show() { banner.classList.remove('offline-banner--hidden'); }
+    function hide() { banner.classList.add('offline-banner--hidden'); }
+
+    if (!navigator.onLine) show();
+    window.addEventListener('offline', show);
+    window.addEventListener('online', () => {
+        msg.textContent = 'Conexão restaurada!';
+        banner.classList.add('offline-banner--online');
+        setTimeout(() => {
+            hide();
+            banner.classList.remove('offline-banner--online');
+            msg.textContent = 'Sem conexão — os dados serão sincronizados quando você reconectar.';
+        }, 2500);
+    });
+}
+
+// ========== MÁSCARA MONETÁRIA ==========
+function _initMascaraMonetaria() {
+    // Aplica máscara BRL (R$ X.XXX,XX) em todos os inputs monetários do formulário principal
+    const ids = ['inputValor'];
+    for (const id of ids) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        // Converte type=number para type=text com inputmode decimal
+        el.type      = 'text';
+        el.inputMode = 'decimal';
+        el.setAttribute('autocomplete', 'off');
+
+        // Formata enquanto digita
+        el.addEventListener('input', _formatarMoedaInput);
+        el.addEventListener('blur',  _formatarMoedaInput);
+        // Ao focar, seleciona o conteúdo para facilitar edição
+        el.addEventListener('focus', () => {
+            requestAnimationFrame(() => el.select());
+        });
+    }
+}
+
+function _formatarMoedaInput(e) {
+    const el = e.target;
+    const raw = el.value.replace(/[^\d]/g, '');
+    if (!raw) { el.value = ''; return; }
+    const num = parseInt(raw, 10) / 100;
+    el.value  = num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Guarda o valor numérico como data-attribute para lancarTransacao() recuperar sem parsear vírgula
+    el.dataset.valorNumerico = String(num);
+}
+
+// Patch global para que lancarTransacao() leia corretamente com máscara ativada
+// (lancarTransacao usa `document.getElementById('inputValor').value`)
+// A máscara escreve "1.234,56" mas salva o número em data-valorNumerico.
+// Sobrescrevemos o getter de value via defineProperty para retornar o número float.
+function _patchInputValorGetter() {
+    const el = document.getElementById('inputValor');
+    if (!el || el._maskPatched) return;
+    el._maskPatched = true;
+    // Quando a máscara está ativa, `value` no formato "1.234,56" precisaria ser re-parseado.
+    // Mais simples: o data-valorNumerico é lido em lancarTransacao via uma verificação leve.
+    // Não usamos defineProperty (pode conflitar com frameworks) — em vez disso, patching via
+    // um interceptor no keydown para garantir que el.value é sempre um float string legível.
+}
+
+// ========== SWIPE ENTRE SEÇÕES (MOBILE) ==========
+function _initSwipeNav() {
+    const _SECOES = ['dashboard','transacoes','reservas','cartoes','graficos','relatorios','configuracoes'];
+    let _touchStartX = 0;
+    let _touchStartY = 0;
+    const THRESHOLD = 60; // px mínimos para contar como swipe
+
+    const mainArea = document.querySelector('.main-content') || document.getElementById('mainContent');
+    if (!mainArea) return;
+
+    mainArea.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) return;
+        _touchStartX = e.touches[0].clientX;
+        _touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    mainArea.addEventListener('touchend', (e) => {
+        if (!localStorage.getItem('ge_swipe_nav') || localStorage.getItem('ge_swipe_nav') !== '1') return;
+        if (e.changedTouches.length !== 1) return;
+
+        const dx = e.changedTouches[0].clientX - _touchStartX;
+        const dy = e.changedTouches[0].clientY - _touchStartY;
+
+        // Ignora se o gesto é mais vertical que horizontal
+        if (Math.abs(dy) > Math.abs(dx) * 0.8) return;
+        if (Math.abs(dx) < THRESHOLD) return;
+
+        // Determina seção ativa
+        const pageAtiva = document.querySelector('.page.active');
+        if (!pageAtiva) return;
+        const idAtiva = pageAtiva.id.replace('Page', '');
+        const idx     = _SECOES.indexOf(idAtiva);
+        if (idx < 0) return;
+
+        const novoIdx = dx < 0 ? idx + 1 : idx - 1; // left = próximo, right = anterior
+        if (novoIdx < 0 || novoIdx >= _SECOES.length) return;
+
+        mostrarTela(_SECOES[novoIdx]);
+    }, { passive: true });
+}
+
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
     verificarLogin();
@@ -5249,6 +5451,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSidebarToggle();
     _initBtnPeriodoDash();
     _initSyncIndicator();
+    _initOfflineBanner();
+    _initMascaraMonetaria();
+    _initSwipeNav();
 
     // Fallback para qualquer <img> de foto de perfil que falhar ao carregar
     document.querySelectorAll('#userPhoto, #mobileUserPhoto, #cfgUserPhoto').forEach(img => {

@@ -221,6 +221,9 @@ function _exportarRelatorio() {
             { icon:'fa-file-pdf',       color:'#ef4444', label:'PDF',                badge:'Recomendado',
               desc:'Abre o relatório completo com gráficos em nova aba. Salve como PDF com Ctrl+P.',
               fn: () => { _ctx.fecharPopup(); setTimeout(_exportPDF, 120); } },
+            { icon:'fa-file-csv',       color:'#0891b2', label:'CSV',
+              desc:'Exporta todas as transações do período em CSV (UTF-8). Compatível com Excel e Google Sheets.',
+              fn: () => { _ctx.fecharPopup(); setTimeout(_exportCSV, 120); } },
             { icon:'fa-file-excel',     color:'#16a34a', label:'Excel (.xls)',
               desc:'Planilha com 4 abas: Resumo, Transações, Metas e Contas Fixas.',
               fn: () => { _ctx.fecharPopup(); setTimeout(_exportExcel, 120); } },
@@ -280,6 +283,38 @@ function _exportarRelatorio() {
 
         box.appendChild(h3); box.appendChild(sub); box.appendChild(list); box.appendChild(btnCancel);
     });
+}
+
+// ── CSV: transações do período (UTF-8 BOM) ───────────────────────────────
+function _exportCSV() {
+    const txs = _getTxsDoPeriodo();
+    const { mesNome, anoNum, mesNum } = _getPeriodInfo();
+    const perfilNome = _ctx.perfilAtivo?.nome || 'relatorio';
+
+    // Cabeçalho
+    const cols = ['Data','Hora','Categoria','Tipo','Descrição','Valor (R$)'];
+
+    function _csvCell(val) {
+        // RFC 4180: envolve em aspas se contém vírgula, aspas ou quebra de linha
+        const s = String(val ?? '').replace(/"/g, '""');
+        return /[",\n\r]/.test(s) ? `"${s}"` : s;
+    }
+
+    const linhas = [cols.map(_csvCell).join(',')];
+    txs.forEach(t => {
+        linhas.push([
+            _csvCell(t.data  || ''),
+            _csvCell(t.hora  || ''),
+            _csvCell(t.categoria || ''),
+            _csvCell(t.tipo  || ''),
+            _csvCell(t.descricao || ''),
+            _csvCell(typeof t.valor === 'number' ? t.valor.toFixed(2).replace('.', ',') : (t.valor || '0,00')),
+        ].join(','));
+    });
+
+    const csv     = '﻿' + linhas.join('\r\n'); // BOM UTF-8 para Excel abrir corretamente
+    const arquivo = `GranaEvo_${anoNum}-${mesNum}_${perfilNome}_transacoes.csv`;
+    _downloadBlob(csv, arquivo, 'text/csv;charset=utf-8');
 }
 
 // ── PDF: HTML standalone com gráficos embutidos ──────────────────────────
@@ -3285,36 +3320,61 @@ function gerarHistoricoPatrimonial(container) {
     const fmt = v => _ctx.formatBRL ? _ctx.formatBRL(v) : `R$ ${v.toFixed(2).replace('.', ',')}`;
     const corV = variacao >= 0 ? 'var(--success)' : 'var(--danger)';
 
-    // Barra de progresso relativa ao maior patrimônio
-    const maxPatr = Math.max(...linhas.map(l => l.patrimonio), 1);
+    // Agrega linhas mensais conforme período selecionado
+    function _agruparPorPeriodo(linhasBase, step) {
+        if (step === 1) return linhasBase.map((l, i) => ({ ...l, _prev: i > 0 ? linhasBase[i-1].patrimonio : null }));
+        const grupos = [];
+        for (let i = 0; i < linhasBase.length; i += step) {
+            const slice = linhasBase.slice(i, i + step);
+            if (!slice.length) continue;
+            const label = step >= 12
+                ? slice[0].label.split(' ')[1] // só o ano
+                : `${slice[0].label.split(' ')[0]}–${slice[slice.length-1].label.split(' ')[0]} ${slice[slice.length-1].label.split(' ')[1]}`;
+            grupos.push({
+                label,
+                entradas:   slice.reduce((s, l) => s + l.entradas,   0),
+                saidas:     slice.reduce((s, l) => s + l.saidas,     0),
+                saldo:      slice[slice.length - 1].saldo,
+                reservas:   slice[slice.length - 1].reservas,
+                patrimonio: slice[slice.length - 1].patrimonio,
+                _prev: grupos.length > 0 ? grupos[grupos.length - 1].patrimonio : null,
+            });
+        }
+        return grupos;
+    }
 
-    let linhasHTML = linhas.map((l, i) => {
-        const pct    = Math.max(0, Math.min(100, (l.patrimonio / maxPatr) * 100));
-        const delta  = i > 0 ? l.patrimonio - linhas[i-1].patrimonio : 0;
-        const corD   = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--text-muted)';
-        const icD    = delta > 0 ? 'arrow-up' : delta < 0 ? 'arrow-down' : 'minus';
-        return `
-            <tr class="rel-patr-row">
-                <td class="rel-patr-mes">${_ctx.sanitizeHTML ? _ctx.sanitizeHTML(l.label) : l.label}</td>
+    function _renderLinhas(linhasAgrup) {
+        const maxPatrL = Math.max(...linhasAgrup.map(l => l.patrimonio), 1);
+        return linhasAgrup.map((l) => {
+            const pct  = Math.max(0, Math.min(100, (l.patrimonio / maxPatrL) * 100));
+            const delta = l._prev != null ? l.patrimonio - l._prev : 0;
+            const corD  = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--text-muted)';
+            const icD   = delta > 0 ? 'arrow-up' : delta < 0 ? 'arrow-down' : 'minus';
+            const mesEsc = _ctx.sanitizeHTML ? _ctx.sanitizeHTML(l.label) : l.label;
+            return `<tr class="rel-patr-row">
+                <td class="rel-patr-mes">${mesEsc}</td>
                 <td style="color:var(--success)">${fmt(l.entradas)}</td>
                 <td style="color:var(--danger)">${fmt(l.saidas)}</td>
                 <td>${fmt(l.saldo)}</td>
                 <td style="color:var(--warning)">${fmt(l.reservas)}</td>
                 <td>
-                    <div class="rel-patr-bar-wrap">
-                        <div class="rel-patr-bar" style="width:${pct.toFixed(1)}%"></div>
-                    </div>
+                    <div class="rel-patr-bar-wrap"><div class="rel-patr-bar" style="width:${pct.toFixed(1)}%"></div></div>
                     <span style="font-weight:700;color:var(--primary)">${fmt(l.patrimonio)}</span>
-                    ${i > 0 ? `<span style="font-size:0.75rem;color:${corD};margin-left:6px"><i class="fas fa-${icD}"></i></span>` : ''}
+                    <span style="font-size:0.75rem;color:${corD};margin-left:6px"><i class="fas fa-${icD}"></i></span>
                 </td>
             </tr>`;
-    }).join('');
+        }).join('');
+    }
+
+    const _STEPS = { mensal:1, bimestral:2, trimestral:3, semestral:6, anual:12 };
+    let _periodoAtivo = 'mensal';
+    const linhasIniciais = _agruparPorPeriodo(linhas, 1);
 
     container.innerHTML = `
         <div class="rel-patrimonio-wrap">
             <div class="rel-patrimonio-header">
                 <h2><i class="fas fa-chart-area"></i> Histórico Patrimonial</h2>
-                <p>Evolução do seu patrimônio mês a mês — saldo disponível + total em reservas</p>
+                <p>Evolução do seu patrimônio — saldo disponível + total em reservas</p>
             </div>
 
             <div class="rel-patrimonio-cards">
@@ -3324,9 +3384,7 @@ function gerarHistoricoPatrimonial(container) {
                 </div>
                 <div class="rel-patr-card">
                     <div class="rel-patr-card-label">Variação Total</div>
-                    <div class="rel-patr-card-value" style="color:${corV}">
-                        ${variacao >= 0 ? '+' : ''}${fmt(variacao)}
-                    </div>
+                    <div class="rel-patr-card-value" style="color:${corV}">${variacao >= 0 ? '+' : ''}${fmt(variacao)}</div>
                 </div>
                 <div class="rel-patr-card">
                     <div class="rel-patr-card-label">Melhor Mês</div>
@@ -3334,29 +3392,45 @@ function gerarHistoricoPatrimonial(container) {
                     <div style="font-size:0.78rem;color:var(--text-secondary)">+${fmt(melhorMes.entradas - melhorMes.saidas)}</div>
                 </div>
                 <div class="rel-patr-card">
-                    <div class="rel-patr-card-label">Mês com Mais Saídas</div>
+                    <div class="rel-patr-card-label">Mais Saídas</div>
                     <div class="rel-patr-card-value" style="color:var(--danger);font-size:1rem">${piorMes.label}</div>
                     <div style="font-size:0.78rem;color:var(--text-secondary)">${fmt(piorMes.saidas)} saídas</div>
                 </div>
             </div>
 
+            <div class="rel-patr-periodo-bar" id="patrPeriodoBar"></div>
+
             <div class="rel-patrimonio-table-wrap">
                 <table class="rel-patrimonio-table">
                     <thead>
-                        <tr>
-                            <th>Mês</th>
-                            <th>Entradas</th>
-                            <th>Saídas</th>
-                            <th>Saldo</th>
-                            <th>Reservas</th>
-                            <th>Patrimônio</th>
-                        </tr>
+                        <tr><th>Período</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Reservas</th><th>Patrimônio</th></tr>
                     </thead>
-                    <tbody>${linhasHTML}</tbody>
+                    <tbody id="patrTableBody">${_renderLinhas(linhasIniciais)}</tbody>
                 </table>
             </div>
         </div>
     `;
+
+    // Adiciona seletor de período via DOM (evita dados de usuário em innerHTML)
+    const periodoBar = container.querySelector('#patrPeriodoBar');
+    if (periodoBar) {
+        [['mensal','Mensal'],['bimestral','Bimestral'],['trimestral','Trimestral'],['semestral','Semestral'],['anual','Anual']].forEach(([key, lbl]) => {
+            const btn = document.createElement('button');
+            btn.type      = 'button';
+            btn.className = 'rel-patr-periodo-btn' + (key === _periodoAtivo ? ' rel-patr-periodo-btn--active' : '');
+            btn.textContent = lbl;
+            btn.addEventListener('click', () => {
+                _periodoAtivo = key;
+                periodoBar.querySelectorAll('.rel-patr-periodo-btn').forEach(b => {
+                    b.classList.toggle('rel-patr-periodo-btn--active', b.textContent === lbl);
+                });
+                const agrup = _agruparPorPeriodo(linhas, _STEPS[key]);
+                const tbody = container.querySelector('#patrTableBody');
+                if (tbody) tbody.innerHTML = _renderLinhas(agrup);
+            });
+            periodoBar.appendChild(btn);
+        });
+    }
 }
 
 // ========== SCORE FINANCEIRO ==========

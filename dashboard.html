@@ -893,6 +893,16 @@
                                     </div>
                                     <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
                                 </button>
+                                <button class="cfg-item" id="btnToggleSwipeNav" type="button" aria-pressed="false">
+                                    <div class="cfg-item-icon cfg-item-icon--emerald"><i class="fas fa-hand-pointer" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Navegar com Swipe</span>
+                                        <span class="cfg-item-sub" id="swipeNavStatusText">Deslize para trocar de seção no mobile</span>
+                                    </div>
+                                    <div class="cfg-toggle" id="swipeNavToggle" aria-hidden="true">
+                                        <div class="cfg-toggle-track"></div>
+                                    </div>
+                                </button>
                             </div>
                         </div>
 
@@ -994,6 +1004,14 @@
     <!-- MODAL/POPUP -->
     <div id="modalOverlay" class="modal-overlay" role="presentation"></div>
     <div id="modalContainer" role="dialog" aria-modal="true" aria-label="Janela de diálogo"></div>
+
+    <!-- BOTTOM SHEET (modal adaptativo mobile) -->
+    <div id="bottomSheetOverlay" role="presentation">
+        <div id="bottomSheetContainer" role="dialog" aria-modal="true" aria-label="Painel de ação">
+            <div class="bottom-sheet-handle" aria-hidden="true"></div>
+            <div class="bottom-sheet-content" id="bottomSheetContent"></div>
+        </div>
+    </div>
 
     <!-- Scripts do Sistema -->
     <script type="module" src="src/scripts/pages/dashboard.js?v=27"></script>
