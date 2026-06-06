@@ -2,7 +2,7 @@
 let _ctx = null;
 
 // ===== CDI automático =====
-const _CDI_CACHE_KEY = '_ge_cdi_v1';
+const _CDI_CACHE_KEY = '_ge_cdi_v2';
 const _CDI_FALLBACK  = 10.5;
 let   _cdiAnual      = _CDI_FALLBACK;
 
@@ -11,21 +11,33 @@ async function _fetchCDI() {
         const cached = localStorage.getItem(_CDI_CACHE_KEY);
         if (cached) {
             const { val, ts } = JSON.parse(cached);
-            if (Date.now() - ts < 86_400_000) { _cdiAnual = val; return val; }
+            // Cache de 6h — BCB atualiza a série 4389 com lag após COPOM
+            if (Date.now() - ts < 21_600_000) { _cdiAnual = val; return val; }
         }
     } catch {}
-    try {
-        // Série 4389 = CDI anualizado (% a.a.). Séries auxiliares: 4189 = Meta Selic
-        const res  = await fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json');
-        const json = await res.json();
-        const val  = parseFloat(json[0]?.valor?.replace(',', '.'));
-        if (Number.isFinite(val) && val > 0) {
-            _cdiAnual = val;
-            try { localStorage.setItem(_CDI_CACHE_KEY, JSON.stringify({ val, ts: Date.now() })); } catch {}
-            _atualizarLabelCDI(val);
-            return val;
-        }
-    } catch {}
+
+    // Busca série 4389 (CDI efetivo) e série 432 (Meta Selic) em paralelo.
+    // A série 4389 costuma atrasar após decisões do COPOM; a 432 reflete
+    // a meta imediatamente. Usamos o maior entre os dois.
+    const _parseBCB = async (serie) => {
+        const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${serie}/dados/ultimos/1?formato=json`;
+        try {
+            const res  = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+            const json = await res.json();
+            const v    = parseFloat(String(json[0]?.valor ?? '').replace(',', '.'));
+            return Number.isFinite(v) && v > 0 ? v : null;
+        } catch { return null; }
+    };
+
+    const [cdi, selic] = await Promise.all([_parseBCB(4389), _parseBCB(432)]);
+    const val = [cdi, selic].reduce((max, v) => (v !== null && v > max ? v : max), 0);
+
+    if (val > 0) {
+        _cdiAnual = val;
+        try { localStorage.setItem(_CDI_CACHE_KEY, JSON.stringify({ val, ts: Date.now() })); } catch {}
+        _atualizarLabelCDI(val);
+        return val;
+    }
     return null;
 }
 
