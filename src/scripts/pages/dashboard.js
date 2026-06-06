@@ -2388,6 +2388,8 @@ function atualizarDashboardResumo() {
     const suffixo = isMesAtualView ? '' : ` · ${_NOMES_MESES_DASH[parseInt(filtroMes.mes,10)-1]}`;
     if (labelEntEl) labelEntEl.textContent = `Entradas${suffixo}`;
     if (labelSaiEl) labelSaiEl.textContent = `Saídas${suffixo}`;
+
+    document.querySelector('.cards-grid[data-loading]')?.removeAttribute('data-loading');
 }
 
 // ========== SISTEMA DE NOTIFICAÇÕES DE VENCIMENTO ==========
@@ -5197,12 +5199,56 @@ window.addEventListener('blur', () => {
     }
 });
 
+// ========== INDICADOR DE SAVE E ESTADO OFFLINE ==========
+function _initSyncIndicator() {
+    let _offlineMode = !navigator.onLine;
+    let _clearTimer  = null;
+
+    function _setSync(state, text, autoHideMs) {
+        if (_clearTimer) { clearTimeout(_clearTimer); _clearTimer = null; }
+        const els = [
+            document.getElementById('syncIndicator'),
+            document.getElementById('syncIndicatorDesktop'),
+        ].filter(Boolean);
+        for (const el of els) {
+            if (state) { el.dataset.state = state; el.textContent = text; }
+            else { delete el.dataset.state; el.textContent = ''; }
+        }
+        if (autoHideMs > 0) _clearTimer = setTimeout(() => _setSync(null, '', 0), autoHideMs);
+    }
+
+    document.addEventListener('ge:save-start', () => {
+        if (_offlineMode) return;
+        _setSync('saving', 'Salvando...', 0);
+    });
+    document.addEventListener('ge:save-done', () => {
+        if (_offlineMode) return;
+        _setSync('saved', 'Salvo ✓', 3_000);
+    });
+    document.addEventListener('ge:save-error', () => {
+        if (_offlineMode) return;
+        _setSync('error', 'Erro ao salvar', 5_000);
+    });
+
+    window.addEventListener('offline', () => {
+        _offlineMode = true;
+        _setSync('error', 'Sem conexão', 0);
+    });
+    window.addEventListener('online', () => {
+        _offlineMode = false;
+        _setSync('saved', 'Conectado ✓', 3_000);
+    });
+
+    if (_offlineMode) _setSync('error', 'Sem conexão', 0);
+}
+
 // ========== INICIALIZAÇÃO ==========
 document.addEventListener('DOMContentLoaded', () => {
     verificarLogin();
     bindEventos();
     setupSidebarToggle();
     _initBtnPeriodoDash();
+    _initSyncIndicator();
 
     // Fallback para qualquer <img> de foto de perfil que falhar ao carregar
     document.querySelectorAll('#userPhoto, #mobileUserPhoto, #cfgUserPhoto').forEach(img => {

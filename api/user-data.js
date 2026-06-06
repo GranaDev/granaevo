@@ -10,7 +10,7 @@
 //   POST { action:"push-subscribe", endpoint, p256dh, auth, userAgent? }
 //   POST { action:"push-unsubscribe", endpoint }
 
-import { checkRate, checkRateWindow } from './_rate-limit.js'
+import { checkRate, checkRateWindow, isIPBlocked } from './_rate-limit.js'
 import { logger } from './_logger.js'
 
 const PATH = '/api/user-data'
@@ -123,6 +123,12 @@ export default async function handler(req, res) {
                 ? req.headers['x-forwarded-for'].split(',')[0].trim()
                 : req.socket?.remoteAddress ?? 'unknown'
     );
+
+    // Blocklist persistente — IPs bloqueados por atingirem thresholds de ataque
+    if (await isIPBlocked(ip)) {
+        logger.warn('ip_blocked', PATH, { ip });
+        return res.status(403).json({ error: 'Forbidden' });
+    }
 
     // CSRF — Origin + Sec-Fetch-*
     if (origin && !ALLOWED_ORIGINS.includes(origin))

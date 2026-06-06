@@ -7,6 +7,8 @@
     <title>Dashboard - GranaEvo</title>
 
     <!-- CSP definida via HTTP header em vercel.json — não duplicar aqui -->
+    <!-- Aplica tema salvo antes do primeiro render (script clássico, síncrono) -->
+    <script src="/theme-init.js"></script>
 
     <!-- beforeinstallprompt capturado o mais cedo possível.
          O pwa-installer.js é lazy-loaded (Configurações) e perderia o evento
@@ -38,6 +40,8 @@
     <link rel="stylesheet" href="src/styles/graficos.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Supabase: abre TCP+TLS com antecedência — reduz latência da primeira API call -->
+    <link rel="preconnect" href="https://fvrhqqeofqedmhadzzqw.supabase.co" crossorigin>
     <!-- [GOD6-M02] preconnect cdn.jsdelivr.net removido — Chart.js agora é self-hosted -->
     <link
         href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap"
@@ -271,7 +275,7 @@
                 </div>
                 <!-- ===== FIM SALDO HERO MOBILE ===== -->
 
-                <div class="cards-grid">
+                <div class="cards-grid" data-loading>
                     <div class="card card-green" id="cardEntradasDashboard">
                         <div class="card-icon"><i class="fas fa-arrow-trend-up" aria-hidden="true"></i></div>
                         <div class="card-content">
@@ -856,6 +860,16 @@
                         <div class="cfg-section">
                             <div class="cfg-section-label">Aplicativo</div>
                             <div class="cfg-list">
+                                <button class="cfg-item" id="btnToggleTema" type="button" aria-pressed="false">
+                                    <div class="cfg-item-icon cfg-item-icon--purple"><i class="fas fa-adjust" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Tema do App</span>
+                                        <span class="cfg-item-sub" id="themeStatusText">Escuro</span>
+                                    </div>
+                                    <div class="cfg-toggle" id="themeToggle" aria-hidden="true">
+                                        <div class="cfg-toggle-track"></div>
+                                    </div>
+                                </button>
                                 <button class="cfg-item" id="btnInstalarApp" type="button">
                                     <div class="cfg-item-icon cfg-item-icon--emerald"><i class="fas fa-download" aria-hidden="true"></i></div>
                                     <div class="cfg-item-text">

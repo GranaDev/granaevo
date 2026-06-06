@@ -253,6 +253,56 @@
 }
 
 
+/* ── Toggle Switch (tema claro/escuro) ──────────────────────────────── */
+.cfg-toggle {
+    position: relative;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+.cfg-toggle-track {
+    display: block;
+    width: 44px;
+    height: 26px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    transition: background 0.2s ease, border-color 0.2s ease;
+    position: relative;
+}
+
+.cfg-toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.45);
+    border-radius: 50%;
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.cfg-toggle--active .cfg-toggle-track {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.cfg-toggle--active .cfg-toggle-track::after {
+    transform: translateX(18px);
+    background: #ffffff;
+}
+
+/* Light theme: adapta o track para fundo claro */
+[data-theme="light"] .cfg-toggle-track {
+    background: rgba(0, 0, 0, 0.12);
+    border-color: rgba(0, 0, 0, 0.10);
+}
+
+[data-theme="light"] .cfg-toggle-track::after {
+    background: rgba(0, 0, 0, 0.35);
+}
+
 /* ── Ícone laranja (reset/danger-soft) ─────────────────────────────── */
 .cfg-item-icon--orange { background: rgba(234, 88, 12, 0.15); color: #ea580c; }
 
@@ -262,3 +312,23 @@
     border-color: rgba(234, 88, 12, 0.2) !important;
 }
 .cfg-item--danger-soft .cfg-item-title { color: #ea580c; }
+
+/* ── Adaptações para tema claro ─────────────────────────────────────── */
+[data-theme="light"] .cfg-profile-card {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.07);
+}
+
+[data-theme="light"] .cfg-list {
+    background: rgba(0, 0, 0, 0.02);
+    border-color: rgba(0, 0, 0, 0.07);
+}
+
+[data-theme="light"] .cfg-item {
+    border-bottom-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .cfg-item:hover,
+[data-theme="light"] .cfg-item:active {
+    background: rgba(0, 0, 0, 0.04);
+}

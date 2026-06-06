@@ -30,6 +30,8 @@ export function init(ctx) {
     _updateOfflineStatus();
     // Inicializa botão de notificações push
     _initPushButton();
+    // Inicializa toggle de tema claro/escuro
+    _initThemeToggle();
     // Inicializa botão de backup nas configurações (binding dinâmico)
     _bindBtnBackup();
 }
@@ -92,6 +94,35 @@ function _initPushButton() {
         }
 
         btn.disabled = currentPerm !== 'granted' && getPushPermission() === 'denied';
+    });
+}
+
+function _applyTheme(isLight) {
+    if (isLight) {
+        document.documentElement.setAttribute('data-theme', 'light');
+        try { localStorage.setItem('ge_theme', 'light'); } catch {}
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        try { localStorage.setItem('ge_theme', 'dark'); } catch {}
+    }
+    const status = document.getElementById('themeStatusText');
+    const toggle = document.getElementById('themeToggle');
+    const btn    = document.getElementById('btnToggleTema');
+    if (status) status.textContent = isLight ? 'Claro' : 'Escuro';
+    if (toggle) toggle.classList.toggle('cfg-toggle--active', isLight);
+    if (btn)    btn.setAttribute('aria-pressed', String(isLight));
+}
+
+function _initThemeToggle() {
+    const btn = document.getElementById('btnToggleTema');
+    if (!btn) return;
+
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    _applyTheme(isLight);
+
+    btn.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') === 'light';
+        _applyTheme(!current);
     });
 }
 

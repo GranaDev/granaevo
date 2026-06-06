@@ -46,6 +46,26 @@ const CONFIG = Object.freeze({
 const LOGIN_ERROR_MSG = 'Tentativa inválida: email ou senha incorreto';
 
 // ═══════════════════════════════════════════════════════════════
+//  MAPEAMENTO DE CÓDIGOS DE REDIRECT DO AUTH-GUARD (?c=)
+//  Códigos emitidos por auth-guard.js ao redirecionar para login.
+// ═══════════════════════════════════════════════════════════════
+const _AUTH_REDIRECT_MSGS = Object.freeze({
+    a1: { msg: 'Sua sessão expirou. Por favor, entre novamente.',                        type: 'error'   },
+    a2: { msg: 'Sua sessão expirou. Por favor, entre novamente.',                        type: 'error'   },
+    a3: { msg: 'Sessão encerrada por segurança. Por favor, entre novamente.',            type: 'error'   },
+    a4: { msg: 'Sessão encerrada por inatividade. Por favor, entre novamente.',          type: 'error'   },
+    a5: { msg: 'Sessão encerrada por segurança. Por favor, entre novamente.',            type: 'error'   },
+    a6: { msg: 'Muitas tentativas de acesso. Aguarde alguns minutos e tente novamente.', type: 'error'   },
+    a7: { msg: 'Assinatura não encontrada. Verifique seu plano para continuar.',         type: 'error',  redirect: 'planos.html' },
+    a8: { msg: 'Esta página não está disponível para convidados.',                       type: 'error'   },
+    a9: { msg: 'Convidados não podem gerenciar planos.',                                 type: 'error'   },
+    b1: { msg: 'Sua sessão foi encerrada. Por favor, entre novamente.',                  type: 'error'   },
+    b2: { msg: 'Você saiu da sua conta com sucesso.',                                    type: 'success' },
+    b3: { msg: 'Sessão encerrada por segurança. Por favor, entre novamente.',            type: 'error'   },
+    b4: { msg: 'Ocorreu um problema. Por favor, entre novamente.',                       type: 'error'   },
+});
+
+// ═══════════════════════════════════════════════════════════════
 //  CABEÇALHOS
 // ═══════════════════════════════════════════════════════════════
 async function _requireSessionHeader() {
@@ -658,6 +678,23 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     createMoneyParticles();
     createAnimatedCharts();
+
+    // Interpreta ?c= (código de redirect emitido pelo auth-guard) e exibe mensagem amigável.
+    // Remove o parâmetro da URL após leitura para evitar reexibição ao recarregar.
+    try {
+        const urlParams    = new URLSearchParams(window.location.search);
+        const redirectCode = urlParams.get('c');
+        if (redirectCode) {
+            urlParams.delete('c');
+            const newSearch = urlParams.toString();
+            history.replaceState(null, '', window.location.pathname + (newSearch ? '?' + newSearch : ''));
+            const entry = _AUTH_REDIRECT_MSGS[redirectCode];
+            if (entry) {
+                showAuthMessage(entry.msg, entry.type);
+                if (entry.redirect) setTimeout(() => window.location.replace(entry.redirect), 2500);
+            }
+        }
+    } catch {}
 
     const authError = sessionStorage.getItem('auth_error');
     if (authError) {

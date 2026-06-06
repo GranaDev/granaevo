@@ -40,11 +40,10 @@ const ALLOWED_ORIGINS = [
   'https://www.granaevo.com',
 ]
 
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin  = req.headers.get('origin') ?? ''
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+function getCorsHeaders(origin: string): Record<string, string> | null {
+  if (!ALLOWED_ORIGINS.includes(origin)) return null
   return {
-    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Origin':  origin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-proxy-secret',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin',
@@ -69,7 +68,16 @@ function json(body: unknown, status = 200, corsHeaders: Record<string, string>):
 }
 
 Deno.serve(async (req: Request) => {
-  const corsHeaders = getCorsHeaders(req)
+  const origin      = req.headers.get('origin') ?? ''
+  const corsHeaders = getCorsHeaders(origin)
+
+  // Rejeita origins não autorizadas — sem fallback para domínio padrão
+  if (!corsHeaders) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json', 'Vary': 'Origin' },
+    })
+  }
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders })

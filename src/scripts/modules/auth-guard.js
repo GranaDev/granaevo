@@ -570,154 +570,82 @@ const SubscriptionChecker = (() => {
             }
 
             try {
-                // ── 1. Stripe — busca por user_id (inclui Cakto migrados) ────
-                // Todos os planos agora em stripe_subscriptions. Cakto migrado
-                // aparece como status='active' + current_period_end=2099.
-                const { data: stripeSub, error: stripeErr } = await supabase
-                    .from('stripe_subscriptions')
-                    .select('id, plan_name, status, current_period_end')
-                    .eq('user_id', userId)
-                    .in('status', ['active', 'trialing'])
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
+                // Uma única round-trip ao banco via RPC — substitui 5 queries sequenciais.
+                const { data: result, error: rpcErr } = await supabase
+                    .rpc('get_user_access_data', { p_user_id: userId });
 
-                if (!stripeErr && stripeSub) {
-                    // Período ainda válido ou sem data de expiração definida
-                    if (!stripeSub.current_period_end ||
-                        new Date(stripeSub.current_period_end) >= new Date()) {
-                        _cache = Object.freeze({
-                            subscription: stripeSub,
-                            isGuest:      false,
-                            ownerId:      userId,
-                            planName:     _normalizePlanName(stripeSub.plan_name),
-                            ownerEmail:   null,
-                        });
-                        _cacheUser = userId;
-                        _cacheExp  = Date.now() + CACHE_TTL;
-                        return _cache;
+                if (rpcErr || !result) return EMPTY;
+
+                const type = result.type;
+                const sub  = result.sub;
+
+                // ── Subscription ativa por user_id ──────────────────────────
+                if (type === 'active') {
+                    _cache = Object.freeze({
+                        subscription: sub,
+                        isGuest:      false,
+                        ownerId:      userId,
+                        planName:     _normalizePlanName(sub.plan_name),
+                        ownerEmail:   null,
+                    });
+                    _cacheUser = userId;
+                    _cacheExp  = Date.now() + CACHE_TTL;
+                    return _cache;
+                }
+
+                // ── Subscription ativa por email (user_id IS NULL) ──────────
+                if (type === 'active_email') {
+                    // Auto-link em background — JWT confirma que o email é verificado
+                    const { data: authData } = await supabase.auth.getUser();
+                    const authUser = authData?.user;
+                    if (authUser?.email_confirmed_at) {
+                        _autoLinkStripe(sub.id, userId, result.user_email, sub.user_email);
+                        _cache     = null;
+                        _cacheUser = null;
+                        _cacheExp  = 0;
                     }
+                    return Object.freeze({
+                        subscription: sub,
+                        isGuest:      false,
+                        ownerId:      userId,
+                        planName:     _normalizePlanName(sub.plan_name),
+                        ownerEmail:   null,
+                    });
                 }
 
-                // ── 2. Fallback por email (user_id = NULL) ────────────
-                // Compra feita sem login ou Cakto migrado sem user_id vinculado.
-                const { data: authData } = await supabase.auth.getUser();
-                const authUser     = authData?.user;
-                const sessionEmail = authUser?.email;
-
-                if (sessionEmail) {
-                    // Stripe by email (inclui Cakto migrados sem user_id)
-                    const { data: stripeEmailSub, error: stripeEmailErr } = await supabase
-                        .from('stripe_subscriptions')
-                        .select('id, plan_name, status, current_period_end, user_email')
-                        .is('user_id', null)
-                        .eq('user_email', sessionEmail.toLowerCase())
-                        .in('status', ['active', 'trialing'])
-                        .order('created_at', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
-
-                    if (!stripeEmailErr && stripeEmailSub) {
-                        if (!stripeEmailSub.current_period_end ||
-                            new Date(stripeEmailSub.current_period_end) >= new Date()) {
-
-                            const emailConfirmedStripe = !!authUser?.email_confirmed_at;
-                            if (emailConfirmedStripe) {
-                                // Auto-link em background (RLS "stripe_sub_update_claim")
-                                _autoLinkStripe(
-                                    stripeEmailSub.id,
-                                    userId,
-                                    sessionEmail,
-                                    stripeEmailSub.user_email,
-                                );
-                                _cache     = null;
-                                _cacheUser = null;
-                                _cacheExp  = 0;
-                            }
-
-                            return Object.freeze({
-                                subscription: stripeEmailSub,
-                                isGuest:      false,
-                                ownerId:      userId,
-                                planName:     _normalizePlanName(stripeEmailSub.plan_name),
-                                ownerEmail:   null,
-                            });
-                        }
-                    }
+                // ── Estado congelado — cancelado < 90 dias ──────────────────
+                if (type === 'frozen') {
+                    const daysSince =
+                        (Date.now() - new Date(sub.current_period_end).getTime()) / 86_400_000;
+                    return {
+                        subscription:      null,
+                        isGuest:           false,
+                        ownerId:           userId,
+                        planName:          null,
+                        ownerEmail:        null,
+                        isFrozen:          true,
+                        daysUntilDeletion: Math.max(1, Math.ceil(90 - daysSince)),
+                        frozenPlanName:    _normalizePlanName(sub.plan_name),
+                    };
                 }
 
-                // ── 2.6: Estado "congelado" — cancelado há menos de 90 dias ──────
-                // Se não há plano ativo mas existe uma assinatura Stripe cancelada
-                // dentro do período de 90 dias de retenção de dados, retorna um
-                // estado especial que exibe a tela de assinatura encerrada.
-                try {
-                    const { data: frozenSub } = await supabase
-                        .from('stripe_subscriptions')
-                        .select('plan_name, current_period_end')
-                        .eq('user_id', userId)
-                        .eq('status', 'canceled')
-                        .order('updated_at', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
-
-                    if (frozenSub?.current_period_end) {
-                        const daysSince =
-                            (Date.now() - new Date(frozenSub.current_period_end).getTime()) / 86_400_000;
-                        if (daysSince <= 90) {
-                            return {
-                                subscription:      null,
-                                isGuest:           false,
-                                ownerId:           userId,
-                                planName:          null,
-                                ownerEmail:        null,
-                                isFrozen:          true,
-                                daysUntilDeletion: Math.max(1, Math.ceil(90 - daysSince)),
-                                frozenPlanName:    _normalizePlanName(frozenSub.plan_name),
-                            };
-                        }
-                    }
-                } catch {
-                    // Não bloqueia o fluxo — segue para verificação de convidado
+                // ── Convidado ───────────────────────────────────────────────
+                if (type === 'guest') {
+                    const ownerId   = result.owner_user_id;
+                    const planName  = _normalizePlanName(sub.plan_name);
+                    _cache = Object.freeze({
+                        subscription: sub,
+                        isGuest:      true,
+                        ownerId,
+                        planName:     planName || 'Individual',
+                        ownerEmail:   result.owner_email,
+                    });
+                    _cacheUser = userId;
+                    _cacheExp  = Date.now() + CACHE_TTL;
+                    return _cache;
                 }
 
-                // ── 3. Verifica se é convidado ────────────────────────
-                const { data: member, error: memErr } = await supabase
-                    .from('account_members')
-                    .select('id, owner_user_id, owner_email, is_active')
-                    .eq('member_user_id', userId)
-                    .eq('is_active', true)
-                    .maybeSingle();
-
-                if (memErr || !member) return EMPTY;
-
-                // Verifica subscription do dono (todos em stripe_subscriptions)
-                const { data: ownerStripe } = await supabase
-                    .from('stripe_subscriptions')
-                    .select('id, plan_name, status, current_period_end')
-                    .eq('user_id', member.owner_user_id)
-                    .in('status', ['active', 'trialing'])
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
-
-                if (!ownerStripe) return EMPTY;
-                if (ownerStripe.current_period_end && new Date(ownerStripe.current_period_end) < new Date()) {
-                    return EMPTY;
-                }
-
-                const finalSub      = ownerStripe;
-                const finalPlanName = _normalizePlanName(ownerStripe.plan_name);
-
-                _cache = Object.freeze({
-                    subscription: finalSub,
-                    isGuest:      true,
-                    ownerId:      member.owner_user_id,
-                    planName:     finalPlanName || 'Individual',
-                    ownerEmail:   member.owner_email,
-                });
-                _cacheUser = userId;
-                _cacheExp  = Date.now() + CACHE_TTL;
-                return _cache;
+                return EMPTY;
 
             } catch {
                 return EMPTY;

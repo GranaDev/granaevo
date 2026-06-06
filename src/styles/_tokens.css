@@ -169,6 +169,48 @@
     --neon-glow-strong: var(--shadow-neon-strong);
   }
 
+  /* ── Tema Claro ─────────────────────────────────────────────── */
+  [data-theme="light"] {
+    --color-bg:             #f4f6fa;
+    --color-bg-card:        #ffffff;
+    --color-bg-soft:        #eaecf4;
+    --color-bg-elevated:    #dde0ee;
+
+    --color-text:           #111827;
+    --color-text-muted:     #4b5563;
+    --color-text-faint:     #6b7280;
+    --color-text-lighter:   #374151;
+
+    --color-border:         rgba(0, 0, 0, 0.08);
+    --color-border-strong:  rgba(0, 0, 0, 0.15);
+
+    --shadow-sm:            0 2px 8px rgba(0, 0, 0, 0.05);
+    --shadow-md:            0 4px 16px rgba(0, 0, 0, 0.08);
+    --shadow-lg:            0 8px 32px rgba(0, 0, 0, 0.12);
+    --shadow-xl:            0 16px 48px rgba(0, 0, 0, 0.15);
+    --shadow-card:          0 4px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0,0,0,0.04);
+    --shadow-neon:          0 0 20px rgba(16, 185, 129, 0.25);
+    --shadow-neon-strong:   0 0 40px rgba(16, 185, 129, 0.40);
+    --shadow-neon-sm:       0 0 10px rgba(16, 185, 129, 0.15);
+
+    --backdrop:             rgba(234, 236, 244, 0.97);
+    --gradient-dark:        linear-gradient(135deg, var(--color-bg-soft), var(--color-bg-elevated));
+
+    /* Aliases */
+    --dark:            var(--color-bg);
+    --dark-card:       var(--color-bg-card);
+    --dark-soft:       var(--color-bg-soft);
+    --text-primary:    var(--color-text);
+    --text-secondary:  var(--color-text-lighter);
+    --text-muted:      var(--color-text-faint);
+    --gray:            var(--color-text-faint);
+    --gray-light:      var(--color-text-muted);
+    --gray-lighter:    var(--color-text-lighter);
+    --border:          var(--color-border);
+    --secondary:       var(--color-bg-soft);
+    --secondary-light: var(--color-bg-elevated);
+  }
+
   /* ── Preferência: sem movimento ─────────────────────────────── */
   @media (prefers-reduced-motion: reduce) {
     :root {

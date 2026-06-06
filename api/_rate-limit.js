@@ -159,3 +159,63 @@ export async function checkRateWithUser(ip, userId, max, windowSecs = 60) {
 
 /** true se Redis está configurado e sendo utilizado */
 export const isRedisEnabled = USE_REDIS
+
+// ── Blocklist persistente de IPs ──────────────────────────────────────────────
+const BLOCKLIST_PREFIX = 'blocklist:ip:'
+const BLOCKLIST_DEFAULT_TTL = 3_600 // 1 hora em segundos
+
+// In-memory como fallback quando Redis não está disponível
+const _blockedIPs = new Map() // ip → expiry timestamp (ms)
+
+setInterval(() => {
+  const now = Date.now()
+  for (const [ip, expiry] of _blockedIPs) {
+    if (now > expiry) _blockedIPs.delete(ip)
+  }
+}, 60_000)
+
+/**
+ * Verifica se um IP está na blocklist persistente.
+ * @param {string} ip
+ * @returns {Promise<boolean>}
+ */
+export async function isIPBlocked(ip) {
+  if (!ip || ip === 'unknown') return false
+  if (USE_REDIS) {
+    try {
+      const res = await fetch(`${REDIS_URL}/exists/${BLOCKLIST_PREFIX}${ip}`, {
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+        signal:  AbortSignal.timeout(2_000),
+      })
+      if (!res.ok) return _blockedIPs.has(ip) && Date.now() < (_blockedIPs.get(ip) ?? 0)
+      const data = await res.json()
+      return (data?.result ?? 0) > 0
+    } catch {
+      return _blockedIPs.has(ip) && Date.now() < (_blockedIPs.get(ip) ?? 0)
+    }
+  }
+  return _blockedIPs.has(ip) && Date.now() < (_blockedIPs.get(ip) ?? 0)
+}
+
+/**
+ * Adiciona um IP à blocklist persistente.
+ * @param {string} ip
+ * @param {number} [ttlSecs=3600] TTL em segundos
+ * @returns {Promise<void>}
+ */
+export async function blockIP(ip, ttlSecs = BLOCKLIST_DEFAULT_TTL) {
+  if (!ip || ip === 'unknown') return
+  _blockedIPs.set(ip, Date.now() + ttlSecs * 1_000)
+  if (!USE_REDIS) return
+  try {
+    await fetch(`${REDIS_URL}/pipeline`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify([
+        ['SET', `${BLOCKLIST_PREFIX}${ip}`, '1'],
+        ['EXPIRE', `${BLOCKLIST_PREFIX}${ip}`, ttlSecs],
+      ]),
+      signal: AbortSignal.timeout(2_000),
+    })
+  } catch { /* silêncio — in-memory já foi setado como fallback */ }
+}

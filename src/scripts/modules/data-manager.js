@@ -331,6 +331,7 @@ class DataManager {
         }
 
         this.#isSaving = true;
+        document.dispatchEvent(new CustomEvent('ge:save-start'));
 
         try {
             // Deep clone — imunidade a mutação externa durante operações assíncronas
@@ -386,15 +387,17 @@ class DataManager {
             if (!saveResp.ok) {
                 const errText = await saveResp.text().catch(() => '');
                 console.error('❌ [DATA-MANAGER] Erro ao salvar no banco:', saveResp.status, errText);
+                document.dispatchEvent(new CustomEvent('ge:save-error'));
                 return false;
             }
 
             this.#lastSaveTime = new Date();
-
+            document.dispatchEvent(new CustomEvent('ge:save-done'));
             return true;
 
         } catch (err) {
             console.error('❌ [DATA-MANAGER] Erro crítico ao salvar:', err?.message ?? err);
+            document.dispatchEvent(new CustomEvent('ge:save-error'));
             return false;
 
         } finally {

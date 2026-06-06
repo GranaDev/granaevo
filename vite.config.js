@@ -85,12 +85,30 @@ export default defineConfig(({ mode }) => ({
         // Sem navigate fallback (não interceptar navegação HTML)
         navigateFallback: null,
 
-        // Sem runtime caching de recursos externos.
-        // Font Awesome (cdnjs): browser HTTP cache com Cache-Control do CDN ✓
-        // Google Fonts: browser HTTP cache ✓
-        // Supabase API: sempre rede para dados financeiros frescos ✓
-        // Supabase Storage (avatares): browser HTTP cache ✓
-        runtimeCaching: [],
+        // Runtime caching limitado a recursos estáticos que N��O carregam dados financeiros:
+        //   - Google Fonts CSS: StaleWhileRevalidate (atualiza silenciosamente em background)
+        //   - Google Fonts webfonts (.woff2): CacheFirst (imutáveis por design — URLs incluem hash)
+        // NÃO cacheado: Supabase API, HTML, CDN de scripts — dados financeiros devem ser frescos.
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'ge-fonts-css',
+              expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 30 }, // 30 dias
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ge-fonts-woff2',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 }, // 1 ano
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
         // Injeta handler de push events no Service Worker
         importScripts: ['/sw-push-handler.js'],
       },

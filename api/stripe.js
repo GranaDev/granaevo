@@ -2,7 +2,7 @@
 // checkout: NÃO requer JWT — usuário paga antes de criar conta
 // portal:   REQUER JWT — gerenciar assinatura existente
 
-import { checkRate } from './_rate-limit.js'
+import { checkRate, isIPBlocked } from './_rate-limit.js'
 import { logger }    from './_logger.js'
 
 const PATH = '/api/stripe'
@@ -134,6 +134,12 @@ export default async function handler(req, res) {
   const ip = req.headers['x-real-ip']
     ?? (req.headers['x-forwarded-for'] ?? '').split(',')[0].trim()
     ?? 'unknown'
+
+  // Blocklist persistente — IPs bloqueados por atingirem thresholds de ataque
+  if (await isIPBlocked(ip)) {
+    logger.warn('ip_blocked', PATH, { ip, action })
+    return res.status(403).json({ error: 'Forbidden' })
+  }
 
   if (!(await checkRate(`stripe-${action}:${ip}`, RATE_LIMITS[action]))) {
     logger.warn('rate_limit', PATH, { ip, action })

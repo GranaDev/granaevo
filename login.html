@@ -25,9 +25,18 @@
         código) são renderizados manualmente pelo login.js via
         grecaptcha.render() com seus respectivos callbacks.
     -->
+    <!--
+        crossorigin="anonymous" isola o contexto de execução do reCAPTCHA
+        (impede que o script acesse cookies/credenciais desta origem).
+        SRI estático não é aplicável: Google serve api.js com conteúdo
+        dinâmico versionado — um hash fixo quebraria em cada deploy.
+        A proteção real é o domínio allowlist na CSP do vercel.json.
+    -->
     <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=__grOnLoad"
             async
-            defer></script>
+            defer
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"></script>
 </head>
 <body>
 

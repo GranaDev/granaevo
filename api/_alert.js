@@ -22,6 +22,11 @@ const ALERT_RECIPIENTS = ALERT_EMAILS
 const DEAD_LETTER_KEY  = 'alerts:dead_letter'
 const DEAD_LETTER_TTL  = 86_400 // 24 horas em segundos
 
+// IPs são bloqueados por 1 hora ao atingir threshold em eventos críticos
+const BLOCKLIST_PREFIX    = 'blocklist:ip:'
+const BLOCKLIST_TTL       = 3_600 // 1 hora em segundos
+const _BLOCK_ON_THRESHOLD = new Set(['jwt_forgery', 'webhook_tamper', 'proxy_bypass'])
+
 // Tipo de evento → { quantos eventos na janela disparam alerta, janela em segundos }
 const THRESHOLDS = {
   rate_limit_burst:  { count: 40,  window: 300  }, // 40 rate limits em 5min → scanning/botnet
@@ -39,6 +44,28 @@ const LABELS = {
   login_lockout:    '⚠️  Múltiplos Lockouts (possível credential stuffing)',
   upload_abuse:     '⚠️  Abuso de Upload de Fotos',
   proxy_bypass:     '🔴 Tentativa de Acesso Direto às Edge Functions (bypass de proxy Vercel)',
+}
+
+// ── Blocklist de IPs ──────────────────────────────────────────────────────────
+
+/** Bloqueia um IP no Redis por BLOCKLIST_TTL segundos. Fire-and-forget. */
+async function _blockIPInRedis(ip) {
+  if (!REDIS_URL || !REDIS_TOKEN || !ip || ip === 'unknown') return
+  try {
+    await fetch(`${REDIS_URL}/pipeline`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify([
+        ['SET', `${BLOCKLIST_PREFIX}${ip}`, '1'],
+        ['EXPIRE', `${BLOCKLIST_PREFIX}${ip}`, BLOCKLIST_TTL],
+      ]),
+      signal: AbortSignal.timeout(2_000),
+    })
+    console.log(JSON.stringify({
+      level: 'security', event: 'ip_blocked', ip, ttl: BLOCKLIST_TTL,
+      timestamp: new Date().toISOString(),
+    }))
+  } catch { /* silêncio */ }
 }
 
 // ── Dead-letter queue ─────────────────────────────────────────────────────────
@@ -145,6 +172,10 @@ export async function trackSecurityEvent(eventType, meta = {}) {
       const delivered = await _sendAlert(eventType, count, meta, false)
       if (!delivered) {
         await _saveDeadLetter(eventType, count, meta)
+      }
+      // Bloqueia o IP ao atingir threshold em eventos críticos de ataque direto
+      if (_BLOCK_ON_THRESHOLD.has(eventType) && meta?.ip) {
+        _blockIPInRedis(meta.ip).catch(() => {})
       }
     }
   } catch { /* silêncio — monitoramento nunca quebra o fluxo principal */ }

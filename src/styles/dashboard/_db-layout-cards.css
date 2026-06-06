@@ -182,3 +182,63 @@
 }
 
 /* ========== SECTION BOX ========== */
+
+/* ── Skeleton loader — cards-grid ──────────────────────────────────── */
+@keyframes skeleton-shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+}
+
+.cards-grid[data-loading] .card-value {
+    color: transparent !important;
+    min-width: 80px;
+    min-height: 1.1em;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.cards-grid[data-loading] .card-value::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.12) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.cards-grid[data-loading] .card-percent {
+    color: transparent !important;
+    height: 10px;
+    min-width: 60%;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    overflow: hidden;
+    position: relative;
+}
+
+.cards-grid[data-loading] .card-percent::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.08) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    animation-delay: 0.2s;
+}
+
+[data-theme="light"] .cards-grid[data-loading] .card-value {
+    background: rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .cards-grid[data-loading] .card-value::after {
+    background: linear-gradient(90deg, transparent 25%, rgba(0,0,0,0.08) 50%, transparent 75%);
+    background-size: 200% 100%;
+}
+[data-theme="light"] .cards-grid[data-loading] .card-percent {
+    background: rgba(0,0,0,0.05);
+}
+[data-theme="light"] .cards-grid[data-loading] .card-percent::after {
+    background: linear-gradient(90deg, transparent 25%, rgba(0,0,0,0.06) 50%, transparent 75%);
+    background-size: 200% 100%;
+}
