@@ -43,10 +43,11 @@ function _clonarDados(origem) {
 // SVG remoto bloqueado (pode conter JS embutido)
 // Aceita: data:image/*, caminhos relativos, HTTPS raster em domínio permitido
 const _DOMINIOS_FOTO_PERMITIDOS = Object.freeze([
+    // Supabase Storage — projeto atual
+    'fvrhqqeofqedmhadzzqw.supabase.co',
+    // CDN próprio (futuro)
     'cdn.granaevo.com',
     'images.granaevo.com',
-    'storage.googleapis.com',
-    'firebasestorage.googleapis.com'
 ]);
 
 function _fotoSegura(fotoRaw, inicialFallback) {
@@ -103,8 +104,13 @@ function _setSafeHTML(element, html) {
     template.innerHTML = html;
     const frag = template.content;
 
-    // Remove todos os <script>
-    frag.querySelectorAll('script').forEach(s => s.remove());
+    // Remove tags estruturalmente perigosas (execução de código ou exfiltração)
+    const _TAGS_BLOQUEADAS = ['script','iframe','frame','object','embed','applet',
+                              'link','meta','base','form','svg','math'];
+    _TAGS_BLOQUEADAS.forEach(tag => frag.querySelectorAll(tag).forEach(s => s.remove()));
+
+    // Esquemas URI perigosos — bloqueados em qualquer atributo
+    const _URI_PERIGOSOS = /^\s*(javascript|vbscript|data|blob|file):/i;
 
     // Remove todos os elementos perigosos
     frag.querySelectorAll('*').forEach(el => {
@@ -113,18 +119,17 @@ function _setSafeHTML(element, html) {
             if (el.hasAttribute(attr)) el.removeAttribute(attr);
         });
 
-        // Varredura extra: qualquer atributo que começa com "on"
+        // Varredura catch-all: qualquer atributo que começa com "on"
         Array.from(el.attributes).forEach(attr => {
             if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
         });
 
-        // Remove src/href com javascript:
-        ['src', 'href', 'action', 'formaction', 'data'].forEach(attr => {
+        // Remove URIs perigosos em atributos que aceitam URLs
+        ['src', 'href', 'action', 'formaction', 'data', 'srcdoc', 'poster',
+         'background', 'code', 'codebase', 'usemap', 'longdesc'].forEach(attr => {
             if (el.hasAttribute(attr)) {
                 const val = el.getAttribute(attr);
-                if (/^\s*javascript:/i.test(val) || /^\s*vbscript:/i.test(val)) {
-                    el.removeAttribute(attr);
-                }
+                if (_URI_PERIGOSOS.test(val)) el.removeAttribute(attr);
             }
         });
     });
@@ -246,15 +251,88 @@ let filtroAtual = {
     anoComparacao: null
 };
 
-// Cores do tema
+// Cores do tema — lidas dos CSS tokens via getComputedStyle para respeitar o design system
+function _lerToken(nome, fallback) {
+    try {
+        return getComputedStyle(document.documentElement).getPropertyValue(nome).trim() || fallback;
+    } catch { return fallback; }
+}
+
 const coresTema = {
-    primary: '#43a047',
-    success: '#00ff99',
-    danger: '#ff4b4b',
-    warning: '#ffd166',
-    accent: '#6c63ff',
-    gradient: ['#43a047', '#66bb6a', '#00ff99', '#6c63ff', '#ff4b4b', '#ffd166', '#8a84ff', '#ff6b6b']
+    get primary() { return _lerToken('--color-primary',       '#10b981'); },
+    get success()  { return _lerToken('--color-success',       '#10b981'); },
+    get danger()   { return _lerToken('--color-danger',        '#ef4444'); },
+    get warning()  { return _lerToken('--color-warning',       '#fbbf24'); },
+    get accent()   { return '#6c63ff'; },
+    get gradient() {
+        return [
+            _lerToken('--color-primary',       '#10b981'),
+            _lerToken('--color-primary-light',  '#34d399'),
+            _lerToken('--color-primary-neon',   '#6ee7b7'),
+            '#6c63ff', '#8a84ff',
+            _lerToken('--color-danger',         '#ef4444'),
+            _lerToken('--color-warning',        '#fbbf24'),
+            '#3b82f6',
+        ];
+    }
 };
+
+// ── ResizeObserver — charts responsivos sem distorção ─────────────────────────
+// Chama chart.resize() quando o container muda de tamanho (rotação, sidebar, etc.)
+let _resizeObserver = null;
+
+function _setupResizeObserver() {
+    if (typeof ResizeObserver === 'undefined') return;
+    if (_resizeObserver) _resizeObserver.disconnect();
+
+    _resizeObserver = new ResizeObserver(() => {
+        for (const id of Object.getOwnPropertyNames(graficosInstances)) {
+            try { graficosInstances[id]?.resize?.(); } catch { /* ignore */ }
+        }
+    });
+
+    // Observa o container principal dos gráficos
+    const containers = document.querySelectorAll(
+        '.graficos-container, #graficosContent, .chart-wrapper, [id$="Canvas"]'
+    );
+    containers.forEach(el => {
+        const parent = el.closest('.graficos-wrapper, .section-content, section') ?? el.parentElement;
+        if (parent) _resizeObserver.observe(parent);
+    });
+}
+
+// ── Defaults globais do Chart.js — aplicados uma vez no load ─────────────────
+function _configurarChartDefaults() {
+    if (typeof Chart === 'undefined') return;
+
+    Chart.defaults.animation = {
+        duration: 400,
+        easing:   'easeOutQuart',
+    };
+    Chart.defaults.color            = _lerToken('--color-text-muted', '#9ca3af');
+    Chart.defaults.borderColor      = _lerToken('--color-border',     'rgba(255,255,255,0.08)');
+    Chart.defaults.font.family      = "'DM Sans', 'Inter', 'Segoe UI', sans-serif";
+    Chart.defaults.font.size        = 12;
+    Chart.defaults.plugins.tooltip  = {
+        ...Chart.defaults.plugins.tooltip,
+        backgroundColor: _lerToken('--color-bg-card',     '#13141f'),
+        borderColor:     _lerToken('--color-border-primary', 'rgba(16,185,129,0.25)'),
+        borderWidth:     1,
+        titleColor:      _lerToken('--color-text',        '#ffffff'),
+        bodyColor:       _lerToken('--color-text-muted',  '#9ca3af'),
+        padding:         12,
+        cornerRadius:    8,
+        displayColors:   true,
+    };
+    Chart.defaults.plugins.legend = {
+        ...Chart.defaults.plugins.legend,
+        labels: {
+            color:      _lerToken('--color-text-lighter', '#d1d5db'),
+            padding:    16,
+            usePointStyle: true,
+        },
+    };
+}
 
 // ========== INICIALIZAÇÃO ==========
 // Substituído setTimeout(1000) frágil por evento customizado + MutationObserver
@@ -282,6 +360,9 @@ function inicializarGraficos() {
     // R6 FIX: sincronizar UserStore no boot — captura estado inicial do window
     // Após isso, UserStore.get*() é a única fonte de dados de usuário no módulo
     UserStore.sincronizar();
+
+    // Configura defaults visuais do Chart.js (cores dos tokens, tooltip, animações)
+    _configurarChartDefaults();
 
     configurarFiltros();
     configurarViewButtons();
@@ -477,11 +558,12 @@ async function gerarGraficos() {
         }
 
         esconderLoading();
+        // Registra ResizeObserver após os charts serem criados
+        _setupResizeObserver();
 
     } catch (error) {
         console.error('❌ ERRO ao gerar gráficos:', error);
         console.error('Stack trace:', error.stack);
-        // Mensagem de erro não expõe dados do objeto error ao usuário
         mostrarEmptyState('Erro ao processar dados. Verifique o console (F12) para mais detalhes.');
         esconderLoading();
     }

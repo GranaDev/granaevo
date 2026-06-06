@@ -132,7 +132,15 @@ export default defineConfig(({ mode }) => ({
           ) {
             return 'vendor-supabase';
           }
+          // Sentry em chunk separado — só carregado se houver erro, não bloqueia LCP
+          if (id.includes('@sentry')) {
+            return 'vendor-sentry';
+          }
         },
+        // Nomes legíveis em produção sem hash nos chunks vendor (cache-friendly)
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
       },
     },
     // esnext: tree shaking e output mais compacto que es2020
@@ -144,8 +152,13 @@ export default defineConfig(({ mode }) => ({
         drop_debugger: true,
         passes:        2,
         pure_getters:  true,
+        unsafe_math:   false,
         // Remove chamadas de log residuais
-        pure_funcs: ['console.log', 'console.info', 'console.debug'],
+        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.warn'],
+      },
+      mangle: {
+        // Reduz nomes de variáveis internas para strings menores
+        toplevel: false,
       },
       format: {
         comments: false,
@@ -160,6 +173,11 @@ export default defineConfig(({ mode }) => ({
     // Vite 8 usa LightningCSS por padrão — mantém esbuild para compatibilidade
     // com !important em múltiplos valores de transition.
     cssMinify: 'esbuild',
+  },
+
+  // Otimiza dependências internas do dev server (pre-bundling)
+  optimizeDeps: {
+    include: ['@supabase/supabase-js', 'chart.js'],
   },
 
   server: {

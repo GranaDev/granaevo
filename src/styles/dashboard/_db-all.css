@@ -8221,6 +8221,43 @@ button,
 }
 
 /* ==========================================
+   PERFORMANCE — Containment & Rendering
+   ========================================== */
+
+/* Containment em elementos de grid repetidos — isola reflow/repaint por card */
+.card,
+.conta-card,
+.grafico-card,
+.cartao-cc,
+.meta-item,
+.relatorio-card,
+.config-card {
+    contain: layout style;
+}
+
+/* section-box: contain sem paint para nao cortar overflow de tooltips */
+.section-box {
+    contain: layout style;
+}
+
+/* Itens de transacao: ja tem will-change:transform — containment reduz reflow na lista */
+.mov-item {
+    contain: layout style;
+}
+
+/* No mobile, sidebar usa transform (nao width) — ajusta will-change */
+@media (max-width: 768px) {
+    .sidebar {
+        will-change: transform;
+    }
+}
+
+/* Impede rubber-band do scroll se propagar para o body em iOS/Android */
+.main-content {
+    overscroll-behavior-y: contain;
+}
+
+/* ==========================================
    PREFERS-REDUCED-MOTION â€” Acessibilidade
    ========================================== */
 @media (prefers-reduced-motion: reduce) {
