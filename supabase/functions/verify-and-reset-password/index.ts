@@ -1,16 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
 // ═══════════════════════════════════════════════════════════════
-//  verify-and-reset-password — v6
+//  verify-and-reset-password — v7
 //
-//  Mudança crítica v6:
-//    secure_password_change=true no GoTrue bloqueia PUT /admin/users/{id}
-//    e PUT /user sem uma sessão com AMR recente.
-//    Solução: fluxo nativo de recovery OTP do Supabase:
-//      1. admin.generateLink({ type: 'recovery' }) → token (sem email)
-//      2. auth.verifyOtp({ token_hash, type: 'recovery' }) → sessão com AMR
-//      3. PUT /auth/v1/user com access_token da sessão → atualiza senha
-//    Esse fluxo é o único que bypassa secure_password_change legitimamente.
+//  Mudança v7:
+//    Tenta admin.updateUserById primeiro (1 chamada GoTrue).
+//    Fallback para recovery flow (generateLink + verifyOtp + PUT /user)
+//    apenas se admin update falhar com erro de secure_password_change.
+//    Isso resolve o hang no verifyOtp para contas restauradas por migration.
+//    Timeouts explícitos (AbortSignal) em cada chamada GoTrue.
 // ═══════════════════════════════════════════════════════════════
 
 const ALLOWED_ORIGINS = [
@@ -33,6 +31,9 @@ function getCorsHeaders(req: Request): Record<string, string> {
 const MAX_VERIFY_ATTEMPTS    = 5
 const CAPTCHA_REQUIRED_AFTER = 3
 const CAPTCHA_TOKEN_MIN_LEN  = 50
+
+// Timeout por chamada individual ao GoTrue
+const GOTRUE_CALL_TIMEOUT_MS = 8_000
 
 async function hashCode(code: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code))
@@ -57,53 +58,73 @@ async function verifyCaptchaToken(token: string): Promise<boolean> {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body:    new URLSearchParams({ secret: secretKey, response: token.trim() }),
+      signal:  AbortSignal.timeout(5_000),
     })
     return (await res.json()).success === true
   } catch { return false }
 }
 
 /**
- * Lookup user_id diretamente na GoTrue Admin API pelo email.
- * Fallback final quando subscription tables não têm user_id.
+ * Abordagem primária: usa admin.updateUserById diretamente.
+ * Uma única chamada GoTrue — rápida e confiável.
+ * Funciona mesmo para contas restauradas por migration.
  */
-async function getUserIdByEmail(
+async function updatePasswordViaAdmin(
   supabaseUrl: string,
   serviceKey: string,
-  email: string,
-): Promise<string | null> {
+  userId: string,
+  newPassword: string,
+): Promise<{ ok: boolean; errorCode?: string; message?: string; isSecurePasswordChangeError?: boolean }> {
   try {
-    const res = await fetch(
-      `${supabaseUrl}/auth/v1/admin/users?page=1&per_page=100&filter=${encodeURIComponent(email)}`,
-      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } },
+    const adminClient = createClient(supabaseUrl, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    // Timeout via Promise.race — supabase-js não expõe AbortSignal diretamente
+    const updatePromise = adminClient.auth.admin.updateUserById(userId, { password: newPassword })
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('ADMIN_UPDATE_TIMEOUT')), GOTRUE_CALL_TIMEOUT_MS),
     )
-    if (!res.ok) {
-      console.error(`[verify-reset] ERR_05: GoTrue users list HTTP ${res.status}`)
-      return null
+
+    const { error } = await Promise.race([updatePromise, timeoutPromise])
+
+    if (!error) {
+      console.log('[verify-reset] v7 admin update OK')
+      return { ok: true }
     }
-    const data = await res.json()
-    const users: Array<{ id: string; email: string }> = data.users ?? []
-    const match = users.find(u => u.email?.toLowerCase() === email)
-    if (match?.id) {
-      console.log(`[verify-reset] ERR_05_OK: user_id via GoTrue admin (${users.length} users retornados)`)
-      return match.id
-    }
-    // Filtro GoTrue pode não funcionar em todas as versões — tenta sem filtro se nada encontrado
-    console.warn(`[verify-reset] ERR_05_NOFILT: filter retornou ${users.length} mas sem match, tentando listagem`)
-    return null
+
+    console.warn('[verify-reset] v7 admin update falhou:', error.status, error.message)
+
+    // Detecta se o erro é de secure_password_change (requer recovery flow)
+    const msg = error.message?.toLowerCase() ?? ''
+    const isSecurePasswordChangeError =
+      error.status === 422 ||
+      error.status === 403 ||
+      msg.includes('reauthentication') ||
+      msg.includes('secure_password_change') ||
+      msg.includes('requires recent login') ||
+      msg.includes('token is expired') ||
+      msg.includes('session') ||
+      msg.includes('password update requires')
+
+    return { ok: false, errorCode: 'ERR_ADMIN', message: error.message, isSecurePasswordChangeError }
   } catch (e) {
-    console.error('[verify-reset] ERR_05_EXC:', String(e))
-    return null
+    const msg = String(e)
+    console.error('[verify-reset] v7 admin update exception:', msg)
+    return { ok: false, errorCode: 'ERR_ADMIN_EXC', message: msg, isSecurePasswordChangeError: false }
   }
 }
 
 /**
- * Atualiza senha usando o fluxo nativo de recovery OTP do Supabase.
- * Bypassa secure_password_change porque a sessão de recovery tem AMR recente.
+ * Abordagem fallback: fluxo nativo de recovery OTP do Supabase.
+ * Usado quando admin.updateUserById falha por secure_password_change.
  *
  * Fluxo:
  *   1. admin.generateLink({ type:'recovery' }) — gera token SEM enviar email
  *   2. verifyOtp({ token_hash, type:'recovery' }) — obtém sessão autenticada
- *   3. PUT /auth/v1/user com access_token — altera senha legitimamente
+ *   3. PUT /auth/v1/user com access_token — altera senha
+ *
+ * Cada chamada tem timeout explícito para evitar hang indefinido.
  */
 async function updatePasswordViaRecoveryFlow(
   supabaseUrl: string,
@@ -113,17 +134,28 @@ async function updatePasswordViaRecoveryFlow(
   newPassword: string,
 ): Promise<{ ok: boolean; errorCode?: string; message?: string }> {
 
-  // Step 1: gerar link de recovery (não envia email — apenas gera o token)
   const adminClient = createClient(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
-  const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-    type: 'recovery',
-    email,
-  })
+
+  // Step 1: gerar recovery token (sem email)
+  let linkData: Awaited<ReturnType<typeof adminClient.auth.admin.generateLink>>['data']
+  let linkError: Awaited<ReturnType<typeof adminClient.auth.admin.generateLink>>['error']
+  try {
+    const genPromise = adminClient.auth.admin.generateLink({ type: 'recovery', email })
+    const genTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('GENERATE_LINK_TIMEOUT')), GOTRUE_CALL_TIMEOUT_MS),
+    )
+    const result = await Promise.race([genPromise, genTimeout])
+    linkData  = result.data
+    linkError = result.error
+  } catch (e) {
+    console.error('[verify-reset] ERR_06A_TIMEOUT generateLink:', String(e))
+    return { ok: false, errorCode: 'ERR_06A_TIMEOUT', message: String(e) }
+  }
+
   if (linkError) {
     console.error('[verify-reset] ERR_06A generateLink:', linkError.message, '| status:', linkError.status)
-    // 404 = conta auth.users não existe para este email (subscription sem auth account)
     const errCode = (linkError.status === 404 || linkError.message?.toLowerCase().includes('not found'))
       ? 'ERR_06A_NO_ACCOUNT'
       : 'ERR_06A'
@@ -131,19 +163,30 @@ async function updatePasswordViaRecoveryFlow(
   }
   const tokenHash = linkData?.properties?.hashed_token
   if (!tokenHash) {
-    console.error('[verify-reset] ERR_06B: hashed_token ausente na resposta do generateLink')
+    console.error('[verify-reset] ERR_06B: hashed_token ausente')
     return { ok: false, errorCode: 'ERR_06B' }
   }
   console.log('[verify-reset] ERR_06A_OK: recovery token gerado')
 
-  // Step 2: trocar token por sessão de recovery (prova de identidade via OTP)
+  // Step 2: trocar token por sessão de recovery
   const anonClient = createClient(supabaseUrl, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
-  const { data: otpData, error: otpError } = await anonClient.auth.verifyOtp({
-    token_hash: tokenHash,
-    type: 'recovery',
-  })
+  let otpData: Awaited<ReturnType<typeof anonClient.auth.verifyOtp>>['data']
+  let otpError: Awaited<ReturnType<typeof anonClient.auth.verifyOtp>>['error']
+  try {
+    const otpPromise = anonClient.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+    const otpTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('VERIFY_OTP_TIMEOUT')), GOTRUE_CALL_TIMEOUT_MS),
+    )
+    const result = await Promise.race([otpPromise, otpTimeout])
+    otpData  = result.data
+    otpError = result.error
+  } catch (e) {
+    console.error('[verify-reset] ERR_06C_TIMEOUT verifyOtp:', String(e))
+    return { ok: false, errorCode: 'ERR_06C_TIMEOUT', message: String(e) }
+  }
+
   if (otpError || !otpData?.session?.access_token) {
     console.error('[verify-reset] ERR_06C verifyOtp:', otpError?.message)
     return { ok: false, errorCode: 'ERR_06C', message: otpError?.message }
@@ -151,16 +194,23 @@ async function updatePasswordViaRecoveryFlow(
   const accessToken = otpData.session.access_token
   console.log('[verify-reset] ERR_06C_OK: sessão de recovery obtida')
 
-  // Step 3: atualizar senha com a sessão de recovery (tem AMR recente — bypassa secure_password_change)
-  const updateRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    method: 'PUT',
-    headers: {
-      'apikey':        anonKey,
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type':  'application/json',
-    },
-    body: JSON.stringify({ password: newPassword }),
-  })
+  // Step 3: atualizar senha com a sessão de recovery
+  let updateRes: Response
+  try {
+    updateRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      method: 'PUT',
+      headers: {
+        'apikey':        anonKey,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type':  'application/json',
+      },
+      body:   JSON.stringify({ password: newPassword }),
+      signal: AbortSignal.timeout(GOTRUE_CALL_TIMEOUT_MS),
+    })
+  } catch (e) {
+    console.error('[verify-reset] ERR_06D_TIMEOUT PUT /user:', String(e))
+    return { ok: false, errorCode: 'ERR_06D_TIMEOUT', message: String(e) }
+  }
 
   if (!updateRes.ok) {
     const body = await updateRes.text()
@@ -171,7 +221,7 @@ async function updatePasswordViaRecoveryFlow(
     return { ok: false, errorCode: `ERR_06D_${updateRes.status}`, message: body }
   }
 
-  console.log('[verify-reset] ERR_06D_OK: senha atualizada com sucesso')
+  console.log('[verify-reset] ERR_06D_OK: senha atualizada via recovery flow')
   return { ok: true }
 }
 
@@ -250,12 +300,14 @@ Deno.serve(async (req) => {
 
     if (action === 'reset_password') {
       if (typeof newPassword !== 'string')
-        return json({ status: 'error', message: 'A senha deve ter no mínimo 10 caracteres.' }, 400)
+        return json({ status: 'error', message: 'A senha deve ter entre 8 e 128 caracteres.' }, 400)
       const cleaned = newPassword.replace(/\x00/g, '')
-      if (cleaned.length < 10 || cleaned.length > 128)
-        return json({ status: 'error', message: 'A senha deve ter no mínimo 10 caracteres.' }, 400)
-      if (!/[A-Za-z]/.test(cleaned) || !/[0-9]/.test(cleaned))
-        return json({ status: 'error', message: 'A senha deve conter letras e números.' }, 400)
+      if (cleaned.length < 8 || cleaned.length > 128)
+        return json({ status: 'error', message: 'A senha deve ter entre 8 e 128 caracteres.' }, 400)
+      if (!/[A-Z]/.test(cleaned))
+        return json({ status: 'error', message: 'A senha deve conter pelo menos uma letra maiúscula.' }, 400)
+      if (!/[0-9]/.test(cleaned))
+        return json({ status: 'error', message: 'A senha deve conter pelo menos um número.' }, 400)
       ;(body as Record<string, unknown>).newPassword = cleaned
     }
 
@@ -308,39 +360,49 @@ Deno.serve(async (req) => {
 
     if (action === 'verify_code') return json({ status: 'code_valid' })
 
-    // ── 4. reset_password: resolver email → usar recovery flow ─
-
-    // O fluxo nativo de recovery usa o EMAIL diretamente, não precisa de user_id.
-    // Isso elimina toda a cadeia de fallbacks de lookup de user_id que estava falhando.
-    // generateLink({ type:'recovery' }) + verifyOtp → sessão com AMR recente →
-    // PUT /auth/v1/user bypassa secure_password_change legitimamente.
-
+    // ── 4. reset_password ──────────────────────────────────────
     const finalPassword = (body as Record<string, unknown>).newPassword as string
-    const updateResult  = await updatePasswordViaRecoveryFlow(
-      supabaseUrl, serviceKey, anonKey, normalizedEmail, finalPassword,
-    )
+    const userId        = resetEntry.user_id as string | null
+
+    let updateResult: { ok: boolean; errorCode?: string; message?: string }
+
+    // Abordagem primária: admin.updateUserById (rápida, 1 chamada GoTrue)
+    if (userId) {
+      console.log('[verify-reset] v7: tentando admin update (user_id disponível)')
+      const adminResult = await updatePasswordViaAdmin(supabaseUrl, serviceKey, userId, finalPassword)
+
+      if (adminResult.ok) {
+        updateResult = { ok: true }
+      } else if (adminResult.isSecurePasswordChangeError) {
+        // Admin update bloqueado por secure_password_change → usa recovery flow
+        console.log('[verify-reset] v7: admin bloqueado por secure_password_change, tentando recovery flow')
+        updateResult = await updatePasswordViaRecoveryFlow(supabaseUrl, serviceKey, anonKey, normalizedEmail, finalPassword)
+      } else {
+        // Outro erro no admin update — tenta recovery flow como fallback
+        console.warn('[verify-reset] v7: admin update falhou (não é secure_password_change), tentando recovery flow')
+        updateResult = await updatePasswordViaRecoveryFlow(supabaseUrl, serviceKey, anonKey, normalizedEmail, finalPassword)
+      }
+    } else {
+      // Sem user_id → vai direto para recovery flow
+      console.log('[verify-reset] v7: user_id não disponível, usando recovery flow')
+      updateResult = await updatePasswordViaRecoveryFlow(supabaseUrl, serviceKey, anonKey, normalizedEmail, finalPassword)
+    }
 
     if (!updateResult.ok) {
       console.error(`[verify-reset] Falha no update: ${updateResult.errorCode} — ${updateResult.message ?? ''}`)
 
-      // Conta auth inexistente (subscription sem auth account — purge inconsistente)
       if (updateResult.errorCode === 'ERR_06A_NO_ACCOUNT') {
-        // Invalida o código para evitar loops de tentativa
         await supabase
           .from('password_reset_codes')
           .update({ used: true, used_at: new Date().toISOString() })
           .eq('id', resetEntry.id)
-        return json({
-          status:  'invalid_code',
-          message: 'Código inválido, expirado ou já utilizado.',
-        })
+        return json({ status: 'invalid_code', message: 'Código inválido, expirado ou já utilizado.' })
       }
 
-      // ERR_06D_422 = senha rejeitada pelo GoTrue (força/requisitos)
       if (updateResult.errorCode === 'ERR_06D_422') {
         return json({
           status:  'error',
-          message: 'A senha deve conter letras e números (mínimo 10 caracteres).',
+          message: 'A senha deve ter entre 8 e 128 caracteres, com letra maiúscula e número.',
         }, 422)
       }
 

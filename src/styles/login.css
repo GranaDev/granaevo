@@ -1457,6 +1457,39 @@ body {
 }
 
 /* ==========================================
+   REQUISITOS DE SENHA (em tempo real)
+   ========================================== */
+.password-requirements {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.req-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.45);
+    transition: color 0.25s ease;
+}
+
+.req-item[data-valid="true"] {
+    color: var(--neon-green, #10b981);
+}
+
+.req-icon::before {
+    content: '○';
+    font-size: 10px;
+    line-height: 1;
+}
+
+.req-item[data-valid="true"] .req-icon::before {
+    content: '✓';
+}
+
+/* ==========================================
    HELP TEXT
    ========================================== */
 .help-text {

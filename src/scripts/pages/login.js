@@ -1099,13 +1099,21 @@ if (buttons.changePassword) {
             return;
         }
 
-        if (newPass.length < 10 || newPass.length > 128) {
-            showError('A senha deve ter entre 10 e 128 caracteres.');
+        if (newPass.length < 8 || newPass.length > 128) {
+            showError('A senha deve ter entre 8 e 128 caracteres.');
+            shakeInput(inputs.newPassword);
             return;
         }
 
-        if (!/[A-Za-z]/.test(newPass) || !/[0-9]/.test(newPass)) {
-            showError('A senha deve conter letras e números.');
+        if (!/[A-Z]/.test(newPass)) {
+            showError('A senha deve conter pelo menos uma letra maiúscula.');
+            shakeInput(inputs.newPassword);
+            return;
+        }
+
+        if (!/[0-9]/.test(newPass)) {
+            showError('A senha deve conter pelo menos um número.');
+            shakeInput(inputs.newPassword);
             return;
         }
 
@@ -1145,6 +1153,7 @@ if (buttons.changePassword) {
                         code:        RecoveryState.getCode(),
                         newPassword: newPass,
                     }),
+                    signal: AbortSignal.timeout(25_000),
                 }
             );
 
@@ -1354,6 +1363,25 @@ function createAnimatedCharts() {
 // ═══════════════════════════════════════════════════════════════
 //  ATALHOS DE TECLADO
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  VALIDAÇÃO EM TEMPO REAL — NOVA SENHA
+//  Atualiza os indicadores de requisito conforme o usuário digita.
+// ═══════════════════════════════════════════════════════════════
+function _updatePasswordRequirements(value) {
+    const reqLength    = document.getElementById('req-length');
+    const reqUppercase = document.getElementById('req-uppercase');
+    const reqNumber    = document.getElementById('req-number');
+    if (!reqLength || !reqUppercase || !reqNumber) return;
+
+    const hasLength    = value.length >= 8 && value.length <= 128;
+    const hasUppercase = /[A-Z]/.test(value);
+    const hasNumber    = /[0-9]/.test(value);
+
+    reqLength.dataset.valid    = String(hasLength);
+    reqUppercase.dataset.valid = String(hasUppercase);
+    reqNumber.dataset.valid    = String(hasNumber);
+}
+
 function _registerKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && document.activeElement === inputs.loginEmail) {
@@ -1364,6 +1392,16 @@ function _registerKeyboardShortcuts() {
     inputs.newPassword?.addEventListener('keypress',     (e) => { if (e.key === 'Enter') inputs.confirmPassword?.focus(); });
     inputs.confirmPassword?.addEventListener('keypress', (e) => { if (e.key === 'Enter') buttons.changePassword?.click(); });
     inputs.recoveryEmail?.addEventListener('keypress',   (e) => { if (e.key === 'Enter') buttons.sendCode?.click(); });
+
+    // Validação em tempo real nos campos de senha
+    inputs.newPassword?.addEventListener('input', (e) => {
+        _updatePasswordRequirements(e.target.value);
+        // Limpa o erro ao digitar novamente
+        if (errorMessage?.classList.contains('show')) hideError();
+    });
+    inputs.confirmPassword?.addEventListener('input', () => {
+        if (errorMessage?.classList.contains('show')) hideError();
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════

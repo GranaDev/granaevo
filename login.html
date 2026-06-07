@@ -439,7 +439,7 @@
                     </div>
 
                     <h2 class="form-title">Nova senha</h2>
-                    <p class="form-subtitle">Digite sua nova senha (mínimo 10 caracteres, letras e números)</p>
+                    <p class="form-subtitle">Mínimo 8 caracteres, uma letra maiúscula e um número</p>
 
                     <form class="recovery-form" novalidate autocomplete="off">
                         <div class="form-group">
@@ -460,7 +460,22 @@
                                     minlength="8"
                                     maxlength="128"
                                     aria-required="true"
+                                    aria-describedby="passwordRequirements"
                                 >
+                            </div>
+                            <div class="password-requirements" id="passwordRequirements" role="status" aria-live="polite" aria-label="Requisitos da senha">
+                                <div class="req-item" id="req-length" data-valid="false">
+                                    <span class="req-icon" aria-hidden="true"></span>
+                                    <span class="req-text">Mínimo 8 caracteres</span>
+                                </div>
+                                <div class="req-item" id="req-uppercase" data-valid="false">
+                                    <span class="req-icon" aria-hidden="true"></span>
+                                    <span class="req-text">Uma letra maiúscula (A–Z)</span>
+                                </div>
+                                <div class="req-item" id="req-number" data-valid="false">
+                                    <span class="req-icon" aria-hidden="true"></span>
+                                    <span class="req-text">Um número (0–9)</span>
+                                </div>
                             </div>
                         </div>
 
