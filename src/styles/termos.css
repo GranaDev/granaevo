@@ -2,6 +2,7 @@
    GRANAEVO - TERMOS DE USO
    Página de Termos com Design Consistente
    ========================================== */
+@import './_fonts.css';
 
 :root {
     --primary: #10b981;

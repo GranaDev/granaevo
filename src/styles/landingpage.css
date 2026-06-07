@@ -25,6 +25,7 @@
 @layer base, components, animations;
 
 /* ── Módulos ─────────────────────────────────────────────────────────────── */
+@import './_fonts.css';
 @import './landing/_variables.css';
 @import './landing/_reset.css';
 @import './landing/_loading.css';

@@ -777,6 +777,14 @@ function _renderFrozenOverlay(subData, guard) {
     // Remove overlay anterior se existir
     document.getElementById('_ge_frozen_overlay')?.remove();
 
+    // Injeta classe CSS uma única vez — evita inline styles no body/html
+    if (!document.getElementById('_ge_frozen_styles')) {
+        const s = document.createElement('style');
+        s.id = '_ge_frozen_styles';
+        s.textContent = 'html.ge-frozen{overflow:hidden!important}body.ge-frozen{overflow:hidden!important;pointer-events:none!important}';
+        document.head.appendChild(s);
+    }
+
     // Garante que days seja sempre um inteiro seguro (evita "NaN dias" se daysUntilDeletion vier como NaN)
     const _rawDays     = subData.daysUntilDeletion;
     const days         = Number.isInteger(_rawDays) && _rawDays >= 0 ? _rawDays : 0;
@@ -787,9 +795,8 @@ function _renderFrozenOverlay(subData, guard) {
     const daysText     = days === 0 ? 'muito pouco tempo' : days === 1 ? '1 dia' : `${days} dias`;
 
     // ── 1. Trava scroll do body ───────────────────────────────────
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow            = 'hidden';
-    document.body.style.pointerEvents       = 'none';  // bloqueia cliques no body
+    document.documentElement.classList.add('ge-frozen');
+    document.body.classList.add('ge-frozen');
 
     // ── 2. Intercepta history API ─────────────────────────────────
     // Guarda referências originais para restaurar no cleanup
@@ -870,8 +877,10 @@ function _renderFrozenOverlay(subData, guard) {
         if (!document.getElementById('_ge_frozen_overlay')) {
             try { document.body.appendChild(overlay); } catch { /* */ }
         }
-        // Garante pointer-events desabilitado no body
-        document.body.style.pointerEvents = 'none';
+        // Garante classe de bloqueio presente no body
+        if (!document.body.classList.contains('ge-frozen')) {
+            document.body.classList.add('ge-frozen');
+        }
     }, 800);
 
     // ── 9. Visibilitychange — revalida ao voltar para a aba ───────
@@ -897,9 +906,8 @@ function _renderFrozenOverlay(subData, guard) {
         document.removeEventListener('keyup',          _onKeyDown,   true);
         document.removeEventListener('focusin',        _onFocusIn,   true);
         document.removeEventListener('visibilitychange', _onVisible);
-        document.documentElement.style.overflow = '';
-        document.body.style.overflow            = '';
-        document.body.style.pointerEvents       = '';
+        document.documentElement.classList.remove('ge-frozen');
+        document.body.classList.remove('ge-frozen');
         try {
             history.pushState    = _origPushState;
             history.replaceState = _origReplaceState;
@@ -999,10 +1007,15 @@ const AuthGuard = (() => {
     let _user              = null;
     let _subData           = null;
     let _monitorTimer      = null;
+    let _monitorAbortCtrl  = null; // AbortController do tick em voo
     let _consecutiveErrors = 0;
     let _protecting        = false; // [FIX-EXTRA-1] Mutex
 
     function _stopMonitoring() {
+        if (_monitorAbortCtrl) {
+            _monitorAbortCtrl.abort();
+            _monitorAbortCtrl = null;
+        }
         if (_monitorTimer) {
             clearInterval(_monitorTimer);
             _monitorTimer = null;
@@ -1014,6 +1027,8 @@ const AuthGuard = (() => {
         _consecutiveErrors = 0;
 
         _monitorTimer = setInterval(async () => {
+            const tickCtrl = new AbortController();
+            _monitorAbortCtrl = tickCtrl;
             try {
                 const { data: { session } } = await supabase.auth.getSession();
 
@@ -1043,7 +1058,7 @@ const AuthGuard = (() => {
                                 'Authorization': `Bearer ${session.access_token}`,
                             },
                             body:   JSON.stringify({}),
-                            signal: AbortSignal.timeout(8_000),
+                            signal: AbortSignal.any([tickCtrl.signal, AbortSignal.timeout(8_000)]),
                         });
                         if (rMon.ok) {
                             const apiMon = await rMon.json();
@@ -1097,6 +1112,8 @@ const AuthGuard = (() => {
                     }
                 }
             }
+            // Limpa referência ao controller deste tick; não cancela se já foi substituído
+            if (_monitorAbortCtrl === tickCtrl) _monitorAbortCtrl = null;
         }, SECURITY.SESSION_POLL_INTERVAL);
     }
 

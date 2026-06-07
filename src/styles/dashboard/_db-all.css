@@ -9201,6 +9201,45 @@ button,
     border-color: rgba(67,160,71,0.45);
 }
 
+.tx-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-tx-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    border: 1px solid transparent;
+}
+.btn-tx-action:active { transform: scale(0.97); }
+
+.btn-tx-secondary {
+    background: rgba(255,255,255,0.06);
+    color: var(--text-secondary);
+    border-color: rgba(255,255,255,0.12);
+}
+.btn-tx-secondary:hover {
+    background: rgba(255,255,255,0.12);
+    color: var(--text-primary);
+    border-color: rgba(255,255,255,0.22);
+}
+
+@media (max-width: 480px) {
+    .tx-actions { gap: 6px; }
+    .btn-tx-action span { display: none; }
+    .btn-tx-action { padding: 8px 10px; }
+}
+
 .imp-drop-zone {
     display: flex;
     flex-direction: column;

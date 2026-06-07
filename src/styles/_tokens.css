@@ -139,7 +139,10 @@
     --bp-xl:  1280px;
     --bp-2xl: 1536px;
 
-    /* ── Aliases de compatibilidade — consumidos por dashboard.css e landing ── */
+    /* ── @deprecated: aliases de compatibilidade — usar --color-* diretamente ─
+     *   Estes aliases serão removidos em uma migração futura. Novos estilos
+     *   devem referenciar --color-primary, --color-danger, etc. diretamente.
+     * ──────────────────────────────────────────────────────────────────────── */
     --primary:          var(--color-primary);
     --primary-dark:     var(--color-primary-dark);
     --primary-light:    var(--color-primary-light);

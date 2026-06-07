@@ -88,34 +88,39 @@ const SignupModal = (() => {
         _pendingPlan = null;
     }
 
-    // Avalia força da senha com base nos 3 requisitos obrigatórios
+    // Avalia força da senha com base nos 4 requisitos obrigatórios
+    // Mínimo: 10 chars — consistente com o reset de senha em login.js
     function _checkStrength(password) {
-        const hasMin   = password.length >= 8;
+        const hasMin   = password.length >= 10;
         const hasUpper = /[A-Z]/.test(password);
         const hasNum   = /[0-9]/.test(password);
+        const hasSpec  = /[^A-Za-z0-9]/.test(password);
         const met      = [hasMin, hasUpper, hasNum].filter(Boolean).length;
 
-        if (!password) return { level: 0, label: '', hasMin, hasUpper, hasNum };
-        if (met === 3 && password.length >= 12) return { level: 3, label: 'Senha forte',  hasMin, hasUpper, hasNum };
-        if (met === 3)                           return { level: 2, label: 'Senha média',  hasMin, hasUpper, hasNum };
-        if (met >= 1)                            return { level: 1, label: 'Senha fraca',  hasMin, hasUpper, hasNum };
-        return                                          { level: 0, label: 'Muito fraca', hasMin, hasUpper, hasNum };
+        if (!password) return { level: 0, label: '', hasMin, hasUpper, hasNum, hasSpec };
+        if (met === 3 && hasSpec && password.length >= 12) return { level: 4, label: 'Senha muito forte', hasMin, hasUpper, hasNum, hasSpec };
+        if (met === 3 && password.length >= 12) return { level: 3, label: 'Senha forte',  hasMin, hasUpper, hasNum, hasSpec };
+        if (met === 3)                           return { level: 2, label: 'Senha média',  hasMin, hasUpper, hasNum, hasSpec };
+        if (met >= 1)                            return { level: 1, label: 'Senha fraca',  hasMin, hasUpper, hasNum, hasSpec };
+        return                                          { level: 0, label: 'Muito fraca',  hasMin, hasUpper, hasNum, hasSpec };
     }
 
     function _updateStrengthBar(password) {
-        const fill   = document.getElementById('signupStrengthFill');
-        const text   = document.getElementById('signupStrengthText');
-        const reqMin = document.getElementById('reqMin');
+        const fill     = document.getElementById('signupStrengthFill');
+        const text     = document.getElementById('signupStrengthText');
+        const reqMin   = document.getElementById('reqMin');
         const reqUpper = document.getElementById('reqUpper');
         const reqNum   = document.getElementById('reqNum');
+        const reqSpec  = document.getElementById('reqSpec');
         if (!fill || !text) return;
 
-        const { level, label, hasMin, hasUpper, hasNum } = _checkStrength(password);
+        const { level, label, hasMin, hasUpper, hasNum, hasSpec } = _checkStrength(password);
 
         fill.className = 'signup-strength-fill' + (
-            level === 3 ? ' signup-str-strong' :
-            level === 2 ? ' signup-str-medium' :
-            level === 1 ? ' signup-str-weak'   : ''
+            level === 4 ? ' signup-str-vstrong' :
+            level === 3 ? ' signup-str-strong'  :
+            level === 2 ? ' signup-str-medium'  :
+            level === 1 ? ' signup-str-weak'    : ''
         );
         text.textContent = label;
 
@@ -123,6 +128,7 @@ const SignupModal = (() => {
         reqMin?.classList.toggle('met',   hasMin);
         reqUpper?.classList.toggle('met', hasUpper);
         reqNum?.classList.toggle('met',   hasNum);
+        reqSpec?.classList.toggle('met',  hasSpec);
     }
 
     function init() {
@@ -186,9 +192,9 @@ const SignupModal = (() => {
                 return;
             }
 
-            // Validação de senha — 3 requisitos obrigatórios
-            if (password.length < 8) {
-                showAlert('error', 'A senha deve ter no mínimo 8 caracteres.');
+            // Validação de senha — requisitos obrigatórios
+            if (password.length < 10) {
+                showAlert('error', 'A senha deve ter no mínimo 10 caracteres.');
                 pwdInput()?.focus();
                 return;
             }
@@ -300,19 +306,6 @@ async function _checkoutComSessao(session, plan) {
 // CONFIGURAÇÕES
 // ==========================================
 const CONFIG = {
-    purchaseNotification: {
-        minInterval: 15000,
-        maxInterval: 90000,
-        duration:    5000
-    },
-    names: [
-        'Maria Silva',       'João Santos',       'Ana Costa',         'Carlos Pereira',
-        'Patricia Oliveira', 'Roberto Lima',      'Juliana Martins',   'Fernando Souza',
-        'Camila Rocha',      'Ricardo Alves',     'Beatriz Fernandes', 'Thiago Mendes',
-        'Lucas Ribeiro',     'Amanda Costa',      'Rafael Santos',     'Larissa Oliveira'
-    ],
-    plans: ['Individual', 'Casal', 'Família'],
-
     // Domínios permitidos para redirecionamento (whitelist)
     allowedRedirectDomains: ['checkout.stripe.com'],
 
@@ -720,39 +713,6 @@ if (canvas) {
     animateParticles();
 }
 
-// ==========================================
-// PURCHASE NOTIFICATIONS
-// ==========================================
-const purchaseNotification = document.getElementById('purchaseNotification');
-
-function getRandomInterval() {
-    const { minInterval, maxInterval } = CONFIG.purchaseNotification;
-    return Math.floor(Math.random() * (maxInterval - minInterval) + minInterval);
-}
-
-function showPurchaseNotification() {
-    if (!purchaseNotification) return;
-
-    const randomName = CONFIG.names[Math.floor(Math.random() * CONFIG.names.length)];
-    const randomPlan = CONFIG.plans[Math.floor(Math.random() * CONFIG.plans.length)];
-
-    const nameElement   = purchaseNotification.querySelector('.notification-name');
-    const actionElement = purchaseNotification.querySelector('.notification-action strong');
-
-    // textContent — sem risco de XSS
-    if (nameElement)   nameElement.textContent   = randomName;
-    if (actionElement) actionElement.textContent = `Plano ${randomPlan}`;
-
-    purchaseNotification.classList.add('show');
-
-    setTimeout(() => {
-        purchaseNotification.classList.remove('show');
-    }, CONFIG.purchaseNotification.duration);
-
-    setTimeout(showPurchaseNotification, getRandomInterval() + CONFIG.purchaseNotification.duration);
-}
-
-setTimeout(showPurchaseNotification, getRandomInterval());
 
 // ==========================================
 // PLAN CARDS HOVER EFFECT (DESKTOP)

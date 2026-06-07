@@ -3,6 +3,7 @@
    v4 | Mobile First · Carousel Fix · Otimizado
    v5 | Mobile First · Carousel Fix · Otimizado
    ========================================== */
+@import './_fonts.css';
 
 /* ==========================================
    VARIÁVEIS CSS
@@ -2223,8 +2224,10 @@ input[type="password"]::-ms-clear {
 /* ── 3D tilt: preserve-3d for perspective illusion ──────────────── */
 .plan-card {
     transform-style: preserve-3d !important;
-    will-change: transform;
     backface-visibility: hidden;
+}
+.plan-card:hover {
+    will-change: transform;
 }
 
 /* ── Parallax orbs ───────────────────────────────────────────────── */

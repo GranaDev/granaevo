@@ -51,8 +51,8 @@
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         script-src 'self' 'sha256-JpSqkc4lJtTGdFgSBst3AQTsEudZFZAC9KIwl5YXKLo=' https://static.cloudflareinsights.com;
-        style-src 'self' https://fonts.googleapis.com;
-        font-src 'self' https://fonts.gstatic.com;
+        style-src 'self';
+        font-src 'self';
         img-src 'self' data:;
         connect-src 'self' https://cloudflareinsights.com;
         frame-src 'none';
@@ -100,21 +100,7 @@
 
     <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
 
-    <!--
-        Google Fonts: preconnect com crossorigin correto.
-        NOTA: SRI (integrity) não é viável para a CSS do Google Fonts
-        porque o conteúdo é gerado dinamicamente por user-agent.
-        Para máxima segurança, baixe e sirva as fontes localmente.
-    -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
-
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
-        rel="stylesheet"
-        referrerpolicy="no-referrer"
-        crossorigin="anonymous"
-    >
+    <!-- Fonts: Inter auto-importado via landingpage.css → _fonts.css (@fontsource/inter) -->
 
     <!-- CSS local -->
     <link rel="stylesheet" href="src/styles/landingpage.css">

@@ -383,10 +383,20 @@
                     </nav>
                     <div class="tx-title-row">
                         <h1 class="tx-page-title">Transações</h1>
-                        <button class="btn-import-extrato" id="btnImportarExtrato" type="button">
-                            <i class="fas fa-file-import" aria-hidden="true"></i>
-                            <span>Importar Extrato</span>
-                        </button>
+                        <div class="tx-actions">
+                            <button class="btn-tx-action btn-tx-secondary" id="btnCategorizarTudo" type="button" title="Categorizar automaticamente todas as transações sem categoria">
+                                <i class="fas fa-magic" aria-hidden="true"></i>
+                                <span>Categorizar Tudo</span>
+                            </button>
+                            <button class="btn-tx-action btn-tx-secondary" id="btnGerenciarRegras" type="button" title="Gerenciar regras de categorização aprendidas">
+                                <i class="fas fa-brain" aria-hidden="true"></i>
+                                <span>Regras</span>
+                            </button>
+                            <button class="btn-tx-action btn-import-extrato" id="btnImportarExtrato" type="button">
+                                <i class="fas fa-file-import" aria-hidden="true"></i>
+                                <span>Importar Extrato</span>
+                            </button>
+                        </div>
                     </div>
                     <p class="tx-page-subtitle">Registre e gerencie todas as suas movimentações financeiras</p>
                 </div>

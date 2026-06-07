@@ -16,13 +16,17 @@ const SUPABASE_BEACON_URL = `${window.location.origin}/api/user-data`;
 const PROFILE_ID_REGEX = /^[a-zA-Z0-9_-]{1,64}$/;
 
 /**
- * Validador ESTRITO — usado apenas no SAVE.
- * Impede que dados malformados ou injetados cheguem ao banco.
+ * Valida a forma de um perfil.
+ * strict=true (padrão, save): valida id, balance e name.
+ * strict=false (load): só descarta o que claramente não é um objeto —
+ *   dados do banco já foram validados no save; ser estrito no load rejeita
+ *   perfis legítimos de antes da migração (id SERIAL inteiro, etc).
  */
-function validateProfileShape(profile) {
+function validateProfileShape(profile, { strict = true } = {}) {
     if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
         return 'perfil deve ser um objeto';
     }
+    if (!strict) return null;
     const isIntId = Number.isInteger(profile.id) && profile.id > 0;
     const isStrId = typeof profile.id === 'string' && profile.id.trim() !== '';
     if (!isIntId && !isStrId) {
@@ -40,22 +44,6 @@ function validateProfileShape(profile) {
     if ('name' in profile && (typeof profile.name !== 'string' || profile.name.length > 256)) {
         return 'profile.name inválido ou muito longo';
     }
-    return null;
-}
-
-/**
- * Validador LENIENTE — usado apenas no LOAD.
- * Dados vindos do banco já foram validados no save. Ser estrito aqui
- * causa rejeição de perfis legítimos salvos antes da migração de segurança
- * (ex: id inteiro SERIAL, id ausente em dados antigos, etc).
- * Apenas descartamos o que claramente não é um objeto.
- */
-function validateProfileShapeForLoad(profile) {
-    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
-        return 'perfil deve ser um objeto';
-    }
-    // ✅ Sem validação de id no load — dados do banco são confiáveis.
-    //    A validação estrita ocorre exclusivamente no save.
     return null;
 }
 
@@ -213,14 +201,11 @@ class DataManager {
             if (!Array.isArray(userData.profiles)) userData.profiles = [];
             if (!userData.version)                  userData.version  = '1.0';
 
-            // ✅ CORREÇÃO CRÍTICA: usa validador LENIENTE no load.
-            //    O validador estrito (validateProfileShape) rejeita perfis legítimos
-            //    já gravados no banco (ex: id inteiro SERIAL, dados antes da migração).
-            //    No load, apenas descartamos o que claramente não é um objeto.
-            //    A validação estrita ocorre EXCLUSIVAMENTE no save.
+            // No load, usa validateProfileShape com strict:false — não valida id/balance
+            // para não rejeitar perfis legítimos gravados antes da migração de segurança.
             const validProfiles = [];
             for (let i = 0; i < userData.profiles.length; i++) {
-                const err = validateProfileShapeForLoad(userData.profiles[i]);
+                const err = validateProfileShape(userData.profiles[i], { strict: false });
                 if (err) {
                     console.warn(`⚠️ [DATA-MANAGER] Perfil [${i}] ignorado no load: ${err}`);
                 } else {

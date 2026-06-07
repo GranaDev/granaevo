@@ -2,6 +2,7 @@
    GranaEvo — Gerenciar Assinatura
    atualizarplano.css  v5 · Premium Emerald Edition
 ══════════════════════════════════════════════════════════════════ */
+@import './_fonts.css';
 
 /* ── Reset & design tokens ──────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

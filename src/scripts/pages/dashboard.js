@@ -4,6 +4,9 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?
 import { dataManager } from '../modules/data-manager.js?v=8';
 import AuthGuard from '../modules/auth-guard.js?v=2';
 
+// ========== CONSTANTES ==========
+const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
 // ========== ESTADO GLOBAL ==========
 let usuarioLogado = {
     userId: null,     
@@ -174,10 +177,7 @@ function validarUserData(userData) {
 // ========== FIM DAS FUNÇÕES UTILITÁRIAS ==========
 
 (function _inicializarGE() {
-    const _IS_DEV = (
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1'
-    );
+    const _IS_DEV = IS_DEV;
 
     // ✅ CORREÇÃO: em produção __GE__ não existe — getter retorna undefined
     //    Extensões maliciosas, XSS e scripts de terceiros não conseguem
@@ -269,10 +269,7 @@ function validarUserData(userData) {
     }));
 
     // ✅ Dev-only: aliases com prefixo _dev_ para debugging no console
-    if (
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1'
-    ) {
+    if (IS_DEV) {
         _def('_dev_transacoes',  () => Object.freeze(transacoes.map(t => Object.freeze(Object.assign({}, t)))));
         _def('_dev_metas',       () => Object.freeze(metas.map(m => Object.freeze(Object.assign({}, m)))));
         _def('_dev_contasFixas', () => Object.freeze(contasFixas.map(c => Object.freeze(Object.assign({}, c)))));
@@ -401,8 +398,6 @@ function getMesNome(mes) {
 
 // ========== CARREGAR E SALVAR DADOS ==========
 const _log = (() => {
-    const IS_DEV = window.location.hostname === 'localhost' ||
-                   window.location.hostname === '127.0.0.1';
     return {
         info:  IS_DEV ? (...a) => console.info('[GE]',  ...a) : () => {},
         warn:  IS_DEV ? (...a) => console.warn('[GE]',  ...a) : () => {},
@@ -4751,12 +4746,7 @@ function obterEstatisticas() {
 }
 
 // ========== CONSOLE DE DEBUG (APENAS DESENVOLVIMENTO) ==========
-const _IS_DEV_BUILD = (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1'
-);
-
-if (_IS_DEV_BUILD) {
+if (IS_DEV) {
     Object.defineProperty(window, 'debugGranaEvo', {
         value: () => {
             console.log('=== DEBUG GRANAEVO (DEV) ===');

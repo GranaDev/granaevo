@@ -11,13 +11,19 @@ export function init(ctx) {
     window.abrirDetalhesTransacao   = (t) => abrirDetalhesTransacao(t);
     window.atualizarTiposDinamicos  = () => atualizarTiposDinamicos();
 
-    // Botão importar extrato — via addEventListener (CSP não permite inline onclick)
+    // Botões de ação de transações — via addEventListener (CSP não permite inline onclick)
     const btnImport = document.getElementById('btnImportarExtrato');
     if (btnImport) {
         const newBtn = btnImport.cloneNode(true);
         btnImport.parentNode.replaceChild(newBtn, btnImport);
         newBtn.addEventListener('click', () => abrirImportarExtrato());
     }
+
+    const btnCatTudo = document.getElementById('btnCategorizarTudo');
+    if (btnCatTudo) btnCatTudo.addEventListener('click', () => _categorizarTudo());
+
+    const btnGerenciar = document.getElementById('btnGerenciarRegras');
+    if (btnGerenciar) btnGerenciar.addEventListener('click', () => _abrirGerenciarRegras());
 
     _initAutoCategorizar();
     bindFiltrosMovimentacoes();
@@ -1519,52 +1525,112 @@ const _CATEGORIAS_IMPORT = Object.freeze([
 ]);
 
 const _AUTO_CAT = Object.freeze([
-    // ── Entradas identificáveis PRIMEIRO (evita false-positives de sobrenomes) ─
-    [/pix.*receb|receb.*pix|transfer.*receb|pix recebido/i,           { cat: 'entrada', tipo: 'Renda Extra' }],
-    [/salario|holerite|pagto.*rh|folha.*pgto/i,                       { cat: 'entrada', tipo: 'Salário' }],
-    [/pix.*envia|envia.*pix|transfer.*envia/i,                        { cat: 'saida',   tipo: 'Outros' }],
-    // ── Food & delivery ────────────────────────────────────────────────────────
-    [/ifood|rappi|uber.*eat|delivery/i,                               { cat: 'saida', tipo: 'Ifood' }],
-    [/restauran|lanchon|padaria|pizzar|hamburguer|burger|sushi|churrasc|bar e|snack|lanche/i, { cat: 'saida', tipo: 'Ifood' }],
-    // ── Marketplaces ───────────────────────────────────────────────────────────
-    [/mercado livre|mercadolivre|meli\b/i,                            { cat: 'saida', tipo: 'Mercado Livre' }],
-    [/shopee/i,                                                       { cat: 'saida', tipo: 'Shopee' }],
-    [/amazon/i,                                                       { cat: 'saida', tipo: 'Amazon' }],
-    // ── Supermercado ─────────────────────────────────────────────────────────
-    [/supermercado|carrefour|atacad|hortifruti|pao de acucar|extra\b/i, { cat: 'saida', tipo: 'Mercado' }],
-    [/\bsuperm|\bmerced|\bprecito|\bdia\b.*super|sacolao/i,           { cat: 'saida', tipo: 'Mercado' }],
-    // ── Farmácia ──────────────────────────────────────────────────────────────
-    [/farmacia|drogasil|ultrafarma|pacheco|droga\b|remedios/i,        { cat: 'saida', tipo: 'Farmácia' }],
-    // ── Saúde ────────────────────────────────────────────────────────────────
-    [/medico|dentista|clinica|hospital|consulta|exame|plano.*saude|unimed|amil|bradesco.*saude|sulamerica|laboratorio/i, { cat: 'saida', tipo: 'Saúde' }],
-    // ── Educação ─────────────────────────────────────────────────────────────
-    [/faculdade|mensalidade.*escol|escola\b|universidade|\bcurso\b|livro|matricula|colegio|creche|udemy|alura/i, { cat: 'saida', tipo: 'Educação' }],
-    // ── Viagem ───────────────────────────────────────────────────────────────
-    [/passagem.*aerea|airbnb|booking\.com|decolar|latam|gol\b|azul\b|hotel|hospedagem|pousada/i, { cat: 'saida', tipo: 'Viagem' }],
-    // ── Roupas e moda ─────────────────────────────────────────────────────────
-    [/renner|\bcea\b|riachuelo|zara|hering|levis|\bpuma\b|nike\b|adidas|roupas|vestuario|calcado|sapato|tenis\b/i, { cat: 'saida', tipo: 'Roupas' }],
-    // ── Eletrônicos ───────────────────────────────────────────────────────────
-    [/kabum|casas bahia|magazine|magalu|informatica|notebook|celular|eletronico|terabyte/i, { cat: 'saida', tipo: 'Eletrônico' }],
-    // ── Pets ─────────────────────────────────────────────────────────────────
-    [/veterinario|petshop|racao|petz\b|cobasi|\bpet\b/i,              { cat: 'saida', tipo: 'Pet' }],
-    // ── Beleza ───────────────────────────────────────────────────────────────
+    // ══ ENTRADAS — identificar ANTES das saídas (evita false-positives) ═══════
+    [/pix.*receb|receb.*pix|transfer.*receb|pix recebido/i,                  { cat: 'entrada', tipo: 'Renda Extra' }],
+    [/salario|holerite|pagto.*rh|folha.*pgto|pagamento.*emprego/i,           { cat: 'entrada', tipo: 'Salário' }],
+    [/dividendo|jscp|lucro.*distribu|proventos/i,                            { cat: 'entrada', tipo: 'Investimento' }],
+    [/rendimento|resgate.*investim|tesouro.*resg|resg.*poupanca/i,           { cat: 'entrada', tipo: 'Investimento' }],
+    [/restituicao.*ir|imposto.*devolu|devolucao.*receita/i,                  { cat: 'entrada', tipo: 'Renda Extra' }],
+    [/fgts\b|seguro.*desemprego|auxilio.*governo/i,                          { cat: 'entrada', tipo: 'Renda Extra' }],
+    [/pix.*envia|envia.*pix|transfer.*envia/i,                               { cat: 'saida',   tipo: 'Outros' }],
+    [/renda|freelance|autonomo|honorario|comissao|bico\b/i,                  { cat: 'entrada', tipo: 'Renda Extra' }],
+
+    // ══ FOOD & DELIVERY ════════════════════════════════════════════════════════
+    [/ifood|rappi|uber.*eat|delivery|james.*delivery/i,                      { cat: 'saida', tipo: 'Ifood' }],
+    [/restauran|lanchon|padaria|pizzar|hamburguer|burger|sushi|churrasc/i,   { cat: 'saida', tipo: 'Ifood' }],
+    [/\bbobs\b|outback|giraffas|spoleto|subway\b|mcdonalds|mcdonald|bk\b|burger king/i, { cat: 'saida', tipo: 'Ifood' }],
+    [/bar e|snack|lanche|sorveteria|confeitaria|cafeteria|\bcafe\b.*loja/i,  { cat: 'saida', tipo: 'Ifood' }],
+
+    // ══ MARKETPLACES ═══════════════════════════════════════════════════════════
+    [/mercado livre|mercadolivre|meli\b/i,                                   { cat: 'saida', tipo: 'Mercado Livre' }],
+    [/shopee/i,                                                              { cat: 'saida', tipo: 'Shopee' }],
+    [/amazon/i,                                                              { cat: 'saida', tipo: 'Amazon' }],
+    [/aliexpress|ali express|olx\b|enjoei|enjoy\b/i,                         { cat: 'saida', tipo: 'Outros' }],
+
+    // ══ SUPERMERCADO ═══════════════════════════════════════════════════════════
+    [/supermercado|carrefour|atacad|hortifruti|pao de acucar|grupo.*extra/i, { cat: 'saida', tipo: 'Mercado' }],
+    [/\bsuperm|\bmerced|\bprecito|\bdia\b.*super|sacolao|feira\b/i,          { cat: 'saida', tipo: 'Mercado' }],
+    [/assai\b|atacadao|makro|sam\'s club|costco|prezunic/i,                  { cat: 'saida', tipo: 'Mercado' }],
+
+    // ══ FARMÁCIA ════════════════════════════════════════════════════════════════
+    [/farmacia|drogasil|ultrafarma|pacheco|droga\b|remedios|raia\b|panvel/i, { cat: 'saida', tipo: 'Farmácia' }],
+    [/drogaria\b|farma.*pop|popular.*farma/i,                                { cat: 'saida', tipo: 'Farmácia' }],
+
+    // ══ SAÚDE ══════════════════════════════════════════════════════════════════
+    [/medico|dentista|clinica|hospital|consulta|exame|plano.*saude/i,        { cat: 'saida', tipo: 'Saúde' }],
+    [/unimed|amil|bradesco.*saude|sulamerica|laboratorio|hapvida|notredame/i, { cat: 'saida', tipo: 'Saúde' }],
+    [/fisioterapia|psicolog|psicologo|terapia|nutricionista|quiroprax/i,     { cat: 'saida', tipo: 'Saúde' }],
+    [/\binss\b|previdencia.*social|contrib.*previdenc/i,                     { cat: 'saida', tipo: 'Conta fixa' }],
+
+    // ══ EDUCAÇÃO ════════════════════════════════════════════════════════════════
+    [/faculdade|mensalidade.*escol|escola\b|universidade|\bcurso\b|matricula/i, { cat: 'saida', tipo: 'Educação' }],
+    [/colegio|creche|udemy|alura|coursera|duolingo|descomplica|estacio/i,    { cat: 'saida', tipo: 'Educação' }],
+    [/livro\b|sebrae|senai|senac|sesc\b|sebrae/i,                            { cat: 'saida', tipo: 'Educação' }],
+
+    // ══ VIAGEM ═════════════════════════════════════════════════════════════════
+    [/passagem.*aerea|airbnb|booking\.com|decolar|latam|gol\b|azul\b/i,     { cat: 'saida', tipo: 'Viagem' }],
+    [/hotel|hospedagem|pousada|hostel|trivago|expedia|kayak\b/i,             { cat: 'saida', tipo: 'Viagem' }],
+
+    // ══ ROUPAS E MODA ══════════════════════════════════════════════════════════
+    [/renner|\bcea\b|riachuelo|zara|hering|levis|\bpuma\b|nike\b|adidas/i,   { cat: 'saida', tipo: 'Roupas' }],
+    [/roupas|vestuario|calcado|sapato|tenis\b|lupo\b|havaianas|crocs\b/i,    { cat: 'saida', tipo: 'Roupas' }],
+    [/farm\b|arezzo|schutz|melissa\b|animale|marisa\b|chico\b.*rei/i,        { cat: 'saida', tipo: 'Roupas' }],
+
+    // ══ ELETRÔNICOS & INFORMÁTICA ══════════════════════════════════════════════
+    [/kabum|casas bahia|magazine|magalu|informatica|notebook|celular/i,      { cat: 'saida', tipo: 'Eletrônico' }],
+    [/eletronico|terabyte|pichau|gta\b.*comp|dell\b|apple\b.*store/i,        { cat: 'saida', tipo: 'Eletrônico' }],
+
+    // ══ PETS ═══════════════════════════════════════════════════════════════════
+    [/veterinario|petshop|racao|petz\b|cobasi|\bpet\b|animal.*consu/i,       { cat: 'saida', tipo: 'Pet' }],
+
+    // ══ BELEZA ════════════════════════════════════════════════════════════════
     [/salao|manicure|pedicure|barbearia|barbeiro|estetica|\bspa\b|cabelei/i, { cat: 'saida', tipo: 'Beleza' }],
-    // ── Lazer & entretenimento ────────────────────────────────────────────────
-    [/cinema|teatro|\bshow\b|evento|ingresso|sympla|bilheteria|parque|boliche|karaoke/i, { cat: 'saida', tipo: 'Lazer' }],
-    // ── Transporte ────────────────────────────────────────────────────────────
-    [/\buber\b|99pop|cabify|combustivel|gasolina|ipiranga|shell\b|posto\b|auto.*posto/i, { cat: 'saida', tipo: 'Transporte' }],
-    [/\bmetro\b|onibus|bilhete.*unico|passagem.*onibus/i,             { cat: 'saida', tipo: 'Transporte' }],
-    // ── Assinaturas ───────────────────────────────────────────────────────────
-    [/netflix|spotify|\bprime\b|disney\+|hbo|youtube.*prem|twitch|apple.*one|globoplay|crunchyroll|deezer/i, { cat: 'saida', tipo: 'Assinaturas' }],
-    // ── Academia ─────────────────────────────────────────────────────────────
-    [/academia|smartfit|bluefit|bodytech|\bgym\b/i,                   { cat: 'saida', tipo: 'Academia' }],
-    // ── Seguros ──────────────────────────────────────────────────────────────
-    [/seguro\b|apolice|premio.*seguro/i,                              { cat: 'saida', tipo: 'Conta fixa' }],
-    // ── Contas fixas ─────────────────────────────────────────────────────────
-    [/aluguel|condominio|iptu|energia|enel\b|cemig\b|copel\b|internet|tim\b|claro\b|vivo\b|\boi\b/i, { cat: 'saida', tipo: 'Conta fixa' }],
-    [/conta.*agua|sabesp|saneamento|\bgas\b|comgas|ipva\b/i,          { cat: 'saida', tipo: 'Conta fixa' }],
-    // ── Renda extra genérica ───────────────────────────────────────────────
-    [/renda|freelance|autonomo/i,                                     { cat: 'entrada', tipo: 'Renda Extra' }],
+    [/sephora|boticario|natura\b|avon\b|oboticario|l\'oreal|loreal/i,        { cat: 'saida', tipo: 'Beleza' }],
+
+    // ══ LAZER & ENTRETENIMENTO ═════════════════════════════════════════════════
+    [/cinema|teatro|\bshow\b|evento|ingresso|sympla|bilheteria|parque/i,     { cat: 'saida', tipo: 'Lazer' }],
+    [/boliche|karaoke|escape room|fliperamas|laser.*tag|paintball/i,         { cat: 'saida', tipo: 'Lazer' }],
+    [/steam\b|playstation|xbox\b|nintendo|games\b|jogo.*digital/i,           { cat: 'saida', tipo: 'Lazer' }],
+
+    // ══ TRANSPORTE ════════════════════════════════════════════════════════════
+    [/\buber\b|99pop|\b99\b.*taxi|cabify|lady.*driver/i,                     { cat: 'saida', tipo: 'Transporte' }],
+    [/combustivel|gasolina|ipiranga|shell\b|posto\b|auto.*posto|br.*distrib/i, { cat: 'saida', tipo: 'Transporte' }],
+    [/\bmetro\b|onibus|bilhete.*unico|passagem.*onibus|sptrans|brt\b/i,      { cat: 'saida', tipo: 'Transporte' }],
+    [/estacionamento|pedagio|sem.*parar|veloe\b|conectcar/i,                 { cat: 'saida', tipo: 'Transporte' }],
+    [/manutencao.*carro|funilaria|mecanica|borracharia|troca.*oleo/i,        { cat: 'saida', tipo: 'Transporte' }],
+
+    // ══ ASSINATURAS DIGITAIS ═══════════════════════════════════════════════════
+    [/netflix|spotify|\bprime\b|disney\+|hbo|youtube.*prem|twitch/i,        { cat: 'saida', tipo: 'Assinaturas' }],
+    [/apple.*one|globoplay|crunchyroll|deezer|paramount|star\+/i,           { cat: 'saida', tipo: 'Assinaturas' }],
+    [/notion\b|figma\b|adobe\b|canva\b|github\b|dropbox|google.*one|icloud/i, { cat: 'saida', tipo: 'Assinaturas' }],
+    [/granaevo|assinatura.*app/i,                                            { cat: 'saida', tipo: 'Assinaturas' }],
+
+    // ══ ACADEMIA / ESPORTE ════════════════════════════════════════════════════
+    [/academia|smartfit|bluefit|bodytech|\bgym\b|crossfit|pilates/i,         { cat: 'saida', tipo: 'Academia' }],
+    [/natacao|yoga\b|musculacao|personal.*trainer|corrida.*club/i,           { cat: 'saida', tipo: 'Academia' }],
+
+    // ══ CASA & REFORMA ════════════════════════════════════════════════════════
+    [/leroy|telhanorte|c&c\b|tok.*stok|etna\b|mobly|camicado|tramontina/i,   { cat: 'saida', tipo: 'Outros' }],
+    [/reforma|pintura.*casa|pedreiro|encanador|eletricista|marceneiro/i,     { cat: 'saida', tipo: 'Outros' }],
+
+    // ══ FINANÇAS & INVESTIMENTOS ═══════════════════════════════════════════════
+    [/tesouro.*direto|nuinvest|xp\b.*invest|rico\b.*invest|easynvest|inter\b.*invest/i, { cat: 'saida', tipo: 'Investimento' }],
+    [/cdb\b|lci\b|lca\b|fundo.*invest|acoes\b|fundos.*imob/i,                { cat: 'saida', tipo: 'Investimento' }],
+    [/iof\b|tarifa.*banc|taxa.*banc|manutencao.*conta|anuidade/i,            { cat: 'saida', tipo: 'Conta fixa' }],
+
+    // ══ GOVERNO & CARTÓRIO ════════════════════════════════════════════════════
+    [/correios\b|sedex|pac\b.*envio|ecf\b/i,                                 { cat: 'saida', tipo: 'Outros' }],
+    [/cartorio|tabelionato|registro.*imovel|escritura/i,                     { cat: 'saida', tipo: 'Outros' }],
+    [/detran\b|multa.*transit|licencia.*veiculo|dpvat\b/i,                   { cat: 'saida', tipo: 'Transporte' }],
+    [/receita.*federal|darf\b|gru\b.*imposto|guia.*recolh/i,                 { cat: 'saida', tipo: 'Conta fixa' }],
+
+    // ══ SEGUROS ═══════════════════════════════════════════════════════════════
+    [/seguro\b|apolice|premio.*seguro|porto.*seguro|azul.*seguros/i,         { cat: 'saida', tipo: 'Conta fixa' }],
+
+    // ══ CONTAS FIXAS ══════════════════════════════════════════════════════════
+    [/aluguel|condominio|iptu|energia|enel\b|cemig\b|copel\b/i,              { cat: 'saida', tipo: 'Conta fixa' }],
+    [/internet|tim\b|claro\b|vivo\b|\boi\b|net\b.*telecom|sky\b/i,           { cat: 'saida', tipo: 'Conta fixa' }],
+    [/conta.*agua|sabesp|saneamento|\bgas\b|comgas|ipva\b|telefone\b/i,      { cat: 'saida', tipo: 'Conta fixa' }],
 ]);
 
 function _autoCategorizar(memo) {
@@ -1735,6 +1801,339 @@ function _initAutoCategorizar() {
     // Oculta chip quando categoria é alterada manualmente
     const catSel = document.getElementById('selectCategoria');
     if (catSel) catSel.addEventListener('change', () => hideChip());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Categorização em lote: aplica auto-categorização a transações sem categoria
+// ─────────────────────────────────────────────────────────────────────────────
+function _categorizarTudo() {
+    const semCat = (_ctx.transacoes || []).filter(t =>
+        (!t.categoria || !t.tipo) && t.descricao
+    );
+
+    if (semCat.length === 0) {
+        _ctx.mostrarNotificacao('Todas as transações já estão categorizadas!', 'success');
+        return;
+    }
+
+    const sugestoes = semCat
+        .map(t => ({ t, sugestao: _autoCatComAprendizado(t.descricao) }))
+        .filter(({ sugestao }) => sugestao !== null);
+
+    if (sugestoes.length === 0) {
+        _ctx.mostrarNotificacao(
+            `${semCat.length} transação(ões) sem categoria, mas nenhuma foi reconhecida pelas regras automáticas.`,
+            'info'
+        );
+        return;
+    }
+
+    const _catLabel = c => ({ entrada: '↑ Entrada', saida: '↓ Saída', saida_credito: '↓ Crédito', reserva: '⬡ Reserva' }[c] || c);
+
+    _ctx.criarPopupDOM((popup) => {
+        const h3 = document.createElement('h3');
+        h3.textContent = 'Categorizar Automaticamente';
+        popup.appendChild(h3);
+
+        const resumo = document.createElement('p');
+        resumo.style.cssText = 'color: var(--text-secondary); margin: 8px 0 16px; font-size: 0.9rem;';
+        resumo.textContent = `${sugestoes.length} transação(ões) identificadas de ${semCat.length} sem categoria.`;
+        popup.appendChild(resumo);
+
+        const listWrap = document.createElement('div');
+        listWrap.style.cssText = 'max-height: 300px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 20px;';
+
+        sugestoes.forEach(({ t, sugestao }, idx) => {
+            const row = document.createElement('div');
+            row.style.cssText = `padding: 10px 14px; display: flex; align-items: center; gap: 12px; font-size: 0.83rem; ${idx > 0 ? 'border-top: 1px solid rgba(255,255,255,0.07);' : ''}`;
+
+            const icon = document.createElement('i');
+            icon.className = sugestao.learned ? 'fas fa-brain' : 'fas fa-bolt';
+            icon.style.cssText = 'color: var(--text-secondary); font-size: 0.75rem; flex-shrink: 0;';
+            icon.title = sugestao.learned ? 'Regra aprendida' : 'Regra embutida';
+
+            const desc = document.createElement('span');
+            desc.style.cssText = 'flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary);';
+            desc.textContent = t.descricao;
+            desc.title = t.descricao;
+
+            const badge = document.createElement('span');
+            badge.style.cssText = 'background: rgba(67,160,71,0.15); color: var(--primary); border-radius: 6px; padding: 2px 9px; font-size: 0.75rem; white-space: nowrap; font-weight: 600;';
+            badge.textContent = `${_catLabel(sugestao.cat)} · ${sugestao.tipo}`;
+
+            row.appendChild(icon);
+            row.appendChild(desc);
+            row.appendChild(badge);
+            listWrap.appendChild(row);
+        });
+
+        popup.appendChild(listWrap);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display: flex; gap: 12px;';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.type = 'button';
+        btnCancelar.className = 'btn-secondary';
+        btnCancelar.style.cssText = 'flex: 1;';
+        btnCancelar.textContent = 'Cancelar';
+        btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
+
+        const btnAplicar = document.createElement('button');
+        btnAplicar.type = 'button';
+        btnAplicar.className = 'btn-primary';
+        btnAplicar.style.cssText = 'flex: 1;';
+        btnAplicar.textContent = `Aplicar ${sugestoes.length} Sugestão(ões)`;
+        btnAplicar.addEventListener('click', () => {
+            sugestoes.forEach(({ t, sugestao }) => {
+                t.categoria = sugestao.cat;
+                t.tipo      = sugestao.tipo;
+            });
+            _ctx.salvarDados();
+            _ctx.atualizarTudo();
+            _ctx.fecharPopup();
+            _ctx.mostrarNotificacao(`${sugestoes.length} transação(ões) categorizadas com sucesso!`, 'success');
+        });
+
+        btnRow.appendChild(btnCancelar);
+        btnRow.appendChild(btnAplicar);
+        popup.appendChild(btnRow);
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Painel de gerenciamento de regras de categorização
+// ─────────────────────────────────────────────────────────────────────────────
+function _abrirGerenciarRegras() {
+    const uid = _ctx?.user?.id || 'anon';
+    const key = `ge_learned_cats_${uid}`;
+
+    function _lerAprendidas() {
+        try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
+    }
+    function _persistir(arr) {
+        try { localStorage.setItem(key, JSON.stringify(arr)); } catch { }
+    }
+
+    _ctx.criarPopupDOM((popup) => {
+        popup.style.cssText = 'width: min(640px, 95vw); max-height: 80vh; display: flex; flex-direction: column; gap: 0;';
+
+        const h3 = document.createElement('h3');
+        h3.style.marginBottom = '12px';
+        h3.textContent = 'Regras de Categorização';
+        popup.appendChild(h3);
+
+        // ── Tabs ─────────────────────────────────────────────────────────────
+        const tabBar = document.createElement('div');
+        tabBar.style.cssText = 'display: flex; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 16px; flex-shrink: 0;';
+
+        const panels = {};
+
+        function _makeTab(label, id) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.tab = id;
+            btn.style.cssText = 'background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 16px; font-size: 0.85rem; cursor: pointer; color: var(--text-secondary); transition: color 0.15s, border-color 0.15s;';
+            btn.textContent = label;
+            return btn;
+        }
+
+        const tabA = _makeTab('Aprendidas', 'aprendidas');
+        const tabE = _makeTab('Embutidas', 'embutidas');
+        tabBar.appendChild(tabA);
+        tabBar.appendChild(tabE);
+        popup.appendChild(tabBar);
+
+        // ── Scroll wrapper ───────────────────────────────────────────────────
+        const scrollWrap = document.createElement('div');
+        scrollWrap.style.cssText = 'overflow-y: auto; flex: 1; min-height: 0;';
+        popup.appendChild(scrollWrap);
+
+        // ── Panel: Aprendidas ─────────────────────────────────────────────────
+        const panelA = document.createElement('div');
+
+        function _renderAprendidas() {
+            panelA.innerHTML = '';
+            const list = _lerAprendidas();
+
+            const toolbar = document.createElement('div');
+            toolbar.style.cssText = 'display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;';
+
+            const btnExport = document.createElement('button');
+            btnExport.type = 'button';
+            btnExport.style.cssText = 'background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; color: var(--text-secondary);';
+            btnExport.textContent = 'Exportar JSON';
+            btnExport.disabled = list.length === 0;
+            btnExport.addEventListener('click', () => {
+                const blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'regras-categorizacao.json';
+                a.click();
+                URL.revokeObjectURL(a.href);
+            });
+
+            const btnLimpar = document.createElement('button');
+            btnLimpar.type = 'button';
+            btnLimpar.style.cssText = 'background: rgba(229,62,62,0.1); border: 1px solid rgba(229,62,62,0.2); border-radius: 8px; padding: 6px 14px; font-size: 0.8rem; cursor: pointer; color: #e53e3e;';
+            btnLimpar.textContent = 'Limpar Todas';
+            btnLimpar.disabled = list.length === 0;
+            btnLimpar.addEventListener('click', () => {
+                if (!confirm(`Remover todas as ${list.length} regras aprendidas?`)) return;
+                _persistir([]);
+                _renderAprendidas();
+            });
+
+            toolbar.appendChild(btnExport);
+            toolbar.appendChild(btnLimpar);
+            panelA.appendChild(toolbar);
+
+            if (list.length === 0) {
+                const empty = document.createElement('p');
+                empty.style.cssText = 'text-align: center; color: var(--text-secondary); padding: 32px 0; font-size: 0.9rem;';
+                empty.textContent = 'Nenhuma regra aprendida. O sistema aprende quando você corrige uma sugestão automática.';
+                panelA.appendChild(empty);
+                return;
+            }
+
+            const counter = document.createElement('p');
+            counter.style.cssText = 'color: var(--text-secondary); font-size: 0.78rem; margin-bottom: 10px;';
+            counter.textContent = `${list.length} de 200 regras em uso. As regras aprendidas têm prioridade sobre as embutidas.`;
+            panelA.appendChild(counter);
+
+            const table = document.createElement('table');
+            table.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 0.83rem;';
+
+            const thead = document.createElement('thead');
+            const hrow = document.createElement('tr');
+            ['Palavra-chave', 'Categoria', 'Tipo', ''].forEach(label => {
+                const th = document.createElement('th');
+                th.textContent = label;
+                th.style.cssText = 'text-align: left; padding: 6px 10px; color: var(--text-secondary); font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 0.78rem;';
+                hrow.appendChild(th);
+            });
+            thead.appendChild(hrow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement('tbody');
+            list.forEach((rule, idx) => {
+                const tr = document.createElement('tr');
+                tr.style.cssText = idx % 2 === 0 ? 'background: rgba(255,255,255,0.02);' : '';
+
+                const tdK = document.createElement('td');
+                const code = document.createElement('code');
+                code.style.cssText = 'background: rgba(255,255,255,0.07); padding: 2px 7px; border-radius: 4px; font-size: 0.78rem;';
+                code.textContent = rule.keyword;
+                tdK.appendChild(code);
+
+                const tdC = document.createElement('td');
+                tdC.textContent = rule.cat;
+
+                const tdT = document.createElement('td');
+                tdT.textContent = rule.tipo;
+
+                const tdX = document.createElement('td');
+                const btnDel = document.createElement('button');
+                btnDel.type = 'button';
+                btnDel.title = 'Remover regra';
+                btnDel.style.cssText = 'background: none; border: none; color: rgba(229,62,62,0.7); cursor: pointer; padding: 4px 8px; font-size: 0.85rem;';
+                btnDel.textContent = '✕';
+                btnDel.addEventListener('click', () => {
+                    const updated = _lerAprendidas().filter((_, i) => i !== idx);
+                    _persistir(updated);
+                    _renderAprendidas();
+                });
+                tdX.appendChild(btnDel);
+
+                [tdK, tdC, tdT, tdX].forEach(td => {
+                    td.style.cssText = (td.style.cssText || '') + 'padding: 9px 10px; vertical-align: middle; border-bottom: 1px solid rgba(255,255,255,0.05);';
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            table.appendChild(tbody);
+            panelA.appendChild(table);
+        }
+
+        _renderAprendidas();
+        panels.aprendidas = panelA;
+
+        // ── Panel: Embutidas ──────────────────────────────────────────────────
+        const panelE = document.createElement('div');
+
+        const infoE = document.createElement('p');
+        infoE.style.cssText = 'color: var(--text-secondary); font-size: 0.78rem; margin-bottom: 12px;';
+        infoE.textContent = `${_AUTO_CAT.length} regras embutidas (somente leitura). Palavras-chave em regex, sem distinção maiúsculas/minúsculas.`;
+        panelE.appendChild(infoE);
+
+        const tableE = document.createElement('table');
+        tableE.style.cssText = 'width: 100%; border-collapse: collapse; font-size: 0.82rem;';
+
+        const theadE = document.createElement('thead');
+        const hrowE = document.createElement('tr');
+        ['Padrão', 'Categoria', 'Tipo'].forEach(label => {
+            const th = document.createElement('th');
+            th.textContent = label;
+            th.style.cssText = 'text-align: left; padding: 6px 10px; color: var(--text-secondary); font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 0.78rem;';
+            hrowE.appendChild(th);
+        });
+        theadE.appendChild(hrowE);
+        tableE.appendChild(theadE);
+
+        const tbodyE = document.createElement('tbody');
+        _AUTO_CAT.forEach(([re, res], idx) => {
+            const tr = document.createElement('tr');
+            tr.style.cssText = idx % 2 === 0 ? 'background: rgba(255,255,255,0.02);' : '';
+
+            const tdP = document.createElement('td');
+            const code = document.createElement('code');
+            code.style.cssText = 'background: rgba(255,255,255,0.07); padding: 2px 7px; border-radius: 4px; font-size: 0.75rem; word-break: break-all; display: inline-block; max-width: 320px;';
+            code.textContent = re.source.length > 70 ? re.source.slice(0, 70) + '…' : re.source;
+            code.title = re.source;
+            tdP.appendChild(code);
+
+            const tdC = document.createElement('td');
+            tdC.textContent = res.cat;
+
+            const tdT = document.createElement('td');
+            tdT.textContent = res.tipo;
+
+            [tdP, tdC, tdT].forEach(td => {
+                td.style.cssText = (td.style.cssText || '') + 'padding: 8px 10px; vertical-align: middle; border-bottom: 1px solid rgba(255,255,255,0.05);';
+                tr.appendChild(td);
+            });
+            tbodyE.appendChild(tr);
+        });
+
+        tableE.appendChild(tbodyE);
+        panelE.appendChild(tableE);
+        panels.embutidas = panelE;
+
+        // ── Tab switching ────────────────────────────────────────────────────
+        function _switchTab(id) {
+            scrollWrap.innerHTML = '';
+            scrollWrap.appendChild(panels[id]);
+            [tabA, tabE].forEach(btn => {
+                const on = btn.dataset.tab === id;
+                btn.style.borderBottomColor = on ? 'var(--primary)' : 'transparent';
+                btn.style.color = on ? 'var(--primary)' : 'var(--text-secondary)';
+                btn.style.fontWeight = on ? '600' : '400';
+            });
+        }
+
+        tabA.addEventListener('click', () => _switchTab('aprendidas'));
+        tabE.addEventListener('click', () => _switchTab('embutidas'));
+        _switchTab('aprendidas');
+
+        const btnFechar = document.createElement('button');
+        btnFechar.type = 'button';
+        btnFechar.className = 'btn-secondary';
+        btnFechar.style.cssText = 'margin-top: 16px; width: 100%; flex-shrink: 0;';
+        btnFechar.textContent = 'Fechar';
+        btnFechar.addEventListener('click', () => _ctx.fecharPopup());
+        popup.appendChild(btnFechar);
+    });
 }
 
 // Corrige mojibake em OFX de bancos brasileiros.

@@ -37,8 +37,8 @@
         default-src 'self';
         upgrade-insecure-requests;
         script-src 'self' https://www.googletagmanager.com https://connect.facebook.net;
-        style-src 'self' https://fonts.googleapis.com;
-        font-src https://fonts.gstatic.com;
+        style-src 'self';
+        font-src 'self';
         img-src 'self' data: https:;
         connect-src 'self' https://*.supabase.co;
         frame-src 'none';
@@ -56,12 +56,7 @@
     <title>Planos - GranaEvo | Transforme Suas Finanças</title>
     <meta name="description" content="Escolha o plano ideal e comece sua evolução financeira hoje. Assinatura mensal, dashboard completo e controle total de suas finanças.">
 
-    <!-- Preconnect -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Fonts: Inter auto-importado via planos.css → _fonts.css (@fontsource/inter) -->
 
     <!-- CSS -->
     <link rel="stylesheet" href="src/styles/planos.css">
@@ -637,7 +632,7 @@
                     <label for="signupPassword">Senha</label>
                     <div class="signup-input-wrap">
                         <input type="password" id="signupPassword" name="password"
-                            placeholder="Mínimo 8 caracteres"
+                            placeholder="Mínimo 10 caracteres"
                             autocomplete="new-password"
                             maxlength="128"
                             required aria-required="true"
@@ -658,9 +653,10 @@
                     </div>
                     <!-- Requisitos visuais -->
                     <div class="signup-pwd-reqs" aria-hidden="true">
-                        <span class="signup-pwd-req" id="reqMin">Mínimo 8 caracteres</span>
+                        <span class="signup-pwd-req" id="reqMin">Mínimo 10 caracteres</span>
                         <span class="signup-pwd-req" id="reqUpper">Pelo menos uma letra maiúscula</span>
                         <span class="signup-pwd-req" id="reqNum">Pelo menos um número</span>
+                        <span class="signup-pwd-req" id="reqSpec">Caractere especial (bônus)</span>
                     </div>
                 </div>
 

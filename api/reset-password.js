@@ -23,6 +23,7 @@ const ENDPOINTS = {
   verify_code:    `${SUPABASE_URL}/functions/v1/verify-and-reset-password`,
   reset_password: `${SUPABASE_URL}/functions/v1/verify-and-reset-password`,
 }
+const CHECK_EMAIL_URL = `${SUPABASE_URL}/functions/v1/check-email-status`
 
 // Rate limits por step — mais restrito em "send" para evitar spam de email
 const RATE_LIMITS = { send: 3, verify_code: 10, reset_password: 5 }
@@ -73,6 +74,42 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
 
+  // Etapa 'send': verificar email server-side antes de disparar OTP.
+  // Anti-enumeração: a resposta ao frontend é SEMPRE {status:"sent"} —
+  // o resultado do check nunca é exposto, eliminando o vetor de enumeração
+  // que existia quando o frontend chamava /api/check-email diretamente.
+  if (step === 'send') {
+    if (typeof body?.email !== 'string' || body.email.length > 254) {
+      return res.status(400).json({ error: 'email obrigatório' })
+    }
+    try {
+      const checkR = await fetch(CHECK_EMAIL_URL, {
+        method:  'POST',
+        headers: {
+          'Content-Type':    'application/json',
+          'Authorization':   `Bearer ${ANON_KEY}`,
+          'apikey':          ANON_KEY,
+          'x-proxy-secret':  PROXY_SECRET,
+          'x-forwarded-for': ip,
+        },
+        body:   JSON.stringify({ email: body.email }),
+        signal: AbortSignal.timeout(8_000),
+      })
+      if (checkR.ok) {
+        const { status: emailStatus } = await checkR.json()
+        const valid = emailStatus === 'ready' || emailStatus === 'password_exists'
+        if (!valid) {
+          logger.info('send_skipped', PATH, { ip, reason: emailStatus })
+          res.setHeader('Content-Type', 'application/json')
+          return res.status(200).json({ status: 'sent' })
+        }
+      }
+      // Se o check falhar por erro de rede/HTTP, prosseguir para evitar falso-negativo
+    } catch {
+      logger.warn('check_email_failed', PATH, { ip })
+    }
+  }
+
   // verify-and-reset-password exige o campo 'action' no body.
   // O frontend envia 'step'; o proxy repassa como 'action' para a Edge Function.
   // Para 'send', a Edge Function de destino não usa 'action' — não incluído.
@@ -83,7 +120,7 @@ export default async function handler(req, res) {
   const upstreamBody = JSON.stringify(forwardBody)
 
   try {
-    // [NOVO-003] Envia x-proxy-secret para que as Edge Functions possam bloquear
+    // Envia x-proxy-secret para que as Edge Functions possam bloquear
     // chamadas diretas que bypassam os rate limits deste proxy Vercel.
     const r = await fetch(ENDPOINTS[step], {
       method:  'POST',
