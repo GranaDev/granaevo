@@ -355,7 +355,7 @@ class DataManager {
             const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
             let saveResp;
             try {
-                const saveToken = await this.#getAuthToken();
+                let saveToken = await this.#getAuthToken();
                 saveResp = await fetch('/api/user-data', {
                     method:  'POST',
                     headers: {
@@ -365,6 +365,27 @@ class DataManager {
                     body:   serialized,
                     signal,
                 });
+
+                // 403 da Edge Function — JWT pode ter expirado entre getSession() e o fetch.
+                // Tenta uma vez com token refrescado antes de desistir.
+                if (saveResp.status === 403) {
+                    const { data: { session: _s } } = await supabase.auth.refreshSession();
+                    saveToken = _s?.access_token ?? null;
+                    if (saveToken) {
+                        const { signal: sig2, cleanup: cl2 } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
+                        try {
+                            saveResp = await fetch('/api/user-data', {
+                                method:  'POST',
+                                headers: {
+                                    'Content-Type':  'application/json',
+                                    'Authorization': `Bearer ${saveToken}`,
+                                },
+                                body:   serialized,
+                                signal: sig2,
+                            });
+                        } finally { cl2(); }
+                    }
+                }
             } finally {
                 cleanup();
             }

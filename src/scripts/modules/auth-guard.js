@@ -570,9 +570,24 @@ const SubscriptionChecker = (() => {
             }
 
             try {
+                // Garante que o JWT está carregado no cliente Supabase antes da RPC.
+                // supabase.rpc() usa o auth state interno — se chamado antes do
+                // INITIAL_SESSION event, vai como anon e recebe 403 (REVOKE FROM PUBLIC).
+                const { data: { session: _sess } } = await supabase.auth.getSession();
+                if (!_sess?.access_token) return EMPTY;
+
                 // Uma única round-trip ao banco via RPC — substitui 5 queries sequenciais.
-                const { data: result, error: rpcErr } = await supabase
+                let { data: result, error: rpcErr } = await supabase
                     .rpc('get_user_access_data', { p_user_id: userId });
+
+                // Retry único após refresh — cobre o caso onde o access_token expirou
+                // entre o getSession() acima e o envio do request HTTP.
+                if (rpcErr?.code === '42501' || rpcErr?.status === 403) {
+                    const { data: { session: _sess2 } } = await supabase.auth.refreshSession();
+                    if (!_sess2?.access_token) return EMPTY;
+                    ({ data: result, error: rpcErr } = await supabase
+                        .rpc('get_user_access_data', { p_user_id: userId }));
+                }
 
                 if (rpcErr || !result) return EMPTY;
 
