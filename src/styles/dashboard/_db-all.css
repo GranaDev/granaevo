@@ -4,6 +4,9 @@
 /* Font Awesome self-hosted via npm â€” sem dependÃªncia de CDN externo */
 @import '@fortawesome/fontawesome-free/css/all.min.css';
 
+/* Tema claro â€” overrides de componentes com cores hardcoded */
+@import './_db-light-theme.css';
+
 /* ==============================================
    GRANAEVO - CSS COMPLETO E RESPONSIVO
    ============================================== */
@@ -2306,19 +2309,21 @@ select.form-input option:checked {
 /* ── Swipe actions (mobile) ──────────────────────────────────────────── */
 .mov-swipe-wrap { position: relative; overflow: hidden; border-radius: 14px; }
 .mov-swipe-actions { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; z-index: 0; }
-.mov-swipe-actions--left  { right: 0; padding-right: 8px; }
-.mov-swipe-actions--right { left: 0; padding-left: 8px; }
+.mov-swipe-actions--left  { right: 0; padding-right: 10px; }
+.mov-swipe-actions--right { left: 0; padding-left: 10px; }
 .mov-swipe-btn {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 4px; width: 68px; height: 68px; border: none; border-radius: 12px;
-    cursor: pointer; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; transition: opacity 0.2s;
+    gap: 3px; width: 52px; height: 52px; border: none; border-radius: 12px;
+    cursor: pointer; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em;
+    transition: transform 0.15s, opacity 0.15s; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
 }
-.mov-swipe-btn i { font-size: 1.1rem; }
-.mov-swipe-btn--del { background: linear-gradient(135deg,#ff4b4b,#c0392b); color: #fff; }
+.mov-swipe-btn:active { transform: scale(0.94); opacity: 0.85; }
+.mov-swipe-btn i { font-size: 0.95rem; }
+.mov-swipe-btn--del  { background: linear-gradient(135deg,#ff4b4b,#c0392b); color: #fff; }
 .mov-swipe-btn--edit { background: linear-gradient(135deg,#3b82f6,#1d4ed8); color: #fff; }
-.mov-item { position: relative; z-index: 1; transition: transform 0.18s ease-out; will-change: transform; }
-.mov-item.swipe-open-left  { box-shadow: -3px 0 12px rgba(255,75,75,0.2); }
-.mov-item.swipe-open-right { box-shadow:  3px 0 12px rgba(59,130,246,0.2); }
+.mov-item { position: relative; z-index: 1; transition: transform 0.18s cubic-bezier(0.25,0.46,0.45,0.94); will-change: transform; background: var(--dark-card, #13141f); }
+.mov-item.swipe-open-left  { box-shadow: -4px 0 16px rgba(255,75,75,0.25); }
+.mov-item.swipe-open-right { box-shadow:  4px 0 16px rgba(59,130,246,0.25); }
 
 /* ========== MOVIMENTAÃ‡Ã•ES ========== */
 .movimentacoes-list {
@@ -8292,202 +8297,194 @@ button,
     overscroll-behavior: none;
 }
 
-/* Camada 2 â€” Spotlight (destaca o elemento alvo via box-shadow gigante) */
+/* ── Spotlight ─────────────────────────────────────────────────────────────── */
 .tut-spotlight {
     position: fixed;
     z-index: 8992;
     pointer-events: none;
-    border-radius: 12px;
+    border-radius: 16px;
     box-shadow:
-        0 0 0 3px rgba(67, 160, 71, 0.55),
-        0 0 0 7px rgba(67, 160, 71, 0.10),
-        0 0 0 9999px rgba(4, 6, 18, 0.82);
+        0 0 0 2px rgba(16, 185, 129, 0.65),
+        0 0 0 6px rgba(16, 185, 129, 0.12),
+        0 0 0 9999px rgba(2, 4, 14, 0.85);
     transition:
-        top          0.42s cubic-bezier(0.4, 0, 0.2, 1),
-        left         0.42s cubic-bezier(0.4, 0, 0.2, 1),
-        width        0.42s cubic-bezier(0.4, 0, 0.2, 1),
-        height       0.42s cubic-bezier(0.4, 0, 0.2, 1),
-        border-radius 0.4s ease,
-        opacity      0.24s ease;
+        top          0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        left         0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        width        0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        height       0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        border-radius 0.36s ease,
+        opacity      0.22s ease;
 }
 
 .tut-spotlight.tut-spot-oculto { opacity: 0; }
 
-/* Camada 3 â€” Card flutuante (compacto) */
+/* ── Card ──────────────────────────────────────────────────────────────────── */
+@keyframes tutEntrar {
+    from { opacity: 0; transform: scale(0.9) translateY(16px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes tutSair {
+    to { opacity: 0; transform: scale(0.92) translateY(10px); }
+}
+
 .tut-card {
     position: fixed;
     z-index: 8995;
-    background: linear-gradient(145deg, #181c2e 0%, #22263a 100%);
-    border: 1px solid rgba(67, 160, 71, 0.22);
-    border-radius: 16px;
-    padding: 14px 16px 12px;
-    width: 320px;
-    max-width: calc(100vw - 28px);
+    background: linear-gradient(160deg, #151928 0%, #1c2035 100%);
+    border: 1px solid rgba(16, 185, 129, 0.18);
+    border-radius: 20px;
+    padding: 0;
+    width: 360px;
+    max-width: calc(100vw - 24px);
     box-shadow:
-        0 24px 64px rgba(0, 0, 0, 0.7),
-        0 0 0 1px rgba(255, 255, 255, 0.04),
-        0 0 48px rgba(67, 160, 71, 0.07);
+        0 32px 80px rgba(0, 0, 0, 0.75),
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        0 0 60px rgba(16, 185, 129, 0.05);
     pointer-events: all;
-    animation: tutEntrar 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+    animation: tutEntrar 0.3s cubic-bezier(0.34, 1.35, 0.64, 1) forwards;
     font-family: 'DM Sans', 'Segoe UI', sans-serif;
-}
-
-@keyframes tutEntrar {
-    from { opacity: 0; transform: scale(0.88) translateY(14px); }
-    to   { opacity: 1; transform: scale(1) translateY(0); }
+    overflow: hidden;
 }
 
 .tut-card.tut-saindo {
-    animation: tutSair 0.2s ease forwards !important;
+    animation: tutSair 0.22s ease forwards !important;
 }
 
-@keyframes tutSair {
-    to { opacity: 0; transform: scale(0.9) translateY(10px); }
-}
-
-/* Seta triangular */
+/* Seta direcional */
 .tut-card::after {
     content: '';
     position: absolute;
-    width: 12px;
-    height: 12px;
-    background: #1e2236;
-    border: 1px solid rgba(67, 160, 71, 0.22);
+    width: 12px; height: 12px;
+    background: #151928;
+    border: 1px solid rgba(16, 185, 129, 0.18);
     display: none;
 }
+.tut-card.tut-seta-cima::after  { display: block; top: -6px; left: 50%; transform: translateX(-50%) rotate(45deg); border-bottom-color: transparent; border-right-color: transparent; }
+.tut-card.tut-seta-baixo::after { display: block; bottom: -6px; left: 50%; transform: translateX(-50%) rotate(45deg); border-top-color: transparent; border-left-color: transparent; }
+.tut-card.tut-seta-esq::after   { display: block; left: -6px; top: 28px; transform: rotate(45deg); border-right-color: transparent; border-top-color: transparent; }
+.tut-card.tut-seta-dir::after   { display: block; right: -6px; top: 28px; transform: rotate(45deg); border-left-color: transparent; border-bottom-color: transparent; }
 
-.tut-card.tut-seta-cima::after {
-    display: block;
-    top: -6px;
-    left: 50%;
-    transform: translateX(-50%) rotate(45deg);
-    border-bottom-color: transparent;
-    border-right-color: transparent;
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+.tut-header {
+    padding: 14px 18px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
-.tut-card.tut-seta-baixo::after {
-    display: block;
-    bottom: -6px;
-    left: 50%;
-    transform: translateX(-50%) rotate(45deg);
-    border-top-color: transparent;
-    border-left-color: transparent;
+.tut-progress-wrap {
+    height: 3px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 3px;
+    overflow: hidden;
 }
 
-.tut-card.tut-seta-esq::after {
-    display: block;
-    left: -6px;
-    top: 24px;
-    transform: rotate(45deg);
-    border-right-color: transparent;
-    border-top-color: transparent;
+.tut-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #059669, #10b981, #34d399);
+    border-radius: 3px;
+    transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
 }
 
-.tut-card.tut-seta-dir::after {
-    display: block;
-    right: -6px;
-    top: 24px;
-    transform: rotate(45deg);
-    border-left-color: transparent;
-    border-bottom-color: transparent;
-}
-
-/* CabeÃ§alho: badge + dots */
-.tut-top {
+.tut-header-meta {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
-    margin-bottom: 10px;
 }
 
 .tut-badge {
     font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 1.4px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #66bb6a;
-    background: rgba(67, 160, 71, 0.12);
-    border: 1px solid rgba(67, 160, 71, 0.2);
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
     border-radius: 20px;
-    padding: 2px 8px;
-    flex-shrink: 0;
+    padding: 2px 9px;
     white-space: nowrap;
 }
 
-.tut-dots {
+.tut-secao {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.3);
     display: flex;
-    gap: 3px;
-    flex: 1;
-    justify-content: flex-end;
-    flex-wrap: wrap;
     align-items: center;
+    gap: 4px;
+    letter-spacing: 0.03em;
 }
 
-.tut-dot {
-    width: 14px;
-    height: 2.5px;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.1);
-    display: inline-block;
-    transition: background 0.3s ease, width 0.3s ease;
+.tut-secao .fas { font-size: 0.6rem; }
+
+/* ── Body ───────────────────────────────────────────────────────────────────── */
+.tut-body {
+    padding: 18px 18px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tut-icon-wrap {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    border: 1px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
+    align-self: flex-start;
 }
 
-.tut-dot.tut-done  { background: rgba(67, 160, 71, 0.3); }
-.tut-dot.tut-ativo { background: #43a047; width: 22px; }
+.tut-icon-wrap .fas { font-size: 1.15rem; }
 
-/* ConteÃºdo */
 .tut-titulo {
-    font-size: 0.97rem;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 6px;
-    line-height: 1.3;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-}
-
-.tut-titulo .fas {
-    color: #66bb6a;
-    font-size: 0.92rem;
-    flex-shrink: 0;
+    font-size: 1rem;
+    font-weight: 800;
+    color: #f0f2ff;
+    line-height: 1.28;
+    margin: 0;
+    letter-spacing: -0.01em;
 }
 
 .tut-texto {
-    font-size: 0.82rem;
-    color: #b0b3c1;
-    line-height: 1.62;
-    margin-bottom: 12px;
+    font-size: 0.84rem;
+    color: rgba(176, 179, 200, 0.9);
+    line-height: 1.65;
+    margin: 0;
 }
 
-.tut-texto strong { color: #dde1f0; font-weight: 600; }
-.tut-texto em     { color: #7ee8a2; font-style: normal; font-weight: 500; }
+.tut-texto strong { color: #e2e5f5; font-weight: 700; }
+.tut-texto em     { color: #6ee7b7; font-style: normal; font-weight: 600; }
 
-/* RodapÃ© */
-.tut-acoes {
+/* ── Footer ─────────────────────────────────────────────────────────────────── */
+.tut-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 6px;
+    gap: 8px;
+    padding: 12px 18px 16px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    background: rgba(0,0,0,0.15);
 }
 
-.tut-pular-tudo {
-    font-size: 0.70rem;
-    color: #4e5870;
+.tut-btn-pular {
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.25);
     background: none;
     border: none;
     cursor: pointer;
     padding: 5px 2px;
-    text-decoration: underline;
-    text-underline-offset: 3px;
     transition: color 0.2s;
     font-family: inherit;
     flex-shrink: 0;
     white-space: nowrap;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: rgba(255,255,255,0.12);
 }
-
-.tut-pular-tudo:hover { color: #b0b3c1; }
+.tut-btn-pular:hover { color: rgba(255,255,255,0.55); }
 
 .tut-nav {
     display: flex;
@@ -8495,52 +8492,55 @@ button,
     align-items: center;
 }
 
-.tut-voltar {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #b0b3c1;
-    border-radius: 9px;
-    padding: 7px 12px;
-    font-size: 0.78rem;
+.tut-btn-voltar {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.5);
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    font-weight: 600;
     cursor: pointer;
     transition: background 0.2s, color 0.2s;
     font-family: inherit;
     white-space: nowrap;
 }
+.tut-btn-voltar:hover:not([disabled]) { background: rgba(255,255,255,0.11); color: rgba(255,255,255,0.8); }
+.tut-btn-voltar[disabled] { opacity: 0.22; cursor: default; }
 
-.tut-voltar:hover:not([disabled]) {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
-}
-
-.tut-voltar[disabled] {
-    opacity: 0.26;
-    cursor: default;
-}
-
-.tut-avancar {
-    background: linear-gradient(135deg, #43a047, #66bb6a);
+.tut-btn-avancar {
+    background: linear-gradient(135deg, #059669, #10b981);
     border: none;
     color: #fff;
-    border-radius: 9px;
-    padding: 7px 16px;
+    border-radius: 10px;
+    padding: 8px 18px;
     font-size: 0.82rem;
-    font-weight: 600;
+    font-weight: 700;
     cursor: pointer;
-    transition: box-shadow 0.2s, transform 0.2s;
+    transition: box-shadow 0.2s, transform 0.15s;
     font-family: inherit;
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.01em;
 }
-
-.tut-avancar:hover {
-    box-shadow: 0 4px 16px rgba(67, 160, 71, 0.4);
+.tut-btn-avancar:hover {
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
     transform: translateY(-1px);
 }
+.tut-btn-avancar:active { transform: translateY(0); }
+.tut-btn-avancar--concluir {
+    background: linear-gradient(135deg, #059669, #10b981);
+    padding: 8px 20px;
+}
 
-/* Mobile â€” posicionamento inteiramente via JS; apenas ocultar setas e dots */
+/* ── Mobile ─────────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
     .tut-card::after { display: none !important; }
-    .tut-dots        { display: none; }
+    .tut-card { border-radius: 18px; }
+    .tut-titulo { font-size: 0.94rem; }
+    .tut-texto  { font-size: 0.81rem; }
 }
 /* =====================================================
    HISTÃ“RICO PATRIMONIAL â€” GrÃ¡ficos

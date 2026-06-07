@@ -177,7 +177,7 @@ function _buildResumoCartao(cartao) {
 
     const actionsDiv = document.createElement('div'); actionsDiv.className = 'cdes-resumo-actions';
     const actionsDef = [
-        { icon: 'fa-file-invoice-dollar', label: 'Pagar Fatura',    extraClass: '', action: () => { const f = _ctx.contasFixas.find(c => c.cartaoId === cartao.id && c.tipoContaFixa === 'fatura_cartao' && !c.pago); if (f) abrirPopupPagarContaFixa(f.id); else _ctx.mostrarNotificacao('Nenhuma fatura em aberto.', 'info'); } },
+        { icon: 'fa-file-invoice-dollar', label: 'Pagar Fatura',    extraClass: '', action: () => { const f = _ctx.contasFixas.find(c => c.cartaoId === cartao.id && c.tipoContaFixa === 'fatura_cartao' && !c.pago); if (f) _ctx.abrirPopupPagarContaFixa(f.id); else _ctx.mostrarNotificacao('Nenhuma fatura em aberto.', 'info'); } },
         { icon: cartao.congelado ? 'fa-fire' : 'fa-snowflake',       label: cartao.congelado ? 'Descongelar' : 'Congelar Cartão', extraClass: cartao.congelado ? 'cdes-action--frozen' : '', action: () => congelarCartao(cartao.id) },
         { icon: 'fa-circle-info',         label: 'Ver Detalhes',     extraClass: '', action: () => abrirDetalhesCartaoCompleto(cartao.id) },
         { icon: 'fa-ellipsis-vertical',   label: 'Mais opções',      extraClass: '', action: () => abrirCartaoForm(cartao.id) },
@@ -348,7 +348,7 @@ function _buildMobileContent(container, cartaoAtivo) {
 
     const actionsRow = document.createElement('div'); actionsRow.className = 'cartao-actions-row';
     const acoesDef = [
-        { icon: 'fa-file-invoice-dollar', label: 'Pagar Fatura', action: () => { const f = _ctx.contasFixas.find(c => c.cartaoId === cartaoAtivo.id && c.tipoContaFixa === 'fatura_cartao' && !c.pago); if (f) abrirPopupPagarContaFixa(f.id); else _ctx.mostrarNotificacao('Nenhuma fatura em aberto neste cartão.', 'info'); } },
+        { icon: 'fa-file-invoice-dollar', label: 'Pagar Fatura', action: () => { const f = _ctx.contasFixas.find(c => c.cartaoId === cartaoAtivo.id && c.tipoContaFixa === 'fatura_cartao' && !c.pago); if (f) _ctx.abrirPopupPagarContaFixa(f.id); else _ctx.mostrarNotificacao('Nenhuma fatura em aberto neste cartão.', 'info'); } },
         { icon: cartaoAtivo.congelado ? 'fa-fire' : 'fa-snowflake', label: cartaoAtivo.congelado ? 'Descongelar' : 'Congelar', extraClass: cartaoAtivo.congelado ? 'cartao-action-btn--freeze cartao-action-btn--frozen' : 'cartao-action-btn--freeze', action: () => congelarCartao(cartaoAtivo.id) },
         { icon: 'fa-circle-info', label: 'Detalhes', action: () => abrirDetalhesCartaoCompleto(cartaoAtivo.id) },
     ];

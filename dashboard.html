@@ -13,18 +13,7 @@
     <!-- beforeinstallprompt capturado o mais cedo possível.
          O pwa-installer.js é lazy-loaded (Configurações) e perderia o evento
          se não o capturássemos aqui, antes de qualquer módulo. -->
-    <script>
-        window.__pwaInstallPrompt = null;
-        window.addEventListener('beforeinstallprompt', function(e) {
-            e.preventDefault(); // previne banner automático do Chrome
-            window.__pwaInstallPrompt = e;
-            document.dispatchEvent(new CustomEvent('ge:pwa-ready'));
-        });
-        window.addEventListener('appinstalled', function() {
-            window.__pwaInstallPrompt = null;
-            document.dispatchEvent(new CustomEvent('ge:pwa-installed'));
-        });
-    </script>
+    <script src="/pwa-init.js"></script>
 
     <!-- ================================================================
          🔐 CAMADA 2 — Referrer Policy

@@ -1,190 +1,207 @@
 /**
  * @module tutorial
- * @description Sistema de tutorial interativo do GranaEvo.
+ * @description Tutorial interativo do GranaEvo — redesenhado.
  *
  * Uso:
  *   import { iniciarTutorial } from './tutorial.js';
- *   iniciarTutorial();                        // tutorial padrão (Individual)
- *   iniciarTutorial({ plano: 'Casal' });      // tutorial com steps de convidados
- *   iniciarTutorial({ isGuest: true });       // tutorial simplificado para convidados
- *
- * @typedef {'Individual'|'Casal'|'Família'} PlanoNome
- *
- * @typedef {Object} TutorialPerfil
- * @property {PlanoNome} [plano='Individual'] - Plano do usuário
- * @property {boolean}   [isGuest=false]      - Se é conta convidada
- *
- * @typedef {Object} Passo
- * @property {string|null}   pagina    - ID da página interna (ex: 'dashboard')
- * @property {string|null}   [seletor] - Seletor CSS do elemento destacado
- * @property {string[]}      [seletores] - Múltiplos seletores (união do rect)
- * @property {string}        titulo    - Título do passo (HTML permitido via ic())
- * @property {string}        texto     - Texto do passo (HTML)
- * @property {'centro'|'baixo'|'cima'|'direita'|'esquerda'} pos - Posição do card
- * @property {boolean}       [ultimo]  - Marca o último passo
+ *   iniciarTutorial();
+ *   iniciarTutorial({ plano: 'Casal' });
+ *   iniciarTutorial({ isGuest: true });
  */
 
-// ── Ícone helper ───────────────────────────────────────────────────────────────
-const ic = (cls) => `<i class="fas ${cls}"></i>`;
-
-// ── Passos base (comuns a todos os perfis) ─────────────────────────────────────
+// ── Passos base ────────────────────────────────────────────────────────────────
 const PASSOS_BASE = [
   {
-    pagina: null,
-    seletor: null,
-    titulo: `${ic('fa-star')} Bem-vindo ao GranaEvo!`,
-    texto: 'Que bom ter você aqui! Em menos de 2 minutos vou te mostrar tudo que o <strong>GranaEvo</strong> tem para transformar a sua vida financeira.',
-    pos: 'centro',
+    pagina:   null,
+    seletor:  null,
+    icon:     'fa-rocket',
+    iconColor:'#10b981',
+    secao:    null,
+    titulo:   'Bem-vindo ao GranaEvo!',
+    texto:    'Em poucos passos você vai conhecer <strong>todas as funcionalidades</strong> do app. Vou te guiar por cada seção.',
+    pos:      'centro',
   },
   {
-    pagina: 'dashboard',
-    seletores: ['.saldo-hero-mobile', '.cards-grid'],
-    titulo: `${ic('fa-chart-line')} Seu Painel Financeiro`,
-    texto: 'Aqui está o resumo do mês: <em>Saldo</em>, <em>Entradas</em>, <em>Saídas</em> e <em>Reservas</em>. Uma olhada e você já sabe como estão suas finanças.',
-    pos: 'baixo',
+    pagina:   'dashboard',
+    seletores:['.saldo-hero-mobile', '.cards-grid'],
+    icon:     'fa-chart-line',
+    iconColor:'#10b981',
+    secao:    'Dashboard',
+    titulo:   'Painel Financeiro',
+    texto:    'Aqui está o resumo do mês: <strong>Saldo disponível</strong>, Entradas, Saídas e Reservas. Uma olhada e você já sabe como estão suas finanças.',
+    pos:      'baixo',
   },
   {
-    pagina: 'dashboard',
-    seletor: '#sectionContasFixas',
-    titulo: `${ic('fa-folder-open')} Contas Fixas`,
-    texto: 'Cadastre suas contas recorrentes — aluguel, internet, academia, streaming... O GranaEvo <em>alerta sobre vencimentos próximos</em> e você marca como paga com um clique.',
-    pos: 'cima',
+    pagina:   'dashboard',
+    seletor:  '#sectionContasFixas',
+    icon:     'fa-folder-open',
+    iconColor:'#f59e0b',
+    secao:    'Dashboard',
+    titulo:   'Contas Fixas',
+    texto:    'Cadastre contas recorrentes — aluguel, internet, streaming... O app <strong>alerta vencimentos próximos</strong> e você marca como paga com um clique.',
+    pos:      'cima',
   },
   {
-    pagina: 'transacoes',
-    seletor: '.transaction-form',
-    titulo: `${ic('fa-credit-card')} Lançar Transações`,
-    texto: 'O coração do app. Registre <em>tudo que entra e sai</em>: receitas, gastos, reservas e compras no crédito. Selecione categoria, tipo, descrição e valor.',
-    pos: 'baixo',
+    pagina:   'transacoes',
+    seletor:  '.transaction-form',
+    icon:     'fa-plus-circle',
+    iconColor:'#10b981',
+    secao:    'Transações',
+    titulo:   'Lançar Transações',
+    texto:    'Registre <strong>tudo que entra e sai</strong>: receitas, gastos, reservas e crédito. A categoria é sugerida automaticamente enquanto você digita.',
+    pos:      'baixo',
   },
   {
-    pagina: 'transacoes',
-    seletor: '#listaMovimentacoes',
-    titulo: `${ic('fa-list')} Histórico Completo`,
-    texto: 'Suas movimentações ficam aqui, organizadas e filtráveis por período. Toque em qualquer item para <strong>editar ou excluir</strong>.',
-    pos: 'cima',
+    pagina:   'transacoes',
+    seletor:  '#listaMovimentacoes',
+    icon:     'fa-list-ul',
+    iconColor:'#3b82f6',
+    secao:    'Transações',
+    titulo:   'Histórico Completo',
+    texto:    'Todas as movimentações organizadas e filtráveis por período. <strong>Deslize</strong> um item para editar ou excluir rapidamente.',
+    pos:      'cima',
   },
   {
-    pagina: 'transacoes',
-    seletor: '#orcamentosSection',
-    titulo: `${ic('fa-wallet')} Orçamentos por Categoria`,
-    texto: 'Defina limites mensais para cada tipo de gasto — Mercado, Lazer, Farmácia... A barra fica <em style="color:var(--warning)">amarela</em> a 80% e <em style="color:var(--danger)">vermelha</em> ao estourar. Você recebe alerta automático.',
-    pos: 'baixo',
+    pagina:   'transacoes',
+    seletor:  '#orcamentosSection',
+    icon:     'fa-wallet',
+    iconColor:'#f59e0b',
+    secao:    'Transações',
+    titulo:   'Orçamentos por Categoria',
+    texto:    'Defina limites mensais por gasto. A barra fica <strong style="color:#f59e0b">amarela a 80%</strong> e <strong style="color:#ef4444">vermelha ao estourar</strong>. Você recebe alerta automático.',
+    pos:      'baixo',
   },
   {
-    pagina: 'reservas',
-    seletor: '.reservas-sidebar',
-    titulo: `${ic('fa-piggy-bank')} Reservas`,
-    texto: 'Crie reservas para seus objetivos: viagem, emergência, novo equipamento... Acompanhe o progresso em <em>gráficos em tempo real</em>.',
-    pos: 'direita',
+    pagina:   'reservas',
+    seletor:  '.reservas-sidebar',
+    icon:     'fa-piggy-bank',
+    iconColor:'#a78bfa',
+    secao:    'Reservas',
+    titulo:   'Metas e Reservas',
+    texto:    'Crie reservas para objetivos: viagem, emergência, equipamento... Acompanhe o progresso com <strong>gráficos e simulador de aportes</strong>.',
+    pos:      'direita',
   },
   {
-    pagina: 'cartoes',
-    seletor: null,
-    titulo: `${ic('fa-gem')} Cartões de Crédito`,
-    texto: 'Gerencie seus cartões, visualize as <strong>faturas detalhadas</strong> com cada compra, acompanhe parcelas e nunca mais seja pego de surpresa.',
-    pos: 'centro',
+    pagina:   'cartoes',
+    seletor:  null,
+    icon:     'fa-credit-card',
+    iconColor:'#ec4899',
+    secao:    'Cartões',
+    titulo:   'Cartões de Crédito',
+    texto:    'Gerencie cartões, visualize <strong>faturas detalhadas</strong> com cada compra, acompanhe parcelas e nunca seja pego de surpresa no fechamento.',
+    pos:      'centro',
   },
   {
-    pagina: 'graficos',
-    seletor: '.graficos-filtros',
-    titulo: `${ic('fa-chart-bar')} Análise Visual`,
-    texto: 'Transforme números em <em>gráficos inteligentes</em>. Veja distribuição dos gastos, evolução mensal e compare períodos. Clique em "Gerar Gráficos" para explorar.',
-    pos: 'baixo',
+    pagina:   'graficos',
+    seletor:  '.graficos-filtros',
+    icon:     'fa-chart-pie',
+    iconColor:'#06b6d4',
+    secao:    'Gráficos',
+    titulo:   'Análise Visual',
+    texto:    'Transforme números em <strong>gráficos inteligentes</strong>. Veja distribuição dos gastos, evolução mensal e compare períodos.',
+    pos:      'baixo',
   },
   {
-    pagina: 'relatorios',
-    seletor: '.rel-filtros',
-    titulo: `${ic('fa-file-alt')} Relatórios Detalhados`,
-    texto: 'Gere relatórios completos com análise por categoria. Perfeito para entender <strong>onde foi seu dinheiro</strong> e planejar o próximo mês.',
-    pos: 'baixo',
+    pagina:   'relatorios',
+    seletor:  '.rel-filtros',
+    icon:     'fa-file-alt',
+    iconColor:'#f97316',
+    secao:    'Relatórios',
+    titulo:   'Relatórios Completos',
+    texto:    'Exporte relatórios em <strong>CSV, Excel ou PDF</strong>. Analise por categoria, período e veja o histórico patrimonial da sua evolução financeira.',
+    pos:      'baixo',
   },
 ];
 
-// ── Passos específicos de planos com convidados ─────────────────────────────────
 const PASSOS_CONVIDADOS = [
   {
-    pagina: 'configuracoes',
-    seletor: '.cfg-convidados, [data-section="convidados"]',
-    titulo: `${ic('fa-users')} Gerenciar Convidados`,
-    texto: 'No seu plano <strong>Casal/Família</strong>, você pode convidar membros para compartilhar o acesso. Envie o convite por email e compartilhe o código de 6 dígitos.',
-    pos: 'cima',
+    pagina:   'configuracoes',
+    seletor:  '.cfg-convidados, [data-section="convidados"]',
+    icon:     'fa-users',
+    iconColor:'#10b981',
+    secao:    'Configurações',
+    titulo:   'Gerenciar Convidados',
+    texto:    'No plano <strong>Casal/Família</strong>, convide membros por email e compartilhe o código de 6 dígitos. Cada um tem seu acesso.',
+    pos:      'cima',
   },
 ];
 
-// ── Passos para convidados (versão simplificada) ────────────────────────────────
 const PASSOS_GUEST = [
   {
-    pagina: null,
-    seletor: null,
-    titulo: `${ic('fa-star')} Bem-vindo ao GranaEvo!`,
-    texto: 'Você foi convidado para acessar o GranaEvo! Você tem acesso <strong>visualização</strong> das finanças. Vou te mostrar o que você pode fazer.',
-    pos: 'centro',
+    pagina:   null,
+    seletor:  null,
+    icon:     'fa-hand-wave',
+    iconColor:'#10b981',
+    secao:    null,
+    titulo:   'Bem-vindo ao GranaEvo!',
+    texto:    'Você foi convidado para acessar este GranaEvo. Você pode <strong>visualizar</strong> as finanças e, dependendo das permissões, editar transações.',
+    pos:      'centro',
   },
   {
-    pagina: 'dashboard',
-    seletores: ['.saldo-hero-mobile', '.cards-grid'],
-    titulo: `${ic('fa-chart-line')} Painel Financeiro Compartilhado`,
-    texto: 'Aqui você vê o resumo financeiro da conta que você foi convidado a acessar. Os dados são atualizados em tempo real.',
-    pos: 'baixo',
+    pagina:   'dashboard',
+    seletores:['.saldo-hero-mobile', '.cards-grid'],
+    icon:     'fa-chart-line',
+    iconColor:'#10b981',
+    secao:    'Dashboard',
+    titulo:   'Painel Financeiro Compartilhado',
+    texto:    'Resumo financeiro da conta que você foi convidado a acessar. Os dados são <strong>atualizados em tempo real</strong>.',
+    pos:      'baixo',
   },
   {
-    pagina: 'transacoes',
-    seletor: '#listaMovimentacoes',
-    titulo: `${ic('fa-list')} Histórico de Transações`,
-    texto: 'Você pode visualizar todas as movimentações. Dependendo das permissões, pode adicionar ou editar transações.',
-    pos: 'cima',
+    pagina:   'transacoes',
+    seletor:  '#listaMovimentacoes',
+    icon:     'fa-list-ul',
+    iconColor:'#3b82f6',
+    secao:    'Transações',
+    titulo:   'Histórico de Transações',
+    texto:    'Visualize todas as movimentações. Dependendo das permissões, você pode <strong>adicionar ou editar</strong> transações.',
+    pos:      'cima',
   },
   {
-    pagina: 'graficos',
-    seletor: '.graficos-filtros',
-    titulo: `${ic('fa-chart-bar')} Análise Visual`,
-    texto: 'Visualize gráficos e análises financeiras. Uma forma visual de entender o fluxo de dinheiro.',
-    pos: 'baixo',
+    pagina:   'graficos',
+    seletor:  '.graficos-filtros',
+    icon:     'fa-chart-pie',
+    iconColor:'#06b6d4',
+    secao:    'Gráficos',
+    titulo:   'Análise Visual',
+    texto:    'Gráficos e análises financeiras da conta. Uma forma visual de entender o <strong>fluxo de dinheiro</strong> em tempo real.',
+    pos:      'baixo',
   },
 ];
 
-// ── Passo final (comum a todos) ─────────────────────────────────────────────────
 const PASSO_FINAL = {
-  pagina: 'configuracoes',
-  seletor: '.cfg-body',
-  titulo: `${ic('fa-cog')} Personalize Tudo`,
-  texto: 'Aqui você altera <strong>nome e senha</strong>, gerencia sua assinatura e pode reiniciar esse tutorial quando quiser.',
-  pos: 'cima',
+  pagina:   'configuracoes',
+  seletor:  '.cfg-body',
+  icon:     'fa-sliders-h',
+  iconColor:'#6366f1',
+  secao:    'Configurações',
+  titulo:   'Personalize Tudo',
+  texto:    'Altere <strong>nome, senha e tema</strong>, gerencie sua assinatura, ative notificações push e reinicie este tutorial quando quiser.',
+  pos:      'cima',
 };
 
 const PASSO_CONCLUSAO = {
-  pagina: null,
-  seletor: null,
-  titulo: `${ic('fa-check-circle')} Tudo pronto!`,
-  texto: 'Parabéns! Agora você domina o GranaEvo. Comece lançando suas primeiras transações e veja sua vida financeira se transformar.',
-  pos: 'centro',
-  ultimo: true,
+  pagina:   null,
+  seletor:  null,
+  icon:     'fa-check-circle',
+  iconColor:'#10b981',
+  secao:    null,
+  titulo:   'Você está pronto!',
+  texto:    'Parabéns! Agora você domina o GranaEvo. Comece lançando suas primeiras transações e acompanhe sua evolução financeira.',
+  pos:      'centro',
+  ultimo:   true,
 };
 
-/**
- * Monta a sequência de passos com base no perfil do usuário.
- * @param {TutorialPerfil} perfil - Perfil do usuário
- * @returns {Passo[]} Sequência de passos para o tutorial
- */
 function montarPassos(perfil) {
   const { plano = 'Individual', isGuest = false } = perfil;
-
-  // Tutorial simplificado para convidados
-  if (isGuest) {
-    return [...PASSOS_GUEST, PASSO_FINAL, PASSO_CONCLUSAO];
-  }
-
-  // Tutorial completo + steps de convidados para planos Casal/Família
+  if (isGuest) return [...PASSOS_GUEST, PASSO_FINAL, PASSO_CONCLUSAO];
   const passos = [...PASSOS_BASE];
-  if (plano === 'Casal' || plano === 'Família') {
-    passos.push(...PASSOS_CONVIDADOS);
-  }
+  if (plano === 'Casal' || plano === 'Família') passos.push(...PASSOS_CONVIDADOS);
   passos.push(PASSO_FINAL, PASSO_CONCLUSAO);
   return passos;
 }
 
-// ── Estado ──────────────────────────────────────────────────────────────────────
+// ── Estado ─────────────────────────────────────────────────────────────────────
 let _passos    = [];
 let _passo     = 0;
 let _backdrop  = null;
@@ -192,12 +209,7 @@ let _spotlight = null;
 let _card      = null;
 let _ativo     = false;
 
-// ── API pública ─────────────────────────────────────────────────────────────────
-
-/**
- * Inicia o tutorial interativo.
- * @param {TutorialPerfil} [perfil={}] - Perfil do usuário para personalizar os steps
- */
+// ── API pública ────────────────────────────────────────────────────────────────
 export function iniciarTutorial(perfil = {}) {
   if (_ativo) return;
   _ativo  = true;
@@ -207,32 +219,31 @@ export function iniciarTutorial(perfil = {}) {
   _ir(0);
 }
 
-function reiniciarTutorial(perfil = {}) {
+function _reiniciar(perfil = {}) {
   _desmontar();
-  setTimeout(() => iniciarTutorial(perfil), 300);
+  setTimeout(() => iniciarTutorial(perfil), 350);
 }
 
-// ── Montagem / desmontagem ──────────────────────────────────────────────────────
+// ── Montagem ───────────────────────────────────────────────────────────────────
 function _montar() {
-  _backdrop  = _criarEl('div', 'tut-backdrop');
-  _spotlight = _criarEl('div', 'tut-spotlight tut-spot-oculto');
-  _card      = _criarEl('div', 'tut-card');
+  _backdrop  = _el('div', 'tut-backdrop');
+  _spotlight = _el('div', 'tut-spotlight tut-spot-oculto');
+  _card      = _el('div', 'tut-card');
   document.body.append(_backdrop, _spotlight, _card);
 
-  _backdrop.addEventListener('touchstart', _pararEvento, { passive: false });
-  _backdrop.addEventListener('touchmove',  _pararEvento, { passive: false });
-  document.addEventListener('wheel', _pararRoda, { passive: false });
+  _backdrop.addEventListener('touchstart', _blk, { passive: false });
+  _backdrop.addEventListener('touchmove',  _blk, { passive: false });
+  document.addEventListener('wheel', _blkWheel, { passive: false });
 }
 
 function _desmontar() {
   if (!_card) return;
   _card.classList.add('tut-saindo');
+  _spotlight?.classList.add('tut-spot-oculto');
 
-  if (_backdrop) {
-    _backdrop.removeEventListener('touchstart', _pararEvento);
-    _backdrop.removeEventListener('touchmove',  _pararEvento);
-  }
-  document.removeEventListener('wheel', _pararRoda);
+  _backdrop?.removeEventListener('touchstart', _blk);
+  _backdrop?.removeEventListener('touchmove',  _blk);
+  document.removeEventListener('wheel', _blkWheel);
 
   setTimeout(() => {
     _backdrop?.remove();
@@ -240,44 +251,40 @@ function _desmontar() {
     _card?.remove();
     _backdrop = _spotlight = _card = null;
     _ativo = false;
-  }, 230);
+  }, 280);
 }
 
-function _pararEvento(e) { e.preventDefault(); }
-function _pararRoda(e)   { if (!e.target.closest('.tut-card')) e.preventDefault(); }
+function _blk(e)      { e.preventDefault(); }
+function _blkWheel(e) { if (!e.target.closest('.tut-card')) e.preventDefault(); }
 
-// ── Navegação entre passos ──────────────────────────────────────────────────────
+// ── Navegação ──────────────────────────────────────────────────────────────────
 async function _ir(idx) {
   if (!_ativo) return;
   const p = _passos[idx];
-  _passo = idx;
+  _passo  = idx;
 
   const paginaAtual = document.querySelector('.page.active')?.id?.replace('Page', '');
   if (p.pagina && paginaAtual !== p.pagina) {
-    _navegarPara(p.pagina);
-    await _esperar(320);
+    _navPara(p.pagina);
+    await _wait(360);
   }
 
-  let alvo   = null;
-  let spRect = null;
+  let alvo = null, spRect = null;
 
   if (p.seletores) {
     spRect = _unionRect(p.seletores);
-    alvo   = p.seletores
-      .map(s => document.querySelector(s))
-      .filter(el => el && el.getBoundingClientRect().height > 0)
-      .pop() ?? null;
+    alvo = p.seletores.map(s => document.querySelector(s)).filter(el => el?.getBoundingClientRect().height > 0).pop() ?? null;
   } else if (p.seletor) {
     alvo = document.querySelector(p.seletor);
   }
 
   if (alvo) {
     alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await _esperar(380);
+    await _wait(400);
     spRect = p.seletores ? _unionRect(p.seletores) : alvo.getBoundingClientRect();
   }
 
-  if (spRect && spRect.height > 0) {
+  if (spRect?.height > 0) {
     _posSpotlight(spRect);
     _spotlight.classList.remove('tut-spot-oculto');
   } else {
@@ -285,112 +292,191 @@ async function _ir(idx) {
   }
 
   _renderCard(p, idx);
-  await _esperar(12);
+  await _wait(16);
   _posCard(spRect, p.pos);
 }
 
-// ── Spotlight ───────────────────────────────────────────────────────────────────
+// ── Spotlight ──────────────────────────────────────────────────────────────────
 function _posSpotlight(rect) {
-  const pad = 10;
+  const pad = 12;
   Object.assign(_spotlight.style, {
-    top:          rect.top    - pad + 'px',
-    left:         rect.left   - pad + 'px',
-    width:        rect.width  + pad * 2 + 'px',
-    height:       rect.height + pad * 2 + 'px',
-    borderRadius: '12px',
+    top:    rect.top    - pad + 'px',
+    left:   rect.left   - pad + 'px',
+    width:  rect.width  + pad * 2 + 'px',
+    height: rect.height + pad * 2 + 'px',
+    borderRadius: '16px',
   });
 }
 
-function _unionRect(selectors) {
-  let top = Infinity, left = Infinity, bottom = -Infinity, right = -Infinity;
-  let any = false;
-  selectors.forEach(s => {
+function _unionRect(sels) {
+  let top = Infinity, left = Infinity, bottom = -Infinity, right = -Infinity, any = false;
+  sels.forEach(s => {
     const el = document.querySelector(s);
     if (!el) return;
     const r = el.getBoundingClientRect();
     if (r.height === 0) return;
-    any    = true;
-    top    = Math.min(top,    r.top);
-    left   = Math.min(left,   r.left);
-    bottom = Math.max(bottom, r.bottom);
-    right  = Math.max(right,  r.right);
+    any = true;
+    top = Math.min(top, r.top); left = Math.min(left, r.left);
+    bottom = Math.max(bottom, r.bottom); right = Math.max(right, r.right);
   });
   return any ? { top, left, bottom, right, width: right - left, height: bottom - top } : null;
 }
 
-// ── Card ────────────────────────────────────────────────────────────────────────
+// ── Card ───────────────────────────────────────────────────────────────────────
 function _renderCard(p, idx) {
-  const total    = _passos.length;
+  const total   = _passos.length;
   const primeiro = idx === 0;
   const ultimo   = idx === total - 1 || p.ultimo;
+  const pct      = Math.round(((idx + 1) / total) * 100);
 
-  // Indicador de progresso: dots com estados (feito/ativo/pendente)
-  const dots = _passos.map((_, i) => {
-    const cls = i < idx ? 'tut-dot tut-done' : i === idx ? 'tut-dot tut-ativo' : 'tut-dot';
-    return `<span class="${cls}" aria-hidden="true"></span>`;
-  }).join('');
+  _card.innerHTML = '';
 
-  _card.innerHTML = `
-    <div class="tut-top">
-      <span class="tut-badge" aria-label="Passo ${idx + 1} de ${total}">Passo ${idx + 1} de ${total}</span>
-      <div class="tut-dots" role="progressbar" aria-valuenow="${idx + 1}" aria-valuemin="1" aria-valuemax="${total}">${dots}</div>
-    </div>
-    <h3 class="tut-titulo">${p.titulo}</h3>
-    <p class="tut-texto">${p.texto}</p>
-    <div class="tut-acoes">
-      <button class="tut-pular-tudo" type="button" aria-label="Pular tutorial">Pular tutorial</button>
-      <div class="tut-nav">
-        <button class="tut-voltar" type="button" ${primeiro ? 'disabled aria-disabled="true"' : ''} aria-label="Passo anterior">Voltar</button>
-        <button class="tut-avancar" type="button" aria-label="${ultimo ? 'Concluir tutorial' : 'Próximo passo'}">${ultimo ? 'Concluir' : 'Prosseguir'}</button>
-      </div>
-    </div>
-  `;
+  // Header: progresso + seção
+  const header = _el('div', 'tut-header');
 
-  _card.querySelector('.tut-pular-tudo').onclick = _desmontar;
-  _card.querySelector('.tut-voltar').onclick     = () => { if (!primeiro) _ir(_passo - 1); };
-  _card.querySelector('.tut-avancar').onclick    = () => { ultimo ? _desmontar() : _ir(_passo + 1); };
+  const progressWrap = _el('div', 'tut-progress-wrap');
+  const progressBar  = _el('div', 'tut-progress-bar');
+  progressBar.style.width = pct + '%';
+  progressWrap.appendChild(progressBar);
 
-  // Navegação por teclado (Escape = pular, ← → = navegar)
+  const headerMeta = _el('div', 'tut-header-meta');
+  const badge = _el('span', 'tut-badge');
+  badge.setAttribute('aria-label', `Passo ${idx + 1} de ${total}`);
+  badge.textContent = `${idx + 1} / ${total}`;
+
+  const secaoEl = _el('span', 'tut-secao');
+  if (p.secao) {
+    const ic = document.createElement('i');
+    ic.className = `fas ${_secaoIcon(p.secao)}`;
+    ic.setAttribute('aria-hidden', 'true');
+    secaoEl.appendChild(ic);
+    secaoEl.appendChild(document.createTextNode(' ' + p.secao));
+  }
+
+  headerMeta.appendChild(badge);
+  if (p.secao) headerMeta.appendChild(secaoEl);
+  header.appendChild(progressWrap);
+  header.appendChild(headerMeta);
+
+  // Body: icon + título + texto
+  const body = _el('div', 'tut-body');
+
+  const iconWrap = _el('div', 'tut-icon-wrap');
+  iconWrap.style.background = (p.iconColor || '#10b981') + '18';
+  iconWrap.style.borderColor = (p.iconColor || '#10b981') + '40';
+  const iconEl = document.createElement('i');
+  iconEl.className = `fas ${p.icon || 'fa-star'}`;
+  iconEl.style.color = p.iconColor || '#10b981';
+  iconEl.setAttribute('aria-hidden', 'true');
+  iconWrap.appendChild(iconEl);
+
+  const titulo = _el('h3', 'tut-titulo');
+  titulo.textContent = p.titulo;
+
+  const texto = _el('p', 'tut-texto');
+  // p.texto contém apenas HTML estático hardcoded no módulo — safe
+  texto.innerHTML = p.texto;
+
+  body.appendChild(iconWrap);
+  body.appendChild(titulo);
+  body.appendChild(texto);
+
+  // Footer: botões
+  const footer = _el('div', 'tut-footer');
+
+  const btnPular = _el('button', 'tut-btn-pular');
+  btnPular.type = 'button';
+  btnPular.textContent = 'Pular tutorial';
+  btnPular.setAttribute('aria-label', 'Pular tutorial');
+  btnPular.onclick = _desmontar;
+
+  const nav = _el('div', 'tut-nav');
+
+  const btnVoltar = _el('button', 'tut-btn-voltar');
+  btnVoltar.type = 'button';
+  btnVoltar.textContent = 'Voltar';
+  btnVoltar.setAttribute('aria-label', 'Passo anterior');
+  if (primeiro) { btnVoltar.disabled = true; btnVoltar.setAttribute('aria-disabled', 'true'); }
+  btnVoltar.onclick = () => { if (!primeiro) _ir(_passo - 1); };
+
+  const btnAvancar = _el('button', 'tut-btn-avancar');
+  btnAvancar.type = 'button';
+  btnAvancar.setAttribute('aria-label', ultimo ? 'Concluir tutorial' : 'Próximo passo');
+  if (ultimo) {
+    btnAvancar.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Concluir';
+    btnAvancar.classList.add('tut-btn-avancar--concluir');
+  } else {
+    btnAvancar.innerHTML = 'Próximo <i class="fas fa-arrow-right" aria-hidden="true"></i>';
+  }
+  btnAvancar.onclick = () => ultimo ? _desmontar() : _ir(_passo + 1);
+
+  nav.appendChild(btnVoltar);
+  nav.appendChild(btnAvancar);
+  footer.appendChild(btnPular);
+  footer.appendChild(nav);
+
+  _card.appendChild(header);
+  _card.appendChild(body);
+  _card.appendChild(footer);
+
+  // Keyboard nav
   _card.onkeydown = (e) => {
-    if (e.key === 'Escape')     { _desmontar(); return; }
-    if (e.key === 'ArrowRight' && !ultimo)  { _ir(_passo + 1); return; }
-    if (e.key === 'ArrowLeft'  && !primeiro){ _ir(_passo - 1); return; }
+    if (e.key === 'Escape')                  { _desmontar(); return; }
+    if (e.key === 'ArrowRight' && !ultimo)   { _ir(_passo + 1); return; }
+    if (e.key === 'ArrowLeft'  && !primeiro) { _ir(_passo - 1); return; }
   };
   _card.setAttribute('tabindex', '0');
-  _card.focus();
+  _card.setAttribute('role', 'dialog');
+  _card.setAttribute('aria-modal', 'true');
+  _card.setAttribute('aria-label', `Tutorial — ${p.titulo}`);
+  requestAnimationFrame(() => _card?.focus());
 }
 
+function _secaoIcon(secao) {
+  const map = {
+    'Dashboard':     'fa-house',
+    'Transações':    'fa-exchange-alt',
+    'Reservas':      'fa-piggy-bank',
+    'Cartões':       'fa-credit-card',
+    'Gráficos':      'fa-chart-pie',
+    'Relatórios':    'fa-file-alt',
+    'Configurações': 'fa-cog',
+  };
+  return map[secao] || 'fa-circle';
+}
+
+// ── Posicionamento do card ─────────────────────────────────────────────────────
 function _posCard(spRect, pos) {
   _card.className = 'tut-card';
 
   const isMobile = window.innerWidth <= 768;
   const GAP      = 12;
-  const BOT_NAV  = 72;
 
   if (isMobile) {
-    const vw = window.innerWidth;
-    _card.style.position = 'fixed';
-    _card.style.left     = GAP + 'px';
-    _card.style.right    = GAP + 'px';
-    _card.style.width    = (vw - GAP * 2) + 'px';
-
+    Object.assign(_card.style, {
+      position: 'fixed',
+      left:     GAP + 'px',
+      right:    GAP + 'px',
+      width:    (window.innerWidth - GAP * 2) + 'px',
+      top:      '',
+      bottom:   '',
+    });
     const elCenter = spRect ? (spRect.top + spRect.height / 2) : 0;
-    if (spRect && elCenter > window.innerHeight * 0.48) {
+    if (spRect && elCenter > window.innerHeight * 0.5) {
       _card.style.top    = (GAP + 8) + 'px';
       _card.style.bottom = 'auto';
     } else {
-      _card.style.bottom = (BOT_NAV + GAP) + 'px';
+      _card.style.bottom = '84px';
       _card.style.top    = 'auto';
     }
     return;
   }
 
-  // ── Desktop ────────────────────────────────────────────────────────────────
-  const CW    = 340;
-  const GAP_D = 20;
-  const vw    = window.innerWidth;
-  const vh    = window.innerHeight;
-  const ch    = _card.offsetHeight || 210;
+  const CW   = 360;
+  const GAP_D = 24;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const ch = _card.offsetHeight || 260;
 
   let top = 0, left = 0, seta = '';
 
@@ -425,28 +511,29 @@ function _posCard(spRect, pos) {
   top  = Math.max(GAP_D, Math.min(vh - ch - GAP_D, top));
 
   Object.assign(_card.style, {
-    top:   top  + 'px',
-    left:  left + 'px',
-    width: CW   + 'px',
+    position: 'fixed',
+    top:      top  + 'px',
+    left:     left + 'px',
+    width:    CW   + 'px',
+    right:    '',
+    bottom:   '',
   });
 
   if (seta) _card.classList.add(seta);
 }
 
-// ── Navegação entre seções ──────────────────────────────────────────────────────
-function _navegarPara(pagina) {
+// ── Navegação entre seções ─────────────────────────────────────────────────────
+function _navPara(pagina) {
   const btn = document.querySelector(`[data-page="${pagina}"]`);
   if (btn) { btn.click(); return; }
   if (pagina === 'configuracoes') document.getElementById('mobileSettingsBtn')?.click();
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────────
-function _criarEl(tag, cls) {
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function _el(tag, cls) {
   const el = document.createElement(tag);
   el.className = cls;
   return el;
 }
 
-function _esperar(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+function _wait(ms) { return new Promise(r => setTimeout(r, ms)); }

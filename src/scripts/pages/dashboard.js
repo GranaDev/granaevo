@@ -569,8 +569,18 @@ async function _recarregarFotosPerfisBackground(userIdSeguro) {
         );
         usuarioLogado.perfis = perfisResolvidos;
         _gravarCachePerfis(userIdSeguro, perfisResolvidos);
-        atualizarTelaPerfis(); // Re-renderiza cards de perfil com fotos reais
+        atualizarTelaPerfis();
         iniciarRenovacaoFotos();
+
+        // Atualiza foto do perfil ativo se foi carregada em background
+        if (perfilAtivo) {
+            const atualizado = perfisResolvidos.find(p => String(p.id) === String(perfilAtivo.id));
+            if (atualizado?.foto && atualizado.foto !== perfilAtivo.foto) {
+                perfilAtivo.foto          = atualizado.foto;
+                perfilAtivo._storagePath  = atualizado._storagePath;
+                atualizarNomeUsuario();
+            }
+        }
     } catch { /* background — falha silenciosa */ }
 }
 
@@ -1742,6 +1752,7 @@ function _makeCtx() {
         safeCategorias:            { value: (...a) => safeCategorias(...a),            enumerable: true },
         sanitizarHTMLPopup:        { value: (...a) => sanitizarHTMLPopup(...a),        enumerable: true },
         mostrarPopupLimite:        { value: (...a) => mostrarPopupLimite(...a),        enumerable: true },
+        abrirPopupPagarContaFixa:  { value: (...a) => abrirPopupPagarContaFixa(...a), enumerable: true },
         // Cross-section lazy calls
         atualizarMovimentacoesUI: { value: () => window._dbTransacoes?.atualizarMovimentacoesUI?.(), enumerable: true },
         renderMetasList:          { value: () => window._dbMetas?.renderMetasList?.(),               enumerable: true },
@@ -5415,6 +5426,8 @@ function _initSwipeNav() {
 
     mainArea.addEventListener('touchstart', (e) => {
         if (e.touches.length !== 1) return;
+        // Ignora toque dentro de item swipeable (transações) para evitar conflito
+        if (e.target.closest?.('.mov-swipe-wrap')) { _touchStartX = 0; _touchStartY = 0; return; }
         _touchStartX = e.touches[0].clientX;
         _touchStartY = e.touches[0].clientY;
     }, { passive: true });
