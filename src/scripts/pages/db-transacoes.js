@@ -149,7 +149,7 @@ function lancarTransacao() {
     const valorStr  = valorEl.dataset?.valorNumerico
         || valorEl.value.replace(/\./g, '').replace(',', '.');
 
-    if(!categoria) return alert('Escolha Entrada, Saída ou Reserva.');
+    if(!categoria) categoria = 'saida';
     if(categoria === 'reserva' && _ctx.metas.filter(m => m.id !== 'emergency').length === 0) {
         return alert('Você ainda não criou nenhuma meta ou reserva, crie no menu "Reservas"');
     }

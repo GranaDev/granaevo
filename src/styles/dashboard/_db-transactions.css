@@ -536,18 +536,18 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    width: 68px;
-    height: 68px;
+    gap: 3px;
+    width: 60px;
+    height: 52px;
     border: none;
-    border-radius: 12px;
+    border-radius: 10px;
     cursor: pointer;
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     transition: opacity 0.2s;
 }
-.mov-swipe-btn i { font-size: 1.1rem; }
+.mov-swipe-btn i { font-size: 1rem; }
 .mov-swipe-btn--del {
     background: linear-gradient(135deg, #ff4b4b, #c0392b);
     color: #fff;
@@ -563,6 +563,17 @@
     z-index: 1;
     transition: transform 0.18s ease-out;
     will-change: transform;
+    /* Permite scroll vertical nativo; swipe horizontal é tratado pelo JS */
+    touch-action: pan-y;
+}
+
+/* Garante background opaco para ocultar os botões de ação atrás do item */
+.mov-swipe-wrap .mov-item {
+    background: var(--dark-card, #1a1d2e);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 0;
 }
 /* Feedback visual quando aberto */
 .mov-item.swipe-open-left  { box-shadow: -3px 0 12px rgba(255, 75, 75, 0.2); }

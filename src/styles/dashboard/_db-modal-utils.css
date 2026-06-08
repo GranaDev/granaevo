@@ -270,10 +270,11 @@
     z-index: 9999;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 13px 20px;
-    background: #1a1f2e;
+    gap: 12px;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, #1a1f2e, #151b2c);
     border-top: 2px solid #ef4444;
+    border-radius: 12px 12px 0 0;
     color: #fca5a5;
     font-size: 0.88rem;
     font-weight: 500;
@@ -284,17 +285,17 @@
 .offline-banner--online {
     border-top-color: #10b981;
     color: #6ee7b7;
-    background: #0d1f18;
+    background: linear-gradient(135deg, #0d1f18, #0a1a12);
     box-shadow: 0 -4px 24px rgba(16, 185, 129, 0.15);
 }
 
 .offline-banner--hidden { display: none; }
 
-.offline-banner__icon { font-size: 1.1rem; flex-shrink: 0; }
-.offline-banner__msg  { flex: 1; line-height: 1.4; }
+.offline-banner__icon { font-size: 1.2rem; flex-shrink: 0; }
+.offline-banner__msg  { flex: 1; line-height: 1.4; font-weight: 600; }
 
 @media (max-width: 768px) {
-    .offline-banner { bottom: 64px; font-size: 0.82rem; padding: 10px 16px; }
+    .offline-banner { bottom: 64px; font-size: 0.82rem; padding: 10px 16px; border-radius: 10px 10px 0 0; }
 }
 
 /* ========== BOTTOM SHEET (modal adaptativo mobile) ========== */
@@ -316,12 +317,22 @@
 
 #bottomSheetContainer {
     width: 100%;
-    max-height: 90vh;
+    max-height: 85vh;
     overflow-y: auto;
     background: var(--dark-card, #1a1d2e);
     border-radius: 20px 20px 0 0;
-    padding: 0 0 env(safe-area-inset-bottom, 16px);
+    /* Garante espaço acima da nav bar mobile (64px) + safe-area */
+    padding: 0 0 max(calc(64px + env(safe-area-inset-bottom, 0px)), 80px);
     animation: bottomSheetIn 0.28s cubic-bezier(.32,.72,0,1);
+    /* Conteúdo nunca fica colado na nav bottom */
+    margin-bottom: 0;
+}
+
+/* Em desktop (sidebar visível), sem padding extra de nav */
+@media (min-width: 769px) {
+    #bottomSheetContainer {
+        padding: 0 0 env(safe-area-inset-bottom, 24px);
+    }
 }
 
 .bottom-sheet-handle {
@@ -332,7 +343,35 @@
     margin: 12px auto 0;
 }
 
-.bottom-sheet-content { padding: 16px 20px 24px; }
+.bottom-sheet-content {
+    padding: 16px 20px 20px;
+}
+
+/* Popup dentro do bottom sheet — estilos base */
+.bottom-sheet-content h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--text-primary, #f1f5f9);
+}
+
+.bottom-sheet-content .small {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #94a3b8);
+    margin-bottom: 16px;
+    display: block;
+}
+
+.bottom-sheet-content button {
+    margin: 6px 4px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: opacity 0.2s;
+}
 
 /* ============================================
    HEADERS PREMIUM V3.0 - LAYOUT LATERAL

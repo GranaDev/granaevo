@@ -4332,19 +4332,32 @@ function preencherSelectParcelas() {
 
 // ✅ Variável única — usada por iniciarAutoSave e pararAutoSave
 let autoSaveInterval = null;
+let _autoSaveFailCount = 0;
+const _AUTO_SAVE_MAX_FAILS = 3;
 
 function iniciarAutoSave() {
     if (!perfilAtivo) return;
 
     pararAutoSave();
+    _autoSaveFailCount = 0;
 
-    // ✅ CORRIGIDO: não expõe perfilAtivo.nome nem perfilAtivo.id em produção
     _log.info('[AUTO-SAVE] Sistema iniciado');
 
     autoSaveInterval = setInterval(async () => {
         if (!perfilAtivo) return;
         _log.info('[AUTO-SAVE PERIÓDICO] Executando...');
-        await salvarDados();
+        const ok = await salvarDados();
+        if (ok === false) {
+            _autoSaveFailCount++;
+            _log.warn(`[AUTO-SAVE] Falha ${_autoSaveFailCount}/${_AUTO_SAVE_MAX_FAILS}`);
+            if (_autoSaveFailCount >= _AUTO_SAVE_MAX_FAILS) {
+                _log.warn('[AUTO-SAVE] Muitas falhas consecutivas — pausando auto-save');
+                pararAutoSave();
+                mostrarNotificacao('Sincronização pausada. Verifique sua conexão e recarregue a página.', 'error');
+            }
+        } else {
+            _autoSaveFailCount = 0;
+        }
     }, 30_000);
 }
 
@@ -5423,7 +5436,6 @@ function _initSwipeNav() {
     }, { passive: true });
 
     mainArea.addEventListener('touchend', (e) => {
-        if (!localStorage.getItem('ge_swipe_nav') || localStorage.getItem('ge_swipe_nav') !== '1') return;
         if (e.changedTouches.length !== 1) return;
 
         const dx = e.changedTouches[0].clientX - _touchStartX;
