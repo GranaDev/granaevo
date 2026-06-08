@@ -4242,7 +4242,11 @@ function bindEventos() {
 
     const btnComoUsar = document.getElementById('btnComoUsar');
     if(btnComoUsar) {
-        btnComoUsar.addEventListener('click', () => window.comoUsar?.());
+        btnComoUsar.addEventListener('click', async () => {
+            if (window.comoUsar) { window.comoUsar(); return; }
+            const { iniciarTutorial } = await import('./modules/tutorial.js');
+            iniciarTutorial();
+        });
     }
 
     const btnLogout = document.getElementById('btnLogout');
@@ -5177,10 +5181,11 @@ function _verificarOnboardingNovoPerfil() {
                 btnSim.type = 'button';
                 btnSim.style.flex = '1';
                 btnSim.innerHTML = '<i class="fas fa-play" aria-hidden="true"></i> Iniciar tour';
-                btnSim.addEventListener('click', () => {
+                btnSim.addEventListener('click', async () => {
                     fecharPopup();
-                    // Tutorial ativado via db-configuracoes.js (lazy-loaded)
-                    setTimeout(() => window.comoUsar?.(), 300);
+                    // Import direto — não depende de db-configuracoes estar carregado
+                    const { iniciarTutorial } = await import('./modules/tutorial.js');
+                    setTimeout(() => iniciarTutorial(), 320);
                 });
 
                 const btnNao = document.createElement('button');

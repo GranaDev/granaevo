@@ -143,17 +143,30 @@ function lancarTransacao() {
         }
     }
 
-    let tipo      = document.getElementById('selectTipo').value;
+    // Categoria padrão quando vazia — sistema aprende com edições futuras
+    if (!categoria) {
+        categoria = 'saida';
+        document.getElementById('selectCategoria').value = 'saida';
+        atualizarTiposDinamicos();
+    }
+
+    let tipo = document.getElementById('selectTipo').value;
+    // Auto-seleciona primeiro tipo disponível para não bloquear o lançamento
+    if (!tipo && categoria !== 'saida_credito') {
+        const selTipo = document.getElementById('selectTipo');
+        const firstOpt = [...selTipo.options].find(o => o.value !== '');
+        tipo = firstOpt?.value ?? 'Outros';
+        selTipo.value = tipo;
+    }
+
     const valorEl   = document.getElementById('inputValor');
     // Suporte à máscara monetária: lê dataset.valorNumerico se disponível, senão parseia string
     const valorStr  = valorEl.dataset?.valorNumerico
         || valorEl.value.replace(/\./g, '').replace(',', '.');
 
-    if(!categoria) categoria = 'saida';
     if(categoria === 'reserva' && _ctx.metas.filter(m => m.id !== 'emergency').length === 0) {
         return alert('Você ainda não criou nenhuma meta ou reserva, crie no menu "Reservas"');
     }
-    if(!tipo && categoria !== 'saida_credito') return alert('Escolha o tipo.');
     if(!descricao) return alert('Digite a descrição.');
     if(!valorStr || !Number.isFinite(Number(valorStr)) || Number(valorStr) <= 0) return alert('Digite um valor válido.');
 
