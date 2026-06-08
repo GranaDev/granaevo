@@ -4244,7 +4244,7 @@ function bindEventos() {
     if(btnComoUsar) {
         btnComoUsar.addEventListener('click', async () => {
             if (window.comoUsar) { window.comoUsar(); return; }
-            const { iniciarTutorial } = await import('./modules/tutorial.js');
+            const { iniciarTutorial } = await import('../modules/tutorial.js');
             iniciarTutorial();
         });
     }
@@ -5184,7 +5184,7 @@ function _verificarOnboardingNovoPerfil() {
                 btnSim.addEventListener('click', async () => {
                     fecharPopup();
                     // Import direto — não depende de db-configuracoes estar carregado
-                    const { iniciarTutorial } = await import('./modules/tutorial.js');
+                    const { iniciarTutorial } = await import('../modules/tutorial.js');
                     setTimeout(() => iniciarTutorial(), 320);
                 });
 
