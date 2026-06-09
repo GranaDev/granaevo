@@ -73,7 +73,7 @@
  * @property {string}    [loadingElementId]       - ID do elemento de loading a ocultar
  */
 
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, clearRememberMe } from '../services/supabase-client.js?v=2';
+import { supabase, clearRememberMe } from '../services/supabase-client.js?v=2';
 
 // ═══════════════════════════════════════════════════════════════
 //  TAB_ID — identificador único desta aba [FIX-REPORT-3]
@@ -573,109 +573,48 @@ const SubscriptionChecker = (() => {
                 const { data: { session: _sess } } = await supabase.auth.getSession();
                 if (!_sess?.access_token) return EMPTY;
 
-                // Fetch direto com JWT explícito — bypassa o Supabase JS client e
-                // seu cache interno de headers, eliminando a race condition INITIAL_SESSION.
-                // Também imune a stale PostgREST schema cache: o JWT é enviado na
-                // Authorization header independente do cache de permissões do cliente.
-                const _callRpc = async (token) => {
-                    const r = await fetch(
-                        `${SUPABASE_URL}/rest/v1/rpc/get_user_access_data`,
-                        {
-                            method:  'POST',
-                            headers: {
-                                'Content-Type':  'application/json',
-                                'apikey':        SUPABASE_ANON_KEY,
-                                'Authorization': `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({ p_user_id: userId }),
-                        },
-                    );
-                    if (!r.ok) return { data: null, error: { status: r.status } };
-                    return { data: await r.json(), error: null };
-                };
+                const r = await fetch('/api/check-user-access', {
+                    method:  'POST',
+                    headers: {
+                        'Content-Type':  'application/json',
+                        'Authorization': `Bearer ${_sess.access_token}`,
+                    },
+                    body:   '{}',
+                    signal: AbortSignal.timeout(8_000),
+                });
 
-                let { data: result, error: rpcErr } = await _callRpc(_sess.access_token);
+                if (!r.ok) return EMPTY;
 
-                // Retry único após refresh — cobre token expirado entre getSession() e a chamada HTTP.
-                // 403 = sem permissão (GRANT não aplicado); não adianta refresh. Só retry em 401.
-                if (rpcErr?.status === 401) {
-                    const { data: { session: _sess2 } } = await supabase.auth.refreshSession();
-                    if (!_sess2?.access_token) return EMPTY;
-                    ({ data: result, error: rpcErr } = await _callRpc(_sess2.access_token));
-                }
+                const api = await r.json();
 
-                if (rpcErr || !result) return EMPTY;
+                if (!api.hasAccess || api.needsTermsAcceptance) return EMPTY;
 
-                const type = result.type;
-                const sub  = result.sub;
+                // Cacheia confirmação de termos para evitar round-trip extra em protect()
+                try { sessionStorage.setItem(SECURITY.KEYS.termsCache, '1'); } catch { /* */ }
 
-                // ── Subscription ativa por user_id ──────────────────────────
-                if (type === 'active') {
-                    _cache = Object.freeze({
-                        subscription: sub,
-                        isGuest:      false,
-                        ownerId:      userId,
-                        planName:     _normalizePlanName(sub.plan_name),
-                        ownerEmail:   null,
-                    });
-                    _cacheUser = userId;
-                    _cacheExp  = Date.now() + CACHE_TTL;
-                    return _cache;
-                }
-
-                // ── Subscription ativa por email (user_id IS NULL) ──────────
-                if (type === 'active_email') {
-                    // Auto-link em background — JWT confirma que o email é verificado
-                    const { data: authData } = await supabase.auth.getUser();
-                    const authUser = authData?.user;
-                    if (authUser?.email_confirmed_at) {
-                        _autoLinkStripe(sub.id, userId, result.user_email, sub.user_email);
-                        _cache     = null;
-                        _cacheUser = null;
-                        _cacheExp  = 0;
-                    }
-                    return Object.freeze({
-                        subscription: sub,
-                        isGuest:      false,
-                        ownerId:      userId,
-                        planName:     _normalizePlanName(sub.plan_name),
-                        ownerEmail:   null,
-                    });
-                }
-
-                // ── Estado congelado — cancelado < 90 dias ──────────────────
-                if (type === 'frozen') {
-                    const daysSince =
-                        (Date.now() - new Date(sub.current_period_end).getTime()) / 86_400_000;
-                    return {
-                        subscription:      null,
-                        isGuest:           false,
-                        ownerId:           userId,
-                        planName:          null,
-                        ownerEmail:        null,
-                        isFrozen:          true,
-                        daysUntilDeletion: Math.max(1, Math.ceil(90 - daysSince)),
-                        frozenPlanName:    _normalizePlanName(sub.plan_name),
-                    };
-                }
-
-                // ── Convidado ───────────────────────────────────────────────
-                if (type === 'guest') {
-                    const ownerId   = result.owner_user_id;
-                    const planName  = _normalizePlanName(sub.plan_name);
-                    _cache = Object.freeze({
-                        subscription: sub,
+                let result;
+                if (api.isGuest && api.ownerId) {
+                    result = Object.freeze({
+                        subscription: { id: 'api-verified' },
                         isGuest:      true,
-                        ownerId,
-                        planName:     planName || 'Individual',
-                        ownerEmail:   result.owner_email,
+                        ownerId:      api.ownerId,
+                        planName:     _normalizePlanName(api.planName) || 'Individual',
+                        ownerEmail:   api.ownerEmail || null,
                     });
-                    _cacheUser = userId;
-                    _cacheExp  = Date.now() + CACHE_TTL;
-                    return _cache;
+                } else {
+                    result = Object.freeze({
+                        subscription: { id: 'api-verified' },
+                        isGuest:      false,
+                        ownerId:      userId,
+                        planName:     'Individual',
+                        ownerEmail:   null,
+                    });
                 }
 
-                return EMPTY;
+                _cache     = result;
+                _cacheUser = userId;
+                _cacheExp  = Date.now() + CACHE_TTL;
+                return _cache;
 
             } catch {
                 return EMPTY;
