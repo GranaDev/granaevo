@@ -4086,6 +4086,77 @@ select.form-input option:checked {
     }
 }
 
+/* ========== BOTTOM SHEET (modal adaptativo mobile) ========== */
+@keyframes bottomSheetIn {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+}
+
+#bottomSheetOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+}
+
+#bottomSheetOverlay.active { display: flex; align-items: flex-end; }
+
+#bottomSheetContainer {
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: var(--dark-card, #1a1d2e);
+    border-radius: 20px 20px 0 0;
+    padding: 0 0 max(calc(64px + env(safe-area-inset-bottom, 0px)), 80px);
+    animation: bottomSheetIn 0.28s cubic-bezier(.32,.72,0,1);
+    margin-bottom: 0;
+}
+
+@media (min-width: 769px) {
+    #bottomSheetContainer {
+        padding: 0 0 env(safe-area-inset-bottom, 24px);
+    }
+}
+
+.bottom-sheet-handle {
+    width: 40px;
+    height: 4px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+    margin: 12px auto 0;
+}
+
+.bottom-sheet-content {
+    padding: 16px 20px 20px;
+}
+
+.bottom-sheet-content h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--text-primary, #f1f5f9);
+}
+
+.bottom-sheet-content .small {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #94a3b8);
+    margin-bottom: 16px;
+    display: block;
+}
+
+.bottom-sheet-content button {
+    margin: 6px 4px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: opacity 0.2s;
+}
+
 /* Oculta scrollbar WebKit em todos os wrappers de popup com scroll */
 .popup *::-webkit-scrollbar { display: none; }
 

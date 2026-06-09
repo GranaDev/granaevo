@@ -73,7 +73,7 @@
  * @property {string}    [loadingElementId]       - ID do elemento de loading a ocultar
  */
 
-import { supabase, clearRememberMe } from '../services/supabase-client.js?v=2';
+import { supabase, supabaseReady, clearRememberMe } from '../services/supabase-client.js?v=2';
 
 // ═══════════════════════════════════════════════════════════════
 //  TAB_ID — identificador único desta aba [FIX-REPORT-3]
@@ -570,9 +570,12 @@ const SubscriptionChecker = (() => {
             }
 
             try {
-                // Garante que o JWT está carregado no cliente Supabase antes da RPC.
-                // supabase.rpc() usa o auth state interno — se chamado antes do
-                // INITIAL_SESSION event, vai como anon e recebe 403 (REVOKE FROM PUBLIC).
+                // Aguarda INITIAL_SESSION antes da RPC — garante que _setAuth()
+                // já atualizou os headers do cliente com o JWT do usuário.
+                // getSession() sozinho não é suficiente: o listener que chama
+                // _setAuth() pode ser enfileirado como microtask após getSession()
+                // resolver, causando a race condition (anon-role → 403).
+                await supabaseReady;
                 const { data: { session: _sess } } = await supabase.auth.getSession();
                 if (!_sess?.access_token) return EMPTY;
 

@@ -19,12 +19,7 @@ export function init(ctx) {
         newBtn.addEventListener('click', () => abrirImportarExtrato());
     }
 
-    const btnCatTudo = document.getElementById('btnCategorizarTudo');
-    if (btnCatTudo) btnCatTudo.addEventListener('click', () => _categorizarTudo());
-
-    const btnGerenciar = document.getElementById('btnGerenciarRegras');
-    if (btnGerenciar) btnGerenciar.addEventListener('click', () => _abrirGerenciarRegras());
-
+    atualizarTiposDinamicos();
     _initAutoCategorizar();
     bindFiltrosMovimentacoes();
     renderizarOrcamentos();
@@ -49,11 +44,11 @@ function atualizarTiposDinamicos() {
             o.textContent = x;
             tipoSelect.appendChild(o);
         });
-    } else if(cat === 'saida' || cat === 'saida_credito') {
+    } else if(cat === 'saida' || cat === 'saida_credito' || !cat) {
         const tiposPadrao = ['Mercado', 'Farmácia', 'Saúde', 'Eletrônico', 'Roupas', 'Assinaturas',
          'Beleza', 'Presente', 'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte',
          'Viagem', 'Pet', 'Shopee', 'Mercado Livre', 'Ifood', 'Amazon', 'Educação', 'Outros'];
-        const personalizados = (_ctx.tiposPersonalizados || []).filter(t => typeof t === 'string' && t.trim());
+        const personalizados = (_ctx?.tiposPersonalizados || []).filter(t => typeof t === 'string' && t.trim());
         [...tiposPadrao, ...personalizados].forEach(x => {
             const o = document.createElement('option');
             o.value = x;
@@ -270,8 +265,6 @@ function lancarTransacao() {
         atualizarTiposDinamicos();
         document.getElementById('inputDescricao').value = '';
         document.getElementById('inputValor').value     = '';
-        const _chipCC = document.getElementById('autocatChip');
-        if (_chipCC) { _chipCC.className = 'autocat-chip autocat-hidden'; _chipCC.textContent = ''; }
 
         alert("Compra lançada! A fatura do cartão foi atualizada.");
         return;
@@ -344,12 +337,10 @@ function lancarTransacao() {
         _ctx.verificarAnomaliaGasto?.(tipoSalvo, valor);
         renderizarOrcamentos();
 
-        document.getElementById('selectCategoria').value    = '';
-        document.getElementById('selectTipo').innerHTML     = '<option value="">Tipo</option>';
-        document.getElementById('inputDescricao').value     = '';
-        document.getElementById('inputValor').value         = '';
-        const _chipNorm = document.getElementById('autocatChip');
-        if (_chipNorm) { _chipNorm.className = 'autocat-chip autocat-hidden'; _chipNorm.textContent = ''; }
+        document.getElementById('selectCategoria').value = '';
+        atualizarTiposDinamicos();
+        document.getElementById('inputDescricao').value = '';
+        document.getElementById('inputValor').value     = '';
     });
 }
 
@@ -1709,96 +1700,37 @@ function _initAutoCategorizar() {
     const inputDesc = document.getElementById('inputDescricao');
     if (!inputDesc) return;
 
-    const chip = document.createElement('div');
-    chip.id = 'autocatChip';
-    chip.className = 'autocat-chip autocat-hidden';
-    chip.setAttribute('role', 'status');
-    chip.setAttribute('aria-live', 'polite');
-
-    const descContainer = inputDesc.closest('.form-field-icon');
-    if (!descContainer) return;
-    descContainer.insertAdjacentElement('afterend', chip);
-
-    let _debounceTimer = null;
+    // Estado interno — sem UI visível para o usuário
+    let _debounceTimer  = null;
     let _lastSuggestion = null;
-    let _lastMemo = '';
-
-    const _catLabel = (cat) => ({ entrada: 'Entrada', saida: 'Saída', saida_credito: 'Crédito', reserva: 'Reserva' }[cat] || cat);
-
-    function hideChip() {
-        _lastSuggestion = null;
-        chip.className = 'autocat-chip autocat-hidden';
-        chip.textContent = '';
-    }
-
-    function applyAndHide(suggestion) {
-        const catSel  = document.getElementById('selectCategoria');
-        const tipoSel = document.getElementById('selectTipo');
-        if (!catSel) return;
-        catSel.value = suggestion.cat;
-        atualizarTiposDinamicos();
-        // selectTipo is repopulated synchronously inside atualizarTiposDinamicos
-        if (tipoSel && suggestion.tipo) tipoSel.value = suggestion.tipo;
-        hideChip();
-    }
-
-    function showChip(suggestion, memo) {
-        _lastSuggestion = suggestion;
-        _lastMemo       = memo;
-        chip.textContent = '';
-
-        const icon = document.createElement('span');
-        icon.className  = 'autocat-icon';
-        icon.textContent = suggestion.learned ? '🧠' : '⚡';
-
-        const label = document.createElement('span');
-        label.className  = 'autocat-label';
-        label.textContent = `${_catLabel(suggestion.cat)} · ${suggestion.tipo}`;
-
-        const btnAccept = document.createElement('button');
-        btnAccept.type      = 'button';
-        btnAccept.className = 'autocat-btn-accept';
-        btnAccept.textContent = 'Aceitar';
-        btnAccept.addEventListener('click', () => applyAndHide(suggestion));
-
-        const btnDismiss = document.createElement('button');
-        btnDismiss.type      = 'button';
-        btnDismiss.className = 'autocat-btn-dismiss';
-        btnDismiss.setAttribute('aria-label', 'Dispensar sugestão');
-        btnDismiss.textContent = '✕';
-        btnDismiss.addEventListener('click', () => hideChip());
-
-        chip.appendChild(icon);
-        chip.appendChild(label);
-        chip.appendChild(btnAccept);
-        chip.appendChild(btnDismiss);
-        chip.className = 'autocat-chip';
-    }
+    let _lastMemo       = '';
 
     inputDesc.addEventListener('input', () => {
         clearTimeout(_debounceTimer);
         _debounceTimer = setTimeout(() => {
-            const memo    = inputDesc.value.trim();
-            const catSel  = document.getElementById('selectCategoria');
-            // Não sugere se usuário já escolheu categoria manualmente
-            if (catSel && catSel.value) { hideChip(); return; }
-            if (memo.length < 3) { hideChip(); return; }
+            const memo   = inputDesc.value.trim();
+            const catSel = document.getElementById('selectCategoria');
+            if (catSel && catSel.value) { _lastSuggestion = null; _lastMemo = ''; return; }
+            if (memo.length < 3) { _lastSuggestion = null; _lastMemo = ''; return; }
 
             const suggestion = _autoCatComAprendizado(memo);
             if (suggestion) {
-                showChip(suggestion, memo);
+                // Guarda internamente — aplicado silenciosamente ao lançar
+                _lastSuggestion = suggestion;
+                _lastMemo       = memo;
             } else {
-                hideChip();
+                _lastSuggestion = null;
+                _lastMemo       = '';
             }
         }, 220);
     });
 
-    // Aprender correção: quando usuário aceita sugestão mas depois altera manualmente o tipo
+    // Aprende correção quando usuário altera o tipo manualmente após sugestão interna
     const tipoSel = document.getElementById('selectTipo');
     if (tipoSel) {
         tipoSel.addEventListener('change', () => {
             if (_lastSuggestion && _lastMemo && tipoSel.value && tipoSel.value !== _lastSuggestion.tipo) {
-                const catSel = document.getElementById('selectCategoria');
+                const catSel  = document.getElementById('selectCategoria');
                 const keyword = _lastMemo
                     .normalize('NFD').replace(/[̀-ͯ]/g, '')
                     .replace(/[^\w\s]/g, ' ')
@@ -1811,9 +1743,8 @@ function _initAutoCategorizar() {
         });
     }
 
-    // Oculta chip quando categoria é alterada manualmente
     const catSel = document.getElementById('selectCategoria');
-    if (catSel) catSel.addEventListener('change', () => hideChip());
+    if (catSel) catSel.addEventListener('change', () => { _lastSuggestion = null; _lastMemo = ''; });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

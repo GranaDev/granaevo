@@ -115,3 +115,14 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         storage:            _dynamicStorageAdapter,
     },
 });
+
+// Resolves after the Supabase client's INITIAL_SESSION event fires,
+// guaranteeing that the internal auth headers (_setAuth) are updated
+// before any RPC call is made. Prevents the anon-role 403 race condition.
+let _resolveReady;
+export const supabaseReady = new Promise(resolve => { _resolveReady = resolve; });
+supabase.auth.onAuthStateChange(event => {
+    if (event === 'INITIAL_SESSION') _resolveReady();
+});
+// Safety fallback — resolve after 4s if INITIAL_SESSION never fires
+setTimeout(_resolveReady, 4000);
