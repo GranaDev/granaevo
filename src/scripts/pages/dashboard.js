@@ -5441,6 +5441,8 @@ function _initSwipeNav() {
     }, { passive: true });
 
     mainArea.addEventListener('touchend', (e) => {
+        // Respeita a preferência do usuário — ignorado se swipe estiver desativado
+        if (localStorage.getItem('ge_swipe_nav') !== '1') return;
         if (e.changedTouches.length !== 1) return;
 
         const dx = e.changedTouches[0].clientX - _touchStartX;
@@ -5461,6 +5463,17 @@ function _initSwipeNav() {
         if (novoIdx < 0 || novoIdx >= _SECOES.length) return;
 
         mostrarTela(_SECOES[novoIdx]);
+
+        // Animação de slide na página que está entrando
+        const novaPage = document.getElementById(_SECOES[novoIdx] + 'Page');
+        if (novaPage) {
+            const cls = dx < 0 ? 'swipe-enter-right' : 'swipe-enter-left';
+            novaPage.classList.remove('swipe-enter-right', 'swipe-enter-left');
+            novaPage.classList.add(cls);
+            novaPage.addEventListener('animationend', () => {
+                novaPage.classList.remove('swipe-enter-right', 'swipe-enter-left');
+            }, { once: true });
+        }
     }, { passive: true });
 }
 

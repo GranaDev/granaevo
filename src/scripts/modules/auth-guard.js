@@ -73,7 +73,7 @@
  * @property {string}    [loadingElementId]       - ID do elemento de loading a ocultar
  */
 
-import { supabase, supabaseReady, clearRememberMe } from '../services/supabase-client.js?v=2';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, clearRememberMe } from '../services/supabase-client.js?v=2';
 
 // ═══════════════════════════════════════════════════════════════
 //  TAB_ID — identificador único desta aba [FIX-REPORT-3]
@@ -570,26 +570,37 @@ const SubscriptionChecker = (() => {
             }
 
             try {
-                // Aguarda INITIAL_SESSION antes da RPC — garante que _setAuth()
-                // já atualizou os headers do cliente com o JWT do usuário.
-                // getSession() sozinho não é suficiente: o listener que chama
-                // _setAuth() pode ser enfileirado como microtask após getSession()
-                // resolver, causando a race condition (anon-role → 403).
-                await supabaseReady;
                 const { data: { session: _sess } } = await supabase.auth.getSession();
                 if (!_sess?.access_token) return EMPTY;
 
-                // Uma única round-trip ao banco via RPC — substitui 5 queries sequenciais.
-                let { data: result, error: rpcErr } = await supabase
-                    .rpc('get_user_access_data', { p_user_id: userId });
+                // Fetch direto com JWT explícito — bypassa o Supabase JS client e
+                // seu cache interno de headers, eliminando a race condition INITIAL_SESSION.
+                // Também imune a stale PostgREST schema cache: o JWT é enviado na
+                // Authorization header independente do cache de permissões do cliente.
+                const _callRpc = async (token) => {
+                    const r = await fetch(
+                        `${SUPABASE_URL}/rest/v1/rpc/get_user_access_data`,
+                        {
+                            method:  'POST',
+                            headers: {
+                                'Content-Type':  'application/json',
+                                'apikey':        SUPABASE_ANON_KEY,
+                                'Authorization': `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({ p_user_id: userId }),
+                        },
+                    );
+                    if (!r.ok) return { data: null, error: { status: r.status } };
+                    return { data: await r.json(), error: null };
+                };
 
-                // Retry único após refresh — cobre o caso onde o access_token expirou
-                // entre o getSession() acima e o envio do request HTTP.
-                if (rpcErr?.code === '42501' || rpcErr?.status === 403) {
+                let { data: result, error: rpcErr } = await _callRpc(_sess.access_token);
+
+                // Retry único após refresh — cobre token expirado entre getSession() e a chamada HTTP.
+                if (rpcErr?.status === 403 || rpcErr?.status === 401) {
                     const { data: { session: _sess2 } } = await supabase.auth.refreshSession();
                     if (!_sess2?.access_token) return EMPTY;
-                    ({ data: result, error: rpcErr } = await supabase
-                        .rpc('get_user_access_data', { p_user_id: userId }));
+                    ({ data: result, error: rpcErr } = await _callRpc(_sess2.access_token));
                 }
 
                 if (rpcErr || !result) return EMPTY;

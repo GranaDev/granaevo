@@ -1521,7 +1521,13 @@ function renderMetaVisual() {
         });
         periodoBar.appendChild(btn);
     });
-    details.appendChild(periodoBar);
+    // Insere o seletor de período entre o título e o canvas do gráfico de linha,
+    // removendo qualquer barra anterior para evitar duplicatas em re-renders.
+    const _lineSection = line.closest('.chart-section');
+    const _existingBar = _lineSection.querySelector('.meta-periodo-bar');
+    if (_existingBar) _existingBar.remove();
+    const _chartWrapper = _lineSection.querySelector('.chart-wrapper');
+    _lineSection.insertBefore(periodoBar, _chartWrapper);
 
     const falta = Math.max(0, Number(meta.objetivo || 0) - Number(meta.saved || 0));
     const concluida = Number(meta.saved || 0) >= Number(meta.objetivo || 1);

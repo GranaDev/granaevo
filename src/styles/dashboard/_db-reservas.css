@@ -713,127 +713,141 @@
     gap: 8px;
 }
 
-/* ========== SELETOR DE PERÍODO DO GRÁFICO ========== */
 /* ========== SELETOR DE PERÍODO — RESERVAS ========== */
 .meta-periodo-bar {
     display: flex;
-    gap: 5px;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 12px;
-    padding: 5px;
+    gap: 3px;
+    padding: 4px;
+    margin: 8px 0 10px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
 }
 
 .meta-periodo-btn {
     flex: 1;
-    min-width: 60px;
-    padding: 6px 10px;
-    border-radius: 8px;
+    padding: 5px 4px;
+    border-radius: 7px;
     border: none;
     background: transparent;
-    color: var(--text-muted);
-    font-size: 0.75rem;
+    color: rgba(255,255,255,0.36);
+    font-size: 0.71rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.15s;
+    transition: all 0.18s ease;
     white-space: nowrap;
     text-align: center;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
+    font-family: inherit;
 }
 
-.meta-periodo-btn:hover {
-    background: rgba(77,166,255,0.1);
-    color: #7bc8ff;
+.meta-periodo-btn:hover:not(.meta-periodo-btn--active) {
+    background: rgba(77,166,255,0.08);
+    color: rgba(255,255,255,0.65);
 }
 
-.meta-periodo-btn:active { transform: scale(0.96); }
+.meta-periodo-btn:active { transform: scale(0.95); }
 
 .meta-periodo-btn--active {
-    background: linear-gradient(135deg, rgba(77,166,255,0.22), rgba(77,166,255,0.12));
-    color: #7bc8ff;
-    box-shadow: 0 1px 8px rgba(77,166,255,0.18), inset 0 0 0 1px rgba(77,166,255,0.3);
+    background: linear-gradient(135deg, rgba(77,166,255,0.28) 0%, rgba(77,166,255,0.16) 100%);
+    color: #8dd6ff;
+    box-shadow: 0 1px 8px rgba(77,166,255,0.2), inset 0 0 0 1px rgba(77,166,255,0.28);
     font-weight: 700;
 }
 
 /* ========== SIMULADOR DE APORTES ========== */
 @keyframes simSlideIn {
-    from { opacity: 0; transform: translateY(8px); }
+    from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes simGlow {
+    0%, 100% { opacity: 0.35; }
+    50%       { opacity: 0.75; }
+}
+
 .meta-sim-card {
-    background: linear-gradient(160deg, rgba(16,185,129,0.06) 0%, rgba(16,185,129,0.03) 100%);
-    border: 1px solid rgba(16, 185, 129, 0.22);
-    border-radius: 16px;
+    background: linear-gradient(158deg, rgba(16,185,129,0.09) 0%, rgba(16,185,129,0.03) 55%, rgba(0,0,0,0.12) 100%);
+    border: 1px solid rgba(16,185,129,0.22);
+    border-radius: 18px;
     padding: 20px;
-    margin-top: 16px;
+    margin-top: 18px;
     position: relative;
     overflow: hidden;
+    animation: simSlideIn 0.3s ease-out;
 }
 
 .meta-sim-card::before {
     content: '';
     position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, #10b981 50%, transparent);
-    opacity: 0.6;
+    top: 0; left: 15%; right: 15%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(16,185,129,0.85) 50%, transparent);
+    animation: simGlow 3s ease-in-out infinite;
+}
+
+.meta-sim-card::after {
+    content: '';
+    position: absolute;
+    top: -55px; right: -40px;
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(16,185,129,0.07) 0%, transparent 70%);
+    pointer-events: none;
 }
 
 .meta-sim-title {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--success);
-    margin-bottom: 4px;
+    letter-spacing: 0.12em;
+    color: #10b981;
+    margin-bottom: 3px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
 }
 
 .meta-sim-title::before {
     content: '';
-    width: 6px; height: 6px;
+    width: 5px; height: 5px;
     border-radius: 50%;
-    background: var(--success);
-    box-shadow: 0 0 8px rgba(16,185,129,0.6);
+    background: #10b981;
+    box-shadow: 0 0 10px rgba(16,185,129,0.9), 0 0 20px rgba(16,185,129,0.4);
     flex-shrink: 0;
 }
 
 .meta-sim-desc {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-bottom: 16px;
-    line-height: 1.5;
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.38);
+    margin-bottom: 14px;
+    line-height: 1.55;
 }
 
 .meta-sim-input-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    background: rgba(0,0,0,0.25);
-    border: 1px solid rgba(16,185,129,0.25);
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(16,185,129,0.2);
     border-radius: 12px;
     padding: 10px 16px;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .meta-sim-input-row:focus-within {
-    border-color: rgba(16,185,129,0.55);
-    box-shadow: 0 0 0 3px rgba(16,185,129,0.08);
+    border-color: rgba(16,185,129,0.6);
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.08), 0 2px 16px rgba(16,185,129,0.06);
 }
 
 .meta-sim-prefix,
 .meta-sim-suffix {
-    font-size: 0.85rem;
+    font-size: 0.88rem;
     font-weight: 700;
-    color: rgba(16,185,129,0.8);
+    color: rgba(16,185,129,0.75);
     white-space: nowrap;
     flex-shrink: 0;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
 }
 
 .meta-sim-input {
@@ -841,25 +855,26 @@
     background: transparent;
     border: none;
     outline: none;
-    color: var(--text-primary);
-    font-size: 1.15rem;
+    color: #fff;
+    font-size: 1.2rem;
     font-weight: 800;
     min-width: 0;
     text-align: center;
     font-family: inherit;
     font-variant-numeric: tabular-nums;
     caret-color: #10b981;
+    letter-spacing: -0.01em;
 }
 
-.meta-sim-input::placeholder { color: var(--text-muted); font-weight: 400; font-size: 0.9rem; }
+.meta-sim-input::placeholder { color: rgba(255,255,255,0.2); font-weight: 400; font-size: 0.9rem; }
 
 .meta-sim-result {
-    margin-top: 16px;
+    margin-top: 14px;
     display: flex;
     flex-direction: column;
     gap: 0;
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
     overflow: hidden;
     animation: simSlideIn 0.25s ease-out;
 }
@@ -870,7 +885,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 14px;
+    padding: 11px 16px;
     gap: 12px;
     background: rgba(255,255,255,0.02);
     border-bottom: 1px solid rgba(255,255,255,0.04);
@@ -879,31 +894,45 @@
 
 .meta-sim-row:last-child { border-bottom: none; }
 
-.meta-sim-row:first-child { background: rgba(16,185,129,0.07); }
+.meta-sim-row:first-child {
+    background: linear-gradient(90deg, rgba(16,185,129,0.1) 0%, rgba(16,185,129,0.04) 100%);
+    border-bottom-color: rgba(16,185,129,0.1);
+}
 
 .meta-sim-row-label {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.43);
     font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+.meta-sim-row:first-child .meta-sim-row-label {
+    color: rgba(16,185,129,0.85);
+    font-weight: 600;
 }
 
 .meta-sim-row-value {
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     font-weight: 800;
     text-align: right;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
+    color: rgba(255,255,255,0.75);
 }
 
-.meta-sim-row:first-child .meta-sim-row-value { color: #10b981; font-size: 1rem; }
+.meta-sim-row:first-child .meta-sim-row-value {
+    color: #10b981;
+    font-size: 1.05rem;
+    text-shadow: 0 0 16px rgba(16,185,129,0.4);
+}
 
 .meta-sim-warn {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: #fbbf24;
-    line-height: 1.55;
+    line-height: 1.6;
     padding: 10px 14px;
-    background: rgba(251,191,36,0.07);
-    border: 1px solid rgba(251,191,36,0.15);
+    background: rgba(251,191,36,0.06);
+    border: 1px solid rgba(251,191,36,0.14);
     border-radius: 10px;
     margin-top: 12px;
     display: flex;
