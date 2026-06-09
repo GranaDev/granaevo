@@ -1056,11 +1056,6 @@ body::before {
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Swipe de navegação entre seções — transição em tempo real via JS */
-/* Suprime o fadeIn padrão quando a navegação veio de um gesto de swipe */
-.page.swipe-no-anim {
-    animation: none !important;
-}
 
 .page-header { margin-bottom: 40px; }
 
@@ -2312,24 +2307,7 @@ select.form-input option:checked {
 @keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
 .mov-load-total { text-align: center; font-size: 0.78rem; color: var(--text-muted); padding: 20px 0 8px; margin: 0; }
 
-/* ── Swipe actions (mobile) ──────────────────────────────────────────── */
-.mov-swipe-wrap { position: relative; overflow: hidden; border-radius: 14px; }
-.mov-swipe-actions { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; z-index: 0; }
-.mov-swipe-actions--left  { right: 0; padding-right: 10px; }
-.mov-swipe-actions--right { left: 0; padding-left: 10px; }
-.mov-swipe-btn {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 3px; width: 52px; height: 52px; border: none; border-radius: 12px;
-    cursor: pointer; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em;
-    transition: transform 0.15s, opacity 0.15s; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-}
-.mov-swipe-btn:active { transform: scale(0.94); opacity: 0.85; }
-.mov-swipe-btn i { font-size: 0.95rem; }
-.mov-swipe-btn--del  { background: linear-gradient(135deg,#ff4b4b,#c0392b); color: #fff; }
-.mov-swipe-btn--edit { background: linear-gradient(135deg,#3b82f6,#1d4ed8); color: #fff; }
-.mov-item { position: relative; z-index: 1; transition: transform 0.18s cubic-bezier(0.25,0.46,0.45,0.94); will-change: transform; background: var(--dark-card, #13141f); }
-.mov-item.swipe-open-left  { box-shadow: -4px 0 16px rgba(255,75,75,0.25); }
-.mov-item.swipe-open-right { box-shadow:  4px 0 16px rgba(59,130,246,0.25); }
+.mov-item { background: var(--dark-card, #13141f); }
 
 /* ========== MOVIMENTAÃ‡Ã•ES ========== */
 .movimentacoes-list {
