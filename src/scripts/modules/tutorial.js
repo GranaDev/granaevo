@@ -11,6 +11,7 @@
 
 // ── Passos base ────────────────────────────────────────────────────────────────
 const PASSOS_BASE = [
+  // ── 1 · Boas-vindas ────────────────────────────────────────────
   {
     pagina:   null,
     seletor:  null,
@@ -18,9 +19,11 @@ const PASSOS_BASE = [
     iconColor:'#10b981',
     secao:    null,
     titulo:   'Bem-vindo ao GranaEvo!',
-    texto:    'Em poucos passos você vai conhecer <strong>todas as funcionalidades</strong> do app. Vou te guiar por cada seção.',
+    texto:    'Você está a poucos minutos de dominar o app. Vou te mostrar cada recurso — do controle básico às <strong>análises avançadas</strong> que vão mudar sua relação com o dinheiro.',
     pos:      'centro',
   },
+
+  // ── 2 · Dashboard — visão geral ────────────────────────────────
   {
     pagina:   'dashboard',
     seletores:['.saldo-hero-mobile', '.cards-grid'],
@@ -28,9 +31,23 @@ const PASSOS_BASE = [
     iconColor:'#10b981',
     secao:    'Dashboard',
     titulo:   'Painel Financeiro',
-    texto:    'Aqui está o resumo do mês: <strong>Saldo disponível</strong>, Entradas, Saídas e Reservas. Uma olhada e você já sabe como estão suas finanças.',
+    texto:    'Resumo completo do mês: <strong>Saldo disponível</strong>, Entradas, Saídas e Reservas. Toque no <em>seletor de período</em> no topo para analisar qualquer mês passado.',
     pos:      'baixo',
   },
+
+  // ── 3 · Dashboard — Alertas inteligentes (NOVO) ────────────────
+  {
+    pagina:   'dashboard',
+    seletor:  '.alertas-vencimento',
+    icon:     'fa-bell',
+    iconColor:'#ef4444',
+    secao:    'Dashboard',
+    titulo:   'Alertas de Vencimento',
+    texto:    'O app detecta automaticamente contas <strong>vencidas</strong>, vencendo hoje, em 3 dias e nos próximos 7 dias. Nunca mais pague multa por esquecer — visualize, pague e marque como concluído.',
+    pos:      'cima',
+  },
+
+  // ── 4 · Contas Fixas ───────────────────────────────────────────
   {
     pagina:   'dashboard',
     seletor:  '#sectionContasFixas',
@@ -38,9 +55,11 @@ const PASSOS_BASE = [
     iconColor:'#f59e0b',
     secao:    'Dashboard',
     titulo:   'Contas Fixas',
-    texto:    'Cadastre contas recorrentes — aluguel, internet, streaming... O app <strong>alerta vencimentos próximos</strong> e você marca como paga com um clique.',
+    texto:    'Cadastre contas recorrentes — aluguel, internet, streaming, academia... O app gera <strong>alertas automáticos</strong> de vencimento e você marca como paga com um clique.',
     pos:      'cima',
   },
+
+  // ── 5 · Transações — Formulário ────────────────────────────────
   {
     pagina:   'transacoes',
     seletor:  '.transaction-form',
@@ -48,9 +67,23 @@ const PASSOS_BASE = [
     iconColor:'#10b981',
     secao:    'Transações',
     titulo:   'Lançar Transações',
-    texto:    'Registre <strong>tudo que entra e sai</strong>: receitas, gastos, reservas e crédito. A categoria é sugerida automaticamente enquanto você digita.',
+    texto:    'Registre entradas, saídas e reservas. Para compras no crédito, selecione <strong>Saída no Crédito</strong>, escolha o cartão e o número de parcelas — o app divide e rastreia <em>cada parcela automaticamente</em>.',
     pos:      'baixo',
   },
+
+  // ── 6 · Transações — Busca & Filtros (NOVO) ────────────────────
+  {
+    pagina:    'transacoes',
+    seletores: ['#movBuscaInput', '#toggleFiltrosBtn'],
+    icon:      'fa-search',
+    iconColor: '#8b5cf6',
+    secao:     'Transações',
+    titulo:    'Busca e Filtros',
+    texto:     'Encontre qualquer lançamento pela <strong>busca por descrição</strong>. Use os filtros para ver apenas um período: últimos 15, 30 ou 60 dias — ou selecione um mês específico para análise focada.',
+    pos:       'baixo',
+  },
+
+  // ── 7 · Transações — Histórico ─────────────────────────────────
   {
     pagina:   'transacoes',
     seletor:  '#listaMovimentacoes',
@@ -58,9 +91,11 @@ const PASSOS_BASE = [
     iconColor:'#3b82f6',
     secao:    'Transações',
     titulo:   'Histórico Completo',
-    texto:    'Todas as movimentações organizadas e filtráveis por período. <strong>Deslize</strong> um item para editar ou excluir rapidamente.',
+    texto:    'Todas as movimentações em ordem cronológica. <strong>Toque</strong> em qualquer item para editar descrição, categoria, valor ou excluir. O histórico fica guardado para sempre.',
     pos:      'cima',
   },
+
+  // ── 8 · Orçamentos por Categoria ──────────────────────────────
   {
     pagina:   'transacoes',
     seletor:  '#orcamentosSection',
@@ -68,9 +103,11 @@ const PASSOS_BASE = [
     iconColor:'#f59e0b',
     secao:    'Transações',
     titulo:   'Orçamentos por Categoria',
-    texto:    'Defina limites mensais por gasto. A barra fica <strong style="color:#f59e0b">amarela a 80%</strong> e <strong style="color:#ef4444">vermelha ao estourar</strong>. Você recebe alerta automático.',
+    texto:    'Defina <strong>limites mensais</strong> por gasto — toque em editar para ajustar o teto. A barra fica <strong style="color:#f59e0b">amarela a 80%</strong> e <strong style="color:#ef4444">vermelha ao estourar</strong>. Você controla quanto quer gastar em cada área.',
     pos:      'baixo',
   },
+
+  // ── 9 · Reservas / Metas ───────────────────────────────────────
   {
     pagina:   'reservas',
     seletor:  '.reservas-sidebar',
@@ -78,9 +115,11 @@ const PASSOS_BASE = [
     iconColor:'#a78bfa',
     secao:    'Reservas',
     titulo:   'Metas e Reservas',
-    texto:    'Crie reservas para objetivos: viagem, emergência, equipamento... Acompanhe o progresso com <strong>gráficos e simulador de aportes</strong>.',
+    texto:    'Crie metas com nome e valor-alvo. O <strong>simulador de aportes</strong> calcula quanto depositar por mês para chegar lá — com opção de rendimento <em>CDI</em> ou taxa personalizada. Depósitos recorrentes são criados automaticamente.',
     pos:      'direita',
   },
+
+  // ── 10 · Cartões de Crédito ────────────────────────────────────
   {
     pagina:   'cartoes',
     seletor:  null,
@@ -88,9 +127,11 @@ const PASSOS_BASE = [
     iconColor:'#ec4899',
     secao:    'Cartões',
     titulo:   'Cartões de Crédito',
-    texto:    'Gerencie cartões, visualize <strong>faturas detalhadas</strong> com cada compra, acompanhe parcelas e nunca seja pego de surpresa no fechamento.',
+    texto:    'Cadastre seus cartões com limite e data de fechamento. Veja <strong>faturas detalhadas</strong> por compra com rastreamento de parcelas. Sabe exatamente quanto do limite está comprometido — e pode <em>congelar</em> um cartão quando não quiser usá-lo.',
     pos:      'centro',
   },
+
+  // ── 11 · Gráficos ──────────────────────────────────────────────
   {
     pagina:   'graficos',
     seletor:  '.graficos-filtros',
@@ -98,9 +139,11 @@ const PASSOS_BASE = [
     iconColor:'#06b6d4',
     secao:    'Gráficos',
     titulo:   'Análise Visual',
-    texto:    'Transforme números em <strong>gráficos inteligentes</strong>. Veja distribuição dos gastos, evolução mensal e compare períodos.',
+    texto:    'Transforme números em <strong>gráficos inteligentes</strong>. Veja distribuição por categoria, evolução mensal do saldo e compare diferentes períodos para entender tendências.',
     pos:      'baixo',
   },
+
+  // ── 12 · Relatórios ────────────────────────────────────────────
   {
     pagina:   'relatorios',
     seletor:  '.rel-filtros',
@@ -108,8 +151,20 @@ const PASSOS_BASE = [
     iconColor:'#f97316',
     secao:    'Relatórios',
     titulo:   'Relatórios Completos',
-    texto:    'Exporte relatórios em <strong>CSV, Excel ou PDF</strong>. Analise por categoria, período e veja o histórico patrimonial da sua evolução financeira.',
+    texto:    'Relatórios detalhados de <strong>onde foi seu dinheiro</strong>, evolução patrimonial e histórico financeiro. Exporte em <strong>CSV, Excel, PDF</strong> ou como apresentação animada.',
     pos:      'baixo',
+  },
+
+  // ── 13 · Score Financeiro (NOVO) ───────────────────────────────
+  {
+    pagina:   'relatorios',
+    seletor:  null,
+    icon:     'fa-trophy',
+    iconColor:'#f59e0b',
+    secao:    'Relatórios',
+    titulo:   'Score Financeiro',
+    texto:    'O GranaEvo avalia sua <strong>saúde financeira</strong> e gera uma pontuação baseada em orçamentos cumpridos, reservas, dívidas e fundo de emergência. Receba <em>dicas personalizadas</em> para evoluir todo mês.',
+    pos:      'centro',
   },
 ];
 
@@ -121,7 +176,7 @@ const PASSOS_CONVIDADOS = [
     iconColor:'#10b981',
     secao:    'Configurações',
     titulo:   'Gerenciar Convidados',
-    texto:    'No plano <strong>Casal/Família</strong>, convide membros por email e compartilhe o código de 6 dígitos. Cada um tem seu acesso.',
+    texto:    'Convide membros por email — cada um recebe <strong>login próprio</strong> e acessa o mesmo painel financeiro. Você define as permissões de cada convidado e pode remover o acesso a qualquer momento.',
     pos:      'cima',
   },
 ];
@@ -134,7 +189,7 @@ const PASSOS_GUEST = [
     iconColor:'#10b981',
     secao:    null,
     titulo:   'Bem-vindo ao GranaEvo!',
-    texto:    'Você foi convidado para acessar este GranaEvo. Você pode <strong>visualizar</strong> as finanças e, dependendo das permissões, editar transações.',
+    texto:    'Você foi convidado para acessar esta conta. Dependendo das permissões concedidas, você pode <strong>visualizar e editar</strong> as finanças do grupo.',
     pos:      'centro',
   },
   {
@@ -143,8 +198,18 @@ const PASSOS_GUEST = [
     icon:     'fa-chart-line',
     iconColor:'#10b981',
     secao:    'Dashboard',
-    titulo:   'Painel Financeiro Compartilhado',
-    texto:    'Resumo financeiro da conta que você foi convidado a acessar. Os dados são <strong>atualizados em tempo real</strong>.',
+    titulo:   'Painel Compartilhado',
+    texto:    'Resumo financeiro da conta que você foi convidado a acessar. Dados <strong>atualizados em tempo real</strong> — use o seletor de período para ver qualquer mês.',
+    pos:      'baixo',
+  },
+  {
+    pagina:   'transacoes',
+    seletor:  '.transaction-form',
+    icon:     'fa-plus-circle',
+    iconColor:'#10b981',
+    secao:    'Transações',
+    titulo:   'Lançar Transações',
+    texto:    'Se você tiver permissão de edição, pode registrar novas entradas e saídas. <strong>Toque em qualquer item</strong> do histórico para editar ou excluir.',
     pos:      'baixo',
   },
   {
@@ -154,7 +219,7 @@ const PASSOS_GUEST = [
     iconColor:'#3b82f6',
     secao:    'Transações',
     titulo:   'Histórico de Transações',
-    texto:    'Visualize todas as movimentações. Dependendo das permissões, você pode <strong>adicionar ou editar</strong> transações.',
+    texto:    'Veja todas as movimentações do grupo. Use a <strong>busca por descrição</strong> e os filtros de período para encontrar qualquer lançamento rapidamente.',
     pos:      'cima',
   },
   {
@@ -164,7 +229,7 @@ const PASSOS_GUEST = [
     iconColor:'#06b6d4',
     secao:    'Gráficos',
     titulo:   'Análise Visual',
-    texto:    'Gráficos e análises financeiras da conta. Uma forma visual de entender o <strong>fluxo de dinheiro</strong> em tempo real.',
+    texto:    'Gráficos completos da conta compartilhada: distribuição por categoria, evolução mensal e comparativos de período. Uma forma clara de entender o <strong>fluxo financeiro do grupo</strong>.',
     pos:      'baixo',
   },
 ];
@@ -176,7 +241,7 @@ const PASSO_FINAL = {
   iconColor:'#6366f1',
   secao:    'Configurações',
   titulo:   'Personalize Tudo',
-  texto:    'Altere <strong>nome, senha e tema</strong>, gerencie sua assinatura, ative notificações push e reinicie este tutorial quando quiser.',
+  texto:    'Ajuste <strong>nome, senha e tema</strong>. Ative <strong>notificações push</strong> para alertas direto no celular. Use o <em>backup automático</em> para proteger seus dados — e reinicie este tutorial quando quiser.',
   pos:      'cima',
 };
 
@@ -186,8 +251,8 @@ const PASSO_CONCLUSAO = {
   icon:     'fa-check-circle',
   iconColor:'#10b981',
   secao:    null,
-  titulo:   'Você está pronto!',
-  texto:    'Parabéns! Agora você domina o GranaEvo. Comece lançando suas primeiras transações e acompanhe sua evolução financeira.',
+  titulo:   'Tudo pronto para evoluir!',
+  texto:    'Você conhece tudo que o GranaEvo oferece. Comece lançando suas primeiras transações e veja como é fácil ter <strong>clareza financeira total</strong> todos os dias.',
   pos:      'centro',
   ultimo:   true,
 };
@@ -204,6 +269,7 @@ function montarPassos(perfil) {
 // ── Estado ─────────────────────────────────────────────────────────────────────
 let _passos    = [];
 let _passo     = 0;
+let _direcao   = 'centro';
 let _backdrop  = null;
 let _spotlight = null;
 let _card      = null;
@@ -212,9 +278,10 @@ let _ativo     = false;
 // ── API pública ────────────────────────────────────────────────────────────────
 export function iniciarTutorial(perfil = {}) {
   if (_ativo) return;
-  _ativo  = true;
-  _passo  = 0;
-  _passos = montarPassos(perfil);
+  _ativo    = true;
+  _passo    = 0;
+  _direcao  = 'centro';
+  _passos   = montarPassos(perfil);
   _montar();
   _ir(0);
 }
@@ -260,8 +327,11 @@ function _blkWheel(e) { if (!e.target.closest('.tut-card')) e.preventDefault(); 
 // ── Navegação ──────────────────────────────────────────────────────────────────
 async function _ir(idx) {
   if (!_ativo) return;
-  const p = _passos[idx];
-  _passo  = idx;
+
+  _direcao = idx > _passo ? 'avancar' : (idx < _passo ? 'voltar' : _direcao);
+
+  const p   = _passos[idx];
+  _passo    = idx;
 
   const paginaAtual = document.querySelector('.page.active')?.id?.replace('Page', '');
   if (p.pagina && paginaAtual !== p.pagina) {
@@ -284,7 +354,12 @@ async function _ir(idx) {
     spRect = p.seletores ? _unionRect(p.seletores) : alvo.getBoundingClientRect();
   }
 
+  const iconColor = p.iconColor || '#10b981';
+
   if (spRect?.height > 0) {
+    _spotlight.style.setProperty('--tut-color',    iconColor);
+    _spotlight.style.setProperty('--tut-color-20', _hexToRgba(iconColor, 0.20));
+    _spotlight.style.setProperty('--tut-color-25', _hexToRgba(iconColor, 0.25));
     _posSpotlight(spRect);
     _spotlight.classList.remove('tut-spot-oculto');
   } else {
@@ -324,14 +399,16 @@ function _unionRect(sels) {
 
 // ── Card ───────────────────────────────────────────────────────────────────────
 function _renderCard(p, idx) {
-  const total   = _passos.length;
+  const total    = _passos.length;
   const primeiro = idx === 0;
   const ultimo   = idx === total - 1 || p.ultimo;
   const pct      = Math.round(((idx + 1) / total) * 100);
+  const iconColor = p.iconColor || '#10b981';
 
   _card.innerHTML = '';
+  _card.style.setProperty('--tut-color', iconColor);
 
-  // Header: progresso + seção
+  // ── Header ─────────────────────────────────────────────────────
   const header = _el('div', 'tut-header');
 
   const progressWrap = _el('div', 'tut-progress-wrap');
@@ -340,9 +417,6 @@ function _renderCard(p, idx) {
   progressWrap.appendChild(progressBar);
 
   const headerMeta = _el('div', 'tut-header-meta');
-  const badge = _el('span', 'tut-badge');
-  badge.setAttribute('aria-label', `Passo ${idx + 1} de ${total}`);
-  badge.textContent = `${idx + 1} / ${total}`;
 
   const secaoEl = _el('span', 'tut-secao');
   if (p.secao) {
@@ -353,20 +427,42 @@ function _renderCard(p, idx) {
     secaoEl.appendChild(document.createTextNode(' ' + p.secao));
   }
 
+  const badge = _el('span', 'tut-badge');
+  badge.setAttribute('aria-label', `Passo ${idx + 1} de ${total}`);
+  badge.textContent = `${idx + 1} / ${total}`;
+
+  headerMeta.appendChild(secaoEl);
   headerMeta.appendChild(badge);
-  if (p.secao) headerMeta.appendChild(secaoEl);
   header.appendChild(progressWrap);
   header.appendChild(headerMeta);
 
-  // Body: icon + título + texto
+  // Dot navigation
+  const dotsWrap = _el('div', 'tut-dots');
+  dotsWrap.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < total; i++) {
+    const cls = i === idx ? 'tut-dot tut-dot-ativo' : i < idx ? 'tut-dot tut-dot-feito' : 'tut-dot';
+    const dot = _el('span', cls);
+    const iCaptured = i;
+    dot.addEventListener('click', () => { if (iCaptured !== _passo) _ir(iCaptured); });
+    dotsWrap.appendChild(dot);
+  }
+  header.appendChild(dotsWrap);
+
+  // ── Body ───────────────────────────────────────────────────────
   const body = _el('div', 'tut-body');
 
+  const stepNum = _el('span', 'tut-step-num');
+  stepNum.textContent = String(idx + 1).padStart(2, '0');
+  stepNum.setAttribute('aria-hidden', 'true');
+  body.appendChild(stepNum);
+
   const iconWrap = _el('div', 'tut-icon-wrap');
-  iconWrap.style.background = (p.iconColor || '#10b981') + '18';
-  iconWrap.style.borderColor = (p.iconColor || '#10b981') + '40';
+  iconWrap.style.background    = iconColor + '18';
+  iconWrap.style.borderColor   = iconColor + '40';
+  iconWrap.style.boxShadow     = `0 4px 24px ${_hexToRgba(iconColor, 0.28)}`;
   const iconEl = document.createElement('i');
   iconEl.className = `fas ${p.icon || 'fa-star'}`;
-  iconEl.style.color = p.iconColor || '#10b981';
+  iconEl.style.color = iconColor;
   iconEl.setAttribute('aria-hidden', 'true');
   iconWrap.appendChild(iconEl);
 
@@ -381,12 +477,12 @@ function _renderCard(p, idx) {
   body.appendChild(titulo);
   body.appendChild(texto);
 
-  // Footer: botões
+  // ── Footer ─────────────────────────────────────────────────────
   const footer = _el('div', 'tut-footer');
 
   const btnPular = _el('button', 'tut-btn-pular');
   btnPular.type = 'button';
-  btnPular.textContent = 'Pular tutorial';
+  btnPular.textContent = 'Pular';
   btnPular.setAttribute('aria-label', 'Pular tutorial');
   btnPular.onclick = _desmontar;
 
@@ -394,7 +490,7 @@ function _renderCard(p, idx) {
 
   const btnVoltar = _el('button', 'tut-btn-voltar');
   btnVoltar.type = 'button';
-  btnVoltar.textContent = 'Voltar';
+  btnVoltar.innerHTML = '<i class="fas fa-arrow-left" aria-hidden="true"></i>';
   btnVoltar.setAttribute('aria-label', 'Passo anterior');
   if (primeiro) { btnVoltar.disabled = true; btnVoltar.setAttribute('aria-disabled', 'true'); }
   btnVoltar.onclick = () => { if (!primeiro) _ir(_passo - 1); };
@@ -419,7 +515,6 @@ function _renderCard(p, idx) {
   _card.appendChild(body);
   _card.appendChild(footer);
 
-  // Keyboard nav
   _card.onkeydown = (e) => {
     if (e.key === 'Escape')                  { _desmontar(); return; }
     if (e.key === 'ArrowRight' && !ultimo)   { _ir(_passo + 1); return; }
@@ -447,10 +542,14 @@ function _secaoIcon(secao) {
 
 // ── Posicionamento do card ─────────────────────────────────────────────────────
 function _posCard(spRect, pos) {
+  // Reset className e força reflow para reiniciar a animação CSS
   _card.className = 'tut-card';
+  void _card.offsetHeight;
 
-  const isMobile = window.innerWidth <= 768;
-  const GAP      = 12;
+  const isUltimo  = _passo === _passos.length - 1 || _passos[_passo]?.ultimo;
+  const isMobile  = window.innerWidth <= 768;
+  const GAP       = 12;
+  let baseClass   = `tut-card tut-entr-${_direcao}${isUltimo ? ' tut-final' : ''}`;
 
   if (isMobile) {
     Object.assign(_card.style, {
@@ -469,14 +568,15 @@ function _posCard(spRect, pos) {
       _card.style.bottom = '84px';
       _card.style.top    = 'auto';
     }
+    _card.className = baseClass;
     return;
   }
 
-  const CW   = 360;
+  const CW    = 400;
   const GAP_D = 24;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const ch = _card.offsetHeight || 260;
+  const vw    = window.innerWidth;
+  const vh    = window.innerHeight;
+  const ch    = _card.offsetHeight || 290;
 
   let top = 0, left = 0, seta = '';
 
@@ -519,7 +619,7 @@ function _posCard(spRect, pos) {
     bottom:   '',
   });
 
-  if (seta) _card.classList.add(seta);
+  _card.className = `${baseClass}${seta ? ' ' + seta : ''}`;
 }
 
 // ── Navegação entre seções ─────────────────────────────────────────────────────
@@ -537,3 +637,11 @@ function _el(tag, cls) {
 }
 
 function _wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function _hexToRgba(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}

@@ -8586,30 +8586,57 @@ button,
 }
 
 /* ── Spotlight ─────────────────────────────────────────────────────────────── */
+@keyframes tutSpotPulse {
+    0%, 100% {
+        box-shadow:
+            0 0 0 2px var(--tut-color, #10b981),
+            0 0 0 5px var(--tut-color-20, rgba(16,185,129,.20)),
+            0 0 0 9999px var(--tut-overlay, rgba(2, 4, 14, 0.88));
+    }
+    50% {
+        box-shadow:
+            0 0 0 3px var(--tut-color, #10b981),
+            0 0 0 14px var(--tut-color-25, rgba(16,185,129,.25)),
+            0 0 0 9999px var(--tut-overlay, rgba(2, 4, 14, 0.88));
+    }
+}
+
 .tut-spotlight {
     position: fixed;
     z-index: 8992;
     pointer-events: none;
     border-radius: 16px;
+    --tut-color:    #10b981;
+    --tut-color-20: rgba(16, 185, 129, 0.20);
+    --tut-color-25: rgba(16, 185, 129, 0.25);
+    --tut-overlay:  rgba(2, 4, 14, 0.88);
     box-shadow:
-        0 0 0 2px rgba(16, 185, 129, 0.65),
-        0 0 0 6px rgba(16, 185, 129, 0.12),
-        0 0 0 9999px rgba(2, 4, 14, 0.85);
+        0 0 0 2px var(--tut-color),
+        0 0 0 5px var(--tut-color-20),
+        0 0 0 9999px rgba(2, 4, 14, 0.88);
+    animation: tutSpotPulse 2.8s ease-in-out infinite;
     transition:
-        top          0.38s cubic-bezier(0.4, 0, 0.2, 1),
-        left         0.38s cubic-bezier(0.4, 0, 0.2, 1),
-        width        0.38s cubic-bezier(0.4, 0, 0.2, 1),
-        height       0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        top           0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        left          0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        width         0.38s cubic-bezier(0.4, 0, 0.2, 1),
+        height        0.38s cubic-bezier(0.4, 0, 0.2, 1),
         border-radius 0.36s ease,
-        opacity      0.22s ease;
+        opacity       0.22s ease;
 }
-
-.tut-spotlight.tut-spot-oculto { opacity: 0; }
+.tut-spotlight.tut-spot-oculto { opacity: 0; animation-play-state: paused; }
 
 /* ── Card ──────────────────────────────────────────────────────────────────── */
-@keyframes tutEntrar {
-    from { opacity: 0; transform: scale(0.9) translateY(16px); }
-    to   { opacity: 1; transform: scale(1) translateY(0); }
+@keyframes tutEntrarAvancar {
+    from { opacity: 0; transform: translateX(32px) scale(0.95); }
+    to   { opacity: 1; transform: translateX(0)    scale(1);    }
+}
+@keyframes tutEntrarVoltar {
+    from { opacity: 0; transform: translateX(-32px) scale(0.95); }
+    to   { opacity: 1; transform: translateX(0)     scale(1);    }
+}
+@keyframes tutEntrarCentro {
+    from { opacity: 0; transform: translateY(22px) scale(0.93); }
+    to   { opacity: 1; transform: translateY(0)    scale(1);    }
 }
 @keyframes tutSair {
     to { opacity: 0; transform: scale(0.92) translateY(10px); }
@@ -8618,24 +8645,38 @@ button,
 .tut-card {
     position: fixed;
     z-index: 8995;
-    background: linear-gradient(160deg, #151928 0%, #1c2035 100%);
-    border: 1px solid rgba(16, 185, 129, 0.18);
-    border-radius: 20px;
+    background: linear-gradient(160deg, #131625 0%, #1a1f33 55%, #1e2438 100%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 22px;
     padding: 0;
-    width: 360px;
+    width: 400px;
     max-width: calc(100vw - 24px);
     box-shadow:
-        0 32px 80px rgba(0, 0, 0, 0.75),
-        0 0 0 1px rgba(255, 255, 255, 0.05),
-        0 0 60px rgba(16, 185, 129, 0.05);
+        0 40px 100px rgba(0, 0, 0, 0.80),
+        0 0 0 1px rgba(255, 255, 255, 0.04),
+        0 0 80px rgba(16, 185, 129, 0.06);
     pointer-events: all;
-    animation: tutEntrar 0.3s cubic-bezier(0.34, 1.35, 0.64, 1) forwards;
     font-family: 'DM Sans', 'Segoe UI', sans-serif;
     overflow: hidden;
+    isolation: isolate;
 }
+
+/* Entradas direction-aware */
+.tut-card.tut-entr-avancar { animation: tutEntrarAvancar 0.32s cubic-bezier(0.34, 1.2, 0.64, 1) forwards; }
+.tut-card.tut-entr-voltar  { animation: tutEntrarVoltar  0.32s cubic-bezier(0.34, 1.2, 0.64, 1) forwards; }
+.tut-card.tut-entr-centro  { animation: tutEntrarCentro  0.36s cubic-bezier(0.34, 1.35, 0.64, 1) forwards; }
 
 .tut-card.tut-saindo {
     animation: tutSair 0.22s ease forwards !important;
+}
+
+/* Último passo — glow especial */
+.tut-card.tut-final {
+    border-color: rgba(16, 185, 129, 0.28);
+    box-shadow:
+        0 40px 100px rgba(0, 0, 0, 0.80),
+        0 0 70px rgba(16, 185, 129, 0.16),
+        0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 /* Seta direcional */
@@ -8643,8 +8684,8 @@ button,
     content: '';
     position: absolute;
     width: 12px; height: 12px;
-    background: #151928;
-    border: 1px solid rgba(16, 185, 129, 0.18);
+    background: #131625;
+    border: 1px solid rgba(255, 255, 255, 0.07);
     display: none;
 }
 .tut-card.tut-seta-cima::after  { display: block; top: -6px; left: 50%; transform: translateX(-50%) rotate(45deg); border-bottom-color: transparent; border-right-color: transparent; }
@@ -8654,24 +8695,24 @@ button,
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */
 .tut-header {
-    padding: 14px 18px 0;
+    padding: 16px 20px 0;
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
 .tut-progress-wrap {
-    height: 3px;
-    background: rgba(255,255,255,0.07);
-    border-radius: 3px;
+    height: 2px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
     overflow: hidden;
 }
 
 .tut-progress-bar {
     height: 100%;
     background: linear-gradient(90deg, #059669, #10b981, #34d399);
-    border-radius: 3px;
-    transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+    border-radius: 2px;
+    transition: width 0.45s cubic-bezier(0.4,0,0.2,1);
 }
 
 .tut-header-meta {
@@ -8682,7 +8723,7 @@ button,
 }
 
 .tut-badge {
-    font-size: 0.62rem;
+    font-size: 0.6rem;
     font-weight: 800;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -8690,60 +8731,114 @@ button,
     background: rgba(16, 185, 129, 0.1);
     border: 1px solid rgba(16, 185, 129, 0.2);
     border-radius: 20px;
-    padding: 2px 9px;
+    padding: 2px 8px;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .tut-secao {
-    font-size: 0.68rem;
+    font-size: 0.66rem;
     font-weight: 600;
-    color: rgba(255,255,255,0.3);
+    color: rgba(255,255,255,0.28);
     display: flex;
     align-items: center;
     gap: 4px;
     letter-spacing: 0.03em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.tut-secao .fas { font-size: 0.58rem; flex-shrink: 0; }
+
+/* ── Dot navigation ─────────────────────────────────────────────────────────── */
+.tut-dots {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 0;
+    flex-wrap: nowrap;
+    overflow: hidden;
 }
 
-.tut-secao .fas { font-size: 0.6rem; }
+.tut-dot {
+    flex-shrink: 0;
+    height: 5px;
+    width: 5px;
+    border-radius: 100px;
+    background: rgba(255,255,255,0.12);
+    cursor: pointer;
+    transition:
+        width      0.38s cubic-bezier(0.34, 1.4, 0.64, 1),
+        background 0.25s ease;
+}
+.tut-dot:hover { background: rgba(255,255,255,0.28); }
+.tut-dot.tut-dot-ativo {
+    width: 22px;
+    background: var(--tut-color, #10b981);
+    cursor: default;
+}
+.tut-dot.tut-dot-feito { background: rgba(16, 185, 129, 0.38); }
 
 /* ── Body ───────────────────────────────────────────────────────────────────── */
 .tut-body {
-    padding: 18px 18px 14px;
+    padding: 20px 20px 16px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Número decorativo de fundo */
+.tut-step-num {
+    position: absolute;
+    right: 8px;
+    top: 2px;
+    font-size: 5.5rem;
+    font-weight: 900;
+    color: rgba(255,255,255,0.028);
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+    letter-spacing: -0.05em;
+    font-variant-numeric: tabular-nums;
+}
+
+@keyframes tutIconEntrar {
+    from { transform: scale(0.5) rotate(-15deg); opacity: 0; }
+    to   { transform: scale(1)   rotate(0deg);   opacity: 1; }
 }
 
 .tut-icon-wrap {
-    width: 44px; height: 44px;
-    border-radius: 12px;
-    border: 1px solid;
+    width: 52px; height: 52px;
+    border-radius: 14px;
+    border: 1px solid transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     align-self: flex-start;
+    animation: tutIconEntrar 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-
-.tut-icon-wrap .fas { font-size: 1.15rem; }
+.tut-icon-wrap .fas { font-size: 1.3rem; }
 
 .tut-titulo {
-    font-size: 1rem;
+    font-size: 1.1rem;
     font-weight: 800;
-    color: #f0f2ff;
-    line-height: 1.28;
+    color: #eef0ff;
+    line-height: 1.25;
     margin: 0;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
 }
 
 .tut-texto {
-    font-size: 0.84rem;
-    color: rgba(176, 179, 200, 0.9);
-    line-height: 1.65;
+    font-size: 0.85rem;
+    color: rgba(176, 180, 205, 0.88);
+    line-height: 1.68;
     margin: 0;
 }
-
-.tut-texto strong { color: #e2e5f5; font-weight: 700; }
+.tut-texto strong { color: #dde0f5; font-weight: 700; }
 .tut-texto em     { color: #6ee7b7; font-style: normal; font-weight: 600; }
 
 /* ── Footer ─────────────────────────────────────────────────────────────────── */
@@ -8752,27 +8847,27 @@ button,
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 12px 18px 16px;
+    padding: 14px 20px 18px;
     border-top: 1px solid rgba(255,255,255,0.05);
-    background: rgba(0,0,0,0.15);
+    background: rgba(0,0,0,0.18);
 }
 
 .tut-btn-pular {
-    font-size: 0.7rem;
-    color: rgba(255,255,255,0.25);
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.2);
     background: none;
     border: none;
     cursor: pointer;
-    padding: 5px 2px;
+    padding: 6px 2px;
     transition: color 0.2s;
     font-family: inherit;
     flex-shrink: 0;
     white-space: nowrap;
     text-decoration: underline;
     text-underline-offset: 3px;
-    text-decoration-color: rgba(255,255,255,0.12);
+    text-decoration-color: rgba(255,255,255,0.1);
 }
-.tut-btn-pular:hover { color: rgba(255,255,255,0.55); }
+.tut-btn-pular:hover { color: rgba(255,255,255,0.5); }
 
 .tut-nav {
     display: flex;
@@ -8781,31 +8876,38 @@ button,
 }
 
 .tut-btn-voltar {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.5);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.45);
     border-radius: 10px;
-    padding: 8px 14px;
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 0.78rem;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
     font-family: inherit;
-    white-space: nowrap;
+    flex-shrink: 0;
 }
-.tut-btn-voltar:hover:not([disabled]) { background: rgba(255,255,255,0.11); color: rgba(255,255,255,0.8); }
-.tut-btn-voltar[disabled] { opacity: 0.22; cursor: default; }
+.tut-btn-voltar:hover:not([disabled]) {
+    background: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.85);
+    border-color: rgba(255,255,255,0.18);
+}
+.tut-btn-voltar[disabled] { opacity: 0.2; cursor: default; }
 
 .tut-btn-avancar {
     background: linear-gradient(135deg, #059669, #10b981);
     border: none;
     color: #fff;
     border-radius: 10px;
-    padding: 8px 18px;
+    padding: 9px 20px;
     font-size: 0.82rem;
     font-weight: 700;
     cursor: pointer;
-    transition: box-shadow 0.2s, transform 0.15s;
+    transition: box-shadow 0.2s, transform 0.15s, filter 0.2s;
     font-family: inherit;
     white-space: nowrap;
     display: flex;
@@ -8814,21 +8916,21 @@ button,
     letter-spacing: 0.01em;
 }
 .tut-btn-avancar:hover {
-    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
-    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.50);
+    transform: translateY(-2px);
+    filter: brightness(1.08);
 }
 .tut-btn-avancar:active { transform: translateY(0); }
-.tut-btn-avancar--concluir {
-    background: linear-gradient(135deg, #059669, #10b981);
-    padding: 8px 20px;
-}
+.tut-btn-avancar--concluir { padding: 9px 22px; }
 
 /* ── Mobile ─────────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
     .tut-card::after { display: none !important; }
-    .tut-card { border-radius: 18px; }
-    .tut-titulo { font-size: 0.94rem; }
-    .tut-texto  { font-size: 0.81rem; }
+    .tut-card { border-radius: 20px; }
+    .tut-titulo { font-size: 1rem; }
+    .tut-texto  { font-size: 0.82rem; }
+    .tut-icon-wrap { width: 46px; height: 46px; }
+    .tut-step-num { font-size: 4rem; }
 }
 /* =====================================================
    HISTÃ“RICO PATRIMONIAL â€” GrÃ¡ficos

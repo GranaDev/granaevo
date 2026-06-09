@@ -381,26 +381,64 @@
 [data-theme="light"] .mov-sep { background: transparent; border-bottom-color: rgba(0,0,0,0.06); }
 
 /* ── Tutorial card ───────────────────────────────────────────── */
+[data-theme="light"] .tut-spotlight {
+    --tut-overlay: rgba(0, 0, 0, 0.50);
+}
+
 [data-theme="light"] .tut-card {
     background: #ffffff;
-    border-color: rgba(0,0,0,0.08);
-    box-shadow: 0 16px 48px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.05);
+    border-color: rgba(0,0,0,0.07);
+    box-shadow:
+        0 20px 60px rgba(0,0,0,0.16),
+        0 0 0 1px rgba(0,0,0,0.04);
 }
 
-[data-theme="light"] .tut-titulo { color: rgba(0,0,0,0.85); }
-[data-theme="light"] .tut-texto  { color: rgba(0,0,0,0.55); }
-[data-theme="light"] .tut-badge  { background: rgba(16,185,129,0.12); color: #059669; }
-[data-theme="light"] .tut-texto strong { color: rgba(0,0,0,0.75); }
-
-[data-theme="light"] .tut-pular-tudo {
-    color: rgba(0,0,0,0.4);
+[data-theme="light"] .tut-card.tut-final {
+    border-color: rgba(5,150,105,0.25);
+    box-shadow:
+        0 20px 60px rgba(0,0,0,0.16),
+        0 0 50px rgba(5,150,105,0.12),
+        0 0 0 1px rgba(0,0,0,0.04);
 }
-[data-theme="light"] .tut-pular-tudo:hover { color: rgba(0,0,0,0.65); }
 
-[data-theme="light"] .tut-voltar {
-    background: rgba(0,0,0,0.05);
-    color: rgba(0,0,0,0.6);
-    border-color: rgba(0,0,0,0.1);
+[data-theme="light"] .tut-card::after { background: #ffffff; border-color: rgba(0,0,0,0.07); }
+
+[data-theme="light"] .tut-progress-wrap { background: rgba(0,0,0,0.06); }
+
+[data-theme="light"] .tut-secao    { color: rgba(0,0,0,0.38); }
+[data-theme="light"] .tut-badge    { background: rgba(5,150,105,0.10); color: #059669; border-color: rgba(5,150,105,0.18); }
+
+[data-theme="light"] .tut-step-num { color: rgba(0,0,0,0.04); }
+
+[data-theme="light"] .tut-titulo         { color: rgba(0,0,0,0.88); }
+[data-theme="light"] .tut-texto          { color: rgba(0,0,0,0.55); }
+[data-theme="light"] .tut-texto strong   { color: rgba(0,0,0,0.78); }
+[data-theme="light"] .tut-texto em       { color: #059669; }
+
+[data-theme="light"] .tut-footer {
+    background: rgba(0,0,0,0.025);
+    border-top-color: rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .tut-btn-pular {
+    color: rgba(0,0,0,0.32);
+    text-decoration-color: rgba(0,0,0,0.15);
+}
+[data-theme="light"] .tut-btn-pular:hover { color: rgba(0,0,0,0.6); }
+
+[data-theme="light"] .tut-dot            { background: rgba(0,0,0,0.10); }
+[data-theme="light"] .tut-dot:hover      { background: rgba(0,0,0,0.22); }
+[data-theme="light"] .tut-dot.tut-dot-feito { background: rgba(5,150,105,0.30); }
+
+[data-theme="light"] .tut-btn-voltar {
+    background: rgba(0,0,0,0.04);
+    border-color: rgba(0,0,0,0.10);
+    color: rgba(0,0,0,0.55);
+}
+[data-theme="light"] .tut-btn-voltar:hover:not([disabled]) {
+    background: rgba(0,0,0,0.08);
+    color: rgba(0,0,0,0.80);
+    border-color: rgba(0,0,0,0.16);
 }
 
 /* ── Perfil selector ─────────────────────────────────────────── */
