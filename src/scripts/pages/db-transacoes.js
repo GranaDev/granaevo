@@ -555,7 +555,7 @@ function _buildTable(visivel) {
 
     const thead  = document.createElement('thead');
     const trHead = document.createElement('tr');
-    ['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor', 'Ações'].forEach(col => {
+    ['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor'].forEach(col => {
         const th = document.createElement('th');
         th.textContent = col;
         trHead.appendChild(th);
@@ -623,35 +623,8 @@ function _buildTable(visivel) {
         tdValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
         tr.appendChild(tdValor);
 
-        // — Ações —
-        const tdAcoes = document.createElement('td');
-        tdAcoes.className = 'td-acoes';
-
-        const btnEdit = document.createElement('button');
-        btnEdit.className = 'btn-tx-action btn-tx-edit';
-        btnEdit.type  = 'button';
-        btnEdit.title = 'Editar';
-        btnEdit.setAttribute('aria-label', 'Editar transação');
-        const iEdit = document.createElement('i');
-        iEdit.className = 'fas fa-pen';
-        iEdit.setAttribute('aria-hidden', 'true');
-        btnEdit.appendChild(iEdit);
-        btnEdit.addEventListener('click', () => editarTransacao(t));
-
-        const btnDel = document.createElement('button');
-        btnDel.className = 'btn-tx-action btn-tx-del';
-        btnDel.type  = 'button';
-        btnDel.title = 'Excluir';
-        btnDel.setAttribute('aria-label', 'Excluir transação');
-        const iDel = document.createElement('i');
-        iDel.className = 'fas fa-trash';
-        iDel.setAttribute('aria-hidden', 'true');
-        btnDel.appendChild(iDel);
-        btnDel.addEventListener('click', () => excluirTransacao(t));
-
-        tdAcoes.appendChild(btnEdit);
-        tdAcoes.appendChild(btnDel);
-        tr.appendChild(tdAcoes);
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', () => editarTransacao(t));
 
         tbody.appendChild(tr);
     });
@@ -660,90 +633,8 @@ function _buildTable(visivel) {
     return table;
 }
 
-// ── Swipe helper para mobile ───────────────────────────────────────────────
-// Implementação segura: touch start/move/end sem interferir com scroll vertical.
-// Swipe esquerda → revela botão Excluir (vermelho).
-// Swipe direita  → revela botão Editar (azul).
-// Tap fora ou segundo swipe → fecha.
-let _swipeAtivo = null; // elemento atualmente "aberto" via swipe
-
-function _bindSwipe(item, t) {
-    let startX = 0, startY = 0, currentX = 0;
-    let isDragging = false, isHorizontal = null;
-    const THRESHOLD = 60; // px mínimo para revelar ações
-
-    function fecharSwipe(el) {
-        if (!el) return;
-        el.style.transform = '';
-        el.classList.remove('swipe-open-left', 'swipe-open-right');
-        _swipeAtivo = null;
-    }
-
-    item.addEventListener('touchstart', (e) => {
-        // Fecha qualquer swipe aberto em outro item
-        if (_swipeAtivo && _swipeAtivo !== item) fecharSwipe(_swipeAtivo);
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-        currentX = 0;
-        isDragging = false;
-        isHorizontal = null;
-    }, { passive: true });
-
-    item.addEventListener('touchmove', (e) => {
-        const dx = e.touches[0].clientX - startX;
-        const dy = e.touches[0].clientY - startY;
-
-        // Detecta direção predominante na primeira movimentação
-        if (isHorizontal === null) {
-            if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
-            isHorizontal = Math.abs(dx) > Math.abs(dy);
-        }
-
-        // Só trata se horizontal — deixa scroll vertical intacto
-        if (!isHorizontal) return;
-        e.preventDefault(); // previne scroll da página durante swipe horizontal
-        isDragging = true;
-        currentX = dx;
-
-        // Limita deslocamento a ±90px
-        const clamp = Math.max(-90, Math.min(90, currentX));
-        item.style.transform = `translateX(${clamp}px)`;
-    }, { passive: false });
-
-    item.addEventListener('touchend', () => {
-        if (!isDragging) return;
-        const abs = Math.abs(currentX);
-
-        if (abs > THRESHOLD) {
-            // Snap para posição aberta
-            const dir = currentX < 0 ? -80 : 80;
-            item.style.transform = `translateX(${dir}px)`;
-            item.classList.toggle('swipe-open-left',  dir < 0);
-            item.classList.toggle('swipe-open-right', dir > 0);
-            _swipeAtivo = item;
-        } else {
-            fecharSwipe(item);
-        }
-
-        isDragging = false;
-        isHorizontal = null;
-    }, { passive: true });
-
-    // Tap no item fechado → editar; tap no item aberto → fechar
-    item.addEventListener('click', (e) => {
-        if (item.classList.contains('swipe-open-left') || item.classList.contains('swipe-open-right')) {
-            fecharSwipe(item);
-            e.stopPropagation();
-            return;
-        }
-        editarTransacao(t);
-    });
-}
 
 function _buildCards(visivel) {
-    // Fecha swipe aberto ao re-renderizar
-    if (_swipeAtivo) { _swipeAtivo.style.transform = ''; _swipeAtivo = null; }
-
     const wrapper  = document.createElement('div');
     wrapper.className = 'mov-cards';
     const frag     = document.createDocumentFragment();
@@ -761,44 +652,10 @@ function _buildCards(visivel) {
             frag.appendChild(sep);
         }
 
-        // Wrapper externo para ações de swipe (contém o item + botões de ação)
-        const swipeWrap = document.createElement('div');
-        swipeWrap.className = 'mov-swipe-wrap';
-
-        // Botões de ação (ficam atrás do item, revelados pelo swipe)
-        const actionsLeft = document.createElement('div');
-        actionsLeft.className = 'mov-swipe-actions mov-swipe-actions--left';
-        const btnExcluirSwipe = document.createElement('button');
-        btnExcluirSwipe.type = 'button';
-        btnExcluirSwipe.className = 'mov-swipe-btn mov-swipe-btn--del';
-        btnExcluirSwipe.setAttribute('aria-label', 'Excluir transação');
-        btnExcluirSwipe.innerHTML = '<i class="fas fa-trash" aria-hidden="true"></i><span>Excluir</span>';
-        btnExcluirSwipe.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (_swipeAtivo) { _swipeAtivo.style.transform = ''; _swipeAtivo = null; }
-            excluirTransacao(t);
-        });
-        actionsLeft.appendChild(btnExcluirSwipe);
-
-        const actionsRight = document.createElement('div');
-        actionsRight.className = 'mov-swipe-actions mov-swipe-actions--right';
-        const btnEditarSwipe = document.createElement('button');
-        btnEditarSwipe.type = 'button';
-        btnEditarSwipe.className = 'mov-swipe-btn mov-swipe-btn--edit';
-        btnEditarSwipe.setAttribute('aria-label', 'Editar transação');
-        btnEditarSwipe.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i><span>Editar</span>';
-        btnEditarSwipe.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (_swipeAtivo) { _swipeAtivo.style.transform = ''; _swipeAtivo = null; }
-            editarTransacao(t);
-        });
-        actionsRight.appendChild(btnEditarSwipe);
-
-        swipeWrap.appendChild(actionsLeft);
-        swipeWrap.appendChild(actionsRight);
-
         const div     = document.createElement('div');
         div.className = 'mov-item';
+        div.style.cursor = 'pointer';
+        div.addEventListener('click', () => editarTransacao(t));
 
         const iconeBadge     = document.createElement('div');
         iconeBadge.className = `mov-icon-badge ${cat}`;
@@ -834,23 +691,10 @@ function _buildCards(visivel) {
         div.appendChild(left);
         div.appendChild(right);
 
-        swipeWrap.appendChild(div);
-        _bindSwipe(div, t);
-
-        frag.appendChild(swipeWrap);
+        frag.appendChild(div);
     });
 
     wrapper.appendChild(frag);
-
-    // Fecha qualquer swipe aberto ao tocar fora da lista
-    wrapper.addEventListener('touchstart', (e) => {
-        if (_swipeAtivo && !_swipeAtivo.contains(e.target)) {
-            _swipeAtivo.style.transform = '';
-            _swipeAtivo.classList.remove('swipe-open-left', 'swipe-open-right');
-            _swipeAtivo = null;
-        }
-    }, { passive: true });
-
     return wrapper;
 }
 
