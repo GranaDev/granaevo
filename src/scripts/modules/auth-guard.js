@@ -597,7 +597,8 @@ const SubscriptionChecker = (() => {
                 let { data: result, error: rpcErr } = await _callRpc(_sess.access_token);
 
                 // Retry único após refresh — cobre token expirado entre getSession() e a chamada HTTP.
-                if (rpcErr?.status === 403 || rpcErr?.status === 401) {
+                // 403 = sem permissão (GRANT não aplicado); não adianta refresh. Só retry em 401.
+                if (rpcErr?.status === 401) {
                     const { data: { session: _sess2 } } = await supabase.auth.refreshSession();
                     if (!_sess2?.access_token) return EMPTY;
                     ({ data: result, error: rpcErr } = await _callRpc(_sess2.access_token));

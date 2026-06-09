@@ -417,8 +417,12 @@ function analyzeJson(root) {
     while (stack.length) {
         const [node, depth] = stack.pop();
         if (depth > maxDepth) maxDepth = depth;
-        const keys = Array.isArray(node) ? node.length : Object.keys(node).length;
-        if (keys > maxKeys) maxKeys = keys;
+        // Só conta chaves de objetos — arrays têm tamanho validado pelo _SAVE_LIMITS no frontend.
+        // Antes contava node.length de arrays, o que rejeitava saves com > 50 transações (400).
+        if (!Array.isArray(node)) {
+            const keys = Object.keys(node).length;
+            if (keys > maxKeys) maxKeys = keys;
+        }
         for (const child of (Array.isArray(node) ? node : Object.values(node))) {
             if (child !== null && typeof child === 'object') stack.push([child, depth + 1]);
         }
