@@ -5423,232 +5423,203 @@ function _patchInputValorGetter() {
 }
 
 // ========== SWIPE ENTRE SEÇÕES (MOBILE) ==========
+// Arquitetura: ambas as páginas são movidas para um stage container
+// (position:fixed; overflow:hidden) durante o gesto. Ao finalizar,
+// são restauradas às posições originais no DOM via referências salvas.
+// Isso evita overflow travado, z-index conflitante e flash de layout.
 function _initSwipeNav() {
-    const _SECOES = ['dashboard','transacoes','reservas','cartoes','graficos','relatorios','configuracoes'];
-    const EASE    = 'cubic-bezier(0.33, 1, 0.68, 1)'; // slight spring, no overshoot
+    const PAGES = ['dashboard','transacoes','reservas','cartoes','graficos','relatorios','configuracoes'];
+    const EASE  = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
     let startX = 0, startY = 0, lastX = 0, lastTime = 0;
-    let velocity = 0;
-    let dragging = false;
-    let isHorizontal = null;
-    let direction    = null;   // 'left' | 'right'
-    let currentPage  = null;
-    let targetPage   = null;
-    let targetId     = null;
-    let scrim        = null;   // overlay que escurece a página que sai
-    let busy         = false;
+    let velocity = 0, dragging = false, isHoriz = null;
+    let busy = false;
 
-    const mainArea = document.querySelector('.main-content') || document.getElementById('mainContent');
-    if (!mainArea) return;
+    // Estado do gesto em andamento
+    let dir, curEl, nxtEl, nxtId, svCur, svNxt, stage, scrim;
 
-    function _getAdjacent(dx) {
+    const host = document.querySelector('.main-content') || document.getElementById('mainContent');
+    if (!host) return;
+
+    function adjPage(goNext) {
         const active = document.querySelector('.page.active');
         if (!active) return null;
-        const id  = active.id.replace('Page', '');
-        const idx = _SECOES.indexOf(id);
-        if (idx < 0) return null;
-        const ni = dx < 0 ? idx + 1 : idx - 1;
-        if (ni < 0 || ni >= _SECOES.length) return null;
-        return { page: document.getElementById(_SECOES[ni] + 'Page'), id: _SECOES[ni] };
+        const cur = active.id.replace('Page', '');
+        const i   = PAGES.indexOf(cur);
+        if (i < 0) return null;
+        const ni  = goNext ? i + 1 : i - 1;
+        if (ni < 0 || ni >= PAGES.length) return null;
+        return { el: document.getElementById(PAGES[ni] + 'Page'), id: PAGES[ni] };
     }
 
-    function _createScrim() {
-        const el = document.createElement('div');
+    // Salva posição no DOM para restauração posterior
+    function saveDom(el) { return { parent: el.parentNode, next: el.nextSibling }; }
+
+    // Monta uma página dentro do stage como slot absolute
+    function mount(el, offsetPx) {
         Object.assign(el.style, {
-            position:      'fixed',
-            inset:         '0',
-            zIndex:        '199',  // entre current (normal) e target (200)
-            background:    'rgba(0,0,0,0)',
-            pointerEvents: 'none',
-            transition:    'none',
+            display: 'block', position: 'absolute', inset: '0',
+            overflowY: 'auto', willChange: 'transform',
+            transition: 'none', transform: `translateX(${offsetPx}px)`,
         });
-        document.body.appendChild(el);
-        return el;
+        stage.appendChild(el);
     }
 
-    function _prepareTarget(page, fromRight) {
-        const shadowSide = fromRight ? '-20px 0 32px' : '20px 0 32px';
-        Object.assign(page.style, {
-            display:       'block',
-            position:      'fixed',
-            top:           '0', left: '0', right: '0', bottom: '0',
-            overflowY:     'auto',
-            zIndex:        '200',
-            pointerEvents: 'none',
-            willChange:    'transform',
-            transition:    'none',
-            transform:     `translateX(${fromRight ? '100%' : '-100%'})`,
-            boxShadow:     `${shadowSide} rgba(0,0,0,0.24)`,
+    function beginSwipe(dx) {
+        const goNext = dx < 0;
+        const adj    = adjPage(goNext);
+        curEl        = document.querySelector('.page.active');
+        if (!curEl || !adj) return false;
+
+        dir   = goNext ? 'next' : 'prev';
+        nxtEl = adj.el;
+        nxtId = adj.id;
+        const w = window.innerWidth;
+
+        // Stage: container fixo que serve de viewport para o gesto
+        stage = document.createElement('div');
+        Object.assign(stage.style, {
+            position: 'fixed', inset: '0',
+            zIndex: '5000', overflow: 'hidden',
         });
+        document.body.appendChild(stage);
+
+        // Scrim entre as duas páginas (z:1 — abaixo da entrante z:2)
+        scrim = document.createElement('div');
+        Object.assign(scrim.style, {
+            position: 'absolute', inset: '0', zIndex: '1',
+            background: 'rgba(0,0,0,0)', pointerEvents: 'none',
+        });
+        stage.appendChild(scrim);
+
+        // Página atual (z:0) e página destino (z:2, com sombra lateral)
+        svCur = saveDom(curEl);
+        curEl.style.zIndex = '0';
+        mount(curEl, 0);
+
+        svNxt = saveDom(nxtEl);
+        nxtEl.style.zIndex = '2';
+        nxtEl.style.boxShadow = goNext
+            ? '-14px 0 28px rgba(0,0,0,0.18)'
+            : '14px 0 28px rgba(0,0,0,0.18)';
+        mount(nxtEl, goNext ? w : -w);
+
+        return true;
     }
 
-    function _applyDrag(dx) {
-        if (!currentPage) return;
-        const w        = window.innerWidth;
-        const progress = Math.min(Math.abs(dx) / w, 1);
-
-        // Página saindo: desliza + recua levemente em escala
-        const scale = 1 - progress * 0.035;
-        currentPage.style.transform = `translateX(${dx}px) scale(${scale.toFixed(4)})`;
-
-        // Scrim escurece proporcionalmente ao avanço
-        if (scrim) scrim.style.background = `rgba(0,0,0,${(progress * 0.2).toFixed(3)})`;
-
-        // Página entrando: desliza na mesma velocidade
-        if (targetPage) {
-            const offset = direction === 'left' ? w : -w;
-            targetPage.style.transform = `translateX(${offset + dx}px)`;
-        }
+    function applyDrag(dx) {
+        const w = window.innerWidth;
+        const t = Math.min(Math.abs(dx) / w, 1);
+        // Página saindo: desliza + leve recuo em escala
+        curEl.style.transform = `translateX(${dx}px) scale(${(1 - t * 0.04).toFixed(4)})`;
+        // Scrim escurece proporcionalmente
+        scrim.style.background = `rgba(0,0,0,${(t * 0.2).toFixed(3)})`;
+        // Página entrando: desliza junto
+        nxtEl.style.transform = `translateX(${(dir === 'next' ? w : -w) + dx}px)`;
     }
 
-    function _dur() {
-        return Math.round(Math.max(180, 340 - Math.abs(velocity) * 280));
+    function snapDur() {
+        return Math.round(Math.max(200, 380 - Math.abs(velocity) * 300));
     }
 
-    function _commit() {
+    function finish(commit) {
         busy = true;
-        const w   = window.innerWidth;
-        const dur = _dur();
+        const d  = snapDur();
+        const w  = window.innerWidth;
+        // Captura locais — evita depender de vars externas no cleanup assíncrono
+        const c = curEl, n = nxtEl, sg = stage, sr = scrim;
+        const sc = svCur, sn = svNxt, id = nxtId, go = dir;
 
-        currentPage.style.transition = `transform ${dur}ms ${EASE}, opacity ${dur}ms ${EASE}`;
-        currentPage.style.transform  = `translateX(${direction === 'left' ? -w : w}px) scale(0.97)`;
-        currentPage.style.opacity    = '0.82';
-
-        if (scrim) {
-            scrim.style.transition = `background ${dur}ms ${EASE}`;
-            scrim.style.background = 'rgba(0,0,0,0.2)';
+        if (commit) {
+            c.style.transition  = `transform ${d}ms ${EASE}, opacity ${d}ms ${EASE}`;
+            n.style.transition  = `transform ${d}ms ${EASE}`;
+            sr.style.transition = `background ${d}ms ${EASE}`;
+            c.style.transform   = `translateX(${go === 'next' ? -w : w}px) scale(0.97)`;
+            c.style.opacity     = '0.85';
+            n.style.transform   = 'translateX(0)';
+            sr.style.background = 'rgba(0,0,0,0.2)';
+        } else {
+            c.style.transition  = `transform ${d}ms ${EASE}, opacity ${d}ms ${EASE}`;
+            n.style.transition  = `transform ${d}ms ${EASE}`;
+            sr.style.transition = `background ${d}ms ${EASE}`;
+            c.style.transform   = 'translateX(0) scale(1)';
+            c.style.opacity     = '1';
+            n.style.transform   = `translateX(${go === 'next' ? w : -w}px)`;
+            sr.style.background = 'rgba(0,0,0,0)';
         }
 
-        if (targetPage) {
-            targetPage.style.transition    = `transform ${dur}ms ${EASE}`;
-            targetPage.style.pointerEvents = 'none';
-            targetPage.style.transform     = 'translateX(0)';
-            targetPage.addEventListener('transitionend', _finalizeCommit, { once: true });
+        let done = false;
+        function cleanup() {
+            if (done) return; done = true;
+
+            // Restaura páginas ao DOM original (sincrono — sem flash de layout)
+            c.style.cssText = '';
+            if (sc?.parent) sc.parent.insertBefore(c, sc.next || null);
+            n.style.cssText = '';
+            if (sn?.parent) sn.parent.insertBefore(n, sn.next || null);
+            sg.remove();
+
+            if (commit) {
+                n.classList.add('swipe-no-anim');
+                mostrarTela(id);
+                requestAnimationFrame(() => n.classList.remove('swipe-no-anim'));
+            }
+
+            curEl = nxtEl = nxtId = dir = svCur = svNxt = stage = scrim = null;
+            busy = false;
         }
+
+        n.addEventListener('transitionend', cleanup, { once: true });
+        setTimeout(cleanup, d + 160); // fallback se transitionend não disparar
     }
 
-    function _finalizeCommit() {
-        const id = targetId;
-        [currentPage, targetPage].forEach(p => { if (p) p.style.cssText = ''; });
-        if (scrim) { scrim.remove(); scrim = null; }
-
-        const incoming = document.getElementById(id + 'Page');
-        if (incoming) incoming.classList.add('swipe-no-anim');
-        mostrarTela(id);
-        if (incoming) requestAnimationFrame(() => incoming.classList.remove('swipe-no-anim'));
-
-        currentPage = targetPage = targetId = direction = null;
-        busy = false;
-    }
-
-    function _cancel() {
-        busy = true;
-        const dur = _dur();
-
-        if (currentPage) {
-            currentPage.style.transition = `transform ${dur}ms ${EASE}, opacity ${dur}ms ${EASE}`;
-            currentPage.style.transform  = 'translateX(0) scale(1)';
-            currentPage.style.opacity    = '1';
-        }
-        if (scrim) {
-            scrim.style.transition = `background ${dur}ms ${EASE}`;
-            scrim.style.background = 'rgba(0,0,0,0)';
-        }
-        if (targetPage) {
-            const resetX = direction === 'left' ? '100%' : '-100%';
-            targetPage.style.transition = `transform ${dur}ms ${EASE}`;
-            targetPage.style.transform  = `translateX(${resetX})`;
-        }
-
-        const ref = targetPage || currentPage;
-        if (ref) ref.addEventListener('transitionend', _cleanupCancel, { once: true });
-        else     _cleanupCancel();
-    }
-
-    function _cleanupCancel() {
-        if (currentPage) currentPage.style.cssText = '';
-        if (targetPage)  targetPage.style.cssText  = '';
-        if (scrim)       { scrim.remove(); scrim = null; }
-        currentPage = targetPage = targetId = direction = null;
-        busy = false;
-    }
-
-    mainArea.addEventListener('touchstart', (e) => {
+    host.addEventListener('touchstart', e => {
         if (busy || e.touches.length !== 1) return;
         startX = lastX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
         lastTime = Date.now();
-        velocity = 0; dragging = false; isHorizontal = null; direction = null;
+        velocity = 0; dragging = false; isHoriz = null;
     }, { passive: true });
 
-    mainArea.addEventListener('touchmove', (e) => {
+    host.addEventListener('touchmove', e => {
         if (busy || e.touches.length !== 1) return;
         if (localStorage.getItem('ge_swipe_nav') !== '1') return;
 
-        const now = Date.now();
-        const dt  = now - lastTime;
+        const now = Date.now(), dt = now - lastTime;
         if (dt > 0) velocity = (e.touches[0].clientX - lastX) / dt;
-        lastX    = e.touches[0].clientX;
-        lastTime = now;
+        lastX = e.touches[0].clientX; lastTime = now;
 
         const dx = e.touches[0].clientX - startX;
         const dy = e.touches[0].clientY - startY;
 
-        if (isHorizontal === null) {
-            if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-            isHorizontal = Math.abs(dx) > Math.abs(dy) * 1.3;
-
-            if (isHorizontal) {
-                direction   = dx < 0 ? 'left' : 'right';
-                currentPage = document.querySelector('.page.active');
-                const adj   = _getAdjacent(dx);
-
-                if (adj) {
-                    targetPage = adj.page;
-                    targetId   = adj.id;
-                    _prepareTarget(targetPage, direction === 'left');
-                    scrim = _createScrim();
-                } else {
-                    targetPage = null;
-                    targetId   = null;
-                }
-
-                if (currentPage) {
-                    Object.assign(currentPage.style, {
-                        willChange:      'transform, opacity',
-                        transition:      'none',
-                        transformOrigin: direction === 'left' ? 'right center' : 'left center',
-                    });
-                }
-
-                document.body.style.overflow = 'hidden';
+        if (isHoriz === null) {
+            if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+            isHoriz = Math.abs(dx) > Math.abs(dy) * 1.5;
+            if (isHoriz) {
+                if (!beginSwipe(dx)) { isHoriz = false; return; }
                 dragging = true;
             }
         }
 
-        if (!isHorizontal || !dragging) return;
+        if (!isHoriz || !dragging) return;
         e.preventDefault();
-        _applyDrag(dx);
+        applyDrag(dx);
     }, { passive: false });
 
-    mainArea.addEventListener('touchend', (e) => {
-        document.body.style.overflow = '';
-        if (!dragging) { dragging = false; isHorizontal = null; return; }
-        dragging = false; isHorizontal = null;
+    host.addEventListener('touchend', e => {
+        if (!dragging) { dragging = false; isHoriz = null; return; }
+        dragging = false; isHoriz = null;
+        if (!stage) return;
 
         const dx   = e.changedTouches[0].clientX - startX;
-        const fast = Math.abs(velocity) > 0.3;
-        const far  = Math.abs(dx) > window.innerWidth * 0.35;
-
-        if (targetPage && (far || fast)) _commit();
-        else                             _cancel();
+        const fast = Math.abs(velocity) > 0.4;
+        const far  = Math.abs(dx) > window.innerWidth * 0.38;
+        finish(fast || far);
     }, { passive: true });
 
-    mainArea.addEventListener('touchcancel', () => {
-        document.body.style.overflow = '';
-        dragging = false; isHorizontal = null;
-        if (currentPage || targetPage) _cancel();
-        else if (scrim) { scrim.remove(); scrim = null; }
+    host.addEventListener('touchcancel', () => {
+        dragging = false; isHoriz = null;
+        if (stage) finish(false);
     }, { passive: true });
 }
 
