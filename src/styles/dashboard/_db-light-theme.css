@@ -427,3 +427,237 @@
     background: linear-gradient(90deg, #e8eaf2 25%, #f0f2f8 50%, #e8eaf2 75%);
     background-size: 200% 100%;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   TEMA CLARO — Correções de hardcodes e glassmorphism escuro
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Tela de loading de perfil ───────────────────────────────── */
+[data-theme="light"] .profile-loading {
+    background: var(--color-bg);
+}
+
+[data-theme="light"] .pl-text {
+    color: var(--color-text);
+}
+
+[data-theme="light"] .pl-sub {
+    color: var(--color-text-muted);
+}
+
+[data-theme="light"] .loader-text {
+    color: var(--color-text-muted);
+}
+
+/* ── Sidebar: substituir neon por verde sólido ───────────────── */
+[data-theme="light"] .nav-btn::before {
+    background: linear-gradient(180deg, var(--color-primary-dark), var(--color-primary));
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.3);
+}
+
+[data-theme="light"] .nav-btn.active::before {
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
+}
+
+[data-theme="light"] .nav-btn:hover .nav-icon i {
+    color: var(--color-primary);
+    filter: none;
+}
+
+[data-theme="light"] .nav-btn.active .nav-icon i {
+    color: var(--color-primary-dark);
+    filter: none;
+}
+
+/* ── Cores dos tipos de transação ────────────────────────────── */
+[data-theme="light"] .entrada          { color: #059669; }
+[data-theme="light"] .saida            { color: #dc2626; }
+[data-theme="light"] .reserva          { color: #d97706; }
+[data-theme="light"] .retirada_reserva { color: #ea580c; }
+
+/* ── Badges de ícone (lista de movimentações) ────────────────── */
+[data-theme="light"] .mov-icon-badge.entrada {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+[data-theme="light"] .mov-icon-badge.saida {
+    background: rgba(220, 38, 38, 0.08);
+    color: #dc2626;
+    border-color: rgba(220, 38, 38, 0.16);
+}
+
+[data-theme="light"] .mov-icon-badge.reserva {
+    background: rgba(217, 119, 6, 0.1);
+    color: #d97706;
+    border-color: rgba(217, 119, 6, 0.18);
+}
+
+[data-theme="light"] .mov-icon-badge.retirada_reserva {
+    background: rgba(234, 88, 12, 0.1);
+    color: #ea580c;
+    border-color: rgba(234, 88, 12, 0.18);
+}
+
+/* ── Ícones de tipo na tabela de transações ──────────────────── */
+[data-theme="light"] .tipo-icon-entrada          { background: rgba(16,185,129,0.1);  color: #059669; }
+[data-theme="light"] .tipo-icon-saida            { background: rgba(220,38,38,0.08);  color: #dc2626; }
+[data-theme="light"] .tipo-icon-reserva          { background: rgba(217,119,6,0.1);   color: #d97706; }
+[data-theme="light"] .tipo-icon-retirada_reserva { background: rgba(234,88,12,0.1);   color: #ea580c; }
+
+/* ── Cat-badges na tabela ────────────────────────────────────── */
+[data-theme="light"] .cat-entrada          { background: rgba(16,185,129,0.09);  color: #059669; border-color: rgba(16,185,129,0.22); }
+[data-theme="light"] .cat-saida            { background: rgba(220,38,38,0.08);   color: #dc2626; border-color: rgba(220,38,38,0.2); }
+[data-theme="light"] .cat-reserva          { background: rgba(99,102,241,0.09);  color: #4338ca; border-color: rgba(99,102,241,0.22); }
+[data-theme="light"] .cat-retirada_reserva { background: rgba(234,88,12,0.09);   color: #ea580c; border-color: rgba(234,88,12,0.2); }
+
+/* ── Valores monetários na tabela ────────────────────────────── */
+[data-theme="light"] .val-entrada          { color: #059669; }
+[data-theme="light"] .val-saida            { color: #dc2626; }
+[data-theme="light"] .val-reserva          { color: #d97706; }
+[data-theme="light"] .val-retirada_reserva { color: #ea580c; }
+
+/* ── Botões de ação na tabela ────────────────────────────────── */
+[data-theme="light"] .btn-tx-edit          { background: rgba(99,102,241,0.09); color: #4338ca; }
+[data-theme="light"] .btn-tx-edit:hover    { background: rgba(99,102,241,0.18); color: #3730a3; }
+[data-theme="light"] .btn-tx-del           { background: rgba(220,38,38,0.08);  color: #dc2626; }
+[data-theme="light"] .btn-tx-del:hover     { background: rgba(220,38,38,0.16);  color: #991b1b; }
+
+/* ── Select options ──────────────────────────────────────────── */
+[data-theme="light"] select.form-input option {
+    background: #ffffff;
+    color: #111827;
+}
+
+[data-theme="light"] select.form-input option:checked {
+    background: rgba(16,185,129,0.12) !important;
+    color: #059669 !important;
+}
+
+/* ── Filtros expandíveis: header ─────────────────────────────── */
+[data-theme="light"] .mov-filtros-header {
+    background: rgba(255,255,255,0.9);
+    border-color: rgba(0,0,0,0.1);
+    color: rgba(0,0,0,0.65);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+
+[data-theme="light"] .mov-filtros-header:hover {
+    background: #ffffff;
+    border-color: rgba(16,185,129,0.3);
+    color: rgba(0,0,0,0.8);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(16,185,129,0.1);
+    transform: translateY(-1px);
+}
+
+[data-theme="light"] .mov-filtros-wrapper.open .mov-filtros-header {
+    background: #ffffff;
+    border-color: rgba(16,185,129,0.25);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .mov-filtros-label {
+    color: rgba(0,0,0,0.6);
+}
+
+[data-theme="light"] .mov-filtros-chevron {
+    color: rgba(0,0,0,0.3);
+}
+
+[data-theme="light"] .mov-filtros-wrapper.open .mov-filtros-chevron {
+    color: var(--color-primary);
+}
+
+/* ── Filtros expandíveis: painel aberto ──────────────────────── */
+[data-theme="light"] .mov-filtros {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.08);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+[data-theme="light"] .mov-filtro-btn {
+    background: rgba(0,0,0,0.04);
+    border-color: rgba(0,0,0,0.09);
+    color: rgba(0,0,0,0.55);
+}
+
+[data-theme="light"] .mov-filtro-btn:hover {
+    background: rgba(16,185,129,0.08);
+    border-color: rgba(16,185,129,0.3);
+    color: #059669;
+    box-shadow: none;
+    transform: translateY(-1px);
+}
+
+[data-theme="light"] .mov-filtro-btn.active {
+    background: rgba(16,185,129,0.12);
+    border-color: rgba(16,185,129,0.4);
+    color: #059669;
+    box-shadow: 0 0 0 1px rgba(16,185,129,0.15);
+    font-weight: 700;
+}
+
+/* ── Barra de busca de movimentações ─────────────────────────── */
+[data-theme="light"] .mov-busca-wrap {
+    background: rgba(255,255,255,0.9);
+    border-color: rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+[data-theme="light"] .mov-busca-wrap:focus-within {
+    background: #ffffff;
+    border-color: rgba(16,185,129,0.4);
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.1), 0 4px 16px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+}
+
+/* ── Contas fixas ────────────────────────────────────────────── */
+[data-theme="light"] .conta-card {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.08);
+    box-shadow: 0 2px 16px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.04);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+[data-theme="light"] .conta-card:hover {
+    background: #fafffe;
+    border-color: rgba(16,185,129,0.3);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.1), 0 0 0 1px rgba(16,185,129,0.15);
+}
+
+[data-theme="light"] .conta-card::before {
+    background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.5), transparent);
+    box-shadow: none;
+    opacity: 0.3;
+}
+
+[data-theme="light"] .conta-card:hover::before { opacity: 0.7; }
+
+[data-theme="light"] .conta-title {
+    text-shadow: none;
+}
+
+/* ── Cards e itens: correção no breakpoint mobile ────────────── */
+@media (max-width: 768px) {
+    [data-theme="light"] .card {
+        background: #ffffff;
+        border-color: rgba(0,0,0,0.07);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+@media (max-width: 640px) {
+    [data-theme="light"] .mov-item {
+        background: #ffffff;
+        border-color: rgba(0,0,0,0.06);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
