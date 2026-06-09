@@ -1207,3 +1207,215 @@
         color: rgba(0,0,0,0.45);
     }
 }
+
+/* ================================================================
+   GRÁFICOS — overrides completos para tema claro
+   Todos os containers com dark-glass/rgba escuro substituídos
+   ================================================================ */
+
+/* ── Stat cards (estatísticas rápidas) ─────────────────────────── */
+[data-theme="light"] .stat-card {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.08);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+[data-theme="light"] .stat-label { color: #4b5563; }
+[data-theme="light"] .stat-value { color: #111827; }
+
+[data-theme="light"] .stat-change.positive {
+    background: rgba(5,150,105,0.1);
+    color: #059669;
+}
+
+[data-theme="light"] .stat-change.negative {
+    background: rgba(220,38,38,0.08);
+    color: #dc2626;
+}
+
+/* ── Legenda dos gráficos ───────────────────────────────────────── */
+[data-theme="light"] .legenda-item {
+    background: rgba(0,0,0,0.03);
+    border: 1px solid rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .legenda-item:hover {
+    background: rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .legenda-texto { color: #4b5563; }
+[data-theme="light"] .legenda-valor { color: #111827; }
+
+/* ── Comparação de perfis ───────────────────────────────────────── */
+[data-theme="light"] .comparacao-container {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.08);
+    box-shadow: 0 2px 20px rgba(0,0,0,0.07);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+[data-theme="light"] .comparacao-title { color: #111827; }
+[data-theme="light"] .comparacao-subtitle { color: #4b5563; }
+
+[data-theme="light"] .perfil-comparacao-card {
+    background: #f8fafc;
+    border-color: rgba(0,0,0,0.09);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+[data-theme="light"] .perfil-comparacao-card.winner {
+    background: rgba(16,185,129,0.05);
+    border-color: rgba(16,185,129,0.3);
+    box-shadow: 0 4px 20px rgba(16,185,129,0.12);
+}
+
+[data-theme="light"] .perfil-nome-comparacao { color: #111827; }
+[data-theme="light"] .stat-label-comparacao  { color: #4b5563; }
+[data-theme="light"] .stat-value-comparacao  { color: #111827; }
+[data-theme="light"] .stat-row-comparacao    { border-bottom-color: rgba(0,0,0,0.07); }
+
+/* ── Ranking de categorias ──────────────────────────────────────── */
+[data-theme="light"] .ranking-container {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.08);
+    box-shadow: 0 2px 20px rgba(0,0,0,0.07);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+[data-theme="light"] .ranking-title { color: #111827; }
+
+[data-theme="light"] .ranking-item-grafico {
+    background: #f8fafc;
+    border-color: rgba(0,0,0,0.08);
+}
+
+[data-theme="light"] .ranking-item-grafico:hover {
+    background: rgba(16,185,129,0.05);
+    border-color: rgba(16,185,129,0.2);
+}
+
+[data-theme="light"] .ranking-categoria  { color: #111827; }
+[data-theme="light"] .ranking-percentual { color: #4b5563; }
+[data-theme="light"] .ranking-valor-grafico { color: #dc2626; }
+
+[data-theme="light"] .ranking-barra-container {
+    background: rgba(0,0,0,0.07);
+}
+
+/* ── Tendências ─────────────────────────────────────────────────── */
+[data-theme="light"] .tendencia-card {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.08);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+[data-theme="light"] .tendencia-titulo    { color: #111827; }
+[data-theme="light"] .tendencia-valor     { color: #111827; }
+[data-theme="light"] .tendencia-comparacao{ color: #4b5563; }
+
+[data-theme="light"] .tendencia-badge.up {
+    background: rgba(5,150,105,0.1);
+    color: #059669;
+}
+
+[data-theme="light"] .tendencia-badge.down {
+    background: rgba(220,38,38,0.08);
+    color: #dc2626;
+}
+
+/* ── Comparação especial header ─────────────────────────────────── */
+[data-theme="light"] .comparacao-header-especial {
+    background: linear-gradient(135deg, #f4f6fa, #eaecf4);
+    border-color: rgba(0,0,0,0.08);
+}
+
+[data-theme="light"] .comparacao-header-especial h2 { color: #111827; }
+[data-theme="light"] .comparacao-header-especial p  { color: #4b5563; }
+
+/* ── Cards comparativos ─────────────────────────────────────────── */
+[data-theme="light"] .stat-comparativo-card {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.09);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+[data-theme="light"] .stat-comp-label   { color: #4b5563; }
+[data-theme="light"] .stat-comp-header  { border-bottom-color: rgba(0,0,0,0.08); }
+[data-theme="light"] .periodo-label     { color: #6b7280; }
+[data-theme="light"] .valor-principal   { color: #111827; }
+
+[data-theme="light"] .stat-comp-variacao.positiva {
+    background: rgba(5,150,105,0.1);
+    color: #059669;
+}
+
+[data-theme="light"] .stat-comp-variacao.negativa {
+    background: rgba(220,38,38,0.08);
+    color: #dc2626;
+}
+
+[data-theme="light"] .comparacao-toggle {
+    background: rgba(0,0,0,0.03);
+    border: 1px solid rgba(0,0,0,0.07);
+}
+
+[data-theme="light"] .comparacao-toggle label { color: #111827; }
+
+[data-theme="light"] .comparacao-filtros {
+    background: #f8fafc;
+    border-color: rgba(0,0,0,0.08);
+}
+
+/* ── Insights ───────────────────────────────────────────────────── */
+[data-theme="light"] .insights-container {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.08);
+    box-shadow: 0 2px 20px rgba(0,0,0,0.07);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+[data-theme="light"] .insights-title { color: #111827; }
+
+[data-theme="light"] .insight-card {
+    background: #f8fafc;
+    border-color: rgba(0,0,0,0.08);
+}
+
+[data-theme="light"] .insight-card:hover {
+    background: rgba(16,185,129,0.04);
+    border-color: rgba(16,185,129,0.2);
+}
+
+[data-theme="light"] .insight-content h4 { color: #111827; }
+[data-theme="light"] .insight-content p  { color: #4b5563; }
+
+/* ── Filtro labels e label geral ────────────────────────────────── */
+[data-theme="light"] .filtro-label { color: #374151; }
+
+/* ── Empty state "sem dados" para patrimônio ───────────────────── */
+[data-theme="light"] .patrimonio-sem-dados {
+    text-align: center;
+    color: rgba(0,0,0,0.35);
+    font-size: 0.85rem;
+    padding: 16px 0;
+}
+
+/* ── Mobile stat-card (override do media 768px no graficos.css) ─── */
+@media (max-width: 768px) {
+    [data-theme="light"] .stat-card {
+        background: #ffffff !important;
+        border-color: rgba(0,0,0,0.08) !important;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+}
