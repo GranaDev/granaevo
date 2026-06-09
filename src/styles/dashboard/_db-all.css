@@ -1056,23 +1056,10 @@ body::before {
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Swipe transitions — aplicadas via JS apenas quando ge_swipe_nav === '1' */
-@keyframes swipeInFromRight {
-    from { opacity: 0; transform: translateX(28px); }
-    to   { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes swipeInFromLeft {
-    from { opacity: 0; transform: translateX(-28px); }
-    to   { opacity: 1; transform: translateX(0); }
-}
-
-.page.swipe-enter-right {
-    animation: swipeInFromRight 0.26s cubic-bezier(0.32, 0.72, 0, 1) both;
-}
-
-.page.swipe-enter-left {
-    animation: swipeInFromLeft 0.26s cubic-bezier(0.32, 0.72, 0, 1) both;
+/* Swipe de navegação entre seções — transição em tempo real via JS */
+/* Suprime o fadeIn padrão quando a navegação veio de um gesto de swipe */
+.page.swipe-no-anim {
+    animation: none !important;
 }
 
 .page-header { margin-bottom: 40px; }

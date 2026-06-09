@@ -5425,55 +5425,196 @@ function _patchInputValorGetter() {
 // ========== SWIPE ENTRE SEÇÕES (MOBILE) ==========
 function _initSwipeNav() {
     const _SECOES = ['dashboard','transacoes','reservas','cartoes','graficos','relatorios','configuracoes'];
-    let _touchStartX = 0;
-    let _touchStartY = 0;
-    const THRESHOLD = 60; // px mínimos para contar como swipe
+
+    let startX = 0, startY = 0, lastX = 0, lastTime = 0;
+    let velocity = 0;          // px/ms
+    let dragging = false;
+    let isHorizontal = null;   // null = still deciding, true/false = decided
+    let direction = null;      // 'left' | 'right'
+    let currentPage = null;
+    let targetPage  = null;
+    let targetId    = null;
+    let busy = false;          // bloqueia novo swipe enquanto anima
 
     const mainArea = document.querySelector('.main-content') || document.getElementById('mainContent');
     if (!mainArea) return;
 
+    function _getAdjacent(dx) {
+        const active = document.querySelector('.page.active');
+        if (!active) return null;
+        const id  = active.id.replace('Page', '');
+        const idx = _SECOES.indexOf(id);
+        if (idx < 0) return null;
+        const ni = dx < 0 ? idx + 1 : idx - 1;
+        if (ni < 0 || ni >= _SECOES.length) return null;
+        return { page: document.getElementById(_SECOES[ni] + 'Page'), id: _SECOES[ni] };
+    }
+
+    function _prepareTarget(page, fromRight) {
+        // fromRight = true  → página vem da direita (swipe left = próxima)
+        // fromRight = false → página vem da esquerda (swipe right = anterior)
+        Object.assign(page.style, {
+            display:       'block',
+            position:      'fixed',
+            top:           '0', left: '0', right: '0', bottom: '0',
+            overflowY:     'auto',
+            zIndex:        '200',
+            pointerEvents: 'none',
+            willChange:    'transform',
+            transition:    'none',
+            transform:     `translateX(${fromRight ? '100%' : '-100%'})`,
+        });
+    }
+
+    function _applyDrag(dx) {
+        if (!currentPage) return;
+        currentPage.style.transform = `translateX(${dx}px)`;
+        if (targetPage) {
+            const offset = direction === 'left' ? window.innerWidth : -window.innerWidth;
+            targetPage.style.transform = `translateX(${offset + dx}px)`;
+        }
+    }
+
+    function _springDuration() {
+        // Duração menor para flick rápido, maior para arrasto lento
+        return Math.round(Math.max(160, 320 - Math.abs(velocity) * 250));
+    }
+
+    function _commit() {
+        busy = true;
+        const w   = window.innerWidth;
+        const dur = _springDuration();
+        const ease = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+
+        currentPage.style.transition = `transform ${dur}ms ${ease}`;
+        currentPage.style.transform  = `translateX(${direction === 'left' ? -w : w}px)`;
+
+        if (targetPage) {
+            targetPage.style.transition   = `transform ${dur}ms ${ease}`;
+            targetPage.style.pointerEvents = 'none';
+            targetPage.style.transform    = 'translateX(0)';
+            targetPage.addEventListener('transitionend', _finalizeCommit, { once: true });
+        }
+    }
+
+    function _finalizeCommit() {
+        const id = targetId;
+        [currentPage, targetPage].forEach(p => { if (p) { p.style.cssText = ''; } });
+
+        // Suprime o fadeIn padrão — a transição já aconteceu via swipe
+        const incoming = document.getElementById(id + 'Page');
+        if (incoming) incoming.classList.add('swipe-no-anim');
+        mostrarTela(id);
+        if (incoming) requestAnimationFrame(() => incoming.classList.remove('swipe-no-anim'));
+
+        currentPage = targetPage = targetId = direction = null;
+        busy = false;
+    }
+
+    function _cancel() {
+        busy = true;
+        const dur  = _springDuration();
+        const ease = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+
+        if (currentPage) {
+            currentPage.style.transition = `transform ${dur}ms ${ease}`;
+            currentPage.style.transform  = 'translateX(0)';
+        }
+        if (targetPage) {
+            const resetX = direction === 'left' ? '100%' : '-100%';
+            targetPage.style.transition = `transform ${dur}ms ${ease}`;
+            targetPage.style.transform  = `translateX(${resetX})`;
+        }
+
+        const ref = targetPage || currentPage;
+        if (ref) {
+            ref.addEventListener('transitionend', _cleanupCancel, { once: true });
+        } else {
+            _cleanupCancel();
+        }
+    }
+
+    function _cleanupCancel() {
+        if (currentPage) { currentPage.style.cssText = ''; }
+        if (targetPage)  { targetPage.style.cssText  = ''; }
+        currentPage = targetPage = targetId = direction = null;
+        busy = false;
+    }
+
     mainArea.addEventListener('touchstart', (e) => {
-        if (e.touches.length !== 1) return;
-        // Ignora toque dentro de item swipeable (transações) para evitar conflito
-        if (e.target.closest?.('.mov-swipe-wrap')) { _touchStartX = 0; _touchStartY = 0; return; }
-        _touchStartX = e.touches[0].clientX;
-        _touchStartY = e.touches[0].clientY;
+        if (busy || e.touches.length !== 1) return;
+        startX = lastX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        lastTime = Date.now();
+        velocity = 0; dragging = false; isHorizontal = null; direction = null;
     }, { passive: true });
 
-    mainArea.addEventListener('touchend', (e) => {
-        // Respeita a preferência do usuário — ignorado se swipe estiver desativado
+    mainArea.addEventListener('touchmove', (e) => {
+        if (busy || e.touches.length !== 1) return;
         if (localStorage.getItem('ge_swipe_nav') !== '1') return;
-        if (e.changedTouches.length !== 1) return;
 
-        const dx = e.changedTouches[0].clientX - _touchStartX;
-        const dy = e.changedTouches[0].clientY - _touchStartY;
+        const now = Date.now();
+        const dt  = now - lastTime;
+        if (dt > 0) velocity = (e.touches[0].clientX - lastX) / dt;
+        lastX = e.touches[0].clientX;
+        lastTime = now;
 
-        // Ignora se o gesto é mais vertical que horizontal
-        if (Math.abs(dy) > Math.abs(dx) * 0.8) return;
-        if (Math.abs(dx) < THRESHOLD) return;
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
 
-        // Determina seção ativa
-        const pageAtiva = document.querySelector('.page.active');
-        if (!pageAtiva) return;
-        const idAtiva = pageAtiva.id.replace('Page', '');
-        const idx     = _SECOES.indexOf(idAtiva);
-        if (idx < 0) return;
+        // Primeira movimentação: decide se é gesto horizontal
+        if (isHorizontal === null) {
+            if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+            isHorizontal = Math.abs(dx) > Math.abs(dy) * 1.3;
 
-        const novoIdx = dx < 0 ? idx + 1 : idx - 1; // left = próximo, right = anterior
-        if (novoIdx < 0 || novoIdx >= _SECOES.length) return;
+            if (isHorizontal) {
+                direction   = dx < 0 ? 'left' : 'right';
+                currentPage = document.querySelector('.page.active');
+                const adj   = _getAdjacent(dx);
 
-        mostrarTela(_SECOES[novoIdx]);
+                if (adj) {
+                    targetPage = adj.page;
+                    targetId   = adj.id;
+                    _prepareTarget(targetPage, direction === 'left');
+                } else {
+                    targetPage = null;
+                    targetId   = null;
+                }
 
-        // Animação de slide na página que está entrando
-        const novaPage = document.getElementById(_SECOES[novoIdx] + 'Page');
-        if (novaPage) {
-            const cls = dx < 0 ? 'swipe-enter-right' : 'swipe-enter-left';
-            novaPage.classList.remove('swipe-enter-right', 'swipe-enter-left');
-            novaPage.classList.add(cls);
-            novaPage.addEventListener('animationend', () => {
-                novaPage.classList.remove('swipe-enter-right', 'swipe-enter-left');
-            }, { once: true });
+                if (currentPage) {
+                    Object.assign(currentPage.style, { willChange: 'transform', transition: 'none' });
+                }
+
+                document.body.style.overflow = 'hidden';
+                dragging = true;
+            }
         }
+
+        if (!isHorizontal || !dragging) return;
+        e.preventDefault();
+        _applyDrag(dx);
+    }, { passive: false });
+
+    mainArea.addEventListener('touchend', (e) => {
+        document.body.style.overflow = '';
+        if (!dragging) { dragging = false; isHorizontal = null; return; }
+        dragging = false; isHorizontal = null;
+
+        const dx   = e.changedTouches[0].clientX - startX;
+        const fast = Math.abs(velocity) > 0.3;
+        const far  = Math.abs(dx) > window.innerWidth * 0.35;
+
+        if (targetPage && (far || fast)) {
+            _commit();
+        } else {
+            _cancel();
+        }
+    }, { passive: true });
+
+    mainArea.addEventListener('touchcancel', () => {
+        document.body.style.overflow = '';
+        dragging = false; isHorizontal = null;
+        if (currentPage || targetPage) _cancel();
     }, { passive: true });
 }
 
