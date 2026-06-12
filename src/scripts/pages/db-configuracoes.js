@@ -636,7 +636,12 @@ function trocarPerfil() {
 }
 
 function comoUsar() {
-    iniciarTutorial();
+    // Passa o contexto real do usuário para o tour adaptar os passos
+    // (convidados veem o fluxo reduzido; Casal/Família veem o passo de convites)
+    iniciarTutorial({
+        plano:   _ctx?.usuarioLogado?.plano,
+        isGuest: Boolean(_ctx?.usuarioLogado?.isGuest),
+    });
 }
 
 // Redireciona para a página de gerenciamento de assinatura (cancelar, trocar cartão, faturas)

@@ -1467,10 +1467,11 @@ async function entrarNoPerfil(index) {
         // Ativa o indicador de sync somente após o save inicial de boot
         _syncReadyForDisplay = true;
 
-        // Onboarding automático para novos perfis (sem dados, primeira visita)
-        _verificarOnboardingNovoPerfil();
-
         mostrarTela('dashboard');
+
+        // Onboarding automático para novos perfis (sem dados, primeira visita)
+        // Chamado APÓS mostrarTela para garantir que a UI base está visível
+        _verificarOnboardingNovoPerfil();
 
     } catch (e) {
         _log.error('PERFIL_ENTER_001', e);
@@ -4397,7 +4398,10 @@ function bindEventos() {
         btnComoUsar.addEventListener('click', async () => {
             if (window.comoUsar) { window.comoUsar(); return; }
             const { iniciarTutorial } = await import('../modules/tutorial.js');
-            iniciarTutorial();
+            iniciarTutorial({
+                plano:   usuarioLogado?.plano,
+                isGuest: Boolean(usuarioLogado?.isGuest),
+            });
         });
     }
 
@@ -5290,73 +5294,53 @@ function desenharTopGastos(dados, label) {
 }
 
 // ========== ONBOARDING AUTOMÁTICO PARA NOVOS USUÁRIOS ==========
-// Detecta perfil sem dados (transacoes.length === 0) na primeira visita e dispara tutorial.
-// Usa localStorage para não mostrar novamente após o primeiro onboarding.
+// Detecta perfil sem dados na primeira visita e mostra a experiência de
+// boas-vindas (módulo onboarding.js, camada própria — não usa o modalOverlay
+// compartilhado, então não pode ser "engolido" por outros popups).
+//
+// ✅ O flag "visto" só é gravado APÓS interação real do usuário (tour/dispensa).
+//    Antes, era gravado ao agendar o popup — qualquer falha de exibição fazia
+//    as boas-vindas sumirem para sempre.
 function _verificarOnboardingNovoPerfil() {
     try {
         if (!perfilAtivo) return;
-        const chaveVisto = `ge_onboard_${perfilAtivo.id}`;
-        if (localStorage.getItem(chaveVisto)) return; // já viu o tutorial
+        // v2: chave nova — a v1 era gravada antes da exibição e ficava
+        // "queimada" mesmo quando o usuário nunca viu o popup
+        const chaveVisto = `ge_onboard_v2_${perfilAtivo.id}`;
+        if (localStorage.getItem(chaveVisto)) return; // já interagiu com as boas-vindas
 
         // Considera novo se não tem transações nem contas fixas
         const ehNovo = transacoes.length === 0 && contasFixas.length === 0;
         if (!ehNovo) {
-            // Marca como "visto" mesmo sem tutorial (usuário com dados pré-existentes)
+            // Usuário com dados pré-existentes: marca como visto sem exibir
             localStorage.setItem(chaveVisto, '1');
             return;
         }
 
         // Pequeno delay para garantir que a UI terminou de renderizar
-        setTimeout(() => {
-            localStorage.setItem(chaveVisto, '1');
-            // Mostra boas-vindas antes do tutorial completo
-            criarPopupDOM((box) => {
-                box.style.maxWidth = '400px';
-
-                const img = document.createElement('div');
-                img.style.cssText = 'font-size:3rem; text-align:center; margin-bottom:8px;';
-                img.textContent = '👋';
-
-                const h3 = document.createElement('h3');
-                h3.style.cssText = 'text-align:center; margin-bottom:8px;';
-                h3.textContent = 'Bem-vindo ao GranaEvo!';
-
-                const p = document.createElement('p');
-                p.style.cssText = 'text-align:center; color:var(--text-secondary); margin-bottom:20px; line-height:1.6;';
-                p.textContent = 'Seu painel financeiro está pronto. Quer um guia rápido de 2 minutos para aproveitar tudo?';
-
-                const row = document.createElement('div');
-                row.style.cssText = 'display:flex; gap:10px; flex-wrap:wrap;';
-
-                const btnSim = document.createElement('button');
-                btnSim.className = 'btn-primary';
-                btnSim.type = 'button';
-                btnSim.style.flex = '1';
-                btnSim.innerHTML = '<i class="fas fa-play" aria-hidden="true"></i> Iniciar tour';
-                btnSim.addEventListener('click', async () => {
-                    fecharPopup();
-                    // Import direto — não depende de db-configuracoes estar carregado
-                    const { iniciarTutorial } = await import('../modules/tutorial.js');
-                    setTimeout(() => iniciarTutorial(), 320);
+        setTimeout(async () => {
+            try {
+                const { mostrarBoasVindas } = await import('../modules/onboarding.js');
+                mostrarBoasVindas({
+                    nome:    perfilAtivo?.nome || usuarioLogado?.nome || '',
+                    plano:   usuarioLogado?.plano || '',
+                    isGuest: Boolean(usuarioLogado?.isGuest),
+                    aoEscolher: async (escolha) => {
+                        // ✅ Persiste somente aqui — após escolha explícita
+                        try { localStorage.setItem(chaveVisto, '1'); } catch (_) {}
+                        if (escolha === 'tour') {
+                            const { iniciarTutorial } = await import('../modules/tutorial.js');
+                            setTimeout(() => iniciarTutorial({
+                                plano:   usuarioLogado?.plano,
+                                isGuest: Boolean(usuarioLogado?.isGuest),
+                            }), 120);
+                        }
+                    },
                 });
-
-                const btnNao = document.createElement('button');
-                btnNao.className = 'btn-cancelar';
-                btnNao.type = 'button';
-                btnNao.style.flex = '1';
-                btnNao.textContent = 'Pular';
-                btnNao.setAttribute('data-no-enter', '1');
-                btnNao.addEventListener('click', fecharPopup);
-
-                row.appendChild(btnSim);
-                row.appendChild(btnNao);
-
-                box.appendChild(img);
-                box.appendChild(h3);
-                box.appendChild(p);
-                box.appendChild(row);
-            });
-        }, 800);
+            } catch (e) {
+                _log.error('ONBOARD_001', e);
+            }
+        }, 700);
 
     } catch { /* localStorage pode estar bloqueado — falha silenciosa */ }
 }
