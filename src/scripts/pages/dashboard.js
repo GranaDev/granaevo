@@ -25,6 +25,7 @@ let filtroMovMes   = null;
 let filtroMovAno   = null;
 let metas = [];
 let contasFixas = [];
+let assinaturas = [];
 let nextTransId = 1;
 let nextMetaId = 1;
 let nextContaFixaId = 1;
@@ -616,6 +617,7 @@ async function carregarDadosPerfil(perfilId) {
             metas          = [];
             contasFixas    = [];
             cartoesCredito = [];
+            assinaturas    = [];
             if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
 
             // ✅ nextIds mantidos apenas para cartões — cartão ainda usa ID local
@@ -629,6 +631,7 @@ async function carregarDadosPerfil(perfilId) {
         metas          = Array.isArray(perfilData.metas)          ? perfilData.metas          : [];
         contasFixas    = Array.isArray(perfilData.contasFixas)    ? perfilData.contasFixas    : [];
         cartoesCredito = Array.isArray(perfilData.cartoesCredito) ? perfilData.cartoesCredito : [];
+        assinaturas    = Array.isArray(perfilData.assinaturas)    ? perfilData.assinaturas    : [];
         orcamentos          = (perfilData.orcamentos && typeof perfilData.orcamentos === 'object' && !Array.isArray(perfilData.orcamentos))
                               ? perfilData.orcamentos : {};
         tiposPersonalizados = Array.isArray(perfilData.tiposPersonalizados)
@@ -659,6 +662,7 @@ async function carregarDadosPerfil(perfilId) {
         metas          = [];
         contasFixas    = [];
         cartoesCredito = [];
+        assinaturas    = [];
         if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
         atualizarReferenciasGlobais();
     }
@@ -759,6 +763,34 @@ const _validators = {
 
         return true;
     },
+    assinatura(a) {
+        if (!a || typeof a !== 'object') return false;
+
+        if (a.id !== undefined && a.id !== null) {
+            const isIntId  = Number.isInteger(a.id) && a.id > 0;
+            const isUuidId = typeof a.id === 'string' && a.id.length > 0;
+            if (!isIntId && !isUuidId) return false;
+        }
+
+        if (typeof a.nome !== 'string' || a.nome.length < 1 || a.nome.length > 60)              return false;
+        if (typeof a.valor !== 'number' || !isFinite(a.valor) || a.valor <= 0 || a.valor > 99999999) return false;
+
+        const isIntCartao  = Number.isInteger(a.cartaoId) && a.cartaoId > 0;
+        const isUuidCartao = typeof a.cartaoId === 'string' && a.cartaoId.length > 0;
+        if (!isIntCartao && !isUuidCartao) return false;
+
+        if (!Number.isInteger(a.diaCobranca) || a.diaCobranca < 1 || a.diaCobranca > 28) return false;
+        if (typeof a.ativa !== 'boolean')                                                return false;
+        if (typeof a.criadaEm !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(a.criadaEm))   return false;
+
+        if (a.ultimaCobranca !== undefined && a.ultimaCobranca !== null) {
+            if (typeof a.ultimaCobranca !== 'string' || !/^\d{4}-\d{2}$/.test(a.ultimaCobranca)) return false;
+        }
+        if (a.canceladaEm !== undefined && a.canceladaEm !== null) {
+            if (typeof a.canceladaEm !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(a.canceladaEm)) return false;
+        }
+        return true;
+    },
 };
 
 // ── NOVO (Ponto 1 — Anti Prototype Pollution):
@@ -805,6 +837,7 @@ const _SAVE_LIMITS = Object.freeze({
     metas:            500,
     contasFixas:    1_000,
     cartoesCredito:    50,
+    assinaturas:      100,
 });
 
 // ── NOVO (Ponto 1 — Whitelist de chaves por entidade):
@@ -832,7 +865,110 @@ const _ALLOWED_KEYS = Object.freeze({
         'id', 'nomeBanco', 'limite', 'vencimentoDia', 'fechamentoDia',
         'bandeiraImg', 'usado', 'congelado',
     ]),
+    assinatura: Object.freeze([
+        'id', 'nome', 'valor', 'cartaoId', 'diaCobranca',
+        'ativa', 'criadaEm', 'ultimaCobranca', 'canceladaEm',
+    ]),
 });
+
+// ========== ASSINATURAS — MOTOR DE COBRANÇA RECORRENTE ==========
+// Calcula a data (YYYY-MM-DD) da fatura do cartão à qual uma cobrança feita em
+// `dataBase` pertence — mesma regra usada para compras parceladas no crédito
+// (saida_credito), garantindo consistência entre os dois fluxos.
+function _calcularFaturaParaData(cartao, dataBase) {
+    const ano = dataBase.getFullYear();
+    const mes = dataBase.getMonth() + 1;
+    const dia = dataBase.getDate();
+
+    const diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia;
+    const diaFatura     = cartao.vencimentoDia;
+
+    let proxMes, proxAno;
+    if (dia >= diaFechamento) {
+        proxMes = mes + 1;
+        proxAno = ano;
+        if (proxMes > 12) { proxMes = 1; proxAno++; }
+    } else {
+        proxMes = mes;
+        proxAno = ano;
+    }
+    return `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaFatura).padStart(2, '0')}`;
+}
+
+// Gera (se ainda não gerada neste ciclo) a cobrança de UMA assinatura ativa,
+// lançando-a como "compra" na fatura do cartão correspondente.
+// Idempotente: não faz nada se `ultimaCobranca` já é o mês/ano atual.
+function _processarCobrancaAssinatura(assinatura, cartao) {
+    const hoje       = new Date();
+    const chaveAtual = yearMonthKey(hoje);
+    if (assinatura.ultimaCobranca === chaveAtual) return false;
+
+    const dataFaturaISO = _calcularFaturaParaData(cartao, hoje);
+    const dh = agoraDataHora();
+
+    const novaCompra = {
+        id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `compra_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        tipo:          'Assinatura',
+        descricao:     assinatura.nome,
+        valorTotal:    assinatura.valor,
+        valorParcela:  assinatura.valor,
+        totalParcelas: 1,
+        parcelaAtual:  1,
+        dataCompra:    dh.data,
+        assinaturaId:  assinatura.id,
+        recorrente:    true,
+    };
+
+    const faturaExistente = contasFixas.find(c =>
+        c.cartaoId === cartao.id &&
+        c.vencimento === dataFaturaISO &&
+        c.tipoContaFixa === 'fatura_cartao'
+    );
+
+    if (faturaExistente) {
+        if (!faturaExistente.compras) faturaExistente.compras = [];
+        faturaExistente.compras.push(novaCompra);
+        faturaExistente.valor = faturaExistente.compras.reduce((sum, c) => {
+            const p = parseFloat(c.valorParcela);
+            return sum + (isFinite(p) && p > 0 ? p : 0);
+        }, 0);
+    } else {
+        contasFixas.push({
+            id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `fatura_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            descricao:     `Fatura ${cartao.nomeBanco}`,
+            valor:         novaCompra.valorParcela,
+            vencimento:    dataFaturaISO,
+            pago:          false,
+            cartaoId:      cartao.id,
+            tipoContaFixa: 'fatura_cartao',
+            compras:       [novaCompra],
+        });
+    }
+
+    cartao.usado = (cartao.usado || 0) + assinatura.valor;
+    assinatura.ultimaCobranca = chaveAtual;
+    return true;
+}
+
+// Roda a cada carregamento do dashboard — gera a cobrança do ciclo atual para
+// cada assinatura ativa ainda não cobrada neste mês. Idempotente e O(n).
+function gerarCobrancasAssinaturas() {
+    if (!Array.isArray(assinaturas) || assinaturas.length === 0) return;
+
+    let alterou = false;
+    assinaturas.forEach(assinatura => {
+        if (!assinatura || !assinatura.ativa) return;
+        const cartao = cartoesCredito.find(c => String(c.id) === String(assinatura.cartaoId));
+        if (!cartao) return;
+        if (_processarCobrancaAssinatura(assinatura, cartao)) alterou = true;
+    });
+
+    if (alterou) salvarDados();
+}
 
 // ── Indicador de sincronização ─────────────────────────────────────────────
 // Só exibe após o carregamento inicial estar completo (_syncReadyForDisplay = true).
@@ -929,6 +1065,7 @@ async function salvarDados() {
                 const transacoesValidas = transacoes.filter(_validators.transacao);
                 const metasValidas      = metas.filter(_validators.meta);
                 const cartoesValidos    = cartoesCredito.filter(_validators.cartao);
+                const assinaturasValidas = assinaturas.filter(_validators.assinatura);
 
                 // ✅ Remove a flag _processando antes de persistir.
                 const contasValidas = contasFixas
@@ -941,7 +1078,8 @@ async function salvarDados() {
                 if (transacoesValidas.length !== transacoes.length   ||
                     metasValidas.length      !== metas.length         ||
                     contasFixas.filter(_validators.contaFixa).length !== contasFixas.length ||
-                    cartoesValidos.length    !== cartoesCredito.length) {
+                    cartoesValidos.length    !== cartoesCredito.length ||
+                    assinaturasValidas.length !== assinaturas.length) {
                     _log.warn('SAVE: itens inválidos descartados antes de persistir');
                 }
 
@@ -970,6 +1108,12 @@ async function salvarDados() {
                     resolve(false);
                     return;
                 }
+                if (assinaturasValidas.length > _SAVE_LIMITS.assinaturas) {
+                    _log.error('SAVE_LIMIT_005',
+                        `Assinaturas excedem o limite (${assinaturasValidas.length} > ${_SAVE_LIMITS.assinaturas})`);
+                    resolve(false);
+                    return;
+                }
 
                 // ── 3. Sanitizar estrutura — whitelist de chaves ────────────
                 const transacoesSanitizadas = transacoesValidas.map(t =>
@@ -984,6 +1128,9 @@ async function salvarDados() {
                 const cartoesSanitizados = cartoesValidos.map(c =>
                     _sanitizeObject(c, _ALLOWED_KEYS.cartao)
                 );
+                const assinaturasSanitizadas = assinaturasValidas.map(a =>
+                    _sanitizeObject(a, _ALLOWED_KEYS.assinatura)
+                );
 
                 // ── 4. Montar objeto do perfil atual ────────────────────────
                 const dadosPerfil = {
@@ -994,6 +1141,7 @@ async function salvarDados() {
                     metas:          metasSanitizadas,
                     contasFixas:    contasSanitizadas,
                     cartoesCredito: cartoesSanitizados,
+                    assinaturas:    assinaturasSanitizadas,
                     orcamentos:          _sanitizarOrcamentos(orcamentos),
                     tiposPersonalizados: tiposPersonalizados.filter(t => typeof t === 'string' && t.length > 0).slice(0, 50),
                     nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
@@ -1293,6 +1441,7 @@ async function entrarNoPerfil(index) {
 
         await carregarDadosPerfil(perfilAtivo.id);
         atualizarReferenciasGlobais();
+        gerarCobrancasAssinaturas();
 
         atualizarTudo();
         atualizarNomeUsuario();
@@ -1666,6 +1815,7 @@ function _makeCtx() {
         metas:               { get: () => metas,               set: v => { metas = v;          if (typeof _cache !== 'undefined') _cache.mt = null; }, enumerable: true },
         cartoesCredito:      { get: () => cartoesCredito,      set: v => { cartoesCredito = v; if (typeof _cache !== 'undefined') _cache.cc = null; }, enumerable: true },
         contasFixas:         { get: () => contasFixas,         set: v => { contasFixas = v;    if (typeof _cache !== 'undefined') _cache.cf = null; }, enumerable: true },
+        assinaturas:         { get: () => assinaturas,         set: v => { assinaturas = v; }, enumerable: true },
         perfilAtivo:         { get: () => perfilAtivo,         set: v => { perfilAtivo = v; },         enumerable: true },
         usuarioLogado:       { get: () => usuarioLogado,       set: v => { usuarioLogado = v; },       enumerable: true },
         filtroMovAtivo:      { get: () => filtroMovAtivo,      set: v => { filtroMovAtivo = v; },      enumerable: true },
@@ -1748,6 +1898,8 @@ function _makeCtx() {
         sanitizarHTMLPopup:        { value: (...a) => sanitizarHTMLPopup(...a),        enumerable: true },
         mostrarPopupLimite:        { value: (...a) => mostrarPopupLimite(...a),        enumerable: true },
         abrirPopupPagarContaFixa:  { value: (...a) => abrirPopupPagarContaFixa(...a), enumerable: true },
+        gerarCobrancasAssinaturas: { value: (...a) => gerarCobrancasAssinaturas(...a), enumerable: true },
+        _calcularFaturaParaData:   { value: (...a) => _calcularFaturaParaData(...a),   enumerable: true },
         // Cross-section lazy calls
         atualizarMovimentacoesUI: { value: () => window._dbTransacoes?.atualizarMovimentacoesUI?.(), enumerable: true },
         renderMetasList:          { value: () => window._dbMetas?.renderMetasList?.(),               enumerable: true },
@@ -1802,7 +1954,7 @@ function mostrarTela(tela) {
         if (periodoSel) periodoSel.style.display = 'none';
 
         if (!_dbLoaded.transacoes) {
-            import('./db-transacoes.js?v=8').then(m => {
+            import('./db-transacoes.js?v=9').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.transacoes = true;
             });
@@ -1824,7 +1976,7 @@ function mostrarTela(tela) {
 
     if (tela === 'cartoes') {
         if (!_dbLoaded.cartoes) {
-            import('./db-cartoes.js?v=5').then(m => {
+            import('./db-cartoes.js?v=6').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.cartoes = true;
             });
@@ -3089,7 +3241,7 @@ function atualizarListaContasFixas() {
 
             if (c.tipoContaFixa === 'fatura_cartao') {
                 if (!_dbLoaded.cartoes) {
-                    import('./db-cartoes.js?v=5').then(m => {
+                    import('./db-cartoes.js?v=6').then(m => {
                         m.init(_makeCtx());
                         _dbLoaded.cartoes = true;
                         window.abrirVisualizacaoFatura?.(c.id);
@@ -5242,6 +5394,7 @@ window.addEventListener('beforeunload', () => {
         return rest;
     });
     const cartoesValidos    = cartoesCredito.filter(_validators.cartao);
+    const assinaturasValidas = assinaturas.filter(_validators.assinatura);
 
     const dadosAtual = {
         id:             perfilAtivo.id,
@@ -5251,6 +5404,7 @@ window.addEventListener('beforeunload', () => {
         metas:          metasValidas,
         contasFixas:    contasValidas,
         cartoesCredito: cartoesValidos,
+        assinaturas:    assinaturasValidas,
         nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
         lastUpdate:     new Date().toISOString(),
     };

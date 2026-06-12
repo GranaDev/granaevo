@@ -30,6 +30,7 @@ export function init(ctx) {
 function atualizarTiposDinamicos() {
     const cat = document.getElementById('selectCategoria').value;
     const tipoSelect = document.getElementById('selectTipo');
+    const tipoWrap   = document.getElementById('tipoFieldWrap');
     tipoSelect.innerHTML = '';
     
     const placeholder = document.createElement('option');
@@ -71,15 +72,51 @@ function atualizarTiposDinamicos() {
             });
         }
     }
-    
+    // cat === 'assinatura' não usa "tipo" — a própria assinatura é o tipo
+
+    if (tipoWrap) tipoWrap.classList.toggle('js-hidden', cat === 'assinatura');
+
     atualizarCamposCredito();
 }
 
+// Popula um <select> de cartões — reutilizado pelos fluxos de crédito e assinatura
+function _popularSelectCartao(selectEl) {
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+
+    if (_ctx.cartoesCredito.length === 0) {
+        const opt       = document.createElement('option');
+        opt.value       = '';
+        opt.textContent = 'Cadastre um cartão no menu "Cartões"';
+        selectEl.appendChild(opt);
+        selectEl.disabled = true;
+        return;
+    }
+
+    // ✅ Opção placeholder
+    const placeholder       = document.createElement('option');
+    placeholder.value       = '';
+    placeholder.textContent = 'Selecione o cartão';
+    selectEl.appendChild(placeholder);
+
+    // ✅ Cada cartão via DOM — nomeBanco e id nunca passam por innerHTML
+    _ctx.cartoesCredito.forEach(c => {
+        const opt       = document.createElement('option');
+        opt.value       = String(c.id);          // ✅ atribuição direta — não interpolado
+        opt.textContent = _ctx._sanitizeText(c.nomeBanco); // ✅ sanitizado via textContent
+        selectEl.appendChild(opt);
+    });
+
+    selectEl.disabled = false;
+}
+
 function atualizarCamposCredito() {
-    const creditDiv      = document.getElementById('creditoFields');
-    const parcelasSelect = document.getElementById('selectParcelas');
-    const cartaoSelect   = document.getElementById('selectCartao');
-    const catVal         = document.getElementById('selectCategoria').value;
+    const creditDiv       = document.getElementById('creditoFields');
+    const parcelasSelect  = document.getElementById('selectParcelas');
+    const cartaoSelect    = document.getElementById('selectCartao');
+    const assinaturaDiv   = document.getElementById('assinaturaFields');
+    const cartaoAssinSel  = document.getElementById('selectCartaoAssinatura');
+    const catVal          = document.getElementById('selectCategoria').value;
 
     if (parcelasSelect) {
         parcelasSelect.innerHTML = '';
@@ -93,33 +130,15 @@ function atualizarCamposCredito() {
 
     if (catVal === 'saida_credito') {
         creditDiv.classList.remove('js-hidden');
-        cartaoSelect.innerHTML  = '';
-
-        if (_ctx.cartoesCredito.length === 0) {
-            const opt       = document.createElement('option');
-            opt.value       = '';
-            opt.textContent = 'Cadastre um cartão no menu "Cartões"';
-            cartaoSelect.appendChild(opt);
-            cartaoSelect.disabled = true;
-        } else {
-            // ✅ Opção placeholder
-            const placeholder       = document.createElement('option');
-            placeholder.value       = '';
-            placeholder.textContent = 'Selecione o cartão';
-            cartaoSelect.appendChild(placeholder);
-
-            // ✅ Cada cartão via DOM — nomeBanco e id nunca passam por innerHTML
-            _ctx.cartoesCredito.forEach(c => {
-                const opt       = document.createElement('option');
-                opt.value       = String(c.id);          // ✅ atribuição direta — não interpolado
-                opt.textContent = _ctx._sanitizeText(c.nomeBanco); // ✅ sanitizado via textContent
-                cartaoSelect.appendChild(opt);
-            });
-
-            cartaoSelect.disabled = false;
-        }
+        assinaturaDiv?.classList.add('js-hidden');
+        _popularSelectCartao(cartaoSelect);
+    } else if (catVal === 'assinatura') {
+        creditDiv.classList.add('js-hidden');
+        assinaturaDiv?.classList.remove('js-hidden');
+        _popularSelectCartao(cartaoAssinSel);
     } else {
         creditDiv.classList.add('js-hidden');
+        assinaturaDiv?.classList.add('js-hidden');
     }
 }
 
@@ -267,6 +286,51 @@ function lancarTransacao() {
         document.getElementById('inputValor').value     = '';
 
         alert("Compra lançada! A fatura do cartão foi atualizada.");
+        return;
+    }
+
+    if(categoria === 'assinatura') {
+        const cartaoSel = document.getElementById('selectCartaoAssinatura').value;
+        const diaSel    = document.getElementById('selectDiaCobranca').value;
+
+        if(!cartaoSel) return alert("Selecione o cartão!");
+        if(!diaSel)    return alert("Selecione o dia de cobrança!");
+
+        const cartao = _ctx.cartoesCredito.find(c => String(c.id) === String(cartaoSel));
+        if(!cartao) return alert("Cartão não encontrado!");
+        if(cartao.congelado) { _ctx.mostrarNotificacao('Cartão congelado. Descongele no menu de Cartões para utilizá-lo.', 'error'); return; }
+
+        const diaCobranca = Number(diaSel);
+        if(!Number.isInteger(diaCobranca) || diaCobranca < 1 || diaCobranca > 28) return alert("Dia de cobrança inválido!");
+
+        if(!confirm(`Criar assinatura "${descricao}" de ${formatBRL(valor)} no cartão ${cartao.nomeBanco}, com cobrança todo dia ${diaCobranca}.\nProsseguir?`)) return;
+
+        const novaAssinatura = {
+            id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `assinatura_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            nome:           descricao,
+            valor,
+            cartaoId:       cartao.id,
+            diaCobranca,
+            ativa:          true,
+            criadaEm:       _ctx.isoDate(),
+            ultimaCobranca: null,
+        };
+
+        // Lança a 1ª cobrança imediatamente, atribuída ao ciclo de fatura atual
+        _ctx.assinaturas.push(novaAssinatura);
+        _ctx.gerarCobrancasAssinaturas();
+        _ctx.salvarDados();
+        _ctx.atualizarTudo();
+
+        document.getElementById('selectCategoria').value  = '';
+        atualizarTiposDinamicos();
+        document.getElementById('inputDescricao').value   = '';
+        document.getElementById('inputValor').value       = '';
+        document.getElementById('selectDiaCobranca').value = '';
+
+        alert("Assinatura criada! A primeira cobrança já foi lançada na fatura do cartão.");
         return;
     }
 

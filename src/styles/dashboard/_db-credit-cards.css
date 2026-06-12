@@ -744,4 +744,25 @@
 
 .cdes-txs-total-val { font-weight: 700; color: var(--primary-light); }
 
+/* ── Minhas Assinaturas (resumo agregado) ── */
+.cdes-assinaturas-section {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+[data-theme="light"] .cdes-assinaturas-section {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.07);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+.cdes-assinaturas-total { font-size: 0.85rem; font-weight: 700; color: var(--primary-light); }
+
+.cdes-assinatura-row--cancelada { opacity: 0.6; }
+
+.cdes-status--cancelada { background: rgba(128,128,128,0.16); color: var(--text-muted); }
+
 /* ========== BADGE DE NOTIFICAÃ‡ÃƒO â€” SIDEBAR DESKTOP ========== */

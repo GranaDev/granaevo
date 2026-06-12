@@ -297,6 +297,265 @@ function _buildUltimasTransacoes(cartao) {
     return section;
 }
 
+// ========== ASSINATURAS — SELECT DE DIA (1-28, sem placeholder) ==========
+// Usado ao editar uma assinatura existente — diaCobranca já vem validado (1-28).
+function _criarSelectDiasAssinatura(valorSelecionado) {
+    const select = document.createElement('select');
+    select.className = 'form-input';
+    for (let i = 1; i <= 28; i++) {
+        const opt = document.createElement('option');
+        opt.value       = String(i);
+        opt.textContent = String(i).padStart(2, '0');
+        if (Number(valorSelecionado) === i) opt.selected = true;
+        select.appendChild(opt);
+    }
+    return select;
+}
+
+// ========== ASSINATURAS — RESUMO AGREGADO ("Minhas Assinaturas") ==========
+function _buildAssinaturasSection() {
+    const lista = _ctx.assinaturas || [];
+
+    const section = document.createElement('div'); section.className = 'cdes-assinaturas-section';
+
+    const hdr = document.createElement('div'); hdr.className = 'cdes-section-header';
+    const tit = document.createElement('span'); tit.className = 'cdes-section-title';
+    const titIcon = document.createElement('i'); titIcon.className = 'fas fa-rotate'; titIcon.setAttribute('aria-hidden', 'true');
+    titIcon.style.marginRight = '8px';
+    tit.appendChild(titIcon);
+    tit.appendChild(document.createTextNode('Minhas Assinaturas'));
+    hdr.appendChild(tit);
+
+    const ativas      = lista.filter(a => a && a.ativa);
+    const totalMensal = ativas.reduce((s, a) => s + Number(a.valor || 0), 0);
+    if (ativas.length > 0) {
+        const total = document.createElement('span'); total.className = 'cdes-assinaturas-total';
+        total.textContent = `${formatBRL(totalMensal)}/mês`;
+        hdr.appendChild(total);
+    }
+    section.appendChild(hdr);
+
+    const list = document.createElement('div'); list.className = 'cdes-cartoes-list';
+
+    if (lista.length === 0) {
+        const emptyWrap = document.createElement('div'); emptyWrap.style.cssText = 'text-align: center; padding: 20px 0;';
+        const emptyIcon = document.createElement('i'); emptyIcon.className = 'fas fa-rotate'; emptyIcon.setAttribute('aria-hidden', 'true');
+        emptyIcon.style.cssText = 'font-size: 1.8rem; color: var(--text-muted); opacity: 0.4; margin-bottom: 10px; display: block;';
+        const emptyTxt = document.createElement('p'); emptyTxt.className = 'empty-state'; emptyTxt.style.cssText = 'padding: 0; margin: 0;';
+        emptyTxt.textContent = 'Nenhuma assinatura cadastrada.';
+        const emptySub = document.createElement('p'); emptySub.style.cssText = 'font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;';
+        emptySub.textContent = 'Crie uma assinatura na tela de Transações.';
+        emptyWrap.appendChild(emptyIcon); emptyWrap.appendChild(emptyTxt); emptyWrap.appendChild(emptySub);
+        list.appendChild(emptyWrap);
+    } else {
+        const ordenadas = [...lista].sort((a, b) => {
+            if (a.ativa !== b.ativa) return a.ativa ? -1 : 1;
+            if (a.ativa) return (a.diaCobranca || 0) - (b.diaCobranca || 0);
+            return (b.canceladaEm || '').localeCompare(a.canceladaEm || '');
+        });
+
+        ordenadas.forEach(a => {
+            const row = document.createElement('div');
+            row.className = 'cdes-cartao-row cdes-assinatura-row' + (a.ativa ? '' : ' cdes-assinatura-row--cancelada');
+
+            const nomeSeguro = _ctx._sanitizeText(a.nome);
+            const avatar = document.createElement('div'); avatar.className = 'cdes-tx-avatar';
+            avatar.style.background = _txAvatarColor(nomeSeguro);
+            avatar.textContent = nomeSeguro.charAt(0).toUpperCase();
+            row.appendChild(avatar);
+
+            const info = document.createElement('div'); info.className = 'cdes-cartao-info';
+            const nameWrap = document.createElement('div'); nameWrap.className = 'cdes-cartao-name';
+            const nameSpan = document.createElement('span'); nameSpan.textContent = nomeSeguro;
+            const badge = document.createElement('span');
+            badge.className = a.ativa ? 'cdes-status-badge cdes-status--ativo' : 'cdes-status-badge cdes-status--cancelada';
+            badge.textContent = a.ativa ? 'Ativa' : 'Cancelada';
+            nameWrap.appendChild(nameSpan); nameWrap.appendChild(badge);
+            info.appendChild(nameWrap);
+            row.appendChild(info);
+
+            const cartao = _ctx.cartoesCredito.find(c => String(c.id) === String(a.cartaoId));
+            const statDiv = document.createElement('div'); statDiv.className = 'cdes-cartao-stat';
+            const statVal = document.createElement('div'); statVal.className = 'cdes-cartao-stat-val'; statVal.textContent = formatBRL(a.valor);
+            const statLbl = document.createElement('div'); statLbl.className = 'cdes-cartao-stat-lbl';
+            statLbl.textContent = `${cartao ? _ctx._sanitizeText(cartao.nomeBanco) : 'Sem cartão'} · Dia ${String(a.diaCobranca).padStart(2, '0')}`;
+            statDiv.appendChild(statVal); statDiv.appendChild(statLbl);
+            row.appendChild(statDiv);
+
+            const arrow = document.createElement('div'); arrow.className = 'cdes-cartao-arrow';
+            const arrowIc = document.createElement('i'); arrowIc.className = 'fas fa-chevron-right'; arrowIc.setAttribute('aria-hidden', 'true');
+            arrow.appendChild(arrowIc);
+            row.appendChild(arrow);
+
+            row.addEventListener('click', () => abrirGerenciarAssinatura(a.id));
+            list.appendChild(row);
+        });
+    }
+    section.appendChild(list);
+    return section;
+}
+
+// ========== ASSINATURAS — GERENCIAR (editar valor/dia, cancelar/reativar, excluir) ==========
+function abrirGerenciarAssinatura(assinaturaId) {
+    const a = _ctx.assinaturas.find(x => String(x.id) === String(assinaturaId));
+    if (!a) return;
+
+    const cartao = _ctx.cartoesCredito.find(c => String(c.id) === String(a.cartaoId));
+
+    _ctx.criarPopupDOM((popup) => {
+        popup.style.cssText = 'max-width: 420px; width: 95%;';
+
+        // ── Título
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'text-align: center; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; gap: 10px;';
+        const tituloIcon = document.createElement('i'); tituloIcon.className = 'fas fa-rotate'; tituloIcon.style.color = 'var(--primary)';
+        const tituloText = document.createElement('span'); tituloText.textContent = _ctx._sanitizeText(a.nome);
+        titulo.appendChild(tituloIcon); titulo.appendChild(tituloText);
+        popup.appendChild(titulo);
+
+        // ── Badge de status
+        const statusWrap = document.createElement('div'); statusWrap.style.cssText = 'text-align: center; margin-bottom: 18px;';
+        const statusBadge = document.createElement('span');
+        statusBadge.className = a.ativa ? 'cdes-status-badge cdes-status--ativo' : 'cdes-status-badge cdes-status--cancelada';
+        statusBadge.textContent = a.ativa ? 'Ativa' : 'Cancelada';
+        statusWrap.appendChild(statusBadge);
+        popup.appendChild(statusWrap);
+
+        // ── Grid de informações
+        const infoGrid = document.createElement('div');
+        infoGrid.style.cssText = 'display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 18px;';
+
+        const infoData = [
+            { iconCls: 'fas fa-credit-card',   label: 'Cartão',    value: cartao ? _ctx._sanitizeText(cartao.nomeBanco) : 'Removido' },
+            { iconCls: 'fas fa-calendar-plus', label: 'Criada em', value: formatarDataBR(a.criadaEm) },
+        ];
+        if (a.ultimaCobranca) {
+            const [anoUC, mesUC] = a.ultimaCobranca.split('-');
+            infoData.push({ iconCls: 'fas fa-receipt', label: 'Última cobrança', value: `${mesUC}/${anoUC}` });
+        }
+        if (!a.ativa && a.canceladaEm) {
+            infoData.push({ iconCls: 'fas fa-ban', label: 'Cancelada em', value: formatarDataBR(a.canceladaEm) });
+        }
+
+        infoData.forEach(d => {
+            const box = document.createElement('div');
+            box.style.cssText = 'background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; text-align: center;';
+            const lbl = document.createElement('div');
+            lbl.style.cssText = 'font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 5px; display: flex; align-items: center; justify-content: center; gap: 5px;';
+            const lblIcon = document.createElement('i'); lblIcon.className = d.iconCls; lblIcon.setAttribute('aria-hidden', 'true');
+            const lblText = document.createElement('span'); lblText.textContent = d.label;
+            lbl.appendChild(lblIcon); lbl.appendChild(lblText);
+            const val = document.createElement('div');
+            val.style.cssText = 'font-size: 0.9rem; font-weight: 700; color: var(--text-primary);';
+            val.textContent = d.value;
+            box.appendChild(lbl); box.appendChild(val);
+            infoGrid.appendChild(box);
+        });
+        popup.appendChild(infoGrid);
+
+        // ── Campo: valor mensal
+        const labelValor = document.createElement('label');
+        labelValor.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+        labelValor.textContent = 'Valor mensal:';
+        const inputValor = document.createElement('input');
+        inputValor.type      = 'number';
+        inputValor.className = 'form-input';
+        inputValor.step      = '0.01';
+        inputValor.min       = '0.01';
+        inputValor.max       = '99999999';
+        inputValor.value     = a.valor;
+        popup.appendChild(labelValor);
+        popup.appendChild(inputValor);
+
+        // ── Campo: dia de cobrança
+        const labelDia = document.createElement('label');
+        labelDia.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
+        labelDia.textContent = 'Dia de cobrança:';
+        const selectDia = _criarSelectDiasAssinatura(a.diaCobranca);
+        popup.appendChild(labelDia);
+        popup.appendChild(selectDia);
+
+        // ── Botão salvar
+        const btnSalvar = document.createElement('button');
+        btnSalvar.className   = 'btn-primary';
+        btnSalvar.type        = 'button';
+        btnSalvar.style.marginTop = '16px';
+        btnSalvar.textContent = 'Salvar Alterações';
+        btnSalvar.addEventListener('click', () => {
+            const novoValor = parseFloat(parseFloat(inputValor.value).toFixed(2));
+            const novoDia   = Number(selectDia.value);
+            if (!isFinite(novoValor) || novoValor <= 0 || novoValor > 99999999) { alert('Informe um valor válido e positivo.'); return; }
+            if (!Number.isInteger(novoDia) || novoDia < 1 || novoDia > 28)      { alert('Dia de cobrança inválido.'); return; }
+
+            a.valor       = novoValor;
+            a.diaCobranca = novoDia;
+
+            _ctx.salvarDados();
+            atualizarTelaCartoes();
+            _ctx.fecharPopup();
+            _ctx.mostrarNotificacao('Assinatura atualizada com sucesso!', 'success');
+        });
+        popup.appendChild(btnSalvar);
+
+        // ── Botão cancelar / reativar (requer cartão válido — sem ele, reativar nunca cobraria)
+        if (cartao) {
+            const btnToggle = document.createElement('button');
+            btnToggle.className   = a.ativa ? 'btn-cancelar' : 'btn-primary';
+            btnToggle.type        = 'button';
+            btnToggle.style.marginTop = '10px';
+            btnToggle.textContent = a.ativa ? 'Cancelar Assinatura' : 'Reativar Assinatura';
+            btnToggle.addEventListener('click', () => {
+                const msg = a.ativa
+                    ? `Cancelar a assinatura "${_ctx._sanitizeText(a.nome)}"? A cobrança já lançada neste mês será mantida — apenas as cobranças futuras serão interrompidas.`
+                    : `Reativar a assinatura "${_ctx._sanitizeText(a.nome)}"? Se o ciclo atual ainda não foi cobrado, a cobrança será lançada na fatura imediatamente.`;
+                _ctx.confirmarAcao(msg, () => {
+                    if (a.ativa) {
+                        a.ativa       = false;
+                        a.canceladaEm = _ctx.isoDate();
+                    } else {
+                        a.ativa       = true;
+                        a.canceladaEm = null;
+                        _ctx.gerarCobrancasAssinaturas();
+                    }
+                    _ctx.salvarDados();
+                    atualizarTelaCartoes();
+                    _ctx.atualizarTudo();
+                    _ctx.mostrarNotificacao(a.ativa ? 'Assinatura reativada!' : 'Assinatura cancelada.', 'success');
+                });
+            });
+            popup.appendChild(btnToggle);
+        }
+
+        // ── Botão excluir
+        const btnExcluir = document.createElement('button');
+        btnExcluir.className   = 'btn-excluir';
+        btnExcluir.type        = 'button';
+        btnExcluir.style.marginTop = '10px';
+        btnExcluir.textContent = 'Excluir Assinatura';
+        btnExcluir.addEventListener('click', () => {
+            _ctx.confirmarAcao(
+                `Excluir permanentemente a assinatura "${_ctx._sanitizeText(a.nome)}"? Cobranças já lançadas nas faturas não serão removidas.`,
+                () => {
+                    _ctx.assinaturas = _ctx.assinaturas.filter(x => x.id !== a.id);
+                    _ctx.salvarDados();
+                    atualizarTelaCartoes();
+                    _ctx.mostrarNotificacao('Assinatura excluída.', 'success');
+                }
+            );
+        });
+        popup.appendChild(btnExcluir);
+
+        // ── Botão fechar
+        const btnFechar = document.createElement('button');
+        btnFechar.className   = 'btn-cancelar';
+        btnFechar.type        = 'button';
+        btnFechar.style.marginTop = '10px';
+        btnFechar.textContent = 'Fechar';
+        btnFechar.addEventListener('click', _ctx.fecharPopup);
+        popup.appendChild(btnFechar);
+    });
+}
+
 function _buildMobileContent(container, cartaoAtivo) {
     const header = document.createElement('div'); header.className = 'cartoes-novo-header';
     const titulo = document.createElement('div'); titulo.className = 'cartoes-novo-titulo';
@@ -340,6 +599,7 @@ function _buildMobileContent(container, cartaoAtivo) {
         empty.appendChild(sub);
         empty.appendChild(btn);
         container.appendChild(empty);
+        if (_ctx.assinaturas && _ctx.assinaturas.length > 0) container.appendChild(_buildAssinaturasSection());
         return;
     }
 
@@ -382,6 +642,8 @@ function _buildMobileContent(container, cartaoAtivo) {
     addMini.appendChild(addIc); addMini.appendChild(addTxt);
     addMini.addEventListener('click', () => abrirCartaoForm());
     meusLista.appendChild(addMini); meusSection.appendChild(meusLista); container.appendChild(meusSection);
+
+    container.appendChild(_buildAssinaturasSection());
 }
 
 function _buildDesktopContent(container, cartaoAtivo) {
@@ -398,7 +660,9 @@ function _buildDesktopContent(container, cartaoAtivo) {
         const ei = document.createElement('div'); ei.style.fontSize='3.5rem'; ei.textContent='💳';
         const et = document.createElement('p'); et.textContent='Nenhum cartão cadastrado.';
         const eb = document.createElement('button'); eb.type='button'; eb.className='btn-primary'; eb.style.marginTop='16px'; eb.textContent='+ Adicionar Cartão'; eb.addEventListener('click', () => abrirCartaoForm());
-        empty.appendChild(ei); empty.appendChild(et); empty.appendChild(eb); container.appendChild(empty); return;
+        empty.appendChild(ei); empty.appendChild(et); empty.appendChild(eb); container.appendChild(empty);
+        if (_ctx.assinaturas && _ctx.assinaturas.length > 0) container.appendChild(_buildAssinaturasSection());
+        return;
     }
 
     const topRow = document.createElement('div'); topRow.className = 'cdes-top-row';
@@ -410,6 +674,8 @@ function _buildDesktopContent(container, cartaoAtivo) {
     botRow.appendChild(_buildMeusCartoesList(cartaoAtivo));
     botRow.appendChild(_buildUltimasTransacoes(cartaoAtivo));
     container.appendChild(botRow);
+
+    container.appendChild(_buildAssinaturasSection());
 }
 
 function atualizarTelaCartoes() {
@@ -749,10 +1015,16 @@ function abrirCartaoForm(editId = null) {
             btnCancelar.addEventListener('click', _ctx.fecharPopup);
             btnSalvar.addEventListener('click', () => _executarSalvar(selectBanco, inputOutro, inputLimite, selectFechamento, selectDia, c));
             btnExcluir.addEventListener('click', () => {
-                if (confirm('Excluir cartão? Todas as compras futuras vinculadas a ele serão removidas.')) {
+                if (confirm('Excluir cartão? Faturas e parcelas futuras vinculadas a ele serão removidas, e assinaturas vinculadas serão canceladas.')) {
                     _ctx.cartoesCredito = _ctx.cartoesCredito.filter(x => x.id !== editId);
                     if (_ctx.cartaoSelecionadoId === editId) _ctx.cartaoSelecionadoId = null;
                     _ctx.contasFixas    = _ctx.contasFixas.filter(x => x.cartaoId !== editId);
+                    _ctx.assinaturas.forEach(a => {
+                        if (String(a.cartaoId) === String(editId) && a.ativa) {
+                            a.ativa       = false;
+                            a.canceladaEm = _ctx.isoDate();
+                        }
+                    });
                     _ctx.salvarDados();
                     _ctx.atualizarTelaCartoes();
                     _ctx.atualizarListaContasFixas();
@@ -951,6 +1223,51 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
             instDiv.appendChild(instLbl);
             instDiv.appendChild(instVal);
             scroll.appendChild(instDiv);
+        }
+
+        // ── Assinaturas vinculadas a este cartão
+        const assinaturasCartao = _ctx.assinaturas.filter(a => String(a.cartaoId) === String(cartaoId));
+        if (assinaturasCartao.length > 0) {
+            const aTitle = document.createElement('h4');
+            aTitle.style.cssText = 'color: var(--text-primary); margin-bottom: 12px; margin-top: 16px; display: flex; align-items: center; gap: 8px;';
+            const aTitleIcon = document.createElement('i');
+            aTitleIcon.className = 'fas fa-rotate';
+            aTitleIcon.style.color = 'var(--primary-light)';
+            const aTitleText = document.createElement('span');
+            aTitleText.textContent = 'Assinaturas neste Cartão';
+            aTitle.appendChild(aTitleIcon);
+            aTitle.appendChild(aTitleText);
+            scroll.appendChild(aTitle);
+
+            assinaturasCartao.forEach(a => {
+                const aItem = document.createElement('div');
+                aItem.style.cssText = `background: rgba(255,255,255,0.05); padding: 14px; border-radius: 12px; border-left: 3px solid ${a.ativa ? 'var(--primary-light)' : 'rgba(255,255,255,0.2)'}; cursor: pointer; margin-bottom: 8px; transition: background 0.2s; opacity: ${a.ativa ? '1' : '0.6'};`;
+
+                const aRow = document.createElement('div');
+                aRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+                const aDesc = document.createElement('div');
+                aDesc.style.cssText = 'font-weight: 600; font-size: 0.9rem; color: var(--text-primary);';
+                aDesc.textContent = _ctx._sanitizeText(a.nome);
+                const aVal = document.createElement('div');
+                aVal.style.cssText = 'font-weight: 700; color: var(--primary-light);';
+                aVal.textContent = `${_ctx.formatBRL(a.valor)}/mês`;
+                aRow.appendChild(aDesc);
+                aRow.appendChild(aVal);
+
+                const aSub = document.createElement('div');
+                aSub.style.cssText = 'font-size: 0.78rem; color: var(--text-secondary); margin-top: 5px;';
+                aSub.textContent = `Cobrança todo dia ${String(a.diaCobranca).padStart(2, '0')} — ${a.ativa ? 'Ativa' : 'Cancelada'}`;
+
+                aItem.appendChild(aRow);
+                aItem.appendChild(aSub);
+                aItem.addEventListener('mouseover', () => { aItem.style.background = 'rgba(255,255,255,0.08)'; });
+                aItem.addEventListener('mouseout',  () => { aItem.style.background = 'rgba(255,255,255,0.05)'; });
+                aItem.addEventListener('click', () => {
+                    _ctx.fecharPopup();
+                    setTimeout(() => abrirGerenciarAssinatura(a.id), 200);
+                });
+                scroll.appendChild(aItem);
+            });
         }
 
         popup.appendChild(scroll);

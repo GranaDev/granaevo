@@ -1974,12 +1974,14 @@ body::before {
     color: var(--primary-light);
 }
 
-#creditoFields {
+#creditoFields,
+#assinaturaFields {
     display: flex;
     gap: 16px;
 }
 
-#creditoFields .form-field-icon {
+#creditoFields .form-field-icon,
+#assinaturaFields .form-field-icon {
     flex: 1;
 }
 
