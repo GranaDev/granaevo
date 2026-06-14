@@ -1587,3 +1587,168 @@
         -webkit-backdrop-filter: none !important;
     }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   TEMA CLARO — Fase 4: Refinamento de Elegância
+   ──────────────────────────────────────────────────────────────
+   Objetivo: elevar de "limpo" para "sofisticado de referência".
+   Princípios aplicados (Stripe · Linear · Vercel · Mercury):
+     1. Sombras tingidas de slate em camadas (contato + ambiente)
+        no lugar de preto puro → profundidade limpa, nunca "suja".
+     2. Micro-lift no hover (−2px) com anel verde sutil → resposta
+        tátil que o cérebro lê como "vivo" e responsivo.
+     3. Bordas slate frias e hairline → nitidez sem peso.
+     4. Atmosfera de fundo em vez de "clarão" chapado.
+     5. Detalhes premium: seleção, caret, foco, scrollbar.
+   Vem por último no arquivo → vence os hardcodes anteriores por ordem.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Atmosfera de fundo: luz superior + profundidade fria ─────── */
+[data-theme="light"] body {
+    background:
+        radial-gradient(120% 80% at 50% -10%, #ffffff 0%, rgba(255,255,255,0) 45%),
+        linear-gradient(180deg, #f7f9fc 0%, var(--color-bg) 38%, #eef1f8 100%);
+    background-attachment: fixed;
+}
+
+[data-theme="light"] body::before {
+    background:
+        radial-gradient(ellipse 80% 50% at 15% 0%, rgba(16,185,129,0.055), transparent 60%),
+        radial-gradient(ellipse 70% 60% at 100% 100%, rgba(59,130,246,0.04), transparent 55%);
+}
+
+/* ── Seleção de texto e cursor de digitação ──────────────────── */
+[data-theme="light"] ::selection {
+    background: rgba(16,185,129,0.18);
+    color: #064e3b;
+}
+[data-theme="light"] input,
+[data-theme="light"] textarea {
+    caret-color: var(--color-primary-dark);
+}
+
+/* ── Scrollbar tingida de slate ──────────────────────────────── */
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: rgba(15,23,42,0.14);
+    border-radius: var(--radius-full);
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,0.24); }
+[data-theme="light"] ::-webkit-scrollbar-track { background: rgba(15,23,42,0.035); }
+
+/* ── Superfícies-cartão: sombra premium em camadas + lift ────── */
+[data-theme="light"] .card,
+[data-theme="light"] .section-box,
+[data-theme="light"] .grafico-card,
+[data-theme="light"] .graficos-filtros,
+[data-theme="light"] .conta-card,
+[data-theme="light"] .stat-card,
+[data-theme="light"] .tendencia-card,
+[data-theme="light"] .comparacao-container,
+[data-theme="light"] .ranking-container,
+[data-theme="light"] .insights-container,
+[data-theme="light"] .stat-comparativo-card,
+[data-theme="light"] .reservas-sidebar,
+[data-theme="light"] .reservas-main,
+[data-theme="light"] .res-detail-card,
+[data-theme="light"] .rel-filtros,
+[data-theme="light"] .meta-card,
+[data-theme="light"] .reservas-card,
+[data-theme="light"] .rel-patr-card {
+    border-color: var(--color-border);
+    box-shadow: var(--shadow-card);
+    transition: box-shadow var(--duration-normal) var(--ease-out),
+                transform var(--duration-normal) var(--ease-out),
+                border-color var(--duration-normal) var(--ease-out);
+}
+
+[data-theme="light"] .card:hover,
+[data-theme="light"] .section-box:hover,
+[data-theme="light"] .grafico-card:hover,
+[data-theme="light"] .conta-card:hover,
+[data-theme="light"] .stat-card:hover,
+[data-theme="light"] .tendencia-card:hover,
+[data-theme="light"] .stat-comparativo-card:hover,
+[data-theme="light"] .reservas-sidebar:hover,
+[data-theme="light"] .reservas-main:hover,
+[data-theme="light"] .meta-card:hover,
+[data-theme="light"] .reservas-card:hover {
+    border-color: rgba(16,185,129,0.22);
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-2px);
+}
+
+/* ── Modais e painéis flutuantes: elevação séria e suave ──────── */
+[data-theme="light"] .popup,
+[data-theme="light"] #modalContainer .popup {
+    box-shadow:
+        0 1px 3px rgba(16,24,40,0.06),
+        0 24px 56px -16px rgba(16,24,40,0.24),
+        0 0 0 1px rgba(16,24,40,0.05);
+}
+
+[data-theme="light"] .modal-overlay {
+    background: rgba(15,23,42,0.30);
+    backdrop-filter: blur(8px) saturate(120%);
+    -webkit-backdrop-filter: blur(8px) saturate(120%);
+}
+
+[data-theme="light"] .notificacoes-panel {
+    box-shadow: -8px 0 48px -12px rgba(16,24,40,0.18), 0 0 0 1px rgba(16,24,40,0.04);
+}
+
+[data-theme="light"] .tut-card,
+[data-theme="light"] .obw-card,
+[data-theme="light"] .perfil-card {
+    box-shadow:
+        0 2px 6px rgba(16,24,40,0.06),
+        0 28px 64px -20px rgba(16,24,40,0.22),
+        0 0 0 1px rgba(16,24,40,0.04);
+}
+
+/* ── Foco: anel nítido de duas camadas (acessível e premium) ─── */
+[data-theme="light"] .form-input:focus,
+[data-theme="light"] select:focus,
+[data-theme="light"] textarea:focus,
+[data-theme="light"] input:focus {
+    border-color: rgba(16,185,129,0.55);
+    box-shadow:
+        0 0 0 3.5px rgba(16,185,129,0.14),
+        0 1px 2px rgba(16,24,40,0.05);
+}
+
+/* ── Botões primários: sombra tingida de verde (não preta) ───── */
+[data-theme="light"] .btn-header-premium.primary {
+    box-shadow: 0 1px 2px rgba(5,150,105,0.20), 0 6px 18px -4px rgba(5,150,105,0.40);
+}
+[data-theme="light"] .btn-header-premium.primary:hover {
+    box-shadow: 0 2px 4px rgba(5,150,105,0.24), 0 10px 26px -6px rgba(5,150,105,0.48);
+    transform: translateY(-1px);
+}
+
+/* ── Tipografia: tons slate em vez de preto chapado ──────────── */
+[data-theme="light"] .card-value   { color: #1e293b; letter-spacing: -0.01em; }
+[data-theme="light"] .card-label   { color: #64748b; }
+[data-theme="light"] .stat-value   { color: #0f172a; letter-spacing: -0.01em; }
+[data-theme="light"] .grafico-titulo { color: #1e293b; }
+
+/* ── Hairline divisores: slate frio uniforme ─────────────────── */
+[data-theme="light"] thead th        { border-bottom-color: rgba(15,23,42,0.08); }
+[data-theme="light"] tbody td        { border-bottom-color: rgba(15,23,42,0.05); }
+
+/* ── Reduced-motion: sem lift ────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    [data-theme="light"] .card:hover,
+    [data-theme="light"] .section-box:hover,
+    [data-theme="light"] .grafico-card:hover,
+    [data-theme="light"] .conta-card:hover,
+    [data-theme="light"] .stat-card:hover,
+    [data-theme="light"] .tendencia-card:hover,
+    [data-theme="light"] .stat-comparativo-card:hover,
+    [data-theme="light"] .reservas-sidebar:hover,
+    [data-theme="light"] .reservas-main:hover,
+    [data-theme="light"] .meta-card:hover,
+    [data-theme="light"] .reservas-card:hover,
+    [data-theme="light"] .btn-header-premium.primary:hover {
+        transform: none;
+    }
+}

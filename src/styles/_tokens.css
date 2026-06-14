@@ -173,30 +173,49 @@
   }
 
   /* ── Tema Claro ─────────────────────────────────────────────── */
+  /*
+   * Sombras tingidas de slate (rgba(16,24,40,…)) em vez de preto puro:
+   * preto puro sobre fundo claro lê como cinza "sujo"; o tom slate frio
+   * dá profundidade limpa e premium (padrão Stripe / Linear / Untitled UI).
+   * Cada sombra é composta por duas camadas — contato (curta e nítida) +
+   * ambiente (longa e difusa) — para profundidade física real.
+   */
   [data-theme="light"] {
-    --color-bg:             #f4f6fa;
+    --color-bg:             #f5f7fb;
     --color-bg-card:        #ffffff;
-    --color-bg-soft:        #eaecf4;
-    --color-bg-elevated:    #dde0ee;
+    --color-bg-soft:        #eef1f7;
+    --color-bg-elevated:    #e3e7f1;
 
-    --color-text:           #111827;
-    --color-text-muted:     #4b5563;
-    --color-text-faint:     #6b7280;
-    --color-text-lighter:   #374151;
+    --color-text:           #0f172a;
+    --color-text-muted:     #475569;
+    --color-text-faint:     #64748b;
+    --color-text-lighter:   #334155;
 
-    --color-border:         rgba(0, 0, 0, 0.08);
-    --color-border-strong:  rgba(0, 0, 0, 0.15);
+    --color-border:         rgba(15, 23, 42, 0.07);
+    --color-border-strong:  rgba(15, 23, 42, 0.13);
 
-    --shadow-sm:            0 2px 8px rgba(0, 0, 0, 0.05);
-    --shadow-md:            0 4px 16px rgba(0, 0, 0, 0.08);
-    --shadow-lg:            0 8px 32px rgba(0, 0, 0, 0.12);
-    --shadow-xl:            0 16px 48px rgba(0, 0, 0, 0.15);
-    --shadow-card:          0 4px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0,0,0,0.04);
-    --shadow-neon:          0 0 20px rgba(16, 185, 129, 0.25);
-    --shadow-neon-strong:   0 0 40px rgba(16, 185, 129, 0.40);
-    --shadow-neon-sm:       0 0 10px rgba(16, 185, 129, 0.15);
+    /* Tom base das sombras: slate-900 frio */
+    --shadow-tint:          16, 24, 40;
 
-    --backdrop:             rgba(234, 236, 244, 0.97);
+    --shadow-sm:            0 1px 2px rgba(var(--shadow-tint), 0.06),
+                            0 1px 3px rgba(var(--shadow-tint), 0.05);
+    --shadow-md:            0 2px 4px -1px rgba(var(--shadow-tint), 0.06),
+                            0 6px 16px -4px rgba(var(--shadow-tint), 0.10);
+    --shadow-lg:            0 4px 8px -2px rgba(var(--shadow-tint), 0.06),
+                            0 14px 28px -6px rgba(var(--shadow-tint), 0.12);
+    --shadow-xl:            0 8px 12px -4px rgba(var(--shadow-tint), 0.06),
+                            0 24px 44px -8px rgba(var(--shadow-tint), 0.16);
+    --shadow-card:          0 1px 2px rgba(var(--shadow-tint), 0.04),
+                            0 4px 14px -3px rgba(var(--shadow-tint), 0.08),
+                            0 0 0 1px rgba(var(--shadow-tint), 0.035);
+    --shadow-card-hover:    0 2px 4px rgba(var(--shadow-tint), 0.05),
+                            0 14px 30px -8px rgba(var(--shadow-tint), 0.14),
+                            0 0 0 1px rgba(16, 185, 129, 0.18);
+    --shadow-neon:          0 0 20px rgba(16, 185, 129, 0.22);
+    --shadow-neon-strong:   0 0 40px rgba(16, 185, 129, 0.38);
+    --shadow-neon-sm:       0 0 10px rgba(16, 185, 129, 0.14);
+
+    --backdrop:             rgba(245, 247, 251, 0.85);
     --gradient-dark:        linear-gradient(135deg, var(--color-bg-soft), var(--color-bg-elevated));
 
     /* Aliases */
