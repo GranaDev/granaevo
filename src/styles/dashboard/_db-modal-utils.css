@@ -1,4 +1,12 @@
-﻿/* ========== MODAL/POPUP ========== */
+﻿/* ========== TRAVA DE ROLAGEM (pop-up/modal aberto) ========== */
+/* Aplicada via scroll-lock.js: o <body> recebe position:fixed + top,
+   garantindo que a página atrás do pop-up não role (inclui iOS). */
+body.scroll-locked {
+    overflow: hidden;
+    touch-action: none;
+}
+
+/* ========== MODAL/POPUP ========== */
 .modal-overlay {
     position: fixed;
     top: 0;

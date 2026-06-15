@@ -113,12 +113,13 @@ function popularFiltrosRelatorio() {
         }
     }
 
-    if (periodosDisponiveis.size === 0) {
-        const hoje    = new Date();
-        const anoAtual = hoje.getFullYear();
-        const mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
-        periodosDisponiveis.add(`${anoAtual}-${mesAtual}`);
-    }
+    // Garante que o mês/ano atuais estejam sempre disponíveis nas caixas,
+    // mesmo que ainda não existam transações no período — assim o usuário
+    // pode apenas abrir e clicar em "Gerar Relatório" (igual aos Gráficos).
+    const _hojeFiltro  = new Date();
+    const _anoAtualStr = String(_hojeFiltro.getFullYear());
+    const _mesAtualStr = String(_hojeFiltro.getMonth() + 1).padStart(2, '0');
+    periodosDisponiveis.add(`${_anoAtualStr}-${_mesAtualStr}`);
 
     const meses = new Set();
     const anos  = new Set();
@@ -153,6 +154,15 @@ function popularFiltrosRelatorio() {
         option.textContent = ano;
         anoSelect.appendChild(option);
     });
+
+    // Pré-seleciona o mês/ano atuais para que o usuário possa apenas abrir
+    // e clicar em "Gerar Relatório", sem precisar escolher manualmente.
+    if ([...mesSelect.options].some(o => o.value === _mesAtualStr)) {
+        mesSelect.value = _mesAtualStr;
+    }
+    if ([...anoSelect.options].some(o => o.value === _anoAtualStr)) {
+        anoSelect.value = _anoAtualStr;
+    }
 
     setupBotoesRelatorio();
     // ✅ CORRIGIDO: log operacional sem dados sensíveis

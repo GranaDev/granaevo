@@ -7,6 +7,9 @@
 /* ── Reset & design tokens ──────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Trava de rolagem enquanto o modal/comprovante está aberto (scroll-lock.js) */
+body.scroll-locked { overflow: hidden; touch-action: none; }
+
 :root {
     /* Background scale */
     --bg:           #04100a;
