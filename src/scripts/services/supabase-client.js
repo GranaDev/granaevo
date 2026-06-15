@@ -126,24 +126,26 @@ export async function loginWithPassword(email, password, remember) {
 
 /**
  * Renova o access via cookie HttpOnly. Single-flight.
- *   - sucesso → retorna o grant ({ access_token, ... })
- *   - 401 (sessão expirada/ausente) → DEFINITIVO: limpa sessão local e retorna null
- *   - 5xx / rede → TRANSITÓRIO: lança erro (chamador NÃO deve deslogar)
+ *   - 200 com access_token  → renova e retorna o grant ({ access_token, ... })
+ *   - 200 com session:null  → DEFINITIVO (deslogado): limpa sessão local e retorna null
+ *   - 5xx / rede            → TRANSITÓRIO: lança erro (chamador NÃO deve deslogar)
  */
 export async function refreshSession() {
     if (_refreshInFlight) return _refreshInFlight;
     _refreshInFlight = (async () => {
         const res = await _callAuth('refresh', { remember: isRememberMe() }); // rede → throw
-        if (res.status === 401) {
+        if (!res.ok) {
+            // Apenas erro real de gateway (5xx/504) → transitório
+            throw Object.assign(new Error('refresh_transient'), { status: res.status });
+        }
+        const data = await res.json();
+        if (!data?.access_token) {
+            // 200 { session: null } = deslogado (sem cookie ou refresh rejeitado)
             await supabase.auth.signOut().catch(() => {});
             _expiresAt = 0;
             return null;
         }
-        if (!res.ok) {
-            // Falha de infraestrutura — não conclui logout; deixa o chamador reverificar
-            throw Object.assign(new Error('refresh_transient'), { status: res.status });
-        }
-        return _applyGrant(await res.json());
+        return _applyGrant(data);
     })().finally(() => { _refreshInFlight = null; });
     return _refreshInFlight;
 }

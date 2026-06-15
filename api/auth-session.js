@@ -199,27 +199,30 @@ export default async function handler(req, res) {
       return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
     }
 
+    // Sem cookie = simplesmente deslogado. Responde 200 com sessão vazia (não 401)
+    // para não poluir o console com erro vermelho em toda página pública/deslogada.
     const refreshToken = readRefreshCookie(req.headers['cookie'] ?? '')
-    if (!refreshToken) return res.status(401).json({ error: 'no_session' })
+    if (!refreshToken) return res.status(200).json({ session: null })
 
     let grantRes
     try {
       grantRes = await gotrue('token?grant_type=refresh_token', { body: { refresh_token: refreshToken } })
     } catch (e) {
+      // Erro real de gateway (rede/timeout/5xx) → transitório, NÃO desloga
       const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502
       return res.status(code).json({ error: 'Gateway indisponível' })
     }
 
     if (!grantRes.ok) {
-      // Refresh inválido/revogado → limpa o cookie para forçar novo login
+      // Refresh inválido/revogado → limpa o cookie e sinaliza "deslogado" (200, sem erro)
       res.setHeader('Set-Cookie', buildRefreshCookie('', { clear: true }))
-      return res.status(401).json({ error: 'session_expired' })
+      return res.status(200).json({ session: null })
     }
 
     const grant = await grantRes.json()
     if (!grant?.access_token || !grant?.refresh_token) {
       res.setHeader('Set-Cookie', buildRefreshCookie('', { clear: true }))
-      return res.status(401).json({ error: 'session_expired' })
+      return res.status(200).json({ session: null })
     }
 
     // Rotação: Supabase emite novo refresh a cada uso — re-grava o cookie.
