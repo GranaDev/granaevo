@@ -1,8 +1,9 @@
 // ========== IMPORTS ESSENCIAIS ==========
-import { supabase } from '../services/supabase-client.js?v=2';
+import { supabase, refreshSession as hybridRefresh } from '../services/supabase-client.js?v=2';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?v=2';
 import { dataManager } from '../modules/data-manager.js?v=8';
 import AuthGuard from '../modules/auth-guard.js?v=2';
+import '../modules/scroll-lock.js?v=1';
 
 // ========== CONSTANTES ==========
 const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -1599,14 +1600,18 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
                 return;
             }
 
-            // ── FIX-2: Token garantidamente fresco via refreshSession() ───
-            // getSession() lê do cache — após fluxo de "primeiro acesso"
-            // (magic link / recovery), o token pode estar expirado ou inválido.
-            // refreshSession() bate no servidor e sempre retorna token válido.
+            // ── FIX-2: Token garantidamente fresco via refresh (cookie HttpOnly) ───
+            // getSession() lê do cache em memória; o refresh bate em
+            // /api/auth-session (cookie HttpOnly) e renova o access token.
             let sessionFresh;
             try {
-                const { data: refreshData, error: refreshError } =
-                    await supabase.auth.refreshSession();
+                let refreshData = null, refreshError = null;
+                try {
+                    const grant = await hybridRefresh();
+                    const { data } = await supabase.auth.getSession();
+                    refreshData = data;
+                    if (!grant) refreshError = new Error('refresh_rejected');
+                } catch (e) { refreshError = e; }
 
                 if (refreshError || !refreshData?.session?.access_token) {
                     // Fallback: tenta getSession uma última vez

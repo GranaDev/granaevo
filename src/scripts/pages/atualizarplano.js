@@ -4,7 +4,8 @@
  */
 
 import AuthGuard    from '../modules/auth-guard.js?v=2';
-import { supabase } from '../services/supabase-client.js?v=2';
+import { supabase, getValidAccessToken } from '../services/supabase-client.js?v=2';
+import '../modules/scroll-lock.js?v=1';
 
 // ── Loading screen ────────────────────────────────────────────────
 window.addEventListener('load', () => {
@@ -379,8 +380,7 @@ async function loadStripeDetails(session) {
     _showInvoiceSkeleton();
 
     try {
-        const { data: { session: fresh } } = await supabase.auth.getSession();
-        const token = fresh?.access_token || session.access_token;
+        const token = (await getValidAccessToken()) || session.access_token;
 
         const resp = await fetch('/api/stripe', {
             method: 'POST',

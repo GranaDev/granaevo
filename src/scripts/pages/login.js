@@ -1,4 +1,4 @@
-import { supabase, SUPABASE_ANON_KEY, setRememberMe, clearRememberMe } from '../services/supabase-client.js';
+import { supabase, SUPABASE_ANON_KEY, setRememberMe, loginWithPassword, logout, supabaseReady } from '../services/supabase-client.js';
 
 // ═══════════════════════════════════════════════════════════════
 //  [TT-POLICY-1] TRUSTED TYPES — POLÍTICA granaevo-policy
@@ -663,7 +663,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Sessão existente → redireciona (respeitando ?next=)
+    // Aguarda a reidratação via cookie HttpOnly antes de checar a sessão.
     try {
+        await supabaseReady;
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
             const next = getNextRedirect();
@@ -777,16 +779,30 @@ loginForm?.addEventListener('submit', async (e) => {
     setRememberMe(rememberChecked);
 
     try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-        if (error) {
-            inputs.loginPassword.value = '';
-            LoginCaptchaState.reset();
-            _registerFailedLoginAttempt();
-            showAuthMessage(LOGIN_ERROR_MSG, 'error');
-            shakeInput(inputs.loginEmail);
-            shakeInput(inputs.loginPassword);
-            return;
+        let data;
+        try {
+            // Login server-side: o refresh token fica em cookie HttpOnly,
+            // só o access token volta (para a memória, via supabase-client).
+            data = await loginWithPassword(email, password, rememberChecked);
+        } catch (err) {
+            const status = err?.status ?? 0;
+            if (status === 429) {
+                // Rate limit server-side — não conta como tentativa de credencial
+                showAuthMessage('Muitas tentativas. Aguarde alguns minutos e tente novamente.', 'error');
+                return;
+            }
+            if (status >= 400 && status < 500) {
+                // Credenciais inválidas (401/400) — mensagem genérica
+                inputs.loginPassword.value = '';
+                LoginCaptchaState.reset();
+                _registerFailedLoginAttempt();
+                showAuthMessage(LOGIN_ERROR_MSG, 'error');
+                shakeInput(inputs.loginEmail);
+                shakeInput(inputs.loginPassword);
+                return;
+            }
+            // 5xx / rede → tratado como erro de conexão no catch externo
+            throw err;
         }
 
         // Login bem-sucedido
@@ -799,8 +815,8 @@ loginForm?.addEventListener('submit', async (e) => {
         const { hasAccess } = checkAccessResult;
 
         if (!hasAccess) {
-            clearRememberMe();
-            await supabase.auth.signOut();
+            // Encerra a sessão recém-criada (limpa cookie HttpOnly + revoga)
+            await logout();
             const lockMsg = checkAccessResult?.lockMessage;
             if (lockMsg) {
                 showAuthMessage(sanitizeText(lockMsg), 'error');
@@ -817,7 +833,7 @@ loginForm?.addEventListener('submit', async (e) => {
         inputs.loginPassword.value = '';
         inputs.loginEmail.value    = '';
 
-        const userName = sanitizeText(data.user.user_metadata?.name || 'Usuário');
+        const userName = sanitizeText(data.user?.user_metadata?.name || 'Usuário');
         showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
         const nextPage = getNextRedirect() ?? 'dashboard.html';
         setTimeout(() => window.location.replace(nextPage), 1500);

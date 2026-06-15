@@ -6,7 +6,7 @@
  * Faz verificação de sessão manual: sem sessão → login.
  */
 
-import { supabase } from '../services/supabase-client.js?v=2';
+import { supabase, supabaseReady, getValidAccessToken } from '../services/supabase-client.js?v=2';
 
 (async () => {
     const loadingEl = document.getElementById('loading');
@@ -16,8 +16,10 @@ import { supabase } from '../services/supabase-client.js?v=2';
     const btnAccept = document.getElementById('btnAccept');
 
     // ── 1. Verificar sessão ────────────────────────────────────────────────────
+    // Aguarda reidratação via cookie HttpOnly antes de checar (não usa auth-guard).
     let session;
     try {
+        await supabaseReady;
         const { data } = await supabase.auth.getSession();
         session = data.session;
     } catch {
@@ -48,9 +50,8 @@ import { supabase } from '../services/supabase-client.js?v=2';
         if (errorEl) errorEl.textContent = '';
 
         try {
-            // Obtém sessão fresca para token válido
-            const { data: { session: fresh } } = await supabase.auth.getSession();
-            const token = fresh?.access_token ?? session.access_token;
+            // Token válido (renova via cookie HttpOnly se necessário)
+            const token = (await getValidAccessToken()) ?? session.access_token;
 
             const r = await fetch('/api/accept-terms', {
                 method:  'POST',

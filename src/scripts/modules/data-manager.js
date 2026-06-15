@@ -1,5 +1,5 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
-import { supabase } from '../services/supabase-client.js?v=2';
+import { supabase, getValidAccessToken, refreshSession as hybridRefresh } from '../services/supabase-client.js?v=2';
 
 // ========== CONSTANTES PRIVADAS ==========
 const MAX_PAYLOAD_BYTES  = 4_900_000;
@@ -88,8 +88,8 @@ class DataManager {
     }
 
     async #getAuthToken() {
-        const { data: { session } } = await supabase.auth.getSession();
-        return session?.access_token ?? null;
+        // Garante token válido (renova via cookie HttpOnly se perto de expirar)
+        return getValidAccessToken();
     }
 
     // ============================ //
@@ -366,11 +366,11 @@ class DataManager {
                     signal,
                 });
 
-                // 403 da Edge Function — JWT pode ter expirado entre getSession() e o fetch.
-                // Tenta uma vez com token refrescado antes de desistir.
+                // 403 da Edge Function — JWT pode ter expirado entre a leitura e o fetch.
+                // Tenta uma vez com token refrescado via cookie HttpOnly antes de desistir.
                 if (saveResp.status === 403) {
-                    const { data: { session: _s } } = await supabase.auth.refreshSession();
-                    saveToken = _s?.access_token ?? null;
+                    const grant = await hybridRefresh().catch(() => null);
+                    saveToken = grant?.access_token ?? null;
                     if (saveToken) {
                         const { signal: sig2, cleanup: cl2 } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
                         try {

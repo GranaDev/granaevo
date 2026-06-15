@@ -73,7 +73,13 @@
  * @property {string}    [loadingElementId]       - ID do elemento de loading a ocultar
  */
 
-import { supabase, clearRememberMe } from '../services/supabase-client.js?v=2';
+import {
+    supabase,
+    clearRememberMe,
+    refreshSession as hybridRefresh,
+    logout as hybridLogout,
+    supabaseReady,
+} from '../services/supabase-client.js?v=2';
 
 // ═══════════════════════════════════════════════════════════════
 //  TAB_ID — identificador único desta aba [FIX-REPORT-3]
@@ -139,6 +145,79 @@ function _err(code, message) {
     e.code    = code;
     e.message = message;
     return e;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MÓDULO: RESILIÊNCIA DE SESSÃO  [FIX-TABSWITCH]
+//  Resolve o estado REAL da sessão sem deslogar por instabilidade.
+//
+//  Problema corrigido: ao trocar de aba e voltar após um curto período,
+//  supabase.auth.getSession() podia retornar null momentaneamente
+//  (refresh de token em voo, contenção de Web Lock entre abas, timers de
+//  aba de fundo estrangulados pelo browser). Os handlers deslogavam o
+//  usuário imediatamente nesse null transitório, forçando novo login.
+//
+//  Regra de ouro: SÓ desloga quando a sessão está CONFIRMADAMENTE
+//  encerrada (refresh rejeitado por erro de auth definitivo). Qualquer
+//  incerteza (rede, lock, 5xx, offline) mantém o usuário logado — o
+//  monitor periódico reverifica em seguida.
+//
+//  Estados retornados:
+//    'active'  → sessão válida (objeto em .session)
+//    'gone'    → sessão CONFIRMADAMENTE encerrada — pode deslogar
+//    'unknown' → indeterminado (instabilidade) — NUNCA deslogar
+// ═══════════════════════════════════════════════════════════════
+function _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Resolve o estado da sessão de forma resiliente: tenta getSession várias
+ * vezes e, quando vier vazio, tenta um refresh EXPLÍCITO antes de concluir
+ * que a sessão terminou. Offline ⇒ sempre 'unknown' (jamais desloga sem rede).
+ *
+ * @param {{retries?:number, delayMs?:number}} [opts]
+ * @returns {Promise<{status:'active'|'gone'|'unknown', session:Object|null}>}
+ */
+async function _resolveSessionStatus({ retries = 2, delayMs = 400 } = {}) {
+    // Sem rede → impossível confirmar logout. Mantém sessão.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return { status: 'unknown', session: null };
+    }
+
+    let sawDefinitiveGone = false;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const { data, error } = await supabase.auth.getSession();
+
+            if (!error && data?.session) {
+                return { status: 'active', session: data.session };
+            }
+
+            // Sessão ausente nesta tentativa — tenta um refresh explícito via
+            // cookie HttpOnly (/api/auth-session). Cobre o caso de getSession()
+            // null transitório quando ainda há refresh token válido no cookie.
+            //   grant truthy → sessão reidratada (setSession já aplicado)
+            //   null          → refresh DEFINITIVAMENTE rejeitado (401) → 'gone'
+            //   throw         → transitório (5xx/rede) → inconclusivo
+            try {
+                const grant = await hybridRefresh();
+                if (grant) {
+                    const { data: rd } = await supabase.auth.getSession();
+                    if (rd?.session) return { status: 'active', session: rd.session };
+                }
+                sawDefinitiveGone = true;
+            } catch { /* rede / 5xx — inconclusivo, tenta de novo */ }
+
+        } catch { /* getSession lançou — inconclusivo */ }
+
+        if (attempt < retries) await _sleep(delayMs);
+    }
+
+    // Só conclui 'gone' se um refresh foi rejeitado de forma DEFINITIVA.
+    // Caso contrário mantém o usuário logado e deixa o monitor reverificar.
+    return { status: sawDefinitiveGone ? 'gone' : 'unknown', session: null };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -999,9 +1078,17 @@ const AuthGuard = (() => {
             const tickCtrl = new AbortController();
             _monitorAbortCtrl = tickCtrl;
             try {
-                const { data: { session } } = await supabase.auth.getSession();
+                // [FIX-TABSWITCH] Resolve a sessão de forma resiliente — não desloga
+                // por null transitório (instabilidade momentânea do Supabase/lock).
+                const { status, session } = await _resolveSessionStatus();
 
-                if (!session) {
+                if (status === 'unknown') {
+                    // Estado indeterminado — adia a verificação para o próximo tick.
+                    console.warn('[AUTH GUARD] Monitor: estado de sessão indeterminado, adiando verificação.');
+                    return;
+                }
+
+                if (status === 'gone' || !session) {
                     _publicAPI.forceLogout('SESSION_GONE');
                     return;
                 }
@@ -1141,6 +1228,11 @@ const AuthGuard = (() => {
             if (loader) loader.classList.remove('hidden');
 
             try {
+                // ── Passo 0: Reidratar sessão a partir do cookie HttpOnly ──
+                // Garante que getSession() já reflita a sessão restaurada via
+                // /api/auth-session refresh antes de qualquer verificação.
+                await supabaseReady;
+
                 // ── Passo 1: Rate limit ───────────────────────────────
                 // [FIX-REPORT-3] isAllowed() agora usa localStorage global entre abas
                 if (!await RateLimiter.isAllowed()) {
@@ -1160,14 +1252,15 @@ const AuthGuard = (() => {
                 const secsLeft = expires_at - Math.floor(Date.now() / 1000);
 
                 if (secsLeft <= 0) {
-                    const { data: refreshed, error: refErr } = await supabase.auth.refreshSession();
-                    if (refErr || !refreshed?.session) {
+                    const grant = await hybridRefresh().catch(() => null);
+                    const { data: rd } = await supabase.auth.getSession();
+                    if (!grant || !rd?.session) {
                         throw _err('TOKEN_EXPIRED', 'Token expirado e refresh falhou.');
                     }
-                    user       = refreshed.session.user;
-                    expires_at = refreshed.session.expires_at;
+                    user       = rd.session.user;
+                    expires_at = rd.session.expires_at;
                 } else if (secsLeft < SECURITY.TOKEN_REFRESH_THRESHOLD_SECONDS) {
-                    supabase.auth.refreshSession().catch(() => {});
+                    hybridRefresh().catch(() => {});
                 }
 
                 // ── Passo 4: Fingerprint ──────────────────────────────
@@ -1182,14 +1275,14 @@ const AuthGuard = (() => {
 
                 // ── Passo 5: Idade da sessão ──────────────────────────
                 if (Fingerprint.isSessionExpiredByAge()) {
-                    await supabase.auth.signOut().catch(() => {});
+                    await hybridLogout().catch(() => {});   // limpa cookie HttpOnly
                     throw _err('SESSION_TOO_OLD', 'Sessão ultrapassou 24h.');
                 }
 
                 // ── Passo 6: Integrity stamp ──────────────────────────
                 const stampedUid = await Fingerprint.readIntegrityStamp();
                 if (stampedUid !== null && stampedUid !== user.id) {
-                    await supabase.auth.signOut().catch(() => {});
+                    await hybridLogout().catch(() => {});   // limpa cookie HttpOnly
                     throw _err('INTEGRITY_FAIL', 'Carimbo de integridade inválido.');
                 }
 
@@ -1412,13 +1505,14 @@ const AuthGuard = (() => {
 
             _broadcastLogout('LOGOUT');
 
-            try { await supabase.auth.signOut(); }
+            // hybridLogout: revoga server-side + limpa o cookie HttpOnly + signOut local
+            try { await hybridLogout(); }
             catch { /* Ignora erro de rede */ }
 
             SafeRedirect.toLogin(reason); // dedup via _isRedirecting
         },
 
-        // [SEC-08] Aguarda signOut — sem race condition
+        // [SEC-08] Aguarda logout — sem race condition
         async forceLogout(reason = 'FORCE_LOGOUT') {
             _stopMonitoring();
             _ready = false;
@@ -1430,7 +1524,8 @@ const AuthGuard = (() => {
 
             _broadcastLogout('FORCE_LOGOUT');
 
-            try { await supabase.auth.signOut(); }
+            // hybridLogout: revoga server-side + limpa o cookie HttpOnly + signOut local
+            try { await hybridLogout(); }
             catch { /* Ignora */ }
 
             SafeRedirect.toLogin(reason); // dedup via _isRedirecting
@@ -1492,12 +1587,22 @@ supabase.auth.onAuthStateChange((event, session) => {
             // [FIX-LOGOUT] O SDK pode disparar SIGNED_OUT espuriamente durante
             // falha de rede no refresh automático de token. Aguarda 1s e re-verifica
             // antes de reagir — evita logout falso por instabilidade momentânea.
+            // [FIX-TABSWITCH] Usa _resolveSessionStatus (retry + refresh explícito)
+            // para distinguir logout real de instabilidade transitória.
             setTimeout(async () => {
-                try {
-                    const { data } = await supabase.auth.getSession();
-                    if (data?.session) return; // sessão ainda ativa — evento espúrio, ignora
-                } catch { /* se a verificação falhar, prossegue com o logout */ }
+                const { status } = await _resolveSessionStatus();
 
+                // Sessão recuperada — evento espúrio, ignora.
+                if (status === 'active') return;
+
+                // Estado indeterminado (rede/instabilidade) — não desloga agora;
+                // o monitor e o visibilitychange reverificarão.
+                if (status === 'unknown') {
+                    console.warn('[AUTH GUARD] SIGNED_OUT com estado indeterminado — logout adiado.');
+                    return;
+                }
+
+                // status === 'gone' — logout confirmado pelo servidor.
                 AuthGuard._internalStop();
                 Fingerprint.clear();
                 SubscriptionChecker.invalidate();
@@ -1513,8 +1618,8 @@ supabase.auth.onAuthStateChange((event, session) => {
             SubscriptionChecker.invalidate();
             break;
         case 'PASSWORD_RECOVERY':
-            // [SEC-09] signOut antes de redirecionar
-            supabase.auth.signOut()
+            // [SEC-09] logout (limpa cookie HttpOnly) antes de redirecionar
+            hybridLogout()
                 .catch(() => {})
                 .finally(() => {
                     if (!window.location.href.includes('login.html')) {
@@ -1531,16 +1636,41 @@ supabase.auth.onAuthStateChange((event, session) => {
 // pois o storage adapter agora usa sessionStorage com chave 'ge_auth'.
 // Mantido como comentário para documentar a decisão arquitetural.
 
-// [FIX-VUL-9] Reativação da aba — revalida fingerprint + integrity stamp
+// [FIX-VUL-9]     Reativação da aba — revalida fingerprint + integrity stamp
+// [FIX-TABSWITCH] Resiliência: NUNCA desloga por null transitório de sessão.
+//   Antes, um getSession() vazio momentâneo (refresh em voo / lock entre abas)
+//   ao voltar para a aba forçava logout imediato. Agora o estado é confirmado
+//   via _resolveSessionStatus() e só desloga em sessão comprovadamente encerrada.
+let _visibilityCheckInFlight = false;
+
 document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState !== 'visible' || !AuthGuard.isReady()) return;
 
-    try {
-        const { data: { session } } = await supabase.auth.getSession();
+    // Debounce — ignora reativações em rajada enquanto uma verificação roda.
+    if (_visibilityCheckInFlight) return;
+    _visibilityCheckInFlight = true;
 
-        if (!session) {
+    try {
+        const { status, session } = await _resolveSessionStatus();
+
+        // Indeterminado (rede / lock / instabilidade / offline) → mantém logado.
+        // O monitor periódico reverificará. NUNCA desloga aqui.
+        if (status === 'unknown') return;
+
+        // Sessão CONFIRMADAMENTE encerrada → logout legítimo.
+        if (status === 'gone') {
             await AuthGuard.forceLogout('NO_SESSION');
             return;
+        }
+
+        // status === 'active' (session garantida abaixo)
+
+        // Renova proativamente se o token estiver perto de expirar — timers de
+        // refresh são estrangulados em abas de fundo, então a sessão pode voltar
+        // quase expirada. Não bloqueia o fluxo.
+        const secsLeft = (session.expires_at || 0) - Math.floor(Date.now() / 1000);
+        if (secsLeft < SECURITY.TOKEN_REFRESH_THRESHOLD_SECONDS) {
+            hybridRefresh().catch(() => {});
         }
 
         // [FIX-VUL-9] Revalida fingerprint ao retornar à aba
@@ -1558,7 +1688,9 @@ document.addEventListener('visibilitychange', async () => {
         }
 
     } catch {
-        // Erro de rede — não força logout
+        // Erro inesperado — não força logout (fail-safe a favor do usuário)
+    } finally {
+        _visibilityCheckInFlight = false;
     }
 });
 

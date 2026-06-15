@@ -1,0 +1,120 @@
+# ──────────────────────────────────────────────────────────────────────────────
+#  GranaEvo — Testes de segurança contra `vercel dev`
+#
+#  Por que este workflow existe:
+#    A suíte tests/security/security.test.js bate em ROTAS /api/* — que são
+#    Serverless Functions da Vercel, NÃO arquivos estáticos. O `vite` (npm run dev)
+#    serve só estáticos, então os ~156 testes "falham" por alvo errado. Este
+#    workflow sobe `vercel dev` (que executa as funções de verdade) e aponta os
+#    testes para ele, dando um pipeline verde contínuo.
+#
+#  ⚠️  CUIDADO COM EFEITOS COLATERAIS:
+#    Vários testes fazem POST real em create-account / reset-password / queue-email.
+#    Apontados para o backend de PRODUÇÃO, isso dispara emails reais, tenta criar
+#    contas e consome rate limit. Por isso:
+#      1. Os secrets abaixo DEVEM apontar para um projeto Supabase de STAGING,
+#         nunca o de produção.
+#      2. O gatilho é pull_request + manual (workflow_dispatch) — nunca em todo
+#         push — para limitar o raio de alcance.
+#
+#  Secrets necessários (Settings → Secrets and variables → Actions):
+#    VERCEL_TOKEN        — token de conta Vercel (vercel.com/account/tokens)
+#    VERCEL_ORG_ID       — ID da org (arquivo .vercel/project.json após `vercel link`)
+#    VERCEL_PROJECT_ID   — ID do projeto (idem)
+#  O `vercel pull` traz as demais env vars (SUPABASE_*, PROXY_SECRET, UPSTASH_*)
+#  do ambiente "development" do projeto Vercel vinculado — configure-as lá
+#  apontando para STAGING.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: security-tests
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancela execuções antigas do mesmo PR ao dar push de novo commit
+concurrency:
+  group: security-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  vercel-dev-tests:
+    runs-on: ubuntu-latest
+    # Não roda em forks (sem acesso aos secrets) nem se o token não estiver configurado
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository }}
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: Guard — VERCEL_TOKEN presente
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN não configurado — adicione os secrets para habilitar o CI de segurança."
+            exit 1
+          fi
+
+      - name: Pull env do projeto Vercel (ambiente development = STAGING)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel pull --yes --environment=development --token="$VERCEL_TOKEN"
+
+      - name: Subir `vercel dev` e aguardar a porta
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          # Inicia o servidor em background, log para arquivo
+          vercel dev --listen 3000 --token="$VERCEL_TOKEN" > vercel-dev.log 2>&1 &
+          echo "VERCEL_DEV_PID=$!" >> "$GITHUB_ENV"
+          # Aguarda até 90s a porta responder
+          for i in $(seq 1 90); do
+            if curl -sf -o /dev/null "http://localhost:3000/"; then
+              echo "vercel dev pronto após ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::vercel dev não respondeu em 90s"
+          cat vercel-dev.log
+          exit 1
+
+      - name: Rodar testes de segurança
+        run: |
+          # Exporta as env vars puxadas (SUPABASE_URL, SUPABASE_ANON_KEY, ...) para o
+          # processo de teste — alguns testes batem direto nas Edge Functions.
+          set -a
+          [ -f .vercel/.env.development.local ] && . .vercel/.env.development.local
+          set +a
+          BASE_URL=http://localhost:3000 node --test tests/security/security.test.js
+
+      - name: Log do vercel dev em caso de falha
+        if: failure()
+        run: cat vercel-dev.log || true
+
+      - name: Encerrar vercel dev
+        if: always()
+        run: |
+          if [ -n "${VERCEL_DEV_PID:-}" ]; then
+            kill "$VERCEL_DEV_PID" 2>/dev/null || true
+          fi

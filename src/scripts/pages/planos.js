@@ -3,7 +3,7 @@
 // Versão Segura v6 | Stripe Checkout
 // ==========================================
 
-import { supabase } from '../services/supabase-client.js?v=2';
+import { supabase, loginWithPassword } from '../services/supabase-client.js?v=2';
 
 // ==========================================
 // MODAL DE CADASTRO PRÉ-CHECKOUT
@@ -250,11 +250,10 @@ const SignupModal = (() => {
                     throw new Error('CREATE_FAILED');
                 }
 
-                // 2. Obtém sessão via signInWithPassword (conta já confirmada pelo proxy)
-                const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-                if (signInErr) throw signInErr;
-
-                const session = signInData?.session;
+                // 2. Login server-side (conta já confirmada pelo proxy).
+                //    O refresh token vai para cookie HttpOnly; o access para a memória.
+                await loginWithPassword(email, password, false);
+                const { data: { session } } = await supabase.auth.getSession();
                 if (!session?.access_token) {
                     throw new Error('Sessão não estabelecida após cadastro.');
                 }

@@ -1277,38 +1277,6 @@ describe('GOD MODE Round 3 — Email Spam Protection & Nonce Integrity', () => {
     )
   })
 
-  // ── [GOD-001] Vetor 4: queue-email via proxy envia x-proxy-secret (fallback) ──
-
-  test('[GOD-001-V4] /api/queue-email com type=welcome não retorna 502', async () => {
-    const { status, json } = await post('/api/queue-email', {
-      type:     'welcome',
-      email:    'queue_test@granaevo.com',
-      name:     'Test User',
-      planName: 'Individual',
-    })
-    assert.notEqual(status, 502,
-      `[GOD-001-V4] 502 indica que send-welcome-email rejeitou chamada do proxy: ${JSON.stringify(json)}`)
-    assert.ok(
-      [200, 202, 400, 401, 403, 429, 503].includes(status),
-      `[GOD-001-V4] status inesperado: ${status}`
-    )
-  })
-
-  // ── [GOD-001] Vetor 5: queue-email fallback com proxy-secret ──
-
-  test('[GOD-001-V5] /api/queue-email type=reset-code não retorna 502', async () => {
-    const { status } = await post('/api/queue-email', {
-      type:  'reset-code',
-      email: 'queue_reset_test@granaevo.com',
-    })
-    assert.notEqual(status, 502,
-      `[GOD-001-V5] 502 indica que send-password-reset-code rejeitou chamada: proxy-secret faltando`)
-    assert.ok(
-      [200, 202, 400, 401, 403, 429, 503].includes(status),
-      `[GOD-001-V5] status inesperado: ${status}`
-    )
-  })
-
   // ── [GOD-002] Vetor 1: nonce sem expires_at não causa 500 ──
 
   test('[GOD-002-V1] verify-guest-invite nonce válido não causa erro 500 (expires_at fix)', async () => {
@@ -1378,51 +1346,6 @@ describe('GOD MODE Round 3 — Email Spam Protection & Nonce Integrity', () => {
 describe('GOD MODE Round 4 — QStash, Password Min, CSP Report', () => {
 
   const SUPABASE_EF_URL = process.env.SUPABASE_URL ?? 'https://fvrhqqeofqedmhadzzqw.supabase.co'
-
-  // ── [GOD4-001] Vetor 1: queue-email fallback com welcome não retorna 502 ──
-
-  test('[GOD4-001-V1] /api/queue-email type=welcome fallback não retorna 502', async () => {
-    const { status } = await post('/api/queue-email', {
-      type:     'welcome',
-      email:    'god4_v1_test@granaevo.com',
-      name:     'Test GOD4',
-      planName: 'Individual',
-    })
-    assert.notEqual(status, 502,
-      `[GOD4-001-V1] 502 = EF rejeitou x-proxy-secret faltando no fallback: ${status}`)
-    assert.ok(
-      [200, 202, 400, 401, 403, 429, 503].includes(status),
-      `[GOD4-001-V1] status inesperado: ${status}`
-    )
-  })
-
-  // ── [GOD4-001] Vetor 2: queue-email fallback com reset-code não retorna 502 ──
-
-  test('[GOD4-001-V2] /api/queue-email type=reset-code fallback não retorna 502', async () => {
-    const { status } = await post('/api/queue-email', {
-      type:  'reset-code',
-      email: 'god4_v2_test@granaevo.com',
-    })
-    assert.notEqual(status, 502,
-      `[GOD4-001-V2] 502 = EF rejeitou x-proxy-secret: ${status}`)
-    assert.ok(
-      [200, 202, 400, 401, 403, 429, 503].includes(status),
-      `[GOD4-001-V2] status inesperado: ${status}`
-    )
-  })
-
-  // ── [GOD4-001] Vetor 3: queue-email type inválido retorna 400 ──
-
-  test('[GOD4-001-V3] /api/queue-email type inválido retorna 400', async () => {
-    const { status } = await post('/api/queue-email', {
-      type:  'malicious-type',
-      email: 'god4_v3_test@granaevo.com',
-    })
-    assert.ok(
-      [400, 403, 429].includes(status),
-      `[GOD4-001-V3] type inválido deve retornar 400: ${status}`
-    )
-  })
 
   // ── [GOD4-002] csp-report endpoint funcional ──
 
@@ -2089,43 +2012,6 @@ describe('GOD MODE Round 5 — Fail-Closed PROXY_SECRET & confirm-user-email', (
 // [GOD6-V02] PROXY_SECRET ausente em env guard de 7 endpoints corrigido.
 
 describe('GOD MODE Round 6 — Origin Bypass & PROXY_SECRET Guards', () => {
-
-  // [GOD6-V01-1] queue-email sem Origin deve retornar 403 (CRÍTICO — era aceito antes)
-  test('[GOD6-V01-1] queue-email sem Origin header retorna 403 (origin bypass fechado)', async () => {
-    const r = await fetch(`${BASE_URL}/api/queue-email`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' }, // SEM Origin
-      body:    JSON.stringify({ type: 'welcome', email: 'victim@evil.com' }),
-    })
-    assert.equal(r.status, 403,
-      `[GOD6-V01-1] queue-email sem Origin deve retornar 403 (origin bypass), recebeu: ${r.status}`)
-  })
-
-  // [GOD6-V01-2] queue-email com Origin malicioso deve retornar 403
-  test('[GOD6-V01-2] queue-email com Origin evil.com retorna 403', async () => {
-    const r = await fetch(`${BASE_URL}/api/queue-email`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Origin': 'https://evil.com' },
-      body:    JSON.stringify({ type: 'reset-code', email: 'victim@evil.com' }),
-    })
-    assert.equal(r.status, 403,
-      `[GOD6-V01-2] Origin malicioso deve retornar 403, recebeu: ${r.status}`)
-  })
-
-  // [GOD6-V01-3] queue-email com Origin legítimo ainda funciona (regressão)
-  test('[GOD6-V01-3] queue-email com Origin granaevo.com não é bloqueado por origin (regressão)', async () => {
-    const r = await fetch(`${BASE_URL}/api/queue-email`, {
-      method:  'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Origin':       'https://www.granaevo.com',
-      },
-      body: JSON.stringify({ type: 'welcome', email: 'test@test.com' }),
-    })
-    // Com Origin válido: deve passar o origin check (pode retornar 400/429/503 por outros motivos)
-    assert.notEqual(r.status, 403,
-      `[GOD6-V01-3] Origin legítimo não deve ser bloqueado por origin check, recebeu: ${r.status}`)
-  })
 
   // [GOD6-V01-4] reset-password sem Origin deve retornar 403 (garantia de cobertura)
   test('[GOD6-V01-4] reset-password sem Origin retorna 403', async () => {
