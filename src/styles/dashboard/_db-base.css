@@ -1,8 +1,8 @@
 ﻿/* Design tokens â€” fonte Ãºnica de verdade para cores, espaÃ§amento e tipografia */
 @import '../_tokens.css';
 
-/* Font Awesome self-hosted via npm â€” sem dependÃªncia de CDN externo */
-@import '@fortawesome/fontawesome-free/css/all.min.css';
+/* Font Awesome — subset gerado (só ícones usados). Ver scripts/build-fa-subset.mjs */
+@import '../vendor/fontawesome-subset.css';
 
 /* ==============================================
    GRANAEVO - CSS COMPLETO E RESPONSIVO

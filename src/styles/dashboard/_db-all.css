@@ -2,7 +2,7 @@
 @import '../_tokens.css';
 
 /* Font Awesome self-hosted via npm â€” sem dependÃªncia de CDN externo */
-@import '@fortawesome/fontawesome-free/css/all.min.css';
+@import '../vendor/fontawesome-subset.css';
 
 /* Tema claro â€” overrides de componentes com cores hardcoded */
 @import './_db-light-theme.css';

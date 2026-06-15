@@ -6,7 +6,10 @@
   "packageManager": "npm@10.4.0",
   "scripts": {
     "dev": "vite",
+    "fa:subset": "node scripts/build-fa-subset.mjs",
+    "prebuild": "node scripts/build-fa-subset.mjs",
     "build": "vite build",
+    "postbuild": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
