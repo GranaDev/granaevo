@@ -611,12 +611,23 @@ async function checkUserAccess() {
 // ═══════════════════════════════════════════════════════════════
 //  LOADING SCREEN
 // ═══════════════════════════════════════════════════════════════
-window.addEventListener('load', () => {
+function hideLoginLoadingScreen() {
     const loadingScreen = document.getElementById('loadingScreen');
-    if (loadingScreen) {
-        setTimeout(() => loadingScreen.classList.add('hidden'), 1200);
-    }
-});
+    if (!loadingScreen) return;
+    loadingScreen.classList.add('hidden');
+    // Remove do DOM após a transição CSS — não bloqueia o layout
+    loadingScreen.addEventListener('transitionend', () => loadingScreen.remove(), { once: true });
+    // Fallback caso transitionend não dispare
+    setTimeout(() => loadingScreen?.remove(), 800);
+}
+
+// Esconde assim que a página estiver pronta — sem atraso artificial.
+// requestAnimationFrame garante que o browser pintou antes do fade-out.
+if (document.readyState === 'complete') {
+    requestAnimationFrame(hideLoginLoadingScreen);
+} else {
+    window.addEventListener('load', () => requestAnimationFrame(hideLoginLoadingScreen));
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  REDIRECIONAMENTO PÓS-LOGIN
@@ -693,7 +704,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             const entry = _AUTH_REDIRECT_MSGS[redirectCode];
             if (entry) {
                 showAuthMessage(entry.msg, entry.type);
-                if (entry.redirect) setTimeout(() => window.location.replace(entry.redirect), 2500);
+                if (entry.redirect) setTimeout(() => window.location.replace(entry.redirect), 1800);
             }
         }
     } catch {}
@@ -825,7 +836,7 @@ loginForm?.addEventListener('submit', async (e) => {
                 showAuthMessage('Serviço temporariamente indisponível. Tente novamente em instantes.', 'error');
             } else {
                 showAuthMessage('Você precisa de um plano ativo para acessar o sistema.', 'error');
-                setTimeout(() => window.location.replace('planos.html'), 2500);
+                setTimeout(() => window.location.replace('planos.html'), 1800);
             }
             return;
         }
@@ -836,7 +847,8 @@ loginForm?.addEventListener('submit', async (e) => {
         const userName = sanitizeText(data.user?.user_metadata?.name || 'Usuário');
         showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
         const nextPage = getNextRedirect() ?? 'dashboard.html';
-        setTimeout(() => window.location.replace(nextPage), 1500);
+        // Caminho feliz: tempo curto só para registrar o "bem-vindo" sem travar a entrada.
+        setTimeout(() => window.location.replace(nextPage), 800);
 
     } catch {
         // Erro de rede — não penaliza o usuário

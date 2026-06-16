@@ -1267,7 +1267,11 @@ async function verificarLogin() {
                 if (idx !== -1) {
                     _log.info('[VERIFICAR LOGIN] Restaurando perfil salvo:', idSalvo);
                     perfilRestaurado = true;
-                    await entrarNoPerfil(idx);
+                    // Mantém o MESMO loader (authLoading) visível durante o boot —
+                    // só atualiza o texto. silent:true evita o segundo overlay empilhado.
+                    const lt = document.getElementById('loaderText');
+                    if (lt) lt.textContent = 'Carregando seus dados...';
+                    await entrarNoPerfil(idx, { silent: true });
                 }
             }
         } catch (_) {}
@@ -1420,8 +1424,10 @@ function atualizarTelaPerfis() {
 }
 
 
-async function entrarNoPerfil(index) {
-    const profileLoading = document.getElementById('profileLoading');
+async function entrarNoPerfil(index, { silent = false } = {}) {
+    // silent: usado no boot quando o authLoading já está visível — evita empilhar
+    // um segundo overlay (sensação de "carregar duas vezes").
+    const profileLoading = silent ? null : document.getElementById('profileLoading');
 
     if (!Number.isInteger(index) || index < 0 || index >= usuarioLogado.perfis.length) {
         _log.error('PERFIL_IDX_001', `Índice inválido: ${index}`);
