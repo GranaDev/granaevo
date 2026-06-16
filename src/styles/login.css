@@ -52,6 +52,8 @@
        e só existia para compensar o conflito que agora não existe mais).
    ========================================== */
 
+/* Fontes self-hosted — ver scripts/build-fonts-subset.mjs */
+@import './_fonts.css';
 /* Tokens globais — fonte única de verdade para cores, espaçamento e tipografia */
 @import './_tokens.css';
 

@@ -1,8 +1,4 @@
-/* Self-hosted Inter via @fontsource/inter — sem dependência de Google Fonts CDN */
-@import '@fontsource/inter/300.css';
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/inter/700.css';
-@import '@fontsource/inter/800.css';
-@import '@fontsource/inter/900.css';
+/* Fontes self-hosted (Inter, DM Sans, Syne, Outfit) — subset gerado por
+   scripts/build-fonts-subset.mjs: woff2-only, apenas latin + latin-ext,
+   somente os pesos usados. Sem dependência de Google Fonts CDN. */
+@import './vendor/fonts-subset.css';

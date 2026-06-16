@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
-    <meta name="description" content="Controle suas finanças com inteligência. O GranaEvo é o app que transforma sua relação com o dinheiro.">
+    <meta name="description" content="App de controle financeiro pessoal para organizar gastos, cartões e metas — sem conectar sua conta bancária. Para você, casal ou família. 7 dias de garantia.">
     <meta name="theme-color" content="#10b981">
 
     <!--
@@ -99,6 +99,133 @@
     -->
 
     <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
+
+    <!-- ============================================================
+         SEO + SOCIAL SHARING
+         ────────────────────────────────────────────────────────────
+         canonical evita conteúdo duplicado (www/não-www, com/sem barra).
+         Open Graph + Twitter Cards: preview bonito ao compartilhar o
+         link no WhatsApp/Instagram/Telegram — crítico para crescimento
+         por indicação.
+
+         IMAGEM OG: hoje aponta para o logo (granaevo-logo.jpg) para o
+         preview já FUNCIONAR. Para resultado ideal, criar um banner
+         dedicado de 1200×630 (ex: /assets/icons/og-image.png) com
+         título + mockup do app e trocar a URL abaixo (og:image e
+         twitter:image). Ao trocar, adicionar também:
+           <meta property="og:image:width" content="1200">
+           <meta property="og:image:height" content="630">
+         ============================================================ -->
+    <link rel="canonical" href="https://www.granaevo.com/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="GranaEvo">
+    <meta property="og:locale" content="pt_BR">
+    <meta property="og:url" content="https://www.granaevo.com/">
+    <meta property="og:title" content="GranaEvo — Controle financeiro sem entregar seus dados ao banco">
+    <meta property="og:description" content="Organize gastos, cartões e metas em um só lugar — sem conectar sua conta bancária. Para você, casal ou família. Comece com 7 dias de garantia.">
+    <meta property="og:image" content="https://www.granaevo.com/assets/icons/granaevo-logo.jpg">
+    <meta property="og:image:alt" content="GranaEvo — app de controle financeiro pessoal">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="GranaEvo — Controle financeiro sem entregar seus dados ao banco">
+    <meta name="twitter:description" content="Organize gastos, cartões e metas em um só lugar — sem conectar sua conta bancária. Para você, casal ou família. Comece com 7 dias de garantia.">
+    <meta name="twitter:image" content="https://www.granaevo.com/assets/icons/granaevo-logo.jpg">
+
+    <!--
+        JSON-LD structured data (Organization + SoftwareApplication + FAQPage).
+        <script type="application/ld+json"> é um DATA BLOCK, não executável —
+        NÃO é bloqueado pelo script-src da CSP nem pelo Trusted Types.
+        FAQPage habilita rich snippets (FAQ expansível direto na busca do Google).
+        Sem aggregateRating de propósito: não inventamos nota/reviews.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://www.granaevo.com/#organization",
+          "name": "GranaEvo",
+          "url": "https://www.granaevo.com/",
+          "logo": "https://www.granaevo.com/assets/icons/granaevo-logo.jpg",
+          "email": "suporte@granaevo.com",
+          "slogan": "Sua evolução financeira começa aqui"
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://www.granaevo.com/#app",
+          "name": "GranaEvo",
+          "applicationCategory": "FinanceApplication",
+          "operatingSystem": "Web, iOS, Android",
+          "url": "https://www.granaevo.com/",
+          "description": "App de controle financeiro pessoal para organizar gastos, cartões e metas sem conectar a conta bancária. Planos para uso individual, casal e família.",
+          "publisher": { "@id": "https://www.granaevo.com/#organization" },
+          "offers": {
+            "@type": "AggregateOffer",
+            "priceCurrency": "BRL",
+            "lowPrice": "19.99",
+            "highPrice": "54.99",
+            "offerCount": "3"
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://www.granaevo.com/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "O GranaEvo funciona no celular?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Sim! O GranaEvo é 100% responsivo e funciona perfeitamente em celulares, tablets e computadores — sem precisar instalar nada."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Como funciona a assinatura?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "A cobrança é mensal e automática. Você pode cancelar a qualquer momento pelo painel, sem multa nem burocracia. O acesso continua até o fim do período pago."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Meus dados financeiros estão seguros?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Absolutamente. Usamos criptografia AES-256, autenticação segura e nunca compartilhamos seus dados com terceiros. Conformidade total com a LGPD."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Posso usar com meu cônjuge ou família?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Sim! Temos planos Casal (2 perfis) e Família (4 perfis). Cada membro tem seu controle individual, com visão compartilhada das finanças da casa."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Há garantia de reembolso?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Sim. Garantia de 7 dias em cada cobrança mensal. Se não gostar por qualquer motivo, devolvemos 100% do valor — sem perguntas."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Posso trocar de plano depois?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Sim! Você pode fazer upgrade do plano a qualquer momento, pagando apenas a diferença. O downgrade entra em vigor no próximo ciclo."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
 
     <!-- Fonts: Inter auto-importado via landingpage.css → _fonts.css (@fontsource/inter) -->
 
@@ -220,17 +347,18 @@
                 <div class="hero-text" data-parallax="0.1">
                     <div class="badge" role="note">
                         <span class="pulse-dot" aria-hidden="true"></span>
-                        <span>Revolucionando o Controle Financeiro</span>
+                        <span>Sem conectar seu banco · Seus dados são só seus</span>
                     </div>
 
                     <h1 class="hero-title" id="hero-title">
-                        Domine Suas Finanças<br>
-                        <span class="gradient-text">Com Inteligência</span>
+                        Para onde foi<br>
+                        <span class="gradient-text">o seu dinheiro?</span>
                     </h1>
 
                     <p class="hero-description">
-                        Controle total de gastos, metas inteligentes e análises em tempo real.
-                        Transforme seus hábitos financeiros em 30 dias.
+                        O GranaEvo organiza seus gastos, cartões e metas em um só lugar —
+                        sem conectar sua conta bancária e sem entregar seus dados.
+                        Em 30 dias você muda sua relação com o dinheiro.
                     </p>
 
                     <div class="hero-buttons">
@@ -248,6 +376,8 @@
                             <span>Login</span>
                         </a>
                     </div>
+
+                    <span class="cta-note">A partir de R$ 19,99/mês · Cancele quando quiser · 7 dias de garantia</span>
 
                 </div>
 
@@ -529,8 +659,8 @@
                             <path d="M7 11V7C7 4.79086 8.79086 3 11 3H13C15.2091 3 17 4.79086 17 7V11" stroke="currentColor" stroke-width="2"/>
                         </svg>
                     </div>
-                    <h3>100% Seguro</h3>
-                    <p>Seus dados são criptografados e nunca compartilhados com terceiros.</p>
+                    <h3>Privacidade de Verdade</h3>
+                    <p>Diferente de outros apps, o GranaEvo não conecta sua conta bancária. Seus dados são criptografados (AES-256), seguem a LGPD e nunca são vendidos.</p>
                 </div>
 
                 <div class="feature-card" data-tilt>
@@ -679,15 +809,15 @@
         <div class="container">
             <div class="cta-box">
                 <div class="cta-content">
-                    <h2 id="cta-title">Pronto para transformar suas finanças?</h2>
-                    <p>Junte-se a milhares de pessoas que já organizaram sua vida financeira</p>
+                    <h2 id="cta-title">Comece hoje a saber para onde vai o seu dinheiro</h2>
+                    <p>Teste sem risco: se não gostar nos primeiros 7 dias, devolvemos 100% do valor — sem perguntas.</p>
                     <a href="planos.html" class="btn-primary btn-large">
-                        <span>Começar Agora!!</span>
+                        <span>Quero ter controle</span>
                         <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
                             <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </a>
-                    <span class="cta-note">✓ Assine e cancele quando quiser · Garantia de 7 dias</span>
+                    <span class="cta-note">A partir de R$ 19,99/mês · Cancele quando quiser · Sem conectar seu banco</span>
                 </div>
             </div>
         </div>

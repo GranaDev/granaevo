@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "fa:subset": "node scripts/build-fa-subset.mjs",
-    "prebuild": "node scripts/build-fa-subset.mjs",
+    "fonts:subset": "node scripts/build-fonts-subset.mjs",
+    "prebuild": "node scripts/build-fa-subset.mjs && node scripts/build-fonts-subset.mjs",
     "build": "vite build",
     "postbuild": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview"
@@ -20,9 +21,13 @@
     "workbox-window": "^7.4.1"
   },
   "devDependencies": {
+    "@fontsource/dm-sans": "^5.2.8",
     "@fontsource/inter": "^5.2.8",
+    "@fontsource/outfit": "^5.2.8",
+    "@fontsource/syne": "^5.2.7",
     "esbuild": "^0.28.0",
     "rollup-plugin-visualizer": "^7.0.1",
+    "sharp": "^0.35.1",
     "terser": "^5.31.0",
     "vite": "^8.0.10",
     "vite-plugin-pwa": "^1.3.0"

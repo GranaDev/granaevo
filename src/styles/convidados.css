@@ -1,3 +1,5 @@
+/* Fontes self-hosted (Outfit usado aqui) — ver scripts/build-fonts-subset.mjs */
+@import './_fonts.css';
 /* Font Awesome — subset gerado (só ícones usados). Ver scripts/build-fa-subset.mjs */
 @import './vendor/fontawesome-subset.css';
 

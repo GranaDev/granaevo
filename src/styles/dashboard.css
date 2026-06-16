@@ -5,4 +5,5 @@
  * Os módulos individuais (src/styles/dashboard/) estão disponíveis
  * para referência e edição futura.
  */
+@import './_fonts.css';
 @import './dashboard/_db-all.css';

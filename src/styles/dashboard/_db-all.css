@@ -4,6 +4,8 @@
 /* Font Awesome self-hosted via npm â€” sem dependÃªncia de CDN externo */
 @import '../vendor/fontawesome-subset.css';
 
+/* Fontes self-hosted: importadas pela CSS de entrada (dashboard.css → _fonts.css). */
+
 /* Tema claro â€” overrides de componentes com cores hardcoded */
 @import './_db-light-theme.css';
 
