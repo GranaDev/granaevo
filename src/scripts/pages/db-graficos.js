@@ -1,5 +1,11 @@
 // db-graficos.js — Seção de Gráficos (lazy-loaded)
 let _ctx = null;
+let _carregando = false;
+
+// graficos.js (a engine de gráficos, ~92 KB) também é classic script servido de
+// public/. Antes carregava EAGER no HTML em toda visita ao dashboard. Agora é
+// injetado aqui, sob demanda, junto do Chart.js — só quando a aba Gráficos abre.
+const _GRAFICOS_SRC = '/scripts/modules/graficos.js?v=2';
 
 export function init(ctx) {
     _ctx = ctx;
@@ -9,41 +15,59 @@ export function init(ctx) {
     inicializarGraficos();
 }
 
-// ========== GRÁFICOS - DELEGA PARA graficos.js ==========
-// graficos.js é carregado no HTML e inicializa via DOMContentLoaded.
-// Aqui apenas garantimos que Chart.js (CDN ~500KB) esteja disponível
-// antes de o usuário tentar gerar gráficos.
-// _chartJsCarregado, _chartJsCarregando, _CHARTJS_SRC e _CHARTJS_INTEGRITY
-// são estado/constantes de dashboard.js, acessíveis via _ctx.
+// ========== GRÁFICOS - CARGA SOB DEMANDA ==========
+// Carrega Chart.js (~200KB) e graficos.js (~92KB) só quando necessário, na ordem
+// correta, e então dispara a inicialização da UI de gráficos (graficos.js expõe
+// window.inicializarGraficos como global por ser classic script).
+// Como graficos.js agora carrega DEPOIS do DOMContentLoaded, seu auto-init via
+// evento não dispara — por isso o chamamos explicitamente aqui.
 
-function inicializarGraficos() {
-    // Se Chart.js já está disponível (carregado em sessão anterior ou pelo HTML), nada a fazer.
-    if (typeof Chart !== 'undefined') {
+function _carregarScript(src, integrity) {
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        if (integrity) {
+            s.integrity      = integrity;
+            s.crossOrigin    = 'anonymous';
+            s.referrerPolicy = 'no-referrer';
+        }
+        s.onload  = () => resolve();
+        s.onerror = () => reject(new Error('Falha ao carregar ' + src));
+        document.head.appendChild(s);
+    });
+}
+
+async function inicializarGraficos() {
+    // Já tudo carregado: só re-renderiza a UI (re-entrância é segura — guards internos).
+    if (typeof Chart !== 'undefined' && window.GraficosGranaEvo) {
         _ctx._chartJsCarregado = true;
+        if (typeof window.inicializarGraficos === 'function') window.inicializarGraficos();
         return;
     }
+    if (_carregando) return;
+    _carregando = true;
 
-    if (_ctx._chartJsCarregado || _ctx._chartJsCarregando) return;
+    try {
+        // 1) Chart.js primeiro (graficos.js configura Chart.defaults no init).
+        if (typeof Chart === 'undefined') {
+            await _carregarScript(_ctx._CHARTJS_SRC, _ctx._CHARTJS_INTEGRITY);
+        }
+        _ctx._chartJsCarregado = true;
 
-    _ctx._chartJsCarregando = true;
+        // 2) graficos.js (engine). Sem SRI — mesmo origin, coberto por script-src 'self'.
+        if (!window.GraficosGranaEvo) {
+            await _carregarScript(_GRAFICOS_SRC);
+        }
 
-    const chartScript          = document.createElement('script');
-    chartScript.src            = _ctx._CHARTJS_SRC;
-    chartScript.integrity      = _ctx._CHARTJS_INTEGRITY;
-    chartScript.crossOrigin    = 'anonymous';
-    chartScript.referrerPolicy = 'no-referrer';
-
-    chartScript.onload = () => {
-        _ctx._chartJsCarregado  = true;
-        _ctx._chartJsCarregando = false;
-    };
-
-    chartScript.onerror = () => {
-        _ctx._chartJsCarregando = false;
-        _ctx.mostrarNotificacao('Erro ao carregar Chart.js. Verifique a conexão e tente novamente.', 'error');
-    };
-
-    document.head.appendChild(chartScript);
+        // 3) Inicializa filtros/botões/handlers da UI de gráficos.
+        if (typeof window.inicializarGraficos === 'function') {
+            window.inicializarGraficos();
+        }
+    } catch (e) {
+        _ctx.mostrarNotificacao('Erro ao carregar os gráficos. Verifique a conexão e tente novamente.', 'error');
+    } finally {
+        _carregando = false;
+    }
 }
 
 function atualizarGraficos() {

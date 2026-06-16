@@ -1,0 +1,94 @@
+/* Extraído de _db-all.css — carregado lazy pela página correspondente. NÃO editar à mão. */
+/* ================================================================
+   RELATÃ“RIOS â€” DESKTOP (min-width: 769px)
+   Mobile intocÃ¡vel â€” todas as regras aqui sÃ£o min-width only
+   ================================================================ */
+@media (min-width: 769px) {
+    /* Centraliza e limita largura da pÃ¡gina */
+    #relatoriosPage {
+        max-width: 1040px;
+        margin: 0 auto;
+    }
+
+    /* â”€â”€ Filtros: layout horizontal em linha â”€â”€ */
+    .rel-filtros {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: flex-end !important;
+        flex-wrap: wrap !important;
+        gap: 14px !important;
+        padding: 20px 22px !important;
+    }
+
+    /* Tabs de tipo: ficam na mesma linha, nÃ£o ocupam 100% */
+    .rel-tipo-tabs {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* Selector de perfil (casal/famÃ­lia): inline */
+    .rel-perfil-selector {
+        flex: 0 0 180px;
+        margin-bottom: 0 !important;
+    }
+
+    /* Period row: vira flex row inline */
+    .rel-period-row {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 10px !important;
+        margin-bottom: 0 !important;
+        flex: 0 0 auto !important;
+    }
+
+    /* BotÃ£o gerar: auto width */
+    #btnGerarRelatorio {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        padding-left: 24px !important;
+        padding-right: 24px !important;
+    }
+
+    /* â”€â”€ KPI: 3 colunas no desktop â”€â”€ */
+    .rel-kpi-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 12px !important;
+    }
+
+    /* â”€â”€ Resultado: 2 colunas para as sections â”€â”€ */
+    #relatorioResultado {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        align-items: start;
+    }
+
+    /* Header do relatÃ³rio e KPI grid: span completo */
+    #relatorioResultado .rel-report-header,
+    #relatorioResultado .rel-kpi-grid {
+        grid-column: 1 / -1;
+    }
+
+    /* Ãšltima section (TransaÃ§Ãµes) tambÃ©m span completo */
+    #relatorioResultado .rel-section:last-child {
+        grid-column: 1 / -1;
+    }
+
+    /* â”€â”€ Cards de crÃ©dito: 2 por linha â”€â”€ */
+    #listaCartoesRelatorio {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    /* Cards summary: 4 cols no desktop */
+    .rel-cards-summary {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+
+    /* Bills chips: garantir 4 cols */
+    .rel-bills-chips {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+}

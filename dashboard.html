@@ -1045,9 +1045,9 @@
 
     <!-- Scripts do Sistema -->
     <script type="module" src="src/scripts/pages/dashboard.js?v=27"></script>
-    <!-- graficos.js — classic script (não usa import/export), servido de public/ -->
-    <!-- Chart.js (~500KB) é carregado sob demanda em inicializarGraficos() -->
-    <script src="/scripts/modules/graficos.js?v=2"></script>
+    <!-- graficos.js (92 KB) + Chart.js (~200 KB) são carregados SOB DEMANDA por
+         db-graficos.js apenas quando o usuário abre a aba Gráficos. Antes,
+         graficos.js carregava eager em toda visita ao dashboard. -->
 
 </body>
 </html>

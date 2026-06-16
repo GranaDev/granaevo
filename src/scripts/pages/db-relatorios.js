@@ -1,4 +1,7 @@
 ﻿// db-relatorios.js — Seção de Relatórios (lazy-loaded)
+// CSS desktop-only (min-width:769px) viaja neste chunk lazy — mobile não baixa
+// essas regras (saíram do dashboard.css eager).
+import '../../styles/dashboard/_db-reports-desktop-lazy.css';
 import { dataManager } from '../modules/data-manager.js?v=8';
 let _ctx = null;
 

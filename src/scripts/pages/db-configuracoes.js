@@ -1,4 +1,6 @@
 // db-configuracoes.js — Seção de Configurações (lazy-loaded)
+// CSS desktop-only (min-width:769px) viaja neste chunk lazy — mobile não baixa.
+import '../../styles/dashboard/_db-config-desktop-lazy.css';
 import { supabase } from '../services/supabase-client.js?v=2';
 import { iniciarTutorial } from '../modules/tutorial.js';
 import { initPWA, initInstallButton } from '../modules/pwa-installer.js';

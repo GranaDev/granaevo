@@ -137,10 +137,9 @@ export default defineConfig(({ mode }) => ({
       },
       output: {
         manualChunks: (id) => {
-          // Chart.js em chunk próprio — compartilhado entre dashboard, graficos, relatorios
-          if (id.includes('node_modules/chart.js')) {
-            return 'vendor-charts';
-          }
+          // Chart.js NÃO entra aqui: é servido como UMD self-hosted de
+          // public/scripts/vendor/chart.umd.min.js (carregado sob demanda por
+          // db-graficos.js). Nunca é importado como ESM — sem chunk vendor-charts.
           // Supabase SDK em chunk próprio — cacheado separado entre páginas.
           // supabase-client.js entra junto para evitar chunk de 0.6 kB que pode 404.
           if (
@@ -193,9 +192,10 @@ export default defineConfig(({ mode }) => ({
     cssMinify: 'esbuild',
   },
 
-  // Otimiza dependências internas do dev server (pre-bundling)
+  // Otimiza dependências internas do dev server (pre-bundling).
+  // chart.js NÃO entra: é UMD self-hosted (public/), nunca importado como ESM.
   optimizeDeps: {
-    include: ['@supabase/supabase-js', 'chart.js'],
+    include: ['@supabase/supabase-js'],
   },
 
   server: {
