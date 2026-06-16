@@ -1,0 +1,9 @@
+/* TIME / TEAM */
+    Produto: GranaEvo — evolução financeira pessoal
+    Contato: suporte@granaevo.com
+    Site: https://www.granaevo.com
+
+/* TECNOLOGIA / TECHNOLOGY */
+    HTML5, CSS3, JavaScript (vanilla), Vite
+    Supabase, Vercel, Cloudflare
+    Idioma: pt-BR

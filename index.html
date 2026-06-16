@@ -100,6 +100,140 @@
 
     <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
 
+    <!-- ============================================================
+         SEO / SOCIAL / STRUCTURED DATA
+         Domínio canônico: https://www.granaevo.com
+         NOTA: og:image é buscada pelos crawlers (WhatsApp/Facebook)
+         server-side — não passa pelo CSP img-src. URLs absolutas.
+         O bloco JSON-LD (type="application/ld+json") é bloco de DADOS,
+         não script executável → não é bloqueado pelo script-src/Trusted Types.
+    ============================================================ -->
+    <link rel="canonical" href="https://www.granaevo.com/">
+
+    <!-- Open Graph (WhatsApp, Facebook, LinkedIn, Telegram) -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="GranaEvo">
+    <meta property="og:locale" content="pt_BR">
+    <meta property="og:url" content="https://www.granaevo.com/">
+    <meta property="og:title" content="GranaEvo — Domine Suas Finanças Com Inteligência">
+    <meta property="og:description" content="O app que transforma sua relação com o dinheiro: controle de gastos, metas e relatórios. Para você, casal ou família. Garantia de 7 dias.">
+    <meta property="og:image" content="https://www.granaevo.com/assets/og/og-granaevo.jpg">
+    <meta property="og:image:secure_url" content="https://www.granaevo.com/assets/og/og-granaevo.jpg">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="GranaEvo — controle financeiro inteligente">
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="GranaEvo — Domine Suas Finanças Com Inteligência">
+    <meta name="twitter:description" content="O app que transforma sua relação com o dinheiro: controle de gastos, metas e relatórios. Garantia de 7 dias.">
+    <meta name="twitter:image" content="https://www.granaevo.com/assets/og/og-granaevo.jpg">
+    <meta name="twitter:image:alt" content="GranaEvo — controle financeiro inteligente">
+
+    <!-- JSON-LD: Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "GranaEvo",
+      "url": "https://www.granaevo.com/",
+      "logo": "https://www.granaevo.com/assets/icons/granaevo-logo.jpg",
+      "email": "suporte@granaevo.com",
+      "description": "Aplicativo de controle financeiro pessoal para indivíduos, casais e famílias.",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "suporte@granaevo.com",
+        "contactType": "customer support",
+        "availableLanguage": ["Portuguese"]
+      }
+    }
+    </script>
+
+    <!-- JSON-LD: WebSite (+ SearchAction / sitelinks searchbox) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "GranaEvo",
+      "url": "https://www.granaevo.com/",
+      "inLanguage": "pt-BR",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://www.granaevo.com/?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
+    <!-- JSON-LD: SoftwareApplication
+         aggregateRating NÃO incluído de propósito — o Google penaliza
+         nota inventada (JSON-LD não aceita comentários, então não há
+         placeholder no bloco). Quando houver avaliações REAIS, adicione
+         dentro do objeto, após "offers":
+           "aggregateRating": { "@type": "AggregateRating",
+             "ratingValue": "4.8", "reviewCount": "127" } -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "GranaEvo",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web, iOS, Android",
+      "url": "https://www.granaevo.com/",
+      "description": "Controle financeiro pessoal com dashboard, metas, relatórios e perfis para casal e família. Conformidade com a LGPD e criptografia AES-256.",
+      "inLanguage": "pt-BR",
+      "offers": [
+        { "@type": "Offer", "name": "Individual", "price": "19.99", "priceCurrency": "BRL", "category": "subscription" },
+        { "@type": "Offer", "name": "Casal", "price": "34.99", "priceCurrency": "BRL", "category": "subscription" },
+        { "@type": "Offer", "name": "Família", "price": "54.99", "priceCurrency": "BRL", "category": "subscription" }
+      ]
+    }
+    </script>
+
+    <!-- JSON-LD: FAQPage (rich snippet do FAQ no Google) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "O GranaEvo funciona no celular?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Sim! O GranaEvo é 100% responsivo e funciona perfeitamente em celulares, tablets e computadores — sem precisar instalar nada." }
+        },
+        {
+          "@type": "Question",
+          "name": "Como funciona a assinatura?",
+          "acceptedAnswer": { "@type": "Answer", "text": "A cobrança é mensal e automática. Você pode cancelar a qualquer momento pelo painel, sem multa nem burocracia. O acesso continua até o fim do período pago." }
+        },
+        {
+          "@type": "Question",
+          "name": "Meus dados financeiros estão seguros?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Absolutamente. Usamos criptografia AES-256, autenticação segura e nunca compartilhamos seus dados com terceiros. Conformidade total com a LGPD." }
+        },
+        {
+          "@type": "Question",
+          "name": "Posso usar com meu cônjuge ou família?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Sim! Temos planos Casal (2 perfis) e Família (4 perfis). Cada membro tem seu controle individual, com visão compartilhada das finanças da casa." }
+        },
+        {
+          "@type": "Question",
+          "name": "Há garantia de reembolso?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Sim. Garantia de 7 dias em cada cobrança mensal. Se não gostar por qualquer motivo, devolvemos 100% do valor — sem perguntas." }
+        },
+        {
+          "@type": "Question",
+          "name": "Posso trocar de plano depois?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Sim! Você pode fazer upgrade do plano a qualquer momento, pagando apenas a diferença. O downgrade entra em vigor no próximo ciclo." }
+        }
+      ]
+    }
+    </script>
+
     <!-- Fonts: Inter auto-importado via landingpage.css → _fonts.css (@fontsource/inter) -->
 
     <!-- CSS local -->
