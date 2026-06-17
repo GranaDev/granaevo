@@ -1,11 +1,19 @@
 // db-graficos.js — Seção de Gráficos (lazy-loaded)
+// CSS dos gráficos (~28 KB) acoplado a este chunk: o Vite só o baixa quando a
+// aba Gráficos abre. Antes era <link> render-blocking no <head> do dashboard,
+// embora o Chart.js e a engine de gráficos já fossem carregados sob demanda.
+import '../../styles/graficos.css';
+
 let _ctx = null;
 let _carregando = false;
 
 // graficos.js (a engine de gráficos, ~92 KB) também é classic script servido de
 // public/. Antes carregava EAGER no HTML em toda visita ao dashboard. Agora é
 // injetado aqui, sob demanda, junto do Chart.js — só quando a aba Gráficos abre.
-const _GRAFICOS_SRC = '/scripts/modules/graficos.js?v=2';
+// FONTE ÚNICA: public/scripts/modules/graficos.js (não há mais cópia em src/ —
+// a duplicata divergia e servia cores de tema escuro no tema claro). Ao editar
+// a engine, suba o ?v= abaixo para invalidar o cache do navegador.
+const _GRAFICOS_SRC = '/scripts/modules/graficos.js?v=3';
 
 export function init(ctx) {
     _ctx = ctx;

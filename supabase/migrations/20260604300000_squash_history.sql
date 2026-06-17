@@ -2,7 +2,8 @@
 -- GranaEvo — Migration: Squash do histórico de migrations
 --
 -- Contexto:
---   47 migrations de April-May 2026 foram arquivadas em supabase/legacy/.
+--   47 migrations de April-May 2026 foram arquivadas fora do repo ativo
+--   (../_GranaEvo_Archive/supabase_legacy_migrations/) e permanecem no histórico git.
 --   Todos os seus esquemas permanecem intactos no banco.
 --   Esta migration remove as entradas de rastreamento antigas da tabela
 --   supabase_migrations.schema_migrations, deixando apenas as migrations

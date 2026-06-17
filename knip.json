@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "*.html",
+    "src/scripts/pages/*.js",
+    "public/theme-init.js",
+    "public/pwa-init.js",
+    "public/sw-push-handler.js",
+    "public/scripts/modules/graficos.js",
+    "vite.config.js",
+    "scripts/*.mjs"
+  ],
+  "project": [
+    "src/**/*.js",
+    "public/scripts/**/*.js",
+    "public/*.js",
+    "scripts/**/*.mjs"
+  ],
+  "ignore": [
+    "supabase/**",
+    "dist/**",
+    "node_modules/**"
+  ],
+  "ignoreBinaries": ["vercel", "supabase"],
+  "ignoreDependencies": [],
+  "vite": false
+}

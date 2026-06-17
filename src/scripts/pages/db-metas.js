@@ -365,19 +365,19 @@ function abrirFormReservaExistente() {
         btnOk.addEventListener('click', () => {
             // ── Validação: nome ───────────────────────────────────────────────
             const descRaw = inpDesc.value.trim();
-            if (!descRaw)            return alert('Informe o nome da reserva.');
-            if (descRaw.length > 200) return alert('Nome muito longo (máx. 200 caracteres).');
+            if (!descRaw)            return _ctx.mostrarNotificacao('Informe o nome da reserva.', 'error');
+            if (descRaw.length > 200) return _ctx.mostrarNotificacao('Nome muito longo (máx. 200 caracteres).', 'error');
             const desc = _sanitizeText(descRaw);
 
             // ── Validação: tipo ───────────────────────────────────────────────
             const tipoVal = selTipo.value;
-            if (!TIPOS_VALIDOS.includes(tipoVal)) return alert('Tipo de reserva inválido.');
+            if (!TIPOS_VALIDOS.includes(tipoVal)) return _ctx.mostrarNotificacao('Tipo de reserva inválido.', 'error');
 
             // ── Validação: saldo ──────────────────────────────────────────────
             const saldoStr = inpSaldo.value;
             const saldo    = parseFloat(saldoStr);
             if (saldoStr === '' || !Number.isFinite(saldo) || saldo < 0 || saldo > 9_999_999) {
-                return alert('Informe um saldo válido (entre R$ 0,00 e R$ 9.999.999,00).');
+                return _ctx.mostrarNotificacao('Informe um saldo válido (entre R$ 0,00 e R$ 9.999.999,00).', 'error');
             }
             const saldoSeguro = parseFloat(saldo.toFixed(2));
 
@@ -387,14 +387,14 @@ function abrirFormReservaExistente() {
             if (objStr !== '') {
                 const objVal = parseFloat(objStr);
                 if (!Number.isFinite(objVal) || objVal < 0 || objVal > 999_999_999) {
-                    return alert('Objetivo inválido (entre R$ 0,00 e R$ 999.999.999,00).');
+                    return _ctx.mostrarNotificacao('Objetivo inválido (entre R$ 0,00 e R$ 999.999.999,00).', 'error');
                 }
                 objetivo = parseFloat(objVal.toFixed(2));
             }
 
             // ── Validação: rendimento ─────────────────────────────────────────
             const tipoR = document.querySelector('input[name="reExistRendType"]:checked')?.value ?? 'sem_rendimento';
-            if (!['sem_rendimento', 'cdi', 'personalizado'].includes(tipoR)) return alert('Tipo de rendimento inválido.');
+            if (!['sem_rendimento', 'cdi', 'personalizado'].includes(tipoR)) return _ctx.mostrarNotificacao('Tipo de rendimento inválido.', 'error');
 
             let cdiPct           = null;
             let taxaJuros        = null;
@@ -403,7 +403,7 @@ function abrirFormReservaExistente() {
             if (tipoR === 'cdi') {
                 const cdiVal = parseFloat(inpCDI.value);
                 if (!Number.isFinite(cdiVal) || cdiVal < 1 || cdiVal > 200) {
-                    return alert('Informe a % do CDI entre 1% e 200%.');
+                    return _ctx.mostrarNotificacao('Informe a % do CDI entre 1% e 200%.', 'error');
                 }
                 cdiPct = parseFloat(cdiVal.toFixed(2));
             }
@@ -411,7 +411,7 @@ function abrirFormReservaExistente() {
             if (tipoR === 'personalizado') {
                 const taxaVal = parseFloat(inpTaxa.value);
                 if (!Number.isFinite(taxaVal) || taxaVal <= 0 || taxaVal > 999) {
-                    return alert('Informe uma taxa entre 0,01% e 999%.');
+                    return _ctx.mostrarNotificacao('Informe uma taxa entre 0,01% e 999%.', 'error');
                 }
                 taxaJuros = parseFloat(taxaVal.toFixed(4));
                 rendimentoPeriodo = selPeriodo.value === 'ano' ? 'ano' : 'mes';
@@ -802,12 +802,12 @@ function abrirMetaForm(editId = null) {
             const desc   = document.getElementById('metaDesc').value.trim();
             const objStr = document.getElementById('metaObj').value;
 
-            if (!desc)                                                              return alert('Digite o nome da reserva.');
-            if (desc.length > 200)                                                  return alert('Nome muito longo (máx. 200 caracteres).');
-            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0) return alert('Digite um objetivo válido.');
+            if (!desc)                                                              return _ctx.mostrarNotificacao('Digite o nome da reserva.', 'error');
+            if (desc.length > 200)                                                  return _ctx.mostrarNotificacao('Nome muito longo (máx. 200 caracteres).', 'error');
+            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0) return _ctx.mostrarNotificacao('Digite um objetivo válido.', 'error');
 
             const objetivo = parseFloat(parseFloat(objStr).toFixed(2));
-            if (!Number.isFinite(objetivo) || objetivo <= 0) return alert('Digite um objetivo válido.');
+            if (!Number.isFinite(objetivo) || objetivo <= 0) return _ctx.mostrarNotificacao('Digite um objetivo válido.', 'error');
 
             // Prazo
             const prazoMV = document.getElementById('metaPrazoMes').value;
@@ -820,7 +820,7 @@ function abrirMetaForm(editId = null) {
 
             if (tipoR === 'cdi') {
                 const pct = parseFloat(document.getElementById('metaCdiPct').value);
-                if (!Number.isFinite(pct) || pct <= 0 || pct > 200) return alert('Digite uma porcentagem válida do CDI (1–200).');
+                if (!Number.isFinite(pct) || pct <= 0 || pct > 200) return _ctx.mostrarNotificacao('Digite uma porcentagem válida do CDI (1–200).', 'error');
                 cdiPct = pct;
                 rendimentoPeriodo = document.querySelector('input[name="periodoRendCdi"]:checked')?.value || 'mes';
                 const taxaAnual = _cdiAnual * pct / 100;
@@ -829,7 +829,7 @@ function abrirMetaForm(editId = null) {
                     : parseFloat((taxaAnual / 12).toFixed(6));
             } else if (tipoR === 'personalizado') {
                 const pct = parseFloat(document.getElementById('metaPersPct').value);
-                if (!Number.isFinite(pct) || pct < 0 || pct > 999) return alert('Digite uma taxa válida (0–999).');
+                if (!Number.isFinite(pct) || pct < 0 || pct > 999) return _ctx.mostrarNotificacao('Digite uma taxa válida (0–999).', 'error');
                 rendimentoPeriodo = document.querySelector('input[name="periodoRendPers"]:checked')?.value || 'mes';
                 taxaJuros = rendimentoPeriodo === 'ano'
                     ? parseFloat(((Math.pow(1 + pct / 100, 1/12) - 1) * 100).toFixed(6))
@@ -842,7 +842,7 @@ function abrirMetaForm(editId = null) {
             if (aporteRecorrente) {
                 const apStr = document.getElementById('metaAporteValor').value;
                 valorAporte = parseFloat(apStr);
-                if (!Number.isFinite(valorAporte) || valorAporte <= 0) return alert('Digite um valor de aporte válido.');
+                if (!Number.isFinite(valorAporte) || valorAporte <= 0) return _ctx.mostrarNotificacao('Digite um valor de aporte válido.', 'error');
             }
 
             if (isEdit) {
@@ -2028,13 +2028,13 @@ function renderMetaVisual() {
 }
 
 function abrirRetiradaForm() {
-    if(!_ctx.metaSelecionadaId) return alert('Selecione uma meta primeiro.');
+    if(!_ctx.metaSelecionadaId) return _ctx.mostrarNotificacao('Selecione uma meta primeiro.', 'error');
 
     const meta = _ctx.metas.find(m => String(m.id) === String(_ctx.metaSelecionadaId));
-    if(!meta) return alert('Meta não encontrada.');
+    if(!meta) return _ctx.mostrarNotificacao('Meta não encontrada.', 'error');
 
     const saldoDisponivel = Number(meta.saved || 0);
-    if(saldoDisponivel <= 0) return alert('Não há saldo disponível nesta reserva para retirar.');
+    if(saldoDisponivel <= 0) return _ctx.mostrarNotificacao('Não há saldo disponível nesta reserva para retirar.', 'error');
 
     _ctx.criarPopup(`
         <h3>💸 Retirar Dinheiro</h3>
@@ -2108,21 +2108,21 @@ function abrirRetiradaForm() {
         const outroMotivoTexto = document.getElementById('outroMotivoTexto').value.trim();
 
         if(!valorStr || !Number.isFinite(Number(valorStr)) || Number(valorStr) <= 0) {
-        return alert('Digite um valor válido.');
+        return _ctx.mostrarNotificacao('Digite um valor válido.', 'error');
         }
         if(!motivoSelect) {
-            return alert('⚠️ Por favor, selecione o motivo da retirada.');
+            return _ctx.mostrarNotificacao('Por favor, selecione o motivo da retirada.', 'warning');
         }
         if(motivoSelect === 'Outro' && !outroMotivoTexto) {
-            return alert('⚠️ Por favor, descreva o motivo da retirada.');
+            return _ctx.mostrarNotificacao('Por favor, descreva o motivo da retirada.', 'warning');
         }
 
         const valorRetirar = parseFloat(parseFloat(valorStr).toFixed(2));
         if(!Number.isFinite(valorRetirar) || valorRetirar <= 0) {
-            return alert('Valor inválido após processamento.');
+            return _ctx.mostrarNotificacao('Valor inválido após processamento.', 'error');
         }
         if(valorRetirar > saldoDisponivel) {
-            return alert('Valor maior que o saldo disponível!');
+            return _ctx.mostrarNotificacao('Valor maior que o saldo disponível!', 'error');
         }
 
         const motivoFinal = motivoSelect === 'Outro' ? outroMotivoTexto : motivoSelect;

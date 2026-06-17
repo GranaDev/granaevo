@@ -484,8 +484,8 @@ function abrirGerenciarAssinatura(assinaturaId) {
         btnSalvar.addEventListener('click', () => {
             const novoValor = parseFloat(parseFloat(inputValor.value).toFixed(2));
             const novoDia   = Number(selectDia.value);
-            if (!isFinite(novoValor) || novoValor <= 0 || novoValor > 99999999) { alert('Informe um valor válido e positivo.'); return; }
-            if (!Number.isInteger(novoDia) || novoDia < 1 || novoDia > 28)      { alert('Dia de cobrança inválido.'); return; }
+            if (!isFinite(novoValor) || novoValor <= 0 || novoValor > 99999999) { _ctx.mostrarNotificacao('Informe um valor válido e positivo.', 'error'); return; }
+            if (!Number.isInteger(novoDia) || novoDia < 1 || novoDia > 28)      { _ctx.mostrarNotificacao('Dia de cobrança inválido.', 'error'); return; }
 
             a.valor       = novoValor;
             a.diaCobranca = novoDia;
@@ -789,8 +789,8 @@ function abrirCartaoForm(editId = null) {
 
         if (nomeBanco === 'Outro') {
             const nomeDigitado = inputOutro.value.trim();
-            if (!nomeDigitado)           { alert('Digite o nome do cartão!'); return; }
-            if (nomeDigitado.length > 50) { alert('Nome do cartão muito longo (máx. 50 caracteres).'); return; }
+            if (!nomeDigitado)           { _ctx.mostrarNotificacao('Digite o nome do cartão!', 'error'); return; }
+            if (nomeDigitado.length > 50) { _ctx.mostrarNotificacao('Nome do cartão muito longo (máx. 50 caracteres).', 'error'); return; }
             nomeBanco = nomeDigitado;
         }
 
@@ -798,14 +798,14 @@ function abrirCartaoForm(editId = null) {
         const fechamentoDia = selectFechamento.value;
         const vencimentoDia = selectDia.value;
 
-        if (!nomeBanco || !limiteStr || !fechamentoDia || !vencimentoDia) { alert('Preencha todos os campos!'); return; }
+        if (!nomeBanco || !limiteStr || !fechamentoDia || !vencimentoDia) { _ctx.mostrarNotificacao('Preencha todos os campos!', 'error'); return; }
 
         const limite = parseFloat(parseFloat(limiteStr).toFixed(2));
-        if (isNaN(limite) || limite <= 0) { alert('Informe um limite válido e positivo.'); return; }
-        if (limite > 9999999)              { alert('Limite máximo permitido: R$ 9.999.999,00.'); return; }
+        if (isNaN(limite) || limite <= 0) { _ctx.mostrarNotificacao('Informe um limite válido e positivo.', 'error'); return; }
+        if (limite > 9999999)              { _ctx.mostrarNotificacao('Limite máximo permitido: R$ 9.999.999,00.', 'error'); return; }
 
         if (Number(fechamentoDia) === Number(vencimentoDia)) {
-            alert('O dia de fechamento e o dia de vencimento não podem ser iguais.');
+            _ctx.mostrarNotificacao('O dia de fechamento e o dia de vencimento não podem ser iguais.', 'error');
             return;
         }
 
@@ -1710,7 +1710,7 @@ function processarPagamentoCompra(faturaId, compraId, valorPago) {
             _ctx.fecharPopup();
             _ctx.salvarDados();
             _ctx.atualizarTudo();
-            alert('✅ Última parcela paga! Fatura quitada.');
+            _ctx.mostrarNotificacao('Última parcela paga! Fatura quitada.', 'success');
             return;
         }
 

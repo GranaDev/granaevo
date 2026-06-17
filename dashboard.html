@@ -8,7 +8,7 @@
 
     <!-- CSP definida via HTTP header em vercel.json — não duplicar aqui -->
     <!-- Aplica tema salvo antes do primeiro render (script clássico, síncrono) -->
-    <script src="/theme-init.js"></script>
+    <script src="/theme-init.js" data-light-css="/assets/css/db-light-theme.css?v=1"></script>
 
     <!-- beforeinstallprompt capturado o mais cedo possível.
          O pwa-installer.js é lazy-loaded (Configurações) e perderia o evento
@@ -26,7 +26,8 @@
     <!-- Preload do logo — aparece imediatamente na tela de loading (LCP crítico) -->
     <link rel="preload" as="image" href="/assets/icons/granaevo-logo.jpg">
     <link rel="stylesheet" href="src/styles/dashboard.css?v=14">
-    <link rel="stylesheet" href="src/styles/graficos.css">
+    <!-- graficos.css NÃO é carregado aqui: é lazy via import em db-graficos.js,
+         baixado só quando a aba Gráficos abre (era ~28 KB render-blocking à toa). -->
     <!-- Supabase: abre TCP+TLS com antecedência — reduz latência da primeira API call -->
     <link rel="preconnect" href="https://fvrhqqeofqedmhadzzqw.supabase.co" crossorigin>
     <!-- Fontes (Inter/DM Sans/Syne) self-hosted via dashboard.css → _fonts.css — sem Google CDN -->
@@ -131,7 +132,7 @@
                     id="mobileSettingsBtn"
                     type="button"
                     aria-label="Configurações">
-                    <img src="/assets/icons/Configuracoes.gif" alt="Configurações" class="mobile-settings-icon-img">
+                    <img src="/assets/icons/Configuracoes.webp" alt="Configurações" class="mobile-settings-icon-img">
                 </button>
             </div>
         </div>
@@ -982,27 +983,27 @@
         <!-- ========== BOTTOM NAV MOBILE ========== -->
         <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Navegação inferior">
             <button class="mobile-nav-item active" data-page="dashboard" type="button" aria-label="Dashboard">
-                <img src="/assets/icons/Dashboard.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Dashboard.webp" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Home</span>
             </button>
             <button class="mobile-nav-item" data-page="transacoes" type="button" aria-label="Transações">
-                <img src="/assets/icons/Extrato.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Extrato.webp" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Transações</span>
             </button>
             <button class="mobile-nav-item" data-page="reservas" type="button" aria-label="Reservas">
-                <img src="/assets/icons/Reservas.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Reservas.webp" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Reservas</span>
             </button>
             <button class="mobile-nav-item" data-page="cartoes" type="button" aria-label="Cartões">
-                <img src="/assets/icons/Cartoes.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Cartoes.webp" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Cartões</span>
             </button>
             <button class="mobile-nav-item" data-page="graficos" type="button" aria-label="Gráficos">
-                <img src="/assets/icons/Graficos.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Graficos.webp" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Gráficos</span>
             </button>
             <button class="mobile-nav-item" data-page="relatorios" type="button" aria-label="Relatórios">
-                <img src="/assets/icons/Relatorios.gif" alt="" class="mobile-nav-icon-img">
+                <img src="/assets/icons/Relatorios.webp" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Relatórios</span>
             </button>
             <button class="mobile-nav-item" id="chatNavBtn" type="button" aria-label="Chat">

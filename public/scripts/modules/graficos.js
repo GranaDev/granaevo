@@ -258,6 +258,25 @@ function _lerToken(nome, fallback) {
     } catch { return fallback; }
 }
 
+// Retorna paleta de cores para Chart.js responsiva ao tema atual
+function _coresGrafico() {
+    const light = document.documentElement.getAttribute('data-theme') === 'light';
+    return {
+        tick:         light ? '#374151' : '#b0b3c1',
+        tickFaint:    light ? '#6b7280' : 'rgba(255,255,255,0.5)',
+        gridLine:     light ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)',
+        gridFaint:    light ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)',
+        tooltipBg:    light ? '#ffffff' : '#1e2130',
+        tooltipTitle: light ? '#111827' : '#ffffff',
+        tooltipBody:  light ? '#4b5563' : '#b0b3c1',
+        tooltipBorder:light ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.08)',
+        legendLabel:  light ? '#374151' : '#b0b3c1',
+        legendFaint:  light ? '#374151' : 'rgba(255,255,255,0.75)',
+        noDataText:   light ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.4)',
+        borderPizza:  light ? '#f4f6fa' : '#1e2130',
+    };
+}
+
 const coresTema = {
     get primary() { return _lerToken('--color-primary',       '#10b981'); },
     get success()  { return _lerToken('--color-success',       '#10b981'); },
@@ -480,6 +499,9 @@ async function gerarGraficos() {
         return;
     }
     _gerarGraficosUltimaExecucao = agora;
+
+    // Atualiza defaults do Chart.js para o tema atual antes de renderizar
+    _configurarChartDefaults();
 
     mostrarLoading();
 
@@ -1259,6 +1281,7 @@ function criarGraficoBarrasComparativo(canvasId, dados1, dados2, periodo1, perio
         graficosInstances[canvasId].destroy();
     }
 
+    const c = _coresGrafico();
     const todasCategorias = new Set([
         ...Object.keys(dados1.categorias),
         ...Object.keys(dados2.categorias)
@@ -1296,12 +1319,14 @@ function criarGraficoBarrasComparativo(canvasId, dados1, dados2, periodo1, perio
             plugins: {
                 legend: {
                     position: 'top',
-                    labels: { color: '#b0b3c1', padding: 15, font: { size: 13, weight: '600' } }
+                    labels: { color: c.legendLabel, padding: 15, font: { size: 13, weight: '600' } }
                 },
                 tooltip: {
-                    backgroundColor: '#1e2130',
-                    titleColor:      '#ffffff',
-                    bodyColor:       '#b0b3c1',
+                    backgroundColor: c.tooltipBg,
+                    borderColor:     c.tooltipBorder,
+                    borderWidth:     1,
+                    titleColor:      c.tooltipTitle,
+                    bodyColor:       c.tooltipBody,
                     padding:         12,
                     cornerRadius:    8,
                     callbacks: {
@@ -1312,11 +1337,11 @@ function criarGraficoBarrasComparativo(canvasId, dados1, dados2, periodo1, perio
             scales: {
                 y: {
                     beginAtZero: true,
-                    ticks: { color: '#b0b3c1', callback: (v) => 'R$ ' + v.toLocaleString('pt-BR') },
-                    grid:  { color: 'rgba(255, 255, 255, 0.08)' }
+                    ticks: { color: c.tick, callback: (v) => 'R$ ' + v.toLocaleString('pt-BR') },
+                    grid:  { color: c.gridLine }
                 },
                 x: {
-                    ticks: { color: '#b0b3c1' },
+                    ticks: { color: c.tick },
                     grid:  { display: false }
                 }
             }
@@ -1332,6 +1357,7 @@ function criarGraficoLinhaComparativo(canvasId, dados1, dados2, periodo1, period
         graficosInstances[canvasId].destroy();
     }
 
+    const c = _coresGrafico();
     const dias1   = Object.keys(dados1.evolucaoDiaria).sort((a, b) => a - b);
     const dias2   = Object.keys(dados2.evolucaoDiaria).sort((a, b) => a - b);
     const maxDias = Math.max(dias1.length, dias2.length, 30);
@@ -1350,16 +1376,16 @@ function criarGraficoLinhaComparativo(canvasId, dados1, dados2, periodo1, period
                 {
                     label:           `${periodo1} - Entradas`,
                     data:            entradas1,
-                    borderColor:     '#00ff99',
-                    backgroundColor: 'rgba(0, 255, 153, 0.1)',
+                    borderColor:     '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     borderWidth:     3,
                     tension:         0.4
                 },
                 {
                     label:           `${periodo1} - Saídas`,
                     data:            saidas1,
-                    borderColor:     '#ff4b4b',
-                    backgroundColor: 'rgba(255, 75, 75, 0.1)',
+                    borderColor:     '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
                     borderWidth:     3,
                     tension:         0.4
                 },
@@ -1375,8 +1401,8 @@ function criarGraficoLinhaComparativo(canvasId, dados1, dados2, periodo1, period
                 {
                     label:           `${periodo2} - Saídas`,
                     data:            saidas2,
-                    borderColor:     '#ffd166',
-                    backgroundColor: 'rgba(255, 209, 102, 0.1)',
+                    borderColor:     '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
                     borderWidth:     2,
                     borderDash:      [5, 5],
                     tension:         0.4
@@ -1389,12 +1415,14 @@ function criarGraficoLinhaComparativo(canvasId, dados1, dados2, periodo1, period
             plugins: {
                 legend: {
                     position: 'top',
-                    labels: { color: '#b0b3c1', padding: 12, font: { size: 12, weight: '500' } }
+                    labels: { color: c.legendLabel, padding: 12, font: { size: 12, weight: '500' } }
                 },
                 tooltip: {
-                    backgroundColor: '#1e2130',
-                    titleColor:      '#ffffff',
-                    bodyColor:       '#b0b3c1',
+                    backgroundColor: c.tooltipBg,
+                    borderColor:     c.tooltipBorder,
+                    borderWidth:     1,
+                    titleColor:      c.tooltipTitle,
+                    bodyColor:       c.tooltipBody,
                     padding:         12,
                     cornerRadius:    8,
                     callbacks: {
@@ -1405,12 +1433,12 @@ function criarGraficoLinhaComparativo(canvasId, dados1, dados2, periodo1, period
             scales: {
                 y: {
                     beginAtZero: true,
-                    ticks: { color: '#b0b3c1', callback: (v) => 'R$ ' + v.toLocaleString('pt-BR') },
-                    grid:  { color: 'rgba(255, 255, 255, 0.08)' }
+                    ticks: { color: c.tick, callback: (v) => 'R$ ' + v.toLocaleString('pt-BR') },
+                    grid:  { color: c.gridLine }
                 },
                 x: {
-                    ticks: { color: '#b0b3c1', maxTicksLimit: 15 },
-                    grid:  { color: 'rgba(255, 255, 255, 0.05)' }
+                    ticks: { color: c.tick, maxTicksLimit: 15 },
+                    grid:  { color: c.gridFaint }
                 }
             }
         }
@@ -1609,6 +1637,7 @@ function criarGraficoPizza(canvasId, dados) {
 
     const isMobile = window.innerWidth <= 768;
 
+    const c = _coresGrafico();
     graficosInstances[canvasId] = new Chart(ctx, {
         type: 'doughnut',
         // R5 FIX: devicePixelRatio fica no nível correto (top-level do config Chart.js)
@@ -1618,7 +1647,7 @@ function criarGraficoPizza(canvasId, dados) {
             datasets: [{
                 data:            values,
                 backgroundColor: coresTema.gradient,
-                borderColor:     '#1e2130',
+                borderColor:     c.borderPizza,
                 borderWidth:     2
             }]
         },
@@ -1630,12 +1659,14 @@ function criarGraficoPizza(canvasId, dados) {
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { color: '#b0b3c1', padding: 15, font: { size: 12, weight: '500' } }
+                    labels: { color: c.legendLabel, padding: 15, font: { size: 12, weight: '500' } }
                 },
                 tooltip: {
-                    backgroundColor: '#1e2130',
-                    titleColor:      '#ffffff',
-                    bodyColor:       '#b0b3c1',
+                    backgroundColor: c.tooltipBg,
+                    borderColor:     c.tooltipBorder,
+                    borderWidth:     1,
+                    titleColor:      c.tooltipTitle,
+                    bodyColor:       c.tooltipBody,
                     padding:         12,
                     cornerRadius:    8,
                     callbacks: {
@@ -1674,6 +1705,7 @@ function renderizarGraficoBarras(dados) {
 function criarGraficoBarras(canvasId, dados) {
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
+    const c = _coresGrafico();
 
     if (graficosInstances[canvasId]) {
         graficosInstances[canvasId].destroy();
@@ -1690,7 +1722,7 @@ function criarGraficoBarras(canvasId, dados) {
                 label:           'Valor Gasto',
                 data:            values,
                 backgroundColor: coresTema.gradient,
-                borderColor:     '#1e2130',
+                borderColor:     c.borderPizza,
                 borderWidth:     2,
                 borderRadius:    8
             }]
@@ -1701,9 +1733,11 @@ function criarGraficoBarras(canvasId, dados) {
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: '#1e2130',
-                    titleColor:      '#ffffff',
-                    bodyColor:       '#b0b3c1',
+                    backgroundColor: c.tooltipBg,
+                    borderColor:     c.tooltipBorder,
+                    borderWidth:     1,
+                    titleColor:      c.tooltipTitle,
+                    bodyColor:       c.tooltipBody,
                     padding:         12,
                     cornerRadius:    8,
                     callbacks: {
@@ -1714,11 +1748,11 @@ function criarGraficoBarras(canvasId, dados) {
             scales: {
                 y: {
                     beginAtZero: true,
-                    ticks: { color: '#b0b3c1', callback: (v) => 'R$ ' + v.toLocaleString('pt-BR') },
-                    grid:  { color: 'rgba(255, 255, 255, 0.08)' }
+                    ticks: { color: c.tick, callback: (v) => 'R$ ' + v.toLocaleString('pt-BR') },
+                    grid:  { color: c.gridLine }
                 },
                 x: {
-                    ticks: { color: '#b0b3c1' },
+                    ticks: { color: c.tick },
                     grid:  { display: false }
                 }
             }
@@ -1752,6 +1786,7 @@ function criarGraficoLinha(canvasId, dados) {
         graficosInstances[canvasId].destroy();
     }
 
+    const c = _coresGrafico();
     const dias     = Object.keys(dados.evolucaoDiaria).sort((a, b) => a - b);
     const entradas = dias.map(d => dados.evolucaoDiaria[d].entradas);
     const saidas   = dias.map(d => dados.evolucaoDiaria[d].saidas);
@@ -1765,7 +1800,7 @@ function criarGraficoLinha(canvasId, dados) {
                     label:           'Entradas',
                     data:            entradas,
                     borderColor:     coresTema.success,
-                    backgroundColor: 'rgba(0, 255, 153, 0.1)',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     borderWidth:     3,
                     fill:            true,
                     tension:         0.4
@@ -1774,7 +1809,7 @@ function criarGraficoLinha(canvasId, dados) {
                     label:           'Saídas',
                     data:            saidas,
                     borderColor:     coresTema.danger,
-                    backgroundColor: 'rgba(255, 75, 75, 0.1)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
                     borderWidth:     3,
                     fill:            true,
                     tension:         0.4
@@ -1787,12 +1822,14 @@ function criarGraficoLinha(canvasId, dados) {
             plugins: {
                 legend: {
                     position: 'top',
-                    labels: { color: '#b0b3c1', padding: 15, font: { size: 13, weight: '600' } }
+                    labels: { color: c.legendLabel, padding: 15, font: { size: 13, weight: '600' } }
                 },
                 tooltip: {
-                    backgroundColor: '#1e2130',
-                    titleColor:      '#ffffff',
-                    bodyColor:       '#b0b3c1',
+                    backgroundColor: c.tooltipBg,
+                    borderColor:     c.tooltipBorder,
+                    borderWidth:     1,
+                    titleColor:      c.tooltipTitle,
+                    bodyColor:       c.tooltipBody,
                     padding:         12,
                     cornerRadius:    8,
                     callbacks: {
@@ -1803,12 +1840,12 @@ function criarGraficoLinha(canvasId, dados) {
             scales: {
                 y: {
                     beginAtZero: true,
-                    ticks: { color: '#b0b3c1', callback: (v) => 'R$ ' + v.toLocaleString('pt-BR') },
-                    grid:  { color: 'rgba(255, 255, 255, 0.08)' }
+                    ticks: { color: c.tick, callback: (v) => 'R$ ' + v.toLocaleString('pt-BR') },
+                    grid:  { color: c.gridLine }
                 },
                 x: {
-                    ticks: { color: '#b0b3c1' },
-                    grid:  { color: 'rgba(255, 255, 255, 0.05)' }
+                    ticks: { color: c.tick },
+                    grid:  { color: c.gridFaint }
                 }
             }
         }
@@ -2091,7 +2128,7 @@ function renderizarSecaoPatrimonio(d) {
                 </div>
             </div>
             ${semGrafico
-                ? `<p style="text-align:center;color:rgba(255,255,255,0.4);font-size:0.85rem;padding:16px 0">
+                ? `<p class="patrimonio-sem-dados">
                       <i class="fas fa-info-circle"></i> Registre transações em 2+ meses para ver o gráfico de evolução.
                    </p>`
                 : `<div class="grafico-wrapper"><canvas id="patrimonioChart" aria-label="Gráfico de evolução patrimonial"></canvas></div>`
@@ -2109,6 +2146,7 @@ function criarGraficoPatrimonio(canvasId, d) {
         delete graficosInstances[canvasId];
     }
 
+    const c = _coresGrafico();
     const ctx = canvas.getContext('2d');
     graficosInstances[canvasId] = new Chart(ctx, {
         type: 'line',
@@ -2118,10 +2156,10 @@ function criarGraficoPatrimonio(canvasId, d) {
                 {
                     label: 'Patrimônio Total',
                     data: d.totais,
-                    borderColor: 'rgba(67,160,71,1)',
-                    backgroundColor: 'rgba(67,160,71,0.08)',
+                    borderColor: 'rgba(16,185,129,1)',
+                    backgroundColor: 'rgba(16,185,129,0.08)',
                     borderWidth: 2.5,
-                    pointBackgroundColor: 'rgba(67,160,71,1)',
+                    pointBackgroundColor: 'rgba(16,185,129,1)',
                     pointRadius: 4,
                     fill: true,
                     tension: 0.4,
@@ -2129,7 +2167,7 @@ function criarGraficoPatrimonio(canvasId, d) {
                 {
                     label: 'Saldo Disponível',
                     data: d.saldos,
-                    borderColor: 'rgba(100,180,255,0.85)',
+                    borderColor: 'rgba(59,130,246,0.85)',
                     backgroundColor: 'transparent',
                     borderWidth: 1.5,
                     pointRadius: 3,
@@ -2139,7 +2177,7 @@ function criarGraficoPatrimonio(canvasId, d) {
                 {
                     label: 'Total em Reservas',
                     data: d.reservas,
-                    borderColor: 'rgba(251,191,36,0.85)',
+                    borderColor: 'rgba(245,158,11,0.85)',
                     backgroundColor: 'transparent',
                     borderWidth: 1.5,
                     pointRadius: 3,
@@ -2154,9 +2192,14 @@ function criarGraficoPatrimonio(canvasId, d) {
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: {
-                    labels: { color: 'rgba(255,255,255,0.75)', font: { size: 12 }, boxWidth: 16 }
+                    labels: { color: c.legendFaint, font: { size: 12 }, boxWidth: 16 }
                 },
                 tooltip: {
+                    backgroundColor: c.tooltipBg,
+                    borderColor:     c.tooltipBorder,
+                    borderWidth:     1,
+                    titleColor:      c.tooltipTitle,
+                    bodyColor:       c.tooltipBody,
                     callbacks: {
                         label: ctx => `${ctx.dataset.label}: ${new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(ctx.parsed.y)}`
                     }
@@ -2164,15 +2207,15 @@ function criarGraficoPatrimonio(canvasId, d) {
             },
             scales: {
                 x: {
-                    ticks: { color: 'rgba(255,255,255,0.5)', maxTicksLimit: 12 },
-                    grid:  { color: 'rgba(255,255,255,0.05)' }
+                    ticks: { color: c.tickFaint, maxTicksLimit: 12 },
+                    grid:  { color: c.gridFaint }
                 },
                 y: {
                     ticks: {
-                        color: 'rgba(255,255,255,0.5)',
+                        color: c.tickFaint,
                         callback: v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',notation:'compact'}).format(v)
                     },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
+                    grid: { color: c.gridFaint }
                 }
             }
         }

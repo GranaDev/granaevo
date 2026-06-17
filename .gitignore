@@ -10,3 +10,6 @@ supabase/.temp/
 # Relatórios de segurança — não commitar (expõem vulnerabilidades internas)
 SECURITY_AUDIT_REPORT.md
 security-audit/
+
+# Artefato de análise de CSS não usado (temporário, não versionar)
+css-unused-candidates.txt

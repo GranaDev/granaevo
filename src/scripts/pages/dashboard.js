@@ -355,6 +355,42 @@ function formatBRL(v) {
     }); 
 }
 
+// Anima um valor monetário do valor anterior até o alvo (count-up + flash de cor).
+// Respeita reduced-motion e não anima na primeira pintura nem em valores iguais.
+function _animarMoeda(el, valorAlvo) {
+    if (!el) return;
+    const valorAnterior = Number(el.dataset.num ?? NaN);
+    el.dataset.num = String(valorAlvo);
+
+    const reduzir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduzir || !Number.isFinite(valorAnterior) || valorAnterior === valorAlvo) {
+        if (el._animMoedaId) { cancelAnimationFrame(el._animMoedaId); el._animMoedaId = null; }
+        el.textContent = formatBRL(valorAlvo);
+        return;
+    }
+
+    el.classList.remove('valor-subiu', 'valor-desceu');
+    void el.offsetWidth; // reinicia a animação CSS
+    el.classList.add(valorAlvo >= valorAnterior ? 'valor-subiu' : 'valor-desceu');
+
+    if (el._animMoedaId) cancelAnimationFrame(el._animMoedaId);
+    const inicio = performance.now();
+    const dur = 600;
+    const delta = valorAlvo - valorAnterior;
+    const passo = (agora) => {
+        const t = Math.min(1, (agora - inicio) / dur);
+        const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+        el.textContent = formatBRL(valorAnterior + delta * eased);
+        if (t < 1) {
+            el._animMoedaId = requestAnimationFrame(passo);
+        } else {
+            el.textContent = formatBRL(valorAlvo);
+            el._animMoedaId = null;
+        }
+    };
+    el._animMoedaId = requestAnimationFrame(passo);
+}
+
 function agoraDataHora() {
     const d = new Date();
     const data = d.toLocaleDateString('pt-BR');
@@ -1924,6 +1960,18 @@ function _makeCtx() {
 let _dbLoaded = { transacoes: false, metas: false, cartoes: false, graficos: false, relatorios: false, configuracoes: false };
 
 function mostrarTela(tela) {
+    // Transição suave entre seções via View Transitions API (crossfade nativo).
+    // Degrada graciosamente onde a API não existe ou em reduced-motion.
+    const podeAnimar = typeof document.startViewTransition === 'function'
+        && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (podeAnimar) {
+        document.startViewTransition(() => _mostrarTelaImpl(tela));
+    } else {
+        _mostrarTelaImpl(tela);
+    }
+}
+
+function _mostrarTelaImpl(tela) {
     if (!_domPages)     _domPages     = document.querySelectorAll('.page');
     if (!_domNavBtns)   _domNavBtns   = document.querySelectorAll('.nav-btn');
     if (!_domMobileNav) _domMobileNav = document.querySelectorAll('.mobile-nav-item');
@@ -2532,14 +2580,19 @@ function atualizarDashboardResumo() {
     }
     const { entradas: entradasEl, saidas: saidasEl, saldo: saldoEl, reservas: reservasEl, hero: heroSaldoEl } = _domSaldoEls;
 
-    if (entradasEl) entradasEl.textContent = formatBRL(totalEntradas);
-    if (saidasEl)   saidasEl.textContent   = formatBRL(totalSaidas);
-    if (saldoEl)    saldoEl.textContent     = formatBRL(saldo);
-    if (heroSaldoEl && !heroSaldoEl.classList.contains('oculto')) {
-        heroSaldoEl.textContent = formatBRL(saldo);
+    if (entradasEl) _animarMoeda(entradasEl, totalEntradas);
+    if (saidasEl)   _animarMoeda(saidasEl, totalSaidas);
+    if (saldoEl)    _animarMoeda(saldoEl, saldo);
+    if (heroSaldoEl) {
+        if (!heroSaldoEl.classList.contains('oculto')) {
+            _animarMoeda(heroSaldoEl, saldo);
+        } else {
+            // Saldo oculto: mantém a base fresca sem revelar o valor
+            heroSaldoEl.dataset.num = String(saldo);
+        }
+        heroSaldoEl.dataset.valor = formatBRL(saldo);
     }
-    if (heroSaldoEl) heroSaldoEl.dataset.valor = formatBRL(saldo);
-    if (reservasEl)  reservasEl.textContent    = formatBRL(totalReservasCalc);
+    if (reservasEl)  _animarMoeda(reservasEl, totalReservasCalc);
 
     // ── % variação vs mês anterior ───────────────────────────────────────
     const elPctEnt  = document.getElementById('percentEntradas');
@@ -3073,10 +3126,29 @@ function atualizarListaContasFixas() {
     lista.innerHTML = '';
 
     if (contasFixas.length === 0) {
-        const empty = document.createElement('p');
-        empty.className   = 'empty-state';
-        empty.textContent = 'Nenhuma conta fixa cadastrada.';
-        lista.appendChild(empty);
+        const wrap = document.createElement('div');
+        wrap.className = 'contas-empty-state';
+
+        const icon = document.createElement('div');
+        icon.className = 'contas-empty-icon';
+        icon.innerHTML = '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="7" y1="15" x2="13" y2="15"/></svg>';
+
+        const title = document.createElement('p');
+        title.className = 'contas-empty-title';
+        title.textContent = 'Nenhuma conta fixa cadastrada';
+
+        const sub = document.createElement('p');
+        sub.className = 'contas-empty-sub';
+        sub.textContent = 'Cadastre aluguel, assinaturas e outras contas recorrentes para nunca esquecer um vencimento.';
+
+        const btn = document.createElement('button');
+        btn.className = 'btn-primary contas-empty-cta';
+        btn.type = 'button';
+        btn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Adicionar conta fixa';
+        btn.addEventListener('click', () => document.getElementById('btnNovaContaFixa')?.click());
+
+        wrap.append(icon, title, sub, btn);
+        lista.appendChild(wrap);
         return;
     }
 
@@ -3291,12 +3363,12 @@ function abrirContaFixaForm(editId = null) {
             const valorStr = document.getElementById('valorContaFixa').value;
             const venc     = document.getElementById('vencContaFixa').value;
 
-            if(!desc || !valorStr || !venc) return alert('Preencha todos os campos.');
-            if(desc.length > 100) return alert('Descrição muito longa (máx. 100 caracteres).');
+            if(!desc || !valorStr || !venc) return mostrarNotificacao('Preencha todos os campos.', 'error');
+            if(desc.length > 100) return mostrarNotificacao('Descrição muito longa (máx. 100 caracteres).', 'error');
 
             const valor = parseFloat(parseFloat(valorStr).toFixed(2));
-            if(isNaN(valor) || valor <= 0) return alert('Informe um valor válido e positivo.');
-            if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return alert('Data de vencimento inválida.');
+            if(isNaN(valor) || valor <= 0) return mostrarNotificacao('Informe um valor válido e positivo.', 'error');
+            if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return mostrarNotificacao('Data de vencimento inválida.', 'error');
 
             // ✅ CORREÇÃO: gera id local para que editar e excluir funcionem corretamente
             const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -3349,12 +3421,12 @@ function abrirContaFixaForm(editId = null) {
             const valorStr = document.getElementById('valorContaFixa').value;
             const venc     = document.getElementById('vencContaFixa').value;
 
-            if(!desc || !valorStr || !venc) return alert('Preencha todos os campos.');
-            if(desc.length > 100) return alert('Descrição muito longa (máx. 100 caracteres).');
+            if(!desc || !valorStr || !venc) return mostrarNotificacao('Preencha todos os campos.', 'error');
+            if(desc.length > 100) return mostrarNotificacao('Descrição muito longa (máx. 100 caracteres).', 'error');
 
             const valor = parseFloat(parseFloat(valorStr).toFixed(2));
-            if(isNaN(valor) || valor <= 0) return alert('Informe um valor válido e positivo.');
-            if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return alert('Data de vencimento inválida.');
+            if(isNaN(valor) || valor <= 0) return mostrarNotificacao('Informe um valor válido e positivo.', 'error');
+            if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return mostrarNotificacao('Data de vencimento inválida.', 'error');
 
             conta.descricao  = desc;
             conta.valor      = valor;
@@ -3424,7 +3496,7 @@ function abrirPopupPagarContaFixa(id) {
             // ✅ Validação reforçada: número, positivo e com máximo razoável
             const novoValor = parseFloat(valStr);
             if(!valStr || isNaN(novoValor) || novoValor <= 0 || novoValor > 9999999) {
-                return alert('Digite um valor válido!');
+                return mostrarNotificacao('Digite um valor válido!', 'error');
             }
 
             valorDigitado = parseFloat(novoValor.toFixed(2));
@@ -3480,7 +3552,7 @@ function abrirPopupAnteciparContaFixa(id) {
             const valStr    = document.getElementById('novoValorAnt').value;
             const novoValor = parseFloat(valStr);
             if (!valStr || isNaN(novoValor) || novoValor <= 0 || novoValor > 9999999) {
-                return alert('Digite um valor válido!');
+                return mostrarNotificacao('Digite um valor válido!', 'error');
             }
             const valorFinal = parseFloat(novoValor.toFixed(2));
             if (confirm(`Confirma a antecipação de ${formatBRL(valorFinal)}?`)) {
@@ -3496,14 +3568,14 @@ function anteciparContaFixa(id, valorPago) {
     if (!conta) return;
 
     if (conta._processando) {
-        alert('Aguarde, pagamento em andamento...');
+        mostrarNotificacao('Aguarde, pagamento em andamento...', 'info');
         return;
     }
     conta._processando = true;
 
     const valorSeguro = parseFloat(valorPago);
     if (!isFinite(valorSeguro) || valorSeguro <= 0 || valorSeguro > 9_999_999) {
-        alert('Valor de pagamento inválido.');
+        mostrarNotificacao('Valor de pagamento inválido.', 'error');
         conta._processando = false;
         return;
     }
@@ -3559,7 +3631,7 @@ function anteciparContaFixa(id, valorPago) {
                 salvarDados();
                 atualizarTudo();
                 conta._processando = false;
-                alert('✅ Antecipação concluída! Todas as parcelas foram quitadas.');
+                mostrarNotificacao('Antecipação concluída! Todas as parcelas foram quitadas.', 'success');
                 return;
             }
 
@@ -3595,7 +3667,7 @@ function anteciparContaFixa(id, valorPago) {
         rollbackArray(contasFixas, snapshotContasFixas);
         rollbackArray(cartoesCredito, snapshotCartoes);
         conta._processando = false;
-        alert('❌ Erro ao processar antecipação. Nenhuma alteração foi salva.');
+        mostrarNotificacao('Erro ao processar antecipação. Nenhuma alteração foi salva.', 'error');
     }
 }
 
@@ -3628,7 +3700,7 @@ function pagarContaFixa(id, valorPago) {
 
     // ✅ Lock anti-replay
     if (conta._processando) {
-        alert('Aguarde, pagamento em andamento...');
+        mostrarNotificacao('Aguarde, pagamento em andamento...', 'info');
         return;
     }
     conta._processando = true;
@@ -3636,7 +3708,7 @@ function pagarContaFixa(id, valorPago) {
     // ✅ Validação de valor: deve ser número positivo, finito e dentro do limite razoável
     const valorSeguro = parseFloat(valorPago);
     if (!isFinite(valorSeguro) || valorSeguro <= 0 || valorSeguro > 9_999_999) {
-        alert('Valor de pagamento inválido. Informe um valor entre R$ 0,01 e R$ 9.999.999,00.');
+        mostrarNotificacao('Valor de pagamento inválido. Informe um valor entre R$ 0,01 e R$ 9.999.999,00.', 'error');
         conta._processando = false;
         return;
     }
@@ -3697,7 +3769,7 @@ function pagarContaFixa(id, valorPago) {
                 salvarDados();
                 atualizarTudo();
                 conta._processando = false;
-                alert('✅ Todas as parcelas pagas! Fatura quitada.');
+                mostrarNotificacao('Todas as parcelas pagas! Fatura quitada.', 'success');
                 return;
             }
 
@@ -3737,7 +3809,7 @@ function pagarContaFixa(id, valorPago) {
             salvarDados();
             atualizarTudo();
             conta._processando = false;
-            alert('✅ Parcela paga! O lembrete foi atualizado.');
+            mostrarNotificacao('Parcela paga! O lembrete foi atualizado.', 'success');
             return;
         }
 
@@ -3750,7 +3822,7 @@ function pagarContaFixa(id, valorPago) {
         salvarDados();
         atualizarTudo();
         conta._processando = false;
-        alert('✅ Pagamento realizado! A conta volta para "Pendente" no próximo vencimento.');
+        mostrarNotificacao('Pagamento realizado! A conta volta para "Pendente" no próximo vencimento.', 'success');
 
     } catch (erro) {
         console.error('❌ Erro no pagamento, revertendo estado:', erro);
@@ -3760,7 +3832,7 @@ function pagarContaFixa(id, valorPago) {
         rollbackArray(cartoesCredito, snapshotCartoes);
 
         contaOriginal._processando = false;
-        alert('❌ Erro ao processar pagamento. Nenhuma alteração foi salva.');
+        mostrarNotificacao('Erro ao processar pagamento. Nenhuma alteração foi salva.', 'error');
     }
 }
 
@@ -3770,6 +3842,61 @@ function pagarContaFixa(id, valorPago) {
 let _popupVersaoAtual = 0;
 
 function _isMobileViewport() { return window.innerWidth < 480; }
+
+// ── Focus-trap de modais (acessibilidade) ────────────────────────────
+let _focusTrapCleanup = null;
+let _focoAntesDoModal = null;
+
+function _focaveisDentro(container) {
+    const sel = 'a[href], button:not([disabled]), textarea:not([disabled]), ' +
+                'input:not([disabled]):not([type="hidden"]), select:not([disabled]), ' +
+                '[tabindex]:not([tabindex="-1"])';
+    return Array.from(container.querySelectorAll(sel))
+        .filter(el => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement);
+}
+
+function _ativarFocusTrap(dialogEl) {
+    if (!dialogEl) return;
+    _desativarFocusTrap(); // limpa qualquer trap pendente sem restaurar foco
+    _focoAntesDoModal = document.activeElement;
+
+    // Esconde o conteúdo de fundo de tab + leitores de tela
+    const main = document.getElementById('mainContent');
+    if (main) { main.setAttribute('inert', ''); main.setAttribute('aria-hidden', 'true'); }
+
+    if (!dialogEl.hasAttribute('tabindex')) dialogEl.setAttribute('tabindex', '-1');
+    const focaveis = _focaveisDentro(dialogEl);
+    const alvo = focaveis[0] || dialogEl;
+    requestAnimationFrame(() => { try { alvo.focus({ preventScroll: true }); } catch (_) {} });
+
+    const onKey = (e) => {
+        if (e.key !== 'Tab') return;
+        const itens = _focaveisDentro(dialogEl);
+        if (itens.length === 0) { e.preventDefault(); dialogEl.focus(); return; }
+        const primeiro = itens[0];
+        const ultimo = itens[itens.length - 1];
+        if (e.shiftKey && document.activeElement === primeiro) {
+            e.preventDefault(); ultimo.focus();
+        } else if (!e.shiftKey && document.activeElement === ultimo) {
+            e.preventDefault(); primeiro.focus();
+        }
+    };
+    dialogEl.addEventListener('keydown', onKey);
+
+    _focusTrapCleanup = () => {
+        dialogEl.removeEventListener('keydown', onKey);
+        if (main) { main.removeAttribute('inert'); main.removeAttribute('aria-hidden'); }
+    };
+}
+
+function _desativarFocusTrap() {
+    const restaurar = _focusTrapCleanup && _focoAntesDoModal;
+    if (_focusTrapCleanup) { _focusTrapCleanup(); _focusTrapCleanup = null; }
+    if (restaurar && typeof _focoAntesDoModal.focus === 'function') {
+        try { _focoAntesDoModal.focus({ preventScroll: true }); } catch (_) {}
+    }
+    _focoAntesDoModal = null;
+}
 
 function criarPopup(html) {
     // Em mobile (< 480px) usa bottom sheet; em desktop usa modal centralizado
@@ -3818,9 +3945,11 @@ function criarPopup(html) {
 
     overlay.classList.add('active');
     overlay.onclick = () => fecharPopup();
+    _ativarFocusTrap(container);
 }
 
 function fecharPopup() {
+    _desativarFocusTrap();
     // Fecha bottom sheet se estiver ativo
     const bs = document.getElementById('bottomSheetOverlay');
     if (bs && bs.classList.contains('active')) {
@@ -3868,6 +3997,7 @@ function _criarBottomSheet(html) {
         container2.appendChild(box);
         overlay2.classList.add('active');
         overlay2.onclick = () => fecharPopup();
+        _ativarFocusTrap(container2);
         return;
     }
 
@@ -3880,6 +4010,7 @@ function _criarBottomSheet(html) {
 
     overlay.classList.add('active');
     overlay.onclick = (e) => { if (e.target === overlay) fecharPopup(); };
+    _ativarFocusTrap(document.getElementById('bottomSheetContainer'));
 }
 
 function sanitizarHTMLPopup(html) {
@@ -4795,19 +4926,263 @@ function exportarDadosCSV() {
 // ========== NOTIFICAÇÕES ==========
 
 // Sistema simples de notificações — estilos em dashboard.css (classes ge-notif)
+// Vibração tátil curta no mobile (no-op em desktop ou sem suporte)
+function hapticTap(pattern = 12) {
+    try {
+        if (navigator.vibrate && window.matchMedia('(pointer: coarse)').matches) {
+            navigator.vibrate(pattern);
+        }
+    } catch (_) { /* silencioso */ }
+}
+window.hapticTap = hapticTap;
+
+// Região única de toasts (criada sob demanda) com aria-live para leitores de tela
+function _toastRegion() {
+    let region = document.getElementById('geToastRegion');
+    if (!region) {
+        region = document.createElement('div');
+        region.id = 'geToastRegion';
+        region.className = 'ge-toast-region';
+        region.setAttribute('role', 'region');
+        region.setAttribute('aria-label', 'Notificações');
+        document.body.appendChild(region);
+    }
+    return region;
+}
+
+const _TOAST_ICONS = { success: '✓', error: '✕', warning: '!', info: 'i' };
+
 function mostrarNotificacao(mensagem, tipo = 'info') {
     const tipoMap = { success: 'ge-notif--success', error: 'ge-notif--error', warning: 'ge-notif--warning' };
+    const region = _toastRegion();
+    // Erros interrompem o leitor de tela; o resto aguarda pausa natural
+    region.setAttribute('aria-live', tipo === 'error' ? 'assertive' : 'polite');
+
     const notif = document.createElement('div');
     notif.className = `ge-notif ${tipoMap[tipo] ?? 'ge-notif--info'}`;
-    notif.textContent = String(mensagem ?? '').slice(0, 200);
-    document.body.appendChild(notif);
-    setTimeout(() => {
+    notif.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
+
+    const icon = document.createElement('span');
+    icon.className = 'ge-notif__icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = _TOAST_ICONS[tipo] ?? _TOAST_ICONS.info;
+
+    const txt = document.createElement('span');
+    txt.className = 'ge-notif__text';
+    txt.textContent = String(mensagem ?? '').slice(0, 200);
+
+    notif.append(icon, txt);
+    region.appendChild(notif);
+
+    // Feedback tátil: erro = padrão duplo, demais = toque curto
+    hapticTap(tipo === 'error' ? [18, 40, 18] : 12);
+
+    let encerrado = false;
+    const encerrar = () => {
+        if (encerrado) return;
+        encerrado = true;
         notif.classList.add('ge-notif--exit');
-        setTimeout(() => { notif.remove(); }, 320);
-    }, 3000);
+        setTimeout(() => notif.remove(), 320);
+    };
+    notif.addEventListener('click', encerrar);
+    setTimeout(encerrar, 3000);
 }
 
 window.mostrarNotificacao = mostrarNotificacao;
+
+// ========== ESTADO DE CONEXÃO (online / offline) ==========
+(function initNetworkStatus() {
+    let banner = null;
+    let caiuAlgumaVez = false;
+
+    function getBanner() {
+        if (banner) return banner;
+        banner = document.createElement('div');
+        banner.id = 'geOfflineBanner';
+        banner.className = 'ge-offline-banner';
+        banner.setAttribute('role', 'status');
+        banner.setAttribute('aria-live', 'polite');
+        const ico = document.createElement('i');
+        ico.setAttribute('aria-hidden', 'true');
+        const txt = document.createElement('span');
+        banner.append(ico, txt);
+        document.body.appendChild(banner);
+        return banner;
+    }
+
+    function aoFicarOffline() {
+        caiuAlgumaVez = true;
+        const b = getBanner();
+        b.querySelector('i').className = 'fas fa-wifi';
+        b.querySelector('span').textContent = 'Você está sem conexão — suas alterações podem não ser salvas.';
+        b.classList.remove('ge-offline-banner--online');
+        b.classList.add('ge-offline-banner--visible');
+    }
+
+    function aoFicarOnline() {
+        if (!caiuAlgumaVez) return; // não anuncia "reconectado" se nunca caiu nesta sessão
+        const b = getBanner();
+        b.querySelector('i').className = 'fas fa-check-circle';
+        b.querySelector('span').textContent = 'Conexão restabelecida.';
+        b.classList.add('ge-offline-banner--online', 'ge-offline-banner--visible');
+        setTimeout(() => b.classList.remove('ge-offline-banner--visible', 'ge-offline-banner--online'), 2500);
+    }
+
+    window.addEventListener('offline', aoFicarOffline);
+    window.addEventListener('online',  aoFicarOnline);
+    if (navigator.onLine === false) aoFicarOffline();
+})();
+
+// ========== COMMAND PALETTE (Ctrl/Cmd + K) ==========
+(function initCommandPalette() {
+    const COMANDOS = [
+        { icon: 'fa-house',                 label: 'Ir para o Dashboard',   run: () => mostrarTela('dashboard') },
+        { icon: 'fa-right-left',            label: 'Ir para Transações',    run: () => mostrarTela('transacoes') },
+        { icon: 'fa-piggy-bank',            label: 'Ir para Reservas',      run: () => mostrarTela('reservas') },
+        { icon: 'fa-credit-card',           label: 'Ir para Cartões',       run: () => mostrarTela('cartoes') },
+        { icon: 'fa-chart-line',            label: 'Ir para Gráficos',      run: () => mostrarTela('graficos') },
+        { icon: 'fa-file-lines',            label: 'Ir para Relatórios',    run: () => mostrarTela('relatorios') },
+        { icon: 'fa-gear',                  label: 'Ir para Configurações', run: () => mostrarTela('configuracoes') },
+        { icon: 'fa-plus',                  label: 'Nova transação',        run: () => {
+            mostrarTela('transacoes');
+            setTimeout(() => {
+                const c = document.getElementById('selectCategoria');
+                c?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                c?.focus();
+            }, 140);
+        }},
+        { icon: 'fa-bullseye',              label: 'Nova reserva',          run: () => {
+            mostrarTela('reservas');
+            setTimeout(() => document.getElementById('btnNovaMeta')?.click(), 180);
+        }},
+        { icon: 'fa-credit-card',           label: 'Adicionar cartão',      run: () => {
+            mostrarTela('cartoes');
+            setTimeout(() => document.querySelector('.cartoes-novo-btn-add')?.click(), 180);
+        }},
+        { icon: 'fa-file-invoice-dollar',   label: 'Nova conta fixa',       run: () => {
+            mostrarTela('dashboard');
+            setTimeout(() => document.getElementById('btnNovaContaFixa')?.click(), 140);
+        }},
+    ];
+
+    let overlay, input, listEl, itens = [], selIdx = 0, focoAntes = null, construido = false;
+
+    function appVisivel() {
+        const sel = document.getElementById('selecaoPerfis');
+        if (!sel) return true;
+        return sel.style.display === 'none' || getComputedStyle(sel).display === 'none';
+    }
+
+    function construir() {
+        if (construido) return;
+        overlay = document.createElement('div');
+        overlay.className = 'ge-cmdk-overlay';
+        overlay.id = 'geCmdkOverlay';
+        overlay.innerHTML =
+            '<div class="ge-cmdk" role="dialog" aria-modal="true" aria-label="Paleta de comandos">' +
+                '<div class="ge-cmdk-search">' +
+                    '<i class="fas fa-magnifying-glass" aria-hidden="true"></i>' +
+                    '<input type="text" id="geCmdkInput" placeholder="Buscar ações e seções…" aria-label="Buscar comandos" autocomplete="off" spellcheck="false">' +
+                    '<kbd>ESC</kbd>' +
+                '</div>' +
+                '<ul class="ge-cmdk-list" id="geCmdkList" role="listbox" aria-label="Comandos"></ul>' +
+            '</div>';
+        document.body.appendChild(overlay);
+        input  = overlay.querySelector('#geCmdkInput');
+        listEl = overlay.querySelector('#geCmdkList');
+
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) fechar(); });
+        input.addEventListener('input', () => render(input.value));
+        input.addEventListener('keydown', onKey);
+        construido = true;
+    }
+
+    function filtrados(q) {
+        const t = q.trim().toLowerCase();
+        if (!t) return COMANDOS;
+        return COMANDOS.filter(c => c.label.toLowerCase().includes(t));
+    }
+
+    function render(q) {
+        itens = filtrados(q);
+        selIdx = 0;
+        listEl.innerHTML = '';
+        if (itens.length === 0) {
+            const li = document.createElement('li');
+            li.className = 'ge-cmdk-empty';
+            li.textContent = 'Nenhum comando encontrado.';
+            listEl.appendChild(li);
+            return;
+        }
+        itens.forEach((c, i) => {
+            const li = document.createElement('li');
+            li.className = 'ge-cmdk-item';
+            li.setAttribute('role', 'option');
+            li.setAttribute('aria-selected', i === selIdx ? 'true' : 'false');
+            li.dataset.idx = i;
+            const ico = document.createElement('span');
+            ico.className = 'ge-cmdk-ico';
+            ico.innerHTML = `<i class="fas ${c.icon}" aria-hidden="true"></i>`; // ícone estático, sem dado de usuário
+            const lbl = document.createElement('span');
+            lbl.textContent = c.label;
+            li.append(ico, lbl);
+            li.addEventListener('click', () => executar(i));
+            li.addEventListener('mousemove', () => marcar(i));
+            listEl.appendChild(li);
+        });
+    }
+
+    function marcar(i) {
+        if (i === selIdx) return;
+        selIdx = i;
+        [...listEl.children].forEach((li, idx) => {
+            if (li.setAttribute) li.setAttribute('aria-selected', idx === selIdx ? 'true' : 'false');
+        });
+    }
+
+    function executar(i) {
+        const cmd = itens[i];
+        fechar();
+        if (cmd) { try { cmd.run(); } catch (_) {} }
+    }
+
+    function scrollSel() {
+        listEl.querySelector(`[data-idx="${selIdx}"]`)?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function onKey(e) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); if (itens.length) { marcar((selIdx + 1) % itens.length); scrollSel(); } }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); if (itens.length) { marcar((selIdx - 1 + itens.length) % itens.length); scrollSel(); } }
+        else if (e.key === 'Enter') { e.preventDefault(); if (itens.length) executar(selIdx); }
+        else if (e.key === 'Escape') { e.preventDefault(); fechar(); }
+    }
+
+    function abrir() {
+        construir();
+        focoAntes = document.activeElement;
+        overlay.classList.add('active');
+        input.value = '';
+        render('');
+        requestAnimationFrame(() => { try { input.focus(); } catch (_) {} });
+    }
+
+    function fechar() {
+        if (!overlay || !overlay.classList.contains('active')) return;
+        overlay.classList.remove('active');
+        if (focoAntes && typeof focoAntes.focus === 'function') { try { focoAntes.focus(); } catch (_) {} }
+        focoAntes = null;
+    }
+
+    function estaAberto() { return overlay && overlay.classList.contains('active'); }
+
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+            if (!estaAberto() && !appVisivel()) return; // não abre na tela de seleção de perfil
+            e.preventDefault();
+            if (estaAberto()) fechar(); else abrir();
+        }
+    });
+})();
 
 // ========== ATALHOS DE TECLADO ==========
 
@@ -4828,10 +5203,10 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             return;
         }
-        // Fecha bottom-sheet se aberto
+        // Fecha bottom-sheet se aberto (via fecharPopup → libera focus-trap/inert)
         const bs = document.getElementById('bottomSheetOverlay');
         if (bs && bs.classList.contains('active')) {
-            bs.classList.remove('active');
+            fecharPopup();
             e.preventDefault();
             return;
         }

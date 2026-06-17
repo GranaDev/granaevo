@@ -8,7 +8,8 @@
     "dev": "vite",
     "fa:subset": "node scripts/build-fa-subset.mjs",
     "fonts:subset": "node scripts/build-fonts-subset.mjs",
-    "prebuild": "node scripts/build-fa-subset.mjs && node scripts/build-fonts-subset.mjs",
+    "lighttheme:build": "node scripts/build-light-theme.mjs",
+    "prebuild": "node scripts/build-fa-subset.mjs && node scripts/build-fonts-subset.mjs && node scripts/build-light-theme.mjs",
     "build": "vite build",
     "postbuild": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview"
@@ -25,6 +26,7 @@
     "@fontsource/outfit": "^5.2.8",
     "@fontsource/syne": "^5.2.7",
     "esbuild": "^0.28.0",
+    "knip": "^6.17.1",
     "rollup-plugin-visualizer": "^7.0.1",
     "sharp": "^0.35.1",
     "terser": "^5.31.0",

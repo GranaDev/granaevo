@@ -6,8 +6,10 @@
 
 /* Fontes self-hosted: importadas pela CSS de entrada (dashboard.css → _fonts.css). */
 
-/* Tema claro â€” overrides de componentes com cores hardcoded */
-@import './_db-light-theme.css';
+/* Tema claro NÃO é importado aqui — seria render-blocking (~66 KB) para 100% dos
+   usuários, inclusive a maioria no tema escuro. É minificado por
+   scripts/build-light-theme.mjs → public/assets/css/db-light-theme.css e
+   carregado on-demand por public/theme-init.js SOMENTE quando data-theme="light". */
 
 /* ==============================================
    GRANAEVO - CSS COMPLETO E RESPONSIVO
@@ -2305,6 +2307,20 @@ select.form-input option:checked {
 .mov-empty-sub { font-size: 0.85rem; color: var(--text-muted); margin: 0; max-width: 280px; }
 .mov-empty-cta { margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
 
+/* Empty state de contas fixas (ocupa a grid inteira) */
+.contas-empty-state {
+    grid-column: 1 / -1;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 48px 24px; text-align: center; gap: 12px;
+    background: rgba(20, 30, 22, 0.38);
+    border-radius: 14px;
+    border: 2px dashed rgba(67, 160, 71, 0.18);
+}
+.contas-empty-icon { color: rgba(67,160,71,0.3); margin-bottom: 4px; }
+.contas-empty-title { font-size: 1rem; font-weight: 600; color: var(--text-secondary); margin: 0; }
+.contas-empty-sub { font-size: 0.85rem; color: var(--text-muted); margin: 0; max-width: 320px; }
+.contas-empty-cta { margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+
 /* ── Sentinela de scroll infinito ────────────────────────────────────── */
 .mov-load-sentinela { padding: 24px; text-align: center; }
 .mov-load-info { font-size: 0.8rem; color: var(--text-muted); margin: 0; animation: pulse 1.5s ease-in-out infinite; }
@@ -2368,6 +2384,13 @@ select.form-input option:checked {
     transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
+    /* Pula layout/paint das linhas fora da viewport — grande economia de CPU em
+       listas longas de transações (aparelho fraco). Seguro: a linha já tem
+       overflow:hidden e abre modal (não popover inline), nada a clipar.
+       contain-intrinsic-size guarda a altura real após o 1º render (evita pulo
+       de scroll); 68px é só o palpite inicial. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 68px;
 }
 
 .mov-item:hover {
@@ -7832,24 +7855,232 @@ select.form-input option:checked {
 }
 
 /* â”€â”€ Toast de notificaÃ§Ã£o (mostrarNotificacao) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.ge-notif {
+/* Região única de toasts — empilha verticalmente e anuncia via aria-live */
+.ge-toast-region {
     position: fixed;
     top: 20px;
     right: 20px;
-    padding: 16px 24px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-end;
+    pointer-events: none;
+    max-width: min(92vw, 380px);
+}
+.ge-notif {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
     border-radius: 12px;
     color: #fff;
     font-weight: 600;
-    z-index: 10000;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    max-width: 100%;
     animation: slideInRight 0.3s ease-out;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    pointer-events: auto;
+    cursor: pointer;
 }
+.ge-notif__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.22);
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+.ge-notif__text { flex: 1 1 auto; min-width: 0; }
 .ge-notif--success { background: linear-gradient(135deg, #00ff99, #00cc77); }
 .ge-notif--error   { background: linear-gradient(135deg, #ff4b4b, #cc0000); }
-.ge-notif--warning { background: linear-gradient(135deg, #ffd166, #ffaa00); }
+.ge-notif--warning { background: linear-gradient(135deg, #ffd166, #ffaa00); color: #1a1200; }
+.ge-notif--warning .ge-notif__icon { background: rgba(0, 0, 0, 0.18); }
 .ge-notif--info    { background: linear-gradient(135deg, #6c63ff, #4a42cc); }
 .ge-notif--exit    { animation: slideOutRight 0.3s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+    .ge-notif, .ge-notif--exit { animation: none; }
+}
+@media (max-width: 480px) {
+    .ge-toast-region {
+        top: auto;
+        bottom: 84px; /* acima da navegação inferior mobile */
+        left: 16px;
+        right: 16px;
+        max-width: none;
+        align-items: stretch;
+    }
+}
+
+/* Count-up de valores monetários — flash de cor conforme direção */
+.valor-subiu  { animation: valorFlashUp   0.7s var(--ease-out, ease-out); }
+.valor-desceu { animation: valorFlashDown 0.7s var(--ease-out, ease-out); }
+@keyframes valorFlashUp {
+    0%   { color: var(--color-primary-light, #34d399); }
+    100% { color: inherit; }
+}
+@keyframes valorFlashDown {
+    0%   { color: var(--color-danger, #ef4444); }
+    100% { color: inherit; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .valor-subiu, .valor-desceu { animation: none; }
+}
+
+/* Validação inline de formulário — campo inválido com borda + shake */
+.campo-invalido,
+.form-field-icon input.campo-invalido,
+.form-field-icon select.campo-invalido {
+    border-color: var(--color-danger, #ef4444) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18) !important;
+    animation: campoShake 0.4s var(--ease-default, ease);
+}
+@keyframes campoShake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-5px); }
+    40%, 80% { transform: translateX(5px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .campo-invalido { animation: none; }
+}
+
+/* Banner de estado de conexão (offline / reconectado) */
+.ge-offline-banner {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #ff4b4b, #cc0000);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.88rem;
+    text-align: center;
+    transform: translateY(-100%);
+    transition: transform 0.3s var(--ease-out, ease-out);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+.ge-offline-banner--visible { transform: translateY(0); }
+.ge-offline-banner--online  { background: linear-gradient(135deg, #00cc77, #00995c); }
+@media (prefers-reduced-motion: reduce) {
+    .ge-offline-banner { transition: none; }
+}
+
+/* View Transitions entre seções — crossfade curto e suave */
+@media (prefers-reduced-motion: no-preference) {
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation-duration: 0.22s;
+        animation-timing-function: var(--ease-out, cubic-bezier(0, 0, 0.2, 1));
+    }
+}
+
+/* ===== Command Palette (Ctrl+K) ===== */
+.ge-cmdk-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10002;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 12vh 16px 16px;
+    background: rgba(5, 6, 12, 0.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+.ge-cmdk-overlay.active { display: flex; }
+.ge-cmdk {
+    width: 100%;
+    max-width: 560px;
+    background: var(--color-bg-elevated, #1e2035);
+    border: 1px solid var(--color-border-strong, rgba(255,255,255,0.16));
+    border-radius: 16px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    animation: cmdkIn 0.18s var(--ease-out, ease-out);
+}
+@keyframes cmdkIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.ge-cmdk-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.08));
+}
+.ge-cmdk-search i { color: var(--color-text-faint, #6b7280); font-size: 0.95rem; }
+.ge-cmdk-search input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--color-text, #fff);
+    font-size: 1rem;
+    font-family: inherit;
+}
+.ge-cmdk-search kbd {
+    font-size: 0.7rem;
+    color: var(--color-text-faint, #6b7280);
+    border: 1px solid var(--color-border, rgba(255,255,255,0.08));
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+.ge-cmdk-list {
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: 8px;
+    margin: 0;
+    list-style: none;
+}
+.ge-cmdk-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--color-text-lighter, #d1d5db);
+    font-size: 0.92rem;
+}
+.ge-cmdk-item .ge-cmdk-ico {
+    width: 30px; height: 30px;
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    background: var(--color-bg-soft, #1a1b2e);
+    color: var(--color-primary, #10b981);
+    font-size: 0.85rem;
+}
+.ge-cmdk-item[aria-selected="true"],
+.ge-cmdk-item:hover {
+    background: var(--color-primary, #10b981);
+    color: #fff;
+}
+.ge-cmdk-item[aria-selected="true"] .ge-cmdk-ico,
+.ge-cmdk-item:hover .ge-cmdk-ico {
+    background: rgba(255,255,255,0.2);
+    color: #fff;
+}
+.ge-cmdk-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--color-text-faint, #6b7280);
+    font-size: 0.9rem;
+}
+@media (prefers-reduced-motion: reduce) {
+    .ge-cmdk { animation: none; }
+}
 
 /* ================================================================
    RELATÃ“RIOS â€” DUO-LAYOUT DESKTOP (â‰¥ 1024px)

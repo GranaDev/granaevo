@@ -723,7 +723,7 @@ function setupBotoesRelatorio() {
     
     newBtnCasal.addEventListener('click', function () {
         if (!Array.isArray(_ctx.usuarioLogado?.perfis) || _ctx.usuarioLogado.perfis.length < 2) {
-            alert('Você precisa ter pelo menos 2 perfis cadastrados para gerar relatório de casal!');
+            _ctx.mostrarNotificacao('Você precisa ter pelo menos 2 perfis cadastrados para gerar relatório de casal!', 'warning');
             return;
         }
         _ctx.tipoRelatorioAtivo = 'casal';
@@ -738,7 +738,7 @@ function setupBotoesRelatorio() {
 
     newBtnFamilia.addEventListener('click', function () {
         if (!Array.isArray(_ctx.usuarioLogado?.perfis) || _ctx.usuarioLogado.perfis.length < 2) {
-            alert('Você precisa ter pelo menos 2 perfis para gerar relatório da família!');
+            _ctx.mostrarNotificacao('Você precisa ter pelo menos 2 perfis para gerar relatório da família!', 'warning');
             return;
         }
         _ctx.tipoRelatorioAtivo = 'familia';
@@ -808,13 +808,13 @@ async function gerarRelatorio() {
     
     // CORREÇÃO: Validar formato de mês e ano antes de processar
     if (!mes || !ano) {
-        return alert('Por favor, selecione o mês e o ano.');
+        return _ctx.mostrarNotificacao('Por favor, selecione o mês e o ano.', 'error');
     }
     if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) {
-        return alert('Mês inválido.');
+        return _ctx.mostrarNotificacao('Mês inválido.', 'error');
     }
     if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) {
-        return alert('Ano inválido.');
+        return _ctx.mostrarNotificacao('Ano inválido.', 'error');
     }
     
     _ctx._gerandoRelatorio = true;
@@ -823,10 +823,10 @@ async function gerarRelatorio() {
             const perfilEl = document.getElementById('selectPerfilRelatorio');
             if (!perfilEl) return;
             const perfilId = perfilEl.value;
-            if (!perfilId) return alert('Por favor, selecione um perfil.');
+            if (!perfilId) return _ctx.mostrarNotificacao('Por favor, selecione um perfil.', 'error');
             // CORREÇÃO: Validar que perfilId realmente existe nos perfis do usuário
             const perfilExiste = _ctx.usuarioLogado?.perfis?.some(p => String(p.id) === String(perfilId));
-            if (!perfilExiste) return alert('Perfil inválido.');
+            if (!perfilExiste) return _ctx.mostrarNotificacao('Perfil inválido.', 'error');
             await gerarRelatorioIndividual(mes, ano, perfilId);
         } else if (_ctx.tipoRelatorioAtivo === 'casal') {
             if (_ctx.usuarioLogado.plano === 'Família' && _ctx.usuarioLogado.perfis.length > 2) {
@@ -951,7 +951,7 @@ window.gerarRelatorioCompartilhadoPersonalizado = async function gerarRelatorioC
     );
 
     if (perfisAtivos.length !== 2) {
-        alert('Erro: É necessário selecionar exatamente 2 perfis.');
+        _ctx.mostrarNotificacao('É necessário selecionar exatamente 2 perfis.', 'error');
         return;
     }
 

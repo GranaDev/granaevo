@@ -5,5 +5,9 @@
  * Os módulos individuais (src/styles/dashboard/) estão disponíveis
  * para referência e edição futura.
  */
-@import './_fonts.css';
+/* Fontes ESCOPADAS ao dashboard: só DM Sans (corpo) + Syne (títulos).
+   Não carrega Inter (7 pesos, usado só na landing) nem Outfit (só convidados) —
+   o dashboard cita 'Inter' apenas como fallback de DM Sans, que sempre carrega.
+   Gerado por scripts/build-fonts-subset.mjs. */
+@import './vendor/fonts-dashboard.css';
 @import './dashboard/_db-all.css';

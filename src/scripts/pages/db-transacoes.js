@@ -142,6 +142,25 @@ function atualizarCamposCredito() {
     }
 }
 
+// Sinaliza um campo inválido inline: aria-invalid + borda/shake + foco + toast.
+// Limpa o estado automaticamente quando o usuário corrige o campo.
+function _campoInvalido(el, mensagem) {
+    if (el) {
+        el.setAttribute('aria-invalid', 'true');
+        el.classList.remove('campo-invalido');
+        void el.offsetWidth; // reinicia a animação de shake
+        el.classList.add('campo-invalido');
+        const limpar = () => {
+            el.removeAttribute('aria-invalid');
+            el.classList.remove('campo-invalido');
+        };
+        el.addEventListener('input',  limpar, { once: true });
+        el.addEventListener('change', limpar, { once: true });
+        try { el.focus({ preventScroll: false }); } catch (_) {}
+    }
+    _ctx.mostrarNotificacao?.(mensagem, 'error');
+}
+
 function lancarTransacao() {
     let categoria = document.getElementById('selectCategoria').value;
     const descricao = document.getElementById('inputDescricao').value.trim();
@@ -179,10 +198,10 @@ function lancarTransacao() {
         || valorEl.value.replace(/\./g, '').replace(',', '.');
 
     if(categoria === 'reserva' && _ctx.metas.filter(m => m.id !== 'emergency').length === 0) {
-        return alert('Você ainda não criou nenhuma meta ou reserva, crie no menu "Reservas"');
+        return _ctx.mostrarNotificacao('Você ainda não criou nenhuma meta ou reserva, crie no menu "Reservas"', 'error');
     }
-    if(!descricao) return alert('Digite a descrição.');
-    if(!valorStr || !Number.isFinite(Number(valorStr)) || Number(valorStr) <= 0) return alert('Digite um valor válido.');
+    if(!descricao) return _campoInvalido(document.getElementById('inputDescricao'), 'Digite a descrição.');
+    if(!valorStr || !Number.isFinite(Number(valorStr)) || Number(valorStr) <= 0) return _campoInvalido(valorEl, 'Digite um valor válido.');
 
     const valor = parseFloat(parseFloat(valorStr).toFixed(2));
     const dh    = _ctx.agoraDataHora();
@@ -191,11 +210,11 @@ function lancarTransacao() {
         const cartaoSel   = document.getElementById('selectCartao').value;
         const parcelasSel = Number(document.getElementById('selectParcelas').value);
 
-        if(!cartaoSel)   return alert("Selecione o cartão!");
-        if(!parcelasSel) return alert("Selecione a quantidade de parcelas!");
+        if(!cartaoSel)   return _ctx.mostrarNotificacao("Selecione o cartão!", 'error');
+        if(!parcelasSel) return _ctx.mostrarNotificacao("Selecione a quantidade de parcelas!", 'error');
 
         const cartao = _ctx.cartoesCredito.find(c => String(c.id) === String(cartaoSel));
-        if(!cartao) return alert("Cartão não encontrado!");
+        if(!cartao) return _ctx.mostrarNotificacao("Cartão não encontrado!", 'error');
         if(cartao.congelado) { _ctx.mostrarNotificacao('Cartão congelado. Descongele no menu de Cartões para utilizá-lo.', 'error'); return; }
 
         if(!confirm(`Compra de ${formatBRL(valor)} no cartão ${cartao.nomeBanco}, em ${parcelasSel}x de ${formatBRL(valor/parcelasSel)}.\nProsseguir?`)) return;
@@ -285,7 +304,7 @@ function lancarTransacao() {
         document.getElementById('inputDescricao').value = '';
         document.getElementById('inputValor').value     = '';
 
-        alert("Compra lançada! A fatura do cartão foi atualizada.");
+        _ctx.mostrarNotificacao?.('Compra lançada! A fatura do cartão foi atualizada.', 'success');
         return;
     }
 
@@ -293,15 +312,15 @@ function lancarTransacao() {
         const cartaoSel = document.getElementById('selectCartaoAssinatura').value;
         const diaSel    = document.getElementById('selectDiaCobranca').value;
 
-        if(!cartaoSel) return alert("Selecione o cartão!");
-        if(!diaSel)    return alert("Selecione o dia de cobrança!");
+        if(!cartaoSel) return _ctx.mostrarNotificacao("Selecione o cartão!", 'error');
+        if(!diaSel)    return _ctx.mostrarNotificacao("Selecione o dia de cobrança!", 'error');
 
         const cartao = _ctx.cartoesCredito.find(c => String(c.id) === String(cartaoSel));
-        if(!cartao) return alert("Cartão não encontrado!");
+        if(!cartao) return _ctx.mostrarNotificacao("Cartão não encontrado!", 'error');
         if(cartao.congelado) { _ctx.mostrarNotificacao('Cartão congelado. Descongele no menu de Cartões para utilizá-lo.', 'error'); return; }
 
         const diaCobranca = Number(diaSel);
-        if(!Number.isInteger(diaCobranca) || diaCobranca < 1 || diaCobranca > 28) return alert("Dia de cobrança inválido!");
+        if(!Number.isInteger(diaCobranca) || diaCobranca < 1 || diaCobranca > 28) return _ctx.mostrarNotificacao("Dia de cobrança inválido!", 'error');
 
         if(!confirm(`Criar assinatura "${descricao}" de ${formatBRL(valor)} no cartão ${cartao.nomeBanco}, com cobrança todo dia ${diaCobranca}.\nProsseguir?`)) return;
 
@@ -330,7 +349,7 @@ function lancarTransacao() {
         document.getElementById('inputValor').value       = '';
         document.getElementById('selectDiaCobranca').value = '';
 
-        alert("Assinatura criada! A primeira cobrança já foi lançada na fatura do cartão.");
+        _ctx.mostrarNotificacao?.('Assinatura criada! A primeira cobrança já foi lançada na fatura do cartão.', 'success');
         return;
     }
 
@@ -405,6 +424,8 @@ function lancarTransacao() {
         atualizarTiposDinamicos();
         document.getElementById('inputDescricao').value = '';
         document.getElementById('inputValor').value     = '';
+
+        _ctx.mostrarNotificacao?.('Transação lançada com sucesso!', 'success');
     });
 }
 
@@ -945,9 +966,9 @@ function editarTransacao(t) {
             const novaCat      = selCat.value;
             const novoTipo     = selTipo.value;
 
-            if (!novaDesc) return alert('Digite a descrição.');
+            if (!novaDesc) return _ctx.mostrarNotificacao('Digite a descrição.', 'error');
             const novoValor = parseFloat(parseFloat(novoValorStr).toFixed(2));
-            if (!novoValorStr || !Number.isFinite(novoValor) || novoValor <= 0) return alert('Digite um valor válido.');
+            if (!novoValorStr || !Number.isFinite(novoValor) || novoValor <= 0) return _ctx.mostrarNotificacao('Digite um valor válido.', 'error');
 
             const diff = novoValor - Number(t.valor);
             if (diff !== 0 && t.metaId) {
@@ -1362,10 +1383,10 @@ function abrirModalOrcamento(tipoEditar) {
         const limiteStr = document.getElementById('orcLimiteInput').value;
         const limite    = parseFloat(parseFloat(limiteStr).toFixed(2));
 
-        if (!tipoSel) return alert('Selecione a categoria.');
-        if (!_TIPOS_ORCAMENTO.includes(tipoSel)) return alert('Categoria inválida.');
-        if (!isFinite(limite) || limite <= 0) return alert('Digite um limite válido.');
-        if (limite > 10_000_000) return alert('Limite muito alto.');
+        if (!tipoSel) return _ctx.mostrarNotificacao('Selecione a categoria.', 'error');
+        if (!_TIPOS_ORCAMENTO.includes(tipoSel)) return _ctx.mostrarNotificacao('Categoria inválida.', 'error');
+        if (!isFinite(limite) || limite <= 0) return _ctx.mostrarNotificacao('Digite um limite válido.', 'error');
+        if (limite > 10_000_000) return _ctx.mostrarNotificacao('Limite muito alto.', 'error');
 
         const novo = Object.assign({}, _ctx.orcamentos);
         novo[tipoSel] = { limite };
