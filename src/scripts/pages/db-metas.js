@@ -2161,12 +2161,12 @@ function abrirRetiradaForm() {
         renderMetaVisual();
         _ctx.fecharPopup();
 
-        let mensagemFinal = `Retirada de ${formatBRL(valorRetirar)} realizada com sucesso!\nO valor foi devolvido ao seu saldo.`;
-        if(motivoFinal.includes('Emergência'))  mensagemFinal += '\n\n💙 Esperamos que tudo se resolva bem.';
-        else if(motivoFinal.includes('Investimento')) mensagemFinal += '\n\n📈 Ótima escolha! Investir é construir seu futuro.';
-        else if(motivoFinal.includes('Dívida'))      mensagemFinal += '\n\n💪 Parabéns por priorizar a quitação de dívidas!';
+        let mensagemFinal = `Retirada de ${formatBRL(valorRetirar)} realizada! O valor voltou ao seu saldo.`;
+        if(motivoFinal.includes('Emergência'))        mensagemFinal += ' 💙 Esperamos que tudo se resolva bem.';
+        else if(motivoFinal.includes('Investimento')) mensagemFinal += ' 📈 Ótima escolha!';
+        else if(motivoFinal.includes('Dívida'))        mensagemFinal += ' 💪 Parabéns por priorizar a quitação!';
 
-        alert(mensagemFinal);
+        _ctx.mostrarNotificacao(mensagemFinal, 'success');
     });
 }
 

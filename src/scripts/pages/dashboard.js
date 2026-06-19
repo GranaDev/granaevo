@@ -3647,7 +3647,7 @@ function anteciparContaFixa(id, valorPago) {
             salvarDados();
             atualizarTudo();
             conta._processando = false;
-            alert(`✅ Fatura antecipada! Próxima: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
+            mostrarNotificacao(`Fatura antecipada! Próxima: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`, 'success');
             return;
         }
 
@@ -3659,7 +3659,7 @@ function anteciparContaFixa(id, valorPago) {
         salvarDados();
         atualizarTudo();
         conta._processando = false;
-        alert(`✅ Antecipação registrada! Próximo vencimento: ${formatarDataBR(conta.vencimento)}`);
+        mostrarNotificacao(`Antecipação registrada! Próximo vencimento: ${formatarDataBR(conta.vencimento)}`, 'success');
 
     } catch (erro) {
         console.error('❌ Erro na antecipação, revertendo:', erro);
@@ -3785,7 +3785,7 @@ function pagarContaFixa(id, valorPago) {
             salvarDados();
             atualizarTudo();
             conta._processando = false;
-            alert(`✅ Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`);
+            mostrarNotificacao(`Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`, 'success');
             return;
         }
 

@@ -1723,7 +1723,7 @@ function setupPortalButton(session) {
 
         } catch (err) {
             console.error('[atualizarplano] Erro no portal:', err);
-            alert(`Não foi possível abrir o portal.\n\n${err.message}\n\nTente novamente em instantes.`);
+            _showToast('Não foi possível abrir o portal. Tente novamente em instantes.', 'error');
             btn.disabled = false;
             btn.setAttribute('aria-busy', 'false');
             if (btnText) btnText.textContent = 'Abrir portal de gerenciamento';
