@@ -7,7 +7,8 @@
     "public/pwa-init.js",
     "public/sw-push-handler.js",
     "public/scripts/modules/graficos.js",
-    "vite.config.js",
+    "public/scripts/modules/recaptcha-init.js",
+    "public/scripts/vendor/chart.umd.min.js",
     "scripts/*.mjs"
   ],
   "project": [
@@ -17,11 +18,14 @@
     "scripts/**/*.mjs"
   ],
   "ignore": [
-    "supabase/**",
-    "dist/**",
-    "node_modules/**"
+    "supabase/**"
   ],
   "ignoreBinaries": ["vercel", "supabase"],
-  "ignoreDependencies": [],
-  "vite": false
+  "ignoreDependencies": [
+    "@fortawesome/fontawesome-free",
+    "@fontsource/dm-sans",
+    "@fontsource/inter",
+    "@fontsource/outfit",
+    "@fontsource/syne"
+  ]
 }

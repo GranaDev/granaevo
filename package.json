@@ -12,7 +12,8 @@
     "prebuild": "node scripts/build-fa-subset.mjs && node scripts/build-fonts-subset.mjs && node scripts/build-light-theme.mjs",
     "build": "vite build",
     "postbuild": "node scripts/check-bundle-size.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deadcode": "knip --no-progress"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",
