@@ -5,6 +5,7 @@
     "src/scripts/pages/*.js",
     "public/theme-init.js",
     "public/pwa-init.js",
+    "public/css-boot.js",
     "public/sw-push-handler.js",
     "public/scripts/modules/graficos.js",
     "public/scripts/modules/recaptcha-init.js",

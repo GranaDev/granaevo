@@ -25,7 +25,46 @@
          ================================================================ -->
     <!-- Preload do logo — aparece imediatamente na tela de loading (LCP crítico) -->
     <link rel="preload" as="image" href="/assets/icons/granaevo-logo.jpg">
-    <link rel="stylesheet" href="src/styles/dashboard.css?v=14">
+    <!-- ┌─────────────────────────────────────────────────────────────────┐
+         │ CSS STREAMING (lógica GTA): pinta o loader INSTANTANEAMENTE com  │
+         │ o CSS crítico inline abaixo, e baixa o CSS completo (~285 KB) em │
+         │ paralelo sem bloquear o primeiro paint. Antes, o loader só       │
+         │ aparecia DEPOIS de todo o CSS baixar — tela branca no boot.      │
+         │ CSP /dashboard permite style-src 'unsafe-inline'.                │
+         └─────────────────────────────────────────────────────────────────┘ -->
+    <style id="critical-css">
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'DM Sans','Inter','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh;overflow-x:hidden;position:relative}
+      body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at top,rgba(67,160,71,.15),transparent 50%),radial-gradient(ellipse at bottom,rgba(46,125,50,.1),transparent 50%);pointer-events:none;z-index:0}
+      .js-hidden{display:none!important}
+      .loading-screen{position:fixed;inset:0;background:#090a12;display:flex;align-items:center;justify-content:center;z-index:10000;transition:opacity .5s ease,visibility .5s ease}
+      .loading-screen.hidden{opacity:0;visibility:hidden;pointer-events:none}
+      .profile-loading{position:fixed;inset:0;background:#090a12;display:flex;align-items:center;justify-content:center;z-index:10001}
+      .profile-loading.hidden{display:none}
+      .pl-inner{display:flex;flex-direction:column;align-items:center;gap:28px}
+      .pl-logo-ring{position:relative;width:90px;height:90px;display:flex;align-items:center;justify-content:center}
+      .pl-logo{width:62px;height:62px;border-radius:16px;object-fit:cover;position:relative;z-index:1}
+      .pl-ring{position:absolute;inset:0;border-radius:50%;border:2.5px solid rgba(16,185,129,.15);border-top-color:#10b981;animation:spin .85s linear infinite}
+      .pl-text{color:#dff5ec;font-size:1.1rem;font-weight:600;letter-spacing:-.01em;margin:0;text-align:center}
+      .pl-sub{color:#3f6e58;font-size:.82rem;margin:-16px 0 0;text-align:center}
+      .loader{text-align:center}
+      .loader-logo{width:96px;height:96px;margin:0 auto 2rem;position:relative}
+      .loader-logo::before{content:'';position:absolute;inset:-8px;border-radius:24px;border:2px solid transparent;background:linear-gradient(135deg,#10b981,transparent) border-box;-webkit-mask:linear-gradient(#fff 0 0) padding-box,linear-gradient(#fff 0 0);-webkit-mask-composite:destination-out;mask-composite:exclude;animation:spin 3s linear infinite}
+      .logo-img-loader{width:100%;height:100%;object-fit:contain;border-radius:16px;box-shadow:0 0 40px rgba(16,185,129,.6);animation:logoFloat 2.5s ease-in-out infinite}
+      .loader-bar{width:220px;height:5px;background:rgba(16,185,129,.12);border-radius:9999px;overflow:hidden;margin:0 auto 1rem}
+      .loader-progress{height:100%;width:10%;background:linear-gradient(90deg,#059669,#6ee7b7,#10b981);background-size:200% 100%;border-radius:9999px;box-shadow:0 0 14px rgba(16,185,129,.7);transition:width .45s cubic-bezier(.4,0,.2,1);animation:shimmerBg 1.5s ease infinite}
+      .loader-text{font-size:.8125rem;font-weight:500;color:#94a3b8;letter-spacing:.03em;animation:pulse 2s ease-in-out infinite}
+      @keyframes spin{to{transform:rotate(360deg)}}
+      @keyframes logoFloat{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-8px) scale(1.04)}}
+      @keyframes shimmerBg{0%{background-position:100% 0}100%{background-position:-100% 0}}
+      @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+    </style>
+    <!-- CSS completo do dashboard. O plugin async-dashboard-css (vite.config.js)
+         reescreve este <link> no build para media="print" + data-async-style; o
+         css-boot.js troca para media="all" ao terminar de baixar — tira do caminho
+         crítico sem FOUC (o loader acima já está pintado). noscript = fallback. -->
+    <link rel="stylesheet" href="src/styles/dashboard.css?v=15">
+    <script src="/css-boot.js"></script>
     <!-- graficos.css NÃO é carregado aqui: é lazy via import em db-graficos.js,
          baixado só quando a aba Gráficos abre (era ~28 KB render-blocking à toa). -->
     <!-- Supabase: abre TCP+TLS com antecedência — reduz latência da primeira API call -->

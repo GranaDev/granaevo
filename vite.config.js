@@ -6,6 +6,34 @@ export default defineConfig(({ mode }) => ({
   publicDir: 'public',
 
   plugins: [
+    // ─── CSS STREAMING (lógica GTA) ─────────────────────────────────────────
+    // Tira o CSS pesado do dashboard (~285 KB) do caminho crítico de render.
+    // O Vite injeta o <link rel="stylesheet"> hasheado como render-blocking;
+    // aqui reescrevemos para media="print" (baixa sem bloquear paint) + marca
+    // data-async-style. O css-boot.js troca para media="all" assim que carrega.
+    // O loader já é pintado pelo CSS crítico inline no <head> → zero tela branca.
+    // Escopo: SOMENTE dashboard.html (demais páginas seguem padrão normal).
+    {
+      name: 'async-dashboard-css',
+      enforce: 'post',
+      transformIndexHtml(html, ctx) {
+        const file = ctx?.filename || ctx?.path || '';
+        if (!/dashboard\.html$/.test(file)) return html;
+        let changed = false;
+        const out = html.replace(
+          /<link\s+rel="stylesheet"((?:(?!data-async-style)[^>])*?)href="([^"]+\.css(?:\?[^"]*)?)"((?:(?!data-async-style)[^>])*?)>/g,
+          (m, pre, href, post) => {
+            // não mexer em links já marcados ou já com media definido
+            if (/\bmedia=/.test(pre + post)) return m;
+            changed = true;
+            return `<link rel="stylesheet"${pre}href="${href}"${post} media="print" data-async-style>` +
+                   `<noscript><link rel="stylesheet" href="${href}"></noscript>`;
+          }
+        );
+        return changed ? out : html;
+      },
+    },
+
     // Gera dist/stats.html com mapa visual do bundle (tamanho gzip + brotli por módulo)
     visualizer({
       filename:   'dist/stats.html',

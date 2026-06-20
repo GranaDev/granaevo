@@ -4,6 +4,10 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?
 import { dataManager } from '../modules/data-manager.js?v=8';
 import AuthGuard from '../modules/auth-guard.js?v=2';
 import '../modules/scroll-lock.js?v=1';
+import { initErrorTracking, setUserContext } from '../modules/error-tracking.js';
+
+// Inicializa rastreamento de erros o quanto antes (no-op sem VITE_SENTRY_DSN / fora de produção)
+initErrorTracking();
 
 // ========== CONSTANTES ==========
 const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -1220,6 +1224,19 @@ async function salvarDados() {
     });
 }
 
+// Barra de progresso HONESTA: reflete as etapas REAIS do boot (auth → perfil →
+// dados), não uma animação fixa que sempre enchia até 100% em 1.4s. A largura
+// inicial (10%) vem do CSS e aparece já no primeiro paint; aqui só avançamos
+// conforme cada etapa de fato termina. style.width é DOM API (não viola CSP).
+function _setLoaderProgress(pct, texto) {
+    const bar = document.querySelector('#authLoading .loader-progress');
+    if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    if (texto) {
+        const lt = document.getElementById('loaderText');
+        if (lt) lt.textContent = texto;
+    }
+}
+
 async function verificarLogin() {
     const authLoading = document.getElementById('authLoading');
     const protectedContent = document.querySelector('[data-protected-content]');
@@ -1241,6 +1258,7 @@ async function verificarLogin() {
 
     try {
         _log.info('[VERIFICAR LOGIN] AuthGuard OK. isGuest:', userData.isGuest);
+        _setLoaderProgress(40, 'Autenticado, preparando seu perfil...');
 
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) { window.location.href = 'login.html'; return; }
@@ -1261,9 +1279,13 @@ async function verificarLogin() {
 
         _log.info('[VERIFICAR LOGIN] Usuário inicializado. isGuest:', usuarioLogado.isGuest);
 
+        // Contexto do usuário no Sentry (id + plano; email é mascarado internamente; sem dados financeiros)
+        setUserContext({ id: usuarioLogado.userId, email: usuarioLogado.email, plan: usuarioLogado.plano });
+
         _log.info('[VERIFICAR LOGIN] Inicializando DataManager...');
         await dataManager.initialize(effectiveUserId, effectiveEmail);
         _log.info('[VERIFICAR LOGIN] DataManager inicializado');
+        _setLoaderProgress(65);
 
         _effectiveUserId = effectiveUserId;
         _effectiveEmail  = effectiveEmail;
@@ -1291,6 +1313,7 @@ async function verificarLogin() {
         if (!resultadoPerfis.sucesso) {
             throw new Error("Não foi possível carregar os dados do usuário.");
         }
+        _setLoaderProgress(85, 'Quase lá...');
 
         _log.info('[VERIFICAR LOGIN] Login completo. Verificando perfil salvo na sessão...');
 
@@ -1304,10 +1327,10 @@ async function verificarLogin() {
                     _log.info('[VERIFICAR LOGIN] Restaurando perfil salvo:', idSalvo);
                     perfilRestaurado = true;
                     // Mantém o MESMO loader (authLoading) visível durante o boot —
-                    // só atualiza o texto. silent:true evita o segundo overlay empilhado.
-                    const lt = document.getElementById('loaderText');
-                    if (lt) lt.textContent = 'Carregando seus dados...';
+                    // só atualiza texto + progresso. silent:true evita overlay empilhado.
+                    _setLoaderProgress(92, 'Carregando seus dados...');
                     await entrarNoPerfil(idx, { silent: true });
+                    _setLoaderProgress(100, 'Pronto!');
                 }
             }
         } catch (_) {}
@@ -1960,15 +1983,14 @@ function _makeCtx() {
 let _dbLoaded = { transacoes: false, metas: false, cartoes: false, graficos: false, relatorios: false, configuracoes: false };
 
 function mostrarTela(tela) {
-    // Transição suave entre seções via View Transitions API (crossfade nativo).
-    // Degrada graciosamente onde a API não existe ou em reduced-motion.
-    const podeAnimar = typeof document.startViewTransition === 'function'
-        && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (podeAnimar) {
-        document.startViewTransition(() => _mostrarTelaImpl(tela));
-    } else {
-        _mostrarTelaImpl(tela);
-    }
+    // Transição leve 100% CSS (.page.active → keyframe pageEnter: opacity+translateY
+    // compositados na GPU). Antes usávamos document.startViewTransition(), que tira um
+    // SNAPSHOT da viewport inteira a cada troca — o DOM do dashboard é enorme, então
+    // isso travava em aparelhos fracos e ainda fazia crossfade para a aba VAZIA enquanto
+    // o módulo era importado (conteúdo "pipocava" depois). A animação CSS é barata,
+    // consistente e cobre o reflow do display:none→block. _mostrarTelaImpl já marca a
+    // navegação ativa de forma síncrona no início → feedback instantâneo no clique.
+    _mostrarTelaImpl(tela);
 }
 
 function _mostrarTelaImpl(tela) {

@@ -344,11 +344,15 @@ body::before {
 
 .loader-progress {
     height: 100%;
-    width: 0;
+    width: 10%; /* início visível no primeiro paint; JS avança conforme o boot real */
     background: linear-gradient(90deg, #059669, #6ee7b7, #10b981);
     background-size: 200% 100%;
     border-radius: 9999px;
-    animation: loadProgress 1.4s ease-in-out forwards, shimmerBg 1.5s ease infinite;
+    /* Largura controlada por JS conforme as etapas REAIS do boot (auth → perfil →
+       dados). Antes: animation loadProgress enchia até 100% em 1.4s sempre, mesmo
+       com a carga demorando mais — barra "mentia". Agora reflete o progresso real. */
+    transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: shimmerBg 1.5s ease infinite;
     box-shadow: 0 0 14px rgba(16, 185, 129, 0.7);
 }
 
@@ -360,11 +364,6 @@ body::before {
     animation: pulse 2s ease-in-out infinite;
 }
 
-@keyframes loadProgress {
-    0%   { width: 0%;   }
-    60%  { width: 75%;  }
-    100% { width: 100%; }
-}
 
 @keyframes shimmerBg {
     0%   { background-position: 100% 0; }
@@ -1050,10 +1049,25 @@ body::before {
 
 .page {
     display: none;
-    animation: fadeIn 0.5s ease-out;
 }
 
 .page.active { display: block; }
+
+/* Transição de aba: leve, rápida e compositada na GPU (opacity + translateY).
+   Substitui o antigo document.startViewTransition() (snapshot caro da viewport
+   inteira, travava em aparelhos fracos). Antes a base .page tinha fadeIn 0.5s/20px
+   que ainda rodava JUNTO do View Transition — duas animações brigando. Agora é uma
+   só, curta (0.28s/8px), e desligada em prefers-reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+    .page.active {
+        animation: pageEnter 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+}
+
+@keyframes pageEnter {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
 
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(20px); }
@@ -7975,14 +7989,9 @@ select.form-input option:checked {
     .ge-offline-banner { transition: none; }
 }
 
-/* View Transitions entre seções — crossfade curto e suave */
-@media (prefers-reduced-motion: no-preference) {
-    ::view-transition-old(root),
-    ::view-transition-new(root) {
-        animation-duration: 0.22s;
-        animation-timing-function: var(--ease-out, cubic-bezier(0, 0, 0.2, 1));
-    }
-}
+/* (Removido) Estilos de ::view-transition — a transição de aba agora é a animação
+   CSS .page.active/pageEnter (ver seção MAIN CONTENT). startViewTransition foi
+   descontinuado em dashboard.js por ser caro em aparelhos fracos. */
 
 /* ===== Command Palette (Ctrl+K) ===== */
 .ge-cmdk-overlay {
