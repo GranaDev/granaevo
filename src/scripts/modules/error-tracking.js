@@ -61,11 +61,14 @@ export async function initErrorTracking() {
         // Remove dados de autenticação dos eventos (PII)
         if (event.request) {
           delete event.request.cookies;
-          delete event.request.headers?.['authorization'];
+          if (event.request.headers) delete event.request.headers['authorization'];
         }
-        // Remove breadcrumbs de XHR/fetch para /api/ (podem conter tokens)
-        if (event.breadcrumbs?.values) {
-          event.breadcrumbs.values = event.breadcrumbs.values.filter(b => {
+        // Remove breadcrumbs de XHR/fetch para /api/ (podem conter tokens).
+        // SDK v8+: event.breadcrumbs é um array (Breadcrumb[]) — NÃO { values: [] }
+        // como era no v7. Usar .values aqui pegava o iterador nativo do Array e
+        // quebrava no .filter (TypeError) — derrubando todo o envio de eventos.
+        if (Array.isArray(event.breadcrumbs)) {
+          event.breadcrumbs = event.breadcrumbs.filter(b => {
             if (b.type === 'http' && b.data?.url?.includes('/api/')) return false;
             return true;
           });
