@@ -85,8 +85,9 @@ export async function initErrorTracking() {
       ],
 
       // Integrações mínimas (sem rastreamento de performance para reduzir overhead)
+      // Sentry v8+: browserTracingIntegration() (função), não mais new BrowserTracing()
       integrations: [
-        new Sentry.BrowserTracing({
+        Sentry.browserTracingIntegration({
           // Não rastrear requests para Supabase (dados financeiros sensíveis)
           shouldCreateSpanForRequest: (url) => !url.includes('supabase.co'),
         }),

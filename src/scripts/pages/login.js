@@ -1,4 +1,8 @@
 import { supabase, SUPABASE_ANON_KEY, setRememberMe, loginWithPassword, logout, supabaseReady } from '../services/supabase-client.js';
+import { initErrorTracking } from '../modules/error-tracking.js';
+
+// Rastreamento de erros (no-op sem VITE_SENTRY_DSN / fora de produção)
+initErrorTracking();
 
 // ═══════════════════════════════════════════════════════════════
 //  [TT-POLICY-1] TRUSTED TYPES — POLÍTICA granaevo-policy

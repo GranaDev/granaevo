@@ -6,6 +6,10 @@
 import AuthGuard    from '../modules/auth-guard.js?v=2';
 import { supabase, getValidAccessToken } from '../services/supabase-client.js?v=2';
 import '../modules/scroll-lock.js?v=1';
+import { initErrorTracking } from '../modules/error-tracking.js';
+
+// Rastreamento de erros (no-op sem VITE_SENTRY_DSN / fora de produção)
+initErrorTracking();
 
 // ── Loading screen ────────────────────────────────────────────────
 window.addEventListener('load', () => {

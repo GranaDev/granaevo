@@ -4,6 +4,10 @@
 // ==========================================
 
 import { supabase, loginWithPassword } from '../services/supabase-client.js?v=2';
+import { initErrorTracking } from '../modules/error-tracking.js';
+
+// Rastreamento de erros (no-op sem VITE_SENTRY_DSN / fora de produção)
+initErrorTracking();
 
 // ==========================================
 // MODAL DE CADASTRO PRÉ-CHECKOUT
