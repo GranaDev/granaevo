@@ -13,7 +13,8 @@
     "build": "vite build",
     "postbuild": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview",
-    "deadcode": "knip --no-progress"
+    "deadcode": "knip --no-progress",
+    "images:optimize": "node scripts/optimize-images.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",
