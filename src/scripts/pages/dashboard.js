@@ -5920,6 +5920,13 @@ window.addEventListener('beforeunload', () => {
     if (idx !== -1) profilesAtual[idx] = dadosAtual;
     else profilesAtual.push(dadosAtual);
 
+    // Anti-wipe: este POST cru bypassa o dataManager. Se a memória foi esvaziada
+    // por um load falho, persistir aqui sobrescreveria o banco com dados vazios.
+    if (dataManager.isDestructiveSave(profilesAtual)) {
+        _log.warn('[beforeunload] save bloqueado pelo anti-wipe (load falho — não sobrescrever banco)');
+        return;
+    }
+
     const payload = JSON.stringify({ profiles: profilesAtual });
     if (payload.length > 4_900_000) return;
 

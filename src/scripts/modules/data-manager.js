@@ -82,6 +82,17 @@ class DataManager {
     // Atualizado em loadUserData(); zerado em reset().
     #lastKnownProfileCount = 0;
 
+    // ── Guarda ANTI-WIPE (conteúdo) ──────────────────────────────────────────
+    // O guard de count só bloqueia 0 perfis. Mas a falha real esvazia o CONTEÚDO
+    // de um perfil (transações/contas/cartões/metas) mantendo o objeto — passava
+    // batido e destruía dados. Estes campos rastreiam:
+    //  - #lastLoadOk: o último loadUserData desta sessão foi um sucesso real
+    //    (200 com dados parseados), e não um #emptyStructure() de falha transitória.
+    //  - #idsWithData: ids de perfis que JÁ tiveram dados (persistido em localStorage
+    //    p/ sobreviver a reloads — cobre o caso do 1º load da sessão falhar).
+    #lastLoadOk  = false;
+    #idsWithData = new Set();
+
     // ── Getter público — somente leitura ─────────────────────────────────────
     get userId() {
         return this.#userId;
@@ -109,6 +120,10 @@ class DataManager {
         // ✅ Define ANTES de qualquer await para evitar race conditions
         this.#userId    = userId.trim();
         this.#userEmail = userEmail.trim();
+
+        // Restaura a memória de "perfis que tinham dados" do último login neste
+        // browser — arma o anti-wipe já no 1º save, mesmo se o 1º load falhar.
+        this.#loadPersistedDataFlags();
 
         if (IS_DEV) {
             console.log('📦 [DATA-MANAGER] Inicializado com sucesso.');
@@ -140,6 +155,10 @@ class DataManager {
         this.#queueDepth           = 0;
         this.#saveQueue            = Promise.resolve();
         this.#lastKnownProfileCount = 0;
+        // NÃO limpa o localStorage de #idsWithData — a memória do que tinha dados
+        // deve sobreviver ao logout p/ proteger o próximo login no mesmo browser.
+        this.#lastLoadOk           = false;
+        this.#idsWithData          = new Set();
         if (IS_DEV) console.log('🔒 [DATA-MANAGER] Estado limpo — usuário deslogado');
     }
 
@@ -149,6 +168,11 @@ class DataManager {
 
     async loadUserData() {
         try {
+            // Pessimista por padrão: só vira true num sucesso real (200 + parse).
+            // Qualquer #emptyStructure() de falha transitória deixa isto false,
+            // o que ARMA o guarda anti-wipe nos saves subsequentes.
+            this.#lastLoadOk = false;
+
             if (!this.#userId) {
                 console.error('❌ [DATA-MANAGER] userId não definido — faça initialize() primeiro');
                 return this.#emptyStructure();
@@ -216,6 +240,10 @@ class DataManager {
 
             // Atualiza referência para o guarda anti-reset no próximo save
             this.#lastKnownProfileCount = userData.profiles.length;
+
+            // Load real bem-sucedido: confia no estado e memoriza quem tinha dados.
+            this.#lastLoadOk = true;
+            this.#rememberProfilesWithData(userData.profiles);
 
             if (IS_DEV) {
                 console.log('✅ [DATA-MANAGER] Dados carregados:', {
@@ -311,6 +339,18 @@ class DataManager {
                 `❌ [DATA-MANAGER] BLOQUEIO ANTI-RESET: save de 0 perfis rejeitado ` +
                 `(último load: ${this.#lastKnownProfileCount} perfis). ` +
                 `Use restauração de backup se os dados foram perdidos.`
+            );
+            return false;
+        }
+
+        // Guarda ANTI-WIPE (conteúdo): cobre o caso em que o array de perfis NÃO
+        // está vazio, mas um perfil que tinha dados está sendo esvaziado após um
+        // load malsucedido (transações/contas/cartões/metas zerados em memória).
+        if (this.isDestructiveSave(profilesData)) {
+            console.error(
+                '❌ [DATA-MANAGER] BLOQUEIO ANTI-WIPE: save esvaziaria um perfil que ' +
+                'tinha dados, após um load malsucedido — rejeitado para não destruir ' +
+                'dados reais no banco. Recarregue a página antes de tentar de novo.'
             );
             return false;
         }
@@ -491,6 +531,11 @@ class DataManager {
             return false;
         }
 
+        if (this.isDestructiveSave(profilesData)) {
+            console.error('❌ [SAVE-IMMEDIATE] BLOQUEIO ANTI-WIPE — perfil com dados seria esvaziado após load falho. Cancelado.');
+            return false;
+        }
+
         let payload;
         try {
             payload = JSON.stringify({ profiles: profilesData });
@@ -638,6 +683,61 @@ class DataManager {
 
     #emptyStructure() {
         return { version: '1.0', profiles: [] };
+    }
+
+    // ============================ //
+    //   ANTI-WIPE (CONTEÚDO)       //
+    // ============================ //
+
+    #dataFlagsKey() {
+        return `ge_hasdata_${this.#userId}`;
+    }
+
+    // Um perfil "tem dados" se qualquer coleção financeira não está vazia.
+    #profileHasData(p) {
+        if (!p || typeof p !== 'object') return false;
+        const nonEmpty = (k) => Array.isArray(p[k]) && p[k].length > 0;
+        return nonEmpty('transacoes')     || nonEmpty('metas') ||
+               nonEmpty('contasFixas')    || nonEmpty('cartoesCredito') ||
+               nonEmpty('assinaturas');
+    }
+
+    // Memoriza (RAM + localStorage) ids de perfis que vieram COM dados num load
+    // bem-sucedido. Persistir cobre o caso do 1º load da sessão já falhar.
+    #rememberProfilesWithData(profiles) {
+        for (const p of profiles) {
+            if (this.#profileHasData(p)) this.#idsWithData.add(String(p.id));
+        }
+        try {
+            localStorage.setItem(this.#dataFlagsKey(), JSON.stringify([...this.#idsWithData]));
+        } catch { /* localStorage indisponível — degrada para só-RAM */ }
+    }
+
+    #loadPersistedDataFlags() {
+        try {
+            const raw = localStorage.getItem(this.#dataFlagsKey());
+            if (!raw) return;
+            const ids = JSON.parse(raw);
+            if (Array.isArray(ids)) for (const id of ids) this.#idsWithData.add(String(id));
+        } catch { /* ignore */ }
+    }
+
+    /**
+     * Guarda ANTI-WIPE. true se o save esvaziaria um perfil que JÁ teve dados,
+     * num momento em que o último load NÃO foi sucesso real — sinal de que a
+     * memória está zerada por falha transitória e persistir destruiria o banco.
+     * Se o último load foi OK, confia no estado (permite esvaziamento legítimo).
+     * Público para o beforeunload do dashboard (POST cru) também poder consultar.
+     */
+    isDestructiveSave(profilesData) {
+        if (this.#lastLoadOk) return false;
+        if (!Array.isArray(profilesData)) return false;
+        for (const p of profilesData) {
+            if (p && this.#idsWithData.has(String(p.id)) && !this.#profileHasData(p)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 
