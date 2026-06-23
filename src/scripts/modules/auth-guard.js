@@ -605,6 +605,27 @@ function _normalizePlanName(raw) {
     return map[(raw || '').toLowerCase()] || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : 'Individual');
 }
 
+// Busca o plano REAL do titular direto em stripe_subscriptions.
+// check-user-access só retorna planName para convidado — para o dono, sem esta
+// leitura todo titular cairia em 'Individual', bloqueando convite (limite 0) e
+// 2º perfil (limite 1) mesmo em planos Casal/Família. RLS: owner lê a própria linha.
+// Fail-safe: qualquer erro → 'Individual' (nunca derruba acesso, só restringe extras).
+async function _fetchOwnerPlan(userId) {
+    try {
+        const { data } = await supabase
+            .from('stripe_subscriptions')
+            .select('plan_name')
+            .eq('user_id', userId)
+            .in('status', ['active', 'trialing'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        return _normalizePlanName(data?.plan_name) || 'Individual';
+    } catch {
+        return 'Individual';
+    }
+}
+
 const SubscriptionChecker = (() => {
     let _cache      = null;
     let _cacheUser  = null;
@@ -685,7 +706,7 @@ const SubscriptionChecker = (() => {
                         subscription: { id: 'api-verified' },
                         isGuest:      false,
                         ownerId:      userId,
-                        planName:     'Individual',
+                        planName:     await _fetchOwnerPlan(userId),
                         ownerEmail:   null,
                     });
                 }
@@ -1357,12 +1378,12 @@ const AuthGuard = (() => {
                                                 ownerEmail:   api.ownerEmail || null,
                                             };
                                         } else {
-                                            // Assinante direto
+                                            // Assinante direto — lê o plano real do banco
                                             subData = {
                                                 subscription: { id: 'api-verified' },
                                                 isGuest:      false,
                                                 ownerId:      user.id,
-                                                planName:     'Individual',
+                                                planName:     await _fetchOwnerPlan(user.id),
                                                 ownerEmail:   null,
                                             };
                                         }
