@@ -31,7 +31,8 @@
 
     --color-text:           #ffffff;
     --color-text-muted:     #9ca3af;
-    --color-text-faint:     #6b7280;
+    /* #6b7280 reprovava AA (≈4.0:1 nos fundos mais escuros); #7e8794 ≈5.3:1 (passa AA) */
+    --color-text-faint:     #7e8794;
     --color-text-lighter:   #d1d5db;
 
     --color-danger:         #ef4444;

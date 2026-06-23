@@ -1256,6 +1256,17 @@ body::before {
                 0 0 30px rgba(67, 160, 71, 0.1);
 }
 
+/* Contas fixas fica abaixo da dobra do dashboard (depois dos 4 cards de KPI).
+   content-visibility:auto faz o navegador pular layout/paint do bloco enquanto
+   está fora da viewport — economia direta de CPU no boot em aparelho fraco.
+   contain-intrinsic-size guarda a altura real após o 1º render (evita pulo de
+   scroll); 'auto 360px' é só o palpite inicial. Seguro: o bloco abre modais
+   (não popover inline) e nada vaza para fora dele. */
+#sectionContasFixas {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 360px;
+}
+
 .section-box.promo-bloco {
     background: rgba(8, 18, 10, 0.9);
     border-color: rgba(67, 160, 71, 0.3);
@@ -7918,8 +7929,103 @@ select.form-input option:checked {
 .ge-notif--info    { background: linear-gradient(135deg, #6c63ff, #4a42cc); }
 .ge-notif--exit    { animation: slideOutRight 0.3s ease-out; }
 
+/* ── Toast com ação "Desfazer" (exclusões reversíveis) ─────────────── */
+.ge-notif--undo {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #1e2035, #13141f);
+    color: #fff;
+    cursor: default;
+    padding-bottom: 16px; /* espaço para a barra de tempo */
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ge-notif--undo .ge-notif__icon {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--color-primary-light, #34d399);
+}
+.ge-notif__action {
+    flex: 0 0 auto;
+    appearance: none;
+    border: none;
+    background: rgba(52, 211, 153, 0.14);
+    color: var(--color-primary-light, #34d399);
+    font: inherit;
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background var(--transition-fast, 0.2s);
+}
+.ge-notif__action:hover  { background: rgba(52, 211, 153, 0.26); }
+.ge-notif__action:active { transform: scale(0.96); }
+.ge-notif__action:focus-visible {
+    outline: 2px solid var(--color-primary-light, #34d399);
+    outline-offset: 2px;
+}
+.ge-notif__timer {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    width: 100%;
+    transform-origin: left center;
+    background: var(--color-primary, #10b981);
+    opacity: 0.85;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .ge-notif, .ge-notif--exit { animation: none; }
+    .ge-notif__timer { transition: none !important; }
+}
+
+/* ── Skeleton screens (carregamento de aba — substitui o "pipocar") ── */
+.ge-skel-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px 0;
+}
+.cartoes-grid .ge-skel-wrap,
+.metas-list   .ge-skel-wrap { width: 100%; }
+.ge-skel {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--color-bg-card, #13141f);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+.ge-skel--linha { height: 64px; }
+.ge-skel--card  { height: 104px; }
+.ge-skel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.06) 50%,
+        transparent 100%
+    );
+    animation: geSkelShimmer 1.3s ease-in-out infinite;
+}
+@keyframes geSkelShimmer {
+    100% { transform: translateX(100%); }
+}
+[data-theme="light"] .ge-skel {
+    background: var(--color-bg-soft, #eef1f7);
+}
+[data-theme="light"] .ge-skel::after {
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(15, 23, 42, 0.05) 50%,
+        transparent 100%
+    );
+}
+@media (prefers-reduced-motion: reduce) {
+    .ge-skel::after { animation: none; opacity: 0.5; }
 }
 @media (max-width: 480px) {
     .ge-toast-region {

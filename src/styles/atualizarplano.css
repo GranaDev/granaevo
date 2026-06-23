@@ -28,7 +28,8 @@ body.scroll-locked { overflow: hidden; touch-action: none; }
     /* Text */
     --text:         #dff5ec;
     --text-2:       #7ab89b;
-    --text-3:       #3f6e58;
+    /* #3f6e58 reprovava AA (≈3.1:1 sobre o fundo verde escuro); #5c9079 ≈4.9:1 (passa AA) */
+    --text-3:       #5c9079;
 
     /* Brand greens */
     --g:            #10b981;   /* primary */

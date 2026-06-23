@@ -998,36 +998,46 @@ function editarTransacao(t) {
 
 function excluirTransacao(t) {
     if (!t) return;
+    const idx = _ctx.transacoes.indexOf(t);
+    if (idx === -1) return;
 
-    _ctx.criarPopup(`
-        <h3>Excluir Transação</h3>
-        <p id="excluirMsg" style="color:var(--text-secondary);margin:16px 0;"></p>
-        <button class="btn-excluir" id="confirmarExcluirBtn">Excluir</button>
-        <button class="btn-cancelar" id="cancelarExcluirBtn">Cancelar</button>
-    `);
+    // Snapshot do vínculo com meta (para reverter o saldo no Desfazer).
+    const metaInfo = (() => {
+        if (!t.metaId) return null;
+        const meta = _ctx.metas.find(m => String(m.id) === String(t.metaId));
+        if (!meta) return null;
+        const ym = _ctx.yearMonthKey(t.data);
+        return { meta, ym, tinhaMonthly: !!(meta.monthly && meta.monthly[ym]) };
+    })();
 
-    document.getElementById('excluirMsg').textContent = `Deseja excluir "${_ctx._sanitizeText(t.descricao)}"?`;
-
-    document.getElementById('cancelarExcluirBtn').addEventListener('click', () => _ctx.fecharPopup());
-
-    document.getElementById('confirmarExcluirBtn').addEventListener('click', () => {
-        _ctx.transacoes = _ctx.transacoes.filter(x => x !== t);
-
-        if (t.metaId) {
-            const meta = _ctx.metas.find(m => String(m.id) === String(t.metaId));
-            if (meta) {
-                const sinal = t.categoria === 'reserva' ? -1 : 1;
-                meta.saved = Number((Number(meta.saved || 0) + sinal * Number(t.valor)).toFixed(2));
-                const ym = _ctx.yearMonthKey(t.data);
-                if (meta.monthly && meta.monthly[ym]) {
-                    meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + sinal * Number(t.valor)).toFixed(2));
-                }
-            }
+    // sinal usado na REMOÇÃO; o Desfazer aplica o sinal oposto.
+    const sinalRemover = t.categoria === 'reserva' ? -1 : 1;
+    const aplicarDelta = (sinal) => {
+        if (!metaInfo) return;
+        const { meta, ym, tinhaMonthly } = metaInfo;
+        meta.saved = Number((Number(meta.saved || 0) + sinal * Number(t.valor)).toFixed(2));
+        if (tinhaMonthly) {
+            meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + sinal * Number(t.valor)).toFixed(2));
         }
+    };
 
+    // 1) Remoção otimista (local-first) — UI atualiza na hora, sem "Tem certeza?".
+    _ctx.transacoes.splice(idx, 1);
+    aplicarDelta(sinalRemover);
+    _ctx.salvarDados();
+    _ctx.atualizarTudo();
+    renderizarOrcamentos();
+
+    // 2) Janela de Desfazer — reinsere na posição original e reverte o saldo da meta.
+    _ctx.mostrarNotificacaoDesfazer(`"${t.descricao}" excluída`, () => {
+        if (_ctx.transacoes.indexOf(t) !== -1) return; // já reinserida
+        const pos = Math.min(idx, _ctx.transacoes.length);
+        _ctx.transacoes.splice(pos, 0, t);
+        aplicarDelta(-sinalRemover);
         _ctx.salvarDados();
         _ctx.atualizarTudo();
-        _ctx.fecharPopup();
+        renderizarOrcamentos();
+        _ctx.mostrarNotificacao('Exclusão desfeita', 'success');
     });
 }
 

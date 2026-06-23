@@ -12,6 +12,12 @@ initErrorTracking();
 // ========== CONSTANTES ==========
 const IS_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
+// requestIdleCallback com fallback (Safari/iOS < 16 não têm) — usado para fatiar
+// trabalho não-crítico do boot e liberar a main thread mais cedo em CPU fraca.
+const _idle = (fn) => (typeof window.requestIdleCallback === 'function'
+    ? window.requestIdleCallback(fn, { timeout: 1200 })
+    : setTimeout(fn, 1));
+
 // ========== ESTADO GLOBAL ==========
 let usuarioLogado = {
     userId: null,     
@@ -1509,7 +1515,13 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         atualizarReferenciasGlobais();
         gerarCobrancasAssinaturas();
 
-        atualizarTudo();
+        // Boot: pinta o acima-da-dobra (KPIs + header) síncrono p/ conteúdo imediato,
+        // e difere a lista de contas fixas (abaixo da dobra) para o idle. As chamadas
+        // de transações/metas em atualizarTudo() são no-op aqui (módulos lazy ainda não
+        // carregados), então só replicamos o que de fato renderiza no boot.
+        atualizarDashboardResumo();
+        atualizarHeaderReservas();
+        _idle(() => atualizarListaContasFixas());
         atualizarNomeUsuario();
 
         const selecao         = document.getElementById('selecaoPerfis');
@@ -1948,6 +1960,7 @@ function _makeCtx() {
         fecharPopup:         { value: (...a) => fecharPopup(...a),         enumerable: true },
         confirmarAcao:       { value: (...a) => confirmarAcao(...a),       enumerable: true },
         mostrarNotificacao:  { value: (...a) => mostrarNotificacao(...a),  enumerable: true },
+        mostrarNotificacaoDesfazer: { value: (...a) => mostrarNotificacaoDesfazer(...a), enumerable: true },
         salvarDados:         { value: (...a) => salvarDados(...a),         enumerable: true },
         salvarDadosUrgente:  { value: () => salvarDados(true),            enumerable: true },
         _throttledSave:      { value: (...a) => _throttledSave(...a),      enumerable: true },
@@ -1981,6 +1994,37 @@ function _makeCtx() {
 }
 
 let _dbLoaded = { transacoes: false, metas: false, cartoes: false, graficos: false, relatorios: false, configuracoes: false };
+
+// Skeleton screens — preenchem o container da aba ENQUANTO o módulo é importado
+// (dynamic import()). Sem isso, no 1º acesso a área fica vazia e o conteúdo "pipoca"
+// quando o chunk resolve. O render do módulo faz innerHTML='' e substitui o skeleton.
+const _SKELETON_ALVOS = {
+    transacoes: { id: 'listaMovimentacoes', linhas: 6, tipo: 'linha' },
+    cartoes:    { id: 'cartoesGrid',        linhas: 3, tipo: 'card'  },
+    reservas:   { id: 'listaMetas',         linhas: 4, tipo: 'card'  },
+};
+
+function _injetarSkeleton(tela) {
+    const cfg = _SKELETON_ALVOS[tela];
+    if (!cfg) return;
+    const cont = document.getElementById(cfg.id);
+    if (!cont) return;
+
+    // Só roda no 1º acesso (guardado por !_dbLoaded). Limpa o placeholder
+    // estático do HTML (<p class="empty-state">) que senão piscaria sob o skeleton.
+    cont.innerHTML = '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'ge-skel-wrap';
+    wrap.setAttribute('aria-hidden', 'true'); // decorativo; aria-busy abaixo anuncia o estado
+    for (let i = 0; i < cfg.linhas; i++) {
+        const item = document.createElement('div');
+        item.className = `ge-skel ge-skel--${cfg.tipo}`;
+        wrap.appendChild(item);
+    }
+    cont.setAttribute('aria-busy', 'true');
+    cont.appendChild(wrap);
+}
 
 function mostrarTela(tela) {
     // Transição leve 100% CSS (.page.active → keyframe pageEnter: opacity+translateY
@@ -2036,9 +2080,11 @@ function _mostrarTelaImpl(tela) {
         if (periodoSel) periodoSel.style.display = 'none';
 
         if (!_dbLoaded.transacoes) {
+            _injetarSkeleton('transacoes');
             import('./db-transacoes.js?v=9').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.transacoes = true;
+                document.getElementById('listaMovimentacoes')?.removeAttribute('aria-busy');
             });
         } else {
             window._dbTransacoes?.atualizarMovimentacoesUI?.();
@@ -2047,9 +2093,11 @@ function _mostrarTelaImpl(tela) {
 
     if (tela === 'reservas') {
         if (!_dbLoaded.metas) {
+            _injetarSkeleton('reservas');
             import('./db-metas.js?v=5').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.metas = true;
+                document.getElementById('listaMetas')?.removeAttribute('aria-busy');
             });
         } else {
             window._dbMetas?.renderMetasList?.();
@@ -2058,9 +2106,11 @@ function _mostrarTelaImpl(tela) {
 
     if (tela === 'cartoes') {
         if (!_dbLoaded.cartoes) {
+            _injetarSkeleton('cartoes');
             import('./db-cartoes.js?v=6').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.cartoes = true;
+                document.getElementById('cartoesGrid')?.removeAttribute('aria-busy');
             });
         } else {
             window._dbCartoes?.atualizarTelaCartoes?.();
@@ -5011,6 +5061,67 @@ function mostrarNotificacao(mensagem, tipo = 'info') {
 }
 
 window.mostrarNotificacao = mostrarNotificacao;
+
+// Toast com ação "Desfazer" — para exclusões reversíveis (padrão optimistic UI).
+// A exclusão JÁ foi aplicada localmente (local-first); `aoDesfazer` REVERTE o estado.
+// Se o toast expirar sem ação, a exclusão simplesmente permanece (já foi salva).
+function mostrarNotificacaoDesfazer(mensagem, aoDesfazer, { duracao = 6000 } = {}) {
+    const region = _toastRegion();
+    region.setAttribute('aria-live', 'polite');
+
+    const notif = document.createElement('div');
+    notif.className = 'ge-notif ge-notif--undo';
+    notif.setAttribute('role', 'status');
+
+    const icon = document.createElement('span');
+    icon.className = 'ge-notif__icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '↺';
+
+    const txt = document.createElement('span');
+    txt.className = 'ge-notif__text';
+    txt.textContent = String(mensagem ?? '').slice(0, 200);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ge-notif__action';
+    btn.textContent = 'Desfazer';
+
+    const timer = document.createElement('span');
+    timer.className = 'ge-notif__timer';
+    timer.setAttribute('aria-hidden', 'true');
+
+    notif.append(icon, txt, btn, timer);
+    region.appendChild(notif);
+    hapticTap(12);
+
+    // Barra de tempo restante — degrada para estática em reduced-motion
+    const reduz = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduz) {
+        timer.style.transition = `transform ${duracao}ms linear`;
+        requestAnimationFrame(() => { timer.style.transform = 'scaleX(0)'; });
+    }
+
+    let encerrado = false;
+    let tid = null;
+    const encerrar = () => {
+        if (encerrado) return;
+        encerrado = true;
+        if (tid) clearTimeout(tid);
+        notif.classList.add('ge-notif--exit');
+        setTimeout(() => notif.remove(), 320);
+    };
+
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        encerrar();
+        try { aoDesfazer?.(); } catch (err) { console.error('Falha ao desfazer:', err); }
+    });
+
+    tid = setTimeout(encerrar, duracao);
+    return encerrar;
+}
+window.mostrarNotificacaoDesfazer = mostrarNotificacaoDesfazer;
 
 // ========== ESTADO DE CONEXÃO (online / offline) ==========
 (function initNetworkStatus() {
