@@ -30,6 +30,60 @@ async function encryptData(plaintext: string, userId: string): Promise<string | 
   return 'v2:' + btoa(String.fromCharCode(...combined))
 }
 
+// Decifra (mesmo esquema do get-user-data) — usado SÓ pela guarda anti-wipe,
+// para inspecionar os dados atuais antes de sobrescrever.
+async function decryptData(encrypted: string, userId: string): Promise<string | null> {
+  const keyBase64 = Deno.env.get('DATA_ENCRYPTION_KEY')
+  if (!keyBase64) return null
+  let key: CryptoKey
+  let payload: string
+  try {
+    if (encrypted.startsWith('v2:')) {
+      const derived = await deriveUserKey(userId)
+      if (!derived) return null
+      key     = derived
+      payload = encrypted.slice(3)
+    } else if (encrypted.startsWith('v1:')) {
+      const keyBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0))
+      key     = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt'])
+      payload = encrypted.slice(3)
+    } else {
+      return null
+    }
+    const combined = Uint8Array.from(atob(payload), c => c.charCodeAt(0))
+    const iv       = combined.slice(0, 12)
+    const cipher   = combined.slice(12)
+    const plain    = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher)
+    return new TextDecoder().decode(plain)
+  } catch {
+    return null
+  }
+}
+
+// Um perfil "tem dados" se qualquer coleção financeira não está vazia.
+function profileHasData(p: any): boolean {
+  if (!p || typeof p !== 'object') return false
+  const ne = (k: string) => Array.isArray(p[k]) && p[k].length > 0
+  return ne('transacoes') || ne('metas') || ne('contasFixas') ||
+         ne('cartoesCredito') || ne('assinaturas')
+}
+
+// Extrai o array de profiles do blob armazenado (decifrando se necessário).
+// Retorna null quando não dá para inspecionar com segurança (sem decifrar etc.).
+async function extractStoredProfiles(stored: any, userId: string): Promise<any[] | null> {
+  try {
+    let obj = stored
+    if (stored && typeof stored._enc === 'string') {
+      const plain = await decryptData(stored._enc, userId)
+      if (!plain) return null
+      obj = JSON.parse(plain)
+    }
+    return Array.isArray(obj?.profiles) ? obj.profiles : null
+  } catch {
+    return null
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -177,13 +231,57 @@ Deno.serve(async (req: Request) => {
     // ── 7. INSERT ou UPDATE — funciona independente de constraints ──────────
     const { data: existing, error: selectErr } = await supabaseAdmin
       .from('user_data')
-      .select('user_id')
+      .select('user_id, data_json')
       .eq('user_id', effectiveUserId)
       .maybeSingle()
 
     if (selectErr) {
       console.error('[save-user-data] Erro ao verificar registro existente:', selectErr.message)
       throw selectErr
+    }
+
+    // ── 6.5 GUARDA ANTI-WIPE (autoritativa, server-side) ────────────────────
+    // Bug recorrente: após um load falho, o cliente reenvia perfis VAZIOS e
+    // sobrescrevia dados reais. Esta checagem é IMUNE a bundle/Service Worker
+    // desatualizado no cliente. Rejeita o save quando o registro atual TEM dados
+    // e o payload zeraria todos OU esvaziaria um perfil que tinha dados.
+    // (Remoção legítima de um perfil — perfil ausente no payload — NÃO bloqueia.)
+    if (existing?.data_json) {
+      const incomingHasAnyData = (profiles as any[]).some(profileHasData)
+      const existingProfiles   = await extractStoredProfiles(existing.data_json, effectiveUserId)
+      let wouldWipe = false
+
+      if (existingProfiles === null) {
+        // Não deu para inspecionar (cifrado e não decifrou, ou shape inesperado).
+        // Conservador: se há blob cifrado atual e o payload não traz NENHUM dado,
+        // é provável wipe (e sobrescrever destruiria o ciphertext) → bloqueia.
+        const existingHasEnc = typeof (existing.data_json as any)?._enc === 'string'
+        if (existingHasEnc && !incomingHasAnyData) wouldWipe = true
+      } else if (existingProfiles.length > 0) {
+        const hadDataIds = new Set(
+          existingProfiles.filter(profileHasData).map((p: any) => String(p?.id)),
+        )
+        if (hadDataIds.size > 0) {
+          const incomingById = new Map((profiles as any[]).map(p => [String(p?.id), p]))
+          wouldWipe = profiles.length === 0 // zerou todos os perfis
+          if (!wouldWipe) {
+            for (const id of hadDataIds) {
+              const incoming = incomingById.get(id)
+              // Só bloqueia o caso do BUG: perfil ainda presente, porém esvaziado.
+              // (Remoção legítima de um perfil — ausente no payload — não bloqueia.)
+              if (incoming && !profileHasData(incoming)) { wouldWipe = true; break }
+            }
+          }
+        }
+      }
+
+      if (wouldWipe) {
+        console.error(
+          '[save-user-data] BLOQUEIO ANTI-WIPE: payload esvaziaria dados existentes — save rejeitado. user:',
+          effectiveUserId.slice(0, 8),
+        )
+        return json({ success: false, error: 'WIPE_BLOCKED', code: 'WIPE_BLOCKED' }, 409, corsHeaders)
+      }
     }
 
     if (existing) {
