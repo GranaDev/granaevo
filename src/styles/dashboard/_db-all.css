@@ -2322,29 +2322,98 @@ select.form-input option:checked {
 }
 .mov-busca-clear:hover { background: rgba(239,68,68,0.2); color: #f87171; }
 
-/* ── Empty states de movimentações ───────────────────────────────────── */
-.mov-empty-state {
-    display: flex; flex-direction: column; align-items: center;
-    padding: 48px 24px; text-align: center; gap: 12px;
+/* ════════════════════════════════════════════════════════════════════════
+   EMPTY STATES — padrão unificado (transações · contas fixas · cartões)
+   Card centralizado com badge de ícone, título, subtítulo e CTA.
+   ════════════════════════════════════════════════════════════════════════ */
+.mov-empty-state,
+.contas-empty-state,
+.cartoes-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 14px;
+    width: 100%;
+    max-width: 460px;
+    margin: 8px auto;
+    padding: 52px 28px;
+    border-radius: var(--radius-2xl, 24px);
+    background:
+        radial-gradient(125% 100% at 50% 0%, rgba(16, 185, 129, 0.07) 0%, transparent 62%),
+        var(--color-bg-card, #13141f);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+    box-shadow: var(--shadow-card, 0 4px 24px rgba(0, 0, 0, 0.25));
+    animation: emptyStateIn 0.45s var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)) both;
 }
-.mov-empty-icon { color: rgba(67,160,71,0.3); margin-bottom: 8px; }
-.mov-empty-title { font-size: 1rem; font-weight: 600; color: var(--text-secondary); margin: 0; }
-.mov-empty-sub { font-size: 0.85rem; color: var(--text-muted); margin: 0; max-width: 280px; }
-.mov-empty-cta { margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
 
-/* Empty state de contas fixas (ocupa a grid inteira) */
-.contas-empty-state {
-    grid-column: 1 / -1;
-    display: flex; flex-direction: column; align-items: center;
-    padding: 48px 24px; text-align: center; gap: 12px;
-    background: rgba(20, 30, 22, 0.38);
-    border-radius: 14px;
-    border: 2px dashed rgba(67, 160, 71, 0.18);
+/* Contas fixas ocupa a grid inteira */
+.contas-empty-state { grid-column: 1 / -1; }
+
+@keyframes emptyStateIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
-.contas-empty-icon { color: rgba(67,160,71,0.3); margin-bottom: 4px; }
-.contas-empty-title { font-size: 1rem; font-weight: 600; color: var(--text-secondary); margin: 0; }
-.contas-empty-sub { font-size: 0.85rem; color: var(--text-muted); margin: 0; max-width: 320px; }
-.contas-empty-cta { margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+
+/* Badge circular do ícone */
+.mov-empty-icon,
+.contas-empty-icon,
+.cartoes-empty-icon {
+    display: grid;
+    place-items: center;
+    width: 88px;
+    height: 88px;
+    margin-bottom: 2px;
+    border-radius: 50%;
+    color: var(--color-primary-light, #34d399);
+    background: radial-gradient(circle at 50% 38%, rgba(16, 185, 129, 0.18), rgba(16, 185, 129, 0.04));
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    box-shadow: inset 0 0 0 6px rgba(16, 185, 129, 0.04),
+                0 0 28px rgba(16, 185, 129, 0.12);
+}
+.mov-empty-icon svg,
+.contas-empty-icon svg,
+.cartoes-empty-icon svg { width: 40px; height: 40px; display: block; }
+
+/* Título */
+.mov-empty-title,
+.contas-empty-title,
+.cartoes-empty-title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+}
+
+/* Subtítulo */
+.mov-empty-sub,
+.contas-empty-sub,
+.cartoes-empty-sub {
+    margin: 0;
+    max-width: 340px;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+}
+
+/* CTA */
+.mov-empty-cta,
+.contas-empty-cta,
+.cartoes-empty-cta {
+    margin-top: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mov-empty-state,
+    .contas-empty-state,
+    .cartoes-empty-state { animation: none; }
+}
 
 /* ── Sentinela de scroll infinito ────────────────────────────────────── */
 .mov-load-sentinela { padding: 24px; text-align: center; }
@@ -5209,16 +5278,16 @@ select.form-input option:checked {
 
     /* Ãcone cÃ¢mera sobre a foto */
     .mobile-profile-btn::after {
-        content: 'ðŸ“·';
+        content: '';
         position: absolute;
         bottom: -3px; right: -3px;
         width: 17px; height: 17px;
-        background: var(--primary);
         border-radius: 50%;
-        font-size: 9px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        background-color: var(--primary);
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 10px 10px;
         border: 1.5px solid #0a0d16;
         box-shadow: 0 0 8px rgba(67, 160, 71, 0.6);
         pointer-events: none;
@@ -6075,14 +6144,6 @@ select.form-input option:checked {
     font-size: 0.75rem;
     z-index: 2;
 }
-
-.cartoes-empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text-secondary);
-}
-
-.cartoes-empty-state p { margin-top: 12px; font-size: 0.95rem; }
 
 @media (max-width: 768px) {
     .cartao-featured-card { padding: 20px 18px 16px; min-height: 185px; }

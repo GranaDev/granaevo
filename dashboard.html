@@ -8,12 +8,12 @@
 
     <!-- CSP definida via HTTP header em vercel.json — não duplicar aqui -->
     <!-- Aplica tema salvo antes do primeiro render (script clássico, síncrono) -->
-    <script src="/theme-init.js" data-light-css="/assets/css/db-light-theme.css?v=1"></script>
+    <script src="/theme-init.js" integrity="sha384-W8821UlfPzP1SegI3Hw5O2gYY0TUwtftE0gpoW+Wnbqwk6xtM8WS2g6K55Va+C8g" data-light-css="/assets/css/db-light-theme.css?v=1"></script>
 
     <!-- beforeinstallprompt capturado o mais cedo possível.
          O pwa-installer.js é lazy-loaded (Configurações) e perderia o evento
          se não o capturássemos aqui, antes de qualquer módulo. -->
-    <script src="/pwa-init.js"></script>
+    <script src="/pwa-init.js" integrity="sha384-DQxhbLOh/pDR2t/MEqm7c9+UncKB1xr93Pt8NhJSq76O1/VZ/a68RN9fKrML758O"></script>
 
     <!-- ================================================================
          🔐 CAMADA 2 — Referrer Policy
@@ -64,7 +64,7 @@
          css-boot.js troca para media="all" ao terminar de baixar — tira do caminho
          crítico sem FOUC (o loader acima já está pintado). noscript = fallback. -->
     <link rel="stylesheet" href="src/styles/dashboard.css?v=15">
-    <script src="/css-boot.js"></script>
+    <script src="/css-boot.js" integrity="sha384-1k9qNZti+byqLYZK8YzE5rC39DFLCrsWd1IaD6Ju7udqmT3z1n/Rb4FobHR99zOG"></script>
     <!-- graficos.css NÃO é carregado aqui: é lazy via import em db-graficos.js,
          baixado só quando a aba Gráficos abre (era ~28 KB render-blocking à toa). -->
     <!-- Supabase: abre TCP+TLS com antecedência — reduz latência da primeira API call -->

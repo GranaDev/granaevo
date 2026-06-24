@@ -34,13 +34,19 @@ export default defineConfig(({ mode }) => ({
       },
     },
 
-    // Gera dist/stats.html com mapa visual do bundle (tamanho gzip + brotli por módulo)
-    visualizer({
-      filename:   'dist/stats.html',
-      gzipSize:   true,
-      brotliSize: true,
-      open:       false,
-    }),
+    // Gera dist/stats.html com mapa visual do bundle (tamanho gzip + brotli por módulo).
+    // GATEADO por env: SÓ roda quando você pede análise (ANALYZE=1 npm run build).
+    // O build de produção na Vercel (npm run build) NUNCA emite stats.html — assim o
+    // blueprint do bundle não fica público em /stats.html. Confiar em código, não no
+    // .vercelignore (que filtra upload de source, não a saída do build rodado no servidor).
+    ...(process.env.ANALYZE
+      ? [visualizer({
+          filename:   'dist/stats.html',
+          gzipSize:   true,
+          brotliSize: true,
+          open:       false,
+        })]
+      : []),
 
     // PWA: Service Worker + Web App Manifest
     // Ativa instalação como app nativo em iOS/Android/Desktop

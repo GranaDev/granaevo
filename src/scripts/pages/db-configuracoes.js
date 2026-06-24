@@ -101,8 +101,24 @@ function _initPushButton() {
     });
 }
 
+// O CSS do tema claro (~37 KB) é um arquivo separado carregado on-demand. No
+// boot, theme-init.js só o injeta se o tema salvo JÁ era 'light'. Ao alternar
+// para claro em runtime (dark → light), precisamos garantir o carregamento aqui
+// — senão só aplicam as poucas regras embutidas no dashboard.css e o tema claro
+// fica "pela metade". A URL vem do data-light-css da tag theme-init (fonte única).
+function _ensureLightThemeCss() {
+    if (document.querySelector('link[rel="stylesheet"][href*="db-light-theme"]')) return;
+    const href = document.querySelector('script[data-light-css]')?.dataset.lightCss;
+    if (!href) return;
+    const l = document.createElement('link');
+    l.rel  = 'stylesheet';
+    l.href = href;
+    document.head.appendChild(l);
+}
+
 function _applyTheme(isLight) {
     if (isLight) {
+        _ensureLightThemeCss();
         document.documentElement.setAttribute('data-theme', 'light');
         try { localStorage.setItem('ge_theme', 'light'); } catch {}
     } else {

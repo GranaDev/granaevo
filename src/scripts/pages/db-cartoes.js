@@ -580,6 +580,10 @@ function _buildMobileContent(container, cartaoAtivo) {
         svg.setAttribute('aria-hidden', 'true');
         svg.innerHTML = '<rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>';
 
+        const iconWrap = document.createElement('div');
+        iconWrap.className = 'cartoes-empty-icon';
+        iconWrap.appendChild(svg);
+
         const title = document.createElement('p');
         title.className = 'cartoes-empty-title';
         title.textContent = 'Nenhum cartão cadastrado';
@@ -594,7 +598,7 @@ function _buildMobileContent(container, cartaoAtivo) {
         btn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Adicionar Cartão';
         btn.addEventListener('click', () => abrirCartaoForm());
 
-        empty.appendChild(svg);
+        empty.appendChild(iconWrap);
         empty.appendChild(title);
         empty.appendChild(sub);
         empty.appendChild(btn);
@@ -657,10 +661,18 @@ function _buildDesktopContent(container, cartaoAtivo) {
 
     if (!cartaoAtivo) {
         const empty = document.createElement('div'); empty.className = 'cartoes-empty-state';
-        const ei = document.createElement('div'); ei.style.fontSize='3.5rem'; ei.textContent='💳';
-        const et = document.createElement('p'); et.textContent='Nenhum cartão cadastrado.';
-        const eb = document.createElement('button'); eb.type='button'; eb.className='btn-primary'; eb.style.marginTop='16px'; eb.textContent='+ Adicionar Cartão'; eb.addEventListener('click', () => abrirCartaoForm());
-        empty.appendChild(ei); empty.appendChild(et); empty.appendChild(eb); container.appendChild(empty);
+
+        const ei = document.createElement('div'); ei.className = 'cartoes-empty-icon';
+        ei.innerHTML = '<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>';
+
+        const et = document.createElement('p'); et.className = 'cartoes-empty-title'; et.textContent = 'Nenhum cartão cadastrado';
+        const es = document.createElement('p'); es.className = 'cartoes-empty-sub'; es.textContent = 'Adicione seu cartão de crédito para controlar faturas e parcelamentos.';
+
+        const eb = document.createElement('button'); eb.type='button'; eb.className='btn-primary cartoes-empty-cta';
+        eb.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Adicionar Cartão';
+        eb.addEventListener('click', () => abrirCartaoForm());
+
+        empty.appendChild(ei); empty.appendChild(et); empty.appendChild(es); empty.appendChild(eb); container.appendChild(empty);
         if (_ctx.assinaturas && _ctx.assinaturas.length > 0) container.appendChild(_buildAssinaturasSection());
         return;
     }

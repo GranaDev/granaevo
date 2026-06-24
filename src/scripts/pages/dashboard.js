@@ -4028,7 +4028,14 @@ function fecharPopup() {
         bs.classList.remove('active');
         bs.onclick = null;
         const bsContent = document.getElementById('bottomSheetContent');
-        setTimeout(() => { if (bsContent) bsContent.innerHTML = ''; }, 300);
+        // ✅ FIX: mesmo guard de versão do caminho desktop.
+        //    Se um novo bottom sheet abrir durante os 300ms (ex.: fecharPopup()
+        //    seguido de criarPopup() ao enviar convite), _popupVersaoAtual muda
+        //    e este setTimeout NÃO limpa o conteúdo recém-criado.
+        const versaoFechando = _popupVersaoAtual;
+        setTimeout(() => {
+            if (bsContent && _popupVersaoAtual === versaoFechando) bsContent.innerHTML = '';
+        }, 300);
         return;
     }
 
@@ -4072,6 +4079,11 @@ function _criarBottomSheet(html) {
         _ativarFocusTrap(container2);
         return;
     }
+
+    // ✅ FIX: incrementa versão a cada abertura (igual ao caminho desktop).
+    //    Invalida qualquer setTimeout de fecharPopup() pendente para que ele
+    //    não limpe o conteúdo deste novo bottom sheet.
+    _popupVersaoAtual++;
 
     const htmlSanitizado = sanitizarHTMLPopup(html);
     content.innerHTML    = '';
@@ -6004,42 +6016,6 @@ function _initSyncIndicator() {
     if (_offlineMode) _setSync('error', 'Sem conexão', 0);
 }
 
-// ========== BANNER OFFLINE ========== //
-function _initOfflineBanner() {
-    const banner = document.createElement('div');
-    banner.id        = 'offlineBanner';
-    banner.className = 'offline-banner offline-banner--hidden';
-    banner.setAttribute('role', 'alert');
-    banner.setAttribute('aria-live', 'assertive');
-
-    const icon = document.createElement('span');
-    icon.className   = 'offline-banner__icon';
-    icon.textContent = '📡';
-
-    const msg = document.createElement('span');
-    msg.className   = 'offline-banner__msg';
-    msg.textContent = 'Sem conexão — os dados serão sincronizados quando você reconectar.';
-
-    banner.appendChild(icon);
-    banner.appendChild(msg);
-    document.body.appendChild(banner);
-
-    function show() { banner.classList.remove('offline-banner--hidden'); }
-    function hide() { banner.classList.add('offline-banner--hidden'); }
-
-    if (!navigator.onLine) show();
-    window.addEventListener('offline', show);
-    window.addEventListener('online', () => {
-        msg.textContent = 'Conexão restaurada!';
-        banner.classList.add('offline-banner--online');
-        setTimeout(() => {
-            hide();
-            banner.classList.remove('offline-banner--online');
-            msg.textContent = 'Sem conexão — os dados serão sincronizados quando você reconectar.';
-        }, 2500);
-    });
-}
-
 // ========== MÁSCARA MONETÁRIA ==========
 function _initMascaraMonetaria() {
     // Aplica máscara BRL (R$ X.XXX,XX) em todos os inputs monetários do formulário principal
@@ -6094,7 +6070,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSidebarToggle();
     _initBtnPeriodoDash();
     _initSyncIndicator();
-    _initOfflineBanner();
     _initMascaraMonetaria();
 
     // Fallback para qualquer <img> de foto de perfil que falhar ao carregar

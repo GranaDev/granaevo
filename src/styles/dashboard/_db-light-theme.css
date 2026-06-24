@@ -347,15 +347,6 @@
 
 [data-theme="light"] canvas { filter: none; }
 
-/* ── Offline banner ──────────────────────────────────────────── */
-[data-theme="light"] .offline-banner {
-    background: rgba(244,246,250,0.98);
-    border-top-color: rgba(239,68,68,0.6);
-    color: rgba(0,0,0,0.75);
-}
-
-[data-theme="light"] .offline-banner--online { border-top-color: rgba(16,185,129,0.6); }
-
 /* ── Autocat chip ────────────────────────────────────────────── */
 [data-theme="light"] .autocat-chip {
     background: rgba(16,185,129,0.08);
