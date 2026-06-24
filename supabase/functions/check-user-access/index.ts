@@ -150,7 +150,7 @@ Deno.serve(async (req: Request) => {
     // e current_period_end='2099-12-31'. Não há mais tabela `subscriptions`.
     const { data: stripeSub, error: stripeErr } = await supabaseAdmin
       .from('stripe_subscriptions')
-      .select('id, status, current_period_end')
+      .select('id, status, current_period_end, plan_name')
       .eq('user_id', userId)
       .in('status', ['active', 'trialing'])
       .order('created_at', { ascending: false })
@@ -169,7 +169,7 @@ Deno.serve(async (req: Request) => {
       if (userEmail) {
         const { data: emailSub, error: emailErr } = await supabaseAdmin
           .from('stripe_subscriptions')
-          .select('id, status, current_period_end')
+          .select('id, status, current_period_end, plan_name')
           .eq('user_email', userEmail)
           .is('user_id', null)
           .in('status', ['active', 'trialing'])
@@ -191,7 +191,11 @@ Deno.serve(async (req: Request) => {
               catch { /* silencioso */ }
             }
             const needsTerms1 = await checkNeedsTermsAcceptance(supabaseAdmin, userId)
-            return json({ hasAccess: true, needsTermsAcceptance: needsTerms1 }, 200, corsHeaders)
+            return json({
+              hasAccess:            true,
+              needsTermsAcceptance: needsTerms1,
+              planName:             emailSub.plan_name ?? 'individual',
+            }, 200, corsHeaders)
           }
         }
       }
@@ -263,7 +267,13 @@ Deno.serve(async (req: Request) => {
 
     console.log('[check-user-access] Acesso concedido (Stripe) para:', userId.slice(0, 8))
     const needsTerms3 = await checkNeedsTermsAcceptance(supabaseAdmin, userId)
-    return json({ hasAccess: true, needsTermsAcceptance: needsTerms3 }, 200, corsHeaders)
+    // Retorna o plano do TITULAR (raw) — o frontend normaliza. Sem isto, o dono
+    // cairia em 'Individual' e o convite/2º perfil de planos Casal/Família travaria.
+    return json({
+      hasAccess:            true,
+      needsTermsAcceptance: needsTerms3,
+      planName:             stripeSub.plan_name ?? 'individual',
+    }, 200, corsHeaders)
 
   } catch (error: any) {
     console.error('[check-user-access] Erro inesperado:', error?.message)

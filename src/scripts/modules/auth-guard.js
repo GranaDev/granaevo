@@ -605,26 +605,10 @@ function _normalizePlanName(raw) {
     return map[(raw || '').toLowerCase()] || (raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : 'Individual');
 }
 
-// Busca o plano REAL do titular direto em stripe_subscriptions.
-// check-user-access só retorna planName para convidado — para o dono, sem esta
-// leitura todo titular cairia em 'Individual', bloqueando convite (limite 0) e
-// 2º perfil (limite 1) mesmo em planos Casal/Família. RLS: owner lê a própria linha.
-// Fail-safe: qualquer erro → 'Individual' (nunca derruba acesso, só restringe extras).
-async function _fetchOwnerPlan(userId) {
-    try {
-        const { data } = await supabase
-            .from('stripe_subscriptions')
-            .select('plan_name')
-            .eq('user_id', userId)
-            .in('status', ['active', 'trialing'])
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        return _normalizePlanName(data?.plan_name) || 'Individual';
-    } catch {
-        return 'Individual';
-    }
-}
+// NOTA: o plano do TITULAR vem do check-user-access (server-side, service_role),
+// que retorna `planName`. A leitura client-side de stripe_subscriptions foi
+// removida porque tomava 403 (a tabela não concede SELECT direto ao role do
+// browser), fazendo todo titular cair em 'Individual'.
 
 const SubscriptionChecker = (() => {
     let _cache      = null;
@@ -706,7 +690,9 @@ const SubscriptionChecker = (() => {
                         subscription: { id: 'api-verified' },
                         isGuest:      false,
                         ownerId:      userId,
-                        planName:     await _fetchOwnerPlan(userId),
+                        // Plano do titular vem do check-user-access (server-side, service_role)
+                        // — leitura client-side de stripe_subscriptions tomava 403 (RLS/grant).
+                        planName:     _normalizePlanName(api.planName) || 'Individual',
                         ownerEmail:   null,
                     });
                 }
@@ -1378,12 +1364,13 @@ const AuthGuard = (() => {
                                                 ownerEmail:   api.ownerEmail || null,
                                             };
                                         } else {
-                                            // Assinante direto — lê o plano real do banco
+                                            // Assinante direto — plano vem do check-user-access
+                                            // (server-side). Leitura client-side tomava 403 (RLS/grant).
                                             subData = {
                                                 subscription: { id: 'api-verified' },
                                                 isGuest:      false,
                                                 ownerId:      user.id,
-                                                planName:     await _fetchOwnerPlan(user.id),
+                                                planName:     _normalizePlanName(api.planName) || 'Individual',
                                                 ownerEmail:   null,
                                             };
                                         }
