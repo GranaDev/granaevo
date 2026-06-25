@@ -1,4 +1,7 @@
 ﻿// db-relatorios.js — Seção de Relatórios (lazy-loaded)
+// CSS do RESULTADO (injetado em #relatorioResultado) viaja neste chunk lazy —
+// sai do caminho crítico de boot do dashboard. Base PRIMEIRO, depois overrides.
+import '../../styles/dashboard/_db-reports-lazy.css';
 // CSS desktop-only (min-width:769px) viaja neste chunk lazy — mobile não baixa
 // essas regras (saíram do dashboard.css eager).
 import '../../styles/dashboard/_db-reports-desktop-lazy.css';
