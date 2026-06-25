@@ -744,9 +744,14 @@ class DataManager {
 // ========== INSTÂNCIA GLOBAL ==========
 const dataManagerInstance = new DataManager();
 
-// ✅ Exposição global APENAS em desenvolvimento
+// Exposição global da instância: necessária em PRODUÇÃO também porque o
+// graficos.js (script clássico em public/, não importa ESM) captura
+// window.dataManager para gerar gráficos compartilhados (casal/família).
+// Não é vazamento: são os dados do próprio usuário, já client-side.
+window.dataManager = dataManagerInstance;
+
+// Helper de debug verboso APENAS em desenvolvimento.
 if (IS_DEV) {
-    window.dataManager = dataManagerInstance;
     window.debugDataManager = () => {
         console.log('=== DATA MANAGER STATUS ===');
         console.log(dataManagerInstance.getStatus());
