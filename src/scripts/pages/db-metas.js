@@ -978,10 +978,13 @@ function renderMetasList() {
         const wrap = document.createElement('div');
         wrap.className = 'reservas-empty-state';
         wrap.innerHTML = `
-            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0H5m14 0H3m16 0h2M5 21H3"/>
-                <path d="M9 7h6M9 11h6M9 15h4"/>
-            </svg>
+            <div class="reservas-empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/>
+                    <path d="M2 9v1c0 1.1.9 2 2 2h1"/>
+                    <path d="M16 11h.01"/>
+                </svg>
+            </div>
             <p class="reservas-empty-title">Nenhuma reserva criada</p>
             <p class="reservas-empty-sub">Crie sua primeira reserva — viagem, emergência ou qualquer objetivo financeiro.</p>`;
         const btn = document.createElement('button');

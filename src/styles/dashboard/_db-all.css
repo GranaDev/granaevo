@@ -2335,7 +2335,8 @@ select.form-input option:checked {
    ════════════════════════════════════════════════════════════════════════ */
 .mov-empty-state,
 .contas-empty-state,
-.cartoes-empty-state {
+.cartoes-empty-state,
+.reservas-empty-state {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2366,7 +2367,8 @@ select.form-input option:checked {
 /* Badge circular do ícone */
 .mov-empty-icon,
 .contas-empty-icon,
-.cartoes-empty-icon {
+.cartoes-empty-icon,
+.reservas-empty-icon {
     display: grid;
     place-items: center;
     width: 88px;
@@ -2381,12 +2383,14 @@ select.form-input option:checked {
 }
 .mov-empty-icon svg,
 .contas-empty-icon svg,
-.cartoes-empty-icon svg { width: 40px; height: 40px; display: block; }
+.cartoes-empty-icon svg,
+.reservas-empty-icon svg { width: 40px; height: 40px; display: block; }
 
 /* Título */
 .mov-empty-title,
 .contas-empty-title,
-.cartoes-empty-title {
+.cartoes-empty-title,
+.reservas-empty-title {
     margin: 0;
     font-size: 1.15rem;
     font-weight: 700;
@@ -2397,7 +2401,8 @@ select.form-input option:checked {
 /* Subtítulo */
 .mov-empty-sub,
 .contas-empty-sub,
-.cartoes-empty-sub {
+.cartoes-empty-sub,
+.reservas-empty-sub {
     margin: 0;
     max-width: 340px;
     font-size: 0.9rem;
@@ -2408,7 +2413,8 @@ select.form-input option:checked {
 /* CTA */
 .mov-empty-cta,
 .contas-empty-cta,
-.cartoes-empty-cta {
+.cartoes-empty-cta,
+.reservas-empty-cta {
     margin-top: 10px;
     display: inline-flex;
     align-items: center;
@@ -2419,7 +2425,8 @@ select.form-input option:checked {
 @media (prefers-reduced-motion: reduce) {
     .mov-empty-state,
     .contas-empty-state,
-    .cartoes-empty-state { animation: none; }
+    .cartoes-empty-state,
+    .reservas-empty-state { animation: none; }
 }
 
 /* ── Sentinela de scroll infinito ────────────────────────────────────── */
