@@ -10,9 +10,10 @@
 //
 // Reduz dashboard.css removendo ~1800 regras de glifo não usadas.
 // ─────────────────────────────────────────────────────────────────────────────
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, copyFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join, extname } from 'node:path';
+import subsetFont from 'subset-font';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT      = resolve(__dirname, '..');
@@ -57,10 +58,19 @@ css = css.replace(/@font-face\{[^}]*\}/g, '');
 
 // Poda regras de glifo (incl. agrupadas por alias: `.fa-a,.fa-b{--fa:"\fXXX"}`).
 // Mantém a regra inteira se QUALQUER um de seus seletores estiver em uso.
+// Coleta também os codepoints das regras mantidas → usados para subsetar o woff2.
+const glyphCodepoints = new Set();
 let kept = 0, dropped = 0;
-css = css.replace(/((?:\.fa-[a-z0-9-]+,)*\.fa-[a-z0-9-]+)\{--fa:"[^"]*"\}/g, (full, selectors) => {
+css = css.replace(/((?:\.fa-[a-z0-9-]+,)*\.fa-[a-z0-9-]+)\{--fa:"([^"]*)"\}/g, (full, selectors, content) => {
   const names = selectors.split(',').map(s => s.slice(1)); // remove o ponto
-  if (names.some(n => used.has(n))) { kept++; return full; }
+  if (names.some(n => used.has(n))) {
+    kept++;
+    // Conteúdo é tipo "\f015" — extrai cada escape unicode da regra mantida.
+    for (const m of content.matchAll(/\\([0-9a-fA-F]+)/g)) {
+      glyphCodepoints.add(parseInt(m[1], 16));
+    }
+    return full;
+  }
   dropped++; return '';
 });
 
@@ -76,8 +86,43 @@ const header =
 mkdirSync(dirname(OUT_CSS), { recursive: true });
 writeFileSync(OUT_CSS, header + fontFace + css, 'utf8');
 
-// ── 4. Copia a fonte para public/ (servida em /assets/fonts/) ──────────────────
+// ── 4. Subseta a FONTE (woff2) para conter só os glifos usados ─────────────────
+// O passo 2 já podou o CSS, mas a fonte original (fa-solid-900.woff2) carrega
+// ~2000 glifos (~114 KB). Aqui geramos um woff2 contendo APENAS os codepoints
+// das regras mantidas — mesmo conjunto que o CSS já referencia, então NÃO há
+// risco de cobertura adicional: qualquer ícone ausente já estaria podado do CSS.
+//
+// font-display:block: a fonte bloqueia o render dos ícones até baixar, logo
+// reduzir seu peso melhora diretamente o tempo até o 1º ícone em redes lentas.
+//
+// FALLBACK SEGURO: qualquer falha no subset → copia a fonte completa (idêntico
+// ao comportamento anterior). O build NUNCA quebra por causa desta otimização.
 mkdirSync(OUT_FONTS, { recursive: true });
-copyFileSync(FA_WOFF2, join(OUT_FONTS, 'fa-solid-900.woff2'));
+const OUT_WOFF2 = join(OUT_FONTS, 'fa-solid-900.woff2');
+const fullBuf   = readFileSync(FA_WOFF2);
+
+try {
+  if (glyphCodepoints.size === 0) {
+    throw new Error('nenhum codepoint coletado das regras mantidas');
+  }
+  // Inclui sempre o espaço (U+0020) — algumas engines exigem para métricas.
+  glyphCodepoints.add(0x20);
+  const subsetText = [...glyphCodepoints].map(cp => String.fromCodePoint(cp)).join('');
+  const subsetBuf  = await subsetFont(fullBuf, subsetText, { targetFormat: 'woff2' });
+
+  // Sanidade: subset precisa ser menor que a fonte original e não-vazio.
+  if (!subsetBuf || subsetBuf.length === 0 || subsetBuf.length >= fullBuf.length) {
+    throw new Error(`subset suspeito (${subsetBuf?.length ?? 0} vs ${fullBuf.length} bytes)`);
+  }
+  writeFileSync(OUT_WOFF2, subsetBuf);
+  const pct = ((1 - subsetBuf.length / fullBuf.length) * 100).toFixed(1);
+  console.log(
+    `[fa-subset] fonte: ${glyphCodepoints.size} glifos | ` +
+    `${(fullBuf.length / 1024).toFixed(1)} KB → ${(subsetBuf.length / 1024).toFixed(1)} KB (−${pct}%)`
+  );
+} catch (err) {
+  copyFileSync(FA_WOFF2, OUT_WOFF2);
+  console.warn(`[fa-subset] ⚠️ subset do woff2 falhou (${err.message}) — usando fonte completa (fallback seguro)`);
+}
 
 console.log(`[fa-subset] ${kept} ícones mantidos, ${dropped} podados → ${OUT_CSS}`);
