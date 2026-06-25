@@ -1272,6 +1272,13 @@ body::before {
     border-color: rgba(67, 160, 71, 0.3);
     padding: 0 28px 0 0;
     min-height: 175px;
+    /* Bloco promocional fica abaixo da dobra (após KPIs + contas fixas). Pula
+       layout/paint enquanto fora da viewport. Seguro: já tem overflow:hidden e
+       não abre popover inline (clique navega). contain-intrinsic-size = min-height
+       desktop, evita pulo de scroll antes do 1º render. Mesmo padrão de
+       #sectionContasFixas. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 175px;
 }
 .section-box.promo-bloco .promo-conteudo { padding: 24px 0; }
 .section-box.promo-bloco .promo-acao     { padding: 24px 0; }
