@@ -1,0 +1,53 @@
+name: Security Suite
+
+# A suíte de segurança é STATEFUL e parcialmente destrutiva:
+#   - dispara reset-password step:send (e-mails reais)
+#   - martela endpoints até forçar HTTP 429 (gera eventos rate_limit_burst em _alert.js)
+#   - testa blocklist de IP (pode bloquear o IP do runner)
+# Por isso NÃO roda por push. Roda:
+#   1. Manualmente (workflow_dispatch) — você escolhe a URL alvo
+#   2. Semanalmente (agendada) contra a URL definida no secret SECURITY_TEST_BASE_URL
+#
+# IMPORTANTE: aponte SECURITY_TEST_BASE_URL para um ambiente DEDICADO de testes
+# (preview/staging com seu próprio Supabase), NUNCA para produção — senão você
+# polui alertas e e-mails reais a cada execução.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'URL alvo (ex: https://granaevo-staging.vercel.app). Vazio usa o secret.'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 6 * * 1'  # toda segunda 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    name: Security regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Run security suite
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || secrets.SECURITY_TEST_BASE_URL }}
+          SUPABASE_URL: ${{ secrets.SECURITY_TEST_SUPABASE_URL }}
+        run: |
+          if [ -z "$BASE_URL" ]; then
+            echo "::error::SECURITY_TEST_BASE_URL não configurado. Defina o secret ou passe base_url no dispatch."
+            exit 1
+          fi
+          echo "Rodando suíte contra: $BASE_URL"
+          npm run test:security

@@ -1,0 +1,48 @@
+name: CI
+
+# Per-push / per-PR: APENAS verificações idempotentes e sem efeitos colaterais.
+# A suíte de segurança (que envia e-mails reais e martela rate limits) NÃO roda aqui —
+# ver .github/workflows/security-suite.yml (manual/agendada contra ambiente dedicado).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Dependency audit (falha em high/critical)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build
+        run: npm run build
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # histórico completo para varrer commits antigos
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

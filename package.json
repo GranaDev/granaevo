@@ -14,7 +14,10 @@
     "postbuild": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview",
     "deadcode": "knip --no-progress",
-    "images:optimize": "node scripts/optimize-images.mjs"
+    "coverage:summary": "node scripts/coverage-summary.mjs",
+    "images:optimize": "node scripts/optimize-images.mjs",
+    "test": "node --test tests/security/",
+    "test:security": "node --test tests/security/security.test.js"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",

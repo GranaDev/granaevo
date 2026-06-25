@@ -19,13 +19,27 @@ const USE_REDIS   = !!(REDIS_URL && REDIS_TOKEN)
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' ||
                       process.env.VERCEL_ENV === 'production'
 
-// Avisa se Redis não está configurado em produção (log visível no Vercel)
+// Modo estrito: em produção, exige Upstash configurado (fail-closed na inicialização).
+// Como o Upstash JÁ está setado em produção, ligar isto garante que um deploy futuro
+// que perca as envs falhe ALTO no boot, em vez de degradar silenciosamente para
+// in-memory (que não persiste entre instâncias serverless → brute-force fica inócuo).
+// Default: true em produção. Defina RATE_LIMIT_STRICT=false para desabilitar.
+const STRICT_RATE_LIMIT = (process.env.RATE_LIMIT_STRICT ?? 'true') !== 'false'
+
+// Alerta se Redis não está configurado em produção (log visível no Vercel).
 if (IS_PRODUCTION && !USE_REDIS) {
-  console.warn(JSON.stringify({
-    level: 'warn', event: 'redis_not_configured', path: '/api/_rate-limit',
+  // Nível ERROR (não warn) → dispara alerting em vez de afundar nos logs.
+  console.error(JSON.stringify({
+    level: 'error', event: 'redis_not_configured', path: '/api/_rate-limit',
     timestamp: new Date().toISOString(),
     reason: 'Rate limiting multi-instância inativo. Configure UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN.',
   }))
+  if (STRICT_RATE_LIMIT) {
+    throw new Error(
+      'RATE_LIMIT_STRICT: Upstash Redis ausente em produção. ' +
+      'Configure UPSTASH_REDIS_REST_URL/TOKEN ou defina RATE_LIMIT_STRICT=false para permitir fallback in-memory.'
+    )
+  }
 }
 
 // ── Fallback in-memory ────────────────────────────────────────────────────────
