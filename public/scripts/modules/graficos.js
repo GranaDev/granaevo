@@ -1960,7 +1960,21 @@ function exportarGrafico(canvasId) {
     link.click();
 }
 
+// Destrói todas as instâncias Chart.js ativas e limpa o registro. OBRIGATÓRIO
+// antes de apagar os <canvas> do DOM (loading/empty-state): sem isso, charts
+// órfãos continuam animando/escutando eventos sobre canvas já removido e
+// quebram com "this._fn is not a function" no próximo tick/resize (acontece no
+// caminho dados→vazio, em que nenhum chart novo é criado para destruir o antigo).
+function _destruirTodosGraficos() {
+    for (const id of Object.getOwnPropertyNames(graficosInstances)) {
+        try { graficosInstances[id]?.destroy?.(); } catch { /* ignore */ }
+        delete graficosInstances[id];
+    }
+    if (_resizeObserver) { try { _resizeObserver.disconnect(); } catch { /* ignore */ } }
+}
+
 function mostrarLoading() {
+    _destruirTodosGraficos();
     const container = document.getElementById('graficosConteudo');
     if (container) {
         _setSafeHTML(container, `
@@ -2011,6 +2025,7 @@ function mostrarEmptyState(mensagem) {
     wrapper.appendChild(descEl);
     wrapper.appendChild(btn);
 
+    _destruirTodosGraficos();
     container.innerHTML = '';
     container.appendChild(wrapper);
 }
