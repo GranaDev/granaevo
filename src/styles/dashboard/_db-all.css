@@ -2496,9 +2496,9 @@ select.form-input option:checked {
        listas longas de transações (aparelho fraco). Seguro: a linha já tem
        overflow:hidden e abre modal (não popover inline), nada a clipar.
        contain-intrinsic-size guarda a altura real após o 1º render (evita pulo
-       de scroll); 68px é só o palpite inicial. */
+       de scroll); 84px é o palpite inicial (badge 48 + padding 18×2). */
     content-visibility: auto;
-    contain-intrinsic-size: auto 68px;
+    contain-intrinsic-size: auto 84px;
 }
 
 .mov-item:hover {
@@ -7107,7 +7107,10 @@ select.form-input option:checked {
     background: var(--color-bg-card, #13141f);
     border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
 }
-.ge-skel--linha { height: 64px; }
+/* Alturas casadas com o conteúdo real para zerar CLS quando o skeleton vira
+   conteúdo: .mov-item ≈ 84px (badge 48 + padding 18×2 + borda) e o gap de 12px
+   bate com o margin-bottom da linha; cards (cartão/meta) ≈ 104px. */
+.ge-skel--linha { height: 84px; }
 .ge-skel--card  { height: 104px; }
 .ge-skel::after {
     content: "";

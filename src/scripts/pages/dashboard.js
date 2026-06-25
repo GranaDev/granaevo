@@ -1490,6 +1490,20 @@ function atualizarTelaPerfis() {
 }
 
 
+// Revela a casca do dashboard (esconde seleção de perfis, mostra sidebar/topbar/nav).
+// Só altera display — idempotente e seguro de chamar cedo (boot otimista).
+function _revelarShellDashboard() {
+    const selecao         = document.getElementById('selecaoPerfis');
+    const sidebar         = document.getElementById('sidebar');
+    const mobileTopbar    = document.getElementById('mobileTopbar');
+    const mobileBottomNav = document.getElementById('mobileBottomNav');
+
+    if (selecao)          selecao.style.display         = 'none';
+    if (sidebar)          sidebar.style.display         = 'flex';
+    if (mobileTopbar)     mobileTopbar.style.display    = '';
+    if (mobileBottomNav)  mobileBottomNav.style.display = '';
+}
+
 async function entrarNoPerfil(index, { silent = false } = {}) {
     // silent: usado no boot quando o authLoading já está visível — evita empilhar
     // um segundo overlay (sensação de "carregar duas vezes").
@@ -1512,6 +1526,26 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         // Persiste a seleção — restaurada automaticamente em refreshes da sessão
         try { sessionStorage.setItem('ge_perfil_id', perfilAtivo.id); } catch (_) {}
 
+        // ── Boot otimista (display-only) ─────────────────────────────────────
+        // Pinta os KPIs do topo a partir do último snapshot em cache e revela a
+        // casca do dashboard ANTES do load de rede terminar ("abriu e já está lá").
+        // É só PINTURA: não toca nos arrays de dados nem no save path — iniciarAutoSave
+        // e salvarDados continuam DEPOIS do load, então isto é imune ao bug de wipe
+        // (ver data_wipe_incident). O load real reconcilia abaixo via count-up.
+        const bootOtimista = _pintarResumoBoot(perfilAtivo.id);
+        if (bootOtimista) {
+            // Revela o conteúdo protegido cedo. Seguro: AuthGuard JÁ validou a sessão
+            // em verificarLogin ANTES deste ponto — não estamos antecipando autorização,
+            // só a pintura. verificarLogin repete isto no finally (idempotente).
+            const pc = document.querySelector('[data-protected-content]');
+            if (pc) { pc.classList.remove('js-hidden'); pc.style.display = ''; }
+            _revelarShellDashboard();
+            mostrarTela('dashboard');
+            const al = document.getElementById('authLoading');
+            if (al) al.style.display = 'none';
+            if (profileLoading) profileLoading.classList.add('hidden');
+        }
+
         await carregarDadosPerfil(perfilAtivo.id);
         atualizarReferenciasGlobais();
         gerarCobrancasAssinaturas();
@@ -1520,20 +1554,13 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         // e difere a lista de contas fixas (abaixo da dobra) para o idle. As chamadas
         // de transações/metas em atualizarTudo() são no-op aqui (módulos lazy ainda não
         // carregados), então só replicamos o que de fato renderiza no boot.
+        // No boot otimista isto RECONCILIA: _animarMoeda anima do valor em cache p/ o real.
         atualizarDashboardResumo();
         atualizarHeaderReservas();
         _idle(() => atualizarListaContasFixas());
         atualizarNomeUsuario();
 
-        const selecao         = document.getElementById('selecaoPerfis');
-        const sidebar         = document.getElementById('sidebar');
-        const mobileTopbar    = document.getElementById('mobileTopbar');
-        const mobileBottomNav = document.getElementById('mobileBottomNav');
-
-        if (selecao)          selecao.style.display         = 'none';
-        if (sidebar)          sidebar.style.display         = 'flex';
-        if (mobileTopbar)     mobileTopbar.style.display    = '';
-        if (mobileBottomNav)  mobileBottomNav.style.display = '';
+        if (!bootOtimista) _revelarShellDashboard();
 
         if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
             window.chatAssistant.onProfileSelected(Object.freeze({ ...perfilAtivo }));
@@ -1546,7 +1573,8 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         // Ativa o indicador de sync somente após o save inicial de boot
         _syncReadyForDisplay = true;
 
-        mostrarTela('dashboard');
+        // No boot otimista o dashboard já foi revelado lá em cima (não revela 2×).
+        if (!bootOtimista) mostrarTela('dashboard');
 
         // Onboarding automático para novos perfis (sem dados, primeira visita)
         // Chamado APÓS mostrarTela para garantir que a UI base está visível
@@ -2539,6 +2567,61 @@ function _initBtnPeriodoDash() {
     _atualizarLabelBtnMes();
 }
 
+// ── Boot otimista (display-only) ─────────────────────────────────────────────
+// Guarda APENAS os KPIs já renderizados do topo (entradas/saídas/saldo/reservas),
+// por usuário+perfil, para pintar o dashboard instantaneamente no próximo boot
+// enquanto o load de rede ainda corre ("abriu e já está lá"). É só pintura: NUNCA
+// toca nos arrays de dados nem no save path → impossível causar wipe
+// (ver data_wipe_incident). O load real reconcilia logo em seguida via count-up.
+function _bootKpiKey(perfilId) {
+    return `ge_boot_kpi_${_effectiveUserId || 'x'}_${perfilId}`;
+}
+
+function _salvarResumoBoot(perfilId, kpis) {
+    if (!perfilId || !_effectiveUserId) return;
+    try {
+        localStorage.setItem(_bootKpiKey(perfilId), JSON.stringify({
+            v: 1, e: kpis.entradas, s: kpis.saidas, sa: kpis.saldo, r: kpis.reservas,
+        }));
+    } catch (_) { /* localStorage indisponível — silencioso */ }
+}
+
+// Pinta os KPIs do cache (define textContent + dataset.num, que vira a base do
+// count-up). Retorna true se de fato pintou algo. Respeita saldo oculto.
+function _pintarResumoBoot(perfilId) {
+    if (!perfilId || !_effectiveUserId) return false;
+    let dados;
+    try {
+        const raw = localStorage.getItem(_bootKpiKey(perfilId));
+        if (!raw) return false;
+        dados = JSON.parse(raw);
+    } catch (_) { return false; }
+    if (!dados || dados.v !== 1) return false;
+
+    const pares = [
+        ['totalEntradas', dados.e],
+        ['totalSaidas',   dados.s],
+        ['totalSaldo',    dados.sa],
+        ['totalReservas', dados.r],
+        ['heroSaldo',     dados.sa],
+    ];
+    let pintou = false;
+    for (const [id, val] of pares) {
+        const n = Number(val);
+        if (!Number.isFinite(n)) continue;
+        const el = document.getElementById(id);
+        if (!el) continue;
+        el.dataset.num = String(n); // base p/ o count-up de atualizarDashboardResumo()
+        if (id === 'heroSaldo') {
+            el.dataset.valor = formatBRL(n);
+            if (el.classList.contains('oculto')) continue; // não revela saldo escondido
+        }
+        el.textContent = formatBRL(n);
+        pintou = true;
+    }
+    return pintou;
+}
+
 function atualizarDashboardResumo() {
     let totalEntradas = 0, totalSaidas = 0, totalReservas = 0;
     let corrupcaoDetectada = false;
@@ -2666,6 +2749,12 @@ function atualizarDashboardResumo() {
         heroSaldoEl.dataset.valor = formatBRL(saldo);
     }
     if (reservasEl)  _animarMoeda(reservasEl, totalReservasCalc);
+
+    // Snapshot display-only p/ boot otimista (não toca em arrays nem no save path)
+    if (perfilAtivo) _salvarResumoBoot(perfilAtivo.id, {
+        entradas: totalEntradas, saidas: totalSaidas,
+        saldo: saldo, reservas: totalReservasCalc,
+    });
 
     // ── % variação vs mês anterior ───────────────────────────────────────
     const elPctEnt  = document.getElementById('percentEntradas');
@@ -4078,6 +4167,7 @@ function _criarBottomSheet(html) {
         overlay2.classList.add('active');
         overlay2.onclick = () => fecharPopup();
         _ativarFocusTrap(container2);
+        hapticTap(10); // feedback tátil ao abrir o modal (mobile)
         return;
     }
 
@@ -4096,6 +4186,7 @@ function _criarBottomSheet(html) {
     overlay.classList.add('active');
     overlay.onclick = (e) => { if (e.target === overlay) fecharPopup(); };
     _ativarFocusTrap(document.getElementById('bottomSheetContainer'));
+    hapticTap(10); // feedback tátil ao abrir o bottom sheet (mobile)
 }
 
 function sanitizarHTMLPopup(html) {
@@ -4543,6 +4634,7 @@ function bindEventos() {
     document.querySelectorAll('[data-page]').forEach(btn => {
         btn.addEventListener('click', function() {
             const page = this.getAttribute('data-page');
+            hapticTap(8); // toque seco de seleção ao trocar de aba (mobile)
             mostrarTela(page);
         });
     });
