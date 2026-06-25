@@ -1,4 +1,6 @@
 // db-transacoes.js — Seção de Transações (lazy-loaded)
+import { perfMark, perfMeasure, perfCount } from '../modules/perf-marks.js';
+
 let _ctx = null;
 
 // Proxy para utilitários de dashboard.js disponíveis via _ctx após init()
@@ -601,6 +603,16 @@ const MOV_POR_PAGINA = 50;
 let _movBuscaTerm = ''; // termo atual de busca (normalizado)
 let _movScrollObserver = null; // IntersectionObserver para carregar mais ao rolar
 
+// ── Estado do render incremental do extrato ──────────────────────────────────
+// Renderizamos APENAS o modo visível (tabela no desktop OU cards no mobile, breakpoint
+// 640px = mesmo do CSS) e anexamos só a página nova ao rolar — sem reconstruir tudo.
+const _mqMovMobile = window.matchMedia('(max-width: 640px)');
+let _movMode      = null;   // 'table' | 'cards' | null (nada renderizado)
+let _movContainer = null;   // <table> ou <div.mov-cards> atualmente no DOM
+let _movRowsHost  = null;   // onde anexar novas linhas: <tbody> (tabela) ou wrapper (cards)
+let _movCardState = { ultimaData: null }; // separador de data persiste entre páginas
+let _movResizeBound = false; // garante 1 listener de breakpoint só
+
 function _initBusca() {
     const input  = document.getElementById('movBuscaInput');
     const btnClr = document.getElementById('movBuscaClear');
@@ -634,6 +646,80 @@ const _TIPO_ICON = {
     retirada_reserva: 'fa-wallet',
 };
 
+// Cria UMA linha <tr> da tabela. Isolada para permitir append incremental.
+function _criarLinhaTabela(t) {
+    const cat = _CAT_PERMITIDAS.includes(t.categoria) ? t.categoria : 'saida';
+    const tr  = document.createElement('tr');
+
+    // — Data com ícone de calendário —
+    const tdData = document.createElement('td');
+    tdData.className = 'td-data';
+    const calIcon = document.createElement('i');
+    calIcon.className = 'fas fa-calendar-alt td-cal-icon';
+    calIcon.setAttribute('aria-hidden', 'true');
+    tdData.appendChild(calIcon);
+    tdData.appendChild(document.createTextNode(_ctx._sanitizeText(t.data || '')));
+    tr.appendChild(tdData);
+
+    // — Descrição com subtítulo —
+    const tdDesc = document.createElement('td');
+    tdDesc.className = 'td-desc';
+    const descMain = document.createElement('div');
+    descMain.className = 'td-desc-main';
+    descMain.textContent = _ctx._sanitizeText(t.descricao || '');
+    tdDesc.appendChild(descMain);
+    if (t.tipo) {
+        const descSub = document.createElement('div');
+        descSub.className = 'td-desc-sub';
+        descSub.textContent = _ctx._sanitizeText(t.tipo);
+        tdDesc.appendChild(descSub);
+    }
+    tr.appendChild(tdDesc);
+
+    // — Categoria —
+    const tdCat = document.createElement('td');
+    tdCat.className = 'td-cat';
+    const badge = document.createElement('span');
+    badge.className = `cat-badge cat-${cat}`;
+    badge.textContent = _CAT_LABELS[cat] || cat;
+    tdCat.appendChild(badge);
+    tr.appendChild(tdCat);
+
+    // — Tipo com ícone colorido —
+    const tdTipo = document.createElement('td');
+    tdTipo.className = 'td-tipo';
+    const tipoIconWrap = document.createElement('span');
+    tipoIconWrap.className = `tipo-icon tipo-icon-${cat}`;
+    const tipoI = document.createElement('i');
+    tipoI.className = `fas ${_TIPO_ICON[cat] || 'fa-circle'}`;
+    tipoI.setAttribute('aria-hidden', 'true');
+    tipoIconWrap.appendChild(tipoI);
+    tdTipo.appendChild(tipoIconWrap);
+    tdTipo.appendChild(document.createTextNode(_ctx._sanitizeText(t.tipo || '')));
+    tr.appendChild(tdTipo);
+
+    // — Valor colorido —
+    const sinal   = (cat === 'entrada' || cat === 'retirada_reserva') ? '+' : '-';
+    const tdValor = document.createElement('td');
+    tdValor.className = `td-valor val-${cat}`;
+    tdValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
+    tr.appendChild(tdValor);
+
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', () => editarTransacao(t));
+
+    return tr;
+}
+
+// Anexa linhas ao <tbody> existente (via fragment — 1 reflow só).
+function _appendLinhasTabela(tbody, txs) {
+    const frag = document.createDocumentFragment();
+    txs.forEach(t => frag.appendChild(_criarLinhaTabela(t)));
+    tbody.appendChild(frag);
+}
+
+// Constrói a tabela vazia (thead + tbody) e popula com `visivel`.
+// Retorna { table, tbody } para que o tbody seja reaproveitado nos appends.
 function _buildTable(visivel) {
     const table = document.createElement('table');
     table.className = 'mov-table';
@@ -649,88 +735,23 @@ function _buildTable(visivel) {
     table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
-
-    visivel.forEach(t => {
-        const cat = _CAT_PERMITIDAS.includes(t.categoria) ? t.categoria : 'saida';
-        const tr  = document.createElement('tr');
-
-        // — Data com ícone de calendário —
-        const tdData = document.createElement('td');
-        tdData.className = 'td-data';
-        const calIcon = document.createElement('i');
-        calIcon.className = 'fas fa-calendar-alt td-cal-icon';
-        calIcon.setAttribute('aria-hidden', 'true');
-        tdData.appendChild(calIcon);
-        tdData.appendChild(document.createTextNode(_ctx._sanitizeText(t.data || '')));
-        tr.appendChild(tdData);
-
-        // — Descrição com subtítulo —
-        const tdDesc = document.createElement('td');
-        tdDesc.className = 'td-desc';
-        const descMain = document.createElement('div');
-        descMain.className = 'td-desc-main';
-        descMain.textContent = _ctx._sanitizeText(t.descricao || '');
-        tdDesc.appendChild(descMain);
-        if (t.tipo) {
-            const descSub = document.createElement('div');
-            descSub.className = 'td-desc-sub';
-            descSub.textContent = _ctx._sanitizeText(t.tipo);
-            tdDesc.appendChild(descSub);
-        }
-        tr.appendChild(tdDesc);
-
-        // — Categoria —
-        const tdCat = document.createElement('td');
-        tdCat.className = 'td-cat';
-        const badge = document.createElement('span');
-        badge.className = `cat-badge cat-${cat}`;
-        badge.textContent = _CAT_LABELS[cat] || cat;
-        tdCat.appendChild(badge);
-        tr.appendChild(tdCat);
-
-        // — Tipo com ícone colorido —
-        const tdTipo = document.createElement('td');
-        tdTipo.className = 'td-tipo';
-        const tipoIconWrap = document.createElement('span');
-        tipoIconWrap.className = `tipo-icon tipo-icon-${cat}`;
-        const tipoI = document.createElement('i');
-        tipoI.className = `fas ${_TIPO_ICON[cat] || 'fa-circle'}`;
-        tipoI.setAttribute('aria-hidden', 'true');
-        tipoIconWrap.appendChild(tipoI);
-        tdTipo.appendChild(tipoIconWrap);
-        tdTipo.appendChild(document.createTextNode(_ctx._sanitizeText(t.tipo || '')));
-        tr.appendChild(tdTipo);
-
-        // — Valor colorido —
-        const sinal   = (cat === 'entrada' || cat === 'retirada_reserva') ? '+' : '-';
-        const tdValor = document.createElement('td');
-        tdValor.className = `td-valor val-${cat}`;
-        tdValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
-        tr.appendChild(tdValor);
-
-        tr.style.cursor = 'pointer';
-        tr.addEventListener('click', () => editarTransacao(t));
-
-        tbody.appendChild(tr);
-    });
-
+    _appendLinhasTabela(tbody, visivel);
     table.appendChild(tbody);
-    return table;
+    return { table, tbody };
 }
 
 
-function _buildCards(visivel) {
-    const wrapper  = document.createElement('div');
-    wrapper.className = 'mov-cards';
-    const frag     = document.createDocumentFragment();
-    let ultimaData = null;
+// Anexa cards ao wrapper existente. `state.ultimaData` persiste entre páginas
+// para o separador de data não duplicar/saltar na fronteira de uma página e outra.
+function _appendCards(wrapper, txs, state) {
+    const frag = document.createDocumentFragment();
 
-    visivel.forEach(t => {
+    txs.forEach(t => {
         const cat         = _CAT_PERMITIDAS.includes(t.categoria) ? t.categoria : 'saida';
         const dataExibida = _ctx._sanitizeText(t.data || '');
 
-        if (dataExibida && dataExibida !== ultimaData) {
-            ultimaData = dataExibida;
+        if (dataExibida && dataExibida !== state.ultimaData) {
+            state.ultimaData = dataExibida;
             const sep       = document.createElement('div');
             sep.className   = 'mov-date-separator';
             sep.textContent = dataExibida;
@@ -780,78 +801,64 @@ function _buildCards(visivel) {
     });
 
     wrapper.appendChild(frag);
+}
+
+// Constrói o wrapper de cards e popula com `visivel`. `state` é o objeto de
+// separador de data reaproveitado nos appends seguintes.
+function _buildCards(visivel, state) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'mov-cards';
+    _appendCards(wrapper, visivel, state);
     return wrapper;
 }
 
-function atualizarMovimentacoesUI(resetPagina = true) {
-    const lista = document.getElementById('listaMovimentacoes');
-    if (!lista) return;
+// Renderiza o estado vazio (sem transações ou busca sem resultado).
+function _renderMovVazio(lista) {
+    const wrap = document.createElement('div');
+    wrap.className = 'mov-empty-state';
 
-    // Desconecta observer anterior para evitar disparos duplos
-    if (_movScrollObserver) { _movScrollObserver.disconnect(); _movScrollObserver = null; }
+    const icon = document.createElement('div');
+    icon.className = 'mov-empty-icon';
+    icon.innerHTML = `<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>`;
 
-    if (resetPagina) _ctx._movPaginaAtual = 1;
+    const title = document.createElement('p');
+    title.className = 'mov-empty-title';
+    title.textContent = _movBuscaTerm
+        ? `Nenhum resultado para "${_movBuscaTerm}"`
+        : 'Nenhuma movimentação registrada';
 
-    lista.innerHTML = '';
+    const sub = document.createElement('p');
+    sub.className = 'mov-empty-sub';
+    sub.textContent = _movBuscaTerm
+        ? 'Tente outro termo de busca.'
+        : 'Registre sua primeira transação no formulário acima.';
 
-    const todos   = filtrarTransacoesParaUI().slice().reverse();
-    const total   = todos.length;
-    const visivel = todos.slice(0, _ctx._movPaginaAtual * MOV_POR_PAGINA);
-    const restam  = total - visivel.length;
+    wrap.appendChild(icon);
+    wrap.appendChild(title);
+    wrap.appendChild(sub);
 
-    if (total === 0) {
-        const wrap = document.createElement('div');
-        wrap.className = 'mov-empty-state';
-
-        const icon = document.createElement('div');
-        icon.className = 'mov-empty-icon';
-        icon.innerHTML = `<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>`;
-
-        const title = document.createElement('p');
-        title.className = 'mov-empty-title';
-        title.textContent = _movBuscaTerm
-            ? `Nenhum resultado para "${_movBuscaTerm}"`
-            : 'Nenhuma movimentação registrada';
-
-        const sub = document.createElement('p');
-        sub.className = 'mov-empty-sub';
-        sub.textContent = _movBuscaTerm
-            ? 'Tente outro termo de busca.'
-            : 'Registre sua primeira transação no formulário acima.';
-
-        wrap.appendChild(icon);
-        wrap.appendChild(title);
-        wrap.appendChild(sub);
-
-        if (!_movBuscaTerm) {
-            const btn = document.createElement('button');
-            btn.className = 'btn-primary mov-empty-cta';
-            btn.type = 'button';
-            btn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Lançar transação';
-            btn.addEventListener('click', () => {
-                document.getElementById('selectCategoria')?.focus();
-                document.getElementById('selectCategoria')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            });
-            wrap.appendChild(btn);
-        }
-
-        lista.appendChild(wrap);
-        return;
+    if (!_movBuscaTerm) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-primary mov-empty-cta';
+        btn.type = 'button';
+        btn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Lançar transação';
+        btn.addEventListener('click', () => {
+            document.getElementById('selectCategoria')?.focus();
+            document.getElementById('selectCategoria')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        wrap.appendChild(btn);
     }
 
-    _ctx._movVisivelCache = visivel;
+    lista.appendChild(wrap);
+}
 
-    lista.appendChild(_buildTable(visivel));
-    lista.appendChild(_buildCards(visivel));
-
-    // ── Scroll automático via IntersectionObserver ──────────────────────────
-    // Sentinela invisível no final da lista — quando entra na viewport carrega mais
+// (Re)cria a sentinela de scroll-infinito ou o rodapé de total, sempre no fim da lista.
+function _renderMovRodape(lista, total, restam) {
     if (restam > 0) {
         const sentinela = document.createElement('div');
         sentinela.className = 'mov-load-sentinela';
         sentinela.setAttribute('aria-hidden', 'true');
 
-        // Texto informativo sobre quantas restam (acessível)
         const info = document.createElement('p');
         info.className = 'mov-load-info';
         info.textContent = `Carregando mais ${Math.min(restam, MOV_POR_PAGINA)} de ${restam} movimentações…`;
@@ -869,12 +876,88 @@ function atualizarMovimentacoesUI(resetPagina = true) {
 
         _movScrollObserver.observe(sentinela);
     } else {
-        // Rodapé mostrando total
         const footer = document.createElement('p');
         footer.className = 'mov-load-total';
         footer.textContent = `${total} movimentação${total !== 1 ? 'ões' : ''} no período`;
         lista.appendChild(footer);
     }
+}
+
+// Re-renderiza ao cruzar o breakpoint 640px (desktop⇄mobile). Sem isso, o container
+// renderizado (só um modo) ficaria escondido pelo CSS e a lista sumiria. Registra 1 vez.
+function _bindMovBreakpoint() {
+    if (_movResizeBound) return;
+    _movResizeBound = true;
+    const onChange = () => {
+        // Só re-renderiza se a aba de transações está montada (lista existe e tem modo ativo)
+        if (_movMode && document.getElementById('listaMovimentacoes')) {
+            atualizarMovimentacoesUI(false);
+        }
+    };
+    if (_mqMovMobile.addEventListener) _mqMovMobile.addEventListener('change', onChange);
+    else _mqMovMobile.addListener(onChange); // Safari < 14
+}
+
+function atualizarMovimentacoesUI(resetPagina = true) {
+    const lista = document.getElementById('listaMovimentacoes');
+    if (!lista) return;
+    perfMark('mov:render');
+
+    _bindMovBreakpoint();
+
+    // Desconecta observer anterior para evitar disparos duplos
+    if (_movScrollObserver) { _movScrollObserver.disconnect(); _movScrollObserver = null; }
+
+    if (resetPagina) _ctx._movPaginaAtual = 1;
+
+    const todos   = filtrarTransacoesParaUI().slice().reverse();
+    const total   = todos.length;
+    const pagina  = _ctx._movPaginaAtual;
+    const fim     = pagina * MOV_POR_PAGINA;
+    const visivel = todos.slice(0, fim);
+    const restam  = total - visivel.length;
+
+    if (total === 0) {
+        lista.innerHTML = '';
+        _movMode = null; _movContainer = null; _movRowsHost = null;
+        _renderMovVazio(lista);
+        perfMeasure('mov:render', 'vazio');
+        return;
+    }
+
+    _ctx._movVisivelCache = visivel;
+
+    const modoAtual    = _mqMovMobile.matches ? 'cards' : 'table';
+    const precisaFresh = resetPagina || _movMode !== modoAtual || !_movContainer || !_movContainer.isConnected;
+
+    if (precisaFresh) {
+        // Render do zero: reset de filtro/mês/busca OU mudança de modo (resize de breakpoint).
+        lista.innerHTML = '';
+        _movCardState = { ultimaData: null };
+        _movMode = modoAtual;
+        if (modoAtual === 'cards') {
+            _movContainer = _buildCards(visivel, _movCardState);
+            _movRowsHost  = _movContainer; // cards anexam direto no wrapper
+        } else {
+            const { table, tbody } = _buildTable(visivel);
+            _movContainer = table;
+            _movRowsHost  = tbody;
+        }
+        lista.appendChild(_movContainer);
+    } else {
+        // Load-more incremental: anexa SÓ a página nova ao container que já existe.
+        // Antes era innerHTML='' + rebuild de TUDO (O(n²) ao rolar) — agora é O(página).
+        const novos = todos.slice((pagina - 1) * MOV_POR_PAGINA, fim);
+        lista.querySelector('.mov-load-sentinela')?.remove();
+        lista.querySelector('.mov-load-total')?.remove();
+        if (_movMode === 'cards') _appendCards(_movRowsHost, novos, _movCardState);
+        else                      _appendLinhasTabela(_movRowsHost, novos);
+    }
+
+    _renderMovRodape(lista, total, restam);
+
+    perfMeasure('mov:render', `${precisaFresh ? 'fresh' : 'append'} modo=${_movMode} total=${total} visíveis=${visivel.length}`);
+    perfCount('mov:nós-DOM-lista', lista.querySelectorAll('*').length, `(página ${pagina})`);
 }
 
 function editarTransacao(t) {
