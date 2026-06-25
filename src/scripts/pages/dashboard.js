@@ -5,6 +5,7 @@ import { dataManager } from '../modules/data-manager.js?v=8';
 import AuthGuard from '../modules/auth-guard.js?v=2';
 import '../modules/scroll-lock.js?v=1';
 import { initErrorTracking, setUserContext } from '../modules/error-tracking.js';
+import { perfMark, perfMeasure } from '../modules/perf-marks.js';
 
 // Inicializa rastreamento de erros o quanto antes (no-op sem VITE_SENTRY_DSN / fora de produção)
 initErrorTracking();
@@ -6064,15 +6065,9 @@ function _patchInputValorGetter() {
 
 
 // ========== INICIALIZAÇÃO ==========
-document.addEventListener('DOMContentLoaded', () => {
-    verificarLogin();
-    bindEventos();
-    setupSidebarToggle();
-    _initBtnPeriodoDash();
-    _initSyncIndicator();
-    _initMascaraMonetaria();
-
-    // Fallback para qualquer <img> de foto de perfil que falhar ao carregar
+function _registrarFallbacksFotoPerfil() {
+    // Fallback para qualquer <img> de foto de perfil que falhar ao carregar.
+    // Passivo (só dispara em erro de carga) → seguro adiar para idle.
     document.querySelectorAll('#userPhoto, #mobileUserPhoto, #cfgUserPhoto').forEach(img => {
         img.addEventListener('error', function () {
             this.style.display = 'none';
@@ -6084,5 +6079,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 fb.textContent = (nameEl?.textContent || 'U').trim().charAt(0).toUpperCase() || 'U';
             }
         }, { once: true });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // ── Crítico para o 1º frame: auth + eventos + controles já visíveis/clicáveis ──
+    // Mantidos EAGER de propósito: adiar binding de UI clicável faria o 1º clique "morrer".
+    perfMark('boot:critico');
+    verificarLogin();
+    bindEventos();
+    setupSidebarToggle();
+    _initBtnPeriodoDash();
+    perfMeasure('boot:critico', '(verificarLogin+bindEventos+sidebar+btnPeriodo)');
+
+    // ── Não-crítico: nada disso é interativo no 1º frame nem afeta o primeiro paint.
+    // Vai para idle (libera a main thread mais cedo em CPU fraca):
+    //   • _initSyncIndicator   — indicador passivo de sync
+    //   • _initMascaraMonetaria — máscara do input de valor (form de transações, tela lazy)
+    //   • fallbacks de foto     — só disparam em erro de <img>
+    _idle(() => {
+        perfMark('boot:idle');
+        _initSyncIndicator();
+        _initMascaraMonetaria();
+        _registrarFallbacksFotoPerfil();
+        perfMeasure('boot:idle', '(syncIndicator+mascara+fallbacksFoto)');
     });
 });
