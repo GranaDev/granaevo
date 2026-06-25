@@ -13,7 +13,7 @@ let _carregando = false;
 // FONTE ÚNICA: public/scripts/modules/graficos.js (não há mais cópia em src/ —
 // a duplicata divergia e servia cores de tema escuro no tema claro). Ao editar
 // a engine, suba o ?v= abaixo para invalidar o cache do navegador.
-const _GRAFICOS_SRC = '/scripts/modules/graficos.js?v=4';
+const _GRAFICOS_SRC = '/scripts/modules/graficos.js?v=5';
 
 export function init(ctx) {
     _ctx = ctx;

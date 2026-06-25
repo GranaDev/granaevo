@@ -306,7 +306,18 @@ function _setupResizeObserver() {
 
     _resizeObserver = new ResizeObserver(() => {
         for (const id of Object.getOwnPropertyNames(graficosInstances)) {
-            try { graficosInstances[id]?.resize?.(); } catch { /* ignore */ }
+            const ch = graficosInstances[id];
+            if (!ch) continue;
+            // Canvas já saiu do DOM (container trocado): destrói e remove em vez
+            // de chamar resize() — senão a animação agendada pelo resize tickaria
+            // sobre um chart morto e quebraria com "this._fn is not a function"
+            // dentro do requestAnimationFrame (fora do alcance deste try/catch).
+            if (!ch.canvas || !ch.canvas.isConnected) {
+                try { ch.destroy(); } catch { /* ignore */ }
+                delete graficosInstances[id];
+                continue;
+            }
+            try { ch.resize(); } catch { /* ignore */ }
         }
     });
 
