@@ -10,7 +10,7 @@
 //
 // Reduz dashboard.css removendo ~1800 regras de glifo não usadas.
 // ─────────────────────────────────────────────────────────────────────────────
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, copyFileSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, copyFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join, extname } from 'node:path';
 import subsetFont from 'subset-font';
@@ -47,8 +47,9 @@ function scanInto(tokens, dir, { recursive }) {
 }
 
 const used = new Set(SAFELIST);
-scanInto(used, join(ROOT, 'src'), { recursive: true });  // src/ inteiro
-scanInto(used, ROOT, { recursive: false });              // *.html da raiz
+scanInto(used, join(ROOT, 'src'), { recursive: true });     // src/ inteiro
+scanInto(used, join(ROOT, 'public'), { recursive: true });  // public/ (graficos.js et al. vivem aqui)
+scanInto(used, ROOT, { recursive: false });                 // *.html da raiz
 
 // ── 2. Lê o CSS oficial e poda glifos não usados ──────────────────────────────
 let css = readFileSync(FA_CSS, 'utf8');
