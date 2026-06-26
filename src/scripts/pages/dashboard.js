@@ -6,6 +6,7 @@ import AuthGuard from '../modules/auth-guard.js?v=2';
 import '../modules/scroll-lock.js?v=1';
 import { initErrorTracking, setUserContext } from '../modules/error-tracking.js';
 import { perfMark, perfMeasure } from '../modules/perf-marks.js';
+import { evaluate as evaluateConquistas, enqueueToasts as enqueueConquistaToasts, sanitizeUnlocked as sanitizeConquistas } from '../modules/achievements.js?v=1';
 
 // Inicializa rastreamento de erros o quanto antes (no-op sem VITE_SENTRY_DSN / fora de produção)
 initErrorTracking();
@@ -46,6 +47,8 @@ let cartaoSelecionadoId = null;
 let tipoRelatorioAtivo = 'individual';
 let orcamentos = {}; // { 'Mercado': { limite: 800 }, 'Lazer': { limite: 300 }, ... }
 let tiposPersonalizados = []; // tipos criados pelo usuário, ex: ['Academia em Casa', 'Delivery Especial']
+let conquistasPerfil = {};    // mapa { idConquista: ISOdate } — desbloqueios do perfil ativo
+let _conquistasReady = false; // false durante o backfill silencioso (boot/troca de perfil)
 let _effectiveUserId = null;
 let _effectiveEmail  = null;
 let _allProfilesData = []; // cache local de todos os perfis — fonte de verdade para o save
@@ -630,6 +633,9 @@ async function _recarregarFotosPerfisBackground(userIdSeguro) {
 
 // ========== CARREGAR DADOS DO PERFIL (CORRIGIDA) ==========
 async function carregarDadosPerfil(perfilId) {
+    // Troca de perfil / boot: reseta a flag para que a 1ª avaliação faça o
+    // backfill SILENCIOSO (sem toast) das conquistas já merecidas pelo perfil.
+    _conquistasReady = false;
     try {
         _log.info('📦 [carregarDadosPerfil] Iniciando carregamento de dados');
 
@@ -666,6 +672,7 @@ async function carregarDadosPerfil(perfilId) {
             contasFixas    = [];
             cartoesCredito = [];
             assinaturas    = [];
+            conquistasPerfil = {};
             if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
 
             // ✅ nextIds mantidos apenas para cartões — cartão ainda usa ID local
@@ -685,6 +692,9 @@ async function carregarDadosPerfil(perfilId) {
         tiposPersonalizados = Array.isArray(perfilData.tiposPersonalizados)
                               ? perfilData.tiposPersonalizados.filter(t => typeof t === 'string' && t.length > 0 && t.length <= 60).slice(0, 50)
                               : [];
+        // sanitizeUnlocked: só copia ids conhecidos com valor string — blinda
+        // contra blob corrompido / prototype pollution vindo do servidor.
+        conquistasPerfil    = sanitizeConquistas(perfilData.conquistas);
         if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
 
         const idsCartoesNumericos = cartoesCredito
@@ -711,8 +721,50 @@ async function carregarDadosPerfil(perfilId) {
         contasFixas    = [];
         cartoesCredito = [];
         assinaturas    = [];
+        conquistasPerfil = {};
         if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
         atualizarReferenciasGlobais();
+    }
+}
+
+// ========== CONQUISTAS — AVALIAÇÃO E NÍVEIS ==========
+// Monta o snapshot de estado consumido pelo engine de conquistas (achievements.js).
+// O engine calcula saldo/patrimônio/mensais internamente a partir das arrays.
+function _buildConquistaState() {
+    return {
+        perfisCount:    Array.isArray(usuarioLogado.perfis) ? usuarioLogado.perfis.length : (perfilAtivo ? 1 : 0),
+        transacoes:     Array.isArray(transacoes)     ? transacoes     : [],
+        metas:          Array.isArray(metas)          ? metas          : [],
+        cartoesCredito: Array.isArray(cartoesCredito) ? cartoesCredito : [],
+        contasFixas:    Array.isArray(contasFixas)    ? contasFixas    : [],
+        assinaturas:    Array.isArray(assinaturas)    ? assinaturas    : [],
+        orcamentos:     (orcamentos && typeof orcamentos === 'object') ? orcamentos : {},
+    };
+}
+
+// Avalia conquistas contra o estado atual e MUTA conquistasPerfil com os novos
+// desbloqueios. Na 1ª chamada por perfil (_conquistasReady=false) faz backfill
+// SILENCIOSO — usuários antigos não levam enxurrada de toasts. Depois disso,
+// cada novo desbloqueio dispara o toast estilo Steam. A persistência acontece
+// naturalmente: esta função roda no topo de salvarDados(), então o mapa
+// atualizado entra no mesmo save. Idempotente (recomputa a partir dos dados).
+function checarConquistas() {
+    try {
+        const state  = _buildConquistaState();
+        const silent = !_conquistasReady;
+        const { newly } = evaluateConquistas(state, conquistasPerfil);
+        _conquistasReady = true;
+        if (newly.length) {
+            if (!silent) enqueueConquistaToasts(newly);
+            // Re-renderiza a tela de conquistas, se estiver aberta
+            if (typeof window._reRenderConquistas === 'function') {
+                try { window._reRenderConquistas(); } catch { /* modal pode ter fechado */ }
+            }
+        }
+        return newly;
+    } catch (e) {
+        _log.error('CONQUISTA_EVAL_001', e);
+        return [];
     }
 }
 
@@ -1180,6 +1232,14 @@ async function salvarDados() {
                     _sanitizeObject(a, _ALLOWED_KEYS.assinatura)
                 );
 
+                // ── 3.5. Avaliar conquistas ANTES de montar o perfil ─────────
+                //    Roda o engine (backfill silencioso na 1ª vez, toast depois)
+                //    e deixa conquistasPerfil atualizado para entrar neste save.
+                checarConquistas();
+                // Sanitiza o mapa antes de persistir: só ids conhecidos do
+                // catálogo com valor string (defesa contra blob corrompido).
+                const conquistasSan = sanitizeConquistas(conquistasPerfil);
+
                 // ── 4. Montar objeto do perfil atual ────────────────────────
                 const dadosPerfil = {
                     id:             perfilAtivo.id,
@@ -1192,6 +1252,7 @@ async function salvarDados() {
                     assinaturas:    assinaturasSanitizadas,
                     orcamentos:          _sanitizarOrcamentos(orcamentos),
                     tiposPersonalizados: tiposPersonalizados.filter(t => typeof t === 'string' && t.length > 0).slice(0, 50),
+                    conquistas:     conquistasSan,
                     nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
                     lastUpdate:     new Date().toISOString(),
                 };
@@ -1963,6 +2024,10 @@ function _makeCtx() {
         _sessionNonce:       { get: () => _sessionNonce,   enumerable: true },
         _notificacaoControl:        { get: () => _notificacaoControl, enumerable: true },
         verificarAnomaliaGasto:     { value: (tipo, v) => _notificacaoControl.verificarAnomaliaGasto(tipo, v), enumerable: true },
+        // Conquistas: avaliação + leitura do estado/desbloqueios p/ a tela de perfil
+        checarConquistas:    { value: () => checarConquistas(),       enumerable: true },
+        getConquistaState:   { value: () => _buildConquistaState(),   enumerable: true },
+        getConquistas:       { get: () => conquistasPerfil,           enumerable: true },
         _log:                { get: () => _log,            enumerable: true },
         // Utility functions
         formatBRL:           { value: (...a) => formatBRL(...a),           enumerable: true },
@@ -2170,7 +2235,7 @@ function _mostrarTelaImpl(tela) {
 
     if (tela === 'configuracoes') {
         if (!_dbLoaded.configuracoes) {
-            import('./db-configuracoes.js?v=5').then(m => {
+            import('./db-configuracoes.js?v=6').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.configuracoes = true;
             });

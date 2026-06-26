@@ -5,6 +5,8 @@ import { supabase } from '../services/supabase-client.js?v=2';
 import { iniciarTutorial } from '../modules/tutorial.js';
 import { initPWA, initInstallButton } from '../modules/pwa-installer.js';
 import { isPushSupported, getPushPermission, requestPushPermission, unsubscribePush } from '../modules/push-notifications.js';
+import { computeLevel } from '../modules/achievements.js?v=1';
+import { renderConquistas } from '../modules/achievements-ui.js?v=1';
 let _ctx = null;
 
 // Inicializa PWA logo que o módulo é carregado (uma vez, independente de ctx)
@@ -38,6 +40,8 @@ export function init(ctx) {
     _initSwipeNavToggle();
     // Inicializa botão de backup nas configurações (binding dinâmico)
     _bindBtnBackup();
+    // Torna o card de perfil clicável (hub de perfil → conquistas)
+    _initPerfilCard();
 }
 
 function _bindBtnBackup() {
@@ -1127,4 +1131,168 @@ async function resetarPerfil() {
     });
 }
 window.resetarPerfil = resetarPerfil;
+
+// ========== PERFIL: HUB + CONQUISTAS ==========
+// O card de perfil vira clicável e abre um "hub" com o nível do usuário e
+// opções (a 1ª é Conquistas). Cada perfil tem suas conquistas/nível próprios —
+// o estado vem do dashboard via _ctx (engine em modules/achievements.js).
+
+function _initPerfilCard() {
+    const card = document.querySelector('.cfg-profile-card');
+    if (!card || card.dataset.hubBound === '1') return;
+    card.dataset.hubBound = '1';
+    card.classList.add('is-clickable');
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', 'Abrir perfil e conquistas');
+
+    card.addEventListener('click', abrirPerfilHub);
+    card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirPerfilHub(); }
+    });
+
+    _atualizarBadgeNivel();
+}
+
+// Atualiza/insere o mini-badge de nível dentro do card de perfil.
+function _atualizarBadgeNivel() {
+    try {
+        _ctx.checarConquistas?.(); // garante backfill antes de ler o nível
+        const nivel = computeLevel(_ctx.getConquistas || {});
+        const info = document.querySelector('.cfg-profile-card .cfg-profile-info');
+        if (!info) return;
+        let badge = info.querySelector('.cfg-profile-levelbadge');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'cfg-profile-levelbadge';
+            info.appendChild(badge);
+        }
+        badge.textContent = '';
+        const star = document.createElement('span'); star.textContent = '⭐';
+        const txt  = document.createElement('span');
+        txt.textContent = `Nível ${nivel.nivel} · ${nivel.titulo}`;
+        badge.append(star, txt);
+    } catch { /* badge é opcional */ }
+}
+
+// Hub de perfil — avatar, nome, nível + lista de opções (Conquistas primeiro).
+function abrirPerfilHub() {
+    try { _ctx.checarConquistas?.(); } catch {}
+    const unlocked = _ctx.getConquistas || {};
+    const nivel    = computeLevel(unlocked);
+    const nome     = _ctx._sanitizeText?.(_ctx.perfilAtivo?.nome || 'Perfil') || 'Perfil';
+    const fotoUrl  = _ctx._sanitizeImgUrl?.(_ctx.perfilAtivo?.foto) || '';
+
+    _ctx.criarPopupDOM((box) => {
+        box.style.maxWidth = '440px';
+
+        // ── Cabeçalho do perfil ──────────────────────────────────────────
+        const head = document.createElement('div');
+        head.style.cssText = 'display:flex; align-items:center; gap:14px; margin-bottom:18px;';
+
+        const avatar = document.createElement('div');
+        avatar.style.cssText = 'width:58px; height:58px; border-radius:50%; flex-shrink:0; display:grid; place-items:center; font-size:1.5rem; font-weight:800; color:#fff; background:linear-gradient(135deg,#10b981,#059669); overflow:hidden;';
+        if (fotoUrl) {
+            const img = document.createElement('img');
+            img.src = fotoUrl;
+            img.alt = '';
+            img.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+            avatar.appendChild(img);
+        } else {
+            avatar.textContent = nome.trim().charAt(0).toUpperCase() || 'U';
+        }
+
+        const hInfo = document.createElement('div');
+        hInfo.style.minWidth = '0';
+        const hNome = document.createElement('div');
+        hNome.style.cssText = 'font-size:1.1rem; font-weight:800; color:var(--text-primary);';
+        hNome.textContent = nome;
+        const hNivel = document.createElement('div');
+        hNivel.style.cssText = 'font-size:0.82rem; color:#f5a524; font-weight:700; margin-top:2px;';
+        hNivel.textContent = `⭐ Nível ${nivel.nivel} · ${nivel.titulo}`;
+        hInfo.append(hNome, hNivel);
+        head.append(avatar, hInfo);
+
+        // ── Lista de opções ──────────────────────────────────────────────
+        const lista = document.createElement('div');
+        lista.style.cssText = 'display:flex; flex-direction:column; gap:10px;';
+
+        const opcao = (icon, titulo, sub, onClick) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'cfg-item';
+            b.style.cssText = 'width:100%; text-align:left;';
+            const ic = document.createElement('div');
+            ic.className = 'cfg-item-icon cfg-item-icon--gold';
+            const iEl = document.createElement('span'); iEl.textContent = icon; iEl.style.fontSize = '1.05rem';
+            ic.appendChild(iEl);
+            const tw = document.createElement('div'); tw.className = 'cfg-item-text';
+            const t1 = document.createElement('span'); t1.className = 'cfg-item-title'; t1.textContent = titulo;
+            const t2 = document.createElement('span'); t2.className = 'cfg-item-sub';   t2.textContent = sub;
+            tw.append(t1, t2);
+            const arrow = document.createElement('i'); arrow.className = 'fas fa-chevron-right cfg-item-arrow'; arrow.setAttribute('aria-hidden', 'true');
+            b.append(ic, tw, arrow);
+            b.addEventListener('click', onClick);
+            return b;
+        };
+
+        const total  = Object.keys(unlocked).length;
+        lista.appendChild(opcao('🏆', 'Conquistas', `${total} desbloqueada(s) · nível ${nivel.nivel}`, () => {
+            _ctx.fecharPopup();
+            abrirConquistas();
+        }));
+
+        const btnFechar = document.createElement('button');
+        btnFechar.className = 'btn-cancelar';
+        btnFechar.type = 'button';
+        btnFechar.style.cssText = 'width:100%; margin-top:16px;';
+        btnFechar.textContent = 'Fechar';
+        btnFechar.addEventListener('click', () => _ctx.fecharPopup());
+
+        box.append(head, lista, btnFechar);
+    });
+}
+
+// Tela de Conquistas — nível no topo + grid de cards (engine renderiza).
+function abrirConquistas() {
+    try { _ctx.checarConquistas?.(); } catch {}
+
+    _ctx.criarPopupDOM((box) => {
+        box.style.maxWidth = '660px';
+        box.style.width = '100%';
+
+        const h3 = document.createElement('h3');
+        h3.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:14px;';
+        const hi = document.createElement('span'); hi.textContent = '🏆';
+        h3.append(hi, document.createTextNode(' Conquistas'));
+
+        const container = document.createElement('div');
+        container.style.cssText = 'max-height:62vh; overflow-y:auto; padding-right:6px; margin:0 -2px;';
+
+        const btnFechar = document.createElement('button');
+        btnFechar.className = 'btn-cancelar';
+        btnFechar.type = 'button';
+        btnFechar.style.cssText = 'width:100%; margin-top:16px;';
+        btnFechar.textContent = 'Fechar';
+        btnFechar.addEventListener('click', () => {
+            window._reRenderConquistas = null;
+            _ctx.fecharPopup();
+            _atualizarBadgeNivel();
+        });
+
+        box.append(h3, container, btnFechar);
+
+        const render = () => renderConquistas(container, {
+            state:     _ctx.getConquistaState(),
+            unlocked:  _ctx.getConquistas,
+            formatBRL: _ctx.formatBRL,
+        });
+        render();
+        // Permite que o dashboard re-renderize ao vivo quando algo desbloquear
+        window._reRenderConquistas = render;
+    });
+
+    // Persiste eventuais backfills/desbloqueios feitos ao abrir
+    try { _ctx.salvarDados?.(); } catch {}
+}
 
