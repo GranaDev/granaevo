@@ -271,7 +271,7 @@
                             <h3>Cookies e armazenamento local</h3>
                             <ul>
                                 <li><strong>sessionStorage:</strong> usado para manter o perfil selecionado durante a sessão do navegador. Limpo ao fechar a aba.</li>
-                                <li><strong>localStorage:</strong> não utilizado pelo GranaEvo para dados pessoais.</li>
+                                <li><strong>localStorage:</strong> usado para preferências de interface (ex: tema) e para um <strong>cache local de desempenho</strong> que guarda, apenas no seu próprio dispositivo, um resumo dos seus indicadores financeiros (entradas, saídas, saldo e reservas) por perfil — para exibição instantânea ao abrir o painel. Esses dados <strong>nunca são transmitidos a terceiros</strong> e são reconciliados com o servidor a cada carregamento. Você pode limpá-los a qualquer momento apagando os dados do navegador ou saindo da conta.</li>
                                 <li><strong>Cookies:</strong> o GranaEvo não utiliza cookies de rastreamento. A Cloudflare pode definir cookies técnicos de segurança (ex: cf_clearance) sem finalidade analítica.</li>
                             </ul>
                         </div>
@@ -290,7 +290,7 @@
                             <li><strong>Autenticação:</strong> tokens JWT de curta duração via Supabase Auth;</li>
                             <li><strong>Controle de acesso:</strong> Row Level Security (RLS) no PostgreSQL — cada usuário acessa apenas seus próprios dados;</li>
                             <li><strong>Senhas:</strong> armazenadas exclusivamente em hash bcrypt, nunca em texto puro;</li>
-                            <li><strong>Fotos de perfil:</strong> sanitizadas e convertidas para WebP antes do armazenamento, eliminando metadados EXIF;</li>
+                            <li><strong>Fotos de perfil:</strong> validadas por assinatura de arquivo (apenas JPEG, PNG ou WebP) e sanitizadas com remoção de metadados EXIF/XMP, incluindo coordenadas de GPS, antes do armazenamento;</li>
                             <li><strong>Rate limiting:</strong> proteção contra ataques de força bruta e enumeração;</li>
                             <li><strong>Proteção contra bots:</strong> Google reCAPTCHA na página de autenticação;</li>
                             <li><strong>CSP e headers de segurança:</strong> Content-Security-Policy estrito, HSTS, X-Frame-Options e outros headers em todas as páginas.</li>
