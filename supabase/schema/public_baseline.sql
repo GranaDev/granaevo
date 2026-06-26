@@ -1,14 +1,17 @@
 -- =============================================================================
 -- GranaEvo — BASELINE SCHEMA (public)
--- Gerado via Supabase Management API (introspecção, schema-only) em 2026-06-25T16:34:57.278Z
--- Projeto: granaevo-prod (fvrhqqeofqedmhadzzqw) · PostgreSQL 17.6
---
--- REFERÊNCIA de Disaster Recovery / Auditoria (achado M1). NÃO é migration:
--- não reaplicar contra o banco vivo. Para reconstruir do zero, ver README.md.
--- Nenhum dado de usuário está incluído (schema-only).
+-- Regenerado via Supabase Management API (introspeccao, schema-only) em 2026-06-26T07:47:31Z
+-- Projeto: granaevo-prod (fvrhqqeofqedmhadzzqw)
+-- Pos-limpeza 2026-06-26: M1 (12 funcoes legadas Cakto removidas), L1/L2/L3 (RLS).
+-- REFERENCIA de DR/Auditoria. NAO e migration: nao reaplicar contra o banco vivo.
+-- Nenhum dado de usuario incluido (schema-only).
 -- =============================================================================
 
--- ─── account_members ─────────────────────────────────────────────
+-- ###########################################################################
+-- TABELAS + RLS
+-- ###########################################################################
+
+-- --- account_members ---
 CREATE TABLE IF NOT EXISTS public.account_members (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   owner_user_id uuid NOT NULL,
@@ -29,7 +32,7 @@ CREATE TABLE IF NOT EXISTS public.account_members (
 ALTER TABLE public.account_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.account_members FORCE ROW LEVEL SECURITY;
 
--- ─── edge_rate_limits ────────────────────────────────────────────
+-- --- edge_rate_limits ---
 CREATE TABLE IF NOT EXISTS public.edge_rate_limits (
   key text NOT NULL,
   count integer DEFAULT 1 NOT NULL,
@@ -38,7 +41,7 @@ CREATE TABLE IF NOT EXISTS public.edge_rate_limits (
 );
 ALTER TABLE public.edge_rate_limits ENABLE ROW LEVEL SECURITY;
 
--- ─── feature_flags ───────────────────────────────────────────────
+-- --- feature_flags ---
 CREATE TABLE IF NOT EXISTS public.feature_flags (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   flag_key text NOT NULL,
@@ -54,7 +57,7 @@ CREATE TABLE IF NOT EXISTS public.feature_flags (
 ALTER TABLE public.feature_flags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.feature_flags FORCE ROW LEVEL SECURITY;
 
--- ─── financial_audit_log ─────────────────────────────────────────
+-- --- financial_audit_log ---
 CREATE TABLE IF NOT EXISTS public.financial_audit_log (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid NOT NULL,
@@ -73,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.financial_audit_log (
 ALTER TABLE public.financial_audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.financial_audit_log FORCE ROW LEVEL SECURITY;
 
--- ─── fraud_logs ──────────────────────────────────────────────────
+-- --- fraud_logs ---
 CREATE TABLE IF NOT EXISTS public.fraud_logs (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid,
@@ -90,7 +93,7 @@ CREATE TABLE IF NOT EXISTS public.fraud_logs (
 ALTER TABLE public.fraud_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fraud_logs FORCE ROW LEVEL SECURITY;
 
--- ─── guest_invitations ───────────────────────────────────────────
+-- --- guest_invitations ---
 CREATE TABLE IF NOT EXISTS public.guest_invitations (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   owner_user_id uuid NOT NULL,
@@ -111,7 +114,7 @@ CREATE TABLE IF NOT EXISTS public.guest_invitations (
 ALTER TABLE public.guest_invitations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.guest_invitations FORCE ROW LEVEL SECURITY;
 
--- ─── invite_nonces ───────────────────────────────────────────────
+-- --- invite_nonces ---
 CREATE TABLE IF NOT EXISTS public.invite_nonces (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   nonce text NOT NULL,
@@ -124,7 +127,7 @@ CREATE TABLE IF NOT EXISTS public.invite_nonces (
 ALTER TABLE public.invite_nonces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invite_nonces FORCE ROW LEVEL SECURITY;
 
--- ─── invite_rate_limit ───────────────────────────────────────────
+-- --- invite_rate_limit ---
 CREATE TABLE IF NOT EXISTS public.invite_rate_limit (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   identifier text NOT NULL,
@@ -139,7 +142,7 @@ CREATE TABLE IF NOT EXISTS public.invite_rate_limit (
 ALTER TABLE public.invite_rate_limit ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invite_rate_limit FORCE ROW LEVEL SECURITY;
 
--- ─── login_lockouts ──────────────────────────────────────────────
+-- --- login_lockouts ---
 CREATE TABLE IF NOT EXISTS public.login_lockouts (
   id bigint DEFAULT nextval('login_lockouts_id_seq'::regclass) NOT NULL,
   identifier text NOT NULL,
@@ -155,7 +158,7 @@ CREATE TABLE IF NOT EXISTS public.login_lockouts (
 );
 ALTER TABLE public.login_lockouts ENABLE ROW LEVEL SECURITY;
 
--- ─── password_reset_codes ────────────────────────────────────────
+-- --- password_reset_codes ---
 CREATE TABLE IF NOT EXISTS public.password_reset_codes (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   email text NOT NULL,
@@ -172,7 +175,7 @@ CREATE TABLE IF NOT EXISTS public.password_reset_codes (
 ALTER TABLE public.password_reset_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.password_reset_codes FORCE ROW LEVEL SECURITY;
 
--- ─── payment_events ──────────────────────────────────────────────
+-- --- payment_events ---
 CREATE TABLE IF NOT EXISTS public.payment_events (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   cakto_order_id text NOT NULL,
@@ -187,7 +190,7 @@ CREATE TABLE IF NOT EXISTS public.payment_events (
 ALTER TABLE public.payment_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_events FORCE ROW LEVEL SECURITY;
 
--- ─── plans ───────────────────────────────────────────────────────
+-- --- plans ---
 CREATE TABLE IF NOT EXISTS public.plans (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   name text NOT NULL,
@@ -200,7 +203,7 @@ CREATE TABLE IF NOT EXISTS public.plans (
 ALTER TABLE public.plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.plans FORCE ROW LEVEL SECURITY;
 
--- ─── profile_backups ─────────────────────────────────────────────
+-- --- profile_backups ---
 CREATE TABLE IF NOT EXISTS public.profile_backups (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   owner_user_id uuid NOT NULL,
@@ -228,7 +231,7 @@ CREATE TABLE IF NOT EXISTS public.profile_backups (
 ALTER TABLE public.profile_backups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profile_backups FORCE ROW LEVEL SECURITY;
 
--- ─── profiles ────────────────────────────────────────────────────
+-- --- profiles ---
 CREATE TABLE IF NOT EXISTS public.profiles (
   id integer DEFAULT nextval('profiles_id_seq'::regclass) NOT NULL,
   user_id uuid,
@@ -242,7 +245,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles FORCE ROW LEVEL SECURITY;
 
--- ─── push_subscriptions ──────────────────────────────────────────
+-- --- push_subscriptions ---
 CREATE TABLE IF NOT EXISTS public.push_subscriptions (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid NOT NULL,
@@ -260,7 +263,7 @@ CREATE TABLE IF NOT EXISTS public.push_subscriptions (
 ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.push_subscriptions FORCE ROW LEVEL SECURITY;
 
--- ─── rate_limit_writes ───────────────────────────────────────────
+-- --- rate_limit_writes ---
 CREATE TABLE IF NOT EXISTS public.rate_limit_writes (
   user_id uuid NOT NULL,
   window_start timestamp with time zone DEFAULT date_trunc('hour'::text, now()) NOT NULL,
@@ -271,7 +274,7 @@ CREATE TABLE IF NOT EXISTS public.rate_limit_writes (
 ALTER TABLE public.rate_limit_writes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rate_limit_writes FORCE ROW LEVEL SECURITY;
 
--- ─── stripe_events ───────────────────────────────────────────────
+-- --- stripe_events ---
 CREATE TABLE IF NOT EXISTS public.stripe_events (
   id text NOT NULL,
   processed_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -280,7 +283,7 @@ CREATE TABLE IF NOT EXISTS public.stripe_events (
 ALTER TABLE public.stripe_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stripe_events FORCE ROW LEVEL SECURITY;
 
--- ─── stripe_subscriptions ────────────────────────────────────────
+-- --- stripe_subscriptions ---
 CREATE TABLE IF NOT EXISTS public.stripe_subscriptions (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid,
@@ -308,7 +311,7 @@ CREATE TABLE IF NOT EXISTS public.stripe_subscriptions (
 ALTER TABLE public.stripe_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stripe_subscriptions FORCE ROW LEVEL SECURITY;
 
--- ─── subscriptions_cakto_archive ─────────────────────────────────
+-- --- subscriptions_cakto_archive ---
 CREATE TABLE IF NOT EXISTS public.subscriptions_cakto_archive (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid,
@@ -342,7 +345,7 @@ CREATE TABLE IF NOT EXISTS public.subscriptions_cakto_archive (
 ALTER TABLE public.subscriptions_cakto_archive ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subscriptions_cakto_archive FORCE ROW LEVEL SECURITY;
 
--- ─── terms_acceptance ────────────────────────────────────────────
+-- --- terms_acceptance ---
 CREATE TABLE IF NOT EXISTS public.terms_acceptance (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid NOT NULL,
@@ -362,7 +365,7 @@ CREATE TABLE IF NOT EXISTS public.terms_acceptance (
 ALTER TABLE public.terms_acceptance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.terms_acceptance FORCE ROW LEVEL SECURITY;
 
--- ─── user_data ───────────────────────────────────────────────────
+-- --- user_data ---
 CREATE TABLE IF NOT EXISTS public.user_data (
   id bigint DEFAULT nextval('user_data_id_seq'::regclass) NOT NULL,
   user_id uuid NOT NULL,
@@ -378,7 +381,7 @@ CREATE TABLE IF NOT EXISTS public.user_data (
 ALTER TABLE public.user_data ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_data FORCE ROW LEVEL SECURITY;
 
--- ─── user_data_snapshots ─────────────────────────────────────────
+-- --- user_data_snapshots ---
 CREATE TABLE IF NOT EXISTS public.user_data_snapshots (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid NOT NULL,
@@ -395,7 +398,7 @@ CREATE TABLE IF NOT EXISTS public.user_data_snapshots (
 ALTER TABLE public.user_data_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_data_snapshots FORCE ROW LEVEL SECURITY;
 
--- ─── user_profile_management ─────────────────────────────────────
+-- --- user_profile_management ---
 CREATE TABLE IF NOT EXISTS public.user_profile_management (
   id bigint DEFAULT nextval('user_profile_management_id_seq'::regclass) NOT NULL,
   user_id uuid NOT NULL,
@@ -412,7 +415,10 @@ CREATE TABLE IF NOT EXISTS public.user_profile_management (
 ALTER TABLE public.user_profile_management ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profile_management FORCE ROW LEVEL SECURITY;
 
--- ─── Índices ───────────────────────────────────────────────────────────
+-- ###########################################################################
+-- INDICES
+-- ###########################################################################
+
 CREATE UNIQUE INDEX account_members_pkey ON public.account_members USING btree (id);
 CREATE UNIQUE INDEX account_members_unique ON public.account_members USING btree (owner_user_id, member_email);
 CREATE INDEX idx_acc_members_email ON public.account_members USING btree (member_email);
@@ -534,321 +540,224 @@ CREATE INDEX idx_user_profile_management_user_id ON public.user_profile_manageme
 CREATE UNIQUE INDEX user_profile_management_pkey ON public.user_profile_management USING btree (id);
 CREATE UNIQUE INDEX user_profile_management_user_id_key ON public.user_profile_management USING btree (user_id);
 
--- ─── Políticas RLS ─────────────────────────────────────────────────────
-CREATE POLICY "account_members_owner_select" ON public.account_members
-  AS PERMISSIVE
-  FOR SELECT
-  TO public
-  USING (((owner_user_id = auth.uid()) OR (member_user_id = auth.uid())));
-CREATE POLICY "account_members_owner_update" ON public.account_members
-  AS PERMISSIVE
-  FOR UPDATE
-  TO authenticated
-  USING ((owner_user_id = auth.uid()))
-  WITH CHECK ((owner_user_id = auth.uid()));
+-- ###########################################################################
+-- POLITICAS RLS
+-- ###########################################################################
+
 CREATE POLICY "member_can_read_own_membership" ON public.account_members
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING ((auth.uid() = member_user_id));
+
 CREATE POLICY "owner_can_manage_own_members" ON public.account_members
-  AS PERMISSIVE
-  FOR ALL
-  TO authenticated
+  FOR ALL TO authenticated
   USING ((auth.uid() = owner_user_id))
   WITH CHECK ((auth.uid() = owner_user_id));
+
 CREATE POLICY "service_role_full_access_members" ON public.account_members
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "feature_flags_select_auth" ON public.feature_flags
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
-  USING (((target_user_id IS NULL) OR (target_user_id = auth.uid())));
+  FOR SELECT TO authenticated
+  USING ((target_user_id = auth.uid()));
+
 CREATE POLICY "audit_log_owner_select" ON public.financial_audit_log
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING ((actor_id = auth.uid()));
+
 CREATE POLICY "audit_log_select_own" ON public.financial_audit_log
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING ((auth.uid() = user_id));
+
 CREATE POLICY "audit_log_service_role_only" ON public.financial_audit_log
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "Service role full access to fraud logs" ON public.fraud_logs
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
-CREATE POLICY "guest_invitations_owner_select" ON public.guest_invitations
-  AS PERMISSIVE
-  FOR SELECT
-  TO public
-  USING ((owner_user_id = auth.uid()));
+
 CREATE POLICY "owner_can_view_own_invitations" ON public.guest_invitations
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING ((auth.uid() = owner_user_id));
+
 CREATE POLICY "service_role_full_access_invitations" ON public.guest_invitations
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "service_role_full_access_nonces" ON public.invite_nonces
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "service_role_full_access_rate_limit" ON public.invite_rate_limit
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "Service role full access to reset codes" ON public.password_reset_codes
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "Service role full access to payment events" ON public.payment_events
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "Anyone can view plans" ON public.plans
-  AS PERMISSIVE
-  FOR SELECT
-  TO anon, authenticated
+  FOR SELECT TO anon, authenticated
   USING (true);
+
 CREATE POLICY "Service role full access to plans" ON public.plans
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
-CREATE POLICY "plans_select_public" ON public.plans
-  AS PERMISSIVE
-  FOR SELECT
-  TO public
-  USING (true);
+
 CREATE POLICY "profile_backups_select_own" ON public.profile_backups
-  AS PERMISSIVE
-  FOR SELECT
-  TO public
+  FOR SELECT TO authenticated
   USING ((auth.uid() = owner_user_id));
+
 CREATE POLICY "Service role full access" ON public.profiles
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "Users can delete own profiles" ON public.profiles
-  AS PERMISSIVE
-  FOR DELETE
-  TO authenticated
+  FOR DELETE TO authenticated
   USING ((( SELECT auth.uid() AS uid) = user_id));
-CREATE POLICY "Users can update own profiles" ON public.profiles
-  AS PERMISSIVE
-  FOR UPDATE
-  TO authenticated
-  USING ((( SELECT auth.uid() AS uid) = user_id))
-  WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
 CREATE POLICY "guest_can_insert_owner_profiles" ON public.profiles
-  AS PERMISSIVE
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (((auth.uid() = user_id) OR (EXISTS ( SELECT 1
+  FOR INSERT TO authenticated
+  WITH CHECK ((EXISTS ( SELECT 1
    FROM account_members
-  WHERE ((account_members.owner_user_id = profiles.user_id) AND (account_members.member_user_id = auth.uid()) AND (account_members.is_active = true))))));
+  WHERE ((account_members.owner_user_id = profiles.user_id) AND (account_members.member_user_id = auth.uid()) AND (account_members.is_active = true)))));
+
 CREATE POLICY "guest_can_view_owner_profiles" ON public.profiles
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING (((auth.uid() = user_id) OR (EXISTS ( SELECT 1
    FROM account_members
   WHERE ((account_members.owner_user_id = profiles.user_id) AND (account_members.member_user_id = auth.uid()) AND (account_members.is_active = true))))));
+
 CREATE POLICY "profiles_insert_own" ON public.profiles
-  AS PERMISSIVE
-  FOR INSERT
-  TO authenticated
+  FOR INSERT TO authenticated
   WITH CHECK (((user_id = auth.uid()) AND can_create_profile()));
-CREATE POLICY "profiles_select_as_guest" ON public.profiles
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
-  USING ((user_id IN ( SELECT account_members.owner_user_id
-   FROM account_members
-  WHERE ((account_members.member_user_id = auth.uid()) AND (account_members.is_active = true)))));
-CREATE POLICY "profiles_select_own" ON public.profiles
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
-  USING ((user_id = auth.uid()));
+
 CREATE POLICY "profiles_update_own" ON public.profiles
-  AS PERMISSIVE
-  FOR UPDATE
-  TO authenticated
+  FOR UPDATE TO authenticated
   USING ((user_id = auth.uid()))
   WITH CHECK ((user_id = auth.uid()));
+
 CREATE POLICY "push_delete_own" ON public.push_subscriptions
-  AS PERMISSIVE
-  FOR DELETE
-  TO public
+  FOR DELETE TO authenticated
   USING ((auth.uid() = user_id));
+
 CREATE POLICY "push_insert_own" ON public.push_subscriptions
-  AS PERMISSIVE
-  FOR INSERT
-  TO public
+  FOR INSERT TO authenticated
   WITH CHECK ((auth.uid() = user_id));
+
 CREATE POLICY "push_select_own" ON public.push_subscriptions
-  AS PERMISSIVE
-  FOR SELECT
-  TO public
+  FOR SELECT TO authenticated
   USING ((auth.uid() = user_id));
+
 CREATE POLICY "push_update_own" ON public.push_subscriptions
-  AS PERMISSIVE
-  FOR UPDATE
-  TO public
+  FOR UPDATE TO authenticated
   USING ((auth.uid() = user_id))
   WITH CHECK ((auth.uid() = user_id));
+
 CREATE POLICY "rate_limit_service_only" ON public.rate_limit_writes
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "stripe_sub_select_as_guest" ON public.stripe_subscriptions
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING ((user_id IN ( SELECT account_members.owner_user_id
    FROM account_members
   WHERE ((account_members.member_user_id = auth.uid()) AND (account_members.is_active = true)))));
+
 CREATE POLICY "stripe_sub_select_by_email" ON public.stripe_subscriptions
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING (((lower(user_email) = lower(auth.email())) AND (EXISTS ( SELECT 1
    FROM auth.users u
   WHERE ((u.id = auth.uid()) AND (u.email_confirmed_at IS NOT NULL))))));
+
 CREATE POLICY "stripe_sub_select_own" ON public.stripe_subscriptions
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING ((auth.uid() = user_id));
+
 CREATE POLICY "stripe_sub_update_claim" ON public.stripe_subscriptions
-  AS PERMISSIVE
-  FOR UPDATE
-  TO authenticated
+  FOR UPDATE TO authenticated
   USING (((user_id IS NULL) AND (lower(user_email) = lower((auth.jwt() ->> 'email'::text)))))
   WITH CHECK ((auth.uid() = user_id));
+
 CREATE POLICY "Service role has full access to terms acceptance" ON public.terms_acceptance
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "Users can insert own terms acceptance" ON public.terms_acceptance
-  AS PERMISSIVE
-  FOR INSERT
-  TO authenticated
+  FOR INSERT TO authenticated
   WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
 CREATE POLICY "Users can view own terms acceptance" ON public.terms_acceptance
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING ((( SELECT auth.uid() AS uid) = user_id));
-CREATE POLICY "terms_owner_insert" ON public.terms_acceptance
-  AS PERMISSIVE
-  FOR INSERT
-  TO public
-  WITH CHECK ((user_id = auth.uid()));
-CREATE POLICY "terms_owner_select" ON public.terms_acceptance
-  AS PERMISSIVE
-  FOR SELECT
-  TO public
-  USING ((user_id = auth.uid()));
+
 CREATE POLICY "Service role full access" ON public.user_data
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "user_data_delete" ON public.user_data
-  AS PERMISSIVE
-  FOR DELETE
-  TO authenticated
+  FOR DELETE TO authenticated
   USING ((auth.uid() = user_id));
+
 CREATE POLICY "user_data_insert" ON public.user_data
-  AS PERMISSIVE
-  FOR INSERT
-  TO authenticated
+  FOR INSERT TO authenticated
   WITH CHECK ((auth.uid() = user_id));
-CREATE POLICY "user_data_owner_insert" ON public.user_data
-  AS PERMISSIVE
-  FOR INSERT
-  TO authenticated
-  WITH CHECK ((user_id = auth.uid()));
-CREATE POLICY "user_data_owner_select" ON public.user_data
-  AS PERMISSIVE
-  FOR SELECT
-  TO public
-  USING ((user_id = auth.uid()));
+
 CREATE POLICY "user_data_select" ON public.user_data
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING (((auth.uid() = user_id) OR (EXISTS ( SELECT 1
    FROM account_members
   WHERE ((account_members.owner_user_id = user_data.user_id) AND (account_members.member_user_id = auth.uid()) AND (account_members.is_active = true))))));
+
 CREATE POLICY "user_data_update" ON public.user_data
-  AS PERMISSIVE
-  FOR UPDATE
-  TO authenticated
+  FOR UPDATE TO authenticated
   USING ((auth.uid() = user_id))
   WITH CHECK ((auth.uid() = user_id));
+
 CREATE POLICY "snapshots_select_own" ON public.user_data_snapshots
-  AS PERMISSIVE
-  FOR SELECT
-  TO public
+  FOR SELECT TO authenticated
   USING ((auth.uid() = user_id));
+
 CREATE POLICY "Service role can manage profiles" ON public.user_profile_management
-  AS PERMISSIVE
-  FOR ALL
-  TO service_role
+  FOR ALL TO service_role
   USING (true)
   WITH CHECK (true);
+
 CREATE POLICY "Users can update own profile" ON public.user_profile_management
-  AS PERMISSIVE
-  FOR UPDATE
-  TO authenticated
+  FOR UPDATE TO authenticated
   USING ((( SELECT auth.uid() AS uid) = user_id))
   WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+
 CREATE POLICY "Users can view own profile" ON public.user_profile_management
-  AS PERMISSIVE
-  FOR SELECT
-  TO authenticated
+  FOR SELECT TO authenticated
   USING ((( SELECT auth.uid() AS uid) = user_id));
 
--- ─── Funções ───────────────────────────────────────────────────────────
+-- ###########################################################################
+-- FUNCOES
+-- ###########################################################################
+
 CREATE OR REPLACE FUNCTION public.account_members_set_removed_at()
  RETURNS trigger
  LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
   IF NEW.is_active = false AND (OLD.is_active IS NULL OR OLD.is_active = true) THEN
@@ -870,7 +779,7 @@ CREATE OR REPLACE FUNCTION public.bloquear_alteracao_audit_log()
 AS $function$
 BEGIN
     RAISE EXCEPTION
-        '[SEGURANÇA] Audit log é imutável. UPDATE e DELETE são proibidos. Operação: % | Tabela: %',
+        '[SEGURANÃA] Audit log Ã© imutÃ¡vel. UPDATE e DELETE sÃ£o proibidos. OperaÃ§Ã£o: % | Tabela: %',
         TG_OP, TG_TABLE_NAME;
     RETURN NULL;
 END;
@@ -904,7 +813,7 @@ BEGIN
       AND (current_period_end IS NULL OR current_period_end > now())
     ORDER BY created_at DESC LIMIT 1;
 
-    -- 2. Plano via Stripe por email (user_id ainda não vinculado)
+    -- 2. Plano via Stripe por email (user_id ainda nÃ£o vinculado)
     IF v_plan_name IS NULL AND v_user_email IS NOT NULL THEN
         SELECT lower(plan_name) INTO v_plan_name
         FROM public.stripe_subscriptions
@@ -914,7 +823,7 @@ BEGIN
         ORDER BY created_at DESC LIMIT 1;
     END IF;
 
-    -- 3. Membership (convidado — herda limite do dono via stripe_subscriptions)
+    -- 3. Membership (convidado â herda limite do dono via stripe_subscriptions)
     IF v_plan_name IS NULL THEN
         SELECT lower(ss.plan_name) INTO v_plan_name
         FROM public.account_members am
@@ -935,111 +844,6 @@ BEGIN
     END;
 
     RETURN v_profile_count < v_max_profiles;
-END;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.can_upgrade(user_uuid uuid, new_plan_name text)
- RETURNS boolean
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-DECLARE
-    current_plan text;
-    plan_order   jsonb := '{"Individual": 1, "Casal": 2, "Família": 3}'::jsonb;
-BEGIN
-    -- ✅ Usuário só pode consultar o próprio plano
-    IF auth.uid() IS NULL THEN
-        RETURN false;
-    END IF;
-
-    IF auth.uid() <> user_uuid THEN
-        RAISE EXCEPTION 'Acesso negado: você só pode consultar o próprio plano.';
-    END IF;
-
-    SELECT p.name INTO current_plan
-    FROM subscriptions s
-    JOIN plans p ON s.plan_id = p.id
-    WHERE s.user_id = user_uuid
-      AND s.is_active = true
-      AND s.payment_status = 'approved'
-    ORDER BY s.created_at DESC
-    LIMIT 1;
-
-    IF current_plan IS NULL THEN
-        RETURN true;
-    END IF;
-
-    RETURN (plan_order ->> new_plan_name)::integer > (plan_order ->> current_plan)::integer;
-END;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.check_email_payment_status(email_input text)
- RETURNS TABLE(has_payment boolean, payment_approved boolean, has_password boolean, user_id uuid, user_name text, plan_name text, subscription_id uuid, error_message text)
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-DECLARE
-  sub_record RECORD;
-  auth_user_record RECORD;
-BEGIN
-  -- ✅ Só anon pode chamar (fluxo de primeiro acesso pré-login)
-  --    OU authenticated (fluxo de recuperação)
-  --    Mas bloqueia chamadas sem contexto nenhum (service_role interna não precisa desta função)
-  --    Na prática: mantém o fluxo funcional, apenas documenta a intenção
-
-  SELECT s.id, s.user_id, s.user_name, s.user_email,
-         s.payment_status, s.is_active, s.refunded_at,
-         s.password_created, p.name as plan_name
-  INTO sub_record
-  FROM subscriptions s
-  LEFT JOIN plans p ON s.plan_id = p.id
-  WHERE LOWER(s.user_email) = LOWER(email_input)
-  ORDER BY s.created_at DESC
-  LIMIT 1;
-
-  IF NOT FOUND THEN
-    RETURN QUERY SELECT FALSE, FALSE, FALSE, NULL::UUID, NULL::TEXT,
-      NULL::TEXT, NULL::UUID, 'Nenhuma compra encontrada para este email.'::TEXT;
-    RETURN;
-  END IF;
-
-  IF sub_record.payment_status != 'approved' THEN
-    RETURN QUERY SELECT TRUE, FALSE, FALSE, NULL::UUID, NULL::TEXT,
-      NULL::TEXT, NULL::UUID, 'Pagamento ainda não foi aprovado. Aguarde a confirmação.'::TEXT;
-    RETURN;
-  END IF;
-
-  IF NOT sub_record.is_active THEN
-    RETURN QUERY SELECT TRUE, TRUE, FALSE, NULL::UUID, NULL::TEXT,
-      NULL::TEXT, NULL::UUID, 'Assinatura inativa. Entre em contato com o suporte.'::TEXT;
-    RETURN;
-  END IF;
-
-  IF sub_record.refunded_at IS NOT NULL THEN
-    RETURN QUERY SELECT TRUE, TRUE, FALSE, NULL::UUID, NULL::TEXT,
-      NULL::TEXT, NULL::UUID, 'Esta compra foi reembolsada. Acesso revogado.'::TEXT;
-    RETURN;
-  END IF;
-
-  IF sub_record.user_id IS NOT NULL THEN
-    SELECT id, email INTO auth_user_record
-    FROM auth.users WHERE id = sub_record.user_id;
-
-    IF FOUND THEN
-      RETURN QUERY SELECT TRUE, TRUE, TRUE,
-        sub_record.user_id, sub_record.user_name, sub_record.plan_name, sub_record.id,
-        'Você já possui uma senha cadastrada. Use a opção "Esqueci minha senha" no login ou faça login diretamente.'::TEXT;
-      RETURN;
-    END IF;
-  END IF;
-
-  RETURN QUERY SELECT TRUE, TRUE, FALSE,
-    sub_record.user_id, sub_record.user_name, sub_record.plan_name,
-    sub_record.id, NULL::TEXT;
 END;
 $function$
 ;
@@ -1068,36 +872,6 @@ END;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.check_profile_limit()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-DECLARE
-    current_count integer;
-    limite        integer;
-BEGIN
-    -- ✅ Trava as linhas do usuário antes de contar — elimina race condition
-    PERFORM 1 FROM profiles
-    WHERE user_id = NEW.user_id
-    FOR UPDATE;
-
-    SELECT COUNT(*) INTO current_count
-    FROM profiles
-    WHERE user_id = NEW.user_id;
-
-    limite := max_profiles_for_user(NEW.user_id);
-
-    IF current_count >= limite THEN
-        RAISE EXCEPTION 'PLAN_LIMIT_EXCEEDED: limite de % perfis atingido', limite;
-    END IF;
-
-    RETURN NEW;
-END;
-$function$
-;
-
 CREATE OR REPLACE FUNCTION public.check_rate_limit(p_key text, p_max integer, p_window_seconds integer)
  RETURNS boolean
  LANGUAGE plpgsql
@@ -1115,7 +889,7 @@ BEGIN
   ON CONFLICT (key) DO UPDATE SET
     count        = CASE
                      WHEN edge_rate_limits.window_start < v_window
-                     THEN 1  -- janela expirou — reseta
+                     THEN 1  -- janela expirou â reseta
                      ELSE edge_rate_limits.count + 1
                    END,
     window_start = CASE
@@ -1168,34 +942,18 @@ BEGIN
         deleted_count := deleted_count + 1;
     END LOOP;
 
-    -- Limpa stripe_subscriptions sem usuário, inativas e antigas
+    -- Limpa stripe_subscriptions sem usuÃ¡rio, inativas e antigas
     DELETE FROM public.stripe_subscriptions
     WHERE user_id IS NULL
       AND status NOT IN ('active', 'trialing')
       AND created_at < NOW() - INTERVAL '3 days';
 
-    -- Limpa eventos Stripe expirados (idempotência > 90 dias)
+    -- Limpa eventos Stripe expirados (idempotÃªncia > 90 dias)
     DELETE FROM public.stripe_events
     WHERE processed_at < NOW() - INTERVAL '90 days';
 
-    RAISE NOTICE '[cleanup] % usuário(s) abandonado(s) removido(s).', deleted_count;
+    RAISE NOTICE '[cleanup] % usuÃ¡rio(s) abandonado(s) removido(s).', deleted_count;
     RETURN deleted_count;
-END;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.cleanup_expired_passwords()
- RETURNS integer
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-DECLARE
-  deleted_count INTEGER;
-BEGIN
-  DELETE FROM temp_passwords WHERE expires_at < NOW();
-  GET DIAGNOSTICS deleted_count = ROW_COUNT;
-  RETURN deleted_count;
 END;
 $function$
 ;
@@ -1289,43 +1047,43 @@ END;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.expire_pending_payments()
- RETURNS void
- LANGUAGE plpgsql
- SET search_path TO 'public', 'pg_temp'
-AS $function$BEGIN
-  UPDATE subscriptions
-  SET payment_status = 'expired'
-  WHERE payment_status = 'pending'
-    AND expires_at < NOW();
-END;$function$
-;
-
-CREATE OR REPLACE FUNCTION public.generate_access_token()
- RETURNS text
+CREATE OR REPLACE FUNCTION public.enforce_profile_limit_stripe()
+ RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
-  token TEXT;
-  exists BOOLEAN;
+    v_count int;
+    v_plan  text;
+    v_max   int;
 BEGIN
-  LOOP
-    -- Gera token aleatório de 32 caracteres
-    token := encode(gen_random_bytes(24), 'base64');
-    token := replace(replace(replace(token, '/', ''), '+', ''), '=', '');
-    
-    -- Verifica se já existe
-    SELECT EXISTS(
-      SELECT 1 FROM subscriptions WHERE access_token = token
-    ) INTO exists;
-    
-    -- Se não existe, retorna o token
-    IF NOT exists THEN
-      RETURN token;
+    PERFORM 1 FROM public.profiles WHERE user_id = NEW.user_id FOR UPDATE;
+
+    SELECT COUNT(*) INTO v_count
+    FROM public.profiles WHERE user_id = NEW.user_id;
+
+    SELECT lower(ss.plan_name) INTO v_plan
+    FROM public.stripe_subscriptions ss
+    WHERE (ss.user_id = NEW.user_id
+           OR lower(ss.user_email) = lower((SELECT email FROM auth.users WHERE id = NEW.user_id)))
+      AND ss.status IN ('active', 'trialing')
+      AND (ss.current_period_end IS NULL OR ss.current_period_end > now())
+    ORDER BY ss.created_at DESC
+    LIMIT 1;
+
+    v_max := CASE v_plan
+        WHEN 'individual' THEN 1
+        WHEN 'casal'      THEN 2
+        WHEN 'familia'    THEN 4
+        ELSE 1
+    END;
+
+    IF v_count >= v_max THEN
+        RAISE EXCEPTION 'PLAN_LIMIT_EXCEEDED: limite de % perfis atingido', v_max;
     END IF;
-  END LOOP;
+
+    RETURN NEW;
 END;
 $function$
 ;
@@ -1370,15 +1128,15 @@ DECLARE
     v_owner_sub  jsonb;
     v_now        timestamptz := now();
 BEGIN
-    -- Garante que o chamador só pode consultar seus próprios dados
+    -- Garante que o chamador sÃ³ pode consultar seus prÃ³prios dados
     IF p_user_id IS DISTINCT FROM auth.uid() THEN
         RETURN jsonb_build_object('type', 'none');
     END IF;
 
-    -- Email verificado via JWT (não pode ser forjado pelo cliente)
+    -- Email verificado via JWT (nÃ£o pode ser forjado pelo cliente)
     v_email := auth.email();
 
-    -- ── 1. Subscription ativa por user_id ────────────────────────────────────
+    -- ââ 1. Subscription ativa por user_id ââââââââââââââââââââââââââââââââââââ
     SELECT jsonb_build_object(
         'id',                  id,
         'plan_name',           plan_name,
@@ -1397,7 +1155,7 @@ BEGIN
         RETURN jsonb_build_object('type', 'active', 'sub', v_active_sub);
     END IF;
 
-    -- ── 2. Subscription ativa por email (user_id IS NULL — sem vinculação) ───
+    -- ââ 2. Subscription ativa por email (user_id IS NULL â sem vinculaÃ§Ã£o) âââ
     IF v_email IS NOT NULL THEN
         SELECT jsonb_build_object(
             'id',                  id,
@@ -1424,7 +1182,7 @@ BEGIN
         END IF;
     END IF;
 
-    -- ── 3. Estado congelado — cancelado há menos de 90 dias ──────────────────
+    -- ââ 3. Estado congelado â cancelado hÃ¡ menos de 90 dias ââââââââââââââââââ
     SELECT jsonb_build_object(
         'plan_name',           plan_name,
         'current_period_end',  current_period_end
@@ -1442,7 +1200,7 @@ BEGIN
         RETURN jsonb_build_object('type', 'frozen', 'sub', v_frozen_sub);
     END IF;
 
-    -- ── 4. Verificação de convidado ──────────────────────────────────────────
+    -- ââ 4. VerificaÃ§Ã£o de convidado ââââââââââââââââââââââââââââââââââââââââââ
     SELECT id, owner_user_id, owner_email
     INTO v_member
     FROM account_members
@@ -1454,7 +1212,7 @@ BEGIN
         RETURN jsonb_build_object('type', 'none');
     END IF;
 
-    -- ── 5. Subscription ativa do dono ────────────────────────────────────────
+    -- ââ 5. Subscription ativa do dono ââââââââââââââââââââââââââââââââââââââââ
     SELECT jsonb_build_object(
         'id',                  id,
         'plan_name',           plan_name,
@@ -1479,39 +1237,6 @@ BEGIN
         'owner_user_id',  v_member.owner_user_id::text,
         'owner_email',    v_member.owner_email
     );
-END;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.get_user_subscription(user_uuid uuid)
- RETURNS TABLE(name text, max_profiles integer, status text, created_at timestamp with time zone)
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-BEGIN
-    -- ✅ Usuário só pode consultar a própria assinatura
-    IF auth.uid() IS NULL THEN
-        RETURN;
-    END IF;
-
-    IF auth.uid() <> user_uuid THEN
-        RAISE EXCEPTION 'Acesso negado: você só pode consultar a própria assinatura.';
-    END IF;
-
-    RETURN QUERY
-    SELECT
-        p.name,
-        p.max_profiles,
-        s.payment_status,
-        s.created_at
-    FROM subscriptions s
-    JOIN plans p ON s.plan_id = p.id
-    WHERE s.user_id      = user_uuid
-      AND s.is_active    = true
-      AND s.payment_status = 'approved'
-    ORDER BY s.created_at DESC
-    LIMIT 1;
 END;
 $function$
 ;
@@ -1549,10 +1274,10 @@ BEGIN
         EXISTS(SELECT 1 FROM public.user_data ud WHERE ud.user_id = u.id) AS tem_dados_financeiros,
         CASE
             WHEN EXTRACT(DAY FROM NOW() - COALESCE(u.last_sign_in_at, u.created_at)) > 730
-            THEN '🔴 Notificar e avaliar exclusão (>2 anos sem acesso)'
+            THEN 'ð´ Notificar e avaliar exclusÃ£o (>2 anos sem acesso)'
             WHEN EXTRACT(DAY FROM NOW() - COALESCE(u.last_sign_in_at, u.created_at)) > 365
-            THEN '⚠️  Monitorar (>1 ano sem acesso)'
-            ELSE '✅ Dentro do prazo'
+            THEN 'â ï¸  Monitorar (>1 ano sem acesso)'
+            ELSE 'â Dentro do prazo'
         END                                                     AS recomendacao
     FROM auth.users u
     WHERE EXTRACT(DAY FROM NOW() - COALESCE(u.last_sign_in_at, u.created_at)) > 365
@@ -1565,11 +1290,12 @@ CREATE OR REPLACE FUNCTION public.is_feature_enabled(p_flag_key text, p_user_id 
  RETURNS boolean
  LANGUAGE plpgsql
  STABLE
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
     v_result boolean;
 BEGIN
-    -- 1. Override por usuário específico (maior precedência)
+    -- 1. Override por usuÃ¡rio especÃ­fico (maior precedÃªncia)
     IF p_user_id IS NOT NULL THEN
         SELECT is_enabled INTO v_result
           FROM public.feature_flags
@@ -1618,39 +1344,14 @@ END;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.max_profiles_for_user(uid uuid)
- RETURNS integer
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-    SELECT COALESCE(
-        (SELECT pl.max_profiles
-         FROM subscriptions s
-         JOIN plans pl ON pl.id = s.plan_id
-         WHERE (
-             s.user_id = uid
-             OR s.user_email = (
-                 SELECT email FROM auth.users WHERE id = uid
-             )
-         )
-           AND s.is_active = true
-           AND s.payment_status = 'approved'
-           AND (s.expires_at IS NULL OR s.expires_at > now())
-         ORDER BY s.user_id NULLS LAST
-         LIMIT 1),
-        0
-    );
-$function$
-;
-
 CREATE OR REPLACE FUNCTION public.prevent_user_id_change()
  RETURNS trigger
  LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
     IF NEW.user_id <> OLD.user_id THEN
-        RAISE EXCEPTION 'USER_ID_IMMUTABLE: user_id não pode ser alterado após criação';
+        RAISE EXCEPTION 'USER_ID_IMMUTABLE: user_id nÃ£o pode ser alterado apÃ³s criaÃ§Ã£o';
     END IF;
     RETURN NEW;
 END;
@@ -1660,6 +1361,7 @@ $function$
 CREATE OR REPLACE FUNCTION public.profile_backups_set_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
     NEW.updated_at = NOW();
@@ -1685,7 +1387,7 @@ BEGIN
     WHERE  s.status  = 'canceled'
       AND  s.user_id IS NOT NULL
       AND  COALESCE(s.current_period_end, s.canceled_at, s.created_at) < v_cutoff
-      -- Sem nenhuma assinatura ativa no mesmo user (inclui vitalícios Cakto migrados)
+      -- Sem nenhuma assinatura ativa no mesmo user (inclui vitalÃ­cios Cakto migrados)
       AND  NOT EXISTS (
              SELECT 1 FROM public.stripe_subscriptions s2
              WHERE  s2.user_id = s.user_id
@@ -1699,14 +1401,14 @@ BEGIN
       DELETE FROM auth.users                  WHERE id      = v_user_id;
 
       v_count := v_count + 1;
-      RAISE LOG '[purge_expired] Conta excluída — user_id: %', LEFT(v_user_id::text, 8);
+      RAISE LOG '[purge_expired] Conta excluÃ­da â user_id: %', LEFT(v_user_id::text, 8);
     EXCEPTION WHEN OTHERS THEN
       RAISE WARNING '[purge_expired] Erro ao excluir user_id %: %', LEFT(v_user_id::text, 8), SQLERRM;
     END;
   END LOOP;
 
   IF v_count > 0 THEN
-    RAISE LOG '[purge_expired] Ciclo concluído — % conta(s) excluída(s)', v_count;
+    RAISE LOG '[purge_expired] Ciclo concluÃ­do â % conta(s) excluÃ­da(s)', v_count;
   END IF;
 
   RETURN v_count;
@@ -1729,8 +1431,8 @@ BEGIN
     SELECT u.id
     FROM auth.users u
     WHERE u.created_at < v_cutoff
-      -- Nunca teve assinatura Stripe paga (inclui usuários Cakto migrados, pois
-      -- agora todos estão em stripe_subscriptions com status 'active')
+      -- Nunca teve assinatura Stripe paga (inclui usuÃ¡rios Cakto migrados, pois
+      -- agora todos estÃ£o em stripe_subscriptions com status 'active')
       AND NOT EXISTS (
         SELECT 1 FROM public.stripe_subscriptions s
         WHERE s.user_id = u.id
@@ -1746,14 +1448,14 @@ BEGIN
       DELETE FROM auth.users               WHERE id             = v_user_id;
 
       v_count := v_count + 1;
-      RAISE LOG '[purge_unpaid] Conta excluída — user_id: %', LEFT(v_user_id::text, 8);
+      RAISE LOG '[purge_unpaid] Conta excluÃ­da â user_id: %', LEFT(v_user_id::text, 8);
     EXCEPTION WHEN OTHERS THEN
       RAISE WARNING '[purge_unpaid] Erro ao excluir user_id %: %', LEFT(v_user_id::text, 8), SQLERRM;
     END;
   END LOOP;
 
   IF v_count > 0 THEN
-    RAISE LOG '[purge_unpaid] Ciclo concluído — % conta(s) excluída(s)', v_count;
+    RAISE LOG '[purge_unpaid] Ciclo concluÃ­do â % conta(s) excluÃ­da(s)', v_count;
   END IF;
 
   RETURN v_count;
@@ -1782,7 +1484,7 @@ BEGIN
    FOR UPDATE;
 
   IF NOT FOUND THEN
-    -- Primeira falha — insere com nível 0 (ainda sem lockout)
+    -- Primeira falha â insere com nÃ­vel 0 (ainda sem lockout)
     INSERT INTO public.login_lockouts
       (identifier, identifier_type, failed_attempts, lockout_level, last_attempt_at)
     VALUES
@@ -1792,9 +1494,9 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Verifica se lockout atual ainda está ativo
+  -- Verifica se lockout atual ainda estÃ¡ ativo
   IF v_rec.locked_until IS NOT NULL AND v_rec.locked_until > v_now THEN
-    -- Ainda em lockout — incrementa tentativas e mantém lockout
+    -- Ainda em lockout â incrementa tentativas e mantÃ©m lockout
     UPDATE public.login_lockouts
        SET failed_attempts  = v_rec.failed_attempts + 1,
            last_attempt_at  = v_now
@@ -1804,12 +1506,12 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Lockout expirou — incrementa tentativas e calcula próximo nível
+  -- Lockout expirou â incrementa tentativas e calcula prÃ³ximo nÃ­vel
   v_attempts := v_rec.failed_attempts + 1;
   v_level    := v_rec.lockout_level;
 
-  -- Progressão: 3 falhas = nível 1 (15min), 5 = nível 2 (1h), 8 = nível 3 (24h)
-  -- Cada nível é atingido acumulando falhas dentro da janela
+  -- ProgressÃ£o: 3 falhas = nÃ­vel 1 (15min), 5 = nÃ­vel 2 (1h), 8 = nÃ­vel 3 (24h)
+  -- Cada nÃ­vel Ã© atingido acumulando falhas dentro da janela
   IF v_attempts >= 8 THEN
     v_level := 3;
     v_until := v_now + interval '24 hours';
@@ -1870,7 +1572,7 @@ BEGIN
         hash_after
     ) VALUES (
         COALESCE(NEW.user_id, OLD.user_id),
-        auth.uid(),         -- quem fez a ação (JWT)
+        auth.uid(),         -- quem fez a aÃ§Ã£o (JWT)
         TG_OP,
         v_size_before,
         v_size_after,
@@ -1883,51 +1585,18 @@ END;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.revoke_user_access(p_user_id uuid, p_reason text)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-BEGIN
-  -- ✅ Só service_role pode revogar acesso
-  -- auth.uid() é NULL quando chamado via service_role (webhook/backend)
-  -- auth.uid() tem valor quando chamado via cliente autenticado — bloqueado
-  IF auth.uid() IS NOT NULL THEN
-    RAISE EXCEPTION 'Acesso negado: esta função só pode ser chamada pelo servidor.';
-  END IF;
-
-  UPDATE public.subscriptions
-  SET 
-    is_active         = false,
-    payment_status    = 'refunded',
-    access_revoked_at = NOW(),
-    refund_reason     = p_reason,
-    refunded_at       = NOW()
-  WHERE user_id = p_user_id;
-
-  UPDATE auth.users
-  SET 
-    email_confirmed_at = NULL,
-    banned_until       = NOW() + INTERVAL '100 years'
-  WHERE id = p_user_id;
-
-  RAISE NOTICE 'Acesso revogado para user_id: %, motivo: %', p_user_id, p_reason;
-END;
-$function$
-;
-
 CREATE OR REPLACE FUNCTION public.salvar_dados_usuario(p_data_json jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
     v_user_id  uuid := auth.uid();
     v_profiles jsonb;
 BEGIN
     IF v_user_id IS NULL THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'Não autenticado');
+        RETURN jsonb_build_object('ok', false, 'erro', 'NÃ£o autenticado');
     END IF;
 
     IF NOT verificar_rate_limit_escrita(v_user_id) THEN
@@ -1935,25 +1604,25 @@ BEGIN
     END IF;
 
     IF p_data_json IS NULL THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'Dados nulos não são permitidos');
+        RETURN jsonb_build_object('ok', false, 'erro', 'Dados nulos nÃ£o sÃ£o permitidos');
     END IF;
 
     IF NOT (p_data_json ? 'profiles') THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'Estrutura inválida: campo profiles ausente');
+        RETURN jsonb_build_object('ok', false, 'erro', 'Estrutura invÃ¡lida: campo profiles ausente');
     END IF;
 
     v_profiles := p_data_json -> 'profiles';
 
     IF jsonb_typeof(v_profiles) <> 'array' THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'Estrutura inválida: profiles deve ser array');
+        RETURN jsonb_build_object('ok', false, 'erro', 'Estrutura invÃ¡lida: profiles deve ser array');
     END IF;
 
     IF jsonb_array_length(v_profiles) > 200 THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'Número de perfis excede o limite de 200');
+        RETURN jsonb_build_object('ok', false, 'erro', 'NÃºmero de perfis excede o limite de 200');
     END IF;
 
     IF length(p_data_json::text) > 5242880 THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'Dados excedem o tamanho máximo permitido');
+        RETURN jsonb_build_object('ok', false, 'erro', 'Dados excedem o tamanho mÃ¡ximo permitido');
     END IF;
 
     INSERT INTO user_data (user_id, email, data_json, last_modified)
@@ -1981,6 +1650,7 @@ CREATE OR REPLACE FUNCTION public.salvar_perfil_usuario(p_profile_id text, p_pro
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
     v_user_id     uuid := auth.uid();
@@ -1988,7 +1658,7 @@ DECLARE
     v_profiles    jsonb;
 BEGIN
     IF v_user_id IS NULL THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'Não autenticado');
+        RETURN jsonb_build_object('ok', false, 'erro', 'NÃ£o autenticado');
     END IF;
 
     IF NOT verificar_rate_limit_escrita(v_user_id) THEN
@@ -2000,7 +1670,7 @@ BEGIN
     END IF;
 
     IF NOT (p_profile_id ~ '^[a-zA-Z0-9_\-]{1,64}$') THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'profile_id possui caracteres inválidos');
+        RETURN jsonb_build_object('ok', false, 'erro', 'profile_id possui caracteres invÃ¡lidos');
     END IF;
 
     IF p_profile_data IS NULL THEN
@@ -2008,7 +1678,7 @@ BEGIN
     END IF;
 
     IF length(p_profile_data::text) > 5242880 THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'Perfil excede tamanho máximo permitido');
+        RETURN jsonb_build_object('ok', false, 'erro', 'Perfil excede tamanho mÃ¡ximo permitido');
     END IF;
 
     SELECT data_json -> 'profiles'
@@ -2017,7 +1687,7 @@ BEGIN
     WHERE  user_id = v_user_id;
 
     IF v_profiles IS NULL THEN
-        RETURN jsonb_build_object('ok', false, 'erro', 'Registro do usuário não encontrado');
+        RETURN jsonb_build_object('ok', false, 'erro', 'Registro do usuÃ¡rio nÃ£o encontrado');
     END IF;
 
     SELECT (t.idx - 1)::int
@@ -2076,8 +1746,8 @@ CREATE OR REPLACE FUNCTION public.set_profile_user_id()
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-    -- Só sobrescreve se vier nulo ou diferente do usuário autenticado
-    -- (protege também contra tentativa de forçar outro UUID)
+    -- SÃ³ sobrescreve se vier nulo ou diferente do usuÃ¡rio autenticado
+    -- (protege tambÃ©m contra tentativa de forÃ§ar outro UUID)
     NEW.user_id := auth.uid();
     RETURN NEW;
 END;
@@ -2087,30 +1757,10 @@ $function$
 CREATE OR REPLACE FUNCTION public.set_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
     NEW.updated_at = now();
-    RETURN NEW;
-END;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.sync_subscription_user_id()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-BEGIN
-    -- Quando um usuário é criado ou atualizado no auth.users,
-    -- vincula o user_id em todas as subscriptions com o mesmo email
-    UPDATE public.subscriptions
-    SET 
-        user_id    = NEW.id,
-        updated_at = now()
-    WHERE lower(user_email) = lower(NEW.email)
-      AND user_id IS NULL;
-
     RETURN NEW;
 END;
 $function$
@@ -2126,7 +1776,7 @@ DECLARE
     v_inserted integer := 0;
     v_deleted  integer := 0;
 BEGIN
-    -- Cria snapshot do dia para usuários cujos dados mudaram
+    -- Cria snapshot do dia para usuÃ¡rios cujos dados mudaram
     INSERT INTO public.user_data_snapshots
         (user_id, user_email, snapshot_date, data_json, size_bytes, checksum)
     SELECT
@@ -2138,13 +1788,13 @@ BEGIN
         md5(ud.data_json::text)
     FROM public.user_data ud
     WHERE ud.data_json IS NOT NULL
-      -- Idempotência: pula se snapshot de hoje já existe
+      -- IdempotÃªncia: pula se snapshot de hoje jÃ¡ existe
       AND NOT EXISTS (
           SELECT 1 FROM public.user_data_snapshots s
           WHERE s.user_id       = ud.user_id
             AND s.snapshot_date = CURRENT_DATE
       )
-      -- Dedup: pula se blob idêntico foi salvo nos últimos 5 dias
+      -- Dedup: pula se blob idÃªntico foi salvo nos Ãºltimos 5 dias
       AND NOT EXISTS (
           SELECT 1 FROM public.user_data_snapshots s2
           WHERE s2.user_id  = ud.user_id
@@ -2155,7 +1805,7 @@ BEGIN
 
     GET DIAGNOSTICS v_inserted = ROW_COUNT;
 
-    -- Remove snapshots com mais de 5 dias (retenção rolling)
+    -- Remove snapshots com mais de 5 dias (retenÃ§Ã£o rolling)
     DELETE FROM public.user_data_snapshots
     WHERE snapshot_date < CURRENT_DATE - INTERVAL '5 days';
 
@@ -2178,7 +1828,7 @@ CREATE OR REPLACE FUNCTION public.trg_profiles_enforce_user_id_immutable()
 AS $function$
 BEGIN
     IF NEW.user_id IS DISTINCT FROM OLD.user_id THEN
-        RAISE EXCEPTION 'user_id de um perfil não pode ser alterado após a criação';
+        RAISE EXCEPTION 'user_id de um perfil nÃ£o pode ser alterado apÃ³s a criaÃ§Ã£o';
     END IF;
     RETURN NEW;
 END;
@@ -2221,150 +1871,6 @@ END;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.update_user_profile_management()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-BEGIN
-  -- Atualizar ou inserir na tabela de gerenciamento
-  INSERT INTO user_profile_management (
-    user_id,
-    email,
-    active_profiles_count,
-    profile_names,
-    plan_name
-  )
-  SELECT 
-    NEW.user_id,
-    (SELECT email FROM auth.users WHERE id = NEW.user_id),
-    COUNT(*),
-    ARRAY_AGG(name ORDER BY id),
-    (SELECT plans.name 
-     FROM subscriptions 
-     JOIN plans ON subscriptions.plan_id = plans.id 
-     WHERE subscriptions.user_id = NEW.user_id 
-     AND payment_status = 'approved' 
-     ORDER BY subscriptions.created_at DESC
-     LIMIT 1)
-  FROM profiles
-  WHERE user_id = NEW.user_id
-  GROUP BY user_id
-  ON CONFLICT (user_id) 
-  DO UPDATE SET
-    email = EXCLUDED.email,
-    active_profiles_count = EXCLUDED.active_profiles_count,
-    profile_names = EXCLUDED.profile_names,
-    plan_name = EXCLUDED.plan_name,
-    updated_at = NOW();
-  
-  RETURN NEW;
-END;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.validate_access_token(token_input text)
- RETURNS TABLE(is_valid boolean, subscription_id uuid, user_email text, plan_name text, error_message text)
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-DECLARE
-  sub_record RECORD;
-BEGIN
-  -- Busca a subscription pelo token
-  SELECT 
-    s.id,
-    s.user_email,
-    s.access_token_used,
-    s.access_token_expires_at,
-    s.payment_status,
-    s.is_active,
-    s.refunded_at,
-    p.name as plan_name
-  INTO sub_record
-  FROM subscriptions s
-  LEFT JOIN plans p ON s.plan_id = p.id
-  WHERE s.access_token = token_input;
-
-  -- Token não existe
-  IF NOT FOUND THEN
-    RETURN QUERY SELECT 
-      FALSE, 
-      NULL::UUID, 
-      NULL::TEXT, 
-      NULL::TEXT,
-      'Token inválido ou não encontrado'::TEXT;
-    RETURN;
-  END IF;
-
-  -- Token já foi usado
-  IF sub_record.access_token_used THEN
-    RETURN QUERY SELECT 
-      FALSE, 
-      NULL::UUID, 
-      NULL::TEXT, 
-      NULL::TEXT,
-      'Este link já foi utilizado. Use a opção "Esqueci minha senha" na tela de login.'::TEXT;
-    RETURN;
-  END IF;
-
-  -- Token expirado
-  IF sub_record.access_token_expires_at < NOW() THEN
-    RETURN QUERY SELECT 
-      FALSE, 
-      NULL::UUID, 
-      NULL::TEXT, 
-      NULL::TEXT,
-      'Este link expirou. Entre em contato com o suporte.'::TEXT;
-    RETURN;
-  END IF;
-
-  -- Pagamento não aprovado
-  IF sub_record.payment_status != 'approved' THEN
-    RETURN QUERY SELECT 
-      FALSE, 
-      NULL::UUID, 
-      NULL::TEXT, 
-      NULL::TEXT,
-      'Pagamento ainda não foi aprovado. Aguarde a confirmação.'::TEXT;
-    RETURN;
-  END IF;
-
-  -- Assinatura não está ativa
-  IF NOT sub_record.is_active THEN
-    RETURN QUERY SELECT 
-      FALSE, 
-      NULL::UUID, 
-      NULL::TEXT, 
-      NULL::TEXT,
-      'Assinatura inativa. Entre em contato com o suporte.'::TEXT;
-    RETURN;
-  END IF;
-
-  -- Reembolsado
-  IF sub_record.refunded_at IS NOT NULL THEN
-    RETURN QUERY SELECT 
-      FALSE, 
-      NULL::UUID, 
-      NULL::TEXT, 
-      NULL::TEXT,
-      'Esta compra foi reembolsada. Acesso revogado.'::TEXT;
-    RETURN;
-  END IF;
-
-  -- Token válido!
-  RETURN QUERY SELECT 
-    TRUE, 
-    sub_record.id, 
-    sub_record.user_email,
-    sub_record.plan_name,
-    NULL::TEXT;
-END;
-$function$
-;
-
 CREATE OR REPLACE FUNCTION public.verificar_rate_limit_escrita(p_user_id uuid)
  RETURNS boolean
  LANGUAGE plpgsql
@@ -2373,8 +1879,8 @@ CREATE OR REPLACE FUNCTION public.verificar_rate_limit_escrita(p_user_id uuid)
 AS $function$
 DECLARE
     v_count  integer;
-    -- ✅ 120 saves/hora — comporta auto-save inteligente sem abrir flood
-    --    Antes era 60, o que bloqueava auto-save legítimo nos primeiros minutos
+    -- â 120 saves/hora â comporta auto-save inteligente sem abrir flood
+    --    Antes era 60, o que bloqueava auto-save legÃ­timo nos primeiros minutos
     v_limite integer := 120;
 BEGIN
     INSERT INTO rate_limit_writes (user_id, window_start, write_count)
@@ -2390,7 +1896,7 @@ BEGIN
             p_user_id,
             'RATE_LIMIT',
             'rate_limit_exceeded',
-            'Limite de escritas excedido: ' || v_count || ' na última hora',
+            'Limite de escritas excedido: ' || v_count || ' na Ãºltima hora',
             jsonb_build_object(
                 'writes_count', v_count,
                 'limit',        v_limite,
@@ -2405,11 +1911,16 @@ END;
 $function$
 ;
 
--- ─── Triggers ──────────────────────────────────────────────────────────
+-- ###########################################################################
+-- TRIGGERS
+-- ###########################################################################
+
 CREATE TRIGGER account_members_removed_at BEFORE UPDATE ON public.account_members FOR EACH ROW EXECUTE FUNCTION account_members_set_removed_at();
 CREATE TRIGGER trg_feature_flags_updated_at BEFORE UPDATE ON public.feature_flags FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER tg_audit_log_imutavel BEFORE DELETE OR UPDATE ON public.financial_audit_log FOR EACH ROW EXECUTE FUNCTION bloquear_alteracao_audit_log();
 CREATE TRIGGER profile_backups_updated_at BEFORE UPDATE ON public.profile_backups FOR EACH ROW EXECUTE FUNCTION profile_backups_set_updated_at();
+CREATE TRIGGER enforce_profile_limit_stripe BEFORE INSERT ON public.profiles FOR EACH ROW EXECUTE FUNCTION enforce_profile_limit_stripe();
 CREATE TRIGGER enforce_user_id_immutable BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION trg_profiles_enforce_user_id_immutable();
 CREATE TRIGGER tg_auditoria_user_data AFTER INSERT OR DELETE OR UPDATE ON public.user_data FOR EACH ROW EXECUTE FUNCTION registrar_auditoria_user_data();
 CREATE TRIGGER trigger_update_user_data_timestamp BEFORE UPDATE ON public.user_data FOR EACH ROW EXECUTE FUNCTION update_user_data_timestamp();
+

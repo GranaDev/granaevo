@@ -11,14 +11,10 @@
 -- =============================================================================
 
 -- #2 — recria políticas (ordem inversa não importa entre tabelas distintas)
-CREATE POLICY member_can_read_own_membership ON public.account_members
-  FOR SELECT TO authenticated USING (auth.uid() = member_user_id);
-
+-- NOTA: member_can_read_own_membership e "Anyone can view plans" NÃO são recriadas
+-- aqui porque o UP não as dropa mais (ver nota de reconciliação no UP).
 CREATE POLICY guest_invitations_owner_select ON public.guest_invitations
   FOR SELECT TO public USING (owner_user_id = auth.uid());
-
-CREATE POLICY "Anyone can view plans" ON public.plans
-  FOR SELECT TO anon, authenticated USING (true);
 
 CREATE POLICY profiles_select_as_guest ON public.profiles
   FOR SELECT TO authenticated
