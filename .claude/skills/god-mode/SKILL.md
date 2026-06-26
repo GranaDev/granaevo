@@ -107,6 +107,55 @@ REGRA 10: O sistema só está APROVADO quando um atacante imaginário externo
           tentaria todos os vetores desta skill e falharia em todos
 ```
 
+## FASE 4.5 — CONFERÊNCIA DE CONFORMIDADE LGPD (obrigatória, via BLUE-02/BLUE-04)
+
+O GOD MODE deve verificar, com EVIDÊNCIA (queries no banco via Management API), que a
+retenção de dados está implementada E FUNCIONANDO. Não basta existir o código — tem
+que provar que roda e que o prazo bate com o que a política promete ao usuário.
+
+### Checklist de retenção do audit log (financial_audit_log)
+1. **Rotina de retenção existe e está ativa:**
+   ```sql
+   SELECT jobid, schedule, active FROM cron.job WHERE jobname = 'purge-audit-log-retention';
+   ```
+   → deve retornar 1 linha com active = true. Se ausente/inativa: FALHA.
+
+2. **A função roda sem erro** (executar e conferir que não levanta exceção):
+   ```sql
+   SELECT public.purge_audit_log_retention();  -- retorna nº de linhas removidas, sem erro
+   ```
+   → se der erro (ex: coluna/tabela inexistente), FALHA. Lição: já houve cron que
+   referenciava coluna inexistente e falhava silenciosamente todo dia.
+
+3. **A retenção está REALMENTE sendo aplicada** (não há acúmulo além do prazo):
+   ```sql
+   SELECT count(1) FROM public.financial_audit_log WHERE created_at < now() - interval '6 months';
+   ```
+   → deve ser 0. Se > 0, a retenção não está funcionando.
+
+4. **A imutabilidade continua válida** (só a rotina pode apagar; o resto é bloqueado):
+   ```sql
+   BEGIN; DELETE FROM public.financial_audit_log
+     WHERE id IN (SELECT id FROM public.financial_audit_log LIMIT 1); ROLLBACK;
+   ```
+   → deve FALHAR com "[SEGURANCA] Audit log e imutavel". Se passar: FALHA grave.
+
+5. **O prazo no sistema bate com a política:** confirmar que `privacidade.html` declara o
+   MESMO prazo usado na função (`interval '6 months'`). Divergência texto×sistema = FALHA.
+
+### Checklist de exclusão de conta / minimização
+6. Conferir que os crons de purga (`purge_expired_cancelled_accounts`,
+   `purge_unpaid_accounts`, `cleanup_abandoned_accounts`) estão saudáveis
+   (0 falhas em `cron.job_run_details` nos últimos 7 dias).
+7. Conferir que NENHUMA tabela com PII retém dado de usuário já excluído. Em especial,
+   verificar órfãos de PII (ex.: `subscriptions_cakto_archive` com user_id NULL e
+   email/cpf/telefone não-nulos deve ser 0 — há trigger `cakto_archive_strip_pii`).
+8. Conferir que toda tabela com coluna de identificação do usuário tem FK
+   `ON DELETE CASCADE` para `auth.users` (ou rotina de expurgo equivalente).
+
+> Qualquer item acima reprovado entra na triagem (FASE 3) como achado de conformidade
+> e deve ser corrigido antes do veredicto APROVADO.
+
 ## RELATÓRIO FINAL GOD MODE
 ```
 ╔══════════════════════════════════════════════════════╗
