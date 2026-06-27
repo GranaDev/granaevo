@@ -3596,29 +3596,70 @@ function abrirContaFixaView(id) {
 
     const temParcela = conta.totalParcelas && conta.parcelaAtual;
 
+    // Contagem regressiva inteligente (date-only, sem fuso) para o subtítulo
+    let prazoTexto = '', prazoClass = 'cf-prazo-ok', prazoIcon = 'fa-clock';
+    if (estaPago) {
+        prazoTexto = 'Pago neste mês';
+        prazoClass = 'cf-prazo-pago';
+        prazoIcon  = 'fa-circle-check';
+    } else if (vencValido) {
+        const [vy, vm, vd] = conta.vencimento.split('-').map(Number);
+        const alvo  = new Date(vy, vm - 1, vd);
+        const agora = new Date();
+        const hoje0 = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+        const dias  = Math.round((alvo - hoje0) / 86400000);
+
+        if (dias > 1) {
+            prazoTexto = `Vence em ${dias} dias`;
+            prazoClass = dias <= 5 ? 'cf-prazo-soon' : 'cf-prazo-ok';
+            prazoIcon  = 'fa-clock';
+        } else if (dias === 1) {
+            prazoTexto = 'Vence amanhã';  prazoClass = 'cf-prazo-soon'; prazoIcon = 'fa-clock';
+        } else if (dias === 0) {
+            prazoTexto = 'Vence hoje';     prazoClass = 'cf-prazo-soon'; prazoIcon = 'fa-triangle-exclamation';
+        } else {
+            const atraso = Math.abs(dias);
+            prazoTexto = `Vencido há ${atraso} ${atraso === 1 ? 'dia' : 'dias'}`;
+            prazoClass = 'cf-prazo-late'; prazoIcon = 'fa-triangle-exclamation';
+        }
+    }
+
     // ✅ HTML 100% estático — nenhum dado do usuário aqui (inserido via textContent abaixo)
     criarPopup(`
         <div class="cf-view">
-            <div class="cf-view-head">
-                <h3 id="cfViewDesc"></h3>
+            <div class="cf-view-hero">
+                <div class="cf-view-icon"><i class="fas fa-receipt" aria-hidden="true"></i></div>
+                <div class="cf-view-heart">
+                    <h3 id="cfViewDesc"></h3>
+                    <span class="cf-prazo ${prazoClass}">
+                        <i class="fas ${prazoIcon}" aria-hidden="true"></i>
+                        <span id="cfViewPrazo"></span>
+                    </span>
+                </div>
                 <span class="conta-status" id="cfViewStatus"></span>
             </div>
-            <div class="cf-view-valor" id="cfViewValor"></div>
+
+            <div class="cf-view-amount">
+                <span class="cf-view-amount-label">Valor</span>
+                <span class="cf-view-amount-val" id="cfViewValor"></span>
+            </div>
+
             <div class="cf-view-rows">
                 <div class="cf-view-row">
-                    <span class="cf-view-label">Vencimento</span>
+                    <span class="cf-view-label"><i class="fas fa-calendar-day" aria-hidden="true"></i> Vencimento</span>
                     <span class="cf-view-val" id="cfViewVenc"></span>
                 </div>
                 <div class="cf-view-row" id="cfViewParcelaRow" style="display:none;">
-                    <span class="cf-view-label">Parcela</span>
+                    <span class="cf-view-label"><i class="fas fa-layer-group" aria-hidden="true"></i> Parcela</span>
                     <span class="cf-view-val" id="cfViewParcela"></span>
                 </div>
             </div>
+
             <div class="cf-view-actions">
                 ${estaPago
-                    ? '<button class="btn-warning" id="cfViewAcao">⚡ Antecipar</button>'
-                    : '<button class="btn-primary" id="cfViewAcao">Pagar</button>'}
-                <button class="btn-outline" id="cfViewEditar">Editar</button>
+                    ? '<button class="btn-warning" id="cfViewAcao"><i class="fas fa-bolt" aria-hidden="true"></i> Antecipar</button>'
+                    : '<button class="btn-primary" id="cfViewAcao"><i class="fas fa-circle-dollar-to-slot" aria-hidden="true"></i> Pagar</button>'}
+                <button class="btn-outline" id="cfViewEditar"><i class="fas fa-pen" aria-hidden="true"></i> Editar</button>
                 <button class="btn-cancelar" id="cfViewFechar">Fechar</button>
             </div>
         </div>
@@ -3626,6 +3667,7 @@ function abrirContaFixaView(id) {
 
     // ✅ Preenchimento seguro via textContent — nunca interpreta HTML
     document.getElementById('cfViewDesc').textContent  = conta.descricao;
+    document.getElementById('cfViewPrazo').textContent = prazoTexto;
     const statusEl = document.getElementById('cfViewStatus');
     statusEl.textContent = status;
     statusEl.classList.add(statusClass);
