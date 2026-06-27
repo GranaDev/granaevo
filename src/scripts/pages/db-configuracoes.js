@@ -28,6 +28,7 @@ export function init(ctx) {
     window.gerenciarAssinatura = () => gerenciarAssinatura();
     window.abrirHistoricoBackup = () => abrirHistoricoBackup();
     window.resetarPerfil        = () => resetarPerfil();
+    window.abrirPerfilHub       = () => abrirPerfilHub();
     // Inicializa botão de instalação do PWA na seção de Configurações
     initInstallButton();
     // Atualiza status de cache offline
@@ -1235,6 +1236,16 @@ function abrirPerfilHub() {
             b.addEventListener('click', onClick);
             return b;
         };
+
+        lista.appendChild(opcao('👤', 'Alterar nome', 'Mude seu nome ou apelido', () => {
+            _ctx.fecharPopup();
+            alterarNome();
+        }));
+
+        lista.appendChild(opcao('📷', 'Alterar foto de perfil', 'Escolha uma nova imagem', () => {
+            _ctx.fecharPopup();
+            document.getElementById('photoUpload')?.click();
+        }));
 
         const total  = Object.keys(unlocked).length;
         lista.appendChild(opcao('🏆', 'Conquistas', `${total} desbloqueada(s) · nível ${nivel.nivel}`, () => {

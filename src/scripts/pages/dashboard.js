@@ -1982,6 +1982,9 @@ let _domPages     = null;
 let _domNavBtns   = null;
 let _domMobileNav = null;
 
+// Tela atualmente ativa — fonte de verdade p/ a navegação por swipe (mobile)
+let _telaAtual = 'dashboard';
+
 function _makeCtx() {
     return Object.defineProperties({}, {
         transacoes:          { get: () => transacoes,          set: v => { transacoes = v;     if (typeof _cache !== 'undefined') _cache.tx = null; }, enumerable: true },
@@ -2133,8 +2136,6 @@ function mostrarTela(tela) {
 
 function _mostrarTelaImpl(tela) {
     if (!_domPages)     _domPages     = document.querySelectorAll('.page');
-    if (!_domNavBtns)   _domNavBtns   = document.querySelectorAll('.nav-btn');
-    if (!_domMobileNav) _domMobileNav = document.querySelectorAll('.mobile-nav-item');
 
     _domPages.forEach(p => {
         p.classList.remove('active');
@@ -2143,15 +2144,7 @@ function _mostrarTelaImpl(tela) {
 
     window.scrollTo({ top: 0, behavior: 'instant' });
 
-    // Sidebar — nav-btn
-    _domNavBtns.forEach(btn => btn.classList.remove('active'));
-    const sidebarBtn = document.querySelector(`[data-page="${tela}"]`);
-    if (sidebarBtn) sidebarBtn.classList.add('active');
-
-    // Mobile — bottom nav
-    _domMobileNav.forEach(btn => btn.classList.remove('active'));
-    const mobileBtn = document.querySelector(`.mobile-nav-item[data-page="${tela}"]`);
-    if (mobileBtn) mobileBtn.classList.add('active');
+    _setNavAtiva(tela);
 
     const pageEl = document.getElementById(tela + 'Page');
     if (pageEl) {
@@ -2159,7 +2152,29 @@ function _mostrarTelaImpl(tela) {
         pageEl.classList.add('active');
     }
 
-    // Lazy load section modules
+    _telaAtual = tela;
+    _carregarModuloTela(tela);
+}
+
+// Destaca o item de navegação ativo (sidebar desktop + bottom nav mobile).
+// Extraído de _mostrarTelaImpl p/ ser reusado pela transição de swipe, que
+// finaliza o estado canônico sem refazer o display/lazy-load.
+function _setNavAtiva(tela) {
+    if (!_domNavBtns)   _domNavBtns   = document.querySelectorAll('.nav-btn');
+    if (!_domMobileNav) _domMobileNav = document.querySelectorAll('.mobile-nav-item');
+
+    _domNavBtns.forEach(btn => btn.classList.remove('active'));
+    const sidebarBtn = document.querySelector(`.nav-btn[data-page="${tela}"]`);
+    if (sidebarBtn) sidebarBtn.classList.add('active');
+
+    _domMobileNav.forEach(btn => btn.classList.remove('active'));
+    const mobileBtn = document.querySelector(`.mobile-nav-item[data-page="${tela}"]`);
+    if (mobileBtn) mobileBtn.classList.add('active');
+}
+
+// Lazy-load + refresh do módulo de cada aba. Idempotente (guardado por
+// _dbLoaded): chamar de novo numa aba já carregada só dispara o refresh de UI.
+function _carregarModuloTela(tela) {
     if (tela === 'transacoes') {
         filtroMovAtivo = 'mes_atual';
         filtroMovMes   = null;
@@ -2235,12 +2250,135 @@ function _mostrarTelaImpl(tela) {
 
     if (tela === 'configuracoes') {
         if (!_dbLoaded.configuracoes) {
-            import('./db-configuracoes.js?v=6').then(m => {
+            import('./db-configuracoes.js?v=7').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.configuracoes = true;
+                if (_abrirHubAoCarregar) { _abrirHubAoCarregar = false; window.abrirPerfilHub?.(); }
             });
+        } else if (_abrirHubAoCarregar) {
+            _abrirHubAoCarregar = false;
+            window.abrirPerfilHub?.();
         }
     }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// TRANSIÇÃO DE SWIPE (mobile) — deslize lateral fluido entre abas
+// ───────────────────────────────────────────────────────────────────────────
+// Chamado por swipe-nav.js quando o gesto cruza o limiar de commit. Faz o
+// "carrossel": a aba que sai desliza pro lado e a aba que entra vem da borda
+// oposta, ambas movidas SÓ por transform (composição na GPU, zero reflow
+// durante a animação). O conteúdo da aba alvo é carregado ANTES do slide, então
+// ela já desliza preenchida (ou com skeleton no 1º acesso).
+//
+//   dir: -1 → próxima aba (dedo p/ esquerda, trilho vai p/ -vw)
+//        +1 → aba anterior (dedo p/ direita, trilho vai p/ +vw)
+//   dx : deslocamento horizontal acumulado no fim do arrasto (continuidade)
+//   sy : scrollY no momento do commit (compensa a página que sai p/ não pular)
+function _swipeTo(target, opts = {}) {
+    const { dir = -1, dx = 0, sy = 0, done } = opts;
+    const finish = () => { try { done && done(); } catch (_) { /* noop */ } };
+
+    if (!_domPages) _domPages = document.querySelectorAll('.page');
+    const fromPage = document.querySelector('.page.active');
+    const toPage   = document.getElementById(target + 'Page');
+
+    // Fallbacks: alvo inexistente ou movimento reduzido → troca seca canônica.
+    if (!fromPage || !toPage || fromPage === toPage) { mostrarTela(target); finish(); return; }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        fromPage.style.transform = '';
+        fromPage.style.opacity   = '';
+        mostrarTela(target);
+        finish();
+        return;
+    }
+
+    const mc   = document.getElementById('mainContent');
+    const w    = window.innerWidth;
+    const next = dir < 0;
+    const trackEnd = next ? -w : w;          // posição final do "trilho"
+    const toStart  = next ? dx + w : dx - w; // onde a aba que entra começa
+
+    // Mede o frame de conteúdo (independe de padding/breakpoint) p/ sobrepor as
+    // duas páginas exatamente onde o fluxo normal as colocaria.
+    const cs   = getComputedStyle(mc);
+    const padL = parseFloat(cs.paddingLeft)  || 0;
+    const padT = parseFloat(cs.paddingTop)   || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const cw   = mc.clientWidth - padL - padR;
+    const fromH = fromPage.offsetHeight;
+
+    document.body.classList.add('ge-swiping');
+    mc.style.minHeight = fromH + 'px';   // evita colapso enquanto as páginas são absolutas
+
+    // Conteúdo do alvo carrega/atualiza ANTES do slide.
+    _carregarModuloTela(target);
+
+    [fromPage, toPage].forEach(p => {
+        p.classList.add('ge-swipe-page');
+        p.style.left  = padL + 'px';
+        p.style.top   = padT + 'px';
+        p.style.width = cw + 'px';
+        p.style.transition = 'none';
+    });
+    toPage.style.display = 'block';
+
+    // Alinha: zera o scroll (a aba que entra começa no topo) e compensa
+    // verticalmente a aba que sai p/ ela não "pular" pro topo ao sair.
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    fromPage.style.transform = `translate3d(${dx}px, ${-sy}px, 0)`;
+    toPage.style.transform   = `translate3d(${toStart}px, 0, 0)`;
+    fromPage.style.opacity   = '';
+
+    void toPage.offsetWidth; // força reflow → estado inicial firme antes da transição
+
+    const ease = 'cubic-bezier(0.16, 1, 0.3, 1)';            // easeOutExpo — glide premium
+    const dur  = Math.abs(opts.vX) > 0.9 ? 260 : 340;        // flick forte → mais rápido
+
+    let ended = false;
+    const finalize = () => {
+        if (ended) return;
+        ended = true;
+        toPage.removeEventListener('transitionend', onEnd);
+
+        // Estado canônico (sem reload — módulo já carregado acima).
+        _domPages.forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
+        toPage.style.display = 'block';
+        toPage.classList.add('active');   // ge-swiping ainda ativo → pageEnter suprimido
+        _setNavAtiva(target);
+        _telaAtual = target;
+
+        [fromPage, toPage].forEach(p => {
+            p.classList.remove('ge-swipe-page');
+            p.style.transition = '';
+            p.style.transform  = '';
+            p.style.left = ''; p.style.top = ''; p.style.width = ''; p.style.opacity = '';
+        });
+        mc.style.minHeight = '';
+        document.body.classList.remove('ge-swiping');
+        finish();
+    };
+    const onEnd = (ev) => {
+        if (ev.target === toPage && ev.propertyName === 'transform') finalize();
+    };
+    toPage.addEventListener('transitionend', onEnd);
+    setTimeout(finalize, dur + 80);   // rede de segurança se o transitionend não disparar
+
+    requestAnimationFrame(() => {
+        fromPage.style.transition = `transform ${dur}ms ${ease}`;
+        toPage.style.transition   = `transform ${dur}ms ${ease}`;
+        fromPage.style.transform  = `translate3d(${trackEnd}px, ${-sy}px, 0)`;
+        toPage.style.transform    = `translate3d(0px, 0px, 0)`;
+    });
+}
+
+// Clicar na foto de perfil (sidebar/mobile) leva à aba Configurações e abre o
+// hub de perfil (nome, foto, conquistas). O hub vive no módulo lazy de
+// configurações — a flag garante que ele abra assim que o módulo carrega.
+let _abrirHubAoCarregar = false;
+function abrirPerfilUsuario() {
+    _abrirHubAoCarregar = true;
+    mostrarTela('configuracoes');
 }
 
 // ========== ATUALIZAR NOME E FOTO DO USUÁRIO ==========
@@ -4819,13 +4957,38 @@ function bindEventos() {
             mostrarTela(page);
         });
     });
-    
-    // Upload de foto
+
+    // Navegação por swipe (mobile) — módulo carregado sob demanda (custo zero no
+    // desktop). Progressivo: se falhar, a navegação por toque segue intacta.
+    if (window.matchMedia('(max-width: 768px)').matches) {
+        import('../modules/swipe-nav.js?v=1')
+            .then(m => m.initSwipeNav({
+                order:      ['dashboard', 'transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios'],
+                getCurrent: () => _telaAtual,
+                swipeTo:    _swipeTo,
+            }))
+            .catch(() => { /* swipe é opcional — silencioso */ });
+    }
+
+    // Upload de foto (acionado pelo botão "Alterar foto" no hub de perfil)
     const photoUpload = document.getElementById('photoUpload');
     if(photoUpload) {
         photoUpload.addEventListener('change', alterarFoto);
     }
-    
+
+    // Foto de perfil (sidebar + topbar mobile) → abre o hub de perfil
+    const userPhotoBtn = document.getElementById('userPhotoBtn');
+    if (userPhotoBtn) {
+        userPhotoBtn.addEventListener('click', abrirPerfilUsuario);
+        userPhotoBtn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirPerfilUsuario(); }
+        });
+    }
+    const mobileProfileBtn = document.getElementById('mobileProfileBtn');
+    if (mobileProfileBtn) {
+        mobileProfileBtn.addEventListener('click', () => { hapticTap(8); abrirPerfilUsuario(); });
+    }
+
     // Dashboard - Nova conta fixa
     const btnNovaContaFixa = document.getElementById('btnNovaContaFixa');
     if(btnNovaContaFixa) {
@@ -4883,11 +5046,7 @@ function bindEventos() {
     }
 
     // Configurações
-    const btnAlterarNome = document.getElementById('btnAlterarNome');
-    if(btnAlterarNome) {
-        btnAlterarNome.addEventListener('click', () => window.alterarNome?.());
-    }
-
+    // "Alterar Nome" foi movido para o hub de perfil (clique na foto) — ver db-configuracoes.js
     const btnAlterarEmail = document.getElementById('btnAlterarEmail');
     if(btnAlterarEmail) {
         btnAlterarEmail.addEventListener('click', () => window.alterarEmail?.());

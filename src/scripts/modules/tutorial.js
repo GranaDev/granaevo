@@ -259,13 +259,12 @@ const PASSOS_BASE = [
   // ════ CONFIGURAÇÕES ════════════════════════════════════════════
   {
     pagina:   'configuracoes',
-    seletor:  '#btnAlterarNome',
-    expandir: '.cfg-list',
+    seletor:  '.cfg-profile-card',
     icon:     'fa-user-shield',
     iconColor:'#3b82f6',
     secao:    'Configurações',
-    titulo:   'Conta e Segurança',
-    texto:    'Altere <strong>nome e senha</strong> quando quiser e alterne entre <strong>perfis</strong> da sua conta. Cada perfil tem dados totalmente separados — ideal para organizar finanças pessoais e do negócio, por exemplo.',
+    titulo:   'Seu Perfil',
+    texto:    'Toque no seu <strong>perfil</strong> (ou na foto, em qualquer tela) para alterar <strong>nome e foto</strong> e ver suas <strong>conquistas</strong> e nível. Logo abaixo, você altera a <strong>senha</strong> e alterna entre <strong>perfis</strong> — cada um com dados totalmente separados.',
     pos:      'direita',
   },
   {

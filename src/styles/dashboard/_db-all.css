@@ -1090,6 +1090,36 @@ body::before {
     to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAVEGAÇÃO POR SWIPE (mobile) — deslize lateral entre abas
+   ═══════════════════════════════════════════════════════════════════════════
+   Durante o arrasto (.ge-dragging) e a transição de commit (.ge-swiping), o eixo
+   X fica travado p/ não criar barra de rolagem horizontal com as páginas movidas.
+   No commit, as duas páginas envolvidas viram camadas absolutas (.ge-swipe-page)
+   e deslizam APENAS por transform → composição na GPU, zero reflow. As posições
+   left/top/width são medidas e aplicadas inline pelo JS (fiel a qualquer padding
+   ou breakpoint). */
+body.ge-dragging,
+body.ge-swiping { overflow-x: hidden; }
+
+body.ge-dragging .main-content,
+body.ge-swiping  .main-content { overflow-x: hidden; }
+
+.main-content .page.ge-swipe-page {
+    position: absolute;
+    margin: 0;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.page.ge-swipe-drag { will-change: transform; }
+
+/* Enquanto o swipe controla o movimento lateral, suprime o keyframe pageEnter
+   (opacity + translateY) — senão a página entraria deslizando E com fade ao
+   mesmo tempo, duas animações brigando. */
+body.ge-swiping .page.active { animation: none !important; }
+
 
 .page-header { margin-bottom: 40px; }
 
