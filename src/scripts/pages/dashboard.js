@@ -3561,7 +3561,7 @@ function atualizarListaContasFixas() {
                     window.abrirVisualizacaoFatura?.(c.id);
                 }
             } else {
-                abrirContaFixaForm(c.id);
+                abrirContaFixaView(c.id);
             }
         });
 
@@ -3569,6 +3569,80 @@ function atualizarListaContasFixas() {
     });
 
     lista.appendChild(containerContas);
+}
+
+// ── Visualização (read-only) da conta fixa ──────────────────────────────────
+// Abre primeiro um cartão limpo APENAS para ver a conta. Editar/Pagar/Antecipar
+// são ações explícitas — o teclado e os campos só aparecem se o usuário tocar
+// em "Editar". Evita a edição acidental ao simplesmente tocar no card.
+function abrirContaFixaView(id) {
+    const conta = contasFixas.find(c => c.id === id);
+    if (!conta) return;
+
+    const hojeISO  = new Date().toISOString().slice(0, 10);
+    const mesAtual = hojeISO.slice(0, 7);
+    const vencValido = typeof conta.vencimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento);
+    const vencMes    = vencValido ? conta.vencimento.slice(0, 7) : null;
+    const estaPago =
+        (conta.dataPagamento && conta.dataPagamento.slice(0, 7) === mesAtual) ||
+        (conta.pago === true && !conta.dataPagamento && vencMes !== null && vencMes > mesAtual);
+
+    let status = 'Pendente', statusClass = 'status-pendente';
+    if (estaPago) {
+        status = 'Pago'; statusClass = 'status-pago';
+    } else if (vencValido && conta.vencimento < hojeISO) {
+        status = 'Vencido'; statusClass = 'status-vencido';
+    }
+
+    const temParcela = conta.totalParcelas && conta.parcelaAtual;
+
+    // ✅ HTML 100% estático — nenhum dado do usuário aqui (inserido via textContent abaixo)
+    criarPopup(`
+        <div class="cf-view">
+            <div class="cf-view-head">
+                <h3 id="cfViewDesc"></h3>
+                <span class="conta-status" id="cfViewStatus"></span>
+            </div>
+            <div class="cf-view-valor" id="cfViewValor"></div>
+            <div class="cf-view-rows">
+                <div class="cf-view-row">
+                    <span class="cf-view-label">Vencimento</span>
+                    <span class="cf-view-val" id="cfViewVenc"></span>
+                </div>
+                <div class="cf-view-row" id="cfViewParcelaRow" style="display:none;">
+                    <span class="cf-view-label">Parcela</span>
+                    <span class="cf-view-val" id="cfViewParcela"></span>
+                </div>
+            </div>
+            <div class="cf-view-actions">
+                ${estaPago
+                    ? '<button class="btn-warning" id="cfViewAcao">⚡ Antecipar</button>'
+                    : '<button class="btn-primary" id="cfViewAcao">Pagar</button>'}
+                <button class="btn-outline" id="cfViewEditar">Editar</button>
+                <button class="btn-cancelar" id="cfViewFechar">Fechar</button>
+            </div>
+        </div>
+    `);
+
+    // ✅ Preenchimento seguro via textContent — nunca interpreta HTML
+    document.getElementById('cfViewDesc').textContent  = conta.descricao;
+    const statusEl = document.getElementById('cfViewStatus');
+    statusEl.textContent = status;
+    statusEl.classList.add(statusClass);
+    document.getElementById('cfViewValor').textContent = formatBRL(conta.valor);
+    document.getElementById('cfViewVenc').textContent  = formatarDataBR(conta.vencimento);
+    if (temParcela) {
+        document.getElementById('cfViewParcelaRow').style.display = 'flex';
+        document.getElementById('cfViewParcela').textContent = `${conta.parcelaAtual}/${conta.totalParcelas}`;
+    }
+
+    document.getElementById('cfViewFechar').onclick = () => fecharPopup();
+    // criarPopup() substitui o conteúdo no mesmo container — transição suave, sem flicker
+    document.getElementById('cfViewEditar').onclick = () => abrirContaFixaForm(id);
+    document.getElementById('cfViewAcao').onclick = () => {
+        if (estaPago) abrirPopupAnteciparContaFixa(id);
+        else          abrirPopupPagarContaFixa(id);
+    };
 }
 
 function abrirContaFixaForm(editId = null) {

@@ -4112,16 +4112,27 @@ select.form-input option:checked {
     to   { transform: translateY(0); }
 }
 
+@keyframes bottomSheetOverlayIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
 #bottomSheetOverlay {
     display: none;
     position: fixed;
     inset: 0;
     z-index: 10000;
-    background: rgba(0,0,0,0.55);
-    backdrop-filter: blur(4px);
+    /* SEM backdrop-filter: o blur de tela inteira é re-rasterizado a cada frame
+       durante o slide do sheet → trava em Android. O .modal-overlay já desativa
+       blur no mobile pelo mesmo motivo. Fundo sólido escuro = animação fluida. */
+    background: rgba(0,0,0,0.72);
 }
 
-#bottomSheetOverlay.active { display: flex; align-items: flex-end; }
+#bottomSheetOverlay.active {
+    display: flex;
+    align-items: flex-end;
+    animation: bottomSheetOverlayIn 0.2s ease-out;
+}
 
 #bottomSheetContainer {
     width: 100%;
@@ -4132,6 +4143,10 @@ select.form-input option:checked {
     padding: 0 0 max(calc(64px + env(safe-area-inset-bottom, 0px)), 80px);
     animation: bottomSheetIn 0.28s cubic-bezier(.32,.72,0,1);
     margin-bottom: 0;
+    /* Promove a um layer próprio de GPU: o translateY anima sem repintar */
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
 }
 
 @media (min-width: 769px) {
@@ -4274,6 +4289,82 @@ select.form-input option:checked {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(255, 75, 75, 0.6);
     filter: brightness(1.15);
+}
+
+/* ========== CONTA FIXA — CARTÃO DE VISUALIZAÇÃO (view-first) ========== */
+.cf-view { text-align: left; }
+
+.cf-view-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.cf-view-head h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    word-break: break-word;
+    line-height: 1.25;
+}
+
+.cf-view-head .conta-status {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.cf-view-valor {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--primary, #4caf50);
+    margin: 10px 0 18px;
+    letter-spacing: -0.5px;
+}
+
+.cf-view-rows {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+}
+
+.cf-view-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 2px;
+    border-bottom: 1px solid var(--border);
+}
+
+.cf-view-label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.cf-view-val {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.98rem;
+    text-align: right;
+}
+
+.cf-view-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+}
+
+/* Especificidade alta o bastante para vencer .popup button e
+   .bottom-sheet-content button em ambos os contextos (desktop + mobile) */
+.cf-view .cf-view-actions button {
+    flex: 1 1 auto;
+    min-width: 110px;
+    margin: 0;
+    justify-content: center;
 }
 
 /* ========== SCROLLBAR CUSTOMIZADO ========== */
