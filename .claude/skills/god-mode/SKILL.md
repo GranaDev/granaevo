@@ -92,6 +92,35 @@ SE NÃO FOI TESTADO, NÃO ESTÁ SEGURO.
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
+## FASE 0 — PRÉ-VOO: ACESSO READ-ONLY AO SUPABASE
+Antes da FASE 1, garanta acesso ao banco de produção via servidor MCP do Supabase
+(read-only). Setup em `.claude/SUPABASE_MCP_SETUP.md`. Todas as queries das fases que
+tocam o banco (incluindo a FASE 4.5 abaixo) rodam por esse MCP read-only.
+- Confirme que as ferramentas `mcp__supabase__*` estão disponíveis nesta sessão.
+- O token mora SÓ em variável de ambiente do Windows (`SUPABASE_ACCESS_TOKEN`).
+  NUNCA aceite o token colado no chat, NUNCA o escreva em arquivo versionado.
+  Se alguém colar um token em texto puro: aplica-se a REGRA 6 (revogar imediatamente).
+- Sem acesso ao banco → varreduras de RLS/Cron/Trigger/LGPD ficam BLOQUEADAS;
+  avise o desenvolvedor e mostre o setup antes de prosseguir.
+
+## BRAÇO DE COMPLIANCE SUPABASE & LGPD (paralelo à FASE 2 de ataque)
+Além do RED/BLUE clássico, o GOD MODE orquestra três auditores especializados que
+leem o banco real via MCP read-only e cruzam com migrations/código/documentos:
+
+| Agente | Missão | Saída |
+|---|---|---|
+| `supabase-rls-auditor` | Provar que TODA política RLS está blindada (sem RLS off, sem WITH CHECK faltando, sem USING(true), sem grant indevido a anon, views/SECURITY DEFINER seguros, drift vs migrations) | security-audit/rls-deep-findings.md |
+| `supabase-cron-trigger-auditor` | Todo cron vivo e correto; nenhum trigger de validação desconectado; rotinas de retenção/limpeza presentes | security-audit/cron-trigger-findings.md |
+| `lgpd-compliance-auditor` | Conformidade minuciosa com a LGPD (base legal, consentimento, minimização, direitos do titular, retenção/descarte, segurança, transferência internacional, RoPA, docs legais) | security-audit/lgpd-findings.md |
+
+Regras deste braço:
+- Rode os três em paralelo após a FASE 1 (recon) alimentar o contexto.
+- O `supabase-rls-auditor` e o `supabase-cron-trigger-auditor` aprofundam o que a
+  FASE 4.5 confere — use os relatórios deles como evidência da FASE 4.5.
+- BLUE-02 (Vault) consome rls-deep-findings; correções viram migrations PENDENTES,
+  nunca aplicadas automaticamente em produção (MCP read-only + revisão humana).
+- Nenhum veredito sem evidência do banco (query + resultado).
+
 ## REGRAS ABSOLUTAS DO GOD MODE
 ```
 REGRA 1:  Mínimo 10 ataques diferentes por área

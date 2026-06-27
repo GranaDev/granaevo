@@ -5,6 +5,23 @@ Escopo: todo o codebase local + Supabase (via MCP) + variáveis de ambiente.
 
 ---
 
+## FASE 0 — PRÉ-VOO: ACESSO AO SUPABASE
+
+Antes de tudo, confirme que o servidor MCP do Supabase está conectado (read-only).
+Setup completo em `.claude/SUPABASE_MCP_SETUP.md`.
+
+1. Verifique se as ferramentas `mcp__supabase__*` estão disponíveis nesta sessão.
+2. Se NÃO estiverem:
+   - Avise o desenvolvedor que o acesso ao banco não está ativo e mostre os passos
+     de `.claude/SUPABASE_MCP_SETUP.md` (gerar token → `setx` → reiniciar editor → `/mcp`).
+   - **Nunca** peça nem aceite o token colado no chat. Ele mora só em variável de
+     ambiente do Windows; o repositório jamais o contém.
+   - Rode então apenas as fases que não dependem do banco (1, 3) e marque as demais
+     como BLOQUEADAS por falta de acesso ao banco.
+3. Se estiverem: prossiga com todas as fases.
+
+---
+
 ## FASE 1 — MAPEAMENTO
 
 Antes de qualquer análise:
@@ -27,6 +44,12 @@ Antes de qualquer análise:
 ---
 
 ## FASE 2 — AUDITORIA RLS (execute via Supabase MCP)
+
+> **Passo profundo (recomendado):** delegue esta fase ao subagente
+> `supabase-rls-auditor`, que roda uma bateria estendida (USING(true) frouxo,
+> grants a anon/authenticated, search_path em SECURITY DEFINER, drift vs migrations,
+> advisors nativos) e escreve `security-audit/rls-deep-findings.md`. As queries
+> abaixo são o piso mínimo caso rode inline.
 
 Rode cada query abaixo e documente o resultado.
 
@@ -112,6 +135,47 @@ Para cada resultado da Fase 2:
 
 ---
 
+## FASE 2B — CRON JOBS E TRIGGERS (execute via Supabase MCP)
+
+Delegue ao subagente `supabase-cron-trigger-auditor` (ou rode inline as queries dele).
+Objetivo: nenhum job morto/falhando, nenhum trigger de validação desconectado,
+nenhuma rotina de retenção/limpeza ausente.
+
+Mínimo inline:
+```sql
+-- jobs agendados
+SELECT jobid, schedule, command, active, jobname FROM cron.job ORDER BY jobid;
+-- execuções recentes que falharam
+SELECT j.jobname, r.status, r.return_message, r.start_time
+FROM cron.job_run_details r JOIN cron.job j ON j.jobid=r.jobid
+WHERE r.start_time > now() - interval '14 days' AND r.status='failed'
+ORDER BY r.start_time DESC;
+-- triggers
+SELECT event_object_table AS tabela, trigger_name, action_timing,
+       event_manipulation AS evento, action_statement
+FROM information_schema.triggers
+WHERE event_object_schema IN ('public','auth','storage')
+ORDER BY event_object_table;
+```
+Verifique especificamente: trigger de limite de perfis está atrelado à tabela certa?
+Job de expiração de backups roda? Existe rotina de retenção do `financial_audit_log`?
+
+Classifique cada achado e salve em: security-audit/cron-trigger-findings.md
+
+---
+
+## FASE 2C — CONFORMIDADE LGPD (execute via Supabase MCP + docs + código)
+
+Delegue ao subagente `lgpd-compliance-auditor`. É a fase mais minuciosa: ele monta o
+inventário de dados pessoais, checa base legal/consentimento, minimização, direitos do
+titular (acesso/correção/eliminação/portabilidade), retenção e descarte, segurança,
+transferência internacional, registro de operações (RoPA) e documentos legais.
+
+Saída obrigatória: security-audit/lgpd-findings.md com inventário + matriz de
+conformidade por eixo + riscos jurídicos priorizados. Marque toda correção como PENDENTE.
+
+---
+
 ## FASE 3 — ANÁLISE ESTÁTICA DO CODEBASE
 
 Leia cada arquivo identificado no mapeamento e verifique:
@@ -178,12 +242,20 @@ Score: XX/100 — [CRÍTICO / ALTO / MÉDIO / BOM / EXCELENTE]
 ## Resumo
 - Tabelas auditadas: N
 - Problemas RLS encontrados: N (X críticos, Y altos, Z médios)
+- Cron jobs auditados: N (mortos: X, falhando: Y, retenção ausente: Z)
+- Triggers auditados: N (desconectados/inseguros: X)
+- LGPD: nota de conformidade XX — eixos NÃO-CONFORME: N
 - Problemas no código encontrados: N
 - Secrets/variáveis expostos: N
 - Endpoints sem rate limit: N
 
+## Conformidade LGPD (resumo da Fase 2C)
+- Inventário de dados pessoais: ver security-audit/lgpd-findings.md
+- Riscos jurídicos críticos: [lista]
+- Disclaimer: auditoria técnica, não substitui parecer jurídico.
+
 ## Itens Críticos (corrigir imediatamente)
-[lista]
+[lista — inclui achados de RLS, Cron/Trigger e LGPD]
 
 ## Itens Altos (corrigir antes do próximo deploy)
 [lista]
