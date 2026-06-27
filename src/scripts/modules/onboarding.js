@@ -248,19 +248,19 @@ function _slideEscolha(corpo) {
   corpo.appendChild(h2);
 
   const sub = _el('p', 'obw-texto obw-texto--sub');
-  sub.textContent = 'Recomendamos o tour — leva só alguns minutos e mostra tudo na prática.';
+  sub.textContent = 'Recomendamos a trilha essencial — leva menos de um minuto e mostra o básico na prática.';
   corpo.appendChild(sub);
 
   const opcoes = _el('div', 'obw-opcoes');
 
-  // Opção 1 — Tour guiado (recomendada)
+  // Opção 1 — Trilha essencial guiada (recomendada)
   const opTour = _el('button', 'obw-opcao obw-opcao--primaria');
   opTour.type = 'button';
   opTour.innerHTML =
     '<span class="obw-opcao-badge">Recomendado</span>' +
-    '<span class="obw-opcao-icon"><i class="fas fa-route" aria-hidden="true"></i></span>' +
-    '<span class="obw-opcao-titulo">Fazer o tour guiado</span>' +
-    '<span class="obw-opcao-desc">Passo a passo por todas as seções do app, com destaques na tela</span>';
+    '<span class="obw-opcao-icon"><i class="fas fa-bolt" aria-hidden="true"></i></span>' +
+    '<span class="obw-opcao-titulo">Trilha essencial guiada</span>' +
+    '<span class="obw-opcao-desc">O básico em poucos passos, com destaques na tela — e o guia completo por categoria fica sempre à mão</span>';
   opTour.onclick = () => _fechar('tour');
 
   // Opção 2 — Explorar sozinho
@@ -269,7 +269,7 @@ function _slideEscolha(corpo) {
   opLivre.innerHTML =
     '<span class="obw-opcao-icon"><i class="fas fa-compass" aria-hidden="true"></i></span>' +
     '<span class="obw-opcao-titulo">Explorar por conta própria</span>' +
-    '<span class="obw-opcao-desc">Você pode reabrir o tour quando quiser em Configurações → Como Usar</span>';
+    '<span class="obw-opcao-desc">A Central de Aprendizado fica sempre em Configurações → Como Usar</span>';
   opLivre.onclick = () => _fechar('explorar');
 
   opcoes.appendChild(opTour);

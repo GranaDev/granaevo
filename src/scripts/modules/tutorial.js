@@ -1,480 +1,475 @@
 /**
  * @module tutorial
- * @description Tutorial interativo do GranaEvo — tour guiado completo.
+ * @description Central de Aprendizado do GranaEvo — hub de categorias + tours guiados.
  *
- * Cobre todas as seções do app (Dashboard, Transações, Assinaturas, Reservas,
- * Cartões, Gráficos, Relatórios, Notificações e Configurações) com navegação
- * por capítulos, retomada de progresso e reposicionamento responsivo.
+ * Modelo:
+ *  - HUB: tela inicial onde o usuário escolhe O QUE aprender (Dashboard,
+ *    Transações, Reservas, Cartões, Gráficos, Relatórios, Notificações,
+ *    Configurações, Perfil) — ou faz o Tour Completo / Trilha Essencial.
+ *  - SEQUÊNCIA: um tour guiado (spotlight + card) sobre os passos escolhidos.
+ *    Categorias retornam ao hub ao final; Completo/Essencial encerram.
  *
- * Segurança: todos os textos são estáticos e hardcoded neste módulo.
- * Nenhum dado do usuário é interpolado em innerHTML.
+ * Cada categoria aprofunda não só o COMO (mecânica do app) mas o PORQUÊ
+ * (importância da ferramenta) e dicas práticas, via blocos `dica`.
+ *
+ * Segurança: todos os textos são estáticos e hardcoded neste módulo. Nenhum
+ * dado do usuário é interpolado em innerHTML (o plano entra só em texto fixo).
  *
  * Uso:
  *   import { iniciarTutorial } from './tutorial.js';
- *   iniciarTutorial();
- *   iniciarTutorial({ plano: 'Casal' });
- *   iniciarTutorial({ isGuest: true });
+ *   iniciarTutorial();                              // abre o HUB
+ *   iniciarTutorial({ plano: 'Casal' });            // HUB adaptado ao plano
+ *   iniciarTutorial({ trilha: 'essencial' });       // trilha rápida p/ novo usuário
+ *   iniciarTutorial({ isGuest: true });             // HUB reduzido p/ convidados
  */
 
-const CHAVE_RETOMADA = 'ge_tut_resume';
-
-// ── Passos base ────────────────────────────────────────────────────────────────
-const PASSOS_BASE = [
-  // ════ INÍCIO ═══════════════════════════════════════════════════
-  {
-    pagina:   null,
-    seletor:  null,
-    icon:     'fa-rocket',
-    iconColor:'#10b981',
-    secao:    null,
-    titulo:   'Bem-vindo ao GranaEvo!',
-    texto:    'Este é o <strong>tour completo</strong> do app. Em poucos minutos você vai dominar cada recurso — do primeiro lançamento às análises avançadas. Use as <em>setas do teclado</em> para navegar ou toque no ícone de capítulos para ir direto a uma seção.',
-    pos:      'centro',
-  },
-  {
-    pagina:    'dashboard',
-    seletores: ['.sidebar-nav', '.mobile-bottom-nav'],
-    icon:      'fa-compass',
-    iconColor: '#6366f1',
-    secao:     'Início',
-    titulo:    'Navegação Principal',
-    texto:     'Tudo está a um toque: <strong>Dashboard, Transações, Reservas, Cartões, Gráficos e Relatórios</strong>. No celular, a barra fica na parte inferior — e você ainda pode ativar a <em>navegação por swipe</em> nas Configurações para deslizar entre seções.',
-    pos:       'centro',
-  },
-
-  // ════ DASHBOARD ════════════════════════════════════════════════
-  {
-    pagina:    'dashboard',
-    seletores: ['#btnPeriodoDashboard', '#btnPeriodoDashMobile'],
-    icon:      'fa-calendar-alt',
-    iconColor: '#06b6d4',
-    secao:     'Dashboard',
-    titulo:    'Viaje no Tempo',
-    texto:     'O <strong>seletor de período</strong> muda todo o painel para qualquer mês passado. Quer saber quanto gastou em janeiro? Dois toques e está lá — cards, alertas e contas se ajustam automaticamente.',
-    pos:       'baixo',
-  },
-  {
-    pagina:   'dashboard',
-    seletores:['.saldo-hero-mobile', '.cards-grid'],
-    icon:     'fa-chart-line',
-    iconColor:'#10b981',
-    secao:    'Dashboard',
-    titulo:   'Painel Financeiro',
-    texto:    'Seu mês em quatro números: <strong>Entradas, Saídas, Saldo e Reservas</strong> — cada card compara com o mês anterior para você ver a evolução. No celular, o ícone de <em>olho</em> oculta o saldo em locais públicos.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'dashboard',
-    seletor:  '.alertas-vencimento',
-    icon:     'fa-bell',
-    iconColor:'#ef4444',
-    secao:    'Dashboard',
-    titulo:   'Alertas de Vencimento',
-    texto:    'O app vigia suas contas por você: detecta automaticamente o que está <strong>vencido</strong>, vence hoje, em 3 dias ou na semana. Nunca mais pague multa por esquecimento — visualize, pague e marque como concluído em um clique.',
-    pos:      'cima',
-  },
-  {
-    pagina:   'dashboard',
-    seletor:  '#sectionContasFixas',
-    icon:     'fa-file-invoice-dollar',
-    iconColor:'#f59e0b',
-    secao:    'Dashboard',
-    titulo:   'Contas Fixas',
-    texto:    'Cadastre o que se repete todo mês — <strong>aluguel, internet, energia, academia</strong>. O app gera os alertas de vencimento sozinho e você marca como paga com um toque. Use <em>"Ver todas"</em> para o histórico completo.',
-    pos:      'cima',
-  },
-  {
-    pagina:   'dashboard',
-    seletor:  '#widgetOndeFoiDinheiro',
-    icon:     'fa-search-dollar',
-    iconColor:'#8b5cf6',
-    secao:    'Dashboard',
-    titulo:   'Onde Foi Meu Dinheiro?',
-    texto:    'Análise inteligente que mostra <strong>para onde seus gastos estão indo</strong>: categorias campeãs, gráficos interativos e insights prontos para decisão. Um atalho direto para entender seu padrão de consumo.',
-    pos:      'cima',
-  },
-
-  // ════ TRANSAÇÕES ═══════════════════════════════════════════════
-  {
-    pagina:   'transacoes',
-    seletor:  '.transaction-form',
-    icon:     'fa-plus-circle',
-    iconColor:'#10b981',
-    secao:    'Transações',
-    titulo:   'Lançar Transações',
-    texto:    'O coração do app. Registre <strong>Entradas, Saídas e Reservas</strong> em segundos. Para compras parceladas, escolha <strong>Saída no Crédito</strong>, selecione o cartão e as parcelas — o app divide e rastreia <em>cada parcela</em> na fatura certa.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'transacoes',
-    seletor:  '.transaction-form',
-    icon:     'fa-sync-alt',
-    iconColor:'#8b5cf6',
-    secao:    'Transações',
-    titulo:   'Assinaturas Recorrentes',
-    texto:    'Netflix, Spotify, academia… escolha a categoria <strong>Assinatura</strong>, vincule o cartão e defina o <strong>dia de cobrança</strong>. O GranaEvo gera a cobrança <em>automaticamente todo mês</em> e soma na fatura — sem você lembrar de nada.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'transacoes',
-    seletor:  '#btnImportarExtrato',
-    icon:     'fa-file-import',
-    iconColor:'#06b6d4',
-    secao:    'Transações',
-    titulo:   'Importar Extrato',
-    texto:    'Tem um histórico no banco? <strong>Importe o extrato</strong> e traga dezenas de lançamentos de uma vez, sem digitar nada. Ideal para começar com seus dados reais desde o primeiro dia.',
-    pos:      'baixo',
-  },
-  {
-    pagina:    'transacoes',
-    seletores: ['.mov-busca-wrap', '#movFiltrosWrapper'],
-    icon:      'fa-search',
-    iconColor: '#3b82f6',
-    secao:     'Transações',
-    titulo:    'Busca e Filtros',
-    texto:     'Encontre qualquer lançamento pela <strong>busca por descrição</strong>. Os filtros mostram só o que importa: últimos 15, 30 ou 60 dias, um mês específico ou <em>todo o período</em> — perfeito para conferências e auditorias pessoais.',
-    pos:       'baixo',
-  },
-  {
-    pagina:   'transacoes',
-    seletor:  '#listaMovimentacoes',
-    icon:     'fa-list-ul',
-    iconColor:'#3b82f6',
-    secao:    'Transações',
-    titulo:   'Histórico Completo',
-    texto:    'Todas as movimentações em ordem cronológica, guardadas <strong>para sempre</strong>. <strong>Toque</strong> em qualquer item para editar descrição, categoria, valor — ou excluir. Errou um lançamento? Corrige em segundos.',
-    pos:      'cima',
-  },
-  {
-    pagina:   'transacoes',
-    seletor:  '#orcamentosSection',
-    icon:     'fa-wallet',
-    iconColor:'#f59e0b',
-    secao:    'Transações',
-    titulo:   'Orçamentos por Categoria',
-    texto:    'Defina <strong>tetos mensais</strong> por tipo de gasto. A barra avisa antes do estouro: <strong style="color:#f59e0b">amarela aos 80%</strong>, <strong style="color:#ef4444">vermelha ao ultrapassar</strong>. É o seu freio de mão automático contra gastos por impulso.',
-    pos:      'baixo',
-  },
-
-  // ════ RESERVAS ═════════════════════════════════════════════════
-  {
-    pagina:   'reservas',
-    seletor:  '.reservas-sidebar',
-    icon:     'fa-piggy-bank',
-    iconColor:'#a78bfa',
-    secao:    'Reservas',
-    titulo:   'Crie Metas e Reservas',
-    texto:    'Dê nome e valor-alvo aos seus sonhos: <strong>fundo de emergência, viagem, carro</strong>… O <em>simulador de aportes</em> calcula quanto guardar por mês — com rendimento <strong>CDI</strong> ou taxa personalizada. Já tem dinheiro guardado? Use <em>"Já possuo reservas"</em> para cadastrar sem afetar o saldo.',
-    pos:      'direita',
-  },
-  {
-    pagina:   'reservas',
-    seletor:  '.reservas-main',
-    icon:     'fa-chart-area',
-    iconColor:'#a78bfa',
-    secao:    'Reservas',
-    titulo:   'Acompanhe a Evolução',
-    texto:    'Selecione uma reserva e veja o <strong>progresso geral</strong> e a <strong>evolução dos últimos 12 meses</strong> em gráficos. Precisou usar o dinheiro? O botão <em>Retirar</em> devolve o valor ao seu saldo com rastreio completo.',
-    pos:      'esquerda',
-  },
-
-  // ════ CARTÕES ══════════════════════════════════════════════════
-  {
-    pagina:   'cartoes',
-    seletor:  '#cartoesGrid',
-    icon:     'fa-credit-card',
-    iconColor:'#ec4899',
-    secao:    'Cartões',
-    titulo:   'Cartões de Crédito',
-    texto:    'Cadastre cartões com <strong>limite e dia de fechamento</strong>. Cada fatura mostra compra a compra, com rastreamento de parcelas e assinaturas. Veja quanto do limite está comprometido — e <em>congele</em> um cartão quando quiser pausar o uso.',
-    pos:      'centro',
-  },
-
-  // ════ GRÁFICOS ═════════════════════════════════════════════════
-  {
-    pagina:   'graficos',
-    seletor:  '.graficos-filtros',
-    icon:     'fa-chart-pie',
-    iconColor:'#06b6d4',
-    secao:    'Gráficos',
-    titulo:   'Análise Visual',
-    texto:    'Transforme números em <strong>gráficos inteligentes</strong>: distribuição por categoria, evolução do saldo e visões <em>Individual, Casal ou Família</em>. Escolha mês e ano, toque em <strong>Gerar Gráficos</strong> e veja seus dados ganharem vida.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'graficos',
-    seletor:  '.comparacao-toggle',
-    icon:     'fa-balance-scale',
-    iconColor:'#06b6d4',
-    secao:    'Gráficos',
-    titulo:   'Comparativos de Período',
-    texto:    'Ative os <strong>gráficos comparativos</strong> para colocar dois meses lado a lado. Gastou mais ou menos que no mês passado? Em qual categoria? A resposta aparece em segundos — ideal para medir o efeito das suas decisões.',
-    pos:      'baixo',
-  },
-
-  // ════ RELATÓRIOS ═══════════════════════════════════════════════
-  {
-    pagina:   'relatorios',
-    seletor:  '.rel-filtros',
-    icon:     'fa-file-alt',
-    iconColor:'#f97316',
-    secao:    'Relatórios',
-    titulo:   'Relatórios Completos',
-    texto:    'Análises profundas de <strong>onde foi seu dinheiro</strong>, evolução patrimonial e histórico financeiro. Escolha o tipo — <em>Individual, Casal, Família ou Visão Geral</em> — selecione o período e gere em um toque.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'relatorios',
-    seletor:  '.rel-header-actions',
-    icon:     'fa-file-export',
-    iconColor:'#f97316',
-    secao:    'Relatórios',
-    titulo:   'Exporte e Compartilhe',
-    texto:    'Leve seus dados para onde quiser: exporte em <strong>CSV, Excel, PDF</strong> ou como <em>apresentação animada</em>. Perfeito para planejar com a família, prestar contas ou guardar um registro mensal.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'relatorios',
-    seletor:  null,
-    icon:     'fa-trophy',
-    iconColor:'#f59e0b',
-    secao:    'Relatórios',
-    titulo:   'Score Financeiro',
-    texto:    'O GranaEvo avalia sua <strong>saúde financeira</strong> e gera uma pontuação baseada em orçamentos cumpridos, reservas, dívidas e fundo de emergência. Todo mês você recebe <em>dicas personalizadas</em> para subir de nível.',
-    pos:      'centro',
-  },
-
-  // ════ NOTIFICAÇÕES ═════════════════════════════════════════════
-  {
-    pagina:   'dashboard',
-    seletor:  '#btnNotificacoes',
-    icon:     'fa-bell',
-    iconColor:'#eab308',
-    secao:    'Notificações',
-    titulo:   'Central de Notificações',
-    texto:    'Vencimentos, orçamentos estourando, novidades do app — tudo chega na <strong>central de notificações</strong>. Ative também as <em>notificações push</em> nas Configurações para receber alertas direto no celular, mesmo com o app fechado.',
-    pos:      'direita',
-  },
-
-  // ════ CONFIGURAÇÕES ════════════════════════════════════════════
-  {
-    pagina:   'configuracoes',
-    seletor:  '.cfg-profile-card',
-    icon:     'fa-user-shield',
-    iconColor:'#3b82f6',
-    secao:    'Configurações',
-    titulo:   'Seu Perfil',
-    texto:    'Toque no seu <strong>perfil</strong> (ou na foto, em qualquer tela) para alterar <strong>nome e foto</strong> e ver suas <strong>conquistas</strong> e nível. Logo abaixo, você altera a <strong>senha</strong> e alterna entre <strong>perfis</strong> — cada um com dados totalmente separados.',
-    pos:      'direita',
-  },
-  {
-    pagina:   'configuracoes',
-    seletor:  '#btnToggleTema',
-    expandir: '.cfg-list',
-    icon:     'fa-sliders-h',
-    iconColor:'#6366f1',
-    secao:    'Configurações',
-    titulo:   'Personalize o App',
-    texto:    'Escolha entre tema <strong>claro ou escuro</strong>, instale o GranaEvo como <strong>aplicativo</strong> na tela inicial, ative <strong>notificações push</strong> e a navegação por swipe. O modo offline mantém seus dados acessíveis mesmo sem internet.',
-    pos:      'esquerda',
-  },
-  {
-    pagina:   'configuracoes',
-    seletor:  '#btnHistoricoBackup',
-    expandir: '.cfg-list',
-    icon:     'fa-shield-alt',
-    iconColor:'#14b8a6',
-    secao:    'Configurações',
-    titulo:   'Seus Dados, Protegidos',
-    texto:    'O <strong>backup automático</strong> guarda os últimos 7 dias — restaure qualquer versão em um toque. Quer recomeçar do zero? <em>Resetar Perfil</em> apaga os dados financeiros, mas cria um backup antes, por segurança.',
-    pos:      'esquerda',
-  },
-  {
-    pagina:   'configuracoes',
-    seletor:  '#btnGerenciarAssinatura',
-    expandir: '.cfg-list',
-    icon:     'fa-crown',
-    iconColor:'#f59e0b',
-    secao:    'Configurações',
-    titulo:   'Seu Plano',
-    texto:    'Gerencie sua assinatura do GranaEvo: <strong>alterar plano, trocar cartão ou cancelar</strong> — tudo por aqui, sem burocracia. E o botão <em>Como Usar</em> reabre este tour sempre que você precisar.',
-    pos:      'esquerda',
-  },
-];
-
-const PASSOS_CONVIDADOS = [
-  {
-    pagina:   'configuracoes',
-    seletor:  '#btnAlterarEmail',
-    expandir: '.cfg-list',
-    icon:     'fa-users',
-    iconColor:'#10b981',
-    secao:    'Configurações',
-    titulo:   'Convide sua Família',
-    texto:    'Seu plano permite <strong>convidados</strong>: cada um recebe login próprio e acessa o mesmo painel financeiro. Você define as permissões — só visualizar ou também editar — e pode remover o acesso a qualquer momento.',
-    pos:      'direita',
-  },
-];
-
-const PASSOS_GUEST = [
-  {
-    pagina:   null,
-    seletor:  null,
-    icon:     'fa-rocket',
-    iconColor:'#10b981',
-    secao:    null,
-    titulo:   'Bem-vindo ao GranaEvo!',
-    texto:    'Você foi convidado para acessar esta conta. Dependendo das permissões concedidas, você pode <strong>visualizar e editar</strong> as finanças do grupo. Este tour rápido mostra o essencial.',
-    pos:      'centro',
-  },
-  {
-    pagina:    'dashboard',
-    seletores: ['.sidebar-nav', '.mobile-bottom-nav'],
-    icon:      'fa-compass',
-    iconColor: '#6366f1',
-    secao:     'Início',
-    titulo:    'Navegação Principal',
-    texto:     'Tudo está a um toque: <strong>Dashboard, Transações, Reservas, Cartões, Gráficos e Relatórios</strong>. No celular, a barra fica na parte inferior da tela.',
-    pos:       'centro',
-  },
-  {
-    pagina:   'dashboard',
-    seletores:['.saldo-hero-mobile', '.cards-grid'],
-    icon:     'fa-chart-line',
-    iconColor:'#10b981',
-    secao:    'Dashboard',
-    titulo:   'Painel Compartilhado',
-    texto:    'Resumo financeiro da conta que você acessa, <strong>atualizado em tempo real</strong>: Entradas, Saídas, Saldo e Reservas. Use o seletor de período para ver qualquer mês.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'transacoes',
-    seletor:  '.transaction-form',
-    icon:     'fa-plus-circle',
-    iconColor:'#10b981',
-    secao:    'Transações',
-    titulo:   'Lançar Transações',
-    texto:    'Com permissão de edição, você registra <strong>entradas, saídas, reservas e assinaturas</strong> normalmente. Tudo que você lança aparece na hora para os outros membros do grupo.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'transacoes',
-    seletor:  '#listaMovimentacoes',
-    icon:     'fa-list-ul',
-    iconColor:'#3b82f6',
-    secao:    'Transações',
-    titulo:   'Histórico do Grupo',
-    texto:    'Todas as movimentações em ordem cronológica. Use a <strong>busca por descrição</strong> e os filtros de período para encontrar qualquer lançamento rapidamente.',
-    pos:      'cima',
-  },
-  {
-    pagina:   'graficos',
-    seletor:  '.graficos-filtros',
-    icon:     'fa-chart-pie',
-    iconColor:'#06b6d4',
-    secao:    'Gráficos',
-    titulo:   'Análise Visual',
-    texto:    'Gráficos completos da conta compartilhada: distribuição por categoria, evolução mensal e comparativos de período — uma forma clara de entender o <strong>fluxo financeiro do grupo</strong>.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'relatorios',
-    seletor:  '.rel-filtros',
-    icon:     'fa-file-alt',
-    iconColor:'#f97316',
-    secao:    'Relatórios',
-    titulo:   'Relatórios Completos',
-    texto:    'Gere análises detalhadas por período e exporte em <strong>CSV, Excel ou PDF</strong>. Ótimo para acompanhar as finanças do grupo mês a mês.',
-    pos:      'baixo',
-  },
-  {
-    pagina:   'configuracoes',
-    seletor:  '#btnToggleTema',
-    expandir: '.cfg-list',
-    icon:     'fa-sliders-h',
-    iconColor:'#6366f1',
-    secao:    'Configurações',
-    titulo:   'Personalize o App',
-    texto:    'Escolha entre tema <strong>claro ou escuro</strong>, instale o GranaEvo como app na tela inicial e ative as notificações. O botão <em>Como Usar</em> reabre este tour quando quiser.',
-    pos:      'esquerda',
-  },
-];
-
-const PASSO_CONCLUSAO = {
-  pagina:   null,
-  seletor:  null,
-  icon:     'fa-check-circle',
-  iconColor:'#10b981',
-  secao:    null,
-  titulo:   'Tudo pronto para evoluir!',
-  texto:    'Você conhece cada canto do GranaEvo. Comece agora: <strong>lance sua primeira transação</strong>, cadastre suas contas fixas e crie uma reserva. Em poucos dias você terá <em>clareza financeira total</em> — e este tour estará sempre em Configurações → Como Usar.',
-  pos:      'centro',
-  ultimo:   true,
-};
-
-function montarPassos(perfil) {
+// ─────────────────────────────────────────────────────────────────────────────
+//  CATÁLOGO DE CATEGORIAS
+//  Cada passo: { pagina, seletor|seletores, expandir?, icon, iconColor, titulo,
+//                texto, pos, dica? }.  `secao` é injetado a partir da categoria.
+// ─────────────────────────────────────────────────────────────────────────────
+function montarCatalogo(perfil) {
   const { plano = 'Individual', isGuest = false } = perfil;
-  if (isGuest) return [...PASSOS_GUEST, PASSO_CONCLUSAO];
-  const passos = [...PASSOS_BASE];
-  if (plano === 'Casal' || plano === 'Família') passos.push(...PASSOS_CONVIDADOS);
-  passos.push(PASSO_CONCLUSAO);
+  const planoCompartilhado = plano === 'Casal' || plano === 'Família';
+
+  // Texto do passo "Convidar" muda conforme o plano do usuário
+  const textoConvite = isGuest
+    ? 'Os convites são gerenciados pelo <strong>titular da conta</strong>. Como convidado, você já compartilha o mesmo painel — tudo o que o grupo lança aparece para você em tempo real.'
+    : planoCompartilhado
+      ? `Seu <strong>Plano ${plano}</strong> permite convidar pessoas: cada convidado recebe um login próprio e acessa o <strong>mesmo painel</strong>. Você define se ele pode só visualizar ou também editar — e remove o acesso quando quiser.`
+      : 'Quer dividir as finanças com alguém? Os planos <strong>Casal</strong> e <strong>Família</strong> liberam convidados com login próprio sobre o mesmo painel. Faça o upgrade em Gerenciar Assinatura.';
+
+  return [
+    // ═══════════════ DASHBOARD ═══════════════
+    {
+      id: 'dashboard', nome: 'Dashboard', icon: 'fa-house', cor: '#06b6d4',
+      resumo: 'Sua central financeira: tudo de relance.',
+      passos: [
+        {
+          pagina: 'dashboard', seletor: null, pos: 'centro',
+          icon: 'fa-house', iconColor: '#06b6d4',
+          titulo: 'O Dashboard é seu painel de comando',
+          texto: 'É a primeira tela que você vê — um resumo vivo do seu mês. Aqui você sente, em segundos, se está no azul ou no vermelho, o que vence em breve e para onde o dinheiro está indo.',
+          dica: 'Crie o hábito de abrir o Dashboard 1x ao dia. Clareza diária é o que separa quem controla o dinheiro de quem é controlado por ele.',
+        },
+        {
+          pagina: 'dashboard', seletores: ['.sidebar-nav', '.mobile-bottom-nav'], pos: 'centro',
+          icon: 'fa-compass', iconColor: '#6366f1',
+          titulo: 'Navegação principal',
+          texto: 'Tudo a um toque: <strong>Dashboard, Transações, Reservas, Cartões, Gráficos e Relatórios</strong>. No celular a barra fica embaixo — e você pode ativar a <em>navegação por swipe</em> nas Configurações para deslizar entre as seções.',
+        },
+        {
+          pagina: 'dashboard', seletores: ['#btnPeriodoDashboard', '#btnPeriodoDashMobile'], pos: 'baixo',
+          icon: 'fa-calendar-alt', iconColor: '#06b6d4',
+          titulo: 'Viaje no tempo',
+          texto: 'O <strong>seletor de período</strong> reconstrói todo o painel para qualquer mês passado. Quer saber quanto gastou em janeiro? Dois toques e os cards, alertas e contas se ajustam sozinhos.',
+        },
+        {
+          pagina: 'dashboard', seletores: ['.saldo-hero-mobile', '.cards-grid'], pos: 'baixo',
+          icon: 'fa-chart-line', iconColor: '#10b981',
+          titulo: 'Seu mês em quatro números',
+          texto: '<strong>Entradas, Saídas, Saldo e Reservas</strong> — e cada card compara com o mês anterior, então você vê a evolução, não só o número. No celular, o ícone de <em>olho</em> oculta o saldo em locais públicos.',
+        },
+        {
+          pagina: 'dashboard', seletor: '.alertas-vencimento', pos: 'cima',
+          icon: 'fa-bell', iconColor: '#ef4444',
+          titulo: 'Alertas de vencimento',
+          texto: 'O app vigia suas contas por você: detecta o que está <strong>vencido</strong>, vence hoje, em 3 dias ou na semana. Visualize, pague e marque como concluído em um clique.',
+          dica: 'Uma única multa por atraso costuma custar mais que meses de mensalidade do app. Marcar as contas como pagas mantém os alertas precisos.',
+        },
+        {
+          pagina: 'dashboard', seletor: '#sectionContasFixas', pos: 'cima',
+          icon: 'fa-file-invoice-dollar', iconColor: '#f59e0b',
+          titulo: 'Contas fixas',
+          texto: 'Cadastre o que se repete todo mês — <strong>aluguel, internet, energia, academia</strong>. O app gera os alertas sozinho e você marca como paga com um toque. Use <em>"Ver todas"</em> para o histórico completo.',
+        },
+        {
+          pagina: 'dashboard', seletor: '#widgetOndeFoiDinheiro', pos: 'cima',
+          icon: 'fa-search-dollar', iconColor: '#8b5cf6',
+          titulo: 'Onde foi meu dinheiro?',
+          texto: 'Uma análise pronta de <strong>para onde seus gastos estão indo</strong>: categorias campeãs, gráficos interativos e insights. O atalho mais rápido para entender seu padrão de consumo.',
+        },
+      ],
+    },
+
+    // ═══════════════ TRANSAÇÕES ═══════════════
+    {
+      id: 'transacoes', nome: 'Transações', icon: 'fa-exchange-alt', cor: '#10b981',
+      resumo: 'O coração do app: registre tudo que entra e sai.',
+      passos: [
+        {
+          pagina: 'transacoes', seletor: null, pos: 'centro',
+          icon: 'fa-exchange-alt', iconColor: '#10b981',
+          titulo: 'Transações: o coração do GranaEvo',
+          texto: 'Cada real que entra ou sai vira uma transação. É o registro que alimenta os cards, os gráficos, os orçamentos e o score. Quanto mais fiel, mais o app trabalha por você.',
+          dica: 'Não precisa lançar tudo de uma vez. Comece pelos gastos maiores e pegue o hábito — em poucos dias vira automático.',
+        },
+        {
+          pagina: 'transacoes', seletor: '.transaction-form', pos: 'baixo',
+          icon: 'fa-plus-circle', iconColor: '#10b981',
+          titulo: 'Lançar entradas e saídas',
+          texto: 'Registre <strong>Entradas, Saídas e Reservas</strong> em segundos. Para compras parceladas, escolha <strong>Saída no Crédito</strong>, selecione o cartão e as parcelas — o app divide e rastreia <em>cada parcela</em> na fatura certa.',
+        },
+        {
+          pagina: 'transacoes', seletor: '.transaction-form', pos: 'baixo',
+          icon: 'fa-sync-alt', iconColor: '#8b5cf6',
+          titulo: 'Assinaturas recorrentes',
+          texto: 'Netflix, Spotify, academia… escolha a categoria <strong>Assinatura</strong>, vincule o cartão e defina o <strong>dia de cobrança</strong>. O app gera a cobrança <em>automaticamente todo mês</em> — sem você lembrar de nada.',
+          dica: 'Cadastrar todas as assinaturas costuma ser um choque de realidade. É o jeito mais fácil de descobrir aquele R$ 39,90 que você nem lembrava que pagava.',
+        },
+        {
+          pagina: 'transacoes', seletor: '#btnImportarExtrato', pos: 'baixo',
+          icon: 'fa-file-import', iconColor: '#06b6d4',
+          titulo: 'Importar extrato',
+          texto: 'Tem histórico no banco? <strong>Importe o extrato</strong> e traga dezenas de lançamentos de uma vez, sem digitar. Ideal para começar com seus dados reais desde o primeiro dia.',
+        },
+        {
+          pagina: 'transacoes', seletores: ['.mov-busca-wrap', '#movFiltrosWrapper'], pos: 'baixo',
+          icon: 'fa-search', iconColor: '#3b82f6',
+          titulo: 'Busca e filtros',
+          texto: 'Ache qualquer lançamento pela <strong>busca por descrição</strong>. Os filtros mostram só o que importa: últimos 15, 30 ou 60 dias, um mês específico ou <em>todo o período</em>.',
+        },
+        {
+          pagina: 'transacoes', seletor: '#listaMovimentacoes', pos: 'cima',
+          icon: 'fa-pen-to-square', iconColor: '#3b82f6',
+          titulo: 'Errou? É só editar',
+          texto: 'Todo o histórico fica guardado em ordem. <strong>Toque em qualquer item</strong> para editar descrição, categoria e valor — ou excluir. Nenhum erro é permanente: corrija em segundos e os números se reajustam.',
+          dica: 'Não tenha medo de lançar errado. Editar é instantâneo, e um histórico imperfeito vale muito mais que um histórico vazio.',
+        },
+        {
+          pagina: 'transacoes', seletor: '#orcamentosSection', pos: 'baixo',
+          icon: 'fa-wallet', iconColor: '#f59e0b',
+          titulo: 'Orçamentos por categoria',
+          texto: 'Defina <strong>tetos mensais</strong> por tipo de gasto. A barra avisa antes do estouro: <strong style="color:#f59e0b">amarela aos 80%</strong>, <strong style="color:#ef4444">vermelha ao ultrapassar</strong>.',
+          dica: 'Comece com 1 ou 2 categorias que costumam fugir do controle (delivery, lazer). Limitar tudo de uma vez desanima — limitar o essencial funciona.',
+        },
+      ],
+    },
+
+    // ═══════════════ RESERVAS ═══════════════
+    {
+      id: 'reservas', nome: 'Reservas', icon: 'fa-piggy-bank', cor: '#a78bfa',
+      resumo: 'Metas, fundo de emergência e o poder de guardar.',
+      passos: [
+        {
+          pagina: 'reservas', seletor: null, pos: 'centro',
+          icon: 'fa-piggy-bank', iconColor: '#a78bfa',
+          titulo: 'Por que reservar muda tudo',
+          texto: 'Reserva é dinheiro com destino: o <strong>fundo de emergência</strong> que te protege de um imprevisto e as <strong>metas</strong> que transformam sonhos em plano. Sem reserva, qualquer susto vira dívida.',
+          dica: 'A regra de ouro: monte primeiro um fundo de emergência de 3 a 6 meses dos seus custos fixos. Só depois parta para metas como viagem ou carro.',
+        },
+        {
+          pagina: 'reservas', seletor: '.reservas-sidebar', pos: 'direita',
+          icon: 'fa-bullseye', iconColor: '#a78bfa',
+          titulo: 'Crie metas com o simulador',
+          texto: 'Dê nome e valor-alvo ao seu objetivo. O <em>simulador de aportes</em> calcula quanto guardar por mês — com rendimento <strong>CDI</strong> ou taxa personalizada. Já tem dinheiro guardado? Use <em>"Já possuo reservas"</em> para cadastrar sem afetar seu saldo.',
+        },
+        {
+          pagina: 'reservas', seletor: '.reservas-main', pos: 'esquerda',
+          icon: 'fa-chart-area', iconColor: '#a78bfa',
+          titulo: 'Acompanhe a evolução',
+          texto: 'Selecione uma reserva e veja o <strong>progresso geral</strong> e a <strong>evolução dos últimos 12 meses</strong> em gráficos. Ver a barra subir mês a mês é o que mantém a disciplina viva.',
+        },
+        {
+          pagina: 'reservas', seletores: ['#btnGuardar', '#btnAjustar', '#btnRetirar'], pos: 'cima',
+          icon: 'fa-sliders-h', iconColor: '#10b981',
+          titulo: 'Guardar, ajustar e retirar',
+          texto: 'Com uma reserva selecionada, você tem três ações: <strong>Guardar Dinheiro</strong> (faz um aporte e desconta do saldo), <strong>Ajustar Valor</strong> (corrige o total guardado ou muda a meta sem mexer no saldo) e <strong>Retirar</strong> (devolve o dinheiro ao saldo, com rastreio completo).',
+          dica: 'Use "Ajustar Valor" quando o saldo real da sua poupança diverge do app — ele só acerta o número. "Retirar" é para quando você realmente vai usar o dinheiro.',
+        },
+      ],
+    },
+
+    // ═══════════════ CARTÕES ═══════════════
+    {
+      id: 'cartoes', nome: 'Cartões', icon: 'fa-credit-card', cor: '#ec4899',
+      resumo: 'Faturas, limites e parcelas sob controle.',
+      passos: [
+        {
+          pagina: 'cartoes', seletor: null, pos: 'centro',
+          icon: 'fa-credit-card', iconColor: '#ec4899',
+          titulo: 'Cartões sem sustos',
+          texto: 'O cartão é ótimo servo e péssimo patrão. Aqui você enxerga cada fatura por dentro — antes de ela chegar — para que o crédito trabalhe a seu favor, não contra.',
+          dica: 'A pergunta certa antes de parcelar não é "cabe na parcela?", e sim "essa parcela vai estar competindo com o quê nos próximos meses?".',
+        },
+        {
+          pagina: 'cartoes', seletor: '#cartoesGrid', pos: 'centro',
+          icon: 'fa-credit-card', iconColor: '#ec4899',
+          titulo: 'Seus cartões de crédito',
+          texto: 'Cadastre cartões com <strong>limite e dia de fechamento</strong>. Cada fatura mostra compra a compra, com rastreamento de parcelas e assinaturas. Veja quanto do limite está comprometido — e <em>congele</em> um cartão para pausar o uso.',
+        },
+      ],
+    },
+
+    // ═══════════════ GRÁFICOS ═══════════════
+    {
+      id: 'graficos', nome: 'Gráficos', icon: 'fa-chart-pie', cor: '#06b6d4',
+      resumo: 'Seus números viram imagem e fazem sentido.',
+      passos: [
+        {
+          pagina: 'graficos', seletor: null, pos: 'centro',
+          icon: 'fa-chart-pie', iconColor: '#06b6d4',
+          titulo: 'Ver para entender',
+          texto: 'Números numa tabela escondem padrões; um gráfico os revela na hora. É aqui que você descobre que "saiu mais que entrou" tem nome, categoria e tendência.',
+        },
+        {
+          pagina: 'graficos', seletor: '.graficos-filtros', pos: 'baixo',
+          icon: 'fa-chart-pie', iconColor: '#06b6d4',
+          titulo: 'Gere sua análise visual',
+          texto: 'Escolha mês e ano, a visão (<em>Individual, Casal ou Família</em>) e toque em <strong>Gerar Gráficos</strong>: distribuição por categoria, evolução do saldo e muito mais ganham vida.',
+        },
+        {
+          pagina: 'graficos', seletor: '.comparacao-toggle', pos: 'baixo',
+          icon: 'fa-balance-scale', iconColor: '#06b6d4',
+          titulo: 'Comparativos de período',
+          texto: 'Ative os <strong>gráficos comparativos</strong> para colocar dois meses lado a lado. Gastou mais ou menos? Em qual categoria? Ideal para medir o efeito das suas decisões.',
+          dica: 'Compare sempre o mês atual com o mesmo mês do ano passado: revela gastos sazonais (festas, impostos, matrícula) que o mês anterior esconde.',
+        },
+      ],
+    },
+
+    // ═══════════════ RELATÓRIOS ═══════════════
+    {
+      id: 'relatorios', nome: 'Relatórios', icon: 'fa-file-alt', cor: '#f97316',
+      resumo: 'Análises profundas, score e exportação.',
+      passos: [
+        {
+          pagina: 'relatorios', seletor: null, pos: 'centro',
+          icon: 'fa-file-alt', iconColor: '#f97316',
+          titulo: 'O retrato completo das suas finanças',
+          texto: 'Enquanto os gráficos mostram um recorte, os relatórios costuram a história inteira: onde foi seu dinheiro, como seu patrimônio evolui e quão saudável está sua vida financeira.',
+        },
+        {
+          pagina: 'relatorios', seletor: '.rel-filtros', pos: 'baixo',
+          icon: 'fa-file-alt', iconColor: '#f97316',
+          titulo: 'Gere relatórios completos',
+          texto: 'Escolha o tipo — <em>Individual, Casal, Família ou Visão Geral</em> — selecione o período e gere em um toque. Análises profundas de gastos, evolução patrimonial e histórico.',
+        },
+        {
+          pagina: 'relatorios', seletor: '.rel-header-actions', pos: 'baixo',
+          icon: 'fa-file-export', iconColor: '#f97316',
+          titulo: 'Exporte e compartilhe',
+          texto: 'Leve seus dados para onde quiser: <strong>CSV, Excel, PDF</strong> ou uma <em>apresentação animada</em>. Perfeito para planejar com a família, prestar contas ou guardar um registro mensal.',
+        },
+        {
+          pagina: 'relatorios', seletor: null, pos: 'centro',
+          icon: 'fa-trophy', iconColor: '#f59e0b',
+          titulo: 'Score financeiro',
+          texto: 'O app avalia sua <strong>saúde financeira</strong> com base em orçamentos cumpridos, reservas, dívidas e fundo de emergência — e gera uma pontuação com <em>dicas personalizadas</em> para subir de nível.',
+          dica: 'Trate o score como um jogo cooperativo com você mesmo: a meta não é a nota perfeita, é vê-la subir um pouquinho a cada mês.',
+        },
+      ],
+    },
+
+    // ═══════════════ NOTIFICAÇÕES ═══════════════
+    {
+      id: 'notificacoes', nome: 'Notificações', icon: 'fa-bell', cor: '#eab308',
+      resumo: 'O app te avisa antes do problema acontecer.',
+      passos: [
+        {
+          pagina: 'dashboard', seletor: '#btnNotificacoes', pos: 'esquerda',
+          icon: 'fa-bell', iconColor: '#eab308',
+          titulo: 'Central de notificações',
+          texto: 'Vencimentos, orçamentos estourando, novidades do app — tudo chega aqui. É a forma do GranaEvo te cutucar no momento certo, antes do prejuízo.',
+        },
+        {
+          pagina: 'configuracoes', seletor: '#btnTogglePush', expandir: '.cfg-list', pos: 'esquerda',
+          icon: 'fa-bell', iconColor: '#0ea5e9',
+          titulo: 'Notificações push no celular',
+          texto: 'Ative as <strong>notificações push</strong> nas Configurações para receber alertas direto no celular, <em>mesmo com o app fechado</em>. Assim você nunca depende de lembrar de abrir o app.',
+          dica: 'Push é o que transforma o app de "lugar que eu visito" em "assistente que me avisa". Vale muito a pena ativar.',
+        },
+      ],
+    },
+
+    // ═══════════════ CONFIGURAÇÕES ═══════════════
+    {
+      id: 'configuracoes', nome: 'Configurações', icon: 'fa-cog', cor: '#6366f1',
+      resumo: 'Conta, convidados, tema, backup e plano.',
+      passos: [
+        {
+          pagina: 'configuracoes', seletor: null, pos: 'centro',
+          icon: 'fa-cog', iconColor: '#6366f1',
+          titulo: 'O app do seu jeito',
+          texto: 'Aqui você cuida da conta, da segurança, da aparência e dos seus dados. Vale conhecer cada opção uma vez — depois é só ajustar quando precisar.',
+        },
+        {
+          pagina: 'configuracoes', seletor: '#btnAlterarSenha', expandir: '.cfg-list', pos: 'direita',
+          icon: 'fa-user-shield', iconColor: '#8b5cf6',
+          titulo: 'Conta e segurança',
+          texto: 'Altere sua <strong>senha</strong> quando quiser e use <strong>Trocar Perfil</strong> para alternar entre perfis da mesma conta. Cada perfil tem dados totalmente separados — ótimo para separar finanças pessoais e do negócio.',
+        },
+        {
+          pagina: 'configuracoes', seletor: '#btnAlterarEmail', expandir: '.cfg-list', pos: 'direita',
+          icon: 'fa-user-plus', iconColor: '#10b981',
+          titulo: 'Convidar usuário',
+          texto: textoConvite,
+          dica: planoCompartilhado
+            ? 'Finanças em casal/família funcionam melhor quando todos enxergam o mesmo painel. Transparência evita a maior parte das brigas por dinheiro.'
+            : null,
+        },
+        {
+          pagina: 'configuracoes', seletor: '#btnToggleTema', expandir: '.cfg-list', pos: 'esquerda',
+          icon: 'fa-sliders-h', iconColor: '#6366f1',
+          titulo: 'Personalize o app',
+          texto: 'Alterne entre tema <strong>claro ou escuro</strong>, <strong>instale o GranaEvo</strong> na tela inicial como aplicativo, ative <strong>push</strong> e a <strong>navegação por swipe</strong>. O modo offline mantém seus dados acessíveis mesmo sem internet.',
+        },
+        {
+          pagina: 'configuracoes', seletor: '#btnHistoricoBackup', expandir: '.cfg-list', pos: 'esquerda',
+          icon: 'fa-shield-alt', iconColor: '#14b8a6',
+          titulo: 'Seus dados, protegidos',
+          texto: 'O <strong>backup automático</strong> guarda os últimos 7 dias — restaure qualquer versão em um toque. Quer recomeçar? <em>Resetar Perfil</em> apaga os dados financeiros, mas cria um backup antes, por segurança.',
+        },
+        {
+          pagina: 'configuracoes', seletor: '#btnGerenciarAssinatura', expandir: '.cfg-list', pos: 'esquerda',
+          icon: 'fa-crown', iconColor: '#f59e0b',
+          titulo: 'Seu plano e este guia',
+          texto: 'Gerencie a assinatura — <strong>alterar plano, trocar cartão ou cancelar</strong> — em Gerenciar Assinatura. E o botão <em>Como Usar</em> reabre esta Central de Aprendizado sempre que precisar.',
+        },
+      ],
+    },
+
+    // ═══════════════ PERFIL ═══════════════
+    {
+      id: 'perfil', nome: 'Perfil', icon: 'fa-user-circle', cor: '#f59e0b',
+      resumo: 'Sua foto, seus níveis e suas conquistas.',
+      passos: [
+        {
+          pagina: 'dashboard', seletores: ['#userPhotoBtn', '#mobileUserPhoto'], pos: 'esquerda',
+          icon: 'fa-user-circle', iconColor: '#f59e0b',
+          titulo: 'Sua foto abre o hub de perfil',
+          texto: 'Toque na sua <strong>foto de perfil</strong> para abrir o hub: trocar a imagem, alternar entre perfis e acessar seu progresso. É o seu canto pessoal dentro do app.',
+        },
+        {
+          pagina: 'dashboard', seletores: ['#userPhotoBtn', '#mobileUserPhoto'], pos: 'esquerda',
+          icon: 'fa-medal', iconColor: '#f59e0b',
+          titulo: 'Níveis e títulos',
+          texto: 'Usar o app com consistência rende <strong>XP</strong> e faz você subir de nível — de <em>Iniciante</em> a <em>Lenda das Finanças</em>. Não é só enfeite: é um termômetro lúdico de quão ativo você está cuidando do seu dinheiro.',
+        },
+        {
+          pagina: 'dashboard', seletores: ['#userPhotoBtn', '#mobileUserPhoto'], pos: 'esquerda',
+          icon: 'fa-trophy', iconColor: '#fbbf24',
+          titulo: 'Conquistas',
+          texto: 'Dentro do hub de perfil você encontra as <strong>Conquistas</strong>: dezenas de marcos para desbloquear, das mais <em>comuns</em> às <em>lendárias</em> — primeira reserva, primeiro milhão, contas sempre em dia… Cada uma conta uma parte da sua jornada.',
+          dica: 'Conquistas existem para tornar o hábito divertido. Use-as como pequenas metas: bater uma de cada vez é mais leve do que mirar tudo de uma vez.',
+        },
+      ],
+    },
+  ];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TRILHA ESSENCIAL — primeiro contato, curta e certeira
+// ─────────────────────────────────────────────────────────────────────────────
+function montarEssencial(perfil) {
+  const { isGuest = false } = perfil;
+  const passos = [
+    {
+      pagina: null, seletor: null, pos: 'centro', secao: null,
+      icon: 'fa-rocket', iconColor: '#10b981',
+      titulo: isGuest ? 'Bem-vindo ao GranaEvo!' : 'Vamos começar pelo essencial',
+      texto: isGuest
+        ? 'Você foi convidado para acompanhar as finanças do grupo. Este guia rápido mostra o básico em poucos passos — depois você pode se aprofundar quando quiser.'
+        : 'Em menos de um minuto você vai dominar o básico: lançar, organizar e guardar. O resto você aprofunda quando quiser, categoria por categoria.',
+    },
+    {
+      pagina: 'dashboard', seletores: ['.sidebar-nav', '.mobile-bottom-nav'], pos: 'centro', secao: 'Início',
+      icon: 'fa-compass', iconColor: '#6366f1',
+      titulo: 'Navegação',
+      texto: 'Tudo a um toque: <strong>Dashboard, Transações, Reservas, Cartões, Gráficos e Relatórios</strong>. No celular, a barra fica na parte inferior da tela.',
+    },
+    {
+      pagina: 'transacoes', seletor: '.transaction-form', pos: 'baixo', secao: 'Transações',
+      icon: 'fa-plus-circle', iconColor: '#10b981',
+      titulo: 'Lance sua primeira transação',
+      texto: 'Registre <strong>entradas e saídas</strong> em segundos. É o gesto que alimenta todo o resto do app. Errou? Toque no item no histórico e edite — nada é permanente.',
+    },
+    {
+      pagina: 'dashboard', seletor: '#sectionContasFixas', pos: 'cima', secao: 'Contas',
+      icon: 'fa-file-invoice-dollar', iconColor: '#f59e0b',
+      titulo: 'Cadastre suas contas fixas',
+      texto: 'Aluguel, internet, energia… o que se repete todo mês. O app gera os <strong>alertas de vencimento</strong> sozinho para você nunca mais pagar multa por esquecimento.',
+    },
+    {
+      pagina: 'reservas', seletor: '.reservas-sidebar', pos: 'direita', secao: 'Reservas',
+      icon: 'fa-piggy-bank', iconColor: '#a78bfa',
+      titulo: 'Crie uma reserva',
+      texto: 'Dê nome e valor a um objetivo e o <em>simulador</em> calcula quanto guardar por mês.',
+      dica: 'Comece pelo fundo de emergência: 3 a 6 meses dos seus custos fixos. É a reserva que te protege de transformar qualquer imprevisto em dívida.',
+    },
+  ];
+
+  passos.push({
+    pagina: null, seletor: null, pos: 'centro', secao: null, ultimo: true,
+    icon: 'fa-circle-check', iconColor: '#10b981',
+    titulo: 'Pronto para evoluir!',
+    texto: 'Esse era o essencial. Quando quiser <strong>se aprofundar</strong> em qualquer área — Reservas, Cartões, Gráficos, Perfil e mais — abra a Central de Aprendizado em <em>Configurações → Como Usar</em>.',
+  });
   return passos;
 }
 
-// Capítulos derivados dos passos (1 capítulo por seção, na ordem)
-function montarCapitulos(passos) {
-  const caps = [];
-  passos.forEach((p, i) => {
-    const nome = p.secao || (i === 0 ? 'Boas-vindas' : (p.ultimo ? 'Conclusão' : 'Início'));
-    const last = caps[caps.length - 1];
-    if (!last || last.nome !== nome) caps.push({ nome, inicio: i, qtd: 1 });
-    else last.qtd++;
-  });
-  return caps;
+// ─────────────────────────────────────────────────────────────────────────────
+//  Passos de encerramento
+// ─────────────────────────────────────────────────────────────────────────────
+function passoFimCategoria(catNome) {
+  return {
+    pagina: null, seletor: null, pos: 'centro', ultimo: true,
+    icon: 'fa-circle-check', iconColor: '#10b981',
+    titulo: `Guia de ${catNome} concluído!`,
+    texto: 'Você dominou esta seção. Volte ao menu para explorar outra categoria — ou comece a aplicar agora mesmo.',
+    voltarHub: true,
+  };
 }
 
-// ── Estado ─────────────────────────────────────────────────────────────────────
+const PASSO_CONCLUSAO_COMPLETO = {
+  pagina: null, seletor: null, pos: 'centro', secao: null, ultimo: true,
+  icon: 'fa-circle-check', iconColor: '#10b981',
+  titulo: 'Você conhece cada canto do GranaEvo!',
+  texto: 'Agora é com você: <strong>lance, organize e guarde</strong>. Em poucos dias você terá clareza financeira total — e esta Central de Aprendizado estará sempre em <em>Configurações → Como Usar</em>.',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Estado
+// ─────────────────────────────────────────────────────────────────────────────
+let _catalogo  = [];
+let _perfil    = {};
+let _modo      = 'hub';     // 'hub' | 'seq'
+let _seqTipo   = null;      // 'categoria' | 'completo' | 'essencial'
 let _passos    = [];
-let _capitulos = [];
 let _passo     = 0;
 let _direcao   = 'centro';
 let _backdrop  = null;
 let _spotlight = null;
 let _card      = null;
 let _ativo     = false;
-let _spRectAtual = null;   // rect do spotlight do passo atual (p/ reposicionamento)
+let _spRectAtual = null;
 let _resizeTimer = null;
 
-// ── API pública ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  API pública
+// ─────────────────────────────────────────────────────────────────────────────
 export function iniciarTutorial(perfil = {}) {
   if (_ativo) return;
-  _ativo     = true;
-  _passo     = 0;
-  _direcao   = 'centro';
-  _passos    = montarPassos(perfil);
-  _capitulos = montarCapitulos(_passos);
+  _ativo    = true;
+  _perfil   = perfil || {};
+  _catalogo = montarCatalogo(_perfil);
   _montar();
-  _ir(0);
+
+  if (perfil.trilha === 'essencial') {
+    _rodarEssencial();
+  } else {
+    _abrirHub();
+  }
 }
 
-// ── Retomada de progresso (sessionStorage — nunca dados sensíveis) ─────────────
-function _salvarProgresso(idx) {
-  try { sessionStorage.setItem(CHAVE_RETOMADA, String(idx)); } catch { /* storage bloqueado */ }
-}
-function _lerProgresso() {
-  try {
-    const v = Number(sessionStorage.getItem(CHAVE_RETOMADA));
-    return Number.isInteger(v) && v > 1 && v < _passos.length - 1 ? v : null;
-  } catch { return null; }
-}
-function _limparProgresso() {
-  try { sessionStorage.removeItem(CHAVE_RETOMADA); } catch { /* noop */ }
-}
-
-// ── Montagem ───────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Montagem / desmontagem
+// ─────────────────────────────────────────────────────────────────────────────
 function _montar() {
   _backdrop  = _el('div', 'tut-backdrop');
   _spotlight = _el('div', 'tut-spotlight tut-spot-oculto');
+  // anel de pulso (GPU-only: anima transform/opacity, nunca box-shadow)
+  _spotlight.appendChild(_el('span', 'tut-spot-ring'));
   _card      = _el('div', 'tut-card');
   document.body.append(_backdrop, _spotlight, _card);
 
@@ -485,11 +480,8 @@ function _montar() {
   window.addEventListener('resize', _onResize);
 }
 
-function _desmontar(concluiu = false) {
+function _desmontar() {
   if (!_card) return;
-
-  if (concluiu) _limparProgresso();
-  else if (_passo > 1) _salvarProgresso(_passo);
 
   _card.classList.add('tut-saindo');
   _spotlight?.classList.add('tut-spot-oculto');
@@ -506,7 +498,7 @@ function _desmontar(concluiu = false) {
     _card?.remove();
     _backdrop = _spotlight = _card = null;
     _ativo = false;
-  }, 280);
+  }, 260);
 }
 
 function _blk(e)      { e.preventDefault(); }
@@ -514,22 +506,23 @@ function _blkWheel(e) { if (!e.target.closest('.tut-card')) e.preventDefault(); 
 
 function _teclas(e) {
   if (!_ativo || !_card) return;
+  if (e.key === 'Escape') {
+    if (_modo === 'seq') { _abrirHub(); return; }
+    _desmontar();
+    return;
+  }
+  if (_modo !== 'seq') return;
   const ultimo   = _passo === _passos.length - 1 || _passos[_passo]?.ultimo;
   const primeiro = _passo === 0;
-  if (e.key === 'Escape') {
-    // Fecha o menu de capítulos primeiro, se aberto
-    const painel = _card.querySelector('.tut-cap-panel');
-    if (painel && !painel.classList.contains('js-hidden')) { _toggleCapitulos(false); return; }
-    _desmontar();
-  }
-  else if (e.key === 'ArrowRight' && !ultimo)   _ir(_passo + 1);
-  else if (e.key === 'ArrowLeft'  && !primeiro) _ir(_passo - 1);
+  if (e.key === 'ArrowRight' && !ultimo)   _ir(_passo + 1);
+  else if (e.key === 'ArrowLeft' && !primeiro) _ir(_passo - 1);
 }
 
 function _onResize() {
   clearTimeout(_resizeTimer);
   _resizeTimer = setTimeout(() => {
     if (!_ativo || !_card) return;
+    if (_modo === 'hub') { _posCard(null, 'centro', true); return; }
     const p = _passos[_passo];
     const spRect = _resolverRect(p);
     _spRectAtual = spRect;
@@ -538,16 +531,139 @@ function _onResize() {
   }, 150);
 }
 
-// ── Navegação ──────────────────────────────────────────────────────────────────
-async function _ir(idx) {
-  if (!_ativo) return;
-  idx = Math.max(0, Math.min(_passos.length - 1, idx));
+// ─────────────────────────────────────────────────────────────────────────────
+//  HUB — escolha de categorias
+// ─────────────────────────────────────────────────────────────────────────────
+function _abrirHub() {
+  _modo    = 'hub';
+  _seqTipo = null;
+  _direcao = 'centro';
+  _spotlight?.classList.add('tut-spot-oculto');
+  _renderHub();
+  requestAnimationFrame(() => { _posCard(null, 'centro'); });
+}
 
+function _renderHub() {
+  _card.innerHTML = '';
+  _card.style.removeProperty('--tut-color');
+
+  const head = _el('div', 'tut-hub-head');
+  const kicker = _el('span', 'tut-hub-kicker');
+  kicker.innerHTML = '<i class="fas fa-graduation-cap" aria-hidden="true"></i> Central de Aprendizado';
+  const h2 = _el('h2', 'tut-hub-title');
+  h2.textContent = 'O que você quer aprender?';
+  const sub = _el('p', 'tut-hub-sub');
+  sub.textContent = 'Escolha uma área para um guia aprofundado — ou faça o tour completo de uma vez.';
+  head.append(kicker, h2, sub);
+
+  const grid = _el('div', 'tut-hub-grid');
+  _catalogo.forEach((cat, i) => {
+    const btn = _el('button', 'tut-hub-cat');
+    btn.type = 'button';
+    btn.style.setProperty('--cat-cor', cat.cor);
+    btn.style.setProperty('--cat-delay', (i * 32) + 'ms');
+
+    const ic = _el('span', 'tut-hub-cat-icon');
+    const i1 = document.createElement('i');
+    i1.className = `fas ${cat.icon}`;
+    i1.setAttribute('aria-hidden', 'true');
+    ic.appendChild(i1);
+
+    const txt = _el('span', 'tut-hub-cat-txt');
+    const nm = _el('span', 'tut-hub-cat-nome');
+    nm.textContent = cat.nome;
+    const rs = _el('span', 'tut-hub-cat-resumo');
+    rs.textContent = cat.resumo;
+    txt.append(nm, rs);
+
+    const arrow = document.createElement('i');
+    arrow.className = 'fas fa-chevron-right tut-hub-cat-seta';
+    arrow.setAttribute('aria-hidden', 'true');
+
+    btn.append(ic, txt, arrow);
+    btn.addEventListener('click', () => _rodarCategoria(cat.id));
+    grid.appendChild(btn);
+  });
+
+  const ctas = _el('div', 'tut-hub-ctas');
+  const cTour = _el('button', 'tut-hub-cta tut-hub-cta--primaria');
+  cTour.type = 'button';
+  cTour.innerHTML = '<i class="fas fa-route" aria-hidden="true"></i> Fazer o Tour Completo';
+  cTour.addEventListener('click', _rodarCompleto);
+
+  const cEss = _el('button', 'tut-hub-cta');
+  cEss.type = 'button';
+  cEss.innerHTML = '<i class="fas fa-bolt" aria-hidden="true"></i> Trilha Essencial (rápida)';
+  cEss.addEventListener('click', _rodarEssencial);
+
+  ctas.append(cTour, cEss);
+
+  const footer = _el('div', 'tut-hub-footer');
+  const btnFechar = _el('button', 'tut-btn-pular');
+  btnFechar.type = 'button';
+  btnFechar.textContent = 'Fechar';
+  btnFechar.addEventListener('click', () => _desmontar());
+  footer.appendChild(btnFechar);
+
+  _card.append(head, grid, ctas, footer);
+
+  _card.setAttribute('tabindex', '0');
+  _card.setAttribute('role', 'dialog');
+  _card.setAttribute('aria-modal', 'true');
+  _card.setAttribute('aria-label', 'Central de Aprendizado do GranaEvo');
+  requestAnimationFrame(() => _card?.focus());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Sequências (categoria / completo / essencial)
+// ─────────────────────────────────────────────────────────────────────────────
+function _injetarSecao(passos, secao) {
+  return passos.map(p => ({ ...p, secao: p.secao ?? secao }));
+}
+
+function _rodarCategoria(id) {
+  const cat = _catalogo.find(c => c.id === id);
+  if (!cat) { _abrirHub(); return; }
+  _seqTipo = 'categoria';
+  _passos  = [..._injetarSecao(cat.passos, cat.nome), passoFimCategoria(cat.nome)];
+  _iniciarSeq();
+}
+
+function _rodarCompleto() {
+  _seqTipo = 'completo';
+  const passos = [];
+  _catalogo.forEach(cat => passos.push(..._injetarSecao(cat.passos, cat.nome)));
+  passos.push(PASSO_CONCLUSAO_COMPLETO);
+  _passos = passos;
+  _iniciarSeq();
+}
+
+function _rodarEssencial() {
+  _seqTipo = 'essencial';
+  _passos  = montarEssencial(_perfil);
+  _iniciarSeq();
+}
+
+function _iniciarSeq() {
+  _modo    = 'seq';
+  _passo   = 0;
+  _direcao = 'centro';
+  _ir(0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Navegação de passos
+// ─────────────────────────────────────────────────────────────────────────────
+async function _ir(idx) {
+  if (!_ativo || _modo !== 'seq') return;
+  idx = Math.max(0, Math.min(_passos.length - 1, idx));
   _direcao = idx > _passo ? 'avancar' : (idx < _passo ? 'voltar' : _direcao);
 
   const p = _passos[idx];
   _passo  = idx;
-  if (idx > 1 && !p.ultimo) _salvarProgresso(idx);
+
+  // Esconde o spotlight durante a transição (o fade mascara o reposicionamento)
+  _spotlight.classList.add('tut-spot-oculto');
 
   const paginaAtual = document.querySelector('.page.active')?.id?.replace('Page', '');
   if (p.pagina && paginaAtual !== p.pagina) {
@@ -555,18 +671,18 @@ async function _ir(idx) {
     await _esperarPagina(p.pagina);
   }
 
-  // Aguarda o elemento-alvo existir (seções com conteúdo lazy-loaded)
   await _esperarAlvo(p);
 
-  let spRect = _resolverRect(p);
   const alvo = _resolverAlvo(p);
-
   if (alvo) {
     alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await _wait(400);
-    spRect = _resolverRect(p);
+    await _wait(360);
   }
 
+  // Passo ainda é o atual? (usuário pode ter navegado durante o await)
+  if (!_ativo || _modo !== 'seq' || _passos[_passo] !== p) return;
+
+  const spRect = _resolverRect(p);
   _spRectAtual = spRect;
   const iconColor = p.iconColor || '#10b981';
 
@@ -585,6 +701,11 @@ async function _ir(idx) {
   _posCard(spRect, p.pos);
 }
 
+function _finalizarSeq() {
+  if (_seqTipo === 'categoria') _abrirHub();
+  else _desmontar();
+}
+
 // Resolve o elemento principal do passo (considerando `expandir`)
 function _resolverAlvo(p) {
   let alvo = null;
@@ -598,7 +719,6 @@ function _resolverAlvo(p) {
   return alvo;
 }
 
-// Resolve o retângulo do spotlight do passo
 function _resolverRect(p) {
   if (p.seletores) return _unionRect(p.seletores);
   const alvo = _resolverAlvo(p);
@@ -607,16 +727,14 @@ function _resolverRect(p) {
   return r.height > 0 ? r : null;
 }
 
-// Aguarda a página de destino ficar ativa (até ~1.6s)
 async function _esperarPagina(pagina) {
   for (let i = 0; i < 16; i++) {
     await _wait(100);
     const atual = document.querySelector('.page.active')?.id?.replace('Page', '');
-    if (atual === pagina) { await _wait(180); return; }
+    if (atual === pagina) { await _wait(160); return; }
   }
 }
 
-// Aguarda o alvo existir no DOM (conteúdo lazy — até ~1.2s)
 async function _esperarAlvo(p) {
   const sel = p.seletor || (p.seletores && p.seletores[0]);
   if (!sel) return;
@@ -626,7 +744,9 @@ async function _esperarAlvo(p) {
   }
 }
 
-// ── Spotlight ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Spotlight  (geometria instantânea — só opacidade transiciona; pulso = anel)
+// ─────────────────────────────────────────────────────────────────────────────
 function _posSpotlight(rect) {
   const pad = 12;
   Object.assign(_spotlight.style, {
@@ -652,7 +772,9 @@ function _unionRect(sels) {
   return any ? { top, left, bottom, right, width: right - left, height: bottom - top } : null;
 }
 
-// ── Card ───────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Card de passo
+// ─────────────────────────────────────────────────────────────────────────────
 function _renderCard(p, idx) {
   const total    = _passos.length;
   const primeiro = idx === 0;
@@ -663,12 +785,13 @@ function _renderCard(p, idx) {
   _card.innerHTML = '';
   _card.style.setProperty('--tut-color', iconColor);
 
-  // ── Header ─────────────────────────────────────────────────────
+  // ── Header ──
   const header = _el('div', 'tut-header');
 
   const progressWrap = _el('div', 'tut-progress-wrap');
   const progressBar  = _el('div', 'tut-progress-bar');
   progressBar.style.width = pct + '%';
+  progressBar.style.background = iconColor;
   progressWrap.appendChild(progressBar);
 
   const headerMeta = _el('div', 'tut-header-meta');
@@ -683,69 +806,22 @@ function _renderCard(p, idx) {
   }
 
   const headerRight = _el('div', 'tut-header-right');
-
   const badge = _el('span', 'tut-badge');
   badge.setAttribute('aria-label', `Passo ${idx + 1} de ${total}`);
   badge.textContent = `${idx + 1} / ${total}`;
 
-  // Botão do menu de capítulos
-  const btnCaps = _el('button', 'tut-cap-btn');
-  btnCaps.type = 'button';
-  btnCaps.innerHTML = '<i class="fas fa-list-ul" aria-hidden="true"></i>';
-  btnCaps.setAttribute('aria-label', 'Abrir menu de capítulos');
-  btnCaps.setAttribute('aria-expanded', 'false');
-  btnCaps.onclick = () => _toggleCapitulos();
+  const btnHome = _el('button', 'tut-home-btn');
+  btnHome.type = 'button';
+  btnHome.innerHTML = '<i class="fas fa-grip" aria-hidden="true"></i>';
+  btnHome.title = 'Voltar ao menu de categorias';
+  btnHome.setAttribute('aria-label', 'Voltar ao menu de categorias');
+  btnHome.addEventListener('click', () => _abrirHub());
 
-  headerRight.appendChild(badge);
-  headerRight.appendChild(btnCaps);
+  headerRight.append(badge, btnHome);
+  headerMeta.append(secaoEl, headerRight);
+  header.append(progressWrap, headerMeta);
 
-  headerMeta.appendChild(secaoEl);
-  headerMeta.appendChild(headerRight);
-  header.appendChild(progressWrap);
-  header.appendChild(headerMeta);
-
-  // Dots = capítulos (1 ponto por seção, clicável)
-  const capAtualIdx = _capituloDoPasso(idx);
-  const dotsWrap = _el('div', 'tut-dots');
-  _capitulos.forEach((cap, ci) => {
-    const cls = ci === capAtualIdx ? 'tut-dot tut-dot-ativo' : ci < capAtualIdx ? 'tut-dot tut-dot-feito' : 'tut-dot';
-    const dot = _el('button', cls);
-    dot.type = 'button';
-    dot.setAttribute('aria-label', `Ir para ${cap.nome}`);
-    dot.title = cap.nome;
-    dot.addEventListener('click', () => { if (ci !== capAtualIdx) _ir(cap.inicio); });
-    dotsWrap.appendChild(dot);
-  });
-  header.appendChild(dotsWrap);
-
-  // Painel de capítulos (oculto por padrão)
-  const capPanel = _el('div', 'tut-cap-panel js-hidden');
-  capPanel.setAttribute('role', 'menu');
-  capPanel.setAttribute('aria-label', 'Capítulos do tutorial');
-  _capitulos.forEach((cap, ci) => {
-    const item = _el('button', 'tut-cap-item' + (ci === capAtualIdx ? ' tut-cap-item--ativo' : ''));
-    item.type = 'button';
-    item.setAttribute('role', 'menuitem');
-
-    const icEl = document.createElement('i');
-    icEl.className = `fas ${_secaoIcon(cap.nome)}`;
-    icEl.setAttribute('aria-hidden', 'true');
-
-    const nomeEl = _el('span', 'tut-cap-nome');
-    nomeEl.textContent = cap.nome;
-
-    const qtdEl = _el('span', 'tut-cap-qtd');
-    qtdEl.textContent = cap.qtd > 1 ? `${cap.qtd} passos` : '1 passo';
-
-    item.appendChild(icEl);
-    item.appendChild(nomeEl);
-    item.appendChild(qtdEl);
-    item.addEventListener('click', () => { _toggleCapitulos(false); _ir(cap.inicio); });
-    capPanel.appendChild(item);
-  });
-  header.appendChild(capPanel);
-
-  // ── Body ───────────────────────────────────────────────────────
+  // ── Body ──
   const body = _el('div', 'tut-body');
 
   const stepNum = _el('span', 'tut-step-num');
@@ -754,9 +830,9 @@ function _renderCard(p, idx) {
   body.appendChild(stepNum);
 
   const iconWrap = _el('div', 'tut-icon-wrap');
-  iconWrap.style.background    = iconColor + '18';
-  iconWrap.style.borderColor   = iconColor + '40';
-  iconWrap.style.boxShadow     = `0 4px 24px ${_hexToRgba(iconColor, 0.28)}`;
+  iconWrap.style.background  = iconColor + '18';
+  iconWrap.style.borderColor = iconColor + '40';
+  iconWrap.style.boxShadow   = `0 4px 24px ${_hexToRgba(iconColor, 0.28)}`;
   const iconEl = document.createElement('i');
   iconEl.className = `fas ${p.icon || 'fa-star'}`;
   iconEl.style.color = iconColor;
@@ -767,40 +843,30 @@ function _renderCard(p, idx) {
   titulo.textContent = p.titulo;
 
   const texto = _el('p', 'tut-texto');
-  // p.texto contém apenas HTML estático hardcoded no módulo — safe
-  texto.innerHTML = p.texto;
+  texto.innerHTML = p.texto; // HTML estático hardcoded — safe
 
-  body.appendChild(iconWrap);
-  body.appendChild(titulo);
-  body.appendChild(texto);
+  body.append(iconWrap, titulo, texto);
 
-  // Retomada: no primeiro passo, oferece continuar de onde parou
-  if (primeiro) {
-    const salvo = _lerProgresso();
-    if (salvo) {
-      const capSalvo = _capitulos[_capituloDoPasso(salvo)];
-      const btnRetomar = _el('button', 'tut-btn-retomar');
-      btnRetomar.type = 'button';
-      const icR = document.createElement('i');
-      icR.className = 'fas fa-history';
-      icR.setAttribute('aria-hidden', 'true');
-      btnRetomar.appendChild(icR);
-      btnRetomar.appendChild(document.createTextNode(
-        ` Continuar de onde parei — ${capSalvo ? capSalvo.nome : 'passo ' + (salvo + 1)}`
-      ));
-      btnRetomar.onclick = () => _ir(salvo);
-      body.appendChild(btnRetomar);
-    }
+  // Bloco de dica (importância / boa prática)
+  if (p.dica) {
+    const dica = _el('div', 'tut-dica');
+    const di = document.createElement('i');
+    di.className = 'fas fa-lightbulb';
+    di.setAttribute('aria-hidden', 'true');
+    const ds = _el('span', 'tut-dica-txt');
+    ds.innerHTML = p.dica; // estático — safe
+    dica.append(di, ds);
+    body.appendChild(dica);
   }
 
-  // ── Footer ─────────────────────────────────────────────────────
+  // ── Footer ──
   const footer = _el('div', 'tut-footer');
 
   const btnPular = _el('button', 'tut-btn-pular');
   btnPular.type = 'button';
-  btnPular.textContent = 'Pular';
-  btnPular.setAttribute('aria-label', 'Pular tutorial');
-  btnPular.onclick = () => _desmontar();
+  btnPular.textContent = _seqTipo === 'categoria' ? 'Menu' : 'Sair';
+  btnPular.setAttribute('aria-label', _seqTipo === 'categoria' ? 'Voltar ao menu' : 'Sair do tutorial');
+  btnPular.onclick = () => (_seqTipo === 'categoria' ? _abrirHub() : _desmontar());
 
   const nav = _el('div', 'tut-nav');
 
@@ -813,23 +879,25 @@ function _renderCard(p, idx) {
 
   const btnAvancar = _el('button', 'tut-btn-avancar');
   btnAvancar.type = 'button';
-  btnAvancar.setAttribute('aria-label', ultimo ? 'Concluir tutorial' : 'Próximo passo');
   if (ultimo) {
-    btnAvancar.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Concluir';
     btnAvancar.classList.add('tut-btn-avancar--concluir');
+    if (p.voltarHub) {
+      btnAvancar.innerHTML = '<i class="fas fa-grip" aria-hidden="true"></i> Voltar ao menu';
+      btnAvancar.setAttribute('aria-label', 'Voltar ao menu de categorias');
+    } else {
+      btnAvancar.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Concluir';
+      btnAvancar.setAttribute('aria-label', 'Concluir tutorial');
+    }
   } else {
     btnAvancar.innerHTML = 'Próximo <i class="fas fa-arrow-right" aria-hidden="true"></i>';
+    btnAvancar.setAttribute('aria-label', 'Próximo passo');
   }
-  btnAvancar.onclick = () => ultimo ? _desmontar(true) : _ir(_passo + 1);
+  btnAvancar.onclick = () => (ultimo ? _finalizarSeq() : _ir(_passo + 1));
 
-  nav.appendChild(btnVoltar);
-  nav.appendChild(btnAvancar);
-  footer.appendChild(btnPular);
-  footer.appendChild(nav);
+  nav.append(btnVoltar, btnAvancar);
+  footer.append(btnPular, nav);
 
-  _card.appendChild(header);
-  _card.appendChild(body);
-  _card.appendChild(footer);
+  _card.append(header, body, footer);
 
   _card.setAttribute('tabindex', '0');
   _card.setAttribute('role', 'dialog');
@@ -838,25 +906,10 @@ function _renderCard(p, idx) {
   requestAnimationFrame(() => _card?.focus());
 }
 
-function _capituloDoPasso(idx) {
-  let cap = 0;
-  _capitulos.forEach((c, ci) => { if (idx >= c.inicio) cap = ci; });
-  return cap;
-}
-
-function _toggleCapitulos(forcar) {
-  const painel = _card?.querySelector('.tut-cap-panel');
-  const btn    = _card?.querySelector('.tut-cap-btn');
-  if (!painel) return;
-  const abrir = typeof forcar === 'boolean' ? forcar : painel.classList.contains('js-hidden');
-  painel.classList.toggle('js-hidden', !abrir);
-  btn?.setAttribute('aria-expanded', String(abrir));
-}
-
 function _secaoIcon(secao) {
   const map = {
-    'Boas-vindas':   'fa-rocket',
     'Início':        'fa-compass',
+    'Contas':        'fa-file-invoice-dollar',
     'Dashboard':     'fa-house',
     'Transações':    'fa-exchange-alt',
     'Reservas':      'fa-piggy-bank',
@@ -865,110 +918,124 @@ function _secaoIcon(secao) {
     'Relatórios':    'fa-file-alt',
     'Notificações':  'fa-bell',
     'Configurações': 'fa-cog',
-    'Conclusão':     'fa-check-circle',
+    'Perfil':        'fa-user-circle',
   };
   return map[secao] || 'fa-circle';
 }
 
-// ── Posicionamento do card ─────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Posicionamento do card
+// ─────────────────────────────────────────────────────────────────────────────
 function _posCard(spRect, pos, semAnimacao = false) {
-  // Reset className e força reflow para reiniciar a animação CSS
+  const isHub = _modo === 'hub';
+
   if (!semAnimacao) {
     _card.className = 'tut-card';
-    void _card.offsetHeight;
+    void _card.offsetHeight; // força reflow p/ reiniciar a animação
   }
 
-  const isUltimo  = _passo === _passos.length - 1 || _passos[_passo]?.ultimo;
-  const isMobile  = window.innerWidth <= 768;
-  const GAP       = 12;
+  const isMobile = window.innerWidth <= 768;
+  const isUltimo = _modo === 'seq' && (_passo === _passos.length - 1 || _passos[_passo]?.ultimo);
+  const GAP      = 12;
+
   const baseClass = semAnimacao
     ? _card.className.replace(/\btut-seta-\S+/g, '').replace(/\s+/g, ' ').trim()
-    : `tut-card tut-entr-${_direcao}${isUltimo ? ' tut-final' : ''}`;
+    : `tut-card${isHub ? ' tut-card--hub' : ''} tut-entr-${isHub ? 'centro' : _direcao}${isUltimo ? ' tut-final' : ''}`;
 
-  if (isMobile) {
-    Object.assign(_card.style, {
-      position: 'fixed',
-      left:     GAP + 'px',
-      right:    GAP + 'px',
-      width:    (window.innerWidth - GAP * 2) + 'px',
-      top:      '',
-      bottom:   '',
-    });
-    const elCenter = spRect ? (spRect.top + spRect.height / 2) : 0;
-    if (spRect && elCenter > window.innerHeight * 0.5) {
-      _card.style.top    = (GAP + 8) + 'px';
+  // ── Hub ou passo central: centralizado ──
+  // (centragem por `top` — nunca por transform, que conflita com a animação de entrada)
+  if (isHub || !spRect || pos === 'centro') {
+    if (isMobile) {
+      Object.assign(_card.style, {
+        position: 'fixed',
+        left:  GAP + 'px',
+        right: GAP + 'px',
+        width: (window.innerWidth - GAP * 2) + 'px',
+        transform: '',
+      });
+      const ch = _card.offsetHeight || 300;
+      _card.style.top    = Math.max(GAP, (window.innerHeight - ch) / 2) + 'px';
       _card.style.bottom = 'auto';
     } else {
-      _card.style.bottom = '84px';
-      _card.style.top    = 'auto';
+      const CW = isHub ? Math.min(540, window.innerWidth - GAP * 2) : 400;
+      const ch = _card.offsetHeight || 300;
+      Object.assign(_card.style, {
+        position: 'fixed',
+        left: ((window.innerWidth - CW) / 2) + 'px',
+        top:  Math.max(GAP, (window.innerHeight - ch) / 2) + 'px',
+        width: CW + 'px',
+        right: '', bottom: '', transform: '',
+      });
     }
     _card.className = baseClass;
     return;
   }
 
+  // ── Mobile (passo com alvo): ancora em cima/baixo ──
+  if (isMobile) {
+    Object.assign(_card.style, {
+      position: 'fixed',
+      left:  GAP + 'px',
+      right: GAP + 'px',
+      width: (window.innerWidth - GAP * 2) + 'px',
+      top: '', bottom: '', transform: '',
+    });
+    const elCenter = spRect ? (spRect.top + spRect.height / 2) : 0;
+    if (spRect && elCenter > window.innerHeight * 0.5) {
+      _card.style.top = (GAP + 8) + 'px';
+      _card.style.bottom = 'auto';
+    } else {
+      _card.style.bottom = '84px';
+      _card.style.top = 'auto';
+    }
+    _card.className = baseClass;
+    return;
+  }
+
+  // ── Desktop (passo com alvo): ao lado do spotlight ──
   const CW    = 400;
   const GAP_D = 24;
   const vw    = window.innerWidth;
   const vh    = window.innerHeight;
   const ch    = _card.offsetHeight || 290;
+  const cx    = spRect.left + spRect.width / 2;
 
   let top = 0, left = 0, seta = '';
-
-  if (!spRect || pos === 'centro') {
-    top  = (vh - ch) / 2;
-    left = (vw - CW) / 2;
-  } else {
-    const cx = spRect.left + spRect.width / 2;
-    switch (pos) {
-      case 'baixo':
-        top  = spRect.bottom + GAP_D;
-        left = cx - CW / 2;
-        seta = 'tut-seta-cima';
-        break;
-      case 'cima':
-        top  = spRect.top - ch - GAP_D;
-        left = cx - CW / 2;
-        seta = 'tut-seta-baixo';
-        break;
-      case 'direita':
-        top  = Math.max(GAP_D, spRect.top);
-        left = spRect.right + GAP_D;
-        seta = 'tut-seta-esq';
-        break;
-      case 'esquerda':
-        top  = Math.max(GAP_D, spRect.top);
-        left = spRect.left - CW - GAP_D;
-        seta = 'tut-seta-dir';
-        break;
-      default:
-        top  = (vh - ch) / 2;
-        left = (vw - CW) / 2;
-    }
+  switch (pos) {
+    case 'baixo':
+      top = spRect.bottom + GAP_D; left = cx - CW / 2; seta = 'tut-seta-cima'; break;
+    case 'cima':
+      top = spRect.top - ch - GAP_D; left = cx - CW / 2; seta = 'tut-seta-baixo'; break;
+    case 'direita':
+      top = Math.max(GAP_D, spRect.top); left = spRect.right + GAP_D; seta = 'tut-seta-esq'; break;
+    case 'esquerda':
+      top = Math.max(GAP_D, spRect.top); left = spRect.left - CW - GAP_D; seta = 'tut-seta-dir'; break;
+    default:
+      top = (vh - ch) / 2; left = (vw - CW) / 2;
   }
 
   left = Math.max(GAP_D, Math.min(vw - CW - GAP_D, left));
   top  = Math.max(GAP_D, Math.min(vh - ch - GAP_D, top));
 
   Object.assign(_card.style, {
-    position: 'fixed',
-    top:      top  + 'px',
-    left:     left + 'px',
-    width:    CW   + 'px',
-    right:    '',
-    bottom:   '',
+    position: 'fixed', top: top + 'px', left: left + 'px', width: CW + 'px',
+    right: '', bottom: '', transform: '',
   });
-
   _card.className = `${baseClass}${seta ? ' ' + seta : ''}`;
 }
 
-// ── Navegação entre seções ─────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Navegação entre seções do app
+// ─────────────────────────────────────────────────────────────────────────────
 function _navPara(pagina) {
   const btn = document.querySelector(`[data-page="${pagina}"]`);
   if (btn) { btn.click(); return; }
   if (pagina === 'configuracoes') document.getElementById('mobileSettingsBtn')?.click();
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 function _el(tag, cls) {
   const el = document.createElement(tag);
   el.className = cls;

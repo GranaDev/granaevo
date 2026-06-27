@@ -344,6 +344,23 @@
 [data-theme="light"] .ach-card__bar { background: rgba(0,0,0,0.08); }
 [data-theme="light"] .ach-card__tag { background: rgba(0,0,0,0.04); }
 
+/* Estatísticas / filtros / grupos / callout (fundos rgba branco somem no claro) */
+[data-theme="light"] .ach-stat {
+    background: rgba(0,0,0,0.02);
+    border-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .ach-chip {
+    background: rgba(0,0,0,0.03);
+    border-color: rgba(0,0,0,0.1);
+}
+[data-theme="light"] .ach-chip:hover { border-color: rgba(0,0,0,0.2); }
+[data-theme="light"] .ach-chip.is-active { border-color: transparent; }
+[data-theme="light"] .ach-group__count {
+    background: rgba(0,0,0,0.04);
+    border-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .ach-next__bar { background: rgba(0,0,0,0.08); }
+
 /* ── Orçamentos ──────────────────────────────────────────────── */
 [data-theme="light"] .orc-section { background: transparent; }
 
@@ -491,6 +508,55 @@
     background: rgba(5,150,105,0.12);
     border-color: rgba(5,150,105,0.55);
 }
+
+/* ── Tutorial: botão "voltar ao menu" + dica ─────────────────── */
+[data-theme="light"] .tut-home-btn {
+    background: rgba(0,0,0,0.04);
+    border-color: rgba(0,0,0,0.10);
+    color: rgba(0,0,0,0.45);
+}
+[data-theme="light"] .tut-home-btn:hover {
+    background: rgba(5,150,105,0.10);
+    color: #059669;
+    border-color: rgba(5,150,105,0.30);
+}
+
+[data-theme="light"] .tut-dica {
+    background: rgba(245,158,11,0.08);
+    border-color: rgba(245,158,11,0.22);
+    border-left-color: rgba(217,119,6,0.6);
+}
+[data-theme="light"] .tut-dica > .fas { color: #d97706; }
+[data-theme="light"] .tut-dica-txt { color: rgba(120,80,10,0.92); }
+[data-theme="light"] .tut-dica-txt strong { color: #92590a; }
+
+/* ── Tutorial: HUB (Central de Aprendizado) ──────────────────── */
+[data-theme="light"] .tut-hub-kicker {
+    color: #059669;
+    background: rgba(5,150,105,0.10);
+    border-color: rgba(5,150,105,0.20);
+}
+[data-theme="light"] .tut-hub-title { color: rgba(0,0,0,0.88); }
+[data-theme="light"] .tut-hub-sub   { color: rgba(0,0,0,0.55); }
+
+[data-theme="light"] .tut-hub-cat {
+    background: rgba(0,0,0,0.02);
+    border-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .tut-hub-cat-nome   { color: rgba(0,0,0,0.86); }
+[data-theme="light"] .tut-hub-cat-resumo { color: rgba(0,0,0,0.5); }
+[data-theme="light"] .tut-hub-cat-seta   { color: rgba(0,0,0,0.25); }
+
+[data-theme="light"] .tut-hub-cta {
+    background: rgba(0,0,0,0.03);
+    border-color: rgba(0,0,0,0.12);
+    color: rgba(0,0,0,0.78);
+}
+[data-theme="light"] .tut-hub-cta:hover {
+    background: rgba(0,0,0,0.06);
+    border-color: rgba(0,0,0,0.2);
+}
+[data-theme="light"] .tut-hub-cta--primaria { color: #fff; }
 
 /* ── Boas-vindas (onboarding) ────────────────────────────────── */
 [data-theme="light"] .obw-overlay {

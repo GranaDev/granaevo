@@ -7917,22 +7917,11 @@ button,
     overscroll-behavior: none;
 }
 
-/* ── Spotlight ─────────────────────────────────────────────────────────────── */
-@keyframes tutSpotPulse {
-    0%, 100% {
-        box-shadow:
-            0 0 0 2px var(--tut-color, #10b981),
-            0 0 0 5px var(--tut-color-20, rgba(16,185,129,.20)),
-            0 0 0 9999px var(--tut-overlay, rgba(2, 4, 14, 0.88));
-    }
-    50% {
-        box-shadow:
-            0 0 0 3px var(--tut-color, #10b981),
-            0 0 0 14px var(--tut-color-25, rgba(16,185,129,.25)),
-            0 0 0 9999px var(--tut-overlay, rgba(2, 4, 14, 0.88));
-    }
-}
-
+/* ── Spotlight ───────────────────────────────────────────────────────────────
+   Performance: o recorte escuro (box-shadow 9999px) é ESTÁTICO — nunca animado.
+   O pulso fica num filho `.tut-spot-ring` que anima só transform/opacity (GPU),
+   evitando o repaint de viewport inteira que travava o tour. A geometria é
+   aplicada instantaneamente; só a opacidade transiciona (fade entre passos). */
 .tut-spotlight {
     position: fixed;
     z-index: 8992;
@@ -7945,17 +7934,29 @@ button,
     box-shadow:
         0 0 0 2px var(--tut-color),
         0 0 0 5px var(--tut-color-20),
-        0 0 0 9999px rgba(2, 4, 14, 0.88);
-    animation: tutSpotPulse 2.8s ease-in-out infinite;
-    transition:
-        top           0.38s cubic-bezier(0.4, 0, 0.2, 1),
-        left          0.38s cubic-bezier(0.4, 0, 0.2, 1),
-        width         0.38s cubic-bezier(0.4, 0, 0.2, 1),
-        height        0.38s cubic-bezier(0.4, 0, 0.2, 1),
-        border-radius 0.36s ease,
-        opacity       0.22s ease;
+        0 0 0 9999px var(--tut-overlay);
+    transition: opacity 0.26s ease;
+    will-change: opacity;
 }
-.tut-spotlight.tut-spot-oculto { opacity: 0; animation-play-state: paused; }
+.tut-spotlight.tut-spot-oculto { opacity: 0; }
+
+/* Anel de pulso — GPU-only (transform + opacity) */
+@keyframes tutRingPulse {
+    0%   { transform: scale(1);    opacity: 0.55; }
+    70%  { transform: scale(1.08); opacity: 0;    }
+    100% { transform: scale(1.08); opacity: 0;    }
+}
+.tut-spot-ring {
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    border: 2px solid var(--tut-color);
+    pointer-events: none;
+    transform-origin: center;
+    animation: tutRingPulse 2.4s ease-out infinite;
+    will-change: transform, opacity;
+}
+.tut-spotlight.tut-spot-oculto .tut-spot-ring { animation-play-state: paused; }
 
 /* ── Card ──────────────────────────────────────────────────────────────────── */
 @keyframes tutEntrarAvancar {
@@ -8380,6 +8381,223 @@ button,
 }
 .tut-btn-retomar .fas { font-size: 0.68rem; }
 
+/* ── Botão "voltar ao menu" no header ───────────────────────────────────────── */
+.tut-home-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.45);
+    border-radius: 8px;
+    font-size: 0.66rem;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.15s;
+    font-family: inherit;
+    flex-shrink: 0;
+}
+.tut-home-btn:hover {
+    background: rgba(16, 185, 129, 0.12);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.30);
+    transform: translateY(-1px);
+}
+
+/* ── Bloco de dica (importância / boa prática) ──────────────────────────────── */
+.tut-dica {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 13px;
+    margin-top: 2px;
+    background: rgba(245, 158, 11, 0.07);
+    border: 1px solid rgba(245, 158, 11, 0.18);
+    border-left: 3px solid rgba(245, 158, 11, 0.6);
+    border-radius: 10px;
+}
+.tut-dica > .fas {
+    color: #fbbf24;
+    font-size: 0.82rem;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+.tut-dica-txt {
+    font-size: 0.78rem;
+    line-height: 1.55;
+    color: rgba(226, 210, 175, 0.92);
+}
+.tut-dica-txt strong { color: #fde9bf; font-weight: 700; }
+
+/* ═══════════════ HUB — Central de Aprendizado ═══════════════ */
+.tut-card.tut-card--hub {
+    width: 540px;
+    max-width: calc(100vw - 24px);
+    max-height: min(88vh, 760px);
+    display: flex;
+    flex-direction: column;
+}
+
+.tut-hub-head {
+    padding: 22px 24px 6px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.tut-hub-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.10);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    border-radius: 20px;
+    padding: 4px 12px;
+    margin-bottom: 12px;
+}
+.tut-hub-title {
+    font-size: 1.32rem;
+    font-weight: 800;
+    color: #eef0ff;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+}
+.tut-hub-sub {
+    font-size: 0.82rem;
+    color: rgba(176, 180, 205, 0.82);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.tut-hub-grid {
+    padding: 14px 18px 4px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+@keyframes tutHubCatEntrar {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.tut-hub-cat {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 12px 13px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    transition: background 0.18s, border-color 0.18s, transform 0.15s;
+    animation: tutHubCatEntrar 0.34s ease both;
+    animation-delay: var(--cat-delay, 0ms);
+}
+.tut-hub-cat:hover {
+    background: color-mix(in srgb, var(--cat-cor) 12%, transparent);
+    border-color: color-mix(in srgb, var(--cat-cor) 45%, transparent);
+    transform: translateY(-2px);
+}
+.tut-hub-cat-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--cat-cor) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--cat-cor) 32%, transparent);
+    color: var(--cat-cor);
+    font-size: 1.02rem;
+}
+.tut-hub-cat-txt {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+.tut-hub-cat-nome {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #e7eaff;
+    letter-spacing: -0.01em;
+}
+.tut-hub-cat-resumo {
+    font-size: 0.7rem;
+    color: rgba(176, 180, 205, 0.72);
+    line-height: 1.35;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+.tut-hub-cat-seta {
+    font-size: 0.66rem;
+    color: rgba(255,255,255,0.22);
+    flex-shrink: 0;
+    transition: color 0.18s, transform 0.18s;
+}
+.tut-hub-cat:hover .tut-hub-cat-seta {
+    color: var(--cat-cor);
+    transform: translateX(2px);
+}
+
+.tut-hub-ctas {
+    padding: 12px 18px 6px;
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.tut-hub-cta {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: rgba(230, 233, 250, 0.9);
+    transition: background 0.18s, border-color 0.18s, transform 0.15s, box-shadow 0.2s;
+}
+.tut-hub-cta:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.2);
+    transform: translateY(-2px);
+}
+.tut-hub-cta--primaria {
+    background: linear-gradient(135deg, #059669, #10b981);
+    border-color: transparent;
+    color: #fff;
+}
+.tut-hub-cta--primaria:hover {
+    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.42);
+    filter: brightness(1.06);
+}
+
+.tut-hub-footer {
+    padding: 8px 24px 16px;
+    display: flex;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
 /* ── Mobile ─────────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
     .tut-card::after { display: none !important; }
@@ -8389,6 +8607,13 @@ button,
     .tut-icon-wrap { width: 46px; height: 46px; }
     .tut-step-num { font-size: 4rem; }
     .tut-cap-panel { max-height: 180px; }
+
+    .tut-card.tut-card--hub { width: calc(100vw - 24px); max-height: 86vh; }
+    .tut-hub-grid { grid-template-columns: 1fr; }
+    .tut-hub-head { padding: 18px 18px 4px; }
+    .tut-hub-title { font-size: 1.18rem; }
+    .tut-hub-ctas { flex-direction: column; }
+    .tut-hub-cat-resumo { -webkit-line-clamp: 1; }
 }
 
 /* ==========================================
