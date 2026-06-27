@@ -3657,8 +3657,8 @@ function abrirContaFixaView(id) {
 
             <div class="cf-view-actions">
                 ${estaPago
-                    ? '<button class="btn-warning" id="cfViewAcao"><i class="fas fa-bolt" aria-hidden="true"></i> Antecipar</button>'
-                    : '<button class="btn-primary" id="cfViewAcao"><i class="fas fa-circle-dollar-to-slot" aria-hidden="true"></i> Pagar</button>'}
+                    ? '<button class="btn-warning cf-act-primary" id="cfViewAcao"><i class="fas fa-bolt" aria-hidden="true"></i> Antecipar</button>'
+                    : '<button class="btn-primary cf-act-primary" id="cfViewAcao"><i class="fas fa-circle-dollar-to-slot" aria-hidden="true"></i> Pagar</button>'}
                 <button class="btn-outline" id="cfViewEditar"><i class="fas fa-pen" aria-hidden="true"></i> Editar</button>
                 <button class="btn-cancelar" id="cfViewFechar">Fechar</button>
             </div>
@@ -4858,6 +4858,16 @@ function bindEventos() {
     const btnRetirar = document.getElementById('btnRetirar');
     if(btnRetirar) {
         btnRetirar.addEventListener('click', () => window.abrirRetiradaForm?.());
+    }
+
+    const btnGuardar = document.getElementById('btnGuardar');
+    if(btnGuardar) {
+        btnGuardar.addEventListener('click', () => window.abrirGuardarForm?.());
+    }
+
+    const btnAjustar = document.getElementById('btnAjustar');
+    if(btnAjustar) {
+        btnAjustar.addEventListener('click', () => window.abrirAjusteForm?.());
     }
 
     // Gráficos

@@ -3723,10 +3723,55 @@ select.form-input option:checked {
     .meta-details > div:last-child { font-size: 0.85rem; line-height: 1.6; }
 }
 
+/* ── Grupo de ações da reserva (Guardar / Ajustar / Retirar) ── */
+.meta-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+.meta-actions .meta-action {
+    flex: 1 1 0;
+    min-width: 150px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 18px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+.meta-actions .meta-action i { font-size: 0.95em; }
+
+/* Botão "Ajustar Valor" — neutro/glass, distinto do guardar (verde) e retirar (âmbar) */
+.btn-meta-ajustar {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.btn-meta-ajustar:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.24);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+.btn-meta-ajustar:active { transform: translateY(0); }
+
 @media (max-width: 768px) {
     #donutChart  { width: 160px !important; height: 160px !important; }
     #lineChart   { width: 100% !important; height: 180px !important; max-width: 320px; }
-    #btnRetirar  { width: 100%; padding: 12px; font-size: 0.9rem; margin-top: 12px; }
+    .meta-actions { gap: 8px; }
+    .meta-actions .meta-action {
+        flex: 1 1 100%;
+        width: 100%;
+        padding: 12px;
+        font-size: 0.9rem;
+    }
 }
 
 /* ========== CARTÃ•ES DE CRÃ‰DITO ========== */
@@ -4253,11 +4298,11 @@ select.form-input option:checked {
     width: 90%;
     max-width: 440px;
     box-shadow: var(--shadow-lg);
-    animation: fadeInScale 0.3s ease-out;
+    animation: fadeInScale 0.34s cubic-bezier(.22, .61, .36, 1);
 }
 
 @keyframes fadeInScale {
-    from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+    from { opacity: 0; transform: translate(-50%, calc(-50% + 10px)) scale(0.96); }
     to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
@@ -4471,21 +4516,82 @@ select.form-input option:checked {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    margin-top: 24px;
+    margin-top: 26px;
 }
 
-/* Especificidade alta o bastante para vencer .popup button e
-   .bottom-sheet-content button em ambos os contextos (desktop + mobile) */
+/* Botões coesos e com hierarquia clara: ação principal na linha cheia,
+   secundários dividindo a linha de baixo. Especificidade alta o bastante
+   para vencer .popup button e .bottom-sheet-content button (desktop + mobile). */
 .cf-view .cf-view-actions button {
-    flex: 1 1 auto;
-    min-width: 110px;
+    flex: 1 1 0;
     margin: 0;
+    height: 50px;
+    padding: 0 18px;
+    border-radius: 14px;
+    font-size: 0.92rem;
+    font-weight: 600;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 7px;
+    gap: 8px;
+    transition: transform 0.18s cubic-bezier(.22, .61, .36, 1),
+                background-color 0.18s ease, border-color 0.18s ease,
+                box-shadow 0.18s ease, color 0.18s ease, filter 0.18s ease;
 }
-.cf-view .cf-view-actions .btn-cancelar { flex: 0 1 auto; min-width: 84px; }
+.cf-view .cf-view-actions button i { font-size: 0.95em; }
+.cf-view .cf-view-actions button:active { transform: scale(0.97); }
+
+/* Ação principal (Pagar / Antecipar) — ocupa a primeira linha inteira */
+.cf-view .cf-view-actions .cf-act-primary { flex-basis: 100%; }
+
+/* Editar — secundário neutro e limpo que acende em verde no hover */
+.cf-view .cf-view-actions .btn-outline {
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    box-shadow: none;
+}
+.cf-view .cf-view-actions .btn-outline:hover {
+    background: rgba(67, 160, 71, 0.10);
+    border-color: rgba(67, 160, 71, 0.55);
+    color: #6BE38C;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(67, 160, 71, 0.12);
+}
+
+/* Fechar — fantasma discreto (substitui o gradiente cinza pesado) */
+.cf-view .cf-view-actions .btn-cancelar {
+    flex: 0 1 auto;
+    min-width: 92px;
+    background: transparent !important;
+    border: 1px solid transparent;
+    color: var(--text-secondary) !important;
+    box-shadow: none !important;
+}
+.cf-view .cf-view-actions .btn-cancelar:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: var(--text-primary) !important;
+    transform: none;
+    filter: none;
+    box-shadow: none !important;
+}
+
+/* ── Entrada suave e escalonada do conteúdo (mata a sensação "seca") ── */
+@keyframes cfRise {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.cf-view > * {
+    animation: cfRise 0.44s cubic-bezier(.22, .61, .36, 1) both;
+}
+.cf-view-hero    { animation-delay: 0.03s; }
+.cf-view-amount  { animation-delay: 0.09s; }
+.cf-view-rows    { animation-delay: 0.15s; }
+.cf-view-actions { animation-delay: 0.21s; }
+
+@media (prefers-reduced-motion: reduce) {
+    .cf-view > * { animation: none; }
+}
 
 /* ========== SCROLLBAR CUSTOMIZADO ========== */
 ::-webkit-scrollbar       { width: 10px; height: 10px; }

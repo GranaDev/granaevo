@@ -137,8 +137,8 @@
 
         <!-- ========== TOPBAR MOBILE ========== -->
         <div class="mobile-topbar" id="mobileTopbar">
-            <!-- Foto de perfil (esquerdo) — abre input de foto -->
-            <label for="photoUpload" class="mobile-profile-btn" aria-label="Alterar foto de perfil">
+            <!-- Foto de perfil (esquerdo) — abre o perfil do usuário -->
+            <button type="button" class="mobile-profile-btn" id="mobileProfileBtn" aria-label="Abrir perfil">
                 <img
                     src="/assets/icons/placeholder-user.svg"
                     alt="Foto de perfil"
@@ -148,7 +148,7 @@
                     id="mobileUserPhotoFallback"
                     class="mobile-user-photo-fallback"
                     aria-hidden="true">U</div>
-            </label>
+            </button>
 
             <!-- Logo central + indicador de sync -->
             <div class="mobile-topbar-center">
@@ -188,7 +188,7 @@
             </div>
 
             <div class="sidebar-user">
-                <div class="user-photo-wrapper">
+                <div class="user-photo-wrapper" id="userPhotoBtn" role="button" tabindex="0" aria-label="Abrir perfil">
                     <img
                         src="/assets/icons/placeholder-user.svg"
                         alt="Foto de perfil"
@@ -204,12 +204,6 @@
                     <div class="user-name" id="userName">Usuário</div>
                     <div class="user-plan" data-user-plan>Plano Premium</div>
                 </div>
-                <label for="photoUpload" class="photo-upload-btn" aria-label="Alterar foto de perfil">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                        <circle cx="12" cy="13" r="4"></circle>
-                    </svg>
-                </label>
                 <input
                     type="file"
                     id="photoUpload"
@@ -673,9 +667,17 @@
                                 </div>
                             </div>
                             <div id="metaDetalhes" class="meta-details"></div>
-                            <button class="btn-warning js-hidden" id="btnRetirar" type="button">
-                                Retirar Dinheiro
-                            </button>
+                            <div id="metaActions" class="meta-actions js-hidden">
+                                <button class="btn-primary meta-action" id="btnGuardar" type="button">
+                                    <i class="fas fa-piggy-bank" aria-hidden="true"></i> Guardar Dinheiro
+                                </button>
+                                <button class="btn-meta-ajustar meta-action" id="btnAjustar" type="button">
+                                    <i class="fas fa-sliders-h" aria-hidden="true"></i> Ajustar Valor
+                                </button>
+                                <button class="btn-warning meta-action" id="btnRetirar" type="button">
+                                    <i class="fas fa-arrow-right-from-bracket" aria-hidden="true"></i> Retirar Dinheiro
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -852,14 +854,6 @@
                         <div class="cfg-section">
                             <div class="cfg-section-label">Conta</div>
                             <div class="cfg-list">
-                                <button class="cfg-item" id="btnAlterarNome" type="button">
-                                    <div class="cfg-item-icon cfg-item-icon--blue"><i class="fas fa-user" aria-hidden="true"></i></div>
-                                    <div class="cfg-item-text">
-                                        <span class="cfg-item-title">Alterar Nome</span>
-                                        <span class="cfg-item-sub">Mude seu nome ou apelido</span>
-                                    </div>
-                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
-                                </button>
                                 <button class="cfg-item" id="btnAlterarEmail" type="button">
                                     <div class="cfg-item-icon cfg-item-icon--green"><i class="fas fa-user-plus" aria-hidden="true"></i></div>
                                     <div class="cfg-item-text">
