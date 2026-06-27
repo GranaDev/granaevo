@@ -6,7 +6,7 @@ import AuthGuard from '../modules/auth-guard.js?v=2';
 import '../modules/scroll-lock.js?v=1';
 import { initErrorTracking, setUserContext } from '../modules/error-tracking.js';
 import { perfMark, perfMeasure } from '../modules/perf-marks.js';
-import { evaluate as evaluateConquistas, enqueueToasts as enqueueConquistaToasts, sanitizeUnlocked as sanitizeConquistas } from '../modules/achievements.js?v=1';
+import { evaluate as evaluateConquistas, enqueueToasts as enqueueConquistaToasts, sanitizeUnlocked as sanitizeConquistas } from '../modules/achievements.js?v=2';
 
 // Inicializa rastreamento de erros o quanto antes (no-op sem VITE_SENTRY_DSN / fora de produção)
 initErrorTracking();
@@ -2250,7 +2250,7 @@ function _carregarModuloTela(tela) {
 
     if (tela === 'configuracoes') {
         if (!_dbLoaded.configuracoes) {
-            import('./db-configuracoes.js?v=7').then(m => {
+            import('./db-configuracoes.js?v=8').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.configuracoes = true;
                 if (_abrirHubAoCarregar) { _abrirHubAoCarregar = false; window.abrirPerfilHub?.(); }
@@ -2262,115 +2262,10 @@ function _carregarModuloTela(tela) {
     }
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// TRANSIÇÃO DE SWIPE (mobile) — deslize lateral fluido entre abas
-// ───────────────────────────────────────────────────────────────────────────
-// Chamado por swipe-nav.js quando o gesto cruza o limiar de commit. Faz o
-// "carrossel": a aba que sai desliza pro lado e a aba que entra vem da borda
-// oposta, ambas movidas SÓ por transform (composição na GPU, zero reflow
-// durante a animação). O conteúdo da aba alvo é carregado ANTES do slide, então
-// ela já desliza preenchida (ou com skeleton no 1º acesso).
-//
-//   dir: -1 → próxima aba (dedo p/ esquerda, trilho vai p/ -vw)
-//        +1 → aba anterior (dedo p/ direita, trilho vai p/ +vw)
-//   dx : deslocamento horizontal acumulado no fim do arrasto (continuidade)
-//   sy : scrollY no momento do commit (compensa a página que sai p/ não pular)
-function _swipeTo(target, opts = {}) {
-    const { dir = -1, dx = 0, sy = 0, done } = opts;
-    const finish = () => { try { done && done(); } catch (_) { /* noop */ } };
-
-    if (!_domPages) _domPages = document.querySelectorAll('.page');
-    const fromPage = document.querySelector('.page.active');
-    const toPage   = document.getElementById(target + 'Page');
-
-    // Fallbacks: alvo inexistente ou movimento reduzido → troca seca canônica.
-    if (!fromPage || !toPage || fromPage === toPage) { mostrarTela(target); finish(); return; }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        fromPage.style.transform = '';
-        fromPage.style.opacity   = '';
-        mostrarTela(target);
-        finish();
-        return;
-    }
-
-    const mc   = document.getElementById('mainContent');
-    const w    = window.innerWidth;
-    const next = dir < 0;
-    const trackEnd = next ? -w : w;          // posição final do "trilho"
-    const toStart  = next ? dx + w : dx - w; // onde a aba que entra começa
-
-    // Mede o frame de conteúdo (independe de padding/breakpoint) p/ sobrepor as
-    // duas páginas exatamente onde o fluxo normal as colocaria.
-    const cs   = getComputedStyle(mc);
-    const padL = parseFloat(cs.paddingLeft)  || 0;
-    const padT = parseFloat(cs.paddingTop)   || 0;
-    const padR = parseFloat(cs.paddingRight) || 0;
-    const cw   = mc.clientWidth - padL - padR;
-    const fromH = fromPage.offsetHeight;
-
-    document.body.classList.add('ge-swiping');
-    mc.style.minHeight = fromH + 'px';   // evita colapso enquanto as páginas são absolutas
-
-    // Conteúdo do alvo carrega/atualiza ANTES do slide.
-    _carregarModuloTela(target);
-
-    [fromPage, toPage].forEach(p => {
-        p.classList.add('ge-swipe-page');
-        p.style.left  = padL + 'px';
-        p.style.top   = padT + 'px';
-        p.style.width = cw + 'px';
-        p.style.transition = 'none';
-    });
-    toPage.style.display = 'block';
-
-    // Alinha: zera o scroll (a aba que entra começa no topo) e compensa
-    // verticalmente a aba que sai p/ ela não "pular" pro topo ao sair.
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    fromPage.style.transform = `translate3d(${dx}px, ${-sy}px, 0)`;
-    toPage.style.transform   = `translate3d(${toStart}px, 0, 0)`;
-    fromPage.style.opacity   = '';
-
-    void toPage.offsetWidth; // força reflow → estado inicial firme antes da transição
-
-    const ease = 'cubic-bezier(0.16, 1, 0.3, 1)';            // easeOutExpo — glide premium
-    const dur  = Math.abs(opts.vX) > 0.9 ? 260 : 340;        // flick forte → mais rápido
-
-    let ended = false;
-    const finalize = () => {
-        if (ended) return;
-        ended = true;
-        toPage.removeEventListener('transitionend', onEnd);
-
-        // Estado canônico (sem reload — módulo já carregado acima).
-        _domPages.forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
-        toPage.style.display = 'block';
-        toPage.classList.add('active');   // ge-swiping ainda ativo → pageEnter suprimido
-        _setNavAtiva(target);
-        _telaAtual = target;
-
-        [fromPage, toPage].forEach(p => {
-            p.classList.remove('ge-swipe-page');
-            p.style.transition = '';
-            p.style.transform  = '';
-            p.style.left = ''; p.style.top = ''; p.style.width = ''; p.style.opacity = '';
-        });
-        mc.style.minHeight = '';
-        document.body.classList.remove('ge-swiping');
-        finish();
-    };
-    const onEnd = (ev) => {
-        if (ev.target === toPage && ev.propertyName === 'transform') finalize();
-    };
-    toPage.addEventListener('transitionend', onEnd);
-    setTimeout(finalize, dur + 80);   // rede de segurança se o transitionend não disparar
-
-    requestAnimationFrame(() => {
-        fromPage.style.transition = `transform ${dur}ms ${ease}`;
-        toPage.style.transition   = `transform ${dur}ms ${ease}`;
-        fromPage.style.transform  = `translate3d(${trackEnd}px, ${-sy}px, 0)`;
-        toPage.style.transform    = `translate3d(0px, 0px, 0)`;
-    });
-}
+// NOTA: a transição lateral de swipe (o "carrossel" das duas páginas) vive em
+// swipe-nav.js — módulo lazy, mobile-only. Tirá-la daqui mantém o dashboard.js
+// dentro do orçamento de bundle (eager). O módulo recebe os primitivos abaixo
+// via initSwipeNav: _carregarModuloTela, _setNavAtiva e o setter de _telaAtual.
 
 // Clicar na foto de perfil (sidebar/mobile) leva à aba Configurações e abre o
 // hub de perfil (nome, foto, conquistas). O hub vive no módulo lazy de
@@ -4961,11 +4856,14 @@ function bindEventos() {
     // Navegação por swipe (mobile) — módulo carregado sob demanda (custo zero no
     // desktop). Progressivo: se falhar, a navegação por toque segue intacta.
     if (window.matchMedia('(max-width: 768px)').matches) {
-        import('../modules/swipe-nav.js?v=1')
+        import('../modules/swipe-nav.js?v=2')
             .then(m => m.initSwipeNav({
-                order:      ['dashboard', 'transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios'],
-                getCurrent: () => _telaAtual,
-                swipeTo:    _swipeTo,
+                order:        ['dashboard', 'transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios'],
+                getCurrent:   () => _telaAtual,
+                setCurrent:   (t) => { _telaAtual = t; },
+                navigate:     mostrarTela,        // fallback (reduced-motion / borda)
+                loadModule:   _carregarModuloTela, // carrega/atualiza a aba alvo
+                setNavActive: _setNavAtiva,        // destaca o item de nav ao finalizar
             }))
             .catch(() => { /* swipe é opcional — silencioso */ });
     }
@@ -6304,7 +6202,9 @@ function _verificarOnboardingNovoPerfil() {
                         try { localStorage.setItem(chaveVisto, '1'); } catch (_) {}
                         if (escolha === 'tour') {
                             const { iniciarTutorial } = await import('../modules/tutorial.js');
+                            // Novo usuário: trilha Essencial (curta) — aponta p/ o hub ao final
                             setTimeout(() => iniciarTutorial({
+                                trilha:  'essencial',
                                 plano:   usuarioLogado?.plano,
                                 isGuest: Boolean(usuarioLogado?.isGuest),
                             }), 120);

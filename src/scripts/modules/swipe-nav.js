@@ -13,8 +13,9 @@
 //      voltam sozinhos (snap-back elástico) — resolve o "passei o dedo e trocou".
 //   3. Borda elástica: nas pontas (1ª/última aba) o arrasto resiste em rubber
 //      band e nunca comita — feedback tátil de "não tem mais aba aqui".
-//   4. O commit em si (carrossel das duas páginas) é tocado pelo dashboard via
-//      o callback swipeTo — transform puro na GPU, otimizado p/ aparelho fraco.
+//   4. O commit em si (carrossel das duas páginas) é tocado por commitSlide aqui
+//      mesmo (transform puro na GPU, otimizado p/ aparelho fraco). O dashboard só
+//      fornece os primitivos (carregar módulo, destacar nav, setar aba ativa).
 //
 // Tudo gera só translate3d → composição na GPU, sem reflow durante o arrasto.
 
@@ -33,7 +34,7 @@ const BLOCK_SEL = [
     '[data-no-swipe]', '.no-swipe', '[role="slider"]', '.range-input',
 ].join(',');
 
-let cfg = null;            // { order, getCurrent, swipeTo }
+let cfg = null;            // { order, getCurrent, setCurrent, navigate, loadModule, setNavActive }
 let mc  = null;            // #mainContent
 
 // estado vivo do gesto
@@ -201,13 +202,126 @@ function onEnd() {
 
     if (window.hapticTap) window.hapticTap(8); // confirmação tátil sutil
 
-    // O dashboard assume o carrossel a partir do deslocamento atual (continuidade).
-    cfg.swipeTo(target, {
+    // Carrossel a partir do deslocamento atual (continuidade com o arrasto).
+    commitSlide(el, target, {
         dir: goingNext ? -1 : 1,
         dx,
         sy,
         vX,
         done: () => { busy = false; },
+    });
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// TRANSIÇÃO LATERAL (commit) — o "carrossel" das duas páginas
+// ───────────────────────────────────────────────────────────────────────────
+// A aba que sai desliza pro lado e a que entra vem da borda oposta, ambas
+// movidas SÓ por transform (composição na GPU, zero reflow). O conteúdo do alvo
+// é carregado ANTES do slide, então já desliza preenchido (ou com skeleton no
+// 1º acesso). Vive aqui (módulo lazy, mobile-only) p/ não pesar o dashboard.js.
+//
+//   dir: -1 → próxima aba (dedo p/ esquerda, trilho vai p/ -vw)
+//        +1 → aba anterior (dedo p/ direita, trilho vai p/ +vw)
+//   dx : deslocamento horizontal no fim do arrasto (continuidade)
+//   sy : scrollY no commit (compensa a página que sai p/ ela não pular)
+function commitSlide(fromPage, target, opts) {
+    const { dir, dx, sy, vX, done } = opts;
+    const finish = () => { try { done && done(); } catch (_) { /* noop */ } };
+    const toPage = document.getElementById(target + 'Page');
+
+    // Fallbacks: alvo inexistente ou movimento reduzido → troca seca canônica.
+    if (!fromPage || !toPage || fromPage === toPage) {
+        if (fromPage) { fromPage.style.transform = ''; fromPage.style.opacity = ''; }
+        cfg.navigate(target);
+        finish();
+        return;
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        fromPage.style.transform = '';
+        fromPage.style.opacity   = '';
+        cfg.navigate(target);
+        finish();
+        return;
+    }
+
+    const w    = window.innerWidth;
+    const next = dir < 0;
+    const trackEnd = next ? -w : w;          // posição final do "trilho"
+    const toStart  = next ? dx + w : dx - w; // onde a aba que entra começa
+
+    // Mede o frame de conteúdo (independe de padding/breakpoint) p/ sobrepor as
+    // duas páginas exatamente onde o fluxo normal as colocaria.
+    const cs   = getComputedStyle(mc);
+    const padL = parseFloat(cs.paddingLeft)  || 0;
+    const padT = parseFloat(cs.paddingTop)   || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const cw   = mc.clientWidth - padL - padR;
+    const fromH = fromPage.offsetHeight;
+
+    document.body.classList.add('ge-swiping');
+    mc.style.minHeight = fromH + 'px';   // evita colapso enquanto as páginas são absolutas
+
+    cfg.loadModule(target);              // conteúdo do alvo carrega/atualiza ANTES do slide
+
+    const pages = [fromPage, toPage];
+    pages.forEach(p => {
+        p.classList.add('ge-swipe-page');
+        p.style.left  = padL + 'px';
+        p.style.top   = padT + 'px';
+        p.style.width = cw + 'px';
+        p.style.transition = 'none';
+    });
+    toPage.style.display = 'block';
+
+    // Alinha: zera o scroll (a aba que entra começa no topo) e compensa
+    // verticalmente a aba que sai p/ ela não "pular" pro topo ao sair.
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    fromPage.style.transform = `translate3d(${dx}px, ${-sy}px, 0)`;
+    toPage.style.transform   = `translate3d(${toStart}px, 0, 0)`;
+    fromPage.style.opacity   = '';
+
+    void toPage.offsetWidth; // força reflow → estado inicial firme antes da transição
+
+    const ease = 'cubic-bezier(0.16, 1, 0.3, 1)';        // easeOutExpo — glide premium
+    const dur  = Math.abs(vX) > 0.9 ? 260 : 340;          // flick forte → mais rápido
+
+    let ended = false;
+    const finalize = () => {
+        if (ended) return;
+        ended = true;
+        toPage.removeEventListener('transitionend', onSlideEnd);
+
+        // Estado canônico (sem reload — módulo já carregado acima).
+        document.querySelectorAll('.page').forEach(p => {
+            p.classList.remove('active');
+            p.style.display = 'none';
+        });
+        toPage.style.display = 'block';
+        toPage.classList.add('active');   // ge-swiping ainda ativo → pageEnter suprimido
+        cfg.setNavActive(target);
+        cfg.setCurrent(target);
+
+        pages.forEach(p => {
+            p.classList.remove('ge-swipe-page');
+            p.style.transition = '';
+            p.style.transform  = '';
+            p.style.left = ''; p.style.top = ''; p.style.width = ''; p.style.opacity = '';
+        });
+        mc.style.minHeight = '';
+        document.body.classList.remove('ge-swiping');
+        finish();
+    };
+    const onSlideEnd = (ev) => {
+        if (ev.target === toPage && ev.propertyName === 'transform') finalize();
+    };
+    toPage.addEventListener('transitionend', onSlideEnd);
+    setTimeout(finalize, dur + 80);   // rede de segurança se o transitionend não disparar
+
+    requestAnimationFrame(() => {
+        fromPage.style.transition = `transform ${dur}ms ${ease}`;
+        toPage.style.transition   = `transform ${dur}ms ${ease}`;
+        fromPage.style.transform  = `translate3d(${trackEnd}px, ${-sy}px, 0)`;
+        toPage.style.transform    = `translate3d(0px, 0px, 0)`;
     });
 }
 
@@ -217,7 +331,9 @@ function onCancel() {
 }
 
 export function initSwipeNav(config) {
-    if (!config || typeof config.swipeTo !== 'function') return;
+    if (!config || typeof config.navigate !== 'function' ||
+        typeof config.loadModule !== 'function' || typeof config.setNavActive !== 'function' ||
+        typeof config.setCurrent !== 'function') return;
     mc = document.getElementById('mainContent');
     if (!mc) return;
     if (initSwipeNav._bound) return;   // idempotente
