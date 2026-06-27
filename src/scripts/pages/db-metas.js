@@ -157,6 +157,8 @@ export function init(ctx) {
     window.removerMeta            = (id) => removerMeta(id);
     window.selecionarMeta         = (id) => selecionarMeta(id);
     window.abrirRetiradaForm      = (id) => abrirRetiradaForm(id);
+    window.abrirGuardarForm       = () => abrirGuardarForm();
+    window.abrirAjusteForm        = () => abrirAjusteForm();
     window.abrirAnaliseDisciplina    = () => abrirAnaliseDisciplina();
     window.renderMetaVisual          = () => renderMetaVisual();
     window.abrirFormReservaExistente = () => abrirFormReservaExistente();
@@ -1223,8 +1225,8 @@ function removerMeta(id) {
 function selecionarMeta(id) {
     _ctx.metaSelecionadaId = id;
     renderMetaVisual();
-    const btnRetirar = document.getElementById('btnRetirar');
-    if(btnRetirar) btnRetirar.classList.remove('js-hidden');
+    const metaActions = document.getElementById('metaActions');
+    if(metaActions) metaActions.classList.remove('js-hidden');
 }
 
 // ========== CÁLCULO DE PROJEÇÃO DE CONCLUSÃO DA META ==========
@@ -1428,11 +1430,11 @@ function renderMetaVisual() {
         details.appendChild(_emptyMsg);
         const progressEl = document.getElementById('metaProgress');
         if(progressEl) progressEl.textContent = 'Selecione uma reserva';
-        const btnRetirar = document.getElementById('btnRetirar');
-        if(btnRetirar) btnRetirar.classList.add('js-hidden');
+        const metaActions = document.getElementById('metaActions');
+        if(metaActions) metaActions.classList.add('js-hidden');
         return;
     }
-    
+
     const meta = _ctx.metas.find(m => String(m.id) === String(_ctx.metaSelecionadaId));
     if(!meta) {
         details.innerHTML = '';
@@ -1440,8 +1442,8 @@ function renderMetaVisual() {
         _notFound.className = 'text-secondary';
         _notFound.textContent = 'Meta não encontrada';
         details.appendChild(_notFound);
-        const btnRetirar = document.getElementById('btnRetirar');
-        if(btnRetirar) btnRetirar.classList.add('js-hidden');
+        const metaActions = document.getElementById('metaActions');
+        if(metaActions) metaActions.classList.add('js-hidden');
         return;
     }
     
@@ -2173,6 +2175,380 @@ function abrirRetiradaForm() {
     });
 }
 
+// Saldo disponível no dashboard = acumulado de TODAS as transações.
+// Mesma regra de cálculo do engine (dashboard.js): entrada/retirada somam,
+// saída/reserva subtraem. Usado para validar quanto o usuário pode guardar.
+function _saldoDashboard() {
+    return (_ctx.transacoes || []).reduce((s, t) => {
+        const v = Number(t.valor);
+        if (!Number.isFinite(v) || v < 0) return s;
+        if (t.categoria === 'entrada')          return s + v;
+        if (t.categoria === 'saida')            return s - v;
+        if (t.categoria === 'reserva')          return s - v;
+        if (t.categoria === 'retirada_reserva') return s + v;
+        return s;
+    }, 0);
+}
+
+// Helper compartilhado: seção com fundo glass (mesmo visual dos demais popups)
+function _secaoGlass(labelTxt) {
+    const sec = document.createElement('div');
+    sec.style.cssText = 'background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px 16px; margin-bottom:12px;';
+    if (labelTxt) {
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:10px;';
+        lbl.textContent = labelTxt;
+        sec.appendChild(lbl);
+    }
+    return sec;
+}
+
+// ========== GUARDAR DINHEIRO NA RESERVA ==========
+// Move dinheiro do saldo do dashboard para a reserva selecionada criando uma
+// transação categoria 'reserva' — exatamente o mesmo fluxo da aba Transações
+// (db-transacoes.js): o valor sai do saldo e entra na reserva (meta.saved).
+function abrirGuardarForm() {
+    if (!_ctx.metaSelecionadaId) return _ctx.mostrarNotificacao('Selecione uma reserva primeiro.', 'error');
+
+    const meta = _ctx.metas.find(m => String(m.id) === String(_ctx.metaSelecionadaId));
+    if (!meta) return _ctx.mostrarNotificacao('Reserva não encontrada.', 'error');
+
+    const saldoDisponivel = parseFloat(_saldoDashboard().toFixed(2));
+
+    _ctx.criarPopupDOM((popup) => {
+        popup.style.cssText = 'max-width:440px; width:96%;';
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'max-height:84vh; overflow-y:auto; overflow-x:hidden; padding-right:4px;';
+
+        // ── Título ────────────────────────────────────────────────────────────
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'text-align:center; margin-bottom:6px; display:flex; align-items:center; justify-content:center; gap:10px; font-size:1.12rem;';
+        const tIcon = document.createElement('i');
+        tIcon.className = 'fas fa-piggy-bank';
+        tIcon.setAttribute('aria-hidden', 'true');
+        tIcon.style.color = 'var(--primary)';
+        titulo.appendChild(tIcon);
+        titulo.appendChild(document.createTextNode(' Guardar Dinheiro'));
+
+        // ── Subtítulo: nome da reserva (textContent — blindado contra XSS) ────
+        const subtitulo = document.createElement('div');
+        subtitulo.style.cssText = 'text-align:center; color:var(--text-secondary); font-size:0.9rem; margin-bottom:14px;';
+        subtitulo.appendChild(document.createTextNode('Reserva: '));
+        const subStrong = document.createElement('strong');
+        subStrong.textContent = String(meta.descricao || '');
+        subtitulo.appendChild(subStrong);
+
+        // ── Card: saldo disponível no dashboard ───────────────────────────────
+        const cardSaldo = document.createElement('div');
+        cardSaldo.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:rgba(67,160,71,0.08); border:1px solid rgba(67,160,71,0.2); border-radius:10px; padding:10px 14px; margin-bottom:14px; font-size:0.88rem;';
+        const csLabel = document.createElement('span');
+        csLabel.style.color = 'var(--text-secondary)';
+        csLabel.textContent = 'Saldo disponível';
+        const csVal = document.createElement('strong');
+        csVal.style.color = saldoDisponivel > 0 ? 'var(--primary)' : '#ff4b4b';
+        csVal.textContent = formatBRL(saldoDisponivel);
+        cardSaldo.appendChild(csLabel);
+        cardSaldo.appendChild(csVal);
+
+        // ── Seção: valor + descrição ──────────────────────────────────────────
+        const secDados = _secaoGlass('Quanto guardar?');
+
+        const lblValor = document.createElement('label');
+        lblValor.style.cssText = 'display:block; text-align:left; margin-bottom:6px; color:var(--text-secondary); font-weight:600; font-size:0.85rem;';
+        lblValor.textContent = '💰 Valor a guardar:';
+        const inpValor = document.createElement('input');
+        inpValor.className = 'form-input'; inpValor.id = 'guardarValor';
+        inpValor.type = 'number'; inpValor.step = '0.01'; inpValor.min = '0.01'; inpValor.max = '9999999';
+        inpValor.placeholder = 'Valor a guardar (R$)';
+        inpValor.autocomplete = 'off';
+        inpValor.style.marginBottom = '12px';
+
+        const lblDesc = document.createElement('label');
+        lblDesc.style.cssText = 'display:block; text-align:left; margin-bottom:6px; color:var(--text-secondary); font-weight:600; font-size:0.85rem;';
+        lblDesc.textContent = '📝 Descrição (opcional):';
+        const inpDesc = document.createElement('input');
+        inpDesc.className = 'form-input'; inpDesc.id = 'guardarDesc';
+        inpDesc.type = 'text'; inpDesc.maxLength = 200; inpDesc.autocomplete = 'off';
+        inpDesc.placeholder = 'Ex: Sobra do mês, 13º, venda...';
+
+        secDados.appendChild(lblValor);
+        secDados.appendChild(inpValor);
+        secDados.appendChild(lblDesc);
+        secDados.appendChild(inpDesc);
+
+        // ── Nota informativa ──────────────────────────────────────────────────
+        const nota = document.createElement('div');
+        nota.style.cssText = 'background:rgba(77,166,255,0.08); border-left:3px solid #4da6ff; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:0.82rem; color:var(--text-secondary); line-height:1.5;';
+        const notaIcon = document.createElement('i');
+        notaIcon.className = 'fas fa-info-circle';
+        notaIcon.setAttribute('aria-hidden', 'true');
+        notaIcon.style.cssText = 'color:#4da6ff; margin-right:6px;';
+        nota.appendChild(notaIcon);
+        nota.appendChild(document.createTextNode('O valor sai do seu saldo e entra nesta reserva. Fica registrado em Transações como uma reserva.'));
+
+        // ── Botões ────────────────────────────────────────────────────────────
+        const rowBtns = document.createElement('div');
+        rowBtns.style.cssText = 'display:flex; gap:10px;';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar'; btnCancelar.type = 'button';
+        btnCancelar.style.flex = '1'; btnCancelar.textContent = 'Cancelar';
+        btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
+
+        const btnOk = document.createElement('button');
+        btnOk.className = 'btn-primary'; btnOk.type = 'button';
+        btnOk.style.cssText = 'flex:2; display:flex; align-items:center; justify-content:center; gap:6px;';
+        const iOk = document.createElement('i');
+        iOk.className = 'fas fa-piggy-bank'; iOk.setAttribute('aria-hidden', 'true');
+        btnOk.appendChild(iOk);
+        btnOk.appendChild(document.createTextNode('Guardar'));
+
+        btnOk.addEventListener('click', () => {
+            // ── Validação: valor ──────────────────────────────────────────────
+            const valorStr = inpValor.value;
+            const valorNum = parseFloat(valorStr);
+            if (valorStr === '' || !Number.isFinite(valorNum) || valorNum <= 0) {
+                return _ctx.mostrarNotificacao('Digite um valor válido para guardar.', 'error');
+            }
+            if (valorNum > 9_999_999) {
+                return _ctx.mostrarNotificacao('Valor muito alto (máx. R$ 9.999.999,00).', 'error');
+            }
+            const valor = parseFloat(valorNum.toFixed(2));
+            if (!Number.isFinite(valor) || valor <= 0) {
+                return _ctx.mostrarNotificacao('Valor inválido após processamento.', 'error');
+            }
+            // Revalida o saldo no momento da confirmação (defesa contra alteração entre abrir/confirmar)
+            const saldoAtual = parseFloat(_saldoDashboard().toFixed(2));
+            if (valor > saldoAtual) {
+                return _ctx.mostrarNotificacao(`Saldo insuficiente. Disponível: ${formatBRL(saldoAtual)}.`, 'error');
+            }
+
+            // ── Descrição (opcional, sanitizada) ─────────────────────────────
+            const descRaw = inpDesc.value.trim();
+            if (descRaw.length > 200) {
+                return _ctx.mostrarNotificacao('Descrição muito longa (máx. 200 caracteres).', 'error');
+            }
+            const descricao = descRaw
+                ? _sanitizeText(descRaw)
+                : `Guardado: ${meta.descricao}`.slice(0, 200);
+
+            const dh = _ctx.agoraDataHora();
+
+            // ── Transação 'reserva' (saldo → reserva) — sem id, banco gera UUID ─
+            _ctx.transacoes.push({
+                categoria: 'reserva',
+                tipo:      'Reserva',
+                descricao,
+                valor,
+                data:      dh.data,
+                hora:      dh.hora,
+                metaId:    meta.id,
+            });
+
+            // ── Atualiza saldo da reserva e histórico mensal ─────────────────
+            meta.saved = Number((Number(meta.saved || 0) + valor).toFixed(2));
+            const ym = _ctx.yearMonthKey(_ctx.isoDate());
+            meta.monthly = meta.monthly || {};
+            meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + valor).toFixed(2));
+
+            _ctx.salvarDados();
+            _ctx.atualizarTudo();
+            renderMetaVisual();
+            _ctx.fecharPopup();
+
+            let msg = `${formatBRL(valor)} guardado em "${meta.descricao}"! 🐷`;
+            if (Number(meta.saved) >= Number(meta.objetivo || 0) && Number(meta.objetivo || 0) > 0) {
+                msg = `Meta "${meta.descricao}" concluída! 🎉 Você atingiu ${formatBRL(meta.objetivo)}.`;
+            }
+            _ctx.mostrarNotificacao(msg, 'success');
+        });
+
+        rowBtns.appendChild(btnCancelar);
+        rowBtns.appendChild(btnOk);
+
+        // ── Montagem ──────────────────────────────────────────────────────────
+        wrapper.appendChild(titulo);
+        wrapper.appendChild(subtitulo);
+        wrapper.appendChild(cardSaldo);
+        wrapper.appendChild(secDados);
+        wrapper.appendChild(nota);
+        wrapper.appendChild(rowBtns);
+        popup.appendChild(wrapper);
+    });
+}
+
+// ========== AJUSTAR VALOR DA RESERVA ==========
+// Reconciliação: corrige o valor atual da reserva (meta.saved) para bater com
+// o valor real do usuário. NÃO cria transação e NÃO mexe no saldo do dashboard —
+// apenas acerta o valor exibido da reserva. Registra o ajuste em historicoAjustes.
+function abrirAjusteForm() {
+    if (!_ctx.metaSelecionadaId) return _ctx.mostrarNotificacao('Selecione uma reserva primeiro.', 'error');
+
+    const meta = _ctx.metas.find(m => String(m.id) === String(_ctx.metaSelecionadaId));
+    if (!meta) return _ctx.mostrarNotificacao('Reserva não encontrada.', 'error');
+
+    const valorAtual = parseFloat(Number(meta.saved || 0).toFixed(2));
+
+    _ctx.criarPopupDOM((popup) => {
+        popup.style.cssText = 'max-width:440px; width:96%;';
+
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'max-height:84vh; overflow-y:auto; overflow-x:hidden; padding-right:4px;';
+
+        // ── Título ────────────────────────────────────────────────────────────
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'text-align:center; margin-bottom:6px; display:flex; align-items:center; justify-content:center; gap:10px; font-size:1.12rem;';
+        const tIcon = document.createElement('i');
+        tIcon.className = 'fas fa-sliders-h';
+        tIcon.setAttribute('aria-hidden', 'true');
+        tIcon.style.color = 'var(--primary)';
+        titulo.appendChild(tIcon);
+        titulo.appendChild(document.createTextNode(' Ajustar Valor'));
+
+        // ── Subtítulo: nome da reserva ────────────────────────────────────────
+        const subtitulo = document.createElement('div');
+        subtitulo.style.cssText = 'text-align:center; color:var(--text-secondary); font-size:0.9rem; margin-bottom:14px;';
+        subtitulo.appendChild(document.createTextNode('Reserva: '));
+        const subStrong = document.createElement('strong');
+        subStrong.textContent = String(meta.descricao || '');
+        subtitulo.appendChild(subStrong);
+
+        // ── Card: valor atual registrado ──────────────────────────────────────
+        const cardAtual = document.createElement('div');
+        cardAtual.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px 14px; margin-bottom:14px; font-size:0.88rem;';
+        const caLabel = document.createElement('span');
+        caLabel.style.color = 'var(--text-secondary)';
+        caLabel.textContent = 'Valor atual registrado';
+        const caVal = document.createElement('strong');
+        caVal.textContent = formatBRL(valorAtual);
+        cardAtual.appendChild(caLabel);
+        cardAtual.appendChild(caVal);
+
+        // ── Seção: novo valor ─────────────────────────────────────────────────
+        const secNovo = _secaoGlass('Valor real da reserva');
+
+        const lblNovo = document.createElement('label');
+        lblNovo.style.cssText = 'display:block; text-align:left; margin-bottom:6px; color:var(--text-secondary); font-weight:600; font-size:0.85rem;';
+        lblNovo.textContent = '🎯 Novo valor:';
+        const inpNovo = document.createElement('input');
+        inpNovo.className = 'form-input'; inpNovo.id = 'ajusteValor';
+        inpNovo.type = 'number'; inpNovo.step = '0.01'; inpNovo.min = '0'; inpNovo.max = '9999999';
+        inpNovo.placeholder = 'Valor real da reserva (R$)';
+        inpNovo.autocomplete = 'off';
+        inpNovo.value = String(valorAtual);
+
+        // Pré-visualização da diferença (atualiza ao digitar)
+        const previewDiff = document.createElement('div');
+        previewDiff.style.cssText = 'margin-top:10px; font-size:0.83rem; color:var(--text-muted); min-height:1.2em;';
+
+        const _renderDiff = () => {
+            const nv = parseFloat(inpNovo.value);
+            if (!Number.isFinite(nv) || nv < 0) { previewDiff.textContent = ''; return; }
+            const delta = parseFloat((nv - valorAtual).toFixed(2));
+            while (previewDiff.firstChild) previewDiff.removeChild(previewDiff.firstChild);
+            if (delta === 0) {
+                previewDiff.style.color = 'var(--text-muted)';
+                previewDiff.textContent = 'Sem alteração.';
+            } else {
+                const up = delta > 0;
+                previewDiff.style.color = up ? '#00ff99' : '#ff4b4b';
+                previewDiff.textContent = `${up ? '▲ Aumento de ' : '▼ Redução de '}${formatBRL(Math.abs(delta))}`;
+            }
+        };
+        inpNovo.addEventListener('input', _renderDiff);
+
+        secNovo.appendChild(lblNovo);
+        secNovo.appendChild(inpNovo);
+        secNovo.appendChild(previewDiff);
+
+        // ── Nota informativa ──────────────────────────────────────────────────
+        const nota = document.createElement('div');
+        nota.style.cssText = 'background:rgba(255,209,102,0.1); border-left:3px solid #ffd166; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:0.82rem; color:var(--text-secondary); line-height:1.5;';
+        const notaIcon = document.createElement('i');
+        notaIcon.className = 'fas fa-info-circle';
+        notaIcon.setAttribute('aria-hidden', 'true');
+        notaIcon.style.cssText = 'color:#ffd166; margin-right:6px;';
+        nota.appendChild(notaIcon);
+        nota.appendChild(document.createTextNode('Use para corrigir o valor da reserva quando ele estiver diferente do real. Isto NÃO movimenta seu saldo do dashboard — apenas acerta o valor desta reserva.'));
+
+        // ── Botões ────────────────────────────────────────────────────────────
+        const rowBtns = document.createElement('div');
+        rowBtns.style.cssText = 'display:flex; gap:10px;';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar'; btnCancelar.type = 'button';
+        btnCancelar.style.flex = '1'; btnCancelar.textContent = 'Cancelar';
+        btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
+
+        const btnOk = document.createElement('button');
+        btnOk.className = 'btn-primary'; btnOk.type = 'button';
+        btnOk.style.cssText = 'flex:2; display:flex; align-items:center; justify-content:center; gap:6px;';
+        const iOk = document.createElement('i');
+        iOk.className = 'fas fa-check'; iOk.setAttribute('aria-hidden', 'true');
+        btnOk.appendChild(iOk);
+        btnOk.appendChild(document.createTextNode('Ajustar Valor'));
+
+        btnOk.addEventListener('click', () => {
+            const novoStr = inpNovo.value;
+            const novoNum = parseFloat(novoStr);
+            if (novoStr === '' || !Number.isFinite(novoNum) || novoNum < 0) {
+                return _ctx.mostrarNotificacao('Digite um valor válido (R$ 0,00 ou mais).', 'error');
+            }
+            if (novoNum > 9_999_999) {
+                return _ctx.mostrarNotificacao('Valor muito alto (máx. R$ 9.999.999,00).', 'error');
+            }
+            const novoValor = parseFloat(novoNum.toFixed(2));
+            if (!Number.isFinite(novoValor) || novoValor < 0) {
+                return _ctx.mostrarNotificacao('Valor inválido após processamento.', 'error');
+            }
+
+            const valorAnterior = parseFloat(Number(meta.saved || 0).toFixed(2));
+            const delta = parseFloat((novoValor - valorAnterior).toFixed(2));
+            if (delta === 0) {
+                _ctx.fecharPopup();
+                return _ctx.mostrarNotificacao('Nenhuma alteração no valor da reserva.', 'info');
+            }
+
+            // ── Aplica o ajuste (reconciliação — sem transação) ──────────────
+            meta.saved = novoValor;
+
+            const dh = _ctx.agoraDataHora();
+            if (!Array.isArray(meta.historicoAjustes)) meta.historicoAjustes = [];
+            meta.historicoAjustes.push({
+                data:           dh.data,
+                hora:           dh.hora,
+                valorAnterior,
+                valorNovo:      novoValor,
+                delta,
+            });
+
+            _ctx.salvarDados();
+            _ctx.atualizarTudo();
+            renderMetaVisual();
+            _ctx.fecharPopup();
+
+            const sinal = delta > 0 ? 'aumentado' : 'reduzido';
+            _ctx.mostrarNotificacao(
+                `Reserva "${meta.descricao}" ${sinal} para ${formatBRL(novoValor)}.`,
+                'success'
+            );
+        });
+
+        rowBtns.appendChild(btnCancelar);
+        rowBtns.appendChild(btnOk);
+
+        // ── Montagem ──────────────────────────────────────────────────────────
+        wrapper.appendChild(titulo);
+        wrapper.appendChild(subtitulo);
+        wrapper.appendChild(cardAtual);
+        wrapper.appendChild(secNovo);
+        wrapper.appendChild(nota);
+        wrapper.appendChild(rowBtns);
+        popup.appendChild(wrapper);
+    });
+}
+
 // ========== ANÁLISE DE DISCIPLINA FINANCEIRA NAS RETIRADAS ==========
 function analisarDisciplinaRetiradas(metaId) {
     const meta = _ctx.metas.find(m => String(m.id) === String(metaId));
@@ -2218,26 +2594,71 @@ function analisarDisciplinaRetiradas(metaId) {
     const percInvestimento = ((countInvestimento / totalRetiradas) * 100).toFixed(1);
     const percOutros = ((countOutros / totalRetiradas) * 100).toFixed(1);
     
-    let nivelDisciplina = 'Boa';
-    let corDisciplina = '#00ff99';
-    let mensagemDisciplina = '';
-    
-    if(percEmergencia > 60) {
-        nivelDisciplina = 'Atenção Necessária';
-        corDisciplina = '#ff4b4b';
-        mensagemDisciplina = 'Muitas retiradas por emergência podem indicar falta de um fundo de emergência separado.';
-    } else if(percPlanejado + percInvestimento > 50) {
-        nivelDisciplina = 'Excelente';
-        corDisciplina = '#00ff99';
-        mensagemDisciplina = 'Parabéns! Você está usando suas reservas de forma planejada e inteligente.';
-    } else if(percOutros > 40) {
-        nivelDisciplina = 'Pode Melhorar';
-        corDisciplina = '#ffd166';
-        mensagemDisciplina = 'Tente planejar melhor o uso das suas reservas para evitar retiradas não planejadas.';
+    // ── Score numérico de disciplina (0–100) ────────────────────────────────
+    //    ⚠️ percXxx vêm de toFixed() → são STRINGS. Converter antes de qualquer
+    //    soma/comparação, senão "40.0"+"20.0" vira concatenação ("40.020.0").
+    const nEmerg = Number(percEmergencia)   || 0;
+    const nPlan  = Number(percPlanejado)    || 0;
+    const nInv   = Number(percInvestimento) || 0;
+    const nOut   = Number(percOutros)       || 0;
+
+    // Planejado/Investimento = uso intencional (peso cheio); Emergência = neutro;
+    // Outros (impulso / não categorizado) = quase sem crédito.
+    const score = Math.round(Math.min(100, Math.max(0,
+        nPlan * 1.0 + nInv * 1.0 + nEmerg * 0.4 + nOut * 0.15
+    )));
+
+    let nivelDisciplina, corDisciplina;
+    if      (score >= 70) { nivelDisciplina = 'Excelente';          corDisciplina = '#00ff99'; }
+    else if (score >= 45) { nivelDisciplina = 'Boa';                corDisciplina = '#00ff99'; }
+    else if (score >= 25) { nivelDisciplina = 'Pode Melhorar';      corDisciplina = '#ffd166'; }
+    else                  { nivelDisciplina = 'Atenção Necessária'; corDisciplina = '#ff4b4b'; }
+
+    // Mensagem contextual — detecta o padrão dominante das retiradas
+    let mensagemDisciplina;
+    if (nEmerg > 50) {
+        mensagemDisciplina = 'Boa parte das retiradas foi por emergência. Vale manter um fundo de emergência separado para não comprometer esta reserva.';
+    } else if (nPlan + nInv >= 50) {
+        mensagemDisciplina = 'Excelente! Você usa suas reservas de forma planejada e intencional. Continue assim.';
+    } else if (nOut > 40) {
+        mensagemDisciplina = 'Muitas retiradas sem um motivo planejado. Definir o propósito antes de retirar ajuda a manter a disciplina.';
     } else {
-        mensagemDisciplina = 'Você mantém um bom equilíbrio no uso das suas reservas.';
+        mensagemDisciplina = 'Você mantém um equilíbrio razoável no uso das suas reservas.';
     }
-    
+
+    // ── Métricas avançadas ──────────────────────────────────────────────────
+    const valores       = retiradas.map(r => Number(r.valor) || 0);
+    const retiradaMedia = totalRetiradas > 0 ? valorTotalRetirado / totalRetiradas : 0;
+    const maiorRetirada = valores.length ? Math.max(...valores) : 0;
+
+    // Datas em pt-BR ("DD/MM/AAAA") → cadência e tempo desde a última retirada
+    function _parseDataBR(s) {
+        if (typeof s !== 'string') return null;
+        const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!m) return null;
+        const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+        return isNaN(d.getTime()) ? null : d;
+    }
+    const MS_DIA = 86400000;
+    const datas  = retiradas.map(r => _parseDataBR(r.data)).filter(Boolean).sort((a, b) => a - b);
+
+    let cadenciaDias = null;
+    if (datas.length >= 2) {
+        const span = (datas[datas.length - 1] - datas[0]) / MS_DIA;
+        cadenciaDias = Math.max(1, Math.round(span / (datas.length - 1)));
+    }
+    let diasDesdeUltima = null;
+    if (datas.length) {
+        const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+        diasDesdeUltima = Math.max(0, Math.round((hoje - datas[datas.length - 1]) / MS_DIA));
+    }
+
+    // Impacto acumulado das retiradas sobre o objetivo da meta
+    const objetivoMeta = Number(meta.objetivo) || 0;
+    const impactoObjetivoPerc = objetivoMeta > 0
+        ? Math.round((valorTotalRetirado / objetivoMeta) * 100)
+        : null;
+
     return {
         temDados: true,
         totalRetiradas: totalRetiradas,
@@ -2248,9 +2669,15 @@ function analisarDisciplinaRetiradas(metaId) {
             investimento: { count: countInvestimento, perc: percInvestimento },
             outros: { count: countOutros, perc: percOutros }
         },
+        score: score,
         nivelDisciplina: nivelDisciplina,
         corDisciplina: corDisciplina,
         mensagemDisciplina: mensagemDisciplina,
+        retiradaMedia: retiradaMedia,
+        maiorRetirada: maiorRetirada,
+        cadenciaDias: cadenciaDias,
+        diasDesdeUltima: diasDesdeUltima,
+        impactoObjetivoPerc: impactoObjetivoPerc,
         ultimaRetirada: retiradas[retiradas.length - 1]
     };
 }
@@ -2309,66 +2736,153 @@ function abrirAnaliseDisciplina(metaId) {
         subtitulo.appendChild(subtituloLabel);
         subtitulo.appendChild(subtituloValor);
 
-        // ── Card de nível de disciplina
-        const cardNivel = document.createElement('div');
-        cardNivel.style.background    = `linear-gradient(135deg, ${corSegura}20, ${corSegura}10)`;
-        cardNivel.style.padding       = '20px';
-        cardNivel.style.borderRadius  = '12px';
-        cardNivel.style.marginBottom  = '20px';
-        cardNivel.style.borderLeft    = `4px solid ${corSegura}`;
-        cardNivel.style.textAlign     = 'center';
+        // ── Hero: anel de score (gauge SVG) + chip de nível ──────────────────
+        // ✅ Score é numérico interno; re-clamp defensivo antes de renderizar
+        const scoreSeguro = Math.max(0, Math.min(100, Math.round(Number(analise.score) || 0)));
 
-        const labelNivel = document.createElement('div');
-        labelNivel.style.cssText = 'font-size:0.85rem; color:var(--text-secondary); margin-bottom:8px;';
-        labelNivel.textContent = 'Nível de Disciplina';
+        function _criarRingScore(valor, cor) {
+            const NS = 'http://www.w3.org/2000/svg';
+            const size = 140, raio = 58, centro = size / 2;
+            const C = 2 * Math.PI * raio;
+            const prog = Math.max(0, Math.min(100, Number(valor) || 0));
 
-        const valorNivel = document.createElement('div');
-        valorNivel.style.cssText = `font-size:1.8rem; font-weight:700; color:${corSegura}; margin-bottom:12px;`;
-        valorNivel.textContent = String(analise.nivelDisciplina || ''); // ✅ textContent — valor interno calculado
+            const box = document.createElement('div');
+            box.style.cssText = `position:relative; width:${size}px; height:${size}px; margin:0 auto;`;
+
+            const svg = document.createElementNS(NS, 'svg');
+            svg.setAttribute('width', String(size));
+            svg.setAttribute('height', String(size));
+            svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            svg.style.transform = 'rotate(-90deg)';
+
+            const track = document.createElementNS(NS, 'circle');
+            track.setAttribute('cx', String(centro));
+            track.setAttribute('cy', String(centro));
+            track.setAttribute('r', String(raio));
+            track.setAttribute('fill', 'none');
+            track.setAttribute('stroke', 'rgba(255,255,255,0.08)');
+            track.setAttribute('stroke-width', '11');
+
+            const arco = document.createElementNS(NS, 'circle');
+            arco.setAttribute('cx', String(centro));
+            arco.setAttribute('cy', String(centro));
+            arco.setAttribute('r', String(raio));
+            arco.setAttribute('fill', 'none');
+            arco.setAttribute('stroke', cor); // ✅ cor da whitelist CORES_PERMITIDAS_DISCIPLINA
+            arco.setAttribute('stroke-width', '11');
+            arco.setAttribute('stroke-linecap', 'round');
+            arco.setAttribute('stroke-dasharray', `0 ${C}`);
+            arco.style.transition = 'stroke-dasharray 0.9s cubic-bezier(0.22,1,0.36,1)';
+
+            svg.appendChild(track);
+            svg.appendChild(arco);
+
+            // Anima o preenchimento após o primeiro paint (double rAF)
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                arco.setAttribute('stroke-dasharray', `${(prog / 100) * C} ${C}`);
+            }));
+
+            const miolo = document.createElement('div');
+            miolo.style.cssText = 'position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;';
+            const num = document.createElement('div');
+            num.style.cssText = `font-size:2.6rem; font-weight:800; line-height:1; color:${cor};`;
+            num.textContent = String(prog); // ✅ numérico
+            const den = document.createElement('div');
+            den.style.cssText = 'font-size:0.72rem; letter-spacing:0.5px; color:var(--text-secondary); margin-top:3px; text-transform:uppercase;';
+            den.textContent = 'de 100';
+            miolo.appendChild(num);
+            miolo.appendChild(den);
+
+            box.appendChild(svg);
+            box.appendChild(miolo);
+            return box;
+        }
+
+        const hero = document.createElement('div');
+        hero.style.cssText = 'background:linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.07); border-radius:16px; padding:24px 20px; margin-bottom:16px; text-align:center;';
+
+        const heroLabel = document.createElement('div');
+        heroLabel.style.cssText = 'font-size:0.78rem; letter-spacing:0.5px; text-transform:uppercase; color:var(--text-secondary); margin-bottom:14px;';
+        heroLabel.textContent = 'Nível de Disciplina';
+
+        const ring = _criarRingScore(scoreSeguro, corSegura);
+
+        const chipNivel = document.createElement('div');
+        chipNivel.style.cssText = `display:inline-block; margin:16px 0 0; padding:6px 16px; border-radius:999px; font-weight:700; font-size:0.95rem; color:${corSegura}; background:${corSegura}1f; border:1px solid ${corSegura}44;`;
+        chipNivel.textContent = String(analise.nivelDisciplina || ''); // ✅ textContent
 
         const mensagemNivel = document.createElement('div');
-        mensagemNivel.style.cssText = 'font-size:0.9rem; color:var(--text-secondary); line-height:1.5;';
-        mensagemNivel.textContent = String(analise.mensagemDisciplina || ''); // ✅ textContent — valor interno calculado
+        mensagemNivel.style.cssText = 'font-size:0.88rem; color:var(--text-secondary); line-height:1.55; margin:12px auto 0; max-width:360px;';
+        mensagemNivel.textContent = String(analise.mensagemDisciplina || ''); // ✅ textContent
 
-        cardNivel.appendChild(labelNivel);
-        cardNivel.appendChild(valorNivel);
-        cardNivel.appendChild(mensagemNivel);
+        hero.appendChild(heroLabel);
+        hero.appendChild(ring);
+        hero.appendChild(chipNivel);
+        hero.appendChild(mensagemNivel);
 
-        // ── Grid totais
+        // ── Grid de estatísticas (com ícones) ────────────────────────────────
+        // corValor restrita a literais seguros / var() — nunca dado do usuário
+        function _criarStatCard(icone, rotulo, valor, corValor) {
+            const card = document.createElement('div');
+            card.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); padding:14px; border-radius:12px;';
+            const topo = document.createElement('div');
+            topo.style.cssText = 'font-size:0.78rem; color:var(--text-secondary); margin-bottom:8px; display:flex; align-items:center; gap:6px;';
+            const ic = document.createElement('span'); ic.textContent = icone;
+            const rt = document.createElement('span'); rt.textContent = rotulo;
+            topo.appendChild(ic); topo.appendChild(rt);
+            const v = document.createElement('div');
+            v.style.cssText = `font-size:1.3rem; font-weight:700; color:${corValor || 'var(--text-primary)'};`;
+            v.textContent = valor; // ✅ textContent — valores numéricos/formatBRL
+            card.appendChild(topo);
+            card.appendChild(v);
+            return card;
+        }
+
         const gridTotais = document.createElement('div');
-        gridTotais.style.cssText = 'display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:20px;';
+        gridTotais.style.cssText = 'display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:16px;';
+        gridTotais.appendChild(_criarStatCard('🔢', 'Retiradas',      String(Number(analise.totalRetiradas) || 0)));
+        gridTotais.appendChild(_criarStatCard('💸', 'Total retirado', _ctx.formatBRL(analise.valorTotalRetirado), '#ff4b4b'));
+        gridTotais.appendChild(_criarStatCard('📊', 'Média/retirada', _ctx.formatBRL(analise.retiradaMedia)));
+        gridTotais.appendChild(_criarStatCard('⬆️', 'Maior retirada', _ctx.formatBRL(analise.maiorRetirada)));
 
-        const celulaRetiradas = document.createElement('div');
-        celulaRetiradas.style.cssText = 'background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;';
-        const labelRet = document.createElement('div');
-        labelRet.style.cssText = 'font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;';
-        labelRet.textContent = 'Total de Retiradas';
-        const valorRet = document.createElement('div');
-        valorRet.style.cssText = 'font-size:1.5rem; font-weight:700; color:var(--text-primary);';
-        valorRet.textContent = String(Number(analise.totalRetiradas) || 0); // ✅ textContent — numérico
-        celulaRetiradas.appendChild(labelRet);
-        celulaRetiradas.appendChild(valorRet);
+        // ── Insights dinâmicos (texto derivado apenas de números internos) ───
+        const insightsDados = [];
+        if (analise.cadenciaDias != null && Number(analise.totalRetiradas) >= 2) {
+            insightsDados.push(['📅', `Em média, uma retirada a cada ${analise.cadenciaDias} dia(s).`]);
+        }
+        if (analise.diasDesdeUltima != null) {
+            insightsDados.push(analise.diasDesdeUltima === 0
+                ? ['🕐', 'Sua última retirada foi hoje.']
+                : ['🕐', `Há ${analise.diasDesdeUltima} dia(s) sem retiradas — mantenha o ritmo!`]);
+        }
+        if (analise.impactoObjetivoPerc != null) {
+            insightsDados.push(['🎯', `As retiradas equivalem a ${analise.impactoObjetivoPerc}% do objetivo desta meta.`]);
+        }
 
-        const celulaValor = document.createElement('div');
-        celulaValor.style.cssText = 'background:rgba(255,255,255,0.05); padding:14px; border-radius:10px; text-align:center;';
-        const labelVal = document.createElement('div');
-        labelVal.style.cssText = 'font-size:0.85rem; color:var(--text-secondary); margin-bottom:6px;';
-        labelVal.textContent = 'Valor Total Retirado';
-        const valorVal = document.createElement('div');
-        valorVal.style.cssText = 'font-size:1.5rem; font-weight:700; color:#ff4b4b;';
-        valorVal.textContent = _ctx.formatBRL(analise.valorTotalRetirado); // ✅ textContent — formatBRL retorna numérico formatado
-        celulaValor.appendChild(labelVal);
-        celulaValor.appendChild(valorVal);
-
-        gridTotais.appendChild(celulaRetiradas);
-        gridTotais.appendChild(celulaValor);
+        let cardInsights = null;
+        if (insightsDados.length) {
+            cardInsights = document.createElement('div');
+            cardInsights.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:16px; margin-bottom:16px;';
+            const tituloIns = document.createElement('div');
+            tituloIns.style.cssText = 'font-weight:600; color:var(--text-primary); margin-bottom:10px;';
+            tituloIns.textContent = '💡 Insights';
+            cardInsights.appendChild(tituloIns);
+            insightsDados.forEach(([ic, txt]) => {
+                const linha = document.createElement('div');
+                linha.style.cssText = 'display:flex; gap:8px; align-items:flex-start; font-size:0.88rem; color:var(--text-secondary); line-height:1.5; margin-bottom:7px;';
+                const sIc = document.createElement('span'); sIc.textContent = ic;
+                const sTx = document.createElement('span'); sTx.textContent = txt; // ✅ texto derivado de números
+                linha.appendChild(sIc); linha.appendChild(sTx);
+                cardInsights.appendChild(linha);
+            });
+        }
 
         // ── Distribuição por motivo
         const secaoDistribuicao = document.createElement('div');
-        secaoDistribuicao.style.marginBottom = '20px';
+        secaoDistribuicao.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:16px; margin-bottom:16px;';
 
-        const tituloDistribuicao = document.createElement('h4');
-        tituloDistribuicao.style.cssText = 'margin-bottom:12px; color:var(--text-primary);';
+        const tituloDistribuicao = document.createElement('div');
+        tituloDistribuicao.style.cssText = 'font-weight:600; margin-bottom:14px; color:var(--text-primary);';
         tituloDistribuicao.textContent = '📋 Distribuição por Motivo';
         secaoDistribuicao.appendChild(tituloDistribuicao);
 
@@ -2393,13 +2907,14 @@ function abrirAnaliseDisciplina(metaId) {
             rowLabel.appendChild(spanCount);
 
             const barContainer = document.createElement('div');
-            barContainer.style.cssText = 'width:100%; height:10px; background:rgba(255,255,255,0.1); border-radius:5px; overflow:hidden;';
+            barContainer.style.cssText = 'width:100%; height:8px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden;';
 
             const barFill = document.createElement('div');
-            barFill.style.width      = `${perc}%`;
-            barFill.style.height     = '100%';
-            barFill.style.background = cor;
-            barFill.style.transition = 'width 0.5s';
+            barFill.style.width        = `${perc}%`;
+            barFill.style.height       = '100%';
+            barFill.style.background    = cor;
+            barFill.style.borderRadius  = '999px';
+            barFill.style.transition    = 'width 0.7s cubic-bezier(0.22,1,0.36,1)';
 
             barContainer.appendChild(barFill);
             container.appendChild(rowLabel);
@@ -2468,10 +2983,10 @@ function abrirAnaliseDisciplina(metaId) {
 
         // ── Histórico completo — 100% via DOM, zero innerHTML com dados do usuário
         const secaoHistorico = document.createElement('div');
-        secaoHistorico.style.marginTop = '20px';
+        secaoHistorico.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:16px; margin-top:16px;';
 
-        const tituloHistorico = document.createElement('h4');
-        tituloHistorico.style.cssText = 'margin-bottom:12px; color:var(--text-primary);';
+        const tituloHistorico = document.createElement('div');
+        tituloHistorico.style.cssText = 'font-weight:600; margin-bottom:12px; color:var(--text-primary);';
         tituloHistorico.textContent = '📜 Histórico Completo';
 
         const listaHistorico = document.createElement('div');
@@ -2531,8 +3046,9 @@ function abrirAnaliseDisciplina(metaId) {
         // ── Montagem final
         wrapper.appendChild(titulo);
         wrapper.appendChild(subtitulo);
-        wrapper.appendChild(cardNivel);
+        wrapper.appendChild(hero);
         wrapper.appendChild(gridTotais);
+        if (cardInsights) wrapper.appendChild(cardInsights);
         wrapper.appendChild(secaoDistribuicao);
         wrapper.appendChild(cardUltima);
         wrapper.appendChild(secaoHistorico);
