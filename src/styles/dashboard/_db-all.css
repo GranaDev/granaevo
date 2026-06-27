@@ -177,6 +177,14 @@
     padding: 0;
 }
 
+/* overflow-x no <body> não propaga para o viewport enquanto o <html> está
+   `visible`, então um filho largo ainda deixa a página pannável (efeito de
+   "zoom" + bottom-nav fixo saindo da tela). Travar no <html> garante o clip
+   no nível do viewport em qualquer página. */
+html {
+    overflow-x: hidden;
+}
+
 body {
     font-family: 'DM Sans', 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
     background: #0a0e1a;
@@ -788,27 +796,7 @@ body::before {
     white-space: nowrap;
 }
 
-.photo-upload-btn {
-    display: none;
-    align-items: center;
-    gap: 6px;
-    background: rgba(67,160,71,0.1);
-    color: var(--primary);
-    padding: 6px 14px;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 0.78rem;
-    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
-    border: 1px solid rgba(67,160,71,0.3);
-    font-weight: 600;
-}
-
-.sidebar:hover .photo-upload-btn { display: inline-flex; }
-
-.photo-upload-btn:hover {
-    background: rgba(67,160,71,0.2);
-    color: var(--primary-light);
-}
+.user-photo-wrapper { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
 /* â”€â”€ Nav â”€â”€ */
 .sidebar-nav {
@@ -1031,7 +1019,6 @@ body::before {
     .sidebar .user-photo { width: 52px; height: 52px; min-width: 52px; }
     .sidebar:hover .user-photo { width: 52px; height: 52px; min-width: 52px; }
     .sidebar .user-photo-wrapper { margin-bottom: 10px; }
-    .sidebar .photo-upload-btn { display: inline-flex; }
 
     .sidebar-toggle { display: flex !important; }
 
@@ -2853,16 +2840,20 @@ select.form-input option:checked {
 /* ========== RESERVAS/METAS ========== */
 .reservas-layout {
     display: grid;
-    grid-template-columns: 1fr 1.5fr;
+    /* minmax(0, …) impede o blow-out de grid: sem isso a coluna assume
+       min-width:auto (= min-content) e qualquer filho largo — ex.: a barra
+       de período — estoura a largura do viewport no mobile. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
     gap: 24px;
     align-items: flex-start;
 }
 
 @media (max-width: 768px) {
-    .reservas-layout { grid-template-columns: 1fr; gap: 16px; }
+    .reservas-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 }
 
 .reservas-sidebar {
+    min-width: 0;
     background: rgba(30, 40, 35, 0.3);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -2956,6 +2947,8 @@ select.form-input option:checked {
 }
 
 .reservas-main {
+    min-width: 0;
+    overflow-x: hidden;
     background: rgba(30, 40, 35, 0.3);
     backdrop-filter: blur(12px);
     border: 1px solid rgba(67, 160, 71, 0.15);
@@ -3373,16 +3366,21 @@ select.form-input option:checked {
 /* ========== SELETOR DE PERÍODO — RESERVAS ========== */
 .meta-periodo-bar {
     display: flex;
+    flex-wrap: wrap;
     gap: 3px;
     padding: 4px;
     margin: 8px 0 10px;
+    max-width: 100%;
     background: rgba(255,255,255,0.025);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 10px;
 }
 
 .meta-periodo-btn {
-    flex: 1;
+    flex: 1 1 auto;
+    /* min-width:0 permite o botão encolher abaixo do conteúdo; sem isso os 5
+       botões nowrap somam ~294px e estouram a coluna no mobile estreito. */
+    min-width: 0;
     padding: 5px 4px;
     border-radius: 7px;
     border: none;
@@ -4340,40 +4338,101 @@ select.form-input option:checked {
 /* ========== CONTA FIXA — CARTÃO DE VISUALIZAÇÃO (view-first) ========== */
 .cf-view { text-align: left; }
 
-.cf-view-head {
+/* ── Cabeçalho: ícone + título/prazo + status ── */
+.cf-view-hero {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 4px;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 22px;
 }
 
-.cf-view-head h3 {
-    margin: 0;
-    font-size: 1.25rem;
+.cf-view-icon {
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    font-size: 1.2rem;
+    color: #5ED77F;
+    background: linear-gradient(135deg, rgba(67,160,71,0.28), rgba(46,125,50,0.10));
+    border: 1px solid rgba(67,160,71,0.35);
+    box-shadow:
+        0 0 18px rgba(67,160,71,0.18),
+        inset 0 1px 0 rgba(255,255,255,0.10);
+}
+
+.cf-view-heart {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.cf-view-heart h3 {
+    margin: 0 0 5px;
+    font-size: 1.2rem;
     font-weight: 700;
     color: var(--text-primary);
     word-break: break-word;
     line-height: 1.25;
+    letter-spacing: -0.2px;
 }
 
-.cf-view-head .conta-status {
+.cf-view-hero .conta-status {
     flex: 0 0 auto;
     white-space: nowrap;
 }
 
-.cf-view-valor {
-    font-size: 2rem;
-    font-weight: 800;
-    color: var(--primary, #4caf50);
-    margin: 10px 0 18px;
-    letter-spacing: -0.5px;
+/* ── Chip de prazo (contagem regressiva) ── */
+.cf-prazo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.cf-prazo i { font-size: 0.88em; }
+.cf-prazo-ok   { color: var(--text-secondary); }
+.cf-prazo-soon { color: var(--warning); }
+.cf-prazo-late { color: var(--danger); }
+.cf-prazo-pago { color: var(--success); }
+
+/* ── Valor em destaque ── */
+.cf-view-amount {
+    margin-bottom: 20px;
+    padding: 16px 18px;
+    border-radius: 16px;
+    background:
+        linear-gradient(135deg, rgba(67,160,71,0.10), rgba(67,160,71,0.02));
+    border: 1px solid rgba(67,160,71,0.18);
 }
 
+.cf-view-amount-label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.cf-view-amount-val {
+    display: block;
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    line-height: 1.1;
+    color: var(--primary, #4caf50);               /* fallback */
+    background: linear-gradient(135deg, #6BE38C, #2E9E55);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* ── Linhas de informação ── */
 .cf-view-rows {
     display: flex;
     flex-direction: column;
-    border-top: 1px solid var(--border);
 }
 
 .cf-view-row {
@@ -4384,10 +4443,20 @@ select.form-input option:checked {
     padding: 13px 2px;
     border-bottom: 1px solid var(--border);
 }
+.cf-view-row:last-child { border-bottom: none; }
 
 .cf-view-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
     color: var(--text-secondary);
     font-size: 0.9rem;
+}
+.cf-view-label i {
+    color: rgba(67,160,71,0.75);
+    font-size: 0.95em;
+    width: 16px;
+    text-align: center;
 }
 
 .cf-view-val {
@@ -4397,11 +4466,12 @@ select.form-input option:checked {
     text-align: right;
 }
 
+/* ── Ações ── */
 .cf-view-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    margin-top: 22px;
+    margin-top: 24px;
 }
 
 /* Especificidade alta o bastante para vencer .popup button e
@@ -4410,8 +4480,12 @@ select.form-input option:checked {
     flex: 1 1 auto;
     min-width: 110px;
     margin: 0;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
+    gap: 7px;
 }
+.cf-view .cf-view-actions .btn-cancelar { flex: 0 1 auto; min-width: 84px; }
 
 /* ========== SCROLLBAR CUSTOMIZADO ========== */
 ::-webkit-scrollbar       { width: 10px; height: 10px; }
@@ -4923,6 +4997,9 @@ select.form-input option:checked {
         justify-content: center;
         cursor: pointer;
         position: relative;
+        background: none;
+        border: none;
+        padding: 0;
         -webkit-tap-highlight-color: transparent;
     }
 
@@ -4962,23 +5039,6 @@ select.form-input option:checked {
         box-shadow: 0 0 22px rgba(67, 160, 71, 0.9),
                     0 0 44px rgba(67, 160, 71, 0.4);
         border-color: var(--primary-light);
-    }
-
-    /* Ãcone cÃ¢mera sobre a foto */
-    .mobile-profile-btn::after {
-        content: '';
-        position: absolute;
-        bottom: -3px; right: -3px;
-        width: 17px; height: 17px;
-        border-radius: 50%;
-        background-color: var(--primary);
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: 10px 10px;
-        border: 1.5px solid #0a0d16;
-        box-shadow: 0 0 8px rgba(67, 160, 71, 0.6);
-        pointer-events: none;
     }
 
     /* â”€â”€ Logo central â”€â”€ */
