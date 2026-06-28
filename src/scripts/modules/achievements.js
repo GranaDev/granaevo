@@ -10,8 +10,15 @@
 // próprio perfil (ver dashboard.js). Nível e título são SEMPRE derivados do
 // XP somado das conquistas — nada redundante é salvo.
 //
-// Toda renderização usa DOM seguro (textContent / sem innerHTML com dado
-// dinâmico). Os textos das conquistas são estáticos definidos aqui.
+// ── ARQUITETURA DE BUNDLE (importante) ──────────────────────────────────────
+// Este módulo é importado ESTATICAMENTE pelo dashboard.js (chunk crítico, com
+// orçamento gzip apertado). Por isso aqui mora SÓ o que é necessário para
+// AVALIAR a cada save: id, raridade, flag `hidden` e o predicado `check`.
+// Toda a APRESENTAÇÃO (título, descrição, ícone, categoria, barra de progresso)
+// vive em achievements-catalog.js, carregado SOB DEMANDA (só na tela de
+// Configurações e — via import() — quando um toast precisa renderizar).
+// Manter os textos longos em PT-BR fora do chunk crítico é o que segura o
+// orçamento mesmo com o catálogo crescendo.
 // ----------------------------------------------------------------------------
 
 // ===================== RARIDADES (define XP) =====================
@@ -23,19 +30,9 @@ export const RARITY = Object.freeze({
     oculta:   { xp: 40,  label: 'Secreta',  cls: 'ach-r-oculta'   },
 });
 
-// ===================== ESCADA DE NÍVEIS / TÍTULOS =====================
-// Títulos descontraídos, ganhos por XP acumulado. Max alcançável (~895 XP)
-// chega a "Lenda das Finanças".
-export const LEVELS = Object.freeze([
-    { nivel: 1, titulo: 'Iniciante',          xp: 0   },
-    { nivel: 2, titulo: 'Pé-de-Meia',         xp: 40  },
-    { nivel: 3, titulo: 'Poupador',           xp: 100 },
-    { nivel: 4, titulo: 'Economista',         xp: 190 },
-    { nivel: 5, titulo: 'Investidor',         xp: 320 },
-    { nivel: 6, titulo: 'Estrategista',       xp: 480 },
-    { nivel: 7, titulo: 'Magnata',            xp: 660 },
-    { nivel: 8, titulo: 'Lenda das Finanças', xp: 850 },
-]);
+// A ESCADA DE NÍVEIS (LEVELS) e a derivação de nível/XP (computeLevel) vivem em
+// achievements-catalog.js (lazy): só são lidas na tela de Configurações, nunca
+// no dashboard em si — mantê-las fora do chunk crítico economiza orçamento.
 
 // ===================== HELPERS DE MÉTRICA =====================
 function _num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
@@ -70,6 +67,25 @@ function _mesKey(data) {
     if (data.includes('-') && data.length >= 7) return data.slice(0, 7);
     return null;
 }
+// Decompõe t.data em { d, m, y } numéricos (aceita os dois formatos), ou null.
+function _ymd(data) {
+    if (typeof data !== 'string') return null;
+    if (data.includes('/')) {
+        const p = data.split('/');
+        if (p.length === 3) return { d: +p[0], m: +p[1], y: +p[2] };
+    }
+    if (data.includes('-')) {
+        const p = data.split('-');
+        if (p.length >= 3) return { y: +p[0], m: +p[1], d: parseInt(p[2], 10) };
+    }
+    return null;
+}
+function _ehFimDeSemana(data) {
+    const o = _ymd(data);
+    if (!o || !o.y || !o.m || !o.d) return false;
+    const wd = new Date(o.y, o.m - 1, o.d).getDay();
+    return wd === 0 || wd === 6;
+}
 // Agrupa transações por mês: { ent, sai, n } (sai inclui saída no crédito).
 function _porMes(transacoes) {
     const m = new Map();
@@ -88,8 +104,6 @@ function _porMes(transacoes) {
 // Nº de meses com alguma movimentação (usado no caminho de render/progresso).
 function _mesesAtivos(transacoes) { return _porMes(transacoes).size; }
 // ── Variantes que recebem o Map já agrupado (memoizado por avaliação) ──
-// O caminho de avaliação (check) roda a cada save; estas evitam reconstruir
-// o agrupamento mensal várias vezes por avaliação.
 function _gastoMedioMap(m) {
     const meses = [...m.values()].filter(o => o.sai > 0);
     if (meses.length === 0) return 0;
@@ -107,6 +121,11 @@ function _temMesPositivoMap(m) {
     }
     return false;
 }
+function _contaMesesPositivosMap(m) {
+    let n = 0;
+    for (const o of m.values()) if (o.ent > 0 && o.ent > o.sai) n++;
+    return n;
+}
 // Hora "HH:MM:SS" → hora inteira, ou null.
 function _horaInt(hora) {
     if (typeof hora !== 'string') return null;
@@ -117,83 +136,89 @@ function _orcamentosDefinidos(orcamentos) {
     if (!orcamentos || typeof orcamentos !== 'object') return 0;
     return Object.values(orcamentos).filter(v => _num(v) > 0).length;
 }
-
-// Formatação BRL de fallback (a UI passa a do dashboard quando disponível).
-function _brl(v) {
-    try { return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
-    catch { return 'R$ ' + Math.round(v); }
+function _metasConcluidas(metas) {
+    return metas.filter(m => _num(m.objetivo) > 0 && _num(m.saved) >= _num(m.objetivo)).length;
 }
 
-// ===================== CATÁLOGO (~28 conquistas) =====================
-// Cada item: { id, titulo, desc, icon, rarity, hidden?, check(state,ctx), progresso?(state)->{atual,alvo,fmt?} }
+// ── Métricas públicas para o catálogo de apresentação (barras de progresso) ──
+// O catálogo (lazy) importa estas para suas funções `progresso(state)`. Manter
+// uma única fonte de verdade evita divergência com os predicados `check`.
+export const metrics = Object.freeze({
+    patrimonio:   (s) => _patrimonio(s),
+    reservado:    (s) => _reservado(s.metas),
+    mesesAtivos:  (s) => _mesesAtivos(s.transacoes),
+});
+
+// ===================== CATÁLOGO (avaliação) =====================
+// Cada item: { id, rarity, hidden?, check(state, ctx) }.
+// A APRESENTAÇÃO (título/descrição/ícone/categoria/progresso) está em
+// achievements-catalog.js — casada por `id`. Ao adicionar uma conquista aqui,
+// adicione a entrada correspondente lá.
 export const ACHIEVEMENTS = Object.freeze([
     // ---- Primeiros passos (comum) ----
-    { id: 'primeiro_perfil',    titulo: 'Primeiro Passo',    desc: 'Criou seu primeiro perfil no GranaEvo.',                icon: '🏦', rarity: 'comum',
-      check: (s) => s.perfisCount >= 1 },
-    { id: 'primeira_transacao', titulo: 'Mãos à Obra',       desc: 'Registrou sua primeira transação.',                     icon: '📝', rarity: 'comum',
-      check: (s) => s.transacoes.length >= 1 },
-    { id: 'primeira_entrada',   titulo: 'Primeiro Trocado',  desc: 'Registrou sua primeira entrada de dinheiro.',           icon: '💵', rarity: 'comum',
-      check: (s) => s.transacoes.some(t => t.categoria === 'entrada') },
-    { id: 'primeiro_cartao',    titulo: 'Plástico na Mesa',  desc: 'Cadastrou seu primeiro cartão de crédito.',             icon: '💳', rarity: 'comum',
-      check: (s) => s.cartoesCredito.length >= 1 },
-    { id: 'primeira_reserva',   titulo: 'Sonhador',          desc: 'Criou sua primeira meta / reserva.',                    icon: '🎯', rarity: 'comum',
-      check: (s) => s.metas.length >= 1 },
-    { id: 'primeira_conta',     titulo: 'Contas em Dia',     desc: 'Cadastrou sua primeira conta fixa.',                    icon: '📅', rarity: 'comum',
-      check: (s) => s.contasFixas.length >= 1 },
+    { id: 'primeiro_perfil',     rarity: 'comum', check: (s) => s.perfisCount >= 1 },
+    { id: 'primeira_transacao',  rarity: 'comum', check: (s) => s.transacoes.length >= 1 },
+    { id: 'primeira_entrada',    rarity: 'comum', check: (s) => s.transacoes.some(t => t.categoria === 'entrada') },
+    { id: 'primeira_saida',      rarity: 'comum', check: (s) => s.transacoes.some(t => t.categoria === 'saida') },
+    { id: 'primeiro_cartao',     rarity: 'comum', check: (s) => s.cartoesCredito.length >= 1 },
+    { id: 'primeira_reserva',    rarity: 'comum', check: (s) => s.metas.length >= 1 },
+    { id: 'primeira_conta',      rarity: 'comum', check: (s) => s.contasFixas.length >= 1 },
+    { id: 'primeira_assinatura', rarity: 'comum', check: (s) => (s.assinaturas || []).length >= 1 },
+    { id: 'orcamento_definido',  rarity: 'comum', check: (s) => _orcamentosDefinidos(s.orcamentos) >= 1 },
+    { id: 'quebrou_cofre',       rarity: 'comum', check: (s) => s.transacoes.some(t => t.categoria === 'retirada_reserva') },
 
     // ---- Patrimônio (escala comum → lendário) ----
-    { id: 'patrimonio_1k',   titulo: 'Primeiro Mil',     desc: 'Acumulou R$ 1.000 de patrimônio (saldo + reservas).',  icon: '🪙', rarity: 'comum',
-      check: (s, ctx) => ctx.m.patrimonio >= 1000,    progresso: (s) => ({ atual: _patrimonio(s), alvo: 1000,    fmt: _brl }) },
-    { id: 'patrimonio_10k',  titulo: 'Cinco Dígitos',    desc: 'Alcançou R$ 10.000 de patrimônio.',                    icon: '💰', rarity: 'raro',
-      check: (s, ctx) => ctx.m.patrimonio >= 10000,   progresso: (s) => ({ atual: _patrimonio(s), alvo: 10000,   fmt: _brl }) },
-    { id: 'patrimonio_50k',  titulo: 'Meio Caminho',     desc: 'Alcançou R$ 50.000 de patrimônio.',                    icon: '🏆', rarity: 'epico',
-      check: (s, ctx) => ctx.m.patrimonio >= 50000,   progresso: (s) => ({ atual: _patrimonio(s), alvo: 50000,   fmt: _brl }) },
-    { id: 'patrimonio_100k', titulo: 'Seis Dígitos',     desc: 'Alcançou R$ 100.000 de patrimônio.',                   icon: '👑', rarity: 'epico',
-      check: (s, ctx) => ctx.m.patrimonio >= 100000,  progresso: (s) => ({ atual: _patrimonio(s), alvo: 100000,  fmt: _brl }) },
-    { id: 'patrimonio_500k', titulo: 'Quase Milionário', desc: 'Alcançou R$ 500.000 de patrimônio.',                   icon: '💎', rarity: 'lendario',
-      check: (s, ctx) => ctx.m.patrimonio >= 500000,  progresso: (s) => ({ atual: _patrimonio(s), alvo: 500000,  fmt: _brl }) },
-    { id: 'patrimonio_1m',   titulo: 'Primeiro Milhão',  desc: 'Alcançou R$ 1.000.000 de patrimônio. Lenda!',          icon: '🦄', rarity: 'lendario',
-      check: (s, ctx) => ctx.m.patrimonio >= 1000000, progresso: (s) => ({ atual: _patrimonio(s), alvo: 1000000, fmt: _brl }) },
+    { id: 'patrimonio_1k',   rarity: 'comum',    check: (s, ctx) => ctx.m.patrimonio >= 1000 },
+    { id: 'patrimonio_10k',  rarity: 'raro',     check: (s, ctx) => ctx.m.patrimonio >= 10000 },
+    { id: 'patrimonio_50k',  rarity: 'epico',    check: (s, ctx) => ctx.m.patrimonio >= 50000 },
+    { id: 'patrimonio_100k', rarity: 'epico',    check: (s, ctx) => ctx.m.patrimonio >= 100000 },
+    { id: 'patrimonio_250k', rarity: 'epico',    check: (s, ctx) => ctx.m.patrimonio >= 250000 },
+    { id: 'patrimonio_500k', rarity: 'lendario', check: (s, ctx) => ctx.m.patrimonio >= 500000 },
+    { id: 'patrimonio_1m',   rarity: 'lendario', check: (s, ctx) => ctx.m.patrimonio >= 1000000 },
 
     // ---- Reservas / metas ----
-    { id: 'reserva_5k',         titulo: 'Colchão de Segurança', desc: 'Juntou R$ 5.000 somando todas as reservas.',         icon: '🛡️', rarity: 'raro',
-      check: (s, ctx) => ctx.m.reservado >= 5000, progresso: (s) => ({ atual: _reservado(s.metas), alvo: 5000, fmt: _brl }) },
-    { id: 'meta_concluida',     titulo: 'Objetivo Alcançado',   desc: 'Concluiu uma meta (juntou 100% do objetivo).',       icon: '✅', rarity: 'raro',
-      check: (s) => s.metas.some(m => _num(m.objetivo) > 0 && _num(m.saved) >= _num(m.objetivo)) },
-    { id: 'tres_metas',         titulo: 'Multi-Metas',          desc: 'Mantém 3 reservas ativas ao mesmo tempo.',           icon: '🎲', rarity: 'raro',
-      check: (s) => s.metas.length >= 3, progresso: (s) => ({ atual: s.metas.length, alvo: 3 }) },
-    { id: 'reserva_emergencia', titulo: 'Blindado',             desc: 'Suas reservas cobrem 3x seu gasto mensal médio.',    icon: '🧯', rarity: 'epico',
-      check: (s, ctx) => ctx.m.gastoMedio > 0 && ctx.m.reservado >= 3 * ctx.m.gastoMedio },
+    { id: 'reserva_5k',            rarity: 'raro',  check: (s, ctx) => ctx.m.reservado >= 5000 },
+    { id: 'reserva_20k',           rarity: 'epico', check: (s, ctx) => ctx.m.reservado >= 20000 },
+    { id: 'meta_concluida',        rarity: 'raro',  check: (s) => _metasConcluidas(s.metas) >= 1 },
+    { id: 'duas_metas_concluidas', rarity: 'epico', check: (s) => _metasConcluidas(s.metas) >= 2 },
+    { id: 'meta_grande',           rarity: 'epico', check: (s) => s.metas.some(m => _num(m.objetivo) >= 10000 && _num(m.saved) >= _num(m.objetivo)) },
+    { id: 'tres_metas',            rarity: 'raro',  check: (s) => s.metas.length >= 3 },
+    { id: 'cinco_metas',           rarity: 'epico', check: (s) => s.metas.length >= 5 },
+    { id: 'reserva_emergencia',    rarity: 'epico', check: (s, ctx) => ctx.m.gastoMedio > 0 && ctx.m.reservado >= 3 * ctx.m.gastoMedio },
 
     // ---- Hábito / consistência ----
-    { id: 'dez_transacoes', titulo: 'Contador',          desc: 'Registrou 10 transações.',                          icon: '📊', rarity: 'comum',
-      check: (s) => s.transacoes.length >= 10,  progresso: (s) => ({ atual: s.transacoes.length, alvo: 10 }) },
-    { id: 'cem_transacoes', titulo: 'Maratonista',       desc: 'Registrou 100 transações. Que disciplina!',         icon: '📚', rarity: 'epico',
-      check: (s) => s.transacoes.length >= 100, progresso: (s) => ({ atual: s.transacoes.length, alvo: 100 }) },
-    { id: 'mes_positivo',   titulo: 'No Azul',           desc: 'Fechou um mês com entradas maiores que saídas.',    icon: '📈', rarity: 'raro',
-      check: (s, ctx) => _temMesPositivoMap(ctx.m.mensal) },
-    { id: 'economia_30',    titulo: 'Economia de Mestre',desc: 'Economizou 30% da sua renda em um mês.',            icon: '✂️', rarity: 'epico',
-      check: (s, ctx) => _temMesEconomiaMap(ctx.m.mensal, 0.30) },
-    { id: 'tres_meses',     titulo: 'Disciplina',        desc: 'Registrou movimentações em 3 meses diferentes.',    icon: '🔥', rarity: 'raro',
-      check: (s, ctx) => ctx.m.mesesAtivos >= 3, progresso: (s) => ({ atual: _mesesAtivos(s.transacoes), alvo: 3 }) },
-    { id: 'seis_meses',     titulo: 'Veterano',          desc: 'Acompanhou suas finanças por 6 meses diferentes.',  icon: '🗓️', rarity: 'epico',
-      check: (s, ctx) => ctx.m.mesesAtivos >= 6, progresso: (s) => ({ atual: _mesesAtivos(s.transacoes), alvo: 6 }) },
+    { id: 'dez_transacoes',        rarity: 'comum',    check: (s) => s.transacoes.length >= 10 },
+    { id: 'vinte_cinco_transacoes',rarity: 'comum',    check: (s) => s.transacoes.length >= 25 },
+    { id: 'cinquenta_transacoes',  rarity: 'raro',     check: (s) => s.transacoes.length >= 50 },
+    { id: 'cem_transacoes',        rarity: 'epico',    check: (s) => s.transacoes.length >= 100 },
+    { id: 'mes_positivo',          rarity: 'raro',     check: (s, ctx) => _temMesPositivoMap(ctx.m.mensal) },
+    { id: 'tres_meses_positivos',  rarity: 'epico',    check: (s, ctx) => _contaMesesPositivosMap(ctx.m.mensal) >= 3 },
+    { id: 'economia_30',           rarity: 'epico',    check: (s, ctx) => _temMesEconomiaMap(ctx.m.mensal, 0.30) },
+    { id: 'economia_50',           rarity: 'lendario', check: (s, ctx) => _temMesEconomiaMap(ctx.m.mensal, 0.50) },
+    { id: 'tres_meses',            rarity: 'raro',     check: (s, ctx) => ctx.m.mesesAtivos >= 3 },
+    { id: 'seis_meses',            rarity: 'epico',    check: (s, ctx) => ctx.m.mesesAtivos >= 6 },
+    { id: 'doze_meses',            rarity: 'lendario', check: (s, ctx) => ctx.m.mesesAtivos >= 12 },
 
     // ---- Organização ----
-    { id: 'tres_cartoes',        titulo: 'Carteira Cheia', desc: 'Cadastrou 3 cartões de crédito.',                  icon: '💼', rarity: 'raro',
-      check: (s) => s.cartoesCredito.length >= 3, progresso: (s) => ({ atual: s.cartoesCredito.length, alvo: 3 }) },
-    { id: 'orcamento_definido',  titulo: 'Planejador',     desc: 'Definiu um orçamento para alguma categoria.',      icon: '🎚️', rarity: 'comum',
-      check: (s) => _orcamentosDefinidos(s.orcamentos) >= 1 },
-    { id: 'primeira_assinatura', titulo: 'Vida Recorrente',desc: 'Cadastrou uma assinatura recorrente.',             icon: '🔁', rarity: 'comum',
-      check: (s) => (s.assinaturas || []).length >= 1 },
+    { id: 'tres_cartoes',     rarity: 'raro',  check: (s) => s.cartoesCredito.length >= 3 },
+    { id: 'cinco_cartoes',    rarity: 'epico', check: (s) => s.cartoesCredito.length >= 5 },
+    { id: 'tres_contas',      rarity: 'raro',  check: (s) => s.contasFixas.length >= 3 },
+    { id: 'tres_assinaturas', rarity: 'raro',  check: (s) => (s.assinaturas || []).length >= 3 },
+    { id: 'orcamento_3',      rarity: 'raro',  check: (s) => _orcamentosDefinidos(s.orcamentos) >= 3 },
+    { id: 'orcamento_5',      rarity: 'epico', check: (s) => _orcamentosDefinidos(s.orcamentos) >= 5 },
 
     // ---- Ocultas / secretas (🥚) ----
-    { id: 'coruja',       titulo: 'Coruja Financeira', desc: 'Registrou uma transação na madrugada (0h–4h).',    icon: '🦉', rarity: 'oculta', hidden: true,
-      check: (s) => s.transacoes.some(t => { const h = _horaInt(t.hora); return h !== null && h < 4; }) },
-    { id: 'dedicado',     titulo: 'Dedicação Total',   desc: 'Registrou 250 transações. Você vive o GranaEvo!',  icon: '💪', rarity: 'oculta', hidden: true,
-      check: (s) => s.transacoes.length >= 250 },
-    { id: 'colecionador', titulo: 'Colecionador',      desc: 'Desbloqueou 20 conquistas. Caçador nato!',         icon: '🏅', rarity: 'oculta', hidden: true,
-      check: (s, ctx) => ctx.unlockedCount >= 20 },
+    { id: 'coruja',        rarity: 'oculta', hidden: true, check: (s) => s.transacoes.some(t => { const h = _horaInt(t.hora); return h !== null && h < 4; }) },
+    { id: 'madrugador',    rarity: 'oculta', hidden: true, check: (s) => s.transacoes.some(t => { const h = _horaInt(t.hora); return h !== null && h >= 5 && h < 8; }) },
+    { id: 'ano_novo',      rarity: 'oculta', hidden: true, check: (s) => s.transacoes.some(t => { const o = _ymd(t.data); return !!o && o.d === 1 && o.m === 1; }) },
+    { id: 'fim_de_semana', rarity: 'oculta', hidden: true, check: (s) => s.transacoes.some(t => _ehFimDeSemana(t.data)) },
+    { id: 'dedicado',      rarity: 'oculta', hidden: true, check: (s) => s.transacoes.length >= 250 },
+    { id: 'quinhentas',    rarity: 'oculta', hidden: true, check: (s) => s.transacoes.length >= 500 },
+    { id: 'colecionador',  rarity: 'oculta', hidden: true, check: (s, ctx) => ctx.unlockedCount >= 20 },
+    { id: 'cacador',       rarity: 'oculta', hidden: true, check: (s, ctx) => ctx.unlockedCount >= 35 },
+
+    // ---- Grande final (lendária secreta): tudo menos ela mesma ----
+    { id: 'perfeccionista', rarity: 'lendario', hidden: true, check: (s, ctx) => ctx.unlockedCount >= ACHIEVEMENTS.length - 1 },
 ]);
 
 const _BY_ID = Object.freeze(Object.fromEntries(ACHIEVEMENTS.map(a => [a.id, a])));
@@ -221,7 +246,10 @@ export function sanitizeUnlocked(map) {
 // ===================== ENGINE DE AVALIAÇÃO =====================
 /**
  * Avalia o estado contra o catálogo e MUTA `unlocked` com os novos desbloqueios.
- * Usa ponto-fixo (até 2 passes) p/ meta-conquistas como "Colecionador".
+ * Usa ponto-fixo (até 4 passes) p/ meta-conquistas encadeadas: ex.
+ * base → "Colecionador"/"Caçador" (dependem de contagem) → "Perfeccionista"
+ * (depende destas). `ctx.unlockedCount` é fixo por pass, então cada nível da
+ * cadeia precisa de um pass; o loop para sozimo quando nada muda (early-out).
  * Memoiza (1 vez por avaliação) saldo/patrimônio/agrupamento mensal — evita
  * reconstruí-los em cada predicado a cada save.
  * @returns {{ unlocked: Object, newly: Array }}
@@ -245,7 +273,7 @@ export function evaluate(state, unlocked) {
         gastoMedio:  _gastoMedioMap(mensal),
     };
 
-    for (let pass = 0; pass < 2; pass++) {
+    for (let pass = 0; pass < 4; pass++) {
         const ctx = { unlockedCount: Object.keys(unlocked).length, m: memo };
         let changed = false;
         for (const a of ACHIEVEMENTS) {
@@ -263,35 +291,24 @@ export function evaluate(state, unlocked) {
     return { unlocked, newly };
 }
 
-/** Soma de XP + nível/título derivados do mapa de desbloqueios.
- *  Itera o CATÁLOGO (ids confiáveis), nunca as chaves do mapa do cliente. */
-export function computeLevel(unlocked) {
-    unlocked = unlocked && typeof unlocked === 'object' ? unlocked : {};
-    let xp = 0;
-    for (const a of ACHIEVEMENTS) {
-        if (unlocked[a.id]) xp += RARITY[a.rarity].xp;
-    }
-    let lvl = LEVELS[0], next = null;
-    for (let i = 0; i < LEVELS.length; i++) {
-        if (xp >= LEVELS[i].xp) { lvl = LEVELS[i]; next = LEVELS[i + 1] || null; }
-    }
-    const base = lvl.xp;
-    const ceil = next ? next.xp : lvl.xp;
-    const pct  = next ? Math.min(100, Math.round(((xp - base) / (ceil - base)) * 100)) : 100;
-    return {
-        xp,
-        nivel: lvl.nivel,
-        titulo: lvl.titulo,
-        proxTitulo: next ? next.titulo : null,
-        xpFalta: next ? (ceil - xp) : 0,
-        pct,
-    };
-}
+// computeLevel (derivação de nível/XP) vive em achievements-catalog.js (lazy).
 
 // ===================== TOAST ESTILO STEAM =====================
+// A apresentação (título/desc/ícone) NÃO está neste chunk — é buscada sob
+// demanda em achievements-catalog.js na 1ª vez que um toast precisa renderizar.
+// Toasts são eventos raros e não-críticos de latência, então o import() lazy
+// é aceitável e mantém os textos longos fora do chunk crítico do dashboard.
 let _toastHost = null;
 let _toastQueue = [];
 let _toastActive = false;
+let _catalogPromise = null;
+
+function _loadCatalog() {
+    if (!_catalogPromise) {
+        _catalogPromise = import('./achievements-catalog.js?v=1').catch(() => null);
+    }
+    return _catalogPromise;
+}
 
 function _ensureHost() {
     if (_toastHost && document.body.contains(_toastHost)) return _toastHost;
@@ -307,19 +324,26 @@ function _vibrar() {
     try { if (navigator.vibrate) navigator.vibrate([14, 40, 14]); } catch {}
 }
 
-function _drenarFila() {
+async function _drenarFila() {
     if (_toastActive) return;
     const a = _toastQueue.shift();
     if (!a) return;
     _toastActive = true;
 
+    // Resolve a apresentação sob demanda (cache via _catalogPromise).
+    let p = null;
+    try { p = (await _loadCatalog())?.getPresent?.(a.id) || null; } catch { p = null; }
+    const titulo = p?.titulo || 'Conquista desbloqueada';
+    const desc   = p?.desc   || '';
+    const icon   = p?.icon   || '🏆';
+
     const host = _ensureHost();
     const card = document.createElement('div');
-    card.className = `ach-toast ${RARITY[a.rarity].cls}`;
+    card.className = `ach-toast ${RARITY[a.rarity]?.cls || 'ach-r-comum'}`;
 
     const ic = document.createElement('div');
     ic.className = 'ach-toast__icon';
-    ic.textContent = a.icon;
+    ic.textContent = icon;
 
     const body = document.createElement('div');
     body.className = 'ach-toast__body';
@@ -328,15 +352,15 @@ function _drenarFila() {
     kicker.className = 'ach-toast__kicker';
     kicker.textContent = 'Conquista desbloqueada';
 
-    const titulo = document.createElement('div');
-    titulo.className = 'ach-toast__title';
-    titulo.textContent = a.titulo;
+    const tituloEl = document.createElement('div');
+    tituloEl.className = 'ach-toast__title';
+    tituloEl.textContent = titulo;
 
-    const desc = document.createElement('div');
-    desc.className = 'ach-toast__desc';
-    desc.textContent = a.desc;
+    const descEl = document.createElement('div');
+    descEl.className = 'ach-toast__desc';
+    descEl.textContent = desc;
 
-    body.append(kicker, titulo, desc);
+    body.append(kicker, tituloEl, descEl);
     card.append(ic, body);
     host.appendChild(card);
 
@@ -370,4 +394,5 @@ export function enqueueToasts(lista) {
 }
 
 // A renderização da TELA de conquistas (grid + hero) vive em achievements-ui.js
-// para não pesar no chunk principal (este módulo é importado pelo dashboard.js).
+// e a apresentação (textos) em achievements-catalog.js — ambos fora do chunk
+// crítico do dashboard.

@@ -5,8 +5,8 @@ import { supabase } from '../services/supabase-client.js?v=2';
 import { iniciarTutorial } from '../modules/tutorial.js';
 import { initPWA, initInstallButton } from '../modules/pwa-installer.js';
 import { isPushSupported, getPushPermission, requestPushPermission, unsubscribePush } from '../modules/push-notifications.js';
-import { computeLevel } from '../modules/achievements.js?v=1';
-import { renderConquistas } from '../modules/achievements-ui.js?v=1';
+import { computeLevel } from '../modules/achievements-catalog.js?v=1';
+import { renderConquistas } from '../modules/achievements-ui.js?v=2';
 let _ctx = null;
 
 // Inicializa PWA logo que o módulo é carregado (uma vez, independente de ctx)
