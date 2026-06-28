@@ -1099,22 +1099,18 @@ body::before {
 /* ═══════════════════════════════════════════════════════════════════════════
    NAVEGAÇÃO POR SWIPE (mobile) — carrossel lateral entre abas
    ═══════════════════════════════════════════════════════════════════════════
-   Durante o arrasto (.ge-dragging) e o assentar (.ge-swiping), o eixo X fica
-   travado p/ não criar barra de rolagem horizontal com as páginas movidas.
-
    Carrossel (ver swipe-nav.js):
    • Página ATUAL (.ge-swipe-current) → segue no fluxo normal (preserva o scroll),
      movida só por transform translateX.
    • Página que ENTRA (.ge-swipe-incoming) → position:fixed ancorada à viewport,
      no frame de conteúdo (top/left/width/height medidos e aplicados inline pelo
      JS, fiéis a qualquer breakpoint). Mostra o próprio topo, como um tab novo.
-   Ambas movem-se SÓ por translate3d → composição na GPU, zero reflow. */
-body.ge-dragging,
-body.ge-swiping { overflow-x: hidden; }
+   Ambas movem-se SÓ por translate3d → composição na GPU, zero reflow.
 
-body.ge-dragging .main-content,
-body.ge-swiping  .main-content { overflow-x: hidden; }
-
+   NOTA: NÃO travamos overflow via classe no <body>/.main-content durante o gesto.
+   O <html> e o <body> já têm overflow-x:hidden permanente (clip no viewport), então
+   as páginas transladadas já ficam recortadas. Alternar overflow no .main-content
+   (elemento enorme) no início do arrasto forçava um reflow → era parte do "duro". */
 .page.ge-swipe-current {
     will-change: transform;
     backface-visibility: hidden;

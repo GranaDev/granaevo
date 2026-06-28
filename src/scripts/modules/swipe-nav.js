@@ -56,6 +56,8 @@ let inPage = null;         // elemento da aba que entra
 let inTela = null;         // nome da aba que entra
 let inDir  = null;         // 'next' | 'prev'
 let inEdge = 0;            // posição inicial (off-screen) da aba que entra: +W | -W
+let inLoaded = false;      // o conteúdo da vizinha já foi (re)carregado?
+let loadTimer = 0;         // timer que adia o loadModule p/ fora do 1º frame do arrasto
 
 const isEnabled = () => localStorage.getItem('ge_swipe_nav') === '1';
 const mqMobile  = window.matchMedia('(max-width: 768px)');
@@ -127,13 +129,24 @@ function mountIncoming(dir) {
     el.style.display = 'block';
 
     inPage = el; inTela = tela; inDir = dir;
+    inLoaded = false;
 
-    cfg.loadModule(tela);   // conteúdo entra durante o arrasto → commit sem travada
+    // A aba já visitada mostra na hora o conteúdo que está no DOM (display:block).
+    // O (re)carregar — que pode ser uma renderização SÍNCRONA pesada (lista,
+    // cartões) — é ADIADO p/ DEPOIS dos primeiros frames do arrasto. Senão essa
+    // renderização trava o dedo logo no começo (a sensação de "duro"/lento). O
+    // conteúdo ainda chega muito antes do commit. Fallback no settle cobre flicks
+    // ultrarrápidos que confirmam antes do timer disparar.
+    clearTimeout(loadTimer);
+    loadTimer = setTimeout(() => {
+        if (inPage === el && inTela === tela) { cfg.loadModule(tela); inLoaded = true; }
+    }, 90);
     return true;
 }
 
 // Desmonta a aba vizinha (volta a ficar oculta e no estado normal).
 function unmountIncoming() {
+    clearTimeout(loadTimer);
     if (!inPage) return;
     inPage.classList.remove('ge-swipe-incoming');
     inPage.style.transition = '';
@@ -141,7 +154,7 @@ function unmountIncoming() {
     inPage.style.top = ''; inPage.style.left = '';
     inPage.style.width = ''; inPage.style.height = '';
     inPage.style.display = 'none';
-    inPage = null; inTela = null; inDir = null;
+    inPage = null; inTela = null; inDir = null; inLoaded = false;
 }
 
 // Posiciona o "trilho" (atual + vizinha) durante o arrasto.
@@ -242,8 +255,9 @@ function settle(commit) {
         curPage.removeEventListener('transitionend', onSettleEnd);
 
         if (commit) {
-            // A vizinha vira a aba ativa — sem reload (já carregou no arrasto) e
-            // sem pageEnter (ge-swiping suprime). Scroll vai ao topo, como um tab.
+            // A vizinha vira a aba ativa — sem pageEnter (não tem .ge-page-enter,
+            // então não pisca). Scroll vai ao topo, como um tab novo.
+            clearTimeout(loadTimer);
             window.scrollTo({ top: 0, behavior: 'instant' });
 
             document.querySelectorAll('.page').forEach(p => {
@@ -264,7 +278,11 @@ function settle(commit) {
             cfg.setNavActive(tela);
             cfg.setCurrent(tela);
 
-            inPage = null; inTela = null; inDir = null;
+            // Fallback: flick confirmou antes do timer de pré-load disparar →
+            // carrega agora (página já assentada e estática, sem jank de animação).
+            if (!inLoaded) cfg.loadModule(tela);
+
+            inPage = null; inTela = null; inDir = null; inLoaded = false;
         } else {
             unmountIncoming();   // volta tudo; a atual nunca saiu do fluxo
         }

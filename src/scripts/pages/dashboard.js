@@ -4872,7 +4872,7 @@ function bindEventos() {
     // Navegação por swipe (mobile) — módulo carregado sob demanda (custo zero no
     // desktop). Progressivo: se falhar, a navegação por toque segue intacta.
     if (window.matchMedia('(max-width: 768px)').matches) {
-        import('../modules/swipe-nav.js?v=4')
+        import('../modules/swipe-nav.js?v=5')
             .then(m => m.initSwipeNav({
                 order:        ['dashboard', 'transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios'],
                 getCurrent:   () => _telaAtual,
