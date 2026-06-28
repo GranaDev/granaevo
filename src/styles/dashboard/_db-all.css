@@ -8093,36 +8093,6 @@ button,
 }
 .tut-secao .fas { font-size: 0.58rem; flex-shrink: 0; }
 
-/* ── Dot navigation ─────────────────────────────────────────────────────────── */
-.tut-dots {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    justify-content: center;
-    padding: 2px 0;
-    flex-wrap: nowrap;
-    overflow: hidden;
-}
-
-.tut-dot {
-    flex-shrink: 0;
-    height: 5px;
-    width: 5px;
-    border-radius: 100px;
-    background: rgba(255,255,255,0.12);
-    cursor: pointer;
-    transition:
-        width      0.38s cubic-bezier(0.34, 1.4, 0.64, 1),
-        background 0.25s ease;
-}
-.tut-dot:hover { background: rgba(255,255,255,0.28); }
-.tut-dot.tut-dot-ativo {
-    width: 22px;
-    background: var(--tut-color, #10b981);
-    cursor: default;
-}
-.tut-dot.tut-dot-feito { background: rgba(16, 185, 129, 0.38); }
-
 /* ── Body ───────────────────────────────────────────────────────────────────── */
 .tut-body {
     padding: 20px 20px 16px;
@@ -8266,130 +8236,13 @@ button,
 .tut-btn-avancar:active { transform: translateY(0); }
 .tut-btn-avancar--concluir { padding: 9px 22px; }
 
-/* ── Header right (badge + botão de capítulos) ─────────────────────────────── */
+/* ── Header right (badge + botão de menu) ──────────────────────────────────── */
 .tut-header-right {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
 }
-
-.tut-cap-btn {
-    width: 26px;
-    height: 26px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.10);
-    color: rgba(255,255,255,0.45);
-    border-radius: 8px;
-    font-size: 0.62rem;
-    cursor: pointer;
-    transition: background 0.2s, color 0.2s, border-color 0.2s;
-    font-family: inherit;
-    flex-shrink: 0;
-}
-.tut-cap-btn:hover,
-.tut-cap-btn[aria-expanded="true"] {
-    background: rgba(16, 185, 129, 0.12);
-    color: #34d399;
-    border-color: rgba(16, 185, 129, 0.30);
-}
-
-/* ── Painel de capítulos ────────────────────────────────────────────────────── */
-@keyframes tutCapEntrar {
-    from { opacity: 0; transform: translateY(-6px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-.tut-cap-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-top: 4px;
-    padding: 6px;
-    background: rgba(0, 0, 0, 0.30);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 14px;
-    max-height: 230px;
-    overflow-y: auto;
-    animation: tutCapEntrar 0.22s ease both;
-}
-.tut-cap-panel.js-hidden { display: none; }
-
-.tut-cap-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    background: none;
-    border: none;
-    border-radius: 9px;
-    color: rgba(220, 224, 245, 0.78);
-    font-size: 0.76rem;
-    font-weight: 600;
-    font-family: inherit;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.18s, color 0.18s;
-}
-.tut-cap-item .fas {
-    width: 16px;
-    text-align: center;
-    font-size: 0.7rem;
-    color: rgba(255,255,255,0.32);
-    flex-shrink: 0;
-    transition: color 0.18s;
-}
-.tut-cap-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.tut-cap-item:hover .fas { color: #34d399; }
-.tut-cap-item--ativo {
-    background: rgba(16, 185, 129, 0.10);
-    color: #6ee7b7;
-}
-.tut-cap-item--ativo .fas { color: #10b981; }
-
-.tut-cap-nome { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-
-.tut-cap-qtd {
-    font-size: 0.6rem;
-    font-weight: 700;
-    color: rgba(255,255,255,0.22);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-/* ── Dots como botões (capítulos) ───────────────────────────────────────────── */
-.tut-dot {
-    border: none;
-    padding: 0;
-    font-family: inherit;
-}
-
-/* ── Botão de retomada de progresso ─────────────────────────────────────────── */
-.tut-btn-retomar {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    align-self: flex-start;
-    padding: 8px 14px;
-    background: rgba(16, 185, 129, 0.08);
-    border: 1px dashed rgba(16, 185, 129, 0.35);
-    border-radius: 10px;
-    color: #6ee7b7;
-    font-size: 0.74rem;
-    font-weight: 700;
-    font-family: inherit;
-    cursor: pointer;
-    transition: background 0.2s, border-color 0.2s, transform 0.15s;
-}
-.tut-btn-retomar:hover {
-    background: rgba(16, 185, 129, 0.16);
-    border-color: rgba(16, 185, 129, 0.55);
-    transform: translateY(-1px);
-}
-.tut-btn-retomar .fas { font-size: 0.68rem; }
 
 /* ── Botão "voltar ao menu" no header ───────────────────────────────────────── */
 .tut-home-btn {
@@ -8616,7 +8469,6 @@ button,
     .tut-texto  { font-size: 0.82rem; }
     .tut-icon-wrap { width: 46px; height: 46px; }
     .tut-step-num { font-size: 4rem; }
-    .tut-cap-panel { max-height: 180px; }
 
     .tut-card.tut-card--hub { width: calc(100vw - 24px); max-height: 86vh; }
     .tut-hub-grid { grid-template-columns: 1fr; }

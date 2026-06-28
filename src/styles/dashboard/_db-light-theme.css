@@ -459,10 +459,6 @@
 }
 [data-theme="light"] .tut-btn-pular:hover { color: rgba(0,0,0,0.6); }
 
-[data-theme="light"] .tut-dot            { background: rgba(0,0,0,0.10); }
-[data-theme="light"] .tut-dot:hover      { background: rgba(0,0,0,0.22); }
-[data-theme="light"] .tut-dot.tut-dot-feito { background: rgba(5,150,105,0.30); }
-
 [data-theme="light"] .tut-btn-voltar {
     background: rgba(0,0,0,0.04);
     border-color: rgba(0,0,0,0.10);
@@ -472,41 +468,6 @@
     background: rgba(0,0,0,0.08);
     color: rgba(0,0,0,0.80);
     border-color: rgba(0,0,0,0.16);
-}
-
-/* ── Tutorial: menu de capítulos + retomada ──────────────────── */
-[data-theme="light"] .tut-cap-btn {
-    background: rgba(0,0,0,0.04);
-    border-color: rgba(0,0,0,0.10);
-    color: rgba(0,0,0,0.45);
-}
-[data-theme="light"] .tut-cap-btn:hover,
-[data-theme="light"] .tut-cap-btn[aria-expanded="true"] {
-    background: rgba(5,150,105,0.10);
-    color: #059669;
-    border-color: rgba(5,150,105,0.30);
-}
-
-[data-theme="light"] .tut-cap-panel {
-    background: rgba(0,0,0,0.03);
-    border-color: rgba(0,0,0,0.08);
-}
-[data-theme="light"] .tut-cap-item { color: rgba(0,0,0,0.60); }
-[data-theme="light"] .tut-cap-item .fas { color: rgba(0,0,0,0.30); }
-[data-theme="light"] .tut-cap-item:hover { background: rgba(0,0,0,0.05); color: rgba(0,0,0,0.85); }
-[data-theme="light"] .tut-cap-item:hover .fas { color: #059669; }
-[data-theme="light"] .tut-cap-item--ativo { background: rgba(5,150,105,0.10); color: #047857; }
-[data-theme="light"] .tut-cap-item--ativo .fas { color: #059669; }
-[data-theme="light"] .tut-cap-qtd { color: rgba(0,0,0,0.28); }
-
-[data-theme="light"] .tut-btn-retomar {
-    background: rgba(5,150,105,0.06);
-    border-color: rgba(5,150,105,0.35);
-    color: #047857;
-}
-[data-theme="light"] .tut-btn-retomar:hover {
-    background: rgba(5,150,105,0.12);
-    border-color: rgba(5,150,105,0.55);
 }
 
 /* ── Tutorial: botão "voltar ao menu" + dica ─────────────────── */
