@@ -157,55 +157,38 @@
 
                                     <!-- ===== TELA 1 — DASHBOARD ===== -->
                                     <div class="phone-screen is-active" data-screen="0">
-                                        <div class="pui-head">
-                                            <div class="pui-av">G</div>
-                                            <div class="pui-brand">GranaEvo</div>
-                                            <div class="pui-head-actions">
-                                                <div class="pui-ic">
-                                                    <svg viewBox="0 0 20 20" fill="none" width="13" height="13"><path d="M10 2a6 6 0 00-6 6c0 4-2 5-2 5h16s-2-1-2-5a6 6 0 00-6-6z" stroke="currentColor" stroke-width="1.5"/><path d="M11.7 16a2 2 0 01-3.4 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                                                </div>
-                                            </div>
+                                        <div class="pscreen-hd">
+                                            <span class="pscreen-title">Dashboard</span>
+                                            <span class="pscreen-pill">Mês atual</span>
                                         </div>
-                                        <div class="pui-balance">
-                                            <div class="pui-bal-lbl">Saldo disponível</div>
-                                            <div class="pui-bal-val">R$ 2.000<span class="pui-bal-dec">,00</span></div>
-                                            <div class="pui-bal-trend">
-                                                <svg viewBox="0 0 14 14" fill="none" width="10" height="10"><path d="M7 11V3M7 3L3.5 6.5M7 3L10.5 6.5" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>
-                                                +12,5% este mês
-                                            </div>
+                                        <div class="pd-hero">
+                                            <span class="pd-hero-lbl">Saldo disponível</span>
+                                            <span class="pd-hero-val">R$ 8.430<span class="pd-hero-dec">,00</span></span>
                                         </div>
-                                        <div class="pui-pills">
-                                            <div class="pui-pill pui-pill-g">
-                                                <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 11V3M7 3L3.5 6.5M7 3L10.5 6.5" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg></div>
-                                                <div class="pui-pill-txt"><span class="pui-pill-lbl">Entradas</span><span class="pui-pill-val">R$&nbsp;5.500</span></div>
+                                        <div class="pd-cards">
+                                            <div class="pd-card pd-green">
+                                                <span class="pd-card-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg></span>
+                                                <span class="pd-card-lbl">Entradas</span>
+                                                <span class="pd-card-val">R$ 5.500</span>
+                                                <span class="pd-card-pct">+12% no mês</span>
                                             </div>
-                                            <div class="pui-pill pui-pill-r">
-                                                <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 3v8M7 11L3.5 7.5M7 11L10.5 7.5" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round"/></svg></div>
-                                                <div class="pui-pill-txt"><span class="pui-pill-lbl">Saídas</span><span class="pui-pill-val">R$&nbsp;2.300</span></div>
+                                            <div class="pd-card pd-red">
+                                                <span class="pd-card-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 7 9 13 13 9 21 17"/><polyline points="15 17 21 17 21 11"/></svg></span>
+                                                <span class="pd-card-lbl">Saídas</span>
+                                                <span class="pd-card-val">R$ 2.300</span>
+                                                <span class="pd-card-pct pd-card-pct-r">−4% no mês</span>
                                             </div>
-                                            <div class="pui-pill pui-pill-y">
-                                                <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M2 11h10M7 3v6M4.5 5.5L7 3l2.5 2.5" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-                                                <div class="pui-pill-txt"><span class="pui-pill-lbl">Reservas</span><span class="pui-pill-val">R$&nbsp;1.200</span></div>
+                                            <div class="pd-card pd-blue">
+                                                <span class="pd-card-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z"/><path d="M16 12.5h3"/><circle cx="16.5" cy="12.5" r="1.1" fill="currentColor" stroke="none"/></svg></span>
+                                                <span class="pd-card-lbl">Saldo</span>
+                                                <span class="pd-card-val">R$ 3.200</span>
+                                                <span class="pd-card-pct">+8% no mês</span>
                                             </div>
-                                        </div>
-                                        <div class="pui-contas">
-                                            <div class="pui-contas-hd">
-                                                <svg viewBox="0 0 14 14" fill="none" width="11" height="11"><rect x="2" y="6" width="10" height="7" rx="1.5" stroke="#10b981" stroke-width="1.4"/><path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="#10b981" stroke-width="1.4" stroke-linecap="round"/></svg>
-                                                Contas Fixas
-                                            </div>
-                                            <div class="pui-contas-grid">
-                                                <div class="pui-cc">
-                                                    <div class="pui-cc-hd"><span class="pui-cc-nm">Netflix</span><span class="pui-cc-st pui-cc-pendente">Pendente</span></div>
-                                                    <div class="pui-cc-vl">R$&nbsp;39,50</div><div class="pui-cc-sb">vence dia 15</div>
-                                                </div>
-                                                <div class="pui-cc">
-                                                    <div class="pui-cc-hd"><span class="pui-cc-nm">Academia</span><span class="pui-cc-st pui-cc-pago">Pago</span></div>
-                                                    <div class="pui-cc-vl">R$&nbsp;83,30</div><div class="pui-cc-sb">mensal</div>
-                                                </div>
-                                                <div class="pui-cc">
-                                                    <div class="pui-cc-hd"><span class="pui-cc-nm">Internet</span><span class="pui-cc-st pui-cc-pago">Pago</span></div>
-                                                    <div class="pui-cc-vl">R$&nbsp;129,90</div><div class="pui-cc-sb">mensal</div>
-                                                </div>
+                                            <div class="pd-card pd-yellow">
+                                                <span class="pd-card-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a6 5 0 0 1 6-5h3a6 5 0 0 1 6 5 6 5 0 0 1-2 3.7V19h-3v-1.5h-2V19H7v-3.3A6 5 0 0 1 4 12z"/><path d="M2 11h2"/><circle cx="9" cy="11" r="1" fill="currentColor" stroke="none"/></svg></span>
+                                                <span class="pd-card-lbl">Reservas</span>
+                                                <span class="pd-card-val">R$ 8.700</span>
+                                                <span class="pd-card-pct">+15% no mês</span>
                                             </div>
                                         </div>
                                     </div>
@@ -216,26 +199,26 @@
                                             <span class="pscreen-title">Cartões</span>
                                             <span class="pscreen-pill">2 ativos</span>
                                         </div>
-                                        <div class="pcard">
-                                            <div class="pcard-top">
-                                                <span class="pcard-bank">GranaEvo Black</span>
-                                                <span class="pcard-flag">VISA</span>
+                                        <div class="pc-card">
+                                            <div class="pc-card-top">
+                                                <span class="pc-bank"><span class="pc-bank-dot"></span>GranaEvo Card</span>
+                                                <svg class="pc-contactless" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8.5 8a6 6 0 0 1 0 8"/><path d="M11.5 5.5a10 10 0 0 1 0 13"/></svg>
                                             </div>
-                                            <div class="pcard-chip"></div>
-                                            <div class="pcard-num">•••• •••• •••• 4827</div>
-                                            <div class="pcard-bot">
-                                                <span>LUCAS OLIVEIRA</span>
-                                                <span>08/29</span>
+                                            <div class="pc-chip"></div>
+                                            <div class="pc-card-bottom">
+                                                <div class="pc-col">
+                                                    <span class="pc-lbl">Disponível</span>
+                                                    <span class="pc-val pc-val-green">R$ 3.160</span>
+                                                </div>
+                                                <div class="pc-col pc-col-r">
+                                                    <span class="pc-lbl">Limite</span>
+                                                    <span class="pc-val">R$ 5.000</span>
+                                                </div>
                                             </div>
+                                            <div class="pc-bar"><div class="pc-bar-fill" style="width:37%"></div></div>
+                                            <span class="pc-bar-lbl">37% usado</span>
                                         </div>
-                                        <div class="pcard-limit">
-                                            <div class="pcard-limit-row">
-                                                <span>Fatura atual</span>
-                                                <span class="pcard-limit-val">R$&nbsp;1.840 / 5.000</span>
-                                            </div>
-                                            <div class="pbar"><div class="pbar-fill" style="width:37%"></div></div>
-                                        </div>
-                                        <div class=" plist">
+                                        <div class="plist">
                                             <div class="pli">
                                                 <div class="pli-ic pli-ic-g">🛒</div>
                                                 <div class="pli-info"><span>Mercado Extra</span><span class="pli-sub">Hoje · 14:20</span></div>
@@ -246,11 +229,6 @@
                                                 <div class="pli-info"><span>Posto Shell</span><span class="pli-sub">Ontem · 09:05</span></div>
                                                 <span class="pli-amt">−R$ 180,00</span>
                                             </div>
-                                            <div class="pli">
-                                                <div class="pli-ic pli-ic-p">🎬</div>
-                                                <div class="pli-info"><span>Cinemark</span><span class="pli-sub">12 jun · 20:40</span></div>
-                                                <span class="pli-amt">−R$ 64,00</span>
-                                            </div>
                                         </div>
                                     </div>
 
@@ -258,31 +236,43 @@
                                     <div class="phone-screen" data-screen="2">
                                         <div class="pscreen-hd">
                                             <span class="pscreen-title">Reservas</span>
-                                            <span class="pscreen-pill pscreen-pill-y">R$ 8.700</span>
+                                            <span class="pscreen-pill">2 ativas</span>
                                         </div>
-                                        <div class="pgoal">
-                                            <div class="pgoal-hd">
-                                                <span class="pgoal-emoji">✈️</span>
-                                                <div class="pgoal-info"><span class="pgoal-nm">Viagem Europa</span><span class="pgoal-sub">R$ 7.000 de R$ 10.000</span></div>
-                                                <span class="pgoal-pct">70%</span>
+                                        <div class="pr-top">
+                                            <div class="pr-donut" style="--p:62">
+                                                <div class="pr-donut-center">
+                                                    <span class="pr-donut-pct">62%</span>
+                                                    <span class="pr-donut-cap">geral</span>
+                                                </div>
                                             </div>
-                                            <div class="pbar"><div class="pbar-fill" style="width:70%"></div></div>
+                                            <div class="pr-totals">
+                                                <span class="pr-tot-lbl">Total reservado</span>
+                                                <span class="pr-tot-val">R$ 8.700</span>
+                                                <span class="pr-tot-sub">de R$ 14.000 em metas</span>
+                                            </div>
                                         </div>
-                                        <div class="pgoal">
-                                            <div class="pgoal-hd">
-                                                <span class="pgoal-emoji">🛡️</span>
-                                                <div class="pgoal-info"><span class="pgoal-nm">Emergência</span><span class="pgoal-sub">R$ 1.350 de R$ 3.000</span></div>
-                                                <span class="pgoal-pct">45%</span>
+                                        <div class="pr-list">
+                                            <div class="pr-item">
+                                                <span class="pr-emoji">✈️</span>
+                                                <div class="pr-item-body">
+                                                    <div class="pr-item-row"><span class="pr-item-nm">Viagem Europa</span><span class="pr-item-pct">70%</span></div>
+                                                    <div class="pbar"><div class="pbar-fill" style="width:70%"></div></div>
+                                                </div>
                                             </div>
-                                            <div class="pbar"><div class="pbar-fill pbar-fill-y" style="width:45%"></div></div>
-                                        </div>
-                                        <div class="pgoal">
-                                            <div class="pgoal-hd">
-                                                <span class="pgoal-emoji">💻</span>
-                                                <div class="pgoal-info"><span class="pgoal-nm">Notebook novo</span><span class="pgoal-sub">R$ 350 de R$ 1.500</span></div>
-                                                <span class="pgoal-pct">23%</span>
+                                            <div class="pr-item">
+                                                <span class="pr-emoji">🛡️</span>
+                                                <div class="pr-item-body">
+                                                    <div class="pr-item-row"><span class="pr-item-nm">Emergência</span><span class="pr-item-pct">45%</span></div>
+                                                    <div class="pbar"><div class="pbar-fill pbar-fill-y" style="width:45%"></div></div>
+                                                </div>
                                             </div>
-                                            <div class="pbar"><div class="pbar-fill pbar-fill-c" style="width:23%"></div></div>
+                                            <div class="pr-item">
+                                                <span class="pr-emoji">💻</span>
+                                                <div class="pr-item-body">
+                                                    <div class="pr-item-row"><span class="pr-item-nm">Notebook novo</span><span class="pr-item-pct">23%</span></div>
+                                                    <div class="pbar"><div class="pbar-fill pbar-fill-c" style="width:23%"></div></div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -290,7 +280,21 @@
                                     <div class="phone-screen" data-screen="3">
                                         <div class="pscreen-hd">
                                             <span class="pscreen-title">Relatórios</span>
-                                            <span class="pscreen-pill">6 meses</span>
+                                            <span class="pscreen-pill">Junho</span>
+                                        </div>
+                                        <div class="prep-sum">
+                                            <div class="prep-sum-item">
+                                                <span class="prep-sum-lbl">Entradas</span>
+                                                <span class="prep-sum-val prep-sum-g">R$ 5.500</span>
+                                            </div>
+                                            <div class="prep-sum-item">
+                                                <span class="prep-sum-lbl">Saídas</span>
+                                                <span class="prep-sum-val prep-sum-r">R$ 2.300</span>
+                                            </div>
+                                            <div class="prep-sum-item">
+                                                <span class="prep-sum-lbl">Economia</span>
+                                                <span class="prep-sum-val prep-sum-b">58%</span>
+                                            </div>
                                         </div>
                                         <div class="prep-chart">
                                             <div class="prep-bars">

@@ -1882,7 +1882,7 @@ body {
 .fs-phone {
     position: relative;
     flex-shrink: 0;
-    transform: scale(0.82);
+    transform: scale(0.9);
     transform-origin: center;
 }
 
@@ -2187,7 +2187,7 @@ body {
     align-items: flex-end;
     justify-content: space-between;
     gap: 8px;
-    height: 120px;
+    height: 96px;
 }
 
 .prep-bar {
@@ -2225,9 +2225,186 @@ body {
 .prep-cat-nm { flex: 1; color: rgba(255, 255, 255, 0.78); font-weight: 500; }
 .prep-cat-val { font-weight: 800; color: #fff; }
 
+/* ==========================================
+   TELAS DO TELEFONE — FIÉIS AO APP REAL
+   ========================================== */
+
+/* ── DASHBOARD: saldo hero + grid 2x2 (cores material do app) ── */
+.pd-hero { padding: 4px 16px 12px; flex-shrink: 0; }
+.pd-hero-lbl {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.45);
+    margin-bottom: 4px;
+}
+.pd-hero-val {
+    font-size: 30px;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    color: #fff;
+    line-height: 1;
+}
+.pd-hero-dec { font-size: 17px; font-weight: 700; opacity: 0.6; }
+
+.pd-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+    padding: 0 14px;
+}
+.pd-card {
+    background: rgba(30, 40, 35, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 14px;
+    padding: 11px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.pd-card-ic {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    margin-bottom: 5px;
+}
+.pd-card-ic svg { width: 16px; height: 16px; }
+.pd-card-lbl {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.5);
+}
+.pd-card-val { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+.pd-card-pct { font-size: 8.5px; font-weight: 600; color: #4caf50; }
+.pd-card-pct-r { color: #ef5350; }
+
+.pd-green  .pd-card-ic { background: rgba(67,160,71,0.18);  color: #4caf50; box-shadow: 0 0 14px rgba(67,160,71,0.22); }
+.pd-red    .pd-card-ic { background: rgba(244,67,54,0.18);  color: #ef5350; box-shadow: 0 0 14px rgba(244,67,54,0.22); }
+.pd-blue   .pd-card-ic { background: rgba(33,150,243,0.18); color: #42a5f5; box-shadow: 0 0 14px rgba(33,150,243,0.22); }
+.pd-yellow .pd-card-ic { background: rgba(255,167,38,0.18); color: #ffa726; box-shadow: 0 0 14px rgba(255,167,38,0.22); }
+.pd-green  .pd-card-val { color: #4caf50; }
+.pd-red    .pd-card-val { color: #ef5350; }
+.pd-blue   .pd-card-val { color: #42a5f5; }
+.pd-yellow .pd-card-val { color: #ffa726; }
+
+/* ── CARTÕES: cartão premium (chip dourado, Disponível/Limite, barra) ── */
+.pc-card {
+    position: relative;
+    margin: 0 14px 14px;
+    border-radius: 18px;
+    padding: 15px 16px 14px;
+    overflow: hidden;
+    background:
+        radial-gradient(130% 130% at 100% 0%, rgba(16,185,129,0.30), transparent 55%),
+        linear-gradient(150deg, #1d2b25 0%, #121d18 55%, #0a130f 100%);
+    border: 1px solid rgba(16,185,129,0.22);
+    box-shadow: 0 16px 38px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12);
+    flex-shrink: 0;
+}
+.pc-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.pc-bank { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: #fff; }
+.pc-bank-dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: linear-gradient(135deg, #10b981, #059669);
+    box-shadow: 0 0 8px rgba(16,185,129,0.5);
+}
+.pc-contactless { width: 17px; height: 17px; color: rgba(255,255,255,0.55); }
+.pc-chip {
+    width: 38px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, #d4af37 0%, #f5d060 50%, #c9a227 100%);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12);
+    margin-bottom: 14px;
+}
+.pc-card-bottom { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 11px; }
+.pc-col { display: flex; flex-direction: column; gap: 2px; }
+.pc-col-r { text-align: right; }
+.pc-lbl { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.45); }
+.pc-val { font-size: 15px; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
+.pc-val-green { color: #4ade80; }
+.pc-bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.pc-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10b981, #34d399); box-shadow: 0 0 8px rgba(16,185,129,0.5); }
+.pc-bar-lbl { display: block; margin-top: 6px; font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.5); }
+
+/* ── RESERVAS: donut de progresso + total + lista ── */
+.pr-top { display: flex; align-items: center; gap: 14px; padding: 2px 16px 14px; flex-shrink: 0; }
+.pr-donut {
+    --p: 0;
+    position: relative;
+    width: 78px; height: 78px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: conic-gradient(#10b981 calc(var(--p) * 1%), rgba(255,255,255,0.09) 0);
+}
+.pr-donut::after {
+    content: '';
+    position: absolute;
+    inset: 9px;
+    border-radius: 50%;
+    background: #08090f;
+}
+.pr-donut-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+.pr-donut-pct { font-size: 18px; font-weight: 900; color: #fff; letter-spacing: -0.03em; line-height: 1; }
+.pr-donut-cap { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.4); }
+.pr-totals { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pr-tot-lbl { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.45); }
+.pr-tot-val { font-size: 22px; font-weight: 900; letter-spacing: -0.03em; color: #fff; line-height: 1.05; }
+.pr-tot-sub { font-size: 9.5px; color: rgba(255,255,255,0.4); }
+
+.pr-list { padding: 0 14px; display: flex; flex-direction: column; gap: 10px; }
+.pr-item { display: flex; align-items: center; gap: 10px; }
+.pr-emoji {
+    width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+    display: grid; place-items: center; font-size: 14px;
+    background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.18);
+}
+.pr-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.pr-item-row { display: flex; align-items: center; justify-content: space-between; }
+.pr-item-nm { font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,0.9); }
+.pr-item-pct { font-size: 11px; font-weight: 800; color: var(--accent-green); }
+
+/* ── RELATÓRIOS: resumo no topo ── */
+.prep-sum {
+    display: flex;
+    gap: 7px;
+    padding: 2px 14px 12px;
+    flex-shrink: 0;
+}
+.prep-sum-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+}
+.prep-sum-lbl { font-size: 8.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(255,255,255,0.45); }
+.prep-sum-val { font-size: 12.5px; font-weight: 800; letter-spacing: -0.02em; }
+.prep-sum-g { color: #4caf50; }
+.prep-sum-r { color: #ef5350; }
+.prep-sum-b { color: #42a5f5; }
+
 /* Telefone respira melhor em telas baixas */
-@media (max-height: 860px) and (min-width: 1025px) {
-    .financial-side .phone-3d-wrapper { transform: scale(0.88); }
+@media (max-height: 920px) and (min-width: 1025px) {
+    .financial-side .phone-3d-wrapper { transform: scale(0.9); }
     .phone-sub { display: none; }
 }
 @media (max-height: 740px) and (min-width: 1025px) {

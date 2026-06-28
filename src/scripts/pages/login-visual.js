@@ -84,7 +84,7 @@
         let paused = false;
 
         // Guarda o tamanho-alvo das barras p/ animá-las "crescendo" ao entrar.
-        const bars = Array.from(stack.querySelectorAll('.pbar-fill, .prep-bar-fill'));
+        const bars = Array.from(stack.querySelectorAll('.pbar-fill, .prep-bar-fill, .pc-bar-fill'));
         bars.forEach((bar) => {
             const isV = bar.classList.contains('prep-bar-fill');
             bar.dataset.target = isV ? (bar.style.height || '0%') : (bar.style.width || '0%');
@@ -93,7 +93,7 @@
 
         function growBars(screen) {
             if (reduceMotion) return;
-            screen.querySelectorAll('.pbar-fill, .prep-bar-fill').forEach((bar) => {
+            screen.querySelectorAll('.pbar-fill, .prep-bar-fill, .pc-bar-fill').forEach((bar) => {
                 const axis = bar.dataset.axis;
                 const target = bar.dataset.target;
                 if (!axis || !target) return;
