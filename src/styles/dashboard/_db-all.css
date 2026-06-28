@@ -7973,21 +7973,37 @@ button,
 }
 .tut-spotlight.tut-spot-oculto .tut-spot-ring { animation-play-state: paused; }
 
+/* "Bloom": ao reaparecer, o spotlight assenta de scale(1.05)→1 (GPU, sem
+   repaint do box-shadow) — substitui o liga/desliga seco por um pouso suave. */
+@keyframes tutSpotBloom {
+    from { transform: scale(1.05); }
+    to   { transform: scale(1);    }
+}
+.tut-spotlight.tut-spot-bloom { animation: tutSpotBloom 0.42s cubic-bezier(0.22, 1, 0.36, 1); }
+
 /* ── Card ──────────────────────────────────────────────────────────────────── */
+/* A direção do movimento vem do DESLIZE de posição (.tut-card--glide); a entrada
+   em si é só um "assentar" suave de escala+opacidade, e os filhos do corpo
+   entram em cascata (tutFadeUp) — troca de passo viva, nunca seca.
+   Na primeira aparição (centro) há um leve translateY de surgimento. */
 @keyframes tutEntrarAvancar {
-    from { opacity: 0; transform: translateX(32px) scale(0.95); }
-    to   { opacity: 1; transform: translateX(0)    scale(1);    }
+    from { opacity: 0; transform: scale(0.975); }
+    to   { opacity: 1; transform: scale(1);     }
 }
 @keyframes tutEntrarVoltar {
-    from { opacity: 0; transform: translateX(-32px) scale(0.95); }
-    to   { opacity: 1; transform: translateX(0)     scale(1);    }
+    from { opacity: 0; transform: scale(0.975); }
+    to   { opacity: 1; transform: scale(1);     }
 }
 @keyframes tutEntrarCentro {
-    from { opacity: 0; transform: translateY(22px) scale(0.93); }
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
     to   { opacity: 1; transform: translateY(0)    scale(1);    }
 }
 @keyframes tutSair {
-    to { opacity: 0; transform: scale(0.92) translateY(10px); }
+    to { opacity: 0; transform: scale(0.96) translateY(8px); }
+}
+@keyframes tutFadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0);   }
 }
 
 .tut-card {
@@ -8009,10 +8025,14 @@ button,
     isolation: isolate;
 }
 
-/* Entradas direction-aware */
-.tut-card.tut-entr-avancar { animation: tutEntrarAvancar 0.32s cubic-bezier(0.34, 1.2, 0.64, 1) forwards; }
-.tut-card.tut-entr-voltar  { animation: tutEntrarVoltar  0.32s cubic-bezier(0.34, 1.2, 0.64, 1) forwards; }
-.tut-card.tut-entr-centro  { animation: tutEntrarCentro  0.36s cubic-bezier(0.34, 1.35, 0.64, 1) forwards; }
+/* Deslize de posição entre passos: o card "viaja" até o novo ponto em vez de
+   pular. A transição de top/left/bottom é aplicada inline por JS só a partir do
+   2º passo (_cardPosicionado), para a 1ª aparição não deslizar do canto. */
+
+/* Entradas direction-aware — suaves, com leve mola */
+.tut-card.tut-entr-avancar { animation: tutEntrarAvancar 0.44s cubic-bezier(0.33, 1.08, 0.55, 1) both; }
+.tut-card.tut-entr-voltar  { animation: tutEntrarVoltar  0.44s cubic-bezier(0.33, 1.08, 0.55, 1) both; }
+.tut-card.tut-entr-centro  { animation: tutEntrarCentro  0.48s cubic-bezier(0.33, 1.12, 0.55, 1) both; }
 
 .tut-card.tut-saindo {
     animation: tutSair 0.22s ease forwards !important;
@@ -8137,10 +8157,12 @@ button,
     justify-content: center;
     flex-shrink: 0;
     align-self: flex-start;
-    animation: tutIconEntrar 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: tutIconEntrar 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation-delay: 0.05s;
 }
 .tut-icon-wrap .fas { font-size: 1.3rem; }
 
+/* Cascata de conteúdo: título → texto → dica assentam em sequência */
 .tut-titulo {
     font-size: 1.1rem;
     font-weight: 800;
@@ -8148,6 +8170,8 @@ button,
     line-height: 1.25;
     margin: 0;
     letter-spacing: -0.02em;
+    animation: tutFadeUp 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: 0.12s;
 }
 
 .tut-texto {
@@ -8155,6 +8179,8 @@ button,
     color: rgba(176, 180, 205, 0.88);
     line-height: 1.68;
     margin: 0;
+    animation: tutFadeUp 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: 0.18s;
 }
 .tut-texto strong { color: #dde0f5; font-weight: 700; }
 .tut-texto em     { color: #6ee7b7; font-style: normal; font-weight: 600; }
@@ -8284,6 +8310,8 @@ button,
     border: 1px solid rgba(245, 158, 11, 0.18);
     border-left: 3px solid rgba(245, 158, 11, 0.6);
     border-radius: 10px;
+    animation: tutFadeUp 0.46s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: 0.24s;
 }
 .tut-dica > .fas {
     color: #fbbf24;

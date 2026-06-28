@@ -444,6 +444,9 @@ let _card      = null;
 let _ativo     = false;
 let _spRectAtual = null;
 let _resizeTimer = null;
+let _cardPosicionado = false;   // glide só a partir da 2ª posição em cada contexto
+
+const _GLIDE = 'left 0.46s cubic-bezier(0.22,1,0.36,1), top 0.46s cubic-bezier(0.22,1,0.36,1), bottom 0.46s cubic-bezier(0.22,1,0.36,1)';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  API pública
@@ -538,6 +541,7 @@ function _abrirHub() {
   _modo    = 'hub';
   _seqTipo = null;
   _direcao = 'centro';
+  _cardPosicionado = false;
   _spotlight?.classList.add('tut-spot-oculto');
   _renderHub();
   requestAnimationFrame(() => { _posCard(null, 'centro'); });
@@ -648,6 +652,7 @@ function _iniciarSeq() {
   _modo    = 'seq';
   _passo   = 0;
   _direcao = 'centro';
+  _cardPosicionado = false;
   _ir(0);
 }
 
@@ -692,6 +697,10 @@ async function _ir(idx) {
     _spotlight.style.setProperty('--tut-color-25', _hexToRgba(iconColor, 0.25));
     _posSpotlight(spRect);
     _spotlight.classList.remove('tut-spot-oculto');
+    // "Bloom": reinicia a animação de pouso do spotlight a cada passo
+    _spotlight.classList.remove('tut-spot-bloom');
+    void _spotlight.offsetWidth;
+    _spotlight.classList.add('tut-spot-bloom');
   } else {
     _spotlight.classList.add('tut-spot-oculto');
   }
@@ -933,6 +942,12 @@ function _posCard(spRect, pos, semAnimacao = false) {
     _card.className = 'tut-card';
     void _card.offsetHeight; // força reflow p/ reiniciar a animação
   }
+
+  // Deslize de posição: ativo só a partir da 2ª colocação (não desliza do canto
+  // na 1ª aparição nem em resize). Inline pq o className é reescrito adiante.
+  const glide = _cardPosicionado && !semAnimacao;
+  if (!semAnimacao) _cardPosicionado = true;
+  _card.style.transition = glide ? _GLIDE : 'none';
 
   const isMobile = window.innerWidth <= 768;
   const isUltimo = _modo === 'seq' && (_passo === _passos.length - 1 || _passos[_passo]?.ultimo);
