@@ -9,6 +9,28 @@ triggers e conformidade LGPD diretamente no banco de produção.
 > `${SUPABASE_ACCESS_TOKEN}` e `${SUPABASE_PROJECT_REF}` — nenhum segredo nem
 > identificador de projeto fica versionado.
 
+> **Escopo de segurança:** o servidor roda com `--read-only` **e**
+> `--features=database,debugging,docs`. Isso dá acesso de leitura ao banco
+> (execute_sql, list_tables, get_advisors, list_migrations, get_logs) e remove
+> por completo as tools de escrita da Management API (deploy de edge function,
+> criar/apagar/mergear branch, account). Auditoria não consegue mutar nada.
+
+---
+
+## 0. Instalar o servidor MCP globalmente (uma vez)
+
+O `.mcp.json` chama o binário `mcp-server-supabase`. No Windows, rodar via
+`npx -y @supabase/mcp-server-supabase` falha com
+`'mcp-server-supabase' não é reconhecido` (bug do npx ao criar o shim do bin).
+Por isso instalamos o pacote globalmente:
+
+```powershell
+npm install -g @supabase/mcp-server-supabase@latest
+```
+
+O shim vai para `C:\Users\<voce>\AppData\Roaming\npm\mcp-server-supabase.cmd`
+(esse diretório já está no PATH). Para atualizar no futuro, rode o mesmo comando.
+
 ---
 
 ## 1. Gerar o token (uma vez)
