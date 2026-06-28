@@ -143,31 +143,16 @@ Deno.serve(async (req) => {
 
     console.log('[send-reset-code] Solicitação para:', normalizedEmail)
 
-    // ── 1. Verificar subscription ativa (stripe_subscriptions) ──────────────
-    // Cakto users foram migrados para stripe_subscriptions. Tabela `subscriptions` removida.
-    const { data: stripeSub, error: subError } = await supabase
-      .from('stripe_subscriptions')
-      .select('user_id')
-      .eq('user_email', normalizedEmail)
-      .in('status', ['active', 'trialing'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (subError) {
-      console.error('[send-reset-code] Erro ao buscar stripe_subscriptions:', subError.message)
-      return neutralResponse(corsHeaders)
-    }
-
-    if (!stripeSub) {
-      console.log('[send-reset-code] Email sem subscription ativa:', normalizedEmail)
-      return neutralResponse(corsHeaders)
-    }
-
-    let resolvedUserId: string | null = stripeSub.user_id ?? null
-
-    // Verifica se a conta auth.users existe e captura user_id se disponível.
-    // Se não existir, o código não será enviado — usuário deve usar Primeiro Acesso.
+    // ── 1. Gate: o email precisa ter uma conta auth.users existente ──────────
+    // [FIX-GUEST] O critério para redefinir senha é "a conta existe", NÃO
+    // "a conta tem assinatura ativa". A trava antiga em stripe_subscriptions
+    // bloqueava silenciosamente:
+    //   • convidados (account_members) — não têm assinatura própria;
+    //   • donos com assinatura expirada — ainda donos da própria conta.
+    // A existência da conta auth é a fonte de verdade. Se a conta não existe,
+    // resposta neutra (anti-enumeração) — quem não tem conta usa Primeiro
+    // Acesso (donos) ou aceita o convite (convidados).
+    let resolvedUserId: string | null = null
     {
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
       const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -176,21 +161,23 @@ Deno.serve(async (req) => {
           `${supabaseUrl}/auth/v1/admin/users?page=1&per_page=100&filter=${encodeURIComponent(normalizedEmail)}`,
           { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } },
         )
-        if (res.ok) {
-          const data  = await res.json()
-          const users: Array<{ id: string; email: string }> = data.users ?? []
-          const match = users.find(u => u.email?.toLowerCase() === normalizedEmail)
-          if (!match?.id) {
-            console.warn('[send-reset-code] Email tem subscription mas sem conta auth — retornando neutro')
-            return neutralResponse(corsHeaders)
-          }
-          if (!resolvedUserId) {
-            resolvedUserId = match.id
-            console.log('[send-reset-code] user_id resolvido via GoTrue admin API')
-          }
+        if (!res.ok) {
+          // fail-closed: sem confirmar a conta, não envia (e não vaza o motivo)
+          console.error('[send-reset-code] GoTrue admin lookup falhou: HTTP', res.status)
+          return neutralResponse(corsHeaders)
         }
+        const data  = await res.json()
+        const users: Array<{ id: string; email: string }> = data.users ?? []
+        const match = users.find(u => u.email?.toLowerCase() === normalizedEmail)
+        if (!match?.id) {
+          console.log('[send-reset-code] Email sem conta auth — retornando neutro')
+          return neutralResponse(corsHeaders)
+        }
+        resolvedUserId = match.id
+        console.log('[send-reset-code] Conta auth confirmada — user_id resolvido')
       } catch (e) {
         console.error('[send-reset-code] Erro ao verificar conta auth:', e)
+        return neutralResponse(corsHeaders)
       }
     }
 

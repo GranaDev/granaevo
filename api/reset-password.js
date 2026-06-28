@@ -23,8 +23,6 @@ const ENDPOINTS = {
   verify_code:    `${SUPABASE_URL}/functions/v1/verify-and-reset-password`,
   reset_password: `${SUPABASE_URL}/functions/v1/verify-and-reset-password`,
 }
-const CHECK_EMAIL_URL = `${SUPABASE_URL}/functions/v1/check-email-status`
-
 // Rate limits por step — mais restrito em "send" para evitar spam de email
 const RATE_LIMITS = { send: 3, verify_code: 10, reset_password: 5 }
 
@@ -74,39 +72,18 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
   }
 
-  // Etapa 'send': verificar email server-side antes de disparar OTP.
-  // Anti-enumeração: a resposta ao frontend é SEMPRE {status:"sent"} —
-  // o resultado do check nunca é exposto, eliminando o vetor de enumeração
-  // que existia quando o frontend chamava /api/check-email diretamente.
+  // Etapa 'send': validação leve de input. O gate real (a conta auth precisa
+  // existir) e a resposta neutra anti-enumeração ficam em send-password-reset-code.
+  //
+  // [FIX-GUEST] O pré-check via check-email-status foi REMOVIDO: ele só
+  // consultava stripe_subscriptions e, por isso, descartava convidados
+  // (account_members, sem assinatura própria) ANTES de chamar a Edge Function
+  // — que então nunca era invocada (nem aparecia nos logs). A Edge Function já
+  // responde SEMPRE de forma neutra ({status:"sent"}) para emails sem conta,
+  // então a anti-enumeração continua garantida sem essa trava.
   if (step === 'send') {
     if (typeof body?.email !== 'string' || body.email.length > 254) {
       return res.status(400).json({ error: 'email obrigatório' })
-    }
-    try {
-      const checkR = await fetch(CHECK_EMAIL_URL, {
-        method:  'POST',
-        headers: {
-          'Content-Type':    'application/json',
-          'Authorization':   `Bearer ${ANON_KEY}`,
-          'apikey':          ANON_KEY,
-          'x-proxy-secret':  PROXY_SECRET,
-          'x-forwarded-for': ip,
-        },
-        body:   JSON.stringify({ email: body.email }),
-        signal: AbortSignal.timeout(8_000),
-      })
-      if (checkR.ok) {
-        const { status: emailStatus } = await checkR.json()
-        const valid = emailStatus === 'ready' || emailStatus === 'password_exists'
-        if (!valid) {
-          logger.info('send_skipped', PATH, { ip, reason: emailStatus })
-          res.setHeader('Content-Type', 'application/json')
-          return res.status(200).json({ status: 'sent' })
-        }
-      }
-      // Se o check falhar por erro de rede/HTTP, prosseguir para evitar falso-negativo
-    } catch {
-      logger.warn('check_email_failed', PATH, { ip })
     }
   }
 
