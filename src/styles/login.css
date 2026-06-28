@@ -56,6 +56,8 @@
 @import './_fonts.css';
 /* Tokens globais — fonte única de verdade para cores, espaçamento e tipografia */
 @import './_tokens.css';
+/* Telefone 3D — mesma moldura/dashboard da landing (fonte única do mockup) */
+@import './landing/_phone-mockup.css';
 
 /* ==========================================
    RESET E CONFIGURAÇÕES
@@ -1732,6 +1734,424 @@ body {
         transform: scale(0.82);
         transform-origin: left top;
     }
+}
+
+/* ==========================================
+   TELEFONE 3D — PALCO, MARCA, LEGENDA
+   (a moldura/dashboard vem de landing/_phone-mockup.css)
+   ========================================== */
+.financial-side {
+    padding: 36px 32px;
+}
+
+.phone-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 380px;
+    z-index: 2;
+}
+
+/* ── Marca + selo de segurança (acima do telefone) ── */
+.phone-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+    animation: fadeInUp 0.8s ease 0.15s backwards;
+}
+
+.phone-brand-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 26px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    color: #fff;
+}
+
+.phone-brand-logo svg {
+    width: 30px;
+    height: 30px;
+    color: var(--accent-green);
+    filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.5));
+}
+
+.phone-brand-logo span {
+    background: linear-gradient(135deg, #fff 0%, var(--neon-green) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.phone-secure-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: rgba(110, 231, 183, 0.9);
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    box-shadow: inset 0 0 14px rgba(16, 185, 129, 0.06);
+}
+
+.phone-secure-badge svg {
+    width: 13px;
+    height: 13px;
+    color: var(--accent-green);
+}
+
+/* ── Legenda + indicadores (abaixo do telefone) ── */
+.phone-caption {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: -42px; /* sobe sob o glow do telefone */
+    animation: fadeInUp 0.8s ease 0.35s backwards;
+}
+
+.phone-caption-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.82);
+    letter-spacing: -0.01em;
+    text-align: center;
+    min-height: 20px;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.phone-caption-text.is-swapping {
+    opacity: 0;
+    transform: translateY(6px);
+}
+
+.phone-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.phone-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1), background 0.45s ease, box-shadow 0.45s ease;
+}
+
+.phone-dot.is-active {
+    width: 22px;
+    background: linear-gradient(90deg, var(--accent-green), var(--neon-green));
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+}
+
+/* ==========================================
+   TELEFONE 3D — STACK DE TELAS CÍCLICAS
+   ========================================== */
+.phone-screens {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.phone-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transform: translateX(14px) scale(0.985);
+    pointer-events: none;
+    transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.phone-screen.is-active {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+}
+
+.phone-screen.is-leaving {
+    opacity: 0;
+    transform: translateX(-14px) scale(0.985);
+}
+
+/* Cascata suave do conteúdo ao entrar */
+.phone-screen.is-active > * {
+    animation: puiContentIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.phone-screen.is-active > *:nth-child(1) { animation-delay: 0.04s; }
+.phone-screen.is-active > *:nth-child(2) { animation-delay: 0.10s; }
+.phone-screen.is-active > *:nth-child(3) { animation-delay: 0.16s; }
+.phone-screen.is-active > *:nth-child(4) { animation-delay: 0.22s; }
+
+@keyframes puiContentIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Cabeçalho genérico de tela (Cartões/Reservas/Relatórios) ── */
+.pscreen-hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 16px 12px;
+    flex-shrink: 0;
+}
+
+.pscreen-title {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #fff;
+}
+
+.pscreen-pill {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent-green);
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 3px 9px;
+    border-radius: 999px;
+}
+
+.pscreen-pill-y {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.12);
+    border-color: rgba(251, 191, 36, 0.28);
+}
+
+/* ── Barra de progresso reutilizável ── */
+.pbar {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.pbar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #10b981, #34d399);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.pbar-fill-y { background: linear-gradient(90deg, #f59e0b, #fbbf24); box-shadow: 0 0 8px rgba(251, 191, 36, 0.5); }
+.pbar-fill-c { background: linear-gradient(90deg, #0891b2, #06b6d4); box-shadow: 0 0 8px rgba(6, 182, 212, 0.5); }
+
+/* ===== TELA CARTÕES ===== */
+.pcard {
+    margin: 0 14px 12px;
+    border-radius: 16px;
+    padding: 14px 15px;
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(120% 140% at 0% 0%, rgba(16, 185, 129, 0.35), transparent 55%),
+        linear-gradient(135deg, #0f3b2f 0%, #0a1f1a 60%, #06110e 100%);
+    border: 1px solid rgba(16, 185, 129, 0.28);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), inset 0 0 30px rgba(16, 185, 129, 0.06);
+    flex-shrink: 0;
+}
+
+.pcard::after {
+    content: '';
+    position: absolute;
+    top: -40%;
+    right: -10%;
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, rgba(110, 231, 183, 0.25), transparent 70%);
+    pointer-events: none;
+}
+
+.pcard-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+}
+
+.pcard-bank { font-size: 11px; font-weight: 700; color: rgba(255, 255, 255, 0.9); }
+.pcard-flag { font-size: 13px; font-weight: 900; font-style: italic; color: #fff; letter-spacing: 0.04em; }
+
+.pcard-chip {
+    width: 30px;
+    height: 22px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, #f4d58d, #c79a3b);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+    margin-bottom: 12px;
+}
+
+.pcard-num {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #fff;
+    margin-bottom: 12px;
+}
+
+.pcard-bot {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+}
+
+.pcard-limit { padding: 0 16px 12px; flex-shrink: 0; }
+
+.pcard-limit-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.pcard-limit-val { font-weight: 700; color: rgba(255, 255, 255, 0.85); }
+
+.plist { padding: 0 12px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+
+.pli {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pli-ic {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.pli-ic-g { background: rgba(16, 185, 129, 0.15); }
+.pli-ic-b { background: rgba(6, 182, 212, 0.15); }
+.pli-ic-p { background: rgba(167, 139, 250, 0.15); }
+
+.pli-info { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pli-info > span:first-child { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.9); }
+.pli-sub { font-size: 8.5px; color: rgba(255, 255, 255, 0.35); }
+.pli-amt { font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0; }
+
+/* ===== TELA RESERVAS ===== */
+.pgoal {
+    margin: 0 14px 11px;
+    padding: 11px 13px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+
+.pgoal-hd {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 9px;
+}
+
+.pgoal-emoji {
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    background: rgba(16, 185, 129, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.pgoal-info { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pgoal-nm { font-size: 12px; font-weight: 700; color: rgba(255, 255, 255, 0.92); }
+.pgoal-sub { font-size: 9px; color: rgba(255, 255, 255, 0.4); }
+.pgoal-pct { font-size: 13px; font-weight: 800; color: var(--accent-green); flex-shrink: 0; }
+
+/* ===== TELA RELATÓRIOS ===== */
+.prep-chart {
+    margin: 0 14px 14px;
+    padding: 14px 12px 10px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+
+.prep-bars {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    height: 120px;
+}
+
+.prep-bar {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    height: 100%;
+}
+
+.prep-bar-fill {
+    width: 100%;
+    border-radius: 6px 6px 3px 3px;
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.55), rgba(16, 185, 129, 0.18));
+    min-height: 6px;
+}
+
+.prep-bar-on {
+    background: linear-gradient(180deg, #34d399, #10b981);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+}
+
+.prep-bar-lbl { font-size: 8px; font-weight: 600; color: rgba(255, 255, 255, 0.4); }
+
+.prep-cats { padding: 0 16px; display: flex; flex-direction: column; gap: 8px; }
+
+.prep-cat { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.prep-dot { width: 9px; height: 9px; border-radius: 999px; flex-shrink: 0; }
+.prep-dot-g { background: #10b981; }
+.prep-dot-c { background: #06b6d4; }
+.prep-dot-y { background: #fbbf24; }
+.prep-dot-p { background: #a78bfa; }
+.prep-cat-nm { flex: 1; color: rgba(255, 255, 255, 0.78); font-weight: 500; }
+.prep-cat-val { font-weight: 800; color: #fff; }
+
+/* Telefone respira melhor em telas baixas */
+@media (max-height: 820px) and (min-width: 1025px) {
+    .phone-3d-wrapper { transform: scale(0.9); }
+    .phone-caption { margin-top: -52px; }
+}
+@media (max-height: 720px) and (min-width: 1025px) {
+    .phone-3d-wrapper { transform: scale(0.8); }
 }
 
 /* ==========================================

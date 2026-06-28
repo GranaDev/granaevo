@@ -67,94 +67,273 @@
     <!-- Container principal -->
     <div class="login-container">
 
-        <!-- Lado esquerdo — Visualização Financeira 3D -->
+        <!-- Lado esquerdo — Telefone 3D com a dashboard ao vivo -->
         <div class="financial-side" aria-hidden="true">
-            <div class="financial-3d-wrapper">
-                <div class="financial-visual">
-                    <div class="growth-card">
-                        <div class="card-content">
+            <div class="phone-stage">
 
-                            <div class="logo-section">
-                                <div class="logo-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    </svg>
+                <!-- Marca + selo de segurança -->
+                <div class="phone-brand">
+                    <div class="phone-brand-logo">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>GranaEvo</span>
+                    </div>
+                    <span class="phone-secure-badge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <polyline points="9 12 11 14 15 10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Criptografia ponta a ponta
+                    </span>
+                </div>
+
+                <div class="phone-3d-wrapper" id="phone3DWrapper">
+
+                    <!-- Phone body -->
+                    <div class="phone-3d-device" id="phone3DDevice">
+
+                        <!-- Botões físicos -->
+                        <div class="pbtn pbtn-vol-up"></div>
+                        <div class="pbtn pbtn-vol-down"></div>
+                        <div class="pbtn pbtn-power"></div>
+
+                        <!-- Tela de vidro + moldura -->
+                        <div class="phone-glass">
+                            <div class="phone-pill"></div>
+
+                            <div class="pui">
+                                <!-- Status bar (constante) -->
+                                <div class="pui-bar">
+                                    <span>9:41</span>
+                                    <div class="pui-bar-icons">
+                                        <svg width="13" height="10" viewBox="0 0 13 10" fill="currentColor"><rect x="0" y="5" width="2" height="5" rx="1" opacity="0.4"/><rect x="3.5" y="3" width="2" height="7" rx="1" opacity="0.65"/><rect x="7" y="1" width="2" height="9" rx="1" opacity="0.85"/><rect x="10.5" y="0" width="2" height="10" rx="1"/></svg>
+                                        <svg width="13" height="10" viewBox="0 0 13 10" fill="currentColor"><path d="M6.5 2C4.3 2 2.3 2.9.8 4.4l1.2 1.2C3.1 4.5 4.7 3.8 6.5 3.8S9.9 4.5 11 5.6l1.2-1.2C10.7 2.9 8.7 2 6.5 2z" opacity="0.5"/><path d="M6.5 5.5C5.4 5.5 4.4 6 3.7 6.7l1.2 1.2c.4-.4 1-.6 1.6-.6s1.2.2 1.6.6l1.2-1.2C8.6 6 7.6 5.5 6.5 5.5z"/><circle cx="6.5" cy="9.5" r="1"/></svg>
+                                        <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".5" y=".5" width="18" height="10" rx="2.5" stroke="currentColor" stroke-opacity="0.35"/><rect x="2" y="2" width="13" height="7" rx="1.5" fill="currentColor"/><path d="M20 3.5v4a2 2 0 000-4z" fill="currentColor" opacity="0.4"/></svg>
+                                    </div>
                                 </div>
-                                <h1 class="logo-text">GranaEvo</h1>
+
+                                <!-- Stack de telas que se alternam -->
+                                <div class="phone-screens" id="phoneScreens">
+
+                                    <!-- ===== TELA 1 — DASHBOARD ===== -->
+                                    <div class="phone-screen is-active" data-screen="0">
+                                        <div class="pui-head">
+                                            <div class="pui-av">G</div>
+                                            <div class="pui-brand">GranaEvo</div>
+                                            <div class="pui-head-actions">
+                                                <div class="pui-ic">
+                                                    <svg viewBox="0 0 20 20" fill="none" width="13" height="13"><path d="M10 2a6 6 0 00-6 6c0 4-2 5-2 5h16s-2-1-2-5a6 6 0 00-6-6z" stroke="currentColor" stroke-width="1.5"/><path d="M11.7 16a2 2 0 01-3.4 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="pui-balance">
+                                            <div class="pui-bal-lbl">Saldo disponível</div>
+                                            <div class="pui-bal-val">R$ 2.000<span class="pui-bal-dec">,00</span></div>
+                                            <div class="pui-bal-trend">
+                                                <svg viewBox="0 0 14 14" fill="none" width="10" height="10"><path d="M7 11V3M7 3L3.5 6.5M7 3L10.5 6.5" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>
+                                                +12,5% este mês
+                                            </div>
+                                        </div>
+                                        <div class="pui-pills">
+                                            <div class="pui-pill pui-pill-g">
+                                                <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 11V3M7 3L3.5 6.5M7 3L10.5 6.5" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+                                                <div class="pui-pill-txt"><span class="pui-pill-lbl">Entradas</span><span class="pui-pill-val">R$&nbsp;5.500</span></div>
+                                            </div>
+                                            <div class="pui-pill pui-pill-r">
+                                                <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 3v8M7 11L3.5 7.5M7 11L10.5 7.5" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+                                                <div class="pui-pill-txt"><span class="pui-pill-lbl">Saídas</span><span class="pui-pill-val">R$&nbsp;2.300</span></div>
+                                            </div>
+                                            <div class="pui-pill pui-pill-y">
+                                                <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M2 11h10M7 3v6M4.5 5.5L7 3l2.5 2.5" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                                                <div class="pui-pill-txt"><span class="pui-pill-lbl">Reservas</span><span class="pui-pill-val">R$&nbsp;1.200</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="pui-contas">
+                                            <div class="pui-contas-hd">
+                                                <svg viewBox="0 0 14 14" fill="none" width="11" height="11"><rect x="2" y="6" width="10" height="7" rx="1.5" stroke="#10b981" stroke-width="1.4"/><path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="#10b981" stroke-width="1.4" stroke-linecap="round"/></svg>
+                                                Contas Fixas
+                                            </div>
+                                            <div class="pui-contas-grid">
+                                                <div class="pui-cc">
+                                                    <div class="pui-cc-hd"><span class="pui-cc-nm">Netflix</span><span class="pui-cc-st pui-cc-pendente">Pendente</span></div>
+                                                    <div class="pui-cc-vl">R$&nbsp;39,50</div><div class="pui-cc-sb">vence dia 15</div>
+                                                </div>
+                                                <div class="pui-cc">
+                                                    <div class="pui-cc-hd"><span class="pui-cc-nm">Academia</span><span class="pui-cc-st pui-cc-pago">Pago</span></div>
+                                                    <div class="pui-cc-vl">R$&nbsp;83,30</div><div class="pui-cc-sb">mensal</div>
+                                                </div>
+                                                <div class="pui-cc">
+                                                    <div class="pui-cc-hd"><span class="pui-cc-nm">Internet</span><span class="pui-cc-st pui-cc-pago">Pago</span></div>
+                                                    <div class="pui-cc-vl">R$&nbsp;129,90</div><div class="pui-cc-sb">mensal</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- ===== TELA 2 — CARTÕES ===== -->
+                                    <div class="phone-screen" data-screen="1">
+                                        <div class="pscreen-hd">
+                                            <span class="pscreen-title">Cartões</span>
+                                            <span class="pscreen-pill">2 ativos</span>
+                                        </div>
+                                        <div class="pcard">
+                                            <div class="pcard-top">
+                                                <span class="pcard-bank">GranaEvo Black</span>
+                                                <span class="pcard-flag">VISA</span>
+                                            </div>
+                                            <div class="pcard-chip"></div>
+                                            <div class="pcard-num">•••• •••• •••• 4827</div>
+                                            <div class="pcard-bot">
+                                                <span>LUCAS OLIVEIRA</span>
+                                                <span>08/29</span>
+                                            </div>
+                                        </div>
+                                        <div class="pcard-limit">
+                                            <div class="pcard-limit-row">
+                                                <span>Fatura atual</span>
+                                                <span class="pcard-limit-val">R$&nbsp;1.840 / 5.000</span>
+                                            </div>
+                                            <div class="pbar"><div class="pbar-fill" style="width:37%"></div></div>
+                                        </div>
+                                        <div class=" plist">
+                                            <div class="pli">
+                                                <div class="pli-ic pli-ic-g">🛒</div>
+                                                <div class="pli-info"><span>Mercado Extra</span><span class="pli-sub">Hoje · 14:20</span></div>
+                                                <span class="pli-amt">−R$ 246,90</span>
+                                            </div>
+                                            <div class="pli">
+                                                <div class="pli-ic pli-ic-b">⛽</div>
+                                                <div class="pli-info"><span>Posto Shell</span><span class="pli-sub">Ontem · 09:05</span></div>
+                                                <span class="pli-amt">−R$ 180,00</span>
+                                            </div>
+                                            <div class="pli">
+                                                <div class="pli-ic pli-ic-p">🎬</div>
+                                                <div class="pli-info"><span>Cinemark</span><span class="pli-sub">12 jun · 20:40</span></div>
+                                                <span class="pli-amt">−R$ 64,00</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- ===== TELA 3 — RESERVAS ===== -->
+                                    <div class="phone-screen" data-screen="2">
+                                        <div class="pscreen-hd">
+                                            <span class="pscreen-title">Reservas</span>
+                                            <span class="pscreen-pill pscreen-pill-y">R$ 8.700</span>
+                                        </div>
+                                        <div class="pgoal">
+                                            <div class="pgoal-hd">
+                                                <span class="pgoal-emoji">✈️</span>
+                                                <div class="pgoal-info"><span class="pgoal-nm">Viagem Europa</span><span class="pgoal-sub">R$ 7.000 de R$ 10.000</span></div>
+                                                <span class="pgoal-pct">70%</span>
+                                            </div>
+                                            <div class="pbar"><div class="pbar-fill" style="width:70%"></div></div>
+                                        </div>
+                                        <div class="pgoal">
+                                            <div class="pgoal-hd">
+                                                <span class="pgoal-emoji">🛡️</span>
+                                                <div class="pgoal-info"><span class="pgoal-nm">Emergência</span><span class="pgoal-sub">R$ 1.350 de R$ 3.000</span></div>
+                                                <span class="pgoal-pct">45%</span>
+                                            </div>
+                                            <div class="pbar"><div class="pbar-fill pbar-fill-y" style="width:45%"></div></div>
+                                        </div>
+                                        <div class="pgoal">
+                                            <div class="pgoal-hd">
+                                                <span class="pgoal-emoji">💻</span>
+                                                <div class="pgoal-info"><span class="pgoal-nm">Notebook novo</span><span class="pgoal-sub">R$ 350 de R$ 1.500</span></div>
+                                                <span class="pgoal-pct">23%</span>
+                                            </div>
+                                            <div class="pbar"><div class="pbar-fill pbar-fill-c" style="width:23%"></div></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- ===== TELA 4 — RELATÓRIOS ===== -->
+                                    <div class="phone-screen" data-screen="3">
+                                        <div class="pscreen-hd">
+                                            <span class="pscreen-title">Relatórios</span>
+                                            <span class="pscreen-pill">6 meses</span>
+                                        </div>
+                                        <div class="prep-chart">
+                                            <div class="prep-bars">
+                                                <div class="prep-bar"><span class="prep-bar-fill" style="height:42%"></span><span class="prep-bar-lbl">Jan</span></div>
+                                                <div class="prep-bar"><span class="prep-bar-fill" style="height:58%"></span><span class="prep-bar-lbl">Fev</span></div>
+                                                <div class="prep-bar"><span class="prep-bar-fill" style="height:50%"></span><span class="prep-bar-lbl">Mar</span></div>
+                                                <div class="prep-bar"><span class="prep-bar-fill" style="height:74%"></span><span class="prep-bar-lbl">Abr</span></div>
+                                                <div class="prep-bar"><span class="prep-bar-fill" style="height:63%"></span><span class="prep-bar-lbl">Mai</span></div>
+                                                <div class="prep-bar"><span class="prep-bar-fill prep-bar-on" style="height:88%"></span><span class="prep-bar-lbl">Jun</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="prep-cats">
+                                            <div class="prep-cat">
+                                                <span class="prep-dot prep-dot-g"></span>
+                                                <span class="prep-cat-nm">Alimentação</span>
+                                                <span class="prep-cat-val">34%</span>
+                                            </div>
+                                            <div class="prep-cat">
+                                                <span class="prep-dot prep-dot-c"></span>
+                                                <span class="prep-cat-nm">Transporte</span>
+                                                <span class="prep-cat-val">21%</span>
+                                            </div>
+                                            <div class="prep-cat">
+                                                <span class="prep-dot prep-dot-y"></span>
+                                                <span class="prep-cat-nm">Lazer</span>
+                                                <span class="prep-cat-val">18%</span>
+                                            </div>
+                                            <div class="prep-cat">
+                                                <span class="prep-dot prep-dot-p"></span>
+                                                <span class="prep-cat-nm">Outros</span>
+                                                <span class="prep-cat-val">27%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                <!-- Bottom nav (constante; item ativo sincronizado via JS) -->
+                                <div class="pui-nav" id="phoneNav">
+                                    <div class="pui-nav-it pui-nav-on" data-nav="0">
+                                        <img src="/assets/icons/Dashboard.webp" class="pui-nav-img" alt="" width="19" height="19">
+                                        <span>Home</span>
+                                    </div>
+                                    <div class="pui-nav-it" data-nav="1">
+                                        <img src="/assets/icons/Cartoes.webp" class="pui-nav-img" alt="" width="19" height="19">
+                                        <span>Cartões</span>
+                                    </div>
+                                    <div class="pui-nav-it" data-nav="2">
+                                        <img src="/assets/icons/Reservas.webp" class="pui-nav-img" alt="" width="19" height="19">
+                                        <span>Reservas</span>
+                                    </div>
+                                    <div class="pui-nav-it" data-nav="3">
+                                        <img src="/assets/icons/Graficos.webp" class="pui-nav-img" alt="" width="19" height="19">
+                                        <span>Relatórios</span>
+                                    </div>
+                                    <div class="pui-nav-it" data-nav="-1">
+                                        <img src="/assets/icons/Extrato.webp" class="pui-nav-img" alt="" width="19" height="19">
+                                        <span>Extrato</span>
+                                    </div>
+                                </div>
                             </div>
-
-                            <p class="tagline">Evolua suas finanças com inteligência</p>
-
-                            <div class="stats-grid">
-                                <div class="stat-item">
-                                    <div class="stat-icon">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                            <line x1="12" y1="1" x2="12" y2="23" stroke-width="2" stroke-linecap="round"/>
-                                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke-width="2" stroke-linecap="round"/>
-                                        </svg>
-                                    </div>
-                                    <div class="stat-info">
-                                        <span class="stat-label">Controle Total</span>
-                                        <span class="stat-value">100%</span>
-                                    </div>
-                                </div>
-                                <div class="stat-item">
-                                    <div class="stat-icon">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                        </svg>
-                                    </div>
-                                    <div class="stat-info">
-                                        <span class="stat-label">Análises</span>
-                                        <span class="stat-value">Real-time</span>
-                                    </div>
-                                </div>
-                                <div class="stat-item">
-                                    <div class="stat-icon">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                            <circle cx="12" cy="12" r="10" stroke-width="2"/>
-                                            <polyline points="12 6 12 12 16 14" stroke-width="2" stroke-linecap="round"/>
-                                        </svg>
-                                    </div>
-                                    <div class="stat-info">
-                                        <span class="stat-label">Metas</span>
-                                        <span class="stat-value">Inteligentes</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="decoration">
-                                <div class="deco-line"></div>
-                                <div class="deco-dot"></div>
-                                <div class="deco-line"></div>
-                            </div>
-
-                            <div class="features-list">
-                                <div class="feature-item">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                        <polyline points="20 6 9 17 4 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    </svg>
-                                    <span>Dashboard inteligente e intuitivo</span>
-                                </div>
-                                <div class="feature-item">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                        <polyline points="20 6 9 17 4 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    </svg>
-                                    <span>Relatórios detalhados automáticos</span>
-                                </div>
-                                <div class="feature-item">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                                        <polyline points="20 6 9 17 4 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    </svg>
-                                    <span>Segurança bancária avançada</span>
-                                </div>
-                            </div>
-
                         </div>
                     </div>
+
+                    <!-- Glows -->
+                    <div class="phone-glow-ring" aria-hidden="true"></div>
+                    <div class="phone-3d-glow" aria-hidden="true"></div>
                 </div>
+
+                <!-- Legenda + indicadores -->
+                <div class="phone-caption">
+                    <p class="phone-caption-text" id="phoneCaption">Sua vida financeira, num só lugar</p>
+                    <div class="phone-dots" id="phoneDots">
+                        <span class="phone-dot is-active"></span>
+                        <span class="phone-dot"></span>
+                        <span class="phone-dot"></span>
+                        <span class="phone-dot"></span>
+                    </div>
+                </div>
+
             </div>
         </div>
 
@@ -553,6 +732,7 @@
     <!-- .login-container — fim -->
 
     <script type="module" src="src/scripts/pages/login.js?v=4"></script>
+    <script type="module" src="src/scripts/pages/login-visual.js?v=1"></script>
 
 </body>
 </html>
