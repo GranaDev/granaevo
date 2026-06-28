@@ -23,9 +23,9 @@
         const device  = document.getElementById('phone3DDevice');
         if (!wrapper || !device) return;
 
-        const BASE_X = 14;   // ângulos base do keyframe phone-float-login
-        const BASE_Y = -32;  // telefone bem deitado e de lado (ver login.css)
-        const RANGE  = 12;   // desvio máximo, em graus
+        const BASE_X = 8;    // ângulos base do keyframe phone-float-login
+        const BASE_Y = -17;  // inclinação suave e elegante (ver login.css)
+        const RANGE  = 9;    // desvio máximo, em graus
 
         let rafId = null;
         let targetX = BASE_X, targetY = BASE_Y;
@@ -69,22 +69,14 @@
     (function initScreenCycle() {
         const stack   = document.getElementById('phoneScreens');
         const wrapper = document.getElementById('phone3DWrapper');
-        const caption = document.getElementById('phoneCaption');
-        const dotsBox = document.getElementById('phoneDots');
+        const featBox = document.getElementById('fsFeatures');
         const navBox  = document.getElementById('phoneNav');
         if (!stack) return;
 
-        const screens = Array.from(stack.querySelectorAll('.phone-screen'));
-        const dots    = dotsBox ? Array.from(dotsBox.querySelectorAll('.phone-dot')) : [];
+        const screens  = Array.from(stack.querySelectorAll('.phone-screen'));
+        const feats    = featBox ? Array.from(featBox.querySelectorAll('.fs-feature')) : [];
         const navItems = navBox ? Array.from(navBox.querySelectorAll('.pui-nav-it')) : [];
         if (screens.length < 2) return;
-
-        const CAPTIONS = [
-            'Sua vida financeira, num só lugar',
-            'Todos os seus cartões sob controle',
-            'Metas e reservas que crescem com você',
-            'Relatórios automáticos e inteligentes',
-        ];
 
         const INTERVAL = 4200;
         let index = 0;
@@ -127,22 +119,13 @@
             target.classList.add('is-active');
             growBars(target);
 
-            // indicadores
-            dots.forEach((d, i) => d.classList.toggle('is-active', i === next));
+            // features sincronizadas com a tela ativa (são o indicador de progresso)
+            feats.forEach((f, i) => f.classList.toggle('is-active', i === next));
 
             // bottom nav (data-nav casa com o índice da tela)
             navItems.forEach((it) => {
                 it.classList.toggle('pui-nav-on', it.dataset.nav === String(next));
             });
-
-            // legenda com fade
-            if (caption && CAPTIONS[next]) {
-                caption.classList.add('is-swapping');
-                window.setTimeout(() => {
-                    caption.textContent = CAPTIONS[next];
-                    caption.classList.remove('is-swapping');
-                }, 280);
-            }
 
             index = next;
         }
@@ -166,9 +149,10 @@
             wrapper.addEventListener('mouseleave', () => { paused = false; }, { passive: true });
         }
 
-        // Clique nos indicadores → vai direto pra tela
-        dots.forEach((dot, i) => {
-            dot.addEventListener('click', () => { show(i); }, { passive: true });
+        // Hover/clique numa feature → pausa e mostra a tela correspondente
+        feats.forEach((feat, i) => {
+            feat.addEventListener('mouseenter', () => { paused = true; show(i); }, { passive: true });
+            feat.addEventListener('mouseleave', () => { paused = false; }, { passive: true });
         });
 
         // Economiza CPU quando a aba não está visível
