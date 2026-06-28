@@ -12,6 +12,7 @@
 
 import { checkRate, checkRateWindow, isIPBlocked } from './_rate-limit.js'
 import { logger } from './_logger.js'
+import { timingSafeEqual } from 'node:crypto'
 
 const PATH = '/api/user-data'
 
@@ -58,6 +59,40 @@ export default async function handler(req, res) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
+
+    // ── Cron health (M2): disparado pela Vercel Cron (/api/user-data?cron-health=1) ──
+    // Autenticado pelo CRON_SECRET que a Vercel injeta como `Authorization: Bearer`.
+    // Branch isolado, early-return, ANTES de qualquer lógica de dados/CSRF/JWT — não
+    // afeta o fluxo normal. Repassa à edge cron-health-alert (service_role + Resend).
+    if (req.method === 'GET' && req.query?.['cron-health'] === '1') {
+        const cronSecret = process.env.CRON_SECRET ?? '';
+        const authHdr    = req.headers['authorization'] ?? '';
+        const provided   = authHdr.startsWith('Bearer ') ? authHdr.slice(7).trim() : '';
+        const okSecret = cronSecret && provided &&
+            Buffer.byteLength(provided) === Buffer.byteLength(cronSecret) &&
+            timingSafeEqual(Buffer.from(provided), Buffer.from(cronSecret));
+        if (!okSecret) return res.status(401).json({ error: 'Unauthorized' });
+        if (!SUPABASE_URL || !PROXY_SECRET || !SUPABASE_ANON_KEY)
+            return res.status(503).json({ error: 'Serviço indisponível' });
+        try {
+            const efRes = await fetch(`${SUPABASE_URL}/functions/v1/cron-health-alert`, {
+                method:  'POST',
+                headers: {
+                    'Content-Type':   'application/json',
+                    'apikey':         SUPABASE_ANON_KEY,
+                    'x-proxy-secret': PROXY_SECRET,
+                },
+                body:   '{}',
+                signal: AbortSignal.timeout(12_000),
+            });
+            return res.status(efRes.status)
+                      .setHeader('Content-Type', 'application/json')
+                      .send(await efRes.text());
+        } catch (e) {
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
+            return res.status(code).json({ error: 'Gateway indisponível' });
+        }
+    }
 
     // ── CSP Report handler (consolidado de csp-report.js) ─────
     // Detectado por Content-Type antes de qualquer outra lógica.

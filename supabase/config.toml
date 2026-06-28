@@ -386,6 +386,10 @@ verify_jwt = false
 [functions.upload-profile-photo]
 verify_jwt = false
 
+# Monitor M2: autenticado por x-proxy-secret (servidor→servidor), não por JWT.
+[functions.cron-health-alert]
+verify_jwt = false
+
 # Funções com JWT obrigatório (usuário autenticado) — HS256 compatível
 [functions.send-guest-invite]
 verify_jwt = true
