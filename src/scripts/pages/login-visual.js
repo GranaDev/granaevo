@@ -23,9 +23,9 @@
         const device  = document.getElementById('phone3DDevice');
         if (!wrapper || !device) return;
 
-        const BASE_X = 10;   // ângulos base do keyframe phone-float
-        const BASE_Y = -14;
-        const RANGE  = 10;   // desvio máximo, em graus
+        const BASE_X = 8;    // ângulos base do keyframe phone-float-login
+        const BASE_Y = -26;  // telefone mais de lado (ver login.css)
+        const RANGE  = 11;   // desvio máximo, em graus
 
         let rafId = null;
         let targetX = BASE_X, targetY = BASE_Y;

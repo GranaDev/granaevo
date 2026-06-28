@@ -69,26 +69,20 @@
 
         <!-- Lado esquerdo — Telefone 3D com a dashboard ao vivo -->
         <div class="financial-side" aria-hidden="true">
+
+            <!-- Logo do site (canto superior) -->
+            <div class="login-brand">
+                <span class="login-brand-badge">G</span>
+                <span class="login-brand-name">GranaEvo</span>
+            </div>
+
             <div class="phone-stage">
 
-                <!-- Marca + selo de segurança -->
-                <div class="phone-brand">
-                    <div class="phone-brand-logo">
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <span>GranaEvo</span>
-                    </div>
-                    <span class="phone-secure-badge">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <polyline points="9 12 11 14 15 10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        Criptografia ponta a ponta
-                    </span>
-                </div>
+                <!-- Headline -->
+                <h2 class="phone-headline">
+                    Sua vida financeira,
+                    <span class="phone-headline-accent">na palma da mão.</span>
+                </h2>
 
                 <div class="phone-3d-wrapper" id="phone3DWrapper">
 
@@ -318,20 +312,47 @@
                         </div>
                     </div>
 
+                    <!-- Cards flutuantes (decorativos) -->
+                    <div class="float-card float-card-1" id="floatCard1">
+                        <div class="float-card-ic float-card-ic-g">
+                            <svg viewBox="0 0 14 14" fill="none" width="14" height="14"><path d="M7 11V3M7 3L3.5 6.5M7 3L10.5 6.5" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg>
+                        </div>
+                        <div class="float-card-txt">
+                            <span class="float-card-val">+R$ 5.500</span>
+                            <span class="float-card-sub">Entradas no mês</span>
+                        </div>
+                    </div>
+
+                    <div class="float-card float-card-2" id="floatCard2">
+                        <div class="float-card-ic float-card-ic-c">
+                            <svg viewBox="0 0 16 16" fill="none" width="15" height="15"><circle cx="8" cy="8" r="6.2" stroke="#06b6d4" stroke-width="1.5"/><path d="M8 5v3l2 1.4" stroke="#06b6d4" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        </div>
+                        <div class="float-card-txt">
+                            <span class="float-card-val">Meta da viagem</span>
+                            <span class="float-card-sub">78% concluída</span>
+                        </div>
+                    </div>
+
                     <!-- Glows -->
                     <div class="phone-glow-ring" aria-hidden="true"></div>
                     <div class="phone-3d-glow" aria-hidden="true"></div>
                 </div>
 
-                <!-- Legenda + indicadores -->
+                <!-- Indicadores + selo de segurança -->
                 <div class="phone-caption">
-                    <p class="phone-caption-text" id="phoneCaption">Sua vida financeira, num só lugar</p>
                     <div class="phone-dots" id="phoneDots">
                         <span class="phone-dot is-active"></span>
                         <span class="phone-dot"></span>
                         <span class="phone-dot"></span>
                         <span class="phone-dot"></span>
                     </div>
+                    <span class="phone-secure-badge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <polyline points="9 12 11 14 15 10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Criptografia ponta a ponta
+                    </span>
                 </div>
 
             </div>
