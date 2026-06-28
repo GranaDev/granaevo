@@ -1091,33 +1091,43 @@ body::before {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   NAVEGAÇÃO POR SWIPE (mobile) — deslize lateral entre abas
+   NAVEGAÇÃO POR SWIPE (mobile) — carrossel lateral entre abas
    ═══════════════════════════════════════════════════════════════════════════
-   Durante o arrasto (.ge-dragging) e a transição de commit (.ge-swiping), o eixo
-   X fica travado p/ não criar barra de rolagem horizontal com as páginas movidas.
-   No commit, as duas páginas envolvidas viram camadas absolutas (.ge-swipe-page)
-   e deslizam APENAS por transform → composição na GPU, zero reflow. As posições
-   left/top/width são medidas e aplicadas inline pelo JS (fiel a qualquer padding
-   ou breakpoint). */
+   Durante o arrasto (.ge-dragging) e o assentar (.ge-swiping), o eixo X fica
+   travado p/ não criar barra de rolagem horizontal com as páginas movidas.
+
+   Carrossel (ver swipe-nav.js):
+   • Página ATUAL (.ge-swipe-current) → segue no fluxo normal (preserva o scroll),
+     movida só por transform translateX.
+   • Página que ENTRA (.ge-swipe-incoming) → position:fixed ancorada à viewport,
+     no frame de conteúdo (top/left/width/height medidos e aplicados inline pelo
+     JS, fiéis a qualquer breakpoint). Mostra o próprio topo, como um tab novo.
+   Ambas movem-se SÓ por translate3d → composição na GPU, zero reflow. */
 body.ge-dragging,
 body.ge-swiping { overflow-x: hidden; }
 
 body.ge-dragging .main-content,
 body.ge-swiping  .main-content { overflow-x: hidden; }
 
-.main-content .page.ge-swipe-page {
-    position: absolute;
-    margin: 0;
+.page.ge-swipe-current {
     will-change: transform;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
 }
 
-.page.ge-swipe-drag { will-change: transform; }
+.page.ge-swipe-incoming {
+    position: fixed;
+    margin: 0;
+    overflow: hidden;
+    z-index: 50;               /* acima do conteúdo, abaixo da topbar/bottom-nav fixas */
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
 
 /* Enquanto o swipe controla o movimento lateral, suprime o keyframe pageEnter
-   (opacity + translateY) — senão a página entraria deslizando E com fade ao
-   mesmo tempo, duas animações brigando. */
+   (opacity + translateY) — senão a aba entraria deslizando E com fade/título
+   piscando ao mesmo tempo (a "travada" que o swipe não deve ter). */
 body.ge-swiping .page.active { animation: none !important; }
 
 

@@ -1,31 +1,34 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// NAVEGAÇÃO POR SWIPE — gesto lateral fluido entre abas (mobile)
+// NAVEGAÇÃO POR SWIPE — carrossel lateral fluido entre abas (mobile)
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Filosofia: o gesto tem que ser DELIBERADO (não dispara num roçar de dedo) e a
-// transição tem que ser FLUIDA (a página segue o dedo, com peso e elasticidade —
-// nada de corte seco). Por isso:
+// Objetivo: sensação de carrossel real, sem vazio e sem travada.
 //
-//   1. Bloqueio de eixo: só assume o gesto se o movimento for claramente
-//      horizontal (|dx| > |dy| * RATIO). Rolagem vertical nunca é sequestrada.
-//   2. Limiar de commit: trocar de aba exige arrastar ≥ COMMIT_RATIO da largura
-//      OU dar um "flick" rápido (velocidade ≥ FLICK_V). Arrastos curtos/casuais
-//      voltam sozinhos (snap-back elástico) — resolve o "passei o dedo e trocou".
-//   3. Borda elástica: nas pontas (1ª/última aba) o arrasto resiste em rubber
-//      band e nunca comita — feedback tátil de "não tem mais aba aqui".
-//   4. O commit em si (carrossel das duas páginas) é tocado por commitSlide aqui
-//      mesmo (transform puro na GPU, otimizado p/ aparelho fraco). O dashboard só
-//      fornece os primitivos (carregar módulo, destacar nav, setar aba ativa).
+//   • Carrossel de verdade: assim que o arrasto vira horizontal, a aba vizinha
+//     é montada na BORDA da tela e arrastada JUNTO com o dedo. O usuário já vê a
+//     próxima aba entrando — nada de espaço preto vazio.
+//   • Zero travada no commit: o conteúdo da aba vizinha é carregado AINDA durante
+//     o arrasto (pré-load). Quando o gesto confirma, é só um "assentar" de
+//     transform — nada carrega, nada pisca, sem o flash de título do menu.
+//   • Gesto deliberado: trocar exige arrastar ≥ COMMIT_RATIO da largura OU um
+//     flick rápido. Arrastos casuais voltam com snap elástico. Rolagem vertical
+//     nunca é sequestrada (bloqueio de eixo).
 //
-// Tudo gera só translate3d → composição na GPU, sem reflow durante o arrasto.
+// Arquitetura do carrossel (evita o pulo de scroll de páginas longas):
+//   • Página ATUAL → continua no fluxo normal (preserva o scroll), movida só por
+//     transform translateX.
+//   • Página que ENTRA → position:fixed ancorada à viewport, no frame de conteúdo
+//     (entre topbar e bottom-nav). Mostra o próprio topo, como um tab novo deve.
+//   Ambas movem-se apenas por translate3d → composição na GPU, sem reflow.
 
-const ACTIVATE   = 12;     // px de movimento p/ decidir o eixo do gesto
-const DIR_RATIO  = 1.25;   // |dx| precisa exceder |dy| * isto p/ travar horizontal
-const COMMIT_RATIO = 0.30; // fração da largura p/ comitar por distância
-const FLICK_V    = 0.5;    // px/ms — velocidade p/ comitar por "flick"
-const FLICK_MIN  = 45;     // px mínimos de viagem p/ um flick valer
-const SNAP_MS    = 300;    // duração do retorno elástico (snap-back)
-const DRAG_FADE  = 0.18;   // quanto a página que sai esmaece no auge do arrasto
+const ACTIVATE     = 12;    // px de movimento p/ decidir o eixo do gesto
+const DIR_RATIO    = 1.25;  // |dx| precisa exceder |dy| * isto p/ travar horizontal
+const COMMIT_RATIO = 0.28;  // fração da largura p/ comitar por distância
+const FLICK_V      = 0.45;  // px/ms — velocidade p/ comitar por "flick"
+const FLICK_MIN    = 40;    // px mínimos de viagem p/ um flick valer
+const COMMIT_MS    = 320;   // duração do "assentar" no commit
+const SNAP_MS      = 300;   // duração do retorno elástico (snap-back)
+const EASE_OUT     = 'cubic-bezier(0.22, 1, 0.36, 1)';  // glide premium (easeOutQuint)
 
 // Elementos/contextos onde o swipe NÃO deve nascer (precisam do gesto horizontal
 // pra si, ou seriam atrapalhados por ele).
@@ -40,13 +43,22 @@ let mc  = null;            // #mainContent
 // estado vivo do gesto
 let startX = 0, startY = 0, lastX = 0, lastT = 0, vX = 0;
 let axis = null;           // null → indeciso | 'h' | 'v'
-let page = null;           // .page.active sendo arrastada
-let idx = -1, hasPrev = false, hasNext = false;
-let busy = false;          // commit em andamento → ignora novos gestos
+let active = false;        // gesto horizontal em curso
+let busy = false;          // animação de commit/snap em curso → ignora novos gestos
+let W = 0;                 // largura da viewport no início do gesto
+
+let curPage = null;        // .page.active (fica no fluxo)
+let idx = -1;              // índice da aba atual em cfg.order
+let frame = null;          // { top, left, width, height } do frame de conteúdo
+
+// aba vizinha montada (a que entra)
+let inPage = null;         // elemento da aba que entra
+let inTela = null;         // nome da aba que entra
+let inDir  = null;         // 'next' | 'prev'
+let inEdge = 0;            // posição inicial (off-screen) da aba que entra: +W | -W
 
 const isEnabled = () => localStorage.getItem('ge_swipe_nav') === '1';
-
-const mqMobile = window.matchMedia('(max-width: 768px)');
+const mqMobile  = window.matchMedia('(max-width: 768px)');
 
 // Rubber band clássico (iOS): deslocamento que tende assintoticamente a um teto.
 function rubber(d, w) {
@@ -55,7 +67,6 @@ function rubber(d, w) {
 }
 
 // Algum ancestral (até o #mainContent) é um scroller horizontal de verdade?
-// Se for, é dele o gesto — não sequestramos.
 function inHorizontalScroller(el) {
     while (el && el !== mc && el !== document.body) {
         if (el.scrollWidth > el.clientWidth + 4) {
@@ -80,6 +91,65 @@ function overlayAberto() {
     return false;
 }
 
+// Frame de conteúdo (entre topbar e bottom-nav), medido do padding do mainContent
+// → fiel a qualquer breakpoint, sem hardcode.
+function measureFrame() {
+    const cs   = getComputedStyle(mc);
+    const padL = parseFloat(cs.paddingLeft)  || 0;
+    const padT = parseFloat(cs.paddingTop)   || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    return {
+        top:    padT,
+        left:   padL,
+        width:  mc.clientWidth - padL - padR,
+        height: window.innerHeight - padT,
+    };
+}
+
+// Monta a aba vizinha na direção pedida (off-screen, ancorada à viewport) e já
+// dispara o carregamento do conteúdo. Retorna false se não há aba nessa direção.
+function mountIncoming(dir) {
+    const targetIdx = dir === 'next' ? idx + 1 : idx - 1;
+    if (targetIdx < 0 || targetIdx >= cfg.order.length) return false;
+
+    const tela = cfg.order[targetIdx];
+    const el = document.getElementById(tela + 'Page');
+    if (!el || el === curPage) return false;
+
+    inEdge = dir === 'next' ? W : -W;
+    el.classList.add('ge-swipe-incoming');
+    el.style.top    = frame.top + 'px';
+    el.style.left   = frame.left + 'px';
+    el.style.width  = frame.width + 'px';
+    el.style.height = frame.height + 'px';
+    el.style.transition = 'none';
+    el.style.transform  = `translate3d(${inEdge}px,0,0)`;
+    el.style.display = 'block';
+
+    inPage = el; inTela = tela; inDir = dir;
+
+    cfg.loadModule(tela);   // conteúdo entra durante o arrasto → commit sem travada
+    return true;
+}
+
+// Desmonta a aba vizinha (volta a ficar oculta e no estado normal).
+function unmountIncoming() {
+    if (!inPage) return;
+    inPage.classList.remove('ge-swipe-incoming');
+    inPage.style.transition = '';
+    inPage.style.transform  = '';
+    inPage.style.top = ''; inPage.style.left = '';
+    inPage.style.width = ''; inPage.style.height = '';
+    inPage.style.display = 'none';
+    inPage = null; inTela = null; inDir = null;
+}
+
+// Posiciona o "trilho" (atual + vizinha) durante o arrasto.
+function setTrack(dx) {
+    curPage.style.transform = `translate3d(${dx}px,0,0)`;
+    if (inPage) inPage.style.transform = `translate3d(${inEdge + dx}px,0,0)`;
+}
+
 function onStart(e) {
     if (busy || axis !== null) return;
     if (!isEnabled() || !mqMobile.matches) return;
@@ -91,28 +161,31 @@ function onStart(e) {
     if (inHorizontalScroller(tgt)) return;
     if (overlayAberto()) return;
 
-    page = document.querySelector('.page.active');
-    if (!page) return;
+    curPage = document.querySelector('.page.active');
+    if (!curPage) return;
 
     idx = cfg.order.indexOf(cfg.getCurrent());
-    hasPrev = idx > 0;
-    hasNext = idx >= 0 && idx < cfg.order.length - 1;
+    if (idx < 0) { curPage = null; return; }   // aba fora do carrossel (ex.: configurações)
 
     startX = lastX = t.clientX;
     startY = t.clientY;
     lastT  = performance.now();
     vX = 0;
     axis = null;
+    active = false;
 }
 
-function beginDrag() {
+function beginGesture() {
+    active = true;
+    W = window.innerWidth;
+    frame = measureFrame();
     document.body.classList.add('ge-dragging');
-    page.classList.add('ge-swipe-drag');
-    page.style.transition = 'none';
+    curPage.classList.add('ge-swipe-current');
+    curPage.style.transition = 'none';
 }
 
 function onMove(e) {
-    if (!page || busy) return;
+    if (!curPage || busy) return;
 
     const t  = e.touches[0];
     const dx = t.clientX - startX;
@@ -121,18 +194,12 @@ function onMove(e) {
     // Decide o eixo do gesto na primeira passada relevante.
     if (axis === null) {
         if (Math.abs(dx) < ACTIVATE && Math.abs(dy) < ACTIVATE) return;
-        if (Math.abs(dx) > Math.abs(dy) * DIR_RATIO) {
-            axis = 'h';
-            beginDrag();
-        } else {
-            axis = 'v';          // é rolagem → solta o gesto, deixa o nativo rolar
-            page = null;
-            return;
-        }
+        if (Math.abs(dx) > Math.abs(dy) * DIR_RATIO) { axis = 'h'; beginGesture(); }
+        else { axis = 'v'; curPage = null; return; }  // rolagem → solta o gesto
     }
     if (axis !== 'h') return;
 
-    e.preventDefault();          // a partir daqui o gesto é nosso (trava scroll)
+    e.preventDefault();  // a partir daqui o gesto é nosso (trava o scroll)
 
     const now = performance.now();
     const dt  = now - lastT;
@@ -140,194 +207,149 @@ function onMove(e) {
     lastX = t.clientX;
     lastT = now;
 
-    // Resistência elástica nas bordas (sem aba naquela direção).
-    const goingNext = dx < 0;
-    const blocked = (goingNext && !hasNext) || (!goingNext && !hasPrev);
-    let x = dx;
-    if (blocked) x = Math.sign(dx) * rubber(Math.abs(dx), window.innerWidth);
+    // Direção desejada conforme o sentido do arrasto. Monta/troca a vizinha.
+    const wantDir = dx < 0 ? 'next' : 'prev';
+    if (inDir !== wantDir) {
+        unmountIncoming();
+        mountIncoming(wantDir);
+    }
 
-    const prog = Math.min(1, Math.abs(x) / window.innerWidth);
-    page.style.transform = `translate3d(${x}px,0,0)`;
-    page.style.opacity   = String(1 - prog * DRAG_FADE);
+    if (inPage) {
+        // Carrossel 1:1 (clampa p/ a vizinha não passar do lugar).
+        const clamped = inDir === 'next' ? Math.max(dx, -W) : Math.min(dx, W);
+        setTrack(clamped);
+    } else {
+        // Borda (sem aba nessa direção) → resistência elástica só na página atual.
+        curPage.style.transform = `translate3d(${Math.sign(dx) * rubber(Math.abs(dx), W)}px,0,0)`;
+    }
 }
 
-function snapBack() {
-    const el = page;
-    page = null; axis = null;
-    document.body.classList.remove('ge-dragging');
-    if (!el) return;
+// Anima o trilho até o destino (commit) ou de volta (snap) e finaliza.
+function settle(commit) {
+    busy = true;
+    const goingNext = inDir === 'next';
 
-    el.style.transition = `transform ${SNAP_MS}ms cubic-bezier(0.22,1,0.36,1), opacity ${SNAP_MS}ms ease`;
-    el.style.transform  = 'translate3d(0,0,0)';
-    el.style.opacity    = '';
+    // Posições finais: no commit a vizinha vai a 0 e a atual sai por -inEdge;
+    // no snap a atual volta a 0 e a vizinha volta à borda.
+    const curEnd = commit ? -inEdge : 0;
+    const inEnd  = commit ? 0 : inEdge;
+    const tela   = inTela;
 
-    let cleared = false;
-    const clear = () => {
-        if (cleared) return;
-        cleared = true;
-        el.removeEventListener('transitionend', clear);
+    let ended = false;
+    const done = () => {
+        if (ended) return;
+        ended = true;
+        curPage.removeEventListener('transitionend', onSettleEnd);
+
+        if (commit) {
+            // A vizinha vira a aba ativa — sem reload (já carregou no arrasto) e
+            // sem pageEnter (ge-swiping suprime). Scroll vai ao topo, como um tab.
+            window.scrollTo({ top: 0, behavior: 'instant' });
+
+            document.querySelectorAll('.page').forEach(p => {
+                p.classList.remove('active');
+                if (p !== inPage) p.style.display = 'none';
+            });
+
+            // Limpa a vizinha (sai do fixed, volta ao fluxo) e ativa.
+            inPage.classList.remove('ge-swipe-incoming');
+            inPage.style.transition = '';
+            inPage.style.transform  = '';
+            inPage.style.top = ''; inPage.style.left = '';
+            inPage.style.width = ''; inPage.style.height = '';
+            inPage.style.display = 'block';
+            inPage.classList.add('active');
+
+            cfg.setNavActive(tela);
+            cfg.setCurrent(tela);
+
+            inPage = null; inTela = null; inDir = null;
+        } else {
+            unmountIncoming();   // volta tudo; a atual nunca saiu do fluxo
+        }
+
+        // Limpa a página atual (que saiu, no commit; ou que voltou, no snap).
+        curPage.classList.remove('ge-swipe-current');
+        curPage.style.transition = '';
+        curPage.style.transform  = '';
+        curPage.style.display = commit ? 'none' : '';
+
+        document.body.classList.remove('ge-dragging', 'ge-swiping');
+        curPage = null; axis = null; active = false;
+        busy = false;
+    };
+
+    const onSettleEnd = (ev) => {
+        if (ev.target === curPage && ev.propertyName === 'transform') done();
+    };
+
+    const dur = (commit && Math.abs(vX) > 0.9) ? 260 : (commit ? COMMIT_MS : SNAP_MS);
+    document.body.classList.add('ge-swiping');
+
+    curPage.addEventListener('transitionend', onSettleEnd);
+    setTimeout(done, dur + 80);   // rede de segurança
+
+    requestAnimationFrame(() => {
+        curPage.style.transition = `transform ${dur}ms ${EASE_OUT}`;
+        curPage.style.transform  = `translate3d(${curEnd}px,0,0)`;
+        if (inPage) {
+            inPage.style.transition = `transform ${dur}ms ${EASE_OUT}`;
+            inPage.style.transform  = `translate3d(${inEnd}px,0,0)`;
+        }
+    });
+}
+
+// Snap-back simples quando não há vizinha (borda) — só a página atual volta.
+function snapBackEdge() {
+    busy = true;
+    const el = curPage;
+    let ended = false;
+    const done = () => {
+        if (ended) return;
+        ended = true;
+        el.removeEventListener('transitionend', done);
+        el.classList.remove('ge-swipe-current');
         el.style.transition = '';
         el.style.transform  = '';
-        el.classList.remove('ge-swipe-drag');
+        document.body.classList.remove('ge-dragging', 'ge-swiping');
+        curPage = null; axis = null; active = false; busy = false;
     };
-    el.addEventListener('transitionend', clear);
-    setTimeout(clear, SNAP_MS + 60);
+    document.body.classList.add('ge-swiping');
+    el.addEventListener('transitionend', done);
+    setTimeout(done, SNAP_MS + 60);
+    requestAnimationFrame(() => {
+        el.style.transition = `transform ${SNAP_MS}ms ${EASE_OUT}`;
+        el.style.transform  = 'translate3d(0,0,0)';
+    });
 }
 
 function onEnd() {
-    if (!page) { axis = null; return; }
-    if (axis !== 'h') { page = null; axis = null; document.body.classList.remove('ge-dragging'); return; }
+    if (!curPage || axis !== 'h' || !active) {
+        // Gesto nunca virou horizontal (tap/scroll) → limpa estado leve.
+        if (axis !== 'h') { curPage = null; axis = null; active = false; }
+        return;
+    }
 
-    const w  = window.innerWidth;
     const dx = lastX - startX;
-    const goingNext = dx < 0;
-    const blocked = (goingNext && !hasNext) || (!goingNext && !hasPrev);
     const dist = Math.abs(dx);
-
-    const byDistance = dist >= w * COMMIT_RATIO;
+    const byDistance = dist >= W * COMMIT_RATIO;
     const byFlick    = Math.abs(vX) >= FLICK_V && dist >= FLICK_MIN;
-    const commit = !blocked && (byDistance || byFlick);
 
-    if (!commit) { snapBack(); return; }
-
-    const target = cfg.order[goingNext ? idx + 1 : idx - 1];
-    const sy = window.scrollY;
-    const el = page;
-
-    busy = true;
-    page = null; axis = null;
-    document.body.classList.remove('ge-dragging');
-    el.classList.remove('ge-swipe-drag');
-    el.style.opacity = '';
-
-    if (window.hapticTap) window.hapticTap(8); // confirmação tátil sutil
-
-    // Carrossel a partir do deslocamento atual (continuidade com o arrasto).
-    commitSlide(el, target, {
-        dir: goingNext ? -1 : 1,
-        dx,
-        sy,
-        vX,
-        done: () => { busy = false; },
-    });
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-// TRANSIÇÃO LATERAL (commit) — o "carrossel" das duas páginas
-// ───────────────────────────────────────────────────────────────────────────
-// A aba que sai desliza pro lado e a que entra vem da borda oposta, ambas
-// movidas SÓ por transform (composição na GPU, zero reflow). O conteúdo do alvo
-// é carregado ANTES do slide, então já desliza preenchido (ou com skeleton no
-// 1º acesso). Vive aqui (módulo lazy, mobile-only) p/ não pesar o dashboard.js.
-//
-//   dir: -1 → próxima aba (dedo p/ esquerda, trilho vai p/ -vw)
-//        +1 → aba anterior (dedo p/ direita, trilho vai p/ +vw)
-//   dx : deslocamento horizontal no fim do arrasto (continuidade)
-//   sy : scrollY no commit (compensa a página que sai p/ ela não pular)
-function commitSlide(fromPage, target, opts) {
-    const { dir, dx, sy, vX, done } = opts;
-    const finish = () => { try { done && done(); } catch (_) { /* noop */ } };
-    const toPage = document.getElementById(target + 'Page');
-
-    // Fallbacks: alvo inexistente ou movimento reduzido → troca seca canônica.
-    if (!fromPage || !toPage || fromPage === toPage) {
-        if (fromPage) { fromPage.style.transform = ''; fromPage.style.opacity = ''; }
-        cfg.navigate(target);
-        finish();
-        return;
+    if (inPage && (byDistance || byFlick)) {
+        if (window.hapticTap) window.hapticTap(8);  // confirmação tátil sutil
+        settle(true);                                // commit → desliza p/ a vizinha
+    } else if (inPage) {
+        settle(false);                               // volta p/ a aba atual
+    } else {
+        snapBackEdge();                              // borda → só recolhe a atual
     }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        fromPage.style.transform = '';
-        fromPage.style.opacity   = '';
-        cfg.navigate(target);
-        finish();
-        return;
-    }
-
-    const w    = window.innerWidth;
-    const next = dir < 0;
-    const trackEnd = next ? -w : w;          // posição final do "trilho"
-    const toStart  = next ? dx + w : dx - w; // onde a aba que entra começa
-
-    // Mede o frame de conteúdo (independe de padding/breakpoint) p/ sobrepor as
-    // duas páginas exatamente onde o fluxo normal as colocaria.
-    const cs   = getComputedStyle(mc);
-    const padL = parseFloat(cs.paddingLeft)  || 0;
-    const padT = parseFloat(cs.paddingTop)   || 0;
-    const padR = parseFloat(cs.paddingRight) || 0;
-    const cw   = mc.clientWidth - padL - padR;
-    const fromH = fromPage.offsetHeight;
-
-    document.body.classList.add('ge-swiping');
-    mc.style.minHeight = fromH + 'px';   // evita colapso enquanto as páginas são absolutas
-
-    cfg.loadModule(target);              // conteúdo do alvo carrega/atualiza ANTES do slide
-
-    const pages = [fromPage, toPage];
-    pages.forEach(p => {
-        p.classList.add('ge-swipe-page');
-        p.style.left  = padL + 'px';
-        p.style.top   = padT + 'px';
-        p.style.width = cw + 'px';
-        p.style.transition = 'none';
-    });
-    toPage.style.display = 'block';
-
-    // Alinha: zera o scroll (a aba que entra começa no topo) e compensa
-    // verticalmente a aba que sai p/ ela não "pular" pro topo ao sair.
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    fromPage.style.transform = `translate3d(${dx}px, ${-sy}px, 0)`;
-    toPage.style.transform   = `translate3d(${toStart}px, 0, 0)`;
-    fromPage.style.opacity   = '';
-
-    void toPage.offsetWidth; // força reflow → estado inicial firme antes da transição
-
-    const ease = 'cubic-bezier(0.16, 1, 0.3, 1)';        // easeOutExpo — glide premium
-    const dur  = Math.abs(vX) > 0.9 ? 260 : 340;          // flick forte → mais rápido
-
-    let ended = false;
-    const finalize = () => {
-        if (ended) return;
-        ended = true;
-        toPage.removeEventListener('transitionend', onSlideEnd);
-
-        // Estado canônico (sem reload — módulo já carregado acima).
-        document.querySelectorAll('.page').forEach(p => {
-            p.classList.remove('active');
-            p.style.display = 'none';
-        });
-        toPage.style.display = 'block';
-        toPage.classList.add('active');   // ge-swiping ainda ativo → pageEnter suprimido
-        cfg.setNavActive(target);
-        cfg.setCurrent(target);
-
-        pages.forEach(p => {
-            p.classList.remove('ge-swipe-page');
-            p.style.transition = '';
-            p.style.transform  = '';
-            p.style.left = ''; p.style.top = ''; p.style.width = ''; p.style.opacity = '';
-        });
-        mc.style.minHeight = '';
-        document.body.classList.remove('ge-swiping');
-        finish();
-    };
-    const onSlideEnd = (ev) => {
-        if (ev.target === toPage && ev.propertyName === 'transform') finalize();
-    };
-    toPage.addEventListener('transitionend', onSlideEnd);
-    setTimeout(finalize, dur + 80);   // rede de segurança se o transitionend não disparar
-
-    requestAnimationFrame(() => {
-        fromPage.style.transition = `transform ${dur}ms ${ease}`;
-        toPage.style.transition   = `transform ${dur}ms ${ease}`;
-        fromPage.style.transform  = `translate3d(${trackEnd}px, ${-sy}px, 0)`;
-        toPage.style.transform    = `translate3d(0px, 0px, 0)`;
-    });
 }
 
 function onCancel() {
-    if (axis === 'h') snapBack();
-    else { page = null; axis = null; document.body.classList.remove('ge-dragging'); }
+    if (!curPage) return;
+    if (active && inPage) settle(false);
+    else if (active) snapBackEdge();
+    else { curPage = null; axis = null; active = false; }
 }
 
 export function initSwipeNav(config) {

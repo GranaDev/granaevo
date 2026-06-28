@@ -2091,6 +2091,10 @@ function _makeCtx() {
 }
 
 let _dbLoaded = { transacoes: false, metas: false, cartoes: false, graficos: false, relatorios: false, configuracoes: false };
+// Guarda contra import() concorrente (ex.: swipe pré-carrega a vizinha enquanto o
+// dedo arrasta; um vai-e-volta poderia disparar 2 imports antes do 1º resolver →
+// duplo init). _dbLoading marca o que já está em voo.
+let _dbLoading = { transacoes: false, metas: false, cartoes: false, graficos: false, relatorios: false };
 
 // Skeleton screens — preenchem o container da aba ENQUANTO o módulo é importado
 // (dynamic import()). Sem isso, no 1º acesso a área fica vazia e o conteúdo "pipoca"
@@ -2188,62 +2192,72 @@ function _carregarModuloTela(tela) {
         const periodoSel = document.getElementById('movPeriodoSelector');
         if (periodoSel) periodoSel.style.display = 'none';
 
-        if (!_dbLoaded.transacoes) {
+        if (!_dbLoaded.transacoes && !_dbLoading.transacoes) {
+            _dbLoading.transacoes = true;
             _injetarSkeleton('transacoes');
             import('./db-transacoes.js?v=9').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.transacoes = true;
+                _dbLoading.transacoes = false;
                 document.getElementById('listaMovimentacoes')?.removeAttribute('aria-busy');
             });
-        } else {
+        } else if (_dbLoaded.transacoes) {
             window._dbTransacoes?.atualizarMovimentacoesUI?.();
         }
     }
 
     if (tela === 'reservas') {
-        if (!_dbLoaded.metas) {
+        if (!_dbLoaded.metas && !_dbLoading.metas) {
+            _dbLoading.metas = true;
             _injetarSkeleton('reservas');
             import('./db-metas.js?v=5').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.metas = true;
+                _dbLoading.metas = false;
                 document.getElementById('listaMetas')?.removeAttribute('aria-busy');
             });
-        } else {
+        } else if (_dbLoaded.metas) {
             window._dbMetas?.renderMetasList?.();
         }
     }
 
     if (tela === 'cartoes') {
-        if (!_dbLoaded.cartoes) {
+        if (!_dbLoaded.cartoes && !_dbLoading.cartoes) {
+            _dbLoading.cartoes = true;
             _injetarSkeleton('cartoes');
             import('./db-cartoes.js?v=6').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.cartoes = true;
+                _dbLoading.cartoes = false;
                 document.getElementById('cartoesGrid')?.removeAttribute('aria-busy');
             });
-        } else {
+        } else if (_dbLoaded.cartoes) {
             window._dbCartoes?.atualizarTelaCartoes?.();
         }
     }
 
     if (tela === 'graficos') {
-        if (!_dbLoaded.graficos) {
+        if (!_dbLoaded.graficos && !_dbLoading.graficos) {
+            _dbLoading.graficos = true;
             import('./db-graficos.js?v=3').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.graficos = true;
+                _dbLoading.graficos = false;
             });
-        } else {
+        } else if (_dbLoaded.graficos) {
             window._dbGraficos?.inicializarGraficos?.();
         }
     }
 
     if (tela === 'relatorios') {
-        if (!_dbLoaded.relatorios) {
+        if (!_dbLoaded.relatorios && !_dbLoading.relatorios) {
+            _dbLoading.relatorios = true;
             import('./db-relatorios.js?v=9').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.relatorios = true;
+                _dbLoading.relatorios = false;
             });
-        } else {
+        } else if (_dbLoaded.relatorios) {
             window._dbRelatorios?.popularFiltrosRelatorio?.();
         }
     }
@@ -4856,7 +4870,7 @@ function bindEventos() {
     // Navegação por swipe (mobile) — módulo carregado sob demanda (custo zero no
     // desktop). Progressivo: se falhar, a navegação por toque segue intacta.
     if (window.matchMedia('(max-width: 768px)').matches) {
-        import('../modules/swipe-nav.js?v=2')
+        import('../modules/swipe-nav.js?v=3')
             .then(m => m.initSwipeNav({
                 order:        ['dashboard', 'transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios'],
                 getCurrent:   () => _telaAtual,
