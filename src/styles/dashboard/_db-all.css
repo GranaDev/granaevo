@@ -1073,9 +1073,15 @@ body::before {
    Substitui o antigo document.startViewTransition() (snapshot caro da viewport
    inteira, travava em aparelhos fracos). Antes a base .page tinha fadeIn 0.5s/20px
    que ainda rodava JUNTO do View Transition — duas animações brigando. Agora é uma
-   só, curta (0.28s/8px), e desligada em prefers-reduced-motion. */
+   só, curta (0.28s/8px), e desligada em prefers-reduced-motion.
+
+   OPT-IN via .ge-page-enter: só a navegação por clique (mostrarTela) pede esse
+   "rise". O swipe NÃO adiciona a classe → desliza limpo, sem a piscada (que no
+   swipe não faz sentido). Bônus: como a classe é adicionada JUNTO com .active e
+   removida na desativação, nunca há flip none→animação no mesmo elemento ativo
+   (o que re-disparava o keyframe e causava o flash ao fim do swipe). */
 @media (prefers-reduced-motion: no-preference) {
-    .page.active {
+    .page.active.ge-page-enter {
         animation: pageEnter 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     }
 }
@@ -1125,10 +1131,9 @@ body.ge-swiping  .main-content { overflow-x: hidden; }
     -webkit-backface-visibility: hidden;
 }
 
-/* Enquanto o swipe controla o movimento lateral, suprime o keyframe pageEnter
-   (opacity + translateY) — senão a aba entraria deslizando E com fade/título
-   piscando ao mesmo tempo (a "travada" que o swipe não deve ter). */
-body.ge-swiping .page.active { animation: none !important; }
+/* NOTA: o swipe não precisa suprimir o pageEnter — ele simplesmente não pede a
+   classe .ge-page-enter (ver bloco do keyframe). Assim a aba que entra no swipe
+   nunca dispara o "rise", sem flip none→animação (que causava o flash no fim). */
 
 
 .page-header { margin-bottom: 40px; }

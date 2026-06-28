@@ -247,11 +247,12 @@ function settle(commit) {
             window.scrollTo({ top: 0, behavior: 'instant' });
 
             document.querySelectorAll('.page').forEach(p => {
-                p.classList.remove('active');
+                p.classList.remove('active', 'ge-page-enter');
                 if (p !== inPage) p.style.display = 'none';
             });
 
-            // Limpa a vizinha (sai do fixed, volta ao fluxo) e ativa.
+            // Limpa a vizinha (sai do fixed, volta ao fluxo) e ativa — SEM
+            // ge-page-enter, então não dispara o pageEnter (sem piscada).
             inPage.classList.remove('ge-swipe-incoming');
             inPage.style.transition = '';
             inPage.style.transform  = '';

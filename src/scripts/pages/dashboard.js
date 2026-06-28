@@ -2142,7 +2142,7 @@ function _mostrarTelaImpl(tela) {
     if (!_domPages)     _domPages     = document.querySelectorAll('.page');
 
     _domPages.forEach(p => {
-        p.classList.remove('active');
+        p.classList.remove('active', 'ge-page-enter');
         p.style.display = 'none';
     });
 
@@ -2153,7 +2153,9 @@ function _mostrarTelaImpl(tela) {
     const pageEl = document.getElementById(tela + 'Page');
     if (pageEl) {
         pageEl.style.display = 'block';
-        pageEl.classList.add('active');
+        // ge-page-enter = opt-in do "rise" do pageEnter (só p/ navegação por
+        // clique). O swipe finaliza sem essa classe → desliza sem piscar.
+        pageEl.classList.add('active', 'ge-page-enter');
     }
 
     _telaAtual = tela;
@@ -4870,7 +4872,7 @@ function bindEventos() {
     // Navegação por swipe (mobile) — módulo carregado sob demanda (custo zero no
     // desktop). Progressivo: se falhar, a navegação por toque segue intacta.
     if (window.matchMedia('(max-width: 768px)').matches) {
-        import('../modules/swipe-nav.js?v=3')
+        import('../modules/swipe-nav.js?v=4')
             .then(m => m.initSwipeNav({
                 order:        ['dashboard', 'transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios'],
                 getCurrent:   () => _telaAtual,
