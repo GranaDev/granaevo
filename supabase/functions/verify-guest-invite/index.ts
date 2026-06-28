@@ -252,18 +252,15 @@ Deno.serve(async (req) => {
                 }))
             }
 
-            // Verifica se já existe conta com este email (convite usado anteriormente)
-            const { data: usedBefore } = await supabaseAdmin
-                .from('guest_invitations')
-                .select('id')
-                .eq('guest_email', emailNorm)
-                .eq('used', true)
-                .limit(1)
-                .maybeSingle()
-
-            if (usedBefore) {
-                return respond(err(cors, 'Este email já possui login cadastrado. Use a recuperação de senha se necessário.'))
-            }
+            // [FIX-ORFAO] NÃO bloqueamos com base em "existe convite usado para este
+            // email". Esse heurística assumia "convite usado ⟹ conta existe", o que é
+            // falso quando a conta foi apagada depois (estado órfão): o convidado ficava
+            // preso — reset de senha retorna neutro (sem conta) e o onboarding travava
+            // aqui. A fonte de verdade é o createUser abaixo: se a conta realmente
+            // existir, ele retorna email_exists e devolvemos a mensagem de "use
+            // recuperação"; se não existir (órfão), recria a conta normalmente.
+            // O anti-replay continua garantido: um convite usado nem é localizado como
+            // válido (filtro .eq('used', false) na busca do convite).
 
             // Cria usuário no Supabase Auth
             const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
