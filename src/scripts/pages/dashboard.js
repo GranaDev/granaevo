@@ -1003,8 +1003,24 @@ function _processarCobrancaAssinatura(assinatura, cartao) {
     const chaveAtual = yearMonthKey(hoje);
     if (assinatura.ultimaCobranca === chaveAtual) return false;
 
-    const dataFaturaISO = _calcularFaturaParaData(cartao, hoje);
-    const dh = agoraDataHora();
+    // Dia marcado da cobrança (1–28, validado na criação). Fallback defensivo.
+    const diaRaw      = Number(assinatura.diaCobranca);
+    const diaCobranca = (Number.isInteger(diaRaw) && diaRaw >= 1 && diaRaw <= 28) ? diaRaw : 1;
+
+    // A 1ª cobrança (na criação, ainda sem `ultimaCobranca`) é lançada de imediato.
+    // Nos meses seguintes, só cobra quando a data atual ATINGE o dia marcado —
+    // evita lançar a cobrança logo no 1º dia do mês (bug: descontava na data errada).
+    const primeiraCobranca = !assinatura.ultimaCobranca;
+    if (!primeiraCobranca && hoje.getDate() < diaCobranca) return false;
+
+    // Data de referência = dia marcado do mês atual (não "hoje"), garantindo que a
+    // cobrança caia no ciclo de fatura correto e exiba a data certa mesmo que o
+    // usuário só abra o app dias depois. Na 1ª cobrança usa a data real de criação.
+    const dataRef = primeiraCobranca
+        ? hoje
+        : new Date(hoje.getFullYear(), hoje.getMonth(), diaCobranca);
+
+    const dataFaturaISO = _calcularFaturaParaData(cartao, dataRef);
 
     const novaCompra = {
         id: (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -1016,7 +1032,7 @@ function _processarCobrancaAssinatura(assinatura, cartao) {
         valorParcela:  assinatura.valor,
         totalParcelas: 1,
         parcelaAtual:  1,
-        dataCompra:    dh.data,
+        dataCompra:    dataRef.toLocaleDateString('pt-BR'),
         assinaturaId:  assinatura.id,
         recorrente:    true,
     };
@@ -1587,41 +1603,40 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         // Persiste a seleção — restaurada automaticamente em refreshes da sessão
         try { sessionStorage.setItem('ge_perfil_id', perfilAtivo.id); } catch (_) {}
 
-        // ── Boot otimista (display-only) ─────────────────────────────────────
-        // Pinta os KPIs do topo a partir do último snapshot em cache e revela a
-        // casca do dashboard ANTES do load de rede terminar ("abriu e já está lá").
-        // É só PINTURA: não toca nos arrays de dados nem no save path — iniciarAutoSave
-        // e salvarDados continuam DEPOIS do load, então isto é imune ao bug de wipe
-        // (ver data_wipe_incident). O load real reconcilia abaixo via count-up.
-        const bootOtimista = _pintarResumoBoot(perfilAtivo.id);
-        if (bootOtimista) {
-            // Revela o conteúdo protegido cedo. Seguro: AuthGuard JÁ validou a sessão
-            // em verificarLogin ANTES deste ponto — não estamos antecipando autorização,
-            // só a pintura. verificarLogin repete isto no finally (idempotente).
-            const pc = document.querySelector('[data-protected-content]');
-            if (pc) { pc.classList.remove('js-hidden'); pc.style.display = ''; }
-            _revelarShellDashboard();
-            mostrarTela('dashboard');
-            const al = document.getElementById('authLoading');
-            if (al) al.style.display = 'none';
-            if (profileLoading) profileLoading.classList.add('hidden');
-        }
+        // Pinta os KPIs a partir do último snapshot em cache — mas NÃO revela a tela
+        // ainda. Serve só como valor-base do count-up de atualizarDashboardResumo(),
+        // para que, quando o dashboard finalmente abrir, os números já apareçam
+        // corretos, sem flash de "R$ 0,00".
+        _pintarResumoBoot(perfilAtivo.id);
 
+        // ── Carrega os dados REAIS antes de revelar a tela ───────────────────
+        // O loader (authLoading no boot / profileLoading na troca de perfil) fica
+        // visível até TUDO estar pronto: o dashboard só abre 100% carregado, sem
+        // "pop-in" de saldo ou contas fixas aparecendo depois. iniciarAutoSave e
+        // salvarDados continuam DEPOIS do load — imune ao bug de wipe
+        // (ver data_wipe_incident).
         await carregarDadosPerfil(perfilAtivo.id);
         atualizarReferenciasGlobais();
         gerarCobrancasAssinaturas();
 
-        // Boot: pinta o acima-da-dobra (KPIs + header) síncrono p/ conteúdo imediato,
-        // e difere a lista de contas fixas (abaixo da dobra) para o idle. As chamadas
-        // de transações/metas em atualizarTudo() são no-op aqui (módulos lazy ainda não
-        // carregados), então só replicamos o que de fato renderiza no boot.
-        // No boot otimista isto RECONCILIA: _animarMoeda anima do valor em cache p/ o real.
+        // Renderiza TUDO que aparece acima da dobra de forma SÍNCRONA: KPIs/saldo,
+        // header de reservas e a lista de contas fixas. Antes, as contas fixas eram
+        // adiadas para o idle e "apareciam" só depois da tela já visível.
         atualizarDashboardResumo();
         atualizarHeaderReservas();
-        _idle(() => atualizarListaContasFixas());
+        atualizarListaContasFixas();
         atualizarNomeUsuario();
 
-        if (!bootOtimista) _revelarShellDashboard();
+        // ── Agora sim: revela o dashboard já completamente carregado ──────────
+        // AuthGuard JÁ validou a sessão em verificarLogin ANTES deste ponto — aqui
+        // só liberamos a PINTURA, não a autorização.
+        const pc = document.querySelector('[data-protected-content]');
+        if (pc) { pc.classList.remove('js-hidden'); pc.style.display = ''; }
+        _revelarShellDashboard();
+        mostrarTela('dashboard');
+        const al = document.getElementById('authLoading');
+        if (al) al.style.display = 'none';
+        if (profileLoading) profileLoading.classList.add('hidden');
 
         if (window.chatAssistant && typeof window.chatAssistant.onProfileSelected === 'function') {
             window.chatAssistant.onProfileSelected(Object.freeze({ ...perfilAtivo }));
@@ -1633,9 +1648,6 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
 
         // Ativa o indicador de sync somente após o save inicial de boot
         _syncReadyForDisplay = true;
-
-        // No boot otimista o dashboard já foi revelado lá em cima (não revela 2×).
-        if (!bootOtimista) mostrarTela('dashboard');
 
         // Onboarding automático para novos perfis (sem dados, primeira visita)
         // Chamado APÓS mostrarTela para garantir que a UI base está visível
