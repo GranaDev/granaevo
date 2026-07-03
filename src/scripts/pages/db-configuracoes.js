@@ -245,7 +245,7 @@ async function alterarNome() {
             atualizarNomeUsuario();
             await _ctx.salvarDados();
             _ctx.fecharPopup();
-            _ctx.mostrarNotificacao('✅ Nome alterado com sucesso!', 'success');
+            _ctx.mostrarNotificacao('Nome alterado com sucesso!', 'success');
 
         } catch (error) {
             // ✅ CORREÇÃO: _log.error em vez de log.error
@@ -639,7 +639,7 @@ function abrirAlterarSenha() {
             if (error) throw error;
 
             _ctx.fecharPopup();
-            _ctx.mostrarNotificacao('✅ Senha alterada com sucesso!', 'success');
+            _ctx.mostrarNotificacao('Senha alterada com sucesso!', 'success');
 
         } catch (error) {
             // ✅ CORREÇÃO: _log.error em vez de log.error
@@ -968,7 +968,7 @@ function _abrirConfirmacaoRestauracao(dateStr, dateBR, token, nomearInput, btnRe
                 }
 
                 _ctx.fecharPopup();
-                _ctx.mostrarNotificacao('✅ Backup restaurado! Recarregando…', 'success');
+                _ctx.mostrarNotificacao('Backup restaurado! Recarregando…', 'success');
                 setTimeout(() => window.location.reload(), 1500);
 
             } catch (e) {
@@ -1106,7 +1106,7 @@ async function resetarPerfil() {
 
                 _ctx.fecharPopup();
                 _ctx.atualizarTudo();
-                _ctx.mostrarNotificacao(`✅ Perfil "${nomePerfil}" resetado! Backup salvo por 5 dias.`, 'success');
+                _ctx.mostrarNotificacao(`Perfil "${nomePerfil}" resetado! Backup salvo por 5 dias.`, 'success');
 
                 // Remove o perfil do cache para forçar recarregamento limpo
                 try { sessionStorage.removeItem('ge_perfis_cache'); } catch { /* ignore */ }

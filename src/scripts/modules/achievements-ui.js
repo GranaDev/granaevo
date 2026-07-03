@@ -15,6 +15,15 @@ function _brl(v) {
     catch { return 'R$ ' + Math.round(v); }
 }
 
+// Insere um ícone Font Awesome (classe em whitelist) dentro de `el`.
+function _faInto(el, name, fallback = 'fa-trophy') {
+    const cls = /^fa-[a-z0-9-]+$/.test(name) ? name : fallback;
+    const i = document.createElement('i');
+    i.className = 'fas ' + cls;
+    i.setAttribute('aria-hidden', 'true');
+    el.appendChild(i);
+}
+
 // ISO → "DD/MM/AAAA" (data de desbloqueio). Robusto a valores inválidos.
 function _fmtData(iso) {
     try {
@@ -134,7 +143,7 @@ export function renderConquistas(container, { state, unlocked, formatBRL } = {})
         const prox = candidatas[0];
         const call = document.createElement('div');
         call.className = `ach-next ${RARITY[prox.rarity]?.cls || ''}`;
-        const ci = document.createElement('div'); ci.className = 'ach-next__icon'; ci.textContent = prox.icon;
+        const ci = document.createElement('div'); ci.className = 'ach-next__icon'; _faInto(ci, prox.icon);
         const cinfo = document.createElement('div'); cinfo.className = 'ach-next__info';
         const ck = document.createElement('div'); ck.className = 'ach-next__kicker'; ck.textContent = 'Quase lá';
         const ct = document.createElement('div'); ct.className = 'ach-next__title'; ct.textContent = prox.titulo;
@@ -200,7 +209,7 @@ export function renderConquistas(container, { state, unlocked, formatBRL } = {})
             sec.className = 'ach-group';
             const head = document.createElement('div');
             head.className = 'ach-group__head';
-            const hi = document.createElement('span'); hi.className = 'ach-group__icon'; hi.textContent = catDef.icon;
+            const hi = document.createElement('span'); hi.className = 'ach-group__icon'; _faInto(hi, catDef.icon);
             const hl = document.createElement('span'); hl.className = 'ach-group__label'; hl.textContent = catDef.label;
             const totCat = items.filter(i => i.cat === catDef.key).length;
             const feitasCat = items.filter(i => i.cat === catDef.key && i.feito).length;
@@ -237,7 +246,7 @@ function _card(i, fmtBRL, idx) {
 
     const ic = document.createElement('div');
     ic.className = 'ach-card__icon';
-    ic.textContent = secretaTravada ? '❔' : i.icon;
+    _faInto(ic, secretaTravada ? 'fa-circle-question' : i.icon);
 
     const info = document.createElement('div');
     info.className = 'ach-card__info';

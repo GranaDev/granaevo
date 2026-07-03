@@ -3250,7 +3250,7 @@ const _notificacaoControl = {
         if (mesesComDados < 2) return; // sem histórico suficiente
         const mediaReal = media3m / mesesComDados;
         if (totalMes > mediaReal * 1.5 && totalMes - mediaReal > 50) {
-            mostrarNotificacao(`⚠️ ${tipo}: ${formatBRL(totalMes)} este mês — ${Math.round(((totalMes-mediaReal)/mediaReal)*100)}% acima da sua média`, 'warning');
+            mostrarNotificacao(`${tipo}: ${formatBRL(totalMes)} este mês — ${Math.round(((totalMes-mediaReal)/mediaReal)*100)}% acima da sua média`, 'warning');
             this.marcar('anomaliaGasto');
         }
     },
@@ -5403,7 +5403,7 @@ function _toastRegion() {
     return region;
 }
 
-const _TOAST_ICONS = { success: '✓', error: '✕', warning: '!', info: 'i' };
+const _TOAST_ICONS = { success: 'fa-check', error: 'fa-xmark', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
 
 function mostrarNotificacao(mensagem, tipo = 'info') {
     const tipoMap = { success: 'ge-notif--success', error: 'ge-notif--error', warning: 'ge-notif--warning' };
@@ -5415,10 +5415,9 @@ function mostrarNotificacao(mensagem, tipo = 'info') {
     notif.className = `ge-notif ${tipoMap[tipo] ?? 'ge-notif--info'}`;
     notif.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
 
-    const icon = document.createElement('span');
-    icon.className = 'ge-notif__icon';
+    const icon = document.createElement('i');
+    icon.className = 'ge-notif__icon fas ' + (_TOAST_ICONS[tipo] ?? _TOAST_ICONS.info);
     icon.setAttribute('aria-hidden', 'true');
-    icon.textContent = _TOAST_ICONS[tipo] ?? _TOAST_ICONS.info;
 
     const txt = document.createElement('span');
     txt.className = 'ge-notif__text';

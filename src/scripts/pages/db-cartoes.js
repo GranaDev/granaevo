@@ -1875,7 +1875,7 @@ function excluirCompraFatura(faturaId, compraId) {
             _ctx.fecharPopup();
             _ctx.salvarDados();
             _ctx.atualizarTudo();
-            _ctx.mostrarNotificacao('✅ Fatura excluída — não há mais compras.', 'success');
+            _ctx.mostrarNotificacao('Fatura excluída — não há mais compras.', 'success');
             return;
         }
 

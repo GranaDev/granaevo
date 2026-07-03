@@ -1508,7 +1508,7 @@ function _verificarAlertasOrcamento(categoria, tipo, valorAdicionado) {
         titulo = `⚠️ Orçamento estourado: ${tipo}`;
         corpo  = `Você gastou ${formatBRL(gasto)} de ${formatBRL(limite)} (${pct.toFixed(0)}%).`;
         nivel  = 'error';
-        _ctx.mostrarNotificacao(`⚠️ Limite de ${tipo} estourado! Gasto: ${formatBRL(gasto)} / ${formatBRL(limite)}`, 'error');
+        _ctx.mostrarNotificacao(`Limite de ${tipo} estourado! Gasto: ${formatBRL(gasto)} / ${formatBRL(limite)}`, 'error');
     } else if (pct >= 80) {
         titulo = `Atenção: orçamento de ${tipo}`;
         corpo  = `Você usou ${pct.toFixed(0)}% do limite (${formatBRL(gasto)} / ${formatBRL(limite)}).`;
@@ -2695,7 +2695,7 @@ function abrirImportarExtrato() {
                 _ctx.atualizarTudo();
                 renderizarOrcamentos();
                 _ctx.fecharPopup();
-                _ctx.mostrarNotificacao(`✅ ${lancadas} transaç${lancadas === 1 ? 'ão lançada' : 'ões lançadas'} com sucesso!`, 'success');
+                _ctx.mostrarNotificacao(`${lancadas} transaç${lancadas === 1 ? 'ão lançada' : 'ões lançadas'} com sucesso!`, 'success');
             } else {
                 _ctx.mostrarNotificacao('Nenhuma transação válida para lançar.', 'error');
             }

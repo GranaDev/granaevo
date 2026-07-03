@@ -335,7 +335,7 @@ async function _drenarFila() {
     try { p = (await _loadCatalog())?.getPresent?.(a.id) || null; } catch { p = null; }
     const titulo = p?.titulo || 'Conquista desbloqueada';
     const desc   = p?.desc   || '';
-    const icon   = p?.icon   || '🏆';
+    const icon   = p?.icon   || 'fa-trophy';
 
     const host = _ensureHost();
     const card = document.createElement('div');
@@ -343,7 +343,10 @@ async function _drenarFila() {
 
     const ic = document.createElement('div');
     ic.className = 'ach-toast__icon';
-    ic.textContent = icon;
+    const _icel = document.createElement('i');
+    _icel.className = 'fas ' + (/^fa-[a-z0-9-]+$/.test(icon) ? icon : 'fa-trophy');
+    _icel.setAttribute('aria-hidden', 'true');
+    ic.appendChild(_icel);
 
     const body = document.createElement('div');
     body.className = 'ach-toast__body';
