@@ -356,6 +356,11 @@
     border: 1px solid rgba(255,255,255,0.06);
 }
 .ach-card.is-locked .ach-card__icon { filter: grayscale(0.7); }
+/* Ícone FA colorido pela raridade da conquista (--ach-color vem da classe ach-r-*) */
+.ach-card__icon i,
+.ach-next__icon i  { color: var(--ach-color, #9aa4b2); }
+.ach-toast__icon i { color: var(--ach-color, #fff); }
+.ach-card.is-locked .ach-card__icon i { color: #6b7280; }
 .ach-card__info  { min-width: 0; flex: 1; }
 .ach-card__title {
     font-size: 0.9rem;

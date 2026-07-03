@@ -265,6 +265,26 @@ export function renderHandoff(categoria) {
     return 'Isso é melhor confirmar na tela específica.';
 }
 
+// ── "Não entendi" com sugestão contextual ──────────────────────────────────────
+export function naoEntendiEsperto(local) {
+    if (local && local.valor > 0 && !local.categoria) {
+        return `Achei o valor ${formatBRL(local.valor)}, mas não entendi o que fazer. Foi um gasto? Ex: “gastei ${local.valor} no mercado”.`;
+    }
+    if (local && local.categoria && !(local.valor > 0)) {
+        return 'Entendi o tipo, mas faltou o valor. Quanto foi?';
+    }
+    return pick(NAO_ENTENDI) + '\nPode ser: lançar (“gastei 40 no mercado”), consultar (“quanto gastei em transporte”) ou pedir resumo (“meu resumo do mês”).';
+}
+
+// ── Confirmação de valor alto (anti-typo) ───────────────────────────────────────
+export function confirmarValorAlto(cmd) {
+    const desc = cmd.descricao || cmd.tipo || 'esse lançamento';
+    return `${formatBRL(cmd.valor)} é um valor alto. Confirma o lançamento de “${desc}”? Responda *sim* ou *não*.`;
+}
+export function confirmCancelado() {
+    return pick(['Beleza, cancelei.', 'Ok, não lancei nada.', 'Tranquilo, deixei pra lá.']);
+}
+
 // ── Segurança / mensagens de sistema ───────────────────────────────────────────
 export const SISTEMA = {
     saudacao: () => pick(SAUDACOES),

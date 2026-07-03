@@ -15,7 +15,10 @@ import { consultarGastos, consultarEntradas, saldoAtual, maioresGastos, ultimasT
 import { parseWithAI } from './assistant-api.js';
 import * as P from './phrases.js';
 
-const CONF_LOCAL_OK = 0.7; // acima disso confiamos no parser local (sem gastar IA)
+const CONF_LOCAL_OK = 0.7;   // acima disso confiamos no parser local (sem gastar IA)
+const LIMITE_CONFIRM = 50000; // lançamentos acima disso pedem confirmação (anti-typo)
+const RE_SIM = /^(sim|s|isso|isso ai|confirmo|confirma|pode|pode ser|claro|com certeza|aha|ok|blz|manda|vai)\b/;
+const RE_NAO = /^(nao|n|cancela|deixa|esquece|para|nem|negativo)\b/;
 
 class AssistantEngine {
     #profiles = [];
@@ -24,6 +27,7 @@ class AssistantEngine {
     #pendingReserva = null; // { valor, tipo, descricao } aguardando escolha de meta
     #pendingRetirada = null; // { valor } aguardando de qual reserva retirar
     #pendingCredito = null; // { descricao, tipo } aguardando o valor da compra
+    #pendingConfirm = null; // { cmd } aguardando "sim/não" de valor alto
     #lastUndo = null;       // fn de desfazer do último lançamento (desfazer por texto)
     #lastQuery = null;      // { consultaAlvo, palavrasChave, periodo } p/ follow-up
 
@@ -97,6 +101,21 @@ class AssistantEngine {
         const text = String(rawText ?? '').trim();
         if (!text) return { text: P.SISTEMA.naoEntendi() };
         if (!this.#active()) return { text: '{{fa-gear}} Selecione um perfil primeiro nas configurações.' };
+
+        // Confirmação de valor alto pendente (usuário responde sim/não).
+        if (this.#pendingConfirm) {
+            const t = String(text).toLowerCase();
+            if (RE_SIM.test(t)) {
+                const cmd = this.#pendingConfirm.cmd;
+                this.#pendingConfirm = null;
+                return this.#doLancamento(cmd);
+            }
+            if (RE_NAO.test(t)) {
+                this.#pendingConfirm = null;
+                return { text: P.confirmCancelado() };
+            }
+            this.#pendingConfirm = null; // resposta não foi sim/não → segue o fluxo
+        }
 
         // Continuação de crédito pendente (usuário respondeu o valor da compra).
         if (this.#pendingCredito) {
@@ -175,7 +194,7 @@ class AssistantEngine {
         if (local.intencao !== 'desconhecido' && local.confianca >= 0.4) {
             return this.#route(toCommand(local));
         }
-        return { text: P.SISTEMA.naoEntendi() };
+        return { text: P.naoEntendiEsperto(local) };
     }
 
     // ── Roteamento por intenção ────────────────────────────────────────────────
@@ -221,6 +240,12 @@ class AssistantEngine {
 
     // ── Lançamento com insert otimista + persistência ──────────────────────────
     async #doLancamento(cmd) {
+        // Valor muito alto → confirma antes (proteção anti-erro de digitação).
+        if (cmd.valor > LIMITE_CONFIRM && !cmd._confirmed) {
+            this.#pendingConfirm = { cmd: { ...cmd, _confirmed: true } };
+            return { text: P.confirmarValorAlto(cmd) };
+        }
+
         const profile = this.#active();
         const profileId = this.#activeId;
         const res = applyLancamento(profile, cmd);

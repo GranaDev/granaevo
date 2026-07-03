@@ -62,8 +62,15 @@ overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSheet(
     }
     renderHeaderProfile();
 
-    // 4) Saudação + wiring
+    // 4) Saudação + dica inicial (só na 1ª vez) + wiring
     UI.addAssistantMessage(SISTEMA.saudacao());
+    const hintKey = `ge_asst_hinted_${userId}`;
+    let jaViu = false;
+    try { jaViu = !!localStorage.getItem(hintKey); } catch {}
+    if (!jaViu) {
+        UI.addAssistantMessage('Dá pra: registrar (“gastei 80 no mercado”, “recebi 2000 de salário”, “guardei 200 na reserva”), consultar (“quanto gastei em transporte?”, “meu saldo”, “onde mais gastei?”) e pedir resumo. Fala naturalmente que eu entendo.');
+        try { localStorage.setItem(hintKey, '1'); } catch {}
+    }
     UI.wireInput(onSend);
 
     document.getElementById('geSettings').addEventListener('click', () => openSettings(userId));
