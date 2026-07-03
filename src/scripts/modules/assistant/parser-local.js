@@ -6,7 +6,7 @@
 // Não grava nada; não vê nada além do texto.
 // ---------------------------------------------------------------------------
 
-import { parseValorBR, parseParcelas } from './money.js';
+import { parseValorBR, parseParcelas, parseExtenso, parseDataRelativa } from './money.js';
 
 // Tipos permitidos no app (espelham db-transacoes.js).
 export const TIPOS_SAIDA = ['Mercado', 'Farmácia', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza',
@@ -166,7 +166,7 @@ export function parseLocal(rawText) {
     const base = {
         intencao: 'desconhecido', categoria: null, valor: null, tipo: null, descricao: null,
         meta_hint: null, parcelas: null, cartao_hint: null, aporte_mensal: null,
-        periodo: null, palavras_chave: [], consulta_alvo: null, confianca: 0, source: 'local',
+        periodo: null, palavras_chave: [], consulta_alvo: null, data_override: null, confianca: 0, source: 'local',
     };
     if (!text) return base;
 
@@ -205,7 +205,7 @@ export function parseLocal(rawText) {
         return { ...base, intencao: 'relatorio', periodo: detectPeriodo(text) || 'mes', confianca: 0.85 };
     }
 
-    const valor = parseValorBR(text);
+    const valor = parseValorBR(text) ?? parseExtenso(text);
 
     // 4) Consulta ("quanto gastei com mercado?") — sem intenção clara de lançar
     if (RE_CONSULTA.test(text) && !/\b(gastei|paguei|comprei)\b\s*(r\$\s*)?\d/.test(text)) {
@@ -248,6 +248,7 @@ export function parseLocal(rawText) {
             descricao: descricao || (tipo ?? null),
             meta_hint: metaHint, periodo: null,
             parcelas: categoria === 'saida_credito' ? parseParcelas(rawText) : null,
+            data_override: parseDataRelativa(rawText),
             palavras_chave: [], confianca: conf,
         };
     }

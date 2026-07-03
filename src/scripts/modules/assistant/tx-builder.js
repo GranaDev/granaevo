@@ -55,12 +55,14 @@ export function resolveMeta(profile, hint) {
 /** Monta o objeto de transação puro (sem efeitos). */
 export function buildTransaction(cmd, metaId = null) {
     const dh = agoraDataHora();
+    const data = (typeof cmd.dataOverride === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(cmd.dataOverride))
+        ? cmd.dataOverride : dh.data;
     return {
         categoria: cmd.categoria,
         tipo:      cmd.categoria === 'reserva' ? 'Reserva' : cmd.tipo,
         descricao: cmd.descricao || cmd.tipo || '',
         valor:     cmd.valor,
-        data:      dh.data,
+        data,
         hora:      dh.hora,
         metaId,
     };
