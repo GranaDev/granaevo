@@ -6,7 +6,7 @@
 // Não grava nada; não vê nada além do texto.
 // ---------------------------------------------------------------------------
 
-import { parseValorBR } from './money.js';
+import { parseValorBR, parseParcelas } from './money.js';
 
 // Tipos permitidos no app (espelham db-transacoes.js).
 export const TIPOS_SAIDA = ['Mercado', 'Farmácia', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza',
@@ -93,7 +93,9 @@ export function splitCompound(rawText) {
     const text = String(rawText ?? '');
     // Separa por: vírgula, ponto-e-vírgula, "mas/porém/também", e " e " SÓ quando
     // seguido de um verbo de lançamento (não quebra "pão e leite").
-    const parts = text.split(/\s*,\s*|\s*;\s*|\s+mas\s+|\s+por[ée]m\s+|\s+tamb[ée]m\s+|\s+e\s+(?=(?:gastei|paguei|comprei|recebi|ganhei|caiu|entrou|guardei|reservei|poupei|juntei|separei|tirei|resgatei|saquei|assinei)\b)/i);
+    // Vírgula separa cláusula SÓ quando não é decimal (ex.: "28,06" não quebra;
+    // "mercado, comprei" e "300, ganhei" quebram).
+    const parts = text.split(/(?<!\d),\s*|,\s*(?!\d)|\s*;\s*|\s+mas\s+|\s+por[ée]m\s+|\s+tamb[ée]m\s+|\s+e\s+(?=(?:gastei|paguei|comprei|recebi|ganhei|caiu|entrou|guardei|reservei|poupei|juntei|separei|tirei|resgatei|saquei|assinei)\b)/i);
     const comValor = parts.map((s) => s.trim()).filter((s) => s && parseValorBR(s) !== null);
     return comValor.length >= 2 ? comValor : [text];
 }
@@ -180,6 +182,7 @@ export function parseLocal(rawText) {
             ...base, intencao: 'lancar', categoria, valor, tipo,
             descricao: descricao || (tipo ?? null),
             meta_hint: metaHint, periodo: null,
+            parcelas: categoria === 'saida_credito' ? parseParcelas(rawText) : null,
             palavras_chave: [], confianca: conf,
         };
     }
@@ -189,7 +192,8 @@ export function parseLocal(rawText) {
     if (categoria === 'saida_credito') {
         return {
             ...base, intencao: 'lancar', categoria: 'saida_credito', valor: valor || null,
-            descricao: descricao || 'Compra no crédito', tipo: tipo || 'Cartão', confianca: 0.75,
+            descricao: descricao || 'Compra no crédito', tipo: tipo || 'Cartão',
+            parcelas: parseParcelas(rawText), confianca: 0.75,
         };
     }
 

@@ -96,8 +96,12 @@ async function creditoFlow(credito, cards) {
     const card = await pickCard(usaveis);
     if (!card) { UI.addAssistantMessage('Ok, cancelei a compra no crédito. 🙂'); return; }
 
-    const parcelas = await pickParcelas();
-    if (!parcelas) { UI.addAssistantMessage('Ok, cancelei a compra no crédito. 🙂'); return; }
+    // Se o usuário já disse "em Nx" no texto, não pergunta as parcelas.
+    let parcelas = credito.parcelas;
+    if (!parcelas) {
+        parcelas = await pickParcelas();
+        if (!parcelas) { UI.addAssistantMessage('Ok, cancelei a compra no crédito. 🙂'); return; }
+    }
 
     UI.showTyping();
     let res;

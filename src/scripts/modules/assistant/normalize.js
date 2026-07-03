@@ -48,7 +48,7 @@ export function toCommand(parse) {
         tipo: null,
         descricao: clampStr(parse.descricao, 120),
         metaHint: clampStr(parse.meta_hint, 60),
-        parcelas: Number.isInteger(parse.parcelas) && parse.parcelas > 0 && parse.parcelas <= 60 ? parse.parcelas : null,
+        parcelas: Number.isInteger(parse.parcelas) && parse.parcelas > 0 && parse.parcelas <= 420 ? parse.parcelas : null,
         cartaoHint: clampStr(parse.cartao_hint, 60),
         aporteMensal: null,
         periodo: ['hoje', 'semana', 'mes', 'mes_passado', 'ano', 'tudo'].includes(parse.periodo) ? parse.periodo : null,

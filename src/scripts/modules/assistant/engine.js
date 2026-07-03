@@ -101,7 +101,7 @@ class AssistantEngine {
             if (v) {
                 const pend = this.#pendingCredito;
                 this.#pendingCredito = null;
-                return this.#doCredito({ categoria: 'saida_credito', valor: v, descricao: pend.descricao, tipo: pend.tipo });
+                return this.#doCredito({ categoria: 'saida_credito', valor: v, descricao: pend.descricao, tipo: pend.tipo, parcelas: pend.parcelas });
             }
             this.#pendingCredito = null; // sem valor → mudou de assunto
         }
@@ -237,18 +237,19 @@ class AssistantEngine {
         if (cards.length === 0) return { text: P.semCartao() };
 
         if (!(cmd.valor > 0)) {
-            this.#pendingCredito = { descricao: cmd.descricao, tipo: cmd.tipo };
+            this.#pendingCredito = { descricao: cmd.descricao, tipo: cmd.tipo, parcelas: cmd.parcelas || null };
             return { text: P.creditoQuantoFoi() };
         }
 
-        // Sinaliza à UI pra abrir o picker de cartão + parcelas.
+        // Sinaliza à UI pra abrir o picker. Se as parcelas já vieram no texto
+        // ("em 3x"), a UI pula o picker de parcelas e só pede o cartão.
         return {
             creditoCards: cards.map((c) => ({
                 id: String(c.id),
                 nome: c.nomeBanco || c.nome || 'Cartão',
                 congelado: !!c.congelado,
             })),
-            credito: { valor: cmd.valor, descricao: cmd.descricao, tipo: cmd.tipo },
+            credito: { valor: cmd.valor, descricao: cmd.descricao, tipo: cmd.tipo, parcelas: cmd.parcelas || null },
         };
     }
 
