@@ -67,7 +67,7 @@ overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSheet(
     UI.wireInput(onSend);
 
     document.getElementById('geSettings').addEventListener('click', () => openSettings(userId));
-    setupInstallCTA();
+    setupChrome();
 })();
 
 async function onSend(text) {
@@ -339,20 +339,42 @@ function showLockScreen(userId) {
     });
 }
 
-// ── Botão "Baixar assistente" (instalar PWA) ───────────────────────────────────
-function setupInstallCTA() {
+// ── Chrome do app: voltar ao dashboard (navegador) + instalar PWA ─────────────
+function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+}
+
+function setupChrome() {
+    const standalone = isStandalone();
+
+    // Voltar ao dashboard — só no NAVEGADOR (no app instalado não faz sentido).
+    const back = document.getElementById('geBack');
+    if (back && !standalone) {
+        back.hidden = false;
+        back.addEventListener('click', () => { window.location.href = '/dashboard'; });
+    }
+
+    // Botão instalar — some se já está instalado (standalone).
     const btn = document.getElementById('geInstall');
-    if (!btn) return;
-    const show = () => { if (window.__pwaInstallPrompt) btn.hidden = false; };
-    document.addEventListener('ge:pwa-ready', show);
-    document.addEventListener('ge:pwa-installed', () => { btn.hidden = true; });
-    show();
-    btn.addEventListener('click', async () => {
-        const p = window.__pwaInstallPrompt;
-        if (!p) return;
-        btn.hidden = true;
-        p.prompt();
-        await p.userChoice.catch(() => {});
-        window.__pwaInstallPrompt = null;
-    });
+    if (btn && !standalone) {
+        btn.hidden = false; // sempre visível no navegador; o clique decide o que fazer
+        btn.addEventListener('click', async () => {
+            const p = window.__pwaInstallPrompt;
+            if (p) {
+                p.prompt();
+                await p.userChoice.catch(() => {});
+                window.__pwaInstallPrompt = null;
+                return;
+            }
+            // Sem prompt nativo (iOS, ou critério ainda não atendido) → instruções.
+            const ua = navigator.userAgent || '';
+            if (/iphone|ipad|ipod/i.test(ua) || (/mac/i.test(ua) && 'ontouchend' in document)) {
+                UI.addAssistantMessage('Pra instalar no iPhone/iPad: toque em **Compartilhar** (o ícone ⬆️) e depois em **"Adicionar à Tela de Início"**. 📲');
+            } else {
+                UI.addAssistantMessage('Pra instalar: abra o **menu do navegador** (⋮ ou ⋯) e toque em **"Instalar app"** / **"Adicionar à tela inicial"**. 📲');
+            }
+        });
+        document.addEventListener('ge:pwa-installed', () => { btn.hidden = true; });
+    }
 }
