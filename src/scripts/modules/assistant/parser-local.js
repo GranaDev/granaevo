@@ -54,11 +54,18 @@ const KEYWORDS = [
 ];
 
 // ── Saudações / ajuda / consulta / relatório ─────────────────────────────────
-const RE_SAUDACAO  = /^(oi|ola|ol[aá]|e ?a[ií]|opa|bom dia|boa tarde|boa noite|salve|hey|help)\b/;
-const RE_AJUDA     = /\b(ajuda|como funciona|o que voce faz|o que vc faz|comandos|me ajuda|nao sei usar)\b/;
-const RE_RELATORIO = /\b(relatorio|relatório|resumo|balanco|balanço|extrato|fechamento do mes)\b/;
-const RE_CONSULTA  = /\b(quanto|quantos|qual|quais|total de|gastei com|tenho|meu saldo|minhas reservas|como (esta|estao|está|estão))\b/;
-const RE_PROJECAO  = /\b(quanto tempo|em quanto tempo|se eu (investir|guardar|aportar)|vou levar|leva pra)\b/;
+// (texto já vem normalizado: minúsculo e sem acento)
+const RE_SAUDACAO  = /^(oi+|ola|opa|e ?ai|eae|eai|opa|salve|fala|coe|hey|help|bom dia|boa tarde|boa noite|blz|beleza|tudo (bem|bom|certo))\b/;
+const RE_AJUDA     = /\b(ajuda|me ajuda|como funciona|como (usa|uso|te uso)|o que (voce|vc|da pra) (faz|fazer)|que comandos|comandos|nao sei usar|tutorial|dicas)\b/;
+const RE_RELATORIO = /\b(relatorio|resumo|balanco|extrato|fechamento do mes|panorama|visao geral|como (estou|esta|ta|andam|estao) (as )?(minhas )?(financas|contas|grana)|minha situacao financeira)\b/;
+const RE_CONSULTA  = /\b(quanto|quantos|qual|quais|total de|gastei com|tenho|quanto sobrou|quanto (ja )?(gastei|recebi)|meu saldo|minhas reservas|me mostra|mostra|como (esta|estao|esta|estao))\b/;
+const RE_PROJECAO  = /\b(quanto tempo|em quanto tempo|se eu (investir|guardar|aportar|poupar)|vou levar|leva pra|daqui quanto|falta quanto pra)\b/;
+
+// Ranking de gastos / "gráficos" → breakdown por categoria (texto)
+// Sem \b no fim: "gastei" tem letra após "gast" (fronteira ficaria no meio da palavra).
+const RE_GRAFICOS  = /\b(graficos?|onde (eu )?(mais )?gast|no que (eu )?(mais )?gast|em que (eu )?(mais )?gast|maior(es)? gasto|categoria que mais|onde (foi|vai|ta|esta) (o )?meu dinheiro|resumo por categoria|distribuicao (de|dos) gasto)/;
+// Listar últimos lançamentos
+const RE_LISTAR    = /\b(ultimas? (transac|lancament|movimenta|compra|entrada)|minhas? (transac|movimenta|ultimas)|meus? (lancament|ultimos)|o que (eu )?(lancei|gastei|registrei|paguei) hoje|extrato de hoje|lista(r)? (as )?(transac|lancament|gasto))/;
 
 // ── Período ──────────────────────────────────────────────────────────────────
 function detectPeriodo(t) {
@@ -71,9 +78,10 @@ function detectPeriodo(t) {
     return null; // engine assume 'mes' por padrão em consultas
 }
 
-// Alvo da consulta: saldo, entradas, reservas ou gastos.
+// Alvo da consulta: saldo, entradas, reservas, maior_gasto ou gastos.
 function detectConsultaAlvo(t) {
-    if (/\bsaldo\b/.test(t)) return 'saldo';
+    if (/\bsaldo\b/.test(t) || /quanto (eu )?(tenho|sobrou)/.test(t)) return 'saldo';
+    if (RE_GRAFICOS.test(t)) return 'maior_gasto';
     if (/\breserv/.test(t)) return 'reserva';
     if (/\b(ganhei|recebi|recebo|entrou|entrada|entradas|salario|renda|faturei|fatur)\b/.test(t)) return 'entrada';
     return 'gasto';
@@ -135,7 +143,19 @@ export function parseLocal(rawText) {
         return { ...base, intencao: 'projecao_meta', aporte_mensal: parseValorBR(text), palavras_chave: extractPalavrasChave(text), confianca: 0.6 };
     }
 
-    // 3) Relatório
+    // 3) Gráficos / "onde mais gastei" → ranking de gastos por categoria
+    if (RE_GRAFICOS.test(text)) {
+        return { ...base, intencao: 'consultar', consulta_alvo: 'maior_gasto',
+                 periodo: detectPeriodo(text) || 'mes', palavras_chave: [], confianca: 0.85 };
+    }
+
+    // 3b) Listar últimos lançamentos
+    if (RE_LISTAR.test(text)) {
+        return { ...base, intencao: 'consultar', consulta_alvo: 'listar',
+                 periodo: detectPeriodo(text) || 'mes', palavras_chave: [], confianca: 0.85 };
+    }
+
+    // 3c) Relatório
     if (RE_RELATORIO.test(text)) {
         return { ...base, intencao: 'relatorio', periodo: detectPeriodo(text) || 'mes', confianca: 0.85 };
     }

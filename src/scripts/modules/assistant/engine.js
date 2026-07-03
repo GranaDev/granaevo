@@ -11,7 +11,7 @@ import { parseLocal, splitCompound } from './parser-local.js';
 import { parseValorBR } from './money.js';
 import { toCommand } from './normalize.js';
 import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito } from './tx-builder.js';
-import { consultarGastos, consultarEntradas, saldoAtual, relatorio, statusReservas, projecaoMeta } from './query.js';
+import { consultarGastos, consultarEntradas, saldoAtual, maioresGastos, ultimasTransacoes, relatorio, statusReservas, projecaoMeta } from './query.js';
 import { parseWithAI } from './assistant-api.js';
 import * as P from './phrases.js';
 
@@ -163,11 +163,13 @@ class AssistantEngine {
 
             case 'consultar': {
                 const p = this.#active();
-                if (cmd.consultaAlvo === 'saldo')   return { text: P.renderSaldo(saldoAtual(p)) };
+                if (cmd.consultaAlvo === 'saldo')       return { text: P.renderSaldo(saldoAtual(p)) };
+                if (cmd.consultaAlvo === 'maior_gasto') return { text: P.renderMaiorGasto(maioresGastos(p, cmd.periodo || 'mes')) };
+                if (cmd.consultaAlvo === 'listar')      return { text: P.renderUltimas(ultimasTransacoes(p)) };
                 if (cmd.consultaAlvo === 'reserva' || cmd.palavrasChave.includes('reserva')) {
                     return { text: P.renderReservas(statusReservas(p)) };
                 }
-                if (cmd.consultaAlvo === 'entrada') return { text: P.renderEntradas(consultarEntradas(p, cmd)) };
+                if (cmd.consultaAlvo === 'entrada')     return { text: P.renderEntradas(consultarEntradas(p, cmd)) };
                 return { text: P.renderConsulta(consultarGastos(p, cmd)) };
             }
 

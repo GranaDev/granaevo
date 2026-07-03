@@ -141,6 +141,25 @@ export function renderEntradas(r) {
     return msg;
 }
 
+// ── Onde mais gastei / gráficos (ranking por categoria) ───────────────────────
+export function renderMaiorGasto(r) {
+    const per = PERIODO_LABEL[r.periodo] || 'no período';
+    if (r.count === 0 || !r.ranking.length) return `Não achei gastos ${per} pra montar o ranking.`;
+    let msg = `{{fa-chart-simple}} *No que você mais gastou ${per}* (total ${formatBRL(r.total)}):\n`;
+    msg += r.ranking.map((g, i) => `${i + 1}. ${g.tipo} — ${formatBRL(g.valor)} (${g.pct}%)`).join('\n');
+    return msg;
+}
+
+// ── Últimos lançamentos ────────────────────────────────────────────────────────
+const _SINAL = { entrada: '+', retirada_reserva: '+', saida: '-', reserva: '-', saida_credito: '-', assinatura: '-' };
+export function renderUltimas(lista) {
+    if (!lista.length) return 'Você ainda não tem lançamentos. Manda o primeiro — ex: “gastei 40 no mercado”.';
+    return '{{fa-receipt}} *Seus últimos lançamentos:*\n' + lista.map((t) => {
+        const s = _SINAL[t.categoria] || '';
+        return `• ${t.data} · ${t.descricao || t.tipo}: ${s}${formatBRL(t.valor)}`;
+    }).join('\n');
+}
+
 // ── Saldo atual ────────────────────────────────────────────────────────────────
 export function renderSaldo(v) {
     if (v > 0) return `{{fa-arrow-trend-up}} Seu saldo atual é *${formatBRL(v)}*.`;

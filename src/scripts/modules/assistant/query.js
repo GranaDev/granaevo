@@ -99,6 +99,43 @@ export function saldoAtual(profile) {
     return Math.round(s * 100) / 100;
 }
 
+/**
+ * Ranking de gastos por categoria no período ("onde mais gastei" / gráficos).
+ * @returns {{periodo, total, count, ranking:[{tipo,valor,pct}]}}
+ */
+export function maioresGastos(profile, periodo = 'mes') {
+    const txs = filterByPeriodo(profile?.transacoes, periodo).filter((t) => t.categoria === 'saida');
+    const porTipo = {};
+    let total = 0;
+    for (const t of txs) {
+        const v = Number(t.valor) || 0;
+        porTipo[t.tipo || 'Outros'] = (porTipo[t.tipo || 'Outros'] || 0) + v;
+        total += v;
+    }
+    total = Math.round(total * 100) / 100;
+    const ranking = Object.entries(porTipo)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([tipo, valor]) => ({
+            tipo,
+            valor: Math.round(valor * 100) / 100,
+            pct: total > 0 ? Math.round((valor / total) * 100) : 0,
+        }));
+    return { periodo, total, count: txs.length, ranking };
+}
+
+/** Últimos N lançamentos (mais recentes primeiro). */
+export function ultimasTransacoes(profile, n = 8) {
+    const arr = Array.isArray(profile?.transacoes) ? profile.transacoes : [];
+    return arr.slice(-n).reverse().map((t) => ({
+        categoria: t.categoria,
+        tipo: t.tipo,
+        descricao: t.descricao,
+        valor: Math.round((Number(t.valor) || 0) * 100) / 100,
+        data: t.data,
+    }));
+}
+
 /** Relatório do período: entradas, saídas, reservas, saldo. */
 export function relatorio(profile, periodo = 'mes') {
     const txs = filterByPeriodo(profile?.transacoes, periodo);
