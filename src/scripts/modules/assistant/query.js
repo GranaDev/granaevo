@@ -136,6 +136,79 @@ export function ultimasTransacoes(profile, n = 8) {
     }));
 }
 
+function _ymOf(data) { const d = brDateToObj(data); return d ? yearMonthKey(d) : null; }
+
+/** Compara gastos deste mês vs. mês passado. */
+export function compararMes(profile) {
+    const hoje = new Date();
+    const ymA = yearMonthKey(hoje);
+    const ymP = yearMonthKey(new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1));
+    const txs = Array.isArray(profile?.transacoes) ? profile.transacoes : [];
+    const sum = (ym) => txs.filter((t) => t.categoria === 'saida' && _ymOf(t.data) === ym)
+        .reduce((s, t) => s + (Number(t.valor) || 0), 0);
+    const atual = Math.round(sum(ymA) * 100) / 100;
+    const passado = Math.round(sum(ymP) * 100) / 100;
+    const dif = Math.round((atual - passado) * 100) / 100;
+    const pct = passado > 0 ? Math.round((dif / passado) * 100) : null;
+    return { atual, passado, dif, pct };
+}
+
+/** Média de gastos por mês (sobre os meses com movimentação). */
+export function mediaMensal(profile) {
+    const txs = (Array.isArray(profile?.transacoes) ? profile.transacoes : []).filter((t) => t.categoria === 'saida');
+    const porMes = {};
+    for (const t of txs) { const ym = _ymOf(t.data); if (!ym) continue; porMes[ym] = (porMes[ym] || 0) + (Number(t.valor) || 0); }
+    const meses = Object.keys(porMes).length;
+    const total = Object.values(porMes).reduce((s, v) => s + v, 0);
+    return { media: meses > 0 ? Math.round((total / meses) * 100) / 100 : 0, meses };
+}
+
+/** Fatura(s) de cartão em aberto (opcionalmente de um cartão específico). */
+export function faturaCartao(profile, cartaoHint) {
+    const contas = (Array.isArray(profile?.contasFixas) ? profile.contasFixas : [])
+        .filter((c) => c.tipoContaFixa === 'fatura_cartao' && !c.pago);
+    const cards = Array.isArray(profile?.cartoesCredito) ? profile.cartoesCredito : [];
+    const nomeCartao = (id) => { const c = cards.find((x) => String(x.id) === String(id)); return c ? (c.nomeBanco || c.nome || 'Cartão') : 'Cartão'; };
+
+    let filtradas = contas;
+    if (cartaoHint) {
+        const h = norm(cartaoHint);
+        const match = cards.find((c) => norm(c.nomeBanco || c.nome || '').includes(h));
+        if (match) filtradas = contas.filter((c) => String(c.cartaoId) === String(match.id));
+    }
+    const porCartao = {};
+    let total = 0;
+    for (const f of filtradas) { const v = Number(f.valor) || 0; total += v; const nm = nomeCartao(f.cartaoId); porCartao[nm] = (porCartao[nm] || 0) + v; }
+    return {
+        total: Math.round(total * 100) / 100,
+        itens: Object.entries(porCartao).map(([nome, valor]) => ({ nome, valor: Math.round(valor * 100) / 100 })),
+        count: filtradas.length,
+    };
+}
+
+/** Quanto falta pra completar uma meta. */
+export function faltaMeta(profile, metaHint) {
+    const metas = Array.isArray(profile?.metas) ? profile.metas : [];
+    if (!metas.length) return { ok: false, reason: 'sem_meta' };
+    let meta = null;
+    if (metaHint) {
+        const h = norm(metaHint);
+        if (/emergenc/.test(h)) meta = metas.find((m) => String(m.id) === 'emergency' || /emergenc/.test(norm(_metaNome(m))));
+        if (!meta) meta = metas.find((m) => norm(_metaNome(m)).includes(h));
+    }
+    if (!meta) { const ne = metas.filter((m) => String(m.id) !== 'emergency'); if (ne.length === 1) meta = ne[0]; }
+    if (!meta) return { ok: false, reason: 'ambigua', opcoes: metas.map(_metaNome) };
+    const alvo = _metaAlvo(meta);
+    const saved = Number(meta.saved || 0);
+    if (!(alvo > 0)) return { ok: false, reason: 'sem_alvo', nome: _metaNome(meta), saved: Math.round(saved * 100) / 100 };
+    const faltam = Math.max(0, alvo - saved);
+    return {
+        ok: true, nome: _metaNome(meta),
+        saved: Math.round(saved * 100) / 100, alvo: Math.round(alvo * 100) / 100,
+        faltam: Math.round(faltam * 100) / 100, pct: Math.min(100, Math.round((saved / alvo) * 100)),
+    };
+}
+
 /** Relatório do período: entradas, saídas, reservas, saldo. */
 export function relatorio(profile, periodo = 'mes') {
     const txs = filterByPeriodo(profile?.transacoes, periodo);

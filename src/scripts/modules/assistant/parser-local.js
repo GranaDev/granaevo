@@ -66,6 +66,11 @@ const RE_PROJECAO  = /\b(quanto tempo|em quanto tempo|se eu (investir|guardar|ap
 const RE_GRAFICOS  = /\b(graficos?|onde (eu )?(mais )?gast|no que (eu )?(mais )?gast|em que (eu )?(mais )?gast|maior(es)? gasto|categoria que mais|onde (foi|vai|ta|esta) (o )?meu dinheiro|resumo por categoria|distribuicao (de|dos) gasto)/;
 // Listar últimos lançamentos
 const RE_LISTAR    = /\b(ultimas? (transac|lancament|movimenta|compra|entrada)|minhas? (transac|movimenta|ultimas)|meus? (lancament|ultimos)|o que (eu )?(lancei|gastei|registrei|paguei) hoje|extrato de hoje|lista(r)? (as )?(transac|lancament|gasto))/;
+// Comparação / média / fatura / quanto falta
+const RE_COMPARAR  = /\b(comparad|comparacao|gastei (muito )?mais que|gastei (muito )?menos que|mais (ou menos )?que (o )?mes passado|em rela(c|ç)ao ao mes|(vs|versus) (o )?mes|comparar com)/;
+const RE_MEDIA     = /\b(media de gasto|gasto medio|em media (eu )?gast|quanto (eu )?gasto por mes|por mes em media|minha media)/;
+const RE_FATURA    = /\b(minha fatura|ver (a )?fatura|fatura (do|da|em aberto|atual|deste mes|desse mes)|quanto (eu )?(vou|tenho que|preciso) pagar (de|da|do)? ?(fatura|cartao)|como (esta|ta) (a |minha )?fatura)/;
+const RE_FALTA     = /\b(quanto (ainda )?falta|falta quanto|quanto (eu )?preciso (guardar|juntar)) (pra|para|pro)/;
 
 // ── Período ──────────────────────────────────────────────────────────────────
 function detectPeriodo(t) {
@@ -121,6 +126,19 @@ function extractPalavrasChave(t) {
     return [...new Set(out)].slice(0, 6);
 }
 
+// Extrai nome de meta depois de "pra/para/pro" (para "quanto falta pra X").
+function _extractMetaHint(t) {
+    const m = t.match(/(?:pra|para|pro)\s+(?:a |o |minha |meu )?([\p{L}][\p{L}\s]{1,29})/u);
+    return m ? m[1].trim() : null;
+}
+// Extrai nome do cartão depois de "cartao/fatura do/da".
+function _extractCartaoHint(t) {
+    const m = t.match(/(?:cartao|fatura)\s+(?:do |da |no |de )?([\p{L}][\p{L}\s]{1,29})/u);
+    if (!m) return null;
+    const h = m[1].trim();
+    return /^(em aberto|atual|deste mes|desse mes)/.test(h) ? null : h;
+}
+
 /**
  * Parser local. Sempre retorna um objeto (nunca lança).
  * confianca alta (≥0.7) → engine confia; baixa → engine chama a IA.
@@ -141,6 +159,14 @@ export function parseLocal(rawText) {
     // 2) Projeção de meta ("se eu guardar X por mês…")
     if (RE_PROJECAO.test(text)) {
         return { ...base, intencao: 'projecao_meta', aporte_mensal: parseValorBR(text), palavras_chave: extractPalavrasChave(text), confianca: 0.6 };
+    }
+
+    // 2b) Comparação / média / fatura / quanto falta
+    if (RE_COMPARAR.test(text)) return { ...base, intencao: 'consultar', consulta_alvo: 'comparar', confianca: 0.82 };
+    if (RE_MEDIA.test(text))    return { ...base, intencao: 'consultar', consulta_alvo: 'media', confianca: 0.82 };
+    if (RE_FALTA.test(text))    return { ...base, intencao: 'consultar', consulta_alvo: 'falta_meta', meta_hint: _extractMetaHint(text), confianca: 0.82 };
+    if (RE_FATURA.test(text) && !/\b(gastei|paguei|comprei)\b.*\d/.test(text)) {
+        return { ...base, intencao: 'consultar', consulta_alvo: 'fatura', cartao_hint: _extractCartaoHint(text), confianca: 0.82 };
     }
 
     // 3) Gráficos / "onde mais gastei" → ranking de gastos por categoria

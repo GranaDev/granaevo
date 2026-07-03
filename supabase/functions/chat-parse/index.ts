@@ -124,7 +124,7 @@ const PARSE_TOOL = {
       },
       consulta_alvo: {
         anyOf: [
-          { type: 'string', enum: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar'] },
+          { type: 'string', enum: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar', 'comparar', 'media', 'fatura', 'falta_meta'] },
           { type: 'null' },
         ],
         description: 'Só para intencao=consultar — O QUE consultar: ' +
@@ -132,8 +132,12 @@ const PARSE_TOOL = {
           'entrada ("quanto ganhei/recebi de X"); ' +
           'reserva ("minhas reservas/metas", "como está minha reserva"); ' +
           'gasto ("quanto gastei com X"); ' +
-          'maior_gasto ("onde mais gastei", "no que gastei mais", "gráficos", "ranking de gastos", "resumo por categoria"); ' +
-          'listar ("minhas últimas transações", "o que lancei hoje"). Senão null.',
+          'maior_gasto ("onde mais gastei", "no que gastei mais", "gráficos", "ranking de gastos"); ' +
+          'listar ("minhas últimas transações", "o que lancei hoje"); ' +
+          'comparar ("gastei mais que mês passado?", "comparado ao mês passado"); ' +
+          'media ("quanto gasto por mês em média", "meu gasto médio"); ' +
+          'fatura ("quanto vou pagar de fatura", "minha fatura do Nubank" → preencha cartao_hint); ' +
+          'falta_meta ("quanto falta pra [meta]" → preencha meta_hint). Senão null.',
       },
       confianca: {
         type: 'number',

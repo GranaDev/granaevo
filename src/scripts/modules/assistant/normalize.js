@@ -55,7 +55,7 @@ export function toCommand(parse) {
         palavrasChave: Array.isArray(parse.palavras_chave)
             ? parse.palavras_chave.filter((s) => typeof s === 'string').map((s) => s.toLowerCase().slice(0, 40)).slice(0, 8)
             : [],
-        consultaAlvo: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar'].includes(parse.consulta_alvo) ? parse.consulta_alvo : 'gasto',
+        consultaAlvo: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar', 'comparar', 'media', 'fatura', 'falta_meta'].includes(parse.consulta_alvo) ? parse.consulta_alvo : 'gasto',
     };
 
     const v = Number(parse.valor);

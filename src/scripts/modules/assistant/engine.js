@@ -11,7 +11,7 @@ import { parseLocal, splitCompound } from './parser-local.js';
 import { parseValorBR } from './money.js';
 import { toCommand } from './normalize.js';
 import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito, applyRetirada } from './tx-builder.js';
-import { consultarGastos, consultarEntradas, saldoAtual, maioresGastos, ultimasTransacoes, relatorio, statusReservas, projecaoMeta } from './query.js';
+import { consultarGastos, consultarEntradas, saldoAtual, maioresGastos, ultimasTransacoes, compararMes, mediaMensal, faturaCartao, faltaMeta, relatorio, statusReservas, projecaoMeta } from './query.js';
 import { parseWithAI } from './assistant-api.js';
 import * as P from './phrases.js';
 
@@ -179,6 +179,10 @@ class AssistantEngine {
                 if (cmd.consultaAlvo === 'saldo')       return { text: P.renderSaldo(saldoAtual(p)) };
                 if (cmd.consultaAlvo === 'maior_gasto') return { text: P.renderMaiorGasto(maioresGastos(p, cmd.periodo || 'mes')) };
                 if (cmd.consultaAlvo === 'listar')      return { text: P.renderUltimas(ultimasTransacoes(p)) };
+                if (cmd.consultaAlvo === 'comparar')    return { text: P.renderComparar(compararMes(p)) };
+                if (cmd.consultaAlvo === 'media')       return { text: P.renderMedia(mediaMensal(p)) };
+                if (cmd.consultaAlvo === 'fatura')      return { text: P.renderFatura(faturaCartao(p, cmd.cartaoHint)) };
+                if (cmd.consultaAlvo === 'falta_meta')  return { text: P.renderFaltaMeta(faltaMeta(p, cmd.metaHint)) };
                 if (cmd.consultaAlvo === 'reserva' || cmd.palavrasChave.includes('reserva')) {
                     return { text: P.renderReservas(statusReservas(p)) };
                 }

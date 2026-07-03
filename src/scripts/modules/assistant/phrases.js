@@ -178,6 +178,41 @@ export function renderUltimas(lista) {
     }).join('\n');
 }
 
+// ── Comparação de mês ──────────────────────────────────────────────────────────
+export function renderComparar(r) {
+    if (r.passado === 0 && r.atual === 0) return 'Sem gastos neste mês nem no passado pra comparar ainda.';
+    if (r.passado === 0) return `Você gastou ${formatBRL(r.atual)} este mês. No mês passado não houve gastos registrados.`;
+    if (r.dif > 0) return `{{fa-arrow-trend-up}} Este mês: *${formatBRL(r.atual)}* — ${formatBRL(r.dif)} a MAIS que o mês passado (${formatBRL(r.passado)})${r.pct !== null ? `, ${r.pct}% acima` : ''}.`;
+    if (r.dif < 0) return `{{fa-arrow-trend-down}} Este mês: *${formatBRL(r.atual)}* — ${formatBRL(Math.abs(r.dif))} a MENOS que o mês passado (${formatBRL(r.passado)}). Mandou bem!`;
+    return `Você gastou o mesmo nos dois meses: ${formatBRL(r.atual)}.`;
+}
+
+// ── Média mensal ────────────────────────────────────────────────────────────────
+export function renderMedia(r) {
+    if (!r.meses) return 'Ainda não tenho meses suficientes pra calcular sua média de gastos.';
+    return `Sua média de gastos é *${formatBRL(r.media)}/mês* (sobre ${r.meses} ${r.meses > 1 ? 'meses' : 'mês'} com movimentação).`;
+}
+
+// ── Fatura do cartão ────────────────────────────────────────────────────────────
+export function renderFatura(r) {
+    if (r.count === 0) return '{{fa-credit-card}} Você não tem fatura em aberto no momento.';
+    let msg = `{{fa-credit-card}} *Fatura(s) em aberto:* ${formatBRL(r.total)}`;
+    if (r.itens.length > 1) msg += '\n' + r.itens.map((i) => `• ${i.nome}: ${formatBRL(i.valor)}`).join('\n');
+    return msg;
+}
+
+// ── Quanto falta pra meta ────────────────────────────────────────────────────────
+export function renderFaltaMeta(r) {
+    if (!r.ok) {
+        if (r.reason === 'sem_meta') return '{{fa-bullseye}} Você não tem metas criadas ainda. Crie no menu “Reservas”.';
+        if (r.reason === 'sem_alvo') return `A meta “${r.nome}” não tem valor-alvo definido (você já guardou ${formatBRL(r.saved)}).`;
+        if (r.reason === 'ambigua') return `Qual meta? ${r.opcoes.map((o) => `“${o}”`).join(', ')}.`;
+        return 'Não achei essa meta.';
+    }
+    if (r.faltam <= 0) return `{{fa-bullseye}} A meta “${r.nome}” já está completa! (${formatBRL(r.saved)})`;
+    return `{{fa-bullseye}} Faltam *${formatBRL(r.faltam)}* pra completar “${r.nome}” — você já tem ${formatBRL(r.saved)} de ${formatBRL(r.alvo)} (${r.pct}%).`;
+}
+
 // ── Saldo atual ────────────────────────────────────────────────────────────────
 export function renderSaldo(v) {
     if (v > 0) return `{{fa-arrow-trend-up}} Seu saldo atual é *${formatBRL(v)}*.`;
