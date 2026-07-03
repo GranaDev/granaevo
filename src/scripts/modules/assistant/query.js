@@ -165,15 +165,22 @@ export function relatorio(profile, periodo = 'mes') {
     };
 }
 
+// Nome e alvo da meta moram em `descricao` e `objetivo` no app.
+function _metaNome(m) {
+    return String(m?.descricao ?? m?.nome ?? m?.name ?? m?.titulo ?? (String(m?.id) === 'emergency' ? 'Reserva de Emergência' : 'Meta')).trim();
+}
+function _metaAlvo(m) {
+    return Number(m?.objetivo ?? m?.target ?? m?.alvo ?? m?.meta ?? 0);
+}
+
 /** Situação das reservas/metas. */
 export function statusReservas(profile) {
     const metas = Array.isArray(profile?.metas) ? profile.metas : [];
     return metas.map((m) => {
         const saved = Number(m.saved || 0);
-        const alvo = Number(m.target ?? m.alvo ?? m.meta ?? 0);
-        const nome = String(m.nome ?? m.name ?? m.titulo ?? (String(m.id) === 'emergency' ? 'Reserva de Emergência' : 'Meta')).trim();
+        const alvo = _metaAlvo(m);
         const pct = alvo > 0 ? Math.min(100, Math.round((saved / alvo) * 100)) : null;
-        return { nome, saved: Math.round(saved * 100) / 100, alvo: Math.round(alvo * 100) / 100, pct };
+        return { nome: _metaNome(m), saved: Math.round(saved * 100) / 100, alvo: Math.round(alvo * 100) / 100, pct };
     });
 }
 
@@ -189,18 +196,19 @@ export function projecaoMeta(profile, cmd) {
     let meta = null;
     if (cmd.metaHint) {
         const h = norm(cmd.metaHint);
-        meta = metas.find((m) => norm(m.nome ?? m.name ?? m.titulo).includes(h));
+        if (/emergenc/.test(h)) meta = metas.find((m) => String(m.id) === 'emergency' || /emergenc/.test(norm(_metaNome(m))));
+        if (!meta) meta = metas.find((m) => norm(_metaNome(m)).includes(h));
     }
     if (!meta) meta = metas.find((m) => String(m.id) !== 'emergency') || metas[0];
 
-    const alvo = Number(meta.target ?? meta.alvo ?? meta.meta ?? 0);
+    const alvo = _metaAlvo(meta);
     if (!(alvo > 0)) return { ok: false, reason: 'sem_alvo' };
 
     const faltam = Math.max(0, alvo - Number(meta.saved || 0));
     const meses = Math.ceil(faltam / cmd.aporteMensal);
     return {
         ok: true,
-        nome: String(meta.nome ?? meta.name ?? meta.titulo ?? 'sua meta').trim(),
+        nome: _metaNome(meta),
         faltam: Math.round(faltam * 100) / 100,
         meses,
         aporte: cmd.aporteMensal,

@@ -14,8 +14,12 @@ import { agoraDataHora, yearMonthKey, brDateToObj } from './money.js';
 
 const APLICAVEIS_V1 = ['entrada', 'saida', 'reserva'];
 
+// O NOME da meta mora em `descricao` no app (não em `nome`) — priorizar isso.
 function metaNome(m) {
-    return String(m?.nome ?? m?.name ?? m?.titulo ?? m?.descricao ?? '').trim();
+    return String(m?.descricao ?? m?.nome ?? m?.name ?? m?.titulo ?? '').trim();
+}
+function _norm(s) {
+    return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 
 /** Resolve a meta a partir do hint (nome) contra profile.metas. */
@@ -24,11 +28,16 @@ export function resolveMeta(profile, hint) {
     if (metas.length === 0) return { status: 'none' };
 
     if (hint) {
-        const h = hint.toLowerCase();
-        const exato = metas.find((m) => metaNome(m).toLowerCase() === h);
+        const h = _norm(hint);
+        // "emergência" → a meta especial (id 'emergency' ou nome com "emergenc").
+        if (/emergenc/.test(h)) {
+            const emg = metas.find((m) => String(m.id) === 'emergency' || /emergenc/.test(_norm(metaNome(m))));
+            if (emg) return { status: 'ok', meta: emg };
+        }
+        const exato = metas.find((m) => _norm(metaNome(m)) === h);
         if (exato) return { status: 'ok', meta: exato };
         const contendo = metas.filter((m) => {
-            const n = metaNome(m).toLowerCase();
+            const n = _norm(metaNome(m));
             return n && (n.includes(h) || h.includes(n));
         });
         if (contendo.length === 1) return { status: 'ok', meta: contendo[0] };
@@ -92,6 +101,53 @@ export function applyLancamento(profile, cmd) {
     const t = buildTransaction(cmd, null);
     profile.transacoes.push(t);
     return { ok: true, transaction: t };
+}
+
+/**
+ * Retirada de reserva — RÉPLICA FIEL de db-metas.js: valida disponível,
+ * cria transação retirada_reserva (com metaId), decrementa meta.saved e
+ * monthly, registra historicoRetiradas. O valor volta ao saldo (fórmula).
+ * @returns {{ok:true, transaction, meta} | {ok:false, reason, ...}}
+ */
+export function applyRetirada(profile, cmd) {
+    if (!profile || typeof profile !== 'object') return { ok: false, reason: 'no_profile' };
+    if (!(cmd.valor > 0)) return { ok: false, reason: 'sem_valor' };
+
+    const r = resolveMeta(profile, cmd.metaHint);
+    if (r.status !== 'ok') return { ok: false, reason: 'meta', metaStatus: r.status, opcoes: r.opcoes || [] };
+
+    const meta = r.meta;
+    const disponivel = Number(meta.saved || 0);
+    if (disponivel <= 0) return { ok: false, reason: 'reserva_vazia', meta: metaNome(meta) };
+    if (cmd.valor > disponivel) return { ok: false, reason: 'excede', meta: metaNome(meta), disponivel };
+
+    if (!Array.isArray(profile.transacoes)) profile.transacoes = [];
+    const dh = agoraDataHora();
+    const ym = yearMonthKey();
+    const t = {
+        categoria: 'retirada_reserva',
+        tipo: 'Retirada de Reserva',
+        descricao: `Retirada: ${metaNome(meta)}`,
+        valor: cmd.valor,
+        data: dh.data,
+        hora: dh.hora,
+        metaId: meta.id,
+        motivoRetirada: 'Outro',
+    };
+    profile.transacoes.push(t);
+
+    meta.saved = Number((disponivel - cmd.valor).toFixed(2));
+    meta.monthly = meta.monthly || {};
+    meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) - cmd.valor).toFixed(2));
+    if (meta.monthly[ym] < 0) meta.monthly[ym] = 0;
+
+    if (!Array.isArray(meta.historicoRetiradas)) meta.historicoRetiradas = [];
+    meta.historicoRetiradas.push({
+        data: dh.data, valor: cmd.valor, motivo: 'Outro',
+        saldoAnterior: disponivel, saldoPosterior: meta.saved,
+    });
+
+    return { ok: true, transaction: t, meta: metaNome(meta) };
 }
 
 function uuid(prefix) {
@@ -226,17 +282,25 @@ export function undoLancamento(profile, tx) {
     if (idx === -1) return false;
     profile.transacoes.splice(idx, 1);
 
-    // Reverte a meta (reserva)
-    if (tx.categoria === 'reserva' && tx.metaId) {
+    // Reverte a meta (reserva subtrai o que foi guardado; retirada devolve)
+    if ((tx.categoria === 'reserva' || tx.categoria === 'retirada_reserva') && tx.metaId) {
         const meta = (Array.isArray(profile.metas) ? profile.metas : []).find((m) => String(m.id) === String(tx.metaId));
         if (meta) {
             const valor = Number(tx.valor) || 0;
+            const sinal = tx.categoria === 'reserva' ? -1 : +1; // desfazer reserva = tira; desfazer retirada = devolve
             const d = brDateToObj(tx.data) || new Date();
             const ym = yearMonthKey(d);
-            meta.saved = Number(Math.max(0, Number(meta.saved || 0) - valor).toFixed(2));
-            if (meta.monthly && Object.prototype.hasOwnProperty.call(meta.monthly, ym)) {
-                const novo = Number((Number(meta.monthly[ym]) - valor).toFixed(2));
-                if (novo > 0) meta.monthly[ym] = novo; else delete meta.monthly[ym];
+            meta.saved = Number(Math.max(0, Number(meta.saved || 0) + sinal * valor).toFixed(2));
+            meta.monthly = meta.monthly || {};
+            const novo = Number((Number(meta.monthly[ym] || 0) + sinal * valor).toFixed(2));
+            if (novo > 0) meta.monthly[ym] = novo; else delete meta.monthly[ym];
+            // Remove a última entrada de histórico da retirada desfeita.
+            if (tx.categoria === 'retirada_reserva' && Array.isArray(meta.historicoRetiradas)) {
+                for (let i = meta.historicoRetiradas.length - 1; i >= 0; i--) {
+                    if (Number(meta.historicoRetiradas[i]?.valor) === valor && meta.historicoRetiradas[i]?.data === tx.data) {
+                        meta.historicoRetiradas.splice(i, 1); break;
+                    }
+                }
             }
         }
     }

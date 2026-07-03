@@ -103,6 +103,24 @@ export function cartaoCongelado() {
     return '{{fa-snowflake}} Esse cartão está congelado. Descongele no menu **Cartões** pra usá-lo.';
 }
 
+// ── Retirada de reserva ────────────────────────────────────────────────────────
+export function confirmacaoRetirada(res) {
+    return {
+        text: `{{fa-check}} ${pick(['Retirei', 'Feito', 'Prontinho'])} · ${formatBRL(res.transaction.valor)} · {{fa-piggy-bank}} de ${res.meta} — voltou pro seu saldo.`,
+        chip: { categoria: 'retirada_reserva', undoLabel: 'Desfazer' },
+    };
+}
+export function escolherReservaRetirada(opcoes = []) {
+    if (!opcoes.length) return '{{fa-piggy-bank}} Você não tem reservas pra retirar. Crie uma no menu “Reservas”.';
+    return `De qual reserva você quer tirar? ${opcoes.map((o) => `“${o}”`).join(', ')}. Me diz o nome.`;
+}
+export function reservaVazia(meta) {
+    return `A reserva “${meta}” está zerada — não tem o que retirar.`;
+}
+export function retiradaExcede(meta, disponivel) {
+    return `Você só tem ${formatBRL(disponivel)} guardado em “${meta}”. Quer tirar até esse valor?`;
+}
+
 // ── Escolha de meta (reserva ambígua) ────────────────────────────────────────
 export function escolherMeta(opcoes = []) {
     if (!opcoes.length) {

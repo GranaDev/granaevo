@@ -10,7 +10,7 @@ import { dataManager } from '../data-manager.js';
 import { parseLocal, splitCompound } from './parser-local.js';
 import { parseValorBR } from './money.js';
 import { toCommand } from './normalize.js';
-import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito } from './tx-builder.js';
+import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito, applyRetirada } from './tx-builder.js';
 import { consultarGastos, consultarEntradas, saldoAtual, maioresGastos, ultimasTransacoes, relatorio, statusReservas, projecaoMeta } from './query.js';
 import { parseWithAI } from './assistant-api.js';
 import * as P from './phrases.js';
@@ -22,6 +22,7 @@ class AssistantEngine {
     #activeId = null;
     #ready = false;
     #pendingReserva = null; // { valor, tipo, descricao } aguardando escolha de meta
+    #pendingRetirada = null; // { valor } aguardando de qual reserva retirar
     #pendingCredito = null; // { descricao, tipo } aguardando o valor da compra
 
     get ready() { return this.#ready; }
@@ -106,6 +107,17 @@ class AssistantEngine {
             this.#pendingCredito = null; // sem valor → mudou de assunto
         }
 
+        // Continuação de retirada pendente (usuário respondeu de qual reserva).
+        if (this.#pendingRetirada) {
+            const r = resolveMeta(this.#active(), text);
+            if (r.status === 'ok') {
+                const cmd = { categoria: 'retirada_reserva', valor: this.#pendingRetirada.valor, metaHint: text };
+                this.#pendingRetirada = null;
+                return this.#doRetirada(cmd);
+            }
+            this.#pendingRetirada = null;
+        }
+
         // Continuação de reserva pendente (usuário respondeu o nome da meta).
         if (this.#pendingReserva) {
             const r = resolveMeta(this.#active(), text);
@@ -158,6 +170,7 @@ class AssistantEngine {
 
             case 'lancar':
                 if (cmd.categoria === 'saida_credito') return this.#doCredito(cmd);
+                if (cmd.categoria === 'retirada_reserva') return this.#doRetirada(cmd);
                 if (!cmd.categoria || !(cmd.valor > 0)) return { text: P.SISTEMA.semValor() };
                 return this.#doLancamento(cmd);
 
@@ -230,6 +243,45 @@ class AssistantEngine {
             return { text: P.SISTEMA.erro() };
         }
         return { text: P.desfeito() };
+    }
+
+    // ── Retirada de reserva: resolve a meta (ou pergunta) e aplica ──────────────
+    async #doRetirada(cmd) {
+        if (!(cmd.valor > 0)) return { text: P.SISTEMA.semValor() };
+        const profile = this.#active();
+        const profileId = this.#activeId;
+
+        // Sem reserva informada e várias com saldo → pergunta de qual tirar.
+        if (!cmd.metaHint) {
+            const comSaldo = (Array.isArray(profile?.metas) ? profile.metas : []).filter((m) => Number(m.saved || 0) > 0);
+            if (comSaldo.length > 1) {
+                this.#pendingRetirada = { valor: cmd.valor };
+                return { text: P.escolherReservaRetirada(comSaldo.map((m) => String(m.descricao ?? m.nome ?? 'Reserva').trim())) };
+            }
+        }
+
+        const res = applyRetirada(profile, cmd);
+
+        if (!res.ok) {
+            if (res.reason === 'meta') {
+                if (res.metaStatus === 'none') return { text: P.escolherMeta([]) };
+                this.#pendingRetirada = { valor: cmd.valor };
+                return { text: P.escolherReservaRetirada(res.opcoes) };
+            }
+            if (res.reason === 'reserva_vazia') return { text: P.reservaVazia(res.meta) };
+            if (res.reason === 'excede') return { text: P.retiradaExcede(res.meta, res.disponivel) };
+            return { text: P.SISTEMA.semValor() };
+        }
+
+        const saved = await dataManager.saveUserData(this.#profiles);
+        if (!saved) {
+            try { undoLancamento(profile, res.transaction); } catch {}
+            return { text: P.SISTEMA.erro() };
+        }
+        const txSnap = { ...res.transaction };
+        const view = P.confirmacaoRetirada(res);
+        view.undo = () => this.#undoTx(profileId, txSnap); // undoLancamento já reverte a retirada
+        return view;
     }
 
     // ── Crédito: decide o picker ou pede o valor ────────────────────────────────
