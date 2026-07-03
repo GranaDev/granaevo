@@ -83,8 +83,92 @@ async function onSend(text) {
 
 function renderResponse(res) {
     if (!res) return;
+    if (res.creditoCards) { creditoFlow(res.credito, res.creditoCards); return; }
     if (res.chip) UI.addConfirm(res, res.undo);
     else UI.addAssistantMessage(res.text);
+}
+
+// ── Fluxo de compra no crédito: cartão → parcelas → aplica ───────────────────
+async function creditoFlow(credito, cards) {
+    const usaveis = cards.filter((c) => !c.congelado);
+    if (usaveis.length === 0) { UI.addAssistantMessage('Todos os seus cartões estão congelados. Descongele um no menu Cartões. ❄️'); return; }
+
+    const card = await pickCard(usaveis);
+    if (!card) { UI.addAssistantMessage('Ok, cancelei a compra no crédito. 🙂'); return; }
+
+    const parcelas = await pickParcelas();
+    if (!parcelas) { UI.addAssistantMessage('Ok, cancelei a compra no crédito. 🙂'); return; }
+
+    UI.showTyping();
+    let res;
+    try { res = await assistant.applyCredito({ ...credito, cardId: card.id, parcelas }); }
+    catch { res = { text: SISTEMA.erro() }; }
+    UI.hideTyping();
+    renderResponse(res);
+}
+
+function pickCard(cards) {
+    return new Promise((resolve) => {
+        sheet.replaceChildren();
+        sheet.appendChild(el('h2', null, 'Qual cartão?'));
+        const sec = el('div', 'ge-sheet-section');
+        for (const c of cards) {
+            const b = el('button', 'ge-profile-opt');
+            b.appendChild(el('span', null, '💳'));
+            b.appendChild(el('span', null, c.nome));
+            b.addEventListener('click', () => { closeSheet(); resolve(c); });
+            sec.appendChild(b);
+        }
+        sheet.appendChild(sec);
+        const cancel = el('button', 'ge-undo-btn', 'Cancelar');
+        cancel.addEventListener('click', () => { closeSheet(); resolve(null); });
+        sheet.appendChild(cancel);
+        openSheet();
+    });
+}
+
+function pickParcelas() {
+    return new Promise((resolve) => {
+        let limite = 12; // 12 → 24 → 36 → 48 → input livre
+        const render = () => {
+            sheet.replaceChildren();
+            sheet.appendChild(el('h2', null, 'Em quantas vezes?'));
+            const grid = el('div', 'ge-parcelas-grid');
+            for (let i = 1; i <= limite; i++) {
+                const b = el('button', 'ge-parcela-btn', `${i}x`);
+                b.addEventListener('click', () => { closeSheet(); resolve(i); });
+                grid.appendChild(b);
+            }
+            sheet.appendChild(grid);
+
+            if (limite < 48) {
+                const mais = el('button', 'ge-btn-primary', 'Mais opções');
+                mais.addEventListener('click', () => { limite += 12; render(); });
+                sheet.appendChild(mais);
+            } else {
+                const wrap = el('div', 'ge-sheet-section');
+                const input = el('input');
+                input.type = 'number'; input.min = '1'; input.max = '420'; input.inputMode = 'numeric';
+                input.className = 'ge-input'; input.style.textAlign = 'center';
+                input.placeholder = 'Digite o nº de parcelas';
+                wrap.appendChild(input);
+                sheet.appendChild(wrap);
+                const ok = el('button', 'ge-btn-primary', 'Confirmar');
+                ok.addEventListener('click', () => {
+                    const n = parseInt(input.value, 10);
+                    if (Number.isInteger(n) && n >= 1 && n <= 420) { closeSheet(); resolve(n); }
+                    else input.focus();
+                });
+                sheet.appendChild(ok);
+                setTimeout(() => input.focus(), 50);
+            }
+            const cancel = el('button', 'ge-undo-btn', 'Cancelar');
+            cancel.addEventListener('click', () => { closeSheet(); resolve(null); });
+            sheet.appendChild(cancel);
+        };
+        render();
+        openSheet();
+    });
 }
 
 function renderHeaderProfile() {

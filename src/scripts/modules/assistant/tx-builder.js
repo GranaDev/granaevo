@@ -94,6 +94,116 @@ export function applyLancamento(profile, cmd) {
     return { ok: true, transaction: t };
 }
 
+function uuid(prefix) {
+    return (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function somaParcelas(compras) {
+    return (Array.isArray(compras) ? compras : []).reduce((s, c) => {
+        const p = parseFloat(c.valorParcela);
+        return s + (Number.isFinite(p) && p > 0 ? p : 0);
+    }, 0);
+}
+
+/**
+ * Compra no crédito — RÉPLICA FIEL de db-transacoes.js (saida_credito):
+ * cria a `compra`, atribui ao ciclo de fatura correto (fechamentoDia), cria/atualiza
+ * a fatura em contasFixas e incrementa cartao.usado. Reversível via undoCredito.
+ * @returns {{ok:true, compra, valorParcela, parcelas, cardNome, snapshot} | {ok:false, reason}}
+ */
+export function applyCredito(profile, { valor, descricao, tipo, cardId, parcelas }) {
+    if (!profile || typeof profile !== 'object') return { ok: false, reason: 'no_profile' };
+    if (!(valor > 0)) return { ok: false, reason: 'sem_valor' };
+    const p = Number(parcelas);
+    if (!Number.isInteger(p) || p < 1 || p > 420) return { ok: false, reason: 'parcelas' };
+
+    const cards = Array.isArray(profile.cartoesCredito) ? profile.cartoesCredito : [];
+    const cartao = cards.find((c) => String(c.id) === String(cardId));
+    if (!cartao) return { ok: false, reason: 'no_card' };
+    if (cartao.congelado) return { ok: false, reason: 'frozen' };
+    if (!Array.isArray(profile.contasFixas)) profile.contasFixas = [];
+
+    const dh = agoraDataHora();
+    const hoje = new Date();
+    const diaHoje = hoje.getDate();
+    const diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia;
+    const diaFatura = cartao.vencimentoDia;
+
+    let proxMes = hoje.getMonth() + 1;
+    let proxAno = hoje.getFullYear();
+    if (diaHoje >= diaFechamento) { proxMes += 1; if (proxMes > 12) { proxMes = 1; proxAno += 1; } }
+    const dataFaturaISO = `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaFatura).padStart(2, '0')}`;
+
+    const valorParcela = Number((valor / p).toFixed(2));
+    const compra = {
+        id: uuid('compra'),
+        tipo: tipo || 'Cartão',
+        descricao: descricao || 'Compra no crédito',
+        valorTotal: valor,
+        valorParcela,
+        totalParcelas: p,
+        parcelaAtual: 1,
+        dataCompra: dh.data,
+    };
+
+    const fatura = profile.contasFixas.find((c) =>
+        c.cartaoId === cartao.id && c.vencimento === dataFaturaISO && c.tipoContaFixa === 'fatura_cartao');
+
+    let faturaId, wasNew = false;
+    if (fatura) {
+        if (!Array.isArray(fatura.compras)) fatura.compras = [];
+        fatura.compras.push(compra);
+        fatura.valor = somaParcelas(fatura.compras);
+        faturaId = fatura.id;
+    } else {
+        const nova = {
+            id: uuid('fatura'),
+            descricao: `Fatura ${cartao.nomeBanco}`,
+            valor: valorParcela,
+            vencimento: dataFaturaISO,
+            pago: false,
+            cartaoId: cartao.id,
+            tipoContaFixa: 'fatura_cartao',
+            compras: [compra],
+        };
+        profile.contasFixas.push(nova);
+        faturaId = nova.id;
+        wasNew = true;
+    }
+    cartao.usado = (Number(cartao.usado) || 0) + valor;
+
+    return {
+        ok: true, compra, valorParcela, parcelas: p,
+        cardNome: cartao.nomeBanco || cartao.nome || 'Cartão',
+        snapshot: { compraId: compra.id, faturaId, wasNew, cardId: String(cartao.id), valor },
+    };
+}
+
+/** Desfaz uma compra no crédito (à prova de reload — usa ids). */
+export function undoCredito(profile, snap) {
+    if (!profile || !snap) return false;
+    const contas = Array.isArray(profile.contasFixas) ? profile.contasFixas : [];
+    const fatIdx = contas.findIndex((c) => String(c.id) === String(snap.faturaId));
+    if (fatIdx === -1) return false;
+
+    if (snap.wasNew) {
+        contas.splice(fatIdx, 1); // fatura criada por esta compra → some inteira
+    } else {
+        const fat = contas[fatIdx];
+        if (Array.isArray(fat.compras)) {
+            const i = fat.compras.findIndex((c) => c.id === snap.compraId);
+            if (i !== -1) fat.compras.splice(i, 1);
+            fat.valor = somaParcelas(fat.compras);
+        }
+    }
+    const cartao = (Array.isArray(profile.cartoesCredito) ? profile.cartoesCredito : [])
+        .find((c) => String(c.id) === String(snap.cardId));
+    if (cartao) cartao.usado = Math.max(0, (Number(cartao.usado) || 0) - Number(snap.valor || 0));
+    return true;
+}
+
 // Igualdade de transação por campos (à prova de reload — refs mudam no re-parse).
 function sameTx(a, b) {
     return a && b &&

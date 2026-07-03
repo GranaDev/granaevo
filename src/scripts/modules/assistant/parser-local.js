@@ -184,6 +184,15 @@ export function parseLocal(rawText) {
         };
     }
 
+    // 5b) Crédito SEM valor: reconhece pra pedir o valor (sem gastar IA).
+    //     O engine abre o picker de cartão/parcelas depois do valor.
+    if (categoria === 'saida_credito') {
+        return {
+            ...base, intencao: 'lancar', categoria: 'saida_credito', valor: valor || null,
+            descricao: descricao || 'Compra no crédito', tipo: tipo || 'Cartão', confianca: 0.75,
+        };
+    }
+
     // 6) Valor sozinho sem verbo/keyword, ou nada casou → baixa confiança (vai pra IA)
     if (valor) return { ...base, intencao: 'lancar', categoria: 'saida', valor, confianca: 0.4 };
     return base;

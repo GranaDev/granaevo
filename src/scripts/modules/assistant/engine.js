@@ -8,8 +8,9 @@
 
 import { dataManager } from '../data-manager.js';
 import { parseLocal, splitCompound } from './parser-local.js';
+import { parseValorBR } from './money.js';
 import { toCommand } from './normalize.js';
-import { applyLancamento, undoLancamento, resolveMeta } from './tx-builder.js';
+import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito } from './tx-builder.js';
 import { consultarGastos, consultarEntradas, saldoAtual, relatorio, statusReservas, projecaoMeta } from './query.js';
 import { parseWithAI } from './assistant-api.js';
 import * as P from './phrases.js';
@@ -21,6 +22,7 @@ class AssistantEngine {
     #activeId = null;
     #ready = false;
     #pendingReserva = null; // { valor, tipo, descricao } aguardando escolha de meta
+    #pendingCredito = null; // { descricao, tipo } aguardando o valor da compra
 
     get ready() { return this.#ready; }
 
@@ -93,6 +95,17 @@ class AssistantEngine {
         if (!text) return { text: P.SISTEMA.naoEntendi() };
         if (!this.#active()) return { text: 'Selecione um perfil primeiro nas configurações. ⚙️' };
 
+        // Continuação de crédito pendente (usuário respondeu o valor da compra).
+        if (this.#pendingCredito) {
+            const v = parseValorBR(text);
+            if (v) {
+                const pend = this.#pendingCredito;
+                this.#pendingCredito = null;
+                return this.#doCredito({ categoria: 'saida_credito', valor: v, descricao: pend.descricao, tipo: pend.tipo });
+            }
+            this.#pendingCredito = null; // sem valor → mudou de assunto
+        }
+
         // Continuação de reserva pendente (usuário respondeu o nome da meta).
         if (this.#pendingReserva) {
             const r = resolveMeta(this.#active(), text);
@@ -144,6 +157,7 @@ class AssistantEngine {
             case 'ajuda':    return { text: P.SISTEMA.ajuda() };
 
             case 'lancar':
+                if (cmd.categoria === 'saida_credito') return this.#doCredito(cmd);
                 if (!cmd.categoria || !(cmd.valor > 0)) return { text: P.SISTEMA.semValor() };
                 return this.#doLancamento(cmd);
 
@@ -213,6 +227,59 @@ class AssistantEngine {
             await this.#reload();
             return { text: P.SISTEMA.erro() };
         }
+        return { text: P.desfeito() };
+    }
+
+    // ── Crédito: decide o picker ou pede o valor ────────────────────────────────
+    async #doCredito(cmd) {
+        const profile = this.#active();
+        const cards = Array.isArray(profile?.cartoesCredito) ? profile.cartoesCredito : [];
+        if (cards.length === 0) return { text: P.semCartao() };
+
+        if (!(cmd.valor > 0)) {
+            this.#pendingCredito = { descricao: cmd.descricao, tipo: cmd.tipo };
+            return { text: P.creditoQuantoFoi() };
+        }
+
+        // Sinaliza à UI pra abrir o picker de cartão + parcelas.
+        return {
+            creditoCards: cards.map((c) => ({
+                id: String(c.id),
+                nome: c.nomeBanco || c.nome || 'Cartão',
+                congelado: !!c.congelado,
+            })),
+            credito: { valor: cmd.valor, descricao: cmd.descricao, tipo: cmd.tipo },
+        };
+    }
+
+    // Chamado pela UI depois que o usuário escolheu cartão + parcelas.
+    async applyCredito({ valor, descricao, tipo, cardId, parcelas }) {
+        const profile = this.#active();
+        const profileId = this.#activeId;
+        const res = applyCredito(profile, { valor, descricao, tipo, cardId, parcelas });
+        if (!res.ok) {
+            if (res.reason === 'frozen') return { text: P.cartaoCongelado() };
+            if (res.reason === 'no_card') return { text: 'Não achei esse cartão. 🤔' };
+            return { text: P.SISTEMA.erro() };
+        }
+        const saved = await dataManager.saveUserData(this.#profiles);
+        if (!saved) {
+            try { undoCredito(profile, res.snapshot); } catch {}
+            return { text: P.SISTEMA.erro() };
+        }
+        const snap = res.snapshot;
+        const view = P.confirmacaoCredito(res);
+        view.undo = () => this.#undoCredito(profileId, snap);
+        return view;
+    }
+
+    async #undoCredito(profileId, snap) {
+        const profile = this.#profiles.find((p) => String(p.id) === String(profileId));
+        if (!profile) return { text: 'Não encontrei mais essa compra (dados já atualizados). 🙂' };
+        const removed = undoCredito(profile, snap);
+        if (!removed) return { text: 'Essa compra já não está mais aqui. 👍' };
+        const saved = await dataManager.saveUserData(this.#profiles);
+        if (!saved) { await this.#reload(); return { text: P.SISTEMA.erro() }; }
         return { text: P.desfeito() };
     }
 }

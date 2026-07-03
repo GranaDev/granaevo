@@ -80,6 +80,29 @@ export function desfeito() {
     return pick(['Prontinho, desfiz. 👌', 'Removido — como se nada tivesse acontecido.', 'Desfeito! Teu histórico voltou ao normal.']);
 }
 
+// ── Crédito (compra parcelada com picker de cartão + parcelas) ────────────────
+export function confirmacaoCredito(res) {
+    const parc = res.parcelas > 1
+        ? `${res.parcelas}x de ${formatBRL(res.valorParcela)}`
+        : 'à vista';
+    return {
+        text: `${pick(['✓ Anotei', '✓ Registrado', '✓ Lançado'])} · ${formatBRL(res.compra.valorTotal)} · 💳 ${res.cardNome} · ${parc}`,
+        chip: { categoria: 'saida_credito', undoLabel: 'Desfazer' },
+    };
+}
+export function creditoQuantoFoi() {
+    return pick(['Beleza, compra no crédito! Quanto foi? 💳', 'No crédito 👍 Qual foi o valor da compra?']);
+}
+export function semCartao() {
+    return 'Você ainda não tem um cartão cadastrado. Crie um no menu **Cartões** do GranaEvo que aí eu registro suas compras no crédito. 💳';
+}
+export function todosCongelados() {
+    return 'Todos os seus cartões estão congelados. Descongele um no menu **Cartões** pra usar. ❄️';
+}
+export function cartaoCongelado() {
+    return 'Esse cartão está congelado. Descongele no menu **Cartões** pra usá-lo. ❄️';
+}
+
 // ── Escolha de meta (reserva ambígua) ────────────────────────────────────────
 export function escolherMeta(opcoes = []) {
     if (!opcoes.length) {
@@ -163,13 +186,11 @@ export function renderProjecao(p) {
 
 // ── Handoff (categorias que mexem em meta/cartão — fase 2) ─────────────────────
 export function renderHandoff(categoria) {
-    if (categoria === 'saida_credito')
-        return 'Compra no crédito envolve escolher o cartão e as parcelas — vou te levar pra tela de Cartões pra confirmar direitinho. 💳';
     if (categoria === 'assinatura')
-        return 'Assinatura recorrente precisa do cartão e do dia de cobrança — abre a tela de Cartões que a gente configura. 🔁';
+        return 'Pra assinatura recorrente, cria no menu **Cartões** (precisa do cartão e do dia). 🔁';
     if (categoria === 'retirada_reserva')
-        return 'Retirada de reserva é melhor confirmar na tela de Reservas pra não bagunçar o acompanhamento. Te levo lá. 🐷';
-    return 'Esse tipo de lançamento é melhor confirmar na tela específica. 🙂';
+        return 'Retirada de reserva é melhor fazer no menu **Reservas**. 🐷';
+    return 'Isso é melhor confirmar na tela específica. 🙂';
 }
 
 // ── Segurança / mensagens de sistema ───────────────────────────────────────────

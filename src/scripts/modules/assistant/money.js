@@ -6,18 +6,7 @@
  * Suporta: "R$ 1.234,56", "1234,56", "40", "40 pila/conto/reais", "1,5k", "2k".
  * @returns {number|null} valor positivo em reais, ou null se não achar.
  */
-export function parseValorBR(text) {
-    if (typeof text !== 'string') return null;
-    const s = text.toLowerCase();
-
-    // Token numérico (com separadores) opcionalmente seguido de "k"/"mil".
-    // Ex.: 1.234,56 | 1234,56 | 1.500 | 40 | 1,5k | 2 mil
-    const m = s.match(/(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(k\b|mil\b)?/);
-    if (!m) return null;
-
-    let raw = m[1];
-    const suffix = m[2];
-
+function _parseNum(raw, suffix) {
     let num;
     if (raw.includes('.') && raw.includes(',')) {
         // 1.234,56 → ponto=milhar, vírgula=decimal
@@ -31,12 +20,36 @@ export function parseValorBR(text) {
     } else {
         num = parseFloat(raw);
     }
-
     if (!Number.isFinite(num)) return null;
     if (suffix) num *= 1000; // "1,5k" / "2 mil"
-
     num = Math.round(num * 100) / 100;
     return num > 0 ? num : null;
+}
+
+export function parseValorBR(text) {
+    if (typeof text !== 'string') return null;
+    const s = text.toLowerCase();
+
+    // Token numérico (com separadores) opcionalmente seguido de "k"/"mil".
+    // Ex.: 1.234,56 | 1234,56 | 1.500 | 40 | 1,5k | 2 mil
+    const re = /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(k\b|mil\b)?/g;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+        // Ignora número de PARCELAS ("3x", "em 1x") — não é valor monetário.
+        if (!m[2] && s[re.lastIndex] === 'x') continue;
+        const num = _parseNum(m[1], m[2]);
+        if (num !== null) return num; // primeiro token monetário válido
+    }
+    return null;
+}
+
+/** Extrai o nº de parcelas de "em Nx" / "Nx" (1..420), senão null. */
+export function parseParcelas(text) {
+    if (typeof text !== 'string') return null;
+    const m = text.toLowerCase().match(/\b(\d{1,3})\s*x\b/);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return n >= 1 && n <= 420 ? n : null;
 }
 
 /** Formata número como moeda BRL. */
