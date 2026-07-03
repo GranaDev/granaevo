@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { dataManager } from '../data-manager.js';
-import { parseLocal, splitCompound } from './parser-local.js';
+import { parseLocal, splitCompound, parseFollowup } from './parser-local.js';
 import { parseValorBR } from './money.js';
 import { toCommand } from './normalize.js';
 import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito, applyRetirada } from './tx-builder.js';
@@ -24,6 +24,8 @@ class AssistantEngine {
     #pendingReserva = null; // { valor, tipo, descricao } aguardando escolha de meta
     #pendingRetirada = null; // { valor } aguardando de qual reserva retirar
     #pendingCredito = null; // { descricao, tipo } aguardando o valor da compra
+    #lastUndo = null;       // fn de desfazer do último lançamento (desfazer por texto)
+    #lastQuery = null;      // { consultaAlvo, palavrasChave, periodo } p/ follow-up
 
     get ready() { return this.#ready; }
 
@@ -130,6 +132,20 @@ class AssistantEngine {
             this.#pendingReserva = null;
         }
 
+        // Follow-up de consulta ("e no mês passado?", "e transporte?") — reusa
+        // o contexto da última consulta, trocando só período/termo.
+        if (this.#lastQuery) {
+            const fu = parseFollowup(text);
+            if (fu.isFollowup) {
+                return this.#route({
+                    intent: 'consultar',
+                    consultaAlvo: this.#lastQuery.consultaAlvo,
+                    palavrasChave: fu.palavrasChave.length ? fu.palavrasChave : this.#lastQuery.palavrasChave,
+                    periodo: fu.periodo || this.#lastQuery.periodo,
+                });
+            }
+        }
+
         // Mensagem composta: "gastei 300 no mercado, mas ganhei 120 do pai" →
         // processa cada cláusula e devolve múltiplas respostas (chips).
         const segments = splitCompound(text);
@@ -167,6 +183,7 @@ class AssistantEngine {
         switch (cmd.intent) {
             case 'saudacao': return { text: P.SISTEMA.saudacao() };
             case 'ajuda':    return { text: P.SISTEMA.ajuda() };
+            case 'desfazer': return this.#desfazerUltimo();
 
             case 'lancar':
                 if (cmd.categoria === 'saida_credito') return this.#doCredito(cmd);
@@ -176,6 +193,7 @@ class AssistantEngine {
 
             case 'consultar': {
                 const p = this.#active();
+                this.#lastQuery = { consultaAlvo: cmd.consultaAlvo, palavrasChave: cmd.palavrasChave || [], periodo: cmd.periodo || 'mes' };
                 if (cmd.consultaAlvo === 'saldo')       return { text: P.renderSaldo(saldoAtual(p)) };
                 if (cmd.consultaAlvo === 'maior_gasto') return { text: P.renderMaiorGasto(maioresGastos(p, cmd.periodo || 'mes')) };
                 if (cmd.consultaAlvo === 'listar')      return { text: P.renderUltimas(ultimasTransacoes(p)) };
@@ -230,7 +248,16 @@ class AssistantEngine {
         const txSnap = { ...res.transaction };
         const view = P.confirmacaoLancamento(res);
         view.undo = () => this.#undoTx(profileId, txSnap);
+        this.#lastUndo = view.undo;
         return view;
+    }
+
+    // ── Desfazer por texto ("apaga o último", "errei") ─────────────────────────
+    async #desfazerUltimo() {
+        if (!this.#lastUndo) return { text: 'Não há nada pra desfazer agora.' };
+        const fn = this.#lastUndo;
+        this.#lastUndo = null;
+        try { return await fn(); } catch { return { text: P.SISTEMA.erro() }; }
     }
 
     // ── Desfazer um lançamento específico ───────────────────────────────────────
@@ -284,7 +311,8 @@ class AssistantEngine {
         }
         const txSnap = { ...res.transaction };
         const view = P.confirmacaoRetirada(res);
-        view.undo = () => this.#undoTx(profileId, txSnap); // undoLancamento já reverte a retirada
+        view.undo = () => this.#undoTx(profileId, txSnap);
+        this.#lastUndo = view.undo; // undoLancamento já reverte a retirada
         return view;
     }
 
@@ -329,6 +357,7 @@ class AssistantEngine {
         const snap = res.snapshot;
         const view = P.confirmacaoCredito(res);
         view.undo = () => this.#undoCredito(profileId, snap);
+        this.#lastUndo = view.undo;
         return view;
     }
 

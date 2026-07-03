@@ -71,9 +71,11 @@ const RE_COMPARAR  = /\b(comparad|comparacao|gastei (muito )?mais que|gastei (mu
 const RE_MEDIA     = /\b(media de gasto|gasto medio|em media (eu )?gast|quanto (eu )?gasto por mes|por mes em media|minha media)/;
 const RE_FATURA    = /\b(minha fatura|ver (a )?fatura|fatura (do|da|em aberto|atual|deste mes|desse mes)|quanto (eu )?(vou|tenho que|preciso) pagar (de|da|do)? ?(fatura|cartao)|como (esta|ta) (a |minha )?fatura)/;
 const RE_FALTA     = /\b(quanto (ainda )?falta|falta quanto|quanto (eu )?preciso (guardar|juntar)) (pra|para|pro)/;
+// Desfazer por texto
+const RE_DESFAZER  = /\b(desfaz|desfazer|desfa[cç]a|apaga(r)? (o |a )?ultim|cancela(r)? (isso|o ultimo|a ultima|essa|esse)|errei|foi errado|nao (era|foi) isso|remove(r)? (o )?ultim|apaga isso|cancela isso|volta atras)/;
 
 // ── Período ──────────────────────────────────────────────────────────────────
-function detectPeriodo(t) {
+export function detectPeriodo(t) {
     if (/\bhoje\b/.test(t)) return 'hoje';
     if (/\b(essa|esta) semana\b/.test(t)) return 'semana';
     if (/\bmes passado\b/.test(t)) return 'mes_passado';
@@ -113,8 +115,24 @@ export function splitCompound(rawText) {
     return comValor.length >= 2 ? comValor : [text];
 }
 
+// Detecta uma pergunta de follow-up ("e no mês passado?", "e transporte?").
+// Só conta como follow-up se for um MODIFICADOR curto (período/termo) e NÃO
+// contiver por si só um gatilho de intenção (aí é uma pergunta nova).
+export function parseFollowup(rawText) {
+    const t = norm(rawText);
+    const temIntent = /\b(quanto|qual|quais|onde|gastei|paguei|comprei|recebi|ganhei|guardei|tirei|saquei|assinei|graficos|fatura|media|saldo|relatorio|resumo|reserva|meta)\b/.test(t);
+    if (temIntent) return { isFollowup: false };
+    const per = detectPeriodo(t);
+    const kws = extractPalavrasChave(t);
+    const startsE = /^(e|entao|agora)\b/.test(t);
+    const nWords = t.split(/\s+/).length;
+    const curto = t.length <= 28 && nWords <= 5;
+    const isFollowup = curto && (!!per || kws.length > 0) && (startsE || nWords <= 3);
+    return { isFollowup, periodo: per, palavrasChave: kws };
+}
+
 // Palavras-chave para consultas (casa contra descrição/tipo/categoria depois).
-function extractPalavrasChave(t) {
+export function extractPalavrasChave(t) {
     const out = [];
     for (const [re, , tipo] of KEYWORDS) {
         if (re.test(t)) out.push(tipo.toLowerCase());
@@ -152,9 +170,10 @@ export function parseLocal(rawText) {
     };
     if (!text) return base;
 
-    // 1) Saudação / ajuda (curtas, alta confiança)
+    // 1) Saudação / ajuda / desfazer (curtas, alta confiança)
     if (RE_SAUDACAO.test(text) && text.length <= 25) return { ...base, intencao: 'saudacao', confianca: 0.97 };
     if (RE_AJUDA.test(text)) return { ...base, intencao: 'ajuda', confianca: 0.9 };
+    if (RE_DESFAZER.test(text)) return { ...base, intencao: 'desfazer', confianca: 0.9 };
 
     // 2) Projeção de meta ("se eu guardar X por mês…")
     if (RE_PROJECAO.test(text)) {

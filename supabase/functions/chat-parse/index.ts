@@ -72,8 +72,8 @@ const PARSE_TOOL = {
     properties: {
       intencao: {
         type: 'string',
-        enum: ['lancar', 'consultar', 'relatorio', 'projecao_meta', 'saudacao', 'ajuda', 'desconhecido'],
-        description: 'O que o usuário quer fazer.',
+        enum: ['lancar', 'consultar', 'relatorio', 'projecao_meta', 'saudacao', 'ajuda', 'desfazer', 'desconhecido'],
+        description: 'O que o usuário quer fazer. desfazer = "apaga o último", "cancela isso", "errei".',
       },
       categoria: {
         anyOf: [
