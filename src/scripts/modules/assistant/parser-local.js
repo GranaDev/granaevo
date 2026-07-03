@@ -1,0 +1,190 @@
+// parser-local.js — parser determinístico (regex + palavras-chave)
+// ---------------------------------------------------------------------------
+// PRIMEIRA camada do funil. Resolve a maioria das mensagens SEM gastar token de
+// IA. Devolve um objeto com a MESMA forma do parse da IA (+ `source:'local'` e
+// `confianca`). Se a confiança for baixa, o engine cai para a IA como fallback.
+// Não grava nada; não vê nada além do texto.
+// ---------------------------------------------------------------------------
+
+import { parseValorBR } from './money.js';
+
+// Tipos permitidos no app (espelham db-transacoes.js).
+export const TIPOS_SAIDA = ['Mercado', 'Farmácia', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza',
+    'Presente', 'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Shopee', 'Mercado Livre',
+    'Ifood', 'Amazon', 'Outros'];
+export const TIPOS_ENTRADA = ['Salário', 'Renda Extra', 'Outros Recebimentos'];
+
+// Normaliza: minúsculas, sem acento — para casar palavras-chave de forma robusta.
+function norm(s) {
+    return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// ── Verbos → categoria (ordem importa: específicos antes de genéricos) ───────
+const VERBOS = [
+    { cat: 'retirada_reserva', re: /\b(tirei|resgatei|retirei|saquei|resgate|retirada)\b.*\breserv/ },
+    { cat: 'retirada_reserva', re: /\bda reserva\b.*\b(tirei|resgatei|retirei|saquei)/ },
+    { cat: 'reserva',          re: /\b(guardei|reservei|poupei|juntei|separei|aportei|guardar|poupar|reservar)\b/ },
+    { cat: 'assinatura',       re: /\b(assinatura|assinei|mensalidade|plano mensal)\b/ },
+    { cat: 'saida_credito',    re: /\b(no credito|no cartao|parcelad|parcelei|em \d+x|\d+x de)\b/ },
+    { cat: 'entrada',          re: /\b(recebi|ganhei|caiu|entrou|recebimento|salario|me pagaram|pagaram|ganho|recebe?r|pix de|deposit)\b/ },
+    { cat: 'saida',            re: /\b(gastei|paguei|comprei|gasto|saiu|torrei|gastar|comprar|pagar|paguei|debit)\b/ },
+];
+
+// ── Palavras-chave → {categoria, tipo} ──────────────────────────────────────
+// Curado para o dia-a-dia BR. Mapeia sempre para um tipo PERMITIDO.
+const KEYWORDS = [
+    // Saída
+    [/\b(mercado livre|meli)\b/, 'saida', 'Mercado Livre'],
+    [/\b(supermercado|mercado|atacad|carrefour|hortifruti|sacolao|feira|assai|makro)\b/, 'saida', 'Mercado'],
+    [/\b(farmacia|remedio|drogaria|drogasil|pacheco)\b/, 'saida', 'Farmácia'],
+    [/\b(uber|99|onibus|metro|gasolina|combustivel|transporte|passagem|corrida|bilhete)\b/, 'saida', 'Transporte'],
+    [/\b(ifood|delivery)\b/, 'saida', 'Ifood'],
+    [/\b(shopee)\b/, 'saida', 'Shopee'],
+    [/\b(amazon)\b/, 'saida', 'Amazon'],
+    [/\b(academia|gym|crossfit|personal)\b/, 'saida', 'Academia'],
+    [/\b(cinema|show|bar|balada|lazer|passeio|viagem|netflix|spotify|jogo|game)\b/, 'saida', 'Lazer'],
+    [/\b(roupa|calca|camisa|tenis|sapato|vestido|zara|renner|riachuelo)\b/, 'saida', 'Roupas'],
+    [/\b(celular|notebook|eletronico|fone|tv|monitor|carregador)\b/, 'saida', 'Eletrônico'],
+    [/\b(salao|cabelo|beleza|manicure|barbearia|maquiagem)\b/, 'saida', 'Beleza'],
+    [/\b(presente|gift)\b/, 'saida', 'Presente'],
+    [/\b(luz|agua|energia|internet|aluguel|condominio|conta de|fatura|boleto)\b/, 'saida', 'Conta fixa'],
+    // Entrada
+    [/\b(salario|salário)\b/, 'entrada', 'Salário'],
+    [/\b(freela|bico|extra|renda extra|venda|comissao)\b/, 'entrada', 'Renda Extra'],
+];
+
+// ── Saudações / ajuda / consulta / relatório ─────────────────────────────────
+const RE_SAUDACAO  = /^(oi|ola|ol[aá]|e ?a[ií]|opa|bom dia|boa tarde|boa noite|salve|hey|help)\b/;
+const RE_AJUDA     = /\b(ajuda|como funciona|o que voce faz|o que vc faz|comandos|me ajuda|nao sei usar)\b/;
+const RE_RELATORIO = /\b(relatorio|relatório|resumo|balanco|balanço|extrato|fechamento do mes)\b/;
+const RE_CONSULTA  = /\b(quanto|quantos|qual|quais|total de|gastei com|tenho|meu saldo|minhas reservas|como (esta|estao|está|estão))\b/;
+const RE_PROJECAO  = /\b(quanto tempo|em quanto tempo|se eu (investir|guardar|aportar)|vou levar|leva pra)\b/;
+
+// ── Período ──────────────────────────────────────────────────────────────────
+function detectPeriodo(t) {
+    if (/\bhoje\b/.test(t)) return 'hoje';
+    if (/\b(essa|esta) semana\b/.test(t)) return 'semana';
+    if (/\bmes passado\b/.test(t)) return 'mes_passado';
+    if (/\b(esse|este) ano|no ano\b/.test(t)) return 'ano';
+    if (/\b(tudo|geral|total|sempre|desde o inicio)\b/.test(t)) return 'tudo';
+    if (/\b(esse|este) mes|no mes|do mes\b/.test(t)) return 'mes';
+    return null; // engine assume 'mes' por padrão em consultas
+}
+
+// Alvo da consulta: saldo, entradas, reservas ou gastos.
+function detectConsultaAlvo(t) {
+    if (/\bsaldo\b/.test(t)) return 'saldo';
+    if (/\breserv/.test(t)) return 'reserva';
+    if (/\b(ganhei|recebi|recebo|entrou|entrada|entradas|salario|renda|faturei|fatur)\b/.test(t)) return 'entrada';
+    return 'gasto';
+}
+
+// Verbos de lançamento — usados para dividir mensagens compostas.
+const RE_VERBO_LANC = /\b(gastei|paguei|comprei|gasto|torrei|recebi|ganhei|caiu|entrou|guardei|reservei|poupei|juntei|separei|aportei|tirei|resgatei|saquei|assinei)\b/;
+
+/**
+ * Divide uma mensagem composta em cláusulas independentes de lançamento.
+ * Só divide quando há ≥2 segmentos que CONTÊM valor — evita quebrar
+ * "mercado e farmácia" (2º sem valor) mas quebra "gastei 300 no mercado,
+ * mas ganhei 120 do pai". Conservador por design.
+ * @returns {string[]} segmentos (ou [texto] se não for composto).
+ */
+export function splitCompound(rawText) {
+    const text = String(rawText ?? '');
+    // Separa por: vírgula, ponto-e-vírgula, "mas/porém/também", e " e " SÓ quando
+    // seguido de um verbo de lançamento (não quebra "pão e leite").
+    const parts = text.split(/\s*,\s*|\s*;\s*|\s+mas\s+|\s+por[ée]m\s+|\s+tamb[ée]m\s+|\s+e\s+(?=(?:gastei|paguei|comprei|recebi|ganhei|caiu|entrou|guardei|reservei|poupei|juntei|separei|tirei|resgatei|saquei|assinei)\b)/i);
+    const comValor = parts.map((s) => s.trim()).filter((s) => s && parseValorBR(s) !== null);
+    return comValor.length >= 2 ? comValor : [text];
+}
+
+// Palavras-chave para consultas (casa contra descrição/tipo/categoria depois).
+function extractPalavrasChave(t) {
+    const out = [];
+    for (const [re, , tipo] of KEYWORDS) {
+        if (re.test(t)) out.push(tipo.toLowerCase());
+    }
+    // Termos soltos úteis
+    for (const w of ['mercado', 'transporte', 'uber', 'ifood', 'lazer', 'farmacia', 'salario', 'reserva']) {
+        if (t.includes(w) && !out.includes(w)) out.push(w);
+    }
+    return [...new Set(out)].slice(0, 6);
+}
+
+/**
+ * Parser local. Sempre retorna um objeto (nunca lança).
+ * confianca alta (≥0.7) → engine confia; baixa → engine chama a IA.
+ */
+export function parseLocal(rawText) {
+    const text = norm(rawText);
+    const base = {
+        intencao: 'desconhecido', categoria: null, valor: null, tipo: null, descricao: null,
+        meta_hint: null, parcelas: null, cartao_hint: null, aporte_mensal: null,
+        periodo: null, palavras_chave: [], consulta_alvo: null, confianca: 0, source: 'local',
+    };
+    if (!text) return base;
+
+    // 1) Saudação / ajuda (curtas, alta confiança)
+    if (RE_SAUDACAO.test(text) && text.length <= 25) return { ...base, intencao: 'saudacao', confianca: 0.97 };
+    if (RE_AJUDA.test(text)) return { ...base, intencao: 'ajuda', confianca: 0.9 };
+
+    // 2) Projeção de meta ("se eu guardar X por mês…")
+    if (RE_PROJECAO.test(text)) {
+        return { ...base, intencao: 'projecao_meta', aporte_mensal: parseValorBR(text), palavras_chave: extractPalavrasChave(text), confianca: 0.6 };
+    }
+
+    // 3) Relatório
+    if (RE_RELATORIO.test(text)) {
+        return { ...base, intencao: 'relatorio', periodo: detectPeriodo(text) || 'mes', confianca: 0.85 };
+    }
+
+    const valor = parseValorBR(text);
+
+    // 4) Consulta ("quanto gastei com mercado?") — sem intenção clara de lançar
+    if (RE_CONSULTA.test(text) && !/\b(gastei|paguei|comprei)\b\s*(r\$\s*)?\d/.test(text)) {
+        return {
+            ...base, intencao: 'consultar',
+            periodo: detectPeriodo(text) || 'mes',
+            palavras_chave: extractPalavrasChave(text),
+            consulta_alvo: detectConsultaAlvo(text),
+            confianca: 0.8,
+        };
+    }
+
+    // 5) Lançamento — precisa de categoria (verbo) para ser confiável
+    let categoria = null;
+    for (const v of VERBOS) { if (v.re.test(text)) { categoria = v.cat; break; } }
+
+    // Sem verbo mas com valor e palavra-chave forte → assume saída (comportamento do app)
+    let tipo = null, descricao = null;
+    for (const [re, cat, tp] of KEYWORDS) {
+        if (re.test(text)) { tipo = tp; if (!categoria) categoria = cat; descricao = tp; break; }
+    }
+
+    if (categoria && valor) {
+        // Categorias que mexem em meta/cartão → engine faz handoff seguro (fase 2).
+        // Aqui só reportamos o parse; o engine decide o roteamento.
+        let conf = 0.7;
+        if (tipo) conf = 0.9;
+        // tipo padrão coerente por categoria
+        if (!tipo) {
+            if (categoria === 'entrada') { tipo = 'Outros Recebimentos'; descricao = descricao || 'Recebimento'; }
+            else if (categoria === 'saida') { tipo = 'Outros'; descricao = descricao || 'Gasto'; }
+        }
+        // meta_hint: texto após "reserva do/da/para"
+        let metaHint = null;
+        const mm = text.match(/reserva (?:d[aeo]|para|pro|pra) ([\p{L}\s]{2,30})/u);
+        if (mm) metaHint = mm[1].trim();
+
+        return {
+            ...base, intencao: 'lancar', categoria, valor, tipo,
+            descricao: descricao || (tipo ?? null),
+            meta_hint: metaHint, periodo: null,
+            palavras_chave: [], confianca: conf,
+        };
+    }
+
+    // 6) Valor sozinho sem verbo/keyword, ou nada casou → baixa confiança (vai pra IA)
+    if (valor) return { ...base, intencao: 'lancar', categoria: 'saida', valor, confianca: 0.4 };
+    return base;
+}

@@ -18,6 +18,7 @@
     { "source": "/planos",            "destination": "/planos.html"         },
     { "source": "/login",             "destination": "/login.html"          },
     { "source": "/dashboard",         "destination": "/dashboard.html"      },
+    { "source": "/assistente",        "destination": "/assistente.html"     },
     { "source": "/termos",            "destination": "/termos.html"         },
     { "source": "/privacidade",       "destination": "/privacidade.html"    },
     { "source": "/atualizarplano",    "destination": "/atualizarplano.html" },
@@ -118,6 +119,18 @@
         {
           "key": "Link",
           "value": "<https://fvrhqqeofqedmhadzzqw.supabase.co>; rel=preconnect; crossorigin"
+        }
+      ]
+    },
+
+    {
+      "source": "/assistente",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, private" },
+        { "key": "Pragma",        "value": "no-cache"                                      },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'self'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },

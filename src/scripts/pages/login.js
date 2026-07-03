@@ -642,6 +642,7 @@ const NEXT_WHITELIST = new Set([
     '/planos.html', '/planos',
     '/dashboard.html', '/dashboard',
     '/atualizarplano.html', '/atualizarplano',
+    '/assistente.html', '/assistente',
 ]);
 
 function getNextRedirect() {

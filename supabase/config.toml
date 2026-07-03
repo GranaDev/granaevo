@@ -390,6 +390,10 @@ verify_jwt = false
 [functions.cron-health-alert]
 verify_jwt = false
 
+# Assistente GranaEvo: verifica ES256 via getUser internamente (como save/get).
+[functions.chat-parse]
+verify_jwt = false
+
 # Funções com JWT obrigatório (usuário autenticado) — HS256 compatível
 [functions.send-guest-invite]
 verify_jwt = true

@@ -1,0 +1,268 @@
+// assistente.js — boot da PWA "Assistente GranaEvo"
+// ---------------------------------------------------------------------------
+// Porta de auth (sessão longa, sem re-login) → trava opt-in (PIN/biometria) →
+// init do engine → seleção de perfil (só 1x) → chat. Toda a lógica vive nos
+// módulos assistant/*; aqui é só orquestração de UI e sessão.
+// ---------------------------------------------------------------------------
+
+import { supabaseReady, getValidAccessToken, logout } from '../services/supabase-client.js?v=2';
+import { assistant } from '../modules/assistant/engine.js';
+import * as UI from '../modules/assistant/ui.js';
+import * as Lock from '../modules/assistant/session-lock.js';
+import { SISTEMA } from '../modules/assistant/phrases.js';
+
+const el = (tag, cls, txt) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (txt != null) e.textContent = txt;
+    return e;
+};
+
+// userId (não-autoritativo) só para chavear a trava local — decodifica o sub do JWT.
+function userIdFromToken(token) {
+    try {
+        const p = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return typeof p?.sub === 'string' ? p.sub : 'anon';
+    } catch { return 'anon'; }
+}
+
+const overlay = document.getElementById('geOverlay');
+const sheet   = document.getElementById('geSheet');
+function openSheet() { overlay.hidden = false; }
+function closeSheet() { overlay.hidden = true; sheet.replaceChildren(); }
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSheet(); });
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+(async function boot() {
+    await supabaseReady;
+    const token = await getValidAccessToken();
+    if (!token) { location.replace('/login?next=/assistente'); return; }
+    const userId = userIdFromToken(token);
+
+    // 1) Trava opt-in
+    if (Lock.isEnabled(userId)) {
+        const ok = await showLockScreen(userId);
+        if (!ok) return; // ficou travado
+    }
+
+    // 2) Engine
+    let state;
+    try { state = await assistant.init(); }
+    catch { UI.mountUI(); UI.addAssistantMessage(SISTEMA.erro()); return; }
+
+    UI.mountUI();
+
+    // 3) Seleção de perfil só na 1ª vez (mais de 1 perfil e sem escolha salva)
+    const savedKey = `ge_assistant_profile_${userId}`;
+    const jaEscolheu = (() => { try { return !!localStorage.getItem(savedKey); } catch { return false; } })();
+    if (state.profiles.length > 1 && !jaEscolheu) {
+        await pickProfile(state.profiles);
+    }
+    renderHeaderProfile();
+
+    // 4) Saudação + wiring
+    UI.addAssistantMessage(SISTEMA.saudacao());
+    UI.wireInput(onSend);
+
+    document.getElementById('geSettings').addEventListener('click', () => openSettings(userId));
+    setupInstallCTA();
+})();
+
+async function onSend(text) {
+    UI.addUserMessage(text);
+    UI.showTyping();
+    let res;
+    try { res = await assistant.handle(text); }
+    catch { res = { text: SISTEMA.erro() }; }
+    UI.hideTyping();
+    if (res && Array.isArray(res.multi)) res.multi.forEach(renderResponse);
+    else renderResponse(res);
+}
+
+function renderResponse(res) {
+    if (!res) return;
+    if (res.chip) UI.addConfirm(res, res.undo);
+    else UI.addAssistantMessage(res.text);
+}
+
+function renderHeaderProfile() {
+    const p = assistant.listProfiles().find((x) => x.id === assistant.activeProfileId);
+    const elp = document.getElementById('geHeaderProfile');
+    if (elp) elp.textContent = p ? p.name : '';
+}
+
+// ── Seleção de perfil (overlay bloqueante) ───────────────────────────────────
+function pickProfile(profiles) {
+    return new Promise((resolve) => {
+        sheet.replaceChildren();
+        sheet.appendChild(el('h2', null, 'Qual perfil?'));
+        sheet.appendChild(el('p', 'ge-muted', 'O assistente vai anotar tudo neste perfil. Dá pra trocar depois nas configurações.'));
+        const sec = el('div', 'ge-sheet-section');
+        for (const p of profiles) {
+            const b = el('button', 'ge-profile-opt');
+            b.appendChild(el('span', null, '👤'));
+            b.appendChild(el('span', null, p.name));
+            b.addEventListener('click', () => { assistant.setActiveProfile(p.id); closeSheet(); resolve(); });
+            sec.appendChild(b);
+        }
+        sheet.appendChild(sec);
+        openSheet();
+    });
+}
+
+// ── Configurações ────────────────────────────────────────────────────────────
+function openSettings(userId) {
+    sheet.replaceChildren();
+    sheet.appendChild(el('h2', null, 'Configurações'));
+
+    // Perfil ativo
+    const profiles = assistant.listProfiles();
+    if (profiles.length > 1) {
+        const sec = el('div', 'ge-sheet-section');
+        sec.appendChild(el('label', null, 'Perfil ativo'));
+        for (const p of profiles) {
+            const b = el('button', 'ge-profile-opt' + (p.id === assistant.activeProfileId ? ' active' : ''));
+            b.appendChild(el('span', null, '👤'));
+            b.appendChild(el('span', null, p.name));
+            b.addEventListener('click', () => {
+                assistant.setActiveProfile(p.id);
+                renderHeaderProfile();
+                closeSheet();
+                UI.addAssistantMessage(`Pronto! Agora anotando em *${p.name}*. 👍`);
+            });
+            sec.appendChild(b);
+        }
+        sheet.appendChild(sec);
+    }
+
+    // Segurança — trava opt-in
+    const secLock = el('div', 'ge-sheet-section');
+    secLock.appendChild(el('label', null, 'Segurança'));
+    const row = el('div', 'ge-toggle-row');
+    const enabled = Lock.isEnabled(userId);
+    row.appendChild(el('span', null, enabled ? `Trava ativa (${Lock.getMode(userId) === 'pin' ? 'PIN' : 'biometria'})` : 'Pedir PIN/biometria ao abrir'));
+    const toggle = el('button', 'ge-undo-btn', enabled ? 'Desativar' : 'Ativar');
+    toggle.addEventListener('click', () => {
+        if (enabled) { Lock.disableLock(userId); openSettings(userId); }
+        else setupLockFlow(userId);
+    });
+    row.appendChild(toggle);
+    secLock.appendChild(row);
+    sheet.appendChild(secLock);
+
+    // Logout
+    const secOut = el('div', 'ge-sheet-section');
+    const out = el('button', 'ge-btn-danger', 'Sair da conta');
+    out.addEventListener('click', async () => { await logout().catch(() => {}); location.replace('/login'); });
+    secOut.appendChild(out);
+    sheet.appendChild(secOut);
+
+    openSheet();
+}
+
+// ── Fluxo de ativação da trava ────────────────────────────────────────────────
+function setupLockFlow(userId) {
+    sheet.replaceChildren();
+    sheet.appendChild(el('h2', null, 'Proteger o assistente'));
+    sheet.appendChild(el('p', 'ge-muted', 'Escolha como destravar ao abrir. Isso não muda seu login — é só uma camada extra neste aparelho.'));
+    const sec = el('div', 'ge-sheet-section');
+
+    const pinBtn = el('button', 'ge-profile-opt');
+    pinBtn.appendChild(el('span', null, '🔢'));
+    pinBtn.appendChild(el('span', null, 'Usar um PIN'));
+    pinBtn.addEventListener('click', () => setupPINFlow(userId));
+    sec.appendChild(pinBtn);
+
+    if (Lock.biometricSupported()) {
+        const bioBtn = el('button', 'ge-profile-opt');
+        bioBtn.appendChild(el('span', null, '👆'));
+        bioBtn.appendChild(el('span', null, 'Usar biometria do aparelho'));
+        bioBtn.addEventListener('click', async () => {
+            const ok = await Lock.setupBiometric(userId);
+            if (ok) { closeSheet(); UI.addAssistantMessage('Biometria ativada. 🔒 Vou pedir ao abrir o assistente.'); }
+            else UI.addAssistantMessage('Não consegui ativar a biometria neste aparelho.');
+        });
+        sec.appendChild(bioBtn);
+    }
+    sheet.appendChild(sec);
+    openSheet();
+}
+
+function setupPINFlow(userId) {
+    sheet.replaceChildren();
+    sheet.appendChild(el('h2', null, 'Crie um PIN'));
+    sheet.appendChild(el('p', 'ge-muted', 'De 4 a 8 dígitos.'));
+    const input = el('input');
+    input.type = 'password'; input.inputMode = 'numeric'; input.maxLength = 8;
+    input.className = 'ge-input'; input.style.textAlign = 'center'; input.style.letterSpacing = '0.4em';
+    input.placeholder = '••••';
+    sheet.appendChild(el('div', 'ge-sheet-section')).appendChild(input);
+    const save = el('button', 'ge-btn-primary', 'Salvar PIN');
+    save.addEventListener('click', async () => {
+        const ok = await Lock.setupPIN(userId, input.value.trim());
+        if (ok) { closeSheet(); UI.addAssistantMessage('PIN ativado. 🔒 Vou pedir ao abrir o assistente.'); }
+        else UI.addAssistantMessage('PIN inválido — use de 4 a 8 dígitos.');
+    });
+    sheet.appendChild(save);
+    openSheet();
+    input.focus();
+}
+
+// ── Tela de destravar (bloqueia até destravar) ─────────────────────────────────
+function showLockScreen(userId) {
+    return new Promise((resolve) => {
+        const mode = Lock.getMode(userId);
+        sheet.replaceChildren();
+        sheet.appendChild(el('h2', 'ge-center', '🔒 Assistente bloqueado'));
+
+        if (mode === 'biometric') {
+            sheet.appendChild(el('p', 'ge-muted ge-center', 'Use sua biometria para entrar.'));
+            const btn = el('button', 'ge-btn-primary', 'Desbloquear');
+            const tryBio = async () => {
+                const ok = await Lock.unlockBiometric(userId);
+                if (ok) { closeSheet(); resolve(true); }
+                else btn.textContent = 'Tentar de novo';
+            };
+            btn.addEventListener('click', tryBio);
+            sheet.appendChild(btn);
+            openSheet();
+            tryBio();
+        } else {
+            sheet.appendChild(el('p', 'ge-muted ge-center', 'Digite seu PIN.'));
+            const input = el('input');
+            input.type = 'password'; input.inputMode = 'numeric'; input.maxLength = 8;
+            input.className = 'ge-input'; input.style.textAlign = 'center'; input.style.letterSpacing = '0.4em';
+            const secw = el('div', 'ge-sheet-section'); secw.appendChild(input); sheet.appendChild(secw);
+            const btn = el('button', 'ge-btn-primary', 'Entrar');
+            const err = el('p', 'ge-muted ge-center');
+            const tryPin = async () => {
+                if (await Lock.verifyPIN(userId, input.value.trim())) { closeSheet(); resolve(true); }
+                else { err.textContent = 'PIN incorreto.'; input.value = ''; input.focus(); }
+            };
+            btn.addEventListener('click', tryPin);
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryPin(); });
+            sheet.appendChild(btn);
+            sheet.appendChild(err);
+            openSheet();
+            input.focus();
+        }
+    });
+}
+
+// ── Botão "Baixar assistente" (instalar PWA) ───────────────────────────────────
+function setupInstallCTA() {
+    const btn = document.getElementById('geInstall');
+    if (!btn) return;
+    const show = () => { if (window.__pwaInstallPrompt) btn.hidden = false; };
+    document.addEventListener('ge:pwa-ready', show);
+    document.addEventListener('ge:pwa-installed', () => { btn.hidden = true; });
+    show();
+    btn.addEventListener('click', async () => {
+        const p = window.__pwaInstallPrompt;
+        if (!p) return;
+        btn.hidden = true;
+        p.prompt();
+        await p.userChoice.catch(() => {});
+        window.__pwaInstallPrompt = null;
+    });
+}

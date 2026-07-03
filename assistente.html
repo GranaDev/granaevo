@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+  <meta name="theme-color" content="#0a0b14">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Assistente GranaEvo</title>
+  <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
+  <!-- Manifesto próprio: instala como app que abre direto no /assistente -->
+  <link rel="manifest" href="/assistente.webmanifest">
+  <link rel="apple-touch-icon" href="/assets/icons/pwa-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Assistente GranaEvo">
+  <link rel="stylesheet" href="src/styles/assistente.css">
+  <script src="/pwa-init.js" defer></script>
+</head>
+<body>
+  <main class="ge-chat">
+    <header class="ge-header">
+      <div class="ge-avatar" aria-hidden="true">💬</div>
+      <div class="ge-header-info">
+        <div class="ge-header-title">Assistente GranaEvo</div>
+        <div class="ge-header-status">online</div>
+        <div class="ge-header-profile" id="geHeaderProfile"></div>
+      </div>
+      <button class="ge-icon-btn" id="geInstall" type="button" title="Baixar assistente" aria-label="Baixar assistente" hidden>⬇️</button>
+      <button class="ge-icon-btn" id="geSettings" type="button" title="Configurações" aria-label="Configurações">⚙️</button>
+    </header>
+
+    <div class="ge-messages" id="geMessages" role="log" aria-live="polite" aria-label="Conversa"></div>
+
+    <div class="ge-inputbar">
+      <textarea class="ge-input" id="geInput" rows="1" placeholder="Ex: gastei 80 no mercado" autocomplete="off" autocapitalize="sentences" enterkeyhint="send"></textarea>
+      <button class="ge-send" id="geSend" type="button" aria-label="Enviar" disabled>➤</button>
+    </div>
+  </main>
+
+  <div class="ge-overlay" id="geOverlay" hidden>
+    <div class="ge-sheet" id="geSheet" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <script type="module" src="src/scripts/pages/assistente.js?v=1"></script>
+</body>
+</html>

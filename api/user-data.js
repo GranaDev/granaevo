@@ -360,6 +360,68 @@ export default async function handler(req, res) {
                   .send(await efRes.text())
     }
 
+    // ── POST { action:"chat-parse" }: Assistente GranaEvo (IA como função) ──
+    // Repassa o texto cru à Edge Function chat-parse (que fala com o Claude).
+    // Rate limit AGRESSIVO aqui protege o orçamento de tokens: janela por IP,
+    // por usuário, e um teto DIÁRIO por usuário — nenhum usuário estoura o limite.
+    if (parsed?.action === 'chat-parse') {
+        if (!SUPABASE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
+
+        // 1) janela por IP (15/min)  2) janela por usuário (20/min)  3) teto diário (120/dia)
+        if (!await checkRL(`chatparse:ip:${ip}`, 15)) {
+            res.setHeader('Retry-After', '60');
+            return res.status(429).json({ error: 'Muitas mensagens. Aguarde um momento.' });
+        }
+        if (userId) {
+            if (!await checkRL(`chatparse:uid:${userId}`, 20)) {
+                res.setHeader('Retry-After', '60');
+                return res.status(429).json({ error: 'Muitas mensagens. Aguarde um momento.' });
+            }
+            if (!await checkRL(`chatparse:uid:${userId}:day`, 120, 86_400)) {
+                res.setHeader('Retry-After', '3600');
+                return res.status(429).json({ error: 'Limite diário do assistente atingido. Tente novamente amanhã.' });
+            }
+        }
+
+        // Validação mínima do input (o resto é revalidado na Edge Function).
+        if (typeof parsed?.text !== 'string' || parsed.text.trim().length === 0 || parsed.text.length > 500) {
+            return res.status(400).json({ error: 'Mensagem inválida' });
+        }
+
+        // Payload seguro — anti-mass-assignment: só campos previstos, truncados.
+        const clampLabels = (v) => Array.isArray(v)
+            ? v.filter(s => typeof s === 'string').slice(0, 30).map(s => s.slice(0, 40))
+            : [];
+        const safeBody = JSON.stringify({
+            text:          parsed.text.slice(0, 500),
+            meta_labels:   clampLabels(parsed.meta_labels),
+            cartao_labels: clampLabels(parsed.cartao_labels),
+        });
+
+        let cpRes;
+        try {
+            cpRes = await fetch(`${SUPABASE_URL}/functions/v1/chat-parse`, {
+                method:  'POST',
+                headers: {
+                    'Content-Type':    'application/json',
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                },
+                body:   safeBody,
+                signal: AbortSignal.timeout(15_000),
+            });
+        } catch (e) {
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
+            return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
+        }
+
+        return res.status(cpRes.status)
+                  .setHeader('Content-Type', 'application/json')
+                  .send(await cpRes.text());
+    }
+
     // ── POST (salvar dados): valida profiles ──────────────────
     const { depth, maxKeys } = analyzeJson(parsed);
     if (depth > MAX_JSON_DEPTH)   return res.status(400).json({ error: 'JSON muito profundo' });

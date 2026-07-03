@@ -4844,10 +4844,10 @@ function setupSidebarToggle() {
         mobileNotifBtn.addEventListener('click', () => abrirPainelNotificacoes());
     }
 
-    // ── Chat — em desenvolvimento
+    // ── Chat — Assistente GranaEvo (página leve /assistente; mesma sessão)
     const chatNavBtn = document.getElementById('chatNavBtn');
     if (chatNavBtn) {
-        chatNavBtn.addEventListener('click', () => mostrarNotificacao('Função em desenvolvimento', 'info'));
+        chatNavBtn.addEventListener('click', () => { window.location.href = '/assistente'; });
     }
 
     // ── Fechar painel: botão X

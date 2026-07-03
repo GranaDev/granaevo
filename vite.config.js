@@ -164,6 +164,7 @@ export default defineConfig(({ mode }) => ({
         login:            'login.html',
         privacidade:      'privacidade.html',
         dashboard:        'dashboard.html',
+        assistente:       'assistente.html',
         convidados:       'convidados.html',
         atualizarplano:   'atualizarplano.html',
         termos:           'termos.html',
