@@ -91,16 +91,16 @@ function renderResponse(res) {
 // ── Fluxo de compra no crédito: cartão → parcelas → aplica ───────────────────
 async function creditoFlow(credito, cards) {
     const usaveis = cards.filter((c) => !c.congelado);
-    if (usaveis.length === 0) { UI.addAssistantMessage('Todos os seus cartões estão congelados. Descongele um no menu Cartões. ❄️'); return; }
+    if (usaveis.length === 0) { UI.addAssistantMessage('{{fa-snowflake}} Todos os seus cartões estão congelados. Descongele um no menu Cartões.'); return; }
 
     const card = await pickCard(usaveis);
-    if (!card) { UI.addAssistantMessage('Ok, cancelei a compra no crédito. 🙂'); return; }
+    if (!card) { UI.addAssistantMessage('Ok, cancelei a compra no crédito.'); return; }
 
     // Se o usuário já disse "em Nx" no texto, não pergunta as parcelas.
     let parcelas = credito.parcelas;
     if (!parcelas) {
         parcelas = await pickParcelas();
-        if (!parcelas) { UI.addAssistantMessage('Ok, cancelei a compra no crédito. 🙂'); return; }
+        if (!parcelas) { UI.addAssistantMessage('Ok, cancelei a compra no crédito.'); return; }
     }
 
     UI.showTyping();
@@ -118,7 +118,7 @@ function pickCard(cards) {
         const sec = el('div', 'ge-sheet-section');
         for (const c of cards) {
             const b = el('button', 'ge-profile-opt');
-            b.appendChild(el('span', null, '💳'));
+            b.appendChild(UI.faIcon('fa-credit-card'));
             b.appendChild(el('span', null, c.nome));
             b.addEventListener('click', () => { closeSheet(); resolve(c); });
             sec.appendChild(b);
@@ -190,7 +190,7 @@ function pickProfile(profiles) {
         const sec = el('div', 'ge-sheet-section');
         for (const p of profiles) {
             const b = el('button', 'ge-profile-opt');
-            b.appendChild(el('span', null, '👤'));
+            b.appendChild(UI.faIcon('fa-user'));
             b.appendChild(el('span', null, p.name));
             b.addEventListener('click', () => { assistant.setActiveProfile(p.id); closeSheet(); resolve(); });
             sec.appendChild(b);
@@ -212,13 +212,13 @@ function openSettings(userId) {
         sec.appendChild(el('label', null, 'Perfil ativo'));
         for (const p of profiles) {
             const b = el('button', 'ge-profile-opt' + (p.id === assistant.activeProfileId ? ' active' : ''));
-            b.appendChild(el('span', null, '👤'));
+            b.appendChild(UI.faIcon('fa-user'));
             b.appendChild(el('span', null, p.name));
             b.addEventListener('click', () => {
                 assistant.setActiveProfile(p.id);
                 renderHeaderProfile();
                 closeSheet();
-                UI.addAssistantMessage(`Pronto! Agora anotando em *${p.name}*. 👍`);
+                UI.addAssistantMessage(`Pronto! Agora anotando em *${p.name}*.`);
             });
             sec.appendChild(b);
         }
@@ -258,18 +258,18 @@ function setupLockFlow(userId) {
     const sec = el('div', 'ge-sheet-section');
 
     const pinBtn = el('button', 'ge-profile-opt');
-    pinBtn.appendChild(el('span', null, '🔢'));
+    pinBtn.appendChild(UI.faIcon('fa-hashtag'));
     pinBtn.appendChild(el('span', null, 'Usar um PIN'));
     pinBtn.addEventListener('click', () => setupPINFlow(userId));
     sec.appendChild(pinBtn);
 
     if (Lock.biometricSupported()) {
         const bioBtn = el('button', 'ge-profile-opt');
-        bioBtn.appendChild(el('span', null, '👆'));
+        bioBtn.appendChild(UI.faIcon('fa-fingerprint'));
         bioBtn.appendChild(el('span', null, 'Usar biometria do aparelho'));
         bioBtn.addEventListener('click', async () => {
             const ok = await Lock.setupBiometric(userId);
-            if (ok) { closeSheet(); UI.addAssistantMessage('Biometria ativada. 🔒 Vou pedir ao abrir o assistente.'); }
+            if (ok) { closeSheet(); UI.addAssistantMessage('{{fa-lock}} Biometria ativada. Vou pedir ao abrir o assistente.'); }
             else UI.addAssistantMessage('Não consegui ativar a biometria neste aparelho.');
         });
         sec.appendChild(bioBtn);
@@ -290,7 +290,7 @@ function setupPINFlow(userId) {
     const save = el('button', 'ge-btn-primary', 'Salvar PIN');
     save.addEventListener('click', async () => {
         const ok = await Lock.setupPIN(userId, input.value.trim());
-        if (ok) { closeSheet(); UI.addAssistantMessage('PIN ativado. 🔒 Vou pedir ao abrir o assistente.'); }
+        if (ok) { closeSheet(); UI.addAssistantMessage('{{fa-lock}} PIN ativado. Vou pedir ao abrir o assistente.'); }
         else UI.addAssistantMessage('PIN inválido — use de 4 a 8 dígitos.');
     });
     sheet.appendChild(save);
@@ -303,7 +303,10 @@ function showLockScreen(userId) {
     return new Promise((resolve) => {
         const mode = Lock.getMode(userId);
         sheet.replaceChildren();
-        sheet.appendChild(el('h2', 'ge-center', '🔒 Assistente bloqueado'));
+        const lockTitle = el('h2', 'ge-center');
+        lockTitle.appendChild(UI.faIcon('fa-lock'));
+        lockTitle.appendChild(document.createTextNode(' Assistente bloqueado'));
+        sheet.appendChild(lockTitle);
 
         if (mode === 'biometric') {
             sheet.appendChild(el('p', 'ge-muted ge-center', 'Use sua biometria para entrar.'));
@@ -370,9 +373,9 @@ function setupChrome() {
             // Sem prompt nativo (iOS, ou critério ainda não atendido) → instruções.
             const ua = navigator.userAgent || '';
             if (/iphone|ipad|ipod/i.test(ua) || (/mac/i.test(ua) && 'ontouchend' in document)) {
-                UI.addAssistantMessage('Pra instalar no iPhone/iPad: toque em **Compartilhar** (o ícone ⬆️) e depois em **"Adicionar à Tela de Início"**. 📲');
+                UI.addAssistantMessage('Pra instalar no iPhone/iPad: toque em **Compartilhar** (o ícone {{fa-arrow-up-from-bracket}}) e depois em **"Adicionar à Tela de Início"**.');
             } else {
-                UI.addAssistantMessage('Pra instalar: abra o **menu do navegador** (⋮ ou ⋯) e toque em **"Instalar app"** / **"Adicionar à tela inicial"**. 📲');
+                UI.addAssistantMessage('Pra instalar: abra o **menu do navegador** e toque em **"Instalar app"** / **"Adicionar à tela inicial"**.');
             }
         });
         document.addEventListener('ge:pwa-installed', () => { btn.hidden = true; });

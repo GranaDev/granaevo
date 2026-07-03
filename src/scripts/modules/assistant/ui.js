@@ -16,16 +16,30 @@ export function mountUI() {
     return els;
 }
 
-// Constrói nós de texto com suporte a *negrito* — SEM innerHTML.
+/** Cria um <i> de ícone Font Awesome com nome em whitelist (sem HTML cru). */
+export function faIcon(name, extraClass = '') {
+    const i = document.createElement('i');
+    if (/^fa-[a-z0-9-]+$/.test(name)) i.className = `fas ${name}${extraClass ? ' ' + extraClass : ''}`;
+    i.setAttribute('aria-hidden', 'true');
+    return i;
+}
+
+// Constrói nós com suporte a *negrito* e ícones {{fa-nome}} — SEM innerHTML.
+// Os ícones são criados via createElement com classe em whitelist (fa-xxx),
+// então não há vetor de XSS mesmo com texto vindo da IA (que nunca chega aqui).
 function renderFormatted(container, text) {
     const str = String(text ?? '');
-    const re = /\*([^*\n]+)\*/g;
+    const re = /\*([^*\n]+)\*|\{\{(fa-[a-z0-9-]+)\}\}/g;
     let last = 0, m;
     while ((m = re.exec(str)) !== null) {
         if (m.index > last) container.appendChild(document.createTextNode(str.slice(last, m.index)));
-        const strong = document.createElement('strong');
-        strong.textContent = m[1];
-        container.appendChild(strong);
+        if (m[1] !== undefined) {
+            const strong = document.createElement('strong');
+            strong.textContent = m[1];
+            container.appendChild(strong);
+        } else {
+            container.appendChild(faIcon(m[2], 'ge-ic'));
+        }
         last = re.lastIndex;
     }
     if (last < str.length) container.appendChild(document.createTextNode(str.slice(last)));
@@ -75,7 +89,7 @@ export function addConfirm({ text, chip }, onUndo) {
     btn.addEventListener('click', async () => {
         btn.disabled = true;
         const res = await onUndo();
-        btn.textContent = '✓';
+        btn.replaceChildren(faIcon('fa-check'));
         if (res?.text) addAssistantMessage(res.text);
     }, { once: true });
     wrap.appendChild(btn);

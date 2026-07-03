@@ -1,6 +1,7 @@
 /* assistente.css — Assistente GranaEvo (chat leve, estilo WhatsApp, brand dark) */
 @import './_tokens.css';
 @import './_fonts.css';
+@import './vendor/fontawesome-subset.css';
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -76,6 +77,10 @@ html, body {
   border-bottom-right-radius: var(--radius-sm);
 }
 .ge-bubble strong { font-weight: var(--fw-bold); }
+/* Ícones FA embutidos nas mensagens/chips (token {{fa-*}}) */
+.ge-ic { font-size: 0.92em; opacity: 0.95; }
+.ge-avatar i { color: #fff; }
+.ge-confirm .ge-ic { color: var(--color-primary-light); }
 
 @keyframes ge-pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
 

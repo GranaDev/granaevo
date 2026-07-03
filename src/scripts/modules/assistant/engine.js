@@ -93,7 +93,7 @@ class AssistantEngine {
         if (!this.#ready) return { text: P.SISTEMA.erro() };
         const text = String(rawText ?? '').trim();
         if (!text) return { text: P.SISTEMA.naoEntendi() };
-        if (!this.#active()) return { text: 'Selecione um perfil primeiro nas configurações. ⚙️' };
+        if (!this.#active()) return { text: '{{fa-gear}} Selecione um perfil primeiro nas configurações.' };
 
         // Continuação de crédito pendente (usuário respondeu o valor da compra).
         if (this.#pendingCredito) {
@@ -141,7 +141,7 @@ class AssistantEngine {
             return this.#route(toCommand({ ...ai.parse, source: 'ia' }));
         }
         if (ai.reason === 'rate') return { text: P.SISTEMA.rate() };
-        if (ai.reason === 'auth') return { text: 'Sua sessão expirou — faça login de novo. 🔒' };
+        if (ai.reason === 'auth') return { text: '{{fa-lock}} Sua sessão expirou — faça login de novo.' };
 
         // IA indisponível/sem parse: se o local tinha um palpite, usa; senão desiste.
         if (local.intencao !== 'desconhecido' && local.confianca >= 0.4) {
@@ -217,9 +217,9 @@ class AssistantEngine {
     // ── Desfazer um lançamento específico ───────────────────────────────────────
     async #undoTx(profileId, txSnap) {
         const profile = this.#profiles.find((p) => String(p.id) === String(profileId));
-        if (!profile) return { text: 'Não encontrei mais esse lançamento (dados já atualizados). 🙂' };
+        if (!profile) return { text: 'Não encontrei mais esse lançamento (dados já atualizados).' };
         const removed = undoLancamento(profile, txSnap);
-        if (!removed) return { text: 'Esse lançamento já não está mais aqui. 👍' };
+        if (!removed) return { text: 'Esse lançamento já não está mais aqui.' };
         const saved = await dataManager.saveUserData(this.#profiles);
         if (!saved) {
             // Save falhou → o servidor ainda tem o estado pré-undo. Ressincroniza
@@ -260,7 +260,7 @@ class AssistantEngine {
         const res = applyCredito(profile, { valor, descricao, tipo, cardId, parcelas });
         if (!res.ok) {
             if (res.reason === 'frozen') return { text: P.cartaoCongelado() };
-            if (res.reason === 'no_card') return { text: 'Não achei esse cartão. 🤔' };
+            if (res.reason === 'no_card') return { text: 'Não achei esse cartão.' };
             return { text: P.SISTEMA.erro() };
         }
         const saved = await dataManager.saveUserData(this.#profiles);
@@ -276,9 +276,9 @@ class AssistantEngine {
 
     async #undoCredito(profileId, snap) {
         const profile = this.#profiles.find((p) => String(p.id) === String(profileId));
-        if (!profile) return { text: 'Não encontrei mais essa compra (dados já atualizados). 🙂' };
+        if (!profile) return { text: 'Não encontrei mais essa compra (dados já atualizados).' };
         const removed = undoCredito(profile, snap);
-        if (!removed) return { text: 'Essa compra já não está mais aqui. 👍' };
+        if (!removed) return { text: 'Essa compra já não está mais aqui.' };
         const saved = await dataManager.saveUserData(this.#profiles);
         if (!saved) { await this.#reload(); return { text: P.SISTEMA.erro() }; }
         return { text: P.desfeito() };

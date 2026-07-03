@@ -19,22 +19,22 @@
 <body>
   <main class="ge-chat">
     <header class="ge-header">
-      <button class="ge-icon-btn" id="geBack" type="button" title="Voltar ao dashboard" aria-label="Voltar ao dashboard" hidden>&#8592;</button>
-      <div class="ge-avatar" aria-hidden="true">💬</div>
+      <button class="ge-icon-btn" id="geBack" type="button" title="Voltar ao dashboard" aria-label="Voltar ao dashboard" hidden><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
+      <div class="ge-avatar" aria-hidden="true"><i class="fas fa-comment-dots"></i></div>
       <div class="ge-header-info">
         <div class="ge-header-title">Assistente GranaEvo</div>
         <div class="ge-header-status">online</div>
         <div class="ge-header-profile" id="geHeaderProfile"></div>
       </div>
-      <button class="ge-icon-btn" id="geInstall" type="button" title="Baixar assistente" aria-label="Baixar assistente" hidden>⬇️</button>
-      <button class="ge-icon-btn" id="geSettings" type="button" title="Configurações" aria-label="Configurações">⚙️</button>
+      <button class="ge-icon-btn" id="geInstall" type="button" title="Baixar assistente" aria-label="Baixar assistente" hidden><i class="fas fa-download" aria-hidden="true"></i></button>
+      <button class="ge-icon-btn" id="geSettings" type="button" title="Configurações" aria-label="Configurações"><i class="fas fa-gear" aria-hidden="true"></i></button>
     </header>
 
     <div class="ge-messages" id="geMessages" role="log" aria-live="polite" aria-label="Conversa"></div>
 
     <div class="ge-inputbar">
       <textarea class="ge-input" id="geInput" rows="1" placeholder="Ex: gastei 80 no mercado" autocomplete="off" autocapitalize="sentences" enterkeyhint="send"></textarea>
-      <button class="ge-send" id="geSend" type="button" aria-label="Enviar" disabled>➤</button>
+      <button class="ge-send" id="geSend" type="button" aria-label="Enviar" disabled><i class="fas fa-paper-plane" aria-hidden="true"></i></button>
     </div>
   </main>
 
