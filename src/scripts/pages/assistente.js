@@ -5,7 +5,8 @@
 // módulos assistant/*; aqui é só orquestração de UI e sessão.
 // ---------------------------------------------------------------------------
 
-import { supabaseReady, getValidAccessToken, logout } from '../services/supabase-client.js?v=2';
+import { supabaseReady, getValidAccessToken, logout, supabase } from '../services/supabase-client.js?v=2';
+import { dataManager } from '../modules/data-manager.js';
 import { assistant } from '../modules/assistant/engine.js';
 import * as UI from '../modules/assistant/ui.js';
 import * as Lock from '../modules/assistant/session-lock.js';
@@ -18,14 +19,6 @@ const el = (tag, cls, txt) => {
     return e;
 };
 
-// userId (não-autoritativo) só para chavear a trava local — decodifica o sub do JWT.
-function userIdFromToken(token) {
-    try {
-        const p = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-        return typeof p?.sub === 'string' ? p.sub : 'anon';
-    } catch { return 'anon'; }
-}
-
 const overlay = document.getElementById('geOverlay');
 const sheet   = document.getElementById('geSheet');
 function openSheet() { overlay.hidden = false; }
@@ -37,7 +30,16 @@ overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSheet(
     await supabaseReady;
     const token = await getValidAccessToken();
     if (!token) { location.replace('/login?next=/assistente'); return; }
-    const userId = userIdFromToken(token);
+
+    // Identifica o usuário pela sessão e INICIALIZA o dataManager — obrigatório
+    // antes de carregar dados. Sem isto, loadUserData() volta vazio (0 perfis).
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    const email  = session?.user?.email;
+    if (!userId || !email) { location.replace('/login?next=/assistente'); return; }
+
+    const okInit = await dataManager.initialize(userId, email);
+    if (!okInit) { UI.mountUI(); UI.addAssistantMessage(SISTEMA.erro()); return; }
 
     // 1) Trava opt-in
     if (Lock.isEnabled(userId)) {
