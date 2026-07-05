@@ -301,18 +301,38 @@ class AssistantEngine {
         return { text: P.desfeito() };
     }
 
-    // ── Retirada de reserva: resolve a meta (ou pergunta) e aplica ──────────────
+    // Reservas ativas (com saldo) formatadas p/ o picker da UI.
+    #reservasComSaldo() {
+        const p = this.#active();
+        return (Array.isArray(p?.metas) ? p.metas : [])
+            .filter((m) => Number(m.saved || 0) > 0)
+            .map((m) => ({ id: String(m.id), nome: String(m.descricao ?? m.nome ?? 'Reserva').trim(), saved: Number(m.saved || 0) }));
+    }
+
+    // Chamado pela UI depois que o usuário escolhe a reserva no picker.
+    async retirarDe({ valor, metaId }) {
+        return this.#doRetirada({ categoria: 'retirada_reserva', valor, metaId });
+    }
+
+    // ── Retirada de reserva: mostra o picker (ou aplica se já tem a meta) ────────
     async #doRetirada(cmd) {
         if (!(cmd.valor > 0)) return { text: P.SISTEMA.semValor() };
         const profile = this.#active();
         const profileId = this.#activeId;
 
-        // Sem reserva informada e várias com saldo → pergunta de qual tirar.
-        if (!cmd.metaHint) {
-            const comSaldo = (Array.isArray(profile?.metas) ? profile.metas : []).filter((m) => Number(m.saved || 0) > 0);
-            if (comSaldo.length > 1) {
-                this.#pendingRetirada = { valor: cmd.valor };
-                return { text: P.escolherReservaRetirada(comSaldo.map((m) => String(m.descricao ?? m.nome ?? 'Reserva').trim())) };
+        // Precisa escolher a reserva? (sem id e sem hint claro) → PICKER visual.
+        if (!cmd.metaId) {
+            const comSaldo = this.#reservasComSaldo();
+            if (comSaldo.length === 0) return { text: '{{fa-piggy-bank}} Você não tem reserva com saldo pra retirar.' };
+            let precisaEscolher = false;
+            if (!cmd.metaHint) {
+                precisaEscolher = comSaldo.length > 1;
+            } else {
+                const r = resolveMeta(profile, cmd.metaHint);
+                if (r.status !== 'ok') precisaEscolher = true;
+            }
+            if (precisaEscolher) {
+                return { reservaPicker: comSaldo, retirada: { valor: cmd.valor } };
             }
         }
 
@@ -320,9 +340,9 @@ class AssistantEngine {
 
         if (!res.ok) {
             if (res.reason === 'meta') {
-                if (res.metaStatus === 'none') return { text: P.escolherMeta([]) };
-                this.#pendingRetirada = { valor: cmd.valor };
-                return { text: P.escolherReservaRetirada(res.opcoes) };
+                const comSaldo = this.#reservasComSaldo();
+                if (comSaldo.length === 0) return { text: P.escolherMeta([]) };
+                return { reservaPicker: comSaldo, retirada: { valor: cmd.valor } };
             }
             if (res.reason === 'reserva_vazia') return { text: P.reservaVazia(res.meta) };
             if (res.reason === 'excede') return { text: P.retiradaExcede(res.meta, res.disponivel) };

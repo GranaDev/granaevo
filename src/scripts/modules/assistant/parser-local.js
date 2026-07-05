@@ -77,11 +77,11 @@ const RE_DESFAZER  = /\b(desfaz|desfazer|desfa[cç]a|apaga(r)? (o |a )?ultim|can
 // ── Período ──────────────────────────────────────────────────────────────────
 export function detectPeriodo(t) {
     if (/\bhoje\b/.test(t)) return 'hoje';
-    if (/\b(essa|esta) semana\b/.test(t)) return 'semana';
-    if (/\bmes passado\b/.test(t)) return 'mes_passado';
-    if (/\b(esse|este) ano|no ano\b/.test(t)) return 'ano';
-    if (/\b(tudo|geral|total|sempre|desde o inicio)\b/.test(t)) return 'tudo';
-    if (/\b(esse|este) mes|no mes|do mes\b/.test(t)) return 'mes';
+    if (/\b(essa|esta|nessa|semana passada) semana\b/.test(t) || /\bsemana passada\b/.test(t)) return 'semana';
+    if (/\bmes (passado|anterior|retrasado)\b/.test(t) || /\bultimo mes\b/.test(t) || /\bno mes passado\b/.test(t)) return 'mes_passado';
+    if (/\b(esse|este) ano\b|\bno ano\b|\beste ano\b/.test(t)) return 'ano';
+    if (/\b(tudo|geral|no total|sempre|desde o inicio|desde sempre)\b/.test(t)) return 'tudo';
+    if (/\b(esse|este) mes\b|\bno mes\b|\bdo mes\b|\bmes atual\b/.test(t)) return 'mes';
     return null; // engine assume 'mes' por padrão em consultas
 }
 

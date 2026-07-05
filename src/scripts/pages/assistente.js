@@ -8,6 +8,7 @@
 import { supabaseReady, getValidAccessToken, logout, supabase } from '../services/supabase-client.js?v=2';
 import { dataManager } from '../modules/data-manager.js';
 import { assistant } from '../modules/assistant/engine.js';
+import { formatBRL } from '../modules/assistant/money.js';
 import * as UI from '../modules/assistant/ui.js';
 import * as Lock from '../modules/assistant/session-lock.js';
 import { SISTEMA } from '../modules/assistant/phrases.js';
@@ -91,8 +92,41 @@ async function onSend(text) {
 function renderResponse(res) {
     if (!res) return;
     if (res.creditoCards) { creditoFlow(res.credito, res.creditoCards); return; }
+    if (res.reservaPicker) { retiradaFlow(res.retirada, res.reservaPicker); return; }
     if (res.chip) UI.addConfirm(res, res.undo);
     else UI.addAssistantMessage(res.text);
+}
+
+// ── Fluxo de retirada: escolhe a reserva no picker → aplica ──────────────────
+async function retiradaFlow(retirada, reservas) {
+    const meta = await pickReserva(reservas);
+    if (!meta) { UI.addAssistantMessage('Ok, cancelei a retirada.'); return; }
+    UI.showTyping();
+    let res;
+    try { res = await assistant.retirarDe({ valor: retirada.valor, metaId: meta.id }); }
+    catch { res = { text: SISTEMA.erro() }; }
+    UI.hideTyping();
+    renderResponse(res);
+}
+
+function pickReserva(reservas) {
+    return new Promise((resolve) => {
+        sheet.replaceChildren();
+        sheet.appendChild(el('h2', null, 'De qual reserva?'));
+        const sec = el('div', 'ge-sheet-section');
+        for (const r of reservas) {
+            const b = el('button', 'ge-profile-opt');
+            b.appendChild(UI.faIcon('fa-piggy-bank'));
+            b.appendChild(el('span', null, `${r.nome} · ${formatBRL(r.saved)}`));
+            b.addEventListener('click', () => { closeSheet(); resolve(r); });
+            sec.appendChild(b);
+        }
+        sheet.appendChild(sec);
+        const cancel = el('button', 'ge-undo-btn', 'Cancelar');
+        cancel.addEventListener('click', () => { closeSheet(); resolve(null); });
+        sheet.appendChild(cancel);
+        openSheet();
+    });
 }
 
 // ── Fluxo de compra no crédito: cartão → parcelas → aplica ───────────────────
@@ -358,9 +392,9 @@ function isStandalone() {
 function setupChrome() {
     const standalone = isStandalone();
 
-    // Voltar ao dashboard — só no NAVEGADOR (no app instalado não faz sentido).
+    // Voltar ao dashboard — SEMPRE visível (útil no navegador e no app instalado).
     const back = document.getElementById('geBack');
-    if (back && !standalone) {
+    if (back) {
         back.hidden = false;
         back.addEventListener('click', () => { window.location.href = '/dashboard'; });
     }

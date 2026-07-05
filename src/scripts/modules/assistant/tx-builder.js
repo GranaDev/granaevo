@@ -115,10 +115,16 @@ export function applyRetirada(profile, cmd) {
     if (!profile || typeof profile !== 'object') return { ok: false, reason: 'no_profile' };
     if (!(cmd.valor > 0)) return { ok: false, reason: 'sem_valor' };
 
-    const r = resolveMeta(profile, cmd.metaHint);
-    if (r.status !== 'ok') return { ok: false, reason: 'meta', metaStatus: r.status, opcoes: r.opcoes || [] };
-
-    const meta = r.meta;
+    // Meta pode vir por id (escolhida no picker) ou por hint (nome).
+    let meta;
+    if (cmd.metaId) {
+        meta = (Array.isArray(profile.metas) ? profile.metas : []).find((m) => String(m.id) === String(cmd.metaId));
+        if (!meta) return { ok: false, reason: 'meta', metaStatus: 'none', opcoes: [] };
+    } else {
+        const r = resolveMeta(profile, cmd.metaHint);
+        if (r.status !== 'ok') return { ok: false, reason: 'meta', metaStatus: r.status, opcoes: r.opcoes || [] };
+        meta = r.meta;
+    }
     const disponivel = Number(meta.saved || 0);
     if (disponivel <= 0) return { ok: false, reason: 'reserva_vazia', meta: metaNome(meta) };
     if (cmd.valor > disponivel) return { ok: false, reason: 'excede', meta: metaNome(meta), disponivel };
