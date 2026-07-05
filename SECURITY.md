@@ -20,6 +20,7 @@ Reportar vulnerabilidades: ver [`public/.well-known/security.txt`](public/.well-
 - Upload: magic bytes + strip de EXIF/XMP/GPS + rejeição de polyglot (GIF/SVG).
 - Webhooks: HMAC-SHA256 + tolerância de timestamp + idempotência.
 - Rate limit distribuído (Upstash Redis) com blocklist persistente de IP.
+- Assistente/chat: **IA como função** — o Haiku só faz *parsing* (tool-use `strict`), nunca vê R$/saldos nem gera texto exibível; render 100% via `textContent`/`createElement` (XSS-proof). Ver seção "Assistente GranaEvo" abaixo.
 
 ---
 
@@ -60,6 +61,25 @@ O schema/RLS das tabelas centrais precisa estar versionado — ver
 configurado (`RATE_LIMIT_STRICT`, default `true`). Em produção o Upstash já está setado;
 o guard existe para que um deploy futuro que perca as envs falhe ALTO em vez de degradar
 silenciosamente para in-memory. Para desligar: `RATE_LIMIT_STRICT=false`.
+
+---
+
+## Assistente GranaEvo (chat)
+
+Auditado em 2026-07-02 (god-mode + god-eyes) — relatório em
+[`security-audit/god-mode-god-eyes-chat-REPORT.md`](security-audit/god-mode-god-eyes-chat-REPORT.md).
+Score 96/100; 0 crítico/alto. Não adiciona superfície nova de banco (reusa o save/get).
+
+**Modelo — "IA como função" (o Haiku é parser, nunca interlocutor):**
+- A IA recebe só o texto do turno + rótulos não-sensíveis (nomes de metas/cartões); **nunca** valores, saldos ou dados de outro usuário.
+- Saída travada por `tool_choice` forçado + schema `strict` → impossível vazar prompt ou emitir texto livre. O cliente exibe só o objeto `parse`, sanitizado em `normalize.js` (clamp de valor, whitelist de categoria/tipo/período).
+- Toda a "voz" do assistente sai de `phrases.js` (templates locais), nunca da IA.
+- Render XSS-proof: `ui.js` usa só `textContent`/`createElement` (zero `innerHTML` dinâmico). CSP de `/assistente`: `script-src 'self'` + `style-src 'self'` (sem `unsafe-inline`).
+
+**Auth & anti-abuso (defesa em camadas):**
+- Proxy Vercel (`/api/user-data`, action `chat-parse`) → Edge `chat-parse`, ambos com `x-proxy-secret` (`timingSafeEqual`, fail-closed) + `auth.getUser(token)` (ES256). `verify_jwt=false` na EF é intencional (ela verifica ES256 internamente).
+- Rate limit primário no proxy: 15/min IP · 20/min uid · **teto diário 120/uid**.
+- **Backstop no banco** (achado M1 da auditoria): RPC atômica `chat_parse_bump(uuid,int)` (SECURITY DEFINER, `search_path` travado, EXECUTE só p/ `service_role`) sobre a tabela `chat_parse_usage` (RLS on, sem policies, FK `ON DELETE CASCADE`, sem PII). A Edge consulta o teto (200/dia) **antes** da IA, **fail-open**. Sobrevive a um vazamento do `PROXY_SECRET`. Migration `20260702000000_chat_parse_rate_backstop.sql`.
 
 ---
 

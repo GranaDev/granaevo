@@ -193,6 +193,13 @@ Deno.serve(async (req: Request) => {
   if (authError || !user?.id) return json({ ok: false, error: 'auth' }, 401, cors)
 
   // ── 3. Input estrito ─────────────────────────────────────────────────────
+  // Rejeita corpos absurdos ANTES de ler/parsear (o payload legítimo — texto 500
+  // + até 30 rótulos de 40 chars em 2 arrays — não passa de ~3 KB). 8 KB é folga.
+  const contentLength = Number(req.headers.get('content-length') ?? '0')
+  if (Number.isFinite(contentLength) && contentLength > 8_192) {
+    return json({ ok: false, error: 'body' }, 413, cors)
+  }
+
   let payload: Record<string, unknown>
   try { payload = await req.json() } catch { return json({ ok: false, error: 'body' }, 400, cors) }
 
@@ -209,6 +216,22 @@ Deno.serve(async (req: Request) => {
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) return json({ ok: false, error: 'config' }, 500, cors)
+
+  // ── 3.5 Backstop de teto diário (defesa-em-profundidade) ─────────────────
+  // O rate limit primário vive no proxy Vercel (ip/uid/dia). Este contador por
+  // usuário/dia no banco sobrevive a um eventual vazamento do PROXY_SECRET: mesmo
+  // que alguém chame esta função direto com um JWT válido, o teto continua valendo.
+  // Cap folgado (acima do teto do proxy) → nunca dispara em uso normal, só quando
+  // o proxy é contornado. Fail-open: se a RPC falhar, o proxy segue como defesa.
+  try {
+    const { data: allowed, error: capErr } = await supabaseAdmin.rpc('chat_parse_bump', {
+      p_user_id: user.id,
+      p_cap: 200,
+    })
+    if (!capErr && allowed === false) {
+      return json({ ok: false, error: 'rate' }, 429, cors)
+    }
+  } catch { /* fail-open — o proxy Vercel é a defesa primária de rate limit */ }
 
   // Contexto do turno (rótulos) fica DEPOIS do system fixo → não quebra o cache.
   const contextLine =
