@@ -11,7 +11,8 @@ import { parseLocal, splitCompound, parseFollowup } from './parser-local.js';
 import { parseValorBR } from './money.js';
 import { toCommand } from './normalize.js';
 import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito, applyRetirada } from './tx-builder.js';
-import { consultarGastos, consultarEntradas, saldoAtual, maioresGastos, ultimasTransacoes, compararMes, mediaMensal, faturaCartao, faltaMeta, relatorio, statusReservas, projecaoMeta } from './query.js';
+import { consultarGastos, consultarEntradas, saldoAtual, maioresGastos, ultimasTransacoes, compararMes, mediaMensal, faturaCartao, faltaMeta, relatorio, statusReservas, projecaoMeta,
+    contarPorTipoMes, orcamentoRestante, alertaOrcamento, resumoDoDia, diaMaisCaro, assinaturasRecorrentes, metasParadas, streakDias, narrativaMes } from './query.js';
 import { parseWithAI } from './assistant-api.js';
 import * as P from './phrases.js';
 
@@ -27,9 +28,10 @@ class AssistantEngine {
     #pendingReserva = null; // { valor, tipo, descricao } aguardando escolha de meta
     #pendingRetirada = null; // { valor } aguardando de qual reserva retirar
     #pendingCredito = null; // { descricao, tipo } aguardando o valor da compra
-    #pendingConfirm = null; // { cmd } aguardando "sim/não" de valor alto
+    #pendingConfirm = null; // { cmd, kind } aguardando "sim/não" de valor alto
     #lastUndo = null;       // fn de desfazer do último lançamento (desfazer por texto)
     #lastQuery = null;      // { consultaAlvo, palavrasChave, periodo } p/ follow-up
+    #lastTxInfo = null;     // { profileId, txSnap, cmd } p/ correção inline (B20)
 
     get ready() { return this.#ready; }
 
@@ -95,6 +97,86 @@ class AssistantEngine {
         };
     }
 
+    // Nome do perfil ativo (p/ saudação personalizada — A2). Nunca vai pra IA.
+    #activeName() {
+        const p = this.#active();
+        return String(p?.name ?? p?.nome ?? '').trim();
+    }
+
+    // Insight opcional pós-lançamento (A6/C23/C24/A7/A9). Retorna string ou null.
+    // No máximo UM por lançamento, por ordem de relevância — para não virar ruído.
+    #insightPos(tx) {
+        const p = this.#active();
+        // A6: meta de reserva recém-completada
+        if (tx.categoria === 'reserva' && tx.metaId) {
+            const meta = (Array.isArray(p?.metas) ? p.metas : []).find((m) => String(m.id) === String(tx.metaId));
+            if (meta) {
+                const alvo = Number(meta.objetivo ?? meta.target ?? 0);
+                const saved = Number(meta.saved || 0);
+                if (alvo > 0 && saved >= alvo && (saved - Number(tx.valor || 0)) < alvo) {
+                    return P.metaCompleta(String(meta.descricao ?? meta.nome ?? 'sua meta'), saved);
+                }
+            }
+        }
+        if (tx.categoria === 'saida') {
+            const al = alertaOrcamento(p, tx.tipo);
+            if (al.alerta) return P.alertaOrcamentoMsg(al);
+            const rep = P.insightRepeticao(contarPorTipoMes(p, tx.tipo));
+            if (rep) return rep;
+        }
+        const st = streakDias(p);
+        if ([3, 7, 14, 21, 30, 50, 100].includes(st)) return P.streakMsg(st);
+        if (tx.categoria === 'saida' && Math.random() < 0.3) {
+            const rc = P.reforcoComparativo(compararMes(p));
+            if (rc) return rc;
+        }
+        return null;
+    }
+
+    // Detecta uma correção inline de valor ("não, foram 50", "na verdade foi 80"). B20
+    #matchCorrecao(text) {
+        const t = String(text).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        if (!/^(nao,?\s*(foi|foram|era|e)\b|na verdade|corrige|corrija|ajusta|muda o valor|troca o valor|era pra ser|e pra ser|o certo (e|era))/.test(t)) return null;
+        const v = parseValorBR(text);
+        return v && v > 0 ? v : null;
+    }
+
+    // Refaz o último lançamento (saída/entrada) com um novo valor. B20
+    async #corrigirUltimo(novoValor) {
+        const info = this.#lastTxInfo;
+        if (!info) return { text: 'Não há um lançamento recente pra corrigir.' };
+        const profile = this.#profiles.find((p) => String(p.id) === String(info.profileId));
+        if (!profile) return { text: 'Não achei o lançamento pra corrigir.' };
+        if (!undoLancamento(profile, info.txSnap)) {
+            this.#lastTxInfo = null;
+            return { text: 'Esse lançamento já mudou — não consegui corrigir. Pode lançar de novo?' };
+        }
+        const res = applyLancamento(profile, { ...info.cmd, valor: novoValor, _confirmed: true });
+        if (!res.ok) { await this.#reload(); return { text: P.SISTEMA.erro() }; }
+        const saved = await dataManager.saveUserData(this.#profiles);
+        if (!saved) { try { undoLancamento(profile, res.transaction); } catch {} await this.#reload(); return { text: P.SISTEMA.erro() }; }
+        const txSnap = { ...res.transaction };
+        const base = P.confirmacaoLancamento(res);
+        const view = { text: '{{fa-pen}} Corrigido! ' + base.text.replace(/^\{\{fa-check\}\}\s*/, ''), chip: base.chip };
+        view.undo = () => this.#undoTx(info.profileId, txSnap);
+        this.#lastUndo = view.undo;
+        this.#lastTxInfo = { profileId: info.profileId, txSnap, cmd: info.cmd };
+        return view;
+    }
+
+    // Insights de abertura (1º acesso do dia) — resumo do dia + no máx. mais um.
+    // Chamado pela UI no boot, com gating de "1x por dia" feito lá. C25/C29/C30/A7.
+    aberturaInsights() {
+        const p = this.#active();
+        if (!p) return [];
+        const out = [];
+        const rd = P.resumoDiaMsg(resumoDoDia(p));
+        if (rd) out.push(rd);
+        const segundo = P.metasParadasMsg(metasParadas(p)) || P.streakMsg(streakDias(p)) || P.curiosidadeMsg(diaMaisCaro(p));
+        if (segundo) out.push(segundo);
+        return out;
+    }
+
     // ── Entrada principal ────────────────────────────────────────────────────
     async handle(rawText) {
         if (!this.#ready) return { text: P.SISTEMA.erro() };
@@ -106,15 +188,21 @@ class AssistantEngine {
         if (this.#pendingConfirm) {
             const t = String(text).toLowerCase();
             if (RE_SIM.test(t)) {
-                const cmd = this.#pendingConfirm.cmd;
+                const pend = this.#pendingConfirm;
                 this.#pendingConfirm = null;
-                return this.#doLancamento(cmd);
+                return pend.kind === 'retirada' ? this.#doRetirada(pend.cmd) : this.#doLancamento(pend.cmd);
             }
             if (RE_NAO.test(t)) {
                 this.#pendingConfirm = null;
                 return { text: P.confirmCancelado() };
             }
             this.#pendingConfirm = null; // resposta não foi sim/não → segue o fluxo
+        }
+
+        // Correção inline do último lançamento ("não, foram 50", "na verdade foi 80") — B20
+        if (this.#lastTxInfo) {
+            const novo = this.#matchCorrecao(text);
+            if (novo != null) return this.#corrigirUltimo(novo);
         }
 
         // Continuação de crédito pendente (usuário respondeu o valor da compra).
@@ -200,9 +288,11 @@ class AssistantEngine {
     // ── Roteamento por intenção ────────────────────────────────────────────────
     async #route(cmd) {
         switch (cmd.intent) {
-            case 'saudacao': return { text: P.SISTEMA.saudacao() };
+            case 'saudacao': return { text: P.SISTEMA.saudacao(this.#activeName()) };
             case 'ajuda':    return { text: P.SISTEMA.ajuda() };
             case 'desfazer': return this.#desfazerUltimo();
+            case 'recusa':      return { text: P.SISTEMA.recusa() };
+            case 'privacidade': return { text: P.privacidadeMsg() };
 
             case 'lancar':
                 if (cmd.categoria === 'saida_credito') return this.#doCredito(cmd);
@@ -220,6 +310,10 @@ class AssistantEngine {
                 if (cmd.consultaAlvo === 'media')       return { text: P.renderMedia(mediaMensal(p)) };
                 if (cmd.consultaAlvo === 'fatura')      return { text: P.renderFatura(faturaCartao(p, cmd.cartaoHint)) };
                 if (cmd.consultaAlvo === 'falta_meta')  return { text: P.renderFaltaMeta(faltaMeta(p, cmd.metaHint)) };
+                if (cmd.consultaAlvo === 'orcamento')   return { text: P.orcamentoRestanteMsg(orcamentoRestante(p)) };
+                if (cmd.consultaAlvo === 'assinaturas') return { text: P.assinaturasMsg(assinaturasRecorrentes(p)) };
+                if (cmd.consultaAlvo === 'narrativa')   return { text: P.narrativaMesMsg(narrativaMes(p)) };
+                if (cmd.consultaAlvo === 'curiosidade') return { text: P.curiosidadeMsg(diaMaisCaro(p)) || 'Ainda não tenho gastos suficientes pra achar um padrão. Continua lançando! {{fa-lightbulb}}' };
                 if (cmd.consultaAlvo === 'reserva' || cmd.palavrasChave.includes('reserva')) {
                     return { text: P.renderReservas(statusReservas(p)) };
                 }
@@ -274,7 +368,13 @@ class AssistantEngine {
         const view = P.confirmacaoLancamento(res);
         view.undo = () => this.#undoTx(profileId, txSnap);
         this.#lastUndo = view.undo;
-        return view;
+        // Correção inline só p/ saída/entrada (B20) — reserva/crédito têm mecânica própria.
+        this.#lastTxInfo = (cmd.categoria === 'saida' || cmd.categoria === 'entrada')
+            ? { profileId, txSnap, cmd: { intent: 'lancar', categoria: cmd.categoria, tipo: cmd.tipo, descricao: cmd.descricao } }
+            : null;
+        // Insight opcional pós-lançamento (A6/C23/C24/A7/A9) — no máximo UM, e só quando faz sentido.
+        const extra = this.#insightPos(res.transaction);
+        return extra ? { multi: [view, { text: extra }] } : view;
     }
 
     // ── Desfazer por texto ("apaga o último", "errei") ─────────────────────────
@@ -317,6 +417,11 @@ class AssistantEngine {
     // ── Retirada de reserva: mostra o picker (ou aplica se já tem a meta) ────────
     async #doRetirada(cmd) {
         if (!(cmd.valor > 0)) return { text: P.SISTEMA.semValor() };
+        // E44: retirada de valor alto → confirma antes (anti-typo em operação destrutiva).
+        if (cmd.valor > LIMITE_CONFIRM && !cmd._confirmed) {
+            this.#pendingConfirm = { cmd: { ...cmd, _confirmed: true }, kind: 'retirada' };
+            return { text: P.confirmarValorAlto({ valor: cmd.valor, descricao: 'retirada de reserva' }) };
+        }
         const profile = this.#active();
         const profileId = this.#activeId;
 

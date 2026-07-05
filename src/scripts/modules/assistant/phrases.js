@@ -6,9 +6,55 @@
 // ---------------------------------------------------------------------------
 
 import { formatBRL } from './money.js';
+import { TIPO_ICONE } from './parser-local.js';
 
+// A5: pick que evita repetir a última escolha do MESMO array (soa menos robótico).
+// WeakMap por referência do array (os pools são constantes de módulo, estáveis).
+const _lastPick = new WeakMap();
 export function pick(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
+    if (!Array.isArray(arr) || arr.length === 0) return '';
+    if (arr.length === 1) return arr[0];
+    let i = Math.floor(Math.random() * arr.length);
+    if (_lastPick.get(arr) === i) i = (i + 1) % arr.length;
+    _lastPick.set(arr, i);
+    return arr[i];
+}
+
+// Primeiro nome, capitalizado (para saudação personalizada — A2).
+function primeiroNome(nome) {
+    const w = String(nome ?? '').trim().split(/\s+/)[0] || '';
+    return w ? w.charAt(0).toUpperCase() + w.slice(1) : '';
+}
+
+// A3: cumprimento conforme a hora local do aparelho.
+function saudacaoHora() {
+    const h = new Date().getHours();
+    if (h < 12) return 'Bom dia';
+    if (h < 18) return 'Boa tarde';
+    return 'Boa noite';
+}
+
+// A10: ícone contextual por subcategoria (tipo), com fallback pro ícone da categoria.
+function iconeDe(t) {
+    const tk = TIPO_ICONE[t?.tipo];
+    if (tk) return `{{${tk}}}`;
+    return CAT_ICONE[t?.categoria] || '{{fa-check}}';
+}
+
+// A4: micro-reação por faixa de valor / categoria (dá "vida" à confirmação).
+function microReacao(t) {
+    const v = Number(t?.valor) || 0;
+    if (t?.categoria === 'entrada') {
+        if (v >= 3000) return pick([' Entrada gorda! {{fa-fire}}', ' Isso! Mês começando bem. {{fa-fire}}']);
+        if (v >= 500)  return pick([' Boa, dinheiro no bolso. {{fa-thumbs-up}}', ' Show, mais grana entrando.']);
+        return '';
+    }
+    if (t?.categoria === 'reserva') return pick([' Você guardando é você vencendo. {{fa-piggy-bank}}', ' Futuro agradece. {{fa-piggy-bank}}']);
+    if (t?.categoria === 'saida' || t?.categoria === 'saida_credito') {
+        if (v >= 1000) return pick([' Valor alto — anotado com carinho. {{fa-eye}}', ' Gasto grande, tá registrado.']);
+        return '';
+    }
+    return '';
 }
 
 const CAT_ICONE = {
@@ -22,26 +68,30 @@ const CAT_LABEL = {
 
 const PERIODO_LABEL = {
     hoje: 'hoje', semana: 'nesta semana', mes: 'neste mês',
-    mes_passado: 'no mês passado', ano: 'neste ano', tudo: 'no total',
+    mes_passado: 'no mês passado', trimestre: 'no trimestre', ano: 'neste ano', tudo: 'no total',
 };
 
-// ── Saudações ────────────────────────────────────────────────────────────────
-const SAUDACOES = [
-    'Oi! Manda a movimentação que eu anoto. Ex: “gastei 80 no mercado”.',
-    'E aí! Pode falar — “paguei 45 de uber”, “recebi 2000 de salário”, o que rolar.',
-    'Opa! Bora organizar. Me diz um gasto, entrada ou reserva que eu registro.',
-    'Fala! Digita naturalmente que eu entendo. Ex: “guardei 300 na reserva”.',
-    'Prontinho pra anotar. Manda aí o que você gastou ou recebeu.',
+// ── Saudação (A1 persona "Ge" + A2 nome + A3 hora) ───────────────────────────
+const SAUDACAO_CORPO = [
+    'manda a movimentação que eu anoto. Ex: “gastei 80 no mercado”.',
+    'pode falar naturalmente — “paguei 45 de uber”, “recebi 2000 de salário”.',
+    'bora organizar tua grana. Me diz um gasto, entrada ou reserva.',
+    'diz o que rolou hoje que eu registro na hora.',
+    'sou o Ge, teu braço-direito das finanças. Manda o que gastou ou recebeu.',
 ];
+export function saudacao(nome) {
+    const quem = primeiroNome(nome) ? `, ${primeiroNome(nome)}` : '';
+    return `${saudacaoHora()}${quem}! ${pick(SAUDACAO_CORPO)}`;
+}
 
 const AJUDA = [
-    'Eu sou seu assistente financeiro aqui do GranaEvo. Você pode:\n' +
+    'Sou o *Ge*, seu assistente financeiro do GranaEvo. Comigo você pode:\n' +
     '• Lançar gastos: “gastei 120 no mercado”\n' +
     '• Registrar entradas: “recebi 2500 de salário”\n' +
     '• Guardar reserva: “guardei 200 pra viagem”\n' +
-    '• Consultar: “quanto gastei com transporte esse mês?”\n' +
-    '• Pedir relatório: “me dá um resumo do mês”\n\n' +
-    '{{fa-lock}} Sempre que eu anotar algo, aparece um botão de *Desfazer* — teu histórico fica protegido.',
+    '• Consultar: “quanto gastei com transporte esse mês?”, “meu saldo”, “onde mais gastei?”\n' +
+    '• Pedir resumo: “explica meu mês”\n\n' +
+    '{{fa-shield-halved}} Teus valores nunca saem do teu aparelho pra IA — e todo lançamento tem *Desfazer*.',
 ];
 
 const NAO_ENTENDI = [
@@ -61,13 +111,13 @@ const RATE_DIA = [
 ];
 
 // ── Confirmação de lançamento (com chip + Desfazer) ──────────────────────────
+const ABERTURAS = ['Anotei', 'Registrado', 'Feito', 'Lançado', 'Pronto', 'Tá salvo', 'Marquei aqui'];
 export function confirmacaoLancamento({ transaction, meta }) {
     const t = transaction;
-    const ic = CAT_ICONE[t.categoria] || '{{fa-check}}';
+    const ic = iconeDe(t); // A10: ícone da subcategoria
     const extra = t.categoria === 'reserva' && meta ? ` → ${meta}` : '';
-    const aberturas = ['Anotei', 'Registrado', 'Feito', 'Lançado'];
     return {
-        text: `{{fa-check}} ${pick(aberturas)} · ${formatBRL(t.valor)} · ${ic} ${t.descricao || t.tipo}${extra}`,
+        text: `{{fa-check}} ${pick(ABERTURAS)} · ${formatBRL(t.valor)} · ${ic} ${t.descricao || t.tipo}${extra}${microReacao(t)}`,
         chip: {
             categoria: t.categoria,
             label: `${CAT_LABEL[t.categoria]} · ${formatBRL(t.valor)} · ${t.descricao || t.tipo}`,
@@ -285,9 +335,128 @@ export function confirmCancelado() {
     return pick(['Beleza, cancelei.', 'Ok, não lancei nada.', 'Tranquilo, deixei pra lá.']);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// INSIGHTS & PROATIVIDADE (voz do Ge sobre dados 100% locais)
+// Retornam string OU null (null = "não há o que dizer" → o engine não mostra).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const _ORD = ['1º', '2º', '3º', '4º', '5º', '6º', '7º', '8º', '9º', '10º'];
+
+// C23: "esse é seu 3º Mercado do mês"
+export function insightRepeticao(cpm) {
+    if (!cpm || cpm.count < 3) return null; // só a partir do 3º (senão vira ruído)
+    const ord = _ORD[cpm.count - 1] || `${cpm.count}º`;
+    return `{{fa-circle-info}} Esse foi seu ${ord} *${cpm.tipo}* do mês — ${formatBRL(cpm.total)} no total.`;
+}
+
+// C24: alerta suave de orçamento por categoria
+export function alertaOrcamentoMsg(al) {
+    if (!al || !al.alerta) return null;
+    return `{{fa-triangle-exclamation}} Já são ${formatBRL(al.atual)} em *${al.tipo}* este mês — ${al.pct}% acima da sua média (${formatBRL(al.media)}). Fica de olho!`;
+}
+
+// A9: reforço positivo quando está gastando menos que o mês passado
+export function reforcoComparativo(comp) {
+    if (!comp || comp.passado <= 0 || comp.dif >= -30) return null;
+    return `{{fa-arrow-trend-down}} No ritmo do mês passado você tá gastando *menos*. Mandando bem!`;
+}
+
+// C25: resumo do 1º acesso do dia
+export function resumoDiaMsg(rd) {
+    if (!rd || !rd.temMovimento) return null;
+    const ontem = rd.ontemCount > 0
+        ? `Ontem saíram *${formatBRL(rd.ontemTotal)}* em ${rd.ontemCount} ${rd.ontemCount > 1 ? 'lançamentos' : 'lançamento'}.`
+        : 'Ontem não teve gasto registrado.';
+    return `{{fa-sun}} ${ontem} Saldo do mês até agora: *${formatBRL(rd.saldoMes)}*.`;
+}
+
+// C26: sugestão de guardar quando sobra folga
+export function sugestaoReserva(valor) {
+    const metade = Math.max(1, Math.round(valor / 2));
+    return `{{fa-piggy-bank}} Você tá com uma folga boa esse mês (${formatBRL(valor)}). Que tal guardar uma parte? É só dizer “guardar ${metade} na [reserva]”.`;
+}
+
+// C27: assinaturas/recorrências detectadas
+export function assinaturasMsg(list) {
+    if (!list || !list.length) return 'Não achei assinaturas recorrentes claras nos seus lançamentos. {{fa-magnifying-glass}}';
+    const total = list.reduce((s, r) => s + r.valor, 0);
+    return `{{fa-arrows-rotate}} *Coisas que se repetem todo mês* (~${formatBRL(total)}/mês):\n` +
+        list.map((r) => `• ${r.nome}: ${formatBRL(r.valor)} (${r.meses} meses)`).join('\n') +
+        '\nAlguma dá pra cancelar?';
+}
+
+// C29: curiosidade — dia mais caro
+export function curiosidadeMsg(dc) {
+    if (!dc || !dc.ok) return null;
+    return `{{fa-lightbulb}} Curiosidade: seu dia mais caro costuma ser *${dc.dia}* (média de ${formatBRL(dc.media)} nesse dia).`;
+}
+
+// C30: reserva parada
+export function metasParadasMsg(list) {
+    if (!list || !list.length) return null;
+    const m = list[0];
+    return `{{fa-bullseye}} Faz *${m.diasParado} dias* sem aporte na reserva “${m.nome}” (parada em ${formatBRL(m.saved)}). Bora voltar a guardar?`;
+}
+
+// B22: quanto ainda dá pra gastar
+export function orcamentoRestanteMsg(orc) {
+    if (!orc || !orc.temHistorico) {
+        return 'Ainda não tenho meses suficientes pra estimar quanto dá pra gastar. Continua lançando que logo eu te digo! {{fa-chart-line}}';
+    }
+    if (orc.restante > 0) {
+        return `{{fa-wallet}} Pela sua média (${formatBRL(orc.media)}/mês), ainda dá pra gastar cerca de *${formatBRL(orc.restante)}* este mês — você já gastou ${formatBRL(orc.gastoMes)}.`;
+    }
+    return `{{fa-triangle-exclamation}} Você já gastou ${formatBRL(orc.gastoMes)} este mês — *${formatBRL(Math.abs(orc.restante))} acima* da sua média (${formatBRL(orc.media)}). Hora de segurar. {{fa-hand}}`;
+}
+
+// C31: narrativa "explique meu mês"
+export function narrativaMesMsg(nm) {
+    if (!nm || nm.rel.count === 0) return 'Ainda não tem movimentação esse mês pra eu explicar. Manda os primeiros lançamentos! {{fa-rocket}}';
+    const r = nm.rel, c = nm.comp, top = nm.top;
+    const linhas = ['{{fa-book-open}} *Seu mês até agora:*'];
+    linhas.push(`Entraram ${formatBRL(r.entradas)} e saíram ${formatBRL(r.saidas)} — saldo do período de *${formatBRL(r.saldoPeriodo)}*.`);
+    if (top.ranking && top.ranking.length) {
+        const g = top.ranking[0];
+        linhas.push(`Onde mais pesou: *${g.tipo}* (${formatBRL(g.valor)}, ${g.pct}% dos gastos).`);
+    }
+    if (c.passado > 0 && c.dif > 0) linhas.push(`Você está gastando ${formatBRL(c.dif)} a MAIS que o mês passado. {{fa-arrow-trend-up}}`);
+    else if (c.passado > 0 && c.dif < 0) linhas.push(`E gastou ${formatBRL(Math.abs(c.dif))} a MENOS que o mês passado — mandou bem! {{fa-arrow-trend-down}}`);
+    if (r.reservas > 0) linhas.push(`Ainda guardou ${formatBRL(r.reservas)} em reservas. {{fa-piggy-bank}}`);
+    return linhas.join('\n');
+}
+
+// A6: comemoração de meta completa
+export function metaCompleta(nome, saved) {
+    return pick([
+        `{{fa-trophy}} *Meta batida!* Você completou “${nome}” (${formatBRL(saved)}). Orgulho! {{fa-fire}}`,
+        `{{fa-trophy}} Fechou a meta “${nome}”! ${formatBRL(saved)} guardados. Isso é disciplina! {{fa-star}}`,
+    ]);
+}
+
+// A7: streak de dias consecutivos
+export function streakMsg(n) {
+    if (!n || n < 3) return null; // só celebra a partir de 3 dias
+    if (n >= 7) return `{{fa-fire}} *${n} dias seguidos* anotando! Você virou fera no controle. {{fa-star}}`;
+    return `{{fa-fire}} ${n}º dia seguido lançando — tá criando o hábito!`;
+}
+
+// E42: micro-copy educativo de privacidade
+export function privacidadeMsg() {
+    return '{{fa-shield-halved}} Fica tranquilo: seus valores, saldos e transações *nunca* saem do seu aparelho pra IA. Ela só me ajuda a entender o que você quis dizer — quem faz as contas sou eu, aqui, localmente.';
+}
+
+// E45: rate-limit com espera explícita (educar, não frustrar)
+export function rateEspera(seg) {
+    const s = Number.isFinite(seg) && seg > 0 ? seg : 30;
+    return `{{fa-hourglass-half}} Opa, muita coisa de uma vez! Aguarda ${s}s e manda de novo — é só proteção, teu histórico tá salvo.`;
+}
+
+// E46: rótulo do selo "modo local" (usado pela UI quando a IA está indisponível)
+export const LABEL_MODO_LOCAL = 'entendendo localmente';
+
 // ── Segurança / mensagens de sistema ───────────────────────────────────────────
 export const SISTEMA = {
-    saudacao: () => pick(SAUDACOES),
+    saudacao: (nome) => saudacao(nome),
     ajuda: () => pick(AJUDA),
     naoEntendi: () => pick(NAO_ENTENDI),
     rate: () => pick(RATE),
@@ -295,5 +464,8 @@ export const SISTEMA = {
     semValor: () => pick(NAO_ENTENDI),
     erro: () => 'Deu um problema aqui do meu lado. Tenta de novo daqui a pouco.',
     // Nunca revela nada sobre sistema/dados — resposta padrão de recusa amigável.
-    recusa: () => 'Sou só seu assistente de finanças. Posso anotar gastos, entradas, reservas e te mostrar resumos. Como posso ajudar?',
+    recusa: () => pick([
+        'Eu sou o Ge, seu assistente de finanças — só cuido de gastos, entradas, reservas e resumos. Como posso ajudar com a sua grana?',
+        'Fico só na área de finanças, tá? Posso anotar um gasto, uma entrada ou te mostrar um resumo. Manda aí!',
+    ]),
 };

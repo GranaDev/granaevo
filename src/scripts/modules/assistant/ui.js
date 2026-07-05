@@ -12,8 +12,46 @@ export function mountUI() {
         messages: document.getElementById('geMessages'),
         input:    document.getElementById('geInput'),
         send:     document.getElementById('geSend'),
+        quick:    document.getElementById('geQuick'),
+        mic:      document.getElementById('geMic'),
     };
     return els;
+}
+
+/** D39: vibração sutil (respeita prefers-reduced-motion; no-op se não suportado). */
+export function haptic(ms = 12) {
+    try {
+        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+        navigator.vibrate?.(ms);
+    } catch { /* ignore */ }
+}
+
+/** D32/D33/D40: renderiza chips de sugestão. items = [{label, text}]. */
+export function setQuickReplies(items, onPick) {
+    if (!els?.quick) return;
+    els.quick.replaceChildren();
+    if (!Array.isArray(items) || items.length === 0) { els.quick.hidden = true; return; }
+    for (const it of items) {
+        const b = document.createElement('button');
+        b.className = 'ge-quick-chip';
+        b.type = 'button';
+        b.textContent = it.label;                 // textContent — XSS-proof
+        b.addEventListener('click', () => onPick?.(it.text ?? it.label));
+        els.quick.appendChild(b);
+    }
+    els.quick.hidden = false;
+}
+
+/** Pré-preenche e foca o input (usado pelo botão Corrigir — D35). */
+export function focusInput(prefill) {
+    if (!els?.input) return;
+    if (typeof prefill === 'string') {
+        els.input.value = prefill;
+        els.input.dispatchEvent(new Event('input')); // reativa autoresize + habilita enviar
+    }
+    els.input.focus();
+    const n = els.input.value.length;
+    try { els.input.setSelectionRange(n, n); } catch { /* ignore */ }
 }
 
 /** Cria um <i> de ícone Font Awesome com nome em whitelist (sem HTML cru). */
@@ -71,8 +109,9 @@ export function addAssistantMessage(text) {
     scrollDown();
 }
 
-/** Chip de confirmação com botão Desfazer. onUndo é async. */
+/** Chip de confirmação com botão Desfazer (+ Corrigir p/ saída/entrada). onUndo é async. */
 export function addConfirm({ text, chip }, onUndo) {
+    haptic(); // D39: feedback tátil sutil ao confirmar
     const row = document.createElement('div');
     row.className = 'ge-row assistant';
     const wrap = document.createElement('div');
@@ -82,6 +121,16 @@ export function addConfirm({ text, chip }, onUndo) {
     t.className = 'ge-confirm-text';
     renderFormatted(t, text);
     wrap.appendChild(t);
+
+    // D35: "Corrigir" — só pra saída/entrada (onde a correção inline funciona).
+    if (chip?.categoria === 'saida' || chip?.categoria === 'entrada') {
+        const fix = document.createElement('button');
+        fix.className = 'ge-correct-btn';
+        fix.type = 'button';
+        fix.textContent = 'Corrigir';
+        fix.addEventListener('click', () => focusInput('corrige pra '));
+        wrap.appendChild(fix);
+    }
 
     const btn = document.createElement('button');
     btn.className = 'ge-undo-btn';
@@ -97,6 +146,15 @@ export function addConfirm({ text, chip }, onUndo) {
     row.appendChild(wrap);
     els.messages.appendChild(row);
     scrollDown();
+}
+
+/** D36: cabeçalho sutil quando um único envio gera vários lançamentos. */
+export function addMultiHeader(n) {
+    if (!els?.messages || !(n > 1)) return;
+    const head = document.createElement('div');
+    head.className = 'ge-multi-head';
+    head.textContent = `${n} lançamentos de uma vez:`;
+    els.messages.appendChild(head);
 }
 
 let typingRow = null;

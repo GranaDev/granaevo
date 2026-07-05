@@ -43,6 +43,27 @@ export function parseValorBR(text) {
     return null;
 }
 
+/**
+ * Aritmética simples de quantidade × preço unitário:
+ *   "2 cafés de 8" = 16 · "3 pães a 2,50" = 7,5 · "4 cervejas por 6" = 24.
+ * Conservador: exige um substantivo entre a quantidade e o conector,
+ * quantidade 2..99, ignora palavras de moeda como "substantivo".
+ * @returns {number|null}
+ */
+export function parseAritmetica(text) {
+    if (typeof text !== 'string') return null;
+    const t = text.toLowerCase();
+    const m = t.match(/\b([2-9]|[1-9]\d)\s+([\p{L}][\p{L}\s]{1,20}?)\s+(?:de|a|por|vezes)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\b/u);
+    if (!m) return null;
+    const noun = m[2].trim();
+    if (/\b(reais?|pila|pilas|conto|contos|mango|mangos|pau|paus)\b/.test(noun)) return null;
+    const qtd = parseInt(m[1], 10);
+    const unit = _parseNum(m[3], null);
+    if (unit === null || qtd < 2 || qtd > 99) return null;
+    const total = Math.round(qtd * unit * 100) / 100;
+    return total > 0 && total <= 100_000_000 ? total : null;
+}
+
 /** Extrai o nº de parcelas de "em Nx" / "Nx" (1..420), senão null. */
 export function parseParcelas(text) {
     if (typeof text !== 'string') return null;
@@ -91,6 +112,21 @@ export function parseDataRelativa(text) {
     if (/\banteontem\b/.test(t)) { const d = new Date(hoje); d.setDate(d.getDate() - 2); return fmt(d); }
     if (/\bontem\b/.test(t)) { const d = new Date(hoje); d.setDate(d.getDate() - 1); return fmt(d); }
     if (/\bsemana passada\b/.test(t)) { const d = new Date(hoje); d.setDate(d.getDate() - 7); return fmt(d); }
+
+    // Data absoluta com barra/traço: "dia 5/6", "05/06", "3/5/2026" → dd/mm/aaaa.
+    // Exige dia E mês (tem separador) para não capturar números soltos.
+    const mAbs = t.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
+    if (mAbs) {
+        const dia = parseInt(mAbs[1], 10);
+        const mes = parseInt(mAbs[2], 10);
+        let ano = mAbs[3] ? parseInt(mAbs[3], 10) : hoje.getFullYear();
+        if (ano < 100) ano += 2000;
+        if (dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12 && ano >= 2000 && ano <= 2100) {
+            const d = new Date(ano, mes - 1, dia);
+            if (!Number.isNaN(d.getTime()) && d.getDate() === dia && d.getMonth() === mes - 1) return fmt(d);
+        }
+    }
+
     const mDia = t.match(/\bdia (\d{1,2})\b/);
     if (mDia) {
         const dia = parseInt(mDia[1], 10);

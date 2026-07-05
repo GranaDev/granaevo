@@ -51,11 +51,11 @@ export function toCommand(parse) {
         parcelas: Number.isInteger(parse.parcelas) && parse.parcelas > 0 && parse.parcelas <= 420 ? parse.parcelas : null,
         cartaoHint: clampStr(parse.cartao_hint, 60),
         aporteMensal: null,
-        periodo: ['hoje', 'semana', 'mes', 'mes_passado', 'ano', 'tudo'].includes(parse.periodo) ? parse.periodo : null,
+        periodo: ['hoje', 'semana', 'mes', 'mes_passado', 'trimestre', 'ano', 'tudo'].includes(parse.periodo) ? parse.periodo : null,
         palavrasChave: Array.isArray(parse.palavras_chave)
             ? parse.palavras_chave.filter((s) => typeof s === 'string').map((s) => s.toLowerCase().slice(0, 40)).slice(0, 8)
             : [],
-        consultaAlvo: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar', 'comparar', 'media', 'fatura', 'falta_meta'].includes(parse.consulta_alvo) ? parse.consulta_alvo : 'gasto',
+        consultaAlvo: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar', 'comparar', 'media', 'fatura', 'falta_meta', 'orcamento', 'assinaturas', 'narrativa', 'curiosidade'].includes(parse.consulta_alvo) ? parse.consulta_alvo : 'gasto',
         dataOverride: typeof parse.data_override === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(parse.data_override) ? parse.data_override : null,
     };
 

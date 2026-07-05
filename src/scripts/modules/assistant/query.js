@@ -19,6 +19,11 @@ export function filterByPeriodo(transacoes, periodo) {
     const hoje = new Date();
     const ymAtual = yearMonthKey(hoje);
     const ymPassado = yearMonthKey(new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1));
+    const ymTrimestre = [
+        ymAtual,
+        ymPassado,
+        yearMonthKey(new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1)),
+    ];
 
     return arr.filter((t) => {
         const d = brDateToObj(t?.data);
@@ -28,6 +33,7 @@ export function filterByPeriodo(transacoes, periodo) {
             case 'semana':      return (hoje - d) <= 7 * 864e5 && d <= hoje;
             case 'mes':         return yearMonthKey(d) === ymAtual;
             case 'mes_passado': return yearMonthKey(d) === ymPassado;
+            case 'trimestre':   return ymTrimestre.includes(yearMonthKey(d));
             case 'ano':         return d.getFullYear() === hoje.getFullYear();
             default:            return true;
         }
@@ -285,5 +291,133 @@ export function projecaoMeta(profile, cmd) {
         faltam: Math.round(faltam * 100) / 100,
         meses,
         aporte: cmd.aporteMensal,
+    };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MOTORES DE INSIGHT (proatividade) — 100% local. A IA nunca vê nada disto.
+// Cada função é pura, defensiva e barata; o engine decide QUANDO surfacar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const _round = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/** C23: quantas vezes (e quanto) do MESMO tipo já houve neste mês. */
+export function contarPorTipoMes(profile, tipo, categoria = 'saida') {
+    const ym = yearMonthKey(new Date());
+    const txs = (Array.isArray(profile?.transacoes) ? profile.transacoes : [])
+        .filter((t) => t.categoria === categoria && (t.tipo || 'Outros') === (tipo || 'Outros') && _ymOf(t.data) === ym);
+    const total = txs.reduce((s, t) => s + (Number(t.valor) || 0), 0);
+    return { tipo: tipo || 'Outros', count: txs.length, total: _round(total) };
+}
+
+/** B22: quanto ainda dá pra gastar este mês = média mensal − já gasto no mês. */
+export function orcamentoRestante(profile) {
+    const { media, meses } = mediaMensal(profile);
+    const ym = yearMonthKey(new Date());
+    const gastoMes = (Array.isArray(profile?.transacoes) ? profile.transacoes : [])
+        .filter((t) => t.categoria === 'saida' && _ymOf(t.data) === ym)
+        .reduce((s, t) => s + (Number(t.valor) || 0), 0);
+    return { temHistorico: meses >= 2, media: _round(media), gastoMes: _round(gastoMes), restante: _round(media - gastoMes) };
+}
+
+/** C24: este tipo já passou (bem) da média histórica mensal dele? (alerta suave) */
+export function alertaOrcamento(profile, tipo) {
+    if (!tipo) return { alerta: false };
+    const txs = (Array.isArray(profile?.transacoes) ? profile.transacoes : [])
+        .filter((t) => t.categoria === 'saida' && (t.tipo || 'Outros') === tipo);
+    const porMes = {};
+    for (const t of txs) { const ym = _ymOf(t.data); if (ym) porMes[ym] = (porMes[ym] || 0) + (Number(t.valor) || 0); }
+    const ymAtual = yearMonthKey(new Date());
+    const atual = porMes[ymAtual] || 0;
+    const anteriores = Object.entries(porMes).filter(([ym]) => ym !== ymAtual).map(([, v]) => v);
+    if (anteriores.length < 2 || atual <= 0) return { alerta: false };
+    const media = anteriores.reduce((s, v) => s + v, 0) / anteriores.length;
+    const alerta = atual > media * 1.3 && (atual - media) > 20; // 30% acima E diferença material
+    return { alerta, tipo, atual: _round(atual), media: _round(media), pct: media > 0 ? Math.round(((atual - media) / media) * 100) : 0 };
+}
+
+/** C25: resumo do dia (ontem + saldo do mês) para o 1º acesso do dia. */
+export function resumoDoDia(profile) {
+    const txs = Array.isArray(profile?.transacoes) ? profile.transacoes : [];
+    const hoje = new Date();
+    const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1);
+    const sameDay = (data, ref) => { const d = brDateToObj(data); return d && d.toDateString() === ref.toDateString(); };
+    const ontemTxs = txs.filter((t) => t.categoria === 'saida' && sameDay(t.data, ontem));
+    const ontemTotal = ontemTxs.reduce((s, t) => s + (Number(t.valor) || 0), 0);
+    const rel = relatorio(profile, 'mes');
+    return { ontemTotal: _round(ontemTotal), ontemCount: ontemTxs.length, saldoMes: rel.saldoPeriodo, gastoMes: rel.saidas, temMovimento: rel.count > 0 };
+}
+
+/** C29: dia da semana com maior gasto médio no trimestre (curiosidade leve). */
+export function diaMaisCaro(profile) {
+    const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+    const txs = filterByPeriodo(profile?.transacoes, 'trimestre').filter((t) => t.categoria === 'saida');
+    if (txs.length < 5) return { ok: false };
+    const soma = new Array(7).fill(0), cont = new Array(7).fill(0);
+    for (const t of txs) { const d = brDateToObj(t.data); if (!d) continue; soma[d.getDay()] += (Number(t.valor) || 0); cont[d.getDay()]++; }
+    let melhor = -1, maxMedia = -1;
+    for (let i = 0; i < 7; i++) { if (!cont[i]) continue; const m = soma[i] / cont[i]; if (m > maxMedia) { maxMedia = m; melhor = i; } }
+    return melhor < 0 ? { ok: false } : { ok: true, dia: DIAS[melhor], media: _round(maxMedia), total: _round(soma[melhor]) };
+}
+
+/** C27: assinaturas/recorrências (mesmo nome+valor em ≥2 meses, ou categoria assinatura). */
+export function assinaturasRecorrentes(profile) {
+    const txs = (Array.isArray(profile?.transacoes) ? profile.transacoes : [])
+        .filter((t) => t.categoria === 'assinatura' || t.categoria === 'saida');
+    const grupos = {};
+    for (const t of txs) {
+        const nome = String(t.descricao || t.tipo || '').trim();
+        const val = Math.round(Number(t.valor) || 0);
+        const ym = _ymOf(t.data);
+        if (!nome || val <= 0 || !ym) continue;
+        const key = `${nome.toLowerCase()}|${val}`;
+        (grupos[key] = grupos[key] || { nome, valor: Number(t.valor) || 0, meses: new Set() }).meses.add(ym);
+    }
+    return Object.values(grupos)
+        .filter((g) => g.meses.size >= 2)
+        .map((g) => ({ nome: g.nome, valor: _round(g.valor), meses: g.meses.size }))
+        .sort((a, b) => b.meses - a.meses)
+        .slice(0, 5);
+}
+
+/** C30: metas com saldo mas sem aporte há mais de `dias` (reserva parada). */
+export function metasParadas(profile, dias = 20) {
+    const metas = Array.isArray(profile?.metas) ? profile.metas : [];
+    const txs = Array.isArray(profile?.transacoes) ? profile.transacoes : [];
+    const hoje = new Date();
+    const out = [];
+    for (const m of metas) {
+        const saved = Number(m.saved || 0);
+        if (saved <= 0) continue;
+        const aportes = txs.filter((t) => t.categoria === 'reserva' && String(t.metaId) === String(m.id))
+            .map((t) => brDateToObj(t.data)).filter(Boolean).sort((a, b) => b - a);
+        if (!aportes.length) continue; // sem histórico de aporte rastreável
+        const diasParado = Math.floor((hoje - aportes[0]) / 864e5);
+        if (diasParado > dias) out.push({ nome: _metaNome(m), saved: _round(saved), diasParado });
+    }
+    return out.sort((a, b) => b.diasParado - a.diasParado).slice(0, 3);
+}
+
+/** A7: streak de dias consecutivos com ≥1 lançamento (só "vivo" se lançou hoje/ontem). */
+export function streakDias(profile) {
+    const txs = Array.isArray(profile?.transacoes) ? profile.transacoes : [];
+    const dias = new Set();
+    for (const t of txs) { const d = brDateToObj(t.data); if (d) { d.setHours(0, 0, 0, 0); dias.add(d.toDateString()); } }
+    if (!dias.size) return 0;
+    const cursor = new Date(); cursor.setHours(0, 0, 0, 0);
+    if (!dias.has(cursor.toDateString())) { cursor.setDate(cursor.getDate() - 1); if (!dias.has(cursor.toDateString())) return 0; }
+    let streak = 0;
+    while (dias.has(cursor.toDateString())) { streak++; cursor.setDate(cursor.getDate() - 1); }
+    return streak;
+}
+
+/** C31: dados agregados para a narrativa "explique meu mês". */
+export function narrativaMes(profile) {
+    return {
+        rel: relatorio(profile, 'mes'),
+        comp: compararMes(profile),
+        top: maioresGastos(profile, 'mes'),
+        saldo: saldoAtual(profile),
+        orcamento: orcamentoRestante(profile),
     };
 }

@@ -26,6 +26,85 @@ function openSheet() { overlay.hidden = false; }
 function closeSheet() { overlay.hidden = true; sheet.replaceChildren(); }
 overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSheet(); });
 
+// ── Estado de sessão + helpers de UX (D32-D40) ───────────────────────────────
+let currentUserId = null;
+let histLog = [];
+const HIST_MAX = 40;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const STARTERS = [
+    { label: 'Meu saldo', text: 'meu saldo' },
+    { label: 'Explica meu mês', text: 'explica meu mês' },
+    { label: 'Onde gastei mais', text: 'onde mais gastei' },
+    { label: 'Quanto posso gastar', text: 'quanto posso gastar esse mês' },
+];
+
+// D37: histórico local da conversa (device-local; limpo no logout).
+function histKey() { return `ge_chat_hist_${currentUserId || 'anon'}`; }
+function loadHistory() {
+    try { const a = JSON.parse(localStorage.getItem(histKey()) || '[]'); return Array.isArray(a) ? a.slice(-HIST_MAX) : []; }
+    catch { return []; }
+}
+function saveHistory() { try { localStorage.setItem(histKey(), JSON.stringify(histLog.slice(-HIST_MAX))); } catch {} }
+function pushHist(role, text) {
+    if (typeof text !== 'string' || !text) return;
+    histLog.push({ r: role === 'user' ? 'u' : 'a', t: text.slice(0, 500) });
+    if (histLog.length > HIST_MAX) histLog = histLog.slice(-HIST_MAX);
+    saveHistory();
+}
+function clearHistory() { try { localStorage.removeItem(histKey()); } catch {} histLog = []; }
+
+function activeProfileName() {
+    const p = assistant.listProfiles().find((x) => x.id === assistant.activeProfileId);
+    return p ? p.name : '';
+}
+
+// D33: sugestões contextuais conforme a resposta.
+function quickFor(res) {
+    if (res?.creditoCards || res?.reservaPicker) return []; // fluxo com picker: sem chips
+    const temChip = res?.chip || (Array.isArray(res?.multi) && res.multi.some((r) => r?.chip));
+    if (temChip) return [
+        { label: 'Meu saldo', text: 'meu saldo' },
+        { label: 'Quanto posso gastar', text: 'quanto posso gastar esse mês' },
+        { label: 'Resumo do mês', text: 'explica meu mês' },
+    ];
+    return [
+        { label: 'Onde gastei mais', text: 'onde mais gastei' },
+        { label: 'Comparar c/ mês passado', text: 'gastei mais que mês passado?' },
+        { label: 'Minhas reservas', text: 'minhas reservas' },
+        { label: 'Minhas assinaturas', text: 'minhas assinaturas' },
+    ];
+}
+
+// C25/C29/C30: insights de abertura — no máximo 1x por dia.
+function showDailyInsights(userId) {
+    const key = `ge_asst_daily_${userId}`;
+    const today = new Date().toDateString();
+    let last = null; try { last = localStorage.getItem(key); } catch {}
+    if (last === today) return;
+    try { localStorage.setItem(key, today); } catch {}
+    for (const t of assistant.aberturaInsights()) UI.addAssistantMessage(t);
+}
+
+// D38: entrada por voz (Web Speech API). Preenche o input; o usuário revisa e envia.
+function setupMic() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const mic = document.getElementById('geMic');
+    if (!SR || !mic) return; // não suportado → botão continua oculto
+    mic.hidden = false;
+    let rec = null, listening = false;
+    mic.addEventListener('click', () => {
+        if (listening) { try { rec?.stop(); } catch {} return; }
+        rec = new SR();
+        rec.lang = 'pt-BR'; rec.interimResults = false; rec.maxAlternatives = 1;
+        rec.onstart = () => { listening = true; mic.classList.add('listening'); };
+        rec.onerror = () => { listening = false; mic.classList.remove('listening'); };
+        rec.onend = () => { listening = false; mic.classList.remove('listening'); };
+        rec.onresult = (e) => { const txt = e.results?.[0]?.[0]?.transcript?.trim(); if (txt) UI.focusInput(txt); };
+        try { rec.start(); } catch {}
+    });
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────────
 (async function boot() {
     await supabaseReady;
@@ -63,16 +142,30 @@ overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSheet(
     }
     renderHeaderProfile();
 
-    // 4) Saudação + dica inicial (só na 1ª vez) + wiring
-    UI.addAssistantMessage(SISTEMA.saudacao());
-    const hintKey = `ge_asst_hinted_${userId}`;
-    let jaViu = false;
-    try { jaViu = !!localStorage.getItem(hintKey); } catch {}
-    if (!jaViu) {
-        UI.addAssistantMessage('Dá pra: registrar (“gastei 80 no mercado”, “recebi 2000 de salário”, “guardei 200 na reserva”), consultar (“quanto gastei em transporte?”, “meu saldo”, “onde mais gastei?”) e pedir resumo. Fala naturalmente que eu entendo.');
-        try { localStorage.setItem(hintKey, '1'); } catch {}
+    // 4) Histórico + saudação personalizada + insights de abertura + wiring
+    currentUserId = userId;
+    const nomeAtivo = activeProfileName();
+    histLog = loadHistory();
+    if (histLog.length) {
+        for (const m of histLog) {
+            if (m.r === 'u') UI.addUserMessage(m.t);
+            else UI.addAssistantMessage(m.t);
+        }
+        UI.addAssistantMessage('{{fa-clock-rotate-left}} Retomando de onde paramos. Manda a próxima!');
+    } else {
+        UI.addAssistantMessage(SISTEMA.saudacao(nomeAtivo));
+        const hintKey = `ge_asst_hinted_${userId}`;
+        let jaViu = false;
+        try { jaViu = !!localStorage.getItem(hintKey); } catch {}
+        if (!jaViu) {
+            UI.addAssistantMessage('Dá pra registrar (“gastei 80 no mercado”, “recebi 2000 de salário”, “guardei 200 na reserva”), consultar (“meu saldo”, “onde mais gastei?”) e pedir resumo (“explica meu mês”). Fala naturalmente que eu entendo.');
+            try { localStorage.setItem(hintKey, '1'); } catch {}
+        }
     }
+    showDailyInsights(userId);
+    UI.setQuickReplies(STARTERS, onSend);
     UI.wireInput(onSend);
+    setupMic();
 
     document.getElementById('geSettings').addEventListener('click', () => openSettings(userId));
     setupChrome();
@@ -80,21 +173,34 @@ overlay.addEventListener('click', (e) => { if (e.target === overlay) closeSheet(
 
 async function onSend(text) {
     UI.addUserMessage(text);
+    pushHist('user', text);
+    UI.haptic();
+    UI.setQuickReplies([], onSend); // esconde sugestões enquanto processa
     UI.showTyping();
+    const started = Date.now();
     let res;
     try { res = await assistant.handle(text); }
     catch { res = { text: SISTEMA.erro() }; }
+    // D34: garante um mínimo de "digitando" perceptível (mais humano).
+    const minDelay = 350 + Math.random() * 300;
+    const elapsed = Date.now() - started;
+    if (elapsed < minDelay) await sleep(minDelay - elapsed);
     UI.hideTyping();
-    if (res && Array.isArray(res.multi)) res.multi.forEach(renderResponse);
-    else renderResponse(res);
+    if (res && Array.isArray(res.multi)) {
+        UI.addMultiHeader(res.multi.length); // D36
+        res.multi.forEach(renderResponse);
+    } else {
+        renderResponse(res);
+    }
+    UI.setQuickReplies(quickFor(res), onSend); // D33
 }
 
 function renderResponse(res) {
     if (!res) return;
     if (res.creditoCards) { creditoFlow(res.credito, res.creditoCards); return; }
     if (res.reservaPicker) { retiradaFlow(res.retirada, res.reservaPicker); return; }
-    if (res.chip) UI.addConfirm(res, res.undo);
-    else UI.addAssistantMessage(res.text);
+    if (res.chip) { UI.addConfirm(res, res.undo); pushHist('a', res.text); }
+    else { UI.addAssistantMessage(res.text); pushHist('a', res.text); }
 }
 
 // ── Fluxo de retirada: escolhe a reserva no picker → aplica ──────────────────
@@ -284,7 +390,7 @@ function openSettings(userId) {
     // Logout
     const secOut = el('div', 'ge-sheet-section');
     const out = el('button', 'ge-btn-danger', 'Sair da conta');
-    out.addEventListener('click', async () => { await logout().catch(() => {}); location.replace('/login'); });
+    out.addEventListener('click', async () => { clearHistory(); await logout().catch(() => {}); location.replace('/login'); });
     secOut.appendChild(out);
     sheet.appendChild(secOut);
 

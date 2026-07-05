@@ -22,6 +22,23 @@ function _norm(s) {
     return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 
+// Distância de Levenshtein (para fuzzy match tolerante a typos — B21).
+function _lev(a, b) {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+        const cur = [i];
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+        }
+        prev = cur;
+    }
+    return prev[b.length];
+}
+
 /** Resolve a meta a partir do hint (nome) contra profile.metas. */
 export function resolveMeta(profile, hint) {
     const metas = Array.isArray(profile?.metas) ? profile.metas : [];
@@ -42,6 +59,21 @@ export function resolveMeta(profile, hint) {
         });
         if (contendo.length === 1) return { status: 'ok', meta: contendo[0] };
         if (contendo.length > 1) return { status: 'ambiguous', opcoes: contendo.map(metaNome) };
+
+        // Fuzzy (B21): melhor match por distância de edição, tolerante a typos
+        // ("emergencya", "reserva emergenca"). Só aceita se estiver perto o bastante.
+        let best = null, bestD = Infinity;
+        for (const m of metas) {
+            const n = _norm(metaNome(m));
+            if (!n) continue;
+            const d = _lev(h, n);
+            if (d < bestD) { bestD = d; best = m; }
+        }
+        if (best) {
+            const alvo = _norm(metaNome(best));
+            const limite = Math.max(2, Math.floor(alvo.length * 0.34));
+            if (bestD <= limite) return { status: 'ok', meta: best };
+        }
     }
 
     // Sem hint: se só existe uma meta (fora a de emergência), usa ela.
