@@ -123,8 +123,9 @@ export function stripTokens(text) {
 const MSG_CAP = 1400; // E47: teto defensivo de tamanho de uma mensagem renderizada.
 
 /**
- * Mensagem do assistente. opts: { cta:{label,href}, copiavel:boolean }.
- * cta → botão que navega pro GranaEvo (A1/F48); copiavel → botão "Copiar" (A7).
+ * Mensagem do assistente. opts: { cta:{label, href|onClick, icon?}, copiavel:boolean }.
+ * cta → botão de ação: navega (href) ou executa callback (onClick — ex.: instalar
+ * PWA, que exige gesto do usuário); copiavel → botão "Copiar" (A7).
  */
 export function addAssistantMessage(text, opts = {}) {
     let str = String(text ?? '');
@@ -144,13 +145,18 @@ export function addAssistantMessage(text, opts = {}) {
 function _actions(rawText, opts) {
     const bar = document.createElement('div');
     bar.className = 'ge-actions';
-    if (opts.cta && typeof opts.cta.href === 'string') {
+    if (opts.cta && (typeof opts.cta.href === 'string' || typeof opts.cta.onClick === 'function')) {
         const a = document.createElement('button');
         a.type = 'button';
         a.className = 'ge-cta-btn';
-        a.appendChild(faIcon('fa-arrow-up-right-from-square'));
+        a.appendChild(faIcon(opts.cta.icon || 'fa-arrow-up-right-from-square'));
         a.appendChild(document.createTextNode(' ' + (opts.cta.label || 'Ver no GranaEvo')));
-        a.addEventListener('click', () => { try { window.location.assign(opts.cta.href); } catch { /* ignore */ } });
+        a.addEventListener('click', () => {
+            try {
+                if (typeof opts.cta.onClick === 'function') opts.cta.onClick(a);
+                else window.location.assign(opts.cta.href);
+            } catch { /* ignore */ }
+        });
         bar.appendChild(a);
     }
     if (opts.copiavel) {

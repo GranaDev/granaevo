@@ -56,21 +56,43 @@ function _bindBtnBackup() {
 
 // "Instalar Chat Assistente" — leva o usuário ao /assistente, onde a instalação
 // do PWA próprio do assistente é possível (é lá que mora o manifesto e o
-// beforeinstallprompt dele). O parâmetro ?install=1 destaca o botão Baixar.
+// beforeinstallprompt dele). O ?install=1 mostra o CTA "Instalar agora" no chat.
 // A instalação não pode ser 100% automática: o Chrome exige um gesto do usuário
 // para abrir o instalador nativo, então o toque final acontece no /assistente.
 function _initInstallAssistantButton() {
     const btn = document.getElementById('btnInstalarAssistente');
     if (!btn) return;
+
+    // Flag local gravado pelo pwa-init.js no appinstalled do /assistente:
+    // este aparelho já instalou o assistente → informa (mas mantém clicável,
+    // pois o usuário pode ter desinstalado; a página /assistente sabe a verdade).
+    try {
+        if (localStorage.getItem('ge_assistant_installed') === '1') {
+            const sub = btn.querySelector('.cfg-item-sub');
+            if (sub) sub.textContent = 'Instalado neste aparelho — abra pelo ícone “Assistente”';
+        }
+    } catch { /* */ }
+
     btn.addEventListener('click', () => {
         const standalone = window.matchMedia('(display-mode: standalone)').matches
             || window.navigator.standalone === true;
+        const isAndroid = /android/i.test(navigator.userAgent || '');
         const url = '/assistente?install=1';
-        // Dentro do app instalado do GranaEvo (standalone), a instalação de um app
-        // separado só rola no navegador → abre numa aba externa pra sair do app.
-        // No navegador comum, navega na própria aba (mais fluido).
-        if (standalone) window.open(url, '_blank', 'noopener');
-        else            window.location.href = url;
+        if (standalone && isAndroid) {
+            // Dentro do app instalado no Android, window.open abriria uma Custom
+            // Tab — onde o Chrome NÃO entrega o prompt de instalação (o "Baixar"
+            // cairia sempre nas instruções manuais). O intent:// abre o Chrome
+            // DE VERDADE; se não houver Chrome, o fallback mantém o fluxo.
+            const fb = encodeURIComponent(location.origin + url);
+            window.location.href = 'intent://' + location.host + url
+                + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + fb + ';end';
+        } else if (standalone) {
+            // Desktop instalado: abre no navegador (janela normal), onde dá pra instalar.
+            window.open(url, '_blank', 'noopener');
+        } else {
+            // Navegador comum: navega na própria aba (mais fluido).
+            window.location.href = url;
+        }
     });
 }
 
