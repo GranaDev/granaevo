@@ -80,31 +80,20 @@ async function instalarAssistente() {
             return 'dismissed';
         } catch { /* cai nas instruções abaixo */ }
     }
-    // iOS nunca tem beforeinstallprompt → instrução de "Compartilhar".
+    // Sem prompt nativo → instrução ESPECÍFICA por navegador. Nem todo browser
+    // expõe o beforeinstallprompt (só Chrome/Edge/Samsung): Opera, Firefox e Safari
+    // instalam pela UI DO PRÓPRIO navegador, não por um botão do site.
+    const ua = navigator.userAgent || '';
     if (isIOSDevice()) {
-        UI.addAssistantMessage('Pra instalar no iPhone/iPad: toque em **Compartilhar** {{fa-arrow-up-from-bracket}} e depois em **“Adicionar à Tela de Início”**.');
-        return 'unavailable';
-    }
-    // Sem prompt nativo em Chrome/Edge → mostra DIAGNÓSTICO (temporário) pra achar
-    // por que o beforeinstallprompt não veio. Manda essa linha pro dev.
-    try {
-        const regs = ('serviceWorker' in navigator) ? await navigator.serviceWorker.getRegistrations() : [];
-        const ctrl = navigator.serviceWorker?.controller;
-        const ready = await Promise.race([
-            navigator.serviceWorker?.ready?.then(r => r.active?.state || 'sem-active').catch(() => 'erro-ready'),
-            new Promise(res => setTimeout(() => res('timeout'), 1500)),
-        ]);
-        const scopes = regs.map(r => (r.scope || '').replace(location.origin, '') + '[' + (r.active ? 'A' : r.installing ? 'I' : r.waiting ? 'W' : '?') + ']').join(' ');
-        UI.addAssistantMessage(
-            '{{fa-circle-info}} Diagnóstico de instalação (me manda essa linha):\n' +
-            '• prompt capturado: ' + (window.__pwaInstallPrompt ? 'SIM' : 'não') + '\n' +
-            '• beforeinstallprompt disparou: ' + (window.__pwaPromptFired ? 'SIM' : 'NÃO') + '\n' +
-            '• service workers: ' + (regs.length ? scopes : 'NENHUM') + '\n' +
-            '• controlando a página: ' + (ctrl ? ctrl.scriptURL.split('/').pop() : 'nenhum') + '\n' +
-            '• ready: ' + ready
-        );
-    } catch (e) {
-        UI.addAssistantMessage('{{fa-circle-info}} Diagnóstico falhou: ' + (e?.message || e));
+        UI.addAssistantMessage('No iPhone/iPad: toque em **Compartilhar** {{fa-arrow-up-from-bracket}} (barra de baixo) e depois em **“Adicionar à Tela de Início”**. Pronto, vira app.');
+    } else if (/OPR\/|OPT\/|\bOpera\b/i.test(ua)) {
+        UI.addAssistantMessage('No **Opera**, a instalação é pelo próprio navegador (o Opera não deixa o site abrir sozinho): clique no ícone **{{fa-download}} de instalar na barra de endereço** (à direita, perto do coração/favoritos) — ou no **menu do Opera → “Instalar Assistente GranaEvo…”**. Instala como app próprio do mesmo jeito. {{fa-circle-info}} Se quiser que o botão instale com 1 clique, use **Chrome** ou **Edge**.');
+    } else if (/Firefox\//i.test(ua)) {
+        UI.addAssistantMessage('No **Firefox**, abra o menu (☰) e toque em **“Instalar”** / **“Adicionar à tela inicial”**.');
+    } else if (/SamsungBrowser/i.test(ua)) {
+        UI.addAssistantMessage('No **Samsung Internet**, toque no menu (☰) → **“Adicionar página a”** → **“Tela inicial”**.');
+    } else {
+        UI.addAssistantMessage('Abra o **menu do navegador** (⋮) e toque em **“Instalar app”** / **“Adicionar à tela inicial”**. Se o botão não abriu a instalação direto, recarregue a página (F5) e tente de novo.');
     }
     return 'unavailable';
 }
