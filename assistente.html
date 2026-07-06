@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+  <!-- Captura do beforeinstallprompt PRIMEIRO de tudo, SEM defer: em visitas
+       repetidas (SW ja em cache) o Chrome dispara o evento cedo; se o listener
+       vier depois (defer/modulo), o prompt se perde e o botao Baixar nao instala.
+       Precisa vir antes do manifesto pra o listener ja existir quando disparar. -->
+  <script src="/pwa-init.js"></script>
   <meta name="theme-color" content="#0a0b14">
   <meta name="robots" content="noindex, nofollow">
   <title>Assistente GranaEvo</title>
@@ -14,7 +19,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Assistente GranaEvo">
   <link rel="stylesheet" href="src/styles/assistente.css">
-  <script src="/pwa-init.js" defer></script>
 </head>
 <body>
   <main class="ge-chat">
