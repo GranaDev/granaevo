@@ -21,19 +21,9 @@ const el = (tag, cls, txt) => {
     return e;
 };
 
-// ── PWA independente ─────────────────────────────────────────────────────────
-// Registra o Service Worker PRÓPRIO do assistente (escopo /assistente), separado
-// do sw.js do site. É o que torna o "Baixar" instalável (fetch handler no escopo)
-// e dá offline ao app-shell. Registra IMEDIATAMENTE (não no 'load') para o
-// critério de instalabilidade do Chrome ficar elegível o quanto antes — quanto
-// mais cedo o SW ativa, mais cedo o beforeinstallprompt pode disparar.
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker
-        .register('/assistant-sw.js', { scope: '/assistente' })
-        .catch(() => { /* sem SW o chat segue funcionando, só sem install/offline */ });
-}
-
 // ── Instalação nativa ─────────────────────────────────────────────────────────
+// O SW próprio do assistente é registrado cedo em /pwa-init.js (antes do módulo),
+// para o beforeinstallprompt ficar elegível o quanto antes.
 // O prompt nativo é capturado cedo em /pwa-init.js (window.__pwaInstallPrompt).
 // Guardamos uma referência viva e escutamos a chegada tardia do evento.
 let deferredInstall = window.__pwaInstallPrompt || null;
@@ -90,11 +80,31 @@ async function instalarAssistente() {
             return 'dismissed';
         } catch { /* cai nas instruções abaixo */ }
     }
-    // Sem prompt nativo (iOS, Firefox, ou critério ainda não atendido) → instruções.
+    // iOS nunca tem beforeinstallprompt → instrução de "Compartilhar".
     if (isIOSDevice()) {
         UI.addAssistantMessage('Pra instalar no iPhone/iPad: toque em **Compartilhar** {{fa-arrow-up-from-bracket}} e depois em **“Adicionar à Tela de Início”**.');
-    } else {
-        UI.addAssistantMessage('Quase lá! Abra o **menu do navegador** (⋮) e toque em **“Instalar app”** / **“Adicionar à tela inicial”**. Dica: se o botão não instalar direto, recarregue a página uma vez e tente de novo.');
+        return 'unavailable';
+    }
+    // Sem prompt nativo em Chrome/Edge → mostra DIAGNÓSTICO (temporário) pra achar
+    // por que o beforeinstallprompt não veio. Manda essa linha pro dev.
+    try {
+        const regs = ('serviceWorker' in navigator) ? await navigator.serviceWorker.getRegistrations() : [];
+        const ctrl = navigator.serviceWorker?.controller;
+        const ready = await Promise.race([
+            navigator.serviceWorker?.ready?.then(r => r.active?.state || 'sem-active').catch(() => 'erro-ready'),
+            new Promise(res => setTimeout(() => res('timeout'), 1500)),
+        ]);
+        const scopes = regs.map(r => (r.scope || '').replace(location.origin, '') + '[' + (r.active ? 'A' : r.installing ? 'I' : r.waiting ? 'W' : '?') + ']').join(' ');
+        UI.addAssistantMessage(
+            '{{fa-circle-info}} Diagnóstico de instalação (me manda essa linha):\n' +
+            '• prompt capturado: ' + (window.__pwaInstallPrompt ? 'SIM' : 'não') + '\n' +
+            '• beforeinstallprompt disparou: ' + (window.__pwaPromptFired ? 'SIM' : 'NÃO') + '\n' +
+            '• service workers: ' + (regs.length ? scopes : 'NENHUM') + '\n' +
+            '• controlando a página: ' + (ctrl ? ctrl.scriptURL.split('/').pop() : 'nenhum') + '\n' +
+            '• ready: ' + ready
+        );
+    } catch (e) {
+        UI.addAssistantMessage('{{fa-circle-info}} Diagnóstico falhou: ' + (e?.message || e));
     }
     return 'unavailable';
 }
