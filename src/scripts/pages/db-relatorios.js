@@ -713,6 +713,9 @@ function setupBotoesRelatorio() {
     const newBtnIndividual = btnIndividual.cloneNode(true);
     const newBtnCasal = btnCasal.cloneNode(true);
     const newBtnFamilia = btnFamilia.cloneNode(true);
+    // Declarado no escopo da função (não dentro do if abaixo): o handler do botão
+    // "Família" o referencia, e um `const` block-scoped causaria ReferenceError.
+    let newBtnPatrimonio = null;
     
     btnIndividual.parentNode.replaceChild(newBtnIndividual, btnIndividual);
     btnCasal.parentNode.replaceChild(newBtnCasal, btnCasal);
@@ -764,7 +767,7 @@ function setupBotoesRelatorio() {
     // ── Histórico Patrimonial ────────────────────────────────────────────
     const btnPatrimonio = document.querySelector('.tipo-relatorio-btns [data-tipo="patrimonio"]');
     if (btnPatrimonio) {
-        const newBtnPatrimonio = btnPatrimonio.cloneNode(true);
+        newBtnPatrimonio = btnPatrimonio.cloneNode(true);
         btnPatrimonio.parentNode.replaceChild(newBtnPatrimonio, btnPatrimonio);
 
         newBtnPatrimonio.addEventListener('click', function () {

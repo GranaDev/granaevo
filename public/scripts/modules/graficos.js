@@ -331,6 +331,44 @@ function _setupResizeObserver() {
     });
 }
 
+// ── Factory de charts com blindagem anti-crash ───────────────────────────────
+// TODO `new Chart` do módulo passa por aqui. Motivo: um único valor não-numérico
+// (undefined, objeto) dentro de um data[] faz a engine de animação do Chart.js v4
+// quebrar com "this._fn is not a function" no próximo tick do requestAnimationFrame
+// — FORA de qualquer try/catch nosso (o tick roda no RAF interno do Chart.js). O
+// interpolador é escolhido por Ds[type || typeof valor]; só existem number/color/
+// boolean, então `typeof undefined` → sem interpolador → _fn vira undefined → estoura
+// ao ser chamado. Como as séries vêm de agregações sobre transações do usuário, um
+// caso de borda contamina o array e derruba a aba inteira, sem chance de capturar.
+// Aqui coeragimos cada valor para número finito ou null — o "sem dado" idiomático do
+// Chart.js, que ele pula com segurança (mesma semântica de um ponto ausente).
+function _valorSeguroChart(v) {
+    if (typeof v === 'number')          return Number.isFinite(v) ? v : null;
+    if (v === null || v === undefined)  return null;
+    if (typeof v === 'object')          return v;   // ponto {x,y}/{x,y,r} — Chart.js cuida
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;            // string numérica → número; resto → gap
+}
+
+function _novoChart(ctx, config) {
+    // Canvas já fora do DOM → não cria: seria um chart órfão animando no vazio, o
+    // mesmo cenário que o ResizeObserver acima destrói. (Só bloqueia o caso
+    // inequívoco "detached"; canvas apenas oculto continua renderizando normal.)
+    const cv = ctx && (ctx.canvas || ctx);           // aceita <canvas> ou CanvasRenderingContext2D
+    if (!cv || cv.isConnected === false) return null;
+
+    try {
+        const datasets = config?.data?.datasets;
+        if (Array.isArray(datasets)) {
+            for (const d of datasets) {
+                if (d && Array.isArray(d.data)) d.data = d.data.map(_valorSeguroChart);
+            }
+        }
+    } catch { /* a sanitização nunca pode impedir o gráfico de nascer */ }
+
+    return new Chart(ctx, config);
+}
+
 // ── Defaults globais do Chart.js — aplicados uma vez no load ─────────────────
 function _configurarChartDefaults() {
     if (typeof Chart === 'undefined') return;
@@ -1301,7 +1339,7 @@ function criarGraficoBarrasComparativo(canvasId, dados1, dados2, periodo1, perio
     const valores1 = labels.map(cat => dados1.categorias[cat] || 0);
     const valores2 = labels.map(cat => dados2.categorias[cat] || 0);
 
-    graficosInstances[canvasId] = new Chart(ctx, {
+    graficosInstances[canvasId] = _novoChart(ctx, {
         type: 'bar',
         data: {
             labels,
@@ -1379,7 +1417,7 @@ function criarGraficoLinhaComparativo(canvasId, dados1, dados2, periodo1, period
     const entradas2 = labels.map((_, i) => dados2.evolucaoDiaria[i + 1]?.entradas || 0);
     const saidas2   = labels.map((_, i) => dados2.evolucaoDiaria[i + 1]?.saidas   || 0);
 
-    graficosInstances[canvasId] = new Chart(ctx, {
+    graficosInstances[canvasId] = _novoChart(ctx, {
         type: 'line',
         data: {
             labels,
@@ -1649,7 +1687,7 @@ function criarGraficoPizza(canvasId, dados) {
     const isMobile = window.innerWidth <= 768;
 
     const c = _coresGrafico();
-    graficosInstances[canvasId] = new Chart(ctx, {
+    graficosInstances[canvasId] = _novoChart(ctx, {
         type: 'doughnut',
         // R5 FIX: devicePixelRatio fica no nível correto (top-level do config Chart.js)
         devicePixelRatio: isMobile ? 1 : undefined,
@@ -1725,7 +1763,7 @@ function criarGraficoBarras(canvasId, dados) {
     const labels = Object.keys(dados.categorias);
     const values = Object.values(dados.categorias);
 
-    graficosInstances[canvasId] = new Chart(ctx, {
+    graficosInstances[canvasId] = _novoChart(ctx, {
         type: 'bar',
         data: {
             labels,
@@ -1802,7 +1840,7 @@ function criarGraficoLinha(canvasId, dados) {
     const entradas = dias.map(d => dados.evolucaoDiaria[d].entradas);
     const saidas   = dias.map(d => dados.evolucaoDiaria[d].saidas);
 
-    graficosInstances[canvasId] = new Chart(ctx, {
+    graficosInstances[canvasId] = _novoChart(ctx, {
         type: 'line',
         data: {
             labels: dias.map(d => `Dia ${d}`),
@@ -2174,7 +2212,7 @@ function criarGraficoPatrimonio(canvasId, d) {
 
     const c = _coresGrafico();
     const ctx = canvas.getContext('2d');
-    graficosInstances[canvasId] = new Chart(ctx, {
+    graficosInstances[canvasId] = _novoChart(ctx, {
         type: 'line',
         data: {
             labels: d.labels,

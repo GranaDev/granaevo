@@ -240,6 +240,10 @@ function onMove(e) {
 // Anima o trilho até o destino (commit) ou de volta (snap) e finaliza.
 function settle(commit) {
     busy = true;
+    // Captura local da página atual: `curPage` é de módulo e é zerado ao fim do
+    // done(); se um segundo settle/cancel disparar durante a animação, o done()
+    // desta chamada ainda precisa de uma referência válida (senão null.removeEL…).
+    const el = curPage;
     const goingNext = inDir === 'next';
 
     // Posições finais: no commit a vizinha vai a 0 e a atual sai por -inEdge;
@@ -252,7 +256,7 @@ function settle(commit) {
     const done = () => {
         if (ended) return;
         ended = true;
-        curPage.removeEventListener('transitionend', onSettleEnd);
+        if (el) el.removeEventListener('transitionend', onSettleEnd);
 
         if (commit) {
             // A vizinha vira a aba ativa — sem pageEnter (não tem .ge-page-enter,
@@ -288,10 +292,12 @@ function settle(commit) {
         }
 
         // Limpa a página atual (que saiu, no commit; ou que voltou, no snap).
-        curPage.classList.remove('ge-swipe-current');
-        curPage.style.transition = '';
-        curPage.style.transform  = '';
-        curPage.style.display = commit ? 'none' : '';
+        if (el) {
+            el.classList.remove('ge-swipe-current');
+            el.style.transition = '';
+            el.style.transform  = '';
+            el.style.display = commit ? 'none' : '';
+        }
 
         document.body.classList.remove('ge-dragging', 'ge-swiping');
         curPage = null; axis = null; active = false;
@@ -299,18 +305,20 @@ function settle(commit) {
     };
 
     const onSettleEnd = (ev) => {
-        if (ev.target === curPage && ev.propertyName === 'transform') done();
+        if (ev.target === el && ev.propertyName === 'transform') done();
     };
 
     const dur = (commit && Math.abs(vX) > 0.9) ? 260 : (commit ? COMMIT_MS : SNAP_MS);
     document.body.classList.add('ge-swiping');
 
-    curPage.addEventListener('transitionend', onSettleEnd);
+    if (el) el.addEventListener('transitionend', onSettleEnd);
     setTimeout(done, dur + 80);   // rede de segurança
 
     requestAnimationFrame(() => {
-        curPage.style.transition = `transform ${dur}ms ${EASE_OUT}`;
-        curPage.style.transform  = `translate3d(${curEnd}px,0,0)`;
+        if (el) {
+            el.style.transition = `transform ${dur}ms ${EASE_OUT}`;
+            el.style.transform  = `translate3d(${curEnd}px,0,0)`;
+        }
         if (inPage) {
             inPage.style.transition = `transform ${dur}ms ${EASE_OUT}`;
             inPage.style.transform  = `translate3d(${inEnd}px,0,0)`;
@@ -343,6 +351,7 @@ function snapBackEdge() {
 }
 
 function onEnd() {
+    if (busy) return;   // animação de commit/snap em curso → não reentra num 2º settle
     if (!curPage || axis !== 'h' || !active) {
         // Gesto nunca virou horizontal (tap/scroll) → limpa estado leve.
         if (axis !== 'h') { curPage = null; axis = null; active = false; }
@@ -365,6 +374,7 @@ function onEnd() {
 }
 
 function onCancel() {
+    if (busy) return;   // já assentando → deixa a animação em curso terminar sozinha
     if (!curPage) return;
     if (active && inPage) settle(false);
     else if (active) snapBackEdge();

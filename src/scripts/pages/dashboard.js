@@ -2262,7 +2262,7 @@ function _carregarModuloTela(tela) {
     if (tela === 'graficos') {
         if (!_dbLoaded.graficos && !_dbLoading.graficos) {
             _dbLoading.graficos = true;
-            import('./db-graficos.js?v=3').then(m => {
+            import('./db-graficos.js?v=4').then(m => {
                 m.init(_makeCtx());
                 _dbLoaded.graficos = true;
                 _dbLoading.graficos = false;
@@ -2938,22 +2938,45 @@ function enviarNotificacaoNativa(titulo, mensagem, tipo = 'info') {
 
     if(!tituloSeguro) return;
 
-    const notification = new Notification(`${icone} ${tituloSeguro}`, {
+    const tituloFinal = `${icone} ${tituloSeguro}`;
+    const opcoes = {
         body: mensagemSegura,
         icon:  '/favicon.ico',
         badge: '/favicon.ico',
         vibrate: [200, 100, 200],
         requireInteraction: tipoSeguro === 'urgente',
-        tag: 'granaevo-' + Date.now()
-    });
-
-    notification.onclick = () => {
-        window.focus();
-        mostrarTela('dashboard');
-        notification.close();
+        tag: 'granaevo-' + Date.now(),
+        data: { url: '/dashboard' }   // o SW (sw-push-handler) usa isto no clique
     };
 
-    setTimeout(() => notification.close(), 10000);
+    // Chrome/Android proíbem `new Notification()` mesmo com permissão concedida
+    // ("Illegal constructor. Use ServiceWorkerRegistration.showNotification()").
+    // Preferimos sempre o service worker; o construtor fica só como fallback de
+    // desktop, protegido por try/catch pra nunca derrubar a thread.
+    if (navigator.serviceWorker) {
+        navigator.serviceWorker.ready
+            .then(reg => reg.showNotification(tituloFinal, opcoes))
+            .catch(() => _notificacaoLegacy(tituloFinal, opcoes));
+        return;
+    }
+
+    _notificacaoLegacy(tituloFinal, opcoes);
+}
+
+// Fallback via construtor Notification — só onde não há service worker (desktop
+// antigo). O clique/foco é tratado aqui; via SW ele é tratado no notificationclick.
+function _notificacaoLegacy(titulo, opcoes) {
+    try {
+        const notification = new Notification(titulo, opcoes);
+        notification.onclick = () => {
+            window.focus();
+            mostrarTela('dashboard');
+            notification.close();
+        };
+        setTimeout(() => notification.close(), 10000);
+    } catch (_) {
+        // Navegador sem suporte ao construtor e sem SW — silencioso (não crítico).
+    }
 }
 
 // Verificar contas a vencer e vencidas — categorização inteligente
