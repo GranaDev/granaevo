@@ -16,7 +16,7 @@
  * Supabase são cross-origin e passam DIRETO pela rede (nunca interceptadas).
  */
 
-const CACHE = 'ge-assistant-v1';
+const CACHE = 'ge-assistant-v2';
 const SHELL = '/assistente';
 
 // Recursos estáveis (não-hasheados) do app-shell. Os bundles JS/CSS hasheados
@@ -79,13 +79,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Assets do build (imutáveis por hash), ícones, manifest e pwa-init:
-  // cache-first com revalidação em background (stale-while-revalidate).
-  if (
-    url.pathname.startsWith('/assets/') ||
-    url.pathname === '/assistente.webmanifest' ||
-    url.pathname === '/pwa-init.js'
-  ) {
+  // Arquivos NÃO-hasheados que podem mudar (pwa-init.js, manifest): NETWORK-FIRST.
+  // Cache-first aqui era um bug: servia versões velhas do pwa-init.js (que captura
+  // o beforeinstallprompt) mesmo após deploy. Fresco quando online; cache no offline.
+  if (url.pathname === '/pwa-init.js' || url.pathname === '/assistente.webmanifest') {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      try {
+        const fresh = await fetch(req);
+        if (fresh && fresh.ok) cache.put(req, fresh.clone());
+        return fresh;
+      } catch {
+        return (await cache.match(req)) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  // Assets do build (imutáveis por HASH de conteúdo): cache-first com revalidação
+  // em background. Seguro porque a URL muda quando o conteúdo muda.
+  if (url.pathname.startsWith('/assets/')) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE);
       const cached = await cache.match(req);

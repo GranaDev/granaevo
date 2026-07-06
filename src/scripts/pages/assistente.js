@@ -41,7 +41,7 @@ function isIOSDevice() {
 
 // Espera curta pelo prompt (ele pode chegar 1-2s depois do load). Fica dentro da
 // janela de ativação de gesto do Chrome (~5s), então pode ser chamada no clique.
-function aguardarPrompt(ms = 2500) {
+function aguardarPrompt(ms = 3800) {
     if (deferredInstall) return Promise.resolve(deferredInstall);
     return new Promise((resolve) => {
         let feito = false;
@@ -66,7 +66,13 @@ async function instalarAssistente() {
         UI.addAssistantMessage('Você já está no modo app. Para instalar o **Chat Assistente** como app separado, abra **granaevo.com/assistente** pelo **navegador** e toque em **Baixar** {{fa-download}}.');
         return 'unavailable';
     }
-    const p = deferredInstall || await aguardarPrompt();
+    // Usa o prompt já capturado; se ainda não chegou, espera um pouco (com feedback)
+    // dentro da janela de gesto do Chrome antes de cair nas instruções.
+    let p = deferredInstall;
+    if (!p) {
+        UI.addAssistantMessage('Preparando a instalação… {{fa-download}}');
+        p = await aguardarPrompt();
+    }
     if (p) {
         try {
             p.prompt();
