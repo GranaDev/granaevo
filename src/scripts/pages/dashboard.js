@@ -1634,6 +1634,15 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         if (pc) { pc.classList.remove('js-hidden'); pc.style.display = ''; }
         _revelarShellDashboard();
         mostrarTela('dashboard');
+        // Deep-link do assistente (A1): /dashboard#relatorios abre a aba direto.
+        try {
+            const alvo = (location.hash || '').replace(/^#/, '');
+            const TABS_DEEPLINK = ['transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios', 'configuracoes'];
+            if (TABS_DEEPLINK.includes(alvo)) {
+                mostrarTela(alvo);
+                history.replaceState(null, '', location.pathname + location.search);
+            }
+        } catch { /* hash inválido — segue no dashboard */ }
         const al = document.getElementById('authLoading');
         if (al) al.style.display = 'none';
         if (profileLoading) profileLoading.classList.add('hidden');

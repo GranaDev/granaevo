@@ -16,6 +16,12 @@ export function filterByPeriodo(transacoes, periodo) {
     const arr = Array.isArray(transacoes) ? transacoes : [];
     if (!periodo || periodo === 'tudo') return arr;
 
+    // A3: mês nomeado — "mes:YYYY-MM" casa exatamente aquele ano-mês.
+    if (typeof periodo === 'string' && periodo.startsWith('mes:')) {
+        const ym = periodo.slice(4);
+        return arr.filter((t) => { const d = brDateToObj(t?.data); return d && yearMonthKey(d) === ym; });
+    }
+
     const hoje = new Date();
     const ymAtual = yearMonthKey(hoje);
     const ymPassado = yearMonthKey(new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1));
@@ -420,4 +426,107 @@ export function narrativaMes(profile) {
         saldo: saldoAtual(profile),
         orcamento: orcamentoRestante(profile),
     };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROATIVIDADE — insights de abertura / marcos (Bloco C) — 100% local.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** "YYYY-MM-DD" (ISO, meia-noite local) → Date, senão null. */
+function _isoToDate(iso) {
+    if (typeof iso !== 'string') return null;
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+function _diasAte(d) {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const alvo = new Date(d); alvo.setHours(0, 0, 0, 0);
+    return Math.round((alvo - hoje) / 864e5);
+}
+
+/** C21: fatura de cartão vencendo em ≤ `dias` (ou já vencida). Só a mais próxima. */
+export function faturaVencendo(profile, dias = 6) {
+    const contas = (Array.isArray(profile?.contasFixas) ? profile.contasFixas : [])
+        .filter((c) => c.tipoContaFixa === 'fatura_cartao' && !c.pago && Number(c.valor) > 0);
+    if (!contas.length) return { ok: false };
+    const cards = Array.isArray(profile?.cartoesCredito) ? profile.cartoesCredito : [];
+    const nomeCartao = (id) => { const c = cards.find((x) => String(x.id) === String(id)); return c ? (c.nomeBanco || c.nome || 'cartão') : 'cartão'; };
+    let melhor = null;
+    for (const c of contas) {
+        const d = _isoToDate(c.vencimento);
+        if (!d) continue;
+        const diff = _diasAte(d);
+        if (diff > dias) continue; // ainda longe
+        if (!melhor || diff < melhor.dias) melhor = { dias: diff, valor: _round(c.valor), nome: nomeCartao(c.cartaoId), vencida: diff < 0 };
+    }
+    return melhor ? { ok: true, ...melhor } : { ok: false };
+}
+
+/** C22: dia provável de salário (recorrente) e se ainda não caiu este mês. */
+export function salarioProvavel(profile) {
+    const txs = (Array.isArray(profile?.transacoes) ? profile.transacoes : [])
+        .filter((t) => t.categoria === 'entrada' && /sal[aá]rio/i.test(String(t.tipo || t.descricao || '')));
+    if (txs.length < 2) return { ok: false };
+    // Dia do mês mais frequente entre os salários registrados.
+    const cont = {};
+    for (const t of txs) { const d = brDateToObj(t.data); if (d) { const dia = d.getDate(); cont[dia] = (cont[dia] || 0) + 1; } }
+    const entradas = Object.entries(cont).sort((a, b) => b[1] - a[1]);
+    if (!entradas.length || entradas[0][1] < 2) return { ok: false }; // sem recorrência clara
+    const dia = Number(entradas[0][0]);
+    const hoje = new Date();
+    const ym = yearMonthKey(hoje);
+    const caiuEsteMes = txs.some((t) => _ymOf(t.data) === ym);
+    const perto = Math.abs(hoje.getDate() - dia) <= 1;
+    return { ok: true, dia, caiuEsteMes, perto };
+}
+
+/** C23: dias restantes até o fim do mês + se houve movimento no mês. */
+export function fimDeMes(profile) {
+    const hoje = new Date();
+    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+    const diasRestantes = ultimoDia - hoje.getDate();
+    const rel = relatorio(profile, 'mes');
+    return { diasRestantes, temMovimento: rel.count > 0, saldoMes: rel.saldoPeriodo };
+}
+
+/** Patrimônio guardado (soma de metas.saved). */
+export function totalReservado(profile) {
+    return _round((Array.isArray(profile?.metas) ? profile.metas : []).reduce((s, m) => s + Math.max(0, Number(m.saved) || 0), 0));
+}
+
+const _MARCOS_RESERVA = [1000, 5000, 10000, 25000, 50000, 100000];
+/** C24: marco de reserva cruzado AGORA por um aporte de `txValor`. null se nenhum. */
+export function marcoReserva(profile, txValor) {
+    const agora = totalReservado(profile);
+    const antes = agora - (Number(txValor) || 0);
+    for (let i = _MARCOS_RESERVA.length - 1; i >= 0; i--) {
+        const T = _MARCOS_RESERVA[i];
+        if (agora >= T && antes < T) return { marco: T, total: agora };
+    }
+    return null;
+}
+
+const _MARCOS_COUNT = [50, 100, 250, 500, 1000];
+/** C24: marco de contagem de lançamentos (chamado logo após inserir). null se nenhum. */
+export function marcoContagem(profile) {
+    const n = (Array.isArray(profile?.transacoes) ? profile.transacoes : []).length;
+    return _MARCOS_COUNT.includes(n) ? { marco: n } : null;
+}
+
+/** C26: total de conquistas desbloqueadas (mapa {id: ISOdate} em profile.conquistas). */
+export function conquistasResumo(profile) {
+    const c = profile?.conquistas;
+    const total = c && typeof c === 'object' ? Object.keys(c).length : 0;
+    return { total };
+}
+/** C26: quantas conquistas foram desbloqueadas HOJE (para insight de abertura). */
+export function conquistasHoje(profile) {
+    const c = profile?.conquistas;
+    if (!c || typeof c !== 'object') return 0;
+    const hojeISO = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+    let n = 0;
+    for (const v of Object.values(c)) { if (typeof v === 'string' && v.slice(0, 10) === hojeISO) n++; }
+    return n;
 }

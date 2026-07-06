@@ -5,7 +5,7 @@
 // ui.js (createElement, whitelist) — sem emojis, sem innerHTML.
 // ---------------------------------------------------------------------------
 
-import { formatBRL } from './money.js';
+import { formatBRL, mesLabel } from './money.js';
 import { TIPO_ICONE } from './parser-local.js';
 
 // A5: pick que evita repetir a última escolha do MESMO array (soa menos robótico).
@@ -70,6 +70,19 @@ const PERIODO_LABEL = {
     hoje: 'hoje', semana: 'nesta semana', mes: 'neste mês',
     mes_passado: 'no mês passado', trimestre: 'no trimestre', ano: 'neste ano', tudo: 'no total',
 };
+
+// Rótulo de período — cobre também mês nomeado ("mes:2026-05" → "em maio"). A3.
+export function perLabel(p) {
+    if (typeof p === 'string' && p.startsWith('mes:')) { const l = mesLabel(p.slice(4)); return l ? `em ${l}` : 'no mês'; }
+    return PERIODO_LABEL[p] || 'no período';
+}
+
+// A9: mini-barra de proporção com blocos (texto puro — sem HTML, seguro).
+export function barra(pct, largura = 10) {
+    const p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    const cheias = Math.round((p / 100) * largura);
+    return '█'.repeat(cheias) + '░'.repeat(Math.max(0, largura - cheias));
+}
 
 // ── Saudação (A1 persona "Ge" + A2 nome + A3 hora) ───────────────────────────
 const SAUDACAO_CORPO = [
@@ -181,7 +194,7 @@ export function escolherMeta(opcoes = []) {
 
 // ── Consulta de gastos ────────────────────────────────────────────────────────
 export function renderConsulta(r) {
-    const per = PERIODO_LABEL[r.periodo] || 'no período';
+    const per = perLabel(r.periodo);
     if (r.count === 0) {
         const alvo = r.termos.length ? ` com ${r.termos.join(', ')}` : '';
         return `Não achei nenhum gasto${alvo} ${per}.`;
@@ -197,7 +210,7 @@ export function renderConsulta(r) {
 
 // ── Entradas (quanto ganhei/recebi) ───────────────────────────────────────────
 export function renderEntradas(r) {
-    const per = PERIODO_LABEL[r.periodo] || 'no período';
+    const per = perLabel(r.periodo);
     if (r.count === 0) {
         const alvo = r.termos.length ? ` de ${r.termos.join(', ')}` : '';
         return `Não achei nenhuma entrada${alvo} ${per}.`;
@@ -211,10 +224,10 @@ export function renderEntradas(r) {
 
 // ── Onde mais gastei / gráficos (ranking por categoria) ───────────────────────
 export function renderMaiorGasto(r) {
-    const per = PERIODO_LABEL[r.periodo] || 'no período';
+    const per = perLabel(r.periodo);
     if (r.count === 0 || !r.ranking.length) return `Não achei gastos ${per} pra montar o ranking.`;
     let msg = `{{fa-chart-simple}} *No que você mais gastou ${per}* (total ${formatBRL(r.total)}):\n`;
-    msg += r.ranking.map((g, i) => `${i + 1}. ${g.tipo} — ${formatBRL(g.valor)} (${g.pct}%)`).join('\n');
+    msg += r.ranking.map((g, i) => `${i + 1}. ${g.tipo} — ${formatBRL(g.valor)}\n${barra(g.pct)} ${g.pct}%`).join('\n');
     return msg;
 }
 
@@ -270,28 +283,45 @@ export function renderSaldo(v) {
     return 'Seu saldo atual está zerado. Manda as movimentações que eu atualizo.';
 }
 
-// ── Relatório ─────────────────────────────────────────────────────────────────
-export function renderRelatorio(r) {
-    const per = PERIODO_LABEL[r.periodo] || 'no período';
+// ── Relatório (resumo rápido do período — A1/A5/A9/A10) ───────────────────────
+// `comp` (opcional) = compararMes() para a linha "vs. mês passado" (só faz
+// sentido no período "mes"). A nota final educa: chat = resumo, site = detalhe.
+export function renderRelatorio(r, comp) {
+    const per = perLabel(r.periodo);
     if (r.count === 0) return `Não tem movimentação ${per} ainda. Bora começar? Manda um gasto ou entrada.`;
     let msg = `{{fa-chart-simple}} *Resumo ${per}*\n` +
         `• Entradas: ${formatBRL(r.entradas)}\n` +
         `• Saídas: ${formatBRL(r.saidas)}\n` +
         `• Reservado: ${formatBRL(r.reservas)}\n` +
-        `• Saldo do período: ${formatBRL(r.saldoPeriodo)}`;
-    if (r.topGastos.length) {
-        msg += '\n\nOnde mais foi:\n' + r.topGastos.map((g) => `• ${g.tipo}: ${formatBRL(g.valor)}`).join('\n');
+        `• Saldo do período: *${formatBRL(r.saldoPeriodo)}*`;
+    // A10: comparativo com o mês passado (só no período "mes").
+    if (r.periodo === 'mes' && comp && comp.passado > 0) {
+        if (comp.dif > 0) msg += `\n{{fa-arrow-trend-up}} ${formatBRL(comp.dif)} a mais que o mês passado${comp.pct !== null ? ` (${comp.pct}%)` : ''}.`;
+        else if (comp.dif < 0) msg += `\n{{fa-arrow-trend-down}} ${formatBRL(Math.abs(comp.dif))} a menos que o mês passado. Mandou bem!`;
     }
+    // A9: onde mais foi, com mini-barras de proporção.
+    if (r.topGastos.length) {
+        const maxV = r.topGastos[0].valor || 1;
+        msg += '\n\nOnde mais foi:\n' + r.topGastos
+            .map((g) => `${g.tipo}: ${formatBRL(g.valor)}\n${barra(Math.round((g.valor / maxV) * 100))}`)
+            .join('\n');
+    }
+    // A5: deixa claro que é o resumo rápido; o detalhe fica no site (CTA anexado pelo engine).
+    msg += '\n\n{{fa-circle-info}} Esse é o resumo rápido. Pro detalhado — gráficos e exportar — abre os Relatórios no GranaEvo.';
     return msg;
 }
 
-// ── Reservas ─────────────────────────────────────────────────────────────────
+// ── Reservas (E47: lista longa é truncada + CTA anexado pelo engine) ──────────
 export function renderReservas(lista) {
     if (!lista.length) return '{{fa-piggy-bank}} Você ainda não tem reservas. Crie no menu “Reservas” e comece a guardar.';
-    return '{{fa-piggy-bank}} *Suas reservas:*\n' + lista.map((m) => {
+    const CAP = 8;
+    const vis = lista.slice(0, CAP);
+    let msg = '{{fa-piggy-bank}} *Suas reservas:*\n' + vis.map((m) => {
         const prog = m.pct !== null ? ` (${m.pct}%${m.alvo ? ` de ${formatBRL(m.alvo)}` : ''})` : '';
         return `• ${m.nome}: ${formatBRL(m.saved)}${prog}`;
     }).join('\n');
+    if (lista.length > CAP) msg += `\n…e mais ${lista.length - CAP} — ver todas no GranaEvo.`;
+    return msg;
 }
 
 // ── Projeção de meta ───────────────────────────────────────────────────────────
@@ -453,6 +483,74 @@ export function rateEspera(seg) {
 
 // E46: rótulo do selo "modo local" (usado pela UI quando a IA está indisponível)
 export const LABEL_MODO_LOCAL = 'entendendo localmente';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BLOCO C — novos insights de proatividade (todos sobre dados 100% locais)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// C21: fatura de cartão vencendo (ou vencida)
+export function faturaVencendoMsg(f) {
+    if (!f || !f.ok) return null;
+    if (f.vencida) return `{{fa-triangle-exclamation}} A fatura do *${f.nome}* (${formatBRL(f.valor)}) já venceu. Bora quitar?`;
+    if (f.dias === 0) return `{{fa-calendar-day}} A fatura do *${f.nome}* (${formatBRL(f.valor)}) vence *hoje*.`;
+    return `{{fa-calendar-day}} A fatura do *${f.nome}* (${formatBRL(f.valor)}) vence em *${f.dias} ${f.dias > 1 ? 'dias' : 'dia'}*.`;
+}
+
+// C22: lembrete de salário provável (só se ainda não caiu este mês)
+export function salarioMsg(s) {
+    if (!s || !s.ok || s.caiuEsteMes || !s.perto) return null;
+    return `{{fa-money-check-dollar}} Seu salário costuma cair por volta do dia *${s.dia}*. Já recebeu? Me fala que eu registro.`;
+}
+
+// C23: nudge de fim de mês
+export function fimDeMesMsg(fm) {
+    if (!fm || !fm.temMovimento || fm.diasRestantes > 3 || fm.diasRestantes < 0) return null;
+    if (fm.diasRestantes === 0) return '{{fa-flag-checkered}} Último dia do mês! Quer fechar registrando o que faltou?';
+    return `{{fa-flag-checkered}} Faltam *${fm.diasRestantes} ${fm.diasRestantes > 1 ? 'dias' : 'dia'}* pro mês fechar. Algo ainda pra anotar?`;
+}
+
+// C24: marcos (reserva acumulada / contagem de lançamentos)
+export function marcoReservaMsg(m) {
+    if (!m) return null;
+    return `{{fa-trophy}} Você passou de *${formatBRL(m.marco)}* guardados no total! Já são ${formatBRL(m.total)}. Que evolução! {{fa-fire}}`;
+}
+export function marcoContagemMsg(m) {
+    if (!m) return null;
+    return `{{fa-star}} Esse foi seu *${m.marco}º lançamento*! Consistência é o que constrói patrimônio.`;
+}
+
+// C26: conquistas (lê o mapa profile.conquistas — sem rodar o engine de conquistas)
+export function conquistasMsg(c) {
+    if (!c || !c.total) return 'Você ainda não desbloqueou conquistas. Continua lançando que elas vêm! {{fa-medal}}';
+    return `{{fa-medal}} Você já desbloqueou *${c.total} ${c.total > 1 ? 'conquistas' : 'conquista'}*. Vê todas (e seu nível) na tela de Conquistas do GranaEvo.`;
+}
+export function conquistasHojeMsg(n) {
+    if (!n) return null;
+    return `{{fa-medal}} Você desbloqueou *${n} ${n > 1 ? 'conquistas' : 'conquista'}* recentemente! Dá um pulo em Conquistas pra ver. {{fa-star}}`;
+}
+
+// B13: valor sozinho ambíguo → pergunta (sem IA; chips vêm do engine)
+export function perguntarGastoOuEntrada(valor) {
+    return `Peguei *${formatBRL(valor)}*, mas não sei se foi gasto ou entrada. Qual dos dois?`;
+}
+
+// B15: repetição do último lançamento
+export function repetido(res) {
+    const base = confirmacaoLancamento(res);
+    return { text: '{{fa-rotate-right}} De novo! ' + base.text.replace(/^\{\{fa-check\}\}\s*/, ''), chip: base.chip };
+}
+export function nadaPraRepetir() {
+    return 'Não tenho um lançamento recente pra repetir. Manda o primeiro que eu anoto!';
+}
+
+// F49: ajuda contextual — varia conforme o que o usuário já tem/usa.
+export function ajudaContexto(ctx = {}) {
+    let extra = '';
+    if (!ctx.temReserva) extra = '\n\n{{fa-piggy-bank}} Dica: crie uma *reserva* no GranaEvo e eu passo a guardar dinheiro por voz (“guardei 200 na viagem”).';
+    else if (!ctx.usouReserva) extra = '\n\n{{fa-piggy-bank}} Você tem reservas! Experimenta “guardei 100 na [nome da reserva]”.';
+    else if (!ctx.temCartao) extra = '\n\n{{fa-credit-card}} Tem compras no crédito? Cadastre um cartão no GranaEvo que eu registro as parceladas.';
+    return pick(AJUDA) + extra;
+}
 
 // ── Segurança / mensagens de sistema ───────────────────────────────────────────
 export const SISTEMA = {

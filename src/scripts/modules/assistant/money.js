@@ -102,16 +102,77 @@ export function parseExtenso(text) {
     return total;
 }
 
+// ── Meses nomeados (pt-BR) → "YYYY-MM" ─────────────────────────────────────────
+// Usado pelas consultas/relatórios ("relatório de maio"). Nomes completos +
+// abreviações de 3 letras (bounded por \b — não casa "janta"/"mercado"/"mais").
+const _MESES = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
+    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const _MESES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+function _normNoAcc(s) {
+    return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/**
+ * Detecta um mês nomeado no texto e devolve a ocorrência mais recente no
+ * passado (ou o mês atual) como "YYYY-MM". Ex.: em julho/2026, "maio"→2026-05,
+ * "dezembro"→2025-12 (dez ainda não aconteceu este ano). Senão null.
+ */
+export function parseMesNomeado(text) {
+    const t = _normNoAcc(text);
+    let idx = -1;
+    for (let i = 0; i < 12; i++) {
+        if (new RegExp(`\\b${_MESES[i]}\\b`).test(t)) { idx = i; break; }
+    }
+    if (idx === -1) {
+        for (let i = 0; i < 12; i++) {
+            if (new RegExp(`\\b${_MESES_ABBR[i]}\\b`).test(t)) { idx = i; break; }
+        }
+    }
+    if (idx === -1) return null;
+    const hoje = new Date();
+    let ano = hoje.getFullYear();
+    if (idx > hoje.getMonth()) ano -= 1; // mês ainda não chegou este ano → ano passado
+    return `${ano}-${String(idx + 1).padStart(2, '0')}`;
+}
+
+/** Rótulo amigável de um "YYYY-MM": "maio" (ano atual) ou "maio de 2025". */
+export function mesLabel(ym) {
+    if (typeof ym !== 'string') return '';
+    const m = ym.match(/^(\d{4})-(\d{2})$/);
+    if (!m) return '';
+    const ano = Number(m[1]);
+    const nomes = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+        'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    const nome = nomes[Number(m[2]) - 1] || '';
+    if (!nome) return '';
+    return ano === new Date().getFullYear() ? nome : `${nome} de ${ano}`;
+}
+
 // ── Datas relativas (pt-BR) → "dd/mm/aaaa" ─────────────────────────────────────
-/** "ontem", "anteontem", "semana passada", "dia N" → data BR; senão null. */
+const _DIAS_SEMANA = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
+
+/** "ontem", "anteontem", "semana passada/retrasada", "terça passada", "dia N" → data BR; senão null. */
 export function parseDataRelativa(text) {
     if (typeof text !== 'string') return null;
     const t = text.toLowerCase();
+    const tn = _normNoAcc(text); // sem acento p/ dias da semana ("terça"→"terca")
     const hoje = new Date();
     const fmt = (d) => d.toLocaleDateString('pt-BR');
-    if (/\banteontem\b/.test(t)) { const d = new Date(hoje); d.setDate(d.getDate() - 2); return fmt(d); }
-    if (/\bontem\b/.test(t)) { const d = new Date(hoje); d.setDate(d.getDate() - 1); return fmt(d); }
-    if (/\bsemana passada\b/.test(t)) { const d = new Date(hoje); d.setDate(d.getDate() - 7); return fmt(d); }
+    if (/\banteontem\b/.test(tn)) { const d = new Date(hoje); d.setDate(d.getDate() - 2); return fmt(d); }
+    if (/\bontem\b/.test(tn)) { const d = new Date(hoje); d.setDate(d.getDate() - 1); return fmt(d); }
+    if (/\bsemana retrasada\b/.test(tn)) { const d = new Date(hoje); d.setDate(d.getDate() - 14); return fmt(d); }
+    if (/\bsemana passada\b/.test(tn)) { const d = new Date(hoje); d.setDate(d.getDate() - 7); return fmt(d); }
+
+    // Dia da semana + "passad[ao]" ("terça passada", "sábado passado", "segunda-feira passada").
+    const mSem = tn.match(/\b(domingo|segunda|terca|quarta|quinta|sexta|sabado)(?:-?\s*feira)?\s+passad[ao]\b/);
+    if (mSem) {
+        const alvo = _DIAS_SEMANA[mSem[1]];
+        const diff = (hoje.getDay() - alvo + 7) % 7;
+        const d = new Date(hoje);
+        d.setDate(d.getDate() - (diff === 0 ? 7 : diff)); // "passada" = estritamente antes de hoje
+        return fmt(d);
+    }
 
     // Data absoluta com barra/traço: "dia 5/6", "05/06", "3/5/2026" → dd/mm/aaaa.
     // Exige dia E mês (tem separador) para não capturar números soltos.

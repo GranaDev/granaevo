@@ -6,7 +6,7 @@
 // Não grava nada; não vê nada além do texto.
 // ---------------------------------------------------------------------------
 
-import { parseValorBR, parseParcelas, parseExtenso, parseDataRelativa, parseAritmetica } from './money.js';
+import { parseValorBR, parseParcelas, parseExtenso, parseDataRelativa, parseAritmetica, parseMesNomeado } from './money.js';
 
 // Tipos permitidos no app (espelham db-transacoes.js: o conjunto reconhecido pelo
 // auto-categorizador em _AUTO_CAT, mais rico que o dropdown de edição). Inclui
@@ -47,7 +47,7 @@ function corrigirTypos(t) {
 // Roteia direto para uma recusa amigável SEM chamar a IA. Blindagem + economia
 // de token. Casa pedidos de "ignore instruções", troca de papel, ou pesca por
 // dados de sistema/senha. A IA já ignoraria isso; aqui fechamos antes.
-const RE_INJECT = /\b(ignore? (as |todas as |suas )?(instru|regras|ordens)|esque[cç]a (as |suas )?(instru|regras)|aja como|finja (que|ser)|voce (agora )?e (um|uma|o|a)\b|assuma o papel|system prompt|prompt do sistema|jailbreak|dan mode|revele? (suas |as )?(instru|regras|senha|chave|token|api)|qual (e |é )?(sua|a) (senha|chave|api|token)|service.?role|bypass)/;
+const RE_INJECT = /\b(ignore? (as |todas as |suas )?(instru|regras|ordens)|esque[cç]a (as |suas )?(instru|regras)|aja como|finja (que|ser)|voce (agora )?e (um|uma|o|a)\b|assuma o papel|system prompt|prompt do sistema|jailbreak|dan mode|modo desenvolvedor|developer mode|revele? (suas |as )?(instru|regras|senha|chave|token|api)|(repita|mostra|mostre|imprima|print|exiba|cole|liste) (o |as |suas |seu )?(texto acima|instru|regras|system|prompt|mensagem de sistema)|quais (sao|são) (suas |as )?(instru|regras)|your (instructions|system prompt|rules)|qual (e |é )?(sua|a) (senha|chave|api|token)|service.?role|\bsudo\b|\bbypass\b)/;
 
 // ── Verbos → categoria (ordem importa: específicos antes de genéricos) ───────
 const VERBOS = [
@@ -108,7 +108,7 @@ export const TIPO_ICONE = {
 // (texto já vem normalizado: minúsculo e sem acento)
 const RE_SAUDACAO  = /^(oi+|ola|opa|e ?ai|eae|eai|opa|salve|fala|coe|hey|help|bom dia|boa tarde|boa noite|blz|beleza|tudo (bem|bom|certo))\b/;
 const RE_AJUDA     = /\b(ajuda|me ajuda|como funciona|como (usa|uso|te uso)|o que (voce|vc|da pra) (faz|fazer)|que comandos|comandos|nao sei usar|tutorial|dicas)\b/;
-const RE_RELATORIO = /\b(relatorio|resumo|balanco|extrato|fechamento do mes|panorama|visao geral|como (estou|esta|ta|andam|estao) (as )?(minhas )?(financas|contas|grana)|minha situacao financeira)\b/;
+const RE_RELATORIO = /\b(relatorio|resumo(?! do dia)|balanco|extrato|fechamento (do mes|da semana|do trimestre|do ano|mensal|semanal)|como fechei|prestacao de contas|raio-?x|diagnostico( financeiro)?|panorama|visao geral|como (estou|esta|ta|andam|estao) (as |os |de )?(minhas |meus )?(financas|contas|grana|gastos)|minha situacao financeira)\b/;
 const RE_CONSULTA  = /\b(quanto|quantos|qual|quais|total de|gastei com|tenho|quanto sobrou|quanto (ja )?(gastei|recebi)|meu saldo|minhas reservas|me mostra|mostra|como (esta|estao|esta|estao))\b/;
 const RE_PROJECAO  = /\b(quanto tempo|em quanto tempo|se eu (investir|guardar|aportar|poupar)|vou levar|leva pra|daqui quanto|falta quanto pra)\b/;
 
@@ -124,6 +124,9 @@ const RE_FATURA    = /\b(minha fatura|ver (a )?fatura|fatura (do|da|em aberto|at
 const RE_FALTA     = /\b(quanto (ainda )?falta|falta quanto|quanto (eu )?preciso (guardar|juntar)) (pra|para|pro)/;
 // Desfazer por texto
 const RE_DESFAZER  = /\b(desfaz|desfazer|desfa[cç]a|apaga(r)? (o |a )?ultim|cancela(r)? (isso|o ultimo|a ultima|essa|esse)|errei|foi errado|nao (era|foi) isso|remove(r)? (o )?ultim|apaga isso|cancela isso|volta atras)/;
+// Repetir o último lançamento (B15): "de novo", "mesma coisa", "igual ontem", "repete".
+// Deliberadamente SEM "mais um(a)" (colide com "mais um café 5" = lançamento novo).
+const RE_REPETIR   = /\b(de novo|denovo|(a )?mesma coisa|igual (a |ao )?(ontem|antes|de sempre|o de sempre)|repete( isso| o ultimo| a ultima)?|repetir( o ultimo| isso)?|(faz|lanca|bota|poe) (isso )?de novo|outra vez)\b/;
 
 // Novos intents de insight/consulta (B22/C27/C29/C31) e privacidade (E42)
 const RE_ORCAMENTO   = /\b(quanto (eu )?(posso|da pra|consigo) gastar|posso gastar quanto|meu orcamento|quanto (ainda )?(sobra|resta|posso) (pra )?gast|quanto (eu )?tenho pra gastar)/;
@@ -135,12 +138,16 @@ const RE_PRIVACIDADE = /\b(voce (ve|le|acessa|guarda|sabe|manda) .*(dinheiro|dad
 // ── Período ──────────────────────────────────────────────────────────────────
 export function detectPeriodo(t) {
     if (/\bhoje\b/.test(t)) return 'hoje';
-    if (/\b(essa|esta|nessa|semana passada) semana\b/.test(t) || /\bsemana passada\b/.test(t)) return 'semana';
+    if (/\b(essa|esta|nessa|desta|dessa|da|na) semana\b/.test(t) || /\bsemana passada\b/.test(t)) return 'semana';
     if (/\b(trimestre|ultimos? (3|tres) meses|ultimos? 90 dias|nos? ultimos 3 meses)\b/.test(t)) return 'trimestre';
     if (/\bmes (passado|anterior|retrasado)\b/.test(t) || /\bultimo mes\b/.test(t) || /\bno mes passado\b/.test(t)) return 'mes_passado';
     if (/\b(esse|este) ano\b|\bno ano\b|\beste ano\b/.test(t)) return 'ano';
     if (/\b(tudo|geral|no total|sempre|desde o inicio|desde sempre)\b/.test(t)) return 'tudo';
     if (/\b(esse|este) mes\b|\bno mes\b|\bdo mes\b|\bmes atual\b/.test(t)) return 'mes';
+    // A3: mês nomeado ("de maio", "em dezembro") → "mes:YYYY-MM" (ocorrência recente).
+    // Só depois dos relativos, para não capturar "mês passado" por engano.
+    const ym = parseMesNomeado(t);
+    if (ym) return `mes:${ym}`;
     return null; // engine assume 'mes' por padrão em consultas
 }
 
@@ -156,22 +163,57 @@ function detectConsultaAlvo(t) {
 // Verbos de lançamento — usados para dividir mensagens compostas.
 const RE_VERBO_LANC = /\b(gastei|paguei|comprei|gasto|torrei|recebi|ganhei|caiu|entrou|guardei|reservei|poupei|juntei|separei|aportei|tirei|resgatei|saquei|assinei)\b/;
 
+// Conta valores monetários num texto (ignora "3x" de parcelas). Usado pelo split.
+function _countValores(text) {
+    const s = String(text).toLowerCase();
+    const re = /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(k\b|mil\b)?/g;
+    let m, n = 0;
+    while ((m = re.exec(s)) !== null) {
+        if (!m[2] && s[re.lastIndex] === 'x') continue; // "3x" = parcelas, não valor
+        n++;
+    }
+    return n;
+}
+
 /**
- * Divide uma mensagem composta em cláusulas independentes de lançamento.
- * Só divide quando há ≥2 segmentos que CONTÊM valor — evita quebrar
- * "mercado e farmácia" (2º sem valor) mas quebra "gastei 300 no mercado,
- * mas ganhei 120 do pai". Conservador por design.
+ * Divide uma mensagem composta em cláusulas independentes de lançamento (B17).
+ * Duas passadas: (1) separadores fortes (vírgula não-decimal, ";", "mas/também/
+ * depois/daí"); (2) dentro de cada pedaço, quebra em " e " SÓ quando o pedaço
+ * tem ≥2 valores — assim "10 no mercado e 10 na gasolina" vira 2 itens, mas
+ * "pão e leite" (0 valores) NÃO quebra. Cada cláusula é reinterpretada sozinha
+ * pelo funil (local→IA), então cada item recebe a categoria correta.
  * @returns {string[]} segmentos (ou [texto] se não for composto).
  */
 export function splitCompound(rawText) {
     const text = String(rawText ?? '');
-    // Separa por: vírgula, ponto-e-vírgula, "mas/porém/também", e " e " SÓ quando
-    // seguido de um verbo de lançamento (não quebra "pão e leite").
-    // Vírgula separa cláusula SÓ quando não é decimal (ex.: "28,06" não quebra;
-    // "mercado, comprei" e "300, ganhei" quebram).
-    const parts = text.split(/(?<!\d),\s*|,\s*(?!\d)|\s*;\s*|\s+mas\s+|\s+por[ée]m\s+|\s+tamb[ée]m\s+|\s+depois\s+|\s+da[ií]\s+|\s+e mais\s+|\s+e\s+(?=(?:gastei|paguei|comprei|recebi|ganhei|caiu|entrou|guardei|reservei|poupei|juntei|separei|tirei|resgatei|saquei|assinei)\b)/i);
-    const comValor = parts.map((s) => s.trim()).filter((s) => s && parseValorBR(s) !== null);
+    // Passada 1 — separadores fortes (vírgula só quando NÃO for decimal).
+    const strong = text.split(/(?<!\d),\s*|,\s*(?!\d)|\s*;\s*|\s+mas\s+|\s+por[ée]m\s+|\s+tamb[ée]m\s+|\s+depois\s+|\s+da[ií]\s+|\s+e mais\s+/i);
+    // Passada 2 — quebra em " e " apenas quando o pedaço carrega ≥2 valores.
+    const segs = [];
+    for (const part of strong) {
+        const p = part.trim();
+        if (!p) continue;
+        if (_countValores(p) >= 2 && /\s+e\s+/i.test(p)) {
+            for (const sub of p.split(/\s+e\s+/i)) { const s = sub.trim(); if (s) segs.push(s); }
+        } else {
+            segs.push(p);
+        }
+    }
+    // Só é composto se ≥2 segmentos independentes contêm valor.
+    const comValor = segs.filter((s) => parseValorBR(s) !== null);
     return comValor.length >= 2 ? comValor : [text];
+}
+
+/**
+ * Casa a primeira palavra-chave conhecida do texto → {categoria, tipo, descricao}.
+ * Reutilizado pela correção de categoria inline (B14). Retorna null se nada casar.
+ */
+export function keywordMatch(rawText) {
+    const t = corrigirTypos(norm(rawText));
+    for (const [re, cat, tp] of KEYWORDS) {
+        if (re.test(t)) return { categoria: cat, tipo: tp, descricao: tp };
+    }
+    return null;
 }
 
 // Detecta uma pergunta de follow-up ("e no mês passado?", "e transporte?").
@@ -232,10 +274,12 @@ export function parseLocal(rawText) {
     // 0) Tentativa de manipulação/prompt-injection → recusa amigável, sem IA (E43)
     if (RE_INJECT.test(text)) return { ...base, intencao: 'recusa', confianca: 0.96 };
 
-    // 1) Saudação / ajuda / desfazer (curtas, alta confiança)
+    // 1) Saudação / ajuda / desfazer / repetir (curtas, alta confiança)
     if (RE_SAUDACAO.test(text) && text.length <= 25) return { ...base, intencao: 'saudacao', confianca: 0.97 };
     if (RE_AJUDA.test(text)) return { ...base, intencao: 'ajuda', confianca: 0.9 };
     if (RE_DESFAZER.test(text)) return { ...base, intencao: 'desfazer', confianca: 0.9 };
+    // B15: repetir o último lançamento — só quando NÃO há valor novo no texto.
+    if (RE_REPETIR.test(text) && parseValorBR(text) === null) return { ...base, intencao: 'repetir', confianca: 0.9 };
 
     // 2) Projeção de meta ("se eu guardar X por mês…")
     if (RE_PROJECAO.test(text)) {
@@ -307,10 +351,13 @@ export function parseLocal(rawText) {
             if (categoria === 'entrada') { tipo = 'Outros Recebimentos'; descricao = descricao || 'Recebimento'; }
             else if (categoria === 'saida') { tipo = 'Outros'; descricao = descricao || 'Gasto'; }
         }
-        // meta_hint: texto após "reserva do/da/para"
+        // meta_hint (só p/ reserva): nome após reserva/meta/na/no/pra/para/em.
+        // Ex.: "guardar 50 na viagem" → "viagem"; "poupei 200 pra emergência" → "emergência".
         let metaHint = null;
-        const mm = text.match(/reserva (?:d[aeo]|para|pro|pra) ([\p{L}\s]{2,30})/u);
-        if (mm) metaHint = mm[1].trim();
+        if (categoria === 'reserva') {
+            const mm = text.match(/\b(?:reserva|meta|pra|para|pro|na|no|em)\s+(?:d[aeo]\s+|[ao]\s+)?([\p{L}][\p{L}\s]{1,28})/u);
+            if (mm) metaHint = mm[1].trim();
+        }
 
         return {
             ...base, intencao: 'lancar', categoria, valor, tipo,
@@ -332,7 +379,16 @@ export function parseLocal(rawText) {
         };
     }
 
-    // 6) Valor sozinho sem verbo/keyword, ou nada casou → baixa confiança (vai pra IA)
-    if (valor) return { ...base, intencao: 'lancar', categoria: 'saida', valor, confianca: 0.4 };
+    // 5c) Verbo/keyword sem valor ("gastei no mercado" sem número) → guarda o
+    //     que foi entendido pra IA tentar; se a IA falhar, naoEntendiEsperto
+    //     usa a categoria pra pedir só o valor.
+    if (categoria) {
+        return { ...base, intencao: 'lancar', categoria, tipo: tipo || null, descricao: descricao || null, confianca: 0.35 };
+    }
+
+    // 6) Valor sozinho, sem verbo nem keyword → AMBÍGUO. NÃO gasta IA: o engine
+    //    pergunta "foi gasto ou entrada?" com 1 toque (B13). Alta confiança pra
+    //    o funil resolver localmente (não cai no fallback de IA).
+    if (valor) return { ...base, intencao: 'valor_ambiguo', valor, confianca: 0.9 };
     return base;
 }

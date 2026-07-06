@@ -10,6 +10,14 @@ import { TIPOS_SAIDA, TIPOS_ENTRADA } from './parser-local.js';
 
 const MAX_VALOR = 100_000_000; // R$ 100 mi — teto sanidade (evita overflow/typo absurdo)
 const CATS_VALIDAS = ['entrada', 'saida', 'saida_credito', 'reserva', 'retirada_reserva', 'assinatura'];
+const PERIODOS_FIXOS = ['hoje', 'semana', 'mes', 'mes_passado', 'trimestre', 'ano', 'tudo'];
+
+// Período válido: um dos fixos OU "mes:YYYY-MM" (mês nomeado — A3, só do parser local).
+function normalizePeriodo(p) {
+    if (PERIODOS_FIXOS.includes(p)) return p;
+    if (typeof p === 'string' && /^mes:\d{4}-\d{2}$/.test(p)) return p;
+    return null;
+}
 
 function clampStr(s, max = 200) {
     return typeof s === 'string' ? s.trim().slice(0, max) : null;
@@ -51,11 +59,11 @@ export function toCommand(parse) {
         parcelas: Number.isInteger(parse.parcelas) && parse.parcelas > 0 && parse.parcelas <= 420 ? parse.parcelas : null,
         cartaoHint: clampStr(parse.cartao_hint, 60),
         aporteMensal: null,
-        periodo: ['hoje', 'semana', 'mes', 'mes_passado', 'trimestre', 'ano', 'tudo'].includes(parse.periodo) ? parse.periodo : null,
+        periodo: normalizePeriodo(parse.periodo),
         palavrasChave: Array.isArray(parse.palavras_chave)
             ? parse.palavras_chave.filter((s) => typeof s === 'string').map((s) => s.toLowerCase().slice(0, 40)).slice(0, 8)
             : [],
-        consultaAlvo: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar', 'comparar', 'media', 'fatura', 'falta_meta', 'orcamento', 'assinaturas', 'narrativa', 'curiosidade'].includes(parse.consulta_alvo) ? parse.consulta_alvo : 'gasto',
+        consultaAlvo: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar', 'comparar', 'media', 'fatura', 'falta_meta', 'orcamento', 'assinaturas', 'narrativa', 'curiosidade', 'conquistas'].includes(parse.consulta_alvo) ? parse.consulta_alvo : 'gasto',
         dataOverride: typeof parse.data_override === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(parse.data_override) ? parse.data_override : null,
     };
 

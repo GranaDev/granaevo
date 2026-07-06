@@ -238,7 +238,60 @@ html, body {
 .ge-mic.listening { color: var(--color-danger); animation: ge-mic-pulse 1s ease-in-out infinite; }
 @keyframes ge-mic-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
+/* ── Ações abaixo da bolha: CTA "Ver no GranaEvo" + Copiar (A1/A7/F48) ─────── */
+.ge-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.ge-cta-btn, .ge-copy-btn {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  border-radius: var(--radius-full); padding: 6px 12px;
+  font-size: var(--text-xs); font-weight: var(--fw-semibold); font-family: inherit;
+  transition: var(--transition-fast);
+}
+.ge-cta-btn {
+  border: 1px solid var(--color-border-primary); background: rgba(16,185,129,0.10);
+  color: var(--color-primary-light);
+}
+.ge-cta-btn:hover { background: rgba(16,185,129,0.18); }
+.ge-copy-btn { border: 1px solid var(--color-border-strong); background: transparent; color: var(--color-text-faint); }
+.ge-copy-btn:hover { color: var(--color-text); }
+
+/* D34: mensagem do usuário reaproveitável (tocar → edita) */
+.ge-editable { cursor: pointer; }
+
+/* D38: card que agrupa lançamentos de um envio composto */
+.ge-group {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  border-left: 2px solid var(--color-border-primary);
+  padding-left: var(--space-3); margin-left: 2px;
+}
+
+/* D39: janela visual de desfazer (barra que encolhe) — só estético */
+.ge-confirm--timed { position: relative; overflow: hidden; }
+.ge-confirm--timed::after {
+  content: ''; position: absolute; left: 0; bottom: 0; height: 2px;
+  width: 100%; background: var(--color-primary); opacity: 0.55;
+  transform-origin: left; animation: ge-countdown 8s linear forwards;
+}
+@keyframes ge-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* D35: busca na conversa */
+.ge-search-results { display: flex; flex-direction: column; gap: var(--space-2); max-height: 46vh; overflow-y: auto; }
+.ge-search-hit {
+  display: flex; align-items: baseline; gap: var(--space-2); width: 100%; text-align: left;
+  padding: var(--space-3); border-radius: var(--radius-lg); cursor: pointer;
+  background: var(--color-bg-soft); border: 1px solid var(--color-border); color: var(--color-text);
+  font-size: var(--text-sm); font-family: inherit; transition: var(--transition-fast);
+}
+.ge-search-hit:hover { border-color: var(--color-border-primary); }
+.ge-search-hit span:last-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ge-search-role {
+  flex-shrink: 0; font-size: var(--text-xs); font-weight: var(--fw-bold);
+  color: var(--color-primary-light); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ge-flash { animation: ge-flash 1.5s ease-out; }
+@keyframes ge-flash { 0%, 100% { background: var(--color-bg-card); } 25% { background: rgba(16,185,129,0.18); } }
+
 @media (prefers-reduced-motion: reduce) {
   .ge-bubble, .ge-confirm, .ge-quick-chip, .ge-sheet { animation: none; }
   .ge-mic.listening { animation: none; }
+  .ge-confirm--timed::after, .ge-flash { animation: none; }
 }

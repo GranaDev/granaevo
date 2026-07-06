@@ -33,7 +33,7 @@ function _clampLabels(list) {
  * Estrutura uma mensagem via IA (fallback do parser local).
  * @param {string} text  Texto cru do usuário.
  * @param {{metaLabels?:string[], cartaoLabels?:string[]}} [ctx]  SÓ rótulos — nada financeiro.
- * @returns {Promise<{ok:true, parse:object} | {ok:false, reason:'rate'|'auth'|'net'|'noparse'}>}
+ * @returns {Promise<{ok:true, parse:object} | {ok:false, reason:'rate'|'rate_day'|'auth'|'net'|'noparse'}>}
  */
 export async function parseWithAI(text, ctx = {}) {
     const clean = typeof text === 'string' ? text.trim() : '';
@@ -64,7 +64,12 @@ export async function parseWithAI(text, ctx = {}) {
         clearTimeout(timer);
     }
 
-    if (resp.status === 429) return { ok: false, reason: 'rate' };
+    if (resp.status === 429) {
+        // E46: o proxy usa "amanhã/diário" só no teto por DIA → mensagem específica.
+        let daily = false;
+        try { const j = await resp.json(); daily = /amanh|di[aá]ri/i.test(String(j?.error ?? '')); } catch { /* corpo ausente */ }
+        return { ok: false, reason: daily ? 'rate_day' : 'rate' };
+    }
     if (!resp.ok)            return { ok: false, reason: 'net' };
 
     let data;

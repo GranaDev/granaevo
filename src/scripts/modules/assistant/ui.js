@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 let els = null;
+let _group = null; // container ativo p/ agrupar lançamentos de um envio (D38)
 
 export function mountUI() {
     els = {
@@ -17,6 +18,18 @@ export function mountUI() {
     };
     return els;
 }
+
+// Alvo de inserção: o grupo ativo (D38) ou a lista de mensagens.
+function _target() { return _group || els.messages; }
+
+/** D38: abre um card que agrupa as mensagens de um envio composto. */
+export function beginGroup() {
+    if (!els?.messages) return;
+    _group = document.createElement('div');
+    _group.className = 'ge-group';
+    els.messages.appendChild(_group);
+}
+export function endGroup() { _group = null; scrollDown(); }
 
 /** D39: vibração sutil (respeita prefers-reduced-motion; no-op se não suportado). */
 export function haptic(ms = 12) {
@@ -88,26 +101,85 @@ function scrollDown() {
 }
 
 export function addUserMessage(text) {
+    const str = String(text ?? '');
     const row = document.createElement('div');
     row.className = 'ge-row user';
     const bubble = document.createElement('div');
-    bubble.className = 'ge-bubble';
-    bubble.textContent = String(text ?? ''); // texto do usuário: sempre textContent
+    bubble.className = 'ge-bubble ge-editable';
+    bubble.textContent = str; // texto do usuário: sempre textContent
+    // D34: tocar na própria mensagem reaproveita o texto no input (editar/reenviar).
+    bubble.title = 'Tocar para reaproveitar e editar';
+    bubble.addEventListener('click', () => focusInput(str));
     row.appendChild(bubble);
-    els.messages.appendChild(row);
+    _target().appendChild(row);
     scrollDown();
 }
 
-export function addAssistantMessage(text) {
+// Remove tokens de formatação ({{fa-*}} e *negrito*) → texto puro (p/ copiar/TTS).
+export function stripTokens(text) {
+    return String(text ?? '').replace(/\{\{fa-[a-z0-9-]+\}\}/g, '').replace(/\*([^*\n]+)\*/g, '$1').replace(/\s+\n/g, '\n').trim();
+}
+
+const MSG_CAP = 1400; // E47: teto defensivo de tamanho de uma mensagem renderizada.
+
+/**
+ * Mensagem do assistente. opts: { cta:{label,href}, copiavel:boolean }.
+ * cta → botão que navega pro GranaEvo (A1/F48); copiavel → botão "Copiar" (A7).
+ */
+export function addAssistantMessage(text, opts = {}) {
+    let str = String(text ?? '');
+    if (str.length > MSG_CAP) str = str.slice(0, MSG_CAP) + '…';
     const row = document.createElement('div');
     row.className = 'ge-row assistant';
     const bubble = document.createElement('div');
     bubble.className = 'ge-bubble';
-    renderFormatted(bubble, text);
+    renderFormatted(bubble, str);
+    if (opts.cta || opts.copiavel) bubble.appendChild(_actions(str, opts));
     row.appendChild(bubble);
-    els.messages.appendChild(row);
+    _target().appendChild(row);
     scrollDown();
 }
+
+// Linha de ações abaixo da bolha (CTA "Ver no GranaEvo" + "Copiar").
+function _actions(rawText, opts) {
+    const bar = document.createElement('div');
+    bar.className = 'ge-actions';
+    if (opts.cta && typeof opts.cta.href === 'string') {
+        const a = document.createElement('button');
+        a.type = 'button';
+        a.className = 'ge-cta-btn';
+        a.appendChild(faIcon('fa-arrow-up-right-from-square'));
+        a.appendChild(document.createTextNode(' ' + (opts.cta.label || 'Ver no GranaEvo')));
+        a.addEventListener('click', () => { try { window.location.assign(opts.cta.href); } catch { /* ignore */ } });
+        bar.appendChild(a);
+    }
+    if (opts.copiavel) {
+        const c = document.createElement('button');
+        c.type = 'button';
+        c.className = 'ge-copy-btn';
+        c.appendChild(faIcon('fa-copy'));
+        c.appendChild(document.createTextNode(' Copiar'));
+        c.addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(stripTokens(rawText)); c.replaceChildren(faIcon('fa-check'), document.createTextNode(' Copiado')); }
+            catch { /* clipboard indisponível — silencioso */ }
+        });
+        bar.appendChild(c);
+    }
+    return bar;
+}
+
+/** D37: fala um texto (template local) via SpeechSynthesis. No-op se indisponível. */
+export function speak(text) {
+    try {
+        const synth = window.speechSynthesis;
+        if (!synth) return;
+        synth.cancel();
+        const u = new SpeechSynthesisUtterance(stripTokens(text));
+        u.lang = 'pt-BR'; u.rate = 1.05;
+        synth.speak(u);
+    } catch { /* ignore */ }
+}
+export function stopSpeak() { try { window.speechSynthesis?.cancel(); } catch { /* ignore */ } }
 
 /** Chip de confirmação com botão Desfazer (+ Corrigir p/ saída/entrada). onUndo é async. */
 export function addConfirm({ text, chip }, onUndo) {
@@ -115,7 +187,7 @@ export function addConfirm({ text, chip }, onUndo) {
     const row = document.createElement('div');
     row.className = 'ge-row assistant';
     const wrap = document.createElement('div');
-    wrap.className = 'ge-confirm';
+    wrap.className = 'ge-confirm ge-confirm--timed'; // D39: janela visual de desfazer
 
     const t = document.createElement('div');
     t.className = 'ge-confirm-text';
@@ -144,17 +216,18 @@ export function addConfirm({ text, chip }, onUndo) {
     wrap.appendChild(btn);
 
     row.appendChild(wrap);
-    els.messages.appendChild(row);
+    _target().appendChild(row);
     scrollDown();
 }
 
-/** D36: cabeçalho sutil quando um único envio gera vários lançamentos. */
+/** D36/D38: cabeçalho sutil quando um único envio gera vários lançamentos. */
 export function addMultiHeader(n) {
-    if (!els?.messages || !(n > 1)) return;
+    if (!(n > 1)) return;
     const head = document.createElement('div');
     head.className = 'ge-multi-head';
-    head.textContent = `${n} lançamentos de uma vez:`;
-    els.messages.appendChild(head);
+    head.appendChild(faIcon('fa-layer-group'));
+    head.appendChild(document.createTextNode(` ${n} lançamentos de uma vez:`));
+    _target().appendChild(head);
 }
 
 let typingRow = null;

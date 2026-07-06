@@ -151,6 +151,33 @@ export default defineConfig(({ mode }) => ({
         enabled: false,
       },
     }),
+
+    // ─── ASSISTENTE PWA INDEPENDENTE ────────────────────────────────────────
+    // O VitePWA injeta, em TODAS as páginas, o manifesto do site principal
+    // (/manifest.webmanifest, id "/") + o registerSW.js do sw.js global. No
+    // /assistente isso atrapalha: a página passa a ter DOIS manifestos e o SW
+    // do site, acoplando a identidade PWA do assistente à do app inteiro e
+    // deixando o "Baixar" (install) ambíguo/quebrado.
+    //
+    // Este plugin roda DEPOIS do VitePWA (ambos transformIndexHtml order:'post';
+    // está posicionado após o VitePWA no array → executa por último) e remove
+    // essa injeção SOMENTE do assistente.html. Resultado: a página fica só com
+    // seu próprio /assistente.webmanifest (id "/assistente") e registra apenas
+    // o /assistant-sw.js (feito no assistente.js). Instalação 100% independente.
+    {
+      name: 'assistant-standalone-pwa',
+      enforce: 'post',
+      transformIndexHtml: {
+        order: 'post',
+        handler(html, ctx) {
+          const file = ctx?.filename || ctx?.path || '';
+          if (!/assistente\.html$/.test(file)) return html;
+          return html
+            .replace(/<link\s+rel="manifest"\s+href="\/manifest\.webmanifest"[^>]*>/gi, '')
+            .replace(/<script\s+id="vite-plugin-pwa:register-sw"[^>]*>\s*<\/script>/gi, '');
+        },
+      },
+    },
   ],
 
   build: {
