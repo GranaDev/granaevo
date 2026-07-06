@@ -37,7 +37,7 @@ export function init(ctx) {
 }
 
 // ========== RELATÓRIOS ==========
-function popularFiltrosRelatorio() {
+async function popularFiltrosRelatorio() {
     const mesSelect    = document.getElementById('mesRelatorio');
     const anoSelect    = document.getElementById('anoRelatorio');
     const perfilSelect = document.getElementById('selectPerfilRelatorio');
@@ -74,105 +74,110 @@ function popularFiltrosRelatorio() {
         perfilSelect.appendChild(option);
     });
 
-    const periodosDisponiveis = new Set();
-
-    if (_ctx.tipoRelatorioAtivo === 'individual') {
-        if (Array.isArray(_ctx.transacoes)) {
-            _ctx.transacoes.forEach(t => {
-                const dataISO = _ctx.sanitizeDate(_ctx.dataParaISO(t.data));
-                if (dataISO) {
-                    periodosDisponiveis.add(dataISO.slice(0, 7));
-                }
-            });
-        }
-    } else {
-        if (Array.isArray(_ctx.usuarioLogado?.perfis)) {
-            _ctx.usuarioLogado.perfis.forEach(perfil => {
-                const chave = `granaevo_perfil_${sanitizeHTML(String(perfil.id))}`;
-                try {
-                    const raw = localStorage.getItem(chave);
-                    if (!raw) return;
-
-                    const dados = JSON.parse(raw);
-
-                    // ✅ Validação de estrutura (já existia)
-                    if (!dados || !Array.isArray(dados.transacoes)) return;
-
-                    dados.transacoes.forEach(t => {
-                        if (!t || typeof t !== 'object') return;
-
-                        // ✅ NOVO: valida cada transação com o mesmo validator do save
-                        //    Impede que dados envenenados no localStorage causem
-                        //    comportamento inesperado no preenchimento dos filtros
-                        if (!_ctx._validators.transacao(t)) return;
-
-                        const dataISO = _ctx.sanitizeDate(_ctx.dataParaISO(t.data));
-                        if (dataISO) {
-                            periodosDisponiveis.add(dataISO.slice(0, 7));
-                        }
-                    });
-                } catch (e) {
-                    // ✅ CORRIGIDO: não expõe perfil.id no console em produção
-                    _ctx._log.warn('RELATORIO_LS_001', 'Erro ao ler dados históricos de período');
-                }
-            });
-        }
-    }
-
-    // Garante que o mês/ano atuais estejam sempre disponíveis nas caixas,
-    // mesmo que ainda não existam transações no período — assim o usuário
-    // pode apenas abrir e clicar em "Gerar Relatório" (igual aos Gráficos).
-    const _hojeFiltro  = new Date();
-    const _anoAtualStr = String(_hojeFiltro.getFullYear());
-    const _mesAtualStr = String(_hojeFiltro.getMonth() + 1).padStart(2, '0');
-    periodosDisponiveis.add(`${_anoAtualStr}-${_mesAtualStr}`);
-
-    const meses = new Set();
-    const anos  = new Set();
-
-    periodosDisponiveis.forEach(periodo => {
-        const partes = periodo.split('-');
-        if (partes.length === 2) {
-            meses.add(partes[1]);
-            anos.add(partes[0]);
-        }
-    });
-
     const mesesNomes = {
         '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março',    '04': 'Abril',
         '05': 'Maio',    '06': 'Junho',     '07': 'Julho',    '08': 'Agosto',
         '09': 'Setembro','10': 'Outubro',   '11': 'Novembro', '12': 'Dezembro'
     };
 
-    Array.from(meses).sort().forEach(mes => {
-        if (!mesesNomes[mes]) return;
-        const option       = document.createElement('option');
-        option.value       = mes;
-        option.textContent = mesesNomes[mes];
-        mesSelect.appendChild(option);
-    });
+    // Renderiza as caixas de mês/ano a partir de um Set de períodos "YYYY-MM".
+    // Sempre inclui o mês/ano atuais e pré-seleciona-os — assim o usuário pode
+    // apenas abrir e clicar em "Gerar Relatório" (igual aos Gráficos).
+    const _renderPeriodos = (periodosDisponiveis) => {
+        const _hojeFiltro  = new Date();
+        const _anoAtualStr = String(_hojeFiltro.getFullYear());
+        const _mesAtualStr = String(_hojeFiltro.getMonth() + 1).padStart(2, '0');
+        periodosDisponiveis.add(`${_anoAtualStr}-${_mesAtualStr}`);
 
-    Array.from(anos).sort().reverse().forEach(ano => {
-        const anoNum = parseInt(ano, 10);
-        if (anoNum < 2000 || anoNum > 2100) return;
-        const option       = document.createElement('option');
-        option.value       = ano;
-        option.textContent = ano;
-        anoSelect.appendChild(option);
-    });
+        // Limpa opções anteriores preservando o placeholder (índice 0)
+        while (mesSelect.options.length > 1) mesSelect.remove(1);
+        while (anoSelect.options.length > 1) anoSelect.remove(1);
 
-    // Pré-seleciona o mês/ano atuais para que o usuário possa apenas abrir
-    // e clicar em "Gerar Relatório", sem precisar escolher manualmente.
-    if ([...mesSelect.options].some(o => o.value === _mesAtualStr)) {
-        mesSelect.value = _mesAtualStr;
-    }
-    if ([...anoSelect.options].some(o => o.value === _anoAtualStr)) {
-        anoSelect.value = _anoAtualStr;
+        const meses = new Set();
+        const anos  = new Set();
+        periodosDisponiveis.forEach(periodo => {
+            const partes = String(periodo).split('-');
+            if (partes.length === 2) {
+                meses.add(partes[1]);
+                anos.add(partes[0]);
+            }
+        });
+
+        Array.from(meses).sort().forEach(mes => {
+            if (!mesesNomes[mes]) return;
+            const option       = document.createElement('option');
+            option.value       = mes;
+            option.textContent = mesesNomes[mes];
+            mesSelect.appendChild(option);
+        });
+
+        Array.from(anos).sort().reverse().forEach(ano => {
+            const anoNum = parseInt(ano, 10);
+            if (anoNum < 2000 || anoNum > 2100) return;
+            const option       = document.createElement('option');
+            option.value       = ano;
+            option.textContent = ano;
+            anoSelect.appendChild(option);
+        });
+
+        if ([...mesSelect.options].some(o => o.value === _mesAtualStr)) {
+            mesSelect.value = _mesAtualStr;
+        }
+        if ([...anoSelect.options].some(o => o.value === _anoAtualStr)) {
+            anoSelect.value = _anoAtualStr;
+        }
+    };
+
+    // Extrai os períodos "YYYY-MM" de uma lista de transações, validando cada uma
+    // com o mesmo validator do save (impede dados envenenados de afetar o filtro).
+    const _coletarPeriodos = (transacoes, set) => {
+        if (!Array.isArray(transacoes)) return;
+        transacoes.forEach(t => {
+            if (!t || typeof t !== 'object') return;
+            if (!_ctx._validators.transacao(t)) return;
+            const dataISO = _ctx.sanitizeDate(_ctx.dataParaISO(t.data));
+            if (dataISO) set.add(dataISO.slice(0, 7));
+        });
+    };
+
+    if (_ctx.tipoRelatorioAtivo === 'individual') {
+        // Individual: transações do perfil ativo já estão em memória.
+        const periodosDisponiveis = new Set();
+        _coletarPeriodos(_ctx.transacoes, periodosDisponiveis);
+        _renderPeriodos(periodosDisponiveis);
+    } else {
+        // Casal/Família: os períodos vêm de TODOS os perfis. A fonte real é o
+        // blob userData (/api/user-data) — o mesmo que o relatório consome. O
+        // antigo localStorage `granaevo_perfil_${id}` não existe mais, então lê-lo
+        // devolvia sempre vazio e só o mês atual aparecia. Renderiza já com o mês
+        // atual e re-renderiza quando o histórico de todos os perfis chegar.
+        _renderPeriodos(new Set());
     }
 
     setupBotoesRelatorio();
     // ✅ CORRIGIDO: log operacional sem dados sensíveis
     _ctx._log.info('[popularFiltrosRelatorio] Filtros populados. Tipo ativo:', _ctx.tipoRelatorioAtivo);
+
+    // Carrega o histórico de todos os perfis em background (casal/família) e
+    // re-renderiza as caixas de mês/ano com os meses realmente disponíveis.
+    if (_ctx.tipoRelatorioAtivo !== 'individual' && _ctx.tipoRelatorioAtivo !== 'patrimonio') {
+        try {
+            const userData = await dataManager.loadUserData();
+            const periodosDisponiveis = new Set();
+            if (Array.isArray(userData?.profiles)) {
+                userData.profiles.forEach(perfil => {
+                    _coletarPeriodos(perfil?.transacoes, periodosDisponiveis);
+                });
+            }
+            // Só re-renderiza se o usuário ainda estiver num modo multi-perfil
+            // (evita sobrescrever se ele trocou para individual/patrimônio enquanto carregava).
+            if (_ctx.tipoRelatorioAtivo !== 'individual' && _ctx.tipoRelatorioAtivo !== 'patrimonio') {
+                _renderPeriodos(periodosDisponiveis);
+            }
+        } catch (e) {
+            _ctx._log.warn('RELATORIO_LS_001', 'Erro ao carregar períodos históricos dos perfis');
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
