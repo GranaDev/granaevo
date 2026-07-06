@@ -105,8 +105,26 @@ function chromeIntentUrl() {
     return 'intent://' + alvo + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + fallback + ';end';
 }
 
-export function abrirNoChrome() {
-    try { window.location.href = chromeIntentUrl(); } catch { /* */ }
+export function abrirNoChrome(onFalha) {
+    // Navegação via <a> REAL + click(): é o único caminho que o Chromium trata
+    // como "clique de link" e roteia pro handler de protocolo externo. Navegar
+    // via location.href falha com "scheme does not have a registered handler"
+    // (erro visto em produção). Em ambiente sem handler nenhum (emulação mobile
+    // do DevTools, desktop com UA falso, WebView restrita) nem o clique lança.
+    try {
+        const a = document.createElement('a');
+        a.href = chromeIntentUrl();
+        a.rel  = 'noopener';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    } catch { if (typeof onFalha === 'function') onFalha(); return; }
+    if (typeof onFalha !== 'function') return;
+    // Intent lançado de verdade → esta aba perde a visibilidade (o Chrome ou o
+    // seletor de apps assume a tela). Se seguimos visíveis, não há handler aqui
+    // → plano B do chamador. (1.4s ainda cabe na janela de gesto de ~5s.)
+    setTimeout(() => { if (document.visibilityState === 'visible') onFalha(); }, 1400);
 }
 
 // ── Instalação (chamar SEMPRE a partir de um gesto do usuário) ────────────────
@@ -167,7 +185,7 @@ function orientarSemPrompt() {
         const texto = NAV.bip
             ? 'O navegador segurou o instalador desta vez — acontece quando a instalação foi dispensada há pouco, ou quando a página abre numa **aba interna** de outro app. Toque abaixo pra abrir no **Chrome** e instalar com um toque — ou use o menu (⋮) → **“Instalar app”**.'
             : 'O **' + NAV.rotulo + '** não deixa o site instalar o app com um toque (limitação do navegador). Toque abaixo pra abrir no **Chrome**, onde a instalação é direta — ou procure **“Instalar”** / **“Adicionar à tela inicial”** no menu do ' + NAV.rotulo + '.';
-        UI.addAssistantMessage(texto, { cta: { label: 'Abrir no Chrome e instalar', icon: 'fa-download', onClick: abrirNoChrome } });
+        UI.addAssistantMessage(texto, { cta: { label: 'Abrir no Chrome e instalar', icon: 'fa-download', onClick: () => abrirNoChrome(_intentFalhou) } });
         return;
     }
     // Desktop sem prompt
@@ -180,6 +198,12 @@ function orientarSemPrompt() {
         return;
     }
     UI.addAssistantMessage('Procure o ícone de **instalar** na barra de endereço, ou abra o menu (⋮) → **“Instalar app”**. Se não aparecer, recarregue a página (F5) e toque em **Baixar** de novo.');
+}
+
+// O intent:// não lançou (sem handler neste ambiente — ex.: emulação mobile do
+// DevTools, WebView restrita): dá o caminho manual que SEMPRE existe.
+function _intentFalhou() {
+    UI.addAssistantMessage('Não consegui abrir o Chrome automaticamente por aqui (este ambiente bloqueia o atalho). Caminho garantido: menu do navegador (⋮ ou ☰) → **“Instalar app”** / **“Adicionar à tela inicial”**. No computador, o ícone de **instalar** fica na barra de endereço.');
 }
 
 // ── Fiação da página (/assistente): botão do header + deep-link + debug ───────

@@ -83,9 +83,23 @@ function _initInstallAssistantButton() {
             // Tab — onde o Chrome NÃO entrega o prompt de instalação (o "Baixar"
             // cairia sempre nas instruções manuais). O intent:// abre o Chrome
             // DE VERDADE; se não houver Chrome, o fallback mantém o fluxo.
+            // Precisa ser navegação de LINK (<a>.click()): via location.href o
+            // Chromium bloqueia protocolo externo ("no registered handler").
             const fb = encodeURIComponent(location.origin + url);
-            window.location.href = 'intent://' + location.host + url
+            const a = document.createElement('a');
+            a.href = 'intent://' + location.host + url
                 + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + fb + ';end';
+            a.rel = 'noopener';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            try { a.click(); } catch { /* */ }
+            a.remove();
+            // Intent lançado → esta janela perde a visibilidade. Se continuamos
+            // visíveis, o ambiente não tem handler (ex.: emulação no desktop)
+            // → plano B: aba externa comum (ainda dentro da janela de gesto).
+            setTimeout(() => {
+                if (document.visibilityState === 'visible') window.open(url, '_blank', 'noopener');
+            }, 1400);
         } else if (standalone) {
             // Desktop instalado: abre no navegador (janela normal), onde dá pra instalar.
             window.open(url, '_blank', 'noopener');
