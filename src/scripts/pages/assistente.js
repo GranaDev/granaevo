@@ -24,14 +24,79 @@ const el = (tag, cls, txt) => {
 // ── PWA independente ─────────────────────────────────────────────────────────
 // Registra o Service Worker PRÓPRIO do assistente (escopo /assistente), separado
 // do sw.js do site. É o que torna o "Baixar" instalável (fetch handler no escopo)
-// e dá offline ao app-shell. Roda cedo, antes da porta de auth, pois é inofensivo
-// e o critério de instalabilidade do Chrome precisa do SW ativo o quanto antes.
+// e dá offline ao app-shell. Registra IMEDIATAMENTE (não no 'load') para o
+// critério de instalabilidade do Chrome ficar elegível o quanto antes — quanto
+// mais cedo o SW ativa, mais cedo o beforeinstallprompt pode disparar.
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker
-            .register('/assistant-sw.js', { scope: '/assistente' })
-            .catch(() => { /* sem SW o chat segue funcionando, só sem install/offline */ });
+    navigator.serviceWorker
+        .register('/assistant-sw.js', { scope: '/assistente' })
+        .catch(() => { /* sem SW o chat segue funcionando, só sem install/offline */ });
+}
+
+// ── Instalação nativa ─────────────────────────────────────────────────────────
+// O prompt nativo é capturado cedo em /pwa-init.js (window.__pwaInstallPrompt).
+// Guardamos uma referência viva e escutamos a chegada tardia do evento.
+let deferredInstall = window.__pwaInstallPrompt || null;
+document.addEventListener('ge:pwa-ready',     () => { deferredInstall = window.__pwaInstallPrompt || deferredInstall; });
+document.addEventListener('ge:pwa-installed', () => { deferredInstall = null; });
+
+function isStandaloneMode() {
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+}
+function isIOSDevice() {
+    const ua = navigator.userAgent || '';
+    return /iphone|ipad|ipod/i.test(ua) || (/mac/i.test(ua) && 'ontouchend' in document);
+}
+
+// Espera curta pelo prompt (ele pode chegar 1-2s depois do load). Fica dentro da
+// janela de ativação de gesto do Chrome (~5s), então pode ser chamada no clique.
+function aguardarPrompt(ms = 2500) {
+    if (deferredInstall) return Promise.resolve(deferredInstall);
+    return new Promise((resolve) => {
+        let feito = false;
+        const finish = () => {
+            if (feito) return; feito = true;
+            document.removeEventListener('ge:pwa-ready', onReady);
+            clearTimeout(timer);
+            resolve(deferredInstall);
+        };
+        const onReady = () => { deferredInstall = window.__pwaInstallPrompt || deferredInstall; finish(); };
+        document.addEventListener('ge:pwa-ready', onReady);
+        const timer = setTimeout(finish, ms);
     });
+}
+
+// Dispara a instalação nativa do assistente. DEVE ser chamada a partir de um
+// gesto do usuário (requisito do Chrome). Retorna 'accepted'|'dismissed'|'unavailable'.
+async function instalarAssistente() {
+    if (isStandaloneMode()) {
+        // Rodando dentro de um app instalado (o próprio assistente ou o GranaEvo):
+        // não há UI de instalação aqui. Orienta abrir pelo navegador.
+        UI.addAssistantMessage('Você já está no modo app. Para instalar o **Chat Assistente** como app separado, abra **granaevo.com/assistente** pelo **navegador** e toque em **Baixar** {{fa-download}}.');
+        return 'unavailable';
+    }
+    const p = deferredInstall || await aguardarPrompt();
+    if (p) {
+        try {
+            p.prompt();
+            const choice = await p.userChoice.catch(() => ({ outcome: 'dismissed' }));
+            deferredInstall = null;
+            window.__pwaInstallPrompt = null;
+            if (choice?.outcome === 'accepted') {
+                UI.addAssistantMessage('Instalando o Chat Assistente… {{fa-circle-check}} Procure o ícone na sua tela inicial!');
+                return 'accepted';
+            }
+            return 'dismissed';
+        } catch { /* cai nas instruções abaixo */ }
+    }
+    // Sem prompt nativo (iOS, Firefox, ou critério ainda não atendido) → instruções.
+    if (isIOSDevice()) {
+        UI.addAssistantMessage('Pra instalar no iPhone/iPad: toque em **Compartilhar** {{fa-arrow-up-from-bracket}} e depois em **“Adicionar à Tela de Início”**.');
+    } else {
+        UI.addAssistantMessage('Quase lá! Abra o **menu do navegador** (⋮) e toque em **“Instalar app”** / **“Adicionar à tela inicial”**. Dica: se o botão não instalar direto, recarregue a página uma vez e tente de novo.');
+    }
+    return 'unavailable';
 }
 
 const overlay = document.getElementById('geOverlay');
@@ -613,13 +678,8 @@ function showLockScreen(userId) {
 }
 
 // ── Chrome do app: voltar ao dashboard (navegador) + instalar PWA ─────────────
-function isStandalone() {
-    return window.matchMedia('(display-mode: standalone)').matches
-        || window.navigator.standalone === true;
-}
-
 function setupChrome() {
-    const standalone = isStandalone();
+    const standalone = isStandaloneMode();
 
     // Voltar ao dashboard — SEMPRE visível (útil no navegador e no app instalado).
     const back = document.getElementById('geBack');
@@ -628,26 +688,26 @@ function setupChrome() {
         back.addEventListener('click', () => { window.location.href = '/dashboard'; });
     }
 
-    // Botão instalar — some se já está instalado (standalone).
+    // Botão instalar — some se já está rodando como app instalado (standalone).
     const btn = document.getElementById('geInstall');
     if (btn && !standalone) {
         btn.hidden = false; // sempre visível no navegador; o clique decide o que fazer
-        btn.addEventListener('click', async () => {
-            const p = window.__pwaInstallPrompt;
-            if (p) {
-                p.prompt();
-                await p.userChoice.catch(() => {});
-                window.__pwaInstallPrompt = null;
-                return;
-            }
-            // Sem prompt nativo (iOS, ou critério ainda não atendido) → instruções.
-            const ua = navigator.userAgent || '';
-            if (/iphone|ipad|ipod/i.test(ua) || (/mac/i.test(ua) && 'ontouchend' in document)) {
-                UI.addAssistantMessage('Pra instalar no iPhone/iPad: toque em **Compartilhar** (o ícone {{fa-arrow-up-from-bracket}}) e depois em **"Adicionar à Tela de Início"**.');
-            } else {
-                UI.addAssistantMessage('Pra instalar: abra o **menu do navegador** e toque em **"Instalar app"** / **"Adicionar à tela inicial"**.');
-            }
-        });
+        btn.addEventListener('click', () => { instalarAssistente(); });
         document.addEventListener('ge:pwa-installed', () => { btn.hidden = true; });
+        // Se o prompt chegar depois, dá um respiro visual pra convidar o clique.
+        document.addEventListener('ge:pwa-ready', () => { btn.classList.add('ge-pulse'); }, { once: true });
     }
+
+    // Deep-link vindo das Configurações do GranaEvo: /assistente?install=1
+    // Não dá pra auto-instalar (Chrome exige gesto), então destacamos o botão e
+    // convidamos ao toque — o toque é o gesto que dispara o instalador nativo.
+    try {
+        const params = new URLSearchParams(location.search);
+        if (params.get('install') === '1' && !standalone) {
+            if (btn) { btn.hidden = false; btn.classList.add('ge-pulse'); }
+            UI.addAssistantMessage('Pra instalar o **Chat Assistente** como app próprio, toque no botão **Baixar** {{fa-download}} aqui em cima. {{fa-arrow-up}}');
+            // limpa o parâmetro da URL sem recarregar
+            history.replaceState(null, '', '/assistente');
+        }
+    } catch { /* noop */ }
 }

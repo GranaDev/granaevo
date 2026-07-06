@@ -31,6 +31,8 @@ export function init(ctx) {
     window.abrirPerfilHub       = () => abrirPerfilHub();
     // Inicializa botão de instalação do PWA na seção de Configurações
     initInstallButton();
+    // Botão "Instalar Chat Assistente" (PWA próprio do assistente, separado)
+    _initInstallAssistantButton();
     // Atualiza status de cache offline
     _updateOfflineStatus();
     // Inicializa botão de notificações push
@@ -50,6 +52,26 @@ function _bindBtnBackup() {
     if (btn) btn.addEventListener('click', abrirHistoricoBackup);
     const btnReset = document.getElementById('btnResetarPerfil');
     if (btnReset) btnReset.addEventListener('click', resetarPerfil);
+}
+
+// "Instalar Chat Assistente" — leva o usuário ao /assistente, onde a instalação
+// do PWA próprio do assistente é possível (é lá que mora o manifesto e o
+// beforeinstallprompt dele). O parâmetro ?install=1 destaca o botão Baixar.
+// A instalação não pode ser 100% automática: o Chrome exige um gesto do usuário
+// para abrir o instalador nativo, então o toque final acontece no /assistente.
+function _initInstallAssistantButton() {
+    const btn = document.getElementById('btnInstalarAssistente');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        const standalone = window.matchMedia('(display-mode: standalone)').matches
+            || window.navigator.standalone === true;
+        const url = '/assistente?install=1';
+        // Dentro do app instalado do GranaEvo (standalone), a instalação de um app
+        // separado só rola no navegador → abre numa aba externa pra sair do app.
+        // No navegador comum, navega na própria aba (mais fluido).
+        if (standalone) window.open(url, '_blank', 'noopener');
+        else            window.location.href = url;
+    });
 }
 
 function _initPushButton() {
