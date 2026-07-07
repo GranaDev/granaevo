@@ -227,9 +227,13 @@ export function applyCredito(profile, { valor, descricao, tipo, cardId, parcelas
     const diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia;
     const diaFatura = cartao.vencimentoDia;
 
+    // proxMes/proxAno = mês do FECHAMENTO do ciclo; se o cartão vence ANTES do dia
+    // de fechamento (ex.: fecha 28, vence 6), a fatura vence no mês SEGUINTE ao do
+    // fechamento — sem o segundo ajuste ela nasceria com data no passado ("Vencida").
     let proxMes = hoje.getMonth() + 1;
     let proxAno = hoje.getFullYear();
     if (diaHoje >= diaFechamento) { proxMes += 1; if (proxMes > 12) { proxMes = 1; proxAno += 1; } }
+    if (diaFatura < diaFechamento) { proxMes += 1; if (proxMes > 12) { proxMes = 1; proxAno += 1; } }
     const dataFaturaISO = `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaFatura).padStart(2, '0')}`;
 
     const valorParcela = Number((valor / p).toFixed(2));

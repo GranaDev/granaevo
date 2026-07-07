@@ -230,6 +230,7 @@ function lancarTransacao() {
         let diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia;
         let diaFatura     = cartao.vencimentoDia;
 
+        // proxMes/proxAno = mês do FECHAMENTO do ciclo ao qual a compra pertence
         let proxMes, proxAno;
         if(diaHoje >= diaFechamento) {
             // Fatura já fechou ou fecha hoje → compra vai pro próximo ciclo
@@ -239,6 +240,15 @@ function lancarTransacao() {
         } else {
             proxMes = mesAtual;
             proxAno = anoAtual;
+        }
+
+        // Quando o cartão vence ANTES do dia de fechamento (ex.: fecha 28, vence 6),
+        // o vencimento cai no mês SEGUINTE ao do fechamento — sem este ajuste a
+        // fatura nasceria com data no passado e apareceria "Vencida". Se vence
+        // DEPOIS do fechamento (ex.: fecha 5, vence 15), fica no mesmo mês.
+        if(diaFatura < diaFechamento) {
+            proxMes++;
+            if(proxMes > 12) { proxMes = 1; proxAno++; }
         }
 
         const dataFaturaISO = `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaFatura).padStart(2, '0')}`;

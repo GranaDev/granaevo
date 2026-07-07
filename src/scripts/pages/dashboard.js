@@ -704,6 +704,10 @@ async function carregarDadosPerfil(perfilId) {
         nextCartaoId = perfilData.nextCartaoId
             || (idsCartoesNumericos.length > 0 ? Math.max(...idsCartoesNumericos) + 1 : 1);
 
+        // Corrige faturas de cartão gravadas com vencimento 1 mês adiantado
+        // (bug do ciclo fechamento→vencimento, corrigido em 07/2026)
+        _repararFaturasAdiantadas();
+
         // ✅ Apenas contadores — sem PII
         _log.info('✅ [carregarDadosPerfil] Carregamento concluído.',
             '| Transações:', transacoes.length,
@@ -983,6 +987,7 @@ function _calcularFaturaParaData(cartao, dataBase) {
     const diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia;
     const diaFatura     = cartao.vencimentoDia;
 
+    // proxMes/proxAno = mês do FECHAMENTO do ciclo ao qual a cobrança pertence
     let proxMes, proxAno;
     if (dia >= diaFechamento) {
         proxMes = mes + 1;
@@ -992,7 +997,61 @@ function _calcularFaturaParaData(cartao, dataBase) {
         proxMes = mes;
         proxAno = ano;
     }
+    // Vencimento ANTES do dia de fechamento (ex.: fecha 28, vence 6) → a fatura
+    // vence no mês SEGUINTE ao do fechamento; sem isso nasceria "Vencida".
+    if (diaFatura < diaFechamento) {
+        proxMes++;
+        if (proxMes > 12) { proxMes = 1; proxAno++; }
+    }
     return `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaFatura).padStart(2, '0')}`;
+}
+
+// ── REPARO AUTOMÁTICO: faturas nascidas com vencimento 1 mês adiantado ────────
+// Bug corrigido em 07/2026: para cartões cujo vencimento cai ANTES do dia de
+// fechamento (ex.: fecha 28, vence 6), o cálculo antigo colocava o vencimento no
+// mesmo mês do fechamento — toda fatura nascia com data no passado ("Vencida").
+// Assinatura inequívoca do bug: a fatura contém compra feita NO dia do fechamento
+// do próprio ciclo ou DEPOIS (impossível na regra correta — compra pós-fechamento
+// pertence à fatura seguinte). Nesses casos empurra o vencimento +1 mês.
+// Idempotente: após o ajuste a assinatura desaparece; faturas corretas (inclusive
+// vencidas de verdade) nunca são tocadas. Roda a cada carregamento de perfil e
+// persiste naturalmente no próximo salvarDados().
+function _repararFaturasAdiantadas() {
+    if (!Array.isArray(contasFixas) || !Array.isArray(cartoesCredito)) return;
+    let reparadas = 0;
+
+    contasFixas.forEach(conta => {
+        if (!conta || conta.tipoContaFixa !== 'fatura_cartao') return;
+        if (typeof conta.vencimento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(conta.vencimento)) return;
+        if (!Array.isArray(conta.compras) || conta.compras.length === 0) return;
+
+        const cartao = cartoesCredito.find(c => String(c.id) === String(conta.cartaoId));
+        if (!cartao) return;
+        const diaFech = cartao.fechamentoDia;
+        const diaVenc = cartao.vencimentoDia;
+        if (!Number.isInteger(diaFech) || !Number.isInteger(diaVenc) || diaVenc >= diaFech) return;
+
+        // Máx. 2 iterações por segurança (o bug adianta exatamente 1 mês)
+        for (let i = 0; i < 2; i++) {
+            // Fechamento do ciclo desta fatura = diaFech do mês ANTERIOR ao vencimento
+            let [y, m] = conta.vencimento.split('-').map(Number);
+            m--; if (m < 1) { m = 12; y--; }
+            const fechamentoISO = `${y}-${String(m).padStart(2, '0')}-${String(diaFech).padStart(2, '0')}`;
+
+            const compraForaDoCiclo = conta.compras.some(cp => {
+                if (!cp || typeof cp.dataCompra !== 'string') return false;
+                const iso = dataParaISO(cp.dataCompra);
+                return typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso) && iso >= fechamentoISO;
+            });
+            if (!compraForaDoCiclo) break;
+            conta.vencimento = _avancarMes(conta.vencimento);
+            if (i === 0) reparadas++;
+        }
+    });
+
+    if (reparadas > 0) {
+        _log.info(`🔧 [faturas] ${reparadas} fatura(s) de cartão com vencimento adiantado corrigida(s) (+1 mês).`);
+    }
 }
 
 // Gera (se ainda não gerada neste ciclo) a cobrança de UMA assinatura ativa,
