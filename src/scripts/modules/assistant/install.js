@@ -174,9 +174,15 @@ export async function instalar() {
     return 'unavailable';
 }
 
+// O usuário caiu no fallback (prompt não veio a tempo)? Se o evento chegar
+// depois, wireInstall anuncia no chat — sem exigir F5 (1ª visita no Edge/Chrome
+// pode liberar o prompt só depois da nossa espera de 3.5s).
+let _fallbackMostrado = false;
+
 // Sem prompt nativo: melhor caminho REAL por plataforma, com CTA de 1 toque
 // no Android (intent:// pro Chrome) em vez de instruções de menu.
 function orientarSemPrompt() {
+    _fallbackMostrado = true;
     if (NAV.os === 'ios') {
         UI.addAssistantMessage('No iPhone/iPad a instalação é pelo sistema: toque em **Compartilhar** {{fa-arrow-up-from-bracket}} e depois em **“Adicionar à Tela de Início”**. Se a opção não aparecer, abra esta página no **Safari**. O resultado é o mesmo: o Assistente vira app na sua tela. {{fa-circle-check}}');
         return;
@@ -219,8 +225,17 @@ export function wireInstall() {
             btn.hidden = true;
             UI.addAssistantMessage('Pronto! **Chat Assistente** instalado. {{fa-circle-check}} Abra pelo ícone na tela inicial — direto no lançamento, sem navegador.');
         });
-        // Prompt chegou depois do load → convite visual ao toque.
-        document.addEventListener('ge:pwa-ready', () => { btn.classList.add('ge-pulse'); }, { once: true });
+        // Prompt chegou depois do load → convite visual ao toque; e se o usuário
+        // já tinha caído no fallback, anuncia a boa notícia com CTA direto.
+        document.addEventListener('ge:pwa-ready', () => {
+            btn.classList.add('ge-pulse');
+            if (_fallbackMostrado) {
+                _fallbackMostrado = false;
+                UI.addAssistantMessage('Boa notícia: a instalação **ficou disponível agora**. {{fa-download}}', {
+                    cta: { label: 'Instalar agora', icon: 'fa-download', onClick: () => { instalar(); } },
+                });
+            }
+        }, { once: true });
     }
 
     let params;

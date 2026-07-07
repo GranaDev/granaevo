@@ -92,9 +92,15 @@ function quickFor(res) {
     ];
 }
 
+// No subdomínio do assistente (assistente.granaevo.com — app com identidade
+// PWA própria), links pro GranaEvo precisam ser ABSOLUTOS: relativo abriria o
+// dashboard na origem do subdomínio, com sessão/localStorage separados do site.
+// No www segue relativo (mesma origem).
+const MAIN_ORIGIN = /^assistente\./i.test(location.hostname) ? 'https://www.granaevo.com' : '';
+
 // Telas válidas p/ deep-link do CTA "Ver no GranaEvo" (A1/F48).
 const TELAS_OK = new Set(['dashboard', 'transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios', 'configuracoes']);
-function ctaHref(tela) { return TELAS_OK.has(tela) ? `/dashboard#${tela}` : '/dashboard'; }
+function ctaHref(tela) { return MAIN_ORIGIN + (TELAS_OK.has(tela) ? `/dashboard#${tela}` : '/dashboard'); }
 
 // Mescla chips contextuais com os starters (sem duplicar), cap 5.
 function mergeQuick(extra, base) {
@@ -612,7 +618,7 @@ function setupChrome() {
     const back = document.getElementById('geBack');
     if (back) {
         back.hidden = false;
-        back.addEventListener('click', () => { window.location.href = '/dashboard'; });
+        back.addEventListener('click', () => { window.location.href = MAIN_ORIGIN + '/dashboard'; });
     }
 
     // Botão Baixar do header + deep-link ?install=1 + diagnóstico ?pwadebug=1.
