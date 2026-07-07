@@ -68,31 +68,14 @@ function _initInstallAssistantButton() {
     btn.addEventListener('click', () => {
         const standalone = window.matchMedia('(display-mode: standalone)').matches
             || window.navigator.standalone === true;
-        const isAndroid = /android/i.test(navigator.userAgent || '');
         const url = ASSIST_APP_URL + '?install=1';
-        if (standalone && isAndroid) {
-            // Dentro do app instalado no Android, window.open abriria uma Custom
-            // Tab — onde o Chrome NÃO entrega o prompt de instalação (o "Baixar"
-            // cairia sempre nas instruções manuais). O intent:// abre o Chrome
-            // DE VERDADE; se não houver Chrome, o fallback mantém o fluxo.
-            // Precisa ser navegação de LINK (<a>.click()): via location.href o
-            // Chromium bloqueia protocolo externo ("no registered handler").
-            const a = document.createElement('a');
-            a.href = 'intent://assistente.granaevo.com/assistente?install=1'
-                + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end';
-            a.rel = 'noopener';
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            try { a.click(); } catch { /* */ }
-            a.remove();
-            // Intent lançado → esta janela perde a visibilidade. Se continuamos
-            // visíveis, o ambiente não tem handler (ex.: emulação no desktop)
-            // → plano B: aba externa comum (ainda dentro da janela de gesto).
-            setTimeout(() => {
-                if (document.visibilityState === 'visible') window.open(url, '_blank', 'noopener');
-            }, 1400);
-        } else if (standalone) {
-            // Desktop instalado: abre no navegador (janela normal), onde dá pra instalar.
+        if (standalone) {
+            // Dentro do app instalado: abre em janela externa (no Android, uma
+            // Custom Tab; no desktop, aba do navegador). NÃO tentamos intent://
+            // daqui — de dentro do WebAPK ele falha silenciosamente ("nada
+            // acontece"). Na Custom Tab a própria página do assistente oferece
+            // o "Abrir no Chrome e instalar" (lá o intent funciona: é Chrome
+            // real, com a sessão do usuário compartilhada).
             window.open(url, '_blank', 'noopener');
         } else {
             // Navegador comum: navega na própria aba (mais fluido).
