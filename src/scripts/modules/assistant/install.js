@@ -272,5 +272,7 @@ async function diagnostico() {
     } catch { ira = 'erro ao consultar'; }
     linhas.push('getInstalledRelatedApps: ' + ira);
     linhas.push('Flag local de instalação: ' + (flagInstalado() ? 'presente' : 'ausente'));
-    UI.addAssistantMessage(linhas.join('\n'));
+    linhas.push('Origem: ' + location.origin);
+    // copiavel: o dev cola o diagnóstico inteiro em vez de tirar print.
+    UI.addAssistantMessage(linhas.join('\n'), { copiavel: true });
 }
