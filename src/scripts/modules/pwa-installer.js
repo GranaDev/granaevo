@@ -9,7 +9,7 @@
  *   Firefox Android              → instruções via menu "Instalar"
  *   Já instalado (standalone)    → mostra estado "Instalado"
  *
- * @typedef {'chromium'|'safari-ios'|'firefox'|'firefox-android'|'unknown'} BrowserType
+ * @typedef {'chromium'|'safari-ios'|'firefox'|'firefox-android'|'opera'|'unknown'} BrowserType
  * @typedef {'installable'|'installed'|'pending'|'dismissed'} PWAState
  */
 
@@ -33,10 +33,15 @@ function _detectBrowser() {
   const isFirefox = /firefox/i.test(ua);
   const isAndroid = /android/i.test(ua);
 
+  const isOpera = /OPR\/|OPT\/|\bOpera/i.test(ua);
+
   if (isIOS && isSafari)  return 'safari-ios';
   if (isFirefox && isAndroid) return 'firefox-android';
   if (isFirefox)          return 'firefox';
-  return 'chromium'; // Chrome, Edge, Samsung Internet, Opera, Brave, etc.
+  // Opera NÃO emite beforeinstallprompt (instala só pela UI do próprio
+  // navegador) → tratado à parte pra não esperarmos um prompt que nunca vem.
+  if (isOpera)            return 'opera';
+  return 'chromium'; // Chrome, Edge, Samsung Internet, Brave, etc.
 }
 
 // ── API pública ────────────────────────────────────────────────────────────────
@@ -110,26 +115,52 @@ export function initPWA() {
   }, 4000);
 }
 
+// Espera curta pelo beforeinstallprompt tardio. Na 1ª visita o Chromium libera
+// o evento alguns segundos depois do load; sem esta espera, um clique cedo no
+// botão caía direto nas instruções manuais mesmo em navegador compatível.
+// Fica dentro da janela de ativação de gesto do Chrome (~5s).
+function _esperarPrompt(ms = 3500) {
+  if (_deferredPrompt) return Promise.resolve(_deferredPrompt);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return; done = true;
+      document.removeEventListener('ge:pwa-ready', onReady);
+      clearTimeout(timer);
+      resolve(_deferredPrompt);
+    };
+    const onReady = () => { _deferredPrompt = window.__pwaInstallPrompt || _deferredPrompt; finish(); };
+    document.addEventListener('ge:pwa-ready', onReady);
+    const timer = setTimeout(finish, ms);
+  });
+}
+
 /**
  * Aciona o prompt nativo de instalação (Chrome/Edge/Samsung Internet).
  * Para outros browsers, abre modal com instruções manuais.
  * @returns {Promise<'accepted'|'dismissed'|'manual'>}
  */
 export async function promptInstall() {
-  // Chromium com prompt nativo disponível
-  if (_deferredPrompt) {
+  // Chromium: usa o prompt já capturado; se ainda não chegou, espera um pouco
+  // (dentro da janela de gesto) antes de desistir. Opera/Firefox/Safari não
+  // emitem o evento → vão direto às instruções, sem espera inútil.
+  let p = _deferredPrompt;
+  if (!p && _browserType === 'chromium') p = await _esperarPrompt();
+
+  if (p) {
     try {
-      _deferredPrompt.prompt();
-      const { outcome } = await _deferredPrompt.userChoice;
+      p.prompt();
+      const { outcome } = await p.userChoice;
+      _deferredPrompt = null;
+      window.__pwaInstallPrompt = null;
       if (outcome === 'accepted') {
-        _deferredPrompt = null;
         _setState('installed');
         return 'accepted';
       }
       _setState('dismissed');
       return 'dismissed';
     } catch {
-      // Prompt falhou — cai para instruções manuais
+      // Prompt consumido/expirado — cai para instruções manuais
     }
   }
 
@@ -263,6 +294,16 @@ function _getInstructions() {
         ],
         note: 'O app será adicionado à tela inicial do Android.',
       };
+    case 'opera':
+      return {
+        subtitle: 'No Opera, a instalação é pelo próprio navegador:',
+        steps: [
+          'Clique no ícone de <strong>instalar</strong> na barra de endereço (à direita)',
+          'Ou abra o <strong>menu do Opera</strong> e procure <strong>"Instalar GranaEvo…"</strong>',
+          'Confirme a instalação',
+        ],
+        note: 'Pra instalar com 1 clique pelo botão, use Chrome ou Edge — o Opera não permite que o site abra o instalador sozinho.',
+      };
     default: // chromium sem prompt capturado ainda
       return {
         subtitle: 'Para instalar no seu navegador:',
@@ -356,6 +397,7 @@ function _updateInstallButton() {
           'safari-ios':       'Siga as instruções para Safari iOS',
           'firefox':          'Veja como instalar no Firefox',
           'firefox-android':  'Instale via menu do Firefox Android',
+          'opera':            'Veja como instalar no Opera',
           'chromium':         'Adicione o GranaEvo à tela inicial',
           'unknown':          'Instale como aplicativo',
         };
