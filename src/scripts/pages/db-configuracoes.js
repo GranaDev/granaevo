@@ -54,30 +54,22 @@ function _bindBtnBackup() {
     if (btnReset) btnReset.addEventListener('click', resetarPerfil);
 }
 
-// "Instalar Chat Assistente" — leva o usuário ao /assistente, onde a instalação
-// do PWA próprio do assistente é possível (é lá que mora o manifesto e o
-// beforeinstallprompt dele). O ?install=1 mostra o CTA "Instalar agora" no chat.
-// A instalação não pode ser 100% automática: o Chrome exige um gesto do usuário
-// para abrir o instalador nativo, então o toque final acontece no /assistente.
+// "Instalar Chat Assistente" — leva o usuário ao app do assistente, que vive
+// no SUBDOMÍNIO próprio (assistente.granaevo.com): identidade PWA separada do
+// GranaEvo (o app principal tem escopo "/", que engloba /assistente e suprimia
+// o instalador do assistente no mesmo domínio). O ?install=1 mostra o CTA
+// "Instalar agora" no chat — o Chrome exige um gesto lá pra abrir o instalador.
+const ASSIST_APP_URL = 'https://assistente.granaevo.com/assistente';
+
 function _initInstallAssistantButton() {
     const btn = document.getElementById('btnInstalarAssistente');
     if (!btn) return;
-
-    // Flag local gravado pelo pwa-init.js no appinstalled do /assistente:
-    // este aparelho já instalou o assistente → informa (mas mantém clicável,
-    // pois o usuário pode ter desinstalado; a página /assistente sabe a verdade).
-    try {
-        if (localStorage.getItem('ge_assistant_installed') === '1') {
-            const sub = btn.querySelector('.cfg-item-sub');
-            if (sub) sub.textContent = 'Instalado neste aparelho — abra pelo ícone “Assistente”';
-        }
-    } catch { /* */ }
 
     btn.addEventListener('click', () => {
         const standalone = window.matchMedia('(display-mode: standalone)').matches
             || window.navigator.standalone === true;
         const isAndroid = /android/i.test(navigator.userAgent || '');
-        const url = '/assistente?install=1';
+        const url = ASSIST_APP_URL + '?install=1';
         if (standalone && isAndroid) {
             // Dentro do app instalado no Android, window.open abriria uma Custom
             // Tab — onde o Chrome NÃO entrega o prompt de instalação (o "Baixar"
@@ -85,10 +77,9 @@ function _initInstallAssistantButton() {
             // DE VERDADE; se não houver Chrome, o fallback mantém o fluxo.
             // Precisa ser navegação de LINK (<a>.click()): via location.href o
             // Chromium bloqueia protocolo externo ("no registered handler").
-            const fb = encodeURIComponent(location.origin + url);
             const a = document.createElement('a');
-            a.href = 'intent://' + location.host + url
-                + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + fb + ';end';
+            a.href = 'intent://assistente.granaevo.com/assistente?install=1'
+                + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end';
             a.rel = 'noopener';
             a.style.display = 'none';
             document.body.appendChild(a);

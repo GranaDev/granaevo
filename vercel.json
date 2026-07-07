@@ -12,6 +12,27 @@
     { "path": "/api/user-data?cron-health=1", "schedule": "0 12 * * *" }
   ],
 
+  "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "assistente.granaevo.com" }],
+      "destination": "/assistente",
+      "permanent": false
+    },
+    {
+      "source": "/dashboard",
+      "has": [{ "type": "host", "value": "assistente.granaevo.com" }],
+      "destination": "https://www.granaevo.com/dashboard",
+      "permanent": false
+    },
+    {
+      "source": "/assistente",
+      "has": [{ "type": "host", "value": "www.granaevo.com" }],
+      "destination": "https://assistente.granaevo.com/assistente",
+      "permanent": false
+    }
+  ],
+
   "rewrites": [
     { "source": "/",                  "destination": "/index.html"          },
     { "source": "/landingpage",       "destination": "/index.html"          },

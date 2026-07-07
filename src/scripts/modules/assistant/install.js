@@ -132,7 +132,7 @@ export function abrirNoChrome(onFalha) {
 /** @returns {Promise<'accepted'|'dismissed'|'installed'|'standalone'|'unavailable'>} */
 export async function instalar() {
     if (isStandalone()) {
-        UI.addAssistantMessage('Você já está no modo app. Pra instalar o **Chat Assistente** como app separado, abra **' + location.host + '/assistente** pelo navegador e toque em **Baixar** {{fa-download}}.');
+        UI.addAssistantMessage('Você já está no modo app. Pra instalar o **Chat Assistente** como app separado, abra **assistente.granaevo.com** pelo navegador e toque em **Baixar** {{fa-download}}.');
         return 'standalone';
     }
 
