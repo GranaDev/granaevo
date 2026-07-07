@@ -27,6 +27,7 @@ const REMEMBER_MAX_AGE = 60 * 60 * 24 * 30   // 30 dias quando "lembrar de mim"
 
 const ALLOWED_ORIGINS = new Set([
   'https://www.granaevo.com',
+  'https://assistente.granaevo.com',
   'https://granaevo.com',
   'https://granaevo.vercel.app',
   ...(process.env.ALLOWED_ORIGIN

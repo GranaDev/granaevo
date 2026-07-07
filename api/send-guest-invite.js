@@ -13,6 +13,7 @@ const PROXY_SECRET   = process.env.PROXY_SECRET ?? ''
 // Suporta múltiplas origens separadas por vírgula (www e não-www)
 const ALLOWED_ORIGINS = new Set([
   'https://www.granaevo.com',
+  'https://assistente.granaevo.com',
   'https://granaevo.com',
   'https://granaevo.vercel.app',
   ...(process.env.ALLOWED_ORIGIN

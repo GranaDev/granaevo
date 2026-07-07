@@ -14,6 +14,7 @@ const PROXY_SECRET      = process.env.PROXY_SECRET      ?? ''
 const EDGE_URL          = `${SUPABASE_URL}/functions/v1/create-user-account`
 const ALLOWED_ORIGINS   = new Set([
   'https://www.granaevo.com',
+  'https://assistente.granaevo.com',
   'https://granaevo.com',
   'https://granaevo.vercel.app',
   ...(process.env.ALLOWED_ORIGIN

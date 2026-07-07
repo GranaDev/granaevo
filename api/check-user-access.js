@@ -19,6 +19,7 @@ const ALLOWED_ORIGINS = [
   process.env.ALLOWED_ORIGIN,
   'https://granaevo.com',
   'https://www.granaevo.com',
+  'https://assistente.granaevo.com',
   'https://granaevo.vercel.app',
 ].filter(Boolean)
 

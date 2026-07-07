@@ -12,6 +12,7 @@ const PROXY_SECRET = process.env.PROXY_SECRET ?? ''
 // Origens de produção sempre permitidas; env var adiciona origens extras (ex.: dev local)
 const ALLOWED_ORIGINS = new Set([
   'https://www.granaevo.com',
+  'https://assistente.granaevo.com',
   'https://granaevo.com',
   ...(process.env.ALLOWED_ORIGIN
     ? process.env.ALLOWED_ORIGIN.split(',').map(s => s.trim()).filter(Boolean)
