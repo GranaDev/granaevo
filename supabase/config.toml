@@ -390,6 +390,10 @@ verify_jwt = false
 [functions.cron-health-alert]
 verify_jwt = false
 
+# Radar: entregador de Web Push, autenticado por x-proxy-secret (cron→proxy→edge).
+[functions.send-radar-push]
+verify_jwt = false
+
 # Assistente GranaEvo: verifica ES256 via getUser internamente (como save/get).
 [functions.chat-parse]
 verify_jwt = false
