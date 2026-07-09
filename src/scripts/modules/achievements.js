@@ -203,11 +203,24 @@ export const ACHIEVEMENTS = Object.freeze([
     { id: 'tres_cartoes',     rarity: 'raro',  check: (s) => s.cartoesCredito.length >= 3 },
     { id: 'cinco_cartoes',    rarity: 'epico', check: (s) => s.cartoesCredito.length >= 5 },
     { id: 'tres_contas',      rarity: 'raro',  check: (s) => s.contasFixas.length >= 3 },
+    { id: 'cinco_contas',     rarity: 'epico', check: (s) => s.contasFixas.length >= 5 },
     { id: 'tres_assinaturas', rarity: 'raro',  check: (s) => (s.assinaturas || []).length >= 3 },
     { id: 'orcamento_3',      rarity: 'raro',  check: (s) => _orcamentosDefinidos(s.orcamentos) >= 3 },
     { id: 'orcamento_5',      rarity: 'epico', check: (s) => _orcamentosDefinidos(s.orcamentos) >= 5 },
+    { id: 'orcamento_10',     rarity: 'epico', check: (s) => _orcamentosDefinidos(s.orcamentos) >= 10 },
+
+    // ---- Desafios (alimentadas por perfilData.desafios via state) ----
+    { id: 'primeiro_desafio', rarity: 'raro',     check: (s) => _num(s.desafiosConcluidos) >= 1 },
+    { id: 'tres_desafios',    rarity: 'epico',    check: (s) => _num(s.desafiosConcluidos) >= 3 },
+    { id: 'dez_desafios',     rarity: 'lendario', check: (s) => _num(s.desafiosConcluidos) >= 10 },
+
+    // ---- Hábito extra ----
+    { id: 'duzentas_transacoes',  rarity: 'epico',    check: (s) => s.transacoes.length >= 200 },
+    { id: 'seis_meses_positivos', rarity: 'lendario', check: (s, ctx) => _contaMesesPositivosMap(ctx.m.mensal) >= 6 },
 
     // ---- Ocultas / secretas (🥚) ----
+    { id: 'consciente',    rarity: 'oculta', hidden: true, check: (s) => s.horasVidaAtivo === true },
+    { id: 'economia_70',   rarity: 'oculta', hidden: true, check: (s, ctx) => _temMesEconomiaMap(ctx.m.mensal, 0.70) },
     { id: 'coruja',        rarity: 'oculta', hidden: true, check: (s) => s.transacoes.some(t => { const h = _horaInt(t.hora); return h !== null && h < 4; }) },
     { id: 'madrugador',    rarity: 'oculta', hidden: true, check: (s) => s.transacoes.some(t => { const h = _horaInt(t.hora); return h !== null && h >= 5 && h < 8; }) },
     { id: 'ano_novo',      rarity: 'oculta', hidden: true, check: (s) => s.transacoes.some(t => { const o = _ymd(t.data); return !!o && o.d === 1 && o.m === 1; }) },

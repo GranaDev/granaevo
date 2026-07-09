@@ -18,7 +18,10 @@ const DIST = resolve(__dirname, '..', 'dist', 'assets');
 // Orçamentos por PREFIXO de arquivo (sem hash), em KB de gzip.
 const BUDGETS_KB = {
   'dashboard.css':       66,   // tela do pagante — alvo principal
-  'dashboard.js':        40,
+  // 42 (2026-07-08): +9 conquistas no engine estatico (predicados) + sanitizadores
+  // de config/desafios no load path. Recursos novos (radar/previsao/desafios/
+  // horas-vida/simulador/recorrencias) sao TODOS chunks lazy — nao pesam aqui.
+  'dashboard.js':        42,
   'vendor-supabase.js':  56,
   'db-relatorios.js':    40,
   'main.css':            14,

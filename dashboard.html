@@ -331,6 +331,9 @@
                     </div>
                 </div>
 
+                <!-- Previsão de fim de mês — preenchido pelo módulo lazy previsao-mes.js -->
+                <div id="previsaoSlot"></div>
+
                 <div class="section-box section-box--contas" id="sectionContasFixas">
                     <div class="section-header">
                         <div class="section-header-left">
@@ -616,6 +619,9 @@
                         <div class="section-header">
                             <h3>Lista de Reservas</h3>
                             <div class="section-header-actions">
+                                <button class="btn-outline" id="btnSimuladorESe" type="button" title="Simule quanto renderia guardar um valor todo mês">
+                                    <i class="fas fa-calculator" aria-hidden="true"></i> E se?
+                                </button>
                                 <button class="btn-outline" id="btnJaPossuiReserva" type="button" title="Cadastre uma reserva que você já possui sem afetar seu saldo atual">
                                     <i class="fas fa-wallet" aria-hidden="true"></i> Já possuo reservas
                                 </button>
@@ -875,6 +881,29 @@
                                     <div class="cfg-item-text">
                                         <span class="cfg-item-title">Trocar Perfil</span>
                                         <span class="cfg-item-sub">Alternar entre perfis cadastrados</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- ── SEÇÃO: RECURSOS ─────────────────────────────── -->
+                        <div class="cfg-section">
+                            <div class="cfg-section-label">Recursos</div>
+                            <div class="cfg-list">
+                                <button class="cfg-item" id="btnHorasVida" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--gold"><i class="fas fa-briefcase" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Horas de Vida</span>
+                                        <span class="cfg-item-sub" id="horasVidaStatusText">Veja gastos em horas de trabalho</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
+                                </button>
+                                <button class="cfg-item" id="btnDesafios" type="button">
+                                    <div class="cfg-item-icon cfg-item-icon--purple"><i class="fas fa-dumbbell" aria-hidden="true"></i></div>
+                                    <div class="cfg-item-text">
+                                        <span class="cfg-item-title">Desafios</span>
+                                        <span class="cfg-item-sub" id="desafiosStatusText">Aceite desafios e destrave conquistas</span>
                                     </div>
                                     <i class="fas fa-chevron-right cfg-item-arrow" aria-hidden="true"></i>
                                 </button>

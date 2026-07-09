@@ -9,7 +9,8 @@
   },
 
   "crons": [
-    { "path": "/api/user-data?cron-health=1", "schedule": "0 12 * * *" }
+    { "path": "/api/user-data?cron-health=1", "schedule": "0 12 * * *" },
+    { "path": "/api/user-data?radar=1",       "schedule": "30 11 * * *" }
   ],
 
   "redirects": [

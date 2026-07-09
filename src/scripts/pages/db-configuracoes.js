@@ -45,6 +45,59 @@ export function init(ctx) {
     _bindBtnBackup();
     // Torna o card de perfil clicável (hub de perfil → conquistas)
     _initPerfilCard();
+    // Recursos: Horas de Vida + Desafios (módulos lazy próprios)
+    _initHorasVidaButton();
+    _initDesafiosButton();
+}
+
+// ── Horas de Vida: gastos em horas de trabalho ──────────────────────────────
+function _atualizarSubHorasVida() {
+    const sub = document.getElementById('horasVidaStatusText');
+    if (!sub) return;
+    const hv = _ctx?.configPerfil?.horasVida;
+    if (hv?.ativo === true && Number.isFinite(Number(hv.valorHora))) {
+        sub.textContent = `Ativo — sua hora vale ${_ctx.formatBRL(Number(hv.valorHora))}`;
+    } else {
+        sub.textContent = 'Veja gastos em horas de trabalho';
+    }
+}
+
+function _initHorasVidaButton() {
+    const btn = document.getElementById('btnHorasVida');
+    if (!btn) return;
+    _atualizarSubHorasVida();
+    btn.addEventListener('click', async () => {
+        try {
+            const m = await import('../modules/horas-vida.js?v=1');
+            m.abrirPopupHorasVida(_ctx, _atualizarSubHorasVida);
+        } catch {
+            _ctx.mostrarNotificacao('Não foi possível abrir agora. Tente novamente.', 'error');
+        }
+    });
+}
+
+// ── Desafios financeiros ─────────────────────────────────────────────────────
+function _initDesafiosButton() {
+    const btn = document.getElementById('btnDesafios');
+    const sub = document.getElementById('desafiosStatusText');
+    if (!btn) return;
+    const dados = _ctx?.desafiosPerfil;
+    const ativos = Array.isArray(dados?.ativos) ? dados.ativos.length : 0;
+    const vencidos = Array.isArray(dados?.historico) ? dados.historico.filter(h => h?.sucesso === true).length : 0;
+    if (sub && (ativos > 0 || vencidos > 0)) {
+        const partes = [];
+        if (ativos > 0)   partes.push(`${ativos} em andamento`);
+        if (vencidos > 0) partes.push(`${vencidos} vencido${vencidos > 1 ? 's' : ''}`);
+        sub.textContent = partes.join(' · ');
+    }
+    btn.addEventListener('click', async () => {
+        try {
+            const m = await import('../modules/desafios.js?v=1');
+            m.abrirDesafios(_ctx);
+        } catch {
+            _ctx.mostrarNotificacao('Não foi possível abrir agora. Tente novamente.', 'error');
+        }
+    });
 }
 
 function _bindBtnBackup() {

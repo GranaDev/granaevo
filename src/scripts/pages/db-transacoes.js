@@ -1,10 +1,18 @@
 // db-transacoes.js — Seção de Transações (lazy-loaded)
 import { perfMark, perfMeasure, perfCount } from '../modules/perf-marks.js';
+import { chipHorasVida } from '../modules/horas-vida.js?v=1';
 
 let _ctx = null;
 
 // Proxy para utilitários de dashboard.js disponíveis via _ctx após init()
 const formatBRL = (...a) => _ctx.formatBRL(...a);
+
+// Chip "⏱ Xh de trabalho" ao lado de valores de saída (Horas de Vida).
+// Retorna null se o recurso está desativado — appendChild condicional.
+function _chipHoras(t, cat) {
+    if (cat !== 'saida' && cat !== 'saida_credito') return null;
+    try { return chipHorasVida(t.valor, _ctx.configPerfil); } catch { return null; }
+}
 
 export function init(ctx) {
     _ctx = ctx;
@@ -713,6 +721,8 @@ function _criarLinhaTabela(t) {
     const tdValor = document.createElement('td');
     tdValor.className = `td-valor val-${cat}`;
     tdValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
+    const chipTab = _chipHoras(t, cat);
+    if (chipTab) tdValor.appendChild(chipTab);
     tr.appendChild(tdValor);
 
     tr.style.cursor = 'pointer';
@@ -802,6 +812,8 @@ function _appendCards(wrapper, txs, state) {
         divValor.className   = cat;
         divValor.textContent = `${sinal} ${formatBRL(t.valor)}`;
         right.appendChild(divValor);
+        const chipCard = _chipHoras(t, cat);
+        if (chipCard) right.appendChild(chipCard);
 
         div.appendChild(iconeBadge);
         div.appendChild(left);
@@ -1341,6 +1353,9 @@ function abrirDetalheOrcamento(tipo) {
     hdrSub.style.color = cor;
     hdrTitle.appendChild(hdrName);
     hdrTitle.appendChild(hdrSub);
+    // Horas de Vida: quanto do seu trabalho esse gasto do mês representa
+    const chipOrc = gasto > 0 ? _chipHoras({ valor: gasto }, 'saida') : null;
+    if (chipOrc) hdrTitle.appendChild(chipOrc);
     hdrLeft.appendChild(hdrIcon);
     hdrLeft.appendChild(hdrTitle);
 
@@ -1437,7 +1452,21 @@ function abrirDetalheOrcamento(tipo) {
     btnFechar.textContent = 'Fechar';
     btnFechar.addEventListener('click', () => _ctx.fecharPopup());
 
+    // "E se?" — simula cortar parte deste gasto e guardar rendendo CDI
+    const btnSimular = document.createElement('button');
+    btnSimular.className = 'btn-cancelar';
+    btnSimular.type = 'button';
+    btnSimular.innerHTML = '<i class="fas fa-calculator" aria-hidden="true"></i> Simular corte';
+    btnSimular.addEventListener('click', async () => {
+        _ctx.fecharPopup();
+        try {
+            const m = await import('../modules/simulador-ese.js?v=1');
+            setTimeout(() => m.abrirSimuladorESe(_ctx, { valorMensal: gasto, origem: tipo }), 150);
+        } catch { /* módulo indisponível — sem quebra */ }
+    });
+
     acoes.appendChild(btnEditar);
+    acoes.appendChild(btnSimular);
     acoes.appendChild(btnRemover);
     acoes.appendChild(btnFechar);
 

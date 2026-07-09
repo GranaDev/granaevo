@@ -48,6 +48,8 @@ let tipoRelatorioAtivo = 'individual';
 let orcamentos = {}; // { 'Mercado': { limite: 800 }, 'Lazer': { limite: 300 }, ... }
 let tiposPersonalizados = []; // tipos criados pelo usuário, ex: ['Academia em Casa', 'Delivery Especial']
 let conquistasPerfil = {};    // mapa { idConquista: ISOdate } — desbloqueios do perfil ativo
+let configPerfil = {};        // preferências do perfil (ex.: horasVida) — sanitizado no save
+let desafiosPerfil = { ativos: [], historico: [] }; // desafios financeiros (módulo lazy desafios.js)
 let _conquistasReady = false; // false durante o backfill silencioso (boot/troca de perfil)
 let _effectiveUserId = null;
 let _effectiveEmail  = null;
@@ -673,6 +675,8 @@ async function carregarDadosPerfil(perfilId) {
             cartoesCredito = [];
             assinaturas    = [];
             conquistasPerfil = {};
+            configPerfil     = {};
+            desafiosPerfil   = { ativos: [], historico: [] };
             if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
 
             // ✅ nextIds mantidos apenas para cartões — cartão ainda usa ID local
@@ -695,6 +699,8 @@ async function carregarDadosPerfil(perfilId) {
         // sanitizeUnlocked: só copia ids conhecidos com valor string — blinda
         // contra blob corrompido / prototype pollution vindo do servidor.
         conquistasPerfil    = sanitizeConquistas(perfilData.conquistas);
+        configPerfil        = _sanitizarConfigPerfil(perfilData.config);
+        desafiosPerfil      = _sanitizarDesafiosPerfil(perfilData.desafios);
         if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
 
         const idsCartoesNumericos = cartoesCredito
@@ -726,6 +732,8 @@ async function carregarDadosPerfil(perfilId) {
         cartoesCredito = [];
         assinaturas    = [];
         conquistasPerfil = {};
+        configPerfil     = {};
+        desafiosPerfil   = { ativos: [], historico: [] };
         if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.mt = null; _cache.cf = null; _cache.cc = null; }
         atualizarReferenciasGlobais();
     }
@@ -735,6 +743,7 @@ async function carregarDadosPerfil(perfilId) {
 // Monta o snapshot de estado consumido pelo engine de conquistas (achievements.js).
 // O engine calcula saldo/patrimônio/mensais internamente a partir das arrays.
 function _buildConquistaState() {
+    const histDesafios = Array.isArray(desafiosPerfil?.historico) ? desafiosPerfil.historico : [];
     return {
         perfisCount:    Array.isArray(usuarioLogado.perfis) ? usuarioLogado.perfis.length : (perfilAtivo ? 1 : 0),
         transacoes:     Array.isArray(transacoes)     ? transacoes     : [],
@@ -743,6 +752,8 @@ function _buildConquistaState() {
         contasFixas:    Array.isArray(contasFixas)    ? contasFixas    : [],
         assinaturas:    Array.isArray(assinaturas)    ? assinaturas    : [],
         orcamentos:     (orcamentos && typeof orcamentos === 'object') ? orcamentos : {},
+        desafiosConcluidos: histDesafios.filter(h => h && h.sucesso === true).length,
+        horasVidaAtivo:     configPerfil?.horasVida?.ativo === true,
     };
 }
 
@@ -929,6 +940,68 @@ function _sanitizarOrcamentos(obj) {
         const limite = parseFloat(v.limite);
         if (!isFinite(limite) || limite <= 0 || limite > 10_000_000) continue;
         clean[key] = { limite: parseFloat(limite.toFixed(2)) };
+    }
+    return clean;
+}
+
+// Sanitiza as preferências do perfil (config) antes de persistir.
+// Whitelist estrita: só chaves conhecidas, só valores dentro dos limites.
+// Espelha os limites do módulo horas-vida.js (defesa em profundidade).
+function _sanitizarConfigPerfil(cfg) {
+    const clean = Object.create(null);
+    if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return clean;
+    const hv = cfg.horasVida;
+    if (hv && typeof hv === 'object' && !Array.isArray(hv)) {
+        const valorHora = Number(hv.valorHora);
+        const modosValidos = ['hora', 'dia', 'mes'];
+        if (modosValidos.includes(hv.modo) &&
+            Number.isFinite(valorHora) && valorHora >= 0.01 && valorHora <= 100_000) {
+            const out = {
+                ativo:     hv.ativo === true,
+                modo:      hv.modo,
+                valorHora: Math.round(valorHora * 100) / 100,
+            };
+            const vb = Number(hv.valorBase);
+            if (Number.isFinite(vb) && vb >= 0.01 && vb <= 10_000_000) out.valorBase = Math.round(vb * 100) / 100;
+            const hd = Number(hv.horasDia);
+            if (Number.isInteger(hd) && hd >= 1 && hd <= 24) out.horasDia = hd;
+            const hs = Number(hv.horasSemana);
+            if (Number.isInteger(hs) && hs >= 1 && hs <= 120) out.horasSemana = hs;
+            clean.horasVida = out;
+        }
+    }
+    return clean;
+}
+
+// Sanitiza a estrutura de desafios antes de persistir. Valida só a FORMA
+// (id slug, datas ISO, booleans, caps) — a validação semântica contra o
+// catálogo vive no módulo lazy desafios.js, que reavalia tudo do zero.
+const _DESAFIO_ID_RE  = /^[a-z0-9_]{3,40}$/;
+const _DESAFIO_ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+function _sanitizarDesafiosPerfil(raw) {
+    const clean = { ativos: [], historico: [] };
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return clean;
+    if (Array.isArray(raw.ativos)) {
+        for (const a of raw.ativos.slice(0, 3)) {
+            if (a && typeof a === 'object' &&
+                typeof a.id === 'string' && _DESAFIO_ID_RE.test(a.id) &&
+                typeof a.iniciadoEm === 'string' && _DESAFIO_ISO_RE.test(a.iniciadoEm)) {
+                clean.ativos.push({ id: a.id, iniciadoEm: a.iniciadoEm });
+            }
+        }
+    }
+    if (Array.isArray(raw.historico)) {
+        for (const h of raw.historico.slice(-60)) {
+            if (h && typeof h === 'object' &&
+                typeof h.id === 'string' && _DESAFIO_ID_RE.test(h.id) &&
+                typeof h.iniciadoEm === 'string' && _DESAFIO_ISO_RE.test(h.iniciadoEm) &&
+                typeof h.finalizadoEm === 'string' && _DESAFIO_ISO_RE.test(h.finalizadoEm)) {
+                clean.historico.push({
+                    id: h.id, iniciadoEm: h.iniciadoEm,
+                    finalizadoEm: h.finalizadoEm, sucesso: h.sucesso === true,
+                });
+            }
+        }
     }
     return clean;
 }
@@ -1328,6 +1401,8 @@ async function salvarDados() {
                     orcamentos:          _sanitizarOrcamentos(orcamentos),
                     tiposPersonalizados: tiposPersonalizados.filter(t => typeof t === 'string' && t.length > 0).slice(0, 50),
                     conquistas:     conquistasSan,
+                    config:         _sanitizarConfigPerfil(configPerfil),
+                    desafios:       _sanitizarDesafiosPerfil(desafiosPerfil),
                     nextCartaoId:   Number.isInteger(nextCartaoId) && nextCartaoId > 0 ? nextCartaoId : 1,
                     lastUpdate:     new Date().toISOString(),
                 };
@@ -1717,6 +1792,12 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         // Ativa o indicador de sync somente após o save inicial de boot
         _syncReadyForDisplay = true;
 
+        // Módulos de recurso (lazy, fora do chunk crítico): previsão de fim de
+        // mês, desafios e agendador do Radar. Carregam no idle pós-boot e se
+        // atualizam sozinhos via evento ge:save-done — os getters do ctx são
+        // vivos, então trocas de perfil não exigem re-init.
+        _bootFeatureModules();
+
         // Onboarding automático para novos perfis (sem dados, primeira visita)
         // Chamado APÓS mostrarTela para garantir que a UI base está visível
         _verificarOnboardingNovoPerfil();
@@ -1727,6 +1808,29 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
     } finally {
         if (profileLoading) profileLoading.classList.add('hidden');
     }
+}
+
+// ── Módulos de recurso lazy (previsão, desafios, radar) ─────────────────────
+// Carregados UMA vez por sessão, no idle após o boot — não pesam no chunk
+// crítico nem competem com o carregamento inicial. Cada módulo se inscreve em
+// ge:save-done e usa os getters vivos do ctx (troca de perfil já coberta).
+let _featureModulesBooted = false;
+function _bootFeatureModules() {
+    if (_featureModulesBooted) return;
+    _featureModulesBooted = true;
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2_500));
+    idle(() => {
+        const ctx = _makeCtx();
+        import('../modules/previsao-mes.js?v=1')
+            .then(m => m.initPrevisao(ctx))
+            .catch(e => _log.error('FEAT_PREVISAO_001', e));
+        import('../modules/desafios.js?v=1')
+            .then(m => m.initDesafios(ctx))
+            .catch(e => _log.error('FEAT_DESAFIOS_001', e));
+        import('../modules/radar.js?v=1')
+            .then(m => m.initRadar(ctx))
+            .catch(e => _log.error('FEAT_RADAR_001', e));
+    });
 }
 
 function adicionarNovoPerfil() {
@@ -2086,6 +2190,8 @@ function _makeCtx() {
         tipoRelatorioAtivo:  { get: () => tipoRelatorioAtivo,  set: v => { tipoRelatorioAtivo = v; },  enumerable: true },
         orcamentos:           { get: () => orcamentos,           set: v => { orcamentos = v; },           enumerable: true },
         tiposPersonalizados:  { get: () => tiposPersonalizados,  set: v => { tiposPersonalizados = v; },  enumerable: true },
+        configPerfil:         { get: () => configPerfil,         set: v => { configPerfil = _sanitizarConfigPerfil(v); },     enumerable: true },
+        desafiosPerfil:       { get: () => desafiosPerfil,       set: v => { desafiosPerfil = _sanitizarDesafiosPerfil(v); }, enumerable: true },
         _effectiveUserId:    { get: () => _effectiveUserId,    set: v => { _effectiveUserId = v; },    enumerable: true },
         _effectiveEmail:     { get: () => _effectiveEmail,     set: v => { _effectiveEmail = v; },     enumerable: true },
         _movPaginaAtual:     { get: () => _movPaginaAtual,     set: v => { _movPaginaAtual = v; },     enumerable: true },

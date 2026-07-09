@@ -335,6 +335,24 @@ function _buildAssinaturasSection() {
     }
     section.appendChild(hdr);
 
+    // Detector de assinaturas esquecidas — varre as transações em busca de
+    // cobranças recorrentes não registradas (módulo lazy recorrencias.js)
+    const btnDetector = document.createElement('button');
+    btnDetector.type = 'button';
+    btnDetector.className = 'rec-btn-detector';
+    const detIcon = document.createElement('i');
+    detIcon.className = 'fas fa-user-secret';
+    detIcon.setAttribute('aria-hidden', 'true');
+    btnDetector.appendChild(detIcon);
+    btnDetector.appendChild(document.createTextNode(' Detectar assinaturas esquecidas'));
+    btnDetector.addEventListener('click', async () => {
+        try {
+            const m = await import('../modules/recorrencias.js?v=1');
+            m.abrirDetectorAssinaturas(_ctx);
+        } catch { /* módulo indisponível — sem quebra */ }
+    });
+    section.appendChild(btnDetector);
+
     const list = document.createElement('div'); list.className = 'cdes-cartoes-list';
 
     if (lista.length === 0) {

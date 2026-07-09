@@ -43,7 +43,10 @@ const RL_RESTORE_WIN_SECS = 3_600;
 const MAX_BODY_BYTES     = 5_242_880;
 const MAX_PROFILES       = 200;
 const MAX_JSON_DEPTH     = 8;
-const MAX_KEYS_OBJ       = 50;
+// 80: o mapa `conquistas` de um perfil guarda 1 chave por conquista
+// desbloqueada — o catálogo tem ~60 ids (2026-07) e segue crescendo.
+// 50 rejeitava o save de quem desbloqueou 51+ conquistas.
+const MAX_KEYS_OBJ       = 80;
 
 // checkRL usa _rate-limit.js (Redis distribuído quando disponível, in-memory fallback).
 // Elimina o rlStore Map local que não persiste entre instâncias serverless da Vercel.
@@ -61,11 +64,16 @@ export default async function handler(req, res) {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
 
-    // ── Cron health (M2): disparado pela Vercel Cron (/api/user-data?cron-health=1) ──
-    // Autenticado pelo CRON_SECRET que a Vercel injeta como `Authorization: Bearer`.
+    // ── Crons: disparados pela Vercel Cron ────────────────────────────────────
+    //   /api/user-data?cron-health=1 → edge cron-health-alert (M2, saúde do pg_cron)
+    //   /api/user-data?radar=1       → edge send-radar-push  (Radar: Web Push diário)
+    // Autenticados pelo CRON_SECRET que a Vercel injeta como `Authorization: Bearer`.
     // Branch isolado, early-return, ANTES de qualquer lógica de dados/CSRF/JWT — não
-    // afeta o fluxo normal. Repassa à edge cron-health-alert (service_role + Resend).
-    if (req.method === 'GET' && req.query?.['cron-health'] === '1') {
+    // afeta o fluxo normal. Repassa à edge function alvo com x-proxy-secret.
+    const cronTarget =
+        (req.query?.['cron-health'] === '1') ? 'cron-health-alert' :
+        (req.query?.['radar'] === '1')       ? 'send-radar-push'   : null;
+    if (req.method === 'GET' && cronTarget) {
         const cronSecret = process.env.CRON_SECRET ?? '';
         const authHdr    = req.headers['authorization'] ?? '';
         const provided   = authHdr.startsWith('Bearer ') ? authHdr.slice(7).trim() : '';
@@ -76,7 +84,7 @@ export default async function handler(req, res) {
         if (!SUPABASE_URL || !PROXY_SECRET || !SUPABASE_ANON_KEY)
             return res.status(503).json({ error: 'Serviço indisponível' });
         try {
-            const efRes = await fetch(`${SUPABASE_URL}/functions/v1/cron-health-alert`, {
+            const efRes = await fetch(`${SUPABASE_URL}/functions/v1/${cronTarget}`, {
                 method:  'POST',
                 headers: {
                     'Content-Type':   'application/json',

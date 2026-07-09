@@ -165,6 +165,14 @@ export function init(ctx) {
     // Aplica rendimentos acumulados (busca CDI atual internamente) e renderiza
     aplicarRendimentosDiarios().then(() => renderMetasList());
 
+    // Simulador "E se?" — projeta aportes mensais rendendo CDI (módulo lazy)
+    document.getElementById('btnSimuladorESe')?.addEventListener('click', async () => {
+        try {
+            const m = await import('../modules/simulador-ese.js?v=1');
+            m.abrirSimuladorESe(_ctx);
+        } catch { /* módulo indisponível — sem quebra */ }
+    });
+
     // search + filter listeners (elementos podem não existir em mobile — guarda com ?.)
     document.getElementById('metaSearchInput')?.addEventListener('input', () => {
         _metaPagina = 1;

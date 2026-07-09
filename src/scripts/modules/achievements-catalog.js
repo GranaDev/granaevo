@@ -119,16 +119,27 @@ export const PRESENT = Object.freeze({
     tres_meses:             { cat: 'habito', icon: 'fa-fire', titulo: 'Disciplina',       desc: 'Registrou movimentações em 3 meses diferentes.', progresso: (s) => ({ atual: metrics.mesesAtivos(s), alvo: 3 }) },
     seis_meses:             { cat: 'habito', icon: 'fa-calendar-days', titulo: 'Veterano',         desc: 'Acompanhou suas finanças por 6 meses diferentes.',progresso: (s) => ({ atual: metrics.mesesAtivos(s), alvo: 6 }) },
     doze_meses:             { cat: 'habito', icon: 'fa-ribbon', titulo: 'Ano Completo',     desc: 'Acompanhou suas finanças por 12 meses diferentes.',progresso: (s) => ({ atual: metrics.mesesAtivos(s), alvo: 12 }) },
+    duzentas_transacoes:    { cat: 'habito', icon: 'fa-mountain', titulo: 'Imparável',        desc: 'Registrou 200 transações.',                       progresso: (s) => ({ atual: s.transacoes.length, alvo: 200 }) },
+    seis_meses_positivos:   { cat: 'habito', icon: 'fa-gem', titulo: 'Semestre de Ouro', desc: 'Fechou 6 meses no azul (entradas > saídas).' },
+
+    // ---- Desafios ----
+    primeiro_desafio: { cat: 'habito', icon: 'fa-dumbbell', titulo: 'Desafiante',          desc: 'Venceu seu primeiro desafio financeiro.' },
+    tres_desafios:    { cat: 'habito', icon: 'fa-fire', titulo: 'Trio de Vitórias',    desc: 'Venceu 3 desafios financeiros.' },
+    dez_desafios:     { cat: 'habito', icon: 'fa-crown', titulo: 'Rei dos Desafios',    desc: 'Venceu 10 desafios financeiros. Disciplina de ferro!' },
 
     // ---- Organização ----
     tres_cartoes:     { cat: 'organizacao', icon: 'fa-briefcase', titulo: 'Carteira Cheia',      desc: 'Cadastrou 3 cartões de crédito.',          progresso: (s) => ({ atual: s.cartoesCredito.length, alvo: 3 }) },
     cinco_cartoes:    { cat: 'organizacao', icon: 'fa-box-archive', titulo: 'Magnata do Plástico', desc: 'Cadastrou 5 cartões de crédito.',          progresso: (s) => ({ atual: s.cartoesCredito.length, alvo: 5 }) },
     tres_contas:      { cat: 'organizacao', icon: 'fa-house', titulo: 'Casa Organizada',     desc: 'Cadastrou 3 contas fixas.',                progresso: (s) => ({ atual: s.contasFixas.length, alvo: 3 }) },
+    cinco_contas:     { cat: 'organizacao', icon: 'fa-building-columns', titulo: 'Gestor da Casa',      desc: 'Cadastrou 5 contas fixas.',                progresso: (s) => ({ atual: s.contasFixas.length, alvo: 5 }) },
     tres_assinaturas: { cat: 'organizacao', icon: 'fa-tv', titulo: 'Assinante VIP',       desc: 'Cadastrou 3 assinaturas recorrentes.',     progresso: (s) => ({ atual: (s.assinaturas || []).length, alvo: 3 }) },
     orcamento_3:      { cat: 'organizacao', icon: 'fa-ruler-combined', titulo: 'Orçamentista',        desc: 'Definiu orçamento para 3 categorias.' },
     orcamento_5:      { cat: 'organizacao', icon: 'fa-calculator', titulo: 'Mestre do Orçamento', desc: 'Definiu orçamento para 5 categorias.' },
+    orcamento_10:     { cat: 'organizacao', icon: 'fa-chess-rook', titulo: 'Controle Total',      desc: 'Definiu orçamento para 10 categorias.' },
 
     // ---- Secretas ----
+    consciente:     { cat: 'secretas', icon: 'fa-briefcase', titulo: 'Preço da Vida',     desc: 'Ativou o Horas de Vida — agora cada gasto mostra seu custo real.' },
+    economia_70:    { cat: 'secretas', icon: 'fa-shield-halved', titulo: 'Monge Financeiro',  desc: 'Economizou 70% da sua renda em um mês. Zen absoluto.' },
     coruja:         { cat: 'secretas', icon: 'fa-moon', titulo: 'Coruja Financeira', desc: 'Registrou uma transação na madrugada (0h–4h).' },
     madrugador:     { cat: 'secretas', icon: 'fa-sun', titulo: 'Madrugador',        desc: 'Registrou uma transação bem cedo (5h–8h).' },
     ano_novo:       { cat: 'secretas', icon: 'fa-champagne-glasses', titulo: 'Ano Novo, Vida Nova',desc: 'Registrou uma transação em 1º de janeiro.' },
