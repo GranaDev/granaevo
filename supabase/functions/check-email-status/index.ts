@@ -1,38 +1,26 @@
 /**
- * GranaEvo — check-email-status/index.ts (v3)
- *
- * Edge Function para verificar se um email tem subscription ativa
- * e pagamento aprovado, habilitando o fluxo de Primeiro Acesso.
+ * GranaEvo — check-email-status/index.ts (v4)
  *
  * ============================================================
- * SEGURANÇA
+ * NEUTRALIZADO — ANTI-ENUMERAÇÃO (auditoria 2026-07-12, achado F2)
  * ============================================================
  *
- * [SEC-ANON]   Endpoint público (pré-autenticação) — não exige JWT.
- *              Protegido apenas pela apikey do Supabase (gateway routing).
- * [SEC-GENERIC] Retornos não-ready são genéricos: não revelam se o email
- *              existe ou qual é o status do pagamento (anti-enumeração).
- * [SEC-LOWERCASE] Email normalizado em lowercase antes de qualquer consulta.
- * [SEC-ADMIN]  Usa service_role key para contornar RLS nas queries internas.
- *              A service_role NUNCA é exposta ao frontend.
- * [SEC-CORS]   Access-Control-Allow-Origin: '*' é seguro aqui pois o endpoint
- *              não usa cookies nem credenciais implícitas — a autenticação é
- *              feita exclusivamente pelo header 'apikey' no gateway.
+ * Este endpoint distinguia entre `not_found` / `password_exists` / `ready`,
+ * o que o tornava um ORÁCULO DE ENUMERAÇÃO de clientes pagantes (revelava,
+ * pré-autenticação, se um e-mail tinha assinatura ativa e/ou conta criada).
  *
- * ============================================================
- * HISTÓRICO
- * ============================================================
+ * Verificado em 2026-07-12: NÃO há nenhum consumidor deste endpoint em src/,
+ * public/ ou nas demais Edge Functions — o pré-check do fluxo de reset foi
+ * removido (ver api/reset-password.js) e o "Primeiro Acesso" não o utiliza.
  *
- * v3 — Sem alterações funcionais.
- *      Revisado e mantido como estava — lógica e segurança confirmadas OK.
- *      Arquivo reentregue para consistência com os demais arquivos corrigidos.
+ * Como é código órfão, a função agora responde SEMPRE de forma neutra e
+ * idêntica, independentemente de o e-mail existir ou ter assinatura. Isso
+ * elimina o oráculo sem quebrar nada. Se o fluxo de "Primeiro Acesso" for
+ * reconstruído no futuro, ele deve ser feito atrás de autenticação (JWT do
+ * próprio usuário) e não como um lookup público por e-mail.
  *
- * v2 — [FIX-01] password_created = true mas user_id NULL → retorna needs_link.
- *      [FIX-02] password_created = false mas user_id preenchido → corrige
- *               password_created no banco e retorna password_exists.
+ * Mantém o gate por PROXY_SECRET (defesa em profundidade) e o CORS restrito.
  */
-
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
 // ──────────────────────────────────────────────────────────────────────────────
 // CORS — restrito às origens conhecidas (proxy Vercel + domínios da aplicação)
@@ -65,6 +53,14 @@ function getCorsHeaders(req: Request): Record<string, string> {
   }
 }
 
+// Resposta neutra e ÚNICA — não revela existência de e-mail/assinatura/conta.
+function neutral(corsHeaders: Record<string, string>, status = 200): Response {
+  return new Response(
+    JSON.stringify({ status: 'not_found' }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status }
+  )
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // HANDLER PRINCIPAL
 // ──────────────────────────────────────────────────────────────────────────────
@@ -88,10 +84,7 @@ Deno.serve(async (req) => {
   const received = req.headers.get('x-proxy-secret') ?? ''
   if (!timingSafeEqual(received, proxySecret)) {
     console.warn('[check-email-status] Proxy secret inválido — chamada direta bloqueada')
-    return new Response(
-      JSON.stringify({ status: 'not_found' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    )
+    return neutral(corsHeaders)
   }
 
   // Apenas POST aceito
@@ -102,103 +95,10 @@ Deno.serve(async (req) => {
     )
   }
 
-  try {
-    // Inicializa cliente admin (service_role) para contornar RLS
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+  // Consome o body (compat com clientes que enviam corpo) mas NÃO o usa para
+  // diferenciar a resposta — anti-enumeração. Toda requisição válida recebe
+  // exatamente a mesma resposta neutra.
+  try { await req.json() } catch { /* ignora — resposta é sempre neutra */ }
 
-    // Leitura do body com tratamento de parse error
-    let body: { email?: unknown }
-    try {
-      body = await req.json()
-    } catch {
-      return new Response(
-        JSON.stringify({ status: 'error', message: 'Body inválido' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      )
-    }
-
-    const { email } = body
-
-    if (!email || typeof email !== 'string') {
-      return new Response(
-        JSON.stringify({ status: 'error', message: 'Email é obrigatório' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      )
-    }
-
-    // [SEC-LOWERCASE] Normaliza email antes de qualquer operação
-    const normalizedEmail = email.toLowerCase().trim()
-
-    // Validação básica de formato (bloqueia payloads obviamente malformados)
-    if (!/^[^\x00-\x1F\x7F\s@]{1,64}@[^\x00-\x1F\x7F\s@]+\.[^\x00-\x1F\x7F\s@]{2,}$/.test(normalizedEmail)) {
-      return new Response(
-        JSON.stringify({ status: 'error', message: 'Formato de email inválido' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      )
-    }
-
-    // ── Busca subscription ativa (stripe_subscriptions — inclui Cakto migrados)
-    const { data: stripeSub, error: subError } = await supabaseAdmin
-      .from('stripe_subscriptions')
-      .select('id, user_id, user_email, plan_name, status, current_period_end')
-      .eq('user_email', normalizedEmail)
-      .in('status', ['active', 'trialing'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (subError) {
-      console.error('[check-email-status] Erro ao buscar stripe_subscriptions:', subError.message)
-      throw subError
-    }
-
-    if (!stripeSub) {
-      return new Response(
-        JSON.stringify({ status: 'not_found' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      )
-    }
-
-    // Período expirado → nega (webhook pode ter atrasado a atualização do status)
-    if (stripeSub.current_period_end && new Date(stripeSub.current_period_end) < new Date()) {
-      return new Response(
-        JSON.stringify({ status: 'not_found' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      )
-    }
-
-    // Usuário já tem conta criada (user_id vinculado) → só precisa fazer login
-    if (stripeSub.user_id) {
-      return new Response(
-        JSON.stringify({ status: 'password_exists', needs_link: false, data: null }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      )
-    }
-
-    // Usuário sem conta — pode criar senha (link via link-user-subscription)
-    return new Response(
-      JSON.stringify({
-        status: 'ready',
-        data: {
-          subscription_id: stripeSub.id,
-          user_name:       'Usuário',
-          plan_name:       stripeSub.plan_name ?? 'GranaEvo',
-          email:           normalizedEmail,
-          is_stripe:       true,
-        },
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    )
-
-  } catch (error) {
-    console.error('[check-email-status] Erro interno:', error?.message ?? error)
-    return new Response(
-      JSON.stringify({ status: 'error', message: 'Erro interno. Tente novamente.' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    )
-  }
+  return neutral(corsHeaders)
 })
