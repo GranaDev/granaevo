@@ -398,6 +398,16 @@ verify_jwt = false
 [functions.chat-parse]
 verify_jwt = false
 
+# Alerta de login em aparelho novo: verifica ES256 via getUser internamente.
+[functions.notify-login]
+verify_jwt = false
+
+# delete-account: exclusão de conta self-service (LGPD art. 18, VI). Auth própria
+# (proxy-secret + auth.getUser). Sem este bloco, o gateway rejeitaria o JWT ES256
+# antes de chegar no código e o botão de excluir conta retornaria 401.
+[functions.delete-account]
+verify_jwt = false
+
 # Funções com JWT obrigatório (usuário autenticado) — HS256 compatível
 [functions.send-guest-invite]
 verify_jwt = true

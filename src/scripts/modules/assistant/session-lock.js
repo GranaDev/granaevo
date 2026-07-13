@@ -39,17 +39,51 @@ export async function setupPIN(userId, pin) {
     return true;
 }
 
+// ── Backoff de tentativas ─────────────────────────────────────────────────────
+// PIN de 4-8 dígitos sem limite de tentativa é brute-forceable por quem pega o
+// aparelho desbloqueado. Espera exponencial: 3 erros → 30s, 5 → 5min, 8 → 30min.
+// (Continua sendo trava de conveniência — a auth real é a sessão Supabase.)
+const _BACKOFF = [[8, 30 * 60_000], [5, 5 * 60_000], [3, 30_000]];
+
+function _fails(userId) {
+    try { return Math.max(0, parseInt(localStorage.getItem(key(userId, 'fails')) || '0', 10) || 0); }
+    catch { return 0; }
+}
+function _bumpFail(userId) {
+    const n = _fails(userId) + 1;
+    try {
+        localStorage.setItem(key(userId, 'fails'), String(n));
+        for (const [min, ms] of _BACKOFF) {
+            if (n >= min) { localStorage.setItem(key(userId, 'until'), String(Date.now() + ms)); break; }
+        }
+    } catch { /* ignore */ }
+}
+function _clearFails(userId) {
+    try { localStorage.removeItem(key(userId, 'fails')); localStorage.removeItem(key(userId, 'until')); } catch { /* ignore */ }
+}
+
+/** Segundos restantes de espera obrigatória (0 = pode tentar). */
+export function lockWaitSeconds(userId) {
+    try {
+        const until = Number(localStorage.getItem(key(userId, 'until')) || 0);
+        return until > Date.now() ? Math.ceil((until - Date.now()) / 1000) : 0;
+    } catch { return 0; }
+}
+
 export async function verifyPIN(userId, pin) {
+    if (lockWaitSeconds(userId) > 0) return false; // em espera — nem computa o hash
     try {
         const salt = localStorage.getItem(key(userId, 'salt'));
         const stored = localStorage.getItem(key(userId, 'hash'));
         if (!salt || !stored) return false;
         const hash = await hashPIN(pin, fromB64(salt));
         // Comparação em tempo ~constante (mesmo comprimento base64).
-        if (hash.length !== stored.length) return false;
+        if (hash.length !== stored.length) { _bumpFail(userId); return false; }
         let diff = 0;
         for (let i = 0; i < hash.length; i++) diff |= hash.charCodeAt(i) ^ stored.charCodeAt(i);
-        return diff === 0;
+        if (diff === 0) { _clearFails(userId); return true; }
+        _bumpFail(userId);
+        return false;
     } catch { return false; }
 }
 
@@ -99,7 +133,7 @@ export async function unlockBiometric(userId) {
 }
 
 export function disableLock(userId) {
-    for (const s of ['mode', 'salt', 'hash', 'credid']) {
+    for (const s of ['mode', 'salt', 'hash', 'credid', 'fails', 'until']) {
         try { localStorage.removeItem(key(userId, s)); } catch {}
     }
 }

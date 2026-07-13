@@ -233,11 +233,6 @@ html, body {
   padding: 2px var(--space-2); margin-bottom: -4px;
 }
 
-/* Microfone (D38) */
-.ge-mic { flex-shrink: 0; }
-.ge-mic.listening { color: var(--color-danger); animation: ge-mic-pulse 1s ease-in-out infinite; }
-@keyframes ge-mic-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-
 /* ── Ações abaixo da bolha: CTA "Ver no GranaEvo" + Copiar (A1/A7/F48) ─────── */
 .ge-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
 .ge-cta-btn, .ge-copy-btn {
@@ -299,6 +294,5 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   .ge-bubble, .ge-confirm, .ge-quick-chip, .ge-sheet { animation: none; }
-  .ge-mic.listening { animation: none; }
   .ge-confirm--timed::after, .ge-flash, .ge-pulse { animation: none; }
 }

@@ -27,6 +27,7 @@ const ALLOWED_ORIGINS = [
   'https://granaevo.vercel.app',
   'https://granaevo.com',
   'https://www.granaevo.com',
+  'https://assistente.granaevo.com',
 ]
 
 function getCorsHeaders(req: Request): Record<string, string> {
@@ -72,8 +73,11 @@ const PARSE_TOOL = {
     properties: {
       intencao: {
         type: 'string',
-        enum: ['lancar', 'consultar', 'relatorio', 'projecao_meta', 'saudacao', 'ajuda', 'desfazer', 'desconhecido'],
-        description: 'O que o usuário quer fazer. desfazer = "apaga o último", "cancela isso", "errei".',
+        enum: ['lancar', 'consultar', 'relatorio', 'projecao_meta', 'saudacao', 'ajuda', 'desfazer', 'pagar_conta', 'definir_orcamento', 'lembrete', 'desconhecido'],
+        description: 'O que o usuário quer fazer. desfazer = "apaga o último", "cancela isso", "errei". ' +
+          'pagar_conta = pagou uma conta fixa/boleto ("paguei a conta de luz", "quitei o aluguel" → preencha conta_hint). ' +
+          'definir_orcamento = definir limite mensal de uma categoria ("põe 600 de orçamento pro mercado" → tipo+valor). ' +
+          'lembrete = pedir aviso futuro ("me lembra de pagar o IPVA dia 10" → lembrete_texto+lembrete_data).',
       },
       categoria: {
         anyOf: [
@@ -139,6 +143,18 @@ const PARSE_TOOL = {
           'fatura ("quanto vou pagar de fatura", "minha fatura do Nubank" → preencha cartao_hint); ' +
           'falta_meta ("quanto falta pra [meta]" → preencha meta_hint). Senão null.',
       },
+      conta_hint: {
+        anyOf: [{ type: 'string' }, { type: 'null' }],
+        description: 'Só para pagar_conta: nome da conta fixa citada (ex: "luz", "aluguel", "internet").',
+      },
+      lembrete_texto: {
+        anyOf: [{ type: 'string' }, { type: 'null' }],
+        description: 'Só para lembrete: O QUE lembrar, curto e limpo (ex: "pagar o IPVA").',
+      },
+      lembrete_data: {
+        anyOf: [{ type: 'string' }, { type: 'null' }],
+        description: 'Só para lembrete: QUANDO, no formato YYYY-MM-DD (data futura). null se o usuário não disse.',
+      },
       confianca: {
         type: 'number',
         description: 'Confiança de 0 a 1 na interpretação.',
@@ -146,7 +162,8 @@ const PARSE_TOOL = {
     },
     required: [
       'intencao', 'categoria', 'valor', 'tipo', 'descricao', 'meta_hint',
-      'parcelas', 'cartao_hint', 'aporte_mensal', 'periodo', 'palavras_chave', 'consulta_alvo', 'confianca',
+      'parcelas', 'cartao_hint', 'aporte_mensal', 'periodo', 'palavras_chave', 'consulta_alvo',
+      'conta_hint', 'lembrete_texto', 'lembrete_data', 'confianca',
     ],
   },
 }
@@ -233,8 +250,11 @@ Deno.serve(async (req: Request) => {
     }
   } catch { /* fail-open — o proxy Vercel é a defesa primária de rate limit */ }
 
-  // Contexto do turno (rótulos) fica DEPOIS do system fixo → não quebra o cache.
+  // Contexto do turno (rótulos + data de hoje, p/ lembrete_data) fica DEPOIS do
+  // system fixo → não quebra o cache do prompt.
+  const hojeISO = new Date().toISOString().slice(0, 10)
   const contextLine =
+    `Hoje é ${hojeISO}. ` +
     (metaLabels.length ? `Metas/reservas do usuário: ${metaLabels.join(', ')}. ` : '') +
     (cartaoLabels.length ? `Cartões do usuário: ${cartaoLabels.join(', ')}.` : '')
 

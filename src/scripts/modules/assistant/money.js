@@ -199,6 +199,61 @@ export function parseDataRelativa(text) {
     return null;
 }
 
+// ── Datas FUTURAS (pt-BR) → "YYYY-MM-DD" (para lembretes do Radar) ─────────────
+// Diferente de parseDataRelativa (que olha pro passado, p/ lançamentos), aqui
+// tudo resolve pra frente: "dia 5" = a PRÓXIMA ocorrência do dia 5.
+export function parseDataFutura(text) {
+    if (typeof text !== 'string') return null;
+    const t = text.toLowerCase();
+    const tn = _normNoAcc(text);
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    if (/\bdepois de amanha\b/.test(tn)) { const d = new Date(hoje); d.setDate(d.getDate() + 2); return iso(d); }
+    if (/\bamanha\b/.test(tn)) { const d = new Date(hoje); d.setDate(d.getDate() + 1); return iso(d); }
+    if (/\bhoje\b/.test(tn)) return iso(hoje);
+
+    // "daqui (a) N dias" / "em N dias"
+    const mDias = tn.match(/\b(?:daqui a?|em)\s+(\d{1,2})\s+dias?\b/);
+    if (mDias) { const n = parseInt(mDias[1], 10); if (n >= 1 && n <= 60) { const d = new Date(hoje); d.setDate(d.getDate() + n); return iso(d); } }
+
+    // "na sexta" / "sexta que vem" / "próxima terça" → próxima ocorrência (nunca hoje)
+    const mSem = tn.match(/\b(?:na |no |proxim[ao] )?(domingo|segunda|terca|quarta|quinta|sexta|sabado)(?:-?\s*feira)?(?: que vem)?\b/);
+    if (mSem && !/\bpassad[ao]\b/.test(tn)) {
+        const alvo = _DIAS_SEMANA[mSem[1]];
+        let diff = (alvo - hoje.getDay() + 7) % 7;
+        if (diff === 0) diff = 7;
+        const d = new Date(hoje); d.setDate(d.getDate() + diff);
+        return iso(d);
+    }
+
+    // Data absoluta "5/8" ou "05/08/2026" → só se for futura (até 60 dias)
+    const mAbs = t.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
+    if (mAbs) {
+        const dia = parseInt(mAbs[1], 10), mes = parseInt(mAbs[2], 10);
+        let ano = mAbs[3] ? parseInt(mAbs[3], 10) : hoje.getFullYear();
+        if (ano < 100) ano += 2000;
+        if (dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12 && ano >= 2000 && ano <= 2100) {
+            let d = new Date(ano, mes - 1, dia);
+            if (!mAbs[3] && d < hoje) d = new Date(ano + 1, mes - 1, dia); // sem ano e já passou → ano que vem
+            if (!Number.isNaN(d.getTime()) && d.getDate() === dia && d >= hoje) return iso(d);
+        }
+        return null;
+    }
+
+    // "dia N" → próxima ocorrência (este mês se ainda não passou, senão o próximo)
+    const mDia = tn.match(/\bdia (\d{1,2})\b/);
+    if (mDia) {
+        const dia = parseInt(mDia[1], 10);
+        if (dia >= 1 && dia <= 31) {
+            let d = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
+            if (d < hoje || d.getDate() !== dia) d = new Date(hoje.getFullYear(), hoje.getMonth() + 1, dia);
+            if (!Number.isNaN(d.getTime()) && d.getDate() === dia) return iso(d);
+        }
+    }
+    return null;
+}
+
 /** Formata número como moeda BRL. */
 export function formatBRL(n) {
     const v = Number(n);

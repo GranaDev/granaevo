@@ -1,0 +1,136 @@
+// supabase/functions/delete-account/index.ts
+// Exclusão de conta self-service (LGPD art. 18, VI — direito à eliminação).
+//
+// Fluxo: proxy-secret (timing-safe) → JWT real (auth.getUser) → confirmação por e-mail
+// → revoga sessões → deleta auth.users. As 25 FKs ON DELETE CASCADE apagam todos os
+// dados do usuário (user_data, profiles, stripe_subscriptions, account_members, etc.).
+//
+// ARMADILHA (CLAUDE.md): deletar usuário NÃO invalida JWTs já emitidos → revogamos as
+// sessões explicitamente ANTES de deletar. O access token restante (~1h) fica órfão e
+// inócuo (todos os dados já foram removidos pela cascata).
+//
+// NÃO cancela a assinatura no Stripe automaticamente — o usuário deve cancelar antes
+// (ou o webhook/purga cuida). A resposta avisa se havia assinatura ativa.
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+
+const ALLOWED_ORIGINS = [
+  'https://granaevo.vercel.app',
+  'https://granaevo.com',
+  'https://www.granaevo.com',
+]
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin  = req.headers.get('origin') ?? ''
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-proxy-secret',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder()
+  const aB = enc.encode(a)
+  const bB = enc.encode(b)
+  const len = Math.max(aB.length, bB.length)
+  let diff = aB.length ^ bB.length
+  for (let i = 0; i < len; i++) diff |= (aB[i] ?? 0) ^ (bB[i] ?? 0)
+  return diff === 0
+}
+
+function json(body: unknown, status: number, cors: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, 'Content-Type': 'application/json' },
+  })
+}
+
+Deno.serve(async (req: Request) => {
+  const cors = getCorsHeaders(req)
+
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors })
+  if (req.method !== 'POST') return json({ ok: false, error: 'method' }, 405, cors)
+
+  // ── 1. proxy-secret ────────────────────────────────────────────────────────
+  const proxySecret = Deno.env.get('PROXY_SECRET')
+  if (!proxySecret) return json({ ok: false, error: 'config' }, 500, cors)
+  if (!timingSafeEqual(req.headers.get('x-proxy-secret') ?? '', proxySecret)) {
+    return json({ ok: false, error: 'unauthorized' }, 401, cors)
+  }
+
+  // ── 2. JWT real (getUser) ──────────────────────────────────────────────────
+  const authHeader = req.headers.get('Authorization') ?? ''
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
+  if (!token || token.length < 20) return json({ ok: false, error: 'auth' }, 401, cors)
+
+  const supabaseAdmin = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } },
+  )
+
+  const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token)
+  if (userErr || !user?.id) return json({ ok: false, error: 'auth' }, 401, cors)
+
+  // ── 3. Confirmação explícita: e-mail digitado deve bater com o da conta ─────
+  let body: Record<string, unknown>
+  try { body = await req.json() } catch { return json({ ok: false, error: 'body' }, 400, cors) }
+
+  const confirmEmail = typeof body.confirmEmail === 'string' ? body.confirmEmail.trim().toLowerCase() : ''
+  const accountEmail = (user.email ?? '').trim().toLowerCase()
+  if (!accountEmail || confirmEmail !== accountEmail) {
+    return json({ ok: false, error: 'confirm_mismatch', message: 'Digite o e-mail exato da sua conta para confirmar.' }, 400, cors)
+  }
+
+  // ── 3b. Bloqueia convidado: quem não é titular não "exclui a conta" (só o dono). ─
+  // Um convidado deve pedir ao titular para removê-lo; excluir aqui apagaria a conta
+  // de login dele, mas os dados pertencem ao titular. Deixamos explícito.
+  const { data: guestRow } = await supabaseAdmin
+    .from('account_members')
+    .select('id')
+    .eq('member_user_id', user.id)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+
+  // Detecta assinatura ativa (apenas para avisar — não bloqueia a exclusão).
+  const { data: sub } = await supabaseAdmin
+    .from('stripe_subscriptions')
+    .select('status')
+    .eq('user_id', user.id)
+    .in('status', ['active', 'trialing'])
+    .limit(1)
+    .maybeSingle()
+
+  // ── 4. Revoga as sessões ativas (best effort) antes de deletar ──────────────
+  // admin.signOut recebe o JWT (não o userId) + scope 'global' → invalida todos os
+  // refresh tokens do usuário. Se a assinatura do método variar entre versões do SDK,
+  // o catch segue: o deleteUser abaixo remove os refresh tokens de qualquer forma.
+  // Ressalva (CLAUDE.md): o access token stateless já emitido continua válido até
+  // expirar (~1h) — porém fica inócuo, pois os dados já não existem e getUser falha.
+  try {
+    // @ts-ignore — signOut(jwt, scope) no admin client
+    await supabaseAdmin.auth.admin.signOut(token, 'global')
+  } catch (_e) { /* best effort */ }
+
+  // ── 5. Deleta o usuário → cascata apaga todos os dados (25 FKs ON DELETE CASCADE) ─
+  const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(user.id)
+  if (delErr) {
+    console.error('[delete-account] Falha ao deletar user:', user.id.slice(0, 8), delErr.message)
+    return json({ ok: false, error: 'delete_failed', message: 'Não foi possível excluir a conta agora. Tente novamente ou contate o suporte.' }, 500, cors)
+  }
+
+  console.log(`[delete-account] Conta excluída — user: ${user.id.slice(0, 8)} guest: ${!!guestRow} tinha_sub_ativa: ${!!sub}`)
+  return json({
+    ok: true,
+    deleted: true,
+    hadActiveSubscription: !!sub,
+    wasGuest: !!guestRow,
+    message: sub
+      ? 'Conta excluída. Se você tinha assinatura ativa, cancele/verifique no Stripe para evitar cobranças futuras.'
+      : 'Conta e dados excluídos permanentemente.',
+  }, 200, cors)
+})

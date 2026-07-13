@@ -475,6 +475,77 @@ export function privacidadeMsg() {
     return '{{fa-shield-halved}} Fica tranquilo: seus valores, saldos e transações *nunca* saem do seu aparelho pra IA. Ela só me ajuda a entender o que você quis dizer — quem faz as contas sou eu, aqui, localmente.';
 }
 
+// ── Pagar conta fixa via chat ─────────────────────────────────────────────────
+export function contaPaga(res) {
+    return {
+        text: `{{fa-check}} ${pick(['Conta paga', 'Quitada', 'Feito'])}! · ${formatBRL(res.transaction.valor)} · {{fa-file-invoice-dollar}} ${res.conta} — marquei como paga e lancei a saída. Próximo vencimento atualizado.`,
+        chip: { categoria: 'saida', label: `Conta paga · ${formatBRL(res.transaction.valor)} · ${res.conta}`, undoLabel: 'Desfazer' },
+    };
+}
+export function contaJaPaga(nome) {
+    return `{{fa-circle-info}} A conta “${nome}” já está marcada como paga neste ciclo.`;
+}
+export function contaNaoAchada(hint) {
+    return hint
+        ? `Não achei uma conta em aberto parecida com “${hint}”. Vê o nome exato na tela de Transações → Contas Fixas.`
+        : 'Não achei contas fixas em aberto agora.';
+}
+export function escolherConta(opcoes = []) {
+    return `Qual conta você pagou? ${opcoes.slice(0, 6).map((o) => `“${o}”`).join(', ')}. Me diz o nome.`;
+}
+export function contaHandoff(nome) {
+    return `{{fa-credit-card}} “${nome}” é fatura de cartão/parcelada — o pagamento mexe nas parcelas e no limite do cartão, então é mais seguro concluir na tela de Contas.`;
+}
+
+// ── Orçamento via chat ────────────────────────────────────────────────────────
+export function orcamentoDefinido(res) {
+    const antes = res.anterior !== null ? ` (antes era ${formatBRL(res.anterior)})` : '';
+    return {
+        text: `{{fa-wallet}} Orçamento de *${res.tipo}* definido: ${formatBRL(res.limite)}/mês${antes}. Te aviso quando chegar perto do limite.`,
+        chip: { categoria: 'saida', label: `Orçamento · ${res.tipo} · ${formatBRL(res.limite)}`, undoLabel: 'Desfazer' },
+    };
+}
+export function orcamentoSemTipo() {
+    return 'Pra qual categoria? Ex: “orçamento de 600 pra Mercado”. Vale: Mercado, Transporte, Lazer, Ifood, Farmácia…';
+}
+
+// ── Lembrete via chat (Radar) ─────────────────────────────────────────────────
+export function lembreteCriado(texto, dataBR, pushOk) {
+    const aviso = pushOk
+        ? ''
+        : '\n{{fa-triangle-exclamation}} Pra receber o aviso no celular, ativa as notificações nas Configurações do GranaEvo.';
+    return `{{fa-bell}} Anotado! Te lembro de *${texto}* em ${dataBR}, de manhã.${aviso}`;
+}
+export function lembreteSemQuando() {
+    return 'Te lembro de quê e quando? Ex: “me lembra de pagar o aluguel dia 5” ou “me avisa amanhã de cancelar o teste grátis”.';
+}
+export function lembreteDuplicado() {
+    return '{{fa-bell}} Esse lembrete já existe pra essa data — pode deixar que eu aviso.';
+}
+export function lembreteErro() {
+    return 'Não consegui agendar o lembrete agora. Tenta de novo em instantes.';
+}
+export function lembreteDesfeito() {
+    return 'Lembrete cancelado.';
+}
+
+// ── Offline (outbox) ──────────────────────────────────────────────────────────
+export function offlineEnfileirado(cmd) {
+    return `{{fa-wifi}} Sem internet agora — mas anotei *${formatBRL(cmd.valor)} · ${cmd.descricao || cmd.tipo}* aqui no aparelho. Assim que a conexão voltar, eu lanço sozinho.`;
+}
+export function offlineSincronizado(n) {
+    return n === 1
+        ? '{{fa-cloud-arrow-up}} Conexão de volta! Lancei o registro que estava esperando.'
+        : `{{fa-cloud-arrow-up}} Conexão de volta! Lancei os ${n} registros que estavam esperando.`;
+}
+
+// ── Selo de entendimento local (telemetria anônima — Configurações) ───────────
+export function statsResumo(s) {
+    if (!s || !s.total) return 'Ainda não tenho estatísticas de uso por aqui.';
+    const pct = s.pctLocal !== null ? `${s.pctLocal}%` : '—';
+    return `{{fa-shield-halved}} Das suas ${s.total} mensagens, *${pct}* foram entendidas 100% no aparelho (sem IA).`;
+}
+
 // E45: rate-limit com espera explícita (educar, não frustrar)
 export function rateEspera(seg) {
     const s = Number.isFinite(seg) && seg > 0 ? seg : 30;

@@ -8,9 +8,13 @@
 
 import { dataManager } from '../data-manager.js';
 import { parseLocal, splitCompound, parseFollowup, keywordMatch } from './parser-local.js';
-import { parseValorBR } from './money.js';
+import { parseValorBR, parseDataFutura } from './money.js';
 import { toCommand } from './normalize.js';
-import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito, applyRetirada } from './tx-builder.js';
+import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito, applyRetirada,
+    resolveContaFixa, applyPagamentoConta, undoPagamentoConta, applyOrcamento, undoOrcamento } from './tx-builder.js';
+import { bump } from './stats.js';
+import * as Outbox from './outbox.js';
+import { criarLembrete, desfazerLembrete, pushLiberado } from './reminders.js';
 import { consultarGastos, consultarEntradas, saldoAtual, maioresGastos, ultimasTransacoes, compararMes, mediaMensal, faturaCartao, faltaMeta, relatorio, statusReservas, projecaoMeta,
     contarPorTipoMes, orcamentoRestante, alertaOrcamento, resumoDoDia, diaMaisCaro, assinaturasRecorrentes, metasParadas, streakDias, narrativaMes,
     faturaVencendo, salarioProvavel, fimDeMes, marcoReserva, marcoContagem, conquistasResumo, conquistasHoje } from './query.js';
@@ -31,6 +35,8 @@ class AssistantEngine {
     #pendingRetirada = null; // { valor } aguardando de qual reserva retirar
     #pendingCredito = null; // { descricao, tipo } aguardando o valor da compra
     #pendingConfirm = null; // { cmd, kind } aguardando "sim/não" de valor alto
+    #pendingConta = null;   // { valor } aguardando o NOME da conta fixa a pagar
+    #pendingLembrete = null; // { texto } aguardando o QUANDO do lembrete
     #lastUndo = null;       // fn de desfazer do último lançamento (desfazer por texto)
     #lastQuery = null;      // { consultaAlvo, palavrasChave, periodo } p/ follow-up
     #lastTxInfo = null;     // { profileId, txSnap, cmd } p/ correção inline (B20)
@@ -45,6 +51,7 @@ class AssistantEngine {
         this.#activeId = null;
         this.#ready = false;
         this.#pendingReserva = this.#pendingRetirada = this.#pendingCredito = this.#pendingConfirm = null;
+        this.#pendingConta = this.#pendingLembrete = null;
         this.#lastUndo = this.#lastQuery = this.#lastTxInfo = this.#lastLancamentoCmd = null;
     }
 
@@ -273,6 +280,25 @@ class AssistantEngine {
             if (novo != null) return this.#corrigirUltimo(novo);
         }
 
+        // Continuação de pagar-conta pendente (usuário respondeu o nome da conta).
+        if (this.#pendingConta) {
+            const pend = this.#pendingConta;
+            this.#pendingConta = null;
+            const r = resolveContaFixa(this.#active(), text);
+            if (r.status === 'ok') return this.#doPagarConta({ contaResolvida: r.conta, valor: pend.valor });
+            if (r.status === 'handoff') return { text: P.contaHandoff(String(r.conta.descricao || 'Conta')), cta: { label: 'Abrir contas', tela: 'transacoes' } };
+            // não casou → segue o fluxo normal (pode ter mudado de assunto)
+        }
+
+        // Continuação de lembrete pendente (usuário respondeu o quando).
+        if (this.#pendingLembrete) {
+            const pend = this.#pendingLembrete;
+            this.#pendingLembrete = null;
+            const dataISO = parseDataFutura(text);
+            if (dataISO) return this.#doLembrete({ lembreteTexto: pend.texto, lembreteData: dataISO });
+            // sem data → segue o fluxo normal
+        }
+
         // Continuação de crédito pendente (usuário respondeu o valor da compra).
         if (this.#pendingCredito) {
             const v = parseValorBR(text);
@@ -351,21 +377,30 @@ class AssistantEngine {
         }
 
         if (local.confianca >= CONF_LOCAL_OK) {
+            bump('local'); // telemetria anônima: resolvido 100% no aparelho
             return this.#route(toCommand(local));
         }
 
-        const ai = await parseWithAI(text, this.#labels());
-        if (ai.ok) {
-            const cmd = toCommand({ ...ai.parse, source: 'ia' });
-            // B12: aprende o comerciante que a IA resolveu (o parser não sabia).
-            if (cmd.intent === 'lancar' && cmd.categoria && cmd.tipo) {
-                try { learnMerchant(text, cmd.categoria, cmd.tipo, cmd.descricao); } catch { /* ignore */ }
+        // Offline: não adianta tentar a IA — usa o palpite local ou explica.
+        const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        if (!offline) {
+            const ai = await parseWithAI(text, this.#labels());
+            if (ai.ok) {
+                bump('ia_ok');
+                const cmd = toCommand({ ...ai.parse, source: 'ia' });
+                // B12: aprende o comerciante que a IA resolveu (o parser não sabia).
+                if (cmd.intent === 'lancar' && cmd.categoria && cmd.tipo) {
+                    try { learnMerchant(text, cmd.categoria, cmd.tipo, cmd.descricao); } catch { /* ignore */ }
+                }
+                return this.#route(cmd);
             }
-            return this.#route(cmd);
+            if (ai.reason === 'rate')     return { text: P.SISTEMA.rate() };
+            if (ai.reason === 'rate_day') return { text: P.SISTEMA.rateDia() }; // E46
+            if (ai.reason === 'auth')     return { text: '{{fa-lock}} Sua sessão expirou — faça login de novo.' };
+            bump('ia_fail');
+        } else {
+            bump('offline');
         }
-        if (ai.reason === 'rate')     return { text: P.SISTEMA.rate() };
-        if (ai.reason === 'rate_day') return { text: P.SISTEMA.rateDia() }; // E46
-        if (ai.reason === 'auth')     return { text: '{{fa-lock}} Sua sessão expirou — faça login de novo.' };
 
         // IA indisponível/sem parse: se o local tinha um palpite, usa; senão desiste.
         if (local.intencao !== 'desconhecido' && local.confianca >= 0.4) {
@@ -410,6 +445,10 @@ class AssistantEngine {
                 if (cmd.categoria === 'retirada_reserva') return this.#doRetirada(cmd);
                 if (!cmd.categoria || !(cmd.valor > 0)) return { text: P.SISTEMA.semValor() };
                 return this.#doLancamento(cmd);
+
+            case 'pagar_conta':      return this.#doPagarConta(cmd);
+            case 'definir_orcamento': return this.#doOrcamento(cmd);
+            case 'lembrete':         return this.#doLembrete(cmd);
 
             case 'consultar': {
                 const p = this.#active();
@@ -483,6 +522,12 @@ class AssistantEngine {
         const saved = await dataManager.saveUserData(this.#profiles);
         if (!saved) {
             try { undoLancamento(profile, res.transaction); } catch {}
+            // OFFLINE-FIRST: sem rede, o comando (não o estado) vai pra fila e
+            // é reaplicado pelo caminho normal quando a conexão voltar.
+            if (typeof navigator !== 'undefined' && navigator.onLine === false &&
+                Outbox.enqueue(dataManager.userId, profileId, cmd)) {
+                return { text: P.offlineEnfileirado(cmd) };
+            }
             return { text: P.SISTEMA.erro() };
         }
 
@@ -500,6 +545,146 @@ class AssistantEngine {
         // Insight opcional pós-lançamento (A6/C24/C28/A9) — no máximo UM, e só quando faz sentido.
         const extra = this.#insightPos(res.transaction);
         return extra ? { multi: [view, { text: extra }] } : view;
+    }
+
+    // ── Pagar conta fixa ("paguei a conta de luz") ─────────────────────────────
+    async #doPagarConta(cmd) {
+        const profile = this.#active();
+        const profileId = this.#activeId;
+
+        // Conta pode já vir resolvida (continuação do "qual conta?").
+        let conta = cmd.contaResolvida || null;
+        if (!conta) {
+            const r = resolveContaFixa(profile, cmd.contaHint);
+            if (r.status === 'none') {
+                // Sem conta em aberto que case — se veio valor, cai pra saída comum.
+                if (cmd.valor > 0) {
+                    return this.#doLancamento({ intent: 'lancar', categoria: 'saida', valor: cmd.valor,
+                        tipo: 'Conta fixa', descricao: cmd.contaHint || 'Conta', _confirmed: false });
+                }
+                return { text: P.contaNaoAchada(cmd.contaHint), cta: { label: 'Ver contas', tela: 'transacoes' } };
+            }
+            if (r.status === 'handoff') {
+                return { text: P.contaHandoff(String(r.conta.descricao || 'Conta')), cta: { label: 'Abrir contas', tela: 'transacoes' } };
+            }
+            if (r.status === 'ambiguous' || r.status === 'choose') {
+                this.#pendingConta = { valor: cmd.valor || null };
+                return { text: P.escolherConta(r.opcoes) };
+            }
+            conta = r.conta;
+        }
+
+        if (conta.pago === true) return { text: P.contaJaPaga(String(conta.descricao || 'Conta')) };
+
+        const res = applyPagamentoConta(profile, conta, cmd.valor);
+        if (!res.ok) {
+            if (res.reason === 'handoff') return { text: P.contaHandoff(String(conta.descricao || 'Conta')), cta: { label: 'Abrir contas', tela: 'transacoes' } };
+            if (res.reason === 'ja_paga') return { text: P.contaJaPaga(String(conta.descricao || 'Conta')) };
+            return { text: P.SISTEMA.semValor() };
+        }
+
+        const saved = await dataManager.saveUserData(this.#profiles);
+        if (!saved) {
+            try { undoPagamentoConta(profile, res.transaction, res.snapshot); } catch {}
+            await this.#reload();
+            return { text: P.SISTEMA.erro() };
+        }
+
+        const txSnap = { ...res.transaction };
+        const snap = { ...res.snapshot };
+        const view = P.contaPaga(res);
+        view.undo = async () => {
+            const p = this.#profiles.find((x) => String(x.id) === String(profileId));
+            if (!p || !undoPagamentoConta(p, txSnap, snap)) return { text: 'Esse pagamento já não está mais aqui.' };
+            const ok = await dataManager.saveUserData(this.#profiles);
+            if (!ok) { await this.#reload(); return { text: P.SISTEMA.erro() }; }
+            return { text: P.desfeito() };
+        };
+        this.#lastUndo = view.undo;
+        this.#lastTxInfo = null; // correção inline não se aplica (mecânica própria)
+        return view;
+    }
+
+    // ── Definir orçamento ("põe 600 de orçamento pra mercado") ──────────────────
+    async #doOrcamento(cmd) {
+        if (!cmd.tipo) return { text: P.orcamentoSemTipo() };
+        if (!(cmd.valor > 0)) return { text: P.SISTEMA.semValor() };
+        const profile = this.#active();
+        const profileId = this.#activeId;
+        const res = applyOrcamento(profile, cmd.tipo, cmd.valor);
+        if (!res.ok) return { text: res.reason === 'sem_tipo' ? P.orcamentoSemTipo() : P.SISTEMA.semValor() };
+
+        const saved = await dataManager.saveUserData(this.#profiles);
+        if (!saved) {
+            try { undoOrcamento(profile, res.tipo, res.anterior); } catch {}
+            return { text: P.SISTEMA.erro() };
+        }
+        const view = P.orcamentoDefinido(res);
+        view.undo = async () => {
+            const p = this.#profiles.find((x) => String(x.id) === String(profileId));
+            if (!p || !undoOrcamento(p, res.tipo, res.anterior)) return { text: 'Esse orçamento já mudou.' };
+            const ok = await dataManager.saveUserData(this.#profiles);
+            if (!ok) { await this.#reload(); return { text: P.SISTEMA.erro() }; }
+            return { text: P.desfeito() };
+        };
+        this.#lastUndo = view.undo;
+        return view;
+    }
+
+    // ── Lembrete ("me lembra de pagar o aluguel dia 5") → Radar ─────────────────
+    async #doLembrete(cmd) {
+        const texto = (cmd.lembreteTexto || '').trim();
+        if (!texto) { return { text: P.lembreteSemQuando() }; }
+        if (!cmd.lembreteData) {
+            this.#pendingLembrete = { texto };
+            return {
+                text: `Beleza — te lembro de *${texto}*. Quando?`,
+                quickReplies: [
+                    { label: 'Amanhã', text: 'amanhã' },
+                    { label: 'Em 3 dias', text: 'daqui a 3 dias' },
+                    { label: 'Dia 5', text: 'dia 5' },
+                ],
+            };
+        }
+        const r = await criarLembrete(texto, cmd.lembreteData);
+        if (!r.ok) {
+            if (r.reason === 'dup') return { text: P.lembreteDuplicado() };
+            if (r.reason === 'auth') return { text: '{{fa-lock}} Sua sessão expirou — faça login de novo.' };
+            return { text: P.lembreteErro() };
+        }
+        const [y, m, d] = cmd.lembreteData.split('-');
+        const view = { text: P.lembreteCriado(texto, `${d}/${m}/${y}`, pushLiberado()), chip: { categoria: 'saida', label: `Lembrete · ${texto}`, undoLabel: 'Cancelar' } };
+        view.undo = async () => ({ text: (await desfazerLembrete(r.dedupeKey)) ? P.lembreteDesfeito() : P.SISTEMA.erro() });
+        this.#lastUndo = view.undo;
+        return view;
+    }
+
+    // ── Outbox offline: reaplica lançamentos enfileirados (chamado pela página) ──
+    async flushOutbox() {
+        if (!this.#ready) return null;
+        const uid = dataManager.userId;
+        const fila = Outbox.peekAll(uid);
+        if (!fila.length) return null;
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;
+
+        await this.#reload(); // base = verdade do servidor
+        const restantes = [];
+        let aplicados = 0;
+        for (const item of fila) {
+            const profile = this.#profiles.find((p) => String(p.id) === String(item.profileId));
+            if (!profile) continue; // perfil sumiu → descarta silencioso
+            const res = applyLancamento(profile, item.cmd);
+            if (!res.ok) continue;  // inválido contra o estado atual → descarta
+            const saved = await dataManager.saveUserData(this.#profiles);
+            if (!saved) {
+                try { undoLancamento(profile, res.transaction); } catch {}
+                restantes.push(item); // rede falhou de novo → mantém na fila
+                continue;
+            }
+            aplicados++;
+        }
+        Outbox.keepOnly(uid, restantes);
+        return aplicados > 0 ? { text: P.offlineSincronizado(aplicados) } : null;
     }
 
     // ── Desfazer por texto ("apaga o último", "errei") ─────────────────────────

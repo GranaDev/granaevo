@@ -304,6 +304,155 @@ export function undoCredito(profile, snap) {
     return true;
 }
 
+// ── Pagar conta fixa ("paguei a conta de luz") ────────────────────────────────
+// RÉPLICA FIEL do caminho "CONTA RECORRENTE (sem parcelas)" de pagarContaFixa
+// do dashboard.js: cria a transação de saída (tipo 'Conta Fixa', contaFixaId),
+// avança o vencimento 1 mês, marca pago + dataPagamento.
+// Faturas de cartão e contas parceladas mexem em compras/cartao.usado →
+// HANDOFF pra tela de Contas (integridade > conveniência).
+
+function _avancarMesISO(vencimentoISO) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(vencimentoISO))) {
+        const f = new Date(); f.setMonth(f.getMonth() + 1);
+        return f.toISOString().slice(0, 10);
+    }
+    let [y, m, d] = vencimentoISO.split('-').map(Number);
+    m++;
+    if (m > 12) { m = 1; y++; }
+    return [y, String(m).padStart(2, '0'), String(d).padStart(2, '0')].join('-');
+}
+
+/**
+ * Resolve a conta fixa em aberto a partir do hint (nome). Só contas NÃO pagas.
+ * @returns {{status:'ok',conta}|{status:'ambiguous'|'choose',opcoes}|{status:'none'}|{status:'handoff',conta}}
+ */
+export function resolveContaFixa(profile, hint) {
+    const abertas = (Array.isArray(profile?.contasFixas) ? profile.contasFixas : [])
+        .filter((c) => c && c.pago !== true);
+    if (!abertas.length) return { status: 'none' };
+
+    const simples = (c) => c.tipoContaFixa !== 'fatura_cartao' && !(c.cartaoId && c.totalParcelas);
+    let candidatas = abertas;
+    if (hint) {
+        const h = _norm(hint);
+        const porNome = abertas.filter((c) => {
+            const n = _norm(c.descricao);
+            return n && (n.includes(h) || h.includes(n));
+        });
+        if (porNome.length === 1) {
+            return simples(porNome[0]) ? { status: 'ok', conta: porNome[0] } : { status: 'handoff', conta: porNome[0] };
+        }
+        if (porNome.length > 1) return { status: 'ambiguous', opcoes: porNome.map((c) => String(c.descricao || 'Conta')) };
+        // Fuzzy tolerante a typo (mesmo critério do resolveMeta)
+        let best = null, bestD = Infinity;
+        for (const c of abertas) {
+            const n = _norm(c.descricao);
+            if (!n) continue;
+            const d = _lev(h, n);
+            if (d < bestD) { bestD = d; best = c; }
+        }
+        if (best) {
+            const alvo = _norm(best.descricao);
+            if (bestD <= Math.max(2, Math.floor(alvo.length * 0.34))) {
+                return simples(best) ? { status: 'ok', conta: best } : { status: 'handoff', conta: best };
+            }
+        }
+        return { status: 'none' };
+    }
+    const soSimples = candidatas.filter(simples);
+    if (soSimples.length === 1) return { status: 'ok', conta: soSimples[0] };
+    if (candidatas.length === 0) return { status: 'none' };
+    return { status: 'choose', opcoes: candidatas.map((c) => String(c.descricao || 'Conta')) };
+}
+
+/**
+ * Aplica o pagamento de uma conta fixa SIMPLES (recorrente, sem cartão).
+ * @returns {{ok:true, transaction, snapshot, conta} | {ok:false, reason}}
+ */
+export function applyPagamentoConta(profile, conta, valorOpcional) {
+    if (!profile || !conta) return { ok: false, reason: 'no_profile' };
+    if (conta.pago === true) return { ok: false, reason: 'ja_paga' };
+    if (conta.tipoContaFixa === 'fatura_cartao' || (conta.cartaoId && conta.totalParcelas)) {
+        return { ok: false, reason: 'handoff' };
+    }
+    const valor = Number(valorOpcional) > 0 ? Number(valorOpcional) : Number(conta.valor);
+    if (!Number.isFinite(valor) || valor <= 0 || valor > 9_999_999) return { ok: false, reason: 'sem_valor' };
+
+    if (!Array.isArray(profile.transacoes)) profile.transacoes = [];
+    const dh = agoraDataHora();
+    const desc = String(conta.descricao || 'Conta').slice(0, 100);
+    const t = {
+        categoria: 'saida',
+        tipo: 'Conta Fixa',
+        descricao: `${desc} (pagamento mensal)`,
+        valor: Number(valor.toFixed(2)),
+        data: dh.data,
+        hora: dh.hora,
+        contaFixaId: conta.id,
+    };
+    profile.transacoes.push(t);
+
+    const snapshot = { contaId: conta.id, vencimento: conta.vencimento, pago: conta.pago === true, dataPagamento: conta.dataPagamento ?? null };
+    conta.vencimento = _avancarMesISO(conta.vencimento);
+    conta.pago = true;
+    conta.dataPagamento = new Date().toISOString().slice(0, 10);
+
+    return { ok: true, transaction: t, snapshot, conta: desc };
+}
+
+/** Desfaz o pagamento: remove a transação e restaura vencimento/pago (por id). */
+export function undoPagamentoConta(profile, txSnap, snapshot) {
+    if (!profile || !snapshot) return false;
+    // Remove a transação do pagamento (match por campos, à prova de reload).
+    let removed = false;
+    if (Array.isArray(profile.transacoes)) {
+        for (let i = profile.transacoes.length - 1; i >= 0; i--) {
+            const a = profile.transacoes[i];
+            if (a && a.categoria === 'saida' && a.tipo === 'Conta Fixa' &&
+                a.descricao === txSnap.descricao && Number(a.valor) === Number(txSnap.valor) &&
+                a.data === txSnap.data && a.hora === txSnap.hora) {
+                profile.transacoes.splice(i, 1); removed = true; break;
+            }
+        }
+    }
+    const conta = (Array.isArray(profile.contasFixas) ? profile.contasFixas : [])
+        .find((c) => String(c?.id) === String(snapshot.contaId));
+    if (conta) {
+        conta.vencimento = snapshot.vencimento;
+        conta.pago = snapshot.pago;
+        if (snapshot.dataPagamento === null) delete conta.dataPagamento;
+        else conta.dataPagamento = snapshot.dataPagamento;
+        return true;
+    }
+    return removed;
+}
+
+// ── Orçamento por categoria ("põe 600 de orçamento pra mercado") ──────────────
+// Mesma forma do dashboard: profile.orcamentos = { 'Mercado': { limite: 600 } }.
+/**
+ * @returns {{ok:true, tipo, limite, anterior:number|null} | {ok:false, reason}}
+ */
+export function applyOrcamento(profile, tipo, limite) {
+    if (!profile || typeof profile !== 'object') return { ok: false, reason: 'no_profile' };
+    const v = Number(limite);
+    if (!tipo) return { ok: false, reason: 'sem_tipo' };
+    if (!Number.isFinite(v) || v <= 0 || v > 10_000_000) return { ok: false, reason: 'sem_valor' };
+    if (!profile.orcamentos || typeof profile.orcamentos !== 'object' || Array.isArray(profile.orcamentos)) {
+        profile.orcamentos = {};
+    }
+    const anterior = Number(profile.orcamentos[tipo]?.limite);
+    profile.orcamentos[tipo] = { limite: Number(v.toFixed(2)) };
+    return { ok: true, tipo, limite: Number(v.toFixed(2)), anterior: Number.isFinite(anterior) ? anterior : null };
+}
+
+/** Desfaz a definição de orçamento (restaura o limite anterior ou remove). */
+export function undoOrcamento(profile, tipo, anterior) {
+    if (!profile?.orcamentos || typeof profile.orcamentos !== 'object') return false;
+    if (anterior === null || anterior === undefined) delete profile.orcamentos[tipo];
+    else profile.orcamentos[tipo] = { limite: Number(anterior) };
+    return true;
+}
+
 // Igualdade de transação por campos (à prova de reload — refs mudam no re-parse).
 function sameTx(a, b) {
     return a && b &&

@@ -65,15 +65,18 @@ export default async function handler(req, res) {
     res.setHeader('Referrer-Policy', 'same-origin');
 
     // ── Crons: disparados pela Vercel Cron ────────────────────────────────────
-    //   /api/user-data?cron-health=1 → edge cron-health-alert (M2, saúde do pg_cron)
-    //   /api/user-data?radar=1       → edge send-radar-push  (Radar: Web Push diário)
+    //   /api/user-data?radar=1       → edge send-radar-push (Radar: Web Push manhã)
+    //   /api/user-data?cron-health=1 → edge cron-health-alert (M2) + FAN-OUT pro
+    //     send-radar-push (2ª rodada do dia — Hobby só permite 2 crons, então o
+    //     cron da tarde dispara os dois; a edge do radar responde 202 rápido e o
+    //     dedupe por (user_id, dedupe_key) garante que nada notifica em dobro).
     // Autenticados pelo CRON_SECRET que a Vercel injeta como `Authorization: Bearer`.
     // Branch isolado, early-return, ANTES de qualquer lógica de dados/CSRF/JWT — não
     // afeta o fluxo normal. Repassa à edge function alvo com x-proxy-secret.
-    const cronTarget =
-        (req.query?.['cron-health'] === '1') ? 'cron-health-alert' :
-        (req.query?.['radar'] === '1')       ? 'send-radar-push'   : null;
-    if (req.method === 'GET' && cronTarget) {
+    const cronTargets =
+        (req.query?.['cron-health'] === '1') ? ['cron-health-alert', 'send-radar-push'] :
+        (req.query?.['radar'] === '1')       ? ['send-radar-push']                      : null;
+    if (req.method === 'GET' && cronTargets) {
         const cronSecret = process.env.CRON_SECRET ?? '';
         const authHdr    = req.headers['authorization'] ?? '';
         const provided   = authHdr.startsWith('Bearer ') ? authHdr.slice(7).trim() : '';
@@ -83,20 +86,40 @@ export default async function handler(req, res) {
         if (!okSecret) return res.status(401).json({ error: 'Unauthorized' });
         if (!SUPABASE_URL || !PROXY_SECRET || !SUPABASE_ANON_KEY)
             return res.status(503).json({ error: 'Serviço indisponível' });
+        const fire = (fn) => fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+            method:  'POST',
+            headers: {
+                'Content-Type':   'application/json',
+                'apikey':         SUPABASE_ANON_KEY,
+                'x-proxy-secret': PROXY_SECRET,
+            },
+            body:   '{}',
+            signal: AbortSignal.timeout(12_000),
+        });
         try {
-            const efRes = await fetch(`${SUPABASE_URL}/functions/v1/${cronTarget}`, {
-                method:  'POST',
-                headers: {
-                    'Content-Type':   'application/json',
-                    'apikey':         SUPABASE_ANON_KEY,
-                    'x-proxy-secret': PROXY_SECRET,
-                },
-                body:   '{}',
-                signal: AbortSignal.timeout(12_000),
-            });
-            return res.status(efRes.status)
-                      .setHeader('Content-Type', 'application/json')
-                      .send(await efRes.text());
+            const results = await Promise.allSettled(cronTargets.map(fire));
+            // O status do PRIMEIRO alvo define a resposta (compatível com o formato
+            // anterior); os demais são fan-out melhor-esforço, refletidos no corpo.
+            const first = results[0];
+            if (first.status === 'rejected') {
+                const e = first.reason;
+                const code = e?.name === 'TimeoutError' || e?.name === 'AbortError' ? 504 : 502;
+                return res.status(code).json({ error: 'Gateway indisponível' });
+            }
+            const primaryText = await first.value.text();
+            if (results.length === 1) {
+                return res.status(first.value.status)
+                          .setHeader('Content-Type', 'application/json')
+                          .send(primaryText);
+            }
+            const extras = results.slice(1).map((r, i) => ({
+                fn: cronTargets[i + 1],
+                ok: r.status === 'fulfilled' ? r.value.ok : false,
+                status: r.status === 'fulfilled' ? r.value.status : 0,
+            }));
+            let primary;
+            try { primary = JSON.parse(primaryText); } catch { primary = { raw: true }; }
+            return res.status(first.value.status).json({ primary, fanout: extras });
         } catch (e) {
             const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
             return res.status(code).json({ error: 'Gateway indisponível' });
@@ -367,6 +390,86 @@ export default async function handler(req, res) {
         return res.status(efRes.status)
                   .setHeader('Content-Type', 'application/json')
                   .send(await efRes.text())
+    }
+
+    // ── POST { action:"delete-account" }: exclusão de conta (LGPD art. 18, VI) ──
+    // Destrutivo e irreversível → rate limit agressivo (ip + uid) + confirmação por e-mail.
+    if (parsed?.action === 'delete-account') {
+        if (!SUPABASE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
+
+        if (!await checkRL(`delacc:ip:${ip}`, 3, 3_600)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 hora.' });
+        }
+        if (userId && !await checkRL(`delacc:uid:${userId}`, 3, 3_600)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 hora.' });
+        }
+
+        if (typeof parsed?.confirmEmail !== 'string' || !parsed.confirmEmail.includes('@')) {
+            return res.status(400).json({ error: 'confirmEmail obrigatório' });
+        }
+
+        let daRes;
+        try {
+            daRes = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+                method:  'POST',
+                headers: {
+                    'Content-Type':    'application/json',
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                },
+                body:   JSON.stringify({ confirmEmail: parsed.confirmEmail.slice(0, 254) }),
+                signal: AbortSignal.timeout(15_000),
+            });
+        } catch (e) {
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
+            return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
+        }
+
+        // Invalida cache Redis do usuário após exclusão
+        if (daRes.status === 200 && userId && REDIS_URL && REDIS_TOKEN) {
+            fetch(`${REDIS_URL}/del/gd:${userId}`, {
+                method:  'POST',
+                headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+                signal:  AbortSignal.timeout(2_000),
+            }).catch(() => {});
+        }
+
+        return res.status(daRes.status)
+                  .setHeader('Content-Type', 'application/json')
+                  .send(await daRes.text());
+    }
+
+    // ── POST { action:"login-notify" }: alerta de login em aparelho novo ──────
+    // Chamado pelo login.js após autenticar. Repassa à edge notify-login com o
+    // user-agent ORIGINAL (x-original-ua) — o fetch do proxy tem UA próprio.
+    // Best-effort: nunca bloqueia o login; resposta sempre 200 pro cliente.
+    if (parsed?.action === 'login-notify') {
+        if (!SUPABASE_URL) return res.status(200).json({ ok: false });
+        if (!await checkRL(`loginnotify:ip:${ip}`, 5)) {
+            return res.status(200).json({ ok: false }); // silencioso — é telemetria de segurança
+        }
+        try {
+            const nlRes = await fetch(`${SUPABASE_URL}/functions/v1/notify-login`, {
+                method:  'POST',
+                headers: {
+                    'Content-Type':    'application/json',
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                    'x-original-ua':   String(req.headers['user-agent'] ?? '').slice(0, 400),
+                },
+                body:   '{}',
+                signal: AbortSignal.timeout(10_000),
+            });
+            return res.status(200).json({ ok: nlRes.ok });
+        } catch {
+            return res.status(200).json({ ok: false });
+        }
     }
 
     // ── POST { action:"chat-parse" }: Assistente GranaEvo (IA como função) ──

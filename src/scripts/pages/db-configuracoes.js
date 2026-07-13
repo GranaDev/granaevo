@@ -1,7 +1,7 @@
 // db-configuracoes.js — Seção de Configurações (lazy-loaded)
 // CSS desktop-only (min-width:769px) viaja neste chunk lazy — mobile não baixa.
 import '../../styles/dashboard/_db-config-desktop-lazy.css';
-import { supabase } from '../services/supabase-client.js?v=2';
+import { supabase, logout } from '../services/supabase-client.js?v=2';
 import { iniciarTutorial } from '../modules/tutorial.js';
 import { initPWA, initInstallButton } from '../modules/pwa-installer.js';
 import { isPushSupported, getPushPermission, requestPushPermission, unsubscribePush } from '../modules/push-notifications.js';
@@ -28,11 +28,14 @@ export function init(ctx) {
     window.gerenciarAssinatura = () => gerenciarAssinatura();
     window.abrirHistoricoBackup = () => abrirHistoricoBackup();
     window.resetarPerfil        = () => resetarPerfil();
+    window.excluirConta         = () => excluirConta();
     window.abrirPerfilHub       = () => abrirPerfilHub();
     // Inicializa botão de instalação do PWA na seção de Configurações
     initInstallButton();
     // Botão "Instalar Chat Assistente" (PWA próprio do assistente, separado)
     _initInstallAssistantButton();
+    // Painel "Segurança da conta" (módulo lazy — só baixa ao abrir)
+    _initSecurityPanelButton();
     // Atualiza status de cache offline
     _updateOfflineStatus();
     // Inicializa botão de notificações push
@@ -105,6 +108,8 @@ function _bindBtnBackup() {
     if (btn) btn.addEventListener('click', abrirHistoricoBackup);
     const btnReset = document.getElementById('btnResetarPerfil');
     if (btnReset) btnReset.addEventListener('click', resetarPerfil);
+    const btnDel = document.getElementById('btnExcluirConta');
+    if (btnDel) btnDel.addEventListener('click', excluirConta);
 }
 
 // "Instalar Chat Assistente" — leva o usuário ao app do assistente, que vive
@@ -133,6 +138,24 @@ function _initInstallAssistantButton() {
         } else {
             // Navegador comum: navega na própria aba (mais fluido).
             window.location.href = url;
+        }
+    });
+}
+
+// Painel "Segurança da conta": sessões, aparelhos com push e atividade recente.
+// O módulo é um chunk lazy — só baixa quando o usuário abre (budget do dashboard).
+function _initSecurityPanelButton() {
+    const btn = document.getElementById('btnPainelSeguranca');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+            const { openSecurityPanel } = await import('../modules/security-panel.js');
+            await openSecurityPanel();
+        } catch {
+            // Sem rede/erro de chunk: silencioso — o botão volta a funcionar.
+        } finally {
+            btn.disabled = false;
         }
     });
 }
@@ -1217,6 +1240,143 @@ async function resetarPerfil() {
     });
 }
 window.resetarPerfil = resetarPerfil;
+
+// ========== EXCLUIR CONTA (LGPD art. 18, VI — direito à eliminação) ==========
+// Exclusão permanente e irreversível da conta de login + TODOS os dados (cascata no
+// banco). Exige digitar o e-mail exato da conta para habilitar. Backend: Edge Function
+// delete-account via proxy /api/user-data (action:"delete-account"), que revalida o
+// e-mail contra o JWT no servidor. Após sucesso: logout + redireciona para login.
+async function excluirConta() {
+    const accountEmail = String(_ctx?.usuarioLogado?.email || '').trim().toLowerCase();
+    const isGuest = Boolean(_ctx?.usuarioLogado?.isGuest);
+
+    _ctx.criarPopupDOM((box) => {
+        box.style.maxWidth = '460px';
+
+        const h3 = document.createElement('h3');
+        h3.innerHTML = '<i class="fas fa-user-slash" style="color:#ef4444" aria-hidden="true"></i> Excluir minha conta';
+        h3.style.marginBottom = '16px';
+
+        // ── Aviso destrutivo ─────────────────────────────────────────────
+        const warnBox = document.createElement('div');
+        warnBox.style.cssText = 'background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); border-radius:12px; padding:12px 14px; margin-bottom:14px;';
+        warnBox.innerHTML = `
+            <div style="font-size:0.78rem; font-weight:700; color:#f87171; margin-bottom:8px;">
+                <i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Esta ação é permanente e irreversível
+            </div>
+            <ul style="font-size:0.82rem; color:rgba(255,255,255,0.65); line-height:1.8; padding-left:18px; margin:0;">
+                <li>Sua conta de acesso será apagada</li>
+                <li>Todos os dados financeiros, perfis e backups serão excluídos</li>
+                <li>${isGuest ? 'Você perderá o acesso à conta que te convidou' : 'Convidados vinculados perderão o acesso'}</li>
+            </ul>`;
+
+        // ── Aviso de assinatura (só titular) ─────────────────────────────
+        const subNote = document.createElement('div');
+        subNote.style.cssText = 'background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:10px; padding:10px 12px; margin-bottom:14px; font-size:0.8rem; color:#fbbf24; line-height:1.5;';
+        subNote.innerHTML = '<i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Se você tem assinatura ativa, cancele-a antes (em Gerenciar assinatura) para evitar cobranças futuras.';
+
+        // ── Confirmação por e-mail ───────────────────────────────────────
+        const confirmLabel = document.createElement('label');
+        confirmLabel.htmlFor = 'delAccountInput';
+        confirmLabel.style.cssText = 'font-size:0.8rem; color:var(--text-secondary); display:block; margin-bottom:6px;';
+        confirmLabel.innerHTML = 'Digite seu e-mail <strong style="color:#ef4444;">' + sanitizeHTML(accountEmail || 'da conta') + '</strong> para confirmar:';
+
+        const confirmInput = document.createElement('input');
+        confirmInput.type = 'email';
+        confirmInput.id   = 'delAccountInput';
+        confirmInput.className = 'form-input';
+        confirmInput.placeholder = 'seu@email.com';
+        confirmInput.autocomplete = 'off';
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:10px; margin-top:14px;';
+
+        const btnConfirmar = document.createElement('button');
+        btnConfirmar.className = 'btn-primary';
+        btnConfirmar.type = 'button';
+        btnConfirmar.style.cssText = 'flex:1; background:linear-gradient(135deg,#dc2626,#b91c1c); opacity:0.5; cursor:not-allowed;';
+        btnConfirmar.disabled = true;
+        btnConfirmar.innerHTML = '<i class="fas fa-user-slash" aria-hidden="true"></i> Excluir para sempre';
+
+        const btnCancelar = document.createElement('button');
+        btnCancelar.className = 'btn-cancelar';
+        btnCancelar.type = 'button';
+        btnCancelar.style.flex = '1';
+        btnCancelar.textContent = 'Cancelar';
+        btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
+
+        // Habilita só quando o e-mail bate (se conhecido) ou parece válido (fallback)
+        confirmInput.addEventListener('input', () => {
+            const val = confirmInput.value.trim().toLowerCase();
+            const ok  = accountEmail ? (val === accountEmail) : (val.includes('@') && val.length > 4);
+            btnConfirmar.disabled = !ok;
+            btnConfirmar.style.opacity = ok ? '1' : '0.5';
+            btnConfirmar.style.cursor  = ok ? 'pointer' : 'not-allowed';
+        });
+
+        btnConfirmar.addEventListener('click', async () => {
+            const typed = confirmInput.value.trim().toLowerCase();
+            if (!typed || (accountEmail && typed !== accountEmail)) return;
+
+            btnConfirmar.disabled = true;
+            btnCancelar.disabled  = true;
+            btnConfirmar.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Excluindo…';
+
+            let token = null;
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                token = session?.access_token ?? null;
+            } catch { /* ignore */ }
+
+            if (!token) {
+                _ctx.mostrarNotificacao('Sessão expirada. Faça login novamente.', 'error');
+                btnConfirmar.disabled = false; btnCancelar.disabled = false;
+                btnConfirmar.innerHTML = '<i class="fas fa-user-slash" aria-hidden="true"></i> Excluir para sempre';
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/user-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type':  'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ action: 'delete-account', confirmEmail: typed }),
+                });
+                const result = await resp.json().catch(() => ({}));
+
+                if (!resp.ok || !result?.ok) {
+                    throw new Error(result?.message || result?.error || `HTTP ${resp.status}`);
+                }
+
+                // Sucesso: limpa sessão local e redireciona ao login
+                try { sessionStorage.clear(); } catch { /* ignore */ }
+                try { await logout(); } catch { /* best effort */ }
+                _ctx.fecharPopup();
+                _ctx.mostrarNotificacao('Conta excluída. Até logo 👋', 'success');
+                setTimeout(() => { window.location.href = 'login.html'; }, 1200);
+
+            } catch (e) {
+                _ctx._log.error('DELETE_ACCOUNT_001', e);
+                btnConfirmar.disabled = false; btnCancelar.disabled = false;
+                btnConfirmar.innerHTML = '<i class="fas fa-user-slash" aria-hidden="true"></i> Excluir para sempre';
+                _ctx.mostrarNotificacao(`Não foi possível excluir: ${e.message || 'tente novamente.'}`, 'error');
+            }
+        });
+
+        btnRow.appendChild(btnConfirmar);
+        btnRow.appendChild(btnCancelar);
+
+        box.appendChild(h3);
+        box.appendChild(warnBox);
+        if (!isGuest) box.appendChild(subNote);
+        box.appendChild(confirmLabel);
+        box.appendChild(confirmInput);
+        box.appendChild(btnRow);
+    });
+}
+window.excluirConta = excluirConta;
 
 // ========== PERFIL: HUB + CONQUISTAS ==========
 // O card de perfil vira clicável e abre um "hub" com o nível do usuário e

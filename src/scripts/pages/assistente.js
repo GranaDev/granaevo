@@ -12,8 +12,11 @@ import { formatBRL } from '../modules/assistant/money.js';
 import * as UI from '../modules/assistant/ui.js';
 import * as Lock from '../modules/assistant/session-lock.js';
 import { clearLearned } from '../modules/assistant/learn.js';
-import { SISTEMA } from '../modules/assistant/phrases.js';
+import { SISTEMA, statsResumo } from '../modules/assistant/phrases.js';
 import * as Install from '../modules/assistant/install.js';
+import { encryptText, decryptText, destroyKey } from '../modules/assistant/crypto-store.js';
+import { snapshot as statsSnapshot, clearStats } from '../modules/assistant/stats.js';
+import { clearOutbox } from '../modules/assistant/outbox.js';
 
 const el = (tag, cls, txt) => {
     const e = document.createElement(tag);
@@ -55,13 +58,40 @@ function ttsEnabled() { try { return localStorage.getItem(prefKey('tts')) === '1
 function setTtsEnabled(on) { try { localStorage.setItem(prefKey('tts'), on ? '1' : '0'); } catch {} }
 
 // D37/E41: histórico local da conversa (device-local; limpo no logout; opt-out).
+// CIFRADO EM REPOUSO (AES-GCM, chave não-extraível no IndexedDB — crypto-store).
+// Formato: "enc1:<base64>". Histórico antigo em claro é migrado no 1º load.
+// Sem WebCrypto/IndexedDB → não persiste (memória apenas, honesto por padrão).
 function histKey() { return `ge_chat_hist_${currentUserId || 'anon'}`; }
-function loadHistory() {
+async function loadHistory() {
     if (!histEnabled()) return [];
-    try { const a = JSON.parse(localStorage.getItem(histKey()) || '[]'); return Array.isArray(a) ? a.slice(-HIST_MAX) : []; }
-    catch { return []; }
+    let raw = null;
+    try { raw = localStorage.getItem(histKey()); } catch {}
+    if (!raw) return [];
+    let json = null;
+    if (raw.startsWith('enc1:')) {
+        json = await decryptText(currentUserId, raw.slice(5));
+        if (json === null) { try { localStorage.removeItem(histKey()); } catch {} return []; }
+    } else {
+        json = raw; // legado em claro → migra pra cifrado no próximo save
+    }
+    try {
+        const a = JSON.parse(json || '[]');
+        const lista = Array.isArray(a) ? a.slice(-HIST_MAX) : [];
+        if (!raw.startsWith('enc1:')) { histLog = lista; saveHistory(); } // migração imediata
+        return lista;
+    } catch { return []; }
 }
-function saveHistory() { if (!histEnabled()) return; try { localStorage.setItem(histKey(), JSON.stringify(histLog.slice(-HIST_MAX))); } catch {} }
+function saveHistory() {
+    if (!histEnabled()) return;
+    const json = JSON.stringify(histLog.slice(-HIST_MAX));
+    // async fire-and-forget: cifra e grava; sem cripto → não persiste em claro.
+    encryptText(currentUserId, json).then((b64) => {
+        try {
+            if (b64) localStorage.setItem(histKey(), 'enc1:' + b64);
+            else localStorage.removeItem(histKey());
+        } catch {}
+    }).catch(() => {});
+}
 function pushHist(role, text) {
     if (!histEnabled() || typeof text !== 'string' || !text) return;
     histLog.push({ r: role === 'user' ? 'u' : 'a', t: text.slice(0, 500) });
@@ -124,25 +154,6 @@ function showDailyInsights(userId) {
     const { messages, quick } = assistant.aberturaInsights();
     for (const t of messages) { UI.addAssistantMessage(t); if (ttsEnabled()) UI.speak(t); }
     return Array.isArray(quick) ? quick : [];
-}
-
-// D38: entrada por voz (Web Speech API). Preenche o input; o usuário revisa e envia.
-function setupMic() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const mic = document.getElementById('geMic');
-    if (!SR || !mic) return; // não suportado → botão continua oculto
-    mic.hidden = false;
-    let rec = null, listening = false;
-    mic.addEventListener('click', () => {
-        if (listening) { try { rec?.stop(); } catch {} return; }
-        rec = new SR();
-        rec.lang = 'pt-BR'; rec.interimResults = false; rec.maxAlternatives = 1;
-        rec.onstart = () => { listening = true; mic.classList.add('listening'); };
-        rec.onerror = () => { listening = false; mic.classList.remove('listening'); };
-        rec.onend = () => { listening = false; mic.classList.remove('listening'); };
-        rec.onresult = (e) => { const txt = e.results?.[0]?.[0]?.transcript?.trim(); if (txt) UI.focusInput(txt); };
-        try { rec.start(); } catch {}
-    });
 }
 
 // ── Busca na conversa (D35) — varre as bolhas no DOM (independe do histórico) ──
@@ -232,7 +243,7 @@ function setupSearch() {
     // 4) Histórico + saudação personalizada + insights de abertura + wiring
     currentUserId = userId;
     const nomeAtivo = activeProfileName();
-    histLog = loadHistory();
+    histLog = await loadHistory();
     if (histLog.length) {
         for (const m of histLog) {
             if (m.r === 'u') UI.addUserMessage(m.t);
@@ -255,11 +266,20 @@ function setupSearch() {
     const dailyQuick = showDailyInsights(userId);
     UI.setQuickReplies(mergeQuick(dailyQuick, STARTERS), onSend);
     UI.wireInput(onSend);
-    setupMic();
 
     document.getElementById('geSettings').addEventListener('click', () => openSettings(userId));
     setupSearch(); // D35
     setupChrome();
+
+    // Outbox offline: sincroniza lançamentos pendentes agora e quando a rede voltar.
+    const flushOutbox = async () => {
+        try {
+            const r = await assistant.flushOutbox();
+            if (r?.text) { UI.addAssistantMessage(r.text); pushHist('a', r.text); }
+        } catch { /* melhor-esforço */ }
+    };
+    flushOutbox();
+    window.addEventListener('online', flushOutbox);
 })();
 
 async function onSend(text) {
@@ -505,11 +525,24 @@ function openSettings(userId) {
     secPref.appendChild(el('p', 'ge-muted', 'A conversa fica só neste aparelho e é apagada ao sair. Desligue se preferir não guardar valores localmente.'));
     sheet.appendChild(secPref);
 
-    // Logout — E45: limpa histórico, aprendizado e todo estado do engine.
+    // Selo de privacidade: % das mensagens entendidas 100% no aparelho (stats.js).
+    const st = statsSnapshot();
+    if (st.total > 0) {
+        const secStats = el('div', 'ge-sheet-section');
+        const pStats = el('p', 'ge-muted');
+        pStats.textContent = statsResumo(st).replace(/\{\{fa-[a-z0-9-]+\}\}\s*/g, '').replace(/\*/g, '');
+        secStats.appendChild(pStats);
+        sheet.appendChild(secStats);
+    }
+
+    // Logout — E45: limpa histórico, aprendizado, telemetria, fila offline,
+    // chave de cifra do histórico e todo estado do engine.
     const secOut = el('div', 'ge-sheet-section');
     const out = el('button', 'ge-btn-danger', 'Sair da conta');
     out.addEventListener('click', async () => {
-        clearHistory(); clearLearned(); UI.stopSpeak();
+        clearHistory(); clearLearned(); clearStats(); UI.stopSpeak();
+        try { clearOutbox(userId); } catch {}
+        try { await destroyKey(userId); } catch {}
         try { assistant.reset(); } catch {}
         await logout().catch(() => {});
         location.replace('/login');
@@ -599,8 +632,14 @@ function showLockScreen(userId) {
             const btn = el('button', 'ge-btn-primary', 'Entrar');
             const err = el('p', 'ge-muted ge-center');
             const tryPin = async () => {
+                const espera = Lock.lockWaitSeconds(userId);
+                if (espera > 0) { err.textContent = `Muitas tentativas. Aguarde ${espera}s.`; input.value = ''; return; }
                 if (await Lock.verifyPIN(userId, input.value.trim())) { closeSheet(); resolve(true); }
-                else { err.textContent = 'PIN incorreto.'; input.value = ''; input.focus(); }
+                else {
+                    const e2 = Lock.lockWaitSeconds(userId);
+                    err.textContent = e2 > 0 ? `PIN incorreto. Aguarde ${e2}s pra tentar de novo.` : 'PIN incorreto.';
+                    input.value = ''; input.focus();
+                }
             };
             btn.addEventListener('click', tryPin);
             input.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryPin(); });

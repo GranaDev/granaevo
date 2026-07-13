@@ -9,7 +9,7 @@
   },
 
   "crons": [
-    { "path": "/api/user-data?cron-health=1", "schedule": "0 12 * * *" },
+    { "path": "/api/user-data?cron-health=1", "schedule": "0 18 * * *" },
     { "path": "/api/user-data?radar=1",       "schedule": "30 11 * * *" }
   ],
 
@@ -136,7 +136,7 @@
         { "key": "Pragma",        "value": "no-cache"                                      },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co blob: data:; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com https://api.bcb.gov.br https://*.ingest.us.sentry.io; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'self'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; style-src-elem 'self' 'sha256-OvmX0Vn3HoUl0gBRJaIbr1xVjfovZK/6MRPJnG7o2Zk='; style-src-attr 'unsafe-inline'; font-src 'self' data:; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co blob: data:; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com https://api.bcb.gov.br https://*.ingest.us.sentry.io; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'self'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         },
         {
           "key": "Link",
@@ -303,6 +303,15 @@
         { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" },
         { "key": "Access-Control-Allow-Origin",  "value": "*" },
         { "key": "Cache-Control",                "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+
+    {
+      "source": "/assets/icons/og-image.png",
+      "headers": [
+        { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" },
+        { "key": "Access-Control-Allow-Origin",  "value": "*" },
+        { "key": "Cache-Control",                "value": "public, max-age=86400, stale-while-revalidate=604800" }
       ]
     },
 

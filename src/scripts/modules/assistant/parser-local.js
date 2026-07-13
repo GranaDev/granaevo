@@ -6,7 +6,7 @@
 // Não grava nada; não vê nada além do texto.
 // ---------------------------------------------------------------------------
 
-import { parseValorBR, parseParcelas, parseExtenso, parseDataRelativa, parseAritmetica, parseMesNomeado } from './money.js';
+import { parseValorBR, parseParcelas, parseExtenso, parseDataRelativa, parseAritmetica, parseMesNomeado, parseDataFutura } from './money.js';
 
 // Tipos permitidos no app (espelham db-transacoes.js: o conjunto reconhecido pelo
 // auto-categorizador em _AUTO_CAT, mais rico que o dropdown de edição). Inclui
@@ -15,6 +15,13 @@ export const TIPOS_SAIDA = ['Mercado', 'Farmácia', 'Saúde', 'Eletrônico', 'Ro
     'Presente', 'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Viagem', 'Pet', 'Educação',
     'Shopee', 'Mercado Livre', 'Ifood', 'Amazon', 'Outros'];
 export const TIPOS_ENTRADA = ['Salário', 'Renda Extra', 'Investimento', 'Outros Recebimentos'];
+
+// Tipos aceitos como CHAVE de orçamento — espelha _TIPOS_SAIDA_VALIDOS do
+// dashboard.js (whitelist do _sanitizarOrcamentos). Chave fora desta lista
+// seria descartada silenciosamente no próximo save do dashboard.
+export const ORCAMENTO_TIPOS = ['Mercado', 'Farmácia', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza',
+    'Presente', 'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Shopee', 'Mercado Livre',
+    'Ifood', 'Amazon', 'Outros'];
 
 // Normaliza: minúsculas, sem acento — para casar palavras-chave de forma robusta.
 function norm(s) {
@@ -127,6 +134,17 @@ const RE_DESFAZER  = /\b(desfaz|desfazer|desfa[cç]a|apaga(r)? (o |a )?ultim|can
 // Repetir o último lançamento (B15): "de novo", "mesma coisa", "igual ontem", "repete".
 // Deliberadamente SEM "mais um(a)" (colide com "mais um café 5" = lançamento novo).
 const RE_REPETIR   = /\b(de novo|denovo|(a )?mesma coisa|igual (a |ao )?(ontem|antes|de sempre|o de sempre)|repete( isso| o ultimo| a ultima)?|repetir( o ultimo| isso)?|(faz|lanca|bota|poe) (isso )?de novo|outra vez)\b/;
+
+// Pagar conta fixa: "paguei a conta de luz", "quitei o aluguel", "conta de luz paga".
+// Exige o artigo/palavra "conta|boleto|fatura de consumo" OU verbo quitar — para NÃO
+// capturar "paguei 50 de uber" (que é saída comum, com valor).
+const RE_PAGAR_CONTA = /\b(paguei|quitei|ja paguei|acabei de pagar)\b.*\b(a |o |as |os )?(conta|boleto|aluguel|condominio|luz|agua|energia|internet|iptu|ipva|gas|telefone)\b|\b(conta|boleto)\s+(de\s+)?[\p{L}\s]{1,20}\s+(paga|pago|quitad[ao])\b/u;
+
+// Definir orçamento: "põe/define orçamento de 600 pra mercado", "limite de 300 no lazer".
+const RE_DEF_ORCAMENTO = /\b(define|definir|poe|poe ai|coloca|colocar|cria|criar|ajusta|ajustar|muda|mudar|quero)\b.*\b(orcamento|limite|teto)\b|\b(orcamento|limite|teto)\s+(de|do|da|pra|para|no|na)\b/;
+
+// Lembrete: "me lembra de pagar o aluguel dia 5", "me avisa amanhã de renovar o seguro".
+const RE_LEMBRETE = /\b(me )?(lembra|lembre|avisa|avise|notifica|notifique)\b|\blembrete\b/;
 
 // Novos intents de insight/consulta (B22/C27/C29/C31) e privacidade (E42)
 const RE_ORCAMENTO   = /\b(quanto (eu )?(posso|da pra|consigo) gastar|posso gastar quanto|meu orcamento|quanto (ainda )?(sobra|resta|posso) (pra )?gast|quanto (eu )?tenho pra gastar)/;
@@ -245,6 +263,36 @@ export function extractPalavrasChave(t) {
     return [...new Set(out)].slice(0, 6);
 }
 
+// Extrai o nome da conta fixa: depois de "conta/boleto de", ou a própria
+// palavra de utilidade ("luz", "aluguel"...). Usado por pagar_conta.
+const _UTILIDADES = /\b(luz|agua|energia|internet|aluguel|condominio|iptu|ipva|gas|telefone|celular|escola|academia)\b/;
+function _extractContaHint(t) {
+    const m = t.match(/\b(?:conta|boleto|fatura)\s+(?:de |do |da )?([\p{L}][\p{L}\s]{1,24}?)(?:\s+(?:de hoje|de ontem|hoje|ontem|paga|pago|quitad[ao])\b|$|[.!?])/u);
+    if (m) return m[1].trim();
+    const u = t.match(_UTILIDADES);
+    return u ? u[1] : null;
+}
+
+// Extrai o TIPO de orçamento citado no texto (whitelist ORCAMENTO_TIPOS ou keyword).
+function _extractOrcamentoTipo(t) {
+    for (const tp of ORCAMENTO_TIPOS) {
+        const tn = tp.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        if (new RegExp(`\\b${tn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(t)) return tp;
+    }
+    const km = keywordMatch(t);
+    return km && ORCAMENTO_TIPOS.includes(km.tipo) ? km.tipo : null;
+}
+
+// Limpa o texto do lembrete: tira o verbo de lembrar e a expressão de data.
+function _extractLembreteTexto(raw) {
+    let s = String(raw)
+        .replace(/^\s*(me\s+)?(lembra|lembre|avisa|avise|notifica|notifique)\s*(me\s+)?(de|que|do|da)?\s*/i, '')
+        .replace(/\blembrete\s*(:|de|pra|para)?\s*/i, '')
+        .replace(/\b(depois de amanha|amanha|amanhã|hoje|daqui a? \d{1,2} dias?|em \d{1,2} dias?|dia \d{1,2}|(na |no |proxim[ao] )?(domingo|segunda|terca|terça|quarta|quinta|sexta|sabado|sábado)(-?\s*feira)?( que vem)?|\d{1,2}[\/\-]\d{1,2}([\/\-]\d{2,4})?)\b/gi, '')
+        .replace(/\s{2,}/g, ' ').trim();
+    return s.replace(/^(de|que|do|da|pra|para)\s+/i, '').trim() || null;
+}
+
 // Extrai nome de meta depois de "pra/para/pro" (para "quanto falta pra X").
 function _extractMetaHint(t) {
     const m = t.match(/(?:pra|para|pro)\s+(?:a |o |minha |meu )?([\p{L}][\p{L}\s]{1,29})/u);
@@ -280,6 +328,40 @@ export function parseLocal(rawText) {
     if (RE_DESFAZER.test(text)) return { ...base, intencao: 'desfazer', confianca: 0.9 };
     // B15: repetir o último lançamento — só quando NÃO há valor novo no texto.
     if (RE_REPETIR.test(text) && parseValorBR(text) === null) return { ...base, intencao: 'repetir', confianca: 0.9 };
+
+    // 1b) Lembrete ("me lembra de pagar o aluguel dia 5") — ANTES do lançamento,
+    // porque a frase costuma conter verbos de pagamento. 100% local.
+    // Guarda: "lembra quanto gastei…" é consulta, não lembrete.
+    if (RE_LEMBRETE.test(text) && !/\b(quanto|qual|quais|onde|quando)\b/.test(text)) {
+        return {
+            ...base, intencao: 'lembrete',
+            lembrete_texto: _extractLembreteTexto(rawText),
+            lembrete_data: parseDataFutura(text),
+            confianca: 0.9,
+        };
+    }
+
+    // 1c) Pagar conta fixa ("paguei a conta de luz", "quitei o aluguel").
+    // O engine tenta casar uma conta em aberto; se não houver, cai pra saída comum.
+    if (RE_PAGAR_CONTA.test(text)) {
+        return {
+            ...base, intencao: 'pagar_conta',
+            conta_hint: _extractContaHint(text),
+            valor: parseValorBR(text),
+            confianca: 0.88,
+        };
+    }
+
+    // 1d) Definir orçamento ("põe orçamento de 600 pra mercado") — precisa de valor.
+    if (RE_DEF_ORCAMENTO.test(text)) {
+        const v = parseValorBR(text) ?? parseExtenso(text);
+        if (v) {
+            return {
+                ...base, intencao: 'definir_orcamento',
+                tipo: _extractOrcamentoTipo(text), valor: v, confianca: 0.88,
+            };
+        }
+    }
 
     // 2) Projeção de meta ("se eu guardar X por mês…")
     if (RE_PROJECAO.test(text)) {

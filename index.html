@@ -108,13 +108,9 @@
          link no WhatsApp/Instagram/Telegram — crítico para crescimento
          por indicação.
 
-         IMAGEM OG: hoje aponta para o logo (granaevo-logo.jpg) para o
-         preview já FUNCIONAR. Para resultado ideal, criar um banner
-         dedicado de 1200×630 (ex: /assets/icons/og-image.png) com
-         título + mockup do app e trocar a URL abaixo (og:image e
-         twitter:image). Ao trocar, adicionar também:
-           <meta property="og:image:width" content="1200">
-           <meta property="og:image:height" content="630">
+         IMAGEM OG: banner dedicado 1200×630 gerado por
+         scripts/build-og-image.mjs (node scripts/build-og-image.mjs para
+         regenerar após mudar marca/slogan).
          ============================================================ -->
     <link rel="canonical" href="https://www.granaevo.com/">
 
@@ -124,13 +120,16 @@
     <meta property="og:url" content="https://www.granaevo.com/">
     <meta property="og:title" content="GranaEvo — Controle financeiro sem entregar seus dados ao banco">
     <meta property="og:description" content="Organize gastos, cartões e metas em um só lugar — sem conectar sua conta bancária. Para você, casal ou família. Comece com 7 dias de garantia.">
-    <meta property="og:image" content="https://www.granaevo.com/assets/icons/granaevo-logo.jpg">
-    <meta property="og:image:alt" content="GranaEvo — app de controle financeiro pessoal">
+    <meta property="og:image" content="https://www.granaevo.com/assets/icons/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:alt" content="GranaEvo — Domine suas finanças com inteligência">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="GranaEvo — Controle financeiro sem entregar seus dados ao banco">
     <meta name="twitter:description" content="Organize gastos, cartões e metas em um só lugar — sem conectar sua conta bancária. Para você, casal ou família. Comece com 7 dias de garantia.">
-    <meta name="twitter:image" content="https://www.granaevo.com/assets/icons/granaevo-logo.jpg">
+    <meta name="twitter:image" content="https://www.granaevo.com/assets/icons/og-image.png">
 
     <!--
         JSON-LD structured data (Organization + SoftwareApplication + FAQPage).

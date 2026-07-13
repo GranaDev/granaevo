@@ -832,12 +832,23 @@ function _renderFrozenOverlay(subData, guard) {
     // Remove overlay anterior se existir
     document.getElementById('_ge_frozen_overlay')?.remove();
 
-    // Injeta classe CSS uma única vez — evita inline styles no body/html
-    if (!document.getElementById('_ge_frozen_styles')) {
-        const s = document.createElement('style');
-        s.id = '_ge_frozen_styles';
-        s.textContent = 'html.ge-frozen{overflow:hidden!important}body.ge-frozen{overflow:hidden!important;pointer-events:none!important}';
-        document.head.appendChild(s);
+    // Injeta classe CSS uma única vez — via constructed stylesheet (CSSOM), que
+    // NÃO é bloqueada pela CSP (style-src sem 'unsafe-inline'). Fallback p/
+    // browsers antigos: <style> injetado (pode ser bloqueado — os handlers de
+    // clique em fase de captura seguram a blindagem mesmo sem o CSS).
+    if (!window._geFrozenStyles) {
+        const css = 'html.ge-frozen{overflow:hidden!important}body.ge-frozen{overflow:hidden!important;pointer-events:none!important}';
+        try {
+            const sheet = new CSSStyleSheet();
+            sheet.replaceSync(css);
+            document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+        } catch {
+            const s = document.createElement('style');
+            s.id = '_ge_frozen_styles';
+            s.textContent = css;
+            document.head.appendChild(s);
+        }
+        window._geFrozenStyles = true;
     }
 
     // Garante que days seja sempre um inteiro seguro (evita "NaN dias" se daysUntilDeletion vier como NaN)

@@ -14,7 +14,6 @@ export function mountUI() {
         input:    document.getElementById('geInput'),
         send:     document.getElementById('geSend'),
         quick:    document.getElementById('geQuick'),
-        mic:      document.getElementById('geMic'),
     };
     return els;
 }

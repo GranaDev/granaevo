@@ -203,9 +203,9 @@ function _showManualInstructions() {
     </div>
   `;
 
-  // Estilos inline do modal (sem depender de CSS externo para funcionar em qualquer estado)
-  const style = document.createElement('style');
-  style.textContent = `
+  // Estilos do modal via constructed stylesheet (CSSOM) — isenta da CSP
+  // (style-src sem 'unsafe-inline'); fallback <style> p/ browsers antigos.
+  const modalCss = `
     #pwaInstructionsModal {
       position: fixed; inset: 0; z-index: 9999;
       display: flex; align-items: center; justify-content: center;
@@ -254,7 +254,15 @@ function _showManualInstructions() {
       font-weight: 700; font-size: 0.95rem; cursor: pointer;
     }
   `;
-  document.head.appendChild(style);
+  try {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(modalCss);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  } catch {
+    const style = document.createElement('style');
+    style.textContent = modalCss;
+    document.head.appendChild(style);
+  }
   document.body.appendChild(modal);
 
   const close = () => { modal.style.display = 'none'; };
@@ -269,7 +277,7 @@ function _getInstructions() {
       return {
         subtitle: 'No Safari do iPhone/iPad, siga os passos abaixo:',
         steps: [
-          'Toque no botão <strong>Compartilhar</strong> <span style="color:#10b981">⎙</span> (na barra inferior)',
+          'Toque no botão <strong>Compartilhar</strong> ⎙ (na barra inferior)',
           'Role para baixo e toque em <strong>"Adicionar à Tela de Início"</strong>',
           'Toque em <strong>"Adicionar"</strong> no canto superior direito',
         ],

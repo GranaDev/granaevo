@@ -123,18 +123,31 @@ export function captureError(error, context = {}) {
   });
 }
 
+// Pseudônimo estável e NÃO reversível a partir do id do usuário (FNV-1a → hex).
+// Objetivo: permitir AGRUPAR erros do mesmo usuário no Sentry sem enviar o UUID
+// real (que é dado pessoal) nem o e-mail. O Sentry não possui a lista de UUIDs,
+// então este valor não permite reidentificar o titular.
+function _pseudoId(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
 /**
  * Define o contexto do usuário no Sentry (após login bem-sucedido).
- * Não inclui dados financeiros — apenas identificador e plano.
+ * PRIVACIDADE (LGPD): NÃO enviamos o UUID real nem o e-mail ao Sentry — apenas um
+ * pseudônimo derivado (não reversível) para agrupar erros, e o plano. Nenhum dado
+ * financeiro é enviado. Ver privacidade.html §04/§05 (operador Sentry).
  * @param {{ id: string, email?: string, plan?: string }} user
  */
 export function setUserContext(user) {
   if (!_initialized || !_Sentry) return;
   _Sentry.setUser({
-    id:    user.id,
-    // Hash do email para não expor PII diretamente no Sentry
-    email: user.email ? `${user.email.slice(0, 3)}***@***.***` : undefined,
-    plan:  user.plan ?? 'unknown',
+    id:   user?.id ? `anon_${_pseudoId(String(user.id))}` : undefined,
+    plan: user?.plan ?? 'unknown',
   });
 }
 

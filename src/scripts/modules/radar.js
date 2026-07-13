@@ -13,6 +13,11 @@
 //
 // Segurança: INSERT/DELETE via supabase-js parametrizado sob RLS; caps de
 // quantidade e tamanho no cliente + CHECK constraints e trigger de teto no DB.
+//
+// PRIVACIDADE (regra): os payloads NUNCA contêm valores em R$ — nem no banco
+// (title/body ficam em claro na tabela) nem na notificação (aparece na tela
+// bloqueada do celular). Só nomes/datas/percentuais; os valores o usuário vê
+// ao abrir o app. Não reintroduzir _brl() aqui.
 // ----------------------------------------------------------------------------
 
 import { supabase } from '../services/supabase-client.js?v=2';
@@ -22,7 +27,8 @@ let _debounceTimer = null;
 let _syncEmVoo = false;
 
 const MAX_EVENTOS   = 40;
-const HORA_DISPARO  = 8;   // 08:00 local — o cron diário roda depois disso
+const HORA_DISPARO  = 8;   // 08:00 local — o cron da manhã roda depois disso
+const HORA_TARDE    = 15;  // 15:00 local — 2ª rodada (fan-out do cron-health 18:00 UTC)
 const THROTTLE_MS   = 10 * 60 * 1000; // mín. 10 min entre sincronizações
 const LS_KEY        = 'ge_radar_last_sync';
 
@@ -42,10 +48,6 @@ function _isoDia(d) {
 }
 function _ymKey(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-function _brl(v) {
-    try { return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
-    catch { return 'R$ ' + Math.round(Number(v) || 0); }
 }
 function _clampTexto(s, max) {
     return String(s || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
@@ -94,10 +96,10 @@ function _computarEventos(ctx) {
         const vespera = new Date(venc.getTime() - 86_400_000);
         add(`cf:${idFrag}:${c.vencimento}:d1`, 'conta_vence', vespera,
             `${desc} vence amanhã`,
-            `${_brl(valor)} — vencimento em ${venc.toLocaleDateString('pt-BR')}. Já se programou?`);
+            `Vencimento em ${venc.toLocaleDateString('pt-BR')}. O valor está no app — já se programou?`);
         add(`cf:${idFrag}:${c.vencimento}:d0`, 'conta_vence', venc,
             `${desc} vence hoje`,
-            `${_brl(valor)} vence hoje. Pague e marque como paga no GranaEvo.`);
+            `Vence hoje. Pague e marque como paga no GranaEvo.`);
     }
 
     // 2) Fechamento de fatura — 2 dias antes, com o valor já usado no cartão.
@@ -109,13 +111,10 @@ function _computarEventos(ctx) {
         const fech = _proximaOcorrencia(diaFech, hoje);
         const aviso = new Date(fech.getTime() - 2 * 86_400_000);
         if (aviso < hoje || fech > limite) continue;
-        const usado = Number(cartao.usado);
         const nome = _clampTexto(cartao.nomeBanco, 30) || 'cartão';
-        const corpo = Number.isFinite(usado) && usado > 0
-            ? `Fatura parcial em ${_brl(usado)}. Compras a partir de ${fech.toLocaleDateString('pt-BR')} caem na próxima.`
-            : `Compras a partir de ${fech.toLocaleDateString('pt-BR')} entram na próxima fatura.`;
         add(`fech:${String(cartao.id).slice(0, 40)}:${_ymKey(fech)}`, 'fatura_fecha', aviso,
-            `Fatura do ${nome} fecha em 2 dias`, corpo);
+            `Fatura do ${nome} fecha em 2 dias`,
+            `Compras a partir de ${fech.toLocaleDateString('pt-BR')} entram na próxima fatura. Veja o valor parcial no app.`);
     }
 
     // 3) Assinaturas ativas — renova amanhã.
@@ -130,7 +129,7 @@ function _computarEventos(ctx) {
         const nome = _clampTexto(a.nome, 40) || 'Assinatura';
         add(`ass:${String(a.id).slice(0, 40)}:${_ymKey(cobra)}`, 'assinatura_renova', vespera,
             `${nome} renova amanhã`,
-            `${_brl(valor)}/mês no cartão. Ainda vale a pena? Cancele antes se não usa.`);
+            `Cobrança mensal no cartão. Ainda vale a pena? Cancele antes se não usa.`);
     }
 
     // 4) Orçamentos ≥ 85% — aviso na próxima manhã (1× por categoria/mês).
@@ -158,12 +157,22 @@ function _computarEventos(ctx) {
         const gasto = gastoPorTipo.get(tipo) || 0;
         const pct = (gasto / lim) * 100;
         if (pct < 85) continue;
+        // Próxima janela de entrega: manhã (08h) → tarde (15h) → manhã seguinte.
+        // Com a 2ª rodada do cron, um estouro ao meio-dia avisa às 15h do MESMO dia.
         const amanha = new Date(hoje.getTime() + 86_400_000);
-        const diaDisparo = agora.getHours() < HORA_DISPARO ? hoje : amanha;
+        let fireOrc;
+        if (agora.getHours() < HORA_DISPARO)     fireOrc = _fireAt(hoje);
+        else if (agora.getHours() < HORA_TARDE) { fireOrc = new Date(hoje); fireOrc.setHours(HORA_TARDE, 0, 0, 0); }
+        else                                     fireOrc = _fireAt(amanha);
         const rotulo = pct >= 100 ? 'estourou' : `chegou a ${Math.floor(pct)}%`;
-        add(`orc:${_clampTexto(tipo, 30)}:${_ymKey(hoje)}`, 'orcamento_estouro', diaDisparo,
-            `Orçamento de ${_clampTexto(tipo, 30)} ${rotulo}`,
-            `${_brl(gasto)} de ${_brl(lim)} neste mês. Vale segurar os próximos gastos.`);
+        eventos.push({
+            dedupe_key: _clampTexto(`orc:${_clampTexto(tipo, 30)}:${_ymKey(hoje)}`, 120),
+            tipo: 'orcamento_estouro',
+            title: _clampTexto(`Orçamento de ${_clampTexto(tipo, 30)} ${rotulo}`, 80),
+            body:  _clampTexto(`Você usou ${Math.floor(pct)}% do limite deste mês. Vale segurar os próximos gastos.`, 200),
+            url:   '/dashboard',
+            fire_at: fireOrc.toISOString(),
+        });
     }
 
     // Mais próximos primeiro; teto de segurança

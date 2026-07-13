@@ -85,7 +85,7 @@
                 <p class="page-subtitle">
                     Como coletamos, usamos e protegemos seus dados pessoais — conforme a LGPD (Lei nº 13.709/2018)
                 </p>
-                <p class="last-update">Última atualização: <strong id="updateDate">Maio de 2026</strong></p>
+                <p class="last-update">Última atualização: <strong id="updateDate">Julho de 2026</strong></p>
             </div>
 
             <div class="terms-content">
@@ -101,6 +101,7 @@
                             <ul>
                                 <li><strong>Plataforma:</strong> GranaEvo</li>
                                 <li><strong>Site:</strong> granaevo.com</li>
+                                <li><strong>Encarregado (DPO):</strong> Equipe GranaEvo</li>
                                 <li><strong>E-mail do encarregado (DPO):</strong> <a href="mailto:privacidade@granaevo.com">privacidade@granaevo.com</a></li>
                                 <li><strong>Suporte geral:</strong> <a href="mailto:suporte@granaevo.com">suporte@granaevo.com</a></li>
                             </ul>
@@ -129,7 +130,7 @@
                             <h3>Dados de perfil</h3>
                             <ul>
                                 <li>Nome do perfil (escolhido pelo usuário);</li>
-                                <li>Foto de perfil (opcional — processada e convertida para WebP antes do armazenamento);</li>
+                                <li>Foto de perfil (opcional — validada por assinatura de arquivo e limpa de metadados EXIF/XMP, incluindo localização GPS, antes do armazenamento);</li>
                                 <li>Tipo de plano contratado (Individual, Casal ou Família).</li>
                             </ul>
                         </div>
@@ -143,7 +144,7 @@
                                 <li>Reservas e metas financeiras: nome, valor-alvo e aportes registrados;</li>
                                 <li>Rendas mensais e demais dados inseridos manualmente pelo usuário.</li>
                             </ul>
-                            <p class="warning-text">Atenção: o GranaEvo <strong>não acessa</strong> contas bancárias, aplicativos de pagamento, extratos ou qualquer dado financeiro externo. Todos os dados são inseridos manualmente pelo próprio usuário.</p>
+                            <p class="warning-text">Atenção: o GranaEvo <strong>não acessa</strong> contas bancárias, aplicativos de pagamento, extratos ou qualquer dado financeiro externo. Todos os dados são inseridos manualmente pelo próprio usuário. Os dados financeiros são armazenados <strong>criptografados (AES-256-GCM), com chave exclusiva por usuário</strong>.</p>
                         </div>
 
                         <div class="highlight-box">
@@ -156,11 +157,22 @@
                         </div>
 
                         <div class="highlight-box">
+                            <h3>Assistente por Inteligência Artificial (opcional)</h3>
+                            <ul>
+                                <li>Quando você usa o <strong>assistente</strong> para registrar ou consultar lançamentos por mensagem de texto, o <strong>texto que você digita</strong> é processado por um modelo de IA para interpretar o comando (ex.: transformar "gastei 40 no mercado" em um lançamento estruturado);</li>
+                                <li>Junto ao texto, enviamos apenas <strong>rótulos não sensíveis</strong> (nomes de categorias, metas e cartões que você mesmo criou), para melhorar a interpretação;</li>
+                                <li><strong>Não</strong> enviamos ao provedor de IA o seu nome, e-mail, identificador de conta, saldos, totais ou histórico — apenas o texto da mensagem. Ou seja, o conteúdo enviado é <strong>pseudonimizado</strong> (não permite identificar você).</li>
+                            </ul>
+                            <p class="warning-text">O uso do assistente é <strong>opcional</strong>. Se você nunca utilizar o assistente, nenhum texto seu é enviado ao provedor de IA.</p>
+                        </div>
+
+                        <div class="highlight-box">
                             <h3>Dados técnicos e de uso</h3>
                             <ul>
                                 <li>Logs de auditoria internos (ações do usuário dentro da plataforma — sem conteúdo financeiro);</li>
                                 <li>Registros de rate-limiting (endereço IP ou chave de sessão — apenas para prevenção de abuso);</li>
-                                <li>Nonces de convite (tokens de uso único para convite de perfis).</li>
+                                <li>Nonces de convite (tokens de uso único para convite de perfis);</li>
+                                <li><strong>Diagnóstico de erros:</strong> quando ocorre uma falha técnica na aplicação, podemos registrar detalhes do erro (mensagem, tela, navegador e um identificador técnico de sessão) para correção de bugs. Esses relatórios <strong>não incluem seus dados financeiros</strong>.</li>
                             </ul>
                         </div>
 
@@ -181,7 +193,8 @@
                                 <li>Autenticar o usuário e manter a sessão ativa;</li>
                                 <li>Armazenar e exibir os dados financeiros inseridos pelo usuário;</li>
                                 <li>Processar a assinatura e controlar o acesso à plataforma;</li>
-                                <li>Gerenciar perfis e convites dentro do plano contratado.</li>
+                                <li>Gerenciar perfis e convites dentro do plano contratado;</li>
+                                <li><strong>Assistente por IA:</strong> interpretar as mensagens em linguagem natural que você envia ao assistente, para registrar ou consultar lançamentos — funcionalidade opcional do serviço.</li>
                             </ul>
                         </div>
 
@@ -189,6 +202,7 @@
                             <h3>Cumprimento de obrigação legal (art. 7º, II)</h3>
                             <ul>
                                 <li>Retenção de registros por 90 dias após o encerramento, conforme política interna e possíveis obrigações fiscais;</li>
+                                <li>Retenção de logs de acesso com IP por 6 meses (Marco Civil da Internet, art. 15);</li>
                                 <li>Atendimento a eventual requisição judicial ou de autoridade regulatória.</li>
                             </ul>
                         </div>
@@ -198,6 +212,7 @@
                             <ul>
                                 <li>Rate limiting e prevenção de abuso, fraude e ataques à plataforma;</li>
                                 <li>Logs de auditoria internos para segurança e diagnóstico de falhas;</li>
+                                <li>Monitoramento de estabilidade e diagnóstico de erros técnicos da aplicação;</li>
                                 <li>Monitoramento de uptime e estabilidade do serviço.</li>
                             </ul>
                         </div>
@@ -225,11 +240,15 @@
                                 <li><strong>Stripe:</strong> processamento de pagamentos e gestão de assinaturas (PCI-DSS Nível 1). O GranaEvo não armazena dados de cartão — estes ficam exclusivamente com a Stripe. Política: <em>stripe.com/privacy</em>.</li>
                                 <li><strong>Vercel:</strong> hospedagem da aplicação web e funções serverless. Política: <em>vercel.com/legal/privacy-policy</em>.</li>
                                 <li><strong>Cloudflare:</strong> proteção contra DDoS, CDN e análise de tráfego (Cloudflare Insights). Pode processar endereços IP de forma anonimizada. Política: <em>cloudflare.com/privacypolicy</em>.</li>
+                                <li><strong>Anthropic PBC:</strong> provedor do modelo de Inteligência Artificial que interpreta as mensagens do assistente. Recebe <strong>apenas o texto da mensagem e rótulos não sensíveis</strong> — sem seu nome, e-mail, identificador de conta ou dados financeiros. Utilizado somente quando você usa o assistente. Política: <em>anthropic.com/legal/privacy</em>.</li>
+                                <li><strong>Sentry (Functional Software, Inc.):</strong> monitoramento e diagnóstico de erros técnicos da aplicação. Recebe detalhes de falhas e um identificador técnico de sessão para correção de bugs — <strong>sem dados financeiros</strong>. Política: <em>sentry.io/privacy</em>.</li>
                                 <li><strong>Google reCAPTCHA:</strong> usado na página de login para prevenção de bots. Pode coletar sinais comportamentais anônimos. Política: <em>policies.google.com/privacy</em>.</li>
+                                <li><strong>Resend (Plus Five Five, Inc.):</strong> envio de e-mails transacionais (boas-vindas, confirmação de conta, redefinição de senha, avisos de assinatura). Recebe seu <strong>e-mail e nome</strong> para entregar a mensagem — <strong>sem dados financeiros</strong>. Política: <em>resend.com/legal/privacy-policy</em>.</li>
+                                <li><strong>Upstash:</strong> limitação de requisições (rate limiting) para proteção contra abuso e ataques. Pode processar seu <strong>endereço IP</strong> de forma efêmera. Política: <em>upstash.com/trust/privacy.pdf</em>.</li>
                             </ul>
                         </div>
 
-                        <p>Todos os operadores foram escolhidos por adotarem práticas de segurança e privacidade compatíveis com a LGPD e/ou regulamentações equivalentes (GDPR, CCPA).</p>
+                        <p>Todos os operadores foram escolhidos por adotarem práticas de segurança e privacidade compatíveis com a LGPD e/ou regulamentações equivalentes (GDPR, CCPA), e o compartilhamento é regido por cláusulas contratuais de proteção de dados (DPA) firmadas com cada operador.</p>
                     </div>
                 </article>
 
@@ -238,9 +257,20 @@
                     <div class="section-number">05</div>
                     <h2 class="section-title">TRANSFERÊNCIA INTERNACIONAL DE DADOS</h2>
                     <div class="section-content">
-                        <p>Parte dos dados pode ser processada em servidores localizados fora do Brasil, especialmente pelos operadores Supabase (AWS us-east-1), Vercel e Cloudflare.</p>
-                        <p>Essas transferências são realizadas com as salvaguardas previstas no art. 33 da LGPD, pois os operadores adotam padrões equivalentes de proteção (GDPR, SOC 2, ISO 27001) e possuem cláusulas contratuais adequadas.</p>
-                        <p>Os dados financeiros inseridos pelo usuário residem no banco de dados Supabase com criptografia AES-256 em repouso e transmissão exclusiva via TLS 1.2+.</p>
+                        <p>Parte dos dados é processada em servidores localizados <strong>fora do Brasil</strong>, principalmente nos Estados Unidos, pelos seguintes operadores:</p>
+                        <div class="highlight-box">
+                            <h3>Operadores no exterior</h3>
+                            <ul>
+                                <li><strong>Supabase</strong> (banco de dados / AWS us-east-1, EUA);</li>
+                                <li><strong>Vercel</strong> e <strong>Cloudflare</strong> (hospedagem e rede, EUA);</li>
+                                <li><strong>Stripe</strong> (pagamentos, EUA);</li>
+                                <li><strong>Anthropic</strong> (assistente por IA, EUA) — recebe apenas o texto pseudonimizado das mensagens do assistente;</li>
+                                <li><strong>Sentry</strong> (diagnóstico de erros, EUA) e <strong>Google</strong> (reCAPTCHA, EUA);</li>
+                                <li><strong>Resend</strong> (envio de e-mails, EUA) e <strong>Upstash</strong> (proteção contra abuso, EUA).</li>
+                            </ul>
+                        </div>
+                        <p>Essas transferências são realizadas com as salvaguardas previstas no <strong>art. 33 da LGPD</strong>: os operadores adotam padrões equivalentes de proteção (GDPR, SOC 2, ISO 27001) e o tratamento é regido por <strong>cláusulas contratuais padrão</strong> constantes dos acordos de proteção de dados (DPA) firmados com cada um.</p>
+                        <p>Os dados financeiros inseridos pelo usuário residem no banco de dados Supabase com <strong>criptografia AES-256-GCM em repouso (chave por usuário)</strong> e transmissão exclusiva via TLS 1.2+. O provedor de IA (Anthropic) <strong>não recebe</strong> esses dados financeiros armazenados — apenas o texto da mensagem que você digita ao assistente.</p>
                     </div>
                 </article>
 
@@ -262,6 +292,8 @@
                                 <li>Logs de auditoria e de acesso (que registram a ação, a data/hora e o endereço IP, para fins de segurança e prevenção de fraude) são retidos por <strong>6 meses</strong> — prazo que atende ao mínimo legal do Marco Civil da Internet (Lei nº 12.965/2018, art. 15) — e <strong>excluídos automaticamente</strong> após esse período.</li>
                             </ul>
                         </div>
+
+                        <p>Para sua proteção contra perda de dados, mantemos <strong>snapshots diários criptografados</strong> (AES-256-GCM) dos seus dados por <strong>5 dias</strong> e <strong>backups de perfil criptografados</strong> por <strong>90 dias</strong> — acessíveis apenas por você e excluídos automaticamente ao fim desses prazos.</p>
 
                         <div class="warning-box">
                             <p>A exclusão é irreversível. Recomendamos exportar seus dados antes de cancelar a assinatura.</p>
@@ -285,17 +317,18 @@
                     <div class="section-content">
                         <p>O GranaEvo adota as seguintes medidas técnicas e organizacionais para proteger seus dados:</p>
                         <ul>
-                            <li><strong>Criptografia em repouso:</strong> AES-256 no banco de dados Supabase;</li>
+                            <li><strong>Criptografia em repouso:</strong> AES-256 no banco de dados Supabase; os dados financeiros do seu registro principal (transações, contas, cartões, metas) têm camada adicional de criptografia AES-256-GCM com chave exclusiva por usuário. Notificações e alertas que você opta por receber (ex.: lembretes de vencimento) são protegidos por Row Level Security e retidos por prazo curto;</li>
                             <li><strong>Criptografia em trânsito:</strong> TLS 1.2+ em todas as comunicações;</li>
-                            <li><strong>Autenticação:</strong> tokens JWT de curta duração via Supabase Auth;</li>
+                            <li><strong>Autenticação:</strong> tokens JWT de curta duração via Supabase Auth; token de renovação em cookie HttpOnly (inacessível a scripts);</li>
                             <li><strong>Controle de acesso:</strong> Row Level Security (RLS) no PostgreSQL — cada usuário acessa apenas seus próprios dados;</li>
                             <li><strong>Senhas:</strong> armazenadas exclusivamente em hash bcrypt, nunca em texto puro;</li>
                             <li><strong>Fotos de perfil:</strong> validadas por assinatura de arquivo (apenas JPEG, PNG ou WebP) e sanitizadas com remoção de metadados EXIF/XMP, incluindo coordenadas de GPS, antes do armazenamento;</li>
+                            <li><strong>Assistente por IA:</strong> recebe apenas o texto da mensagem, sem identificadores ou dados financeiros armazenados;</li>
                             <li><strong>Rate limiting:</strong> proteção contra ataques de força bruta e enumeração;</li>
                             <li><strong>Proteção contra bots:</strong> Google reCAPTCHA na página de autenticação;</li>
                             <li><strong>CSP e headers de segurança:</strong> Content-Security-Policy estrito, HSTS, X-Frame-Options e outros headers em todas as páginas.</li>
                         </ul>
-                        <p>Nenhum sistema é absolutamente inviolável. Em caso de incidente de segurança com impacto relevante aos titulares, notificaremos a ANPD e os usuários afetados conforme os prazos previstos na LGPD.</p>
+                        <p>Nenhum sistema é absolutamente inviolável. Em caso de incidente de segurança que possa acarretar risco ou dano relevante aos titulares, notificaremos a <strong>ANPD</strong> e os usuários afetados em prazo razoável, conforme o art. 48 da LGPD.</p>
                     </div>
                 </article>
 
@@ -312,16 +345,16 @@
                                 <li><strong>Confirmação e acesso:</strong> saber quais dados pessoais tratamos sobre você;</li>
                                 <li><strong>Correção:</strong> solicitar a atualização de dados incompletos, inexatos ou desatualizados;</li>
                                 <li><strong>Anonimização, bloqueio ou eliminação:</strong> de dados desnecessários ou tratados em desconformidade com a lei;</li>
-                                <li><strong>Portabilidade:</strong> receber seus dados em formato estruturado para transferência a outro controlador;</li>
+                                <li><strong>Portabilidade:</strong> receber seus dados em formato estruturado para transferência a outro controlador (o GranaEvo oferece exportação dos seus dados em formato JSON dentro da própria plataforma);</li>
                                 <li><strong>Eliminação:</strong> solicitar a exclusão antecipada de todos os seus dados (antes dos 90 dias);</li>
                                 <li><strong>Revogação do consentimento:</strong> retirar consentimento para tratamentos baseados nessa base legal;</li>
                                 <li><strong>Oposição:</strong> se opor a tratamentos realizados com base em legítimo interesse;</li>
                                 <li><strong>Informação sobre compartilhamento:</strong> obter informações sobre com quais entidades seus dados são compartilhados;</li>
-                                <li><strong>Revisão de decisões automatizadas:</strong> solicitar revisão humana de decisões tomadas exclusivamente com base em tratamento automatizado.</li>
+                                <li><strong>Revisão de decisões automatizadas:</strong> solicitar revisão humana de decisões tomadas exclusivamente com base em tratamento automatizado. Observação: o assistente por IA <strong>não toma decisões</strong> sobre você — ele apenas interpreta o texto que você digita, e todo lançamento só é gravado após sua confirmação.</li>
                             </ul>
                         </div>
 
-                        <p>Para exercer qualquer um desses direitos, entre em contato com nosso encarregado em <a href="mailto:privacidade@granaevo.com">privacidade@granaevo.com</a>. Responderemos em até <strong>15 dias úteis</strong>, conforme prazo razoável.</p>
+                        <p>Para exercer qualquer um desses direitos, entre em contato com nosso encarregado em <a href="mailto:privacidade@granaevo.com">privacidade@granaevo.com</a>. Responderemos em até <strong>15 dias</strong>, conforme o art. 19 da LGPD.</p>
 
                         <p>Caso não fique satisfeito com nossa resposta, você pode apresentar reclamação à <strong>Autoridade Nacional de Proteção de Dados (ANPD)</strong> em <em>gov.br/anpd</em>.</p>
                     </div>

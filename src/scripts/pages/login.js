@@ -849,6 +849,21 @@ loginForm?.addEventListener('submit', async (e) => {
         inputs.loginPassword.value = '';
         inputs.loginEmail.value    = '';
 
+        // Alerta de aparelho novo (fire-and-forget — NUNCA atrasa nem falha o login).
+        // O servidor identifica o aparelho pelo user-agent e, se for a 1ª vez dele
+        // nesta conta (e a conta já tiver outro aparelho), manda e-mail de alerta.
+        try {
+            const tk = data?.access_token || data?.session?.access_token;
+            if (tk) {
+                fetch('/api/user-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tk}` },
+                    body: JSON.stringify({ action: 'login-notify' }),
+                    keepalive: true,
+                }).catch(() => {});
+            }
+        } catch { /* best-effort */ }
+
         const userName = sanitizeText(data.user?.user_metadata?.name || 'Usuário');
         showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
         const nextPage = getNextRedirect() ?? 'dashboard.html';

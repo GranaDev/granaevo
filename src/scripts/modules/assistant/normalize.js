@@ -6,7 +6,7 @@
 // domado antes de virar transação.
 // ---------------------------------------------------------------------------
 
-import { TIPOS_SAIDA, TIPOS_ENTRADA } from './parser-local.js';
+import { TIPOS_SAIDA, TIPOS_ENTRADA, ORCAMENTO_TIPOS } from './parser-local.js';
 
 const MAX_VALOR = 100_000_000; // R$ 100 mi — teto sanidade (evita overflow/typo absurdo)
 const CATS_VALIDAS = ['entrada', 'saida', 'saida_credito', 'reserva', 'retirada_reserva', 'assinatura'];
@@ -65,6 +65,10 @@ export function toCommand(parse) {
             : [],
         consultaAlvo: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar', 'comparar', 'media', 'fatura', 'falta_meta', 'orcamento', 'assinaturas', 'narrativa', 'curiosidade', 'conquistas'].includes(parse.consulta_alvo) ? parse.consulta_alvo : 'gasto',
         dataOverride: typeof parse.data_override === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(parse.data_override) ? parse.data_override : null,
+        // pagar_conta / definir_orcamento / lembrete (locais ou via IA)
+        contaHint: clampStr(parse.conta_hint, 60),
+        lembreteTexto: clampStr(parse.lembrete_texto, 120),
+        lembreteData: typeof parse.lembrete_data === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parse.lembrete_data) ? parse.lembrete_data : null,
     };
 
     const v = Number(parse.valor);
@@ -76,6 +80,13 @@ export function toCommand(parse) {
     if (cmd.intent === 'lancar' && cmd.categoria) {
         cmd.tipo = normalizeTipo(cmd.categoria, parse.tipo);
         if (!cmd.descricao) cmd.descricao = cmd.tipo;
+    }
+
+    // Orçamento: o tipo tem que estar na whitelist do dashboard (senão o
+    // _sanitizarOrcamentos descartaria a chave no próximo save de lá).
+    if (cmd.intent === 'definir_orcamento') {
+        const alvo = String(parse.tipo ?? '').trim().toLowerCase();
+        cmd.tipo = ORCAMENTO_TIPOS.find((t) => t.toLowerCase() === alvo) || null;
     }
 
     return cmd;
