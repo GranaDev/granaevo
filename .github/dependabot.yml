@@ -1,0 +1,33 @@
+# GranaEvo — Dependabot
+# Abre PRs semanais de atualização de dependências. O gate de vulnerabilidade
+# (`npm audit --omit=dev --audit-level=high`) já roda no CI (.github/workflows/ci.yml).
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+version: 2
+updates:
+  # Dependências npm (runtime + dev)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    # Agrupa minor/patch em um único PR por semana — reduz ruído; major fica isolado p/ revisão.
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Mantém as actions do CI atualizadas (checkout, setup-node, gitleaks-action)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"

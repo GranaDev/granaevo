@@ -398,12 +398,16 @@ os 5 primeiros chars do SHA-1 da senha; a senha nunca sai). Fecha credential stu
 
 ---
 
-## PASSO 16 — Dependabot + `npm audit` em CI 🔴
+## PASSO 16 — Dependabot + `npm audit` em CI ✅ APLICADO (2026-07-14)
+> **Descoberta:** o `npm audit --omit=dev --audit-level=high` **já existia** no CI (`.github/workflows/ci.yml`),
+> junto com gitleaks (secret scan) e build check. A auditoria super-sinalizou. Faltava só o Dependabot →
+> criado `.github/dependabot.yml` (npm + github-actions, semanal segunda 06:00, minor/patch agrupados,
+> major isolado). Ativa sozinho no GitHub após o push. Nada mais a fazer.
 **Objetivo:** alerta automático de dependência vulnerável.
 **Por quê:** superfície de deps é mínima (4 runtime), mas hoje não há gate automático. Higiene barata de DevSecOps.
 
-- [ ] ⬜ Adicionar `.github/dependabot.yml` (ecosystem `npm`, schedule semanal).
-- [ ] ⬜ (Opcional) step de `npm audit --audit-level=high` no CI, sem quebrar build por vuln transitiva de dev.
+- [x] ☑️ `npm audit --omit=dev --audit-level=high` no CI — **já existia** (ci.yml).
+- [x] ☑️ `.github/dependabot.yml` criado (npm + github-actions, semanal, agrupado). **(2026-07-14)**
 
 **Risco:** nenhum. **Esforço:** ~15 min. **Verificar:** Dependabot abre PR de teste; CI roda o audit.
 
@@ -523,6 +527,58 @@ reativação de inativo, aviso de fatura.
 
 ---
 
+# FASE 6 — Fechar os 10/10 (novos, da auditoria 360 — 2026-07-14)
+> Itens que faltavam para cada dimensão bater 10/10 e que não tinham passo próprio. Ver o mapa completo
+> em memory `caminho_para_10_10`. O usuário decidiu executar TODOS.
+
+## PASSO 25 — Step-up auth (re-autenticação) em ações sensíveis 🔴
+**Objetivo:** pedir a senha (ou 2º fator, quando houver) de novo antes de: excluir conta, trocar e-mail, exportar dados.
+**Por quê:** fecha o elo mais fraco (conta legítima sequestrada por sessão roubada/XSS). O `config.toml` já tem
+`secure_password_change=true` — estender a mesma ideia às outras ações destrutivas.
+- [ ] ⬜ Mapear as ações sensíveis e onde elas disparam (delete-account, troca de e-mail, export).
+- [ ] ⬜ Exigir re-autenticação recente (checar `aal`/último login) antes de executar; UI de confirmação por senha.
+- [ ] ⬜ Testar: ação sensível com sessão "antiga" pede senha; com re-auth recente passa.
+
+**Risco:** médio (mexe em fluxos sensíveis). **Esforço:** 1–2 dias. **Verificar:** excluir conta sem re-auth recente é barrado.
+
+## PASSO 26 — Turnstile (Cloudflare) em signup + reset 🔴
+**Objetivo:** captcha invisível anti-bot no cadastro e no reset (já usamos Cloudflare).
+**Por quê:** honeypot + rate-limit cobrem bem, mas Turnstile fecha bot/credential-stuffing na porta. Grátis no Cloudflare.
+- [ ] ⬜ Criar o widget Turnstile no painel Cloudflare; adicionar o site key ao frontend e o secret aos edge secrets.
+- [ ] ⬜ Validar o token server-side (edge `verify-recaptcha` já existe — reusar/estender p/ Turnstile).
+- [ ] ⬜ Ajustar CSP (`connect-src`/`frame-src`) p/ o Turnstile nas páginas de login/planos.
+
+**Risco:** baixo-médio (CSP + fluxo de auth). **Esforço:** ~1 dia. **Verificar:** signup/reset sem token válido é barrado.
+
+## PASSO 27 — Observabilidade + Lighthouse CI 🔴
+**Objetivo:** tracing correlacionado proxy↔edge, dashboards de negócio (ativação/retenção/churn) e orçamento de LCP/INP no CI.
+**Por quê:** hoje há logs + Sentry, mas falta correlação ponta a ponta e métrica de negócio; e o guard de perf é só de bytes.
+- [ ] ⬜ Propagar um `x-request-id` do proxy Vercel → edge functions; logar em ambos p/ correlação.
+- [ ] ⬜ Lighthouse CI no pipeline com orçamento de LCP/INP (análogo ao `check-bundle-size.mjs`).
+- [ ] ⬜ (Futuro) painel de métricas de negócio (pode ser query agendada + Sentry/simple dashboard).
+
+**Risco:** baixo. **Esforço:** 1–2 dias. **Verificar:** um request aparece com o mesmo id no proxy e na edge; CI falha se LCP estourar.
+
+## PASSO 28 — LGPD B1: aviso de retenção do audit-log ao titular 🔴
+**Objetivo:** deixar explícito, no fluxo de exclusão de conta, que os logs de acesso (`financial_audit_log`) seguem retidos por 6 meses por obrigação legal (Marco Civil art. 15).
+**Por quê:** único gap BAIXO restante da LGPD — transparência ao titular.
+- [ ] ⬜ Adicionar a nota na resposta/UI de exclusão de conta e (se fizer sentido) na Política.
+- [ ] ⬜ Conferir que o texto bate com o prazo real (6 meses, migration 20260626140000).
+
+**Risco:** nenhum (texto). **Esforço:** ~30 min. **Verificar:** fluxo de exclusão informa a retenção de 6 meses.
+
+## PASSO 29 — Assistente proativo (memória + proatividade + insight) 🔴 ⭐
+**Objetivo:** elevar o chat de 8.2 → 10 SEM quebrar "IA como função" (o Haiku só interpreta; nunca vê valores nem fala).
+**Por quê:** memória + proatividade + insight são o que separa um assistente de um parser. Tudo derivado NO CLIENTE.
+- [ ] ⬜ Memória de sessão: últimos N turnos em local cifrado (reusar `crypto-store.js`).
+- [ ] ⬜ Perfil de hábitos derivado no cliente (categorias/recorrências) p/ enriquecer o contexto — sem enviar valores à IA.
+- [ ] ⬜ Proatividade: "detectei assinatura nova de R$X — registrar como recorrente?"; alerta de fim-de-mês (casa com o detector de assinaturas fantasma do backlog).
+- [ ] ⬜ Insight contextual: micro-lição ("32% em delivery — média 12%") + "porquê" sob demanda.
+
+**Risco:** médio (mexe no engine do assistente). **Esforço:** vários dias, incremental. **Verificar:** assistente lembra do turno anterior; sugere ação proativa sem enviar valores à IA. Ver [[diferenciais_backlog_usuario]] e memory `caminho_para_10_10`.
+
+---
+
 ## Resumo — trilha de execução
 | Fase | Passo | Prioridade | Esforço | Status |
 |---|---|---|---|---|
@@ -534,7 +590,7 @@ reativação de inativo, aviso de fatura.
 | 1.5 | 13 — LGPD: bump versão de termos (M2) ⏱️ | 🔴 importante | ~1–2h | ✅ aplicado em prod (2026-07-14, commit d4fa24a) |
 | 1.5 | 14 — LGPD: aceite dos legados (M1) | 🔴 importante | ~30 min | ✅ coberto pelo mecanismo do Passo 13 (re-aceite no login) |
 | 1.5 | 15 — HIBP no signup/reset (k-anonymity) ⭐ | 🔴 alto valor | ~2–3h | ✅ aplicado em prod (2026-07-14) |
-| 1.5 | 16 — Dependabot + npm audit | 🟢 baixo | ~15 min | 🔴 |
+| 1.5 | 16 — Dependabot + npm audit | 🟢 baixo | ~15 min | ✅ npm audit já existia + dependabot criado (2026-07-14) |
 | 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | 🔴 |
 | 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🔴 |
 | 2 | 8 — Aliviar vendors (Chart/Supabase) | 🟡 médio | half-day+ | 🔴 |
@@ -550,6 +606,11 @@ reativação de inativo, aviso de fatura.
 | 5 ⚖️ | 22 — Ciclo de vida e-mail/push | ⚖️ decisão | 1–2 dias | 🔴 avaliar |
 | 5 ⚖️ | 23 — Programa de indicação | ⚖️ decisão | 1–2 dias | 🔴 avaliar |
 | 5 ⚖️ | 24 — Conteúdo/SEO de topo | ⚖️ decisão | contínuo | 🔴 avaliar |
+| 6 | 25 — Step-up auth em ações sensíveis | 🔴 alto | 1–2 dias | 🔴 |
+| 6 | 26 — Turnstile em signup + reset | 🟡 médio | ~1 dia | 🔴 |
+| 6 | 27 — Observabilidade + Lighthouse CI | 🟡 médio | 1–2 dias | 🔴 |
+| 6 | 28 — LGPD B1: aviso retenção audit-log | 🟢 baixo | ~30 min | 🔴 |
+| 6 | 29 — Assistente proativo (memória/insight) ⭐ | 🔴 alto valor | vários dias | 🔴 |
 
 ## Ordem recomendada de arranque (2026-07-14)
 1. **Bloco rápido de fechamento (Passos 13→14→16→15):** meio dia, fecha os gaps da auditoria e ganha momentum. Começar pelo **13 (LGPD bump)** por ser o mais "com relógio".
