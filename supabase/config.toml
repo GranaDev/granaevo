@@ -383,6 +383,13 @@ verify_jwt = false
 [functions.check-user-access]
 verify_jwt = false
 
+# accept-terms: registra aceite dos Termos. Auth própria (proxy-secret + auth.getUser),
+# mesmo padrão de check-user-access. verify_jwt=false evita o gateway rejeitar JWT ES256
+# antes de chegar no código. (Antes ausente do config → deploy pegava o default; fixado
+# junto do bump de versão de termos v1.1 em 2026-07-14.)
+[functions.accept-terms]
+verify_jwt = false
+
 [functions.upload-profile-photo]
 verify_jwt = false
 
