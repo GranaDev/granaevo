@@ -235,7 +235,16 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')              ?? ''
   const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  const anonKey     = Deno.env.get('SUPABASE_ANON_KEY')         ?? ''
+  // Prefere a publishable key nova (SUPABASE_PUBLISHABLE_KEYS['default']) e cai
+  // para a anon legada durante a transição. Usada só como `apikey` no recovery
+  // flow. Ver docs/roadmap-melhorias-dev.md Passo 1, Estágio 3. (Migração 2026-07-14)
+  const anonKey     = (() => {
+    try {
+      const pk = JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') ?? '{}')?.default
+      if (pk) return pk
+    } catch { /* SUPABASE_PUBLISHABLE_KEYS ausente/inválida → usa a legada */ }
+    return Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+  })()
   const proxySecret = Deno.env.get('PROXY_SECRET')              ?? ''
 
   if (!proxySecret) {

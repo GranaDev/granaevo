@@ -3,7 +3,7 @@
 
 const BASE = process.env.BASE_URL ?? 'https://granaevo.com'
 const SUPABASE_EF = 'https://fvrhqqeofqedmhadzzqw.supabase.co'
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo'
+const ANON_KEY = 'sb_publishable_IL6DH06V4icgZdMARtPIUg_zbPCV8wY'
 
 const results = []
 

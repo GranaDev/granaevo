@@ -713,7 +713,7 @@ describe('Round 4 (R4) — JWT Signature, Admin Endpoint, Body Limits (legacy)',
   // (testamos sem secret pois não temos o webhook secret em CI — verificamos rejeição)
   test('webhook-cakto sem secret não processa pagamento', async () => {
     const supabaseUrl = 'https://fvrhqqeofqedmhadzzqw.supabase.co'
-    const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo'
+    const ANON_KEY = 'sb_publishable_IL6DH06V4icgZdMARtPIUg_zbPCV8wY'
     const r = await fetch(`${supabaseUrl}/functions/v1/webhook-cakto`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': ANON_KEY },
@@ -972,7 +972,7 @@ describe('GOD MODE Round 1 — Infrastructure & Vault Regressions', () => {
       method:  'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey':       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo',
+        'apikey':       'sb_publishable_IL6DH06V4icgZdMARtPIUg_zbPCV8wY',
         // Sem x-proxy-secret
       },
       body: JSON.stringify({ email: 'test@granaevo.com' }),
@@ -1213,7 +1213,7 @@ describe('GOD MODE Round 3 — Email Spam Protection & Nonce Integrity', () => {
 
   const SUPABASE_EF_URL = process.env.SUPABASE_URL ?? 'https://fvrhqqeofqedmhadzzqw.supabase.co'
   const ANON_KEY = process.env.SUPABASE_ANON_KEY ??
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo'
+    'sb_publishable_IL6DH06V4icgZdMARtPIUg_zbPCV8wY'
 
   // ── [GOD-001] Vetor 1: chamada direta a send-welcome-email sem proxy-secret ──
 
@@ -1665,7 +1665,7 @@ describe('GOD MODE Round 5 — Fail-Closed PROXY_SECRET & confirm-user-email', (
 
   const SUPABASE_EF_URL = process.env.SUPABASE_URL ?? 'https://fvrhqqeofqedmhadzzqw.supabase.co'
   const ANON_KEY = process.env.SUPABASE_ANON_KEY ??
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo'
+    'sb_publishable_IL6DH06V4icgZdMARtPIUg_zbPCV8wY'
 
   // ── [GOD5-M01] Vetor 1: send-welcome-email sem proxy-secret → 401 (não 200 passante) ──
   // Regressão: antes do fix, se PROXY_SECRET não estivesse configurado, a EF

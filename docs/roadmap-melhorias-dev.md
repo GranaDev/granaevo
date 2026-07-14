@@ -58,18 +58,32 @@ das novas keys → criar/ativar. Copiar a `sb_publishable_...`. **Não revogar n
 - [x] ☑️ Smoke server-side via curl em `www.granaevo.com`: login inválido → **401 invalid_credentials**
       (não 503); refresh sem cookie → **200 session:null**; verify-recaptcha token falso → **400 success:false**.
       Rotas vivas, env nova ativa. **(2026-07-14)**
-- [ ] ⬜ **VOCÊ (navegador):** confirmar login real (logout + login), e — se quiser cobertura total —
-      um **reset de senha** e um **cadastro novo** (fluxos que mandam e-mail / criam dados, não dá pra
-      testar por curl sem efeito colateral). Rollback = restaurar env legada na Vercel + redeploy.
+- [x] ☑️ **Login real confirmado** pelo usuário (logout + login OK em produção). **(2026-07-14)**
+      ✅ **ESTÁGIO 2 COMPLETO.** (reset de senha / cadastro novo = cobertura opcional, não bloqueia)
 
-**Estágio 3 — edge:** atualizar o secret usado por `verify-and-reset-password` e testar o reset.
-- [ ] ⬜ Confirmar qual `SUPABASE_ANON_KEY` a edge usa (auto-injetado vs custom) e testar o fluxo de reset.
+**Estágio 3 — edge (`verify-and-reset-password`):** única edge function que lê `SUPABASE_ANON_KEY`
+(as demais usam `SUPABASE_SERVICE_ROLE_KEY`). Doc oficial confirmada: com as novas keys, o Supabase
+injeta `SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS` (dicionários JSON) nas functions.
+- [x] ☑️ **Código pronto (2026-07-14):** `anonKey` agora prefere `SUPABASE_PUBLISHABLE_KEYS['default']`
+      com fallback à `SUPABASE_ANON_KEY` (backward-compatible). Commitado.
+- [ ] ⬜ **Deploy + teste (pendente):** `supabase functions deploy verify-and-reset-password --no-verify-jwt`
+      + testar um reset de senha real (manda e-mail + troca senha → conta descartável). Edge deploya
+      SEPARADO do git push (armadilha conhecida).
 
-**Estágio 4 — testes:** trocar o literal por `process.env.SUPABASE_ANON_KEY` nos testes.
-- [ ] ⬜ `security.test.js` + `purple-validator.mjs` lendo do env.
+**Estágio 4 — testes:** remover o JWT legado hardcoded.
+- [x] ☑️ **FEITO (2026-07-14):** `security.test.js` (4 refs) + `purple-validator.mjs` (1 ref) agora usam a
+      publishable. `git grep` do JWT legado = **vazio** (0 ocorrências no repo). Syntax check OK.
 
-**Estágio 5 — cleanup (dias depois, destrutivo):**
-- [ ] ⬜ Após estabilidade confirmada, **revogar a key legada** no painel.
+**Estágio 5 — revogação (REBAIXADO p/ baixa prioridade):** 🟢
+> **Achado 2026-07-14:** as chaves legadas são `ANON_KEY` **e** `SERVICE_ROLE_KEY`. Como ~20 edge
+> functions usam `SUPABASE_SERVICE_ROLE_KEY`, revogar as legadas exigiria migrar TODAS elas para
+> `SUPABASE_SECRET_KEYS` — um esforço à parte ("migração service_role → secret"). **O ganho de segurança
+> central do Passo 1 (tirar a anon legada do bundle público) JÁ FOI capturado no Estágio 1.** A legada
+> restante só vive server-side (não exposta). Então:
+- [ ] ⬜ (Opcional, futuro) Fazer a migração service_role → `SUPABASE_SECRET_KEYS` nas edge functions
+      como milestone separado, e só então **desativar as legadas** no painel.
+- [ ] ⬜ Confirmar no painel se dá pra desativar a legada **anon** independentemente da **service_role**
+      (se sim, revogar só a anon fica barato — só depende do Estágio 3 estar deployado).
 
 **Risco:** baixo (E1) → médio (E2/E3). **Esforço:** E0+E1 ~30 min; E2–E5 ~half-day com testes. **Verificar:** app 100% autenticado na nova key; bundle sem o JWT legado; legada revogada só no fim.
 
@@ -281,7 +295,7 @@ fixas, faturas, assinaturas do detector, previsão de fim de mês).
 ## Resumo — trilha de execução
 | Fase | Passo | Prioridade | Esforço | Status |
 |---|---|---|---|---|
-| 0 | 1 — Rotacionar anon key → `sb_publishable_` | 🟢 baixo | 30 min | 🔴 |
+| 0 | 1 — Rotacionar anon key → `sb_publishable_` | 🟢 baixo | 30 min | ✅ E1–E4 (core); E5 opcional/futuro |
 | 0 | 2 — Consolidar cópia dupla src/public | 🟢 baixo | ~1h | 🔴 |
 | 0 | 3 — Limpar cruft de RLS (migration) | 🟡 médio | ~1–2h | 🔴 |
 | 0 | 4 — Documentar crons fora de migration | 🟢 baixo | ~1h | 🔴 |
