@@ -9,6 +9,7 @@
 // Esta função realiza revalidação defensiva (defense-in-depth) e executa a criação.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { isPasswordPwned } from '../_shared/hibp.ts'
 
 const corsHeaders = { 'Content-Type': 'application/json' }
 
@@ -74,6 +75,13 @@ Deno.serve(async (req: Request) => {
 
   if (!VALID_PLANS.has(plan))
     return json({ error: 'Plano inválido.' }, 400)
+
+  // ── 2.5 HIBP: bloqueia senha que já vazou (k-anonymity, grátis, fail-open) ─────
+  // O frontend (planos.js) trata { error: 'senha_vazada' } com mensagem específica.
+  if (await isPasswordPwned(password)) {
+    console.log(`[create-user-account] Senha vazada rejeitada: ${email.slice(0, 8)}***`)
+    return json({ error: 'senha_vazada' }, 400)
+  }
 
   // ── 3. Cria usuário via Admin API ─────────────────────────────────────────────
   const supabaseUrl    = Deno.env.get('SUPABASE_URL')             ?? ''

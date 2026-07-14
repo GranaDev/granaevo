@@ -1220,6 +1220,11 @@ if (buttons.changePassword) {
                 RecoveryState.clearCode();
                 setTimeout(() => switchScreen(screens.newPassword, screens.code), 2500);
 
+            } else if (result.status === 'weak_password') {
+                // Senha vazada (HIBP, server-side) — o código segue válido; usuário só troca a senha
+                showError(result.message || 'Essa senha apareceu em vazamentos de dados. Escolha uma senha diferente.');
+                shakeInput(inputs.newPassword);
+
             } else {
                 showError('Não foi possível alterar a senha. Tente novamente.');
             }

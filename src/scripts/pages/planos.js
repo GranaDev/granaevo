@@ -250,6 +250,15 @@ const SignupModal = (() => {
                     return;
                 }
 
+                if (createRes.status === 400) {
+                    // Senha vazada (HIBP, server-side) — mensagem específica p/ o usuário trocar
+                    const b = await createRes.json().catch(() => ({}));
+                    if (b?.error === 'senha_vazada') {
+                        showAlert('error', 'Essa senha apareceu em vazamentos de dados. Escolha uma senha diferente e mais forte.');
+                        return;
+                    }
+                }
+
                 if (!createRes.ok) {
                     throw new Error('CREATE_FAILED');
                 }

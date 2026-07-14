@@ -321,7 +321,18 @@ fixas, faturas, assinaturas do detector, previsão de fim de mês).
 > Achados novos da auditoria orquestrada `/god-mode` + `/god-eyes` de 2026-07-14 (global 8.6; 0 crít/alto).
 > Nenhum é bloqueante, mas os de LGPD têm um leve caráter de tempo (a política já mudou; falta re-aceite).
 
-## PASSO 13 — LGPD: bump da versão de termos + re-aceite (gap M2) 🟡 ⏱️
+## PASSO 13 — LGPD: bump da versão de termos + re-aceite (gap M2) ✅ APLICADO EM PROD (2026-07-14)
+> **APLICADO E VERIFICADO 2026-07-14:** migration aplicada em prod via Management API (bloqueador
+> `terms_acceptance_user_id_unique` removido; `(user_id, terms_version)` mantido — conferido read-only).
+> As 3 edge functions redeployadas com v1.1 (`accept-terms` v9→v10, `check-user-access` v35→v36,
+> `verify-guest-invite` v40→v41; smoke tests 401/400 limpos). Frontend deployado (`vercel --prod` →
+> www.granaevo.com; `/termos` mostra "Julho de 2026"). Commit `d4fa24a` em `main` (push origin OK).
+> `config.toml` ganhou `[functions.accept-terms] verify_jwt=false` (estava ausente). O re-aceite v1.1
+> agora dispara na próxima sessão de cada usuário (aceites em prod ainda `1.0:4` até os logins) — isso
+> também cobre o **Passo 14 (M1)**: os 4 legados serão forçados a aceitar no próximo login.
+> **⚠️ Dívida separada descoberta:** `supabase db push` está inseguro (19 migrations "fora de ordem" no
+> histórico do CLI) — migration foi aplicada por SQL direto, não por `db push`. Vale um passo de higiene
+> do histórico de migrations depois.
 > **Investigação 2026-07-14 (feita):** o gate `checkNeedsTermsAcceptance` (check-user-access) compara
 > `terms_version = CURRENT_TERMS_VERSION` → o bump **força** re-aceite, ok. **PORÉM achamos um BLOQUEADOR:**
 > a tabela `terms_acceptance` tinha DOIS uniques — `terms_acceptance_user_id_unique (user_id)` **e**
@@ -360,7 +371,17 @@ aceitaram o texto anterior e **não houve re-aceite**. A própria política prom
 
 ---
 
-## PASSO 15 — HIBP no signup/reset via k-anonymity 🔴 ⭐
+## PASSO 15 — HIBP no signup/reset via k-anonymity ✅ APLICADO EM PROD (2026-07-14)
+> **APLICADO 2026-07-14 (grátis, sem Pro):** módulo `_shared/hibp.ts` (SHA-1 → prefixo de 5 → range API,
+> header `Add-Padding`, **fail-open**, timeout 2.5s). Ligado em `create-user-account` (retorna
+> `{error:'senha_vazada'}` 400) e `verify-and-reset-password` (retorna `{status:'weak_password'}` 200,
+> porque o front engole !ok como "erro de conexão"). Frontend: `planos.js` (branch 400/senha_vazada) e
+> `login.js` (branch weak_password no reset). `config.toml` ganhou `[functions.create-user-account]
+> verify_jwt=false` (estava ausente → risco de quebrar signup pós-rotação da anon key). 2 edges
+> redeployadas + `vercel --prod`. **Algoritmo validado contra o HIBP real:** `Password1` (3.46M vazamentos)
+> e `Senha123` (314k) = PWNED; senha forte = LIMPA. **NOTA:** cobre signup + reset; NÃO cobre troca de
+> senha logada via GoTrue nativo (fora do nosso fluxo). Esclarecimento: o "HIBP só no Pro" era o toggle
+> NATIVO do Supabase; esta é a versão self-hosted, que independe do plano.
 **Objetivo:** bloquear senhas comprometidas na criação de conta e no reset, **sem** depender do plano Pro.
 **Por quê:** o "Leaked Password Protection" nativo do Supabase exige plano Pro (desabilitado hoje). Mas dá
 pra checar por conta própria via a API k-anonymity do Have I Been Pwned — **grátis e privada** (só enviamos
@@ -510,9 +531,9 @@ reativação de inativo, aviso de fatura.
 | 0 | 3 — Limpar cruft de RLS (migration) | 🟡 médio | ~1–2h | ✅ policies já ok + 4 órfãs dropadas |
 | 0 | 4 — Documentar crons fora de migration | 🟢 baixo | ~1h | ✅ 10 drift documentados |
 | 1 | 5 — Higiene de `innerHTML` | 🟢 baixo | ~2–3h | ✅ auditado, sem gap |
-| 1.5 | 13 — LGPD: bump versão de termos (M2) ⏱️ | 🔴 importante | ~1–2h | 🔴 |
-| 1.5 | 14 — LGPD: aceite dos legados (M1) | 🔴 importante | ~30 min | 🔴 |
-| 1.5 | 15 — HIBP no signup/reset (k-anonymity) ⭐ | 🔴 alto valor | ~2–3h | 🔴 |
+| 1.5 | 13 — LGPD: bump versão de termos (M2) ⏱️ | 🔴 importante | ~1–2h | ✅ aplicado em prod (2026-07-14, commit d4fa24a) |
+| 1.5 | 14 — LGPD: aceite dos legados (M1) | 🔴 importante | ~30 min | ✅ coberto pelo mecanismo do Passo 13 (re-aceite no login) |
+| 1.5 | 15 — HIBP no signup/reset (k-anonymity) ⭐ | 🔴 alto valor | ~2–3h | ✅ aplicado em prod (2026-07-14) |
 | 1.5 | 16 — Dependabot + npm audit | 🟢 baixo | ~15 min | 🔴 |
 | 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | 🔴 |
 | 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🔴 |

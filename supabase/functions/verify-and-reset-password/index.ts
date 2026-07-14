@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { isPasswordPwned } from '../_shared/hibp.ts'
 
 // ═══════════════════════════════════════════════════════════════
 //  verify-and-reset-password — v7
@@ -317,6 +318,14 @@ Deno.serve(async (req) => {
         return json({ status: 'error', message: 'A senha deve conter pelo menos uma letra maiúscula.' }, 400)
       if (!/[0-9]/.test(cleaned))
         return json({ status: 'error', message: 'A senha deve conter pelo menos um número.' }, 400)
+
+      // HIBP: rejeita senha vazada (k-anonymity, grátis, fail-open). Retorna 200 com
+      // campo `status` — o frontend (login.js) trata 'weak_password' com mensagem própria;
+      // respostas !ok viram "erro de conexão". Checa antes de consumir o código de reset.
+      if (await isPasswordPwned(cleaned)) {
+        return json({ status: 'weak_password', message: 'Essa senha apareceu em vazamentos de dados. Escolha uma senha diferente.' })
+      }
+
       ;(body as Record<string, unknown>).newPassword = cleaned
     }
 
