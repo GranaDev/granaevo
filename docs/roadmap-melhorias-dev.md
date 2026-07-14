@@ -136,7 +136,12 @@ no banco** que atrapalha auditoria. Higiene.
 
 ---
 
-## PASSO 4 — Documentar os ~10 crons fora de migration (IaC) 🔴
+## PASSO 4 — Documentar os ~10 crons fora de migration (IaC) ✅ RESOLVIDO (2026-07-14)
+> **15 crons vivos** auditados: 5 já versionados (push-subscriptions, purge-audit-log-retention,
+> purge-radar-notifications, limpar-user-devices, purge-payment-events-pii); os **10 restantes** (drift)
+> foram documentados em `20260714130000_document_existing_crons.sql` — `cron.schedule` guardado por
+> `NOT EXISTS` (NO-OP em prod, recria em DR). Registrado no ledger; jobs vivos **não tocados**. O cron
+> duplicado `limpar-rate-limits` já não existe (removido em 20260712). **Nada mais a fazer.**
 **Objetivo:** trazer os cron jobs vivos que nasceram fora de migration para o versionamento.
 **Por quê:** drift de rastreabilidade — os jobs existem e rodam, mas não estão no repo, então um
 disaster-recovery não os recria. **Sem risco de segurança**, é pura governança.
@@ -310,7 +315,7 @@ fixas, faturas, assinaturas do detector, previsão de fim de mês).
 | 0 | 1 — Rotacionar anon key → `sb_publishable_` | 🟢 baixo | 30 min | ✅ E1–E4 (core); E5 opcional/futuro |
 | 0 | 2 — Consolidar cópia dupla src/public | 🟢 baixo | ~1h | ✅ já resolvido (2026-06-17) |
 | 0 | 3 — Limpar cruft de RLS (migration) | 🟡 médio | ~1–2h | ✅ policies já ok + 4 órfãs dropadas |
-| 0 | 4 — Documentar crons fora de migration | 🟢 baixo | ~1h | 🔴 |
+| 0 | 4 — Documentar crons fora de migration | 🟢 baixo | ~1h | ✅ 10 drift documentados |
 | 1 | 5 — Higiene de `innerHTML` | 🟢 baixo | ~2–3h | 🔴 |
 | 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | 🔴 |
 | 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🔴 |
