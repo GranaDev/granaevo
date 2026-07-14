@@ -44,14 +44,23 @@ das novas keys → criar/ativar. Copiar a `sb_publishable_...`. **Não revogar n
 - [x] ☑️ Trocar o literal em `supabase-client.js` pela `sb_publishable_` (hardcoded). **(2026-07-14)**
       Equivalência com a legada **provada via REST** (REST root / user_data-anon / auth-settings idênticos).
 - [x] ☑️ Bundle verificado no **build local**: nova key presente, JWT legado **eliminado** do cliente. **(2026-07-14)**
-- [ ] ⬜ **VOCÊ:** deploy (git push → Vercel) + smoke em produção: login, carregar dashboard, salvar um
-      lançamento, trocar de perfil. Rollback = reverter 1 linha. Reconfirmar no DevTools (Network) que
-      nenhuma request leva o JWT legado.
+- [x] ☑️ Deploy em produção (commit `5074ab0`, Vercel Ready) + **smoke OK** (login, dados, transação,
+      troca de perfil confirmados pelo usuário). **(2026-07-14)** ✅ **ESTÁGIO 1 COMPLETO**
 
 **Estágio 2 — servidor (EU + você na Vercel):** testar as ~12 rotas.
-- [ ] ⬜ Trocar `SUPABASE_ANON_KEY` na Vercel (prod+preview+dev) e no `.env.local`.
-- [ ] ⬜ Smoke rota a rota: login/refresh (auth-session), salvar/carregar (user-data), stripe, criar conta,
-      check-email, reset senha, convites, recaptcha, upload de foto, aceitar termos. Atenção ao `Bearer`.
+- [x] ☑️ **Pré-voo provado (2026-07-14):** TODAS as edge functions do app têm `verify_jwt=false` (o gateway
+      não valida o Bearer — quem autentica é o `x-proxy-secret`), e o login (`auth-session`) usa a key só
+      como `apikey`. Testes REST diretos: verify-recaptcha / verify-guest-invite / check-email-status /
+      create-user-account respondem **idêntico** com legada e nova. → drop-in seguro.
+- [x] ☑️ Trocado `SUPABASE_ANON_KEY` na Vercel **prod + preview + dev** (preview via `npx vercel@latest`,
+      bug do 50.35) e no `.env.local`. **(2026-07-14)**
+- [x] ☑️ Redeploy de produção (`vercel --prod`, READY). **(2026-07-14)**
+- [x] ☑️ Smoke server-side via curl em `www.granaevo.com`: login inválido → **401 invalid_credentials**
+      (não 503); refresh sem cookie → **200 session:null**; verify-recaptcha token falso → **400 success:false**.
+      Rotas vivas, env nova ativa. **(2026-07-14)**
+- [ ] ⬜ **VOCÊ (navegador):** confirmar login real (logout + login), e — se quiser cobertura total —
+      um **reset de senha** e um **cadastro novo** (fluxos que mandam e-mail / criam dados, não dá pra
+      testar por curl sem efeito colateral). Rollback = restaurar env legada na Vercel + redeploy.
 
 **Estágio 3 — edge:** atualizar o secret usado por `verify-and-reset-password` e testar o reset.
 - [ ] ⬜ Confirmar qual `SUPABASE_ANON_KEY` a edge usa (auto-injetado vs custom) e testar o fluxo de reset.
