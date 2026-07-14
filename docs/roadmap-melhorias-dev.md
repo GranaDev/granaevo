@@ -429,14 +429,23 @@ tema claro, navegação por teclado no dashboard). É inclusão **e** um selo de
 
 ---
 
-## PASSO 18 — Testes de lógica financeira 🔴
+## PASSO 18 — Testes de lógica financeira 🟡 PARCIAL — money.js coberto (2026-07-14)
+> **FEITO 2026-07-14:** `tests/unit/money.test.js` — **57 testes** cobrindo o parser de valores do
+> assistente (`assistant/money.js`, 100% puro): `parseValorBR` ("1,5k"→1500, "1.234,56", ignora "3x"),
+> `parseAritmetica` (2×8=16), `parseParcelas`, `parseExtenso` ("mil e duzentos"→1200), `formatBRL`,
+> `yearMonthKey`, `brDateToObj`, `parseMesNomeado`, `parseData(Futura|Relativa)`. Script `test:unit`
+> (glob nativo do Node, cross-platform) + step no CI (`ci.yml`, idempotente, sem rede). Todos passam.
+> **É o alvo de MAIOR valor/menor risco:** money.js decide o VALOR gravado de cada transação.
+> **PENDENTE (precisa extração — não é zero-risco):** ciclo de fatura (venc<fech → +1 mês) vive
+> ACOPLADO ao DOM em `db-cartoes.js` (`_buildResumoCartao`, e duplicado em ~3 pontos — ver memory
+> `fatura_ciclo_vencimento_fix`). Extrair p/ módulo puro `finance/fatura-ciclo.js` + testar casa com o
+> Passo 10 (split do dashboard). Idem saldo/projeção de meta (em `dashboard.js`/`db-metas.js`).
 **Objetivo:** cobrir com testes os cálculos críticos (fatura, ciclos de vencimento, saldo, metas).
 **Por quê:** hoje só há `tests/security`. A lógica financeira é o núcleo do produto e já teve bug de ciclo
 de fatura (`fatura_ciclo_vencimento_fix`). Teste evita regressão silenciosa em dinheiro do usuário.
 
-- [ ] ⬜ Extrair as funções puras de cálculo (fatura, ciclo venc<fech → +1 mês, saldo, projeção de meta).
-- [ ] ⬜ `node --test` com casos de borda (virada de mês, fatura vencida, parcelas, reserva/retirada).
-- [ ] ⬜ Ligar no CI ao lado de `test:security`.
+- [x] ☑️ `money.js` (parser de valores do assistente) — 57 testes, no CI. **(2026-07-14)**
+- [ ] ⬜ Extrair ciclo de fatura + saldo + projeção de meta p/ módulos puros e testar (com Passo 10).
 
 **Risco:** nenhum (só adiciona testes). **Esforço:** ~1 dia. **Verificar:** suíte verde; um bug proposital de cálculo é pego pelo teste.
 
@@ -597,7 +606,7 @@ reativação de inativo, aviso de fatura.
 | 2 | 9 — Boot otimista (IndexedDB) | 🔴 alto valor | 1–2 dias | 🔴 |
 | 2 | 10 — Split do `dashboard.js` ⭐ | 🔴 alto valor | 2–3 dias | 🔴 |
 | 4 | 17 — Auditoria WCAG AA | 🟡 médio | ~1 dia | 🔴 |
-| 4 | 18 — Testes de lógica financeira | 🟢 baixo | ~1 dia | 🔴 |
+| 4 | 18 — Testes de lógica financeira | 🟢 baixo | ~1 dia | 🟡 money.js coberto (57 testes, CI); fatura/saldo pendem extração |
 | 4 | 19 — Índices/policies (higiene DB) | 🟡 médio | ~1–2h | 🔴 |
 | 3 | 11 — Calendário financeiro visual | 🟢 baixo | 1–2 dias | 🔴 |
 | 3 | 12 — Share Target no manifest | 🟢 baixo | ~1 dia | 🔴 |

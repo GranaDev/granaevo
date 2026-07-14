@@ -17,7 +17,8 @@
     "coverage:summary": "node scripts/coverage-summary.mjs",
     "images:optimize": "node scripts/optimize-images.mjs",
     "test": "node --test tests/security/",
-    "test:security": "node --test tests/security/security.test.js"
+    "test:security": "node --test tests/security/security.test.js",
+    "test:unit": "node --test \"tests/unit/**/*.test.js\""
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",

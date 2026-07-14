@@ -31,6 +31,9 @@ jobs:
       - name: Dependency audit (falha em high/critical)
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Unit tests (lógica financeira — sem rede, idempotente)
+        run: npm run test:unit
+
       - name: Build
         run: npm run build
 
