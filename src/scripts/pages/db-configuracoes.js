@@ -1275,6 +1275,12 @@ async function excluirConta() {
         subNote.style.cssText = 'background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:10px; padding:10px 12px; margin-bottom:14px; font-size:0.8rem; color:#fbbf24; line-height:1.5;';
         subNote.innerHTML = '<i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Se você tem assinatura ativa, cancele-a antes (em Gerenciar assinatura) para evitar cobranças futuras.';
 
+        // ── Transparência LGPD (B1): retenção legal dos logs de acesso ──────
+        // O restante (dados financeiros, perfis, backups) é apagado na hora pela cascata.
+        const retentionNote = document.createElement('div');
+        retentionNote.style.cssText = 'background:rgba(148,163,184,0.08); border:1px solid rgba(148,163,184,0.2); border-radius:10px; padding:10px 12px; margin-bottom:14px; font-size:0.78rem; color:var(--text-muted); line-height:1.5;';
+        retentionNote.innerHTML = '<i class="fas fa-shield-halved" aria-hidden="true"></i> Por obrigação legal (Marco Civil da Internet, art. 15), os registros de acesso (data, hora e IP — <strong>sem seus dados financeiros</strong>) são mantidos por até <strong>6 meses</strong> após a exclusão e então apagados automaticamente.';
+
         // ── Confirmação por e-mail ───────────────────────────────────────
         const confirmLabel = document.createElement('label');
         confirmLabel.htmlFor = 'delAccountInput';
@@ -1371,6 +1377,7 @@ async function excluirConta() {
         box.appendChild(h3);
         box.appendChild(warnBox);
         if (!isGuest) box.appendChild(subNote);
+        box.appendChild(retentionNote);
         box.appendChild(confirmLabel);
         box.appendChild(confirmInput);
         box.appendChild(btnRow);

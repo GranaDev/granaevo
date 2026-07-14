@@ -130,7 +130,7 @@ Deno.serve(async (req: Request) => {
     hadActiveSubscription: !!sub,
     wasGuest: !!guestRow,
     message: sub
-      ? 'Conta excluída. Se você tinha assinatura ativa, cancele/verifique no Stripe para evitar cobranças futuras.'
-      : 'Conta e dados excluídos permanentemente.',
+      ? 'Conta excluída. Se você tinha assinatura ativa, cancele/verifique no Stripe para evitar cobranças futuras. Registros de acesso (IP/data, sem dados financeiros) são mantidos por 6 meses por obrigação legal (Marco Civil, art. 15) e depois apagados.'
+      : 'Conta e dados financeiros excluídos. Registros de acesso (IP/data, sem dados financeiros) são mantidos por 6 meses por obrigação legal (Marco Civil, art. 15) e depois apagados automaticamente.',
   }, 200, cors)
 })

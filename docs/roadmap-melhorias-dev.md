@@ -568,11 +568,16 @@ reativação de inativo, aviso de fatura.
 
 **Risco:** baixo. **Esforço:** 1–2 dias. **Verificar:** um request aparece com o mesmo id no proxy e na edge; CI falha se LCP estourar.
 
-## PASSO 28 — LGPD B1: aviso de retenção do audit-log ao titular 🔴
+## PASSO 28 — LGPD B1: aviso de retenção do audit-log ao titular ✅ APLICADO EM PROD (2026-07-14)
+> **FEITO 2026-07-14:** nota de transparência no modal de exclusão (`db-configuracoes.js` — "registros de
+> acesso, sem dados financeiros, mantidos por até 6 meses por Marco Civil art. 15 e depois apagados") +
+> mensagem da edge `delete-account` refinada (não diz mais "excluídos permanentemente" sem ressalva).
+> A Política (`privacidade.html`) JÁ declarava os 6 meses (linhas 205/292) — bate com a migration
+> `20260626140000`. Edge redeployada + `vercel --prod`. **LGPD: todos os gaps (M2/M1/B1) fechados.**
 **Objetivo:** deixar explícito, no fluxo de exclusão de conta, que os logs de acesso (`financial_audit_log`) seguem retidos por 6 meses por obrigação legal (Marco Civil art. 15).
 **Por quê:** único gap BAIXO restante da LGPD — transparência ao titular.
-- [ ] ⬜ Adicionar a nota na resposta/UI de exclusão de conta e (se fizer sentido) na Política.
-- [ ] ⬜ Conferir que o texto bate com o prazo real (6 meses, migration 20260626140000).
+- [x] ☑️ Nota no modal de exclusão + mensagem da edge `delete-account`. **(2026-07-14)**
+- [x] ☑️ Conferido: Política já declara 6 meses (privacidade.html) e bate com a migration 20260626140000.
 
 **Risco:** nenhum (texto). **Esforço:** ~30 min. **Verificar:** fluxo de exclusão informa a retenção de 6 meses.
 
@@ -618,7 +623,7 @@ reativação de inativo, aviso de fatura.
 | 6 | 25 — Step-up auth em ações sensíveis | 🔴 alto | 1–2 dias | 🔴 |
 | 6 | 26 — Turnstile em signup + reset | 🟡 médio | ~1 dia | 🔴 |
 | 6 | 27 — Observabilidade + Lighthouse CI | 🟡 médio | 1–2 dias | 🔴 |
-| 6 | 28 — LGPD B1: aviso retenção audit-log | 🟢 baixo | ~30 min | 🔴 |
+| 6 | 28 — LGPD B1: aviso retenção audit-log | 🟢 baixo | ~30 min | ✅ aplicado em prod (2026-07-14) |
 | 6 | 29 — Assistente proativo (memória/insight) ⭐ | 🔴 alto valor | vários dias | 🔴 |
 
 ## Ordem recomendada de arranque (2026-07-14)
