@@ -89,7 +89,12 @@ injeta `SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS` (dicionários JSON) na
 
 ---
 
-## PASSO 2 — Consolidar a cópia dupla `src/` × `public/` 🔴
+## PASSO 2 — Consolidar a cópia dupla `src/` × `public/` ✅ JÁ RESOLVIDO
+> **Verificado 2026-07-14:** NÃO existe mais cópia dupla — foi consolidada em 2026-06-17 (commit 4ac7c64).
+> Busca repo-wide confirma fonte única: só `public/scripts/modules/graficos.js` e `recaptcha-init.js`
+> (a de `src/` já foi deletada). `src/scripts/pages/db-graficos.js` é o orquestrador lazy-load, não uma
+> duplicata. Relatório 360 super-sinalizou (índice de memória citava a armadilha sem marcar como resolvida).
+> **Nada a fazer.**
 **Objetivo:** eliminar a divergência de `graficos.js` e `recaptcha-init.js` (armadilha conhecida —
 duas cópias que saem de sincronia). Fonte única.
 **Por quê:** hoje existe `public/scripts/modules/graficos.js` e `public/scripts/modules/recaptcha-init.js`
@@ -106,7 +111,14 @@ servidos como estáticos, com risco de divergir da versão em `src/`. Bug silenc
 
 ---
 
-## PASSO 3 — Limpar cruft de RLS (migration) 🔴
+## PASSO 3 — Limpar cruft de RLS (migration) ✅ RESOLVIDO (2026-07-14)
+> **Item principal (policies redundantes em `user_data`) JÁ estava resolvido** — hoje há 1 policy por
+> comando (SELECT/INSERT/UPDATE/DELETE) + service_role; as `user_data_owner_*` já tinham sido removidas.
+> **4 funções de trigger órfãs DROPADAS** via migration `20260714120000_drop_orphan_trigger_functions.sql`
+> (`prevent_user_id_change`, `set_profile_user_id`, `update_updated_at`, `update_updated_at_column`) —
+> cada proteção comprovadamente coberta por trigger/RLS ativo; EXECUTE já revogado. Pós-drop verificado:
+> 0 órfãs restantes, 10 triggers ativos intactos, ledger registrado. **Regenerar `public_baseline.sql`
+> na próxima varredura** (ainda lista as 4).
 **Objetivo:** remover políticas permissivas redundantes em `user_data` e dropar 3 funções de trigger órfãs.
 **Por quê:** não é falha (políticas permissivas = OR; funções órfãs não são chamadas), mas é **dead code
 no banco** que atrapalha auditoria. Higiene.
@@ -296,8 +308,8 @@ fixas, faturas, assinaturas do detector, previsão de fim de mês).
 | Fase | Passo | Prioridade | Esforço | Status |
 |---|---|---|---|---|
 | 0 | 1 — Rotacionar anon key → `sb_publishable_` | 🟢 baixo | 30 min | ✅ E1–E4 (core); E5 opcional/futuro |
-| 0 | 2 — Consolidar cópia dupla src/public | 🟢 baixo | ~1h | 🔴 |
-| 0 | 3 — Limpar cruft de RLS (migration) | 🟡 médio | ~1–2h | 🔴 |
+| 0 | 2 — Consolidar cópia dupla src/public | 🟢 baixo | ~1h | ✅ já resolvido (2026-06-17) |
+| 0 | 3 — Limpar cruft de RLS (migration) | 🟡 médio | ~1–2h | ✅ policies já ok + 4 órfãs dropadas |
 | 0 | 4 — Documentar crons fora de migration | 🟢 baixo | ~1h | 🔴 |
 | 1 | 5 — Higiene de `innerHTML` | 🟢 baixo | ~2–3h | 🔴 |
 | 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | 🔴 |
