@@ -24,7 +24,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 export const SUPABASE_URL      = 'https://fvrhqqeofqedmhadzzqw.supabase.co';
-export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2cmhxcWVvZnFlZG1oYWR6enF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczODIxMzgsImV4cCI6MjA4Mjk1ODEzOH0.1p6vHQm8qTJwq6xo7XYO0Et4_eZfN1-7ddcqfEN4LBo';
+// Chave PUBLISHABLE (formato novo `sb_publishable_`, rotacionável isoladamente).
+// Pública por design — a segurança dos dados vem do RLS. Migrada da anon key
+// legada (JWT exp 2082) em 2026-07-14. Ver docs/roadmap-melhorias-dev.md Passo 1.
+export const SUPABASE_ANON_KEY = 'sb_publishable_IL6DH06V4icgZdMARtPIUg_zbPCV8wY';
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     throw new Error('Configuração do cliente Supabase indisponível.');
