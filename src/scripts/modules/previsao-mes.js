@@ -87,9 +87,8 @@ function _entradasPrevistas(transacoes, hoje) {
     return { total, itens };
 }
 
-/** Núcleo do cálculo — exportado p/ reuso e teste. */
-export function calcularPrevisao(ctx) {
-    const hoje      = new Date();
+/** Núcleo do cálculo — exportado p/ reuso e teste. `hoje` injetável p/ testes. */
+export function calcularPrevisao(ctx, hoje = new Date()) {
     const ano       = hoje.getFullYear();
     const mes       = hoje.getMonth();
     const ultimoDia = new Date(ano, mes + 1, 0).getDate();
@@ -117,17 +116,34 @@ export function calcularPrevisao(ctx) {
         qtdContas++;
     }
 
-    // ── Gasto variável médio/dia (28 dias, excluindo contas e faturas) ───
+    // ── Gasto variável médio/dia (janela de 28 dias, EXCLUINDO fixas/cartão) ──
+    // BUGFIX (2026-07-14): a exclusão antiga era `t.tipo === 'Conta fixa'/'Cartão'`,
+    // mas os tipos REAIS gravados são 'Conta Fixa' (F maiúsculo) e 'Pagamento Cartão'
+    // — nunca casavam. Resultado: TODA conta fixa/fatura paga (categoria 'saida')
+    // vazava pro gasto variável e a média diária estourava → previsão "muito
+    // desproporcional". Agora exclui por MARCADOR de origem (id — robusto a rótulo)
+    // e também por tipo (defesa extra). Assinatura NÃO entra aqui (vira compra no
+    // cartão → fatura → contasAPagar, nunca uma transação 'saida').
     const inicio28 = new Date(ano, mes, hoje.getDate() - 28);
-    let gastoVariavel = 0;
+    let gastoVariavel = 0, primeiraSaidaTs = null;
     for (const t of (ctx.transacoes || [])) {
         if (t.categoria !== 'saida') continue;
-        if (t.tipo === 'Conta fixa' || t.tipo === 'Cartão') continue; // já contados acima
+        if (t.contaFixaId != null || t.faturaId != null || t.compraId != null) continue;
+        if (t.tipo === 'Conta Fixa' || t.tipo === 'Conta fixa' ||
+            t.tipo === 'Pagamento Cartão' || t.tipo === 'Cartão') continue;
         const dt = _txDate(t.data);
         if (!dt || dt < inicio28 || dt > hoje) continue;
         gastoVariavel += _valSeguro(t.valor);
+        const ts = dt.getTime();
+        if (primeiraSaidaTs === null || ts < primeiraSaidaTs) primeiraSaidaTs = ts;
     }
-    const mediaDiaria = gastoVariavel / 28;
+    // Denominador ADAPTATIVO: dias realmente cobertos entre a 1ª saída variável da
+    // janela e hoje (evita subestimar quem tem < 28 dias de histórico). Piso de 7
+    // (um único dia cheio não domina a projeção) e teto de 28.
+    const diasJanela = primeiraSaidaTs !== null
+        ? Math.min(28, Math.max(7, Math.round((hoje.getTime() - primeiraSaidaTs) / 86_400_000) + 1))
+        : 28;
+    const mediaDiaria = gastoVariavel / diasJanela;
 
     // ── Entradas recorrentes previstas ───────────────────────────────────
     const previstas = _entradasPrevistas(ctx.transacoes || [], hoje);
