@@ -451,7 +451,17 @@ de fatura (`fatura_ciclo_vencimento_fix`). Teste evita regressão silenciosa em 
 
 ---
 
-## PASSO 19 — Higiene de banco: índices não usados + policies permissivas 🔴
+## PASSO 19 — Higiene de banco: índices não usados + policies permissivas ✅ APLICADO EM PROD (2026-07-14)
+> **FEITO 2026-07-14 — abordagem criteriosa (não "dropar os 30"):** dropados **12 índices DUPLICADOS**
+> (mesma tabela+colunas que uma UNIQUE já cobre) — migration `20260714150000_drop_duplicate_indexes.sql`
+> (+`.down`), aplicada via Management API. Reduz amplificação de escrita, destaque p/ `user_data` (tabela
+> mais quente) que mantinha **3** índices idênticos de user_id. Verificado read-only: 12 duplicados sumiram,
+> 11 coberturas UNIQUE intactas, detector de duplicatas vazio, zero regressão.
+> **NÃO dropados** os índices meramente `idx_scan=0` não-duplicados: num app pré-escala isso é "sem tráfego",
+> não "inútil" — sustentam RLS/lookup/FK e seriam necessários em escala.
+> **Policies permissivas múltiplas (4 tabelas): mantidas de propósito** — NÃO são redundância, são OR de
+> caminhos DISTINTOS (audit_log: actor_id≠user_id; stripe: own/email/guest; profiles: own/guest-insert).
+> Consolidar reduziria clareza + arriscaria RLS por ganho nulo. Documentado e parado (guidance do próprio passo).
 **Objetivo:** dropar os 30 índices nunca usados e consolidar as 4 tabelas com múltiplas policies permissivas.
 **Por quê:** advisors de performance do Supabase. Índice morto custa em cada escrita; múltiplas policies
 permissivas (OR) são avaliadas a cada query. **Sem risco de segurança** — pura performance/higiene.
@@ -612,7 +622,7 @@ reativação de inativo, aviso de fatura.
 | 2 | 10 — Split do `dashboard.js` ⭐ | 🔴 alto valor | 2–3 dias | 🔴 |
 | 4 | 17 — Auditoria WCAG AA | 🟡 médio | ~1 dia | 🔴 |
 | 4 | 18 — Testes de lógica financeira | 🟢 baixo | ~1 dia | 🟡 money.js coberto (57 testes, CI); fatura/saldo pendem extração |
-| 4 | 19 — Índices/policies (higiene DB) | 🟡 médio | ~1–2h | 🔴 |
+| 4 | 19 — Índices/policies (higiene DB) | 🟡 médio | ~1–2h | ✅ 12 índices duplicados dropados (2026-07-14); policies OR mantidas |
 | 3 | 11 — Calendário financeiro visual | 🟢 baixo | 1–2 dias | 🔴 |
 | 3 | 12 — Share Target no manifest | 🟢 baixo | ~1 dia | 🔴 |
 | 5 ⚖️ | 20 — Trial/demo sem cartão ⭐ | ⚖️ decisão | 2–4 dias | 🔴 avaliar |
