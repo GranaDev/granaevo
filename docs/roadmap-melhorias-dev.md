@@ -211,7 +211,18 @@ TOTP no Supabase é nativo e gratuito em todos os planos (só SMS custa; TOTP n�
 
 # FASE 2 — Performance
 
-## PASSO 7 — Podar CSS morto + virtualizar listas longas 🔴
+## PASSO 7 — Podar CSS morto + virtualizar listas longas 🟡 ANALISADO — PODA PARQUEADA (2026-07-14)
+> **Análise 2026-07-14 (com Coverage real + script novo `scripts/css-coverage-report.mjs`):** medido no
+> build — `dashboard.css` = 200 KB fonte / **39 KB gzip, e é ASSÍNCRONO** (media=print + css-boot.js →
+> não bloqueia paint) e está em **58% do budget**. Coverage mostrou 25.7% usado, MAS a sessão foi
+> incompleta (Relatórios/Configurações/Gráficos = 0%) E a lista estática `css-unused-candidates.txt` está
+> **contaminada de classes DINÂMICAS**: `db-relatorios.js` monta `rel-bill-item--${status}`,
+> `rel-tx-dot--${dotClass}` etc. em template literals (linhas 1664/1704/1710) — batem exatamente com os
+> "candidatos". Pior: classes de valor dinâmico (`rel-bill-item--vencida`) só aparecem "usadas" se o estado
+> existir nos dados no momento da captura → Coverage NUNCA limpa 100%. **Veredito: poda é baixo-ROI e
+> arriscada (quebraria Relatórios), e o CSS já é async + dentro do budget → não é problema real. PARQUEADO.**
+> A ferramenta `css-coverage-report.mjs` fica no repo caso um dia se queira o corte cirúrgico com sessão
+> 100% completa. **Virtualização de listas longas:** não abordada; reavaliar se surgir queixa real de scroll.
 **Objetivo:** reduzir o peso do `_db-all.css` (~259 KB fonte) e acelerar telas com muitas linhas.
 **Por quê:** `css-unused-candidates.txt` já lista **104 candidatas de 903 classes** (com aviso de
 falso-positivo para classes dinâmicas). Listas de transações/relatórios renderizam tudo de uma vez.
@@ -616,7 +627,7 @@ reativação de inativo, aviso de fatura.
 | 1.5 | 15 — HIBP no signup/reset (k-anonymity) ⭐ | 🔴 alto valor | ~2–3h | ✅ aplicado em prod (2026-07-14) |
 | 1.5 | 16 — Dependabot + npm audit | 🟢 baixo | ~15 min | ✅ npm audit já existia + dependabot criado (2026-07-14) |
 | 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | 🔴 |
-| 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🔴 |
+| 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🟡 analisado — poda baixo-ROI/arriscada, CSS já async+budget → parqueado (2026-07-14) |
 | 2 | 8 — Aliviar vendors (Chart/Supabase) | 🟡 médio | half-day+ | 🔴 |
 | 2 | 9 — Boot otimista (IndexedDB) | 🔴 alto valor | 1–2 dias | 🔴 |
 | 2 | 10 — Split do `dashboard.js` ⭐ | 🔴 alto valor | 2–3 dias | 🔴 |
