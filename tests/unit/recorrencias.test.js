@@ -70,11 +70,42 @@ describe('detectarAssinaturasEsquecidas — detecção verdadeira', () => {
 
 describe('detectarAssinaturasEsquecidas — critérios conservadores', () => {
   test('cobrança antiga (>45 dias sem cobrar) não conta como ativa', () => {
+    // 3 ocorrências e dia consistente — só falha no critério de "ainda ativa".
     const txs = [
-      { categoria: 'saida', tipo: 'Lazer', descricao: 'Spotify', valor: 21.90, data: '01/03/2026' },
-      { categoria: 'saida', tipo: 'Lazer', descricao: 'Spotify', valor: 21.90, data: '31/03/2026' },
+      { categoria: 'saida', tipo: 'Lazer', descricao: 'Spotify', valor: 21.90, data: '02/01/2026' },
+      { categoria: 'saida', tipo: 'Lazer', descricao: 'Spotify', valor: 21.90, data: '01/02/2026' },
+      { categoria: 'saida', tipo: 'Lazer', descricao: 'Spotify', valor: 21.90, data: '03/03/2026' },
     ]
     assert.deepEqual(detectarAssinaturasEsquecidas(txs, [], HOJE), [])
+  })
+
+  test('PEDÁGIO: valor fixo e ~mensal, mas em DIAS ALEATÓRIOS → não é assinatura', () => {
+    // Caso real relatado: pedágio tem valor exatamente fixo e pode cair ~1x/mês,
+    // casando com valor estável + gap mensal. O que o denuncia é o dia do mês.
+    const txs = [
+      { categoria: 'saida_credito', tipo: 'Transporte', descricao: 'Pedagio', valor: 12.80, data: '03/05/2026' },
+      { categoria: 'saida_credito', tipo: 'Transporte', descricao: 'Pedagio', valor: 12.80, data: '31/05/2026' },
+      { categoria: 'saida_credito', tipo: 'Transporte', descricao: 'Pedagio', valor: 12.80, data: '28/06/2026' },
+    ]
+    assert.deepEqual(detectarAssinaturasEsquecidas(txs, [], HOJE), [],
+      'dias 3, 31 e 28 → espalhamento > 3, não é cobrança de assinatura')
+  })
+
+  test('2 ocorrências não bastam — evidência fraca demais', () => {
+    const txs = [
+      { categoria: 'saida', tipo: 'Lazer', descricao: 'Netflix', valor: 39.90, data: '11/06/2026' },
+      { categoria: 'saida', tipo: 'Lazer', descricao: 'Netflix', valor: 39.90, data: '11/07/2026' },
+    ]
+    assert.deepEqual(detectarAssinaturasEsquecidas(txs, [], HOJE), [])
+  })
+
+  test('dia do mês desloca ±3 (fim de semana/mês curto) → ainda é assinatura', () => {
+    const txs = [
+      { categoria: 'saida', tipo: 'Lazer', descricao: 'Disney', valor: 33.90, data: '11/05/2026' },
+      { categoria: 'saida', tipo: 'Lazer', descricao: 'Disney', valor: 33.90, data: '13/06/2026' },
+      { categoria: 'saida', tipo: 'Lazer', descricao: 'Disney', valor: 33.90, data: '12/07/2026' },
+    ]
+    assert.equal(detectarAssinaturasEsquecidas(txs, [], HOJE).length, 1)
   })
 
   test('valor instável (mercado) não é assinatura', () => {

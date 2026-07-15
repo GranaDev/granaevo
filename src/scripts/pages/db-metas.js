@@ -974,58 +974,82 @@ let _metaPagina = 1;
 // pote que enche proporcionalmente — mostra progresso onde antes não havia
 // informação alguma. Construído com createElementNS (nunca innerHTML) — mantém a
 // disciplina anti-XSS do projeto mesmo com valores dinâmicos.
+// Ícone de categoria — usado na tela de DETALHE da reserva (renderMetaVisual).
+// ⚠️ NÃO REMOVER: o card da lista passou a usar o jarro (_criarJarro), mas o detalhe
+// continua usando este ícone. Removê-lo daqui já quebrou a tela uma vez
+// (ReferenceError em renderMetaVisual → os botões de adicionar/retirar sumiam).
+function _metaIconClass(m) {
+    if (String(m.id) === 'emergency') return 'fa-shield-alt';
+    if (m.tipoRendimento && m.tipoRendimento !== 'sem_rendimento') return 'fa-chart-line';
+    return 'fa-piggy-bank';
+}
+
 const _SVG_NS = 'http://www.w3.org/2000/svg';
 // Corpo do pote — serve de contorno E de máscara (clip) do líquido.
-const _JARRO_D = 'M7 8h10v9a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4z';
+// Cantos: topo r=1.5, fundo r=2.5. As laterais ficam RETAS de y=8.5 a 18.5, então o
+// nível sobe de forma linear e legível em qualquer percentual. (A 1ª versão usava
+// r=4 nos dois cantos do fundo, virando um "U": com pouco progresso o líquido
+// enchia só a ponta estreita e praticamente não aparecia.)
+const _JARRO_D = 'M7 7H17A1.5 1.5 0 0 1 18.5 8.5V18.5A2.5 2.5 0 0 1 16 21H8A2.5 2.5 0 0 1 5.5 18.5V8.5A1.5 1.5 0 0 1 7 7Z';
+const _JARRO_TOPO = 7;    // y do topo útil
+const _JARRO_BASE = 21;   // y do fundo útil
+const _JARRO_ALT  = _JARRO_BASE - _JARRO_TOPO;
 
-function _criarJarro(percentual, cor, uid) {
+const _el = (tag, attrs) => {
+    const n = document.createElementNS(_SVG_NS, tag);
+    for (const k in attrs) n.setAttribute(k, String(attrs[k]));
+    return n;
+};
+
+function _criarJarro(percentual, uid) {
     const pct = Math.max(0, Math.min(100, Number(percentual) || 0));
-    const svg = document.createElementNS(_SVG_NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('width', '22');
-    svg.setAttribute('height', '22');
-    svg.setAttribute('aria-hidden', 'true');
+    const svg = _el('svg', { viewBox: '0 0 24 24', width: '22', height: '22', 'aria-hidden': 'true' });
     svg.classList.add('meta-jarro');
 
-    // id do clip precisa ser único por meta (vários jarros na mesma página)
-    const clipId = `jarro-${String(uid).replace(/[^a-zA-Z0-9_-]/g, '')}`;
-    const defs = document.createElementNS(_SVG_NS, 'defs');
-    const clip = document.createElementNS(_SVG_NS, 'clipPath');
-    clip.setAttribute('id', clipId);
-    const clipPath = document.createElementNS(_SVG_NS, 'path');
-    clipPath.setAttribute('d', _JARRO_D);
-    clip.appendChild(clipPath);
+    // ids precisam ser únicos por meta (vários jarros na mesma página)
+    const uidSafe = String(uid).replace(/[^a-zA-Z0-9_-]/g, '');
+    const clipId = `jarroC-${uidSafe}`;
+    const gradId = `jarroG-${uidSafe}`;
+
+    const defs = _el('defs', {});
+    const clip = _el('clipPath', { id: clipId });
+    clip.appendChild(_el('path', { d: _JARRO_D }));
     defs.appendChild(clip);
+
+    // Gradiente vertical dá profundidade ao líquido (claro em cima, fundo mais denso).
+    const grad = _el('linearGradient', { id: gradId, x1: '0', y1: '0', x2: '0', y2: '1' });
+    grad.appendChild(_el('stop', { offset: '0',   'stop-color': '#34d399' }));
+    grad.appendChild(_el('stop', { offset: '1',   'stop-color': '#059669' }));
+    defs.appendChild(grad);
     svg.appendChild(defs);
 
-    // Líquido: sobe do fundo (y=21) até o topo do corpo (y=8) → 13 unidades.
-    const altura = (13 * pct) / 100;
-    const liquido = document.createElementNS(_SVG_NS, 'rect');
-    liquido.setAttribute('x', '6');
-    liquido.setAttribute('y', String(21 - altura));
-    liquido.setAttribute('width', '12');
-    liquido.setAttribute('height', String(altura));
-    liquido.setAttribute('fill', cor);
-    liquido.setAttribute('clip-path', `url(#${clipId})`);
-    svg.appendChild(liquido);
+    // Vidro fosco (fundo do pote), sempre visível — dá corpo mesmo com 0%.
+    svg.appendChild(_el('path', { d: _JARRO_D, fill: 'currentColor', opacity: '.10' }));
 
-    const corpo = document.createElementNS(_SVG_NS, 'path');
-    corpo.setAttribute('d', _JARRO_D);
-    corpo.setAttribute('fill', 'none');
-    corpo.setAttribute('stroke', 'currentColor');
-    corpo.setAttribute('stroke-width', '1.6');
-    corpo.setAttribute('stroke-linejoin', 'round');
-    svg.appendChild(corpo);
+    if (pct > 0) {
+        // Líquido com SUPERFÍCIE ONDULADA — é o detalhe que faz ler como líquido
+        // em vez de "barra de progresso dentro de um pote".
+        const yTopo = _JARRO_BASE - (_JARRO_ALT * pct) / 100;
+        const onda = Math.min(0.7, (_JARRO_ALT * pct) / 100); // sem onda quando é um fio
+        const d = `M4 ${yTopo} Q8 ${yTopo - onda} 12 ${yTopo} T20 ${yTopo} L20 22 L4 22 Z`;
+        svg.appendChild(_el('path', { d, fill: `url(#${gradId})`, 'clip-path': `url(#${clipId})` }));
+    }
 
-    const tampa = document.createElementNS(_SVG_NS, 'rect');
-    tampa.setAttribute('x', '5');
-    tampa.setAttribute('y', '4.5');
-    tampa.setAttribute('width', '14');
-    tampa.setAttribute('height', '3.5');
-    tampa.setAttribute('rx', '1.2');
-    tampa.setAttribute('fill', 'currentColor');
-    tampa.setAttribute('opacity', '.7');
-    svg.appendChild(tampa);
+    // Brilho de vidro — faixa suave à esquerda.
+    svg.appendChild(_el('rect', {
+        x: '7.6', y: '9.4', width: '1.7', height: '7.6', rx: '.85',
+        fill: '#ffffff', opacity: '.14', 'clip-path': `url(#${clipId})`,
+    }));
+
+    // Contorno do pote (neutro — a cor do progresso vive no líquido e no badge %).
+    svg.appendChild(_el('path', {
+        d: _JARRO_D, fill: 'none', stroke: 'currentColor',
+        'stroke-width': '1.4', 'stroke-linejoin': 'round', opacity: '.55',
+    }));
+
+    // Tampa + aro
+    svg.appendChild(_el('rect', { x: '5.2', y: '3.4', width: '13.6', height: '3.2', rx: '1.1', fill: 'currentColor', opacity: '.5' }));
+    svg.appendChild(_el('rect', { x: '8.4', y: '2.2', width: '7.2', height: '1.6', rx: '.8', fill: 'currentColor', opacity: '.35' }));
 
     return svg;
 }

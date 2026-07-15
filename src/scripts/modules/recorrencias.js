@@ -7,7 +7,9 @@
 // Critérios (conservadores, para não gerar falso-positivo):
 //   - categoria 'saida' ou 'saida_credito', EXCLUINDO contas fixas e pagamentos de
 //     fatura (por marcador de origem — ver BUGFIX abaixo)
-//   - ≥ 2 ocorrências com intervalo entre 25 e 36 dias
+//   - ≥ 3 ocorrências com intervalo entre 25 e 36 dias (2 só é coincidência)
+//   - DIA DO MÊS consistente (±3) — assinatura cobra sempre no mesmo dia; pedágio,
+//     mercado e afins caem em dia aleatório. É o discriminador mais forte.
 //   - variação de valor ≤ 15% (ou ≤ R$ 2 p/ valores pequenos)
 //   - última cobrança nos últimos 45 dias (ainda ativa)
 //   - descrição não bate com nenhuma assinatura já cadastrada
@@ -79,7 +81,12 @@ export function detectarAssinaturasEsquecidas(transacoes, assinaturas, hoje = ne
     const MS_DIA = 86_400_000;
 
     for (const [key, occ] of grupos) {
-        if (occ.length < 2) continue;
+        // ≥3 ocorrências (2 gaps). Com 2, a evidência é fraca demais: qualquer par de
+        // compras iguais ~30 dias apart vira "assinatura" (caso real: PEDÁGIO — valor
+        // exatamente fixo, passou 2x com ~1 mês de diferença). Assinatura de verdade
+        // aparece 3 meses seguidos; precisão importa mais que rapidez aqui, porque um
+        // falso-positivo destrói a confiança na feature.
+        if (occ.length < 3) continue;
 
         // já cadastrada? (match por inclusão nos dois sentidos)
         let registrada = false;
@@ -99,6 +106,13 @@ export function detectarAssinaturasEsquecidas(transacoes, assinaturas, hoje = ne
             if (gap >= 25 && gap <= 36) gapsMensais++;
         }
         if (gapsTotal === 0 || gapsMensais < Math.max(1, gapsTotal - 1)) continue;
+
+        // DIA DO MÊS CONSISTENTE — o discriminador mais forte contra falso-positivo.
+        // Assinatura cobra sempre no mesmo dia (11, 11, 11); pedágio/compra cai em dia
+        // aleatório (3, 27, 14). Tolera ±3 dias: fim de semana/feriado deslocam a
+        // cobrança, e mês curto joga o dia 31 para 30/29/28.
+        const diasMes = occ.map(o => o.dt.getDate());
+        if (Math.max(...diasMes) - Math.min(...diasMes) > 3) continue;
 
         // valor estável
         const vals = occ.map(o => o.v);
