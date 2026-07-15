@@ -34,6 +34,11 @@ jobs:
       - name: Unit tests (lógica financeira — sem rede, idempotente)
         run: npm run test:unit
 
+      # O rollup trata função inexistente como global e só avisa — o build passa verde
+      # e vira ReferenceError no navegador do usuário. Já aconteceu (botões das reservas).
+      - name: Chamadas órfãs (função chamada que não existe)
+        run: npm run check:refs
+
       - name: Build
         run: npm run build
 

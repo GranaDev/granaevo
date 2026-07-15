@@ -350,7 +350,7 @@ async function alterarNome() {
                 _ctx.usuarioLogado.perfis[idx].nome = novoNome;
             }
 
-            atualizarNomeUsuario();
+            _ctx.atualizarNomeUsuario();
             await _ctx.salvarDados();
             _ctx.fecharPopup();
             _ctx.mostrarNotificacao('Nome alterado com sucesso!', 'success');

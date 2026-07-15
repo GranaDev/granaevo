@@ -1879,9 +1879,9 @@ function processarPagamentoCompra(faturaId, compraId, valorPago) {
     } catch (erro) {
         _ctx._log.error('PAG_COMPRA_001', erro);
 
-        rollbackArray(_ctx.transacoes,     snapshotTransacoes);
-        rollbackArray(_ctx.contasFixas,    snapshotContasFixas);
-        rollbackArray(_ctx.cartoesCredito, snapshotCartoes);
+        _ctx.rollbackArray(_ctx.transacoes,     snapshotTransacoes);
+        _ctx.rollbackArray(_ctx.contasFixas,    snapshotContasFixas);
+        _ctx.rollbackArray(_ctx.cartoesCredito, snapshotCartoes);
 
         compra._processando = false;
         _ctx.mostrarNotificacao('Erro ao processar pagamento. Nenhuma alteração foi salva.', 'error');

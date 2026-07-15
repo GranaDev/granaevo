@@ -2264,6 +2264,11 @@ function _makeCtx() {
         atualizarListaContasFixas: { value: (...a) => atualizarListaContasFixas(...a), enumerable: true },
         verificarVencimentos:      { value: (...a) => verificarVencimentos(...a),      enumerable: true },
         atualizarBadgeVencimentos: { value: (...a) => atualizarBadgeVencimentos(...a), enumerable: true },
+        // As 3 abaixo eram chamadas pelas pages lazy SEM estar no ctx — ReferenceError
+        // silencioso desde o split de dashboard.js (achado por scripts/check-refs.mjs).
+        atualizarHeaderReservas:   { value: (...a) => atualizarHeaderReservas(...a),   enumerable: true },
+        atualizarNomeUsuario:      { value: (...a) => atualizarNomeUsuario(...a),      enumerable: true },
+        rollbackArray:             { value: (...a) => rollbackArray(...a),             enumerable: true },
         _requerPerfilAtivo:        { value: (...a) => _requerPerfilAtivo(...a),        enumerable: true },
         _requerNonce:              { value: (...a) => _requerNonce(...a),              enumerable: true },
         desenharGraficoLinha:      { value: (...a) => desenharGraficoLinha(...a),      enumerable: true },

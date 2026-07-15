@@ -1312,7 +1312,7 @@ function removerMeta(id) {
     _ctx.salvarDados();
     _ctx.renderMetasList();
     _ctx.atualizarTudo();
-    atualizarHeaderReservas();
+    _ctx.atualizarHeaderReservas();
 }
 
 function selecionarMeta(id) {
