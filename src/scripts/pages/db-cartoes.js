@@ -414,6 +414,120 @@ function _buildAssinaturasSection() {
 }
 
 // ========== ASSINATURAS — GERENCIAR (editar valor/dia, cancelar/reativar, excluir) ==========
+// ── Alteração de valor da assinatura ──────────────────────────────────────────
+// Regra de ouro: fatura PAGA nunca é reescrita. Ela registra o que o usuário
+// realmente pagou (e o `cartao.usado` dela já foi baixado no pagamento, db-cartoes
+// :1723) — mexer nela desincronizaria a fatura do lançamento de pagamento.
+// Faturas em ABERTO ainda são corrigíveis: ajustamos a compra, recalculamos o total
+// (mesma soma de valorParcela usada em _processarCobrancaAssinatura) e movemos o
+// `usado` pelo delta.
+function _aplicarNovoValorAssinatura(a, novoValor, corrigirPassado) {
+    const cartao  = _ctx.cartoesCredito.find(c => String(c.id) === String(a.cartaoId));
+    const hojeISO = _ctx.isoDate();
+    let faturasAtualizadas = 0;
+
+    for (const f of (_ctx.contasFixas || [])) {
+        if (f.tipoContaFixa !== 'fatura_cartao') continue;
+        if (String(f.cartaoId) !== String(a.cartaoId)) continue;
+        if (f.pago === true) continue;                       // fatura paga = histórico real
+        if (!Array.isArray(f.compras)) continue;
+        // Sem "corrigir passado": só o ciclo atual e os futuros (vencimento >= hoje).
+        if (!corrigirPassado && String(f.vencimento || '') < hojeISO) continue;
+
+        let mudou = false;
+        for (const c of f.compras) {
+            if (String(c.assinaturaId ?? '') !== String(a.id)) continue;
+            const antes = Number(c.valorParcela) || 0;
+            if (Math.abs(antes - novoValor) < 0.01) continue;
+            c.valorTotal   = novoValor;
+            c.valorParcela = novoValor;
+            if (cartao) cartao.usado = Math.max(0, (cartao.usado || 0) - antes + novoValor);
+            mudou = true;
+        }
+        if (mudou) {
+            f.valor = f.compras.reduce((s, c) => {
+                const p = parseFloat(c.valorParcela);
+                return s + (isFinite(p) && p > 0 ? p : 0);
+            }, 0);
+            faturasAtualizadas++;
+        }
+    }
+    return faturasAtualizadas;
+}
+
+function _finalizarAlteracaoAssinatura(faturasAtualizadas) {
+    _ctx.salvarDados();
+    atualizarTelaCartoes();
+    _ctx.fecharPopup();
+    _ctx.mostrarNotificacao(
+        faturasAtualizadas > 0
+            ? `Assinatura atualizada — ${faturasAtualizadas} fatura${faturasAtualizadas > 1 ? 's' : ''} em aberto corrigida${faturasAtualizadas > 1 ? 's' : ''}.`
+            : 'Assinatura atualizada com sucesso!',
+        'success',
+    );
+}
+
+// Pergunta o ALCANCE da mudança de valor. As duas intenções são diferentes:
+//   • preço subiu   → o histórico está certo; corrigir só o que ainda não fechou.
+//   • cadastrei errado → o histórico está errado; corrigir também os meses anteriores
+//     que ainda dá (faturas em aberto). Faturas pagas nunca são tocadas.
+function _perguntarEscopoValor(a, novoValor, novoDia, valorAntigo) {
+    _ctx.criarPopupDOM((popup) => {
+        popup.style.cssText = 'max-width: 430px; width: 95%;';
+
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'text-align:center; margin-bottom:6px;';
+        titulo.textContent = 'O que mudou?';
+        popup.appendChild(titulo);
+
+        const resumo = document.createElement('p');
+        resumo.style.cssText = 'text-align:center; color:var(--text-secondary); font-size:0.85rem; margin-bottom:16px;';
+        resumo.textContent = `${_ctx._sanitizeText(a.nome)}: ${formatBRL(valorAntigo)} → ${formatBRL(novoValor)}`;
+        popup.appendChild(resumo);
+
+        const mkOpcao = (titulo, desc, corrigirPassado, classe) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = classe;
+            btn.style.cssText = 'display:block; width:100%; text-align:left; margin-bottom:10px; padding:12px 14px; line-height:1.4;';
+            const t = document.createElement('div');
+            t.style.cssText = 'font-weight:700; margin-bottom:3px;';
+            t.textContent = titulo;
+            const d = document.createElement('div');
+            d.style.cssText = 'font-size:0.76rem; opacity:.85; font-weight:400;';
+            d.textContent = desc;
+            btn.appendChild(t);
+            btn.appendChild(d);
+            btn.addEventListener('click', () => {
+                a.valor       = novoValor;
+                a.diaCobranca = novoDia;
+                const n = _aplicarNovoValorAssinatura(a, novoValor, corrigirPassado);
+                _finalizarAlteracaoAssinatura(n);
+            });
+            return btn;
+        };
+
+        popup.appendChild(mkOpcao(
+            'O preço mudou',
+            'Passa a valer deste mês em diante. As faturas já pagas continuam como estão — você pagou aquilo mesmo.',
+            false, 'btn-primary',
+        ));
+        popup.appendChild(mkOpcao(
+            'Eu tinha cadastrado errado',
+            'Corrige também os meses anteriores que ainda estão em aberto. Faturas já pagas não são alteradas.',
+            true, 'btn-cancelar',
+        ));
+
+        const btnVoltar = document.createElement('button');
+        btnVoltar.type = 'button';
+        btnVoltar.className = 'btn-cancelar';
+        btnVoltar.style.cssText = 'width:100%; margin-top:4px;';
+        btnVoltar.textContent = 'Cancelar';
+        btnVoltar.addEventListener('click', () => _ctx.fecharPopup());
+        popup.appendChild(btnVoltar);
+    });
+}
+
 function abrirGerenciarAssinatura(assinaturaId) {
     const a = _ctx.assinaturas.find(x => String(x.id) === String(assinaturaId));
     if (!a) return;
@@ -498,20 +612,27 @@ function abrirGerenciarAssinatura(assinaturaId) {
         btnSalvar.className   = 'btn-primary';
         btnSalvar.type        = 'button';
         btnSalvar.style.marginTop = '16px';
-        btnSalvar.textContent = 'Salvar Alterações';
+        btnSalvar.textContent = 'Alterar valor da assinatura';
         btnSalvar.addEventListener('click', () => {
             const novoValor = parseFloat(parseFloat(inputValor.value).toFixed(2));
             const novoDia   = Number(selectDia.value);
             if (!isFinite(novoValor) || novoValor <= 0 || novoValor > 99999999) { _ctx.mostrarNotificacao('Informe um valor válido e positivo.', 'error'); return; }
             if (!Number.isInteger(novoDia) || novoDia < 1 || novoDia > 28)      { _ctx.mostrarNotificacao('Dia de cobrança inválido.', 'error'); return; }
 
-            a.valor       = novoValor;
-            a.diaCobranca = novoDia;
+            const valorAntigo = Number(a.valor) || 0;
+            const valorMudou  = Math.abs(novoValor - valorAntigo) >= 0.01;
 
-            _ctx.salvarDados();
-            atualizarTelaCartoes();
-            _ctx.fecharPopup();
-            _ctx.mostrarNotificacao('Assinatura atualizada com sucesso!', 'success');
+            // Só o dia mudou → nada de fatura para mexer, salva direto.
+            if (!valorMudou) {
+                a.diaCobranca = novoDia;
+                _finalizarAlteracaoAssinatura(0);
+                return;
+            }
+
+            // O valor mudou: "subiu de preço" e "cadastrei errado" pedem alcances
+            // diferentes. Perguntar 1x custa um clique e evita reescrever histórico
+            // por engano (ou deixar meses errados por falta de opção).
+            _perguntarEscopoValor(a, novoValor, novoDia, valorAntigo);
         });
         popup.appendChild(btnSalvar);
 
