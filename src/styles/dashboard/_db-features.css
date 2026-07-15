@@ -494,8 +494,14 @@
 .rec-vazio i {
     font-size: 1.8rem;
     color: var(--color-success);
-    display: block;
-    margin-bottom: 10px;
+    /* flex centraliza o glifo de verdade. Antes era display:block dependendo do
+       text-align herdado — o <i> virava caixa full-width e o ícone saía torto. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin: 0 0 10px;
+    line-height: 1;
 }
 
 /* ── Desafios ────────────────────────────────────────────────────────────── */

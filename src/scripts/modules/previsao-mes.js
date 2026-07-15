@@ -8,12 +8,13 @@
 //            − (média diária de gasto variável × dias restantes)
 //
 // 100% client-side, matemática pura — nenhum dado sai do navegador.
-// Render: card no dashboard (#previsaoSlot) + popup de detalhamento.
+// Render: card DENTRO do popup "Onde foi meu dinheiro?" (db-relatorios) via
+// renderPrevisaoEm() + popup de detalhamento. Saiu do dashboard em 2026-07-14
+// para não floodar a home.
 // Todo dado dinâmico entra via textContent (imune a XSS).
 // ----------------------------------------------------------------------------
 
 let _ctx = null;
-let _debounceTimer = null;
 
 // ── Datas ─────────────────────────────────────────────────────────────────────
 // t.data chega como "DD/MM/YYYY" (padrão do app) ou "YYYY-MM-DD" (legado/import).
@@ -162,20 +163,22 @@ export function calcularPrevisao(ctx, hoje = new Date()) {
 }
 
 // ── Render do card ────────────────────────────────────────────────────────────
-function _render() {
-    if (!_ctx) return;
-    const slot = document.getElementById('previsaoSlot');
-    if (!slot) return;
+/**
+ * Renderiza o card num container qualquer.
+ * Mora dentro do "Onde foi meu dinheiro?" (db-relatorios) — saiu do dashboard em
+ * 2026-07-14 para não floodar a home, e porque é o contexto certo: quem quer saber
+ * para onde o dinheiro FOI também quer saber onde ele VAI PARAR no fim do mês.
+ */
+export function renderPrevisaoEm(container, ctx) {
+    if (!container || !ctx) return;
+    _ctx = ctx;
+    container.textContent = '';
 
-    // Sem transações ainda → não polui o dashboard de quem está começando
-    if (!Array.isArray(_ctx.transacoes) || _ctx.transacoes.length < 3) {
-        slot.innerHTML = '';
-        return;
-    }
+    // Sem transações suficientes → não mostra uma projeção sem base
+    if (!Array.isArray(ctx.transacoes) || ctx.transacoes.length < 3) return;
 
-    const r = calcularPrevisao(_ctx);
-
-    slot.innerHTML = '';
+    const r = calcularPrevisao(ctx);
+    const slot = container;
     const card = document.createElement('div');
     card.className = 'previsao-card';
     card.setAttribute('role', 'button');
@@ -275,15 +278,6 @@ function _abrirDetalhe(r) {
     });
 }
 
-/** Boot: chamado pelo dashboard via import() após o carregamento inicial. */
-export function initPrevisao(ctx) {
-    _ctx = ctx;
-    _render();
-    // Recalcula após cada save (dados mudaram) — debounced p/ saves em rajada
-    document.addEventListener('ge:save-done', () => {
-        clearTimeout(_debounceTimer);
-        _debounceTimer = setTimeout(_render, 1_200);
-    });
-}
-
-export function atualizarPrevisao() { _render(); }
+// Não há mais boot no dashboard: o card é renderizado sob demanda por
+// renderPrevisaoEm(), quando o popup "Onde foi meu dinheiro?" abre. Isso dispensa
+// o listener de `ge:save-done` — o popup sempre recalcula ao abrir.

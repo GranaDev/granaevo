@@ -10,22 +10,9 @@
  */
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { calcScore, nivelDe, scoreEm100 } from '../../src/scripts/modules/score-financeiro.js'
+import { calcScore, nivelDe } from '../../src/scripts/modules/score-financeiro.js'
 
 const JULHO = new Date(2026, 6, 15)
-
-describe('scoreEm100 — índice do semáforo', () => {
-  test('1000 → 100 e 0 → 0', () => {
-    assert.equal(scoreEm100(1000), 100)
-    assert.equal(scoreEm100(0), 0)
-  })
-  test('850 → 85 (arredonda por 10)', () => assert.equal(scoreEm100(850), 85))
-  test('clampa e trata lixo', () => {
-    assert.equal(scoreEm100(5000), 100)
-    assert.equal(scoreEm100(-50), 0)
-    assert.equal(scoreEm100('abc'), 0)
-  })
-})
 
 describe('nivelDe — faixas', () => {
   test('limites de cada nível', () => {
@@ -98,7 +85,6 @@ describe('calcScore — componentes', () => {
     // 200 (C1) + 100 (C2) + 150 (C3) + 0 (C4) + 75 (C5) = 525
     assert.equal(r.score, 525)
     assert.equal(r.nivel.letra, 'D')
-    assert.equal(scoreEm100(r.score), 53)
   })
 })
 

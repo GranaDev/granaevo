@@ -1821,9 +1821,8 @@ function _bootFeatureModules() {
     const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2_500));
     idle(() => {
         const ctx = _makeCtx();
-        import('../modules/previsao-mes.js?v=1')
-            .then(m => m.initPrevisao(ctx))
-            .catch(e => _log.error('FEAT_PREVISAO_001', e));
+        // Previsão de fim de mês NÃO entra aqui: mora dentro do popup "Onde foi meu
+        // dinheiro?" (db-relatorios) desde 2026-07-14, para não floodar a home.
         import('../modules/desafios.js?v=1')
             .then(m => m.initDesafios(ctx))
             .catch(e => _log.error('FEAT_DESAFIOS_001', e));
@@ -1841,11 +1840,8 @@ function _bootFeatureModules() {
         import('../modules/duplicados.js?v=1')
             .then(m => m.initAvisoDuplicados(ctx))
             .catch(e => _log.error('FEAT_DUP_001', e));
-        // Semáforo de saúde financeira (0–100). Motor extraído de db-relatorios.js
-        // → o dashboard mostra o resumo sem carregar o chunk de relatórios.
-        import('../modules/score-financeiro.js?v=1')
-            .then(m => m.initSemaforoSaude(ctx))
-            .catch(e => _log.error('FEAT_SAUDE_001', e));
+        // Semáforo de saúde financeira REMOVIDO daqui (2026-07-14): o score já vive
+        // na aba Relatórios (gauge + histórico) e o dashboard estava poluído.
     });
 }
 

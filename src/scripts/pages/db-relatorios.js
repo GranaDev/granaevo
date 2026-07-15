@@ -2742,6 +2742,18 @@ function abrirWidgetOndeForDinheiro() {
 
         wrapper.appendChild(titulo);
         wrapper.appendChild(subtitulo);
+
+        // ── Previsão de fim de mês ──────────────────────────────────────────
+        // Vive AQUI (e não no dashboard) desde 2026-07-14: a home estava ficando
+        // poluída, e este é o contexto certo — quem quer saber para onde o dinheiro
+        // FOI também quer saber onde ele VAI PARAR no fim do mês. Lazy e
+        // best-effort: se falhar, a análise continua funcionando.
+        const previsaoBox = document.createElement('div');
+        wrapper.appendChild(previsaoBox);
+        import('../modules/previsao-mes.js?v=2')
+            .then(m => m.renderPrevisaoEm(previsaoBox, _ctx))
+            .catch(() => { /* previsão é complemento — nunca quebra a análise */ });
+
         wrapper.appendChild(rowFiltros);
         wrapper.appendChild(btnAnalisar);
         wrapper.appendChild(resultadoDiv);
