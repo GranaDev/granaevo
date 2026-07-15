@@ -191,6 +191,55 @@
 }
 .dup-acoes > button { flex: 1; }
 
+/* ── Semáforo de saúde financeira (score-financeiro.js) ─────────────────────
+   A cor do nível é dinâmica (vem do motor) → aplicada via style inline, que a CSP
+   do dashboard permite (style-src-attr 'unsafe-inline'). Aqui só a estrutura.   */
+.saude-barra {
+    height: 6px;
+    border-radius: 99px;
+    background: var(--color-border);
+    overflow: hidden;
+    margin-top: 6px;
+}
+.saude-barra__fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--color-success);
+    transition: width .35s ease;
+}
+.saude-pop-valor {
+    font-size: 1.7rem;
+    font-weight: var(--fw-bold, 700);
+    margin: 10px 0 16px;
+    text-align: center;
+}
+.saude-pop-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.saude-pop-topo {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: var(--text-sm, .85rem);
+    font-weight: var(--fw-semibold, 600);
+}
+.saude-pop-pts {
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-muted);
+    font-weight: var(--fw-semibold, 600);
+}
+.saude-pop-dica {
+    font-size: var(--text-xs, .75rem);
+    color: var(--color-text-muted);
+    margin-top: 5px;
+    line-height: var(--leading-normal, 1.5);
+}
+@media (prefers-reduced-motion: reduce) {
+    .saude-barra__fill { transition: none; }
+}
+
 .previsao-pop-valor {
     font-size: 1.7rem;
     font-weight: var(--fw-bold, 700);

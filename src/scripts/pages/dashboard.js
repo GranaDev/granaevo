@@ -1841,6 +1841,11 @@ function _bootFeatureModules() {
         import('../modules/duplicados.js?v=1')
             .then(m => m.initAvisoDuplicados(ctx))
             .catch(e => _log.error('FEAT_DUP_001', e));
+        // Semáforo de saúde financeira (0–100). Motor extraído de db-relatorios.js
+        // → o dashboard mostra o resumo sem carregar o chunk de relatórios.
+        import('../modules/score-financeiro.js?v=1')
+            .then(m => m.initSemaforoSaude(ctx))
+            .catch(e => _log.error('FEAT_SAUDE_001', e));
     });
 }
 
