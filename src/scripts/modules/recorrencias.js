@@ -168,10 +168,10 @@ function _renderAviso() {
     const totalAnual = achados.reduce((s, a) => s + a.valorAnual, 0);
 
     const card = document.createElement('div');
-    card.className = 'assin-aviso';
+    card.className = 'aviso-card';
 
     const iconWrap = document.createElement('div');
-    iconWrap.className = 'assin-aviso__icon';
+    iconWrap.className = 'aviso-card__icon';
     const ic = document.createElement('i');
     ic.className = 'fas fa-repeat';
     ic.setAttribute('aria-hidden', 'true');
@@ -179,18 +179,18 @@ function _renderAviso() {
 
     const body = document.createElement('button');
     body.type = 'button';
-    body.className = 'assin-aviso__body';
+    body.className = 'aviso-card__body';
 
     const label = document.createElement('div');
-    label.className = 'assin-aviso__label';
+    label.className = 'aviso-card__label';
     label.textContent = 'Você ainda usa?';
 
     const valor = document.createElement('div');
-    valor.className = 'assin-aviso__valor';
+    valor.className = 'aviso-card__valor';
     valor.textContent = `${_ctxAviso.formatBRL(totalAnual)} / ano`;
 
     const sub = document.createElement('div');
-    sub.className = 'assin-aviso__sub';
+    sub.className = 'aviso-card__sub';
     sub.textContent = achados.length === 1
         ? '1 cobrança recorrente que você não registrou · toque para ver'
         : `${achados.length} cobranças recorrentes que você não registrou · toque para ver`;
@@ -202,7 +202,7 @@ function _renderAviso() {
 
     const fechar = document.createElement('button');
     fechar.type = 'button';
-    fechar.className = 'assin-aviso__fechar';
+    fechar.className = 'aviso-card__fechar';
     fechar.setAttribute('aria-label', 'Dispensar este aviso por 30 dias');
     const fi = document.createElement('i');
     fi.className = 'fas fa-xmark';

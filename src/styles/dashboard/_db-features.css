@@ -59,10 +59,12 @@
 }
 .previsao-seta { color: var(--color-text-faint); font-size: .8rem; }
 
-/* ── Aviso proativo: assinaturas não registradas (recorrencias.js) ───────────
-   Mesmo padrão visual do card de previsão. Usa SOMENTE tokens → o tema claro sai
-   de graça (nenhuma regra precisa ir para o _db-light-theme extraído).          */
-.assin-aviso {
+/* ── Card de aviso proativo (padrão compartilhado) ───────────────────────────
+   Usado por: recorrencias.js (assinaturas não registradas) e duplicados.js
+   (lançamentos repetidos). Mesmo padrão visual do card de previsão. Usa SOMENTE
+   tokens → o tema claro sai de graça (nada precisa ir para o _db-light-theme
+   extraído). Ao criar um 3º aviso, REUSE estas classes em vez de copiar.        */
+.aviso-card {
     display: flex;
     align-items: center;
     gap: 14px;
@@ -73,8 +75,8 @@
     border-radius: var(--radius-lg, 16px);
     transition: border-color .18s ease;
 }
-.assin-aviso:hover { border-color: var(--color-border-strong); }
-.assin-aviso__icon {
+.aviso-card:hover { border-color: var(--color-border-strong); }
+.aviso-card__icon {
     flex: 0 0 auto;
     width: 42px;
     height: 42px;
@@ -86,7 +88,7 @@
     background: color-mix(in srgb, var(--color-warning) 14%, transparent);
     color: var(--color-warning);
 }
-.assin-aviso__body {
+.aviso-card__body {
     flex: 1 1 auto;
     min-width: 0;
     text-align: left;
@@ -97,32 +99,32 @@
     color: inherit;
     cursor: pointer;
 }
-.assin-aviso__body:focus-visible {
+.aviso-card__body:focus-visible {
     outline: 2px solid var(--color-warning);
     outline-offset: 3px;
     border-radius: 8px;
 }
-.assin-aviso__label {
+.aviso-card__label {
     font-size: var(--text-xs, .75rem);
     color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: .04em;
     font-weight: var(--fw-semibold, 600);
 }
-.assin-aviso__valor {
+.aviso-card__valor {
     font-size: 1.35rem;
     font-weight: var(--fw-bold, 700);
     line-height: var(--leading-tight, 1.2);
     color: var(--color-warning);
 }
-.assin-aviso__sub {
+.aviso-card__sub {
     font-size: var(--text-xs, .75rem);
     color: var(--color-text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.assin-aviso__fechar {
+.aviso-card__fechar {
     flex: 0 0 auto;
     background: none;
     border: 0;
@@ -133,11 +135,61 @@
     font-size: .9rem;
     line-height: 1;
 }
-.assin-aviso__fechar:hover { color: var(--color-text-muted); }
-.assin-aviso__fechar:focus-visible {
+.aviso-card__fechar:hover { color: var(--color-text-muted); }
+.aviso-card__fechar:focus-visible {
     outline: 2px solid var(--color-border-strong);
     outline-offset: 2px;
 }
+
+/* ── Popup de revisão de lançamentos repetidos (duplicados.js) ─────────────── */
+.dup-intro,
+.dup-dica {
+    font-size: var(--text-sm, .85rem);
+    color: var(--color-text-muted);
+    line-height: var(--leading-normal, 1.5);
+}
+.dup-dica { margin-top: 12px; }
+.dup-vazio {
+    text-align: center;
+    color: var(--color-text-muted);
+    padding: 12px 0;
+}
+.dup-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 14px 0 4px;
+}
+.dup-row {
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-warning);
+    border-radius: 10px;
+    background: var(--color-bg-card);
+}
+.dup-row-nome {
+    font-weight: var(--fw-semibold, 600);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dup-row-meta {
+    font-size: var(--text-xs, .75rem);
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+.dup-row-impacto {
+    font-size: var(--text-xs, .75rem);
+    color: var(--color-warning);
+    font-weight: var(--fw-semibold, 600);
+    margin-top: 4px;
+}
+.dup-acoes {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+.dup-acoes > button { flex: 1; }
 
 .previsao-pop-valor {
     font-size: 1.7rem;

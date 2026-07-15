@@ -1836,6 +1836,11 @@ function _bootFeatureModules() {
         import('../modules/recorrencias.js?v=2')
             .then(m => m.initAvisoAssinaturas(ctx))
             .catch(e => _log.error('FEAT_ASSIN_001', e));
+        // Aviso de lançamentos repetidos — app é 100% manual, duplicar é comum e
+        // contamina saldo/previsão/relatórios. Só PERGUNTA; não apaga nada.
+        import('../modules/duplicados.js?v=1')
+            .then(m => m.initAvisoDuplicados(ctx))
+            .catch(e => _log.error('FEAT_DUP_001', e));
     });
 }
 
@@ -2266,6 +2271,9 @@ function _makeCtx() {
         exportarDadosCSV:          { value: (...a) => exportarDadosCSV(...a),          enumerable: true },
         sistemaLog:                { get: () => sistemaLog,                             enumerable: true },
         mostrarSelecaoPerfis:      { value: (...a) => mostrarSelecaoPerfis(...a),      enumerable: true },
+        // Navegação entre abas — usada por avisos proativos que levam o usuário
+        // até a tela onde a ação correta existe (ex.: duplicados.js → Transações).
+        mostrarTela:               { value: (...a) => mostrarTela(...a),              enumerable: true },
         validarUserData:           { value: (...a) => validarUserData(...a),           enumerable: true },
         safeCategorias:            { value: (...a) => safeCategorias(...a),            enumerable: true },
         sanitizarHTMLPopup:        { value: (...a) => sanitizarHTMLPopup(...a),        enumerable: true },
