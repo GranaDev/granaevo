@@ -5,7 +5,8 @@
 // e mostra quanto elas custam por ano. 100% client-side, matemática pura.
 //
 // Critérios (conservadores, para não gerar falso-positivo):
-//   - categoria 'saida' ou 'saida_credito', excluindo 'Conta fixa' e 'Cartão'
+//   - categoria 'saida' ou 'saida_credito', EXCLUINDO contas fixas e pagamentos de
+//     fatura (por marcador de origem — ver BUGFIX abaixo)
 //   - ≥ 2 ocorrências com intervalo entre 25 e 36 dias
 //   - variação de valor ≤ 15% (ou ≤ R$ 2 p/ valores pequenos)
 //   - última cobrança nos últimos 45 dias (ainda ativa)
@@ -43,13 +44,20 @@ function _norm(s) {
  * Retorna candidatos: [{ nome, valorMensal, valorAnual, ocorrencias, ultima }]
  * ordenados do mais caro para o mais barato (máx. 10).
  */
-export function detectarAssinaturasEsquecidas(transacoes, assinaturas) {
+export function detectarAssinaturasEsquecidas(transacoes, assinaturas, hoje = new Date()) {
     const grupos = new Map();
-    const hoje = new Date();
 
     for (const t of (transacoes || [])) {
         if (t.categoria !== 'saida' && t.categoria !== 'saida_credito') continue;
-        if (t.tipo === 'Conta fixa' || t.tipo === 'Cartão') continue;
+        // BUGFIX (2026-07-14): a exclusão usava t.tipo === 'Conta fixa'/'Cartão', mas os
+        // tipos REAIS gravados são 'Conta Fixa' (F maiúsculo) e 'Pagamento Cartão' —
+        // nunca casavam. Como conta fixa é justamente o padrão que o detector procura
+        // (mensal + valor estável), aluguel/luz apareciam como "assinatura esquecida"
+        // (falso-positivo grave). Agora exclui por MARCADOR de origem (id — robusto a
+        // rótulo) + pelos tipos corretos.
+        if (t.contaFixaId != null || t.faturaId != null || t.compraId != null) continue;
+        if (t.tipo === 'Conta Fixa' || t.tipo === 'Conta fixa' ||
+            t.tipo === 'Pagamento Cartão' || t.tipo === 'Cartão') continue;
         const dt = _txDate(t.data);
         const v  = Number(t.valor);
         if (!dt || !Number.isFinite(v) || v <= 0) continue;
