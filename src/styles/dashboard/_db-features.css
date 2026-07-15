@@ -240,6 +240,27 @@
     .saude-barra__fill { transition: none; }
 }
 
+/* ── Cofre visual (jarro) + confetti (db-metas.js / celebracao.js) ─────────── */
+.meta-jarro {
+    display: block;
+    /* o líquido sobe animado quando a meta cresce */
+    transition: opacity .2s ease;
+}
+.meta-jarro rect[clip-path] {
+    transition: y .5s ease, height .5s ease;
+}
+.confetti-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;   /* nunca bloqueia clique */
+    z-index: 9999;
+}
+@media (prefers-reduced-motion: reduce) {
+    .meta-jarro rect[clip-path] { transition: none; }
+}
+
 .previsao-pop-valor {
     font-size: 1.7rem;
     font-weight: var(--fw-bold, 700);

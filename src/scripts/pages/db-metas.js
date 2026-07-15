@@ -969,10 +969,65 @@ function _sincronizarContaFixaAporte(meta, aporteAtivo, valorAporte, aporteAnter
 const _META_POR_PAGINA = 5;
 let _metaPagina = 1;
 
-function _metaIconClass(m) {
-    if (String(m.id) === 'emergency') return 'fa-shield-alt';
-    if (m.tipoRendimento && m.tipoRendimento !== 'sem_rendimento') return 'fa-chart-line';
-    return 'fa-piggy-bank';
+// ── Cofre visual: jarro que enche conforme a meta cresce ──────────────────────
+// Substitui o ícone estático (era um fa-piggy-bank que não dizia nada) por um
+// pote que enche proporcionalmente — mostra progresso onde antes não havia
+// informação alguma. Construído com createElementNS (nunca innerHTML) — mantém a
+// disciplina anti-XSS do projeto mesmo com valores dinâmicos.
+const _SVG_NS = 'http://www.w3.org/2000/svg';
+// Corpo do pote — serve de contorno E de máscara (clip) do líquido.
+const _JARRO_D = 'M7 8h10v9a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4z';
+
+function _criarJarro(percentual, cor, uid) {
+    const pct = Math.max(0, Math.min(100, Number(percentual) || 0));
+    const svg = document.createElementNS(_SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '22');
+    svg.setAttribute('height', '22');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add('meta-jarro');
+
+    // id do clip precisa ser único por meta (vários jarros na mesma página)
+    const clipId = `jarro-${String(uid).replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const defs = document.createElementNS(_SVG_NS, 'defs');
+    const clip = document.createElementNS(_SVG_NS, 'clipPath');
+    clip.setAttribute('id', clipId);
+    const clipPath = document.createElementNS(_SVG_NS, 'path');
+    clipPath.setAttribute('d', _JARRO_D);
+    clip.appendChild(clipPath);
+    defs.appendChild(clip);
+    svg.appendChild(defs);
+
+    // Líquido: sobe do fundo (y=21) até o topo do corpo (y=8) → 13 unidades.
+    const altura = (13 * pct) / 100;
+    const liquido = document.createElementNS(_SVG_NS, 'rect');
+    liquido.setAttribute('x', '6');
+    liquido.setAttribute('y', String(21 - altura));
+    liquido.setAttribute('width', '12');
+    liquido.setAttribute('height', String(altura));
+    liquido.setAttribute('fill', cor);
+    liquido.setAttribute('clip-path', `url(#${clipId})`);
+    svg.appendChild(liquido);
+
+    const corpo = document.createElementNS(_SVG_NS, 'path');
+    corpo.setAttribute('d', _JARRO_D);
+    corpo.setAttribute('fill', 'none');
+    corpo.setAttribute('stroke', 'currentColor');
+    corpo.setAttribute('stroke-width', '1.6');
+    corpo.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(corpo);
+
+    const tampa = document.createElementNS(_SVG_NS, 'rect');
+    tampa.setAttribute('x', '5');
+    tampa.setAttribute('y', '4.5');
+    tampa.setAttribute('width', '14');
+    tampa.setAttribute('height', '3.5');
+    tampa.setAttribute('rx', '1.2');
+    tampa.setAttribute('fill', 'currentColor');
+    tampa.setAttribute('opacity', '.7');
+    svg.appendChild(tampa);
+
+    return svg;
 }
 
 function renderMetasList() {
@@ -1051,10 +1106,8 @@ function renderMetasList() {
 
         const iconWrap = document.createElement('div');
         iconWrap.className = 'meta-item-icon';
-        const iconI = document.createElement('i');
-        iconI.className = `fas ${_metaIconClass(m)}`;
-        iconI.setAttribute('aria-hidden', 'true');
-        iconWrap.appendChild(iconI);
+        iconWrap.style.color = corProgresso;
+        iconWrap.appendChild(_criarJarro(percentual, corProgresso, m.id));
 
         const colInfo = document.createElement('div');
         colInfo.className = 'meta-item-info';
@@ -1211,6 +1264,14 @@ function renderMetasList() {
     pagControls.appendChild(btnNext);
     pagination.appendChild(pagControls);
     cont.appendChild(pagination);
+
+    // Confetti ao bater uma meta. `saved` muda em 5 pontos diferentes (transação de
+    // reserva, aporte aqui, rendimento diário, edição, retirada) — detectar a
+    // travessia dos 100% neste ponto único pós-mudança cobre todos eles. Lazy e
+    // best-effort: celebração é enfeite, nunca pode quebrar a tela.
+    import('../modules/celebracao.js?v=1')
+        .then(m => m.celebrarMetasConcluidas(_ctx))
+        .catch(() => { /* sem festa, sem problema */ });
 }
 
 function removerMeta(id) {
