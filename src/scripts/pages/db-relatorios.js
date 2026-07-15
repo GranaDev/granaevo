@@ -3281,6 +3281,78 @@ function _gerarPatrimonioCompleto(container) {
     const patrimonioWrap = document.createElement('div');
     container.appendChild(patrimonioWrap);
     gerarHistoricoPatrimonial(patrimonioWrap);
+
+    // ── Projeção de patrimônio (1/5/10 anos) ────────────────────────────────
+    // Fecha o arco do relatório: score (como estou) → histórico (como cheguei) →
+    // projeção (onde chego no ritmo atual). Lazy e best-effort: o motor só baixa
+    // aqui e, se falhar, o resto do relatório continua de pé.
+    const projWrap = document.createElement('div');
+    container.appendChild(projWrap);
+    import('../modules/patrimonio.js?v=1')
+        .then(m => _renderProjecaoPatrimonio(projWrap, m))
+        .catch(() => { /* projeção é complemento */ });
+}
+
+// Projeção de patrimônio — honesta de propósito: se o usuário está gastando mais do
+// que ganha, mostra o patrimônio CAINDO em vez de forçar otimismo.
+function _renderProjecaoPatrimonio(container, mod) {
+    const r = mod.projetarPatrimonio(_ctx);
+    container.textContent = '';
+
+    const divisor = document.createElement('div');
+    divisor.style.cssText = 'border-top: 1px solid rgba(255,255,255,0.07); margin: 24px 0;';
+    container.appendChild(divisor);
+
+    const tit = document.createElement('h3');
+    tit.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:1rem; margin-bottom:4px;';
+    const titIc = document.createElement('i');
+    titIc.className = 'fas fa-arrow-trend-up';
+    titIc.style.color = 'var(--primary)';
+    titIc.setAttribute('aria-hidden', 'true');
+    tit.appendChild(titIc);
+    tit.appendChild(document.createTextNode('Onde você chega neste ritmo'));
+    container.appendChild(tit);
+
+    const sub = document.createElement('p');
+    sub.style.cssText = 'color:var(--text-muted); font-size:0.78rem; margin-bottom:14px;';
+    sub.textContent = r.mesesObservados > 0
+        ? `Hoje: ${formatBRL(r.patrimonioHoje)} · guardando ${formatBRL(r.poupancaMensal)}/mês (média de ${r.mesesObservados} ${r.mesesObservados === 1 ? 'mês' : 'meses'})`
+        : `Hoje: ${formatBRL(r.patrimonioHoje)} · registre alguns meses para projetar seu ritmo`;
+    container.appendChild(sub);
+
+    if (r.mesesObservados === 0) return;
+
+    if (r.poupancaMensal <= 0) {
+        const alerta = document.createElement('p');
+        alerta.style.cssText = 'font-size:0.82rem; color:#ff9f43; background:rgba(255,159,67,0.1); border:1px solid rgba(255,159,67,0.25); border-radius:10px; padding:10px 12px; line-height:1.5;';
+        alerta.textContent = 'No ritmo atual você está gastando mais do que ganha, então não há patrimônio a projetar — ele diminuiria. Suba a taxa de poupança e a projeção aparece aqui.';
+        container.appendChild(alerta);
+        return;
+    }
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid; grid-template-columns:repeat(3,1fr); gap:10px;';
+    for (const p of r.projecoes) {
+        const box = document.createElement('div');
+        box.style.cssText = 'background:rgba(255,255,255,0.05); padding:12px 8px; border-radius:12px; text-align:center;';
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'font-size:0.7rem; color:var(--text-secondary); margin-bottom:5px;';
+        lbl.textContent = p.anos === 1 ? 'Em 1 ano' : `Em ${p.anos} anos`;
+        const val = document.createElement('div');
+        val.style.cssText = 'font-size:0.95rem; font-weight:700; color:var(--primary);';
+        val.textContent = formatBRL(p.valor);
+        box.appendChild(lbl);
+        box.appendChild(val);
+        grid.appendChild(box);
+    }
+    container.appendChild(grid);
+
+    const nota = document.createElement('p');
+    nota.style.cssText = 'color:var(--text-muted); font-size:0.72rem; margin-top:10px; line-height:1.5;';
+    nota.textContent = r.taxaMensal > 0
+        ? 'Projeção com juros compostos sobre o que você já tem mais o que guarda por mês. É uma estimativa no ritmo atual — não é promessa de rendimento.'
+        : 'Projeção sem rendimento: só o que você já tem mais o que guarda por mês. Se investir, o número real tende a ser maior.';
+    container.appendChild(nota);
 }
 
 function gerarHistoricoPatrimonial(container) {
