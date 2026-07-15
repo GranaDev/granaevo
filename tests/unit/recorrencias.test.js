@@ -10,7 +10,7 @@
  */
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { detectarAssinaturasEsquecidas } from '../../src/scripts/modules/recorrencias.js'
+import { detectarAssinaturasEsquecidas, deveMostrarAviso } from '../../src/scripts/modules/recorrencias.js'
 
 const HOJE = new Date(2026, 6, 15) // 15/07/2026
 
@@ -89,5 +89,34 @@ describe('detectarAssinaturasEsquecidas — critérios conservadores', () => {
   test('ocorrência única não vira assinatura', () => {
     const txs = [{ categoria: 'saida', tipo: 'Lazer', descricao: 'Cinema', valor: 45, data: '11/07/2026' }]
     assert.deepEqual(detectarAssinaturasEsquecidas(txs, [], HOJE), [])
+  })
+})
+
+describe('deveMostrarAviso — regra do card proativo no dashboard', () => {
+  const AGORA = HOJE.getTime()
+  const DIA = 86_400_000
+  const achados = [{ nome: 'Netflix', valorAnual: 478.8 }]
+
+  test('sem achados → não mostra (não polui o dashboard de quem está ok)', () => {
+    assert.equal(deveMostrarAviso([], 0, AGORA), false)
+    assert.equal(deveMostrarAviso(null, 0, AGORA), false)
+  })
+
+  test('com achados e nunca dispensado → mostra', () => {
+    assert.equal(deveMostrarAviso(achados, 0, AGORA), true)
+    assert.equal(deveMostrarAviso(achados, null, AGORA), true)
+  })
+
+  test('dispensado há 5 dias → fica quieto (não vira nag)', () => {
+    assert.equal(deveMostrarAviso(achados, AGORA - 5 * DIA, AGORA), false)
+  })
+
+  test('dispensado há 40 dias → volta a perguntar', () => {
+    assert.equal(deveMostrarAviso(achados, AGORA - 40 * DIA, AGORA), true)
+  })
+
+  test('valor de dispensa corrompido não trava o card', () => {
+    assert.equal(deveMostrarAviso(achados, NaN, AGORA), true)
+    assert.equal(deveMostrarAviso(achados, 'lixo', AGORA), true)
   })
 })

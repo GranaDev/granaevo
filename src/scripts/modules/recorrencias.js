@@ -124,6 +124,109 @@ export function detectarAssinaturasEsquecidas(transacoes, assinaturas, hoje = ne
     return candidatos.slice(0, 10);
 }
 
+// ── Aviso PROATIVO no dashboard ───────────────────────────────────────────────
+// Antes o detector só existia como botão (pull) em Cartões → Assinaturas: o usuário
+// precisava lembrar de procurar. Aqui o app PERGUNTA — card com o custo ANUAL das
+// cobranças recorrentes não registradas. A dispensa mora em localStorage (por
+// usuário+perfil): não vira nag e NÃO toca o save-path/whitelist do banco.
+
+const _DISMISS_DIAS = 30;
+let _ctxAviso  = null;
+let _avisoTimer = null;
+
+/** Regra pura de exibição — exportada p/ teste. */
+export function deveMostrarAviso(achados, dispensadoEm, agora = Date.now(), dias = _DISMISS_DIAS) {
+    if (!Array.isArray(achados) || achados.length === 0) return false;
+    const ts = Number(dispensadoEm);
+    if (Number.isFinite(ts) && ts > 0 && (agora - ts) < dias * 86_400_000) return false;
+    return true;
+}
+
+// Chave por usuário+perfil — a dispensa de um perfil não vaza para outro.
+function _chaveDispensa(ctx) {
+    const u = String(ctx?._effectiveUserId ?? 'anon').slice(0, 40);
+    const p = ctx?.perfilAtivo;
+    const pid = String((p && typeof p === 'object' ? (p.id ?? p.nome) : p) ?? 'x').slice(0, 40);
+    return `ge:assinAviso:${u}:${pid}`;
+}
+
+function _lerDispensa(ctx) {
+    try { return Number(localStorage.getItem(_chaveDispensa(ctx))); } catch { return 0; }
+}
+function _gravarDispensa(ctx) {
+    try { localStorage.setItem(_chaveDispensa(ctx), String(Date.now())); } catch { /* modo privado */ }
+}
+
+function _renderAviso() {
+    const slot = document.getElementById('assinaturasSlot');
+    if (!slot || !_ctxAviso) return;
+    slot.textContent = '';
+
+    const achados = detectarAssinaturasEsquecidas(_ctxAviso.transacoes, _ctxAviso.assinaturas);
+    if (!deveMostrarAviso(achados, _lerDispensa(_ctxAviso))) return;
+
+    const totalAnual = achados.reduce((s, a) => s + a.valorAnual, 0);
+
+    const card = document.createElement('div');
+    card.className = 'assin-aviso';
+
+    const iconWrap = document.createElement('div');
+    iconWrap.className = 'assin-aviso__icon';
+    const ic = document.createElement('i');
+    ic.className = 'fas fa-repeat';
+    ic.setAttribute('aria-hidden', 'true');
+    iconWrap.appendChild(ic);
+
+    const body = document.createElement('button');
+    body.type = 'button';
+    body.className = 'assin-aviso__body';
+
+    const label = document.createElement('div');
+    label.className = 'assin-aviso__label';
+    label.textContent = 'Você ainda usa?';
+
+    const valor = document.createElement('div');
+    valor.className = 'assin-aviso__valor';
+    valor.textContent = `${_ctxAviso.formatBRL(totalAnual)} / ano`;
+
+    const sub = document.createElement('div');
+    sub.className = 'assin-aviso__sub';
+    sub.textContent = achados.length === 1
+        ? '1 cobrança recorrente que você não registrou · toque para ver'
+        : `${achados.length} cobranças recorrentes que você não registrou · toque para ver`;
+
+    body.appendChild(label);
+    body.appendChild(valor);
+    body.appendChild(sub);
+    body.addEventListener('click', () => abrirDetectorAssinaturas(_ctxAviso));
+
+    const fechar = document.createElement('button');
+    fechar.type = 'button';
+    fechar.className = 'assin-aviso__fechar';
+    fechar.setAttribute('aria-label', 'Dispensar este aviso por 30 dias');
+    const fi = document.createElement('i');
+    fi.className = 'fas fa-xmark';
+    fi.setAttribute('aria-hidden', 'true');
+    fechar.appendChild(fi);
+    fechar.addEventListener('click', () => { _gravarDispensa(_ctxAviso); slot.textContent = ''; });
+
+    card.appendChild(iconWrap);
+    card.appendChild(body);
+    card.appendChild(fechar);
+    slot.appendChild(card);
+}
+
+/** Boot: chamado pelo dashboard via import() após o carregamento inicial. */
+export function initAvisoAssinaturas(ctx) {
+    _ctxAviso = ctx;
+    _renderAviso();
+    // Recalcula após cada save (dados mudaram) — debounced p/ saves em rajada.
+    document.addEventListener('ge:save-done', () => {
+        clearTimeout(_avisoTimer);
+        _avisoTimer = setTimeout(_renderAviso, 1_500);
+    });
+}
+
 /** Popup com o resultado da varredura — entrada: aba Cartões → Assinaturas. */
 export function abrirDetectorAssinaturas(ctx) {
     const achados = detectarAssinaturasEsquecidas(ctx.transacoes, ctx.assinaturas);

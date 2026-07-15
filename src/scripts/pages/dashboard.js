@@ -1830,6 +1830,12 @@ function _bootFeatureModules() {
         import('../modules/radar.js?v=1')
             .then(m => m.initRadar(ctx))
             .catch(e => _log.error('FEAT_RADAR_001', e));
+        // Aviso proativo de assinaturas não registradas (mesmo módulo do detector
+        // aberto em Cartões → Assinaturas — manter o ?v= igual nos dois imports
+        // para não carregar duas instâncias do módulo).
+        import('../modules/recorrencias.js?v=2')
+            .then(m => m.initAvisoAssinaturas(ctx))
+            .catch(e => _log.error('FEAT_ASSIN_001', e));
     });
 }
 

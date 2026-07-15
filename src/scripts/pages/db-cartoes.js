@@ -347,7 +347,7 @@ function _buildAssinaturasSection() {
     btnDetector.appendChild(document.createTextNode(' Detectar assinaturas esquecidas'));
     btnDetector.addEventListener('click', async () => {
         try {
-            const m = await import('../modules/recorrencias.js?v=1');
+            const m = await import('../modules/recorrencias.js?v=2');
             m.abrirDetectorAssinaturas(_ctx);
         } catch { /* módulo indisponível — sem quebra */ }
     });
