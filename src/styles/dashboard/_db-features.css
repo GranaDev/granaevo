@@ -59,6 +59,88 @@
 }
 .previsao-seta { color: var(--color-text-faint); font-size: .8rem; }
 
+/* ── Sugestão de corte (item 17) — dentro do popup "Onde foi meu dinheiro?" ──
+   Sem cursor/hover: é leitura, não é botão. O tom é informativo de propósito —
+   nada de vermelho de alarme, porque não há erro nenhum em ter gastado. */
+.corte-card {
+    margin: 16px 0 4px;
+    padding: 14px 16px;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 16px);
+}
+.corte-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.corte-icon {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    font-size: .95rem;
+    background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+    color: var(--color-warning);
+}
+.corte-label {
+    font-size: var(--text-xs, .75rem);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: var(--fw-semibold, 600);
+}
+.corte-valor {
+    font-size: 1.2rem;
+    font-weight: var(--fw-bold, 700);
+    line-height: var(--leading-tight, 1.2);
+    color: var(--color-success);
+}
+.corte-lista { display: flex; flex-direction: column; gap: 8px; }
+.corte-row {
+    padding: 9px 11px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+.corte-row-topo,
+.corte-row-baixo {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+.corte-row-baixo { margin-top: 3px; }
+.corte-row-tipo {
+    font-size: .88rem;
+    font-weight: var(--fw-semibold, 600);
+    color: var(--color-text);
+}
+.corte-row-gasto,
+.corte-row-acao {
+    font-size: var(--text-xs, .75rem);
+    color: var(--color-text-muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.corte-row-eco {
+    font-size: .82rem;
+    font-weight: var(--fw-bold, 700);
+    color: var(--color-success);
+    white-space: nowrap;
+}
+.corte-nota {
+    margin-top: 10px;
+    font-size: var(--text-xs, .7rem);
+    color: var(--color-text-faint);
+    line-height: 1.4;
+}
+
 /* ── Card de aviso proativo (padrão compartilhado) ───────────────────────────
    Usado por: recorrencias.js (assinaturas não registradas) e duplicados.js
    (lançamentos repetidos). Mesmo padrão visual do card de previsão. Usa SOMENTE

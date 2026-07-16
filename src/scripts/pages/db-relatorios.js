@@ -2758,6 +2758,17 @@ function abrirWidgetOndeForDinheiro() {
         wrapper.appendChild(btnAnalisar);
         wrapper.appendChild(resultadoDiv);
 
+        // ── Sugestão de corte (item 17) ─────────────────────────────────────
+        // Depois do resultado, de propósito: primeiro o usuário vê PARA ONDE o
+        // dinheiro foi, aí a pergunta natural é onde dá para aparar. Nunca toca
+        // em essencial (remédio/mercado/transporte) — só em consumo repetido.
+        // Lazy e best-effort, igual à previsão: se falhar, a análise continua.
+        const cortesBox = document.createElement('div');
+        wrapper.appendChild(cortesBox);
+        import('../modules/sugestao-corte.js?v=1')
+            .then(m => m.renderCortesEm(cortesBox, _ctx))
+            .catch(() => { /* complemento — nunca quebra a análise */ });
+
         // ── Botão fechar (fora do wrapper scroll)
         const btnFechar = document.createElement('button');
         btnFechar.id        = 'fecharWidgetAnalise';
