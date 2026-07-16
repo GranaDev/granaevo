@@ -223,6 +223,138 @@
     margin-bottom: 6px;
 }
 
+/* ── Reserva compartilhada da família (item 13) ────────────────────────────── */
+.rf-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+    padding: 14px 16px;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 16px);
+    cursor: pointer;
+    transition: border-color .18s ease, transform .18s ease;
+}
+.rf-card:hover,
+.rf-card:focus-visible {
+    border-color: var(--color-border-strong);
+    transform: translateY(-1px);
+    outline: none;
+}
+.rf-icon {
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    font-size: 1.05rem;
+    background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+    color: var(--color-primary);
+}
+.rf-body { flex: 1 1 auto; min-width: 0; }
+.rf-label {
+    font-size: var(--text-xs, .75rem);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: var(--fw-semibold, 600);
+}
+.rf-valor {
+    font-size: 1.3rem;
+    font-weight: var(--fw-bold, 700);
+    color: var(--color-primary);
+    line-height: var(--leading-tight, 1.2);
+}
+.rf-sub {
+    font-size: var(--text-xs, .74rem);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rf-seta { color: var(--color-text-faint); font-size: .8rem; }
+
+.rf-intro {
+    font-size: var(--text-sm, .82rem);
+    color: var(--color-text-muted);
+    line-height: var(--leading-normal, 1.5);
+    margin-bottom: 12px;
+}
+.rf-reserva {
+    text-align: left;
+    padding: 14px;
+    margin-bottom: 12px;
+    border-radius: var(--radius-lg, 16px);
+    background: var(--color-bg-soft);
+    border: 1px solid var(--color-border);
+}
+.rf-reserva-nome { font-size: .95rem; font-weight: var(--fw-bold, 700); color: var(--color-text); }
+.rf-reserva-saldo {
+    font-size: 1.6rem;
+    font-weight: var(--fw-bold, 700);
+    color: var(--color-primary);
+    line-height: var(--leading-tight, 1.2);
+}
+.rf-reserva-meta { font-size: var(--text-xs, .72rem); color: var(--color-text-muted); }
+.rf-barra {
+    height: 6px;
+    border-radius: 3px;
+    margin: 8px 0 4px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+.rf-barra-fill { height: 100%; background: var(--color-primary); border-radius: 3px; }
+
+.rf-secao {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+    font-size: var(--text-xs, .7rem);
+    color: var(--color-text-faint);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-weight: var(--fw-semibold, 600);
+}
+.rf-membro,
+.rf-mov {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: var(--text-sm, .82rem);
+    color: var(--color-text-muted);
+}
+.rf-membro-valor,
+.rf-mov-valor { font-weight: var(--fw-bold, 700); color: var(--color-success); white-space: nowrap; }
+.rf-neg { color: var(--color-warning); }
+.rf-mov-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-mov-dir { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.rf-mov-hora { font-size: var(--text-xs, .68rem); color: var(--color-text-faint); }
+.rf-undo {
+    background: none;
+    border: none;
+    padding: 0 0 0 8px;
+    font-size: var(--text-xs, .68rem);
+    color: var(--color-text-faint);
+    text-decoration: underline;
+    cursor: pointer;
+}
+.rf-undo:hover { color: var(--color-danger); }
+
+.rf-form { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.rf-form-btns { display: flex; gap: 8px; }
+.rf-form-btns button { flex: 1; }
+.rf-nota {
+    margin-top: 8px;
+    font-size: var(--text-xs, .7rem);
+    color: var(--color-text-faint);
+    line-height: 1.4;
+}
+
 /* ── Card de aviso proativo (padrão compartilhado) ───────────────────────────
    Usado por: recorrencias.js (assinaturas não registradas) e duplicados.js
    (lançamentos repetidos). Mesmo padrão visual do card de previsão. Usa SOMENTE

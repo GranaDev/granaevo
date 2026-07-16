@@ -1099,6 +1099,16 @@ function _criarJarro(percentual, uid) {
     return svg;
 }
 
+// Carrega o card da reserva compartilhada dentro do slot já reservado.
+// Best-effort de ponta a ponta: se o chunk não baixar ou a query falhar, o slot
+// fica vazio e a tela de Reservas segue normal. Uma reserva de família não pode
+// derrubar a tela das metas individuais.
+function _renderReservaFamilia(slot) {
+    import('../modules/reserva-familia.js?v=1')
+        .then(m => m.renderCardFamiliaEm(slot, _ctx))
+        .catch(() => { /* complemento — nunca quebra a lista */ });
+}
+
 function renderMetasList() {
     const cont = document.getElementById('listaMetas');
     if (!cont) return;
@@ -1107,6 +1117,20 @@ function renderMetasList() {
     const statusVal  = (document.getElementById('metaStatusFilter')?.value || '');
 
     cont.innerHTML = '';
+
+    // ── Reserva compartilhada (item 13) ─────────────────────────────────────
+    // Só aparece em conta casal/família — para quem usa sozinho, "reserva da
+    // família" é ruído (as metas normais já servem). Vive FORA do blob: é a
+    // única coisa do app que várias pessoas escrevem, então precisa de tabela
+    // própria com RLS (ver modules/reserva-familia.js). Lazy e best-effort: se
+    // a rede falhar, a lista de metas continua inteira.
+    //
+    // O container é criado AGORA, síncrono, e preenchido depois: o módulo faz
+    // I/O, e sem um lugar reservado o card chegaria DEPOIS das metas e apareceria
+    // no fim da lista, não no topo.
+    const slotFamilia = document.createElement('div');
+    cont.appendChild(slotFamilia);
+    _renderReservaFamilia(slotFamilia);
 
     if (_ctx.metas.length === 0) {
         const wrap = document.createElement('div');
