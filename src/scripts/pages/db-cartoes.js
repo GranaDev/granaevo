@@ -1,4 +1,6 @@
 // db-cartoes.js — Seção de Cartões de Crédito (lazy-loaded)
+import { analisarCiclo, proximaOcorrencia, meiaNoite } from '../modules/ciclo-fatura.js?v=1';
+
 let _ctx = null;
 
 // Proxies para utilitários de dashboard.js disponíveis via _ctx após init()
@@ -121,33 +123,35 @@ function _buildResumoCartao(cartao) {
     const proxFatura  = faturasAbertas.slice().sort((a, b) => (a.vencimento || '').localeCompare(b.vencimento || ''))[0];
     const hoje        = new Date();
 
-    // ── Previsão de fechamento ──────────────────────────────────────────
-    const diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia ?? 10;
-    const diaVenc       = cartao.vencimentoDia || 1;
+    // ── Ciclo da fatura ─────────────────────────────────────────────────
+    // Conta delegada a modules/ciclo-fatura.js (pura e testada). Aqui havia
+    // duas regressões: (1) `new Date()` COM hora comparado com `<=` fazia o
+    // painel dizer "Fecha em 31 dias" NO DIA do fechamento — invertido no único
+    // dia em que a informação decide a compra; (2) melhorDia = (dia % 28) + 1
+    // dizia "melhor dia: 1" para quem fecha no 28, mandando comprar no PIOR dia.
+    const ciclo = analisarCiclo(cartao, hoje);
+    const diaVenc = cartao.vencimentoDia || 1;
 
-    // Calcula próximo fechamento (quando param as compras da fatura atual)
-    let proxFecha = new Date(hoje.getFullYear(), hoje.getMonth(), diaFechamento);
-    if (proxFecha <= hoje) proxFecha = new Date(hoje.getFullYear(), hoje.getMonth() + 1, diaFechamento);
-    const diasAteFecha = Math.ceil((proxFecha - hoje) / 86400000);
-
-    // Calcula próximo vencimento (quando a fatura deve ser paga)
-    let proxVenc = new Date(hoje.getFullYear(), hoje.getMonth(), diaVenc);
-    if (proxVenc <= hoje) proxVenc = new Date(hoje.getFullYear(), hoje.getMonth() + 1, diaVenc);
-    const diasAteVenc = Math.ceil((proxVenc - hoje) / 86400000);
+    const proxVenc     = proximaOcorrencia(diaVenc, hoje);
+    const diasAteVenc  = proxVenc ? Math.round((proxVenc - meiaNoite(hoje)) / 86400000) : null;
 
     // Texto contextual do vencimento
     const vencTexto = proxFatura?.vencimento
-        ? `Vence ${formatarDataBR(proxFatura.vencimento)} · ${diasAteVenc}d`
+        ? `Vence ${formatarDataBR(proxFatura.vencimento)}${diasAteVenc !== null ? ` · ${diasAteVenc}d` : ''}`
         : `Próx. venc: dia ${diaVenc}`;
 
-    // Texto de fechamento com urgência
-    const fechaTexto = diasAteFecha <= 3
-        ? `⚠️ Fecha em ${diasAteFecha} dia${diasAteFecha !== 1 ? 's' : ''}!`
-        : `Fecha em ${diasAteFecha} dia${diasAteFecha !== 1 ? 's' : ''}`;
-    const fechaCls = diasAteFecha <= 3 ? 'cdes-stat--danger' : diasAteFecha <= 7 ? 'cdes-stat--warning' : '';
+    // Cartão sem dia de fechamento utilizável: não inventa número.
+    const diaFechamento = ciclo ? ciclo.diaFechamento : null;
+    const diasAteFecha  = ciclo ? ciclo.diasAteFechamento : null;
+
+    const fechaTexto = !ciclo         ? 'Defina o dia de fechamento'
+                     : ciclo.fechaHoje ? '⚠️ Fecha hoje!'
+                     : ciclo.urgente   ? `⚠️ Fecha em ${diasAteFecha} dia${diasAteFecha !== 1 ? 's' : ''}!`
+                     : `Fecha em ${diasAteFecha} dia${diasAteFecha !== 1 ? 's' : ''}`;
+    const fechaCls = !ciclo ? '' : ciclo.urgente ? 'cdes-stat--danger' : diasAteFecha <= 7 ? 'cdes-stat--warning' : '';
 
     // Melhor dia de compra (logo após o fechamento — máximo de prazo)
-    const melhorDia = ((diaFechamento) % 28) + 1;
+    const melhorDia = ciclo ? ciclo.melhorDia : null;
 
     const panel = document.createElement('div'); panel.className = 'cdes-resumo-panel';
     const title = document.createElement('div'); title.className = 'cdes-resumo-title'; title.textContent = 'Resumo do cartão';
@@ -157,8 +161,8 @@ function _buildResumoCartao(cartao) {
     const statsDef = [
         { icon: 'fa-file-invoice-dollar', label: 'FATURA ATUAL',    value: formatBRL(totalFatura), sub: vencTexto, cls: 'cdes-stat--fatura' },
         { icon: 'fa-percent',             label: 'LIMITE UTILIZADO', value: `${percUsado.toFixed(0)}%`, sub: `${formatBRL(cartao.usado || 0)} de ${formatBRL(cartao.limite)}`, cls: percUsado > 80 ? 'cdes-stat--danger' : percUsado > 50 ? 'cdes-stat--warning' : '' },
-        { icon: 'fa-calendar-check',      label: 'FECHAMENTO',       value: `Dia ${diaFechamento}`, sub: fechaTexto, cls: fechaCls },
-        { icon: 'fa-calendar-day',        label: 'MELHOR DIA',       value: String(melhorDia).padStart(2,'0'), sub: 'Máximo prazo para compra', cls: '' },
+        { icon: 'fa-calendar-check',      label: 'FECHAMENTO',       value: diaFechamento ? `Dia ${diaFechamento}` : '—', sub: fechaTexto, cls: fechaCls },
+        { icon: 'fa-calendar-day',        label: 'MELHOR DIA',       value: melhorDia ? String(melhorDia).padStart(2,'0') : '—', sub: melhorDia ? 'Máximo prazo para compra' : 'Depende do fechamento', cls: '' },
     ];
     statsDef.forEach(s => {
         const box = document.createElement('div'); box.className = `cdes-resumo-stat ${s.cls}`;

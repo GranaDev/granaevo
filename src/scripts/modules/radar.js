@@ -21,6 +21,7 @@
 // ----------------------------------------------------------------------------
 
 import { supabase } from '../services/supabase-client.js?v=2';
+import { proximaOcorrencia, meiaNoite } from './ciclo-fatura.js?v=1';
 
 let _ctx = null;
 let _debounceTimer = null;
@@ -33,11 +34,10 @@ const THROTTLE_MS   = 10 * 60 * 1000; // mín. 10 min entre sincronizações
 const LS_KEY        = 'ge_radar_last_sync';
 
 // ── Helpers de data ───────────────────────────────────────────────────────────
-function _hoje0() {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-}
+// _hoje0 e _proximaOcorrencia mudaram-se para modules/ciclo-fatura.js (meiaNoite
+// e proximaOcorrencia). A conta do fechamento estava duplicada aqui e no painel
+// do db-cartoes — e as cópias DIVERGIAM: a de lá usava `<=` contra um Date com
+// hora e errava justamente no dia do fechamento. Uma conta, uma implementação.
 function _fireAt(dia) {
     const d = new Date(dia);
     d.setHours(HORA_DISPARO, 0, 0, 0);
@@ -52,17 +52,11 @@ function _ymKey(d) {
 function _clampTexto(s, max) {
     return String(s || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
 }
-// Próxima ocorrência de um dia-do-mês (1–28) a partir de hoje.
-function _proximaOcorrencia(diaDoMes, base) {
-    const d = new Date(base.getFullYear(), base.getMonth(), diaDoMes);
-    if (d < base) return new Date(base.getFullYear(), base.getMonth() + 1, diaDoMes);
-    return d;
-}
 
 // ── Cálculo dos eventos ───────────────────────────────────────────────────────
 function _computarEventos(ctx) {
     const eventos = [];
-    const hoje = _hoje0();
+    const hoje = meiaNoite(new Date());
     const limite = new Date(hoje.getTime() + 35 * 86_400_000); // janela de 35 dias
     const agora = new Date();
 
@@ -108,7 +102,7 @@ function _computarEventos(ctx) {
                        : Number.isInteger(cartao.vencimentoDia) ? cartao.vencimentoDia : null;
         if (!diaFech || diaFech < 1 || diaFech > 28) continue;
         if (cartao.congelado === true) continue;
-        const fech = _proximaOcorrencia(diaFech, hoje);
+        const fech = proximaOcorrencia(diaFech, hoje);
         const aviso = new Date(fech.getTime() - 2 * 86_400_000);
         if (aviso < hoje || fech > limite) continue;
         const nome = _clampTexto(cartao.nomeBanco, 30) || 'cartão';
@@ -123,7 +117,7 @@ function _computarEventos(ctx) {
         if (!Number.isInteger(a.diaCobranca) || a.diaCobranca < 1 || a.diaCobranca > 28) continue;
         const valor = Number(a.valor);
         if (!Number.isFinite(valor) || valor <= 0) continue;
-        const cobra = _proximaOcorrencia(a.diaCobranca, hoje);
+        const cobra = proximaOcorrencia(a.diaCobranca, hoje);
         const vespera = new Date(cobra.getTime() - 86_400_000);
         if (vespera < hoje || cobra > limite) continue;
         const nome = _clampTexto(a.nome, 40) || 'Assinatura';
