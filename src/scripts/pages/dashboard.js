@@ -944,6 +944,8 @@ function _sanitizarOrcamentos(obj) {
     return clean;
 }
 
+const _ISO_DIA_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 // Sanitiza as preferências do perfil (config) antes de persistir.
 // Whitelist estrita: só chaves conhecidas, só valores dentro dos limites.
 // Espelha os limites do módulo horas-vida.js (defesa em profundidade).
@@ -969,6 +971,23 @@ function _sanitizarConfigPerfil(cfg) {
             if (Number.isInteger(hs) && hs >= 1 && hs <= 120) out.horasSemana = hs;
             clean.horasVida = out;
         }
+    }
+    // Modo viagem (item 11). Guardado no config — e NÃO como marcador nas
+    // transações — porque o custo é derivado da janela [inicio, fim]; ver a
+    // decisão de modelagem no topo de modules/viagem.js. Sem esta chave aqui a
+    // viagem seria descartada no save seguinte: `dadosPerfil` é allow-list.
+    const vg = cfg.viagem;
+    if (vg && typeof vg === 'object' && !Array.isArray(vg) && _ISO_DIA_RE.test(String(vg.inicio || ''))) {
+        const out = {
+            ativa:  vg.ativa === true,
+            nome:   _sanitizeText(String(vg.nome ?? '')).slice(0, 60) || 'Viagem',
+            inicio: String(vg.inicio),
+            fim:    _ISO_DIA_RE.test(String(vg.fim || '')) ? String(vg.fim) : null,
+        };
+        // Fim antes do início é incoerente: guarda só o início e deixa a viagem
+        // em aberto, em vez de persistir uma janela que o motor recusaria.
+        if (out.fim !== null && out.fim < out.inicio) out.fim = null;
+        clean.viagem = out;
     }
     return clean;
 }

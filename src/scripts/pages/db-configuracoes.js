@@ -48,9 +48,34 @@ export function init(ctx) {
     _bindBtnBackup();
     // Torna o card de perfil clicável (hub de perfil → conquistas)
     _initPerfilCard();
-    // Recursos: Horas de Vida + Desafios (módulos lazy próprios)
+    // Recursos: Horas de Vida + Modo viagem + Desafios (módulos lazy próprios)
     _initHorasVidaButton();
+    _initViagemButton();
     _initDesafiosButton();
+}
+
+// ── Modo viagem: quanto a viagem realmente custou ───────────────────────────
+function _atualizarSubViagem() {
+    const sub = document.getElementById('viagemStatusText');
+    if (!sub) return;
+    const v = _ctx?.configPerfil?.viagem;
+    sub.textContent = v?.ativa === true
+        ? `Em curso — ${String(v.nome || 'Viagem')}`
+        : 'Saiba quanto sua viagem custou';
+}
+
+function _initViagemButton() {
+    const btn = document.getElementById('btnViagem');
+    if (!btn) return;
+    _atualizarSubViagem();
+    btn.addEventListener('click', async () => {
+        try {
+            const m = await import('../modules/viagem.js?v=1');
+            m.abrirPopupViagem(_ctx, _atualizarSubViagem);
+        } catch {
+            _ctx.mostrarNotificacao('Não foi possível abrir agora. Tente novamente.', 'error');
+        }
+    });
 }
 
 // ── Horas de Vida: gastos em horas de trabalho ──────────────────────────────

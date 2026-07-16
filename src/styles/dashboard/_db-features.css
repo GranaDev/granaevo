@@ -141,6 +141,88 @@
     line-height: 1.4;
 }
 
+/* ── Modo viagem (item 11) — popup em Configurações ────────────────────────── */
+.vg-intro {
+    font-size: var(--text-sm, .82rem);
+    color: var(--color-text-muted);
+    line-height: var(--leading-normal, 1.5);
+    margin-bottom: 14px;
+}
+.vg-secao-label {
+    font-size: var(--text-xs, .7rem);
+    color: var(--color-text-faint);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    font-weight: var(--fw-semibold, 600);
+    margin-bottom: 6px;
+}
+.vg-resumo {
+    padding: 14px;
+    margin-bottom: 14px;
+    border-radius: var(--radius-lg, 16px);
+    background: var(--color-bg-soft);
+    border: 1px solid var(--color-border);
+    text-align: left;
+}
+.vg-resumo-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.vg-resumo-nome {
+    font-size: .95rem;
+    font-weight: var(--fw-bold, 700);
+    color: var(--color-text);
+}
+.vg-resumo-periodo {
+    font-size: var(--text-xs, .72rem);
+    color: var(--color-text-faint);
+}
+.vg-destaque {
+    font-size: 1.7rem;
+    font-weight: var(--fw-bold, 700);
+    color: var(--color-primary);
+    line-height: var(--leading-tight, 1.2);
+    margin-top: 6px;
+}
+.vg-destaque-sub {
+    font-size: var(--text-xs, .74rem);
+    color: var(--color-text-muted);
+}
+.vg-detalhe,
+.vg-cats {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+}
+.vg-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 3px 0;
+    font-size: var(--text-sm, .82rem);
+    color: var(--color-text-muted);
+}
+.vg-row--forte { color: var(--color-text); font-weight: var(--fw-semibold, 600); }
+.vg-row-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vg-row-valor { white-space: nowrap; font-weight: var(--fw-semibold, 600); }
+.vg-nota {
+    margin-top: 8px;
+    font-size: var(--text-xs, .7rem);
+    color: var(--color-text-faint);
+    line-height: 1.4;
+}
+.vg-label {
+    display: block;
+    text-align: left;
+    font-size: var(--text-sm, .82rem);
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+}
+
 /* ── Card de aviso proativo (padrão compartilhado) ───────────────────────────
    Usado por: recorrencias.js (assinaturas não registradas) e duplicados.js
    (lançamentos repetidos). Mesmo padrão visual do card de previsão. Usa SOMENTE

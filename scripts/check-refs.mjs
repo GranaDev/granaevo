@@ -33,7 +33,7 @@ const GLOBAIS = new Set([
     'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'alert',
     'confirm', 'prompt', 'atob', 'btoa', 'crypto', 'performance', 'matchMedia', 'screen',
     'Image', 'Blob', 'File', 'FileReader', 'FormData', 'Headers', 'Request', 'Response',
-    'URL', 'URLSearchParams', 'AbortController', 'Event', 'CustomEvent', 'EventTarget',
+    'URL', 'URLSearchParams', 'AbortController', 'AbortSignal', 'Event', 'CustomEvent', 'EventTarget',
     'MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'Notification',
     'Worker', 'BroadcastChannel', 'TextEncoder', 'TextDecoder', 'CanvasRenderingContext2D',
     'HTMLElement', 'Node', 'NodeList', 'DOMParser', 'getComputedStyle', 'scrollTo', 'open',
@@ -124,6 +124,14 @@ for (const arquivo of ler(RAIZ)) {
             case 'NewExpression':
                 if (no.callee?.type === 'Identifier') {
                     chamados.push({ nome: no.callee.name, linha: no.callee.loc.start.line });
+                } else if (no.callee?.type === 'MemberExpression' &&
+                           no.callee.object?.type === 'Identifier' &&
+                           !no.callee.computed) {
+                    // `X.metodo()` — o callee é MemberExpression, então a checagem
+                    // de Identifier acima não vê o `X`. Sem este ramo, uma constante
+                    // inexistente usada como `_MINHA_RE.test(s)` passa batido e só
+                    // quebra no navegador. Aconteceu ao escrever este projeto.
+                    chamados.push({ nome: no.callee.object.name, linha: no.callee.object.loc.start.line });
                 }
                 break;
         }
