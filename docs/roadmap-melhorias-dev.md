@@ -370,7 +370,18 @@ aceitaram o texto anterior e **não houve re-aceite**. A própria política prom
 
 ---
 
-## PASSO 14 — LGPD: aceite dos 4 usuários legados (gap M1) 🔴
+## PASSO 14 — LGPD: aceite dos 4 usuários legados (gap M1) 🟡 GATE ARMADO, ESPERANDO LOGIN
+> **Censo no banco de prod (2026-07-16):** 8 usuários em `auth.users`; 5 linhas em `terms_acceptance`
+> (**4 na v1.0**, 1 na v1.1). **4 usuários sem NENHUMA linha de aceite — 3 deles ATIVOS** (com
+> assinatura ativa/trialing ou membro ativo de conta casal/família).
+>
+> O gate do Passo 13 (bump p/ `CURRENT_TERMS_VERSION = '1.1'`) cobre os DOIS grupos: quem está na v1.0
+> é re-perguntado, e quem não tem linha nenhuma também. Mas o gate só dispara **no login** — ou seja,
+> o passo não fecha sozinho: fecha quando essas 3 pessoas entrarem no app. Se alguma nunca mais
+> entrar, o consentimento demonstrável dela continua faltando.
+>
+> **Decisão pendente do usuário:** esperar o login natural (custo zero, prazo indefinido) ou disparar
+> e-mail de re-aceite para as 3 contas ativas (fecha o gap com data).
 **Objetivo:** capturar consentimento demonstrável dos 4 usuários legados (Cakto) sem registro em `terms_acceptance`.
 **Por quê:** `terms_acceptance` tem 4 linhas; há 4 usuários reais (legados) sem registro de aceite.
 
@@ -440,7 +451,20 @@ tema claro, navegação por teclado no dashboard). É inclusão **e** um selo de
 
 ---
 
-## PASSO 18 — Testes de lógica financeira 🟡 PARCIAL — money.js coberto (2026-07-14)
+## PASSO 18 — Testes de lógica financeira ✅ FECHADO (2026-07-16)
+> **FECHADO 2026-07-16 — sem depender do Passo 10.** O pendente era "extrair ciclo de fatura + saldo +
+> projeção de meta p/ módulos puros e testar". Os três saíram, cada um junto da feature que os exigia:
+> - **ciclo de fatura** → `modules/ciclo-fatura.js` (23 testes, commit `f0377e8`). A extração revelou que
+>   a conta estava DUPLICADA e as cópias divergiam: o painel do cartão dizia "Fecha em 31 dias" **no dia
+>   do fechamento**. `radar.js` passou a usar o módulo — uma conta, uma implementação.
+> - **projeção de meta** → `modules/ritmo-metas.js` (32 testes, commit `03d696f`).
+>   `fvComposto`/`mesesParaMeta`/`aporteNecessario` eram cópia local sem teste em `db-metas.js`.
+> - **saldo/patrimônio** → `modules/patrimonio.js` + `modules/score-financeiro.js`, já testados.
+>
+> Suíte total: **189 → 419 testes** na sessão de 2026-07-16. Também entraram `sugestao-corte`,
+> `viagem`, `reserva-familia`, `categorizacao`. Todos puros, `hoje` injetável, no CI.
+>
+> **Histórico:** 🟡 PARCIAL — money.js coberto (2026-07-14)
 > **FEITO 2026-07-14:** `tests/unit/money.test.js` — **57 testes** cobrindo o parser de valores do
 > assistente (`assistant/money.js`, 100% puro): `parseValorBR` ("1,5k"→1500, "1.234,56", ignora "3x"),
 > `parseAritmetica` (2×8=16), `parseParcelas`, `parseExtenso` ("mil e duzentos"→1200), `formatBRL`,
@@ -456,7 +480,9 @@ tema claro, navegação por teclado no dashboard). É inclusão **e** um selo de
 de fatura (`fatura_ciclo_vencimento_fix`). Teste evita regressão silenciosa em dinheiro do usuário.
 
 - [x] ☑️ `money.js` (parser de valores do assistente) — 57 testes, no CI. **(2026-07-14)**
-- [ ] ⬜ Extrair ciclo de fatura + saldo + projeção de meta p/ módulos puros e testar (com Passo 10).
+- [x] ☑️ Extrair ciclo de fatura + saldo + projeção de meta p/ módulos puros e testar. **(2026-07-16)**
+      Não precisou esperar o Passo 10: cada extração saiu junto da feature que a exigia, e a de fatura
+      **achou um bug real em produção** no caminho (ver `ciclo-fatura.js`).
 
 **Risco:** nenhum (só adiciona testes). **Esforço:** ~1 dia. **Verificar:** suíte verde; um bug proposital de cálculo é pego pelo teste.
 
