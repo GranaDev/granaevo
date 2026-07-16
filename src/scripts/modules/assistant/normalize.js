@@ -19,8 +19,24 @@ function normalizePeriodo(p) {
     return null;
 }
 
+// Tokens de formatação do ui.js: `*negrito*` e o token de ícone de chaves
+// duplas. A descrição deixou de ser um rótulo de lista fechada e passou a ser
+// TEXTO LIVRE do usuário (describe.js) — e phrases.js interpola ela dentro dos
+// templates, inclusive DENTRO de um `*...*` (offlineEnfileirado). Sem neutralizar:
+//   • um "*" na descrição racha o pareamento do negrito e quebra a mensagem;
+//   • um token de ícone digitado pelo usuário vira ícone na fala do assistente.
+// NB: não escreva um token de ícone literal aqui — o scanner do build-fa-subset
+// varre src/ como TEXTO e puxaria esse ícone pra dentro da fonte de produção.
+// Não é XSS (ui.js só usa createTextNode/createElement e faIcon tem whitelist),
+// mas num perfil casal/família a descrição de um membro é renderizada na tela
+// do outro. Neutralizar aqui: ponto único onde local e IA convergem.
+function stripTemplateTokens(s) {
+    return s.replace(/\*/g, '').replace(/\{\{/g, '(').replace(/\}\}/g, ')');
+}
+
 function clampStr(s, max = 200) {
-    return typeof s === 'string' ? s.trim().slice(0, max) : null;
+    if (typeof s !== 'string') return null;
+    return stripTemplateTokens(s).trim().slice(0, max);
 }
 
 function normalizeTipo(categoria, tipo) {

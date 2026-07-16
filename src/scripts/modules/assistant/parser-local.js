@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseValorBR, parseParcelas, parseExtenso, parseDataRelativa, parseAritmetica, parseMesNomeado, parseDataFutura } from './money.js';
+import { extractDescricao } from './describe.js';
 
 // Tipos permitidos no app (espelham db-transacoes.js: o conjunto reconhecido pelo
 // auto-categorizador em _AUTO_CAT, mais rico que o dropdown de edição). Inclui
@@ -56,15 +57,29 @@ function corrigirTypos(t) {
 // dados de sistema/senha. A IA já ignoraria isso; aqui fechamos antes.
 const RE_INJECT = /\b(ignore? (as |todas as |suas )?(instru|regras|ordens)|esque[cç]a (as |suas )?(instru|regras)|aja como|finja (que|ser)|voce (agora )?e (um|uma|o|a)\b|assuma o papel|system prompt|prompt do sistema|jailbreak|dan mode|modo desenvolvedor|developer mode|revele? (suas |as )?(instru|regras|senha|chave|token|api)|(repita|mostra|mostre|imprima|print|exiba|cole|liste) (o |as |suas |seu )?(texto acima|instru|regras|system|prompt|mensagem de sistema)|quais (sao|são) (suas |as )?(instru|regras)|your (instructions|system prompt|rules)|qual (e |é )?(sua|a) (senha|chave|api|token)|service.?role|\bsudo\b|\bbypass\b)/;
 
+// ── Vocabulário de reserva ──────────────────────────────────────────────────
+// O brasileiro quase nunca diz "reserva": diz "caixinha" (é como o Nubank chama),
+// "cofrinho" (PicPay), "porquinho", "poupança". Exigir a palavra literal "reserv"
+// depois do verbo — como era antes — fazia "retirei 109,05 da caixinha" não casar
+// verbo NENHUM: caía em `valor_ambiguo` e o assistente perguntava "foi gasto ou
+// entrada?" de um saque de reserva. Bug real relatado em prod.
+// "caixa" (eletrônico) NÃO entra: `\bcaixinha` não casa "caixa".
+export const RESERVA_ALVO = /\b(reserv|caixinha|cofrinho|porquinho|poupanc|guardadinho|vaquinha|meta\b|objetivo)/;
+const RE_VERBO_TIRAR = /\b(tirei|resgatei|retirei|saquei|resgate|retirada|puxei|peguei de volta)\b/;
+
 // ── Verbos → categoria (ordem importa: específicos antes de genéricos) ───────
 const VERBOS = [
-    { cat: 'retirada_reserva', re: /\b(tirei|resgatei|retirei|saquei|resgate|retirada|puxei|peguei de volta)\b.*\breserv/ },
-    { cat: 'retirada_reserva', re: /\bda reserva\b.*\b(tirei|resgatei|retirei|saquei|puxei)/ },
+    { cat: 'retirada_reserva', re: /\b(tirei|resgatei|retirei|saquei|resgate|retirada|puxei|peguei de volta)\b.*\b(reserv|caixinha|cofrinho|porquinho|poupanc|guardadinho|vaquinha)/ },
+    { cat: 'retirada_reserva', re: /\b(d[ao]|na|no) (reserva|caixinha|cofrinho|porquinho|poupanca|vaquinha)\b.*\b(tirei|resgatei|retirei|saquei|puxei)/ },
     { cat: 'reserva',          re: /\b(guardei|reservei|poupei|juntei|separei|aportei|guardar|poupar|reservar|economizei|botei de lado|coloquei de lado)\b/ },
     { cat: 'assinatura',       re: /\b(assinatura|assinei|mensalidade|plano mensal|recorrente|todo mes pago)\b/ },
     { cat: 'saida_credito',    re: /\b(no credito|no cartao|parcelad|parcelei|em \d+x|\d+x de|no cartao de credito)\b/ },
     { cat: 'entrada',          re: /\b(recebi|ganhei|caiu|entrou|pingou|embolsei|faturei|recebimento|salario|me pagaram|pagaram|ganho|recebe?r|pix de|deposit|caiu na conta|entrou na conta)\b/ },
-    { cat: 'saida',            re: /\b(gastei|paguei|comprei|gasto|saiu|torrei|mandei|meti|queimei|desembolsei|estourei|fritei|gastar|comprar|pagar|debit|paguei por|deu de)\b/ },
+    // `gastos?` e não `gasto`: a fronteira \b no fim de "gasto" cai no MEIO de
+    // "gastos" e não casa o plural — era por isso que a frase "75,69 gastos na
+    // shopee" só virava saída por acidente (via a keyword "shopee"), e que
+    // "75,69 gastos com fita de led" era perguntada como "gasto ou entrada?".
+    { cat: 'saida',            re: /\b(gastei|paguei|comprei|gastos?|saiu|torrei|mandei|meti|queimei|desembolsei|estourei|fritei|gastar|comprar|pagar|debit|paguei por|deu de)\b/ },
 ];
 
 // ── Palavras-chave → {categoria, tipo} ──────────────────────────────────────
@@ -207,12 +222,19 @@ export function splitCompound(rawText) {
     // Passada 1 — separadores fortes (vírgula só quando NÃO for decimal).
     const strong = text.split(/(?<!\d),\s*|,\s*(?!\d)|\s*;\s*|\s+mas\s+|\s+por[ée]m\s+|\s+tamb[ée]m\s+|\s+depois\s+|\s+da[ií]\s+|\s+e mais\s+/i);
     // Passada 2 — quebra em " e " apenas quando o pedaço carrega ≥2 valores.
+    // A quebra exige valor DOS DOIS LADOS: sem isso, "20 no uber com pão e leite"
+    // (2 valores no pedaço inteiro) rachava em "…pão" + "leite", e "leite" — sem
+    // valor — era filtrado fora silenciosamente no fim desta função. Perda de
+    // dado invisível, e o risco cresce agora que descrições reais ("carne e
+    // arroz", "fita de led e tinta branca") naturalmente contêm " e ".
     const segs = [];
     for (const part of strong) {
         const p = part.trim();
         if (!p) continue;
         if (_countValores(p) >= 2 && /\s+e\s+/i.test(p)) {
-            for (const sub of p.split(/\s+e\s+/i)) { const s = sub.trim(); if (s) segs.push(s); }
+            const subs = p.split(/\s+e\s+/i).map((s) => s.trim()).filter(Boolean);
+            if (subs.every((s) => parseValorBR(s) !== null)) segs.push(...subs);
+            else segs.push(p); // algum pedaço não tem valor → não era lista de lançamentos
         } else {
             segs.push(p);
         }
@@ -298,6 +320,17 @@ function _extractMetaHint(t) {
     const m = t.match(/(?:pra|para|pro)\s+(?:a |o |minha |meu )?([\p{L}][\p{L}\s]{1,29})/u);
     return m ? m[1].trim() : null;
 }
+
+// "caixinha", "reserva", "cofrinho" sozinhos são a PALAVRA GENÉRICA, não o nome
+// da meta. Passá-los adiante como hint faz o resolveMeta procurar uma meta
+// chamada "caixinha", falhar, e o engine abrir picker mesmo quando havia só uma
+// reserva óbvia. Devolve o nome real ("caixinha de emergência" → "emergencia")
+// ou null quando o usuário só disse a palavra genérica.
+const RE_META_GENERICA = /^(?:a|o|as|os|minha|meu|nossa|nosso)?\s*(?:reserva|caixinha|cofrinho|porquinho|poupanca|vaquinha|meta|guardadinho)s?\s*(?:d[aeo]\s+)?/;
+function _limparMetaHint(h) {
+    const limpo = norm(h).replace(RE_META_GENERICA, '').trim();
+    return limpo.length >= 2 ? limpo : null;
+}
 // Extrai nome do cartão depois de "cartao/fatura do/da".
 function _extractCartaoHint(t) {
     const m = t.match(/(?:cartao|fatura)\s+(?:do |da |no |de )?([\p{L}][\p{L}\s]{1,29})/u);
@@ -315,7 +348,10 @@ export function parseLocal(rawText) {
     const base = {
         intencao: 'desconhecido', categoria: null, valor: null, tipo: null, descricao: null,
         meta_hint: null, parcelas: null, cartao_hint: null, aporte_mensal: null,
-        periodo: null, palavras_chave: [], consulta_alvo: null, data_override: null, confianca: 0, source: 'local',
+        periodo: null, palavras_chave: [], consulta_alvo: null, data_override: null, confianca: 0,
+        // 1 = "li tudo que havia na frase". Só o lançamento rebaixa isso (ver abaixo);
+        // saudação/consulta/ajuda não têm conteúdo livre a perder.
+        completude: 1, source: 'local',
     };
     if (!text) return base;
 
@@ -428,26 +464,52 @@ export function parseLocal(rawText) {
         // Aqui só reportamos o parse; o engine decide o roteamento.
         let conf = 0.7;
         if (tipo) conf = 0.9;
+
+        // A DESCRIÇÃO — o que o usuário de fato comprou. Até aqui este campo era
+        // sobrescrito pelo rótulo da categoria (o laço de KEYWORDS acima fazia
+        // `descricao = tp`) e o texto livre nunca era lido por ninguém: "75,69
+        // gastos na shopee com fita de led e tinta branca" gravava "Shopee".
+        // Agora o describe.js lê a frase; o rótulo só entra se não sobrar nada.
+        const ex = extractDescricao(rawText);
+
+        // COMPLETUDE ≠ CONFIANÇA. `conf` responde "sei o que ele quer?" (sim: é
+        // uma saída). `completude` responde "li tudo que estava na frase?". Eram
+        // o MESMO número, e por isso um parse certo na intenção e cego no
+        // conteúdo era final — vetando a IA justo nas mensagens mais ricas.
+        // Baixa quando há descrição de verdade mas nenhuma pista da categoria.
+        //
+        // SÓ vale para saida/entrada, onde `tipo` É a categoria. Em reserva e
+        // retirada_reserva o tipo é null POR PROJETO (o tx-builder grava
+        // 'Reserva'/'Retirada de Reserva' por conta própria) — sem esta guarda,
+        // todo saque e todo aporte cairiam na IA por "falta de tipo", gastando
+        // rede e token à toa numa categoria que o parser já resolveu sozinho.
+        const tipoEhCategoria = categoria === 'saida' || categoria === 'entrada';
+        const completude = (tipoEhCategoria && !tipo && ex.descricao) ? 0.4 : 1;
+
         // tipo padrão coerente por categoria
         if (!tipo) {
             if (categoria === 'entrada') { tipo = 'Outros Recebimentos'; descricao = descricao || 'Recebimento'; }
             else if (categoria === 'saida') { tipo = 'Outros'; descricao = descricao || 'Gasto'; }
         }
-        // meta_hint (só p/ reserva): nome após reserva/meta/na/no/pra/para/em.
-        // Ex.: "guardar 50 na viagem" → "viagem"; "poupei 200 pra emergência" → "emergência".
+        // meta_hint — nome após reserva/caixinha/meta/na/no/pra/em.
+        // "guardar 50 na viagem" → "viagem"; "poupei 200 na caixinha" → null
+        // (genérico: o engine pergunta ou usa a única reserva que existe).
+        // Vale também para RETIRADA: antes o hint só era calculado para 'reserva',
+        // então "retirei 50 da caixinha de emergência" chegava ao engine sem hint
+        // e abria o picker mesmo com o usuário tendo dito de qual reserva era.
         let metaHint = null;
-        if (categoria === 'reserva') {
-            const mm = text.match(/\b(?:reserva|meta|pra|para|pro|na|no|em)\s+(?:d[aeo]\s+|[ao]\s+)?([\p{L}][\p{L}\s]{1,28})/u);
-            if (mm) metaHint = mm[1].trim();
+        if (categoria === 'reserva' || categoria === 'retirada_reserva') {
+            const mm = text.match(/\b(?:reserva|meta|caixinha|cofrinho|porquinho|poupanca|vaquinha|pra|para|pro|na|no|em)\s+(?:d[aeo]\s+|[ao]\s+)?([\p{L}][\p{L}\s]{1,28})/u);
+            if (mm) metaHint = _limparMetaHint(mm[1]);
         }
 
         return {
             ...base, intencao: 'lancar', categoria, valor, tipo,
-            descricao: descricao || (tipo ?? null),
+            descricao: ex.descricao || descricao || tipo || null,
             meta_hint: metaHint, periodo: null,
             parcelas: categoria === 'saida_credito' ? parseParcelas(rawText) : null,
             data_override: parseDataRelativa(rawText),
-            palavras_chave: [], confianca: conf,
+            palavras_chave: [], confianca: conf, completude,
         };
     }
 
@@ -456,7 +518,8 @@ export function parseLocal(rawText) {
     if (categoria === 'saida_credito') {
         return {
             ...base, intencao: 'lancar', categoria: 'saida_credito', valor: valor || null,
-            descricao: descricao || 'Compra no crédito', tipo: tipo || 'Cartão',
+            descricao: extractDescricao(rawText).descricao || descricao || 'Compra no crédito',
+            tipo: tipo || 'Cartão',
             parcelas: parseParcelas(rawText), confianca: 0.75,
         };
     }

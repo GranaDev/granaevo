@@ -601,8 +601,12 @@ export function conquistasHojeMsg(n) {
 }
 
 // B13: valor sozinho ambíguo → pergunta (sem IA; chips vêm do engine)
+// Valor solto, sem direção. Oferece as QUATRO direções que o app tem — antes
+// eram só gasto/entrada, e quem tinha tirado da reserva ficava sem saída. O
+// engine guarda o valor (#pendingValorAmbiguo), então responder por escrito
+// ("retirada da caixinha") também funciona, não só os chips.
 export function perguntarGastoOuEntrada(valor) {
-    return `Peguei *${formatBRL(valor)}*, mas não sei se foi gasto ou entrada. Qual dos dois?`;
+    return `Peguei *${formatBRL(valor)}* — só me diz o que foi que eu lanço.`;
 }
 
 // B15: repetição do último lançamento

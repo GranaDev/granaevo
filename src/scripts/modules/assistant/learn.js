@@ -26,7 +26,8 @@ function _load() {
         if (Array.isArray(raw)) {
             for (const pair of raw) {
                 if (Array.isArray(pair) && typeof pair[0] === 'string' && pair[1] && typeof pair[1] === 'object') {
-                    _map.set(pair[0], { categoria: pair[1].categoria, tipo: pair[1].tipo, descricao: pair[1].descricao });
+                    // `descricao` de versões antigas é ignorada de propósito (ver learnMerchant).
+                    _map.set(pair[0], { categoria: pair[1].categoria, tipo: pair[1].tipo });
                 }
             }
         }
@@ -62,25 +63,31 @@ export function merchantKey(text) {
     return cand && !STOP.has(cand) ? cand : null;
 }
 
-/** Consulta o aprendizado para um texto. Retorna {categoria,tipo,descricao} ou null. */
+/** Consulta o aprendizado para um texto. Retorna {categoria,tipo} ou null. */
 export function applyLearned(text) {
     const key = merchantKey(text);
     if (!key) return null;
     const hit = _load().get(key);
-    return hit && hit.categoria && hit.tipo ? { categoria: hit.categoria, tipo: hit.tipo, descricao: hit.descricao || hit.tipo } : null;
+    return hit && hit.categoria && hit.tipo ? { categoria: hit.categoria, tipo: hit.tipo } : null;
 }
 
 /**
  * Aprende com um lançamento que a IA resolveu (chamar SÓ quando o parser local
- * não sabia — senão é redundante). Guarda termo→{categoria,tipo,descricao}.
+ * não sabia — senão é redundante). Guarda termo→{categoria,tipo}.
+ *
+ * NÃO guarda descrição — e isso é deliberado. Comerciante→categoria é ESTÁVEL
+ * ("Kalunga" é sempre papelaria); comerciante→o-que-você-comprou NÃO é. Guardar
+ * a descrição fazia o módulo memorizar "kalunga → Caderno" e repetir "Caderno"
+ * na compra seguinte, que era uma caneta. A descrição vem do describe.js a cada
+ * mensagem, lida do texto daquela compra.
  */
-export function learnMerchant(text, categoria, tipo, descricao) {
+export function learnMerchant(text, categoria, tipo) {
     if (!categoria || !tipo) return;
     const key = merchantKey(text);
     if (!key) return;
     const map = _load();
     map.delete(key);                 // move-to-end (recência p/ LRU)
-    map.set(key, { categoria, tipo, descricao: descricao || tipo });
+    map.set(key, { categoria, tipo });
     while (map.size > MAX) map.delete(map.keys().next().value);
     _save();
 }

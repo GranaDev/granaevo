@@ -8,6 +8,7 @@
 
 import { dataManager } from '../data-manager.js';
 import { parseLocal, splitCompound, parseFollowup, keywordMatch } from './parser-local.js';
+import { extractDescricao, textoParaModelo } from './describe.js';
 import { parseValorBR, parseDataFutura } from './money.js';
 import { toCommand } from './normalize.js';
 import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito, applyRetirada,
@@ -20,6 +21,7 @@ import { consultarGastos, consultarEntradas, saldoAtual, maioresGastos, ultimasT
     faturaVencendo, salarioProvavel, fimDeMes, marcoReserva, marcoContagem, conquistasResumo, conquistasHoje } from './query.js';
 import { applyLearned, learnMerchant } from './learn.js';
 import { parseWithAI } from './assistant-api.js';
+import { construirModelo, sugerirCategoria } from '../categorizacao.js';
 import * as P from './phrases.js';
 
 const CONF_LOCAL_OK = 0.7;   // acima disso confiamos no parser local (sem gastar IA)
@@ -37,6 +39,11 @@ class AssistantEngine {
     #pendingConfirm = null; // { cmd, kind } aguardando "sim/não" de valor alto
     #pendingConta = null;   // { valor } aguardando o NOME da conta fixa a pagar
     #pendingLembrete = null; // { texto } aguardando o QUANDO do lembrete
+    // R3: valor solto aguardando a DIREÇÃO ("109,05" → gasto? entrada? retirada?).
+    // Sem esta gaveta o valor morria: os chips só funcionavam porque reenviam o
+    // número embutido no texto ("gastei 109.05"), então responder por escrito
+    // ("retirada da caixinha") perdia os 109,05 e o chat repetia a pergunta.
+    #pendingValorAmbiguo = null; // { valor }
     #lastUndo = null;       // fn de desfazer do último lançamento (desfazer por texto)
     #lastQuery = null;      // { consultaAlvo, palavrasChave, periodo } p/ follow-up
     #lastTxInfo = null;     // { profileId, txSnap, cmd } p/ correção inline (B20)
@@ -51,7 +58,7 @@ class AssistantEngine {
         this.#activeId = null;
         this.#ready = false;
         this.#pendingReserva = this.#pendingRetirada = this.#pendingCredito = this.#pendingConfirm = null;
-        this.#pendingConta = this.#pendingLembrete = null;
+        this.#pendingConta = this.#pendingLembrete = this.#pendingValorAmbiguo = null;
         this.#lastUndo = this.#lastQuery = this.#lastTxInfo = this.#lastLancamentoCmd = null;
     }
 
@@ -76,6 +83,7 @@ class AssistantEngine {
             const data = await dataManager.loadUserData();
             if (Array.isArray(data?.profiles)) {
                 this.#profiles = data.profiles;
+                this.#invalidarModelo(); // as transações mudaram → o cérebro do R6 envelheceu
                 if (!this.#profiles.some((p) => String(p.id) === String(this.#activeId))) {
                     this.#restoreActive();
                 }
@@ -101,11 +109,44 @@ class AssistantEngine {
         this.#activeId = String(id);
         try { localStorage.setItem(this.#profileKey(), this.#activeId); } catch {}
         this.#pendingReserva = null;
+        this.#invalidarModelo(); // nunca sugerir com o histórico do perfil anterior
         return true;
     }
 
     get activeProfileId() { return this.#activeId; }
     #active() { return this.#profiles.find((p) => String(p.id) === String(this.#activeId)) || null; }
+
+    // ── R6: o cérebro do app, dentro do chat ─────────────────────────────────
+    // O dashboard aprende a categorização do histórico do próprio usuário
+    // (categorizacao.js, usado por _autoCatComAprendizado). O chat tinha um
+    // learn.js paralelo, mais fraco e quase sempre dormente. Agora os dois usam
+    // o MESMO cérebro: o chat categoriza igual ao app e melhora sozinho toda vez
+    // que o usuário corrige algo na tela de transações.
+    //
+    // Só foi possível depois do describe.js: este motor recebe uma DESCRIÇÃO e
+    // devolve categoria+tipo. Enquanto a descrição era o rótulo da categoria,
+    // perguntar a ele era circular ("Shopee" → Shopee) e inútil.
+    //
+    // Cache invalidado por perfil E por save. A chave por perfil não é detalhe:
+    // sem ela, num casal/família o modelo de um sugeriria as categorias do outro
+    // (mesma armadilha documentada em db-transacoes.js:1716).
+    #modeloCat = null;
+    #modeloCatPerfil = null;
+
+    #invalidarModelo() { this.#modeloCat = null; this.#modeloCatPerfil = null; }
+
+    #sugerirDoHistorico(descricao) {
+        try {
+            const p = this.#active();
+            if (!p || !descricao) return null;
+            if (!this.#modeloCat || this.#modeloCatPerfil !== this.#activeId) {
+                this.#modeloCat = construirModelo(Array.isArray(p.transacoes) ? p.transacoes : []);
+                this.#modeloCatPerfil = this.#activeId;
+            }
+            const s = sugerirCategoria(this.#modeloCat, descricao);
+            return s && s.tipo ? { categoria: s.categoria, tipo: s.tipo } : null;
+        } catch { return null; } // modelo indisponível → segue para as fontes antigas
+    }
 
     // Rótulos NÃO-sensíveis para dar contexto à IA (nomes, nunca valores).
     #labels() {
@@ -166,7 +207,18 @@ class AssistantEngine {
     // Retorna { valor } | { categoria, tipo, descricao } | null.
     #matchCorrecao(text) {
         const t = String(text).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-        if (!/^(nao,?\s*(foi|foram|era|e)\b|na verdade|corrige|corrija|ajusta|muda (o valor|a categoria|pra|para)|troca (o valor|a categoria|pra|para)|era pra ser|e pra ser|o certo (e|era))/.test(t)) return null;
+        if (!/^(nao,?\s*(foi|foram|era|e)\b|na verdade|corrige|corrija|ajusta|muda (o valor|a categoria|a descricao|pra|para)|troca (o valor|a categoria|a descricao|pra|para)|era pra ser|e pra ser|o certo (e|era))/.test(t)) return null;
+
+        // R7: correção explícita de DESCRIÇÃO — "corrige a descrição pra fita de led".
+        // Vem ANTES do valor/categoria porque é a mais específica: o usuário nomeou
+        // o campo. Sem isso, a única saída pra uma descrição errada era desfazer e
+        // redigitar a frase inteira.
+        const md = String(text).match(/\b(?:a\s+)?descri(?:c|ç)(?:a|ã)o\s+(?:pra|para|e|é|:)?\s*(.{2,80})$/i);
+        if (md) {
+            const nova = md[1].trim().replace(/[.!?]+$/, '');
+            if (nova.length >= 2) return { descricao: nova };
+        }
+
         const v = parseValorBR(text);
         if (v && v > 0) return { valor: v };
         const km = keywordMatch(text); // B14: correção de categoria por palavra-chave
@@ -185,7 +237,12 @@ class AssistantEngine {
             return { text: 'Esse lançamento já mudou — não consegui corrigir. Pode lançar de novo?' };
         }
         const novoCmd = { ...info.cmd, _confirmed: true, valor: corr.valor != null ? corr.valor : Number(info.txSnap.valor) };
-        if (corr.categoria) { novoCmd.categoria = corr.categoria; novoCmd.tipo = corr.tipo; novoCmd.descricao = corr.descricao; }
+        // Corrigir a CATEGORIA não pode apagar a descrição: quem diz "não, foi
+        // transporte" está consertando o tipo, não desistindo de "Uber pro
+        // aeroporto". Antes o rótulo da keyword sobrescrevia a descrição aqui —
+        // o mesmo bug que o describe.js matou, ressurgindo pelo caminho da correção.
+        if (corr.categoria) { novoCmd.categoria = corr.categoria; novoCmd.tipo = corr.tipo; }
+        else if (corr.descricao) { novoCmd.descricao = corr.descricao; } // R7
         const res = applyLancamento(profile, novoCmd);
         if (!res.ok) { await this.#reload(); return { text: P.SISTEMA.erro() }; }
         const saved = await dataManager.saveUserData(this.#profiles);
@@ -333,6 +390,22 @@ class AssistantEngine {
             this.#pendingReserva = null;
         }
 
+        // R3: valor solto esperando direção. Qualquer resposta que traga a DIREÇÃO
+        // sem trazer valor próprio herda o número pendente — "retirada da caixinha",
+        // "foi um gasto", "guardei". Antes só os chips funcionavam (porque reenviam
+        // o valor embutido no texto) e responder por escrito era um beco sem saída.
+        if (this.#pendingValorAmbiguo) {
+            const pend = this.#pendingValorAmbiguo;
+            this.#pendingValorAmbiguo = null;
+            const p = parseLocal(text);
+            // Só combina quando a resposta é direção PURA. Se trouxe valor novo,
+            // o usuário mudou de assunto — segue o fluxo normal (sem duplicar).
+            if (p.intencao === 'lancar' && p.categoria && !(p.valor > 0)) {
+                return this.#route(toCommand({ ...p, valor: pend.valor, confianca: 0.9, source: 'local' }));
+            }
+            // não era direção → cai no fluxo normal
+        }
+
         // Follow-up de consulta ("e no mês passado?", "e transporte?") — reusa
         // o contexto da última consulta, trocando só período/termo.
         if (this.#lastQuery) {
@@ -362,6 +435,21 @@ class AssistantEngine {
     async #handleOne(text) {
         const local = parseLocal(text);
 
+        // R6 — 1ª fonte: SEU HISTÓRICO. O parser sabe a direção e leu a descrição,
+        // mas não faz ideia da categoria (tipo genérico → completude baixa). Quem
+        // já lançou "caderno kalunga" como Educação três vezes não precisa de IA
+        // pra isso. Mesma precedência do dashboard (db-transacoes.js:1733).
+        if (local.intencao === 'lancar' && local.completude < 1 && local.descricao) {
+            // Consulta com o texto CHEIO (loja inclusa), não com a descrição: a
+            // descrição corta a loja quando há "com <item>", e a loja é o sinal
+            // mais forte do classificador. Ver describe.textoParaModelo.
+            const s = this.#sugerirDoHistorico(textoParaModelo(text));
+            if (s) {
+                bump('local');
+                return this.#route(toCommand({ ...local, categoria: s.categoria, tipo: s.tipo }));
+            }
+        }
+
         // B12: comerciante já aprendido resolve LOCALMENTE (zero token). Só quando
         // o parser ficou incerto ou o valor está solto (ambíguo) — nunca sobrepõe
         // um parse confiante por palavra-chave.
@@ -371,12 +459,22 @@ class AssistantEngine {
             if (learned && v > 0) {
                 return this.#route(toCommand({
                     intencao: 'lancar', categoria: learned.categoria, tipo: learned.tipo,
-                    descricao: learned.descricao, valor: v, source: 'local', confianca: 0.9,
+                    // Descrição SEMPRE fresca, lida desta mensagem — nunca a que foi
+                    // memorizada do comerciante (ver learn.js/learnMerchant).
+                    descricao: local.descricao || extractDescricao(text).descricao,
+                    valor: v, source: 'local', confianca: 0.9,
                 }));
             }
         }
 
-        if (local.confianca >= CONF_LOCAL_OK) {
+        // R5 — o portão agora tem DUAS perguntas, não uma.
+        //   confianca  = "sei o que ele quer?"
+        //   completude = "li tudo que estava na frase?"
+        // Antes era um número só, então um parse certo na intenção e cego no
+        // conteúdo era final: a IA ficava trancada do lado de fora justamente
+        // nas mensagens mais ricas. Agora "sei que é saída, li 'caderno kalunga',
+        // mas não sei a categoria" cai pra IA — que conhece a Kalunga.
+        if (local.confianca >= CONF_LOCAL_OK && local.completude >= 1) {
             bump('local'); // telemetria anônima: resolvido 100% no aparelho
             return this.#route(toCommand(local));
         }
@@ -387,10 +485,14 @@ class AssistantEngine {
             const ai = await parseWithAI(text, this.#labels());
             if (ai.ok) {
                 bump('ia_ok');
-                const cmd = toCommand({ ...ai.parse, source: 'ia' });
+                // A IA é chamada pela CATEGORIA, não pela descrição. Se ela não
+                // devolver descrição, o normalize cairia no rótulo do tipo — que é
+                // exatamente o bug que o describe.js veio matar. A extração local
+                // segura a ponta: veio das palavras literais do usuário.
+                const cmd = toCommand({ ...ai.parse, descricao: ai.parse?.descricao || local.descricao, source: 'ia' });
                 // B12: aprende o comerciante que a IA resolveu (o parser não sabia).
                 if (cmd.intent === 'lancar' && cmd.categoria && cmd.tipo) {
-                    try { learnMerchant(text, cmd.categoria, cmd.tipo, cmd.descricao); } catch { /* ignore */ }
+                    try { learnMerchant(text, cmd.categoria, cmd.tipo); } catch { /* ignore */ }
                 }
                 return this.#route(cmd);
             }
@@ -428,14 +530,18 @@ class AssistantEngine {
             case 'recusa':      return { text: P.SISTEMA.recusa() };
             case 'privacidade': return { text: P.privacidadeMsg() };
 
-            case 'valor_ambiguo': {                                                // B13
+            case 'valor_ambiguo': {                                                // B13 + R3
                 const v = cmd.valor;
                 if (!(v > 0)) return { text: P.SISTEMA.semValor() };
+                // Guarda o valor: agora responder por ESCRITO também resolve.
+                this.#pendingValorAmbiguo = { valor: v };
                 return {
                     text: P.perguntarGastoOuEntrada(v),
                     quickReplies: [
                         { label: 'Foi um gasto', text: `gastei ${v}` },
                         { label: 'Foi uma entrada', text: `recebi ${v}` },
+                        { label: 'Guardei na reserva', text: `guardei ${v}` },
+                        { label: 'Tirei da reserva', text: `retirei ${v} da reserva` },
                     ],
                 };
             }
@@ -530,6 +636,8 @@ class AssistantEngine {
             }
             return { text: P.SISTEMA.erro() };
         }
+
+        this.#invalidarModelo(); // R6: este lançamento é evidência nova pro cérebro
 
         // Desfazer amarrado a ESTE lançamento (match por campos, à prova de reload).
         const txSnap = { ...res.transaction };
