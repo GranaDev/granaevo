@@ -1,6 +1,7 @@
 // db-transacoes.js — Seção de Transações (lazy-loaded)
 import { perfMark, perfMeasure, perfCount } from '../modules/perf-marks.js';
 import { chipHorasVida } from '../modules/horas-vida.js?v=1';
+import { construirModelo, sugerirCategoria } from '../modules/categorizacao.js?v=1';
 
 let _ctx = null;
 
@@ -1711,6 +1712,32 @@ function _autoCategorizar(memo) {
     return null;
 }
 
+// Modelo aprendido do histórico — construído sob demanda e cacheado (build de ~16ms
+// com 3000 transações; a consulta é imediata). Duas invalidações, e as DUAS importam:
+//   • ge:save-done → os dados mudaram.
+//   • troca de perfil → selecionarPerfil() troca as transações SEM salvar, então não
+//     emite ge:save-done. Sem a chave por perfil, o modelo do perfil anterior
+//     sobreviveria e sugeriria as categorias de OUTRA pessoa (casal/família).
+let _modeloCat = null;
+let _modeloCatPerfil = null;
+function _modeloCategorias() {
+    const perfil = _ctx?.perfilAtivo?.id ?? null;
+    if (!_modeloCat || _modeloCatPerfil !== perfil) {
+        _modeloCat = construirModelo(_ctx?.transacoes || []);
+        _modeloCatPerfil = perfil;
+    }
+    return _modeloCat;
+}
+document.addEventListener('ge:save-done', () => { _modeloCat = null; });
+
+// ORDEM DAS FONTES (decidida com o usuário em 2026-07-14):
+//   1º SEU HISTÓRICO  → o que você mesmo escolheu nas últimas vezes. É o sinal mais
+//                       forte e mais recente. Sem esta precedência, as regras antigas
+//                       da importação venceriam calado o que o histórico aprendeu.
+//   2º regras da importação (localStorage) → o que você corrigiu ao importar extrato.
+//   3º lista fixa de palavras → o chute genérico que veio pronto no app.
+// O módulo só sugere com evidência (senão devolve null) — então cair para o 2º/3º é
+// o caminho normal de quem ainda não tem histórico, não um erro.
 function _autoCatComAprendizado(memo) {
     const m = String(memo || '')
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -1719,7 +1746,13 @@ function _autoCatComAprendizado(memo) {
         .trim();
     if (!m) return null;
 
-    // Verifica regras aprendidas do usuário (palavras-chave exatas)
+    // 1º — histórico do próprio usuário
+    try {
+        const s = sugerirCategoria(_modeloCategorias(), memo);
+        if (s && s.tipo) return { cat: s.categoria, tipo: s.tipo, learned: true };
+    } catch { /* modelo indisponível → segue para as fontes antigas */ }
+
+    // 2º — regras aprendidas na importação (palavras-chave exatas)
     try {
         const uid = _ctx?.user?.id || 'anon';
         const raw = localStorage.getItem(`ge_learned_cats_${uid}`);
@@ -1735,6 +1768,7 @@ function _autoCatComAprendizado(memo) {
         }
     } catch { /* localStorage pode estar bloqueado */ }
 
+    // 3º — lista fixa de palavras que veio pronta no app
     return _autoCategorizar(memo);
 }
 

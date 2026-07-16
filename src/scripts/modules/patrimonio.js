@@ -11,7 +11,7 @@
 // `hoje` é injetável (testes + determinismo), igual a score-financeiro.js.
 //
 // ── DECISÃO DE MODELAGEM: por que NÃO excluímos o marcador de origem ────────
-// Os módulos irmãos (previsao-mes, recorrencias, duplicados, assinatura-precos)
+// Os módulos irmãos (previsao-mes, recorrencias, duplicados, categorizacao)
 // pulam transações com `contaFixaId/faturaId/compraId`. Aqui isso seria um BUG,
 // e a razão é a diferença entre os dois cálculos:
 //
