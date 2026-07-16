@@ -1,4 +1,8 @@
 // db-metas.js — Seção de Metas/Reservas (lazy-loaded)
+import {
+    fvComposto, mesesParaMeta, aporteNecessario, mesesAtePrazo, analisarRitmo,
+} from '../modules/ritmo-metas.js?v=1';
+
 let _ctx = null;
 let _metaLinePeriod = 'mensal'; // mensal | bimestral | trimestral | semestral | anual
 
@@ -52,24 +56,62 @@ function _atualizarLabelCDI(val) {
 const formatBRL     = (...a) => _ctx.formatBRL(...a);
 const _sanitizeText = (...a) => _ctx._sanitizeText(...a);
 
-// ===== Funções financeiras (escopo de módulo — usadas no form E na projeção) =====
-function fvComposto(pv, pmt, r, n) {
-    if (r <= 0) return pv + pmt * n;
-    return pv * Math.pow(1 + r, n) + pmt * ((Math.pow(1 + r, n) - 1) / r);
-}
-function mesesParaMeta(pv, obj, pmt, r) {
-    for (let n = 1; n <= 600; n++) {
-        if (fvComposto(pv, pmt, r, n) >= obj) return n;
+// ===== Funções financeiras =====
+// fvComposto / mesesParaMeta / aporteNecessario MUDARAM-SE para
+// modules/ritmo-metas.js (importadas no topo) — mesma matemática, agora coberta
+// por testes e compartilhada com o cálculo de ritmo da lista. Manter uma cópia
+// local aqui faria o preview do form e a tag da lista divergirem com o tempo.
+
+/**
+ * Tag de ritmo da meta na lista (item 3), ou null quando não há o que dizer.
+ *
+ * Tom deliberado: ORIENTA, não acusa. Meta recém-criada mostra "guarde R$X/mês"
+ * (útil) em vez de "atrasada" (injusto — não deu tempo de aportar ainda).
+ */
+function _tagRitmo(m) {
+    let r;
+    try {
+        r = analisarRitmo(m, _ctx.transacoes, _taxaMensal(m), new Date());
+    } catch (e) {
+        _ctx._log?.warn?.('RITMO_TAG_001', e);
+        return null;                       // ritmo é complemento: nunca quebra a lista
     }
-    return null;
-}
-function aporteNecessario(pv, obj, r, n) {
-    if (n <= 0) return null;
-    const fv = obj - pv * Math.pow(1 + r, n);
-    if (r <= 0) return fv / n;
-    const fator = Math.pow(1 + r, n) - 1;
-    if (fator <= 0) return null;
-    return fv * r / fator;
+
+    const tag = document.createElement('span');
+    tag.className = 'meta-tag';
+
+    switch (r.status) {
+        case 'no_ritmo':
+            tag.classList.add('meta-tag-ritmo-ok');
+            tag.textContent = '✅ no ritmo';
+            tag.title = r.necessario > 0
+                ? `Precisa de ${formatBRL(r.necessario)}/mês — você guarda ${formatBRL(r.real)}/mês`
+                : 'O rendimento sozinho já leva ao objetivo dentro do prazo';
+            return tag;
+
+        case 'atrasada':
+            tag.classList.add('meta-tag-ritmo-off');
+            tag.textContent = `⚠️ faltam ${formatBRL(r.gap)}/mês`;
+            tag.title = `Precisa de ${formatBRL(r.necessario)}/mês para chegar no prazo — `
+                      + `você guarda ${formatBRL(r.real)}/mês`;
+            return tag;
+
+        case 'sem_historico':
+            tag.classList.add('meta-tag-ritmo-neutro');
+            tag.textContent = `🎯 guarde ${formatBRL(r.necessario)}/mês`;
+            tag.title = `Para chegar em ${formatBRL(parseFloat(m.objetivo) || 0)} no prazo, `
+                      + `em ${r.mesesRestantes} ${r.mesesRestantes === 1 ? 'mês' : 'meses'}`;
+            return tag;
+
+        case 'vencida':
+            tag.classList.add('meta-tag-ritmo-off');
+            tag.textContent = '⏰ prazo vencido';
+            tag.title = `Ainda faltam ${formatBRL(r.falta)} para o objetivo`;
+            return tag;
+
+        default:                            // sem_prazo / concluida: nada a dizer
+            return null;
+    }
 }
 
 // Retorna taxa diária efetiva para uma meta com rendimento
@@ -720,11 +762,14 @@ function abrirMetaForm(editId = null) {
                     : pct / 100;
             }
 
+            // Mesma função que a tag de ritmo da lista usa. Antes era uma
+            // aproximação de 30,44 dias até o 1º dia do mês, que dava ±1 mês de
+            // diferença — o preview e a tag mostrariam R$/mês diferentes para a
+            // mesma meta, e o usuário não teria como saber qual acreditar.
             let mesesPrazo = null;
             if (prazoM && prazoA) {
-                const hoje = new Date();
-                const dt   = new Date(parseInt(prazoA), parseInt(prazoM) - 1, 1);
-                mesesPrazo = Math.max(1, Math.round((dt - hoje) / (1000 * 60 * 60 * 24 * 30.44)));
+                const m = mesesAtePrazo(`${prazoM}/${prazoA}`);
+                mesesPrazo = (m !== null && m > 0) ? m : null;
             }
 
             const secP = document.getElementById('metaProjecaoPreview');
@@ -1158,6 +1203,14 @@ function renderMetasList() {
                 tagPrazo.className = 'meta-tag meta-tag-prazo';
                 tagPrazo.textContent = `⏰ ${nomeMes[parseInt(pm,10) - 1] || pm}/${pa}`;
                 rowTags.appendChild(tagPrazo);
+
+                // ── Ritmo (item 3) ───────────────────────────────────────────
+                // O prazo sozinho é decoração: não diz se você vai chegar lá. A
+                // tag abaixo responde isso a cada render, a partir dos aportes
+                // REAIS (transações com metaId) — nunca de m.monthly, que soma o
+                // rendimento diário e faria o juro passar por esforço.
+                const tagRitmo = _tagRitmo(m);
+                if (tagRitmo) rowTags.appendChild(tagRitmo);
             }
             if (m.tipoRendimento === 'cdi') {
                 const tagRend = document.createElement('span');

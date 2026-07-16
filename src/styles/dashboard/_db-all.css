@@ -3235,6 +3235,13 @@ select.form-input option:checked {
 .meta-tag-rend   { background: rgba(0,255,153,0.12);   color: #00cc7a; }
 .meta-tag-aporte { background: rgba(67,160,71,0.15);   color: var(--primary); }
 
+/* Ritmo da meta (item 3) — acompanha a tag de prazo e diz se ela vai ser
+   cumprida. Neutro = meta nova (orienta), âmbar = fora do ritmo (não usa
+   vermelho: atraso é corrigível, não é erro). */
+.meta-tag-ritmo-ok     { background: rgba(0,255,153,0.12);   color: #00cc7a; }
+.meta-tag-ritmo-off    { background: rgba(255,183,77,0.15);  color: #ffb74d; }
+.meta-tag-ritmo-neutro { background: rgba(148,163,184,0.15); color: #94a3b8; }
+
 .meta-item-perc {
     padding: 5px 10px;
     border-radius: 20px;

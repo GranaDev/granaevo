@@ -1158,6 +1158,11 @@
 [data-theme="light"] .meta-tag-rend  { background: rgba(16,185,129,0.1); color: #059669; }
 [data-theme="light"] .meta-tag-prazo { background: rgba(139,92,246,0.1); color: #6d28d9; }
 
+/* Ritmo (item 3) — no claro os tons escuros do dark falham no contraste. */
+[data-theme="light"] .meta-tag-ritmo-ok     { background: rgba(16,185,129,0.1);  color: #059669; }
+[data-theme="light"] .meta-tag-ritmo-off    { background: rgba(217,119,6,0.1);   color: #b45309; }
+[data-theme="light"] .meta-tag-ritmo-neutro { background: rgba(100,116,139,0.1); color: #475569; }
+
 [data-theme="light"] .btn-meta-edit          { background: rgba(16,185,129,0.1);  color: #059669; }
 [data-theme="light"] .btn-meta-edit:hover    { background: rgba(16,185,129,0.2);  color: #047857; }
 [data-theme="light"] .btn-meta-del           { background: rgba(220,38,38,0.08);  color: #dc2626; }
