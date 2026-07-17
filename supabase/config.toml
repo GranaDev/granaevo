@@ -393,6 +393,9 @@ verify_jwt = false
 # create-user-account: criação de conta. Auth por x-proxy-secret; é chamada com a
 # publishable key (NÃO-JWT) no Bearer → verify_jwt precisa ser false senão o gateway
 # rejeita antes de chegar no código. (Antes ausente do config; fixado com o HIBP em 2026-07-14.)
+[functions.send-signup-code]
+verify_jwt = false
+
 [functions.create-user-account]
 verify_jwt = false
 

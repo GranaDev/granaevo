@@ -1967,6 +1967,37 @@ input[type="password"]::-ms-clear {
 }
 .signup-field-error.show { display: block; }
 
+/* ── Passo do código de e-mail (prova de posse no cadastro) ───────────────── */
+.signup-field-hint {
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 0.375rem;
+    line-height: 1.5;
+}
+/* Botão que se comporta como link: o "Reenviar" precisa ser <button> por ser
+   ação, não navegação — mas não deve parecer um botão no meio da frase. */
+.signup-link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: #00cc7a;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.signup-link-btn:hover:not(:disabled) { color: #00e88a; }
+.signup-link-btn:disabled { opacity: 0.6; cursor: default; text-decoration: none; }
+
+/* O código é o campo mais importante da tela quando aparece: dígitos grandes,
+   espaçados e monoespaçados — quem digita compara com o e-mail caractere a
+   caractere, e fonte proporcional atrapalha essa conferência. */
+#signupCode {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: 1.35rem;
+    letter-spacing: 0.4em;
+    text-align: center;
+}
+
 .signup-submit-btn {
     width: 100%;
     padding: 0.9375rem 1.25rem;

@@ -85,6 +85,14 @@ export default async function handler(req, res) {
   const email    = typeof parsed?.email    === 'string' ? parsed.email.trim().toLowerCase()   : ''
   const password = typeof parsed?.password === 'string' ? parsed.password                      : ''
   const plan     = typeof parsed?.plan     === 'string' ? parsed.plan.trim().toLowerCase()    : ''
+  // Código de 6 dígitos enviado por action:'send-code' ao e-mail. A edge é quem
+  // valida contra o hash — aqui só o formato, para não gastar round-trip com lixo.
+  const code     = typeof parsed?.code     === 'string' ? parsed.code.trim()                   : ''
+  // Rota multiplexada: 'send-code' pede o código; ausente/'create' cria a conta.
+  // Allow-list: qualquer outro valor é recusado em vez de cair no caminho padrão.
+  const action   = typeof parsed?.action   === 'string' ? parsed.action.trim()                 : ''
+  if (action && action !== 'send-code' && action !== 'create')
+    return res.status(400).json({ error: 'action inválida.' })
   const _hp_email = typeof parsed?._hp_email === 'string' ? parsed._hp_email : null
   const _hp_url   = typeof parsed?._hp_url   === 'string' ? parsed._hp_url   : null
 
@@ -100,6 +108,60 @@ export default async function handler(req, res) {
   if (!email || !EMAIL_RE.test(email))
     return res.status(400).json({ error: 'Email inválido.' })
 
+  // ── AÇÃO: send-code — passo 1 do cadastro ───────────────────────────────────
+  // Multiplexado nesta rota (e não em /api/signup-code) porque o plano Hobby da
+  // Vercel só permite 12 Serverless Functions e já estamos no teto. Mesmo padrão
+  // de api/stripe.js (roteia por `action`) e api/user-data.js.
+  //
+  // Envia o código de 6 dígitos que PROVA A POSSE do e-mail antes de a conta
+  // existir. Sem isto, `admin.createUser({ email_confirm: true })` afirmava ao
+  // banco que o e-mail fora verificado sem ninguém ter verificado nada — e 5
+  // caminhos do sistema passaram a confiar nesse endereço (auditoria 2026-07-16).
+  if (action === 'send-code') {
+    const ipSC = (req.headers['x-real-ip']
+      ?? (req.headers['x-forwarded-for'] ?? '').split(',')[0]
+      ?? 'unknown').toString().trim()
+
+    // Duas dimensões, e as duas importam:
+    //  - por IP: varrer muitos e-mails de um ponto só
+    //  - por e-mail: encher a caixa de UMA vítima a partir de IPs diferentes,
+    //    que o limite por IP não cobre (proxy/botnet passa por ele sem esforço)
+    if (!(await checkRateWindow(`signup-code:ip:${ipSC}`, 5, 3600))) {
+      logger.warn('rate_limited', PATH, { ip: ipSC, action })
+      return res.status(429).json({ error: 'Muitas tentativas. Aguarde antes de tentar novamente.' })
+    }
+    if (!(await checkRateWindow(`signup-code:mail:${email}`, 3, 3600))) {
+      logger.warn('rate_limited_email', PATH, { ip: ipSC, action })
+      return res.status(429).json({ error: 'Muitas tentativas para este e-mail. Aguarde.' })
+    }
+
+    if (plan && !VALID_PLANS.has(plan))
+      return res.status(400).json({ error: 'Plano inválido.' })
+
+    try {
+      const scRes = await fetch(`${SUPABASE_URL}/functions/v1/send-signup-code`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':   'application/json',
+          'Authorization':  `Bearer ${ANON_KEY}`,
+          'apikey':         ANON_KEY,
+          'x-proxy-secret': PROXY_SECRET,
+          'Origin':         'https://granaevo.com',
+        },
+        body:   JSON.stringify({ email, plan }),
+        signal: AbortSignal.timeout(15_000),
+      })
+      // A edge responde SEMPRE 'sent', exista o e-mail ou não (anti-enumeração).
+      // Repassamos sem interpretar.
+      const scBody = await scRes.text()
+      res.setHeader('Content-Type', 'application/json')
+      return res.status(scRes.status).send(scBody)
+    } catch (e) {
+      logger.error('send_code_failed', PATH, { msg: String(e?.message ?? '').slice(0, 120) })
+      return res.status(502).json({ error: 'Não foi possível enviar o código agora.' })
+    }
+  }
+
   if (!password || password.length < 8 || password.length > 128)
     return res.status(400).json({ error: 'A senha deve ter entre 8 e 128 caracteres.' })
 
@@ -111,6 +173,11 @@ export default async function handler(req, res) {
 
   if (!VALID_PLANS.has(plan))
     return res.status(400).json({ error: 'Plano inválido.' })
+
+  // Só o formato aqui — a autoridade é a edge, que compara contra o hash
+  // gravado. Rejeitar lixo antes evita gastar round-trip e queimar tentativa.
+  if (!/^\d{6}$/.test(code))
+    return res.status(400).json({ error: 'codigo_invalido' })
 
   // Rate limit: 3 criações de conta por IP por hora
   const ip = (req.headers['x-real-ip']
@@ -134,7 +201,7 @@ export default async function handler(req, res) {
         'apikey':         ANON_KEY,
         'x-proxy-secret': PROXY_SECRET,
       },
-      body:   JSON.stringify({ email, password, plan }),
+      body:   JSON.stringify({ email, password, plan, code }),
       signal: AbortSignal.timeout(15_000),
     })
 

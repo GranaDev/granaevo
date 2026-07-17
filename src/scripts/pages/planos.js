@@ -28,6 +28,9 @@ const SignupModal = (() => {
     const backdrop    = () => document.getElementById('signupModalBackdrop');
     const form        = () => document.getElementById('signupForm');
     const emailInput  = () => document.getElementById('signupEmail');
+    const codeInput   = () => document.getElementById('signupCode');
+    const codeField   = () => document.getElementById('signupCodeField');
+    const resendBtn   = () => document.getElementById('signupResendCode');
     const pwdInput    = () => document.getElementById('signupPassword');
     const confInput   = () => document.getElementById('signupConfirmPassword');
     const submitBtn   = () => document.getElementById('signupSubmitBtn');
@@ -66,6 +69,56 @@ const SignupModal = (() => {
         if (span) span.textContent = loading ? 'Aguarde...' : 'Continuar para pagamento';
     }
 
+    // ── Prova de posse do e-mail (código de 6 dígitos) ──────────────────────
+    // O cadastro virou 2 passos no MESMO formulário: (1) pede o código, (2) cria
+    // a conta com ele. Antes, a conta nascia com `email_confirm: true` sem
+    // ninguém ter verificado nada — e 5 caminhos do sistema passaram a confiar
+    // num e-mail que não era prova de nada (auditoria 2026-07-16).
+    let _codigoEnviado = false;
+
+    function _mostrarCampoCodigo() {
+        const f = codeField();
+        if (f) f.hidden = false;
+        codeInput()?.focus();
+        const btn = submitBtn()?.querySelector('.btn-text');
+        if (btn) btn.textContent = 'Confirmar e continuar';
+        showAlert('success', 'Enviamos um código de 6 dígitos para o seu e-mail.');
+    }
+
+    /** Pede o código. Devolve true se o envio foi aceito. */
+    async function _pedirCodigo(email) {
+        try {
+            // Multiplexado em /api/create-account (action) porque o plano Hobby
+            // da Vercel só permite 12 Serverless Functions e já estamos no teto.
+            const r = await fetch('/api/create-account', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    action: 'send-code',
+                    email,
+                    plan: _pendingPlan || 'individual',
+                    _hp_email: '',
+                    _hp_url:   '',
+                }),
+            });
+            if (r.status === 429) {
+                showAlert('error', 'Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+                return false;
+            }
+            if (!r.ok) {
+                showAlert('error', 'Não foi possível enviar o código agora. Tente novamente.');
+                return false;
+            }
+            // A resposta é sempre 'sent', exista o e-mail ou não (anti-enumeração).
+            // Se o e-mail já tiver conta, o código não chega e o passo 2 falha com
+            // "código incorreto" — o 409 explícito continua no /api/create-account.
+            return true;
+        } catch {
+            showAlert('error', 'Erro de conexão. Verifique sua internet.');
+            return false;
+        }
+    }
+
     function open(plan) {
         _pendingPlan = plan;
         const m = modal();
@@ -90,6 +143,17 @@ const SignupModal = (() => {
         m.classList.remove('open');
         m.setAttribute('aria-hidden', 'true');
         _pendingPlan = null;
+
+        // Reseta o passo do código. Sem isto, reabrir o modal mantinha
+        // `_codigoEnviado = true` e o submit tentaria criar a conta com o campo
+        // escondido e vazio — o cadastro simplesmente não funcionaria na 2ª vez.
+        _codigoEnviado = false;
+        const cf = codeField();
+        if (cf) cf.hidden = true;
+        const ci = codeInput();
+        if (ci) ci.value = '';
+        const bt = submitBtn()?.querySelector('.btn-text');
+        if (bt) bt.textContent = 'Continuar para pagamento';
     }
 
     // Avalia força da senha com base nos 4 requisitos obrigatórios
@@ -139,6 +203,24 @@ const SignupModal = (() => {
         // Fecha ao clicar no backdrop
         backdrop()?.addEventListener('click', close);
         closeBtn()?.addEventListener('click', close);
+
+        // Reenviar código. Não reseta `_codigoEnviado`: o campo continua visível
+        // e o usuário só recebe outro código — o rate limit por e-mail (3/h) no
+        // /api/signup-code é quem contém abuso, não a UI.
+        resendBtn()?.addEventListener('click', async () => {
+            const email = (emailInput()?.value || '').trim().toLowerCase();
+            if (!email) { emailInput()?.focus(); return; }
+            const btn = resendBtn();
+            if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+            await _pedirCodigo(email);
+            if (btn) { btn.disabled = false; btn.textContent = 'Reenviar'; }
+            codeInput()?.focus();
+        });
+
+        // Só dígitos no campo do código — colar "123 456" ou "1-2-3" não deve falhar.
+        codeInput()?.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        });
 
         // Toggle visibilidade da senha — mantém foco e cursor no input
         toggleBtn()?.addEventListener('click', () => {
@@ -221,7 +303,29 @@ const SignupModal = (() => {
             setLoading(true);
 
             try {
-                // 1. Cria conta via proxy server-side (rate-limited, com honeypot e validações)
+                // ── PASSO 1: pedir o código, se ainda não pedimos ───────────────
+                // Prova de posse do e-mail ANTES de a conta existir. Sem isto,
+                // qualquer um criava conta com o e-mail de terceiro e o sistema
+                // inteiro passava a confiar naquele endereço (auditoria 2026-07-16).
+                if (!_codigoEnviado) {
+                    const okEnvio = await _pedirCodigo(email);
+                    setLoading(false);
+                    if (okEnvio) {
+                        _codigoEnviado = true;
+                        _mostrarCampoCodigo();
+                    }
+                    return;   // não cria conta ainda — espera o código
+                }
+
+                // ── PASSO 2: já temos o código digitado → cria a conta ──────────
+                const code = (codeInput()?.value || '').trim();
+                if (!/^\d{6}$/.test(code)) {
+                    setLoading(false);
+                    showAlert('error', 'Digite o código de 6 dígitos que enviamos ao seu e-mail.');
+                    codeInput()?.focus();
+                    return;
+                }
+
                 let createRes;
                 try {
                     createRes = await fetch('/api/create-account', {
@@ -230,6 +334,7 @@ const SignupModal = (() => {
                         body:    JSON.stringify({
                             email,
                             password,
+                            code,
                             plan: _pendingPlan || 'individual',
                             _hp_email: '',
                             _hp_url:   '',
@@ -237,6 +342,15 @@ const SignupModal = (() => {
                     });
                 } catch {
                     throw new Error('NETWORK');
+                }
+
+                if (createRes.status === 400) {
+                    const b = await createRes.clone().json().catch(() => ({}));
+                    if (b?.error === 'codigo_invalido') {
+                        showAlert('error', 'Código incorreto ou expirado. Confira o e-mail ou peça outro.');
+                        codeInput()?.focus();
+                        return;
+                    }
                 }
 
                 if (createRes.status === 409) {

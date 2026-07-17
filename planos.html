@@ -687,6 +687,21 @@
                     <p id="signupPwdError" class="signup-field-error"></p>
                 </div>
 
+                <!-- Passo 2 — código do e-mail. Escondido até o código ser enviado.
+                     Prova a posse do endereço antes de a conta existir; sem isto,
+                     qualquer um cria conta com o e-mail de terceiro. -->
+                <div class="signup-field" id="signupCodeField" hidden>
+                    <label for="signupCode">Código enviado ao seu e-mail</label>
+                    <input type="text" id="signupCode" name="code"
+                           inputmode="numeric" autocomplete="one-time-code"
+                           pattern="[0-9]{6}" maxlength="6" placeholder="000000"
+                           aria-describedby="signupCodeHint">
+                    <p id="signupCodeHint" class="signup-field-hint">
+                        Vale por 15 minutos. Não recebeu?
+                        <button type="button" id="signupResendCode" class="signup-link-btn">Reenviar</button>
+                    </p>
+                </div>
+
                 <button type="submit" id="signupSubmitBtn" class="signup-submit-btn">
                     <span class="btn-text">Continuar para pagamento</span>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
