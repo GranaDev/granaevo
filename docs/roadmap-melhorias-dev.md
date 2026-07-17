@@ -238,7 +238,34 @@ falso-positivo para classes dinâmicas). Listas de transações/relatórios rend
 
 ---
 
-## PASSO 8 — Aliviar os vendors pesados 🔴
+## PASSO 8 — Aliviar os vendors pesados 🟡 INVESTIGADO + GANHO PROVADO (2026-07-17)
+> **MEDIDO com `ANALYZE=1 npm run build` + experimento de build descartável.**
+>
+> **CHART: nada a fazer.** Confirmado que `chart.umd.min.js` (68,2 KB gzip) é asset self-hosted
+> separado, carregado só quando a aba Gráficos abre (`db-graficos.js`). **NÃO está no bundle de boot** —
+> o `dashboard.html` só faz `modulepreload` de `dashboard.js` (39,1) + `vendor-supabase` (48,6). A
+> premissa "Chart pesa no carregamento" já estava resolvida pelo lazy-load. Trocar de lib seria risco
+> visual por zero ganho de boot. **Parar aqui.**
+>
+> **SUPABASE: ganho grande e de baixo risco — PROVADO, mas pendente de teste do usuário.**
+> O `vendor-supabase` (48,6 KB gzip, a MAIOR peça única do boot) carrega `realtime-js`, `storage-js` e
+> `functions-js` — e o app **não usa nenhum dos três** (confirmado: 0 arquivos com `.storage.`, 0 com
+> `.functions.invoke`, e a única "realtime" era `pushManager.subscribe` do Web Push, não Supabase).
+> Mas o construtor do `SupabaseClient` faz `new RealtimeClient()` SEMPRE, então tree-shake não remove.
+>
+> **EXPERIMENTO (descartável, revertido):** alias `@supabase/realtime-js` → stub de 5 métodos no-op
+> (`channel`, `getChannels`, `removeChannel`, `removeAllChannels`, `setAuth` — os únicos que o
+> SupabaseClient chama). Build limpo. **`vendor-supabase`: 48,6 → 34,2 KB gzip = −14,4 KB no boot
+> (−30% do maior chunk).** Sem tocar em auth, sem reescrever cliente.
+>
+> **POR QUE NÃO DEIXEI NO AR:** o stub fica no caminho do cliente Supabase (auth + DB). Se um update
+> futuro do supabase-js chamar um método novo de realtime que o stub não cobre, quebra — e o usuário
+> não podia testar auth/DB agora. **Retomar COM teste do usuário:** aplicar o alias + stub (+ pinar a
+> versão do supabase-js), rodar login/cadastro/queries de ponta a ponta, e ajustar o budget do
+> `check-bundle-size.mjs`. Storage/functions provavelmente saem junto pelo tree-shake ao dropar o
+> realtime; medir de novo. **Ganho de ~14 KB no boot vale o teste — é o maior ganho de perf disponível.**
+>
+> ── objetivo original abaixo ──
 **Objetivo:** reduzir Chart (206 KB) e `@supabase/supabase-js` (197 KB).
 **Por quê:** dominam o peso de terceiros. **Nuance importante (confirmada no `vite.config.js`):** o
 Chart **já é UMD self-hosted carregado sob demanda** por `db-graficos.js` — ele **não** bloqueia o boot.
@@ -288,9 +315,18 @@ Ganho: tempo percebido despenca + offline-first de brinde.
 > - **painel de alertas** (`renderizarPainelAlertas` + `_criarCard` aninhado, ~13 KB): o caller usa
 >   retorno síncrono (`const painelEl = renderizarPainelAlertas()`); extrair exige tornar assíncrono.
 >
-> **Próximo passo barato quando retomar:** `knip` acusa **34 unused exports** — varrer por mais
-> código morto (a fatia 2 provou que há) é ganho sem risco de comportamento. Só então mexer nos
-> blocos vivos, um por vez, COM teste do usuário.
+> **Fatia 3 (2026-07-17):** varredura `knip` — dos 34 "unused exports", só `getById` era morto de
+> verdade (removido, commit dd27059). O resto é **falso positivo**: uso interno que o knip não vê
+> (`extractPalavrasChave`, `getHorasVida`…) ou ponto cego real (`horaDe` usado internamente,
+> `assistant-sw.js` registrado como SW por string). E como o bundler já tree-shake mortos, o ganho
+> de apagá-los é limpeza de fonte, **não bytes**.
+>
+> **PAREI o Passo 10 em 39,1 KB (de 40,9).** O maior bloco frio restante é o **painel de alertas**
+> (`renderizarPainelAlertas` + `_criarCard`, ~12,6 KB, só abre no clique do sino) — MAS não é
+> código-folha: os botões dele chamam de volta `abrirPopupPagarContaFixa` (→ pagamento) e
+> `abrirContaFixaForm`. Extrair fia uma cadeia que termina em **dinheiro**, e não vale fazer sem o
+> usuário poder testar. Os outros grandes (`salvarDados`, `_criarPerfilHandler`, contas-fixas) tocam
+> core/auth/dinheiro. **Retomar só com teste do usuário disponível**, um bloco por vez.
 >
 > **Histórico do objetivo original:** ⭐
 **Objetivo:** tirar do caminho crítico o que hoje são **6.673 linhas** carregadas eager.
