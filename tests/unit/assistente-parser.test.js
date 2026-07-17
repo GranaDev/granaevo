@@ -9,7 +9,7 @@
  */
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseLocal, splitCompound } from '../../src/scripts/modules/assistant/parser-local.js'
+import { parseLocal, splitCompound, detectPeriodo } from '../../src/scripts/modules/assistant/parser-local.js'
 
 const CONF_LOCAL_OK = 0.7 // espelha engine.js
 
@@ -107,12 +107,24 @@ describe('completude — o que destrava a IA (R5)', () => {
     assert.ok(r.confianca >= CONF_LOCAL_OK)
   })
   test('loja DESCONHECIDA com descrição = completude baixa → vale perguntar', () => {
-    // "kalunga" não está na lista fixa: sabemos que é saída e lemos o item,
-    // mas não fazemos ideia da categoria. É exatamente aqui que a IA ajuda.
-    const r = parseLocal('gastei 80 na kalunga com um caderno')
+    // "tabacaria" não está na lista fixa: sabemos que é saída e lemos o item, mas
+    // não fazemos ideia da categoria. É exatamente aqui que a IA (ou o histórico)
+    // ajuda. NB: escolher um termo que a lista fixa NÃO cobre é o ponto do teste —
+    // se um dia ele virar keyword, troque o termo, não afrouxe a asserção.
+    const r = parseLocal('gastei 30 na tabacaria')
     assert.equal(r.categoria, 'saida')
     assert.ok(r.descricao, 'deveria ter extraído a descrição')
     assert.ok(r.completude < 1, `completude deveria ser baixa, veio ${r.completude}`)
+  })
+
+  test('loja conhecida por keyword NOVA não gasta IA', () => {
+    // Estes vinham caindo na IA por buraco na lista fixa (50% das frases comuns).
+    for (const [f, tipo] of [['gastei 12 no café', 'Ifood'], ['paguei 30 no açougue', 'Mercado'],
+      ['paguei 90 na oficina', 'Transporte'], ['paguei 18 na papelaria', 'Educação']]) {
+      const r = parseLocal(f.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''))
+      assert.equal(r.tipo, tipo, `${f} → tipo`)
+      assert.equal(r.completude, 1, `${f} ainda chamaria a IA`)
+    }
   })
   test('frase seca não rebaixa completude (não há o que perder)', () => {
     assert.equal(parseLocal('gastei 50').completude, 1)
@@ -148,6 +160,69 @@ describe('splitCompound não descarta pedaço em silêncio (R11)', () => {
   })
   test('frase simples não racha', () => {
     assert.deepEqual(splitCompound('250 no mercado com carne e arroz'), ['250 no mercado com carne e arroz'])
+  })
+})
+
+describe('valor_ambiguo NÃO é catch-all — o lançamento fantasma', () => {
+  // Bug real: qualquer frase não-entendida que tivesse um número virava "valor
+  // solto" → o chat oferecia lançar → 1 toque gravava algo que ninguém pediu.
+  test('valor de verdade sozinho continua sendo ambíguo', () => {
+    for (const f of ['109,05', '80', 'r$ 109,05', '50 reais', '1,5k']) {
+      assert.equal(parseLocal(f).intencao, 'valor_ambiguo', `${JSON.stringify(f)} deveria ser ambíguo`)
+    }
+  })
+
+  test('pedido de EDITAR não vira convite pra lançar', () => {
+    const r = parseLocal('muda o valor daquela compra de terça pra 80')
+    assert.notEqual(r.intencao, 'valor_ambiguo')
+    assert.notEqual(r.intencao, 'lancar')
+    assert.equal(r.intencao, 'editar_antigo')
+  })
+
+  test('pedido de CRIAR META não vira convite pra lançar', () => {
+    const r = parseLocal('cria uma meta de 5000 pra viagem')
+    assert.notEqual(r.intencao, 'valor_ambiguo', 'ofereceria lançar R$5000 como gasto')
+  })
+
+  test('frase com conteúdo não-lido vai pra IA, não vira lançamento', () => {
+    const r = parseLocal('transferi 200 pro joão do trabalho semana retrasada')
+    assert.notEqual(r.intencao, 'valor_ambiguo')
+  })
+})
+
+describe('editar_antigo — honesto sobre o limite', () => {
+  const casos = [
+    'apaga o gasto de ontem no mercado',
+    'muda aquela compra de terça pra 80',
+    'deleta a transação de segunda',
+    'corrige aquele lançamento',
+    'altera o gasto do dia 5',
+  ]
+  for (const f of casos) {
+    test(JSON.stringify(f), () => {
+      assert.equal(parseLocal(f).intencao, 'editar_antigo')
+    })
+  }
+
+  test('"apaga o último" continua sendo DESFAZER, não handoff', () => {
+    for (const f of ['apaga o último', 'desfaz', 'errei', 'cancela isso']) {
+      assert.equal(parseLocal(f.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')).intencao, 'desfazer', f)
+    }
+  })
+
+  test('lançamento normal não é confundido com edição', () => {
+    for (const f of ['gastei 50 no mercado', 'paguei 30 no uber ontem', 'recebi 3000 de salario']) {
+      assert.equal(parseLocal(f).intencao, 'lancar', f)
+    }
+  })
+})
+
+describe('semana passada ≠ esta semana', () => {
+  test('as duas expressões têm períodos DIFERENTES', () => {
+    assert.equal(detectPeriodo('quanto gastei essa semana'), 'semana')
+    assert.equal(detectPeriodo('quanto gastei semana passada'), 'semana_passada')
+    assert.equal(detectPeriodo('quanto gastei na semana passada'), 'semana_passada')
+    assert.equal(detectPeriodo('quanto gastei semana retrasada'), 'semana_passada')
   })
 })
 

@@ -73,9 +73,12 @@ const PARSE_TOOL = {
     properties: {
       intencao: {
         type: 'string',
-        enum: ['lancar', 'consultar', 'relatorio', 'projecao_meta', 'saudacao', 'ajuda', 'desfazer', 'repetir', 'pagar_conta', 'definir_orcamento', 'lembrete', 'desconhecido'],
+        enum: ['lancar', 'consultar', 'relatorio', 'projecao_meta', 'saudacao', 'ajuda', 'desfazer', 'repetir', 'editar_antigo', 'pagar_conta', 'definir_orcamento', 'lembrete', 'desconhecido'],
         description: 'O que o usuário quer fazer. desfazer = "apaga o último", "cancela isso", "errei". ' +
           'repetir = lançar de novo o último ("de novo", "mesma coisa", "igual ontem"). ' +
+          'editar_antigo = quer MEXER num lançamento que NÃO é o último ("apaga o gasto de ontem no mercado", ' +
+          '"muda aquela compra de terça pra 80"). NUNCA classifique isso como "lancar": o usuário quer ' +
+          'alterar algo que já existe, e lançar criaria um registro duplicado que ele não pediu. ' +
           'pagar_conta = pagou uma conta fixa/boleto ("paguei a conta de luz", "quitei o aluguel" → preencha conta_hint). ' +
           'definir_orcamento = definir limite mensal de uma categoria ("põe 600 de orçamento pro mercado" → tipo+valor). ' +
           'lembrete = pedir aviso futuro ("me lembra de pagar o IPVA dia 10" → lembrete_texto+lembrete_data).',
@@ -126,11 +129,12 @@ const PARSE_TOOL = {
       },
       periodo: {
         anyOf: [
-          { type: 'string', enum: ['hoje', 'semana', 'mes', 'mes_passado', 'trimestre', 'ano', 'tudo'] },
+          { type: 'string', enum: ['hoje', 'semana', 'semana_passada', 'mes', 'mes_passado', 'trimestre', 'ano', 'tudo'] },
           { type: 'null' },
         ],
         description: 'Janela de tempo para consultar/relatorio. Padrão "mes" quando não especificado. ' +
-          'trimestre = "últimos 3 meses", "no trimestre".',
+          'semana = "essa semana" (últimos 7 dias) · semana_passada = "semana passada" (os 7 dias ANTERIORES — ' +
+          'nunca confunda os dois) · trimestre = "últimos 3 meses", "no trimestre".',
       },
       palavras_chave: {
         type: 'array',

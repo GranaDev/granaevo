@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { dataManager } from '../data-manager.js';
-import { parseLocal, splitCompound, parseFollowup, keywordMatch } from './parser-local.js';
+import { parseLocal, splitCompound, parseFollowup, keywordMatch, mencionaLancamentoAntigo } from './parser-local.js';
 import { extractDescricao, textoParaModelo } from './describe.js';
 import { parseValorBR, parseDataFutura } from './money.js';
 import { toCommand } from './normalize.js';
@@ -208,6 +208,10 @@ class AssistantEngine {
     #matchCorrecao(text) {
         const t = String(text).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
         if (!/^(nao,?\s*(foi|foram|era|e)\b|na verdade|corrige|corrija|ajusta|muda (o valor|a categoria|a descricao|pra|para)|troca (o valor|a categoria|a descricao|pra|para)|era pra ser|e pra ser|o certo (e|era))/.test(t)) return null;
+        // "muda o valor daquela compra de TERÇA pra 80" casa o padrão acima, mas o
+        // usuário apontou para OUTRO lançamento — aplicar no último editaria a
+        // transação errada, calado. Deixa seguir pro intent editar_antigo.
+        if (mencionaLancamentoAntigo(text)) return null;
 
         // R7: correção explícita de DESCRIÇÃO — "corrige a descrição pra fita de led".
         // Vem ANTES do valor/categoria porque é a mais específica: o usuário nomeou
@@ -529,6 +533,13 @@ class AssistantEngine {
             case 'repetir':  return this.#repetirUltimo();                          // B15
             case 'recusa':      return { text: P.SISTEMA.recusa() };
             case 'privacidade': return { text: P.privacidadeMsg() };
+            // Mexer em lançamento antigo: eu só alcanço o último. Handoff honesto —
+            // melhor que fingir que entendi e gravar um lançamento que ninguém pediu.
+            case 'editar_antigo': return {
+                text: P.editarAntigoMsg(),
+                cta: { label: 'Abrir transações', tela: 'transacoes' },
+                quickReplies: [{ label: 'Desfazer o último', text: 'desfaz o último' }],
+            };
 
             case 'valor_ambiguo': {                                                // B13 + R3
                 const v = cmd.valor;

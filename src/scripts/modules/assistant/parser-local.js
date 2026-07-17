@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseValorBR, parseParcelas, parseExtenso, parseDataRelativa, parseAritmetica, parseMesNomeado, parseDataFutura } from './money.js';
-import { extractDescricao } from './describe.js';
+import { extractDescricao, contarPalavrasConteudo } from './describe.js';
 
 // Tipos permitidos no app (espelham db-transacoes.js: o conjunto reconhecido pelo
 // auto-categorizador em _AUTO_CAT, mais rico que o dropdown de edição). Inclui
@@ -84,21 +84,33 @@ const VERBOS = [
 
 // ── Palavras-chave → {categoria, tipo} ──────────────────────────────────────
 // Curado para o dia-a-dia BR. Mapeia sempre para um tipo PERMITIDO.
+// COBERTURA IMPORTA MAIS DO QUE PARECE: desde que a `completude` passou a mandar
+// gasto-com-loja-desconhecida pra IA, cada termo que falta aqui vira uma chamada
+// de rede (~1s + token + teto de 120/dia). Uma medição com 24 frases corriqueiras
+// do dia-a-dia BR batia 50% de ida à IA — por buracos bobos: "café" faltava mas
+// "cafeteria" estava. Cada palavra adicionada aqui é grátis, instantânea e pra
+// sempre. A IA deve ser exceção, não metade do tráfego.
 const KEYWORDS = [
     // Saída — comida/delivery ANTES de mercado (padaria/lanche = Ifood no app)
     [/\b(ifood|delivery|rappi|uber eats|zedelivery|ze delivery|aiqfome|james delivery)\b/, 'saida', 'Ifood'],
     [/\b(restaurante|lanchonete|lanche|padaria|padoca|pizza|pizzaria|hamburguer|hamburguier|burger|sushi|churrasco|churrascaria|almoco|janta|jantar|marmita|sorveteria|confeitaria|cafeteria|mc ?donalds|burger king|subway|habib|outback|giraffas|spoleto)\b/, 'saida', 'Ifood'],
+    // Comida do dia-a-dia — o brasileiro fala assim, e faltava tudo isto
+    [/\b(cafe|cafezinho|pao de queijo|salgado|salgados|coxinha|acai|sorvete|pastel|tapioca|espetinho|bar|boteco|cerveja|chopp|happy hour|doceria|bolo|pizzaria)\b/, 'saida', 'Ifood'],
     // Marketplaces
     [/\b(mercado livre|meli)\b/, 'saida', 'Mercado Livre'],
     [/\b(shopee)\b/, 'saida', 'Shopee'],
     [/\b(amazon)\b/, 'saida', 'Amazon'],
     // Supermercado (termos claros de super — sem "extra"/"dia" soltos)
     [/\b(supermercado|mercado|atacad|atacadao|carrefour|hortifruti|sacolao|feira|assai|makro|pao de acucar|prezunic)\b/, 'saida', 'Mercado'],
+    [/\b(mercadinho|mercearia|acougue|quitanda|emporio|verdurao|peixaria|granja|minimercado|padoca)\b/, 'saida', 'Mercado'],
     [/\b(farmacia|remedio|drogaria|drogasil|pacheco|raia|panvel|ultrafarma)\b/, 'saida', 'Farmácia'],
     [/\b(medico|dentista|clinica|hospital|consulta|exame|plano de saude|unimed|amil|hapvida|fisioterapia|psicologo|psicologa|terapia|nutricionista)\b/, 'saida', 'Saúde'],
     [/\b(uber|99|onibus|metro|gasolina|combustivel|transporte|passagem|corrida|bilhete|posto|etanol|estacionamento|pedagio|blablacar|indriver|cabify)\b/, 'saida', 'Transporte'],
+    // Carro: manutenção e afins — "oficina"/"mecânico" são gasto clássico
+    [/\b(oficina|mecanico|borracharia|funilaria|lava.?jato|lavagem do carro|revisao|alinhamento|balanceamento|troca de oleo|\btaxi\b|ipiranga|shell|petrobras)\b/, 'saida', 'Transporte'],
     [/\b(academia|gym|crossfit|personal|smartfit|smart fit|pilates|natacao)\b/, 'saida', 'Academia'],
     [/\b(faculdade|universidade|curso|matricula|udemy|alura|coursera|duolingo|colegio|creche|apostila|escola)\b/, 'saida', 'Educação'],
+    [/\b(livraria|papelaria|xerox|impressao|caderno|apostilas|material escolar)\b/, 'saida', 'Educação'],
     [/\b(airbnb|hotel|pousada|hostel|hospedagem|passagem aerea|booking|decolar|latam|\bgol\b|\bazul\b)\b/, 'saida', 'Viagem'],
     [/\b(veterinario|petshop|pet shop|racao|petz|cobasi|\bpet\b)\b/, 'saida', 'Pet'],
     [/\b(cinema|teatro|show|balada|lazer|passeio|role|rolezinho|festa|ingresso|netflix|spotify|disney|hbo max|prime video|youtube premium|steam|playstation|xbox|nintendo|jogo|game)\b/, 'saida', 'Lazer'],
@@ -107,6 +119,11 @@ const KEYWORDS = [
     [/\b(salao|cabelo|beleza|manicure|barbearia|barbeiro|maquiagem|barba|unha|sobrancelha|depilacao|estetica|boticario|natura)\b/, 'saida', 'Beleza'],
     [/\b(presente|gift|lembrancinha)\b/, 'saida', 'Presente'],
     [/\b(luz|agua|energia|internet|aluguel|condominio|conta de|iptu|ipva|\bgas\b|telefone|boleto)\b/, 'saida', 'Conta fixa'],
+    // Contas fixas que faltavam: seguro e recarga são recorrentes clássicos
+    [/\b(seguro|recarga|plano de celular|financiamento|prestacao|parcela do|mensalidade)\b/, 'saida', 'Conta fixa'],
+    // Casa/manutenção: o app não tem categoria "Casa" — 'Outros' É a resposta certa
+    // aqui, e marcá-la explicitamente evita uma ida à IA que não teria nada melhor.
+    [/\b(material de construcao|ferragem|cimento|tinta|lavanderia|chaveiro|encanador|eletricista|pedreiro|marceneiro|faxina|diarista|movel|moveis)\b/, 'saida', 'Outros'],
     // Entrada
     [/\b(salario|salário|pagamento do mes|holerite|folha de pagamento)\b/, 'entrada', 'Salário'],
     [/\b(dividendo|dividendos|rendimento|rendimentos|proventos|resgate|tesouro|jscp)\b/, 'entrada', 'Investimento'],
@@ -146,6 +163,23 @@ const RE_FATURA    = /\b(minha fatura|ver (a )?fatura|fatura (do|da|em aberto|at
 const RE_FALTA     = /\b(quanto (ainda )?falta|falta quanto|quanto (eu )?preciso (guardar|juntar)) (pra|para|pro)/;
 // Desfazer por texto
 const RE_DESFAZER  = /\b(desfaz|desfazer|desfa[cç]a|apaga(r)? (o |a )?ultim|cancela(r)? (isso|o ultimo|a ultima|essa|esse)|errei|foi errado|nao (era|foi) isso|remove(r)? (o )?ultim|apaga isso|cancela isso|volta atras)/;
+
+// ── Mexer num lançamento ANTIGO (não o último) ──────────────────────────────
+// O chat só sabe desfazer/corrigir o ÚLTIMO lançamento. Quando o usuário aponta
+// para OUTRO ("apaga o gasto de ontem no mercado", "muda aquela compra de terça"),
+// a resposta honesta é mandar pra tela de Transações — nunca fingir que entendeu.
+// Sem este intent a frase caía no valor_ambiguo (ou na IA) e virava um lançamento
+// FANTASMA de R$80 que o usuário nunca pediu.
+const RE_VERBO_EDITAR = /\b(apaga|apagar|deleta|deletar|exclui|excluir|remove|remover|muda|mudar|troca|trocar|altera|alterar|corrige|corrigir|edita|editar|arruma|arrumar|conserta|consertar)\b/;
+// Referência a um lançamento ESPECÍFICO que não é o último.
+const RE_REF_ANTIGA = /\b(aquel[ae]s?|daquel[ae]s?|naquel[ae]s?|(a|essa) (compra|transacao|entrada)|([oe]sse|o) (gasto|lancamento|pagamento)|d[eo] (segunda|terca|quarta|quinta|sexta|sabado|domingo)|de ontem|de anteontem|do dia \d{1,2}|da semana passada|do mes passado|de \d{1,2}\/\d{1,2})/;
+
+/** O texto aponta para um lançamento antigo/específico? (usado também pelo engine
+ *  para não aplicar uma correção do "último" quando o usuário falou de outro). */
+export function mencionaLancamentoAntigo(rawText) {
+    const t = corrigirTypos(norm(rawText));
+    return RE_REF_ANTIGA.test(t) && !RE_DESFAZER.test(t);
+}
 // Repetir o último lançamento (B15): "de novo", "mesma coisa", "igual ontem", "repete".
 // Deliberadamente SEM "mais um(a)" (colide com "mais um café 5" = lançamento novo).
 const RE_REPETIR   = /\b(de novo|denovo|(a )?mesma coisa|igual (a |ao )?(ontem|antes|de sempre|o de sempre)|repete( isso| o ultimo| a ultima)?|repetir( o ultimo| isso)?|(faz|lanca|bota|poe) (isso )?de novo|outra vez)\b/;
@@ -171,7 +205,11 @@ const RE_PRIVACIDADE = /\b(voce (ve|le|acessa|guarda|sabe|manda) .*(dinheiro|dad
 // ── Período ──────────────────────────────────────────────────────────────────
 export function detectPeriodo(t) {
     if (/\bhoje\b/.test(t)) return 'hoje';
-    if (/\b(essa|esta|nessa|desta|dessa|da|na) semana\b/.test(t) || /\bsemana passada\b/.test(t)) return 'semana';
+    // "semana passada" ANTES de "essa semana": as duas caíam em 'semana' (últimos
+    // 7 dias), então perguntar pela semana PASSADA devolvia a ATUAL — resposta
+    // errada com cara de certa, que é o pior tipo.
+    if (/\bsemana (passada|anterior|retrasada)\b/.test(t) || /\bna semana passada\b/.test(t)) return 'semana_passada';
+    if (/\b(essa|esta|nessa|desta|dessa|da|na) semana\b/.test(t)) return 'semana';
     if (/\b(trimestre|ultimos? (3|tres) meses|ultimos? 90 dias|nos? ultimos 3 meses)\b/.test(t)) return 'trimestre';
     if (/\bmes (passado|anterior|retrasado)\b/.test(t) || /\bultimo mes\b/.test(t) || /\bno mes passado\b/.test(t)) return 'mes_passado';
     if (/\b(esse|este) ano\b|\bno ano\b|\beste ano\b/.test(t)) return 'ano';
@@ -362,6 +400,11 @@ export function parseLocal(rawText) {
     if (RE_SAUDACAO.test(text) && text.length <= 25) return { ...base, intencao: 'saudacao', confianca: 0.97 };
     if (RE_AJUDA.test(text)) return { ...base, intencao: 'ajuda', confianca: 0.9 };
     if (RE_DESFAZER.test(text)) return { ...base, intencao: 'desfazer', confianca: 0.9 };
+    // Mexer em lançamento antigo → handoff honesto (o chat só alcança o último).
+    // DEPOIS do desfazer, para "apaga o último" continuar sendo desfazer.
+    if (RE_VERBO_EDITAR.test(text) && RE_REF_ANTIGA.test(text)) {
+        return { ...base, intencao: 'editar_antigo', confianca: 0.85 };
+    }
     // B15: repetir o último lançamento — só quando NÃO há valor novo no texto.
     if (RE_REPETIR.test(text) && parseValorBR(text) === null) return { ...base, intencao: 'repetir', confianca: 0.9 };
 
@@ -531,9 +574,19 @@ export function parseLocal(rawText) {
         return { ...base, intencao: 'lancar', categoria, tipo: tipo || null, descricao: descricao || null, confianca: 0.35 };
     }
 
-    // 6) Valor sozinho, sem verbo nem keyword → AMBÍGUO. NÃO gasta IA: o engine
-    //    pergunta "foi gasto ou entrada?" com 1 toque (B13). Alta confiança pra
-    //    o funil resolver localmente (não cai no fallback de IA).
-    if (valor) return { ...base, intencao: 'valor_ambiguo', valor, confianca: 0.9 };
+    // 6) Valor REALMENTE sozinho ("109,05", "80 pila") → AMBÍGUO. NÃO gasta IA: o
+    //    engine pergunta o que foi, com 1 toque (B13), e guarda o valor (R3).
+    //
+    //    A guarda de conteúdo não é detalhe — sem ela isto virava CATCH-ALL: toda
+    //    frase que o parser não entendia, mas que tinha um número, era tratada como
+    //    "valor solto". "muda o valor daquela compra de terça pra 80" e "cria uma
+    //    meta de 5000 pra viagem" viravam convite pra lançar, e um toque no chip
+    //    gravava um lançamento FANTASMA que o usuário nunca pediu.
+    //
+    //    Regra: se sobrou conteúdo que ninguém leu, isto NÃO é um valor solto — é
+    //    uma intenção desconhecida. Vai pra IA (ou pro "não entendi"), que é honesto.
+    if (valor && contarPalavrasConteudo(rawText) <= 1) {
+        return { ...base, intencao: 'valor_ambiguo', valor, confianca: 0.9 };
+    }
     return base;
 }

@@ -67,7 +67,7 @@ const CAT_LABEL = {
 };
 
 const PERIODO_LABEL = {
-    hoje: 'hoje', semana: 'nesta semana', mes: 'neste mês',
+    hoje: 'hoje', semana: 'nesta semana', semana_passada: 'na semana passada', mes: 'neste mês',
     mes_passado: 'no mês passado', trimestre: 'no trimestre', ano: 'neste ano', tudo: 'no total',
 };
 
@@ -601,6 +601,12 @@ export function conquistasHojeMsg(n) {
 }
 
 // B13: valor sozinho ambíguo → pergunta (sem IA; chips vêm do engine)
+// Pedido de mexer num lançamento que não é o último. Ser honesto sobre o limite
+// vale mais que adivinhar: adivinhar aqui grava dado errado no lugar errado.
+export function editarAntigoMsg() {
+    return '{{fa-pen-to-square}} Por aqui eu só alcanço o *último* lançamento — pra mexer num anterior, abre as Transações que lá dá pra editar e apagar qualquer um.';
+}
+
 // Valor solto, sem direção. Oferece as QUATRO direções que o app tem — antes
 // eram só gasto/entrada, e quem tinha tirado da reserva ficava sem saída. O
 // engine guarda o valor (#pendingValorAmbiguo), então responder por escrito

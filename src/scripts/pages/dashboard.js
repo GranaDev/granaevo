@@ -2962,7 +2962,8 @@ function _pintarResumoBoot(perfilId) {
 }
 
 function atualizarDashboardResumo() {
-    let totalEntradas = 0, totalSaidas = 0, totalReservas = 0;
+    // O total reservado exibido é o `totalReservasCalc` (somado das metas, abaixo).
+    let totalEntradas = 0, totalSaidas = 0;
     let corrupcaoDetectada = false;
 
     // ✅ Função auxiliar: converte para número, rejeita NaN e Infinity
@@ -3012,12 +3013,6 @@ function atualizarDashboardResumo() {
         else if (t.categoria === 'saida')             saldoTotal -= valor;
         else if (t.categoria === 'reserva')           saldoTotal -= valor;
         else if (t.categoria === 'retirada_reserva')  saldoTotal += valor;
-        else if (t.categoria === 'reserva') {
-            totalReservas += valor;
-        } else if (t.categoria === 'retirada_reserva') {
-            totalReservas -= valor;
-            if (totalReservas < 0) { corrupcaoDetectada = true; totalReservas = 0; }
-        }
     });
 
     // ── Entradas/Saídas do mês anterior (para %) ─────────────────────────

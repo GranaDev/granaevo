@@ -10,7 +10,7 @@ import { TIPOS_SAIDA, TIPOS_ENTRADA, ORCAMENTO_TIPOS } from './parser-local.js';
 
 const MAX_VALOR = 100_000_000; // R$ 100 mi — teto sanidade (evita overflow/typo absurdo)
 const CATS_VALIDAS = ['entrada', 'saida', 'saida_credito', 'reserva', 'retirada_reserva', 'assinatura'];
-const PERIODOS_FIXOS = ['hoje', 'semana', 'mes', 'mes_passado', 'trimestre', 'ano', 'tudo'];
+const PERIODOS_FIXOS = ['hoje', 'semana', 'semana_passada', 'mes', 'mes_passado', 'trimestre', 'ano', 'tudo'];
 
 // Período válido: um dos fixos OU "mes:YYYY-MM" (mês nomeado — A3, só do parser local).
 function normalizePeriodo(p) {

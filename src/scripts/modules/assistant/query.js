@@ -31,12 +31,24 @@ export function filterByPeriodo(transacoes, periodo) {
         yearMonthKey(new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1)),
     ];
 
+    // Comparações de semana em DIAS, à meia-noite. Usar `new Date()` cru (com a
+    // hora corrente) contra uma data à meia-noite descontava as horas já passadas
+    // de hoje e encolhia a janela: às 20h, "essa semana" virava 6 dias e um pouco.
+    const hoje0 = new Date(hoje); hoje0.setHours(0, 0, 0, 0);
+    const diasAtras = (d) => Math.round((hoje0 - new Date(d).setHours(0, 0, 0, 0)) / 864e5);
+
     return arr.filter((t) => {
         const d = brDateToObj(t?.data);
         if (!d) return periodo === 'tudo';
+        const dd = diasAtras(d);
         switch (periodo) {
             case 'hoje':        return d.toDateString() === hoje.toDateString();
-            case 'semana':      return (hoje - d) <= 7 * 864e5 && d <= hoje;
+            // 'semana' = os últimos 7 dias corridos, incluindo hoje.
+            case 'semana':      return dd >= 0 && dd <= 6;
+            // 'semana_passada' = os 7 dias ANTERIORES a esses. Janela distinta,
+            // sem sobreposição — quem pergunta "gastei quanto semana passada"
+            // quer a semana que passou, não a que está correndo.
+            case 'semana_passada': return dd >= 7 && dd <= 13;
             case 'mes':         return yearMonthKey(d) === ymAtual;
             case 'mes_passado': return yearMonthKey(d) === ymPassado;
             case 'trimestre':   return ymTrimestre.includes(yearMonthKey(d));
@@ -136,16 +148,34 @@ export function maioresGastos(profile, periodo = 'mes') {
     return { periodo, total, count: txs.length, ranking };
 }
 
-/** Últimos N lançamentos (mais recentes primeiro). */
+/**
+ * Últimos N lançamentos, por DATA (mais recentes primeiro).
+ *
+ * Era `slice(-n).reverse()` = ordem de INSERÇÃO no array. Quem registrasse hoje um
+ * gasto de ontem via o lançamento antigo aparecer como "o mais recente" — porque
+ * ele foi o último a ser digitado. Ordenar por data+hora responde a pergunta que o
+ * usuário fez ("minhas últimas transações"), não a ordem em que ele digitou.
+ * Empate → ordem de inserção (o índice desempata, mantendo estabilidade).
+ */
 export function ultimasTransacoes(profile, n = 8) {
     const arr = Array.isArray(profile?.transacoes) ? profile.transacoes : [];
-    return arr.slice(-n).reverse().map((t) => ({
-        categoria: t.categoria,
-        tipo: t.tipo,
-        descricao: t.descricao,
-        valor: Math.round((Number(t.valor) || 0) * 100) / 100,
-        data: t.data,
-    }));
+    const chave = (t) => {
+        const d = brDateToObj(t?.data);
+        if (!d) return -Infinity; // data ilegível → fundo da lista, nunca no topo
+        const [h = 0, mi = 0, s = 0] = String(t?.hora || '').split(':').map(Number);
+        return d.getTime() + (h * 3600 + mi * 60 + (s || 0)) * 1000;
+    };
+    return arr
+        .map((t, i) => ({ t, i, k: chave(t) }))
+        .sort((a, b) => (b.k - a.k) || (b.i - a.i))
+        .slice(0, n)
+        .map(({ t }) => ({
+            categoria: t.categoria,
+            tipo: t.tipo,
+            descricao: t.descricao,
+            valor: Math.round((Number(t.valor) || 0) * 100) / 100,
+            data: t.data,
+        }));
 }
 
 function _ymOf(data) { const d = brDateToObj(data); return d ? yearMonthKey(d) : null; }
@@ -165,11 +195,25 @@ export function compararMes(profile) {
     return { atual, passado, dif, pct };
 }
 
-/** Média de gastos por mês (sobre os meses com movimentação). */
-export function mediaMensal(profile) {
+/**
+ * Média de gastos por mês, sobre os meses FECHADOS.
+ *
+ * O mês corrente fica de fora de propósito. Ele é PARCIAL: entra na conta como se
+ * fosse um mês inteiro muito barato e puxa a média pra baixo — quanto mais cedo no
+ * mês, pior. Com 3 meses de R$3.000 e o mês atual com R$100 gastos, a média saía
+ * R$2.275 em vez de R$3.000, e o "quanto posso gastar" (que é média − gasto do mês)
+ * mentia pra menos justamente no começo do mês, quando o usuário mais consulta.
+ */
+export function mediaMensal(profile, { incluirMesAtual = false } = {}) {
+    const ymAtual = yearMonthKey(new Date());
     const txs = (Array.isArray(profile?.transacoes) ? profile.transacoes : []).filter((t) => t.categoria === 'saida');
     const porMes = {};
-    for (const t of txs) { const ym = _ymOf(t.data); if (!ym) continue; porMes[ym] = (porMes[ym] || 0) + (Number(t.valor) || 0); }
+    for (const t of txs) {
+        const ym = _ymOf(t.data);
+        if (!ym) continue;
+        if (!incluirMesAtual && ym === ymAtual) continue;
+        porMes[ym] = (porMes[ym] || 0) + (Number(t.valor) || 0);
+    }
     const meses = Object.keys(porMes).length;
     const total = Object.values(porMes).reduce((s, v) => s + v, 0);
     return { media: meses > 0 ? Math.round((total / meses) * 100) / 100 : 0, meses };
