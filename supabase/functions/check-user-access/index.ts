@@ -163,46 +163,30 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!stripeSub) {
-      // ── 9. Auto-vinculação por email (compra anônima → criou conta depois) ──
-      // Usuário pagou sem estar logado → subscription tem user_id=null + user_email.
-      // Na primeira autenticação, vinculamos automaticamente pelo email.
-      if (userEmail) {
-        const { data: emailSub, error: emailErr } = await supabaseAdmin
-          .from('stripe_subscriptions')
-          .select('id, status, current_period_end, plan_name')
-          .eq('user_email', userEmail)
-          .is('user_id', null)
-          .in('status', ['active', 'trialing'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (!emailErr && emailSub) {
-          // period_end AUSENTE = dado quebrado, NÃO vitalício (o vitalício manual
-          // grava 2099-12-31). Aceitar null aqui dava acesso eterno de graça a
-          // assinatura cancelada — ver migration 20260716180000 e o fix do
-          // webhook no mesmo commit. Espelha get_user_access_data: fail secure.
-          if (emailSub.current_period_end && new Date(emailSub.current_period_end) >= new Date()) {
-            // Vincula user_id à subscription
-            await supabaseAdmin
-              .from('stripe_subscriptions')
-              .update({ user_id: userId, updated_at: new Date().toISOString() })
-              .eq('id', emailSub.id)
-            console.log('[check-user-access] Auto-vinculação Stripe por email para:', userId.slice(0, 8))
-            // Concede acesso
-            if (userEmail) {
-              try { await supabaseAdmin.rpc('clear_login_lockout', { p_identifier: userEmail, p_identifier_type: 'email' }) }
-              catch { /* silencioso */ }
-            }
-            const needsTerms1 = await checkNeedsTermsAcceptance(supabaseAdmin, userId)
-            return json({
-              hasAccess:            true,
-              needsTermsAcceptance: needsTerms1,
-              planName:             emailSub.plan_name ?? 'individual',
-            }, 200, corsHeaders)
-          }
-        }
-      }
+      // ── 9. REMOVIDO: auto-vinculação de assinatura por e-mail ───────────────
+      // Havia aqui um bloco que, não achando assinatura por `user_id`, procurava
+      // uma com `user_id IS NULL` e o MESMO E-MAIL do JWT, vinculava e concedia
+      // acesso. Era tomada de conta (account pre-hijacking), explorável assim:
+      //
+      //   1. /api/create-account chama admin.createUser({ email_confirm: true }):
+      //      a conta nasce CONFIRMADA, sem link de verificação e sem checagem de
+      //      pagamento — qualquer e-mail, de qualquer um.
+      //   2. login imediato → JWT legítimo com o e-mail da vítima.
+      //   3. este bloco casava o e-mail e entregava a assinatura dela.
+      //   4. e a vítima real nunca mais conseguia se cadastrar (409 email_exists).
+      //
+      // Não era falha de JWT: o JWT é honesto. O erro era tratar o e-mail como
+      // PROVA DE POSSE quando o cadastro nunca provou posse nenhuma.
+      //
+      // Por que dá para simplesmente remover: nenhuma compra nova precisa disto.
+      // O fluxo de planos.js SEMPRE cria a conta antes do checkout
+      // (iniciarCheckout → SignupModal → _checkoutComSessao com JWT), então o
+      // webhook já grava `user_id` via metadata. Este caminho só servia ao legado
+      // Cakto que nunca criou conta — hoje 1 pessoa, que é vinculada à mão.
+      //
+      // Se um dia existir compra anônima de verdade, a reclamação tem que ser por
+      // link/código assinado enviado AO E-MAIL — nunca por casar string.
+      // Ver migration 20260716200000 (mesma remoção em get_user_access_data).
 
       // ── 10. Verificar se é usuário convidado (account_members) ──────────────
       // Convidados não têm subscription própria — o acesso deles depende de

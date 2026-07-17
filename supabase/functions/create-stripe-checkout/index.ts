@@ -11,11 +11,15 @@ const ALLOWED_ORIGINS = [
   'https://www.granaevo.com',
 ]
 
-const PLAN_ENV_MAP: Record<string, string> = {
+// Object.create(null): sem protótipo. Com um objeto literal, `PLAN_ENV_MAP['constructor']`
+// devolve o construtor `Object` (truthy) e PASSA a validação `!PLAN_ENV_MAP[plan]` lá
+// embaixo. Hoje isso morre em 503 no `Deno.env.get` seguinte (falha fechado, sem
+// escalada), mas é sorte, não desenho — e some no dia em que alguém mexer na ordem.
+const PLAN_ENV_MAP: Record<string, string> = Object.assign(Object.create(null), {
   individual: 'STRIPE_PRICE_INDIVIDUAL',
   casal:      'STRIPE_PRICE_CASAL',
   familia:    'STRIPE_PRICE_FAMILIA',
-}
+})
 
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder()

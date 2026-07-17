@@ -1,0 +1,7 @@
+-- Rollback de 20260716200000_remove_email_claim_takeover.sql
+--
+-- ⚠️ NÃO REVERTA. Isto REABRE tomada de assinatura (account pre-hijacking):
+-- qualquer um cria conta com o e-mail da vítima (/api/create-account usa
+-- email_confirm:true, sem verificação) e leva a assinatura dela.
+-- Só faz sentido reverter se antes existir prova de posse do e-mail no cadastro.
+-- A versão anterior está em 20260716180000_fix_null_period_grants_forever.sql.

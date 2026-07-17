@@ -112,8 +112,13 @@ Deno.serve(async (req: Request) => {
 
   const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET')
   if (!webhookSecret) {
-    console.error('[webhook-stripe] STRIPE_WEBHOOK_SECRET não configurada')
-    return okQ()
+    // 500 e não 200: com 200 a Stripe considera ENTREGUE e nunca reenvia — uma
+    // variável de ambiente faltando viraria perda silenciosa e permanente de
+    // eventos (assinatura cancelada continuaria 'active' para sempre). Com 500
+    // ela reentrega, e o evento se recupera sozinho quando a env for corrigida.
+    // Mesma família do bug de 2026-07-16, que ficou 2 meses invisível.
+    console.error('[webhook-stripe] STRIPE_WEBHOOK_SECRET não configurada — devolvendo 500 para a Stripe reentregar')
+    return new Response('Webhook secret not configured', { status: 500, headers: secHeaders })
   }
 
   let rawBytes: Uint8Array
@@ -163,7 +168,10 @@ Deno.serve(async (req: Request) => {
   )
 
   // ── Idempotência ───────────────────────────────────────────────────────────
-  // [GOD7-F15] processed flag previne reprocessamento em partial failures
+  // O INSERT compete pela PK: se o mesmo evento chegar duas vezes, o segundo bate
+  // em 23505 e é ignorado. (O comentário antigo citava uma "processed flag" que
+  // NÃO existe — `stripe_events` só tem `id, processed_at`. Quem lesse ia
+  // procurar uma garantia inexistente.)
   const { error: insertEventErr } = await supabaseAdmin
     .from('stripe_events')
     .insert({ id: eventId })
