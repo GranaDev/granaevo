@@ -206,19 +206,54 @@ Deno.serve(async (req: Request) => {
 
 type DB = ReturnType<typeof createClient>
 
+// Versão fixada. Sem este header a Stripe responde na versão PADRÃO DA CONTA —
+// que muda sozinha quando a conta é atualizada no painel, e mudou: a partir de
+// `2025-03-31.basil` os campos `current_period_start/end` saíram do objeto
+// Subscription e passaram para `items.data[]`. O resultado silencioso foi
+// period = null em todas as assinaturas (ver periodoDaSub abaixo).
+// Mesma versão que create-stripe-checkout já fixa — as duas devem andar juntas.
+const STRIPE_API_VERSION = '2024-06-20'
+
 async function fetchStripeSubscription(subId: string): Promise<Record<string, unknown>> {
-  if (!STRIPE_ID_REGEX.test(subId)) return {}
+  if (!STRIPE_ID_REGEX.test(subId)) throw new Error(`subscription id inválido: ${subId.slice(0, 12)}`)
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') ?? ''
   const res = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subId)}`, {
-    headers: { 'Authorization': `Bearer ${stripeKey}` },
-    signal:  AbortSignal.timeout(10_000),
+    headers: {
+      'Authorization':  `Bearer ${stripeKey}`,
+      'Stripe-Version': STRIPE_API_VERSION,
+    },
+    signal: AbortSignal.timeout(10_000),
   })
-  return res.ok ? await res.json() : {}
+  // ANTES devolvia {} aqui e o fluxo seguia, gravando a assinatura com período
+  // nulo e devolvendo 200 — a Stripe considerava entregue e NUNCA reenviava.
+  // Falhar alto é o certo: o dispatcher devolve 500 e a Stripe reentrega.
+  if (!res.ok) throw new Error(`Stripe GET /subscriptions falhou: ${res.status}`)
+  return await res.json()
 }
 
 function tsToISO(unix: unknown): string | null {
   if (typeof unix !== 'number') return null
   return new Date(unix * 1000).toISOString()
+}
+
+/**
+ * Período da assinatura, aceitando as DUAS formas da API.
+ *
+ * Até `2024-06-20` os campos ficam na raiz da Subscription; de
+ * `2025-03-31.basil` em diante, no item (`items.data[0]`). Lemos os dois com
+ * fallback para não depender só do header fixado: se a versão for trocada um
+ * dia, isto continua certo em vez de voltar a gravar null em silêncio.
+ *
+ * Por que importa tanto: `current_period_end` nulo era lido como "não expira"
+ * pelo gate de acesso — quem assinou uma vez ficava com acesso para sempre,
+ * mesmo cancelando. Bug de receita, invisível até alguém conferir.
+ */
+function periodoDaSub(sub: Record<string, unknown>): { start: string | null; end: string | null } {
+  const item = ((sub?.items as any)?.data?.[0] ?? {}) as Record<string, unknown>
+  return {
+    start: tsToISO(sub.current_period_start ?? item.current_period_start),
+    end:   tsToISO(sub.current_period_end   ?? item.current_period_end),
+  }
 }
 
 async function handleCheckoutCompleted(db: DB, data: Record<string, unknown>) {
@@ -247,9 +282,14 @@ async function handleCheckoutCompleted(db: DB, data: Record<string, unknown>) {
 
   const sub           = await fetchStripeSubscription(subscriptionId)
   const priceId       = (sub?.items as any)?.data?.[0]?.price?.id ?? ''
-  const periodStart   = tsToISO(sub.current_period_start)
-  const periodEnd     = tsToISO(sub.current_period_end)
+  const { start: periodStart, end: periodEnd } = periodoDaSub(sub)
   const subStatus     = (sub.status as string) ?? 'active'
+
+  // Assinatura Stripe SEM período é dado quebrado, não vitalício: gravar assim
+  // dava acesso eterno de graça. Falha alto p/ a Stripe reentregar o evento.
+  if (!periodEnd) {
+    throw new Error(`[webhook-stripe] period_end ausente para ${subscriptionId.slice(0, 12)} — não gravando linha sem expiração`)
+  }
   const cancelAtPeriod = (sub.cancel_at_period_end as boolean) ?? false
 
   // [GOD7-F04] upsert com validação de ownership — não sobrescreve user_id existente com NULL
@@ -320,11 +360,13 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
   const wasCancelScheduled  = existing?.cancel_at_period_end === true
   const justScheduledCancel = newCancelAtEnd && !wasCancelScheduled
 
+  const { start: periodStartUpd, end: periodEndUpd } = periodoDaSub(sub)
+
   const updates: Record<string, unknown> = {
     stripe_subscription_id: subscriptionId,
     status,
-    current_period_start:  tsToISO(sub.current_period_start),
-    current_period_end:    tsToISO(sub.current_period_end),
+    current_period_start:  periodStartUpd,
+    current_period_end:    periodEndUpd,
     cancel_at_period_end:  newCancelAtEnd,
     canceled_at:           tsToISO(sub.canceled_at),
     updated_at:            new Date().toISOString(),
@@ -337,9 +379,14 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
   // Caso contrário, usa o plan_name dos metadados normalmente.
   const pendingPlan      = existing?.pending_plan_name as string | undefined
   const pendingEffectAt  = existing?.pending_plan_effective_at as string | undefined
-  const newPeriodStartTs = sub.current_period_start as number
+  // Deriva de periodoDaSub (ISO) e não de `sub.current_period_start` cru: na API
+  // 2025+ o campo não existe na raiz, viria `undefined`, e o downgrade agendado
+  // NUNCA seria aplicado — o usuário seguiria pagando o plano antigo.
+  const newPeriodStartTs = periodStartUpd ? Math.floor(Date.parse(periodStartUpd) / 1000) : NaN
 
-  if (pendingPlan && pendingEffectAt && typeof newPeriodStartTs === 'number') {
+  // Number.isFinite e não `typeof === 'number'`: NaN passa no typeof e cairia no
+  // ramo com uma comparação que é sempre falsa — silenciosamente sem downgrade.
+  if (pendingPlan && pendingEffectAt && Number.isFinite(newPeriodStartTs)) {
     const effectiveUnix = Math.floor(new Date(pendingEffectAt).getTime() / 1000)
     if (newPeriodStartTs >= effectiveUnix) {
       // Novo ciclo de faturamento iniciou — aplica o plano agendado
@@ -490,9 +537,11 @@ async function handleSubscriptionDeleted(db: DB, data: Record<string, unknown>) 
   const customerId = sub.customer as string
   if (!customerId || !STRIPE_ID_REGEX.test(customerId)) return
 
-  const canceledAt  = tsToISO(sub.canceled_at) ?? new Date().toISOString()
-  const periodEnd   = tsToISO(sub.current_period_end)
-  const periodStart = tsToISO(sub.current_period_start)
+  const canceledAt = tsToISO(sub.canceled_at) ?? new Date().toISOString()
+  // periodoDaSub aceita as duas formas da API — aqui o `sub` vem do PAYLOAD do
+  // evento, cuja versão é a configurada no painel da Stripe (o header fixado em
+  // fetchStripeSubscription não alcança este caminho).
+  const { start: periodStart, end: periodEnd } = periodoDaSub(sub)
 
   // Recupera email antes de atualizar (ainda disponível na tabela)
   const { data: existing } = await db
