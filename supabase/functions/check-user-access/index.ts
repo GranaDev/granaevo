@@ -178,7 +178,11 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
 
         if (!emailErr && emailSub) {
-          if (!emailSub.current_period_end || new Date(emailSub.current_period_end) >= new Date()) {
+          // period_end AUSENTE = dado quebrado, NÃO vitalício (o vitalício manual
+          // grava 2099-12-31). Aceitar null aqui dava acesso eterno de graça a
+          // assinatura cancelada — ver migration 20260716180000 e o fix do
+          // webhook no mesmo commit. Espelha get_user_access_data: fail secure.
+          if (emailSub.current_period_end && new Date(emailSub.current_period_end) >= new Date()) {
             // Vincula user_id à subscription
             await supabaseAdmin
               .from('stripe_subscriptions')
@@ -223,8 +227,10 @@ Deno.serve(async (req: Request) => {
           .limit(1)
           .maybeSingle()
 
+        // O convidado herda o acesso do titular, então herda o mesmo rigor:
+        // sem period_end, o titular não tem acesso — e o convidado também não.
         const ownerStripeOk = ownerStripe
-          ? (!ownerStripe.current_period_end || new Date(ownerStripe.current_period_end) >= new Date())
+          ? (!!ownerStripe.current_period_end && new Date(ownerStripe.current_period_end) >= new Date())
           : false
 
         if (ownerStripeOk) {
@@ -249,8 +255,15 @@ Deno.serve(async (req: Request) => {
     }
 
     // Proteção extra: valida current_period_end mesmo com status 'active'
-    // (o webhook pode ter atrasado a atualização do status)
-    if (stripeSub.current_period_end && new Date(stripeSub.current_period_end) < new Date()) {
+    // (o webhook pode ter atrasado a atualização do status).
+    // A checagem de AUSENTE vem primeiro e nega: antes, `stripeSub.current_period_end &&`
+    // fazia o null escapar deste if inteiro e cair no "acesso concedido" logo
+    // abaixo — que era exatamente o furo do acesso vitalício de graça.
+    if (!stripeSub.current_period_end) {
+      console.log('[check-user-access] Assinatura sem period_end (dado quebrado) — negado:', userId.slice(0, 8))
+      return deny()
+    }
+    if (new Date(stripeSub.current_period_end) < new Date()) {
       console.log('[check-user-access] Período Stripe expirado para:', userId.slice(0, 8))
       return deny()
     }
