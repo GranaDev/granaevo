@@ -2300,6 +2300,9 @@ function _makeCtx() {
         desenharTopGastos:         { value: (...a) => desenharTopGastos(...a),         enumerable: true },
         exportarDadosJSON:         { value: (...a) => exportarDadosJSON(...a),         enumerable: true },
         exportarDadosCSV:          { value: (...a) => exportarDadosCSV(...a),          enumerable: true },
+        // Único que faltava para o módulo lazy de exportação (Passo 10);
+        // _validators e confirmarAcao já estão expostos acima.
+        _EXPORT_MAX_REGISTROS:     { get: () => _EXPORT_MAX_REGISTROS,                  enumerable: true },
         sistemaLog:                { get: () => sistemaLog,                             enumerable: true },
         mostrarSelecaoPerfis:      { value: (...a) => mostrarSelecaoPerfis(...a),      enumerable: true },
         // Navegação entre abas — usada por avisos proativos que levam o usuário
@@ -5455,163 +5458,21 @@ function numeroParaExtenso(numero) {
 //    Um usuário normal raramente terá mais de 5000 transações
 const _EXPORT_MAX_REGISTROS = 5_000;
 
-function exportarDadosJSON() {
-    if (!perfilAtivo) {
-        mostrarNotificacao('Nenhum perfil ativo!', 'error');
-        return;
-    }
-
-    const totalTransacoes  = transacoes.filter(_validators.transacao).length;
-    const totalMetas       = metas.filter(_validators.meta).length;
-    const totalContas      = contasFixas.filter(_validators.contaFixa).length;
-    const totalCartoes     = cartoesCredito.filter(_validators.cartao).length;
-
-    // ✅ Avisa o usuário se o volume for alto e houver truncamento
-    const seraTruncado = totalTransacoes > _EXPORT_MAX_REGISTROS;
-    const avisoTruncamento = seraTruncado
-        ? `\n\n⚠️ Atenção: você possui ${totalTransacoes} transações. Serão exportadas apenas as ${_EXPORT_MAX_REGISTROS} mais recentes para proteger o desempenho do navegador.`
-        : '';
-
-    confirmarAcao(
-        `⚠️ Você está prestes a exportar TODOS os dados financeiros do perfil "${_sanitizeText(perfilAtivo.nome)}" — transações, metas, contas e cartões — para um arquivo local. Confirma?${avisoTruncamento}`,
-        () => {
-            const contasSemLock = contasFixas.map(({ _processando, ...rest }) => rest);
-
-            // ✅ CORREÇÃO: aplica limite máximo em cada array antes de serializar
-            //    Ordena transações da mais recente para a mais antiga antes de truncar
-            //    (para manter as mais relevantes no caso de truncamento)
-            const transacoesOrdenadas = transacoes
-                .filter(_validators.transacao)
-                .slice()
-                .sort((a, b) => {
-                    const dataA = `${a.data} ${a.hora || ''}`;
-                    const dataB = `${b.data} ${b.hora || ''}`;
-                    return dataB.localeCompare(dataA);
-                })
-                .slice(0, _EXPORT_MAX_REGISTROS);
-
-            const dados = {
-                perfil:             _sanitizeText(perfilAtivo.nome),
-                dataExportacao:     new Date().toISOString(),
-                totalRegistros:     {
-                    transacoes:  totalTransacoes,
-                    exportadas:  transacoesOrdenadas.length,
-                    truncado:    seraTruncado,
-                },
-                transacoes:         transacoesOrdenadas,
-                metas:              metas.filter(_validators.meta).slice(0, _EXPORT_MAX_REGISTROS),
-                contasFixas:        contasSemLock.filter(_validators.contaFixa).slice(0, _EXPORT_MAX_REGISTROS),
-                cartoesCredito:     cartoesCredito.filter(_validators.cartao).slice(0, _EXPORT_MAX_REGISTROS),
-            };
-
-            const dataStr = JSON.stringify(dados, null, 2);
-
-            // ✅ Verificação de tamanho antes de criar o Blob
-            //    ~10MB é o limite seguro para maioria dos navegadores
-            const tamanhoEstimadoBytes = new TextEncoder().encode(dataStr).length;
-            if (tamanhoEstimadoBytes > 10 * 1024 * 1024) {
-                mostrarNotificacao(
-                    'O arquivo gerado é muito grande. Tente exportar um período menor via Relatórios.',
-                    'error'
-                );
-                return;
-            }
-
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement('a');
-            a.href     = url;
-            a.download = `granaevo_${_sanitizeText(perfilAtivo.nome).replace(/\s+/g, '_')}_${isoDate()}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            mostrarNotificacao(
-                seraTruncado
-                    ? `Exportação concluída (${_EXPORT_MAX_REGISTROS} de ${totalTransacoes} transações)`
-                    : 'Dados exportados com sucesso!',
-                'success'
-            );
-        }
-    );
+// ── Exportação JSON/CSV — extraída para modules/exportar-dados.js (Passo 10) ──
+// Eram ~163 linhas (~7KB) carregadas EAGER no boot para uma ação que a maioria
+// dos usuários nunca faz. O dashboard.js estava em 40,9KB de um orçamento de 42
+// — cada feature nova exigia conferir se cabia. Agora o chunk só baixa no clique.
+// A lógica não mudou; o que era global daqui entra pelo `ctx` (getters vivos).
+function _exportar(qual) {
+    import('../modules/exportar-dados.js?v=1')
+        .then(m => qual === 'json' ? m.exportarDadosJSON(_makeCtx()) : m.exportarDadosCSV(_makeCtx()))
+        .catch(e => {
+            _log.error('EXPORT_LAZY_001', e);
+            mostrarNotificacao('Não foi possível abrir a exportação agora. Tente novamente.', 'error');
+        });
 }
-
-function exportarDadosCSV() {
-    if (!perfilAtivo) {
-        mostrarNotificacao('Nenhum perfil ativo!', 'error');
-        return;
-    }
-
-    const transacoesValidas = transacoes.filter(_validators.transacao);
-    const seraTruncado      = transacoesValidas.length > _EXPORT_MAX_REGISTROS;
-    const avisoTruncamento  = seraTruncado
-        ? `\n\n⚠️ Você possui ${transacoesValidas.length} transações. Serão exportadas apenas as ${_EXPORT_MAX_REGISTROS} mais recentes.`
-        : '';
-
-    confirmarAcao(
-        `⚠️ Exportar as transações do perfil "${_sanitizeText(perfilAtivo.nome)}" para CSV? O arquivo ficará salvo no seu dispositivo.${avisoTruncamento}`,
-        () => {
-            // ✅ Escape de CSV Injection (já existia — mantido)
-            const escaparCSV = (str) => {
-                const s = String(str || '').replace(/"/g, '""').replace(/[\r\n]/g, ' ');
-                if (/^[=+\-@\t\r]/.test(s)) return `"\t${s}"`;
-                return `"${s}"`;
-            };
-
-            // ✅ CORREÇÃO: ordena da mais recente e limita ao máximo permitido
-            const transacoesParaExportar = transacoesValidas
-                .slice()
-                .sort((a, b) => {
-                    const dataA = `${a.data} ${a.hora || ''}`;
-                    const dataB = `${b.data} ${b.hora || ''}`;
-                    return dataB.localeCompare(dataA);
-                })
-                .slice(0, _EXPORT_MAX_REGISTROS);
-
-            let csv = 'Data,Hora,Categoria,Tipo,Descrição,Valor\n';
-
-            transacoesParaExportar.forEach(t => {
-                const linha = [
-                    escaparCSV(t.data),
-                    escaparCSV(t.hora),
-                    escaparCSV(t.categoria),
-                    escaparCSV(t.tipo),
-                    escaparCSV(t.descricao),
-                    String(Number(t.valor).toFixed(2)),
-                ].join(',');
-                csv += linha + '\n';
-            });
-
-            // ✅ Verificação de tamanho antes de criar o Blob
-            const tamanhoEstimadoBytes = new TextEncoder().encode(csv).length;
-            if (tamanhoEstimadoBytes > 10 * 1024 * 1024) {
-                mostrarNotificacao(
-                    'O arquivo CSV é muito grande. Tente exportar um período menor.',
-                    'error'
-                );
-                return;
-            }
-
-            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement('a');
-            a.href     = url;
-            a.download = `granaevo_transacoes_${_sanitizeText(perfilAtivo.nome).replace(/\s+/g, '_')}_${isoDate()}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            mostrarNotificacao(
-                seraTruncado
-                    ? `CSV exportado (${_EXPORT_MAX_REGISTROS} de ${transacoesValidas.length} transações)`
-                    : 'Transações exportadas com sucesso!',
-                'success'
-            );
-        }
-    );
-}
+function exportarDadosJSON() { _exportar('json'); }
+function exportarDadosCSV()  { _exportar('csv');  }
 
 // ========== NOTIFICAÇÕES ==========
 
