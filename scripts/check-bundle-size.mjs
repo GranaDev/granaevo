@@ -22,7 +22,7 @@ const BUDGETS_KB = {
   // de config/desafios no load path. Recursos novos (radar/previsao/desafios/
   // horas-vida/simulador/recorrencias) sao TODOS chunks lazy — nao pesam aqui.
   'dashboard.js':        42,
-  'vendor-supabase.js':  56,
+  'vendor-supabase.js':  40,   // Passo 8: realtime-js stubado (34,3 KB). Teto baixo TRAVA o ganho — se o realtime real voltar (~48,6), o CI barra.
   'db-relatorios.js':    40,
   'main.css':            14,
   'convidados.css':      20,

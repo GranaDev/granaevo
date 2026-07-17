@@ -1,9 +1,28 @@
 import { defineConfig } from 'vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// __dirname não existe em módulo ESM; derivamos do import.meta.url.
+// fileURLToPath decodifica o path corretamente no Windows (acentos no caminho do
+// projeto quebravam com URL.pathname — aprendido no experimento do Passo 8).
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => ({
   publicDir: 'public',
+
+  // Passo 8: o app NÃO usa Supabase Realtime, mas o construtor do SupabaseClient
+  // instancia RealtimeClient sempre → o realtime-js real (~19 KB gzip) viajava no
+  // bundle de boot. Aliasar para um stub no-op tira −14,4 KB do vendor-supabase
+  // (48,6 → 34,2 KB gzip, medido). O supabase-js está PINADO em 2.104.1 no
+  // package.json porque este stub cobre exatamente os métodos que ESSA versão
+  // chama — ver src/scripts/vendor/realtime-stub.js.
+  resolve: {
+    alias: {
+      '@supabase/realtime-js': path.resolve(__dirname, 'src/scripts/vendor/realtime-stub.js'),
+    },
+  },
 
   plugins: [
     // ─── CSS STREAMING (lógica GTA) ─────────────────────────────────────────
