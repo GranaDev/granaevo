@@ -1,0 +1,3 @@
+-- Rollback de 20260716220000_plan_limit_stop_trusting_email.sql
+-- ⚠️ NÃO REVERTA: reabre herança de limite de perfil por e-mail não provado
+-- (e o NULL = "não expira"). Versões antigas no git.
