@@ -615,12 +615,19 @@ reativação de inativo, aviso de fatura.
 
 **Risco:** baixo. **Esforço:** 1–2 dias. **Verificar:** um request aparece com o mesmo id no proxy e na edge; CI falha se LCP estourar.
 
-## PASSO 28 — LGPD B1: aviso de retenção do audit-log ao titular ✅ APLICADO EM PROD (2026-07-14)
-> **FEITO 2026-07-14:** nota de transparência no modal de exclusão (`db-configuracoes.js` — "registros de
-> acesso, sem dados financeiros, mantidos por até 6 meses por Marco Civil art. 15 e depois apagados") +
-> mensagem da edge `delete-account` refinada (não diz mais "excluídos permanentemente" sem ressalva).
-> A Política (`privacidade.html`) JÁ declarava os 6 meses (linhas 205/292) — bate com a migration
-> `20260626140000`. Edge redeployada + `vercel --prod`. **LGPD: todos os gaps (M2/M1/B1) fechados.**
+## PASSO 28 — LGPD B1: aviso de retenção do audit-log ao titular ✅ APLICADO EM PROD (2026-07-14) · ⚠️ BASE LEGAL CORRIGIDA (2026-07-16)
+> **⚠️ CORREÇÃO 2026-07-16 — a base legal declarada em 14/07 estava ERRADA.**
+> O texto dizia "por obrigação legal (Marco Civil art. 15)" e que os registros incluíam **IP**.
+> Auditoria LGPD refutou, e o banco confirmou: **`ip_address` e `user_agent` são NULOS em 19.796 de
+> 19.796 linhas**. O art. 15 trata de "registro de acesso", que o art. 5º, VIII define como data/hora
+> **"a partir de um determinado endereço IP"** — sem IP, o art. 15 **não incide**, e a base "obrigação
+> legal" **não existia**. A política prometia um log **mais invasivo do que o que existe**.
+> Corrigido em 4 lugares (`privacidade.html` ×2, `RoPA.md`, `db-configuracoes.js`, `delete-account`):
+> base agora é **legítimo interesse (LGPD art. 7º, IX)** e o texto diz explicitamente **sem IP**.
+> Bônus: a lei estava citada como **12.965/2018** — é **/2014**.
+>
+> **FEITO 2026-07-14 (histórico):** nota de transparência no modal de exclusão + mensagem da edge
+> `delete-account` refinada. A Política já declarava os 6 meses — bate com a migration `20260626140000`.
 **Objetivo:** deixar explícito, no fluxo de exclusão de conta, que os logs de acesso (`financial_audit_log`) seguem retidos por 6 meses por obrigação legal (Marco Civil art. 15).
 **Por quê:** único gap BAIXO restante da LGPD — transparência ao titular.
 - [x] ☑️ Nota no modal de exclusão + mensagem da edge `delete-account`. **(2026-07-14)**

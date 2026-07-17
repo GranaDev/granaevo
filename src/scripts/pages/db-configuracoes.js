@@ -1304,7 +1304,12 @@ async function excluirConta() {
         // O restante (dados financeiros, perfis, backups) é apagado na hora pela cascata.
         const retentionNote = document.createElement('div');
         retentionNote.style.cssText = 'background:rgba(148,163,184,0.08); border:1px solid rgba(148,163,184,0.2); border-radius:10px; padding:10px 12px; margin-bottom:14px; font-size:0.78rem; color:var(--text-muted); line-height:1.5;';
-        retentionNote.innerHTML = '<i class="fas fa-shield-halved" aria-hidden="true"></i> Por obrigação legal (Marco Civil da Internet, art. 15), os registros de acesso (data, hora e IP — <strong>sem seus dados financeiros</strong>) são mantidos por até <strong>6 meses</strong> após a exclusão e então apagados automaticamente.';
+        // Não cita mais Marco Civil art. 15: aquele artigo define registro de
+        // acesso como data/hora "a partir de um determinado endereço IP" (art. 5º,
+        // VIII) — e este log NÃO grava IP (nulo em 100% das 19.796 linhas,
+        // verificado em 2026-07-16). Sem IP não é registro de acesso, logo a base
+        // não é obrigação legal, e sim legítimo interesse.
+        retentionNote.innerHTML = '<i class="fas fa-shield-halved" aria-hidden="true"></i> Um registro interno de auditoria (qual operação e quando — <strong>sem IP, sem seus dados financeiros</strong>) é mantido por até <strong>6 meses</strong> após a exclusão, por legítimo interesse de segurança, e então apagado automaticamente.';
 
         // ── Confirmação por e-mail ───────────────────────────────────────
         const confirmLabel = document.createElement('label');

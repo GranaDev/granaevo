@@ -129,8 +129,14 @@ Deno.serve(async (req: Request) => {
     deleted: true,
     hadActiveSubscription: !!sub,
     wasGuest: !!guestRow,
+    // Base corrigida em 2026-07-16: não é obrigação legal. O Marco Civil art. 15
+    // trata de "registro de acesso", que o art. 5º, VIII define como data/hora
+    // "a partir de um determinado endereço IP" — e este log NÃO grava IP (nulo em
+    // 100% das 19.796 linhas). Sem IP, o art. 15 não incide: a base é legítimo
+    // interesse (LGPD art. 7º, IX). Prometer ao titular uma base que não existe é
+    // pior do que não prometer nada.
     message: sub
-      ? 'Conta excluída. Se você tinha assinatura ativa, cancele/verifique no Stripe para evitar cobranças futuras. Registros de acesso (IP/data, sem dados financeiros) são mantidos por 6 meses por obrigação legal (Marco Civil, art. 15) e depois apagados.'
-      : 'Conta e dados financeiros excluídos. Registros de acesso (IP/data, sem dados financeiros) são mantidos por 6 meses por obrigação legal (Marco Civil, art. 15) e depois apagados automaticamente.',
+      ? 'Conta excluída. Se você tinha assinatura ativa, cancele/verifique no Stripe para evitar cobranças futuras. Um registro interno de auditoria (qual operação e quando, sem IP e sem dados financeiros) é mantido por 6 meses por legítimo interesse de segurança e depois apagado.'
+      : 'Conta e dados financeiros excluídos. Um registro interno de auditoria (qual operação e quando, sem IP e sem dados financeiros) é mantido por 6 meses por legítimo interesse de segurança e depois apagado automaticamente.',
   }, 200, cors)
 })

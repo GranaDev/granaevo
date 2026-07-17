@@ -202,7 +202,6 @@
                             <h3>Cumprimento de obrigação legal (art. 7º, II)</h3>
                             <ul>
                                 <li>Retenção de registros por 90 dias após o encerramento, conforme política interna e possíveis obrigações fiscais;</li>
-                                <li>Retenção de logs de acesso com IP por 6 meses (Marco Civil da Internet, art. 15);</li>
                                 <li>Atendimento a eventual requisição judicial ou de autoridade regulatória.</li>
                             </ul>
                         </div>
@@ -211,7 +210,7 @@
                             <h3>Legítimo interesse (art. 7º, IX)</h3>
                             <ul>
                                 <li>Rate limiting e prevenção de abuso, fraude e ataques à plataforma;</li>
-                                <li>Logs de auditoria internos para segurança e diagnóstico de falhas;</li>
+                                <li>Logs de auditoria internos para segurança e diagnóstico de falhas — registram <strong>o que</strong> mudou (a operação, o tamanho e o hash dos dados) e <strong>quando</strong>, <strong>sem endereço IP e sem identificar seu aparelho ou navegador</strong>;</li>
                                 <li>Monitoramento de estabilidade e diagnóstico de erros técnicos da aplicação;</li>
                                 <li>Monitoramento de uptime e estabilidade do serviço.</li>
                             </ul>
@@ -289,7 +288,7 @@
                             <ul>
                                 <li>Os dados pessoais e financeiros são preservados por <strong>90 dias corridos</strong> após o último acesso pago, permitindo a reativação com restauração completa;</li>
                                 <li>Após 90 dias sem reativação, <strong>todos os dados são excluídos permanentemente</strong> de forma automatizada e irreversível;</li>
-                                <li>Logs de auditoria e de acesso (que registram a ação, a data/hora e o endereço IP, para fins de segurança e prevenção de fraude) são retidos por <strong>6 meses</strong> — prazo que atende ao mínimo legal do Marco Civil da Internet (Lei nº 12.965/2018, art. 15) — e <strong>excluídos automaticamente</strong> após esse período.</li>
+                                <li>Os <strong>logs internos de auditoria</strong> (que registram a operação realizada e a data/hora, para segurança e prevenção de fraude — <strong>sem endereço IP e sem identificar seu aparelho ou navegador</strong>) são retidos por <strong>6 meses</strong> com base no <strong>legítimo interesse</strong> (art. 7º, IX, da LGPD) e <strong>excluídos automaticamente</strong> após esse período. Eles guardam apenas o registro de que uma alteração ocorreu — nunca o conteúdo dos seus dados financeiros, que permanece cifrado.</li>
                             </ul>
                         </div>
 
