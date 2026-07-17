@@ -81,19 +81,21 @@ Deno.serve(async (req: Request) => {
 
   if (rowErr) return json({ error: 'Erro interno' }, 500)
 
-  // Fallback: por email (anônimos ainda não vinculados por user_id)
-  if (!row?.stripe_customer_id && user.email) {
-    const { data: rowByEmail, error: rowEmailErr } = await supabaseAdmin
-      .from('stripe_subscriptions')
-      .select('stripe_customer_id, stripe_subscription_id')
-      .eq('user_email', user.email.toLowerCase().trim())
-      .in('status', STATUSES)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (rowEmailErr) return json({ error: 'Erro interno' }, 500)
-    row = rowByEmail
-  }
+  // ── REMOVIDO: fallback por e-mail ───────────────────────────────────────────
+  // Havia aqui um "se não achar por user_id, procura por user_email". Mesma
+  // classe do vetor de tomada de assinatura fechado na migration 20260716200000:
+  // como /api/create-account usa `admin.createUser({ email_confirm: true })`, a
+  // conta nasce confirmada sem verificação nenhuma — logo, o e-mail do JWT NÃO
+  // prova posse. Qualquer um criava conta com o e-mail da vítima e lia daqui o
+  // `stripe_customer_id`/`stripe_subscription_id` dela, mais período e plano.
+  //
+  // Não concedia acesso ao app (isso era o outro caminho), mas vazava
+  // identificadores de cobrança de terceiro — e IDs de cliente Stripe são a
+  // chave para o resto. Esta função só olha por `user_id` agora.
+  //
+  // O fallback existia para "anônimo ainda não vinculado". Não há esse caso:
+  // planos.js SEMPRE cria a conta antes do checkout, então o webhook grava o
+  // user_id via metadata. Só o legado Cakto ficou órfão — vinculado à mão.
 
   if (!row?.stripe_customer_id) return json({ error: 'Nenhuma assinatura encontrada' }, 404)
 
