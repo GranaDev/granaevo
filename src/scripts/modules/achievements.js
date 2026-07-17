@@ -234,12 +234,6 @@ export const ACHIEVEMENTS = Object.freeze([
     { id: 'perfeccionista', rarity: 'lendario', hidden: true, check: (s, ctx) => ctx.unlockedCount >= ACHIEVEMENTS.length - 1 },
 ]);
 
-const _BY_ID = Object.freeze(Object.fromEntries(ACHIEVEMENTS.map(a => [a.id, a])));
-export function getById(id) {
-    // hasOwnProperty: nunca resolve para Object.prototype via chave maliciosa (__proto__).
-    return Object.prototype.hasOwnProperty.call(_BY_ID, id) ? _BY_ID[id] : null;
-}
-
 /**
  * Devolve um mapa LIMPO de desbloqueios — copia APENAS ids conhecidos do
  * catálogo com valor string. Nunca itera chaves não-confiáveis do input
