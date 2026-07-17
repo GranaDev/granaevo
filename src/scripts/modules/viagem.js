@@ -55,6 +55,13 @@ export function dataParaIso(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Date → 'HH:MM:SS' local — mesmo formato do `hora` gravado em cada transação. */
+export function horaDe(d) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
+const HORA_RE = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+
 // "DD/MM/YYYY" ou "YYYY-MM-DD" → Date (ou null). Mesmo parser dos módulos irmãos.
 function _txDate(data) {
     if (typeof data !== 'string') return null;
@@ -70,6 +77,36 @@ function _txDate(data) {
     return isNaN(dt.getTime()) ? null : dt;
 }
 
+/**
+ * Instante exato da transação (data + hora), e não só o dia.
+ *
+ * POR QUE A HORA IMPORTA (bug relatado em 2026-07-16): a 1ª versão comparava só
+ * DATAS. Quem lançasse um gasto de manhã, ligasse o modo viagem à tarde e
+ * lançasse outro, via os DOIS entrarem na viagem — porque ambos eram "do dia do
+ * início". O usuário espera o óbvio: conta o que veio DEPOIS de ativar.
+ *
+ * Sem `hora` (lançamento importado/antigo) assume 00:00 — o mais conservador:
+ * no dia da ativação, isso o deixa ANTES do início e fora da viagem, que é
+ * exatamente a expectativa.
+ */
+function _txInstante(t) {
+    const dt = _txDate(t?.data);
+    if (!dt) return null;
+    const m = typeof t?.hora === 'string' ? HORA_RE.exec(t.hora.trim()) : null;
+    if (m) dt.setHours(Number(m[1]), Number(m[2]), Number(m[3] ?? 0), 0);
+    return dt;
+}
+
+/** Junta 'YYYY-MM-DD' + 'HH:MM:SS' num Date local. Sem hora → 00:00 do dia. */
+function _instante(iso, hora, fallbackFimDoDia = false) {
+    const dt = isoParaData(iso);
+    if (!dt) return null;
+    const m = typeof hora === 'string' ? HORA_RE.exec(hora.trim()) : null;
+    if (m) dt.setHours(Number(m[1]), Number(m[2]), Number(m[3] ?? 0), 0);
+    else if (fallbackFimDoDia) dt.setHours(23, 59, 59, 999);
+    return dt;
+}
+
 /** A viagem ativa do perfil, ou null. Fonte: config.viagem (sanitizada no save). */
 export function viagemAtiva(configPerfil) {
     const v = configPerfil?.viagem;
@@ -80,16 +117,24 @@ export function viagemAtiva(configPerfil) {
 }
 
 /**
- * Fecha a janela da viagem. `fim` só existe quando a viagem foi encerrada; até
- * lá o fim é HOJE — uma viagem em curso conta até agora, não até o infinito.
+ * Fecha a janela da viagem, com precisão de HORA.
+ *
+ * `fim` só existe quando a viagem foi encerrada; até lá o fim é AGORA — uma
+ * viagem em curso conta até este instante, não até o infinito.
+ *
+ * Compatibilidade: viagem gravada antes de existir `inicioHora` cai em 00:00 do
+ * dia (o comportamento antigo), em vez de sumir.
  */
 function _janela(viagem, hoje) {
-    const inicio = isoParaData(viagem.inicio);
+    const inicio = _instante(viagem.inicio, viagem.inicioHora);
     if (!inicio) return null;
-    const fimIso = viagem.fim && isoParaData(viagem.fim) ? viagem.fim : dataParaIso(hoje);
-    const fim = isoParaData(fimIso);
+
+    const fim = viagem.fim
+        ? _instante(viagem.fim, viagem.fimHora, /* fallbackFimDoDia */ true)
+        : new Date(hoje);
     if (!fim || fim < inicio) return null;
-    return { inicio, fim };
+
+    return { inicio, fim, diaInicio: isoParaData(viagem.inicio), diaFim: dataParaIso(fim) };
 }
 
 /**
@@ -110,11 +155,6 @@ export function analisarViagem(viagem, transacoes, hoje = new Date()) {
     const j = _janela(viagem, hoje);
     if (!j) return null;
 
-    // Fim inclusivo: uma viagem que começa e acaba no mesmo dia dura 1 dia, e o
-    // gasto DAQUELE dia conta. Comparar com `<= fim` (meia-noite) descartaria o
-    // dia inteiro do retorno.
-    const fimInclusivo = new Date(j.fim.getTime() + _MS_DIA - 1);
-
     let total = 0;
     let fixas = 0;
     let n = 0;
@@ -122,8 +162,10 @@ export function analisarViagem(viagem, transacoes, hoje = new Date()) {
 
     for (const t of (transacoes || [])) {
         if (t.categoria !== 'saida' && t.categoria !== 'saida_credito') continue;
-        const dt = _txDate(t.data);
-        if (!dt || dt < j.inicio || dt > fimInclusivo) continue;
+        // Instante (data+hora), não só o dia: é o que faz "só o que lancei DEPOIS
+        // de ativar" valer de verdade.
+        const dt = _txInstante(t);
+        if (!dt || dt < j.inicio || dt > j.fim) continue;
         const v = parseFloat(t.valor);
         if (!isFinite(v) || v <= 0) continue;
 
@@ -139,13 +181,17 @@ export function analisarViagem(viagem, transacoes, hoje = new Date()) {
         porTipo.set(tipo, (porTipo.get(tipo) || 0) + v);
     }
 
-    const dias = Math.round((j.fim - j.inicio) / _MS_DIA) + 1;
+    // Dias em CALENDÁRIO (não horas/24): sair sexta às 22h e voltar sábado às
+    // 9h é uma viagem de 2 dias para quem viajou, mesmo tendo 11h de duração.
+    const d0 = new Date(j.inicio.getFullYear(), j.inicio.getMonth(), j.inicio.getDate());
+    const d1 = new Date(j.fim.getFullYear(),    j.fim.getMonth(),    j.fim.getDate());
+    const dias = Math.round((d1 - d0) / _MS_DIA) + 1;
     const adicional = total - fixas;
 
     return {
         nome:      (typeof viagem.nome === 'string' && viagem.nome.trim()) || 'Viagem',
-        inicio:    dataParaIso(j.inicio),
-        fim:       dataParaIso(j.fim),
+        inicio:    j.diaInicio,
+        fim:       j.diaFim,
         emCurso:   !viagem.fim,
         dias,
         total,
@@ -160,13 +206,19 @@ export function analisarViagem(viagem, transacoes, hoje = new Date()) {
     };
 }
 
-/** Objeto de viagem novo, pronto para `config.viagem`. */
+/**
+ * Objeto de viagem novo, pronto para `config.viagem`.
+ * Carimba a HORA: sem ela, o gasto que você lançou de manhã entraria numa
+ * viagem ligada à tarde — foi o bug relatado na 1ª versão.
+ */
 export function iniciarViagem(nome, hoje = new Date()) {
     return {
-        ativa:  true,
-        nome:   String(nome ?? '').trim().slice(0, 60) || 'Viagem',
-        inicio: dataParaIso(hoje),
-        fim:    null,
+        ativa:      true,
+        nome:       String(nome ?? '').trim().slice(0, 60) || 'Viagem',
+        inicio:     dataParaIso(hoje),
+        inicioHora: horaDe(hoje),
+        fim:        null,
+        fimHora:    null,
     };
 }
 
@@ -176,7 +228,9 @@ export function iniciarViagem(nome, hoje = new Date()) {
  */
 export function encerrarViagem(viagem, hoje = new Date()) {
     if (!viagem || typeof viagem !== 'object') return null;
-    return { ...viagem, ativa: false, fim: dataParaIso(hoje) };
+    // Carimba a hora do encerramento pelo mesmo motivo do início: o que você
+    // lançar depois de desligar não é gasto de viagem.
+    return { ...viagem, ativa: false, fim: dataParaIso(hoje), fimHora: horaDe(hoje) };
 }
 
 // ─────────────────────────── UI (única parte com DOM) ────────────────────────
@@ -262,11 +316,18 @@ function _resumo(ctx, r) {
  * Configurações atualizar o subtítulo do botão.
  */
 export function abrirPopupViagem(ctx, onFechar) {
-    const salvar = async (novaViagem) => {
+    const salvar = (novaViagem) => {
         // O setter de configPerfil sanitiza na escrita (dashboard.js) — mas o
         // objeto precisa ser NOVO: mutar o antigo não dispara o setter.
         ctx.configPerfil = { ...ctx.configPerfil, viagem: novaViagem };
-        await ctx.salvarDados();
+        // Sem `await` e fecha na hora — mesmo padrão de horas-vida.js.
+        // A 1ª versão fazia `await ctx.salvarDados()` ANTES de fechar: o popup
+        // congelava durante todo o round-trip de rede, o usuário achava que o
+        // clique não pegou e clicava de novo — o que ENFILEIRAVA outro save e
+        // deixava tudo mais lento ainda. Bug relatado ("preciso dar 2 ou 3
+        // cliques"). O estado já está em memória; o save é assíncrono e o
+        // dashboard já tem guardas anti-wipe se ele falhar.
+        ctx.salvarDadosUrgente();
         ctx.fecharPopup();
         if (typeof onFechar === 'function') onFechar();
     };

@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseValorBR, parseParcelas, parseExtenso, parseDataRelativa, parseAritmetica, parseMesNomeado, parseDataFutura } from './money.js';
-import { extractDescricao, contarPalavrasConteudo } from './describe.js';
+import { extractDescricao } from './describe.js';
 
 // Tipos permitidos no app (espelham db-transacoes.js: o conjunto reconhecido pelo
 // auto-categorizador em _AUTO_CAT, mais rico que o dropdown de edição). Inclui
@@ -64,8 +64,6 @@ const RE_INJECT = /\b(ignore? (as |todas as |suas )?(instru|regras|ordens)|esque
 // verbo NENHUM: caía em `valor_ambiguo` e o assistente perguntava "foi gasto ou
 // entrada?" de um saque de reserva. Bug real relatado em prod.
 // "caixa" (eletrônico) NÃO entra: `\bcaixinha` não casa "caixa".
-export const RESERVA_ALVO = /\b(reserv|caixinha|cofrinho|porquinho|poupanc|guardadinho|vaquinha|meta\b|objetivo)/;
-const RE_VERBO_TIRAR = /\b(tirei|resgatei|retirei|saquei|resgate|retirada|puxei|peguei de volta)\b/;
 
 // ── Verbos → categoria (ordem importa: específicos antes de genéricos) ───────
 const VERBOS = [
@@ -171,6 +169,14 @@ const RE_DESFAZER  = /\b(desfaz|desfazer|desfa[cç]a|apaga(r)? (o |a )?ultim|can
 // Sem este intent a frase caía no valor_ambiguo (ou na IA) e virava um lançamento
 // FANTASMA de R$80 que o usuário nunca pediu.
 const RE_VERBO_EDITAR = /\b(apaga|apagar|deleta|deletar|exclui|excluir|remove|remover|muda|mudar|troca|trocar|altera|alterar|corrige|corrigir|edita|editar|arruma|arrumar|conserta|consertar)\b/;
+
+// Verbos IMPERATIVOS: o usuário está MANDANDO fazer algo. Se o parser não casou
+// nenhum intent e ainda assim há um verbo destes, a frase é uma ordem que eu não
+// entendi — nunca um "valor solto". É esta lista que impede o valor_ambiguo de
+// virar catch-all e transformar "cria uma meta de 5000" em convite pra lançar.
+// Inclui os de edição: "muda o valor pra 80" sem lançamento recente não pode
+// virar um gasto novo de R$80.
+const RE_COMANDO = /\b(cria|criar|crie|adiciona|adicionar|configura|configurar|define|definir|defina|renomeia|renomear|agenda|agendar|ativa|ativar|desativa|desativar|apaga|apagar|deleta|deletar|exclui|excluir|remove|remover|muda|mudar|troca|trocar|altera|alterar|corrige|corrigir|edita|editar|ajusta|ajustar|arruma|arrumar|conserta|consertar)\b/;
 // Referência a um lançamento ESPECÍFICO que não é o último.
 const RE_REF_ANTIGA = /\b(aquel[ae]s?|daquel[ae]s?|naquel[ae]s?|(a|essa) (compra|transacao|entrada)|([oe]sse|o) (gasto|lancamento|pagamento)|d[eo] (segunda|terca|quarta|quinta|sexta|sabado|domingo)|de ontem|de anteontem|do dia \d{1,2}|da semana passada|do mes passado|de \d{1,2}\/\d{1,2})/;
 
@@ -574,19 +580,21 @@ export function parseLocal(rawText) {
         return { ...base, intencao: 'lancar', categoria, tipo: tipo || null, descricao: descricao || null, confianca: 0.35 };
     }
 
-    // 6) Valor REALMENTE sozinho ("109,05", "80 pila") → AMBÍGUO. NÃO gasta IA: o
-    //    engine pergunta o que foi, com 1 toque (B13), e guarda o valor (R3).
+    // 6) Valor sem direção ("109,05", "109,05 com fita de led") → AMBÍGUO. Não
+    //    gasta IA: o engine pergunta o que foi, com 1 toque (B13), e guarda valor
+    //    E descrição (R3) — então "fita de led" sobrevive à pergunta.
     //
-    //    A guarda de conteúdo não é detalhe — sem ela isto virava CATCH-ALL: toda
-    //    frase que o parser não entendia, mas que tinha um número, era tratada como
-    //    "valor solto". "muda o valor daquela compra de terça pra 80" e "cria uma
-    //    meta de 5000 pra viagem" viravam convite pra lançar, e um toque no chip
-    //    gravava um lançamento FANTASMA que o usuário nunca pediu.
+    //    A guarda RE_COMANDO impede que isto vire CATCH-ALL. Sem ela, toda frase
+    //    não-entendida com um número era tratada como "valor solto": "cria uma meta
+    //    de 5000 pra viagem" virava convite pra lançar, e 1 toque no chip gravava um
+    //    lançamento FANTASMA que ninguém pediu.
     //
-    //    Regra: se sobrou conteúdo que ninguém leu, isto NÃO é um valor solto — é
-    //    uma intenção desconhecida. Vai pra IA (ou pro "não entendi"), que é honesto.
-    if (valor && contarPalavrasConteudo(rawText) <= 1) {
-        return { ...base, intencao: 'valor_ambiguo', valor, confianca: 0.9 };
+    //    A régua é a INTENÇÃO, não o conteúdo: um comando imperativo que eu não
+    //    entendi ("cria", "configura", "muda") nunca é um valor solto. Já um valor
+    //    com um item ("109,05 com fita de led") É — e perguntar a direção resolve
+    //    ali mesmo, de graça e OFFLINE, sem depender da IA.
+    if (valor && !RE_COMANDO.test(text)) {
+        return { ...base, intencao: 'valor_ambiguo', valor, descricao: extractDescricao(rawText).descricao, confianca: 0.9 };
     }
     return base;
 }

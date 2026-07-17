@@ -166,27 +166,42 @@ describe('splitCompound não descarta pedaço em silêncio (R11)', () => {
 describe('valor_ambiguo NÃO é catch-all — o lançamento fantasma', () => {
   // Bug real: qualquer frase não-entendida que tivesse um número virava "valor
   // solto" → o chat oferecia lançar → 1 toque gravava algo que ninguém pediu.
-  test('valor de verdade sozinho continua sendo ambíguo', () => {
-    for (const f of ['109,05', '80', 'r$ 109,05', '50 reais', '1,5k']) {
+  // A régua é a INTENÇÃO (comando imperativo?), não a quantidade de conteúdo —
+  // uma régua por conteúdo derrubava casos legítimos como "109,05 com fita de led"
+  // na IA, que é lento, custa token e NÃO FUNCIONA OFFLINE.
+  test('valor de verdade sozinho é ambíguo', () => {
+    for (const f of ['109,05', '80', 'r$ 109,05', '50 reais', '1,5k', '80 no pix']) {
       assert.equal(parseLocal(f).intencao, 'valor_ambiguo', `${JSON.stringify(f)} deveria ser ambíguo`)
     }
   })
 
-  test('pedido de EDITAR não vira convite pra lançar', () => {
+  test('valor COM item também é ambíguo — e a descrição vem junto', () => {
+    // Sem isto, perguntar a direção custaria uma ida à IA e morreria offline.
+    const r = parseLocal('109,05 com fita de led')
+    assert.equal(r.intencao, 'valor_ambiguo')
+    assert.equal(r.descricao, 'Fita de led', 'o item precisa sobreviver à pergunta')
+  })
+
+  test('verbo de transferência não vaza pra descrição', () => {
+    const r = parseLocal('transferi 200 pro joao')
+    assert.equal(r.intencao, 'valor_ambiguo')
+    assert.ok(!/transferi/i.test(r.descricao || ''), `verbo vazou: ${r.descricao}`)
+  })
+
+  test('COMANDO imperativo nunca é valor solto', () => {
+    for (const f of [
+      'cria uma meta de 5000 pra viagem',
+      'muda o valor pra 80',            // sem lançamento recente: não pode virar gasto de R$80
+      'renomeia a reserva pra ferias 3000',
+      'desativa o alerta de 500',
+    ]) {
+      assert.notEqual(parseLocal(f).intencao, 'valor_ambiguo', `${JSON.stringify(f)} ofereceria lançar`)
+    }
+  })
+
+  test('pedido de EDITAR vira handoff, não lançamento', () => {
     const r = parseLocal('muda o valor daquela compra de terça pra 80')
-    assert.notEqual(r.intencao, 'valor_ambiguo')
-    assert.notEqual(r.intencao, 'lancar')
     assert.equal(r.intencao, 'editar_antigo')
-  })
-
-  test('pedido de CRIAR META não vira convite pra lançar', () => {
-    const r = parseLocal('cria uma meta de 5000 pra viagem')
-    assert.notEqual(r.intencao, 'valor_ambiguo', 'ofereceria lançar R$5000 como gasto')
-  })
-
-  test('frase com conteúdo não-lido vai pra IA, não vira lançamento', () => {
-    const r = parseLocal('transferi 200 pro joão do trabalho semana retrasada')
-    assert.notEqual(r.intencao, 'valor_ambiguo')
   })
 })
 

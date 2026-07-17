@@ -63,6 +63,64 @@ describe('viagemAtiva', () => {
   })
 })
 
+describe('REGRESSÃO — só conta o que foi lançado DEPOIS de ativar', () => {
+  // Bug relatado em prod (2026-07-16): "lancei uma saída, aí ativei o modo
+  // viagem e depois lancei outro item; era pra cair só o segundo, mas caíram os
+  // dois". Causa: a 1ª versão comparava só DATAS, então tudo do dia da ativação
+  // entrava. Agora a viagem carimba a hora e a transação tem `hora`.
+  const comHora = (valor, data, hora) => ({ categoria: 'saida', tipo: 'Lazer', valor, data, hora })
+
+  test('o cenário exato: gasto de manhã fica fora, gasto da tarde entra', () => {
+    const v = iniciarViagem('Bahia', new Date(2026, 6, 16, 14, 0, 0)) // ativou 14h
+    const t = [
+      comHora(100, '16/07/2026', '09:30:00'), // ANTES de ativar
+      comHora(250, '16/07/2026', '18:45:00'), // depois de ativar
+    ]
+    const r = analisarViagem(v, t, new Date(2026, 6, 16, 20, 0))
+    assert.equal(r.total, 250, 'o gasto da manhã não é da viagem')
+    assert.equal(r.transacoes, 1)
+  })
+
+  test('encerrar também carimba hora: o que vem depois não entra', () => {
+    let v = iniciarViagem('Bahia', new Date(2026, 6, 16, 8, 0))
+    v = encerrarViagem(v, new Date(2026, 6, 16, 18, 0))
+    const t = [
+      comHora(80, '16/07/2026', '12:00:00'),  // durante
+      comHora(300, '16/07/2026', '21:00:00'), // depois de encerrar
+    ]
+    assert.equal(analisarViagem(v, t, new Date(2026, 6, 17)).total, 80)
+  })
+
+  test('transação SEM hora no dia do início fica fora (conservador)', () => {
+    const v = iniciarViagem('Bahia', new Date(2026, 6, 16, 14, 0))
+    const t = [{ categoria: 'saida', tipo: 'Lazer', valor: 90, data: '16/07/2026' }]
+    assert.equal(analisarViagem(v, t, new Date(2026, 6, 16, 20, 0)).total, 0,
+      'sem hora vira 00:00 → antes da ativação → fora')
+  })
+
+  test('dia seguinte entra inteiro, com ou sem hora', () => {
+    const v = iniciarViagem('Bahia', new Date(2026, 6, 16, 14, 0))
+    const t = [
+      comHora(50, '17/07/2026', '08:00:00'),
+      { categoria: 'saida', tipo: 'Lazer', valor: 70, data: '17/07/2026' },
+    ]
+    assert.equal(analisarViagem(v, t, new Date(2026, 6, 18)).total, 120)
+  })
+
+  test('viagem antiga SEM inicioHora segue contando o dia todo (compatibilidade)', () => {
+    const antiga = { ativa: true, nome: 'Velha', inicio: '2026-07-16', fim: null }
+    const t = [comHora(100, '16/07/2026', '09:30:00')]
+    assert.equal(analisarViagem(antiga, t, new Date(2026, 6, 16, 20, 0)).total, 100,
+      'sem inicioHora = 00:00 = comportamento anterior, não some')
+  })
+
+  test('sair 22h e voltar 9h do dia seguinte = 2 dias (calendário, não 24h)', () => {
+    let v = iniciarViagem('Bahia', new Date(2026, 6, 16, 22, 0))
+    v = encerrarViagem(v, new Date(2026, 6, 17, 9, 0))
+    assert.equal(analisarViagem(v, [], new Date(2026, 6, 18)).dias, 2)
+  })
+})
+
 describe('analisarViagem — a janela', () => {
   test('soma só o que caiu dentro', () => {
     const t = [

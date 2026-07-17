@@ -43,7 +43,9 @@ class AssistantEngine {
     // Sem esta gaveta o valor morria: os chips só funcionavam porque reenviam o
     // número embutido no texto ("gastei 109.05"), então responder por escrito
     // ("retirada da caixinha") perdia os 109,05 e o chat repetia a pergunta.
-    #pendingValorAmbiguo = null; // { valor }
+    // Guarda a DESCRIÇÃO junto: em "109,05 com fita de led" o item também morreria
+    // na pergunta — o chip devolve só o número, e o lançamento sairia como "Gasto".
+    #pendingValorAmbiguo = null; // { valor, descricao }
     #lastUndo = null;       // fn de desfazer do último lançamento (desfazer por texto)
     #lastQuery = null;      // { consultaAlvo, palavrasChave, periodo } p/ follow-up
     #lastTxInfo = null;     // { profileId, txSnap, cmd } p/ correção inline (B20)
@@ -336,10 +338,12 @@ class AssistantEngine {
         }
 
         // Correção inline do último lançamento ("não, foram 50", "na verdade foi 80") — B20
-        if (this.#lastTxInfo) {
-            const novo = this.#matchCorrecao(text);
-            if (novo != null) return this.#corrigirUltimo(novo);
-        }
+        // Roda SEM depender de haver um lançamento recente: "muda o valor pra 80"
+        // numa sessão nova não pode escapar daqui e virar um gasto novo de R$80 lá
+        // embaixo. Quem não tem o que corrigir recebe a resposta honesta do
+        // #corrigirUltimo ("não há um lançamento recente pra corrigir").
+        const correcao = this.#matchCorrecao(text);
+        if (correcao != null) return this.#corrigirUltimo(correcao);
 
         // Continuação de pagar-conta pendente (usuário respondeu o nome da conta).
         if (this.#pendingConta) {
@@ -405,7 +409,13 @@ class AssistantEngine {
             // Só combina quando a resposta é direção PURA. Se trouxe valor novo,
             // o usuário mudou de assunto — segue o fluxo normal (sem duplicar).
             if (p.intencao === 'lancar' && p.categoria && !(p.valor > 0)) {
-                return this.#route(toCommand({ ...p, valor: pend.valor, confianca: 0.9, source: 'local' }));
+                return this.#route(toCommand({
+                    ...p, valor: pend.valor,
+                    // A descrição da resposta ("foi um gasto") não descreve nada —
+                    // vale a que veio junto do valor ("109,05 com fita de led").
+                    descricao: p.descricao || pend.descricao,
+                    confianca: 0.9, source: 'local',
+                }));
             }
             // não era direção → cai no fluxo normal
         }
@@ -544,8 +554,9 @@ class AssistantEngine {
             case 'valor_ambiguo': {                                                // B13 + R3
                 const v = cmd.valor;
                 if (!(v > 0)) return { text: P.SISTEMA.semValor() };
-                // Guarda o valor: agora responder por ESCRITO também resolve.
-                this.#pendingValorAmbiguo = { valor: v };
+                // Guarda valor + descrição: agora responder por ESCRITO também
+                // resolve, e o item ("fita de led") sobrevive à pergunta.
+                this.#pendingValorAmbiguo = { valor: v, descricao: cmd.descricao || null };
                 return {
                     text: P.perguntarGastoOuEntrada(v),
                     quickReplies: [

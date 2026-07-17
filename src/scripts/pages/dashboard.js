@@ -945,6 +945,7 @@ function _sanitizarOrcamentos(obj) {
 }
 
 const _ISO_DIA_RE = /^\d{4}-\d{2}-\d{2}$/;
+const _HORA_RE    = /^\d{2}:\d{2}:\d{2}$/;
 
 // Sanitiza as preferências do perfil (config) antes de persistir.
 // Whitelist estrita: só chaves conhecidas, só valores dentro dos limites.
@@ -983,10 +984,15 @@ function _sanitizarConfigPerfil(cfg) {
             nome:   _sanitizeText(String(vg.nome ?? '')).slice(0, 60) || 'Viagem',
             inicio: String(vg.inicio),
             fim:    _ISO_DIA_RE.test(String(vg.fim || '')) ? String(vg.fim) : null,
+            // A HORA precisa estar aqui: sem ela a whitelist descartava o campo
+            // e a viagem voltava a contar o dia inteiro — inclusive o que foi
+            // lançado ANTES de ativar (bug relatado em 2026-07-16).
+            inicioHora: _HORA_RE.test(String(vg.inicioHora || '')) ? String(vg.inicioHora) : null,
+            fimHora:    _HORA_RE.test(String(vg.fimHora || ''))    ? String(vg.fimHora)    : null,
         };
         // Fim antes do início é incoerente: guarda só o início e deixa a viagem
         // em aberto, em vez de persistir uma janela que o motor recusaria.
-        if (out.fim !== null && out.fim < out.inicio) out.fim = null;
+        if (out.fim !== null && out.fim < out.inicio) { out.fim = null; out.fimHora = null; }
         clean.viagem = out;
     }
     return clean;

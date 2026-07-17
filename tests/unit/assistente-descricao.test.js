@@ -15,7 +15,7 @@
  */
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { extractDescricao, contarPalavrasConteudo, textoParaModelo } from '../../src/scripts/modules/assistant/describe.js'
+import { extractDescricao, textoParaModelo } from '../../src/scripts/modules/assistant/describe.js'
 import { construirModelo, sugerirCategoria } from '../../src/scripts/modules/categorizacao.js'
 
 const desc = (t) => extractDescricao(t).descricao
@@ -169,15 +169,5 @@ describe('textoParaModelo — o classificador precisa da loja; o humano não', (
   test('nunca lança e devolve null quando não sobra nada', () => {
     assert.equal(textoParaModelo('gastei 50'), null)
     assert.doesNotThrow(() => textoParaModelo(null))
-  })
-})
-
-describe('contarPalavrasConteudo — alimenta a decisão de chamar a IA', () => {
-  test('frase rica tem conteúdo não lido', () => {
-    assert.ok(contarPalavrasConteudo('75,69 gastos na shopee com fita de led e tinta branca') >= 2)
-  })
-  test('frase seca não tem conteúdo', () => {
-    assert.equal(contarPalavrasConteudo('gastei 50'), 0)
-    assert.equal(contarPalavrasConteudo('paguei 30 com pix'), 0)
   })
 })

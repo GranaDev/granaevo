@@ -30,7 +30,7 @@ const RE_VALOR = /(?:r\$\s*)?\b\d[\d.,]*\s*(?:k\b|mil\b|reais?\b|real\b|pila[s]?
 // Verbos de lançamento e de correção. Note `gastos?` e `gasto[s]` — a fronteira
 // \b no fim de "gasto" NÃO casa o plural "gastos" (cai no meio da palavra); foi
 // exatamente isso que fez "75,69 gastos ..." não ser reconhecido como saída.
-const RE_VERBO = /\b(gastei|gastos?|gastar|paguei|pagar|comprei|comprar|torrei|desembolsei|queimei|estourei|fritei|meti|mandei|saiu|debitei|recebi|receber|ganhei|ganhar|caiu|entrou|pingou|faturei|embolsei|guardei|guardar|reservei|poupei|juntei|separei|aportei|economizei|tirei|retirei|retirada|saquei|resgatei|resgate|puxei|assinei|foi|foram|era|de novo)\b/gi;
+const RE_VERBO = /\b(gastei|gastos?|gastar|paguei|pagar|comprei|comprar|torrei|desembolsei|queimei|estourei|fritei|meti|mandei|mandar|saiu|debitei|recebi|receber|ganhei|ganhar|caiu|entrou|pingou|faturei|embolsei|guardei|guardar|reservei|poupei|juntei|separei|aportei|economizei|tirei|retirei|retirada|saquei|resgatei|resgate|puxei|assinei|transferi|transferir|enviei|enviar|passei|depositei|foi|foram|era|de novo)\b/gi;
 
 // Marcadores de tempo — nunca são descrição.
 const RE_DATA = /\b(hoje|ontem|anteontem|amanha|amanhã|agora|de manha|de manhã|de tarde|de noite|a tarde|à tarde|a noite|à noite|dia \d{1,2}|semana passada|semana retrasada|mes passado|mês passado|no mes passado|essa semana|esta semana|\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)\b/gi;
@@ -72,15 +72,6 @@ function capitalizar(s) {
 
 const MAX_DESC = 80; // descrição é rótulo, não redação. normalize.js reclampa em 120.
 
-/**
- * Extrai a descrição real de uma frase de lançamento.
- *
- * @param   {string} rawText  a mensagem crua do usuário
- * @returns {{descricao: string|null, fonte: 'com'|'resto'|'nenhuma'}}
- *          descricao=null → nada sobrou além de valor/verbo; o chamador deve
- *          cair no rótulo do tipo (comportamento antigo, ainda correto p/
- *          "gastei 50" ou "guardei 200").
- */
 // Tira só o ruído estrutural, preservando TODO o resto (inclusive a loja).
 // Ordem importa: parcela e forma de pagamento ANTES do valor — ambas contêm
 // números/preposições que a regex de valor comeria pela metade.
@@ -95,11 +86,20 @@ function limparRuido(rawText) {
         .trim();
 }
 
+/**
+ * Extrai a descrição real de uma frase de lançamento.
+ *
+ * @param   {string} rawText  a mensagem crua do usuário
+ * @returns {{descricao: string|null, fonte: 'com'|'resto'|'nenhuma'}}
+ *          descricao=null → nada sobrou além de valor/verbo; o chamador deve
+ *          cair no rótulo do tipo (comportamento antigo, ainda correto p/
+ *          "gastei 50" ou "guardei 200").
+ */
 export function extractDescricao(rawText) {
     const s = limparRuido(rawText);
     if (!s) return { descricao: null, fonte: 'nenhuma' };
 
-    // 2) Cláusula "com <item>" — o sinal mais forte que existe. O comerciante já
+    // Cláusula "com <item>" — o sinal mais forte que existe. O comerciante já
     //    foi capturado no tipo pela keyword, então "na shopee com fita de led e
     //    tinta branca" entrega o item puro: exatamente o que o usuário quer ver
     //    no extrato. (Casos "com pix"/"com cartão" já saíram no passo 1.)
@@ -139,17 +139,4 @@ export function extractDescricao(rawText) {
  */
 export function textoParaModelo(rawText) {
     return limparBordas(limparRuido(rawText)) || null;
-}
-
-/**
- * Quantas palavras de CONTEÚDO a frase tem além do ruído estrutural. Alimenta a
- * `completude` do parser (engine): intenção certa + conteúdo não lido = vale
- * perguntar pra IA. É o que destrava a IA nas mensagens ricas, que hoje ela
- * nunca vê porque a confiança local de 0.9 veta a chamada.
- * @returns {number}
- */
-export function contarPalavrasConteudo(rawText) {
-    const r = extractDescricao(rawText);
-    if (!r.descricao) return 0;
-    return r.descricao.split(/\s+/).filter((w) => !STOP_EDGE.has(norm(w))).length;
 }
