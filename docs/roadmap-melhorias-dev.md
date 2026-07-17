@@ -273,7 +273,26 @@ Ganho: tempo percebido despenca + offline-first de brinde.
 
 ---
 
-## PASSO 10 — Quebrar o monólito `dashboard.js` (< 1.500 linhas no boot) 🔴 ⭐
+## PASSO 10 — Quebrar o monólito `dashboard.js` (< 1.500 linhas no boot) 🟡 EM ANDAMENTO (2026-07-16)
+> **2 fatias seguras feitas (commits f63e9c2, 572b34c): 40,9 → 39,1 KB gzip (97% → 93%).**
+> - Fatia 1: exportação JSON/CSV → `modules/exportar-dados.js` lazy (só baixa no clique).
+> - Fatia 2: `desenharGraficoLinha`/`desenharTopGastos` eram **código morto** — deletadas.
+>
+> **PAREI de propósito, não por acabar.** O peso restante está em blocos que NÃO valem o risco
+> agora, cada um documentado:
+> - **`pagarContaFixa`/`anteciparContaFixa`** (~10 KB): mexem em DINHEIRO. Não extrair sem o
+>   usuário poder testar — e no meio do bloco estão `_avancarMes` (usado no boot, linha ~1145) e
+>   `rollbackArray` (exposto no ctx hoje p/ db-cartoes).
+> - **`_criarPerfilHandler`/`alterarFoto`** (~14 KB): chamam `supabase` direto e mexem em
+>   sessão/token/refresh — infra de auth, muito entrelaçada.
+> - **painel de alertas** (`renderizarPainelAlertas` + `_criarCard` aninhado, ~13 KB): o caller usa
+>   retorno síncrono (`const painelEl = renderizarPainelAlertas()`); extrair exige tornar assíncrono.
+>
+> **Próximo passo barato quando retomar:** `knip` acusa **34 unused exports** — varrer por mais
+> código morto (a fatia 2 provou que há) é ganho sem risco de comportamento. Só então mexer nos
+> blocos vivos, um por vez, COM teste do usuário.
+>
+> **Histórico do objetivo original:** ⭐
 **Objetivo:** tirar do caminho crítico o que hoje são **6.673 linhas** carregadas eager.
 **Por quê:** maior gargalo de performance **e** maior smell de manutenção de uma vez só. As abas já são
 lazy; falta lazy-ar o **núcleo**. Split já foi avaliado e adiado (orçamento passa), mas é o item nº 1.
