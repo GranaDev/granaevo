@@ -346,6 +346,141 @@ async function handleCheckoutCompleted(db: DB, data: Record<string, unknown>) {
   }
 }
 
+const JANELA_GARANTIA_MS = 7 * 24 * 60 * 60 * 1000 // 7 dias — CDC art. 49
+
+/**
+ * Reembolso automático da garantia de 7 dias + revogação imediata do acesso.
+ *
+ * Só age quando: a compra tem MENOS de 7 dias E ainda não foi reembolsada.
+ * Fora disso, não faz nada — o cancelamento normal (fim do período) segue.
+ *
+ * TRAVAS (mover dinheiro automaticamente exige todas):
+ *  - `refunded_at`: idempotência. O webhook reentrega; sem esta marca, uma
+ *    reentrega reembolsaria de novo. É a PRIMEIRA coisa checada e a ÚLTIMA
+ *    gravada.
+ *  - só reembolsa a cobrança REAL desta assinatura (latest_invoice → payment_intent),
+ *    nunca um valor arbitrário.
+ *  - `refunds.list` antes de criar: se a Stripe já tem um refund para este
+ *    payment_intent (ex.: reembolso manual que o dono fez), NÃO cria outro.
+ *  - revoga o acesso na hora: cancela a assinatura já (não no fim do período) e
+ *    zera o current_period_end. Reembolsar sem revogar = mês grátis + dinheiro.
+ */
+async function tentarReembolso7Dias(
+  db: DB,
+  existing: Record<string, unknown>,
+  customerId: string,
+  subscriptionId: string,
+): Promise<void> {
+  // 1) Já reembolsado? Idempotência — sai sem tocar em nada.
+  if (existing.refunded_at) {
+    console.log('[webhook-stripe] 7d: já reembolsado antes, ignorando —', customerId)
+    return
+  }
+
+  // 2) Dentro dos 7 dias? A janela conta da COMPRA (created_at da linha).
+  const criadoMs = existing.created_at ? Date.parse(existing.created_at as string) : NaN
+  if (!Number.isFinite(criadoMs) || (Date.now() - criadoMs) > JANELA_GARANTIA_MS) {
+    // Fora da garantia: cancelamento normal (fim do período). Nada a fazer.
+    return
+  }
+
+  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') ?? ''
+  if (!stripeKey) throw new Error('STRIPE_SECRET_KEY ausente')
+  const stripeGET = async (path: string) => {
+    const r = await fetch(`https://api.stripe.com/v1/${path}`, {
+      headers: { 'Authorization': `Bearer ${stripeKey}`, 'Stripe-Version': STRIPE_API_VERSION },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!r.ok) throw new Error(`Stripe GET ${path} falhou: ${r.status}`)
+    return r.json()
+  }
+
+  // 3) Acha a cobrança real: subscription → latest_invoice → payment_intent.
+  const sub = await stripeGET(`subscriptions/${encodeURIComponent(subscriptionId)}`)
+  const invoiceId = sub.latest_invoice as string | null
+  if (!invoiceId) { console.warn('[webhook-stripe] 7d: sem latest_invoice —', customerId); return }
+
+  const invoice = await stripeGET(`invoices/${encodeURIComponent(invoiceId)}`)
+  const paymentIntentId = invoice.payment_intent as string | null
+  const valorPago = Number(invoice.amount_paid ?? 0)
+
+  // Nada foi pago (fatura zerada/trial) → não há o que reembolsar; só revoga.
+  if (!paymentIntentId || valorPago <= 0) {
+    console.log('[webhook-stripe] 7d: sem valor pago, apenas revoga —', customerId)
+    await revogarAcessoJa(db, customerId, subscriptionId)
+    await db.from('stripe_subscriptions')
+      .update({ refunded_at: new Date().toISOString() })
+      .eq('stripe_customer_id', customerId)
+    return
+  }
+
+  // 4) A Stripe já tem refund para este pagamento? (ex.: dono reembolsou na mão)
+  //    Se sim, não cria outro — só marca e revoga.
+  const refundsExistentes = await stripeGET(`refunds?payment_intent=${encodeURIComponent(paymentIntentId)}&limit=1`)
+  const jaTemRefund = Array.isArray(refundsExistentes.data) && refundsExistentes.data.length > 0
+
+  if (!jaTemRefund) {
+    // Cria o refund. `idempotency_key` amarrada ao payment_intent: mesmo que
+    // esta função rode duas vezes em paralelo, a Stripe cria UM só refund.
+    const body = new URLSearchParams()
+    body.set('payment_intent', paymentIntentId)
+    body.set('reason', 'requested_by_customer')
+    body.set('metadata[motivo]', 'garantia_7_dias_cdc_art_49')
+
+    const rf = await fetch('https://api.stripe.com/v1/refunds', {
+      method:  'POST',
+      headers: {
+        'Authorization':   `Bearer ${stripeKey}`,
+        'Stripe-Version':  STRIPE_API_VERSION,
+        'Content-Type':    'application/x-www-form-urlencoded',
+        'Idempotency-Key': `refund7d_${paymentIntentId}`,
+      },
+      body:   body.toString(),
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!rf.ok) throw new Error(`Stripe POST /refunds falhou: ${rf.status} ${await rf.text()}`)
+    console.log(`[webhook-stripe] 7d: reembolso de ${valorPago} criado — ${customerId}`)
+  } else {
+    console.log('[webhook-stripe] 7d: refund já existia na Stripe, não duplica —', customerId)
+  }
+
+  // 5) Revoga o acesso na hora e marca idempotência.
+  await revogarAcessoJa(db, customerId, subscriptionId)
+  await db.from('stripe_subscriptions')
+    .update({ refunded_at: new Date().toISOString() })
+    .eq('stripe_customer_id', customerId)
+}
+
+/**
+ * Corta o acesso IMEDIATAMENTE: cancela a assinatura na Stripe agora (não no fim
+ * do período) e zera o period_end no banco, para o gate de acesso reprovar já.
+ */
+async function revogarAcessoJa(db: DB, customerId: string, subscriptionId: string): Promise<void> {
+  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') ?? ''
+  // DELETE /subscriptions/{id} = cancela AGORA (a Stripe emitirá subscription.deleted).
+  try {
+    await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+      method:  'DELETE',
+      headers: { 'Authorization': `Bearer ${stripeKey}`, 'Stripe-Version': STRIPE_API_VERSION },
+      signal:  AbortSignal.timeout(10_000),
+    })
+  } catch (e) {
+    // Se o cancelamento imediato na Stripe falhar, o banco abaixo já corta o
+    // acesso no app; a Stripe reentregará o evento e reconvergimos.
+    console.error('[webhook-stripe] 7d: falha ao cancelar sub imediatamente:', (e as Error)?.message)
+  }
+  // Fonte de verdade do ACESSO é o banco (get_user_access_data). Corta aqui já.
+  await db.from('stripe_subscriptions')
+    .update({
+      status:              'canceled',
+      cancel_at_period_end: false,
+      current_period_end:  new Date().toISOString(), // <= now() → gate reprova
+      canceled_at:         new Date().toISOString(),
+      updated_at:          new Date().toISOString(),
+    })
+    .eq('stripe_customer_id', customerId)
+}
+
 async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) {
   const sub            = data.object as Record<string, unknown>
   const customerId     = sub.customer as string
@@ -361,7 +496,7 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
   // Busca dados atuais incluindo downgrade agendado e remoções pendentes
   const { data: existing } = await db
     .from('stripe_subscriptions')
-    .select('user_id, cancel_at_period_end, user_email, plan_name, current_period_start, pending_plan_name, pending_plan_effective_at, pending_profile_removals, pending_member_removals')
+    .select('user_id, cancel_at_period_end, user_email, plan_name, current_period_start, created_at, refunded_at, pending_plan_name, pending_plan_effective_at, pending_profile_removals, pending_member_removals')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
@@ -518,6 +653,24 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
 
   if (error) console.error('[webhook-stripe] Erro ao atualizar subscription:', error.message)
   else console.log('[webhook-stripe] Subscription atualizada:', subscriptionId, status)
+
+  // ── GARANTIA DE 7 DIAS (CDC art. 49): auto-reembolso + revogação imediata ──
+  // Cancelou dentro de 7 dias da compra → devolve o dinheiro E corta o acesso na
+  // hora. Sem isto, o cancelamento só agenda o fim do período (a pessoa usaria o
+  // mês todo), e o reembolso manual na dashboard NÃO corta o acesso — dava mês
+  // grátis + dinheiro de volta. `await` (não fire-and-forget): mover dinheiro
+  // tem que ser confiável e reprocessável se falhar.
+  if (justScheduledCancel && existing) {
+    try {
+      await tentarReembolso7Dias(db, existing, customerId, subscriptionId)
+    } catch (e) {
+      // Relança para o dispatcher devolver 500 e a Stripe REENTREGAR: um reembolso
+      // que falhou no meio não pode ficar sem retentativa. A idempotência
+      // (refunded_at) garante que a reentrega não reembolsa duas vezes.
+      console.error('[webhook-stripe] Falha no auto-reembolso 7 dias:', (e as Error)?.message)
+      throw e
+    }
+  }
 
   // Envia email de cancelamento agendado (fire-and-forget)
   if (justScheduledCancel && existing?.user_email) {
