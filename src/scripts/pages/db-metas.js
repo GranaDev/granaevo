@@ -2,6 +2,10 @@
 import {
     fvComposto, mesesParaMeta, aporteNecessario, mesesAtePrazo, analisarRitmo,
 } from '../modules/ritmo-metas.js?v=1';
+import {
+    contaCompartilhada, ehCompartilhada, membroAtual, registrarMovimento,
+    porMembro, divisaoSugerida,
+} from '../modules/reserva-familia.js?v=2';
 
 let _ctx = null;
 let _metaLinePeriod = 'mensal'; // mensal | bimestral | trimestral | semestral | anual
@@ -563,6 +567,90 @@ function abrirMetaForm(editId = null) {
         secBasico.appendChild(inpDesc);
         secBasico.appendChild(inpObj);
 
+        // ─────────── SEÇÃO: Reserva da família (C1) — só conta compartilhada ────
+        // Marca a caixinha como compartilhada e guarda o roster: "com quem você
+        // quer criar a reserva?". O dinheiro é o fluxo normal de caixinha (sai do
+        // saldo); o que a marcação acrescenta é a trilha de quem colocou/tirou.
+        const ehContaComp = contaCompartilhada(_ctx.usuarioLogado);
+        let   rosterMembros = (meta && Array.isArray(meta.membros)) ? meta.membros.slice(0, 12) : [];
+        let   chkCompart = null;
+        let   secCompartEl = null;
+        if (ehContaComp) {
+            const secCompart = secao('Reserva da família');
+            secCompartEl = secCompart;
+
+            const lblChk = document.createElement('label');
+            lblChk.style.cssText = 'display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:10px;';
+            chkCompart = document.createElement('input');
+            chkCompart.type = 'checkbox'; chkCompart.id = 'metaCompartilhada';
+            chkCompart.style.cssText = 'width:17px; height:17px; accent-color:var(--primary); cursor:pointer; flex-shrink:0;';
+            if (meta && meta.compartilhada) chkCompart.checked = true;
+            const spanChk = document.createElement('span');
+            spanChk.style.fontSize = '0.9rem';
+            spanChk.textContent = '👥 Compartilhada — todos veem quem colocou e tirou';
+            lblChk.appendChild(chkCompart); lblChk.appendChild(spanChk);
+            secCompart.appendChild(lblChk);
+
+            const divRoster = document.createElement('div');
+            divRoster.style.display = (meta && meta.compartilhada) ? 'block' : 'none';
+
+            const rosterHint = document.createElement('div');
+            rosterHint.style.cssText = 'font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;';
+            rosterHint.textContent = 'Com quem você quer criar a reserva?';
+            divRoster.appendChild(rosterHint);
+
+            const chipsWrap = document.createElement('div');
+            chipsWrap.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;';
+            divRoster.appendChild(chipsWrap);
+
+            const renderChips = () => {
+                chipsWrap.replaceChildren();
+                rosterMembros.forEach((nome, i) => {
+                    const chip = document.createElement('span');
+                    chip.style.cssText = 'display:inline-flex; align-items:center; gap:6px; background:rgba(67,160,71,0.14); border:1px solid rgba(67,160,71,0.3); border-radius:14px; padding:3px 10px; font-size:0.82rem;';
+                    chip.appendChild(document.createTextNode(nome));   // textContent — sem XSS
+                    const x = document.createElement('button');
+                    x.type = 'button'; x.textContent = '×';
+                    x.style.cssText = 'background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:1rem; line-height:1; padding:0;';
+                    x.addEventListener('click', () => { rosterMembros.splice(i, 1); renderChips(); });
+                    chip.appendChild(x);
+                    chipsWrap.appendChild(chip);
+                });
+            };
+
+            const rowAdd = document.createElement('div');
+            rowAdd.style.cssText = 'display:flex; gap:8px;';
+            const inpNome = document.createElement('input');
+            inpNome.className = 'form-input'; inpNome.type = 'text'; inpNome.maxLength = 40;
+            inpNome.placeholder = 'Nome do participante'; inpNome.style.flex = '1';
+            const btnAddM = document.createElement('button');
+            btnAddM.className = 'btn-primary'; btnAddM.type = 'button'; btnAddM.textContent = 'Adicionar';
+            btnAddM.style.flexShrink = '0';
+            const addMembro = () => {
+                const n = inpNome.value.trim().slice(0, 40);
+                if (!n) return;
+                if (rosterMembros.length >= 12) { _ctx.mostrarNotificacao('Máximo de 12 participantes.', 'error'); return; }
+                if (rosterMembros.some(x => x.toLowerCase() === n.toLowerCase())) { inpNome.value = ''; return; }
+                rosterMembros.push(n); inpNome.value = ''; renderChips(); inpNome.focus();
+            };
+            btnAddM.addEventListener('click', addMembro);
+            inpNome.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addMembro(); } });
+            rowAdd.appendChild(inpNome); rowAdd.appendChild(btnAddM);
+            divRoster.appendChild(rowAdd);
+            secCompart.appendChild(divRoster);
+
+            chkCompart.addEventListener('change', () => {
+                divRoster.style.display = chkCompart.checked ? 'block' : 'none';
+                // Ao ligar pela 1ª vez, semeia com quem está criando (nunca vazio).
+                if (chkCompart.checked && rosterMembros.length === 0) {
+                    rosterMembros.push(membroAtual(_ctx).nome);
+                    renderChips();
+                }
+            });
+
+            renderChips();
+        }
+
         // ─────────────────────────── SEÇÃO 2: Prazo ────────────────────────────
         const secPrazo = secao('Prazo (opcional)');
         const rowPrazo = document.createElement('div');
@@ -900,6 +988,11 @@ function abrirMetaForm(editId = null) {
                 if (!Number.isFinite(valorAporte) || valorAporte <= 0) return _ctx.mostrarNotificacao('Digite um valor de aporte válido.', 'error');
             }
 
+            // Compartilhada (C1): só vale em conta casal/família. Roster nunca vazio
+            // (semeia com quem cria) para o "quem colocou" ter de quem partir.
+            const compartilhada = ehContaComp && !!(chkCompart && chkCompart.checked);
+            if (compartilhada && rosterMembros.length === 0) rosterMembros.push(membroAtual(_ctx).nome);
+
             if (isEdit) {
                 const aporteAnterior    = meta.aporteRecorrente;
                 const valorAporteAnterior = meta.valorAporte;
@@ -913,6 +1006,11 @@ function abrirMetaForm(editId = null) {
                 meta.rendimentoPeriodo = rendimentoPeriodo;
                 meta.aporteRecorrente = aporteRecorrente;
                 meta.valorAporte      = valorAporte;
+                meta.compartilhada    = compartilhada;
+                if (compartilhada) {
+                    meta.membros = rosterMembros.slice(0, 12);
+                    if (!Array.isArray(meta.movimentos)) meta.movimentos = [];
+                }
 
                 // Sincroniza conta fixa de aporte quando muda configuração
                 _sincronizarContaFixaAporte(meta, aporteRecorrente, valorAporte, aporteAnterior, valorAporteAnterior, desc);
@@ -920,11 +1018,17 @@ function abrirMetaForm(editId = null) {
                 const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
                     ? crypto.randomUUID()
                     : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-                _ctx.metas.push({
+                const novaMeta = {
                     id: novoId, descricao: desc, objetivo, saved: 0, monthly: {},
                     prazo, tipoRendimento: tipoR, taxaJuros, cdiPct,
                     rendimentoPeriodo, aporteRecorrente, valorAporte,
-                });
+                };
+                if (compartilhada) {
+                    novaMeta.compartilhada = true;
+                    novaMeta.membros = rosterMembros.slice(0, 12);
+                    novaMeta.movimentos = [];
+                }
+                _ctx.metas.push(novaMeta);
 
                 // Cria conta fixa de aporte recorrente
                 if (aporteRecorrente && valorAporte > 0) {
@@ -955,6 +1059,7 @@ function abrirMetaForm(editId = null) {
         // ─────────────────────────── MONTAGEM ──────────────────────────────────
         wrapper.appendChild(titulo);
         wrapper.appendChild(secBasico);
+        if (secCompartEl) wrapper.appendChild(secCompartEl);
         wrapper.appendChild(secPrazo);
         wrapper.appendChild(secRend);
         wrapper.appendChild(secAporte);
@@ -1103,12 +1208,6 @@ function _criarJarro(percentual, uid) {
 // Best-effort de ponta a ponta: se o chunk não baixar ou a query falhar, o slot
 // fica vazio e a tela de Reservas segue normal. Uma reserva de família não pode
 // derrubar a tela das metas individuais.
-function _renderReservaFamilia(slot) {
-    import('../modules/reserva-familia.js?v=1')
-        .then(m => m.renderCardFamiliaEm(slot, _ctx))
-        .catch(() => { /* complemento — nunca quebra a lista */ });
-}
-
 function renderMetasList() {
     const cont = document.getElementById('listaMetas');
     if (!cont) return;
@@ -1118,19 +1217,9 @@ function renderMetasList() {
 
     cont.innerHTML = '';
 
-    // ── Reserva compartilhada (item 13) ─────────────────────────────────────
-    // Só aparece em conta casal/família — para quem usa sozinho, "reserva da
-    // família" é ruído (as metas normais já servem). Vive FORA do blob: é a
-    // única coisa do app que várias pessoas escrevem, então precisa de tabela
-    // própria com RLS (ver modules/reserva-familia.js). Lazy e best-effort: se
-    // a rede falhar, a lista de metas continua inteira.
-    //
-    // O container é criado AGORA, síncrono, e preenchido depois: o módulo faz
-    // I/O, e sem um lugar reservado o card chegaria DEPOIS das metas e apareceria
-    // no fim da lista, não no topo.
-    const slotFamilia = document.createElement('div');
-    cont.appendChild(slotFamilia);
-    _renderReservaFamilia(slotFamilia);
+    // Reserva compartilhada (item 13): NÃO é mais um card à parte. Reconstruída
+    // como caixinha normal no blob (meta.compartilhada) — aparece na lista com
+    // as outras, só com um selo "👥". Ver modules/reserva-familia.js.
 
     if (_ctx.metas.length === 0) {
         const wrap = document.createElement('div');
@@ -1214,6 +1303,14 @@ function renderMetasList() {
 
         colInfo.appendChild(strongDesc);
         colInfo.appendChild(divValores);
+
+        // Reserva compartilhada (C3): selo para distinguir na lista.
+        if (m.compartilhada) {
+            const badge = document.createElement('span');
+            badge.style.cssText = 'display:inline-block; margin-top:4px; background:rgba(67,160,71,0.14); color:var(--primary); border-radius:10px; padding:2px 8px; font-size:0.72rem; font-weight:600;';
+            badge.textContent = '👥 Compartilhada';
+            colInfo.appendChild(badge);
+        }
 
         // Tags: prazo + rendimentos + aporte
         if (m.prazo || (m.tipoRendimento && m.tipoRendimento !== 'sem_rendimento') || (m.aporteRecorrente && m.valorAporte)) {
@@ -1375,9 +1472,118 @@ function renderMetasList() {
         .catch(() => { /* sem festa, sem problema */ });
 }
 
+// C4 — dissolver reserva compartilhada devolvendo o saldo a cada membro.
+// O dinheiro volta a UM saldo (o blob é compartilhado); a divisão é o registro
+// de justiça: uma transação de retorno por pessoa, mostrando quem levou quanto.
+// A soma tem que fechar com meta.saved (nunca cria nem some dinheiro do saldo).
+function _dissolverReservaCompartilhada(meta) {
+    const total = Number(meta.saved || 0);
+    const divisao = divisaoSugerida(meta.movimentos, total, meta.membros || []);
+
+    _ctx.criarPopupDOM((popup) => {
+        popup.style.cssText = 'max-width:440px; width:96%;';
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'max-height:82vh; overflow-y:auto; overflow-x:hidden; padding-right:4px;';
+
+        const titulo = document.createElement('h3');
+        titulo.style.cssText = 'text-align:center; margin-bottom:6px;';
+        titulo.textContent = 'Dissolver reserva';
+
+        const sub = document.createElement('div');
+        sub.style.cssText = 'text-align:center; color:var(--text-secondary); font-size:0.88rem; margin-bottom:14px;';
+        sub.appendChild(document.createTextNode(`${formatBRL(total)} voltam ao saldo. Com quanto cada um fica?`));
+
+        const linhasWrap = document.createElement('div');
+        const totalLbl = document.createElement('div');
+        totalLbl.style.cssText = 'text-align:right; font-size:0.85rem; margin:10px 2px;';
+
+        const inputs = [];
+        const recalc = () => {
+            const soma = Math.round(inputs.reduce((s, it) => s + (parseFloat(it.input.value) || 0), 0) * 100) / 100;
+            totalLbl.textContent = `Soma: ${formatBRL(soma)} de ${formatBRL(total)}`;
+            totalLbl.style.color = Math.abs(soma - total) < 0.01 ? 'var(--primary)' : '#ff6b6b';
+        };
+
+        (divisao.length ? divisao : [{ nome: 'Você', valor: total }]).forEach(d => {
+            const linha = document.createElement('div');
+            linha.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:8px;';
+            const nome = document.createElement('span');
+            nome.style.cssText = 'flex:1; font-size:0.92rem;';
+            nome.textContent = d.nome;                     // textContent — sem XSS
+            const inp = document.createElement('input');
+            inp.className = 'form-input'; inp.type = 'number'; inp.step = '0.01'; inp.min = '0';
+            inp.style.cssText = 'width:130px; flex-shrink:0;';
+            inp.value = Number(d.valor).toFixed(2);
+            inp.addEventListener('input', recalc);
+            inputs.push({ nome: d.nome, input: inp });
+            linha.appendChild(nome); linha.appendChild(inp);
+            linhasWrap.appendChild(linha);
+        });
+        recalc();
+
+        const rowBtns = document.createElement('div');
+        rowBtns.style.cssText = 'display:flex; gap:10px; margin-top:14px;';
+        const btnCancel = document.createElement('button');
+        btnCancel.className = 'btn-cancelar'; btnCancel.type = 'button'; btnCancel.style.flex = '1';
+        btnCancel.textContent = 'Cancelar';
+        btnCancel.addEventListener('click', () => _ctx.fecharPopup());
+
+        const btnOk = document.createElement('button');
+        btnOk.className = 'btn-primary'; btnOk.type = 'button'; btnOk.style.flex = '2';
+        btnOk.textContent = 'Dissolver e devolver';
+        btnOk.addEventListener('click', () => {
+            const partes = inputs.map(it => ({ nome: it.nome, valor: Math.round((parseFloat(it.input.value) || 0) * 100) / 100 }));
+            const soma = Math.round(partes.reduce((s, p) => s + p.valor, 0) * 100) / 100;
+            if (Math.abs(soma - total) > 0.01) {
+                return _ctx.mostrarNotificacao(`A soma precisa dar ${formatBRL(total)} (está ${formatBRL(soma)}).`, 'error');
+            }
+            const dh = _ctx.agoraDataHora();
+            // Retorno por membro → o saldo recebe o total; o histórico mostra quem levou.
+            partes.forEach(p => {
+                if (p.valor <= 0) return;
+                _ctx.transacoes.push({
+                    categoria:      'retirada_reserva',
+                    tipo:           'Retirada de Reserva',
+                    descricao:      `Dissolução: ${p.nome} — ${meta.descricao}`.slice(0, 200),
+                    valor:          p.valor,
+                    data:           dh.data,
+                    hora:           dh.hora,
+                    metaId:         null,
+                    motivoRetirada: 'Dissolução da reserva',
+                });
+            });
+            _ctx.metas = _ctx.metas.filter(m => m.id !== meta.id);
+            _ctx.transacoes = _ctx.transacoes.map(t =>
+                (t.metaId && String(t.metaId) === String(meta.id)) ? Object.assign({}, t, { metaId: null }) : t);
+            if (String(_ctx.metaSelecionadaId) === String(meta.id)) _ctx.metaSelecionadaId = null;
+            _ctx.salvarDados();
+            _ctx.renderMetasList();
+            _ctx.atualizarTudo();
+            _ctx.atualizarHeaderReservas();
+            _ctx.fecharPopup();
+            _ctx.mostrarNotificacao(`Reserva dissolvida. ${formatBRL(total)} voltaram ao saldo.`, 'success');
+        });
+
+        rowBtns.appendChild(btnCancel); rowBtns.appendChild(btnOk);
+        wrap.appendChild(titulo); wrap.appendChild(sub); wrap.appendChild(linhasWrap);
+        wrap.appendChild(totalLbl); wrap.appendChild(rowBtns);
+        popup.appendChild(wrap);
+    });
+}
+
 function removerMeta(id) {
+    const alvo = _ctx.metas.find(m => m.id === id);
+    if (!alvo) return;
+
+    // Reserva compartilhada COM saldo: não apaga seco — dissolve devolvendo a
+    // cada membro (C4). Sem saldo, segue o fluxo normal de remoção.
+    if (ehCompartilhada(alvo) && Number(alvo.saved || 0) > 0) {
+        _dissolverReservaCompartilhada(alvo);
+        return;
+    }
+
     if(!confirm('Remover meta? Isso também removerá os valores mensais associados.')) return;
-    
+
     _ctx.metas = _ctx.metas.filter(m => m.id !== id);
     _ctx.transacoes = _ctx.transacoes.map(t => {
         if(t.metaId && String(t.metaId) === String(id)) {
@@ -1385,7 +1591,7 @@ function removerMeta(id) {
         }
         return t;
     });
-    
+
     _ctx.salvarDados();
     _ctx.renderMetasList();
     _ctx.atualizarTudo();
@@ -1667,6 +1873,39 @@ function renderMetaVisual() {
     
     // ── Reconstrói details via DOM — zero dados do usuário em innerHTML
     details.innerHTML = '';
+
+    // ── Reserva compartilhada (C3): quem colocou e quem tirou ──────────────
+    // O coração da feature de família. Líquido por pessoa, do que mais
+    // contribuiu para o que menos. textContent — nunca innerHTML com nome.
+    if (ehCompartilhada(meta)) {
+        const membros = porMembro(meta.movimentos);
+        const secQuem = document.createElement('div');
+        secQuem.style.cssText = 'background:rgba(67,160,71,0.06); border:1px solid rgba(67,160,71,0.2); border-radius:12px; padding:12px 14px; margin-bottom:14px;';
+        const tit = document.createElement('div');
+        tit.style.cssText = 'font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--primary); margin-bottom:8px;';
+        tit.textContent = '👥 Quem colocou';
+        secQuem.appendChild(tit);
+        if (membros.length === 0) {
+            const vazio = document.createElement('div');
+            vazio.style.cssText = 'font-size:0.85rem; color:var(--text-muted);';
+            vazio.textContent = 'Ninguém colocou nada ainda. Use "Guardar" para começar.';
+            secQuem.appendChild(vazio);
+        } else {
+            for (const mem of membros) {
+                const linha = document.createElement('div');
+                linha.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:0.9rem;';
+                const n = document.createElement('span');
+                n.textContent = mem.nome;
+                const q = document.createElement('strong');
+                q.style.color = mem.liquido < 0 ? '#ff6b6b' : 'var(--primary)';
+                q.textContent = formatBRL(mem.liquido);
+                if (mem.retiradas > 0) q.title = `Colocou ${formatBRL(mem.aportes)} · retirou ${formatBRL(mem.retiradas)}`;
+                linha.appendChild(n); linha.appendChild(q);
+                secQuem.appendChild(linha);
+            }
+        }
+        details.appendChild(secQuem);
+    }
 
     // ── Seletor de período para o gráfico de linha ─────────────────────────
     const periodos = [
@@ -2331,6 +2570,13 @@ function abrirRetiradaForm() {
             saldoPosterior: meta.saved
         });
 
+        // Reserva compartilhada: registra QUEM retirou (o dinheiro já voltou ao
+        // saldo pela transação acima — aqui é só a trilha de atribuição).
+        if (ehCompartilhada(meta)) {
+            const quem = membroAtual(_ctx);
+            registrarMovimento(meta, { id: quem.id, nome: quem.nome, tipo: 'retirada', valor: valorRetirar, data: dh.data, hora: dh.hora });
+        }
+
         _ctx.salvarDados();
         _ctx.atualizarTudo();
         renderMetaVisual();
@@ -2521,6 +2767,13 @@ function abrirGuardarForm() {
             const ym = _ctx.yearMonthKey(_ctx.isoDate());
             meta.monthly = meta.monthly || {};
             meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + valor).toFixed(2));
+
+            // Reserva compartilhada: registra QUEM colocou (o dinheiro já saiu do
+            // saldo pela transação acima — aqui é só a trilha de atribuição).
+            if (ehCompartilhada(meta)) {
+                const quem = membroAtual(_ctx);
+                registrarMovimento(meta, { id: quem.id, nome: quem.nome, tipo: 'aporte', valor, data: dh.data, hora: dh.hora });
+            }
 
             _ctx.salvarDados();
             _ctx.atualizarTudo();
