@@ -2,6 +2,7 @@
 import { perfMark, perfMeasure, perfCount } from '../modules/perf-marks.js';
 import { chipHorasVida } from '../modules/horas-vida.js?v=1';
 import { construirModelo, sugerirCategoria } from '../modules/categorizacao.js?v=1';
+import { gerarParcelas, anexarParcelas, paraISO } from '../modules/fatura-parcelas.js?v=1';
 
 let _ctx = null;
 
@@ -230,91 +231,26 @@ function lancarTransacao() {
 
         if(!confirm(`Compra de ${formatBRL(valor)} no cartão ${cartao.nomeBanco}, em ${parcelasSel}x de ${formatBRL(valor/parcelasSel)}.\nProsseguir?`)) return;
 
-        let hoje       = new Date();
-        let anoAtual   = hoje.getFullYear();
-        let mesAtual   = hoje.getMonth() + 1;
-        let diaHoje    = hoje.getDate();
-        // diaFechamento determina qual ciclo a compra pertence (cutoff real do cartão)
-        // fallback para vencimentoDia mantém compatibilidade com cartões antigos sem fechamentoDia
-        let diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia;
-        let diaFatura     = cartao.vencimentoDia;
-
-        // proxMes/proxAno = mês do FECHAMENTO do ciclo ao qual a compra pertence
-        let proxMes, proxAno;
-        if(diaHoje >= diaFechamento) {
-            // Fatura já fechou ou fecha hoje → compra vai pro próximo ciclo
-            proxMes = mesAtual + 1;
-            proxAno = anoAtual;
-            if(proxMes > 12) { proxMes = 1; proxAno++; }
-        } else {
-            proxMes = mesAtual;
-            proxAno = anoAtual;
-        }
-
-        // Quando o cartão vence ANTES do dia de fechamento (ex.: fecha 28, vence 6),
-        // o vencimento cai no mês SEGUINTE ao do fechamento — sem este ajuste a
-        // fatura nasceria com data no passado e apareceria "Vencida". Se vence
-        // DEPOIS do fechamento (ex.: fecha 5, vence 15), fica no mesmo mês.
-        if(diaFatura < diaFechamento) {
-            proxMes++;
-            if(proxMes > 12) { proxMes = 1; proxAno++; }
-        }
-
-        const dataFaturaISO = `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaFatura).padStart(2, '0')}`;
-
-        const faturaExistente = _ctx.contasFixas.find(c =>
-            c.cartaoId === cartao.id &&
-            c.vencimento === dataFaturaISO &&
-            c.tipoContaFixa === 'fatura_cartao'
-        );
-
-        // ✅ CORREÇÃO: gera UUID local para cada compra.
-        //    Compras são armazenadas como JSON aninhado no Supabase (não como rows),
-        //    portanto o banco NUNCA gera IDs para objetos dentro do array.
-        //    Sem id, String(undefined) === String(undefined) é true para todas as compras,
-        //    fazendo find() em pagarCompraIndividual/editarCompraFatura/excluirCompraFatura
-        //    retornar sempre a primeira — causando pagar/editar/excluir a compra errada.
-        const novaCompra = {
-            id: (typeof crypto !== 'undefined' && crypto.randomUUID)
-                ? crypto.randomUUID()
-                : `compra_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        // MODELO NOVO (2026-07-17): a compra vira N parcelas, uma por fatura
+        // mensal — não mais 1 objeto numa fatura só. O motor calcula os
+        // vencimentos (mesma regra de ciclo de antes) e distribui.
+        // Ver modules/fatura-parcelas.js.
+        const dataCompraISO = paraISO(dh.data) || new Date().toISOString().slice(0, 10);
+        const geradas = gerarParcelas({
+            cartao,
             tipo,
             descricao,
-            valorTotal:    valor,
-            valorParcela:  Number((valor / parcelasSel).toFixed(2)),
-            totalParcelas: parcelasSel,
-            parcelaAtual:  1,
-            dataCompra:    dh.data
-        };
+            valorTotal:  valor,
+            parcelas:    parcelasSel,
+            dataCompraISO,
+        });
 
-        if(faturaExistente) {
-            if(!faturaExistente.compras) faturaExistente.compras = [];
-
-            // ✅ Previne inserção duplicada em caso de double-click
-            const jaExiste = faturaExistente.compras.some(c => c.id === novaCompra.id);
-            if(!jaExiste) {
-                faturaExistente.compras.push(novaCompra);
-            }
-            faturaExistente.valor = faturaExistente.compras.reduce((sum, c) => {
-                const p = parseFloat(c.valorParcela);
-                return sum + (isFinite(p) && p > 0 ? p : 0);
-            }, 0);
-        } else {
-            _ctx.contasFixas.push({
-                // ✅ A fatura também recebe UUID — consistência com demais contasFixas
-                id: (typeof crypto !== 'undefined' && crypto.randomUUID)
-                    ? crypto.randomUUID()
-                    : `fatura_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-                descricao:      `Fatura ${cartao.nomeBanco}`,
-                valor:          Number((valor / parcelasSel).toFixed(2)),
-                vencimento:     dataFaturaISO,
-                pago:           false,
-                cartaoId:       cartao.id,
-                tipoContaFixa:  'fatura_cartao',
-                compras:        [novaCompra]
-            });
+        if (geradas.length === 0) {
+            _ctx.mostrarNotificacao('Não foi possível lançar a compra. Verifique os dados do cartão.', 'error');
+            return;
         }
 
+        anexarParcelas(_ctx.contasFixas, cartao, geradas);
         cartao.usado = (cartao.usado || 0) + valor;
 
         _ctx.salvarDados();
@@ -1127,9 +1063,39 @@ function excluirTransacao(t) {
         }
     };
 
+    // D3: se esta transação é o PAGAMENTO de uma parcela (tem faturaId+compraId),
+    // excluí-la volta a parcela para NÃO paga (e o Desfazer volta a marcar paga).
+    // Sem isto, pagava-se 1/5, ficava 2/5, e excluir a transação não revertia.
+    const parcelaInfo = (() => {
+        if (!t.faturaId || !t.compraId) return null;
+        const fatura = _ctx.contasFixas.find(f => String(f.id) === String(t.faturaId));
+        const compra = fatura?.compras?.find(c => String(c.id) === String(t.compraId));
+        if (!compra) return null;
+        const cartao = _ctx.cartoesCredito.find(c => String(c.id) === String(fatura.cartaoId));
+        return { fatura, compra, cartao };
+    })();
+    const reverterParcela = (desfazer) => {
+        if (!parcelaInfo) return;
+        const { fatura, compra, cartao } = parcelaInfo;
+        const v = parseFloat(compra.valorParcela) || 0;
+        if (desfazer) {
+            // Desfazer a exclusão → re-marca paga e volta a descontar do cartão.
+            compra.pago = true;
+            if (cartao) cartao.usado = Math.max(0, (cartao.usado || 0) - v);
+        } else {
+            // Excluir o pagamento → parcela volta a PENDENTE, devolve ao cartão.
+            compra.pago = false;
+            if (cartao) cartao.usado = (cartao.usado || 0) + v;
+        }
+        // Fatura deixa de estar quitada se voltou a ter parcela em aberto.
+        fatura.valor = fatura.compras.reduce((s, c) => c.pago === true ? s : s + (parseFloat(c.valorParcela) || 0), 0);
+        fatura.pago = fatura.compras.every(c => c.pago === true);
+    };
+
     // 1) Remoção otimista (local-first) — UI atualiza na hora, sem "Tem certeza?".
     _ctx.transacoes.splice(idx, 1);
     aplicarDelta(sinalRemover);
+    reverterParcela(false);
     _ctx.salvarDados();
     _ctx.atualizarTudo();
     renderizarOrcamentos();
@@ -1140,6 +1106,7 @@ function excluirTransacao(t) {
         const pos = Math.min(idx, _ctx.transacoes.length);
         _ctx.transacoes.splice(pos, 0, t);
         aplicarDelta(-sinalRemover);
+        reverterParcela(true);
         _ctx.salvarDados();
         _ctx.atualizarTudo();
         renderizarOrcamentos();

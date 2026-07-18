@@ -1,5 +1,6 @@
 // db-cartoes.js — Seção de Cartões de Crédito (lazy-loaded)
 import { analisarCiclo, proximaOcorrencia, meiaNoite } from '../modules/ciclo-fatura.js?v=1';
+import { valorAbertoFatura, parcelasDaCompra } from '../modules/fatura-parcelas.js?v=1';
 
 let _ctx = null;
 
@@ -1469,7 +1470,7 @@ function abrirVisualizacaoFatura(faturaId) {
     const nomeCartao = cartao ? _ctx._sanitizeText(cartao.nomeBanco) : 'Cartão';
 
     const totalCompras    = fatura.compras.length;
-    const comprasPagas    = fatura.compras.filter(c => Number(c.parcelaAtual) > Number(c.totalParcelas)).length;
+    const comprasPagas    = fatura.compras.filter(c => c.pago === true).length;
     const comprasPendentes = totalCompras - comprasPagas;
     const hojeISO         = new Date().toISOString().slice(0, 10);
     const vencida         = fatura.vencimento && fatura.vencimento < hojeISO && !fatura.pago;
@@ -1588,15 +1589,18 @@ function abrirVisualizacaoFatura(faturaId) {
 
         fatura.compras.forEach(compra => {
             if (!compra || typeof compra !== 'object') return;
-            const parcelaAtual  = Number(compra.parcelaAtual);
+            // Modelo novo: numeroParcela + pago. Fallback ao antigo por segurança
+            // (a migração no load já converteu, mas não custa tolerar).
+            const numeroParcela = Number(compra.numeroParcela ?? compra.parcelaAtual);
             const totalParcelas = Number(compra.totalParcelas);
             const valorParcela  = Number(compra.valorParcela);
             const valorTotal    = Number(compra.valorTotal);
-            if (!isFinite(parcelaAtual) || !isFinite(totalParcelas) || !isFinite(valorParcela) || valorParcela <= 0) return;
+            if (!isFinite(numeroParcela) || !isFinite(totalParcelas) || !isFinite(valorParcela) || valorParcela <= 0) return;
 
-            const isPaga = parcelaAtual > totalParcelas;
+            // Esta parcela específica está paga? (não é mais "contador passou do total")
+            const isPaga = compra.pago === true;
             const cor    = isPaga ? '#00ff99' : '#ffd166';
-            const falta  = isPaga ? null : valorParcela * (totalParcelas - parcelaAtual + 1);
+            const falta  = isPaga ? null : valorParcela;
 
             const card = document.createElement('div');
             card.style.cssText = `
@@ -1641,7 +1645,7 @@ function abrirVisualizacaoFatura(faturaId) {
             const stIcon = document.createElement('i');
             stIcon.className = isPaga ? 'fas fa-circle-check' : 'fas fa-rotate';
             statusEl.appendChild(stIcon);
-            statusEl.appendChild(document.createTextNode(isPaga ? 'Quitada' : `${parcelaAtual}/${totalParcelas}x`));
+            statusEl.appendChild(document.createTextNode(isPaga ? 'Pago' : `Parcela ${numeroParcela}/${totalParcelas}`));
 
             rightCol.appendChild(valEl); rightCol.appendChild(statusEl);
             mainRow.appendChild(info); mainRow.appendChild(rightCol);
@@ -1757,7 +1761,7 @@ function pagarCompraIndividual(faturaId, compraId) {
 
         document.getElementById('popupCompParc').innerHTML   = `<strong>Parcela:</strong> <span></span>`;
         document.getElementById('popupCompParc').querySelector('span').textContent =
-            `${compra.parcelaAtual}/${compra.totalParcelas}`;
+            `${compra.numeroParcela ?? compra.parcelaAtual}/${compra.totalParcelas}`;
 
         document.getElementById('popupCompValor').innerHTML  = `<strong>Valor:</strong> <span></span>`;
         document.getElementById('popupCompValor').querySelector('span').textContent = _ctx.formatBRL(compra.valorParcela);
@@ -1830,8 +1834,16 @@ function processarPagamentoCompra(faturaId, compraId, valorPago) {
         snapshotContasFixas = structuredClone(_ctx.contasFixas);
         snapshotCartoes     = structuredClone(_ctx.cartoesCredito);
 
+        // Já paga? Não paga de novo (idempotência de UI).
+        if (compra.pago === true) {
+            compra._processando = false;
+            _ctx.mostrarNotificacao('Esta parcela já está paga.', 'info');
+            return;
+        }
+
         const dh = _ctx.agoraDataHora();
-        const descricaoSegura = `${String(compra.tipo || '').slice(0, 100)} - ${String(compra.descricao || '').slice(0, 100)} (${compra.parcelaAtual}/${compra.totalParcelas})`;
+        const nParc = compra.numeroParcela ?? compra.parcelaAtual;
+        const descricaoSegura = `${String(compra.tipo || '').slice(0, 100)} - ${String(compra.descricao || '').slice(0, 100)} (${nParc}/${compra.totalParcelas})`;
 
         _ctx.transacoes.push({
             categoria:  'saida',
@@ -1848,26 +1860,18 @@ function processarPagamentoCompra(faturaId, compraId, valorPago) {
             cartao.usado = Math.max(0, (cartao.usado || 0) - valorSeguro);
         }
 
-        compra.parcelaAtual++;
+        // MODELO NOVO: marca ESTA parcela como paga — não avança contador nem
+        // "puxa a próxima" (as outras parcelas moram nas faturas dos outros meses).
+        // A fatura do mês baixa; as futuras ficam onde estão. (bugs D1/D2)
+        compra.pago   = true;
+        compra.pagoEm = dh.data;
 
-        if (compra.parcelaAtual > compra.totalParcelas) {
-            fatura.compras = fatura.compras.filter(c => String(c.id) !== String(compraId));
-        }
+        fatura.valor = valorAbertoFatura(fatura);
 
-        fatura.valor = fatura.compras.reduce((sum, c) => {
-            const p = parseFloat(c.valorParcela);
-            return sum + (isFinite(p) && p > 0 ? p : 0);
-        }, 0);
-
-        if (fatura.compras.length === 0) {
-            _ctx.contasFixas = _ctx.contasFixas.filter(c => c.id !== faturaId);
-            compra._processando = false;
-            _ctx.fecharPopup();
-            _ctx.salvarDados();
-            _ctx.atualizarTudo();
-            _ctx.mostrarNotificacao('Última parcela paga! Fatura quitada.', 'success');
-            return;
-        }
+        // Fatura totalmente quitada (todas as parcelas dela pagas) → marca pago.
+        // Não removemos: as parcelas pagas ficam visíveis como "Pago" no mês.
+        const todasPagas = fatura.compras.every(c => c.pago === true);
+        if (todasPagas) fatura.pago = true;
 
         compra._processando = false;
         _ctx.salvarDados();
@@ -1876,8 +1880,9 @@ function processarPagamentoCompra(faturaId, compraId, valorPago) {
 
         setTimeout(() => {
             abrirVisualizacaoFatura(faturaId);
-            const restantes = compra.totalParcelas - compra.parcelaAtual + 1;
-            _ctx.mostrarNotificacao(`Parcela paga! ${restantes} restante(s)`, 'success');
+            _ctx.mostrarNotificacao(
+                todasPagas ? 'Fatura do mês quitada!' : 'Parcela paga! A fatura do mês diminuiu.',
+                'success');
         }, 200);
 
     } catch (erro) {
@@ -1990,45 +1995,46 @@ function editarCompraFatura(faturaId, compraId) {
 window.editarCompraFatura = editarCompraFatura;
 
 // ========== EXCLUIR COMPRA DA FATURA ==========
+// Modelo novo: a compra são N parcelas espalhadas nas faturas mensais. Excluir a
+// compra remove TODAS as parcelas dela (pelo compraOrigemId) — não só a do mês.
 function excluirCompraFatura(faturaId, compraId) {
-    _ctx.confirmarAcao('Tem certeza que deseja excluir esta compra da fatura?', () => {
-        const fatura = _ctx.contasFixas.find(c => c.id === faturaId);
-        if (!fatura) return;
+    const faturaClicada = _ctx.contasFixas.find(c => c.id === faturaId);
+    const compraClicada = faturaClicada?.compras?.find(c => String(c.id) === String(compraId));
+    if (!compraClicada) return;
 
-        const compra = fatura.compras.find(c => String(c.id) === String(compraId));
-        if (!compra) return;
+    const origem = compraClicada.compraOrigemId;
+    const nParcelas = origem ? parcelasDaCompra(_ctx.contasFixas, origem).length : 1;
 
-        const cartao = _ctx.cartoesCredito.find(c => c.id === fatura.cartaoId);
+    const msg = nParcelas > 1
+        ? `Excluir esta compra apaga TODAS as ${nParcelas} parcelas dela (de todos os meses). Continuar?`
+        : 'Tem certeza que deseja excluir esta compra da fatura?';
 
-        // Atualizar valor usado do cartão
-        if (cartao) {
-            const valorRestante = compra.valorTotal - (compra.valorParcela * (compra.parcelaAtual - 1));
-            cartao.usado = Math.max(0, (cartao.usado || 0) - valorRestante);
+    _ctx.confirmarAcao(msg, () => {
+        // Todas as parcelas desta compra (ou só a clicada, se for dado antigo sem origem).
+        const alvos = origem
+            ? parcelasDaCompra(_ctx.contasFixas, origem)
+            : [{ fatura: faturaClicada, parcela: compraClicada }];
+
+        for (const { fatura, parcela } of alvos) {
+            const cartao = _ctx.cartoesCredito.find(c => String(c.id) === String(fatura.cartaoId));
+            // Só devolve ao cartão as parcelas NÃO pagas (as pagas já saíram do usado).
+            if (cartao && parcela.pago !== true) {
+                cartao.usado = Math.max(0, (cartao.usado || 0) - (parseFloat(parcela.valorParcela) || 0));
+            }
+            fatura.compras = fatura.compras.filter(c => c !== parcela);
+            fatura.valor = valorAbertoFatura(fatura);
         }
 
-        // Remover compra
-        fatura.compras = fatura.compras.filter(c => String(c.id) !== String(compraId));
-
-        // Recalcular valor da fatura
-        fatura.valor = fatura.compras.reduce((sum, c) => sum + c.valorParcela, 0);
-
-        // Se não há mais compras, remover fatura
-        if (fatura.compras.length === 0) {
-            _ctx.contasFixas = _ctx.contasFixas.filter(c => c.id !== faturaId);
-            _ctx.fecharPopup();
-            _ctx.salvarDados();
-            _ctx.atualizarTudo();
-            _ctx.mostrarNotificacao('Fatura excluída — não há mais compras.', 'success');
-            return;
-        }
+        // Remove faturas que ficaram sem nenhuma compra.
+        _ctx.contasFixas = _ctx.contasFixas.filter(c =>
+            !(c?.tipoContaFixa === 'fatura_cartao' && Array.isArray(c.compras) && c.compras.length === 0));
 
         _ctx.salvarDados();
         _ctx.atualizarTudo();
         _ctx.fecharPopup();
-        setTimeout(() => {
-            abrirVisualizacaoFatura(faturaId);
-            _ctx.mostrarNotificacao('Compra excluída com sucesso!', 'success');
-        }, 200);
+        _ctx.mostrarNotificacao(
+            nParcelas > 1 ? `Compra excluída — ${nParcelas} parcelas removidas.` : 'Compra excluída com sucesso!',
+            'success');
     });
 }
 

@@ -3079,7 +3079,7 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
     });
 
     // ── Parcelas pendentes no mês atual (contas a pagar neste mês)
-    const parcelasPendentesMes = comprasMes.filter(c => Number(c.parcelaAtual) <= Number(c.totalParcelas)).length;
+    const parcelasPendentesMes = comprasMes.filter(c => c.pago !== true).length;
 
     const dica = obterDicaAleatoria();
 
@@ -3096,10 +3096,11 @@ async function abrirDetalhesCartaoRelatorio(cartaoId, mes, ano, perfilId) {
             </div>`;
     } else {
         comprasMes.forEach(compra => {
-            const pago     = Number(compra.parcelaAtual) > Number(compra.totalParcelas);
+            const pago     = compra.pago === true;
             const cor      = pago ? '#00ff99' : '#ffd166';
-            const falta    = pago ? '—' : _ctx.formatBRL(compra.valorParcela * (compra.totalParcelas - compra.parcelaAtual + 1));
-            const parcTxt  = pago ? 'Quitado' : `Parcela ${sanitizeHTML(String(compra.parcelaAtual))}/${sanitizeHTML(String(compra.totalParcelas))}`;
+            const falta    = pago ? '—' : _ctx.formatBRL(compra.valorParcela);
+            const nParc    = compra.numeroParcela ?? compra.parcelaAtual;
+            const parcTxt  = pago ? 'Pago' : `Parcela ${sanitizeHTML(String(nParc))}/${sanitizeHTML(String(compra.totalParcelas))}`;
             htmlComprasMes += `
                 <div style="background:rgba(255,255,255,0.03); padding:14px; border-radius:10px; margin-bottom:10px; border-left:3px solid ${cor};">
                     <div style="display:flex; justify-content:space-between; align-items:start; gap:8px; flex-wrap:wrap; margin-bottom:8px;">

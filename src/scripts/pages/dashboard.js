@@ -6,6 +6,7 @@ import AuthGuard from '../modules/auth-guard.js?v=2';
 import '../modules/scroll-lock.js?v=1';
 import { initErrorTracking, setUserContext } from '../modules/error-tracking.js';
 import { perfMark, perfMeasure } from '../modules/perf-marks.js';
+import { migrarCompra, anexarParcelas, ehParcelaAntiga, valorAbertoFatura } from '../modules/fatura-parcelas.js?v=1';
 import { evaluate as evaluateConquistas, enqueueToasts as enqueueConquistaToasts, sanitizeUnlocked as sanitizeConquistas } from '../modules/achievements.js?v=2';
 
 // Inicializa rastreamento de erros o quanto antes (no-op sem VITE_SENTRY_DSN / fora de produção)
@@ -714,6 +715,11 @@ async function carregarDadosPerfil(perfilId) {
         // (bug do ciclo fechamento→vencimento, corrigido em 07/2026)
         _repararFaturasAdiantadas();
 
+        // Migra parcelas do modelo ANTIGO (1 compra numa fatura, contador
+        // parcelaAtual) para o NOVO (1 parcela por fatura mensal). Idempotente e
+        // fail-safe. Ver reestruturação 2026-07-17 e modules/fatura-parcelas.js.
+        _migrarParcelasAntigas();
+
         // ✅ Apenas contadores — sem PII
         _log.info('✅ [carregarDadosPerfil] Carregamento concluído.',
             '| Transações:', transacoes.length,
@@ -1150,6 +1156,62 @@ function _repararFaturasAdiantadas() {
     if (reparadas > 0) {
         _log.info(`🔧 [faturas] ${reparadas} fatura(s) de cartão com vencimento adiantado corrigida(s) (+1 mês).`);
     }
+}
+
+// Migra as compras parceladas do modelo ANTIGO (1 objeto numa fatura, contador
+// parcelaAtual) para o NOVO (1 parcela por fatura mensal). Roda no load, uma vez,
+// idempotente. Ver modules/fatura-parcelas.js.
+//
+// FAIL-SAFE por design: mexe em dinheiro real de pagantes. Se QUALQUER coisa der
+// errado numa compra, ela é deixada INTACTA (não migrada) em vez de corrompida —
+// o try/catch por-compra garante que um dado esquisito não derruba o resto nem
+// zera fatura de ninguém. O `usado` do cartão NÃO é tocado: as parcelas restantes
+// somam o mesmo valor que a compra antiga representava.
+function _migrarParcelasAntigas() {
+    if (!Array.isArray(contasFixas) || !Array.isArray(cartoesCredito)) return;
+    let migradas = 0;
+
+    // Coleta as compras antigas ANTES de mexer (vamos remover das faturas de origem).
+    const pendentes = [];
+    for (const fatura of contasFixas) {
+        if (fatura?.tipoContaFixa !== 'fatura_cartao' || !Array.isArray(fatura.compras)) continue;
+        for (const compra of fatura.compras) {
+            if (ehParcelaAntiga(compra)) pendentes.push({ fatura, compra });
+        }
+    }
+    if (pendentes.length === 0) return;
+
+    for (const { fatura, compra } of pendentes) {
+        try {
+            const cartao = cartoesCredito.find(c => String(c.id) === String(fatura.cartaoId));
+            const geradas = migrarCompra(compra, cartao, fatura.vencimento);
+            if (geradas === null) continue;          // não migrável → intacta
+
+            // Remove a compra antiga da fatura de origem…
+            fatura.compras = fatura.compras.filter(c => c !== compra);
+            // …e distribui as parcelas novas (a 1ª volta pra ESTA fatura, mesmo venc.).
+            if (geradas.length > 0 && cartao) anexarParcelas(contasFixas, cartao, geradas);
+            migradas++;
+        } catch (e) {
+            _log.error('MIGRAR_PARCELA_001', e);
+            // deixa a compra como estava — nunca corromper dado financeiro
+        }
+    }
+
+    // Recalcula o valor de toda fatura de cartão (Σ das não pagas) e limpa
+    // faturas que ficaram vazias após a migração.
+    for (const f of contasFixas) {
+        if (f?.tipoContaFixa !== 'fatura_cartao' || !Array.isArray(f.compras)) continue;
+        f.valor = f.compras.reduce((s, c) => {
+            if (c?.pago === true) return s;
+            const v = parseFloat(c?.valorParcela);
+            return s + (isFinite(v) && v > 0 ? v : 0);
+        }, 0);
+    }
+    contasFixas = contasFixas.filter(f =>
+        !(f?.tipoContaFixa === 'fatura_cartao' && Array.isArray(f.compras) && f.compras.length === 0));
+
+    if (migradas > 0) _log.info(`🔧 [parcelas] ${migradas} compra(s) migrada(s) para o modelo por-mês.`);
 }
 
 // Gera (se ainda não gerada neste ciclo) a cobrança de UMA assinatura ativa,
@@ -4248,48 +4310,50 @@ function anteciparContaFixa(id, valorPago) {
         // ── FATURA DE CARTÃO ─────────────────────────────────────────────
         if (conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
             const cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
+            const dataPagto = agoraDataHora().data;
 
+            // MODELO NOVO (2026-07-17): pagar a fatura do mês = marcar as parcelas
+            // DESTE mês como pagas. NÃO avança o vencimento nem "rola" a fatura —
+            // as parcelas dos outros meses moram nas faturas dos outros meses.
+            let algoPago = false;
             conta.compras.forEach(compra => {
-                if (typeof compra.parcelaAtual  !== 'number' || !isFinite(compra.parcelaAtual))  return;
-                if (typeof compra.totalParcelas !== 'number' || !isFinite(compra.totalParcelas)) return;
-                if (typeof compra.valorParcela  !== 'number' || !isFinite(compra.valorParcela))  return;
-                if (compra.parcelaAtual < 1 || compra.totalParcelas < 1) return;
-                if (compra.valorParcela <= 0 || compra.valorParcela > 9_999_999) return;
+                if (compra.pago === true) return;
+                const parcela = parseFloat(compra.valorParcela);
+                if (!isFinite(parcela) || parcela <= 0 || parcela > 9_999_999) return;
 
-                if (compra.parcelaAtual <= compra.totalParcelas) {
-                    compra.parcelaAtual++;
-                    if (cartaoRef) {
-                        const parcela = parseFloat(compra.valorParcela);
-                        cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
-                        if (cartaoRef.usado < 0) cartaoRef.usado = 0;
-                    }
+                compra.pago   = true;
+                compra.pagoEm = dataPagto;
+                algoPago = true;
+
+                // Registra a transação do pagamento (histórico + reversível).
+                const nParc = compra.numeroParcela ?? '';
+                transacoes.push({
+                    categoria: 'saida',
+                    tipo:      'Pagamento Cartão',
+                    descricao: `${String(compra.tipo || '').slice(0,100)} - ${String(compra.descricao || '').slice(0,100)}${nParc ? ` (${nParc}/${compra.totalParcelas})` : ''}`,
+                    valor:     parseFloat(parcela.toFixed(2)),
+                    data:      dataPagto,
+                    hora:      agoraDataHora().hora,
+                    faturaId:  conta.id,
+                    compraId:  compra.id,
+                });
+
+                if (cartaoRef) {
+                    cartaoRef.usado = Math.max(0, (cartaoRef.usado || 0) - parcela);
                 }
             });
 
-            conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
-
-            if (conta.compras.length === 0) {
-                contasFixas = contasFixas.filter(c => c.id !== id);
-                salvarDados();
-                atualizarTudo();
-                conta._processando = false;
-                mostrarNotificacao('Antecipação concluída! Todas as parcelas foram quitadas.', 'success');
-                return;
-            }
-
-            conta.valor = conta.compras.reduce((sum, c) => {
-                const p = parseFloat(c.valorParcela);
-                return sum + (isFinite(p) && p > 0 ? p : 0);
-            }, 0);
-
-            conta.vencimento    = _avancarMes(conta.vencimento);
+            conta.valor         = valorAbertoFatura(conta);
             conta.pago          = true;
             conta.dataPagamento = new Date().toISOString().slice(0, 10);
 
             salvarDados();
             atualizarTudo();
             conta._processando = false;
-            mostrarNotificacao(`Fatura antecipada! Próxima: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`, 'success');
+            mostrarNotificacao(
+                algoPago ? 'Fatura do mês paga! As parcelas dos próximos meses continuam nos seus meses.'
+                         : 'Esta fatura já estava paga.',
+                'success');
             return;
         }
 
@@ -4382,52 +4446,43 @@ function pagarContaFixa(id, valorPago) {
         if (typeof _cache !== 'undefined') { _cache.tx = null; _cache.cf = null; _cache.cc = null; }
 
         // ── FATURA DE CARTÃO ──────────────────────────────────────────────
+        // MODELO NOVO (2026-07-17): marca as parcelas DESTE mês como pagas, sem
+        // avançar o vencimento — as dos outros meses moram nas outras faturas.
         if (conta.tipoContaFixa === 'fatura_cartao' && conta.compras && conta.compras.length > 0) {
             let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
+            const dataPagto = agoraDataHora().data;
 
             conta.compras.forEach(compra => {
-                if (typeof compra.parcelaAtual  !== 'number' || !isFinite(compra.parcelaAtual))  return;
-                if (typeof compra.totalParcelas !== 'number' || !isFinite(compra.totalParcelas)) return;
-                if (typeof compra.valorParcela  !== 'number' || !isFinite(compra.valorParcela))  return;
-                if (compra.parcelaAtual  < 1)         return;
-                if (compra.totalParcelas < 1)         return;
-                if (compra.valorParcela  <= 0)        return;
-                if (compra.valorParcela  > 9_999_999) return;
+                if (compra.pago === true) return;
+                const parcela = parseFloat(compra.valorParcela);
+                if (!isFinite(parcela) || parcela <= 0 || parcela > 9_999_999) return;
 
-                if (compra.parcelaAtual <= compra.totalParcelas) {
-                    compra.parcelaAtual++;
-                    if (cartaoRef) {
-                        const parcela = parseFloat(compra.valorParcela);
-                        cartaoRef.usado = (cartaoRef.usado || 0) - parcela;
-                        if (cartaoRef.usado < 0) cartaoRef.usado = 0;
-                    }
-                }
+                compra.pago   = true;
+                compra.pagoEm = dataPagto;
+
+                const nParc = compra.numeroParcela ?? '';
+                transacoes.push({
+                    categoria: 'saida',
+                    tipo:      'Pagamento Cartão',
+                    descricao: `${String(compra.tipo || '').slice(0,100)} - ${String(compra.descricao || '').slice(0,100)}${nParc ? ` (${nParc}/${compra.totalParcelas})` : ''}`,
+                    valor:     parseFloat(parcela.toFixed(2)),
+                    data:      dataPagto,
+                    hora:      agoraDataHora().hora,
+                    faturaId:  conta.id,
+                    compraId:  compra.id,
+                });
+
+                if (cartaoRef) cartaoRef.usado = Math.max(0, (cartaoRef.usado || 0) - parcela);
             });
 
-            conta.compras = conta.compras.filter(c => c.parcelaAtual <= c.totalParcelas);
-
-            if (conta.compras.length === 0) {
-                contasFixas = contasFixas.filter(c => c.id !== id);
-                salvarDados();
-                atualizarTudo();
-                conta._processando = false;
-                mostrarNotificacao('Todas as parcelas pagas! Fatura quitada.', 'success');
-                return;
-            }
-
-            conta.valor = conta.compras.reduce((sum, c) => {
-                const p = parseFloat(c.valorParcela);
-                return sum + (isFinite(p) && p > 0 ? p : 0);
-            }, 0);
-
-            conta.vencimento    = _avancarMes(conta.vencimento);
+            conta.valor         = valorAbertoFatura(conta);
             conta.pago          = true;
             conta.dataPagamento = new Date().toISOString().slice(0, 10);
 
             salvarDados();
             atualizarTudo();
             conta._processando = false;
-            mostrarNotificacao(`Fatura paga! Próxima fatura: ${formatBRL(conta.valor)} em ${formatarDataBR(conta.vencimento)}`, 'success');
+            mostrarNotificacao('Fatura do mês paga! As parcelas dos próximos meses continuam nos seus meses.', 'success');
             return;
         }
 

@@ -13,7 +13,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   paraISO, somaMesesISO, baseVencimentoISO, gerarParcelas,
-  valorAbertoFatura, parcelasDaCompra, ehParcelaAntiga, migrarCompra,
+  valorAbertoFatura, parcelasDaCompra, ehParcelaAntiga, migrarCompra, anexarParcelas,
 } from '../../src/scripts/modules/fatura-parcelas.js'
 
 // fecha dia 10, vence dia 20 (vence DEPOIS de fechar → mesmo mês)
@@ -134,6 +134,37 @@ describe('parcelasDaCompra — achar todas para excluir/reverter', () => {
   })
   test('compra inexistente → []', () => {
     assert.deepEqual(parcelasDaCompra([], 'A'), [])
+  })
+})
+
+describe('anexarParcelas — distribui nas faturas mensais', () => {
+  test('o Xbox: 5 parcelas criam/preenchem 5 faturas, uma por mês', () => {
+    const contasFixas = []
+    const ger = gerarParcelas({ cartao, tipo: 'Eletrônico', descricao: 'Xbox', valorTotal: 750, parcelas: 5, dataCompraISO: '2026-03-05' })
+    anexarParcelas(contasFixas, cartao, ger)
+    const faturas = contasFixas.filter(f => f.tipoContaFixa === 'fatura_cartao')
+    assert.equal(faturas.length, 5)
+    assert.deepEqual(faturas.map(f => f.vencimento).sort(), ['2026-03-20','2026-04-20','2026-05-20','2026-06-20','2026-07-20'])
+    for (const f of faturas) assert.equal(f.valor, 150)
+  })
+
+  test('2ª compra no mesmo mês SOMA na fatura existente (não duplica fatura)', () => {
+    const contasFixas = []
+    anexarParcelas(contasFixas, cartao, gerarParcelas({ cartao, tipo: 'x', descricao: 'A', valorTotal: 300, parcelas: 1, dataCompraISO: '2026-03-05' }))
+    anexarParcelas(contasFixas, cartao, gerarParcelas({ cartao, tipo: 'y', descricao: 'B', valorTotal: 200, parcelas: 1, dataCompraISO: '2026-03-06' }))
+    const faturas = contasFixas.filter(f => f.tipoContaFixa === 'fatura_cartao')
+    assert.equal(faturas.length, 1, 'mesma fatura de março')
+    assert.equal(faturas[0].valor, 500)
+    assert.equal(faturas[0].compras.length, 2)
+  })
+
+  test('idempotente: reanexar as MESMAS parcelas não duplica', () => {
+    const contasFixas = []
+    const ger = gerarParcelas({ cartao, tipo: 'x', descricao: 'A', valorTotal: 300, parcelas: 3, dataCompraISO: '2026-03-05' })
+    anexarParcelas(contasFixas, cartao, ger)
+    anexarParcelas(contasFixas, cartao, ger)  // de novo
+    const totalCompras = contasFixas.reduce((s, f) => s + (f.compras?.length || 0), 0)
+    assert.equal(totalCompras, 3)
   })
 })
 

@@ -153,6 +153,47 @@ export function parcelasDaCompra(contasFixas, compraOrigemId) {
     return out.sort((a, b) => (a.parcela.numeroParcela || 0) - (b.parcela.numeroParcela || 0));
 }
 
+/**
+ * Anexa parcelas geradas às faturas mensais certas — cria a fatura do mês se
+ * ainda não existe. MUTA `contasFixas` (é o array vivo do app).
+ *
+ * Compartilhado entre a criação de compra e a migração: os dois precisam
+ * distribuir parcelas por mês exatamente da mesma forma.
+ *
+ * @param contasFixas  array vivo (mutado)
+ * @param cartao       { id, nomeBanco }
+ * @param geradas      saída de gerarParcelas()/migrarCompra()
+ */
+export function anexarParcelas(contasFixas, cartao, geradas) {
+    if (!Array.isArray(contasFixas) || !cartao || !Array.isArray(geradas)) return;
+    for (const { vencimentoISO, parcela } of geradas) {
+        if (!_ISO.test(vencimentoISO || '') || !parcela) continue;
+
+        let fatura = contasFixas.find(f =>
+            f?.tipoContaFixa === 'fatura_cartao' &&
+            String(f.cartaoId) === String(cartao.id) &&
+            f.vencimento === vencimentoISO);
+
+        if (!fatura) {
+            fatura = {
+                id: _novoId(),
+                descricao:     `Fatura ${cartao.nomeBanco || 'cartão'}`,
+                valor:         0,
+                vencimento:    vencimentoISO,
+                pago:          false,
+                cartaoId:      cartao.id,
+                tipoContaFixa: 'fatura_cartao',
+                compras:       [],
+            };
+            contasFixas.push(fatura);
+        }
+        if (!Array.isArray(fatura.compras)) fatura.compras = [];
+        // Idempotência: não duplica a mesma parcela (mesmo id).
+        if (!fatura.compras.some(c => c.id === parcela.id)) fatura.compras.push(parcela);
+        fatura.valor = valorAbertoFatura(fatura);
+    }
+}
+
 // ─────────────────────────── Migração do modelo antigo ───────────────────────
 
 /** É uma compra do formato ANTIGO (contador parcelaAtual, sem numeroParcela)? */
