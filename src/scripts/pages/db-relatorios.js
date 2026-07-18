@@ -10,6 +10,62 @@ import { dataManager } from '../modules/data-manager.js?v=8';
 import { calcScore as _calcScoreCore } from '../modules/score-financeiro.js?v=1';
 let _ctx = null;
 
+// ── Lista de transações do relatório: exibição em duas etapas (Passo 7) ──────
+// Quantas linhas entram no primeiro render. 150 cobre o mês típico inteiro (ou
+// seja: a maioria dos usuários nunca vê o botão), e segura o caso de "todo o
+// período", onde despejar milhares de nós de uma vez trava a tela.
+const REL_TX_VISIVEIS = 150;
+
+// As que ficaram de fora do primeiro render, aguardando o "Ver todas".
+// Zerada a cada relatório gerado — nunca pode vazar de um período para outro.
+let _relTxPendentes = [];
+
+/** Uma linha da lista de transações do relatório (mesmo markup dos dois caminhos). */
+function _relTxItemHtml(t) {
+    if (!t || typeof t !== 'object') return '';
+    let dotClass, sinal;
+    if (t.categoria === 'entrada') { dotClass = 'entrada'; sinal = '+'; }
+    else { dotClass = t.categoria === 'saida' ? 'saida' : 'reserva'; sinal = '-'; }
+    return `
+                <div class="rel-tx-item">
+                    <div class="rel-tx-dot rel-tx-dot--${dotClass}"></div>
+                    <div class="rel-tx-info">
+                        <span class="rel-tx-tipo">${sanitizeHTML(String(t.tipo || '').slice(0, 100))}</span>
+                        <span class="rel-tx-desc">${sanitizeHTML(String(t.descricao || '').slice(0, 200))}</span>
+                        <span class="rel-tx-date">${sanitizeHTML(String(t.data || ''))} · ${sanitizeHTML(String(t.hora || ''))}</span>
+                    </div>
+                    <div class="rel-tx-value rel-tx-value--${dotClass}">${sinal}${formatBRL(sanitizeNumber(t.valor))}</div>
+                </div>`;
+}
+
+/**
+ * Renderiza as transações que ficaram de fora e remove o botão.
+ * Idempotente e seguro chamar sem nada pendente — é por isso que a exportação
+ * pode chamar sempre, sem perguntar.
+ * @returns {boolean} true se expandiu algo (a exportação usa para saber se
+ *          precisa esperar o DOM assentar antes de clonar).
+ */
+function _relExpandirTx() {
+    const btn = document.getElementById('relTxVerMais');
+    if (!btn || _relTxPendentes.length === 0) { if (btn) btn.remove(); return false; }
+
+    let html = '';
+    for (const t of _relTxPendentes) html += _relTxItemHtml(t);
+    _relTxPendentes = [];
+
+    // Mesmo saneador do render principal — o caminho de expansão não pode ser
+    // uma porta dos fundos que escapa do DOMParser/whitelist.
+    const temp = document.createElement('div');
+    temp.innerHTML = _sanitizarHTMLRelatorio(html);
+
+    // Insere os .rel-tx-item como IRMÃOS dos que já estão lá. Inserir o próprio
+    // `temp` criaria um <div> intermediário e quebraria o CSS da lista.
+    const pai = btn.parentNode;
+    while (temp.firstChild) pai.insertBefore(temp.firstChild, btn);
+    btn.remove();
+    return true;
+}
+
 // Proxies locais para funções utilitárias de dashboard.js (disponíveis via _ctx após init).
 // Usados como atalhos para evitar prefixar _ctx. em centenas de chamadas no arquivo.
 const formatBRL      = (...a) => _ctx.formatBRL(...a);
@@ -342,6 +398,11 @@ function _exportCSV() {
 
 // ── PDF: HTML standalone com gráficos embutidos ──────────────────────────
 function _exportPDF() {
+    // Passo 7: a tela mostra só as primeiras transações. Este export CLONA o DOM
+    // → sem expandir, geraria um PDF que OMITE transações em silêncio, que é bem
+    // pior do que um relatório lento. Idempotente: sem pendências, não faz nada.
+    _relExpandirTx();
+
     const resultado = document.getElementById('relatorioResultado');
     if (!resultado) return;
     const { mesNome, anoNum, mesNum } = _getPeriodInfo();
@@ -513,6 +574,9 @@ ${(_ctx.contasFixas||[]).filter(c2=>c2.tipoContaFixa!=='fatura_cartao').map(cf =
 
 // ── Apresentação HTML interativa com slides financeiros ───────────────────
 function _exportApresentacao() {
+    // Mesmo motivo do _exportPDF: clona o DOM, então expande antes.
+    _relExpandirTx();
+
     const { mesNome, anoNum, mesNum } = _getPeriodInfo();
     const perfilNome = _ctx.perfilAtivo?.nome || '';
     const txs = _getTxsDoPeriodo();
@@ -1695,23 +1759,29 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
             return dataHoraB.localeCompare(dataHoraA);
         });
 
-        transacoesPeriodo.forEach(t => {
-            if (!t || typeof t !== 'object') return;
-            let dotClass, sinal;
-            if (t.categoria === 'entrada') { dotClass = 'entrada'; sinal = '+'; }
-            else { dotClass = t.categoria === 'saida' ? 'saida' : 'reserva'; sinal = '-'; }
+        // Passo 7 — não despeja o período inteiro de uma vez. Um ano de dados
+        // vira milhares de nós numa string só: o relatório demora a aparecer e o
+        // DOM fica pesado para sempre. Mostra as mais recentes e guarda o resto.
+        //
+        // O corte é SÓ DE EXIBIÇÃO. Relatório financeiro que omite transação em
+        // silêncio é pior que relatório lento — por isso: o botão diz quantas
+        // faltam, e a exportação (PDF/apresentação, que CLONAM o DOM) expande
+        // tudo antes de clonar. CSV/Excel nunca dependeram disso: leem
+        // `_getTxsDoPeriodo()`, os dados crus.
+        const _visiveis = transacoesPeriodo.slice(0, REL_TX_VISIVEIS);
+        const _restantes = transacoesPeriodo.slice(REL_TX_VISIVEIS);
 
+        _visiveis.forEach(t => { html += _relTxItemHtml(t); });
+
+        if (_restantes.length > 0) {
+            _relTxPendentes = _restantes;      // consumido por _relExpandirTx()
             html += `
-                <div class="rel-tx-item">
-                    <div class="rel-tx-dot rel-tx-dot--${dotClass}"></div>
-                    <div class="rel-tx-info">
-                        <span class="rel-tx-tipo">${sanitizeHTML(String(t.tipo || '').slice(0, 100))}</span>
-                        <span class="rel-tx-desc">${sanitizeHTML(String(t.descricao || '').slice(0, 200))}</span>
-                        <span class="rel-tx-date">${sanitizeHTML(String(t.data || ''))} · ${sanitizeHTML(String(t.hora || ''))}</span>
-                    </div>
-                    <div class="rel-tx-value rel-tx-value--${dotClass}">${sinal}${formatBRL(sanitizeNumber(t.valor))}</div>
-                </div>`;
-        });
+                <button type="button" id="relTxVerMais" class="btn-primary" style="width:100%; margin-top:10px;">
+                    Ver todas — mais ${_restantes.length} transaç${_restantes.length === 1 ? 'ão' : 'ões'}
+                </button>`;
+        } else {
+            _relTxPendentes = [];
+        }
         html += `</div></div>`;
     }
 
@@ -2188,6 +2258,10 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
     //           e bloqueio de esquemas javascript:/vbscript:/data: em atributos
     resultado.innerHTML = _sanitizarHTMLRelatorio(html);
     resultado.classList.remove('js-hidden');
+
+    // "Ver todas" (Passo 7). O listener vai AQUI porque o innerHTML acima
+    // recria o botão a cada relatório — um listener preso no HTML morreria junto.
+    document.getElementById('relTxVerMais')?.addEventListener('click', () => _relExpandirTx());
 
     dadosPorPerfil.forEach(d => {
         if (!d?.perfil?.id) return;
