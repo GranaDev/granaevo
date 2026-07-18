@@ -11,10 +11,16 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { filterByPeriodo, mediaMensal, orcamentoRestante, ultimasTransacoes } from '../../src/scripts/modules/assistant/query.js'
 
-// Data BR (DD/MM/AAAA) de N dias atrás — as funções usam `new Date()` internamente,
-// então os testes ancoram em "hoje" real em vez de injetar relógio.
+// RELÓGIO FIXO. Antes o teste montava "N dias atrás" lendo o relógio e a função
+// lia o relógio DE NOVO lá dentro: se a meia-noite (ou a virada de mês) caísse
+// entre as duas leituras, a janela deslocava e o teste falhava sozinho —
+// acontecia ~1 vez em 6 rodadas. Agora há uma leitura só, injetada.
+// Escolhido meio-dia de propósito: longe das duas bordas do dia.
+const HOJE = new Date(2026, 6, 18, 12, 0, 0)   // 18/07/2026, meio-dia local
+
+// Data BR (DD/MM/AAAA) de N dias atrás, relativa a HOJE.
 const diasAtras = (n) => {
-  const d = new Date()
+  const d = new Date(HOJE)
   d.setDate(d.getDate() - n)
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
@@ -29,7 +35,7 @@ describe('semana × semana passada são janelas distintas', () => {
     S({ descricao: 'ha 12 dias', data: diasAtras(12) }),
     S({ descricao: 'ha 20 dias', data: diasAtras(20) }),
   ]
-  const descs = (p) => filterByPeriodo(txs, p).map((t) => t.descricao).sort()
+  const descs = (p) => filterByPeriodo(txs, p, HOJE).map((t) => t.descricao).sort()
 
   test('"semana" pega os últimos 7 dias, incluindo hoje', () => {
     assert.deepEqual(descs('semana'), ['ha 3 dias', 'ha 6 dias', 'hoje'].sort())
@@ -40,8 +46,8 @@ describe('semana × semana passada são janelas distintas', () => {
   })
 
   test('as duas janelas não se sobrepõem', () => {
-    const a = new Set(filterByPeriodo(txs, 'semana').map((t) => t.descricao))
-    const b = filterByPeriodo(txs, 'semana_passada').map((t) => t.descricao)
+    const a = new Set(filterByPeriodo(txs, 'semana', HOJE).map((t) => t.descricao))
+    const b = filterByPeriodo(txs, 'semana_passada', HOJE).map((t) => t.descricao)
     for (const d of b) assert.ok(!a.has(d), `"${d}" aparece nas duas janelas`)
   })
 
@@ -54,8 +60,11 @@ describe('semana × semana passada são janelas distintas', () => {
 
 describe('média mensal ignora o mês corrente (que é parcial)', () => {
   // 3 meses fechados de R$3.000 + o mês atual mal começado.
+  // Ancorado em HOJE também. Lendo o relógio real aqui, o teste passaria hoje por
+  // coincidência (HOJE == data real) e quebraria no mês que vem: as transações
+  // seriam montadas em relação a agosto e a média julgada em relação a julho.
   const mesesAtras = (n) => {
-    const d = new Date()
+    const d = new Date(HOJE)
     d.setDate(1)
     d.setMonth(d.getMonth() - n)
     return `10/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
@@ -70,26 +79,26 @@ describe('média mensal ignora o mês corrente (que é parcial)', () => {
   }
 
   test('a média é dos meses FECHADOS', () => {
-    const m = mediaMensal(perfil)
+    const m = mediaMensal(perfil, { hoje: HOJE })
     assert.equal(m.media, 3000, 'o mês parcial estava puxando a média pra baixo')
     assert.equal(m.meses, 3)
   })
 
   test('"quanto posso gastar" usa a média correta', () => {
-    const o = orcamentoRestante(perfil)
+    const o = orcamentoRestante(perfil, HOJE)
     assert.equal(o.media, 3000)
     assert.equal(o.gastoMes, 100)
     assert.equal(o.restante, 2900, 'respondia R$2.175 com a média contaminada')
   })
 
   test('dá pra incluir o mês atual quando o chamador quiser', () => {
-    assert.equal(mediaMensal(perfil, { incluirMesAtual: true }).meses, 4)
+    assert.equal(mediaMensal(perfil, { incluirMesAtual: true, hoje: HOJE }).meses, 4)
   })
 
   test('quem só tem o mês atual não tem histórico (e não recebe palpite)', () => {
     const novato = { transacoes: [S({ valor: 100, data: diasAtras(0) })] }
-    assert.equal(mediaMensal(novato).meses, 0)
-    assert.equal(orcamentoRestante(novato).temHistorico, false)
+    assert.equal(mediaMensal(novato, { hoje: HOJE }).meses, 0)
+    assert.equal(orcamentoRestante(novato, HOJE).temHistorico, false)
   })
 })
 

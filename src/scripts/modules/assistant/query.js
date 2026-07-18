@@ -12,7 +12,14 @@ function norm(s) {
 }
 
 /** Filtra transações por período. */
-export function filterByPeriodo(transacoes, periodo) {
+/**
+ * @param hoje  relógio INJETÁVEL. Existe por causa de teste instável: o teste
+ *   montava "N dias atrás" lendo o relógio, e esta função lia o relógio de novo —
+ *   se a meia-noite virasse entre as duas leituras, a janela deslocava e o teste
+ *   quebrava (1 falha em 6 rodadas). Com o relógio injetado há UMA leitura só.
+ *   Produção não muda: o default continua sendo a hora atual.
+ */
+export function filterByPeriodo(transacoes, periodo, hoje = new Date()) {
     const arr = Array.isArray(transacoes) ? transacoes : [];
     if (!periodo || periodo === 'tudo') return arr;
 
@@ -22,7 +29,6 @@ export function filterByPeriodo(transacoes, periodo) {
         return arr.filter((t) => { const d = brDateToObj(t?.data); return d && yearMonthKey(d) === ym; });
     }
 
-    const hoje = new Date();
     const ymAtual = yearMonthKey(hoje);
     const ymPassado = yearMonthKey(new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1));
     const ymTrimestre = [
@@ -204,8 +210,10 @@ export function compararMes(profile) {
  * R$2.275 em vez de R$3.000, e o "quanto posso gastar" (que é média − gasto do mês)
  * mentia pra menos justamente no começo do mês, quando o usuário mais consulta.
  */
-export function mediaMensal(profile, { incluirMesAtual = false } = {}) {
-    const ymAtual = yearMonthKey(new Date());
+// `hoje` injetável pelo mesmo motivo de filterByPeriodo: na virada de mês, o
+// teste e a função liam relógios diferentes e discordavam de qual é o mês atual.
+export function mediaMensal(profile, { incluirMesAtual = false, hoje = new Date() } = {}) {
+    const ymAtual = yearMonthKey(hoje);
     const txs = (Array.isArray(profile?.transacoes) ? profile.transacoes : []).filter((t) => t.categoria === 'saida');
     const porMes = {};
     for (const t of txs) {
@@ -361,9 +369,11 @@ export function contarPorTipoMes(profile, tipo, categoria = 'saida') {
 }
 
 /** B22: quanto ainda dá pra gastar este mês = média mensal − já gasto no mês. */
-export function orcamentoRestante(profile) {
-    const { media, meses } = mediaMensal(profile);
-    const ym = yearMonthKey(new Date());
+// `hoje` injetável e REPASSADO a mediaMensal: as duas precisam concordar sobre
+// qual é o mês atual, senão a média sai de um mês e o gasto do mês de outro.
+export function orcamentoRestante(profile, hoje = new Date()) {
+    const { media, meses } = mediaMensal(profile, { hoje });
+    const ym = yearMonthKey(hoje);
     const gastoMes = (Array.isArray(profile?.transacoes) ? profile.transacoes : [])
         .filter((t) => t.categoria === 'saida' && _ymOf(t.data) === ym)
         .reduce((s, t) => s + (Number(t.valor) || 0), 0);
