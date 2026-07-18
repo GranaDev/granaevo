@@ -44,7 +44,7 @@ const MAX_BODY_BYTES   = 4096
 const EMAIL_RE         = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/
 
 // ── Cookie helpers ────────────────────────────────────────────────────────────
-function buildRefreshCookie(value, { maxAge, clear } = {}) {
+function buildRefreshCookie(value, { maxAge, clear, domain } = {}) {
   const parts = [
     `${COOKIE_NAME}=${clear ? '' : value}`,
     'HttpOnly',
@@ -52,10 +52,33 @@ function buildRefreshCookie(value, { maxAge, clear } = {}) {
     'SameSite=Strict',
     `Path=${COOKIE_PATH}`,
   ]
+  // Domain=granaevo.com faz o cookie ser enviado a TODOS os subdomínios (www E
+  // assistente) — sem isto ele fica host-only e o chat (assistente.granaevo.com)
+  // não recebe a sessão, forçando um 2º login. Só em produção; em localhost/
+  // preview o domain fica ausente (host-only, como antes).
+  if (domain) parts.push(`Domain=${domain}`)
   if (clear)                         parts.push('Max-Age=0')
   else if (typeof maxAge === 'number') parts.push(`Max-Age=${maxAge}`)
   // sem Max-Age = cookie de sessão (some ao fechar o browser) — usado quando !remember
   return parts.join('; ')
+}
+
+// Domínio do cookie derivado do Host da requisição. Em *.granaevo.com devolve
+// 'granaevo.com' (compartilha entre subdomínios); em localhost/*.vercel.app
+// devolve undefined (host-only — Domain=granaevo.com seria rejeitado ali).
+function cookieDomainDe(req) {
+  const host = String(req.headers?.host ?? '').toLowerCase().split(':')[0]
+  return (host === 'granaevo.com' || host.endsWith('.granaevo.com')) ? 'granaevo.com' : undefined
+}
+
+// Emite o(s) Set-Cookie de refresh. Quando estamos em produção (domain definido),
+// também LIMPA o cookie host-only legado — senão o browser ficaria com dois
+// `ge_rt` (o antigo host-only + o novo com Domain), e leria o antigo (já
+// rotacionado/inválido) no próximo refresh, deslogando o usuário uma vez.
+function setRefreshCookie(res, value, { maxAge, clear, domain } = {}) {
+  const cookies = [buildRefreshCookie(value, { maxAge, clear, domain })]
+  if (domain) cookies.push(buildRefreshCookie('', { clear: true })) // limpa o host-only legado
+  res.setHeader('Set-Cookie', cookies)
 }
 
 function readRefreshCookie(cookieHeader) {
@@ -188,8 +211,8 @@ export default async function handler(req, res) {
     if (!grant?.access_token || !grant?.refresh_token)
       return res.status(502).json({ error: 'Resposta de autenticação inválida' })
 
-    res.setHeader('Set-Cookie', buildRefreshCookie(grant.refresh_token,
-      remember ? { maxAge: REMEMBER_MAX_AGE } : {}))
+    setRefreshCookie(res, grant.refresh_token,
+      { ...(remember ? { maxAge: REMEMBER_MAX_AGE } : {}), domain: cookieDomainDe(req) })
     return res.status(200).json(sessionPayload(grant))
   }
 
@@ -216,21 +239,21 @@ export default async function handler(req, res) {
 
     if (!grantRes.ok) {
       // Refresh inválido/revogado → limpa o cookie e sinaliza "deslogado" (200, sem erro)
-      res.setHeader('Set-Cookie', buildRefreshCookie('', { clear: true }))
+      setRefreshCookie(res, '', { clear: true, domain: cookieDomainDe(req) })
       return res.status(200).json({ session: null })
     }
 
     const grant = await grantRes.json()
     if (!grant?.access_token || !grant?.refresh_token) {
-      res.setHeader('Set-Cookie', buildRefreshCookie('', { clear: true }))
+      setRefreshCookie(res, '', { clear: true, domain: cookieDomainDe(req) })
       return res.status(200).json({ session: null })
     }
 
     // Rotação: Supabase emite novo refresh a cada uso — re-grava o cookie.
     // Preserva a longevidade: se o cookie atual era persistente (remember), mantém.
     const wasPersistent = (req.headers['cookie'] ?? '').includes(`${COOKIE_NAME}=`) && body?.remember !== false
-    res.setHeader('Set-Cookie', buildRefreshCookie(grant.refresh_token,
-      body?.remember === true || wasPersistent ? { maxAge: REMEMBER_MAX_AGE } : {}))
+    setRefreshCookie(res, grant.refresh_token,
+      { ...(body?.remember === true || wasPersistent ? { maxAge: REMEMBER_MAX_AGE } : {}), domain: cookieDomainDe(req) })
     return res.status(200).json(sessionPayload(grant))
   }
 
@@ -249,7 +272,7 @@ export default async function handler(req, res) {
       try { await gotrue('logout', { token: accessToken }) } catch { /* best effort */ }
     }
     // Limpa o cookie independentemente do resultado da revogação
-    res.setHeader('Set-Cookie', buildRefreshCookie('', { clear: true }))
+    setRefreshCookie(res, '', { clear: true, domain: cookieDomainDe(req) })
     if (!refreshToken && !accessToken) return res.status(200).json({ ok: true })
     return res.status(200).json({ ok: true })
   }
