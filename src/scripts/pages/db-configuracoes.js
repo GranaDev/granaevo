@@ -1324,6 +1324,23 @@ async function excluirConta() {
         confirmInput.placeholder = 'seu@email.com';
         confirmInput.autocomplete = 'off';
 
+        // ── Step-up auth (Passo 25): senha ────────────────────────────────
+        // O e-mail está visível nesta mesma tela — digitá-lo não prova nada a
+        // quem sequestrou a sessão. A senha é o fator que a sessão roubada não
+        // carrega. Conferida no SERVIDOR (edge delete-account, contra o GoTrue);
+        // aqui é só coleta e feedback.
+        const senhaLabel = document.createElement('label');
+        senhaLabel.htmlFor = 'delAccountSenha';
+        senhaLabel.style.cssText = 'font-size:0.8rem; color:var(--text-secondary); display:block; margin:12px 0 6px;';
+        senhaLabel.textContent = 'Confirme sua senha:';
+
+        const senhaInput = document.createElement('input');
+        senhaInput.type = 'password';
+        senhaInput.id   = 'delAccountSenha';
+        senhaInput.className = 'form-input';
+        senhaInput.placeholder = 'Sua senha';
+        senhaInput.autocomplete = 'current-password';
+
         const btnRow = document.createElement('div');
         btnRow.style.cssText = 'display:flex; gap:10px; margin-top:14px;';
 
@@ -1342,17 +1359,24 @@ async function excluirConta() {
         btnCancelar.addEventListener('click', () => _ctx.fecharPopup());
 
         // Habilita só quando o e-mail bate (se conhecido) ou parece válido (fallback)
-        confirmInput.addEventListener('input', () => {
+        // E a senha estiver preenchida — o servidor recusaria de qualquer forma,
+        // mas deixar o botão vivo sem senha só produziria um erro evitável.
+        const _revalidar = () => {
             const val = confirmInput.value.trim().toLowerCase();
-            const ok  = accountEmail ? (val === accountEmail) : (val.includes('@') && val.length > 4);
+            const emailOk = accountEmail ? (val === accountEmail) : (val.includes('@') && val.length > 4);
+            const ok = emailOk && senhaInput.value.length >= 6;
             btnConfirmar.disabled = !ok;
             btnConfirmar.style.opacity = ok ? '1' : '0.5';
             btnConfirmar.style.cursor  = ok ? 'pointer' : 'not-allowed';
-        });
+        };
+        confirmInput.addEventListener('input', _revalidar);
+        senhaInput.addEventListener('input', _revalidar);
 
         btnConfirmar.addEventListener('click', async () => {
             const typed = confirmInput.value.trim().toLowerCase();
+            const senha = senhaInput.value;
             if (!typed || (accountEmail && typed !== accountEmail)) return;
+            if (!senha || senha.length < 6) return;
 
             btnConfirmar.disabled = true;
             btnCancelar.disabled  = true;
@@ -1378,7 +1402,7 @@ async function excluirConta() {
                         'Content-Type':  'application/json',
                         'Authorization': `Bearer ${token}`,
                     },
-                    body: JSON.stringify({ action: 'delete-account', confirmEmail: typed }),
+                    body: JSON.stringify({ action: 'delete-account', confirmEmail: typed, password: senha }),
                 });
                 const result = await resp.json().catch(() => ({}));
 
@@ -1410,6 +1434,8 @@ async function excluirConta() {
         box.appendChild(retentionNote);
         box.appendChild(confirmLabel);
         box.appendChild(confirmInput);
+        box.appendChild(senhaLabel);
+        box.appendChild(senhaInput);
         box.appendChild(btnRow);
     });
 }

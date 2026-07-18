@@ -409,6 +409,13 @@ export default async function handler(req, res) {
         if (typeof parsed?.confirmEmail !== 'string' || !parsed.confirmEmail.includes('@')) {
             return res.status(400).json({ error: 'confirmEmail obrigatório' });
         }
+        // Step-up auth (Passo 25): a senha é conferida na EDGE (contra o GoTrue),
+        // não aqui. O proxy só precisa repassá-la — este body é reconstruído do
+        // zero, então um campo que não seja copiado explicitamente é descartado
+        // no caminho e a edge receberia "senha ausente".
+        if (typeof parsed?.password !== 'string' || parsed.password.length < 6) {
+            return res.status(400).json({ error: 'Confirme sua senha para excluir a conta.' });
+        }
 
         let daRes;
         try {
@@ -421,7 +428,10 @@ export default async function handler(req, res) {
                     'x-forwarded-for': ip,
                     'x-proxy-secret':  PROXY_SECRET,
                 },
-                body:   JSON.stringify({ confirmEmail: parsed.confirmEmail.slice(0, 254) }),
+                body:   JSON.stringify({
+                    confirmEmail: parsed.confirmEmail.slice(0, 254),
+                    password:     parsed.password.slice(0, 200),   // conferida na edge, nunca logada
+                }),
                 signal: AbortSignal.timeout(15_000),
             });
         } catch (e) {

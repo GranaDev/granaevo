@@ -85,6 +85,39 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: 'confirm_mismatch', message: 'Digite o e-mail exato da sua conta para confirmar.' }, 400, cors)
   }
 
+  // ── 3a. STEP-UP AUTH: prova de POSSE DA SENHA (Passo 25) ───────────────────
+  // Confirmar digitando o e-mail NÃO é prova de nada: o e-mail está visível na
+  // própria tela de configurações. Quem sequestra uma sessão (XSS, sessão roubada,
+  // aparelho desbloqueado) já sabe o e-mail e apagaria a conta inteira.
+  // A senha é o único fator que a sessão roubada não carrega.
+  //
+  // A verificação é AQUI, no servidor, de propósito: checar no cliente seria
+  // teatro — basta chamar este endpoint direto. Validamos contra o GoTrue, a
+  // mesma engine do login, para nunca comparar hash na mão.
+  const senha = typeof body.password === 'string' ? body.password : ''
+  if (!senha || senha.length < 6 || senha.length > 200) {
+    return json({ ok: false, error: 'password_required', message: 'Confirme sua senha para excluir a conta.' }, 400, cors)
+  }
+
+  const grantRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    },
+    body: JSON.stringify({ email: accountEmail, password: senha }),
+  }).catch(() => null)
+
+  if (!grantRes || !grantRes.ok) {
+    // Mensagem genérica e status 401: não diz se a senha "quase acertou" nem
+    // vira oráculo. (Quem chega aqui já tem uma sessão válida, mas ainda assim
+    // o GoTrue aplica o rate limit dele sobre estas tentativas.)
+    console.warn('[delete-account] step-up: senha incorreta para', user.id.slice(0, 8))
+    return json({ ok: false, error: 'password_invalid', message: 'Senha incorreta.' }, 401, cors)
+  }
+  // A sessão criada só para provar a senha é descartada — não devolvemos token
+  // algum ao cliente, e o deleteUser abaixo invalida tudo de qualquer forma.
+
   // ── 3b. Bloqueia convidado: quem não é titular não "exclui a conta" (só o dono). ─
   // Um convidado deve pedir ao titular para removê-lo; excluir aqui apagaria a conta
   // de login dele, mas os dados pertencem ao titular. Deixamos explícito.
