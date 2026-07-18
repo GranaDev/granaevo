@@ -11,6 +11,10 @@
 // ---------------------------------------------------------------------------
 
 import { agoraDataHora, yearMonthKey, brDateToObj } from './money.js';
+// Motor de parcelamento COMPARTILHADO com a tela de Transações — o assistente
+// não pode ter a sua própria versão da regra de fatura (foi assim que o modelo
+// antigo e o novo passaram a coexistir e a fatura exibiu valor errado).
+import { gerarParcelas, anexarParcelas, valorAbertoFatura, paraISO } from '../fatura-parcelas.js?v=1';
 
 const APLICAVEIS_V1 = ['entrada', 'saida', 'reserva'];
 
@@ -190,11 +194,8 @@ export function applyRetirada(profile, cmd) {
     return { ok: true, transaction: t, meta: metaNome(meta) };
 }
 
-function uuid(prefix) {
-    return (typeof crypto !== 'undefined' && crypto.randomUUID)
-        ? crypto.randomUUID()
-        : `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
+// (uuid() foi removida: os ids de compra/fatura agora nascem em
+// fatura-parcelas.js, junto com as parcelas.)
 
 function somaParcelas(compras) {
     return (Array.isArray(compras) ? compras : []).reduce((s, c) => {
@@ -222,82 +223,85 @@ export function applyCredito(profile, { valor, descricao, tipo, cardId, parcelas
     if (!Array.isArray(profile.contasFixas)) profile.contasFixas = [];
 
     const dh = agoraDataHora();
-    const hoje = new Date();
-    const diaHoje = hoje.getDate();
-    const diaFechamento = cartao.fechamentoDia ?? cartao.vencimentoDia;
-    const diaFatura = cartao.vencimentoDia;
 
-    // proxMes/proxAno = mês do FECHAMENTO do ciclo; se o cartão vence ANTES do dia
-    // de fechamento (ex.: fecha 28, vence 6), a fatura vence no mês SEGUINTE ao do
-    // fechamento — sem o segundo ajuste ela nasceria com data no passado ("Vencida").
-    let proxMes = hoje.getMonth() + 1;
-    let proxAno = hoje.getFullYear();
-    if (diaHoje >= diaFechamento) { proxMes += 1; if (proxMes > 12) { proxMes = 1; proxAno += 1; } }
-    if (diaFatura < diaFechamento) { proxMes += 1; if (proxMes > 12) { proxMes = 1; proxAno += 1; } }
-    const dataFaturaISO = `${proxAno}-${String(proxMes).padStart(2, '0')}-${String(diaFatura).padStart(2, '0')}`;
-
-    const valorParcela = Number((valor / p).toFixed(2));
-    const compra = {
-        id: uuid('compra'),
+    // Usa o MESMO motor da tela de Transações (fatura-parcelas.js): uma compra
+    // Nx vira N parcelas, cada uma na fatura do seu mês. Antes daqui o assistente
+    // criava o formato ANTIGO (uma compra só, com contador parcelaAtual) — a
+    // migração do dashboard consertava no load seguinte, mas até lá a fatura
+    // exibia valor errado. Duas fontes de verdade para dinheiro é como o bug do
+    // parcelamento nasceu; agora é uma só.
+    const dataCompraISO = paraISO(dh.data) || new Date().toISOString().slice(0, 10);
+    const geradas = gerarParcelas({
+        cartao,
         tipo: tipo || 'Cartão',
         descricao: descricao || 'Compra no crédito',
         valorTotal: valor,
-        valorParcela,
-        totalParcelas: p,
-        parcelaAtual: 1,
-        dataCompra: dh.data,
-    };
+        parcelas: p,
+        dataCompraISO,
+    });
+    if (geradas.length === 0) return { ok: false, reason: 'ciclo_invalido' };
 
-    const fatura = profile.contasFixas.find((c) =>
-        c.cartaoId === cartao.id && c.vencimento === dataFaturaISO && c.tipoContaFixa === 'fatura_cartao');
-
-    let faturaId, wasNew = false;
-    if (fatura) {
-        if (!Array.isArray(fatura.compras)) fatura.compras = [];
-        fatura.compras.push(compra);
-        fatura.valor = somaParcelas(fatura.compras);
-        faturaId = fatura.id;
-    } else {
-        const nova = {
-            id: uuid('fatura'),
-            descricao: `Fatura ${cartao.nomeBanco}`,
-            valor: valorParcela,
-            vencimento: dataFaturaISO,
-            pago: false,
-            cartaoId: cartao.id,
-            tipoContaFixa: 'fatura_cartao',
-            compras: [compra],
-        };
-        profile.contasFixas.push(nova);
-        faturaId = nova.id;
-        wasNew = true;
-    }
+    const idsFaturasAntes = new Set(profile.contasFixas.map((c) => String(c.id)));
+    anexarParcelas(profile.contasFixas, cartao, geradas);
     cartao.usado = (Number(cartao.usado) || 0) + valor;
 
+    const compraOrigemId = geradas[0].parcela.compraOrigemId;
+    const valorParcela = geradas[0].parcela.valorParcela;
+    // Faturas que NASCERAM desta compra — o undo remove essas inteiras.
+    const faturasNovas = profile.contasFixas
+        .filter((c) => !idsFaturasAntes.has(String(c.id)))
+        .map((c) => String(c.id));
+
     return {
-        ok: true, compra, valorParcela, parcelas: p,
+        ok: true, compra: geradas[0].parcela, valorParcela, parcelas: p,
         cardNome: cartao.nomeBanco || cartao.nome || 'Cartão',
-        snapshot: { compraId: compra.id, faturaId, wasNew, cardId: String(cartao.id), valor },
+        snapshot: { compraOrigemId, faturasNovas, cardId: String(cartao.id), valor },
     };
 }
 
-/** Desfaz uma compra no crédito (à prova de reload — usa ids). */
+/**
+ * Desfaz uma compra no crédito (à prova de reload — usa ids).
+ * No modelo novo a compra está espalhada por N faturas mensais, então o undo
+ * varre por `compraOrigemId` em vez de mexer numa fatura só.
+ */
 export function undoCredito(profile, snap) {
     if (!profile || !snap) return false;
     const contas = Array.isArray(profile.contasFixas) ? profile.contasFixas : [];
-    const fatIdx = contas.findIndex((c) => String(c.id) === String(snap.faturaId));
-    if (fatIdx === -1) return false;
 
-    if (snap.wasNew) {
-        contas.splice(fatIdx, 1); // fatura criada por esta compra → some inteira
+    // Compat: snapshots gravados ANTES desta mudança (compraId + faturaId).
+    if (!snap.compraOrigemId) {
+        const fatIdx = contas.findIndex((c) => String(c.id) === String(snap.faturaId));
+        if (fatIdx === -1) return false;
+        if (snap.wasNew) {
+            contas.splice(fatIdx, 1);
+        } else {
+            const fat = contas[fatIdx];
+            if (Array.isArray(fat.compras)) {
+                const i = fat.compras.findIndex((c) => c.id === snap.compraId);
+                if (i !== -1) fat.compras.splice(i, 1);
+                fat.valor = somaParcelas(fat.compras);
+            }
+        }
     } else {
-        const fat = contas[fatIdx];
-        if (Array.isArray(fat.compras)) {
-            const i = fat.compras.findIndex((c) => c.id === snap.compraId);
-            if (i !== -1) fat.compras.splice(i, 1);
-            fat.valor = somaParcelas(fat.compras);
+        const alvo = String(snap.compraOrigemId);
+        let achou = false;
+        for (const c of contas) {
+            if (c?.tipoContaFixa !== 'fatura_cartao' || !Array.isArray(c.compras)) continue;
+            const antes = c.compras.length;
+            c.compras = c.compras.filter((cp) => String(cp?.compraOrigemId ?? '') !== alvo);
+            if (c.compras.length !== antes) { achou = true; c.valor = valorAbertoFatura(c); }
+        }
+        if (!achou) return false;
+        // Remove as faturas que só existiam por causa desta compra (e ficaram vazias).
+        const novas = new Set((snap.faturasNovas || []).map(String));
+        for (let i = contas.length - 1; i >= 0; i--) {
+            const c = contas[i];
+            if (novas.has(String(c?.id)) && Array.isArray(c.compras) && c.compras.length === 0) {
+                contas.splice(i, 1);
+            }
         }
     }
+
     const cartao = (Array.isArray(profile.cartoesCredito) ? profile.cartoesCredito : [])
         .find((c) => String(c.id) === String(snap.cardId));
     if (cartao) cartao.usado = Math.max(0, (Number(cartao.usado) || 0) - Number(snap.valor || 0));
