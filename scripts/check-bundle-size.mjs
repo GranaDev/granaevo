@@ -21,7 +21,11 @@ const BUDGETS_KB = {
   // 42 (2026-07-08): +9 conquistas no engine estatico (predicados) + sanitizadores
   // de config/desafios no load path. Recursos novos (radar/previsao/desafios/
   // horas-vida/simulador/recorrencias) sao TODOS chunks lazy — nao pesam aqui.
-  'dashboard.js':        42,
+  // Passo 10 (2026-07-18): 41,1 → 39,0 KB extraindo o painel de alertas para um
+  // chunk lazy. Orçamento baixado 42 → 40 DE PROPÓSITO: da última vez o ganho do
+  // Passo 10 foi silenciosamente reocupado por features novas até voltar a 98%.
+  // Com 40, quem estourar é obrigado a lazy-ar em vez de engordar o boot.
+  'dashboard.js':        40,
   'vendor-supabase.js':  40,   // Passo 8: realtime-js stubado (34,3 KB). Teto baixo TRAVA o ganho — se o realtime real voltar (~48,6), o CI barra.
   'db-relatorios.js':    40,
   'main.css':            14,
