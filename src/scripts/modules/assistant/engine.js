@@ -23,6 +23,8 @@ import { applyLearned, learnMerchant } from './learn.js';
 import { parseWithAI } from './assistant-api.js';
 import { construirModelo, sugerirCategoria } from '../categorizacao.js';
 import * as P from './phrases.js';
+// Passo 29: proatividade/micro-lição derivadas no cliente (nada vai para a IA).
+import { microLicao, assinaturaNaoCadastrada } from './insights.js';
 
 const CONF_LOCAL_OK = 0.7;   // acima disso confiamos no parser local (sem gastar IA)
 const LIMITE_CONFIRM = 50000; // lançamentos acima disso pedem confirmação (anti-typo)
@@ -280,6 +282,18 @@ class AssistantEngine {
         // C29: sobrou folga clara pela média → sugere guardar.
         const orc = orcamentoRestante(p);
         if (orc.temHistorico && orc.restante > 100) cands.push(P.sugestaoReserva(orc.restante));
+
+        // Passo 29 — os dois que faltavam. Derivados NO CLIENTE (insights.js) e
+        // escritos pelo nosso código: a IA não vê nenhum destes números.
+        // Entram DEPOIS dos urgentes de propósito: uma cobrança repetida e uma
+        // lição de padrão são importantes, mas não passam na frente de uma
+        // fatura vencendo. O slice(0,2) lá embaixo faz a triagem final.
+        try {
+            const ml = microLicao(p.transacoes);
+            if (ml) cands.push(P.microLicaoMsg(ml));
+            const assin = assinaturaNaoCadastrada(p.transacoes, p.assinaturas);
+            if (assin) cands.push(P.assinaturaNovaMsg(assin));
+        } catch { /* insight é complemento: nunca pode derrubar a abertura */ }
         // C30: curiosidade rotativa (só entra se ainda houver espaço).
         const cur = P.curiosidadeMsg(diaMaisCaro(p));
         if (cur) cands.push(cur);

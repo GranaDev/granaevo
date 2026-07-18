@@ -648,3 +648,31 @@ export const SISTEMA = {
         'Fico só na área de finanças, tá? Posso anotar um gasto, uma entrada ou te mostrar um resumo. Manda aí!',
     ]),
 };
+
+// ── Passo 29: micro-lição e proatividade de assinatura ───────────────────────
+// Ambas recebem dados JÁ DERIVADOS no cliente (modules/assistant/insights.js).
+// Nenhum valor daqui passa perto da IA — o Haiku só interpreta a fala do
+// usuário; quem escreve resposta é este arquivo.
+
+/**
+ * Micro-lição: a pessoa comparada com ela mesma, nunca com um padrão externo.
+ * O tom é de constatação, não de bronca — quem se sente julgado fecha o app.
+ */
+export function microLicaoMsg(ml) {
+    if (!ml) return null;
+    return `{{fa-lightbulb}} *${ml.tipo}* levou *${ml.pctAtual}%* do seu gasto neste mês `
+         + `(${formatBRL(ml.gastoAtual)}). Nos últimos ${ml.meses} meses fechados, sua média foi `
+         + `*${ml.pctMedia}%*. Não é regra nenhuma — é só a sua própria história mostrando a diferença.`;
+}
+
+/**
+ * Cobrança que se repete e não está cadastrada. Mostra o ANUAL de propósito:
+ * R$ 39,90/mês parece pouco; R$ 478,80/ano é a mesma coisa dita de um jeito que
+ * faz a pessoa decidir.
+ */
+export function assinaturaNovaMsg(a) {
+    if (!a) return null;
+    return `{{fa-repeat}} Achei uma cobrança que se repete e não está nas suas assinaturas: `
+         + `*${a.nome}*, ${formatBRL(a.valorMensal)}/mês — ${formatBRL(a.valorAnual)} por ano. `
+         + `Quer cadastrar como assinatura pra ela entrar nas suas contas fixas?`;
+}
