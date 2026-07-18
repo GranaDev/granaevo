@@ -3841,8 +3841,13 @@ function atualizarListaContasFixas() {
             divValor.style.color      = 'var(--text-primary)';
             divValor.textContent = `Valor: ${formatBRL(c.valor)}`;
 
+            // Rótulo por mês em vez da data cheia — mais limpo, menos número.
+            // A data exata de vencimento continua na tela de detalhe da fatura.
             const divVenc = document.createElement('div');
-            divVenc.textContent = `Vencimento: ${formatarDataBR(c.vencimento)}`;
+            const _mFat = /^\d{4}-\d{2}-\d{2}$/.test(c.vencimento || '')
+                ? `${_NOMES_MESES_DASH[Number(c.vencimento.slice(5, 7)) - 1]}/${c.vencimento.slice(0, 4)}`
+                : formatarDataBR(c.vencimento);
+            divVenc.textContent = `Fatura de ${_mFat}`;
 
             const divCompras = document.createElement('div');
             divCompras.style.color     = 'var(--text-secondary)';
