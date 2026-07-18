@@ -826,6 +826,19 @@
     border-radius: 12px;
 }
 .dsf-card--ativo { border-color: color-mix(in srgb, var(--color-primary) 45%, transparent); }
+/* Recomendado a partir dos gastos reais do usuário — destaque sutil para separar
+   do catálogo genérico, sem virar alarme. */
+.dsf-card--rec {
+    border-color: color-mix(in srgb, var(--color-primary) 32%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+/* O "porquê" da recomendação, com o número real da pessoa. */
+.dsf-card-motivo {
+    font-size: var(--text-xs, .74rem);
+    color: var(--color-primary);
+    line-height: var(--leading-snug, 1.4);
+    margin-top: 2px;
+}
 .dsf-card-icon {
     flex: 0 0 auto;
     width: 38px;

@@ -37,6 +37,19 @@ export const LEVELS = Object.freeze([
     { nivel: 10, titulo: 'Tubarão dos Investimentos',xp: 1080 },
     { nivel: 11, titulo: 'Magnata',                  xp: 1300 },
     { nivel: 12, titulo: 'Lenda das Finanças',       xp: 1550 },
+    // Degraus novos (2026-07): com as conquistas de reserva compartilhada,
+    // parcelamento e desafios, o teto de XP subiu — sem estes o jogador ficaria
+    // travado no 12 com XP sobrando, que é a pior sensação possível num sistema
+    // de progressão. O espaçamento cresce (+270, +290, …) para o topo continuar
+    // sendo uma conquista de longo prazo, não um degrau que se sobe sem querer.
+    { nivel: 13, titulo: 'Guardião do Patrimônio',   xp: 1820 },
+    { nivel: 14, titulo: 'Arquiteto Financeiro',     xp: 2110 },
+    { nivel: 15, titulo: 'Mente Milionária',         xp: 2420 },
+    // 2580 de ~2865 XP possíveis (~90%): exige quase tudo, mas deixa folga real.
+    // A 2750 o topo virava "conquistou 96% do catálogo" — quem perdesse duas
+    // épicas ficaria travado para sempre, e nível inalcançável desmotiva mais do
+    // que não existir.
+    { nivel: 16, titulo: 'Imortal das Finanças',     xp: 2580 },
 ]);
 
 /** Soma de XP + nível/título derivados do mapa de desbloqueios.
@@ -71,6 +84,13 @@ export const CATEGORIES = Object.freeze([
     { key: 'reservas',    label: 'Reservas & Metas', icon: 'fa-bullseye' },
     { key: 'habito',      label: 'Hábito & Disciplina', icon: 'fa-fire' },
     { key: 'organizacao', label: 'Organização',      icon: 'fa-folder-open' },
+    // Estas 3 já eram usadas por conquistas do catálogo mas NÃO estavam
+    // declaradas aqui — e a UI só renderiza o que está em CATEGORIES
+    // (achievements-ui.js: `items.filter(i => i.cat === catDef.key)`), então
+    // essas conquistas existiam e nunca apareciam para ninguém.
+    { key: 'cartoes',     label: 'Cartões & Faturas', icon: 'fa-credit-card' },
+    { key: 'desafios',    label: 'Desafios',         icon: 'fa-dumbbell' },
+    { key: 'uso',         label: 'Jornada',          icon: 'fa-hourglass-half' },
     { key: 'secretas',    label: 'Secretas',         icon: 'fa-user-secret' },
 ]);
 
@@ -149,6 +169,19 @@ export const PRESENT = Object.freeze({
     colecionador:   { cat: 'secretas', icon: 'fa-medal', titulo: 'Colecionador',      desc: 'Desbloqueou 20 conquistas. Caçador nato!' },
     cacador:        { cat: 'secretas', icon: 'fa-bullseye', titulo: 'Caçador de Troféus', desc: 'Desbloqueou 35 conquistas. Quase lá!' },
     perfeccionista: { cat: 'secretas', icon: 'fa-star', titulo: 'Perfeccionista',    desc: 'Desbloqueou TODAS as outras conquistas. Lenda viva!' },
+
+    // ---- Reserva compartilhada e parcelamento (2026-07) ----
+    reserva_familia:      { cat: 'reservas', icon: 'fa-users',        titulo: 'Cofre da Família',   desc: 'Criou uma reserva compartilhada com quem mora com você.' },
+    familia_unida:        { cat: 'reservas', icon: 'fa-hands-holding-circle', titulo: 'Família Unida', desc: 'Duas pessoas ou mais já colocaram dinheiro na mesma reserva.' },
+    primeira_parcela:     { cat: 'cartoes',  icon: 'fa-layer-group',  titulo: 'Parcelado',          desc: 'Registrou sua primeira compra parcelada no cartão.' },
+    parcelamento_quitado: { cat: 'cartoes',  icon: 'fa-circle-check', titulo: 'Quitado!',           desc: 'Pagou todas as parcelas de uma compra. Dívida zerada.' },
+
+    // ---- Novos degraus ----
+    cinco_desafios: { cat: 'desafios', icon: 'fa-medal',         titulo: 'Desafiante',       desc: 'Venceu 5 desafios financeiros.' },
+    dez_metas:      { cat: 'reservas', icon: 'fa-list-check',    titulo: 'Multi-Reservas',   desc: 'Mantém 10 reservas ao mesmo tempo.' },
+    reserva_50k:    { cat: 'reservas', icon: 'fa-vault',         titulo: 'Meio Caminho',     desc: 'Acumulou R$ 50 mil guardados em reservas.' },
+    mil_transacoes: { cat: 'uso',      icon: 'fa-infinity',      titulo: 'Mil Registros',    desc: 'Registrou 1.000 transações. Disciplina de outro nível.' },
+    veterano:       { cat: 'uso',      icon: 'fa-hourglass-end', titulo: 'Veterano',         desc: 'Dois anos de finanças registradas no GranaEvo.' },
 });
 
 /** Apresentação de uma conquista por id, ou null. (hasOwnProperty: defesa.) */

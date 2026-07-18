@@ -1017,7 +1017,14 @@ function _sanitizarDesafiosPerfil(raw) {
             if (a && typeof a === 'object' &&
                 typeof a.id === 'string' && _DESAFIO_ID_RE.test(a.id) &&
                 typeof a.iniciadoEm === 'string' && _DESAFIO_ISO_RE.test(a.iniciadoEm)) {
-                clean.ativos.push({ id: a.id, iniciadoEm: a.iniciadoEm });
+                // `alvo` = meta personalizada dos desafios de teto, congelada no
+                // aceite. Sem preservar aqui, o save a descartaria e o desafio
+                // seria julgado com alvo 0 (falha injusta). Só forma; o catálogo
+                // valida a semântica em desafios.js.
+                const _alvo = Number(a.alvo);
+                clean.ativos.push(Number.isFinite(_alvo) && _alvo > 0 && _alvo <= 9_999_999
+                    ? { id: a.id, iniciadoEm: a.iniciadoEm, alvo: Math.round(_alvo * 100) / 100 }
+                    : { id: a.id, iniciadoEm: a.iniciadoEm });
             }
         }
     }

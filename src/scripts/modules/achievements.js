@@ -136,6 +136,34 @@ function _orcamentosDefinidos(orcamentos) {
     if (!orcamentos || typeof orcamentos !== 'object') return 0;
     return Object.values(orcamentos).filter(v => _num(v) > 0).length;
 }
+// Reserva compartilhada: 2+ pessoas distintas já APORTARAM. É o que diferencia
+// "criei uma reserva de família" de "a família realmente usa".
+function _duasPessoasNaReserva(m) {
+    if (m?.compartilhada !== true || !Array.isArray(m.movimentos)) return false;
+    const pessoas = new Set();
+    for (const x of m.movimentos) {
+        if (x?.tipo === 'aporte') pessoas.add(String(x.memberId ?? x.memberNome ?? ''));
+    }
+    return pessoas.size >= 2;
+}
+
+// Agrupa as parcelas por compra de origem (modelo novo de fatura): Map
+// compraOrigemId → { t: total de parcelas, p: quantas pagas }.
+function _parcelas(s) {
+    const porOrigem = new Map();
+    for (const c of (s.contasFixas || [])) {
+        if (c?.tipoContaFixa !== 'fatura_cartao' || !Array.isArray(c.compras)) continue;
+        for (const cp of c.compras) {
+            if (!cp || cp.compraOrigemId == null) continue;
+            const k = String(cp.compraOrigemId);
+            const e = porOrigem.get(k) || { t: 0, p: 0 };
+            e.t++; if (cp.pago === true) e.p++;
+            porOrigem.set(k, e);
+        }
+    }
+    return porOrigem;
+}
+
 function _metasConcluidas(metas) {
     return metas.filter(m => _num(m.objetivo) > 0 && _num(m.saved) >= _num(m.objetivo)).length;
 }
@@ -229,6 +257,22 @@ export const ACHIEVEMENTS = Object.freeze([
     { id: 'quinhentas',    rarity: 'oculta', hidden: true, check: (s) => s.transacoes.length >= 500 },
     { id: 'colecionador',  rarity: 'oculta', hidden: true, check: (s, ctx) => ctx.unlockedCount >= 20 },
     { id: 'cacador',       rarity: 'oculta', hidden: true, check: (s, ctx) => ctx.unlockedCount >= 35 },
+
+    // ---- Reserva compartilhada e parcelamento (recursos de 2026-07) ----
+    { id: 'reserva_familia', rarity: 'raro',  check: (s) => s.metas.some(m => m?.compartilhada === true) },
+    { id: 'familia_unida',   rarity: 'epico', check: (s) => s.metas.some(_duasPessoasNaReserva) },
+    { id: 'primeira_parcela', rarity: 'comum', check: (s) => _parcelas(s).size >= 1 },
+    { id: 'parcelamento_quitado', rarity: 'raro', check: (s) => {
+        for (const e of _parcelas(s).values()) if (e.t > 1 && e.p === e.t) return true;
+        return false;
+    } },
+
+    // ---- Novos degraus de progressões que paravam cedo demais ----
+    { id: 'cinco_desafios', rarity: 'epico',    check: (s) => _num(s.desafiosConcluidos) >= 5 },
+    { id: 'dez_metas',      rarity: 'raro',     check: (s) => s.metas.length >= 10 },
+    { id: 'reserva_50k',    rarity: 'epico',    check: (s, ctx) => ctx.m.reservado >= 50000 },
+    { id: 'mil_transacoes', rarity: 'lendario', check: (s) => s.transacoes.length >= 1000 },
+    { id: 'veterano',       rarity: 'lendario', check: (s, ctx) => ctx.m.mesesAtivos >= 24 },
 
     // ---- Grande final (lendária secreta): tudo menos ela mesma ----
     { id: 'perfeccionista', rarity: 'lendario', hidden: true, check: (s, ctx) => ctx.unlockedCount >= ACHIEVEMENTS.length - 1 },
