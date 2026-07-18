@@ -3755,10 +3755,45 @@ function atualizarListaContasFixas() {
     });
     if (precisaSalvar) salvarDados();
 
+    // Colapso das faturas de cartão: o modelo novo cria UMA fatura por mês (para
+    // pagar cada mês isoladamente). Mostrar todas na lista polui a tela — uma
+    // compra 12× viraria 12 linhas. Aqui exibimos só a "fatura atual" de cada
+    // cartão (a mais urgente a pagar); as futuras continuam nos dados e aparecem
+    // ao abrir a fatura. Corrige a regressão visual do rebuild de 2026-07-17.
+    const _faturasOcultas   = new Set();   // ids de faturas futuras escondidas da lista
+    const _proximasFaturas  = new Map();   // id da fatura atual → nº de futuras ocultas
+    {
+        const _venc = f => (typeof f.vencimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f.vencimento)) ? f.vencimento : '9999-99-99';
+        const _aberta = f => Array.isArray(f.compras) && f.compras.some(cp => cp?.pago !== true);
+        const porCartao = new Map();
+        for (const f of contasFixas) {
+            if (f?.tipoContaFixa !== 'fatura_cartao') continue;
+            const key = String(f.cartaoId ?? f.descricao ?? f.id);
+            if (!porCartao.has(key)) porCartao.set(key, []);
+            porCartao.get(key).push(f);
+        }
+        for (const faturas of porCartao.values()) {
+            if (faturas.length <= 1) continue;
+            const abertas = faturas.filter(_aberta);
+            let atual;
+            if (abertas.length) {
+                // a mais antiga em aberto — a que o usuário mais precisa pagar
+                atual = abertas.reduce((a, b) => _venc(a) <= _venc(b) ? a : b);
+            } else {
+                // todas pagas → a próxima (>= mês atual); senão a última
+                const futuras = faturas.filter(f => _venc(f).slice(0, 7) >= mesAtual);
+                atual = (futuras.length ? futuras : faturas).reduce((a, b) => _venc(a) <= _venc(b) ? a : b);
+            }
+            for (const f of faturas) if (f !== atual) _faturasOcultas.add(f.id);
+            _proximasFaturas.set(atual.id, faturas.length - 1);
+        }
+    }
+
     const containerContas = document.createElement('div');
     containerContas.className = 'contas-grid';
 
     contasFixas.forEach(c => {
+        if (_faturasOcultas.has(c.id)) return;   // fatura futura colapsada
         const vencimentoValido = typeof c.vencimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.vencimento);
 
         const vencMes = vencimentoValido ? c.vencimento.slice(0, 7) : null;
@@ -3818,6 +3853,16 @@ function atualizarListaContasFixas() {
             info.appendChild(divValor);
             info.appendChild(divVenc);
             info.appendChild(divCompras);
+
+            const nProximas = _proximasFaturas.get(c.id) || 0;
+            if (nProximas > 0) {
+                const divProx = document.createElement('div');
+                divProx.style.color     = 'var(--text-secondary)';
+                divProx.style.fontSize  = '0.8rem';
+                divProx.style.marginTop = '2px';
+                divProx.textContent = `🗓️ +${nProximas} fatura${nProximas > 1 ? 's' : ''} futura${nProximas > 1 ? 's' : ''}`;
+                info.appendChild(divProx);
+            }
 
             div.appendChild(header);
             div.appendChild(info);
