@@ -42,6 +42,39 @@ jobs:
       - name: Build
         run: npm run build
 
+  lighthouse:
+    name: Lighthouse (orçamento de LCP/CLS/TBT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Roda contra o dist/ estático, só nas páginas PÚBLICAS (o dashboard exige
+      # login — sem sessão o Lighthouse mediria a tela de redirect).
+      # Limiares e a distinção error/warn estão explicados em lighthouserc.cjs.
+      - name: Lighthouse CI
+        run: npx lhci autorun --config=lighthouserc.cjs
+
+      # Guarda os relatórios mesmo quando falha — é justamente no vermelho que
+      # se quer abrir o relatório para saber QUAL métrica estourou.
+      - name: Upload dos relatórios
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/
+          retention-days: 14
+
   secret-scan:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest

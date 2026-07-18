@@ -11,7 +11,7 @@
 //   POST { action:"push-unsubscribe", endpoint }
 
 import { checkRate, checkRateWindow, isIPBlocked } from './_rate-limit.js'
-import { logger } from './_logger.js'
+import { logger, requestIdDe } from './_logger.js'
 import { timingSafeEqual } from 'node:crypto'
 
 const PATH = '/api/user-data'
@@ -56,6 +56,10 @@ async function checkRL(key, max, windowSecs = 60) {
 
 // ── Handler principal ─────────────────────────────────────────
 export default async function handler(req, res) {
+    // Passo 27 — id de correlacao: mesma requisicao, mesmo id no proxy e na edge.
+    // Ecoado na resposta para o usuario poder citar o id ao relatar um problema.
+    const _rid = requestIdDe(req);
+    res.setHeader('x-request-id', _rid);
     const origin = req.headers['origin'] ?? '';
     const ct     = req.headers['content-type'] ?? '';
 
@@ -92,6 +96,7 @@ export default async function handler(req, res) {
                 'Content-Type':   'application/json',
                 'apikey':         SUPABASE_ANON_KEY,
                 'x-proxy-secret': PROXY_SECRET,
+                    'x-request-id':   _rid,
             },
             body:   '{}',
             signal: AbortSignal.timeout(12_000),
@@ -234,6 +239,7 @@ export default async function handler(req, res) {
                     'apikey':          SUPABASE_ANON_KEY,
                     'x-forwarded-for': ip,
                     'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
                 },
                 signal: AbortSignal.timeout(10_000),
             });
@@ -257,6 +263,7 @@ export default async function handler(req, res) {
                     'apikey':          SUPABASE_ANON_KEY,
                     'x-forwarded-for': ip,
                     'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
                 },
                 signal: AbortSignal.timeout(15_000),
             });
@@ -310,6 +317,7 @@ export default async function handler(req, res) {
                     'apikey':          SUPABASE_ANON_KEY,
                     'x-forwarded-for': ip,
                     'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
                 },
                 body: JSON.stringify({ action: 'restore', snapshot_date: parsed.snapshot_date }),
                 signal: AbortSignal.timeout(15_000),
@@ -377,6 +385,7 @@ export default async function handler(req, res) {
                     'apikey':          SUPABASE_ANON_KEY,
                     'x-forwarded-for': ip,
                     'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
                 },
                 body:   JSON.stringify(safePayload),
                 signal: AbortSignal.timeout(10_000),
@@ -427,6 +436,7 @@ export default async function handler(req, res) {
                     'apikey':          SUPABASE_ANON_KEY,
                     'x-forwarded-for': ip,
                     'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
                 },
                 body:   JSON.stringify({
                     confirmEmail: parsed.confirmEmail.slice(0, 254),
@@ -471,6 +481,7 @@ export default async function handler(req, res) {
                     'apikey':          SUPABASE_ANON_KEY,
                     'x-forwarded-for': ip,
                     'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
                     'x-original-ua':   String(req.headers['user-agent'] ?? '').slice(0, 400),
                 },
                 body:   '{}',
@@ -530,6 +541,7 @@ export default async function handler(req, res) {
                     'apikey':          SUPABASE_ANON_KEY,
                     'x-forwarded-for': ip,
                     'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
                 },
                 body:   safeBody,
                 signal: AbortSignal.timeout(15_000),
@@ -570,6 +582,7 @@ export default async function handler(req, res) {
                 'apikey':          SUPABASE_ANON_KEY,
                 'x-forwarded-for': ip,
                 'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
             },
             body:   raw,
             signal: AbortSignal.timeout(15_000),

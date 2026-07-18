@@ -51,6 +51,12 @@ function json(body: unknown, status: number, cors: Record<string, string>): Resp
 Deno.serve(async (req: Request) => {
   const cors = getCorsHeaders(req)
 
+  // Passo 27 — id de correlação vindo do proxy. Sem isto, o log do proxy e o
+  // desta função são duas ilhas: investigar um erro vira cruzar horário na mão.
+  // Saneado porque entra em linha de log — header cru permitiria injetar quebra
+  // de linha e forjar entradas falsas.
+  const rid = (req.headers.get('x-request-id') ?? '').replace(/[^A-Za-z0-9:_-]/g, '').slice(0, 80) || 'sem-rid'
+
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors })
   if (req.method !== 'POST') return json({ ok: false, error: 'method' }, 405, cors)
 
@@ -112,7 +118,7 @@ Deno.serve(async (req: Request) => {
     // Mensagem genérica e status 401: não diz se a senha "quase acertou" nem
     // vira oráculo. (Quem chega aqui já tem uma sessão válida, mas ainda assim
     // o GoTrue aplica o rate limit dele sobre estas tentativas.)
-    console.warn('[delete-account] step-up: senha incorreta para', user.id.slice(0, 8))
+    console.warn(`[delete-account][rid=${rid}] step-up: senha incorreta para ${user.id.slice(0, 8)}`)
     return json({ ok: false, error: 'password_invalid', message: 'Senha incorreta.' }, 401, cors)
   }
   // A sessão criada só para provar a senha é descartada — não devolvemos token
@@ -152,11 +158,11 @@ Deno.serve(async (req: Request) => {
   // ── 5. Deleta o usuário → cascata apaga todos os dados (25 FKs ON DELETE CASCADE) ─
   const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(user.id)
   if (delErr) {
-    console.error('[delete-account] Falha ao deletar user:', user.id.slice(0, 8), delErr.message)
+    console.error(`[delete-account][rid=${rid}] Falha ao deletar user: ${user.id.slice(0, 8)} ${delErr.message}`)
     return json({ ok: false, error: 'delete_failed', message: 'Não foi possível excluir a conta agora. Tente novamente ou contate o suporte.' }, 500, cors)
   }
 
-  console.log(`[delete-account] Conta excluída — user: ${user.id.slice(0, 8)} guest: ${!!guestRow} tinha_sub_ativa: ${!!sub}`)
+  console.log(`[delete-account][rid=${rid}] Conta excluída — user: ${user.id.slice(0, 8)} guest: ${!!guestRow} tinha_sub_ativa: ${!!sub}`)
   return json({
     ok: true,
     deleted: true,

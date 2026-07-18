@@ -60,3 +60,28 @@ export const logger = {
   /** Log de erro — falha de gateway, serviço indisponível, erro inesperado */
   error: (event, path, meta) => _emit('error', event, path, meta),
 }
+
+/**
+ * ID de correlação do request (Passo 27).
+ *
+ * Hoje o proxy loga de um lado e a edge function do outro, sem nada em comum:
+ * investigar um erro é cruzar horário na mão e torcer. Com um id repassado
+ * proxy → edge, as duas pontas da MESMA requisição se acham por busca exata.
+ *
+ * Ordem de preferência, e o porquê:
+ *   1. `x-request-id` que já veio — preserva a cadeia se houver outro salto;
+ *   2. `x-vercel-id` — a Vercel já gera um por request; reusar faz o log da
+ *      aplicação bater com o log da plataforma, sem inventar um segundo id;
+ *   3. aleatório — último caso.
+ *
+ * Saneado a 80 chars e só [A-Za-z0-9:_-]: o valor vem de header (entrada do
+ * cliente) e vai para dentro de linha de log — sem isso, dá para injetar quebra
+ * de linha e forjar entradas falsas no log.
+ */
+export function requestIdDe(req) {
+  const bruto = req?.headers?.['x-request-id'] || req?.headers?.['x-vercel-id'] || ''
+  const limpo = String(bruto).replace(/[^A-Za-z0-9:_-]/g, '').slice(0, 80)
+  if (limpo) return limpo
+  try { return globalThis.crypto.randomUUID() } catch { /* fallback abaixo */ }
+  return `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
