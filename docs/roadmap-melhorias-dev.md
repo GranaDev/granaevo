@@ -321,7 +321,18 @@ Ganho: tempo percebido despenca + offline-first de brinde.
 > `assistant-sw.js` registrado como SW por string). E como o bundler já tree-shake mortos, o ganho
 > de apagá-los é limpeza de fonte, **não bytes**.
 >
-> **PAREI o Passo 10 em 39,1 KB (de 40,9).** O maior bloco frio restante é o **painel de alertas**
+> **2026-07-18 — RETOMADO E AVANÇADO: 41,1 → 39,0 KB, orçamento travado em 40.**
+> Extraí o **painel de alertas** para `modules/painel-alertas.js` (chunk lazy de 1,69 KB, só baixa
+> no clique do sino) + removi `obterEstatisticas()` (45 linhas mortas, zero referências).
+> **O receio registrado abaixo não procedia:** o render NÃO chama pagamento — ele só marca
+> `data-acao`/`data-id`, e o despacho para pagar/editar é um listener DELEGADO que continua no
+> dashboard. Era código-folha. Orçamento baixado 42 → 40 para o ganho não ser reocupado de novo.
+> **Restante avaliado e recusado:** os grandes que sobraram são quentes (`atualizarListaContasFixas`,
+> `salvarDados`, `bindEventos`) ou tocam auth/dinheiro. `alterarFoto` seria o próximo frio, mas seus
+> helpers de imagem são compartilhados com `_criarPerfilHandler` e `_validarMagicBytes` está no ctx —
+> fiaria criação de perfil por ~1,3 KB. **Próximo ganho real de boot é o stub do Realtime (−14,4 KB).**
+>
+> **Nota anterior (2026-07-16):** **PAREI o Passo 10 em 39,1 KB (de 40,9).** O maior bloco frio restante é o **painel de alertas**
 > (`renderizarPainelAlertas` + `_criarCard`, ~12,6 KB, só abre no clique do sino) — MAS não é
 > código-folha: os botões dele chamam de volta `abrirPopupPagarContaFixa` (→ pagamento) e
 > `abrirContaFixaForm`. Extrair fia uma cadeia que termina em **dinheiro**, e não vale fazer sem o
