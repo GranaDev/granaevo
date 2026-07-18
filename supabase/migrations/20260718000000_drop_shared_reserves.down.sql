@@ -1,0 +1,21 @@
+-- ----------------------------------------------------------------------------
+-- DOWN de 20260718000000 — recria a reserva compartilhada em tabelas.
+--
+-- Reverter este DROP significa restaurar TODA a estrutura original (2 tabelas,
+-- 3 índices, 7 policies, 2 funções, 2 triggers, grants). Em vez de duplicar
+-- ~260 linhas aqui — que envelheceriam fora de sincronia com o original e é
+-- exatamente como se recria uma policy errada em produção — o rollback é
+-- reaplicar a migration que criou tudo:
+--
+--     supabase/migrations/20260716120000_shared_reserves.sql
+--
+-- Ela é idempotente (CREATE TABLE IF NOT EXISTS / CREATE OR REPLACE FUNCTION),
+-- então pode ser reexecutada direto.
+--
+-- ATENÇÃO: reverter só recria a ESTRUTURA. Os dados não voltam — e não é perda
+-- real: no momento do DROP as tabelas tinham 1 reserva vazia e 0 movimentos
+-- (R$ 0,00). Reverter o schema sem reverter o código (16d8860) também não faz
+-- sentido: o app não lê mais estas tabelas.
+-- ----------------------------------------------------------------------------
+
+-- Rollback: \i supabase/migrations/20260716120000_shared_reserves.sql
