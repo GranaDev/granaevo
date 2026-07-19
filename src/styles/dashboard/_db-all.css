@@ -7676,10 +7676,23 @@ select.form-input option:checked {
     }
 }
 
-/* Mobile: Exportar button oculto, rel-header-actions escondida */
+/* Mobile: Exportar agora APARECE (antes era display:none) */
 @media (max-width: 1023px) {
-    .rel-header-actions { display: none; }
-    .btn-exportar-rel   { display: none; }
+    /* Estava escondido abaixo de 1024px — ou seja, no celular E no tablet. Não
+       havia motivo técnico (o download de PDF/CSV funciona igual no mobile); foi
+       decisão de layout. O efeito colateral é que a exportação simplesmente NÃO
+       EXISTIA para quem usa pelo celular, e o usuário concluía, com razão, que o
+       recurso não estava lá. Volta compacto: só o ícone, sem texto nem seta. */
+    .rel-header-actions { display: flex; align-items: center; }
+    .btn-exportar-rel {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 12px;
+        gap: 0;
+    }
+    .btn-exportar-rel-txt,
+    .btn-exportar-rel-seta { display: none; }
 
     /* VisÃ£o Geral mobile */
     .rel-vg-wrap {

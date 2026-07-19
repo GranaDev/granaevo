@@ -94,6 +94,27 @@ export function init(ctx) {
     popularFiltrosRelatorio();
 }
 
+// ── Período do relatório: recorte mês/ano OU "todo o período" ───────────────
+// Centralizado porque a validação aparecia em CINCO funções e o prefixo em três.
+// Com "todos" espalhado à mão, bastava esquecer um ponto para o relatório fazer
+// `return` silencioso — o usuário clicaria em Gerar e nada aconteceria, sem erro.
+
+/** Aceita o recorte mês/ano OU o período completo ('todos'). */
+function _periodoValido(mes, ano) {
+    if (mes === 'todos') return true;
+    return /^\d{2}$/.test(mes) && +mes >= 1 && +mes <= 12
+        && /^\d{4}$/.test(ano) && +ano >= 2000 && +ano <= 2100;
+}
+
+/**
+ * Prefixo ISO usado nos filtros (`dataISO.startsWith(...)`).
+ * Para "todo o período" devolve STRING VAZIA — e `startsWith('')` é sempre true,
+ * então todas as transações entram sem precisar de um segundo caminho de código.
+ */
+function _prefixoPeriodo(mes, ano) {
+    return mes === 'todos' ? '' : `${ano}-${mes}`;
+}
+
 // ========== RELATÓRIOS ==========
 async function popularFiltrosRelatorio() {
     const mesSelect    = document.getElementById('mesRelatorio');
@@ -117,8 +138,28 @@ async function popularFiltrosRelatorio() {
     while (perfilSelect.firstChild) perfilSelect.removeChild(perfilSelect.firstChild);
 
     mesSelect.appendChild(_criarPlaceholder('Selecione o mês'));
+
+    // "Todo o período" — o relatório só oferecia mês a mês, então não havia como
+    // ver o ano inteiro nem a vida toda da conta. Vale `todos`: os filtros usam
+    // `periodoSelecionado` como PREFIXO (startsWith), e prefixo vazio casa com
+    // tudo — por isso a opção sai quase de graça, sem um segundo caminho de
+    // filtragem para manter em sincronia.
+    // O ano fica irrelevante aqui e é desabilitado pelo listener abaixo.
+    const optTodos = document.createElement('option');
+    optTodos.value       = 'todos';
+    optTodos.textContent = 'Todo o período';
+    mesSelect.appendChild(optTodos);
+
     anoSelect.appendChild(_criarPlaceholder('Selecione o ano'));
     perfilSelect.appendChild(_criarPlaceholder('Selecione o perfil'));
+
+    // Com "Todo o período" o ano não faz sentido: desabilita para não sugerir
+    // uma combinação que o relatório ignora.
+    mesSelect.addEventListener('change', () => {
+        const todos = mesSelect.value === 'todos';
+        anoSelect.disabled = todos;
+        anoSelect.style.opacity = todos ? '0.5' : '';
+    });
 
     if (!Array.isArray(_ctx.usuarioLogado?.perfis)) return;
 
@@ -259,13 +300,20 @@ function _getPeriodInfo() {
     const mesNum = (mesEl?.value || '').padStart(2, '0');
     const anoNum = anoEl?.value || String(new Date().getFullYear());
     const mesNome = mesEl?.options[mesEl.selectedIndex]?.text || '';
+    // Em "todo o período" o ano não participa do recorte — devolvê-lo faria os
+    // títulos e nomes de arquivo dizerem "Todo o período 2026", que é contraditório.
+    if (mesNum === 'todos') return { mesNum, anoNum: '', mesNome };
     return { mesNum, anoNum, mesNome };
 }
 
 function _getTxsDoPeriodo() {
     const { mesNum, anoNum } = _getPeriodInfo();
-    if (!mesNum || mesNum === '00' || !anoNum) return _ctx.transacoes;
-    const prefix = anoNum + '-' + mesNum;
+    if (!mesNum || mesNum === '00' || (mesNum !== 'todos' && !anoNum)) return _ctx.transacoes;
+    // Usa o MESMO helper do relatório na tela. Montar o prefixo à mão aqui daria
+    // "2026-todos", que não casa com data nenhuma — e o CSV/Excel sairiam VAZIOS
+    // justamente na opção "todo o período".
+    const prefix = _prefixoPeriodo(mesNum, anoNum);
+    if (!prefix) return _ctx.transacoes;
     return _ctx.transacoes.filter(t => {
         const iso = _ctx.dataParaISO(t.data || '');
         return iso ? iso.startsWith(prefix) : false;
@@ -883,15 +931,20 @@ async function gerarRelatorio() {
     const mes = mesEl.value;
     const ano = anoEl.value;
     
+    // "Todo o período" ignora mês E ano de propósito — não há recorte a validar.
+    const todoPeriodo = (mes === 'todos');
+
     // CORREÇÃO: Validar formato de mês e ano antes de processar
-    if (!mes || !ano) {
-        return _ctx.mostrarNotificacao('Por favor, selecione o mês e o ano.', 'error');
-    }
-    if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) {
-        return _ctx.mostrarNotificacao('Mês inválido.', 'error');
-    }
-    if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) {
-        return _ctx.mostrarNotificacao('Ano inválido.', 'error');
+    if (!todoPeriodo) {
+        if (!mes || !ano) {
+            return _ctx.mostrarNotificacao('Por favor, selecione o mês e o ano.', 'error');
+        }
+        if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) {
+            return _ctx.mostrarNotificacao('Mês inválido.', 'error');
+        }
+        if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) {
+            return _ctx.mostrarNotificacao('Ano inválido.', 'error');
+        }
     }
     
     _ctx._gerandoRelatorio = true;
@@ -922,7 +975,7 @@ async function gerarRelatorio() {
 
     // ========== SELEÇÃO DE PERFIS PARA RELATÓRIO CASAL (PLANO FAMÍLIA) ==========
 window.abrirSelecaoPerfisCasal = function abrirSelecaoPerfisCasal(mes, ano) {
-    if (!/^\d{2}$/.test(mes) || !/^\d{4}$/.test(ano)) return;
+    if (!_periodoValido(mes, ano)) return;   // aceita também "todo o período"
 
     if (!Array.isArray(_ctx.usuarioLogado?.perfis)) return;
 
@@ -988,7 +1041,7 @@ window.abrirSelecaoPerfisCasal = function abrirSelecaoPerfisCasal(mes, ano) {
 };
 
 window.confirmarSelecaoPerfisCasal = function confirmarSelecaoPerfisCasal(mes, ano) {
-    if (!/^\d{2}$/.test(mes) || !/^\d{4}$/.test(ano)) return;
+    if (!_periodoValido(mes, ano)) return;   // aceita também "todo o período"
 
     const checkboxes = document.querySelectorAll('.perfil-checkbox-casal:checked');
     const avisoEl = document.getElementById('avisoSelecao');
@@ -1017,11 +1070,10 @@ window.confirmarSelecaoPerfisCasal = function confirmarSelecaoPerfisCasal(mes, a
 
 // ========== GERAR RELATÓRIO CASAL PERSONALIZADO ==========
 window.gerarRelatorioCompartilhadoPersonalizado = async function gerarRelatorioCompartilhadoPersonalizado(mes, ano, perfisIds) {
-    if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) return;
-    if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) return;
+    if (!_periodoValido(mes, ano)) return;   // aceita também "todo o período"
     if (!Array.isArray(perfisIds) || perfisIds.length !== 2) return;
 
-    const periodoSelecionado = `${ano}-${mes}`;
+    const periodoSelecionado = _prefixoPeriodo(mes, ano);
 
     const perfisAtivos = _ctx.usuarioLogado.perfis.filter(p =>
         perfisIds.includes(String(p.id))
@@ -1172,8 +1224,7 @@ function _sanitizarHTMLRelatorio(html) {
 }
 
 async function gerarRelatorioIndividual(mes, ano, perfilId) {
-    if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) return;
-    if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) return;
+    if (!_periodoValido(mes, ano)) return;   // aceita também "todo o período"
     if (!perfilId) return;
 
     const userData = await dataManager.loadUserData();
@@ -1209,7 +1260,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
     const cartoesPerfil       = Array.isArray(dadosPerfil.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
     const contasFixasPerfil   = Array.isArray(dadosPerfil.contasFixas)    ? dadosPerfil.contasFixas    : [];
 
-    const periodoSelecionado  = `${ano}-${mes}`;
+    const periodoSelecionado  = _prefixoPeriodo(mes, ano);
     const hojeISO             = new Date().toISOString().slice(0, 10);
 
     const transacoesPeriodo = transacoesPerfil.filter(t => {
@@ -1900,13 +1951,12 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
 
 async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
     // CORREÇÃO: Validar inputs
-    if (!/^\d{2}$/.test(mes) || parseInt(mes, 10) < 1 || parseInt(mes, 10) > 12) return;
-    if (!/^\d{4}$/.test(ano) || parseInt(ano, 10) < 2000 || parseInt(ano, 10) > 2100) return;
+    if (!_periodoValido(mes, ano)) return;   // aceita também "todo o período"
     
     // CORREÇÃO: Limitar numPerfis a um máximo razoável
     const numPerfisSeguro = Math.min(Math.max(parseInt(numPerfis, 10) || 0, 0), 20);
     
-    const periodoSelecionado = `${ano}-${mes}`;
+    const periodoSelecionado = _prefixoPeriodo(mes, ano);
     const perfisAtivos = (_ctx.usuarioLogado?.perfis || []).slice(0, numPerfisSeguro);
     
     if (perfisAtivos.length < 2) {
@@ -2581,7 +2631,7 @@ function gerarAnaliseOndeForDinheiro(mes, ano) {
         return { temDados: false, mensagem: 'Selecione mês e ano para analisar.' };
     }
 
-    const periodoSelecionado = `${ano}-${mes}`;
+    const periodoSelecionado = _prefixoPeriodo(mes, ano);
 
     const _txPeriodo = (m, a, cat) => _ctx.transacoes.filter(t => {
         if (!t || typeof t !== 'object') return false;
