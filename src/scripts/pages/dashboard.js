@@ -1358,6 +1358,17 @@ function _setSyncState(state) {
 let _saveDebounceTimer   = null;
 let _saveDebounceResolve = null;
 
+// 🔴 SAVE EM VOO — a segunda metade da corrida de troca de perfil (2026-07-19).
+//
+// O flush da troca só espera um save cujo TIMER ainda está armado. Mas quando o
+// timer já disparou e o POST está NA REDE, `_saveDebounceTimer` já é null — e a
+// troca seguia em frente, recarregava do servidor e re-salvava por cima do save
+// que ainda estava voando. Foi assim que a viagem, salva por `salvarDadosUrgente`
+// logo antes de trocar (e sem await, por design do popup), se perdia.
+// Este promise fica != null enquanto um POST de save está em curso; a troca de
+// perfil o aguarda antes de recarregar. Cobre TODO save, não só o de viagem.
+let _saveEmVoo = null;
+
 // 🔴 GUARDA DE TROCA DE PERFIL — corrige a perda de dados de 2026-07-18.
 //
 // O QUE ACONTECEU: o callback do debounce lê as globais NO MOMENTO EM QUE
@@ -1461,6 +1472,12 @@ async function salvarDados() {
         _saveDebounceTimer = setTimeout(async () => {
             _saveDebounceTimer   = null;
             _saveDebounceResolve = null;
+
+            // Marca o POST como "em voo" para que a troca de perfil o aguarde
+            // (ver _saveEmVoo). O finally garante a limpeza mesmo nos returns
+            // antecipados dos limites de payload abaixo.
+            let _vooDone;
+            _saveEmVoo = new Promise((r) => { _vooDone = r; });
 
             if (_syncReadyForDisplay) _setSyncState('saving');
 
@@ -1615,6 +1632,10 @@ async function salvarDados() {
                 _log.error('SAVE_005', e);
                 if (_syncReadyForDisplay) _setSyncState('error');
                 resolve(false);
+            } finally {
+                // Save pousou (sucesso, erro ou limite): libera a troca de perfil.
+                _saveEmVoo = null;
+                _vooDone();
             }
         }, delay);
     });
@@ -1910,13 +1931,24 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         await new Promise(r => requestAnimationFrame(r));
         await new Promise(r => requestAnimationFrame(r));
 
-        // ── 🔴 ORDEM CRÍTICA — não reordenar (perda de dados de 2026-07-18) ──
+        // ── 🔴 ORDEM CRÍTICA — não reordenar (perda de dados de 2026-07-18/19) ──
+        // 0) Espera um save JÁ EM VOO (timer disparou, POST na rede) pousar. Sem
+        //    isto a troca recarregava e re-salvava por cima de um POST em curso —
+        //    foi assim que a viagem, salva sem await logo antes de trocar, sumia.
+        if (_saveEmVoo) {
+            try { await _saveEmVoo; } catch (e) { _log.error('PERFIL_VOO_001', e); }
+        }
         // 1) DESCARREGA o save pendente ENQUANTO o perfil antigo ainda é o ativo.
         //    Aqui `perfilAtivo` e as arrays ainda combinam, então esta gravação
         //    é a correta — e preserva os últimos segundos de edição do usuário
         //    em vez de descartá-los.
         if (_saveDebounceTimer) {
             try { await salvarDados(true); } catch (e) { _log.error('PERFIL_FLUSH_001', e); }
+        }
+        // 1b) O flush acima pode ter iniciado um novo POST — espera ele pousar
+        //     também, senão a corrida reabre com um voo diferente.
+        if (_saveEmVoo) {
+            try { await _saveEmVoo; } catch (e) { _log.error('PERFIL_VOO_002', e); }
         }
         // 2) SÓ ENTÃO fecha a porta: daqui até o load terminar, nenhum save pode
         //    rodar, porque `perfilAtivo` (novo) e as arrays (velhas) ficam
@@ -1962,6 +1994,13 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         atualizarHeaderReservas();
         atualizarListaContasFixas();
         atualizarNomeUsuario();
+
+        // Rótulos que dependem do config do perfil (Modo viagem / Horas de Vida)
+        // têm de refletir o perfil ATUAL já aqui. Sem isto, o banner de viagem
+        // mostrava a viagem do perfil ANTERIOR até o save do fim da troca disparar
+        // ge:save-done — a "viagem que vazava para o outro perfil" do relato de
+        // 2026-07-19. É só re-render (lê o configPerfil vivo); não toca em dados.
+        document.dispatchEvent(new CustomEvent('ge:perfil-carregado'));
 
         // ── Agora sim: revela o dashboard já completamente carregado ──────────
         // AuthGuard JÁ validou a sessão em verificarLogin ANTES deste ponto — aqui

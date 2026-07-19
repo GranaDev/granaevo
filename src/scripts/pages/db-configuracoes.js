@@ -64,10 +64,18 @@ export function init(ctx) {
     // `ge:save-done` serve de gatilho porque entrarNoPerfil termina salvando —
     // toda troca de perfil emite este evento. É texto: re-render é barato e
     // idempotente, então não há custo em reagir a todo save.
-    document.addEventListener('ge:save-done', () => {
+    //
+    // `ge:perfil-carregado` é o gatilho ADIANTADO (2026-07-19): o save-done só
+    // chega no FIM da troca, então entre entrar no perfil e o save concluir o
+    // banner ainda mostrava a viagem do perfil ANTERIOR — o "vazamento" relatado.
+    // Este evento dispara assim que o configPerfil novo é carregado, corrigindo
+    // o texto na hora. Os dois gatilhos chamam a mesma função idempotente.
+    const _sincronizarRotulos = () => {
         _atualizarSubViagem();
         _atualizarSubHorasVida();
-    });
+    };
+    document.addEventListener('ge:save-done', _sincronizarRotulos);
+    document.addEventListener('ge:perfil-carregado', _sincronizarRotulos);
 }
 
 // ── Modo viagem: quanto a viagem realmente custou ───────────────────────────
