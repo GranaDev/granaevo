@@ -25,14 +25,16 @@ const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const SEMANA = ['D','S','T','Q','Q','S','S'];
 
-// Cor e rótulo por tipo — a mesma linguagem visual do resto do app.
+// Cor e rótulo por tipo — a mesma linguagem visual do resto do app. A cor vem
+// de token (var --cal-c-*), não de hex fixo: assim escurece no tema claro e o
+// texto colorido (rótulo/valor/KPI) passa contraste AA — hex vivo reprovava lá.
 const ESTILO = Object.freeze({
-    fatura:     { cor: '#ff4b4b', rotulo: 'Fatura'     },
-    conta:      { cor: '#ff8c32', rotulo: 'Conta fixa' },
-    assinatura: { cor: '#c084fc', rotulo: 'Assinatura' },
-    lembrete:   { cor: '#ffd23f', rotulo: 'Lembrete'   },
-    entrada:    { cor: '#00ff99', rotulo: 'Entrada'    },
-    saida:      { cor: '#4ca6ff', rotulo: 'Saída'      },
+    fatura:     { cor: 'var(--cal-c-fatura)',     rotulo: 'Fatura'     },
+    conta:      { cor: 'var(--cal-c-conta)',      rotulo: 'Conta fixa' },
+    assinatura: { cor: 'var(--cal-c-assinatura)', rotulo: 'Assinatura' },
+    lembrete:   { cor: 'var(--cal-c-lembrete)',   rotulo: 'Lembrete'   },
+    entrada:    { cor: 'var(--cal-c-entrada)',    rotulo: 'Entrada'    },
+    saida:      { cor: 'var(--cal-c-saida)',      rotulo: 'Saída'      },
 });
 
 export function init(ctx) {

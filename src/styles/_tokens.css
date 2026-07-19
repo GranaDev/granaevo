@@ -46,6 +46,17 @@
     --color-border-strong:  rgba(255, 255, 255, 0.16);
     --color-border-primary: rgba(16, 185, 129, 0.25);
 
+    /* Calendário — cor por tipo, usada como TEXTO e marcador. No dark são vivas
+       (ótimo contraste sobre o fundo escuro). No tema claro (abaixo) viram tons
+       Tailwind-700, que passam AA como texto sobre fundo claro — antes o verde/
+       amarelo vivo como texto reprovava contraste no claro. */
+    --cal-c-fatura:     #ff4b4b;
+    --cal-c-conta:      #ff8c32;
+    --cal-c-assinatura: #c084fc;
+    --cal-c-lembrete:   #ffd23f;
+    --cal-c-entrada:    #00ff99;
+    --cal-c-saida:      #4ca6ff;
+
     /* ── Escala de Espaçamento (base 4px) ────────────────────── */
     --space-1:   4px;
     --space-2:   8px;
@@ -194,6 +205,15 @@
 
     --color-border:         rgba(15, 23, 42, 0.07);
     --color-border-strong:  rgba(15, 23, 42, 0.13);
+
+    /* Calendário no claro — Tailwind-700: passam AA (≥4.5:1) como texto sobre
+       #f5f7fb/#fff. O verde/amarelo vivos do dark reprovavam aqui. */
+    --cal-c-fatura:     #b91c1c;
+    --cal-c-conta:      #b45309;
+    --cal-c-assinatura: #7e22ce;
+    --cal-c-lembrete:   #a16207;
+    --cal-c-entrada:    #047857;
+    --cal-c-saida:      #1d4ed8;
 
     /* Tom base das sombras: slate-900 frio */
     --shadow-tint:          16, 24, 40;
