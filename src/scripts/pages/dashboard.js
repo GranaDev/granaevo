@@ -2012,7 +2012,7 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         // Deep-link do assistente (A1): /dashboard#relatorios abre a aba direto.
         try {
             const alvo = (location.hash || '').replace(/^#/, '');
-            const TABS_DEEPLINK = ['transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios', 'configuracoes'];
+            const TABS_DEEPLINK = ['transacoes', 'reservas', 'cartoes', 'graficos', 'relatorios', 'configuracoes', 'calendario'];
             if (TABS_DEEPLINK.includes(alvo)) {
                 mostrarTela(alvo);
                 history.replaceState(null, '', location.pathname + location.search);

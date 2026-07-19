@@ -99,6 +99,33 @@ describe('eventosDoMes — só o mês pedido', () => {
     assert.equal(eventosDoMes(dados, 2026, 7).get('2026-07-10')[0].pago, false)
   })
 
+  // Lembretes (Radar) entram pelo 4º parâmetro, fora do blob.
+  test('lembretes do mês entram como tipo lembrete; de outro mês, não', () => {
+    const lembretes = [
+      { dataISO: '2026-07-22', texto: 'Renovar seguro', base: 'lembrete:renovar-seguro:2026-07-22' },
+      { dataISO: '2026-08-01', texto: 'Outro mês',      base: 'lembrete:outro-mes:2026-08-01' },
+      { dataISO: 'lixo',       texto: 'Data inválida' },
+    ]
+    const m = eventosDoMes({}, 2026, 7, lembretes)
+    const ev = m.get('2026-07-22')
+    assert.ok(ev, 'lembrete de julho presente')
+    assert.equal(ev[0].tipo, 'lembrete')
+    assert.equal(ev[0].titulo, 'Renovar seguro')
+    assert.equal(ev[0].valor, 0)
+    assert.equal(ev[0].base, 'lembrete:renovar-seguro:2026-07-22')
+    assert.equal(m.has('2026-08-01'), false, 'lembrete de agosto fora de julho')
+  })
+
+  test('lembrete não é contado em entrou/saiu/aVencer', () => {
+    const m = eventosDoMes({}, 2026, 7, [{ dataISO: '2026-07-10', texto: 'X' }])
+    const r = resumoDoDia(m.get('2026-07-10'))
+    assert.equal(r.aVencer, 0)
+    assert.equal(r.entrou, 0)
+    assert.equal(r.saiu, 0)
+    assert.equal(r.total, 1)
+    assert.ok(r.tipos.includes('lembrete'))
+  })
+
   test('dois eventos no mesmo dia convivem', () => {
     assert.equal(eventosDoMes(dados, 2026, 7).get('2026-07-05').length, 2)
   })

@@ -44,12 +44,18 @@ const _num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
  *   'fatura'     — fatura de cartão vencendo (o que mais dói esquecer)
  *   'conta'      — conta fixa vencendo
  *   'assinatura' — cobrança recorrente prevista para o dia
+ *   'lembrete'   — lembrete do usuário (via chat ou calendário) para o dia
  *   'entrada'    — dinheiro que entrou
  *   'saida'      — dinheiro que saiu
  *
- * @returns {Map<string, Array<{tipo, titulo, valor, pago?}>>} chave 'YYYY-MM-DD'
+ * `lembretes` vem SEPARADO de `dados` de propósito: lembretes moram em
+ * radar_notifications (servidor), não no blob cifrado. Passá-los à parte mantém
+ * este módulo puro e blob-only; quem tem a rede (db-calendario) os injeta.
+ *
+ * @param {Array<{dataISO, texto, base?}>} [lembretes]
+ * @returns {Map<string, Array<{tipo, titulo, valor, pago?, base?}>>} chave 'YYYY-MM-DD'
  */
-export function eventosDoMes(dados, ano, mes) {
+export function eventosDoMes(dados, ano, mes, lembretes = []) {
     // Desestruturar direto no parâmetro quebraria com `null`: o valor padrão de
     // desestruturação só cobre `undefined`. Quem chama isto vem de estado de app
     // que pode estar meio carregado — estourar aqui derrubaria a tela inteira.
@@ -118,6 +124,17 @@ export function eventosDoMes(dados, ano, mes) {
         });
     }
 
+    // ── Lembretes do usuário (fora do blob — vêm do Radar) ──────────────────
+    for (const l of (Array.isArray(lembretes) ? lembretes : [])) {
+        if (!l || !_ISO.test(String(l.dataISO || ''))) continue;
+        add(l.dataISO, {
+            tipo:   'lembrete',
+            titulo: String(l.texto || 'Lembrete').slice(0, 60),
+            valor:  0,                    // lembrete não tem valor financeiro
+            base:   l.base || null,       // chave p/ excluir a partir do calendário
+        });
+    }
+
     return mapa;
 }
 
@@ -126,7 +143,7 @@ export function eventosDoMes(dados, ano, mes) {
  * `tipos` sai ORDENADO por prioridade (fatura primeiro), porque o marcador
  * mostra poucos pontinhos e o que importa é não esconder o vencimento.
  */
-export const PRIORIDADE = Object.freeze(['fatura', 'conta', 'assinatura', 'entrada', 'saida']);
+export const PRIORIDADE = Object.freeze(['fatura', 'conta', 'assinatura', 'lembrete', 'entrada', 'saida']);
 
 export function resumoDoDia(eventos) {
     const lista = Array.isArray(eventos) ? eventos : [];

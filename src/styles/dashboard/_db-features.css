@@ -969,6 +969,36 @@
 }
 .cal-det-valor { font-size: var(--text-sm, .88rem); white-space: nowrap; }
 
+/* Excluir lembrete (✕) — discreto até o hover. Só tokens (tema claro herda). */
+.cal-det-del {
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent);
+    background: transparent; color: var(--color-text-muted);
+    font-size: var(--text-sm, .85rem); line-height: 1; cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.cal-det-del:hover {
+    background: color-mix(in srgb, #ff4b4b 14%, transparent);
+    border-color: color-mix(in srgb, #ff4b4b 40%, transparent);
+    color: #ff4b4b;
+}
+
+/* Botão "Adicionar lembrete" no detalhe do dia. */
+.cal-add-lembrete {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-top: 10px; padding: 9px 14px; border-radius: 9px; cursor: pointer;
+    font-size: var(--text-sm, .86rem); font-weight: var(--fw-semibold, 600);
+    color: var(--color-text);
+    border: 1px dashed color-mix(in srgb, var(--color-text) 22%, transparent);
+    background: color-mix(in srgb, var(--color-text) 4%, transparent);
+    transition: background .15s ease, border-color .15s ease;
+}
+.cal-add-lembrete:hover {
+    background: color-mix(in srgb, #ffd23f 16%, transparent);
+    border-color: color-mix(in srgb, #ffd23f 45%, transparent);
+}
+.cal-add-lembrete i { color: #ffd23f; }
+
 @media (max-width: 560px) {
     .cal-dia      { min-height: 44px; padding: 4px; }
     .cal-totais   { gap: 12px; }

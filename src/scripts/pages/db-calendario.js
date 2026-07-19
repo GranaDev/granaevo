@@ -13,11 +13,13 @@
 // ----------------------------------------------------------------------------
 
 import { eventosDoMes, resumoDoDia, totaisDoMes, diasNoMes, primeiroDiaSemana } from '../modules/calendario.js?v=1';
+import { listarLembretes, criarLembrete, excluirLembrete, pushLiberado } from '../modules/assistant/reminders.js';
 
 let _ctx = null;
 let _ano = null;
 let _mes = null;      // 1–12
 let _diaAberto = null;
+let _lembretes = [];  // [{ id, base, texto, dataISO }] — vêm do Radar, não do blob
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -28,6 +30,7 @@ const ESTILO = Object.freeze({
     fatura:     { cor: '#ff4b4b', rotulo: 'Fatura'     },
     conta:      { cor: '#ff8c32', rotulo: 'Conta fixa' },
     assinatura: { cor: '#c084fc', rotulo: 'Assinatura' },
+    lembrete:   { cor: '#ffd23f', rotulo: 'Lembrete'   },
     entrada:    { cor: '#00ff99', rotulo: 'Entrada'    },
     saida:      { cor: '#4ca6ff', rotulo: 'Saída'      },
 });
@@ -39,8 +42,17 @@ export function init(ctx) {
     // Mesmo padrão dos outros módulos lazy: reabrir a aba re-renderiza sem re-init.
     window._dbCalendario = { render };
     render();
+    _sincronizarLembretes();   // busca do Radar e re-renderiza quando chegam
     // Mantém a grade fresca quando o usuário lança algo em outra aba.
     document.addEventListener('ge:save-done', () => { if (_ctx) render(); });
+}
+
+// Busca os lembretes do servidor (Radar) e re-renderiza. Silencioso: sem rede,
+// o calendário segue mostrando o que vem do blob.
+async function _sincronizarLembretes() {
+    try { _lembretes = await listarLembretes(); }
+    catch { _lembretes = _lembretes || []; }
+    if (_ctx) render();
 }
 
 export function render() {
@@ -52,7 +64,7 @@ export function render() {
         contasFixas: _ctx.contasFixas,
         transacoes:  _ctx.transacoes,
         assinaturas: _ctx.assinaturas,
-    }, _ano, _mes);
+    }, _ano, _mes, _lembretes);
 
     raiz.appendChild(_cabecalho(mapa));
     raiz.appendChild(_grade(mapa));
@@ -166,23 +178,23 @@ function _celulaDia(dia, iso, eventos, ehHoje) {
     const r = resumoDoDia(eventos);
     const temEvento = r.total > 0;
 
-    // <button> e não <div>: dia com evento é acionável, e precisa ser alcançável
-    // por teclado e anunciado como controle (Passo 17 / WCAG).
-    const cel = document.createElement(temEvento ? 'button' : 'div');
+    // TODO dia é um <button>: além de acionável por teclado (Passo 17 / WCAG),
+    // clicar num dia VAZIO agora abre o detalhe para ADICIONAR um lembrete ali.
+    const cel = document.createElement('button');
+    cel.type = 'button';
     cel.className = 'cal-dia' + (ehHoje ? ' cal-dia--hoje' : '') + (temEvento ? ' cal-dia--tem' : '');
 
     if (temEvento) {
-        cel.type = 'button';
         const resumoTxt = [
             r.aVencer > 0 ? `${_ctx.formatBRL(r.aVencer)} a vencer` : '',
             r.entrou  > 0 ? `entrou ${_ctx.formatBRL(r.entrou)}`    : '',
             r.saiu    > 0 ? `saiu ${_ctx.formatBRL(r.saiu)}`        : '',
         ].filter(Boolean).join(', ');
-        cel.setAttribute('aria-label', `Dia ${dia} de ${MESES[_mes - 1]}: ${resumoTxt || `${r.total} evento(s)`}`);
-        cel.addEventListener('click', () => _abrirDia(iso, eventos));
+        cel.setAttribute('aria-label', `Dia ${dia} de ${MESES[_mes - 1]}: ${resumoTxt || `${r.total} evento(s)`}. Abrir para ver ou adicionar lembrete.`);
     } else {
-        cel.setAttribute('aria-label', `Dia ${dia} de ${MESES[_mes - 1]}, sem eventos`);
+        cel.setAttribute('aria-label', `Dia ${dia} de ${MESES[_mes - 1]}, sem eventos. Abrir para adicionar lembrete.`);
     }
+    cel.addEventListener('click', () => _abrirDia(iso, eventos));
 
     const num = document.createElement('span');
     num.className = 'cal-dia-num';
@@ -223,7 +235,6 @@ function _abrirDia(iso, eventos) {
         p.className = 'cal-det-vazio';
         p.textContent = 'Nada neste dia.';
         alvo.appendChild(p);
-        return;
     }
 
     for (const ev of eventos) {
@@ -242,16 +253,142 @@ function _abrirDia(iso, eventos) {
         nome.className = 'cal-det-nome';
         nome.textContent = ev.titulo;          // textContent — dado do usuário
         info.append(tp, nome);
+        linha.appendChild(info);
 
-        const val = document.createElement('strong');
-        val.className = 'cal-det-valor';
-        val.style.color = est.cor;
-        val.textContent = _ctx.formatBRL(ev.valor);
+        // Lembrete: sem valor financeiro, mas COM botão de excluir. Os demais
+        // eventos (contas/transações) mostram o valor, como antes.
+        if (ev.tipo === 'lembrete') {
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'cal-det-del';
+            del.setAttribute('aria-label', `Excluir lembrete: ${ev.titulo}`);
+            del.textContent = '✕';
+            del.addEventListener('click', (e) => {
+                e.stopPropagation();
+                _excluirLembrete(ev.base, iso);
+            });
+            linha.appendChild(del);
+        } else {
+            const val = document.createElement('strong');
+            val.className = 'cal-det-valor';
+            val.style.color = est.cor;
+            val.textContent = _ctx.formatBRL(ev.valor);
+            linha.appendChild(val);
+        }
 
-        linha.append(info, val);
         alvo.appendChild(linha);
     }
+
+    alvo.appendChild(_botaoAddLembrete(iso));
     alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Lembretes: criar/excluir a partir do dia ────────────────────────────────
+function _botaoAddLembrete(iso) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cal-add-lembrete';
+    const i = document.createElement('i');
+    i.className = 'fas fa-bell';
+    i.setAttribute('aria-hidden', 'true');
+    btn.append(i, document.createTextNode(' Adicionar lembrete'));
+    btn.addEventListener('click', () => _criarLembreteNoDia(iso));
+    return btn;
+}
+
+function _criarLembreteNoDia(iso) {
+    // Guarda contra dia no passado: o Radar só agenda futuro (e o push do dia já
+    // teria passado). Deixa criar a partir de hoje.
+    if (iso < _isoHoje()) {
+        _ctx.mostrarNotificacao('Escolha um dia de hoje em diante para o lembrete.', 'warning');
+        return;
+    }
+    // Popup com input — mesmo padrão do modo viagem (criarPopupDOM + textContent).
+    _ctx.criarPopupDOM((popup) => {
+        const titulo = document.createElement('h3');
+        titulo.textContent = 'Novo lembrete';
+        popup.appendChild(titulo);
+
+        const intro = document.createElement('p');
+        intro.className = 'vg-intro';
+        intro.textContent = `Do que te lembrar em ${_fmtDiaBR(iso)}? Aviso 1 semana antes, 3 dias antes e no dia.`;
+        popup.appendChild(intro);
+
+        const label = document.createElement('label');
+        label.className = 'vg-label';
+        label.htmlFor = 'lembreteTexto';
+        label.textContent = 'Lembrete';
+        popup.appendChild(label);
+
+        const input = document.createElement('input');
+        input.id = 'lembreteTexto';
+        input.className = 'form-input';
+        input.type = 'text';
+        input.maxLength = 120;
+        input.placeholder = 'Ex.: pagar o aluguel, renovar o seguro';
+        popup.appendChild(input);
+
+        const btnCriar = document.createElement('button');
+        btnCriar.className = 'btn-primary';
+        btnCriar.type = 'button';
+        btnCriar.style.cssText = 'width:100%; margin-top:10px;';
+        btnCriar.textContent = 'Criar lembrete';
+        const submeter = () => {
+            const texto = input.value.trim();
+            if (!texto) { input.focus(); return; }
+            _ctx.fecharPopup();
+            _persistirLembrete(texto, iso);
+        };
+        btnCriar.addEventListener('click', submeter);
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submeter(); });
+        popup.appendChild(btnCriar);
+
+        const btnFechar = document.createElement('button');
+        btnFechar.className = 'btn-cancelar';
+        btnFechar.type = 'button';
+        btnFechar.style.cssText = 'width:100%; margin-top:10px;';
+        btnFechar.textContent = 'Cancelar';
+        btnFechar.addEventListener('click', _ctx.fecharPopup);
+        popup.appendChild(btnFechar);
+
+        setTimeout(() => input.focus(), 50);
+    });
+}
+
+async function _persistirLembrete(texto, iso) {
+    const r = await criarLembrete(texto, iso);
+    if (!r.ok) {
+        const msg = r.reason === 'dup' ? 'Você já tem esse lembrete nesse dia.'
+                  : r.reason === 'cap' ? 'Você atingiu o limite de lembretes. Exclua algum antes.'
+                  : r.reason === 'auth' ? 'Faça login de novo para criar o lembrete.'
+                  : 'Não deu para criar o lembrete agora. Tente de novo.';
+        _ctx.mostrarNotificacao(msg, 'error');
+        return;
+    }
+    await _sincronizarLembretes();
+    _diaAberto = iso;
+    if (_ctx) render();
+
+    // Undo imediato + aviso sobre push. Mesma UX do assistente ("Cancelar").
+    const extra = pushLiberado() ? '' : ' Ative as notificações para receber os avisos.';
+    _ctx.mostrarNotificacaoDesfazer(`Lembrete criado (avisos: 7d, 3d e no dia).${extra}`, async () => {
+        await excluirLembrete(r.dedupeKey);
+        await _sincronizarLembretes();
+    });
+}
+
+async function _excluirLembrete(base, iso) {
+    if (!base) return;
+    const ok = await excluirLembrete(base);
+    if (!ok) { _ctx.mostrarNotificacao('Não deu para excluir agora. Tente de novo.', 'error'); return; }
+    _ctx.mostrarNotificacao('Lembrete removido.', 'success');
+    _diaAberto = iso;
+    await _sincronizarLembretes();
+}
+
+function _fmtDiaBR(iso) {
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
 }
 
 function _legenda() {
