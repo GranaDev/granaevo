@@ -12,7 +12,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   porMembro, progressoDe, contaCompartilhada, membroAtual, ehCompartilhada,
-  registrarMovimento, divisaoSugerida,
+  registrarMovimento, divisaoSugerida, perfilParticipa,
 } from '../../src/scripts/modules/reserva-familia.js'
 
 const mov = (tipo, valor, id, nome) => ({ memberId: id, memberNome: nome, tipo, valor })
@@ -162,5 +162,53 @@ describe('divisaoSugerida — C4, dividir ao dissolver', () => {
     const d = divisaoSugerida(ms, 800, ['Ana', 'Bruno'])
     assert.equal(d.reduce((s, x) => s + x.valor, 0), 800)
     assert.ok(d.every(x => x.valor >= 0))
+  })
+})
+
+describe('perfilParticipa — visibilidade por perfil (A1)', () => {
+  const UUID_A = '11111111-1111-4111-8111-111111111111'
+  const UUID_B = '22222222-2222-4222-8222-222222222222'
+
+  test('caixinha NÃO compartilhada aparece para todos', () => {
+    assert.equal(perfilParticipa({ compartilhada: false, membros: [UUID_A] }, UUID_B), true)
+    assert.equal(perfilParticipa({}, UUID_B), true)
+  })
+
+  test('perfil no roster participa; fora do roster, não', () => {
+    const m = { compartilhada: true, membros: [UUID_A] }
+    assert.equal(perfilParticipa(m, UUID_A), true)
+    assert.equal(perfilParticipa(m, UUID_B), false)
+  })
+
+  test('roster vazio não esconde de ninguém (evita reserva órfã invisível)', () => {
+    assert.equal(perfilParticipa({ compartilhada: true, membros: [] }, UUID_B), true)
+    assert.equal(perfilParticipa({ compartilhada: true }, UUID_B), true)
+  })
+
+  test('COMPATIBILIDADE: roster ANTIGO (nomes) segue visível para todos', () => {
+    // Reservas criadas antes de 2026-07-19 guardavam nomes digitados. Tratar
+    // isso como regra de acesso faria a reserva SUMIR da tela de alguém sem
+    // aviso — perder o próprio dinheiro de vista é pior que ver uma a mais.
+    const antiga = { compartilhada: true, membros: ['João', 'Maria'] }
+    assert.equal(perfilParticipa(antiga, UUID_A), true)
+    assert.equal(perfilParticipa(antiga, UUID_B), true)
+  })
+
+  test('roster misto (migração parcial) ainda respeita os ids', () => {
+    const m = { compartilhada: true, membros: [UUID_A, 'Maria'] }
+    assert.equal(perfilParticipa(m, UUID_A), true)
+    assert.equal(perfilParticipa(m, UUID_B), false)
+  })
+
+  test('id inteiro (perfis legados) é reconhecido como id, não como nome', () => {
+    const m = { compartilhada: true, membros: ['7', '9'] }
+    assert.equal(perfilParticipa(m, '7'), true)
+    assert.equal(perfilParticipa(m, '8'), false)
+  })
+
+  test('sem perfil ativo não esconde nada (não deixa o usuário sem ver)', () => {
+    const m = { compartilhada: true, membros: [UUID_A] }
+    assert.equal(perfilParticipa(m, null), true)
+    assert.equal(perfilParticipa(m, ''), true)
   })
 })

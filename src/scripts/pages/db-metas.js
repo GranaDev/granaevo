@@ -4,8 +4,8 @@ import {
 } from '../modules/ritmo-metas.js?v=1';
 import {
     contaCompartilhada, ehCompartilhada, membroAtual, registrarMovimento,
-    porMembro, divisaoSugerida,
-} from '../modules/reserva-familia.js?v=2';
+    porMembro, divisaoSugerida, perfilParticipa,
+} from '../modules/reserva-familia.js?v=3';
 
 let _ctx = null;
 let _metaLinePeriod = 'mensal'; // mensal | bimestral | trimestral | semestral | anual
@@ -575,6 +575,8 @@ function abrirMetaForm(editId = null) {
         let   rosterMembros = (meta && Array.isArray(meta.membros)) ? meta.membros.slice(0, 12) : [];
         let   chkCompart = null;
         let   secCompartEl = null;
+        // Preenchido pela seção de perfis; lê os checkboxes no momento do save.
+        let   lerPerfisSelecionados = null;
         if (ehContaComp) {
             const secCompart = secao('Reserva da família');
             secCompartEl = secCompart;
@@ -596,59 +598,71 @@ function abrirMetaForm(editId = null) {
 
             const rosterHint = document.createElement('div');
             rosterHint.style.cssText = 'font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;';
-            rosterHint.textContent = 'Com quem você quer criar a reserva?';
+            rosterHint.textContent = 'Quais perfis participam desta reserva?';
             divRoster.appendChild(rosterHint);
 
-            const chipsWrap = document.createElement('div');
-            chipsWrap.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;';
-            divRoster.appendChild(chipsWrap);
+            // SELEÇÃO DE PERFIS (não mais nomes digitados). Só os perfis marcados
+            // veem a reserva na lista e podem guardar/retirar.
+            //
+            // ⚠️ ISTO É ORGANIZAÇÃO DE TELA, NÃO SIGILO. Dono e convidado
+            // compartilham UM blob: quem exportar os dados ou abrir o DevTools vê
+            // tudo. Serve para não poluir a tela de quem não participa — e a nota
+            // abaixo diz isso ao usuário, para ninguém contar com uma proteção
+            // que a arquitetura não entrega.
+            const perfisConta = Array.isArray(_ctx.usuarioLogado?.perfis) ? _ctx.usuarioLogado.perfis : [];
+            const idAtivo = String(_ctx.perfilAtivo?.id ?? '');
 
-            const renderChips = () => {
-                chipsWrap.replaceChildren();
-                rosterMembros.forEach((nome, i) => {
-                    const chip = document.createElement('span');
-                    chip.style.cssText = 'display:inline-flex; align-items:center; gap:6px; background:rgba(67,160,71,0.14); border:1px solid rgba(67,160,71,0.3); border-radius:14px; padding:3px 10px; font-size:0.82rem;';
-                    chip.appendChild(document.createTextNode(nome));   // textContent — sem XSS
-                    const x = document.createElement('button');
-                    x.type = 'button'; x.textContent = '×';
-                    x.style.cssText = 'background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:1rem; line-height:1; padding:0;';
-                    x.addEventListener('click', () => { rosterMembros.splice(i, 1); renderChips(); });
-                    chip.appendChild(x);
-                    chipsWrap.appendChild(chip);
-                });
-            };
+            const listaPerfis = document.createElement('div');
+            listaPerfis.style.cssText = 'display:flex; flex-direction:column; gap:6px; margin-bottom:8px;';
 
-            const rowAdd = document.createElement('div');
-            rowAdd.style.cssText = 'display:flex; gap:8px;';
-            const inpNome = document.createElement('input');
-            inpNome.className = 'form-input'; inpNome.type = 'text'; inpNome.maxLength = 40;
-            inpNome.placeholder = 'Nome do participante'; inpNome.style.flex = '1';
-            const btnAddM = document.createElement('button');
-            btnAddM.className = 'btn-primary'; btnAddM.type = 'button'; btnAddM.textContent = 'Adicionar';
-            btnAddM.style.flexShrink = '0';
-            const addMembro = () => {
-                const n = inpNome.value.trim().slice(0, 40);
-                if (!n) return;
-                if (rosterMembros.length >= 12) { _ctx.mostrarNotificacao('Máximo de 12 participantes.', 'error'); return; }
-                if (rosterMembros.some(x => x.toLowerCase() === n.toLowerCase())) { inpNome.value = ''; return; }
-                rosterMembros.push(n); inpNome.value = ''; renderChips(); inpNome.focus();
-            };
-            btnAddM.addEventListener('click', addMembro);
-            inpNome.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addMembro(); } });
-            rowAdd.appendChild(inpNome); rowAdd.appendChild(btnAddM);
-            divRoster.appendChild(rowAdd);
+            perfisConta.forEach((p) => {
+                const pid = String(p.id);
+                const lbl = document.createElement('label');
+                lbl.style.cssText = 'display:flex; align-items:center; gap:9px; cursor:pointer; padding:6px 8px; border-radius:8px; background:rgba(255,255,255,0.03);';
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = pid;
+                cb.style.cssText = 'width:16px; height:16px; accent-color:var(--primary); cursor:pointer; flex-shrink:0;';
+                // Marcado se já está no roster; numa reserva nova, o perfil ATIVO
+                // vem marcado e travado — criar uma reserva da qual você mesmo não
+                // participa (e que some da sua tela) seria só um jeito de perder a
+                // reserva de vista.
+                cb.checked = rosterMembros.length ? rosterMembros.includes(pid) : (pid === idAtivo);
+                if (pid === idAtivo) { cb.checked = true; cb.disabled = true; }
+
+                const nome = document.createElement('span');
+                nome.style.fontSize = '0.9rem';
+                nome.textContent = String(p.nome || 'Perfil');   // textContent — sem XSS
+                if (pid === idAtivo) {
+                    const vc = document.createElement('span');
+                    vc.style.cssText = 'font-size:0.75rem; color:var(--text-muted);';
+                    vc.textContent = ' (você)';
+                    nome.appendChild(vc);
+                }
+
+                lbl.appendChild(cb); lbl.appendChild(nome);
+                listaPerfis.appendChild(lbl);
+            });
+
+            divRoster.appendChild(listaPerfis);
+
+            const notaSigilo = document.createElement('div');
+            notaSigilo.style.cssText = 'font-size:0.75rem; color:var(--text-muted); line-height:1.45; background:rgba(148,163,184,0.08); border-radius:8px; padding:8px 10px;';
+            notaSigilo.textContent = 'Os perfis não marcados não veem esta reserva na lista deles. É uma organização da tela — não é um cofre: quem exporta os dados da conta continua enxergando tudo.';
+            divRoster.appendChild(notaSigilo);
+
             secCompart.appendChild(divRoster);
+
+            // Lê a seleção na hora de salvar (evita manter estado paralelo que
+            // possa divergir do que está marcado na tela).
+            lerPerfisSelecionados = () => Array.from(
+                listaPerfis.querySelectorAll('input[type="checkbox"]')
+            ).filter(cb => cb.checked).map(cb => cb.value);
 
             chkCompart.addEventListener('change', () => {
                 divRoster.style.display = chkCompart.checked ? 'block' : 'none';
-                // Ao ligar pela 1ª vez, semeia com quem está criando (nunca vazio).
-                if (chkCompart.checked && rosterMembros.length === 0) {
-                    rosterMembros.push(membroAtual(_ctx).nome);
-                    renderChips();
-                }
             });
-
-            renderChips();
         }
 
         // ─────────────────────────── SEÇÃO 2: Prazo ────────────────────────────
@@ -991,7 +1005,15 @@ function abrirMetaForm(editId = null) {
             // Compartilhada (C1): só vale em conta casal/família. Roster nunca vazio
             // (semeia com quem cria) para o "quem colocou" ter de quem partir.
             const compartilhada = ehContaComp && !!(chkCompart && chkCompart.checked);
-            if (compartilhada && rosterMembros.length === 0) rosterMembros.push(membroAtual(_ctx).nome);
+            if (compartilhada && typeof lerPerfisSelecionados === 'function') {
+                rosterMembros = lerPerfisSelecionados();
+            }
+            // Nunca vazio: o perfil ativo entra sempre (o checkbox dele é travado,
+            // mas isto protege contra qualquer caminho que devolva lista vazia —
+            // uma reserva sem participantes sumiria da tela de todo mundo).
+            if (compartilhada && rosterMembros.length === 0) {
+                rosterMembros = [String(_ctx.perfilAtivo?.id ?? '')].filter(Boolean);
+            }
 
             if (isEdit) {
                 const aporteAnterior    = meta.aporteRecorrente;
@@ -1245,6 +1267,10 @@ function renderMetasList() {
     }
 
     const filtradas = _ctx.metas.filter(m => {
+        // Reserva compartilhada só aparece para os perfis que participam dela.
+        // (Organização de tela — ver perfilParticipa em reserva-familia.js.)
+        if (!perfilParticipa(m, _ctx.perfilAtivo?.id)) return false;
+
         const nome = _ctx._sanitizeText(m.descricao).toLowerCase();
         if (searchVal && !nome.includes(searchVal)) return false;
         if (statusVal) {
@@ -1478,7 +1504,16 @@ function renderMetasList() {
 // A soma tem que fechar com meta.saved (nunca cria nem some dinheiro do saldo).
 function _dissolverReservaCompartilhada(meta) {
     const total = Number(meta.saved || 0);
-    const divisao = divisaoSugerida(meta.movimentos, total, meta.membros || []);
+
+    // `meta.membros` guarda IDS de perfil (desde 2026-07-19), mas divisaoSugerida
+    // usa o roster como NOMES no fallback (quando ninguém tem líquido positivo).
+    // Sem traduzir, a tela de dissolução listaria UUIDs crus no lugar das pessoas.
+    // Rosters legados já são nomes e passam intactos pelo mapa.
+    const perfis = Array.isArray(_ctx.usuarioLogado?.perfis) ? _ctx.usuarioLogado.perfis : [];
+    const nomePorId = new Map(perfis.map(p => [String(p.id), String(p.nome || 'Perfil')]));
+    const rosterNomes = (meta.membros || []).map(m => nomePorId.get(String(m)) || String(m));
+
+    const divisao = divisaoSugerida(meta.movimentos, total, rosterNomes);
 
     _ctx.criarPopupDOM((popup) => {
         popup.style.cssText = 'max-width:440px; width:96%;';
@@ -2446,6 +2481,11 @@ function abrirRetiradaForm() {
 
     const meta = _ctx.metas.find(m => String(m.id) === String(_ctx.metaSelecionadaId));
     if(!meta) return _ctx.mostrarNotificacao('Meta não encontrada.', 'error');
+    // Guarda de participacao: nao basta a reserva estar escondida da lista —
+    // um perfil que nao participa tambem nao pode movimentar o dinheiro dela.
+    if (!perfilParticipa(meta, _ctx.perfilAtivo?.id)) {
+        return _ctx.mostrarNotificacao('Esta reserva e de outro(s) perfil(is).', 'error');
+    }
 
     const saldoDisponivel = Number(meta.saved || 0);
     if(saldoDisponivel <= 0) return _ctx.mostrarNotificacao('Não há saldo disponível nesta reserva para retirar.', 'error');
@@ -2628,6 +2668,11 @@ function abrirGuardarForm() {
 
     const meta = _ctx.metas.find(m => String(m.id) === String(_ctx.metaSelecionadaId));
     if (!meta) return _ctx.mostrarNotificacao('Reserva não encontrada.', 'error');
+    // Guarda de participacao: nao basta a reserva estar escondida da lista —
+    // um perfil que nao participa tambem nao pode movimentar o dinheiro dela.
+    if (!perfilParticipa(meta, _ctx.perfilAtivo?.id)) {
+        return _ctx.mostrarNotificacao('Esta reserva e de outro(s) perfil(is).', 'error');
+    }
 
     const saldoDisponivel = parseFloat(_saldoDashboard().toFixed(2));
 
@@ -2810,6 +2855,11 @@ function abrirAjusteForm() {
 
     const meta = _ctx.metas.find(m => String(m.id) === String(_ctx.metaSelecionadaId));
     if (!meta) return _ctx.mostrarNotificacao('Reserva não encontrada.', 'error');
+    // Guarda de participacao: nao basta a reserva estar escondida da lista —
+    // um perfil que nao participa tambem nao pode movimentar o dinheiro dela.
+    if (!perfilParticipa(meta, _ctx.perfilAtivo?.id)) {
+        return _ctx.mostrarNotificacao('Esta reserva e de outro(s) perfil(is).', 'error');
+    }
 
     const valorAtual = parseFloat(Number(meta.saved || 0).toFixed(2));
 

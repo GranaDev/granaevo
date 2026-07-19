@@ -53,6 +53,34 @@ export function ehCompartilhada(meta) {
 }
 
 /**
+ * Este perfil participa da reserva?
+ *
+ * `meta.membros` guarda IDS DE PERFIL desde 2026-07-19. Antes disso guardava
+ * NOMES digitados à mão — e essas reservas antigas continuam visíveis para
+ * todos, de propósito: transformar dado legado em regra de acesso faria uma
+ * reserva existente sumir da tela de alguém sem aviso. Perder de vista o próprio
+ * dinheiro é pior do que ver uma reserva a mais.
+ *
+ * ⚠️ Isto é ORGANIZAÇÃO DE TELA, não sigilo. Dono e convidado compartilham um
+ * único blob: quem exporta os dados enxerga tudo, participando ou não.
+ */
+export function perfilParticipa(meta, perfilId) {
+    if (!ehCompartilhada(meta)) return true;              // não é compartilhada → todos veem
+    const membros = meta.membros;
+    if (!Array.isArray(membros) || membros.length === 0) return true;
+
+    const pid = String(perfilId ?? '');
+    if (!pid) return true;                                 // sem perfil ativo → não esconde nada
+
+    // Roster legado (nomes) → não filtra. Um id de perfil é sempre uuid ou
+    // inteiro; se NENHUM item se parece com um id, é lista de nomes antiga.
+    const pareceId = (v) => /^[0-9a-f-]{16,}$/i.test(String(v)) || /^\d+$/.test(String(v));
+    if (!membros.some(pareceId)) return true;
+
+    return membros.map(String).includes(pid);
+}
+
+/**
  * Registra um movimento de atribuição em `meta.movimentos` (MUTA a meta).
  * Chamado junto de guardar/retirar quando a caixinha é compartilhada — o
  * dinheiro em si já é movido pelo fluxo normal da meta; aqui só gravamos QUEM.
