@@ -1369,6 +1369,27 @@ let _saveDebounceResolve = null;
 // que já estava armado ANTES da troca. Esta guarda fecha esse caso.
 let _trocandoPerfil = false;
 
+// 🔴 CONGELAMENTO DE GRAVAÇÕES — restauração de backup (incidente 2026-07-19).
+//
+// Ao restaurar um snapshot, o servidor recebe os dados BONS, mas a memória do
+// app ainda tem os dados ANTIGOS. Qualquer save nesse intervalo (o debounce
+// pendente ou o auto-save) grava o estado velho POR CIMA do que acabou de ser
+// restaurado — e o usuário vê "a restauração não funcionou".
+// Foi exatamente isso: duas restaurações seguidas pareceram não ter efeito, e o
+// blob no banco voltava ao tamanho corrompido segundos depois.
+//
+// NÃO existe função de descongelar, de propósito: o único caminho de volta é o
+// reload, que recarrega o estado correto do servidor. Deixar reabrir por código
+// seria criar de novo a janela que este guarda existe para fechar.
+let _gravacoesCongeladas = false;
+function congelarGravacoes() {
+    _gravacoesCongeladas = true;
+    if (_saveDebounceTimer)   { clearTimeout(_saveDebounceTimer); _saveDebounceTimer = null; }
+    if (_saveDebounceResolve) { _saveDebounceResolve(false);      _saveDebounceResolve = null; }
+    try { pararAutoSave(); } catch { /* autosave pode nem ter iniciado */ }
+    _log.warn('SAVE: gravações CONGELADAS (restauração em curso — só o reload libera)');
+}
+
 async function salvarDados() {
     // Invalidar cache de cópias congeladas — dados foram modificados
     if (typeof _cache !== 'undefined') {
@@ -1388,6 +1409,13 @@ async function salvarDados() {
     // entrarNoPerfil salva de novo no fim, com tudo consistente.
     if (_trocandoPerfil) {
         _log.warn('SAVE: ignorado — troca de perfil em curso (evita gravar dados cruzados)');
+        return false;
+    }
+
+    // Restauração de backup em curso: a memória aqui é o estado ANTIGO, e gravar
+    // desfaria o snapshot que o servidor acabou de aplicar. Só o reload libera.
+    if (_gravacoesCongeladas) {
+        _log.warn('SAVE: ignorado — gravações congeladas (restauração de backup)');
         return false;
     }
 
@@ -2432,6 +2460,10 @@ function _makeCtx() {
         atualizarTudo:             { value: (...a) => atualizarTudo(...a),             enumerable: true },
         atualizarListaContasFixas: { value: (...a) => atualizarListaContasFixas(...a), enumerable: true },
         verificarVencimentos:      { value: (...a) => verificarVencimentos(...a),      enumerable: true },
+        // Usado pela restauração de backup (db-configuracoes): trava as gravações
+        // ANTES de pedir o snapshot ao servidor, para a memória velha não gravar
+        // por cima do que foi restaurado. Sem contrapartida — só o reload libera.
+        congelarGravacoes:         { value: () => congelarGravacoes(),                enumerable: true },
         atualizarBadgeVencimentos: { value: (...a) => atualizarBadgeVencimentos(...a), enumerable: true },
         // As 3 abaixo eram chamadas pelas pages lazy SEM estar no ctx — ReferenceError
         // silencioso desde o split de dashboard.js (achado por scripts/check-refs.mjs).

@@ -1102,6 +1102,15 @@ function _abrirConfirmacaoRestauracao(dateStr, dateBR, token, nomearInput, btnRe
                 btnConfirmar.textContent = '⏳ Restaurando…';
 
                 // 2. Executa a restauração
+                // 🔴 ANTES de pedir a restauração: trava TODA gravação.
+                // A memória do app ainda tem os dados ANTIGOS; um save pendente
+                // ou o auto-save disparando agora gravaria o estado velho POR
+                // CIMA do snapshot que o servidor vai aplicar — e a restauração
+                // pareceria "não ter funcionado". Foi exatamente o que aconteceu
+                // em 2026-07-19: duas restaurações seguidas desfeitas em segundos.
+                // Só o reload abaixo destrava (recarregando os dados corretos).
+                try { _ctx.congelarGravacoes?.(); } catch { /* segue: o reload corrige */ }
+
                 const resp = await fetch('/api/user-data', {
                     method: 'POST',
                     headers: {
