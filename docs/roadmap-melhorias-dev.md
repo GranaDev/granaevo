@@ -360,7 +360,8 @@ lazy; falta lazy-ar o **núcleo**. Split já foi avaliado e adiado (orçamento p
 
 # FASE 3 — Produto / diferenciação
 
-## PASSO 11 — Calendário financeiro visual 🔴
+## PASSO 11 — Calendário financeiro visual ✅ APLICADO EM PROD (2026-07-19)
+> Aba lazy (2,72 KB gzip) + `modules/calendario.js` puro com 17 testes. Datas como STRING de ponta a ponta (criar Date p/ comparar dia move o evento de dia por fuso — há teste travando). Reserva/retirada não contam como gasto; assinatura dia 31 cai no último dia de fevereiro; conta paga não entra em "a vencer". Dia com evento é `<button>` com aria-label descritivo.
 **Objetivo:** uma visão de mês/calendário com os eventos financeiros (vencimentos, faturas, recebimentos,
 assinaturas) pintados nos dias.
 **Por quê:** diferencial visual que ninguém no BR entrega bem, e reusa **dados que já existem** (contas
@@ -504,7 +505,8 @@ os 5 primeiros chars do SHA-1 da senha; a senha nunca sai). Fecha credential stu
 
 # FASE 4 — Qualidade & acessibilidade
 
-## PASSO 17 — Auditoria WCAG AA (foco, contraste, teclado) 🔴
+## PASSO 17 — Auditoria WCAG AA (foco, contraste, teclado) 🟡 APLICADO EM PROD (2026-07-19)
+> Base já estava boa: 0 img sem alt, 0 botão só-ícone sem rótulo, lang/main ok, prefers-reduced-motion tratado, páginas inativas com display:none, `:focus-visible` global. Script varreu todo o CSS atrás de `outline:none` em `:focus` sem substituto → ZERO casos. **Faltavam e foram feitos: skip link (2.4.1 nível A) e `aria-current="page"` (4.1.2).** FALTA: contraste de cor (precisa de ferramenta visual; o Lighthouse do CI cobre, hoje como warn).
 **Objetivo:** acessibilidade AA no dashboard e nas telas de conversão.
 **Por quê:** a landing/planos já têm aria-labels; falta a auditoria completa (foco visível, contraste no
 tema claro, navegação por teclado no dashboard). É inclusão **e** um selo de qualidade.
