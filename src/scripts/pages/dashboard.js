@@ -1073,6 +1073,11 @@ const _ALLOWED_KEYS = Object.freeze({
         // Reserva compartilhada (item 13): sem estas 3, o save descartaria a
         // marcação e a trilha, e o recurso sumiria silenciosamente no reload.
         'compartilhada', 'membros', 'movimentos',
+        // `tipoReserva` (caixinha/poupança/CDB/…) e `origemExistente` eram
+        // gravados por db-metas e DESCARTADOS aqui — o formulário perguntava o
+        // tipo, validava a resposta e jogava fora. Detectado por
+        // scripts/check-allowlist.mjs.
+        'tipoReserva', 'origemExistente',
     ]),
     contaFixa: Object.freeze([
         'id', 'descricao', 'valor', 'vencimento', 'pago',

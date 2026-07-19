@@ -1150,8 +1150,24 @@ let _metaPagina = 1;
 // ⚠️ NÃO REMOVER: o card da lista passou a usar o jarro (_criarJarro), mas o detalhe
 // continua usando este ícone. Removê-lo daqui já quebrou a tela uma vez
 // (ReferenceError em renderMetaVisual → os botões de adicionar/retirar sumiam).
+// Ícone da reserva. `tipoReserva` (o que o usuário escolhe no formulário) vinha
+// sendo gravado e descartado no save — a pergunta existia e a resposta não ia a
+// lugar nenhum. Agora ela decide o ícone, que é onde a escolha faz diferença
+// para quem olha a lista.
+const _ICONE_POR_TIPO = Object.freeze({
+    caixinha:        'fa-box',
+    poupanca:        'fa-piggy-bank',
+    cdb:             'fa-chart-line',
+    lci_lca:         'fa-chart-line',
+    tesouro_direto:  'fa-landmark',
+    renda_fixa:      'fa-chart-line',
+});
+
 function _metaIconClass(m) {
     if (String(m.id) === 'emergency') return 'fa-shield-alt';
+    const porTipo = _ICONE_POR_TIPO[m.tipoReserva];
+    if (porTipo) return porTipo;
+    // Sem tipo declarado (reservas antigas): cai no comportamento anterior.
     if (m.tipoRendimento && m.tipoRendimento !== 'sem_rendimento') return 'fa-chart-line';
     return 'fa-piggy-bank';
 }

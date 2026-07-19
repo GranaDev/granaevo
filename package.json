@@ -20,7 +20,8 @@
     "test:security": "node --test tests/security/security.test.js",
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
     "check:refs": "node scripts/check-refs.mjs",
-    "lh": "lhci autorun --config=lighthouserc.cjs"
+    "lh": "lhci autorun --config=lighthouserc.cjs",
+    "check:allowlist": "node scripts/check-allowlist.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",

@@ -39,6 +39,13 @@ jobs:
       - name: Chamadas órfãs (função chamada que não existe)
         run: npm run check:refs
 
+      # Campo gravado fora do _ALLOWED_KEYS é DESCARTADO no save, sem erro
+      # nenhum: o recurso funciona na tela e some no reload. Esse padrão causou
+      # 4 bugs num só dia (2026-07-18/19) — inclusive um campo que o formulário
+      # pedia ao usuário e jogava fora.
+      - name: Campos descartados pelo save (allowlist)
+        run: npm run check:allowlist
+
       - name: Build
         run: npm run build
 
