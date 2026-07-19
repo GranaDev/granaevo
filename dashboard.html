@@ -233,6 +233,10 @@
                 <span class="nav-icon"><i class="fas fa-chart-bar" aria-hidden="true"></i></span>
                 <span class="nav-text">Gráficos</span>
             </button>
+            <button class="nav-btn" data-page="calendario" data-tooltip="Calendário" type="button">
+                <span class="nav-icon"><i class="fas fa-calendar-days" aria-hidden="true"></i></span>
+                <span class="nav-text">Calendário</span>
+            </button>
             <button class="nav-btn" data-page="relatorios" data-tooltip="Relatórios" type="button">
                 <span class="nav-icon"><i class="fas fa-file-alt" aria-hidden="true"></i></span>
                 <span class="nav-text">Relatórios</span>
@@ -768,6 +772,29 @@
                 <div class="graficos-container">
                     <div id="graficosConteudo" aria-live="polite"></div>
                 </div>
+            </section>
+
+            <!-- CALENDÁRIO FINANCEIRO -->
+            <section class="page" id="calendarioPage">
+                <div class="page-header-premium">
+                    <div class="header-content">
+                        <div class="header-title-group">
+                            <div class="breadcrumb-premium">
+                                <a href="dashboard.html">Início</a>
+                                <span class="separator">›</span>
+                                <span>Calendário</span>
+                            </div>
+                            <h1 class="page-title-premium">
+                                <i class="fas fa-calendar-days" aria-hidden="true"></i> Calendário
+                            </h1>
+                            <p class="page-subtitle-premium">
+                                O que vence, entra e sai — dia a dia
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div id="calendarioConteudo" aria-live="polite"></div>
+                <div id="calendarioDetalhe" aria-live="polite"></div>
             </section>
 
             <!-- RELATÓRIOS -->

@@ -2498,11 +2498,11 @@ function _makeCtx() {
     });
 }
 
-let _dbLoaded = { transacoes: false, metas: false, cartoes: false, graficos: false, relatorios: false, configuracoes: false };
+let _dbLoaded = { transacoes: false, metas: false, cartoes: false, graficos: false, relatorios: false, configuracoes: false, calendario: false };
 // Guarda contra import() concorrente (ex.: swipe pré-carrega a vizinha enquanto o
 // dedo arrasta; um vai-e-volta poderia disparar 2 imports antes do 1º resolver →
 // duplo init). _dbLoading marca o que já está em voo.
-let _dbLoading = { transacoes: false, metas: false, cartoes: false, graficos: false, relatorios: false };
+let _dbLoading = { transacoes: false, metas: false, cartoes: false, graficos: false, relatorios: false, calendario: false };
 
 // Skeleton screens — preenchem o container da aba ENQUANTO o módulo é importado
 // (dynamic import()). Sem isso, no 1º acesso a área fica vazia e o conteúdo "pipoca"
@@ -2628,6 +2628,19 @@ function _carregarModuloTela(tela) {
             });
         } else if (_dbLoaded.metas) {
             window._dbMetas?.renderMetasList?.();
+        }
+    }
+
+    if (tela === 'calendario') {
+        if (!_dbLoaded.calendario && !_dbLoading.calendario) {
+            _dbLoading.calendario = true;
+            import('./db-calendario.js?v=1').then(m => {
+                m.init(_makeCtx());
+                _dbLoaded.calendario = true;
+                _dbLoading.calendario = false;
+            });
+        } else if (_dbLoaded.calendario) {
+            window._dbCalendario?.render?.();
         }
     }
 
