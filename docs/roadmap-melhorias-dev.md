@@ -284,7 +284,45 @@ Então o ganho aqui é menor do que parece; ainda vale, mas com expectativa cali
 
 ---
 
-## PASSO 9 — Boot otimista com snapshot cifrado em IndexedDB 🔴
+## PASSO 9 — Boot otimista ✅ FEITO na versão SEGURA (2026-07-19, commit 40f1c22)
+
+> **Decisão tomada com o usuário: o snapshot NÃO entra nos arrays de dados.**
+>
+> Ao abrir este passo, descobri que metade dele **já existia e tinha sido
+> deliberadamente limitada**. O comentário em `dashboard.js` dizia:
+> *"é só pintura: NUNCA toca nos arrays de dados nem no save path → impossível
+> causar wipe"*. Ou seja: a versão display-only não era preguiça, era projeto.
+>
+> Levar o snapshot para dentro de `transacoes`/`metas`/`contasFixas` troca uma
+> **impossibilidade estrutural** por uma **guarda em tempo de execução**, num app
+> que já perdeu dados duas vezes — sempre por corrida entre memória e gravação.
+> Agrava que a janela otimista **cresce quanto pior a conexão**: valor e risco
+> sobem juntos, e é na conexão lenta que o usuário consegue fazer uma edição que
+> o servidor vai sobrescrever em silêncio. **Recusado de propósito.**
+>
+> **O que foi feito (o ganho real era outro):** o cache de boot gravava saldo,
+> entradas e saídas em **texto claro** no `localStorage` — e sobrevivia ao
+> logout. O app já cifra o histórico do chat com AES-GCM exatamente porque valor
+> financeiro em claro ali estava errado, mas o **saldo** ficava em claro.
+> - [x] `modules/boot-cache.js` — AES-GCM, chave não-extraível por usuário
+>       (reusa `assistant/crypto-store.js`); purga as chaves v1 na importação.
+> - [x] Confere `user_id`/`perfil_id` **dentro do envelope**, não só na chave.
+> - [x] `auth-guard`: `logout` e `forceLogout` apagam as duas gerações de chave.
+> - [x] Trava `_resumoRealPintado` — decifrar é assíncrono, então a pintura podia
+>       resolver DEPOIS do render real e repor número velho por cima do certo.
+> - [x] 6 testes novos (fallback sem cripto, purga do texto claro, logout).
+>
+> **NÃO coberto por teste:** cifrar/decifrar de verdade exige WebCrypto +
+> IndexedDB, que não existem no Node. Esse caminho é teste manual no navegador.
+>
+> **Se um dia alguém quiser o 9 completo**, o que precisa antes: bloquear as
+> ações de edição durante a janela otimista (senão a edição perdida é silenciosa)
+> e um outbox de escrita — "offline-first de brinde" era otimismo do roadmap,
+> escrita offline não sai de graça.
+
+<details><summary>Especificação original (mantida para histórico)</summary>
+
+### PASSO 9 — Boot otimista com snapshot cifrado em IndexedDB 🔴
 **Objetivo:** renderizar o dashboard **na hora** com o último estado local, sem esperar a rede.
 **Por quê:** hoje o boot espera o servidor → tela de loading no celular lento. O padrão já foi provado
 pelo **outbox do assistente** e pelo `crypto-store.js` (AES-GCM, chave non-extractable em IndexedDB).
@@ -298,6 +336,8 @@ Ganho: tempo percebido despenca + offline-first de brinde.
       (evitar o incidente de wipe — ver memória `data_wipe_incident_2026_06_23`).
 
 **Risco:** médio-alto (mexe no caminho de dados; risco de mostrar dado velho ou vazar entre contas). **Esforço:** 1–2 dias. **Verificar:** 2º load é instantâneo; trocar de perfil não mostra dado do outro; offline abre com o último estado.
+
+</details>
 
 ---
 
