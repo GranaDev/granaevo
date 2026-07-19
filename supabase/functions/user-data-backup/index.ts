@@ -105,8 +105,31 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Token inválido' }, 401, cors)
   }
 
-  const userId    = user.id
-  const userEmail = user.email ?? ''
+  // ── 3b. Convidado → DONO (mesma resolução de get-user-data/save-user-data) ─
+  // Um convidado (account_members) NÃO tem user_data nem snapshots próprios: os
+  // dados que ele enxerga são os do titular. Sem esta resolução, o convidado
+  // via um histórico de backup VAZIO — e, se conseguisse disparar a restauração,
+  // ela rodaria contra um user_id sem linha nenhuma e mentiria "restaurado".
+  // Isto é leitura/escrita nos dados do DONO por um membro ativo — exatamente o
+  // que o app já faz no load e no save; a autorização é o vínculo ativo em
+  // account_members, conferido aqui no servidor.
+  let effectiveUserId = user.id
+  let effectiveEmail  = user.email ?? ''
+  const { data: memberEntry } = await admin
+    .from('account_members')
+    .select('owner_user_id, owner_email')
+    .eq('member_user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (memberEntry?.owner_user_id) {
+    effectiveUserId = memberEntry.owner_user_id
+    effectiveEmail  = memberEntry.owner_email ?? effectiveEmail
+    console.log(`[user-data-backup] Convidado ${user.id.slice(0, 8)} → dono ${effectiveUserId.slice(0, 8)}`)
+  }
+
+  const userId    = effectiveUserId
+  const userEmail = effectiveEmail
 
   // ── GET: listar snapshots (apenas metadados — SEM data_json) ───────────────
   if (req.method === 'GET') {
@@ -167,9 +190,16 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Snapshot não encontrado' }, 404, cors)
   }
 
-  // Restaura: sobrescreve user_data com o blob do snapshot
+  // Restaura: sobrescreve user_data com o blob do snapshot.
+  //
+  // `.select('user_id')` NÃO é decoração: sem ele, um UPDATE que não encontra
+  // linha alguma retorna SEM erro, e esta função respondia `success: true` para
+  // uma restauração que não gravou nada. O usuário via "Backup restaurado!",
+  // a página recarregava igual, e ele concluía que perdeu os dados de vez —
+  // no exato momento em que mais precisa confiar na ferramenta.
+  // Agora a resposta só é de sucesso se uma linha REALMENTE foi escrita.
   const now = new Date().toISOString()
-  const { error: restoreErr } = await admin
+  const { data: linhas, error: restoreErr } = await admin
     .from('user_data')
     .update({
       data_json:     snapshot.data_json,
@@ -177,10 +207,22 @@ Deno.serve(async (req: Request) => {
       last_modified: now,
     })
     .eq('user_id', userId)
+    .select('user_id')
 
   if (restoreErr) {
     console.error('[user-data-backup] Erro ao restaurar:', restoreErr.message)
     return json({ error: 'Erro ao restaurar dados' }, 500, cors)
+  }
+
+  if (!linhas || linhas.length === 0) {
+    // Existe snapshot mas não existe destino: estado inconsistente. Falhar alto
+    // é melhor do que fingir sucesso — o usuário precisa saber para pedir ajuda
+    // enquanto o snapshot ainda está dentro da janela de retenção (5 dias).
+    console.error(`[user-data-backup] RESTORE SEM DESTINO: nenhuma linha user_data para ${userId.slice(0, 8)}`)
+    return json({
+      error:   'restore_sem_destino',
+      message: 'Não foi possível aplicar o backup: os dados da conta não foram encontrados. Fale com o suporte — seu backup continua guardado.',
+    }, 409, cors)
   }
 
   console.log(

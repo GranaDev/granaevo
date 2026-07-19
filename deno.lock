@@ -11,6 +11,7 @@
         "npm:@fontsource/outfit@^5.2.8",
         "npm:@fontsource/syne@^5.2.7",
         "npm:@fortawesome/fontawesome-free@^7.2.0",
+        "npm:@lhci/cli@^0.14.0",
         "npm:@sentry/browser@^10.55.0",
         "npm:@supabase/supabase-js@2.104.1",
         "npm:esbuild@^0.28.0",

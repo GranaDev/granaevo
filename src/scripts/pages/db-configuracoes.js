@@ -1120,9 +1120,15 @@ function _abrirConfirmacaoRestauracao(dateStr, dateBR, token, nomearInput, btnRe
                     body: JSON.stringify({ action: 'restore', snapshot_date: dateStr }),
                 });
 
-                if (!resp.ok) {
-                    const err = await resp.json().catch(() => ({}));
-                    throw new Error(err?.error || `HTTP ${resp.status}`);
+                const resultado = await resp.json().catch(() => ({}));
+
+                // Confere o CORPO, não só o status. Antes bastava um 200 para o
+                // app dizer "restaurado!" — e a edge chegou a responder 200 numa
+                // restauração que não gravou linha alguma. Anunciar sucesso falso
+                // aqui é o pior erro possível: o usuário recarrega, vê os dados
+                // errados de novo e conclui que perdeu tudo.
+                if (!resp.ok || resultado?.success !== true) {
+                    throw new Error(resultado?.message || resultado?.error || `HTTP ${resp.status}`);
                 }
 
                 _ctx.fecharPopup();
@@ -1134,7 +1140,15 @@ function _abrirConfirmacaoRestauracao(dateStr, dateBR, token, nomearInput, btnRe
                 btnConfirmar.disabled = false;
                 if (btnRestore) btnRestore.disabled = false;
                 btnConfirmar.innerHTML = '<i class="fas fa-undo" aria-hidden="true"></i> Restaurar agora';
-                _ctx.mostrarNotificacao(`Erro: ${e.message || 'Tente novamente.'}`, 'error');
+                _ctx.mostrarNotificacao(`Erro: ${e.message || 'Tente novamente.'} Recarregando…`, 'error');
+
+                // As gravações foram CONGELADAS antes da chamada e não têm como
+                // ser reabertas por código (de propósito). Se a restauração
+                // falhou, deixar o app aberto assim seria pior que o erro: ele
+                // pareceria funcionar e não salvaria nada, em silêncio.
+                // O reload devolve o app a um estado que salva — e não perde
+                // trabalho, porque nada era persistido desde o congelamento.
+                setTimeout(() => window.location.reload(), 2500);
             }
         });
 
