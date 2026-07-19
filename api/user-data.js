@@ -41,7 +41,14 @@ const RL_MAX_USER_POST   = 8;
 const RL_RESTORE_MAX     = 3;
 const RL_RESTORE_WIN_SECS = 3_600;
 const MAX_BODY_BYTES     = 5_242_880;
-const MAX_PROFILES       = 200;
+// 20: o limite REAL por plano é 1 (individual) / 2 (casal) / 4 (família),
+// imposto por `enforce_profile_limit_stripe` na tabela `profiles` — os perfis
+// usáveis nascem lá, então este teto não controla plano, só evita que um save
+// forjado infle o blob com perfis órfãos (abuso de armazenamento).
+// Era 200 (50× o maior plano). 20 = 5× o maior plano e 10× o máximo observado
+// em produção (2), folga de sobra para duplicatas/legado sem travar save real.
+// MANTER EM SINCRONIA com supabase/functions/save-user-data/index.ts.
+const MAX_PROFILES       = 20;
 const MAX_JSON_DEPTH     = 8;
 // 80: o mapa `conquistas` de um perfil guarda 1 chave por conquista
 // desbloqueada — o catálogo tem ~60 ids (2026-07) e segue crescendo.

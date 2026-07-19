@@ -5389,20 +5389,6 @@ if (widgetOndeFoi) {
 
 // ========== UTILITÁRIOS ADICIONAIS ==========
 
-// Função para preencher seletor de parcelas dinamicamente
-function preencherSelectParcelas() {
-    const select = document.getElementById('selectParcelas');
-    if(!select) return;
-    
-    select.innerHTML = '';
-    for(let i = 1; i <= 24; i++) {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = `${String(i).padStart(2, '0')}x`;
-        select.appendChild(opt);
-    }
-}
-
 // ✅ Variável única — usada por iniciarAutoSave e pararAutoSave
 let autoSaveInterval = null;
 let _autoSaveFailCount = 0;
@@ -5447,41 +5433,6 @@ window.iniciarAutoSave = iniciarAutoSave;
 window.pararAutoSave = pararAutoSave;
 
 // ========== VALIDAÇÕES ADICIONAIS ==========
-
-// Valida formato de email
-function validarEmail(email) {
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return regex.test(email);
-}
-
-// Valida CPF (caso queira adicionar no futuro)
-function validarCPF(cpf) {
-    cpf = cpf.replace(/[^\d]/g, '');
-    if(cpf.length !== 11) return false;
-    
-    // Validação básica de CPF
-    if(/^(\d)\1{10}$/.test(cpf)) return false;
-    
-    let soma = 0;
-    let resto;
-    
-    for(let i = 1; i <= 9; i++) {
-        soma += parseInt(cpf.substring(i-1, i)) * (11 - i);
-    }
-    resto = (soma * 10) % 11;
-    if(resto === 10 || resto === 11) resto = 0;
-    if(resto !== parseInt(cpf.substring(9, 10))) return false;
-    
-    soma = 0;
-    for(let i = 1; i <= 10; i++) {
-        soma += parseInt(cpf.substring(i-1, i)) * (12 - i);
-    }
-    resto = (soma * 10) % 11;
-    if(resto === 10 || resto === 11) resto = 0;
-    if(resto !== parseInt(cpf.substring(10, 11))) return false;
-    
-    return true;
-}
 
 // ========== FORMATAÇÕES ADICIONAIS ==========
 
@@ -6376,18 +6327,6 @@ function _formatarMoedaInput(e) {
 // Patch global para que lancarTransacao() leia corretamente com máscara ativada
 // (lancarTransacao usa `document.getElementById('inputValor').value`)
 // A máscara escreve "1.234,56" mas salva o número em data-valorNumerico.
-// Sobrescrevemos o getter de value via defineProperty para retornar o número float.
-function _patchInputValorGetter() {
-    const el = document.getElementById('inputValor');
-    if (!el || el._maskPatched) return;
-    el._maskPatched = true;
-    // Quando a máscara está ativa, `value` no formato "1.234,56" precisaria ser re-parseado.
-    // Mais simples: o data-valorNumerico é lido em lancarTransacao via uma verificação leve.
-    // Não usamos defineProperty (pode conflitar com frameworks) — em vez disso, patching via
-    // um interceptor no keydown para garantir que el.value é sempre um float string legível.
-}
-
-
 // ========== INICIALIZAÇÃO ==========
 function _registrarFallbacksFotoPerfil() {
     // Fallback para qualquer <img> de foto de perfil que falhar ao carregar.

@@ -624,28 +624,21 @@ const SubscriptionChecker = (() => {
         ownerEmail:   null,
     });
 
-    /**
-     * Auto-link Stripe — vincula stripe_subscriptions.user_id ao usuário autenticado.
-     * Requer RLS policy "stripe_sub_update_claim" (user_id IS NULL + email match).
-     */
-    async function _autoLinkStripe(subscriptionId, userId, sessionEmail, subscriptionEmail) {
-        if (!sessionEmail || !subscriptionEmail) return;
-        if (sessionEmail.toLowerCase() !== subscriptionEmail.toLowerCase()) return;
-
-        try {
-            await supabase
-                .from('stripe_subscriptions')
-                .update({
-                    user_id:    userId,
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('id', subscriptionId)
-                .is('user_id', null)
-                .eq('user_email', subscriptionEmail.toLowerCase());
-        } catch {
-            // Não crítico — check-user-access EF também faz o link via service role
-        }
-    }
+    // ─────────────────────────────────────────────────────────────────────
+    // NÃO RECRIAR: aqui existiu `_autoLinkStripe()`, que vinculava uma
+    // assinatura à conta comparando o e-mail da sessão com o e-mail da
+    // assinatura, via UPDATE client-side em stripe_subscriptions.
+    //
+    // Isso era escalada de plano. O cadastro usa `email_confirm: true`, então
+    // o e-mail do JWT NÃO prova posse do e-mail — bastava cadastrar-se com o
+    // endereço de um assinante para reivindicar a assinatura dele. A policy
+    // que a função exigia (`stripe_sub_update_claim`) foi removida na correção
+    // de 2026-07-12; hoje stripe_subscriptions só tem policies de SELECT, e a
+    // chamada morreu de 403 (f7505b8), deixando a função órfã.
+    //
+    // O vínculo correto é server-side: o webhook da Stripe grava o user_id.
+    // Se um dia faltar vínculo, corrigir no webhook — nunca por e-mail no client.
+    // ─────────────────────────────────────────────────────────────────────
 
     return {
         async getActive(userId) {

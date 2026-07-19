@@ -43,9 +43,6 @@ function _fireAt(dia) {
     d.setHours(HORA_DISPARO, 0, 0, 0);
     return d;
 }
-function _isoDia(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 function _ymKey(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }

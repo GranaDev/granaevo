@@ -78,10 +78,6 @@ async function _requireSessionHeader() {
     return `Bearer ${session.access_token}`;
 }
 
-function _publicHeader() {
-    return `Bearer ${SUPABASE_ANON_KEY}`;
-}
-
 // ═══════════════════════════════════════════════════════════════
 //  CAPTCHA — WIDGET IDs
 // ═══════════════════════════════════════════════════════════════

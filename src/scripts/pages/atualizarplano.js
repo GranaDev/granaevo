@@ -471,60 +471,6 @@ async function loadStripeDetails(session) {
 }
 
 // Atualiza TODOS os campos de data na UI com os dados autoritativos do Stripe.
-// Resolve o "-" em "Próxima cobrança" quando o banco está com current_period_end NULL.
-function _updateDatesFromStripe(subscription) {
-    if (!subscription) return;
-
-    const periodEnd   = subscription.current_period_end;
-    const periodStart = subscription.current_period_start;
-    const cancelAtEnd = subscription.cancel_at_period_end;
-    const status      = subscription.status;
-    const isCanceled  = status === 'canceled';
-
-    if (!periodEnd) return;
-
-    const endFmt   = formatDate(periodEnd);
-    const startFmt = periodStart ? formatDate(periodStart) : null;
-
-    // Header principal da página
-    const nextBillingEl = document.getElementById('nextBilling');
-    const cancelDateEl  = document.getElementById('cancelDate');
-    if (nextBillingEl && !cancelAtEnd && !isCanceled) nextBillingEl.textContent = endFmt;
-    if (cancelDateEl && (cancelAtEnd || isCanceled))  cancelDateEl.textContent  = endFmt;
-
-    // Cards de detalhe — todos os rótulos que carregam datas de período
-    const DATE_LABELS = new Set([
-        'Próxima cobrança', 'Acesso válido até', 'Venceu em',
-        'Teste gratuito até', 'Ciclo de cobrança',
-    ]);
-    document.querySelectorAll('.detail-card').forEach(card => {
-        const labelEl = card.querySelector('.dc-label');
-        const valueEl = card.querySelector('.dc-value');
-        if (!labelEl || !valueEl) return;
-        const label = labelEl.textContent?.trim();
-
-        if (DATE_LABELS.has(label) && label !== 'Ciclo de cobrança') {
-            // Só sobrescreve se o valor atual for "—" (vindo do banco sem data)
-            if (valueEl.textContent === '—' || valueEl.textContent === '-') {
-                valueEl.textContent = endFmt;
-            }
-        }
-        if (label === 'Período atual' && startFmt) {
-            const spans = valueEl.querySelectorAll('span:not(.dc-sep)');
-            if (spans[0] && (spans[0].textContent === '—' || !spans[0].textContent.trim())) {
-                spans[0].textContent = startFmt;
-            }
-            if (spans[1] && (spans[1].textContent === '—' || !spans[1].textContent.trim())) {
-                spans[1].textContent = endFmt;
-            }
-        }
-        if (label === 'Membro desde' && !valueEl.textContent.match(/\d{2}\/\d{2}\/\d{4}/)) {
-            const ts = subscription.start_date || subscription.created;
-            if (ts) valueEl.textContent = formatDateLong(ts);
-        }
-    });
-}
-
 function _updateMemberSince(subscription) {
     if (!subscription) return;
     const ts = subscription.start_date || subscription.created;

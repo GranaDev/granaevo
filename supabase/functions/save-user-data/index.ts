@@ -206,9 +206,16 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: 'profiles deve ser um array' }, 400, corsHeaders)
     }
 
+    // 20: o limite REAL por plano (1/2/4) é imposto pelo trigger
+    // `enforce_profile_limit_stripe` na tabela `profiles`. Este teto só impede
+    // que um save forjado infle o blob com perfis órfãos — abuso de
+    // armazenamento, não de plano. Era 200; 20 é 5× o maior plano e 10× o
+    // máximo observado em produção.
+    // MANTER EM SINCRONIA com MAX_PROFILES em api/user-data.js.
+    const MAX_PROFILES = 20
     const profiles = body.profiles as unknown[]
-    if (profiles.length > 200) {
-      return json({ success: false, error: 'Número de perfis excede o limite de 200' }, 400, corsHeaders)
+    if (profiles.length > MAX_PROFILES) {
+      return json({ success: false, error: `Número de perfis excede o limite de ${MAX_PROFILES}` }, 400, corsHeaders)
     }
 
     // ── 6. Montar payload e criptografar ────────────────────────────────────
