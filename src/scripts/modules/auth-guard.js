@@ -812,6 +812,22 @@ function _broadcastLogout(type) {
     catch { /* canal fechado */ }
 }
 
+// Remove o cache de boot do dashboard (KPIs por perfil) ao sair. Varredura por
+// prefixo, inline e sem import: este módulo é crítico e não deve ganhar
+// dependência de UI só para uma limpeza de 6 linhas.
+// `ge_bootc_` é o cifrado atual; `ge_boot_kpi_` é a v1 em texto claro, que
+// ficava no aparelho mesmo depois do logout — some junto.
+function _purgarCacheBoot() {
+    try {
+        const alvos = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && (k.startsWith('ge_bootc_') || k.startsWith('ge_boot_kpi_'))) alvos.push(k);
+        }
+        alvos.forEach((k) => { try { localStorage.removeItem(k); } catch { /* ignore */ } });
+    } catch { /* storage bloqueado — nada a fazer */ }
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  TELA CONGELADA — assinatura encerrada (dentro dos 90 dias de retenção)
 // ═══════════════════════════════════════════════════════════════
@@ -1506,6 +1522,7 @@ const AuthGuard = (() => {
 
         async logout(reason = 'LOGOUT') {
             _stopMonitoring();
+
             _user    = null;
             _subData = null;
             _ready   = false;
@@ -1514,6 +1531,7 @@ const AuthGuard = (() => {
             Fingerprint.clear();
             RateLimiter.clear();
             clearRememberMe(); // limpa flag + token de localStorage/sessionStorage
+            _purgarCacheBoot(); // KPIs cifrados do boot — não deixar no aparelho
 
             _broadcastLogout('LOGOUT');
 
@@ -1533,6 +1551,7 @@ const AuthGuard = (() => {
             Fingerprint.clear();
             RateLimiter.clear();
             clearRememberMe(); // limpa flag + token de localStorage/sessionStorage
+            _purgarCacheBoot(); // KPIs cifrados do boot — não deixar no aparelho
 
             _broadcastLogout('FORCE_LOGOUT');
 

@@ -1932,7 +1932,12 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         // ainda. Serve só como valor-base do count-up de atualizarDashboardResumo(),
         // para que, quando o dashboard finalmente abrir, os números já apareçam
         // corretos, sem flash de "R$ 0,00".
-        _pintarResumoBoot(perfilAtivo.id);
+        // Reabre a janela otimista: na TROCA de perfil o render anterior já
+        // fechou a trava, e sem reabrir o perfil novo nunca pintaria do cache.
+        _resumoRealPintado = false;
+        // Sem await de propósito — esperar a decifragem atrasaria o load de rede,
+        // que é justamente o que esta pintura existe para disfarçar.
+        _pintarResumoBoot(perfilAtivo.id).catch(() => { /* best-effort */ });
 
         // ── Carrega os dados REAIS antes de revelar a tela ───────────────────
         // O loader (authLoading no boot / profileLoading na troca de perfil) fica
@@ -3116,37 +3121,51 @@ function _initBtnPeriodoDash() {
 // enquanto o load de rede ainda corre ("abriu e já está lá"). É só pintura: NUNCA
 // toca nos arrays de dados nem no save path → impossível causar wipe
 // (ver data_wipe_incident). O load real reconcilia logo em seguida via count-up.
-function _bootKpiKey(perfilId) {
-    return `ge_boot_kpi_${_effectiveUserId || 'x'}_${perfilId}`;
+// O armazenamento vive em modules/boot-cache.js e é CIFRADO (AES-GCM, chave
+// não-extraível) desde 2026-07-19 — antes o saldo, as entradas e as saídas
+// ficavam em CLARO no localStorage, enquanto o histórico do chat já era cifrado
+// pela mesma razão. Import dinâmico de propósito: o módulo puxa a cripto do
+// assistente e não pode entrar no chunk crítico do dashboard (orçamento 40 KB).
+let _bootCachePromise = null;
+function _bootCache() {
+    if (!_bootCachePromise) _bootCachePromise = import('../modules/boot-cache.js');
+    return _bootCachePromise;
 }
+
+// Trava anti-repintura. A pintura otimista virou ASSÍNCRONA (precisa decifrar),
+// então sem isto ela poderia resolver DEPOIS do render real e repor números
+// velhos por cima dos verdadeiros — pior que não pintar nada.
+let _resumoRealPintado = false;
 
 function _salvarResumoBoot(perfilId, kpis) {
     if (!perfilId || !_effectiveUserId) return;
-    try {
-        localStorage.setItem(_bootKpiKey(perfilId), JSON.stringify({
-            v: 1, e: kpis.entradas, s: kpis.saidas, sa: kpis.saldo, r: kpis.reservas,
-        }));
-    } catch (_) { /* localStorage indisponível — silencioso */ }
+    _bootCache()
+        .then((m) => m.guardarKpis(_effectiveUserId, perfilId, kpis))
+        .catch(() => { /* cache é best-effort: falhar aqui não afeta o app */ });
 }
 
 // Pinta os KPIs do cache (define textContent + dataset.num, que vira a base do
 // count-up). Retorna true se de fato pintou algo. Respeita saldo oculto.
-function _pintarResumoBoot(perfilId) {
+async function _pintarResumoBoot(perfilId) {
     if (!perfilId || !_effectiveUserId) return false;
     let dados;
     try {
-        const raw = localStorage.getItem(_bootKpiKey(perfilId));
-        if (!raw) return false;
-        dados = JSON.parse(raw);
+        const m = await _bootCache();
+        dados = await m.lerKpis(_effectiveUserId, perfilId);
     } catch (_) { return false; }
-    if (!dados || dados.v !== 1) return false;
+    if (!dados) return false;
+
+    // Decifrar levou tempo e o load real pode ter chegado nesse meio-tempo.
+    // Se já pintou de verdade, desistir — número velho por cima do certo é
+    // exatamente o que esta feature NÃO pode causar.
+    if (_resumoRealPintado) return false;
 
     const pares = [
-        ['totalEntradas', dados.e],
-        ['totalSaidas',   dados.s],
-        ['totalSaldo',    dados.sa],
-        ['totalReservas', dados.r],
-        ['heroSaldo',     dados.sa],
+        ['totalEntradas', dados.entradas],
+        ['totalSaidas',   dados.saidas],
+        ['totalSaldo',    dados.saldo],
+        ['totalReservas', dados.reservas],
+        ['heroSaldo',     dados.saldo],
     ];
     let pintou = false;
     for (const [id, val] of pares) {
@@ -3289,6 +3308,9 @@ function atualizarDashboardResumo() {
     if (reservasEl)  _animarMoeda(reservasEl, totalReservasCalc);
 
     // Snapshot display-only p/ boot otimista (não toca em arrays nem no save path)
+    // Dados REAIS na tela: fecha a porta para a pintura otimista (que é async e
+    // pode estar decifrando ainda) e realimenta o cache do próximo boot.
+    _resumoRealPintado = true;
     if (perfilAtivo) _salvarResumoBoot(perfilAtivo.id, {
         entradas: totalEntradas, saidas: totalSaidas,
         saldo: saldo, reservas: totalReservasCalc,
