@@ -2577,13 +2577,16 @@ function _setNavAtiva(tela) {
     if (!_domNavBtns)   _domNavBtns   = document.querySelectorAll('.nav-btn');
     if (!_domMobileNav) _domMobileNav = document.querySelectorAll('.mobile-nav-item');
 
-    _domNavBtns.forEach(btn => btn.classList.remove('active'));
+    // `aria-current` acompanha a classe .active: a cor sozinha diz qual aba está
+    // aberta para quem VÊ — no leitor de tela, sem isto, todos os itens soam
+    // iguais e a pessoa perde a noção de onde está (WCAG 4.1.2).
+    _domNavBtns.forEach(btn => { btn.classList.remove('active'); btn.removeAttribute('aria-current'); });
     const sidebarBtn = document.querySelector(`.nav-btn[data-page="${tela}"]`);
-    if (sidebarBtn) sidebarBtn.classList.add('active');
+    if (sidebarBtn) { sidebarBtn.classList.add('active'); sidebarBtn.setAttribute('aria-current', 'page'); }
 
-    _domMobileNav.forEach(btn => btn.classList.remove('active'));
+    _domMobileNav.forEach(btn => { btn.classList.remove('active'); btn.removeAttribute('aria-current'); });
     const mobileBtn = document.querySelector(`.mobile-nav-item[data-page="${tela}"]`);
-    if (mobileBtn) mobileBtn.classList.add('active');
+    if (mobileBtn) { mobileBtn.classList.add('active'); mobileBtn.setAttribute('aria-current', 'page'); }
 }
 
 // Lazy-load + refresh do módulo de cada aba. Idempotente (guardado por

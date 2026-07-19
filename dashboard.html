@@ -86,6 +86,11 @@
 
 </head>
 <body>
+    <!-- Skip link (WCAG 2.4.1 — Bypass Blocks, nível A).
+         Sem ele, quem navega por teclado tinha de percorrer a sidebar inteira
+         a cada troca de tela antes de chegar no conteúdo. Fica invisível até
+         receber foco — é o primeiro elemento focável da página. -->
+    <a href="#mainContent" class="skip-link">Pular para o conteúdo</a>
 
     <!-- LOADING DE AUTENTICAÇÃO -->
     <div class="loading-screen" id="authLoading" role="status" aria-label="Verificando acesso">
@@ -1131,6 +1136,10 @@
             <button class="mobile-nav-item" data-page="graficos" type="button" aria-label="Gráficos">
                 <img src="/assets/icons/Graficos.webp" alt="" class="mobile-nav-icon-img">
                 <span class="mobile-nav-label">Gráficos</span>
+            </button>
+            <button class="mobile-nav-item" data-page="calendario" type="button" aria-label="Calendário">
+                <i class="fas fa-calendar-days mobile-nav-icon-fa" aria-hidden="true"></i>
+                <span class="mobile-nav-label">Agenda</span>
             </button>
             <button class="mobile-nav-item" data-page="relatorios" type="button" aria-label="Relatórios">
                 <img src="/assets/icons/Relatorios.webp" alt="" class="mobile-nav-icon-img">
