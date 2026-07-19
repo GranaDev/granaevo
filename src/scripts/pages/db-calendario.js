@@ -70,9 +70,11 @@ export function render() {
     raiz.appendChild(_grade(mapa));
     raiz.appendChild(_legenda());
 
-    // Reabre o dia selecionado após um re-render (ex.: veio um save).
-    if (_diaAberto && mapa.has(_diaAberto)) _abrirDia(_diaAberto, mapa.get(_diaAberto));
-    else _diaAberto = null;
+    // Reabre o dia selecionado após um re-render. Reabre MESMO vazio (ex.: excluiu
+    // o último lembrete do dia): senão o painel de detalhe ficava com o conteúdo
+    // velho até o usuário clicar noutro dia. `scroll:false` para não puxar a tela
+    // a cada re-render de fundo (ge:save-done).
+    if (_diaAberto) _abrirDia(_diaAberto, mapa.get(_diaAberto) || [], false);
 }
 
 // ── Cabeçalho: navegação + totais do mês ────────────────────────────────────
@@ -218,7 +220,7 @@ function _celulaDia(dia, iso, eventos, ehHoje) {
 }
 
 // ── Detalhe do dia ──────────────────────────────────────────────────────────
-function _abrirDia(iso, eventos) {
+function _abrirDia(iso, eventos, scroll = true) {
     _diaAberto = iso;
     const alvo = document.getElementById('calendarioDetalhe');
     if (!alvo) return;
@@ -280,7 +282,8 @@ function _abrirDia(iso, eventos) {
     }
 
     alvo.appendChild(_botaoAddLembrete(iso));
-    alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // Só rola quando foi o usuário que abriu o dia — não a cada re-render de fundo.
+    if (scroll) alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ── Lembretes: criar/excluir a partir do dia ────────────────────────────────
@@ -381,9 +384,14 @@ async function _excluirLembrete(base, iso) {
     if (!base) return;
     const ok = await excluirLembrete(base);
     if (!ok) { _ctx.mostrarNotificacao('Não deu para excluir agora. Tente de novo.', 'error'); return; }
-    _ctx.mostrarNotificacao('Lembrete removido.', 'success');
+    // Remoção OTIMISTA: tira da lista local e re-renderiza JÁ, sem esperar o
+    // refetch — senão o lembrete só sumia depois de trocar de dia e voltar.
+    _lembretes = (_lembretes || []).filter(l => l.base !== base);
     _diaAberto = iso;
-    await _sincronizarLembretes();
+    if (_ctx) render();
+    _ctx.mostrarNotificacao('Lembrete removido.', 'success');
+    // Reconcilia com o servidor em segundo plano (sem await).
+    _sincronizarLembretes();
 }
 
 function _fmtDiaBR(iso) {
