@@ -52,6 +52,22 @@ export function init(ctx) {
     _initHorasVidaButton();
     _initViagemButton();
     _initDesafiosButton();
+
+    // 🔴 Rótulos de Modo viagem / Horas de Vida ficavam CONGELADOS na troca de
+    // perfil (bug relatado em 2026-07-18): ambos liam `ctx.configPerfil` só uma
+    // vez, dentro do init — e este módulo é lazy, inicializado UMA vez por
+    // sessão. Trocando de perfil, o texto continuava o do perfil anterior:
+    // o usuário via "Em curso — [viagem do outro perfil]" enquanto o popup, que
+    // lê o ctx ao vivo, corretamente oferecia CRIAR uma viagem. Duas fontes
+    // discordando na mesma tela.
+    //
+    // `ge:save-done` serve de gatilho porque entrarNoPerfil termina salvando —
+    // toda troca de perfil emite este evento. É texto: re-render é barato e
+    // idempotente, então não há custo em reagir a todo save.
+    document.addEventListener('ge:save-done', () => {
+        _atualizarSubViagem();
+        _atualizarSubHorasVida();
+    });
 }
 
 // ── Modo viagem: quanto a viagem realmente custou ───────────────────────────

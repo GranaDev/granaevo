@@ -1353,6 +1353,22 @@ function _setSyncState(state) {
 let _saveDebounceTimer   = null;
 let _saveDebounceResolve = null;
 
+// 🔴 GUARDA DE TROCA DE PERFIL — corrige a perda de dados de 2026-07-18.
+//
+// O QUE ACONTECEU: o callback do debounce lê as globais NO MOMENTO EM QUE
+// DISPARA (`transacoes`, `metas`, `perfilAtivo.id`), não quando foi agendado.
+// Em `entrarNoPerfil` existe uma janela entre trocar `perfilAtivo` (o novo) e
+// `carregarDadosPerfil` terminar (as arrays ainda são do ANTIGO). Um save
+// armado antes da troca, disparando nessa fresta, gravava
+//   { id: PERFIL_NOVO, transacoes: DADOS_DO_PERFIL_ANTIGO }
+// — e o perfil de destino era sobrescrito pelos dados do outro. Foi exatamente
+// isso que apagou o "Hachiiman" com os dados da "Meow".
+//
+// Um fix anterior (data_wipe_incident) moveu o INÍCIO do auto-save para depois
+// do load, o que resolveu o save de perfil VAZIO — mas não cancelava um timer
+// que já estava armado ANTES da troca. Esta guarda fecha esse caso.
+let _trocandoPerfil = false;
+
 async function salvarDados() {
     // Invalidar cache de cópias congeladas — dados foram modificados
     if (typeof _cache !== 'undefined') {
@@ -1362,6 +1378,16 @@ async function salvarDados() {
 
     if (!perfilAtivo) {
         _log.error('SAVE_001', 'Nenhum perfil ativo');
+        return false;
+    }
+
+    // Durante a troca de perfil, `perfilAtivo` e as arrays em memória ficam
+    // TEMPORARIAMENTE dessincronizados (ver _trocandoPerfil). Gravar aqui é o
+    // que sobrescrevia um perfil com os dados do outro. Recusar é seguro: quem
+    // troca de perfil já descarregou o save pendente antes, e o próprio
+    // entrarNoPerfil salva de novo no fim, com tudo consistente.
+    if (_trocandoPerfil) {
+        _log.warn('SAVE: ignorado — troca de perfil em curso (evita gravar dados cruzados)');
         return false;
     }
 
@@ -1522,10 +1548,32 @@ async function salvarDados() {
                     profilesBase.push(dadosPerfil);
                 }
 
-                // Atualizar cache local imediatamente (antes do POST para refletir estado atual)
-                _allProfilesData = profilesBase;
+                // 🔴 INVARIANTE: nunca gravar dois perfis com o MESMO id.
+                // O `push` acima é a única forma de criar entrada nova, e ele só
+                // deveria rodar para perfil realmente novo. Quando o cache local
+                // estava dessincronizado (a corrida da troca de perfil, 2026-07-18),
+                // ele empurrava uma DUPLICATA do perfil que já existia — foi assim
+                // que a conta ficou com perfis repetidos.
+                // Aqui a duplicata é barrada ANTES de persistir: prefere-se manter o
+                // que acabou de ser montado (`dadosPerfil`, o estado em memória) e
+                // descartar as cópias. Loga alto porque, se isto disparar, existe um
+                // bug a montante — silenciar esconderia a causa.
+                const vistos = new Set();
+                const semDuplicatas = [];
+                for (const p of profilesBase) {
+                    const pid = String(p?.id ?? '');
+                    if (!pid || vistos.has(pid)) {
+                        _log.error('SAVE_DUP_001', `Perfil duplicado/sem id descartado no save: "${pid}"`);
+                        continue;
+                    }
+                    vistos.add(pid);
+                    semDuplicatas.push(p);
+                }
 
-                const sucesso = await dataManager.saveUserData(profilesBase);
+                // Atualizar cache local imediatamente (antes do POST para refletir estado atual)
+                _allProfilesData = semDuplicatas;
+
+                const sucesso = await dataManager.saveUserData(semDuplicatas);
                 if (!sucesso) _log.error('SAVE_004', 'saveUserData retornou false');
                 if (_syncReadyForDisplay) _setSyncState(sucesso ? 'saved' : 'error');
                 resolve(!!sucesso);
@@ -1829,6 +1877,19 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         await new Promise(r => requestAnimationFrame(r));
         await new Promise(r => requestAnimationFrame(r));
 
+        // ── 🔴 ORDEM CRÍTICA — não reordenar (perda de dados de 2026-07-18) ──
+        // 1) DESCARREGA o save pendente ENQUANTO o perfil antigo ainda é o ativo.
+        //    Aqui `perfilAtivo` e as arrays ainda combinam, então esta gravação
+        //    é a correta — e preserva os últimos segundos de edição do usuário
+        //    em vez de descartá-los.
+        if (_saveDebounceTimer) {
+            try { await salvarDados(true); } catch (e) { _log.error('PERFIL_FLUSH_001', e); }
+        }
+        // 2) SÓ ENTÃO fecha a porta: daqui até o load terminar, nenhum save pode
+        //    rodar, porque `perfilAtivo` (novo) e as arrays (velhas) ficam
+        //    dessincronizados nesse intervalo.
+        _trocandoPerfil = true;
+
         perfilAtivo = usuarioLogado.perfis[index];
 
         // Persiste a seleção — restaurada automaticamente em refreshes da sessão
@@ -1848,6 +1909,12 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         // (ver data_wipe_incident).
         await carregarDadosPerfil(perfilAtivo.id);
         atualizarReferenciasGlobais();
+
+        // 3) Perfil e arrays voltaram a combinar → reabre as gravações.
+        //    (O `finally` desta função repete isto como rede de segurança: se o
+        //    load lançar, o app não pode ficar com os saves travados para sempre.)
+        _trocandoPerfil = false;
+
         gerarCobrancasAssinaturas();
 
         // Renderiza TUDO que aparece acima da dobra de forma SÍNCRONA: KPIs/saldo,
@@ -1903,6 +1970,11 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         _log.error('PERFIL_ENTER_001', e);
         alert('Erro ao carregar o perfil. Tente novamente.');
     } finally {
+        // Rede de segurança: se o load lançou no meio da troca, a guarda ficaria
+        // ligada e o app pararia de salvar em SILÊNCIO até um F5 — pior que o bug
+        // original. Reabrir aqui é seguro porque, em caso de erro, o próximo save
+        // legítimo só acontece depois de um novo entrarNoPerfil bem-sucedido.
+        _trocandoPerfil = false;
         if (profileLoading) profileLoading.classList.add('hidden');
     }
 }
