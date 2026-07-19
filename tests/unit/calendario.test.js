@@ -73,6 +73,32 @@ describe('eventosDoMes — só o mês pedido', () => {
     assert.equal(evs[0].titulo, 'Streaming')
   })
 
+  // Bug 2026-07-19: pagar uma conta fixa avança o vencimento e mantém pago=true,
+  // então `c.pago` cru marcava "pago" a próxima parcela EM ABERTO.
+  test('pago é relativo à ocorrência, não ao flag c.pago cru', () => {
+    const dados = {
+      contasFixas: [
+        // Paga em julho, vencimento já avançou para agosto (o próximo em aberto).
+        // `pago:true` é stale; a ocorrência de agosto NÃO está paga.
+        { descricao: 'Aluguel', valor: 1500, vencimento: '2026-08-10',
+          pago: true, dataPagamento: '2026-07-09' },
+        // Paga DENTRO do mês do vencimento → esta ocorrência está paga.
+        { descricao: 'Internet', valor: 100, vencimento: '2026-08-05',
+          pago: true, dataPagamento: '2026-08-01' },
+      ],
+    }
+    const m = eventosDoMes(dados, 2026, 8)
+    assert.equal(m.get('2026-08-10')[0].pago, false, 'venc futuro ao pagamento = pendente')
+    assert.equal(m.get('2026-08-05')[0].pago, true, 'pago no mês do vencimento = pago')
+  })
+
+  test('sem dataPagamento nunca marca pago (evita falso positivo)', () => {
+    const dados = { contasFixas: [
+      { descricao: 'X', valor: 10, vencimento: '2026-07-10', pago: true },
+    ] }
+    assert.equal(eventosDoMes(dados, 2026, 7).get('2026-07-10')[0].pago, false)
+  })
+
   test('dois eventos no mesmo dia convivem', () => {
     assert.equal(eventosDoMes(dados, 2026, 7).get('2026-07-05').length, 2)
   })

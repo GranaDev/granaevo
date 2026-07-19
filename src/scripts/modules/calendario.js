@@ -69,11 +69,21 @@ export function eventosDoMes(dados, ano, mes) {
     for (const c of (Array.isArray(contasFixas) ? contasFixas : [])) {
         if (!c || !_ISO.test(String(c.vencimento || ''))) continue;
         const ehFatura = c.tipoContaFixa === 'fatura_cartao';
+        // "pago" TEM de ser relativo à OCORRÊNCIA mostrada. Pagar uma conta fixa
+        // avança o vencimento para o mês seguinte E mantém `c.pago = true` — então
+        // o flag fica `true` apontando para uma data FUTURA que ainda não foi paga.
+        // Usar `c.pago` cru marcava "pago" a próxima parcela em aberto (bug do
+        // calendário, 2026-07-19). O sinal confiável é `dataPagamento`: a ocorrência
+        // neste vencimento só está paga se o pagamento caiu no MESMO mês do
+        // vencimento. Mesma intenção do card em atualizarListaContasFixas.
+        const mesVenc = String(c.vencimento).slice(0, 7);
+        const pagoNaOcorrencia =
+            typeof c.dataPagamento === 'string' && c.dataPagamento.slice(0, 7) === mesVenc;
         add(c.vencimento, {
             tipo:   ehFatura ? 'fatura' : 'conta',
             titulo: String(c.descricao || (ehFatura ? 'Fatura' : 'Conta fixa')).slice(0, 60),
             valor:  _num(c.valor),
-            pago:   c.pago === true,
+            pago:   pagoNaOcorrencia,
         });
     }
 
