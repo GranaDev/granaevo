@@ -143,29 +143,17 @@ export default defineConfig(({ mode }) => ({
         //   - Google Fonts webfonts (.woff2): CacheFirst (imutáveis por design — URLs incluem hash)
         // NÃO cacheado: Supabase API, HTML, CDN de scripts — dados financeiros devem ser frescos.
         runtimeCaching: [
-          // ── NAVEGAÇÃO (o HTML do app) — RF-06, offline de leitura ────────────
-          // O HTML segue FORA do precache de propósito (nunca servir versão
-          // velha). Mas sem HTML nenhum, offline o app simplesmente NÃO ABRIA —
-          // os JS/CSS pré-cacheados não servem para nada sem a casca.
+          // ⛔ NÃO cachear navegação/HTML aqui. Tentativa de 2026-07-20 (RF-06)
+          // adicionou NetworkFirst com `networkTimeoutSeconds: 3` para o app abrir
+          // offline — e QUEBROU o app: numa conexão móvel mais lenta que 3s, o
+          // NetworkFirst desiste da rede, procura no cache, não acha nada (cache
+          // ainda vazio) e devolve falha → "Não é possível acessar esse site".
+          // Ou seja: transformou internet lenta em app inacessível.
           //
-          // NetworkFirst resolve os dois lados sem voltar ao bug antigo:
-          //   • ONLINE  → tenta a rede primeiro, então o HTML é sempre o FRESCO;
-          //   • OFFLINE → cai no último HTML bom, o app abre, e o cache de boot
-          //     cifrado (Passo 9) pinta os KPIs do último estado conhecido.
-          // Só entra em cache resposta 200 (nunca opaca 0 — foi resposta opaca
-          // corrompida que quebrou os ícones no passado).
-          // A API financeira NÃO é afetada: `mode === 'navigate'` casa apenas
-          // navegação de documento, não fetch/XHR.
-          {
-            urlPattern: ({ request }) => request.mode === 'navigate',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'ge-html-shell',
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [200] },
-            },
-          },
+          // Se um dia voltarmos ao offline de leitura, o pré-requisito é GARANTIR
+          // que exista sempre uma casca em cache (precache do HTML + fallback de
+          // navegação) ANTES de qualquer timeout — nunca um NetworkFirst nu, e
+          // sempre validado num aparelho real, porque isto não dá para testar daqui.
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'StaleWhileRevalidate',
