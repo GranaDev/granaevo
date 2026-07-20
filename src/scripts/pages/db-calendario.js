@@ -13,7 +13,10 @@
 // ----------------------------------------------------------------------------
 
 import { eventosDoMes, resumoDoDia, totaisDoMes, diasNoMes, primeiroDiaSemana } from '../modules/calendario.js?v=1';
-import { listarLembretes, criarLembrete, excluirLembrete, pushLiberado } from '../modules/assistant/reminders.js';
+import { listarLembretes, criarLembrete, excluirLembrete } from '../modules/assistant/reminders.js';
+// Estado REAL do push (existe subscription?), não a permissão do browser —
+// permissão concedida sem subscription não entrega nada. Ver push-notifications.js.
+import { getPushState } from '../modules/push-notifications.js';
 
 let _ctx = null;
 let _ano = null;
@@ -375,7 +378,8 @@ async function _persistirLembrete(texto, iso) {
     if (_ctx) render();
 
     // Undo imediato + aviso sobre push. Mesma UX do assistente ("Cancelar").
-    const extra = pushLiberado() ? '' : ' Ative as notificações para receber os avisos.';
+    const pushOn = (await getPushState().catch(() => 'off')) === 'on';
+    const extra = pushOn ? '' : ' Ative as notificações para receber os avisos.';
     _ctx.mostrarNotificacaoDesfazer(`Lembrete criado (avisos: 7d, 3d e no dia).${extra}`, async () => {
         await excluirLembrete(r.dedupeKey);
         await _sincronizarLembretes();

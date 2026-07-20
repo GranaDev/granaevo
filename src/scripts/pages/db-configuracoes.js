@@ -4,7 +4,7 @@ import '../../styles/dashboard/_db-config-desktop-lazy.css';
 import { supabase, logout } from '../services/supabase-client.js?v=2';
 import { iniciarTutorial } from '../modules/tutorial.js';
 import { initPWA, initInstallButton } from '../modules/pwa-installer.js';
-import { isPushSupported, getPushPermission, requestPushPermission, unsubscribePush } from '../modules/push-notifications.js';
+import { isPushSupported, getPushState, requestPushPermission, unsubscribePush } from '../modules/push-notifications.js';
 import { computeLevel } from '../modules/achievements-catalog.js?v=1';
 import { renderConquistas } from '../modules/achievements-ui.js?v=2';
 let _ctx = null;
@@ -209,57 +209,75 @@ function _initSecurityPanelButton() {
     });
 }
 
+// 🔴 O estado do toggle vem da SUBSCRIPTION real (getPushState), não da
+// permissão do browser. Antes lia `Notification.permission`: como permissão
+// concedida ≠ inscrito, o botão dizia "Ativas" sem existir subscription nenhuma
+// (0 linhas no servidor = push nunca chegava com o app fechado), e "desativar"
+// não tinha efeito visível — JS não consegue revogar permissão, então ao reabrir
+// voltava "Ativas". Relatado em 2026-07-20.
 function _initPushButton() {
     const btn = document.getElementById('btnTogglePush');
     const sub = document.getElementById('pushStatusText');
     if (!btn || !sub) return;
 
-    if (!isPushSupported()) {
-        sub.textContent = 'Não suportado neste navegador';
-        btn.disabled = true;
-        return;
-    }
+    const _pintar = (estado) => {
+        if (estado === 'not-supported') {
+            sub.textContent = 'Não suportado neste navegador';
+            btn.disabled = true;
+        } else if (estado === 'denied') {
+            sub.textContent = 'Bloqueadas — reative nas configurações do navegador';
+            btn.disabled = true;
+        } else if (estado === 'on') {
+            sub.textContent = 'Ativas — toque para desativar';
+            btn.disabled = false;
+        } else {
+            sub.textContent = 'Desativadas — toque para ativar';
+            btn.disabled = false;
+        }
+    };
 
-    const perm = getPushPermission();
-    if (perm === 'granted') {
-        sub.textContent = 'Ativas — toque para desativar';
-    } else if (perm === 'denied') {
-        sub.textContent = 'Bloqueadas — reative nas configurações do browser';
-        btn.disabled = true;
-    } else {
-        sub.textContent = 'Desativadas — toque para ativar';
-    }
+    if (!isPushSupported()) { _pintar('not-supported'); return; }
+
+    sub.textContent = 'Verificando…';
+    getPushState().then(_pintar).catch(() => _pintar('off'));
 
     btn.addEventListener('click', async () => {
-        if (!_ctx?.accessToken && !_ctx?.session) return;
         const token = _ctx?.session?.access_token ?? _ctx?.accessToken ?? '';
         if (!token) return;
 
         btn.disabled = true;
-        const currentPerm = getPushPermission();
+        const estado = await getPushState().catch(() => 'off');
 
-        if (currentPerm === 'granted') {
-            sub.textContent = 'Desativando...';
+        if (estado === 'on') {
+            sub.textContent = 'Desativando…';
             await unsubscribePush(token);
-            sub.textContent = 'Desativadas — toque para ativar';
-            _ctx?.mostrarNotificacao?.('Notificações push desativadas.', 'info');
-        } else {
-            sub.textContent = 'Aguardando permissão...';
-            const result = await requestPushPermission(token);
-            if (result === 'granted') {
-                sub.textContent = 'Ativas — toque para desativar';
-                _ctx?.mostrarNotificacao?.('Notificações push ativadas!', 'success');
-            } else if (result === 'denied') {
-                sub.textContent = 'Bloqueadas — reative nas configurações do browser';
-                btn.disabled = true;
-                _ctx?.mostrarNotificacao?.('Permissão negada pelo browser.', 'error');
-            } else {
-                sub.textContent = 'Desativadas — toque para ativar';
-                _ctx?.mostrarNotificacao?.('Não foi possível ativar notificações.', 'error');
-            }
+            _pintar(await getPushState().catch(() => 'off'));
+            _ctx?.mostrarNotificacao?.('Notificações desativadas neste aparelho.', 'info');
+            return;
         }
 
-        btn.disabled = currentPerm !== 'granted' && getPushPermission() === 'denied';
+        sub.textContent = 'Aguardando permissão…';
+        const result = await requestPushPermission(token);
+
+        if (result === 'granted') {
+            // Confere a verdade depois de ativar: só diz "Ativas" se a
+            // subscription existe de fato.
+            const depois = await getPushState().catch(() => 'off');
+            _pintar(depois);
+            _ctx?.mostrarNotificacao?.(
+                depois === 'on' ? 'Notificações ativadas! Você será avisado mesmo com o app fechado.'
+                                : 'Ativação incompleta. Tente novamente.',
+                depois === 'on' ? 'success' : 'error');
+        } else if (result === 'denied') {
+            _pintar('denied');
+            _ctx?.mostrarNotificacao?.('Permissão negada pelo navegador.', 'error');
+        } else if (result === 'not-supported') {
+            _pintar('not-supported');
+            _ctx?.mostrarNotificacao?.('Este navegador não suporta notificações.', 'error');
+        } else {
+            _pintar('off');
+            _ctx?.mostrarNotificacao?.('Não foi possível ativar as notificações agora.', 'error');
+        }
     });
 }
 

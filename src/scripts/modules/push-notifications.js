@@ -31,15 +31,46 @@ export function isPushSupported() {
          'Notification'  in window
 }
 
-/** Retorna o estado atual da permissão */
+/** Retorna o estado da PERMISSÃO do browser (não é o estado do push — ver getPushState) */
 export function getPushPermission() {
   if (!('Notification' in window)) return 'not-supported'
   return Notification.permission // 'default' | 'granted' | 'denied'
 }
 
 /**
- * Solicita permissão e cria subscription.
+ * Estado REAL do push, baseado na SUBSCRIPTION ativa — não na permissão.
+ *
+ * POR QUE ISTO EXISTE (2026-07-20): o toggle antes lia `Notification.permission`.
+ * Mas "permissão concedida" ≠ "inscrito para receber push": o usuário pode ter
+ * dado permissão e a subscription nunca ter sido criada/salva (0 linhas no
+ * servidor). Aí o toggle mostrava "Ativas" mentindo, e desativar não fazia nada
+ * (revogar permissão é impossível via JS). A verdade é: existe PushSubscription?
+ *
+ * @returns {Promise<'on'|'off'|'denied'|'not-supported'>}
+ *   'on'  = há subscription ativa (push chega com o app fechado)
+ *   'off' = sem subscription (mesmo que a permissão esteja 'granted')
+ */
+export async function getPushState() {
+  if (!isPushSupported() || !VAPID_PUBLIC_KEY) return 'not-supported'
+  if (Notification.permission === 'denied') return 'denied'
+  try {
+    const reg = await navigator.serviceWorker.ready
+    const sub = await reg.pushManager.getSubscription()
+    return sub ? 'on' : 'off'
+  } catch {
+    return 'off'
+  }
+}
+
+/**
+ * Solicita permissão, cria a subscription e a PERSISTE no servidor.
  * Só chamar após interação do usuário (clique em botão).
+ *
+ * Sem o curto-circuito de sessão da versão antiga: ele devolvia 'granted' SEM
+ * salvar quando o flag de sessão existia — então, se o primeiro save falhou, a
+ * subscription nunca era persistida e o push nunca funcionava (0 linhas). Agora
+ * SEMPRE garante subscription + save; se o save falhar, retorna 'error' (a UI
+ * não mente "ativado").
  *
  * @param {string} authToken — JWT do usuário autenticado
  * @returns {Promise<'granted'|'denied'|'not-supported'|'error'>}
@@ -47,39 +78,31 @@ export function getPushPermission() {
 export async function requestPushPermission(authToken) {
   if (!isPushSupported() || !VAPID_PUBLIC_KEY) return 'not-supported'
 
-  // Não pedir permissão novamente se já foi concedida nesta sessão
-  if (sessionStorage.getItem(SESSION_KEY) === 'true' &&
-      Notification.permission === 'granted') {
-    return 'granted'
-  }
-
   try {
-    const permission = await Notification.requestPermission()
+    const permission = Notification.permission === 'granted'
+      ? 'granted'
+      : await Notification.requestPermission()
     if (permission !== 'granted') return 'denied'
 
     const registration = await navigator.serviceWorker.ready
 
-    // Verificar se já tem subscription ativa
-    const existing = await registration.pushManager.getSubscription()
-    if (existing) {
-      await _saveSubscription(existing, authToken)
-      sessionStorage.setItem(SESSION_KEY, 'true')
-      return 'granted'
+    // Reaproveita a subscription existente ou cria uma nova.
+    let subscription = await registration.pushManager.getSubscription()
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly:      true,
+        applicationServerKey: _urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      })
     }
 
-    // Criar nova subscription
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly:      true,
-      applicationServerKey: _urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    })
-
+    // Persistência é OBRIGATÓRIA e sem atalho: sem linha no servidor, não há push.
     await _saveSubscription(subscription, authToken)
     sessionStorage.setItem(SESSION_KEY, 'true')
     return 'granted'
 
   } catch (err) {
     if (err.name === 'NotAllowedError') return 'denied'
-    console.error('[PUSH] Erro ao criar subscription:', err?.message)
+    console.error('[PUSH] Erro ao ativar push:', err?.message)
     return 'error'
   }
 }
