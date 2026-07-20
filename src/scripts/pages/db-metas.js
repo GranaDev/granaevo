@@ -1859,6 +1859,11 @@ function renderMetaVisual() {
         if(progressEl) progressEl.textContent = 'Selecione uma reserva';
         const metaActions = document.getElementById('metaActions');
         if(metaActions) metaActions.classList.add('js-hidden');
+        // Sem reserva selecionada: os cards Progresso/Evolução ficam OCULTOS
+        // (antes apareciam vazios). A dica "Selecione uma reserva" fica em
+        // #metaDetalhes, que é fora do container.
+        const metaCharts = document.getElementById('metaCharts');
+        if(metaCharts) metaCharts.classList.add('js-hidden');
         return;
     }
 
@@ -1871,9 +1876,15 @@ function renderMetaVisual() {
         details.appendChild(_notFound);
         const metaActions = document.getElementById('metaActions');
         if(metaActions) metaActions.classList.add('js-hidden');
+        const metaCharts = document.getElementById('metaCharts');
+        if(metaCharts) metaCharts.classList.add('js-hidden');
         return;
     }
-    
+
+    // Reserva válida selecionada → revela os cards de gráfico.
+    const metaCharts = document.getElementById('metaCharts');
+    if(metaCharts) metaCharts.classList.remove('js-hidden');
+
     const saved = Number(meta.saved || 0);
     const objetivo = Number(meta.objetivo || 0);
     const perc = objetivo > 0 ? Math.min(100, Math.round((saved/objetivo)*100)) : 0;

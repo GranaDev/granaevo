@@ -884,7 +884,7 @@ function _renderMovRodape(lista, total, restam) {
     } else {
         const footer = document.createElement('p');
         footer.className = 'mov-load-total';
-        footer.textContent = `${total} movimentação${total !== 1 ? 'ões' : ''} no período`;
+        footer.textContent = `${total} ${total === 1 ? 'movimentação' : 'movimentações'} no período`;
         lista.appendChild(footer);
     }
 }

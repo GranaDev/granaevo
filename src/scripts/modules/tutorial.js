@@ -143,6 +143,13 @@ function montarCatalogo(perfil) {
           texto: 'Defina <strong>tetos mensais</strong> por tipo de gasto. A barra avisa antes do estouro: <strong style="color:#f59e0b">amarela aos 80%</strong>, <strong style="color:#ef4444">vermelha ao ultrapassar</strong>.',
           dica: 'Comece com 1 ou 2 categorias que costumam fugir do controle (delivery, lazer). Limitar tudo de uma vez desanima — limitar o essencial funciona.',
         },
+        {
+          pagina: 'transacoes', seletores: ['#btnCategorizarTudo', '#btnGerenciarRegras'], pos: 'baixo',
+          icon: 'fa-bolt', iconColor: '#3b82f6',
+          titulo: 'Categorizar em lote',
+          texto: '<strong>Categorizar tudo</strong> olha suas transações sem categoria e sugere uma de uma vez — o app <em>aprende</em> com suas correções e fica melhor a cada uso. Em <strong>Regras</strong> você vê, exporta ou limpa o que ele aprendeu.',
+          dica: 'Importou um extrato grande? Rode "Categorizar tudo" logo depois: a maioria dos lançamentos já sai organizada sem você tocar num por um.',
+        },
       ],
     },
 
@@ -176,6 +183,39 @@ function montarCatalogo(perfil) {
           titulo: 'Guardar, ajustar e retirar',
           texto: 'Com uma reserva selecionada, você tem três ações: <strong>Guardar Dinheiro</strong> (faz um aporte e desconta do saldo), <strong>Ajustar Valor</strong> (corrige o total guardado ou muda a meta sem mexer no saldo) e <strong>Retirar</strong> (devolve o dinheiro ao saldo, com rastreio completo).',
           dica: 'Use "Ajustar Valor" quando o saldo real da sua poupança diverge do app — ele só acerta o número. "Retirar" é para quando você realmente vai usar o dinheiro.',
+        },
+      ],
+    },
+
+    // ═══════════════ AGENDA & RECURSOS ═══════════════
+    {
+      id: 'recursos', nome: 'Agenda & Recursos', icon: 'fa-calendar-days', cor: '#ffd23f',
+      resumo: 'Calendário, lembretes, modo viagem e horas de vida.',
+      passos: [
+        {
+          pagina: 'calendario', seletores: ['[data-page="calendario"]'], pos: 'direita',
+          icon: 'fa-calendar-days', iconColor: '#ffd23f',
+          titulo: 'Seu mês numa agenda',
+          texto: 'O <strong>Calendário</strong> pinta cada dia com o que acontece nele: contas a vencer, faturas, assinaturas, entradas e saídas. Bateu o olho, entendeu o mês.',
+        },
+        {
+          pagina: 'calendario', seletor: '#calendarioConteudo', pos: 'cima',
+          icon: 'fa-bell', iconColor: '#ffd23f',
+          titulo: 'Lembretes que te avisam',
+          texto: 'Toque em <strong>qualquer dia</strong> e use <strong>Adicionar lembrete</strong> para não esquecer nada — pagar o aluguel, renovar o seguro. O app avisa <strong>1 semana antes, 3 dias antes e no dia</strong>. Você também pode pedir pelo chat: <em>"me lembra de pagar a fatura dia 10"</em>.',
+          dica: 'Para receber os avisos com o app fechado, ative as notificações nas Configurações.',
+        },
+        {
+          pagina: 'configuracoes', seletor: '#btnViagem', expandir: '.cfg-list', pos: 'esquerda',
+          icon: 'fa-plane', iconColor: '#4ca6ff',
+          titulo: 'Modo viagem',
+          texto: 'Ligue ao sair e desligue ao voltar: o app soma <strong>tudo que você gastou no período</strong> e te diz quanto a viagem realmente custou — separando os gastos da viagem das contas fixas que sairiam de qualquer jeito.',
+        },
+        {
+          pagina: 'configuracoes', seletor: '#btnHorasVida', expandir: '.cfg-list', pos: 'esquerda',
+          icon: 'fa-hourglass-half', iconColor: '#10b981',
+          titulo: 'Horas de vida',
+          texto: 'Defina quanto vale sua hora de trabalho e o app traduz cada gasto em <strong>horas da sua vida</strong>. "Esse tênis custou 8 horas" muda a forma como você decide gastar.',
         },
       ],
     },
