@@ -923,3 +923,35 @@ como alternativa amigável, com cuidado de segurança. Familiaridade resolve-se 
 ### Passo 1 — Revogar anon key legada — STANDBY
 Migrar ~20 edge functions service_role→secret e revogar a legada. Sensível; fazer
 isolado, função por função. Fica para depois.
+
+---
+
+## 🔴🔴 RF-11 — CRÍTICO (DINHEIRO): pagar a fatura do cartão desconta EM DOBRO
+
+**Relatado com print em 2026-07-20. Prioridade máxima — mexe em saldo real.**
+
+**Sintoma:** ao pagar a fatura do cartão, o app desconta do saldo:
+1. o valor pago da fatura (ex.: `Conta Fixa — Fatura Nubank … −R$ 454,71`), **E**
+2. **cada item/parcela do cartão separadamente** (`Pagamento Cartão` −28,06,
+   −118,40, −9,90, −143,25, −140,00, −133,60 …).
+
+Resultado: **o usuário paga o cartão DUAS vezes** no saldo.
+
+**Comportamento correto (definido pelo usuário):** pagar a fatura deve
+- descontar do saldo **somente o valor efetivamente pago** (no caso, 454,71 —
+  que pode ser MENOR que a soma dos itens, porque o cartão deu desconto), e
+- **marcar todos os itens daquela fatura como pagos**, sem gerar lançamento de
+  saída para cada um.
+
+**Nota importante:** o valor pago pode divergir da soma das parcelas (desconto,
+juros, pagamento parcial). Então o correto NÃO é "somar os itens" — é usar o
+valor pago como a saída única, e os itens viram apenas baixa de status.
+
+**Onde investigar:** `pagarContaFixa` / `anteciparContaFixa` (dashboard.js) e o
+fluxo de fatura (`valorAbertoFatura`, `ciclo-fatura`, db-cartoes). ATENÇÃO: é o
+bloco que o Passo 10 marcou como "mexe em DINHEIRO — não extrair sem o usuário
+poder testar". Exige teste do usuário antes e depois.
+
+**Risco de regressão:** alto. Qualquer correção precisa cobrir: fatura normal,
+fatura com desconto, parcelas de meses futuros (não podem ser baixadas junto) e
+antecipação.
