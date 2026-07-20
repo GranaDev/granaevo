@@ -242,10 +242,27 @@ function _initPushButton() {
     getPushState().then(_pintar).catch(() => _pintar('off'));
 
     btn.addEventListener('click', async () => {
-        const token = _ctx?.session?.access_token ?? _ctx?.accessToken ?? '';
-        if (!token) return;
-
+        // 🔴 RAIZ DO "NADA ACONTECE AO TOCAR" (achado em 2026-07-20).
+        // Isto lia `_ctx.session?.access_token ?? _ctx.accessToken` — e o ctx NUNCA
+        // expôs nenhum dos dois. O token saía sempre vazio, o handler retornava em
+        // SILÊNCIO (sem toast, sem log) e o clique não fazia absolutamente nada.
+        // Por isso push_subscriptions estava com ZERO linhas desde sempre: o push
+        // nunca chegou a ser ativado por ninguém. Não era permissão, nem Service
+        // Worker, nem VAPID — era o botão morto.
+        // Agora pega a sessão na fonte, como os outros pontos deste arquivo já faziam.
         btn.disabled = true;
+        let token = '';
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            token = session?.access_token ?? '';
+        } catch (_) { /* token vazio cai no aviso abaixo */ }
+
+        if (!token) {
+            _pintar(await getPushState().catch(() => 'off'));
+            _ctx?.mostrarNotificacao?.('Sessão expirada. Entre novamente para ativar as notificações.', 'error');
+            return;
+        }
+
         const estado = await getPushState().catch(() => 'off');
 
         if (estado === 'on') {
