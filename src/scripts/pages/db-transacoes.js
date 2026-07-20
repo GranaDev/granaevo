@@ -31,6 +31,21 @@ export function init(ctx) {
         newBtn.addEventListener('click', () => abrirImportarExtrato());
     }
 
+    // Categorização em lote + gerenciar regras. As funções (_categorizarTudo /
+    // _abrirGerenciarRegras) já eram completas — só faltava o ponto de entrada.
+    const btnCat = document.getElementById('btnCategorizarTudo');
+    if (btnCat) {
+        const nb = btnCat.cloneNode(true);
+        btnCat.parentNode.replaceChild(nb, btnCat);
+        nb.addEventListener('click', () => _categorizarTudo());
+    }
+    const btnRegras = document.getElementById('btnGerenciarRegras');
+    if (btnRegras) {
+        const nb = btnRegras.cloneNode(true);
+        btnRegras.parentNode.replaceChild(nb, btnRegras);
+        nb.addEventListener('click', () => _abrirGerenciarRegras());
+    }
+
     atualizarTiposDinamicos();
     _initAutoCategorizar();
     bindFiltrosMovimentacoes();
