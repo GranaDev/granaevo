@@ -545,8 +545,8 @@ os 5 primeiros chars do SHA-1 da senha; a senha nunca sai). Fecha credential stu
 
 # FASE 4 — Qualidade & acessibilidade
 
-## PASSO 17 — Auditoria WCAG AA (foco, contraste, teclado) 🟡 APLICADO EM PROD (2026-07-19)
-> Base já estava boa: 0 img sem alt, 0 botão só-ícone sem rótulo, lang/main ok, prefers-reduced-motion tratado, páginas inativas com display:none, `:focus-visible` global. Script varreu todo o CSS atrás de `outline:none` em `:focus` sem substituto → ZERO casos. **Faltavam e foram feitos: skip link (2.4.1 nível A) e `aria-current="page"` (4.1.2).** FALTA: contraste de cor (precisa de ferramenta visual; o Lighthouse do CI cobre, hoje como warn).
+## PASSO 17 — Auditoria WCAG AA (foco, contraste, teclado) ✅ FECHADO (2026-07-20)
+> Base já estava boa: 0 img sem alt, 0 botão só-ícone sem rótulo, lang/main ok, prefers-reduced-motion tratado, páginas inativas com display:none, `:focus-visible` global. Script varreu todo o CSS atrás de `outline:none` em `:focus` sem substituto → ZERO casos. Feitos: skip link (2.4.1 A), `aria-current="page"` (4.1.2) e o **contraste do tema claro** (2026-07-20, 4920679: tokens de texto já eram AA; faltava a cor fixa usada como texto no calendário — migrada para tokens --cal-c-* com variante Tailwind-700 no claro).
 **Objetivo:** acessibilidade AA no dashboard e nas telas de conversão.
 **Por quê:** a landing/planos já têm aria-labels; falta a auditoria completa (foco visível, contraste no
 tema claro, navegação por teclado no dashboard). É inclusão **e** um selo de qualidade.
