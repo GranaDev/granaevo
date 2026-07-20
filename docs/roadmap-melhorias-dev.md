@@ -978,3 +978,26 @@ parcelas continuam marcadas como pagas — estado incoerente.
 apontando a uma `fatura_cartao`: desmarcar as parcelas quitadas naquele
 pagamento e reabrir a fatura. NÃO implementado agora de propósito — é código de
 dinheiro e precisa de teste do usuário antes de ir ao ar.
+
+### RF-02 — REMOVIDO (2026-07-20)
+Usuário avaliou as sugestões de melhoria da agenda e considerou o calendário
+suficiente como está. Fora do escopo.
+
+### RF-03 — escopo definido (2026-07-20): itens 1, 3 e 5
+Do menu de sugestões, o usuário escolheu:
+1. **Resumo semanal** (ex.: domingo à noite) — "semana que vem vencem N contas, R$ X".
+3. **Conquista/marco** — avisar quando bate meta de reserva / marco relevante.
+5. **Silêncio inteligente** — teto de 1 push/dia, agrupando eventos, e nada em dia
+   sem novidade. É o item que evita o "massante": hoje o Radar dispara por evento.
+
+⚠️ **PRÉ-REQUISITO:** os três geram/entregam via `radar_notifications` + push. Não
+adianta construí-los antes de UM push chegar de verdade no aparelho — foi
+exatamente construir sobre base não verificada que fez a gente andar em círculos.
+Sequência correta: confirmar 1 push entregue → então implementar 1, 3 e 5.
+
+### RF-05 — CAUSA RAIZ ENCONTRADA (2026-07-20)
+O botão de ativar notificações estava **morto**: lia `_ctx.session?.access_token
+?? _ctx.accessToken`, e o ctx nunca expôs nenhum dos dois → token vazio → `return`
+silencioso no topo do handler. Nunca executou nada. Explica os 0 subscriptions
+desde sempre e o "ao tocar, nada acontece". Corrigido lendo
+`supabase.auth.getSession()`. **Falta o teste do usuário confirmar a entrega.**
