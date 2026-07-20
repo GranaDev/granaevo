@@ -4420,6 +4420,10 @@ function anteciparContaFixa(id, valorPago) {
             // MODELO NOVO (2026-07-17): pagar a fatura do mês = marcar as parcelas
             // DESTE mês como pagas. NÃO avança o vencimento nem "rola" a fatura —
             // as parcelas dos outros meses moram nas faturas dos outros meses.
+            // 🔴 Mesma correção do pagamento normal (RF-11, 2026-07-20): a saída da
+            // fatura já foi lançada acima com o valor pago; lançar cada parcela
+            // também cobrava DUAS vezes. A parcela só muda de status e devolve
+            // limite ao cartão.
             let algoPago = false;
             conta.compras.forEach(compra => {
                 if (compra.pago === true) return;
@@ -4429,19 +4433,6 @@ function anteciparContaFixa(id, valorPago) {
                 compra.pago   = true;
                 compra.pagoEm = dataPagto;
                 algoPago = true;
-
-                // Registra a transação do pagamento (histórico + reversível).
-                const nParc = compra.numeroParcela ?? '';
-                transacoes.push({
-                    categoria: 'saida',
-                    tipo:      'Pagamento Cartão',
-                    descricao: `${String(compra.tipo || '').slice(0,100)} - ${String(compra.descricao || '').slice(0,100)}${nParc ? ` (${nParc}/${compra.totalParcelas})` : ''}`,
-                    valor:     parseFloat(parcela.toFixed(2)),
-                    data:      dataPagto,
-                    hora:      agoraDataHora().hora,
-                    faturaId:  conta.id,
-                    compraId:  compra.id,
-                });
 
                 if (cartaoRef) {
                     cartaoRef.usado = Math.max(0, (cartaoRef.usado || 0) - parcela);
@@ -4557,6 +4548,13 @@ function pagarContaFixa(id, valorPago) {
             let cartaoRef = cartoesCredito.find(c => c.id === conta.cartaoId);
             const dataPagto = agoraDataHora().data;
 
+            // 🔴 NÃO gerar uma saída por item (bug RF-11, corrigido em 2026-07-20).
+            // A saída da fatura JÁ foi lançada acima, com o valor realmente pago.
+            // Lançar TAMBÉM cada parcela debitava o cartão DUAS vezes do saldo.
+            // Aqui a parcela só muda de STATUS (paga) e devolve limite ao cartão —
+            // o dinheiro sai uma vez só, no lançamento da fatura.
+            // E somar as parcelas seria errado de qualquer forma: a fatura pode vir
+            // com desconto/juros, então o valor pago diverge da soma dos itens.
             conta.compras.forEach(compra => {
                 if (compra.pago === true) return;
                 const parcela = parseFloat(compra.valorParcela);
@@ -4564,18 +4562,6 @@ function pagarContaFixa(id, valorPago) {
 
                 compra.pago   = true;
                 compra.pagoEm = dataPagto;
-
-                const nParc = compra.numeroParcela ?? '';
-                transacoes.push({
-                    categoria: 'saida',
-                    tipo:      'Pagamento Cartão',
-                    descricao: `${String(compra.tipo || '').slice(0,100)} - ${String(compra.descricao || '').slice(0,100)}${nParc ? ` (${nParc}/${compra.totalParcelas})` : ''}`,
-                    valor:     parseFloat(parcela.toFixed(2)),
-                    data:      dataPagto,
-                    hora:      agoraDataHora().hora,
-                    faturaId:  conta.id,
-                    compraId:  compra.id,
-                });
 
                 if (cartaoRef) cartaoRef.usado = Math.max(0, (cartaoRef.usado || 0) - parcela);
             });

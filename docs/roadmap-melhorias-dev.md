@@ -955,3 +955,26 @@ poder testar". Exige teste do usuário antes e depois.
 **Risco de regressão:** alto. Qualquer correção precisa cobrir: fatura normal,
 fatura com desconto, parcelas de meses futuros (não podem ser baixadas junto) e
 antecipação.
+
+### ✅ RF-11 CORRIGIDO (2026-07-20) + ⚠️ RF-12 aberto (reversão)
+
+**Fix aplicado:** pagar a fatura NÃO gera mais uma saída por item. A saída é uma
+só — a da própria fatura, com o valor pago. Cada parcela apenas muda de STATUS
+(paga) e devolve limite ao cartão. Corrigido nos DOIS caminhos: pagamento normal
+e antecipação. O pagamento de parcela AVULSA (db-cartoes) segue gerando uma
+transação, e está certo — ali é um pagamento único de verdade.
+
+Confirmação com os números do usuário: itens somavam R$ 573,21 e a fatura era
+R$ 454,71 (desconto do cartão) — prova de que somar itens estaria errado; o
+correto é debitar o valor pago.
+
+**⚠️ RF-12 (aberto, consequência do fix):** excluir a transação do pagamento da
+fatura NÃO reverte as parcelas para "não paga". Antes, as saídas por item tinham
+essa reversão (D3, em db-transacoes, via faturaId+compraId); agora elas não
+existem. Não há reversão por `contaFixaId`.
+Efeito: apagar o lançamento da fatura devolve o dinheiro ao saldo, mas as
+parcelas continuam marcadas como pagas — estado incoerente.
+**Correção proposta:** estender a reversão D3 para transações com `contaFixaId`
+apontando a uma `fatura_cartao`: desmarcar as parcelas quitadas naquele
+pagamento e reabrir a fatura. NÃO implementado agora de propósito — é código de
+dinheiro e precisa de teste do usuário antes de ir ao ar.
