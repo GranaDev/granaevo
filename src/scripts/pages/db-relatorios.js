@@ -479,35 +479,100 @@ function _exportPDF() {
 
     const html = '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n<meta charset="UTF-8">\n<title>GranaEvo — ' + _escapeXml(tipo) + ' ' + _escapeXml(mesNome) + ' ' + _escapeXml(anoNum) + '</title>\n' +
 `<style>
+/* ── Documento de relatório — layout de impressão ─────────────────────────
+   Reformulado em 2026-07-20. O anterior era funcional mas cru. Aqui: escala
+   tipográfica com proporção, números tabulares (colunas alinham de verdade),
+   hierarquia por peso em vez de por caixa, e controle de quebra de página. */
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;color:#1a1a2e;font-size:15px;line-height:1.6}
-.ge-doc{max-width:960px;margin:0 auto;padding:32px 28px}
-.ge-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;padding-bottom:16px;border-bottom:3px solid #10b981;flex-wrap:wrap;gap:12px}
-.ge-logo{font-size:1.7rem;font-weight:900;color:#10b981;letter-spacing:-0.03em}.ge-logo span{color:#1a1a2e}
-.ge-meta{text-align:right;font-size:0.82rem;color:#6b7280;line-height:1.5}
-.ge-meta strong{color:#374151;font-size:0.9rem;display:block;margin-bottom:2px}
-.ge-btn{display:inline-flex;align-items:center;gap:8px;background:#10b981;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;margin-bottom:24px;font-family:inherit}
-.ge-btn:hover{background:#059669}
-.relatorio-resumo,.relatorio-cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}
-.relatorio-card{padding:16px;border-radius:12px;border:1px solid #e5e7eb;background:#f9fafb}
-.relatorio-card-label{font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#9ca3af;margin-bottom:6px}
-.relatorio-card-value{font-size:1.35rem;font-weight:800;color:#374151}
-.relatorio-section,.relatorio-bloco{margin-bottom:28px;page-break-inside:avoid}
-.relatorio-section-title,.relatorio-titulo,.section-title,.grafico-titulo{font-size:1rem;font-weight:700;color:#374151;padding-bottom:8px;border-bottom:2px solid #e5e7eb;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-table{width:100%;border-collapse:collapse;font-size:0.83rem;margin-bottom:4px}
-th{background:#f9fafb;color:#374151;font-weight:700;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;padding:9px 12px;text-align:left;border-bottom:2px solid #e5e7eb}
-td{padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#374151}
+:root{
+  --tinta:#0f172a; --tinta-2:#475569; --tinta-3:#94a3b8;
+  --linha:#e8ecf1; --linha-forte:#cbd5e1; --papel-2:#f8fafc;
+  --marca:#0d9488; --pos:#0a7a4d; --neg:#b91c1c; --res:#a16207;
+}
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  background:#fff;color:var(--tinta);font-size:14px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1,"cv05" 1;
+}
+.ge-doc{max-width:880px;margin:0 auto;padding:40px 44px 64px}
+
+/* Cabeçalho: faixa de marca discreta, não um bloco colorido pesado */
+.ge-hdr{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  margin-bottom:34px;padding-bottom:18px;border-bottom:1px solid var(--linha-forte);
+  position:relative;
+}
+.ge-hdr::after{content:'';position:absolute;left:0;bottom:-1px;width:72px;height:3px;background:var(--marca);border-radius:2px}
+.ge-logo{font-size:1.5rem;font-weight:800;color:var(--marca);letter-spacing:-0.02em;line-height:1.1}
+.ge-logo span{color:var(--tinta)}
+.ge-meta{text-align:right;font-size:0.76rem;color:var(--tinta-3);line-height:1.6}
+.ge-meta strong{color:var(--tinta);font-size:0.95rem;font-weight:700;display:block;margin-bottom:1px;letter-spacing:-0.01em}
+
+.ge-btn{
+  display:inline-flex;align-items:center;gap:8px;background:var(--marca);color:#fff;border:none;
+  padding:11px 24px;border-radius:8px;font-size:0.86rem;font-weight:600;cursor:pointer;
+  margin-bottom:30px;font-family:inherit;letter-spacing:0.01em;
+}
+.ge-btn:hover{background:#0f766e}
+
+/* Cards: barra de acento à esquerda em vez de caixa cinza chapada */
+.relatorio-resumo,.relatorio-cards-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:30px;
+}
+.relatorio-card{
+  padding:15px 17px;border-radius:10px;border:1px solid var(--linha);
+  background:var(--papel-2);border-left:3px solid var(--linha-forte);
+}
+.relatorio-card-label{
+  font-size:0.63rem;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;
+  color:var(--tinta-3);margin-bottom:7px;
+}
+.relatorio-card-value{font-size:1.3rem;font-weight:700;color:var(--tinta);letter-spacing:-0.02em;line-height:1.2}
+
+.relatorio-section,.relatorio-bloco{margin-bottom:32px;page-break-inside:avoid;break-inside:avoid}
+.relatorio-section-title,.relatorio-titulo,.section-title,.grafico-titulo{
+  font-size:0.8rem;font-weight:700;color:var(--tinta-2);text-transform:uppercase;letter-spacing:0.08em;
+  padding-bottom:9px;border-bottom:1px solid var(--linha);margin-bottom:16px;
+  display:flex;align-items:center;gap:8px;page-break-after:avoid;break-after:avoid;
+}
+
+/* Tabelas: sem zebra pesada; respiro e alinhamento fazem o trabalho */
+table{width:100%;border-collapse:collapse;font-size:0.8rem;margin-bottom:6px}
+thead{display:table-header-group}  /* repete o cabeçalho a cada página impressa */
+tr{page-break-inside:avoid;break-inside:avoid}
+th{
+  color:var(--tinta-3);font-weight:700;font-size:0.64rem;text-transform:uppercase;letter-spacing:0.08em;
+  padding:0 12px 8px;text-align:left;border-bottom:1px solid var(--linha-forte);background:none;
+}
+td{padding:9px 12px;border-bottom:1px solid var(--linha);color:var(--tinta-2)}
+td:first-child,th:first-child{padding-left:2px}
+td:last-child,th:last-child{padding-right:2px;text-align:right;font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:none}
-tr:nth-child(even) td{background:#fafafa}
-.val-entrada,.text-success,.cor-entrada{color:#16a34a;font-weight:600}
-.val-saida,.text-danger,.cor-saida{color:#dc2626;font-weight:600}
-.val-reserva,.cor-reserva{color:#d97706;font-weight:600}
-.cat-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:0.7rem;font-weight:700}
-.cat-entrada{background:#dcfce7;color:#16a34a}
-.cat-saida{background:#fee2e2;color:#dc2626}
-.cat-reserva{background:#fef9c3;color:#d97706}
-.grafico-container,.chart-wrapper,.grafico-wrapper{max-width:100%;overflow:hidden;text-align:center}
-img{max-width:100%;height:auto;border-radius:8px}
+
+.val-entrada,.text-success,.cor-entrada{color:var(--pos);font-weight:600}
+.val-saida,.text-danger,.cor-saida{color:var(--neg);font-weight:600}
+.val-reserva,.cor-reserva{color:var(--res);font-weight:600}
+
+.cat-badge{
+  display:inline-block;padding:3px 9px;border-radius:5px;font-size:0.66rem;font-weight:700;
+  letter-spacing:0.02em;
+}
+.cat-entrada{background:#e7f6ee;color:var(--pos)}
+.cat-saida{background:#fdeaea;color:var(--neg)}
+.cat-reserva{background:#fdf3e0;color:var(--res)}
+
+.grafico-container,.chart-wrapper,.grafico-wrapper{max-width:100%;overflow:hidden;text-align:center;margin:0 auto}
+img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--linha)}
+
+/* Impressão: margens de verdade, sem o botão, sem cortar bloco no meio */
+@page{margin:14mm 12mm}
+@media print{
+  .ge-btn{display:none !important}
+  .ge-doc{padding:0;max-width:none}
+  body{font-size:11.5pt}
+  a[href]:after{content:''}
+}
 .prog-bar-wrap{background:#e5e7eb;border-radius:99px;height:8px;margin:4px 0}
 .prog-bar{background:#10b981;height:8px;border-radius:99px}
 @media print{@page{margin:14mm 12mm}.ge-btn{display:none!important}body{font-size:13px}.relatorio-section,.relatorio-bloco{page-break-inside:avoid}}

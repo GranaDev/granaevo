@@ -1001,3 +1001,32 @@ O botão de ativar notificações estava **morto**: lia `_ctx.session?.access_to
 silencioso no topo do handler. Nunca executou nada. Explica os 0 subscriptions
 desde sempre e o "ao tocar, nada acontece". Corrigido lendo
 `supabase.auth.getSession()`. **Falta o teste do usuário confirmar a entrega.**
+
+### RF-13 — Exportações: PDF reformulado ✅ · Excel precisa virar .xlsx real 🔴
+
+**Feedback do usuário (2026-07-20):** "todos estão bem amadores". Excel dava
+"planilha corrompida" no mobile e "formato e extensão não correspondem" no desktop.
+
+**PDF — FEITO:** estilo reformulado (tipografia com escala, números tabulares,
+hierarquia por peso, tabelas sem zebra pesada com cabeçalho repetindo por página,
+`@page` com margens, quebras controladas, botão some na impressão).
+
+**🔴 EXCEL — BUG REAL, ainda aberto.** O arquivo é **SpreadsheetML 2003 (XML)**
+salvo como `.xls` com MIME `application/vnd.ms-excel`. Daí:
+- desktop: avisa "formato não corresponde" (é XML, não .xls binário) — abre no Sim;
+- **mobile: NÃO abre** ("corrompida") — o Excel/Sheets do celular não lê SpreadsheetML.
+
+**Correção correta:** gerar **.xlsx de verdade** (OOXML = ZIP com
+`[Content_Types].xml`, `_rels/.rels`, `xl/workbook.xml`, `xl/worksheets/*.xml`,
+`xl/styles.xml`). Exige um escritor de ZIP (método STORE, sem compressão, serve) +
+CRC32. Abre em qualquer lugar, sem aviso, e permite estilo real (fontes, cores,
+largura de coluna, formato de número, painel congelado).
+
+**Por que NÃO foi feito junto:** é formato binário; um byte errado no ZIP produz
+outro arquivo corrompido — trocaria um export quebrado por outro. Depois de duas
+regressões em produção no mesmo dia, escrever ZIP/CRC32 no fim de uma sessão longa,
+sem poder abrir o arquivo no Excel para conferir, seria imprudente. É a próxima
+tarefa, feita com calma e com teste de estrutura + verificação do usuário.
+
+**Interino:** o **CSV** já funciona em todo lugar (UTF-8 com BOM) — é a saída
+confiável para planilha enquanto o .xlsx não sai.
