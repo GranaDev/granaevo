@@ -130,58 +130,78 @@ function sanitizeDate(dateStr) {
     return dateStr;
 }
 
+// ── Foto de perfil: limites (RF-04, 2026-07-20) ─────────────────────────────
+// A regra ANTIGA rejeitava o arquivo ORIGINAL acima de 2 MB e acima de 4000 px —
+// e a maioria das fotos de celular passa dos dois (4032×3024, ~3-5 MB). Resultado:
+// a foto era barrada ANTES do compressor, que a deixaria em ~200 KB. Invertido:
+// aceitamos uma origem generosa (o arquivo original NUNCA vai ao servidor — o
+// canvas re-encoda tudo) e cobramos o limite na SAÍDA, que é o que sobe.
+// A origem ainda tem teto para barrar "decode bomb" (imagem que estoura memória).
+const _FOTO_ORIGEM_MAX_BYTES = 25 * 1024 * 1024;  // 25 MB de origem
+const _FOTO_ORIGEM_MAX_DIM   = 12000;             // px, anti decode-bomb
+const _FOTO_SAIDA_DIM        = 1440;              // px — mais nítido em telas retina
+const _FOTO_SAIDA_MAX_BYTES  = 400 * 1024;        // 400 KB de saída
+
+function _canvasParaBlob(canvas, q) {
+    return new Promise((r) => canvas.toBlob(r, 'image/webp', q));
+}
+
+/**
+ * Reduz e re-encoda a imagem para WebP. O re-encode pelo canvas é também a
+ * defesa: descarta EXIF/GPS e qualquer payload embutido, porque só os PIXELS
+ * sobrevivem — o que sai é um arquivo novo, não o do usuário.
+ * Qualidade ADAPTATIVA: cai em degraus até a saída caber em _FOTO_SAIDA_MAX_BYTES,
+ * então foto pesada vira arquivo leve sem precisar rejeitar nada.
+ */
 async function _sanitizeImageFile(file) {
-    return new Promise((resolve) => {
-        createImageBitmap(file)
-            .then((bitmap) => {
-                try {
-                    const canvas = document.createElement('canvas');
-                    const MAX_DIM = 1200;
-                    let w = bitmap.width;
-                    let h = bitmap.height;
+    let bitmap = null;
+    try {
+        bitmap = await createImageBitmap(file);
 
-                    if (w > MAX_DIM || h > MAX_DIM) {
-                        if (w >= h) { h = Math.round((h / w) * MAX_DIM); w = MAX_DIM; }
-                        else        { w = Math.round((w / h) * MAX_DIM); h = MAX_DIM; }
-                    }
+        if (bitmap.width > _FOTO_ORIGEM_MAX_DIM || bitmap.height > _FOTO_ORIGEM_MAX_DIM) {
+            _log.error('SANITIZE_IMG_004', 'Imagem excede a dimensão máxima de origem');
+            return null;
+        }
 
-                    canvas.width  = w;
-                    canvas.height = h;
+        let w = bitmap.width, h = bitmap.height;
+        const MAX_DIM = _FOTO_SAIDA_DIM;
+        if (w > MAX_DIM || h > MAX_DIM) {
+            if (w >= h) { h = Math.round((h / w) * MAX_DIM); w = MAX_DIM; }
+            else        { w = Math.round((w / h) * MAX_DIM); h = MAX_DIM; }
+        }
 
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, w, h);
-                    ctx.drawImage(bitmap, 0, 0, w, h);
-                    bitmap.close();
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(bitmap, 0, 0, w, h);
+        bitmap.close();
+        bitmap = null;
 
-                    canvas.toBlob(
-                        (blob) => {
-                            if (!blob) {
-                                _log.error('SANITIZE_IMG_001', 'canvas.toBlob retornou null — upload bloqueado');
-                                resolve(null);
-                                return;
-                            }
-                            const sanitized = new File(
-                                [blob],
-                                'profile.webp',
-                                { type: 'image/webp', lastModified: Date.now() }
-                            );
-                            resolve(sanitized);
-                        },
-                        'image/webp',
-                        0.92
-                    );
-                } catch (err) {
-                    _log.error('SANITIZE_IMG_002', err);
-                    try { bitmap.close(); } catch (_) {}
-                    resolve(null);
-                }
-            })
-            .catch((err) => {
-                _log.error('SANITIZE_IMG_003', 'createImageBitmap falhou — upload bloqueado');
-                resolve(null);
-            });
-    });
+        // Degraus de qualidade até caber no teto de saída.
+        let blob = null;
+        for (const q of [0.85, 0.75, 0.65, 0.55]) {
+            blob = await _canvasParaBlob(canvas, q);
+            if (!blob) break;
+            if (blob.size <= _FOTO_SAIDA_MAX_BYTES) break;
+        }
+        if (!blob) {
+            _log.error('SANITIZE_IMG_001', 'canvas.toBlob retornou null — upload bloqueado');
+            return null;
+        }
+        if (blob.size > _FOTO_SAIDA_MAX_BYTES) {
+            _log.error('SANITIZE_IMG_005', 'Não foi possível comprimir abaixo do limite');
+            return null;
+        }
+        return new File([blob], 'profile.webp', { type: 'image/webp', lastModified: Date.now() });
+
+    } catch (err) {
+        _log.error('SANITIZE_IMG_003', err);
+        return null;
+    } finally {
+        if (bitmap) { try { bitmap.close(); } catch (_) { /* ignore */ } }
+    }
 }
 
 function safeCategorias() {
@@ -2183,25 +2203,13 @@ async function _criarPerfilHandler(inputNome, inputFoto, plano, limitePerfis) {
         if (inputFoto.files && inputFoto.files[0]) {
             const arquivoOriginal = inputFoto.files[0];
 
-            if (arquivoOriginal.size > 2 * 1024 * 1024) { alert('A foto deve ter no máximo 2MB.'); return; }
+            if (arquivoOriginal.size > _FOTO_ORIGEM_MAX_BYTES) { alert('A foto é grande demais (máx. 25MB).'); return; }
 
             const mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
             if (!mimesPermitidos.includes(arquivoOriginal.type)) { alert('Tipo de arquivo inválido. Use JPG, PNG ou WebP.'); return; }
 
             const magicValido = await _validarMagicBytes(arquivoOriginal);
             if (!magicValido) { alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.'); return; }
-
-            const _MAX_DIMENSAO_PX = 4000;
-            let dimensaoValida = false;
-            try {
-                const bitmap = await createImageBitmap(arquivoOriginal);
-                dimensaoValida = bitmap.width <= _MAX_DIMENSAO_PX && bitmap.height <= _MAX_DIMENSAO_PX;
-                bitmap.close();
-            } catch (_) {
-                dimensaoValida = false;
-            }
-
-            if (!dimensaoValida) { alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`); return; }
 
             const arquivo = await _sanitizeImageFile(arquivoOriginal);
             if (!arquivo) {
@@ -2863,28 +2871,13 @@ async function alterarFoto(event) {
     if (!fileOriginal) return;
     if (!perfilAtivo) { alert('Erro: Nenhum perfil ativo encontrado.'); return; }
 
-    if (fileOriginal.size > 2 * 1024 * 1024) { alert('A foto deve ter no máximo 2MB.'); return; }
+    if (fileOriginal.size > _FOTO_ORIGEM_MAX_BYTES) { alert('A foto é grande demais (máx. 25MB).'); return; }
 
     const mimesPermitidos = ['image/jpeg', 'image/png', 'image/webp'];
     if (!mimesPermitidos.includes(fileOriginal.type)) { alert('Tipo de arquivo inválido. Use JPG, PNG ou WebP.'); return; }
 
     const magicValido = await _validarMagicBytes(fileOriginal);
     if (!magicValido) { alert('Arquivo inválido. O conteúdo não corresponde a uma imagem real.'); return; }
-
-    const _MAX_DIMENSAO_PX = 4000;
-    let dimensaoValida = false;
-    try {
-        const bitmap = await createImageBitmap(fileOriginal);
-        dimensaoValida = bitmap.width <= _MAX_DIMENSAO_PX && bitmap.height <= _MAX_DIMENSAO_PX;
-        bitmap.close();
-    } catch (_) {
-        dimensaoValida = false;
-    }
-
-    if (!dimensaoValida) {
-        alert(`A imagem deve ter no máximo ${_MAX_DIMENSAO_PX}x${_MAX_DIMENSAO_PX} pixels.`);
-        return;
-    }
 
     try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
