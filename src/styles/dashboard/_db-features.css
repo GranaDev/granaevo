@@ -969,6 +969,51 @@
 }
 .cal-det-valor { font-size: var(--text-sm, .88rem); white-space: nowrap; }
 
+/* ── Exportar Relatório no MOBILE ───────────────────────────────────────────
+   O botão vive dentro de .page-header-premium, e esse header inteiro é
+   `display:none !important` abaixo de 768px (decisão de layout, para poupar
+   altura). Ou seja: a exportação simplesmente NÃO EXISTIA no celular — e a
+   tentativa anterior de "mostrar o botão" não adiantou nada, porque o PAI
+   continuava oculto. Relatado 2 vezes pelo usuário (2026-07-19 e 20).
+
+   Aqui o header volta SÓ na página de Relatórios e SÓ com as ações: título,
+   breadcrumb e subtítulo continuam ocultos (o ganho de altura é preservado).
+   Com TEXTO, não só ícone — o usuário relatou "não vi nenhum ícone". */
+@media (max-width: 768px) {
+    #relatoriosPage .page-header-premium {
+        display: block !important;
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 0 10px !important;
+        min-height: 0 !important;
+    }
+    #relatoriosPage .page-header-premium .header-title-group { display: none !important; }
+    #relatoriosPage .page-header-premium .header-content {
+        display: flex !important;
+        justify-content: flex-end !important;
+        align-items: center;
+    }
+    #relatoriosPage .rel-header-actions { display: flex !important; }
+    #relatoriosPage .btn-exportar-rel {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: var(--text-sm, .86rem);
+        font-weight: var(--fw-semibold, 600);
+        color: var(--color-text);
+        background: color-mix(in srgb, var(--color-text) 6%, transparent);
+        border: 1px solid var(--color-border-strong);
+    }
+    /* O texto volta: ícone sozinho não foi reconhecido como "exportar". */
+    #relatoriosPage .btn-exportar-rel-txt  { display: inline !important; }
+    #relatoriosPage .btn-exportar-rel-seta { display: none !important; }
+}
+
 /* Excluir lembrete (✕) — discreto até o hover. Só tokens (tema claro herda). */
 .cal-det-del {
     flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px;

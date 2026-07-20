@@ -343,3 +343,32 @@ describe('o mundo real não é limpo', () => {
     assert.deepEqual(a, b, 'mesma pergunta, mesma resposta')
   })
 })
+
+// Bug 2026-07-20: "quase todas as contas fixas viraram Mercado". O usuário tem um
+// cartão "Mercado Pago", e as contas fixas se chamam "... pagamento mensal" — o
+// token "pago/pagamento" ligava as duas coisas e decidia a votação.
+describe('stopwords — palavras genéricas não podem decidir a categoria', () => {
+  test('"pagamento" não liga conta fixa a "Mercado Pago"', () => {
+    const historico = [
+      { categoria: 'saida', tipo: 'Mercado', descricao: 'Mercado Pago pagamento', valor: 50, data: '01/07/2026' },
+      { categoria: 'saida', tipo: 'Mercado', descricao: 'Mercado Pago pagamento', valor: 60, data: '02/07/2026' },
+      { categoria: 'saida', tipo: 'Mercado', descricao: 'Mercado Pago pagamento', valor: 70, data: '03/07/2026' },
+    ]
+    const modelo = construirModelo(historico, new Date('2026-07-20'))
+    // "Condomínio pagamento mensal" só compartilha palavras GENÉRICAS com o
+    // histórico — não pode virar Mercado.
+    const s = sugerirCategoria(modelo, 'Condominio pagamento mensal')
+    assert.equal(s, null, 'não deve sugerir nada com base só em "pagamento/mensal"')
+  })
+
+  test('palavra REAL continua funcionando (não quebrei o aprendizado)', () => {
+    const historico = [
+      { categoria: 'saida', tipo: 'Mercado', descricao: 'Carrefour compra', valor: 50, data: '01/07/2026' },
+      { categoria: 'saida', tipo: 'Mercado', descricao: 'Carrefour compra', valor: 60, data: '02/07/2026' },
+      { categoria: 'saida', tipo: 'Mercado', descricao: 'Carrefour compra', valor: 70, data: '03/07/2026' },
+    ]
+    const modelo = construirModelo(historico, new Date('2026-07-20'))
+    const s = sugerirCategoria(modelo, 'Carrefour')
+    assert.ok(s && s.tipo === 'Mercado', 'token distintivo deve continuar sugerindo')
+  })
+})

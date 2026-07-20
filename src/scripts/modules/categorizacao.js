@@ -61,13 +61,37 @@ function _txDate(data) {
 // Lá o número é inofensivo; aqui ele é veneno: "uber 25" e "mercado 25" nada têm
 // em comum, mas "25" é raro no histórico → IDF alto → viraria a "prova" mais forte
 // da sugestão. Números não carregam significado de categoria. "99pop" (misto) fica.
+// Palavras que aparecem em QUALQUER lan\u00e7amento e n\u00e3o dizem nada sobre o tipo.
+//
+// POR QUE ISTO EXISTE (bug relatado em 2026-07-20): o usu\u00e1rio rodou a
+// categoriza\u00e7\u00e3o em lote e "quase todas as contas fixas" viraram **Mercado**.
+// Causa: o IDF daqui \u00e9 suavizado de prop\u00f3sito (`(n+1)/(df+0.5)`) para nunca
+// zerar \u2014 sen\u00e3o o usu\u00e1rio novo, com 3 lan\u00e7amentos, nunca receberia sugest\u00e3o.
+// O efeito colateral \u00e9 que palavras ultra-comuns CONTINUAM pesando. Como as
+// contas fixas se chamam "Apartamento **pagamento** mensal" / "Fatura Nubank
+// **pagamento**" e existe um cart\u00e3o chamado "Mercado **Pago**", o token
+// "pago/pagamento" ligava conta fixa a Mercado e decidia a vota\u00e7\u00e3o.
+//
+// Elas s\u00e3o removidas no TREINO e na CONSULTA (mesma fun\u00e7\u00e3o), ent\u00e3o n\u00e3o entram
+// no \u00edndice nem votam. O que sobra \u00e9 a palavra que realmente identifica o
+// lan\u00e7amento ("condominio", "iptu", "carrefour").
+const _STOPWORDS = new Set([
+    'pagamento', 'pagamentos', 'pago', 'paga', 'pagar',
+    'fatura', 'faturas', 'conta', 'contas', 'boleto', 'boletos',
+    'mensal', 'mensalidade', 'parcela', 'parcelas', 'parcelado',
+    'compra', 'compras', 'debito', 'credito', 'cartao', 'cartoes',
+    'transferencia', 'transf', 'pix', 'ted', 'doc',
+    'valor', 'total', 'ref', 'referente', 'mes', 'dia', 'ano',
+    'via', 'app', 'aplicativo', 'online', 'loja', 'ltda',
+]);
+
 function _tokens(str) {
     return String(str || '')
         .toLowerCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .replace(/[^\w\s]/g, ' ')
         .split(/\s+/)
-        .filter(w => w.length >= 3 && !/^\d+$/.test(w))
+        .filter(w => w.length >= 3 && !/^\d+$/.test(w) && !_STOPWORDS.has(w))
         .map(w => w.slice(0, 30));
 }
 
