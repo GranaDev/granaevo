@@ -801,3 +801,93 @@ reativação de inativo, aviso de fatura.
 6. **Fase 5 ⚖️ (crescimento):** aqui **você decide passo a passo** se compensa antes de eu executar.
 
 > Me diz por qual passo começamos e eu conduzo a etapa inteira com você — investigação, código, teste e verificação.
+
+---
+
+# 🏁 RETA FINAL — backlog consolidado (2026-07-20)
+
+> O usuário declarou: com estes itens resolvidos, o site fica **pronto**. Lista
+> viva; ordenada mais fácil → mais difícil no fim desta seção.
+> **Legenda de quem faz:** 🤖 = eu, sozinho · 👤 = precisa de você (chave/decisão/teste).
+
+## ✅ Já entregue nesta rodada (2026-07-19/20) — só falta você testar
+- **Bugs do teste:** modo viagem some/vaza na troca (2 causas, 3f64d7a) · calendário
+  marcava "pago" parcela em aberto (17df90d) · exclusão de lembrete instantânea +
+  cabeçalho do calendário centralizado.
+- **Lembretes no calendário + 3 avisos (7d/3d/dia) + integração com o chat** (5b8a822).
+- **Contraste do calendário no tema claro** (tokens --cal-c-*, Tailwind-700).
+- **Categorização em lote + gerenciar regras** ligadas na aba Transações (RF-CAT).
+
+## 🔵 Itens do usuário (2026-07-20) — a fazer
+
+### RF-01 — Texto "X (movimentaçãoões)" 🤖 FÁCIL
+Bug de pluralização no rótulo de transações. Corrigir para "1 movimentação" /
+"N movimentações". Buscar o template do contador.
+
+### RF-02 — Melhorias da agenda (calendário) 🤖 MÉDIO
+Backlog aberto de refinamentos do calendário (a definir com o usuário). Base já no ar.
+
+### RF-03 — Melhoria das notificações + lançamento de transações 🤖 MÉDIO
+(a) melhorar a experiência de notificações no app; (b) sugestões para o fluxo de
+LANÇAMENTO de transações (mais rápido/inteligente). Escopo a detalhar.
+
+### RF-04 — Foto de perfil: resolução maior + compressão + segurança 🤖 MÉDIO-DIFÍCIL
+Hoje a maioria das fotos passa de 2 MB. Precisa: resolução final maior, compressão
+mais forte no cliente (canvas/WebP), e validação server-side (magic bytes + tamanho
++ dimensões) — já há upload validado, estender. Cuidar de EXIF/orientação.
+
+### RF-05 — Push que não desativa ao clicar + PWA só notifica com app aberto 👤+🤖 DIFÍCIL (o mais importante deste bloco)
+Dois problemas: (a) o toggle "Ativas" não desativa ao clicar (bug de UI/estado);
+(b) **o push só chega quando o app abre** — para lembrete, isso o torna inútil.
+DIAGNÓSTICO: push REAL em background exige Web Push com Service Worker recebendo
+`push` event mesmo com app fechado (VAPID já existe — Radar). Se hoje só notifica
+com app aberto, ou o SW não trata `push`, ou a subscription não está registrada,
+ou o iOS limita (iOS só entrega Web Push em PWA INSTALADO, 16.4+). Investigar o
+`assistant-sw.js`/SW principal + a subscription. É a peça que faz o lembrete valer.
+
+### RF-06 — Melhorias do modo offline 🤖 MÉDIO-DIFÍCIL
+Offline-first de leitura (o Passo 9 cifrou o cache de boot). Escrita offline exige
+outbox + reconciliação — pesado. Definir alcance.
+
+### RF-07 — Atualização do guia/tutorial 🤖 FÁCIL-MÉDIO
+Tutorial/hub desatualizado frente às features novas (calendário, lembretes, viagem,
+reservas, categorização em lote). Revisar trilhas.
+
+### RF-08 — Testar "Tempo de Vida" (Horas de Vida) 🤖+👤 FÁCIL
+Passar o módulo horas-vida.js a limpo + teste do usuário. Motor puro já testado;
+validar o fluxo real.
+
+### 🔴 RF-09 — Restauração de backup reseta TODOS os perfis do plano (VERIFICADO — risco real) 🤖 DIFÍCIL
+CONFIRMADO no código: backup/restore é por CONTA (blob inteiro via effectiveUserId),
+NÃO por perfil. Um CONVIDADO que restaura resolve para owner_user_id e volta o blob
+TODO — todos os perfis de todos do plano, à data do snapshot. O medo do usuário é
+válido. Correção real = snapshot/restauração com granularidade por perfil (mexe no
+modelo de snapshot). ALTO por segurança de dados; mitigação interina: avisar forte
+na UI que restaurar afeta a conta inteira + exigir confirmação.
+
+### RF-10 — Reservas: "Progresso geral" e "Evolução" só após selecionar 🤖 FÁCIL
+Hoje os cards aparecem vazios antes de escolher a reserva. Esconder até haver seleção.
+
+## 📌 Anotados para depois (decisão/dependência sua) — 👤
+- **Categorização em lote:** ✅ FEITA (RF-CAT) — era "decisão", o usuário mandou ligar.
+- **Lighthouse (Passo 27):** roda no CI; relatório na aba Actions do GitHub. Eu não
+  consigo ler (gh sem auth aqui). Ver com calma depois.
+- **Turnstile (Passo 26):** usuário se ABSTÉM por ora (dor de cabeça de cache com
+  Cloudflare no passado). Retomar quando ele quiser; eu configuro com a chave.
+- **Re-aceite da Clarice (Passo 14):** só falta claricealexandre (login 03/06, termos
+  1.0). Usuário vai pedir o re-aceite. Zero código.
+- **Reserva compartilhada por convite (#11/#12):** análise entregue; DECISÃO de
+  arquitetura pendente (blob privado 1-escritor × tabela server-readable multi-escritor).
+- **Controlador PF/PJ (LGPD):** decisão do titular; destrava política + log com IP.
+
+## 🔽 Ordem sugerida (fácil → difícil) — o que eu faço sozinho (🤖)
+1. RF-01 texto plural 🤖 (minutos)
+2. RF-10 cards de reserva só após seleção 🤖 (curto)
+3. RF-07 tutorial 🤖 (médio, sem risco)
+4. RF-08 testar Horas de Vida 🤖+👤
+5. RF-02 melhorias da agenda 🤖 (escopo a definir)
+6. RF-03 notificações + lançamento 🤖 (escopo a definir)
+7. RF-04 foto de perfil (compressão+segurança) 🤖
+8. RF-06 modo offline 🤖 (leitura fácil, escrita pesada)
+9. RF-05 push em background 👤+🤖 (o mais importante; iOS pode limitar)
+10. RF-09 restauração por perfil 🤖 (mais pesado; mexe em snapshot)
