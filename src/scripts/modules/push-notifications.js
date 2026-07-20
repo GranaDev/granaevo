@@ -24,6 +24,17 @@ const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? ''
 const PUSH_SUBSCRIBE_URL = '/api/user-data'
 const SESSION_KEY        = 'ge:push_subscribed'
 
+// Último motivo real de falha ao ativar o push. Existe porque a ativação falhava
+// em SILÊNCIO: a UI dizia só "não foi possível" e não havia como saber se o furo
+// era permissão, Service Worker, VAPID ou a gravação no servidor — e sem isso não
+// dá para consertar o que não se enxerga (2026-07-20).
+let _ultimoErro = '';
+
+/** Motivo da última falha de ativação (string curta, para exibir/depurar). */
+export function getUltimoErroPush() {
+  return _ultimoErro;
+}
+
 /** true se o browser suporta Web Push */
 export function isPushSupported() {
   return 'serviceWorker' in navigator &&
@@ -76,15 +87,22 @@ export async function getPushState() {
  * @returns {Promise<'granted'|'denied'|'not-supported'|'error'>}
  */
 export async function requestPushPermission(authToken) {
-  if (!isPushSupported() || !VAPID_PUBLIC_KEY) return 'not-supported'
+  _ultimoErro = ''
+  if (!isPushSupported()) { _ultimoErro = 'navegador sem suporte a Web Push'; return 'not-supported' }
+  if (!VAPID_PUBLIC_KEY)  { _ultimoErro = 'VAPID public key ausente no build';  return 'not-supported' }
 
   try {
     const permission = Notification.permission === 'granted'
       ? 'granted'
       : await Notification.requestPermission()
-    if (permission !== 'granted') return 'denied'
+    if (permission !== 'granted') { _ultimoErro = 'permissão negada'; return 'denied' }
 
-    const registration = await navigator.serviceWorker.ready
+    // Service Worker precisa estar ATIVO — sem ele não há pushManager. Trava
+    // aqui se o SW não subir (foi o que aconteceu quando o SW quebrou).
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('Service Worker não ficou pronto em 10s')), 10_000)),
+    ])
 
     // Reaproveita a subscription existente ou cria uma nova.
     let subscription = await registration.pushManager.getSubscription()
@@ -101,8 +119,9 @@ export async function requestPushPermission(authToken) {
     return 'granted'
 
   } catch (err) {
-    if (err.name === 'NotAllowedError') return 'denied'
-    console.error('[PUSH] Erro ao ativar push:', err?.message)
+    if (err.name === 'NotAllowedError') { _ultimoErro = 'permissão negada'; return 'denied' }
+    _ultimoErro = String(err?.message || err || 'erro desconhecido').slice(0, 160)
+    console.error('[PUSH] Erro ao ativar push:', _ultimoErro)
     return 'error'
   }
 }

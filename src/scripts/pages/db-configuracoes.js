@@ -4,7 +4,7 @@ import '../../styles/dashboard/_db-config-desktop-lazy.css';
 import { supabase, logout } from '../services/supabase-client.js?v=2';
 import { iniciarTutorial } from '../modules/tutorial.js';
 import { initPWA, initInstallButton } from '../modules/pwa-installer.js';
-import { isPushSupported, getPushState, requestPushPermission, unsubscribePush } from '../modules/push-notifications.js';
+import { isPushSupported, getPushState, getUltimoErroPush, requestPushPermission, unsubscribePush } from '../modules/push-notifications.js';
 import { computeLevel } from '../modules/achievements-catalog.js?v=1';
 import { renderConquistas } from '../modules/achievements-ui.js?v=2';
 let _ctx = null;
@@ -276,7 +276,7 @@ function _initPushButton() {
             _ctx?.mostrarNotificacao?.('Este navegador não suporta notificações.', 'error');
         } else {
             _pintar('off');
-            _ctx?.mostrarNotificacao?.('Não foi possível ativar as notificações agora.', 'error');
+            _ctx?.mostrarNotificacao?.(`Não foi possível ativar: ${getUltimoErroPush() || 'erro desconhecido'}`, 'error');
         }
     });
 }
