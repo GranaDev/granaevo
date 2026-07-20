@@ -729,6 +729,18 @@ class DataManager {
      * Se o último load foi OK, confia no estado (permite esvaziamento legítimo).
      * Público para o beforeunload do dashboard (POST cru) também poder consultar.
      */
+    /**
+     * O último loadUserData foi um sucesso REAL (200 + parse), e não um
+     * #emptyStructure() de falha transitória (offline, proxy fora, timeout)?
+     *
+     * Público desde 2026-07-20 (RF-06, offline de leitura): sem isto o dashboard
+     * não distinguia "o usuário não tem dados" de "a rede não respondeu" — e
+     * renderizava R$ 0,00 offline, o que parece perda de dados.
+     */
+    get lastLoadOk() {
+        return this.#lastLoadOk;
+    }
+
     isDestructiveSave(profilesData) {
         if (this.#lastLoadOk) return false;
         if (!Array.isArray(profilesData)) return false;

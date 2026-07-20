@@ -55,6 +55,9 @@ let _conquistasReady = false; // false durante o backfill silencioso (boot/troca
 let _effectiveUserId = null;
 let _effectiveEmail  = null;
 let _allProfilesData = []; // cache local de todos os perfis — fonte de verdade para o save
+// RF-06: o último carregamento falhou por rede (offline/proxy fora). Enquanto
+// true, a tela NÃO deve ser sobrescrita com zeros — ver carregarDadosPerfil.
+let _loadFalhou = false;
 let _cachedAuthToken = null; // token cacheado para beforeunload (fetch+keepalive)
 
 // Cache de cópias congeladas para window.transacoes / metas / contasFixas / cartoesCredito
@@ -663,6 +666,24 @@ async function carregarDadosPerfil(perfilId) {
         _log.info('📦 [carregarDadosPerfil] Iniciando carregamento de dados');
 
         const userData = await dataManager.loadUserData();
+
+        // 🔴 LOAD FALHOU (offline, proxy fora, timeout) — RF-06.
+        // `loadUserData` devolve estrutura VAZIA nesse caso. Seguir daqui zeraria
+        // as arrays e a tela mostraria R$ 0,00 — que, para quem abre o app sem
+        // internet, é indistinguível de "perdi tudo". Mantemos o estado atual (e o
+        // que o cache de boot cifrado já pintou) e avisamos que está offline.
+        // NÃO é só cosmético: o guarda anti-wipe do data-manager depende deste
+        // mesmo sinal para não persistir o vazio por cima do banco.
+        if (!dataManager.lastLoadOk) {
+            _loadFalhou = true;
+            _log.warn('LOAD: falhou (offline?) — mantendo o estado atual, sem zerar a tela');
+            try {
+                mostrarNotificacao('Sem conexão — mostrando o último estado salvo. Nada foi perdido.', 'warning');
+            } catch (_) { /* toast é best-effort */ }
+            return;
+        }
+        _loadFalhou = false;
+
         if (userData.profiles.length > 0) _allProfilesData = userData.profiles;
 
         // ✅ CORREÇÃO CRÍTICA: data-manager.js rejeita perfis com id inteiro (ex: id=6)
@@ -3217,6 +3238,11 @@ async function _pintarResumoBoot(perfilId) {
 }
 
 function atualizarDashboardResumo() {
+    // RF-06: offline e sem nada em memória — não pintar R$ 0,00 por cima do que o
+    // cache de boot cifrado já mostrou. Zerar aqui pareceria perda de dados quando
+    // o que houve foi só falta de rede. Com dados em memória, segue normal.
+    if (_loadFalhou && transacoes.length === 0 && metas.length === 0 && contasFixas.length === 0) return;
+
     // O total reservado exibido é o `totalReservasCalc` (somado das metas, abaixo).
     let totalEntradas = 0, totalSaidas = 0;
     let corrupcaoDetectada = false;

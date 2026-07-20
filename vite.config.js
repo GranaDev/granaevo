@@ -143,6 +143,29 @@ export default defineConfig(({ mode }) => ({
         //   - Google Fonts webfonts (.woff2): CacheFirst (imutáveis por design — URLs incluem hash)
         // NÃO cacheado: Supabase API, HTML, CDN de scripts — dados financeiros devem ser frescos.
         runtimeCaching: [
+          // ── NAVEGAÇÃO (o HTML do app) — RF-06, offline de leitura ────────────
+          // O HTML segue FORA do precache de propósito (nunca servir versão
+          // velha). Mas sem HTML nenhum, offline o app simplesmente NÃO ABRIA —
+          // os JS/CSS pré-cacheados não servem para nada sem a casca.
+          //
+          // NetworkFirst resolve os dois lados sem voltar ao bug antigo:
+          //   • ONLINE  → tenta a rede primeiro, então o HTML é sempre o FRESCO;
+          //   • OFFLINE → cai no último HTML bom, o app abre, e o cache de boot
+          //     cifrado (Passo 9) pinta os KPIs do último estado conhecido.
+          // Só entra em cache resposta 200 (nunca opaca 0 — foi resposta opaca
+          // corrompida que quebrou os ícones no passado).
+          // A API financeira NÃO é afetada: `mode === 'navigate'` casa apenas
+          // navegação de documento, não fetch/XHR.
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'ge-html-shell',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'StaleWhileRevalidate',
