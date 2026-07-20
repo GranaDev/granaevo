@@ -891,3 +891,35 @@ Hoje os cards aparecem vazios antes de escolher a reserva. Esconder até haver s
 8. RF-06 modo offline 🤖 (leitura fácil, escrita pesada)
 9. RF-05 push em background 👤+🤖 (o mais importante; iOS pode limitar)
 10. RF-09 restauração por perfil 🤖 (mais pesado; mexe em snapshot)
+
+---
+
+## ⏸️ STANDBY decidido pelo usuário (2026-07-20) — próximas etapas
+
+### RF-09 + "divisão por perfil" (bloco unificado) — STANDBY
+O usuário juntou, com razão, três coisas que compartilham a MESMA raiz: **falta de
+granularidade por perfil**.
+- RF-09: restauração de backup reverte a conta inteira (deveria ser por perfil).
+- Modo viagem e outras configs: hoje no blob por perfil, mas o compartilhamento entre
+  perfis/convidados não é limpo.
+- Reserva por casal/família: precisa de dado que vive entre perfis.
+**Decisão:** tratar TUDO junto num redesenho de "divisão por perfil", depois. Faz
+mais sentido do que remendar cada um. Mitigação interina do RF-09 (aviso forte na UI
+de restauração) fica para o início desse bloco.
+
+### Passo 6 — MFA — STANDBY (com correção de fato)
+Preocupação do usuário: (a) acha que precisa de Supabase Pro; (b) usuários conhecem
+mais SMS/e-mail que TOTP.
+**Correção factual para quando voltarmos:**
+- **TOTP (app autenticador) é GRÁTIS** no Supabase Auth base — NÃO precisa Pro.
+- **SMS** é que custa: exige provider (Twilio/MessageBird) e cobra por mensagem.
+- **E-mail como 2º fator** não é um método de MFA nativo do Supabase (e-mail lá é
+  magic-link/OTP de LOGIN, não 2FA). Daria pra fazer OTP-por-e-mail caseiro, mas é
+  código próprio + risco de virar bypass se malfeito.
+Recomendação futura: TOTP opcional (grátis, blindado) + talvez OTP-e-mail caseiro
+como alternativa amigável, com cuidado de segurança. Familiaridade resolve-se com UX
+(QR + passo a passo), não trocando por SMS pago.
+
+### Passo 1 — Revogar anon key legada — STANDBY
+Migrar ~20 edge functions service_role→secret e revogar a legada. Sensível; fazer
+isolado, função por função. Fica para depois.
