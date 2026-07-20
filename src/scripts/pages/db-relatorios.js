@@ -6,6 +6,9 @@ import '../../styles/dashboard/_db-reports-lazy.css';
 // essas regras (saíram do dashboard.css eager).
 import '../../styles/dashboard/_db-reports-desktop-lazy.css';
 import { dataManager } from '../modules/data-manager.js?v=8';
+// Gerador de .xlsx REAL (OOXML/ZIP). O export antigo era SpreadsheetML salvo
+// como .xls — o Excel avisava "formato não corresponde" e o celular nem abria.
+import { gerarXlsx } from '../modules/xlsx.js';
 // Motor do score extraído (puro/testável) — ver ../modules/score-financeiro.js
 import { calcScore as _calcScoreCore } from '../modules/score-financeiro.js?v=1';
 let _ctx = null;
@@ -479,12 +482,26 @@ function _exportPDF() {
 
     const html = '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n<meta charset="UTF-8">\n<title>GranaEvo — ' + _escapeXml(tipo) + ' ' + _escapeXml(mesNome) + ' ' + _escapeXml(anoNum) + '</title>\n' +
 `<style>
-/* ── Documento de relatório — layout de impressão ─────────────────────────
-   Reformulado em 2026-07-20. O anterior era funcional mas cru. Aqui: escala
-   tipográfica com proporção, números tabulares (colunas alinham de verdade),
-   hierarquia por peso em vez de por caixa, e controle de quebra de página. */
+/* ── Documento de relatório ───────────────────────────────────────────────
+   O layout NÃO é reescrito aqui: as regras reais do app são injetadas logo
+   abaixo (ver _coletarCssDoRelatorio). Aqui ficam só (a) os TOKENS em versão
+   clara, que convertem o tema escuro do app para papel branco, e (b) os ajustes
+   próprios de documento impresso. */
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
+  /* Tokens do app, em claro — é isto que "vira" o relatório para o papel. */
+  --color-bg:#ffffff; --color-bg-card:#ffffff; --color-bg-soft:#f8fafc;
+  --color-bg-elevated:#f1f5f9; --color-surface:#ffffff;
+  --color-text:#0f172a; --color-text-muted:#475569; --color-text-faint:#64748b;
+  --color-text-lighter:#334155; --text-primary:#0f172a; --text-secondary:#475569;
+  --color-border:rgba(15,23,42,0.10); --color-border-strong:rgba(15,23,42,0.18);
+  --primary:#0d9488; --color-primary:#0d9488;
+  --color-success:#0a7a4d; --color-danger:#b91c1c; --color-warning:#a16207;
+  --color-info:#1d4ed8;
+  /* Calendário/relatório por tipo, já em tons legíveis no branco */
+  --cal-c-fatura:#b91c1c; --cal-c-conta:#b45309; --cal-c-assinatura:#7e22ce;
+  --cal-c-lembrete:#a16207; --cal-c-entrada:#047857; --cal-c-saida:#1d4ed8;
+
   --tinta:#0f172a; --tinta-2:#475569; --tinta-3:#94a3b8;
   --linha:#e8ecf1; --linha-forte:#cbd5e1; --papel-2:#f8fafc;
   --marca:#0d9488; --pos:#0a7a4d; --neg:#b91c1c; --res:#a16207;
@@ -573,6 +590,17 @@ img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--linha)}
   body{font-size:11.5pt}
   a[href]:after{content:''}
 }
+</style>
+<!-- Regras REAIS do relatório, vindas do próprio app (ver _coletarCssDoRelatorio).
+     Ficam DEPOIS da base para vencer no empate de especificidade; os tokens claros
+     declarados acima é que as convertem para papel branco. -->
+<style>
+` + _coletarCssDoRelatorio() + `
+/* Ajustes de documento aplicados por cima do CSS do app */
+#relatorioResultado,.rel-resultado{background:none !important;padding:0 !important;border:none !important;box-shadow:none !important}
+.rel-section{page-break-inside:avoid;break-inside:avoid;margin-bottom:26px}
+.rel-kpi-card{break-inside:avoid}
+canvas{max-width:100% !important;height:auto !important}
 .prog-bar-wrap{background:#e5e7eb;border-radius:99px;height:8px;margin:4px 0}
 .prog-bar{background:#10b981;height:8px;border-radius:99px}
 @media print{@page{margin:14mm 12mm}.ge-btn{display:none!important}body{font-size:13px}.relatorio-section,.relatorio-bloco{page-break-inside:avoid}}
@@ -613,76 +641,75 @@ function _exportExcel() {
     });
     const categorias = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
 
-    const c = (type, val, style) => {
-        const s = style ? ' ss:StyleID="' + style + '"' : '';
-        return '<Cell' + s + '><Data ss:Type="' + type + '">' + _escapeXml(String(val)) + '</Data></Cell>';
-    };
-    const hdr = v => c('String', v, 'sHdr');
-    const num = (v, s) => c('Number', (parseFloat(v) || 0).toFixed(2), s || '');
-    const emptyR = (n) => '<Row><Cell ss:MergeAcross="' + (n-1) + '"><Data ss:Type="String"></Data></Cell></Row>';
-    const titleR = (t, n) => '<Row ss:Height="24"><Cell ss:MergeAcross="' + (n-1) + '" ss:StyleID="sTitle"><Data ss:Type="String">' + _escapeXml(t) + '</Data></Cell></Row>';
-
     const _CAT_LBL = { entrada:'Entrada', saida:'Saída', saida_credito:'Crédito', reserva:'Reserva', retirada_reserva:'Retirada' };
+    // Estilos de modules/xlsx.js: 1=cabeçalho 2=título 3=moeda 4=moeda+ 5=moeda- 6=percentual
+    const H = (v) => ({ v, s: 1 });
+    const T = (v) => ({ v, s: 2 });
+    const M = (v, pos) => ({ v: Number(v) || 0, s: pos === true ? 4 : pos === false ? 5 : 3 });
+    const P = (frac) => ({ v: Number(frac) || 0, s: 6 });
 
-    const sheetResumo = `<Worksheet ss:Name="Resumo"><Table ss:DefaultColumnWidth="160">
-${titleR('GranaEvo — ' + mesNome + ' ' + anoNum + ' · ' + perfilNome, 3)}
-${emptyR(3)}
-<Row ss:Height="20">${hdr('INDICADOR')}${hdr('VALOR')}${hdr('DETALHE')}</Row>
-<Row>${c('String','Entradas')}${num(entradas,'sPos')}${c('String','Receitas do período')}</Row>
-<Row>${c('String','Saídas')}${num(saidas,'sNeg')}${c('String','Gastos do período')}</Row>
-<Row>${c('String','Saldo')}${num(saldo, saldo>=0?'sPos':'sNeg')}${c('String','Entradas − Saídas')}</Row>
-<Row>${c('String','Reservas')}${num(reservas,'sWarn')}${c('String','Aportes em metas')}</Row>
-${emptyR(3)}
-${titleR('Gastos por Categoria', 3)}
-${emptyR(3)}
-<Row ss:Height="20">${hdr('CATEGORIA')}${hdr('VALOR')}${hdr('% DO TOTAL')}</Row>
-${categorias.map(([cat, val]) => '<Row>' + c('String',cat) + num(val,'sNeg') + c('Number', saidas>0?((val/saidas)*100).toFixed(1):'0') + '</Row>').join('')}
-</Table></Worksheet>`;
+    const resumo = [
+        [T('GranaEvo — ' + mesNome + ' ' + anoNum + ' · ' + perfilNome)],
+        [],
+        [H('INDICADOR'), H('VALOR'), H('DETALHE')],
+        ['Entradas', M(entradas, true),   'Receitas do período'],
+        ['Saídas',   M(saidas, false),    'Gastos do período'],
+        ['Saldo',    M(saldo, saldo >= 0), 'Entradas − Saídas'],
+        ['Reservas', M(reservas),         'Aportes em metas'],
+        [],
+        [T('Gastos por Categoria')],
+        [H('CATEGORIA'), H('VALOR'), H('% DO TOTAL')],
+        ...categorias.map(([cat, val]) => [cat, M(val, false), P(saidas > 0 ? val / saidas : 0)]),
+    ];
 
-    const sheetTx = `<Worksheet ss:Name="Transações"><Table ss:DefaultColumnWidth="130">
-${titleR('Transações — ' + mesNome + ' ' + anoNum, 5)}
-${emptyR(5)}
-<Row ss:Height="20">${hdr('DATA')}${hdr('DESCRIÇÃO')}${hdr('CATEGORIA')}${hdr('TIPO')}${hdr('VALOR (R$)')}</Row>
-${txs.slice().reverse().map(t => {
-    const isPos = t.categoria === 'entrada' || t.categoria === 'retirada_reserva';
-    return '<Row>' + c('String',t.data||'') + c('String',t.descricao||'') + c('String',_CAT_LBL[t.categoria]||t.categoria) + c('String',t.tipo||'') + num(t.valor, isPos?'sPos':'sNeg') + '</Row>';
-}).join('')}
-</Table></Worksheet>`;
+    const transacoes = [
+        [T('Transações — ' + mesNome + ' ' + anoNum)],
+        [],
+        [H('DATA'), H('DESCRIÇÃO'), H('CATEGORIA'), H('TIPO'), H('VALOR (R$)')],
+        ...txs.slice().reverse().map(t => [
+            t.data || '',
+            t.descricao || '',
+            _CAT_LBL[t.categoria] || t.categoria || '',
+            t.tipo || '',
+            M(t.valor, t.categoria === 'entrada' || t.categoria === 'retirada_reserva'),
+        ]),
+    ];
 
-    const sheetMetas = `<Worksheet ss:Name="Reservas e Metas"><Table ss:DefaultColumnWidth="140">
-${titleR('Reservas e Metas', 5)}
-${emptyR(5)}
-<Row ss:Height="20">${hdr('NOME')}${hdr('OBJETIVO (R$)')}${hdr('SALVO (R$)')}${hdr('PROGRESSO %')}${hdr('PRAZO')}</Row>
-${(_ctx.metas||[]).map(m => {
-    const pct = m.objetivo>0 ? Math.min(100,((m.saved||0)/m.objetivo)*100).toFixed(1) : '0';
-    return '<Row>' + c('String',m.descricao||'') + num(m.objetivo) + num(m.saved||0,'sPos') + c('Number',pct) + c('String',m.prazo||'Sem prazo') + '</Row>';
-}).join('')}
-</Table></Worksheet>`;
+    const metas = [
+        [T('Reservas e Metas')],
+        [],
+        [H('NOME'), H('OBJETIVO (R$)'), H('SALVO (R$)'), H('PROGRESSO'), H('PRAZO')],
+        ...(_ctx.metas || []).map(m => [
+            m.descricao || '',
+            M(m.objetivo),
+            M(m.saved || 0, true),
+            P(m.objetivo > 0 ? Math.min(1, (m.saved || 0) / m.objetivo) : 0),
+            m.prazo || 'Sem prazo',
+        ]),
+    ];
 
-    const sheetContas = `<Worksheet ss:Name="Contas Fixas"><Table ss:DefaultColumnWidth="150">
-${titleR('Contas Fixas', 4)}
-${emptyR(4)}
-<Row ss:Height="20">${hdr('DESCRIÇÃO')}${hdr('VALOR (R$)')}${hdr('VENCIMENTO')}${hdr('STATUS')}</Row>
-${(_ctx.contasFixas||[]).filter(c2=>c2.tipoContaFixa!=='fatura_cartao').map(cf => {
-    const venc = cf.vencimento ? cf.vencimento.split('-').reverse().join('/') : '';
-    return '<Row>' + c('String',cf.descricao||'') + num(cf.valor,'sNeg') + c('String',venc) + c('String',cf.pago?'Pago':'Pendente') + '</Row>';
-}).join('')}
-</Table></Worksheet>`;
+    const contas = [
+        [T('Contas Fixas')],
+        [],
+        [H('DESCRIÇÃO'), H('VALOR (R$)'), H('VENCIMENTO'), H('STATUS')],
+        ...(_ctx.contasFixas || []).filter(c2 => c2.tipoContaFixa !== 'fatura_cartao').map(cf => [
+            cf.descricao || '',
+            M(cf.valor, false),
+            cf.vencimento ? cf.vencimento.split('-').reverse().join('/') : '',
+            cf.pago ? 'Pago' : 'Pendente',
+        ]),
+    ];
 
-    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n' +
-`<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-<Styles>
-<Style ss:ID="sHdr"><Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="9"/><Interior ss:Color="#10b981" ss:Pattern="Solid"/></Style>
-<Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="13" ss:Color="#10b981"/></Style>
-<Style ss:ID="sPos"><Font ss:Color="#16a34a" ss:Bold="1"/><NumberFormat ss:Format='"R$ "#,##0.00'/></Style>
-<Style ss:ID="sNeg"><Font ss:Color="#dc2626" ss:Bold="1"/><NumberFormat ss:Format='"R$ "#,##0.00'/></Style>
-<Style ss:ID="sWarn"><Font ss:Color="#d97706" ss:Bold="1"/><NumberFormat ss:Format='"R$ "#,##0.00'/></Style>
-</Styles>
-` + sheetResumo + sheetTx + sheetMetas + sheetContas + '</Workbook>';
+    const bytes = gerarXlsx([
+        { nome: 'Resumo',           linhas: resumo,     larguras: [28, 16, 34] },
+        { nome: 'Transações',       linhas: transacoes, larguras: [13, 42, 14, 20, 15] },
+        { nome: 'Reservas e Metas', linhas: metas,      larguras: [30, 16, 16, 13, 14] },
+        { nome: 'Contas Fixas',     linhas: contas,     larguras: [32, 16, 15, 13] },
+    ]);
 
-    const nomArq = 'GranaEvo_' + anoNum + '-' + mesNum + '_' + perfilNome.replace(/\s+/g,'_') + '.xls';
-    _downloadBlob('﻿' + xml, nomArq, 'application/vnd.ms-excel;charset=utf-8');
-    _ctx.mostrarNotificacao('📊 Planilha Excel gerada! Abra o arquivo .xls no Excel ou Google Sheets.', 'success');
+    const nomArq = 'GranaEvo_' + anoNum + '-' + mesNum + '_' + perfilNome.replace(/\s+/g, '_') + '.xlsx';
+    _downloadBlob(bytes, nomArq, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    _ctx.mostrarNotificacao('📊 Planilha gerada! Abre no Excel, Google Sheets e no celular.', 'success');
 }
 
 // ── Apresentação HTML interativa com slides financeiros ───────────────────
@@ -858,6 +885,38 @@ goTo(0);
     const fn = 'GranaEvo_Apresentacao_' + anoNum + '-' + mesNum + '_' + (perfilNome||'perfil').replace(/\s+/g,'_') + '.html';
     _downloadBlob(html, fn, 'text/html;charset=utf-8');
     _ctx.mostrarNotificacao('📊 Apresentação gerada! Abra o HTML no browser e pressione F11 para tela cheia.', 'success');
+}
+
+/**
+ * Coleta do próprio app as regras CSS que estilizam o relatório.
+ *
+ * POR QUE (bug 2026-07-20): o CSS do PDF era escrito à mão mirando classes
+ * `.relatorio-card`, `.relatorio-section`… que NÃO EXISTEM. O resultado real usa
+ * `.rel-kpi-card`, `.rel-section`, `.rel-insight-item`… Ou seja: nenhuma regra
+ * casava e o PDF saía como texto empilhado, sem cards nem tabelas.
+ *
+ * Em vez de adivinhar nomes de novo (e desincronizar na próxima mudança de UI),
+ * pegamos as regras REAIS das folhas de estilo carregadas. O PDF passa a herdar
+ * o layout da tela automaticamente; só os TOKENS de cor são redefinidos para o
+ * papel branco (o app é escuro), o que converte tudo para claro de uma vez.
+ */
+function _coletarCssDoRelatorio() {
+    const regras = [];
+    for (const folha of Array.from(document.styleSheets || [])) {
+        let lista;
+        try { lista = folha.cssRules; }         // folha de outra origem lança
+        catch { continue; }
+        if (!lista) continue;
+        for (const regra of Array.from(lista)) {
+            const txt = regra.cssText || '';
+            if (!txt) continue;
+            // Só o que toca o relatório — não arrastamos o dashboard inteiro.
+            if (/\.rel-|\.relatorio-|#relatorioResultado|\.chart-|\.grafico/.test(txt)) {
+                regras.push(txt);
+            }
+        }
+    }
+    return regras.join('\n');
 }
 
 // ── Utilitário: baixa um Blob como arquivo ────────────────────────────────
