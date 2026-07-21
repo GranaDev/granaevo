@@ -83,12 +83,6 @@
 .trial-nota { margin: 18px 0 0; font-size: .8rem; color: var(--color-text-muted, #9ca3af); text-align: center; }
 .trial-cta  { display: block; width: fit-content; margin: 16px auto 0; }
 
-@media (max-width: 720px) {
-    .trial-body { grid-template-columns: 1fr; }
-    .trial-kpis { grid-template-columns: 1fr; }
-    .trial-valor { width: 100%; }
-    .trial-desc  { flex: 1 1 100%; }
-}
 
 /* ── Enriquecimento: crédito, reserva, rosca e insight ────────────────────── */
 .trial-kpis { grid-template-columns: repeat(4, 1fr); }
@@ -125,9 +119,6 @@
 .trial-insight-ico { font-size: 1.05rem; line-height: 1.4; flex-shrink: 0; }
 .trial-insight-txt { margin: 0; font-size: .87rem; line-height: 1.55; color: var(--color-text, #fff); }
 
-@media (max-width: 720px) {
-    .trial-kpis { grid-template-columns: repeat(2, 1fr); }
-}
 
 /* ══ v2 — chat, dashboard rica, select corrigido ═══════════════════════════ */
 
@@ -198,11 +189,6 @@
 
 .trial-cta { font-size: 1rem; padding: 14px 32px; }
 
-@media (max-width: 980px) {
-    .trial-grid { grid-template-columns: 1fr; }
-    .trial-app--chat { position: static; }
-    .trial-graf-inner { gap: 18px; }
-}
 
 
 /* ══ v3 — DOIS CARDS IRMÃOS ════════════════════════════════════════════════
@@ -263,3 +249,98 @@
 .trial-insight-ico { font-size: .95rem; line-height: 1.5; flex-shrink: 0; color: var(--color-primary, #10b981); }
 
 .trial-nota i { color: var(--color-text-muted, #9ca3af); margin-right: 5px; }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RESPONSIVO — o DESKTOP acima fica INTOCADO de propósito.
+   Tudo daqui para baixo vive dentro de media query: nenhuma regra desta seção
+   alcança telas largas. Foram removidos 3 blocos antigos espalhados que se
+   contradiziam (um mirava .trial-body, que nem existe mais, e os KPIs eram
+   definidos duas vezes com valores diferentes).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── ≤ 980px: os dois cards deixam de dividir a linha ────────────────────── */
+@media (max-width: 980px) {
+    .trial-grid      { grid-template-columns: 1fr; gap: 16px; }
+    /* Sticky só faz sentido lado a lado; empilhado, ele "gruda" atrapalhando. */
+    .trial-app--chat { position: static; }
+    .trial-graf-inner { gap: 22px; }
+}
+
+/* ── ≤ 720px: celular ────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+    .trial-section { padding: 48px 0; }
+    .trial-head    { margin-bottom: 24px; }
+    .trial-title   { font-size: clamp(1.35rem, 6vw, 1.75rem); }
+    .trial-sub     { font-size: .92rem; }
+
+    .trial-app { padding: 16px; border-radius: 14px; }
+
+    /* KPIs 2×2: quatro numa linha vira ilegível; um por linha rola demais. */
+    .trial-kpis    { grid-template-columns: repeat(2, 1fr); gap: 9px; margin-bottom: 14px; }
+    .trial-kpi     { padding: 11px 10px; }
+    .trial-kpi-val { font-size: 1.05rem; }
+    .trial-kpi-sub { font-size: .6rem; }
+
+    /* Formulário em grade: tipo e descrição ocupam a linha; valor e botão
+       dividem a última. Assim nada fica com largura de sobra nem espremido. */
+    .trial-form {
+        display: grid; gap: 8px;
+        grid-template-columns: 1fr auto;
+        grid-template-areas: "tipo tipo" "desc desc" "valor botao";
+    }
+    .trial-select { grid-area: tipo;  width: 100%; }
+    .trial-desc   { grid-area: desc;  width: 100%; }
+    .trial-valor  { grid-area: valor; width: 100%; }
+    .trial-add    { grid-area: botao; white-space: nowrap; }
+    /* Alvo de toque confortável (WCAG sugere ~44px). */
+    .trial-input, .trial-add { min-height: 46px; font-size: 16px; }
+    /* 16px evita o zoom automático do iOS ao focar o campo. */
+
+    .trial-lista     { max-height: 220px; }
+    .trial-item      { padding: 10px 2px; gap: 8px; }
+    .trial-item-desc { font-size: .86rem; }
+    .trial-item-val  { font-size: .86rem; }
+    .trial-item-del  { min-width: 32px; min-height: 32px; }
+
+    /* Rosca em cima, barras embaixo — lado a lado não cabe. */
+    .trial-graf-inner { flex-direction: column; }
+    .trial-graf       { flex: 1 1 auto; width: 100%; max-width: none; }
+    .trial-rosca-wrap, .trial-rosca { width: 132px; }
+    .trial-rosca      { height: 132px; }
+    .trial-bar-row    { grid-template-columns: 72px 1fr auto; gap: 7px; }
+    .trial-bar-lbl    { font-size: .74rem; }
+    .trial-bar-val    { font-size: .72rem; }
+
+    /* Chat mais baixo: no celular ele não pode empurrar o resto para fora. */
+    .trial-chat { min-height: 150px; max-height: 210px; padding: 10px; }
+    .trial-msg  { max-width: 92%; font-size: .84rem; }
+
+    /* Chips numa faixa que ROLA na horizontal, em vez de uma parede de botões
+       que ocupa meia tela. Snap para parar alinhado no dedo. */
+    .trial-chips {
+        flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity;
+        padding-bottom: 6px; margin: 0 -16px; padding-left: 16px; padding-right: 16px;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    .trial-chips::-webkit-scrollbar { display: none; }
+    .trial-chip { flex: 0 0 auto; scroll-snap-align: start; min-height: 38px; }
+
+    .trial-card-head  { padding-bottom: 11px; margin-bottom: 12px; }
+    .trial-card-ico, .trial-chat-avatar { width: 34px; height: 34px; }
+
+    .trial-insights { grid-template-columns: 1fr; gap: 9px; margin-top: 16px; }
+    .trial-insight  { padding: 11px 13px; }
+
+    .trial-cta  { width: 100%; text-align: center; }
+    .trial-nota { font-size: .76rem; line-height: 1.6; }
+}
+
+/* ── ≤ 400px: telas estreitas ────────────────────────────────────────────── */
+@media (max-width: 400px) {
+    .trial-app     { padding: 13px; }
+    .trial-kpi-val { font-size: .95rem; }
+    /* Aqui o botão não cabe mais ao lado do valor: cada um na sua linha. */
+    .trial-form    { grid-template-columns: 1fr; grid-template-areas: "tipo" "desc" "valor" "botao"; }
+    .trial-bar-row { grid-template-columns: 62px 1fr auto; }
+}
