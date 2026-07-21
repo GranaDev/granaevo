@@ -192,11 +192,22 @@ async function _sincronizar() {
 
         // 1) Remove agendamentos pendentes antigos (dados podem ter mudado:
         //    conta paga, assinatura cancelada…). 'sent' fica — é o dedupe.
+        //
+        // 🔴 SÓ OS TIPOS DO PRÓPRIO RADAR (bug encontrado em 2026-07-21).
+        // Este delete era por `status='pending'` e mais nada — então varria TUDO,
+        // inclusive os LEMBRETES que o usuário cria no calendário/chat (tipo
+        // 'lembrete'), que o Radar não calcula e portanto não reinsere no passo 2.
+        // Efeito: bastava ABRIR O APP para todos os lembretes do usuário sumirem,
+        // e nenhum chegava a sobreviver até a data de disparo. Foi exatamente isso
+        // que apagou o lembrete de teste minutos depois de ele ser criado.
+        // A lista é explícita de propósito: tipo novo do Radar precisa ser incluído
+        // aqui de forma consciente, e nada que não seja do Radar entra por descuido.
         const del = await supabase
             .from('radar_notifications')
             .delete()
             .eq('user_id', uid)
-            .eq('status', 'pending');
+            .eq('status', 'pending')
+            .in('tipo', ['conta_vence', 'fatura_fecha', 'assinatura_renova', 'orcamento_estouro']);
         if (del.error) { _log('delete', del.error); return; }
 
         // 2) Insere o estado atual. Conflito com dedupe_key já enviada = ignora.
