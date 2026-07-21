@@ -603,53 +603,69 @@
         <div class="container">
             <div class="trial-head">
                 <span class="trial-badge">Teste agora · sem cadastro</span>
-                <h2 class="trial-title" id="trial-title">Experimente antes de criar conta</h2>
-                <p class="trial-sub">Lance alguns gastos e veja o GranaEvo trabalhando. Nada é salvo — é só para você sentir como funciona.</p>
+                <h2 class="trial-title" id="trial-title">Veja o GranaEvo pensando por você</h2>
+                <p class="trial-sub">Lance pelo formulário ou converse com o assistente. Tudo acontece aqui no seu navegador — nada é salvo, nada é enviado.</p>
             </div>
 
             <div class="trial-app" role="region" aria-label="Demonstração interativa">
+
                 <div class="trial-kpis">
-                    <div class="trial-kpi"><span class="trial-kpi-label">Entradas</span><strong class="trial-kpi-val" id="demoEntradas">R$ 0,00</strong></div>
-                    <div class="trial-kpi"><span class="trial-kpi-label">Saídas</span><strong class="trial-kpi-val trial-neg" id="demoSaidas">R$ 0,00</strong></div>
-                    <div class="trial-kpi"><span class="trial-kpi-label">Reservado</span><strong class="trial-kpi-val trial-res" id="demoReservas">R$ 0,00</strong></div>
-                    <div class="trial-kpi"><span class="trial-kpi-label">Saldo</span><strong class="trial-kpi-val" id="demoSaldo">R$ 0,00</strong></div>
+                    <div class="trial-kpi"><span class="trial-kpi-label">Entradas</span><strong class="trial-kpi-val trial-pos" id="demoEntradas">R$ 0,00</strong><span class="trial-kpi-sub" id="demoSubEntradas">—</span></div>
+                    <div class="trial-kpi"><span class="trial-kpi-label">Saídas</span><strong class="trial-kpi-val trial-neg" id="demoSaidas">R$ 0,00</strong><span class="trial-kpi-sub" id="demoSubSaidas">—</span></div>
+                    <div class="trial-kpi"><span class="trial-kpi-label">Reservado</span><strong class="trial-kpi-val trial-res" id="demoReservas">R$ 0,00</strong><span class="trial-kpi-sub" id="demoSubReservas">—</span></div>
+                    <div class="trial-kpi trial-kpi--saldo"><span class="trial-kpi-label">Saldo livre</span><strong class="trial-kpi-val" id="demoSaldo">R$ 0,00</strong><span class="trial-kpi-sub" id="demoSubSaldo">—</span></div>
                 </div>
 
-                <form class="trial-form" id="demoForm" autocomplete="off">
-                    <select id="demoTipo" class="trial-input" aria-label="Tipo do lançamento">
-                        <option value="saida">Saída</option>
-                        <option value="entrada">Entrada</option>
-                        <option value="credito">Saída no crédito</option>
-                        <option value="reserva">Reserva</option>
-                    </select>
-                    <input id="demoDesc" class="trial-input trial-desc" type="text" maxlength="40" placeholder="Ex.: mercado, salário, uber" aria-label="Descrição">
-                    <input id="demoValor" class="trial-input trial-valor" type="text" inputmode="decimal" maxlength="12" placeholder="0,00" aria-label="Valor">
-                    <button class="trial-add" type="submit">Lançar</button>
-                </form>
-                <p class="trial-erro" id="demoErro" role="alert"></p>
+                <div class="trial-barra-saude" id="demoSaudeWrap" hidden>
+                    <div class="trial-saude-top"><span id="demoSaudeLbl">Saúde do mês</span><span id="demoSaudePct">0%</span></div>
+                    <div class="trial-saude-track"><span class="trial-saude-fill" id="demoSaudeFill"></span></div>
+                </div>
 
-                <div class="trial-body">
-                    <div class="trial-lista-wrap">
-                        <div class="trial-lista-head"><span>Seus lançamentos</span><button type="button" class="trial-limpar" id="demoLimpar">Limpar</button></div>
+                <div class="trial-cols">
+                    <!-- COLUNA 1 — lançar -->
+                    <div class="trial-col">
+                        <span class="trial-col-titulo">✍️ Lançar</span>
+                        <form class="trial-form" id="demoForm" autocomplete="off">
+                            <select id="demoTipo" class="trial-input trial-select" aria-label="Tipo do lançamento">
+                                <option value="saida">Saída</option>
+                                <option value="entrada">Entrada</option>
+                                <option value="credito">Saída no crédito</option>
+                                <option value="reserva">Reserva</option>
+                            </select>
+                            <input id="demoDesc" class="trial-input trial-desc" type="text" maxlength="40" placeholder="Ex.: mercado, salário, uber" aria-label="Descrição">
+                            <input id="demoValor" class="trial-input trial-valor" type="text" inputmode="numeric" maxlength="14" placeholder="0,00" aria-label="Valor">
+                            <button class="trial-add" type="submit">Lançar</button>
+                        </form>
+                        <p class="trial-erro" id="demoErro" role="alert"></p>
+
+                        <div class="trial-lista-head"><span>Seus lançamentos</span><button type="button" class="trial-limpar" id="demoLimpar">Limpar tudo</button></div>
                         <ul class="trial-lista" id="demoLista" aria-live="polite"></ul>
                     </div>
-                    <div class="trial-graf-wrap">
-                        <span class="trial-graf-titulo">Para onde foi o dinheiro</span>
+
+                    <!-- COLUNA 2 — assistente -->
+                    <div class="trial-col trial-col--chat">
+                        <span class="trial-col-titulo">💬 Converse com o assistente</span>
+                        <div class="trial-chat" id="demoChat" aria-live="polite"></div>
+                        <div class="trial-chips" id="demoChips" role="group" aria-label="Sugestões de mensagem"></div>
+                    </div>
+                </div>
+
+                <!-- Para onde foi o dinheiro — centralizado -->
+                <div class="trial-graf-wrap">
+                    <span class="trial-graf-titulo">Para onde foi o seu dinheiro</span>
+                    <div class="trial-graf-inner">
                         <div class="trial-rosca-wrap">
                             <svg class="trial-rosca" id="demoRosca" viewBox="0 0 42 42" role="img" aria-label="Distribuição dos gastos"></svg>
                             <div class="trial-rosca-centro"><span id="demoRoscaTotal">R$ 0,00</span><small>em saídas</small></div>
                         </div>
-                        <div class="trial-graf" id="demoGrafico" aria-live="polite"></div>
+                        <div class="trial-graf" id="demoGrafico"></div>
                     </div>
                 </div>
 
-                <div class="trial-insight" id="demoInsight" aria-live="polite" hidden>
-                    <span class="trial-insight-ico">💡</span>
-                    <p class="trial-insight-txt" id="demoInsightTxt"></p>
-                </div>
+                <div class="trial-insights" id="demoInsights" aria-live="polite"></div>
 
                 <p class="trial-nota">🔒 Demonstração local: nada sai do seu navegador e nada é salvo. Ao recarregar, tudo é apagado.</p>
-                <a class="btn-primary trial-cta" href="planos.html">Gostou? Ver planos</a>
+                <a class="btn-primary trial-cta" href="planos.html">Quero isso na minha vida financeira</a>
             </div>
         </div>
     </section>

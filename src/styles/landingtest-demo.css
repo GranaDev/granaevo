@@ -128,3 +128,83 @@
 @media (max-width: 720px) {
     .trial-kpis { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ══ v2 — chat, dashboard rica, select corrigido ═══════════════════════════ */
+
+/* 🔴 SELECT: o tema da landing deixava o fundo do menu branco e as opções
+   "transparentes" (texto claro sobre branco). Aqui as duas pontas ficam
+   explícitas — o <option> herda do SO, então precisa de cor própria. */
+.trial-select { appearance: none; padding-right: 30px; cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+    background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+.trial-select option { background: #13141f; color: #fff; }
+
+.trial-kpi { display: flex; flex-direction: column; gap: 2px; }
+.trial-kpi-sub { font-size: .64rem; color: var(--color-text-muted, #9ca3af); letter-spacing: .01em; }
+.trial-kpi--saldo { border-color: color-mix(in srgb, var(--color-primary, #10b981) 40%, transparent); }
+
+/* Barra de saúde do mês */
+.trial-barra-saude { margin-bottom: 18px; }
+.trial-saude-top { display: flex; justify-content: space-between; font-size: .72rem;
+    color: var(--color-text-muted, #9ca3af); margin-bottom: 6px; letter-spacing: .03em; }
+.trial-saude-track { height: 7px; border-radius: 4px; overflow: hidden;
+    background: color-mix(in srgb, var(--color-text, #fff) 9%, transparent); }
+.trial-saude-fill { display: block; height: 100%; width: 0; border-radius: 4px; transition: width .45s ease, background .3s ease; }
+
+/* Duas colunas: lançar | conversar */
+.trial-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 22px; }
+.trial-col { min-width: 0; }
+.trial-col-titulo { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--color-text-muted, #9ca3af); margin-bottom: 10px; font-weight: 700; }
+.trial-col--chat { display: flex; flex-direction: column; }
+
+/* Chat */
+.trial-chat { flex: 1; min-height: 190px; max-height: 240px; overflow-y: auto; padding: 12px;
+    border-radius: 11px; margin-bottom: 10px;
+    background: color-mix(in srgb, var(--color-text, #fff) 3%, transparent);
+    border: 1px solid var(--color-border, rgba(255,255,255,.08)); }
+.trial-msg { max-width: 88%; padding: 9px 12px; border-radius: 12px; margin-bottom: 8px;
+    font-size: .85rem; line-height: 1.5; animation: trialFade .25s ease; }
+.trial-msg--bot { background: color-mix(in srgb, var(--color-text, #fff) 7%, transparent);
+    color: var(--color-text, #fff); border-bottom-left-radius: 4px; }
+.trial-msg--user { margin-left: auto; background: var(--color-primary, #10b981); color: #04231a;
+    border-bottom-right-radius: 4px; font-weight: 600; }
+@keyframes trialFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.trial-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.trial-chip { padding: 7px 13px; border-radius: 999px; cursor: pointer; font: inherit; font-size: .78rem;
+    color: var(--color-text, #fff);
+    background: color-mix(in srgb, var(--color-text, #fff) 6%, transparent);
+    border: 1px solid var(--color-border-strong, rgba(255,255,255,.16));
+    transition: background .15s ease, border-color .15s ease, transform .12s ease; }
+.trial-chip:hover { background: color-mix(in srgb, var(--color-primary, #10b981) 16%, transparent);
+    border-color: color-mix(in srgb, var(--color-primary, #10b981) 45%, transparent); transform: translateY(-1px); }
+.trial-chip--pergunta { border-style: dashed; }
+
+/* Para onde foi o dinheiro — centralizado */
+.trial-graf-wrap { text-align: center; padding-top: 6px; border-top: 1px solid var(--color-border, rgba(255,255,255,.08)); }
+.trial-graf-inner { display: flex; align-items: center; justify-content: center; gap: 30px;
+    flex-wrap: wrap; margin-top: 12px; }
+.trial-graf { flex: 1 1 320px; max-width: 420px; text-align: left; }
+.trial-rosca-wrap { margin: 0; flex-shrink: 0; }
+
+.trial-item-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; }
+.trial-item-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Insights: cartões, não uma linha só */
+.trial-insights { display: grid; gap: 10px; margin-top: 20px; }
+.trial-insight { display: flex; gap: 12px; align-items: flex-start; padding: 13px 15px; border-radius: 11px;
+    background: color-mix(in srgb, var(--color-primary, #10b981) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-primary, #10b981) 24%, transparent);
+    animation: trialFade .3s ease; }
+.trial-insight-tit { display: block; font-size: .85rem; color: var(--color-text, #fff); margin-bottom: 3px; }
+.trial-insight-txt { margin: 0; font-size: .82rem; line-height: 1.55; color: var(--color-text-muted, #cbd5e1); }
+
+.trial-cta { font-size: 1rem; padding: 14px 32px; }
+
+@media (max-width: 860px) {
+    .trial-cols { grid-template-columns: 1fr; }
+    .trial-graf-inner { gap: 18px; }
+}
