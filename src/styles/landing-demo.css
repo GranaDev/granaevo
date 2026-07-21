@@ -385,3 +385,34 @@
     .trial-chat { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
     .trial-chat::-webkit-scrollbar { display: none; }
 }
+
+/* ══ CORREÇÃO — chat inoperante no celular ════════════════════════════════
+   Causa (clássica de flexbox): `.trial-chips` é filho de um flex COLUMN e tem
+   `overflow-x:auto` com `nowrap`. Como o padrão de um item flex é
+   `min-width:auto`, ele se recusa a encolher e fica tão largo quanto o conteúdo
+   — empurrando o card inteiro para fora da tela e levando os chips junto. Quem
+   olhava via um card cortado e botões inalcançáveis: "o chat não responde".
+   `min-width: 0` devolve ao item o direito de encolher e ativa a rolagem
+   horizontal de verdade. */
+.trial-app--chat,
+.trial-col,
+.trial-chat,
+.trial-chips { min-width: 0; }
+.trial-grid  { min-width: 0; }
+
+/* O CTA flutuante do mobile é `position: fixed` na faixa de baixo com z-index
+   999. Sem folga, ele cobre justamente a fileira de chips e engole o toque.
+   Esta reserva garante que sempre exista espaço para rolar os chips acima dele. */
+@media (max-width: 720px) {
+    .trial-app--chat { padding-bottom: 20px; }
+    .trial-chips     { scroll-padding-left: 16px; }
+    /* Área de toque confortável e sem "seleção azul" ao tocar. */
+    .trial-chip {
+        min-height: 40px; padding: 9px 15px;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+    }
+    .trial-add, .trial-item-del, .trial-limpar { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    /* Respiro no fim da seção para o CTA fixo nunca cobrir o último conteúdo. */
+    .trial-section { padding-bottom: 96px; }
+}

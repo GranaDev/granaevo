@@ -25,29 +25,41 @@ const CORES = ['#0d9488', '#2563eb', '#b91c1c', '#a16207', '#7e22ce', '#0891b2']
 
 
 // ── Ícones em SVG inline ────────────────────────────────────────────────────
-// A landing NÃO carrega Font Awesome (usa SVG inline em toda parte). Os <i
-// class="fas"> que eu tinha usado renderizavam VAZIOS — era o "quadrado verdinho
-// sem nada" relatado. SVG sempre desenha, não depende de fonte e herda a cor.
+// A landing NÃO carrega Font Awesome (usa SVG inline em toda parte). Os
+// <i class="fas"> que eu tinha usado renderizavam VAZIOS — era o "quadrado
+// verdinho sem nada" relatado.
+//
+// Os nós são criados com createElementNS, NUNCA com innerHTML: definir
+// `innerHTML` num elemento SVG é inconsistente entre navegadores (o Safari
+// antigo nem suporta, e há motores que parseiam os filhos no namespace HTML —
+// o path vira uma tag desconhecida e nada desenha).
 const ICONES = {
-    alerta:  '<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
-    alvo:    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
-    cofre:   '<path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 1 3 2 4v3h3v-2h4v2h3v-3c1-.7 2-2 2-3h2V8l-2-1z"/><circle cx="16" cy="10" r=".6"/>',
-    ideia:   '<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>',
-    cartao:  '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
-    grafico: '<path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/>',
+    alerta:  [['path', 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z']],
+    alvo:    [['circle', null, { cx: 12, cy: 12, r: 9 }], ['circle', null, { cx: 12, cy: 12, r: 5 }], ['circle', null, { cx: 12, cy: 12, r: 1.2 }]],
+    cofre:   [['rect', null, { x: 3, y: 6, width: 18, height: 13, rx: 2 }], ['path', 'M7 19v2M17 19v2M8 3h8'], ['circle', null, { cx: 15.5, cy: 12, r: 1.2 }]],
+    ideia:   [['path', 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z']],
+    cartao:  [['rect', null, { x: 2, y: 5, width: 20, height: 14, rx: 2 }], ['path', 'M2 10h20']],
+    grafico: [['path', 'M3 3v18h18'], ['path', 'm7 14 4-4 3 3 5-6']],
 };
+
 function svgIcone(nome, classe) {
-    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    s.setAttribute('viewBox', '0 0 24 24');
-    s.setAttribute('fill', 'none');
-    s.setAttribute('stroke', 'currentColor');
-    s.setAttribute('stroke-width', '1.9');
-    s.setAttribute('stroke-linecap', 'round');
-    s.setAttribute('stroke-linejoin', 'round');
-    s.setAttribute('aria-hidden', 'true');
-    if (classe) s.setAttribute('class', classe);
-    s.innerHTML = ICONES[nome] || '';   // conteúdo é CONSTANTE nossa, nunca do usuário
-    return s;
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.9');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    if (classe) svg.setAttribute('class', classe);
+    for (const [tag, d, attrs] of (ICONES[nome] || [])) {
+        const n = document.createElementNS(NS, tag);
+        if (d) n.setAttribute('d', d);
+        for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, String(v));
+        svg.appendChild(n);
+    }
+    return svg;
 }
 
 const ROTULO = { saida: 'Saída', entrada: 'Entrada', credito: 'Crédito', reserva: 'Reserva' };
@@ -325,7 +337,7 @@ function chatDigitando() {
     const chat = el('demoChat');
     const b = document.createElement('div');
     b.className = 'trial-msg trial-msg--bot trial-msg--typing';
-    b.innerHTML = '<span></span><span></span><span></span>';  // marcação FIXA nossa
+    for (let i = 0; i < 3; i++) b.appendChild(document.createElement('span'));
     chat.appendChild(b);
     chat.scrollTop = chat.scrollHeight;
     return b;
