@@ -21,7 +21,10 @@ import './script.js';   // mantém TODO o comportamento da landing original
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const MAX_ITENS = 40;
-const CORES = ['#0d9488', '#2563eb', '#b91c1c', '#a16207', '#7e22ce', '#0891b2'];
+// ORDEM VALIDADA — ver a nota em modules/xlsx.js. Âmbar ao lado de vermelho
+// reprovava no teste de separação (ΔE 13,2 na visão normal, piso 15). Atribuir
+// sempre NESTA ordem; nunca ciclar.
+const CORES = ['#0d9488', '#2563eb', '#b91c1c', '#7e22ce', '#0891b2', '#a16207'];
 
 
 // ── Ícones em SVG inline ────────────────────────────────────────────────────
