@@ -23,6 +23,33 @@ const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' 
 const MAX_ITENS = 40;
 const CORES = ['#0d9488', '#2563eb', '#b91c1c', '#a16207', '#7e22ce', '#0891b2'];
 
+
+// ── Ícones em SVG inline ────────────────────────────────────────────────────
+// A landing NÃO carrega Font Awesome (usa SVG inline em toda parte). Os <i
+// class="fas"> que eu tinha usado renderizavam VAZIOS — era o "quadrado verdinho
+// sem nada" relatado. SVG sempre desenha, não depende de fonte e herda a cor.
+const ICONES = {
+    alerta:  '<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+    alvo:    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+    cofre:   '<path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 1 3 2 4v3h3v-2h4v2h3v-3c1-.7 2-2 2-3h2V8l-2-1z"/><circle cx="16" cy="10" r=".6"/>',
+    ideia:   '<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>',
+    cartao:  '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+    grafico: '<path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/>',
+};
+function svgIcone(nome, classe) {
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('fill', 'none');
+    s.setAttribute('stroke', 'currentColor');
+    s.setAttribute('stroke-width', '1.9');
+    s.setAttribute('stroke-linecap', 'round');
+    s.setAttribute('stroke-linejoin', 'round');
+    s.setAttribute('aria-hidden', 'true');
+    if (classe) s.setAttribute('class', classe);
+    s.innerHTML = ICONES[nome] || '';   // conteúdo é CONSTANTE nossa, nunca do usuário
+    return s;
+}
+
 const ROTULO = { saida: 'Saída', entrada: 'Entrada', credito: 'Crédito', reserva: 'Reserva' };
 
 let itens = [];
@@ -219,39 +246,36 @@ function renderInsights(t, cats) {
     const total = cats.reduce((s, [, v]) => s + v, 0);
 
     if (t.entradas > 0 && t.saidas > t.entradas) {
-        out.push(['fa-triangle-exclamation', 'Você gastou mais do que ganhou',
+        out.push(['alerta', 'Você gastou mais do que ganhou',
             `Saíram ${BRL.format(t.saidas)} contra ${BRL.format(t.entradas)} de entrada. No app, o alerta chega ANTES de virar dívida.`]);
     }
     if (cats.length > 0 && total > 0) {
         const [nome, val] = cats[0];
         const pct = Math.round((val / total) * 100);
-        if (pct >= 35) out.push(['fa-bullseye', `"${nome}" domina seus gastos`,
+        if (pct >= 35) out.push(['alvo', `"${nome}" domina seus gastos`,
             `Sozinho, é ${pct}% de tudo que saiu. Esse é o tipo de padrão que passa despercebido no extrato do banco.`]);
     }
     if (t.entradas > 0) {
         const taxa = Math.round((t.reservas / t.entradas) * 100);
-        if (t.reservas > 0) out.push(['fa-piggy-bank', `Você guardou ${taxa}% do que entrou`,
+        if (t.reservas > 0) out.push(['cofre', `Você guardou ${taxa}% do que entrou`,
             taxa >= 20 ? 'Acima da regra dos 50/30/20 — é assim que uma reserva de emergência nasce.'
                        : 'A regra dos 50/30/20 sugere 20%. O app te mostra quanto falta, mês a mês.']);
-        else out.push(['fa-lightbulb', 'Você ainda não reservou nada',
+        else out.push(['ideia', 'Você ainda não reservou nada',
             'Quem separa antes de gastar chega ao fim do mês com sobra. O app calcula quanto dá para guardar sem apertar.']);
     }
     if (t.credito > 0) {
-        out.push(['fa-credit-card', `${BRL.format(t.credito)} no crédito`,
+        out.push(['cartao', `${BRL.format(t.credito)} no crédito`,
             'No app, cada parcela cai no mês certo da fatura — você vê o compromisso futuro antes de assumir mais um.']);
     }
     if (itens.length >= 4 && out.length < 2) {
-        out.push(['fa-chart-line', 'Seu padrão já está aparecendo',
+        out.push(['grafico', 'Seu padrão já está aparecendo',
             'Com poucos lançamentos o app já monta gráficos, previsão de fim de mês e alertas de vencimento.']);
     }
 
     for (const [ico, titulo, texto] of out.slice(0, 3)) {
         const d = document.createElement('div');
         d.className = 'trial-insight';
-        // Ícone Font Awesome (não emoji): mesma linguagem visual do app.
-        const i = document.createElement('i');
-        i.className = 'fas ' + ico + ' trial-insight-ico';
-        i.setAttribute('aria-hidden', 'true');
+        const i = svgIcone(ico, 'trial-insight-ico');
         const corpo = document.createElement('div');
         const h = document.createElement('strong');
         h.className = 'trial-insight-tit';
@@ -265,15 +289,25 @@ function renderInsights(t, cats) {
     }
 }
 
-// ── Assistente (parser local de frases — NÃO é IA) ──────────────────────────
+// ── Assistente (parser local de frases — NÃO é IA) ─────────────────────────
+// Honesto por design: aqui é um roteador de frases prontas. O assistente real do
+// app usa IA apenas como PARSER — nunca para falar de dinheiro. A demo não pode
+// prometer mais do que ela mesma entrega.
 const SUGESTOES = [
-    { txt: 'Gastei 89,90 no mercado',      acao: () => ({ tipo: 'saida',   desc: 'mercado',  valor: 89.9 }) },
-    { txt: 'Recebi 3200 de salário',       acao: () => ({ tipo: 'entrada', desc: 'salário',  valor: 3200 }) },
-    { txt: 'Paguei 149 no crédito',        acao: () => ({ tipo: 'credito', desc: 'compra',   valor: 149 }) },
-    { txt: 'Guardei 400 na reserva',       acao: () => ({ tipo: 'reserva', desc: 'reserva',  valor: 400 }) },
-    { txt: 'Quanto eu gastei?',            pergunta: 'gastos' },
-    { txt: 'Onde estou gastando mais?',    pergunta: 'top' },
-    { txt: 'Posso gastar mais este mês?',  pergunta: 'folga' },
+    { txt: 'Gastei 89,90 no mercado',       acao: () => ({ tipo: 'saida',   desc: 'mercado',   valor: 89.9 }) },
+    { txt: 'Recebi 3200 de salário',        acao: () => ({ tipo: 'entrada', desc: 'salário',   valor: 3200 }) },
+    { txt: 'Almoço 42 reais',               acao: () => ({ tipo: 'saida',   desc: 'almoço',    valor: 42 }) },
+    { txt: 'Uber 23,50',                    acao: () => ({ tipo: 'saida',   desc: 'uber',      valor: 23.5 }) },
+    { txt: 'Paguei 149 no crédito',         acao: () => ({ tipo: 'credito', desc: 'compra',    valor: 149 }) },
+    { txt: 'Parcelei 600 em 3x',            acao: () => ({ tipo: 'credito', desc: 'parcelado', valor: 200 }),
+      extra: 'Dividi em 3 de R$ 200,00 — no app, cada parcela cai no mês certo da fatura.' },
+    { txt: 'Guardei 400 na reserva',        acao: () => ({ tipo: 'reserva', desc: 'reserva',   valor: 400 }) },
+    { txt: 'Quanto eu gastei?',             pergunta: 'gastos'   },
+    { txt: 'Onde estou gastando mais?',     pergunta: 'top'      },
+    { txt: 'Posso gastar mais este mês?',   pergunta: 'folga'    },
+    { txt: 'Quanto consigo guardar?',       pergunta: 'guardar'  },
+    { txt: 'Como está minha saúde financeira?', pergunta: 'saude' },
+    { txt: 'Me dá um resumo',               pergunta: 'resumo'   },
 ];
 
 function chatMsg(quem, texto) {
@@ -283,27 +317,62 @@ function chatMsg(quem, texto) {
     b.textContent = texto;                  // textContent sempre
     chat.appendChild(b);
     chat.scrollTop = chat.scrollHeight;
+    return b;
+}
+
+/** Balão de "digitando" — dá ritmo de conversa em vez de resposta instantânea. */
+function chatDigitando() {
+    const chat = el('demoChat');
+    const b = document.createElement('div');
+    b.className = 'trial-msg trial-msg--bot trial-msg--typing';
+    b.innerHTML = '<span></span><span></span><span></span>';  // marcação FIXA nossa
+    chat.appendChild(b);
+    chat.scrollTop = chat.scrollHeight;
+    return b;
 }
 
 function responder(s) {
     const t = totais();
     const cats = porCategoria();
+    const totalCat = cats.reduce((a, [, v]) => a + v, 0);
+
     if (s.pergunta === 'gastos') {
         return t.saidas > 0
-            ? `Você já gastou ${BRL.format(t.saidas)}${t.credito ? `, sendo ${BRL.format(t.credito)} no crédito` : ''}.`
-            : 'Você ainda não lançou nenhuma saída. Experimente uma das sugestões acima.';
+            ? `Você já gastou ${BRL.format(t.saidas)}${t.credito ? `, sendo ${BRL.format(t.credito)} no crédito` : ''}. São ${itens.filter(i => i.tipo === 'saida' || i.tipo === 'credito').length} lançamentos.`
+            : 'Você ainda não lançou nenhuma saída. Toque numa das sugestões e eu registro.';
     }
     if (s.pergunta === 'top') {
-        if (cats.length === 0) return 'Sem saídas ainda — assim que houver, eu te digo onde o dinheiro está indo.';
+        if (cats.length === 0) return 'Sem saídas ainda — assim que houver, eu te digo para onde o dinheiro está indo.';
         const [nome, val] = cats[0];
-        const total = cats.reduce((a, [, v]) => a + v, 0);
-        return `Seu maior gasto é "${nome}": ${BRL.format(val)}, ${Math.round((val / total) * 100)}% do total.`;
+        const resto = cats.length > 1 ? ` Em seguida vem "${cats[1][0]}", com ${BRL.format(cats[1][1])}.` : '';
+        return `Seu maior gasto é "${nome}": ${BRL.format(val)}, ${Math.round((val / totalCat) * 100)}% do total.${resto}`;
     }
     if (s.pergunta === 'folga') {
         if (t.entradas === 0) return 'Me diga quanto você recebeu que eu calculo sua folga do mês.';
         return t.saldo > 0
-            ? `Sobram ${BRL.format(t.saldo)} livres. Dá para gastar, mas guardar uma parte agora evita aperto depois.`
-            : `Não há folga: você já comprometeu ${BRL.format(t.saidas + t.reservas)} de ${BRL.format(t.entradas)}. Segurar os gastos aqui faz diferença.`;
+            ? `Sobram ${BRL.format(t.saldo)} livres. Dá para gastar — mas separar uma parte agora evita aperto no fim do mês.`
+            : `Não há folga: você já comprometeu ${BRL.format(t.saidas + t.reservas)} de ${BRL.format(t.entradas)}. Segurar os gastos aqui faz diferença real.`;
+    }
+    if (s.pergunta === 'guardar') {
+        if (t.entradas === 0) return 'Lance uma entrada primeiro e eu calculo quanto dá para guardar sem apertar.';
+        const ideal = t.entradas * 0.2;
+        const sobra = Math.max(0, t.saldo);
+        return sobra >= ideal
+            ? `Dá para guardar ${BRL.format(ideal)} (os 20% da regra 50/30/20) e ainda sobram ${BRL.format(sobra - ideal)}.`
+            : `Hoje sobram ${BRL.format(sobra)}. O ideal seriam ${BRL.format(ideal)} — o app mostra quais gastos aproximam você disso.`;
+    }
+    if (s.pergunta === 'saude') {
+        if (t.entradas === 0) return 'Preciso de pelo menos uma entrada para avaliar. Toque em "Recebi 3200 de salário".';
+        const usado = Math.round(((t.saidas + t.reservas) / t.entradas) * 100);
+        if (usado >= 100) return `Alerta: você comprometeu ${usado}% da renda. Está gastando mais do que ganha — é aqui que a dívida começa.`;
+        if (usado >= 80)  return `Atenção: ${usado}% da renda já está comprometida. Resta pouco fôlego para imprevistos.`;
+        return `Saudável: ${usado}% da renda comprometida e ${BRL.format(t.saldo)} livres. É esse controle que o app mantém no automático.`;
+    }
+    if (s.pergunta === 'resumo') {
+        if (itens.length === 0) return 'Ainda não há nada para resumir. Toque numa sugestão e eu começo.';
+        const partes = [`Entraram ${BRL.format(t.entradas)}`, `saíram ${BRL.format(t.saidas)}`];
+        if (t.reservas > 0) partes.push(`e você guardou ${BRL.format(t.reservas)}`);
+        return `${partes.join(', ')}. Saldo livre de ${BRL.format(t.saldo)}${cats.length ? `, com "${cats[0][0]}" liderando os gastos` : ''}.`;
     }
     return null;
 }
@@ -318,16 +387,19 @@ function montarChips() {
         b.textContent = s.txt;
         b.addEventListener('click', () => {
             chatMsg('user', s.txt);
+            const digitando = chatDigitando();
             setTimeout(() => {
+                digitando.remove();
                 if (s.acao) {
                     const { tipo, desc, valor } = s.acao();
                     if (!addItem(tipo, desc, valor)) { chatMsg('bot', 'A demonstração já tem lançamentos demais.'); return; }
-                    chatMsg('bot', `Lancei ${ROTULO[tipo].toLowerCase()} de ${BRL.format(valor)} em "${desc}". Veja os números mudarem no painel ao lado.`);
+                    chatMsg('bot', `Registrei ${ROTULO[tipo].toLowerCase()} de ${BRL.format(valor)} em "${desc}".`);
+                    if (s.extra) setTimeout(() => chatMsg('bot', s.extra), 500);
                     render();
                 } else {
                     chatMsg('bot', responder(s) || 'Não entendi essa.');
                 }
-            }, 380);
+            }, 520);
         });
         box.appendChild(b);
     }

@@ -46,7 +46,7 @@
 .trial-add {
     padding: 11px 22px; border: none; border-radius: 9px; cursor: pointer;
     font-weight: 700; font-size: .92rem; font-family: inherit;
-    background: var(--color-primary, #10b981); color: #04231a;
+    background: var(--color-primary, #10b981); color: #ffffff;
 }
 .trial-add:hover { filter: brightness(1.08); }
 .trial-erro { min-height: 18px; margin: 4px 0 12px; font-size: .82rem; color: #ff6b6b; }
@@ -154,7 +154,7 @@
     font-size: .85rem; line-height: 1.5; animation: trialFade .25s ease; }
 .trial-msg--bot { background: color-mix(in srgb, var(--color-text, #fff) 7%, transparent);
     color: var(--color-text, #fff); border-bottom-left-radius: 4px; }
-.trial-msg--user { margin-left: auto; background: var(--color-primary, #10b981); color: #04231a;
+.trial-msg--user { margin-left: auto; background: var(--color-primary, #10b981); color: #fff;
     border-bottom-right-radius: 4px; font-weight: 600; }
 @keyframes trialFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
@@ -284,15 +284,18 @@
 
     /* Formulário em grade: tipo e descrição ocupam a linha; valor e botão
        dividem a última. Assim nada fica com largura de sobra nem espremido. */
+    /* 2×2: [tipo][valor] em cima, [descrição][lançar] embaixo. Ocupa a largura
+       toda sem deixar campo com sobra nem espremido, e mantém o polegar perto
+       do botão. */
     .trial-form {
         display: grid; gap: 8px;
-        grid-template-columns: 1fr auto;
-        grid-template-areas: "tipo tipo" "desc desc" "valor botao";
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas: "tipo valor" "desc botao";
     }
     .trial-select { grid-area: tipo;  width: 100%; }
+    .trial-valor  { grid-area: valor; width: 100%; text-align: right; }
     .trial-desc   { grid-area: desc;  width: 100%; }
-    .trial-valor  { grid-area: valor; width: 100%; }
-    .trial-add    { grid-area: botao; white-space: nowrap; }
+    .trial-add    { grid-area: botao; white-space: nowrap; width: 100%; }
     /* Alvo de toque confortável (WCAG sugere ~44px). */
     .trial-input, .trial-add { min-height: 46px; font-size: 16px; }
     /* 16px evita o zoom automático do iOS ao focar o campo. */
@@ -340,7 +343,45 @@
 @media (max-width: 400px) {
     .trial-app     { padding: 13px; }
     .trial-kpi-val { font-size: .95rem; }
-    /* Aqui o botão não cabe mais ao lado do valor: cada um na sua linha. */
-    .trial-form    { grid-template-columns: 1fr; grid-template-areas: "tipo" "desc" "valor" "botao"; }
+    /* O 2×2 continua: é mais legível que empilhar 4 campos. Só encolhe. */
+    .trial-form    { gap: 7px; }
+    .trial-input, .trial-add { font-size: 15px; padding-left: 10px; padding-right: 10px; }
     .trial-bar-row { grid-template-columns: 62px 1fr auto; }
+}
+
+
+/* ── Ícone da marca no cabeçalho do card ─────────────────────────────────── */
+.trial-card-ico img { display: block; width: 22px; height: 22px; border-radius: 5px; }
+.trial-chat-avatar svg { width: 19px; height: 19px; color: var(--color-primary, #10b981); }
+.trial-nota-ico { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; color: var(--color-text-muted, #9ca3af); }
+.trial-insight-ico { width: 19px; height: 19px; }
+
+/* ── "Digitando…" no chat ─────────────────────────────────────────────────── */
+.trial-msg--typing { display: flex; gap: 4px; align-items: center; padding: 12px; width: fit-content; }
+.trial-msg--typing span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--color-text-muted, #9ca3af);
+    animation: trialPulse 1.1s infinite ease-in-out;
+}
+.trial-msg--typing span:nth-child(2) { animation-delay: .16s; }
+.trial-msg--typing span:nth-child(3) { animation-delay: .32s; }
+@keyframes trialPulse { 0%, 60%, 100% { opacity: .28; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+    .trial-msg--typing span { animation: none; opacity: .6; }
+    .trial-bar-fill, .trial-saude-fill, .trial-rosca circle { transition: none; }
+}
+
+/* ── Mais respiro e sofisticação no celular ──────────────────────────────── */
+@media (max-width: 720px) {
+    /* Chat mais alto: o usuário-alvo é mobile, e conversa curta demais não
+       mostra o produto. */
+    .trial-chat { min-height: 230px; max-height: 300px; }
+    /* Cabeçalhos centralizados deixam o card mais equilibrado no estreito. */
+    .trial-card-head { justify-content: center; text-align: left; }
+    .trial-kpi { text-align: center; align-items: center; }
+    .trial-graf-titulo { text-align: center; display: block; }
+    .trial-lista-head { font-size: .68rem; }
+    /* Rolagem do chat com inércia e sem barra visível. */
+    .trial-chat { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .trial-chat::-webkit-scrollbar { display: none; }
 }

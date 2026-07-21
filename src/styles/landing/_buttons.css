@@ -35,7 +35,9 @@
     width: 100%;
     padding: 0.875rem 1rem;
     background: var(--primary);
-    color: var(--dark);
+    /* Branco, para casar com o .btn-primary — os dois são o mesmo CTA e
+       apareciam com cores de fonte diferentes. */
+    color: #ffffff;
     font-weight: 700;
     font-size: 0.9375rem;
     border-radius: 12px;
@@ -57,7 +59,9 @@
     gap: 0.5rem;
     padding: 0.875rem 1.75rem;
     background: var(--primary);
-    color: var #ffffff;
+    /* Era `var #ffffff` — sintaxe INVÁLIDA, então o navegador descartava a
+       declaração e o texto herdava a cor escura. Corrigido em 2026-07-21. */
+    color: #ffffff;
     font-weight: 700;
     font-size: 0.9375rem;
     border-radius: 12px;
