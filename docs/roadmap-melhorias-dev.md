@@ -1030,3 +1030,38 @@ tarefa, feita com calma e com teste de estrutura + verificação do usuário.
 
 **Interino:** o **CSV** já funciona em todo lugar (UTF-8 com BOM) — é a saída
 confiável para planilha enquanto o .xlsx não sai.
+
+### RF-06 — offline: PARADO por decisão (2026-07-21) + a ideia do usuário (boa)
+
+**Decisão:** deixar como está. Sem internet o app não abre — e está tudo bem por
+ora. Zero risco. Retomar com calma.
+
+**Estado atual:** navegação em NetworkFirst SEM timeout (o timeout de 3s da 1ª
+tentativa foi o que quebrou o app em conexão lenta). Se o usuário já abriu online
+com o SW novo ativo, a casca fica em cache e o app abre offline; se não, o
+navegador mostra o erro padrão. Não depender disso é justamente o ponto do item.
+
+**💡 IDEIA DO USUÁRIO — é o desenho certo, guardar para quando voltarmos:**
+> "Sempre que o usuário sai do site, ele salva os dados. Capturar esses dados,
+> salvar localmente APENAS PARA LEITURA. Quando detectar falta de rede, ativar o
+> MODO LEITURA com um aviso 'Você está sem internet, modo leitura ativado'.
+> Impossibilita transações e reservas, mas continua permitindo relatórios e
+> gráficos."
+
+**Por que essa ideia é superior à minha proposta anterior:** ela mata o risco na
+raiz. O perigo do offline não é ler — é ESCREVER: duas gravações concorrentes,
+uma antiga chegando depois da nova, e o blob é "último a salvar vence". Foi essa
+família que causou os dois incidentes de perda de dados. Um modo explicitamente
+SOMENTE-LEITURA elimina a necessidade de outbox, de reconciliação e de resolução
+de conflito — some com a parte perigosa inteira, e ainda entrega o que o usuário
+realmente quer offline (consultar, não lançar).
+
+**Como implementar quando voltar:**
+1. Reusar o cache de boot cifrado (Passo 9) — já existe e já é AES-GCM; ampliar
+   do KPI para o conjunto de leitura.
+2. Detectar ausência de rede (`navigator.onLine` + falha real do load, que é o
+   sinal confiável — `onLine` mente).
+3. Trava de UI: desabilitar lançar/reservar/pagar e mostrar a faixa "modo leitura".
+   A trava tem de ser no CAMINHO DE GRAVAÇÃO (o `salvarDados` já recusa quando
+   `_gravacoesCongeladas`), não só nos botões — botão escondido não é trava.
+4. Manter relatórios/gráficos, que só leem.
