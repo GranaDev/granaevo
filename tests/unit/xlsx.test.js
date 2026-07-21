@@ -95,3 +95,64 @@ describe('gerarXlsx — peças obrigatórias do OOXML', () => {
     assert.throws(() => gerarXlsx([]), /nenhuma planilha/);
   });
 });
+
+describe('gráficos nativos — todas as peças e referências fechadas', () => {
+  const bytes = gerarXlsx([
+    {
+      nome: 'Resumo',
+      linhas: [['Cat', 'Valor'], ['Mercado', 100], ['Luz', 50]],
+      graficos: [
+        { tipo: 'pizza', titulo: 'Fatia', catRef: "'Resumo'!$A$2:$A$3", valRef: "'Resumo'!$B$2:$B$3", pontos: 2 },
+        { tipo: 'barra', titulo: 'Barras', catRef: "'Resumo'!$A$2:$A$3", valRef: "'Resumo'!$B$2:$B$3" },
+      ],
+      barras: [{ ref: 'C2:C3' }],
+      filtro: 'A1:B3',
+    },
+    { nome: 'Sem grafico', linhas: [['x']] },
+  ]);
+  const txt = dec.decode(bytes);
+
+  test('gera chart1/chart2, o drawing e os DOIS .rels que os amarram', () => {
+    for (const parte of [
+      'xl/charts/chart1.xml', 'xl/charts/chart2.xml',
+      'xl/drawings/drawing1.xml',
+      'xl/worksheets/_rels/sheet1.xml.rels',
+      'xl/drawings/_rels/drawing1.xml.rels',
+    ]) assert.ok(txt.includes(parte), `falta ${parte}`);
+  });
+
+  test('a aba SEM gráfico não ganha drawing (rel quebrada = arquivo recusado)', () => {
+    assert.ok(!txt.includes('xl/worksheets/_rels/sheet2.xml.rels'));
+    assert.ok(!txt.includes('drawing2.xml'));
+  });
+
+  test('[Content_Types] declara chart e drawing (sem isso o Excel recusa)', () => {
+    assert.ok(txt.includes('drawingml.chart+xml'));
+    assert.ok(txt.includes('officedocument.drawing+xml'));
+  });
+
+  test('a folha referencia o desenho e declara o namespace r:', () => {
+    assert.ok(txt.includes('<drawing r:id="rIdDraw"/>'));
+    assert.ok(txt.includes('xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'));
+  });
+
+  test('pizza e barra usam elementos distintos e as refs vao para o XML', () => {
+    assert.ok(txt.includes('<c:pieChart>'));
+    assert.ok(txt.includes('<c:barChart>'));
+    // O apóstrofo do nome da aba sai escapado (&apos;) — XML válido; o Excel
+    // converte de volta ao ler. Conferimos a forma que REALMENTE vai no arquivo.
+    assert.ok(txt.includes('<c:f>&apos;Resumo&apos;!$B$2:$B$3</c:f>'));
+  });
+
+  test('barra de dados e autofiltro entram na folha', () => {
+    assert.ok(txt.includes('type="dataBar"'));
+    assert.ok(txt.includes('<autoFilter ref="A1:B3"/>'));
+  });
+
+  test('ordem do schema: sheetData vem ANTES de autoFilter e de drawing', () => {
+    const i1 = txt.indexOf('</sheetData>');
+    const i2 = txt.indexOf('<autoFilter');
+    const i3 = txt.indexOf('<drawing r:id');
+    assert.ok(i1 < i2 && i2 < i3, 'ordem invalida faz o Excel recusar o arquivo');
+  });
+});

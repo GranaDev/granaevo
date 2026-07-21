@@ -700,11 +700,48 @@ function _exportExcel() {
         ]),
     ];
 
+    // As categorias começam na linha 11 do Resumo (1: título, 3: cabeçalho KPI,
+    // 4-7: KPIs, 9: título, 10: cabeçalho) — os gráficos apontam para esse bloco.
+    const catIni = 11;
+    const catFim = Math.max(catIni, catIni + categorias.length - 1);
+    const q = (r) => `'Resumo'!$${r}$${catIni}:$${r}$${catFim}`;
+
+    const graficosResumo = categorias.length > 0 ? [
+        { tipo: 'pizza', titulo: 'Participação por categoria',
+          catRef: q('A'), valRef: q('B'), pontos: categorias.length,
+          ancora: { col: 4, linha: 1, col2: 11, linha2: 17 } },
+        { tipo: 'barra', titulo: 'Gastos por categoria (R$)',
+          catRef: q('A'), valRef: q('B'),
+          ancora: { col: 4, linha: 18, col2: 11, linha2: 36 } },
+    ] : [];
+
     const bytes = gerarXlsx([
-        { nome: 'Resumo',           linhas: resumo,     larguras: [28, 16, 34] },
-        { nome: 'Transações',       linhas: transacoes, larguras: [13, 42, 14, 20, 15] },
-        { nome: 'Reservas e Metas', linhas: metas,      larguras: [30, 16, 16, 13, 14] },
-        { nome: 'Contas Fixas',     linhas: contas,     larguras: [32, 16, 15, 13] },
+        {
+            nome: 'Resumo', linhas: resumo, larguras: [28, 16, 34],
+            mesclar: ['A1:C1'],
+            // Barra de dados na coluna de % — "mini-gráfico" dentro da célula.
+            barras: categorias.length ? [{ ref: `C${catIni}:C${catFim}`, cor: '0D9488' }] : [],
+            graficos: graficosResumo,
+            congelarLinha: 3,
+        },
+        {
+            nome: 'Transações', linhas: transacoes, larguras: [13, 42, 14, 20, 15],
+            mesclar: ['A1:E1'],
+            // Filtro no cabeçalho real da tabela (linha 3).
+            filtro: `A3:E${Math.max(3, 3 + txs.length)}`,
+            congelarLinha: 3,
+        },
+        {
+            nome: 'Reservas e Metas', linhas: metas, larguras: [30, 16, 16, 13, 14],
+            mesclar: ['A1:E1'], congelarLinha: 3,
+            barras: (_ctx.metas || []).length
+                ? [{ ref: `D3:D${3 + (_ctx.metas || []).length}`, cor: '2563EB' }] : [],
+        },
+        {
+            nome: 'Contas Fixas', linhas: contas, larguras: [32, 16, 15, 13],
+            mesclar: ['A1:D1'], congelarLinha: 3,
+            filtro: `A3:D${Math.max(3, 3 + (_ctx.contasFixas || []).length)}`,
+        },
     ]);
 
     const nomArq = 'GranaEvo_' + anoNum + '-' + mesNum + '_' + perfilNome.replace(/\s+/g, '_') + '.xlsx';
