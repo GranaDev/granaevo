@@ -143,17 +143,29 @@ export default defineConfig(({ mode }) => ({
         //   - Google Fonts webfonts (.woff2): CacheFirst (imutáveis por design — URLs incluem hash)
         // NÃO cacheado: Supabase API, HTML, CDN de scripts — dados financeiros devem ser frescos.
         runtimeCaching: [
-          // ⛔ NÃO cachear navegação/HTML aqui. Tentativa de 2026-07-20 (RF-06)
-          // adicionou NetworkFirst com `networkTimeoutSeconds: 3` para o app abrir
-          // offline — e QUEBROU o app: numa conexão móvel mais lenta que 3s, o
-          // NetworkFirst desiste da rede, procura no cache, não acha nada (cache
-          // ainda vazio) e devolve falha → "Não é possível acessar esse site".
-          // Ou seja: transformou internet lenta em app inacessível.
+          // ── NAVEGAÇÃO (HTML) — offline de leitura, 2ª tentativa ──────────────
+          // A 1ª (2026-07-20) usava `networkTimeoutSeconds: 3` e QUEBROU o app:
+          // em conexão móvel mais lenta que 3s o NetworkFirst desistia da rede,
+          // procurava no cache, não achava nada e devolvia falha → "não é possível
+          // acessar esse site". O erro NÃO era o NetworkFirst — era o TIMEOUT.
           //
-          // Se um dia voltarmos ao offline de leitura, o pré-requisito é GARANTIR
-          // que exista sempre uma casca em cache (precache do HTML + fallback de
-          // navegação) ANTES de qualquer timeout — nunca um NetworkFirst nu, e
-          // sempre validado num aparelho real, porque isto não dá para testar daqui.
+          // Sem timeout, o comportamento é o correto:
+          //   • ONLINE (mesmo lento) → espera a rede, como faria sem Service
+          //     Worker. Nunca desiste no meio, então nunca inventa uma falha.
+          //   • OFFLINE → o fetch falha de imediato e cai no cache: o app ABRE
+          //     com a última casca boa em vez de ficar parado no ícone.
+          // Só cacheia 200 (resposta opaca já corrompeu ícones aqui no passado).
+          // `mode === 'navigate'` casa apenas documento — a API financeira segue
+          // sem cache, como deve.
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'ge-html-shell',
+              expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'StaleWhileRevalidate',

@@ -1142,10 +1142,50 @@ function excluirTransacao(t) {
         fatura.pago = fatura.compras.every(c => c.pago === true);
     };
 
+    // RF-12: excluir o PAGAMENTO DA FATURA INTEIRA também tem de reverter.
+    //
+    // Desde o RF-11 o pagamento da fatura gera UMA só saída (a da fatura, com o
+    // valor pago) — as parcelas só mudam de status. Ficou a lacuna: apagar essa
+    // transação devolvia o dinheiro ao saldo, mas as parcelas continuavam
+    // "pagas" e a fatura, quitada. Estado incoerente.
+    //
+    // Quais parcelas reverter: as que foram quitadas NAQUELE pagamento, isto é,
+    // com `pagoEm` igual à data da transação. Assim, pagar em dois meses
+    // diferentes e apagar um deles não desfaz o outro.
+    const faturaInfo = (() => {
+        if (!t.contaFixaId || t.faturaId) return null;   // com faturaId é parcela avulsa (D3)
+        const fatura = _ctx.contasFixas.find(f => String(f.id) === String(t.contaFixaId));
+        if (!fatura || fatura.tipoContaFixa !== 'fatura_cartao' || !Array.isArray(fatura.compras)) return null;
+        const dia = String(t.data || '');
+        const alvo = fatura.compras.filter(c => c.pago === true && String(c.pagoEm || '') === dia);
+        if (alvo.length === 0) return null;
+        const cartao = _ctx.cartoesCredito.find(c => String(c.id) === String(fatura.cartaoId));
+        return { fatura, alvo, cartao };
+    })();
+
+    const reverterFatura = (desfazer) => {
+        if (!faturaInfo) return;
+        const { fatura, alvo, cartao } = faturaInfo;
+        for (const compra of alvo) {
+            const v = parseFloat(compra.valorParcela) || 0;
+            if (desfazer) {
+                compra.pago = true;
+                if (cartao) cartao.usado = Math.max(0, (cartao.usado || 0) - v);
+            } else {
+                compra.pago = false;
+                if (cartao) cartao.usado = (cartao.usado || 0) + v;
+            }
+        }
+        fatura.valor = fatura.compras.reduce((s, c) => c.pago === true ? s : s + (parseFloat(c.valorParcela) || 0), 0);
+        fatura.pago = fatura.compras.every(c => c.pago === true);
+        if (!fatura.pago) fatura.dataPagamento = null;
+    };
+
     // 1) Remoção otimista (local-first) — UI atualiza na hora, sem "Tem certeza?".
     _ctx.transacoes.splice(idx, 1);
     aplicarDelta(sinalRemover);
     reverterParcela(false);
+    reverterFatura(false);   // RF-12: fatura inteira volta a ficar em aberto
     _ctx.salvarDados();
     _ctx.atualizarTudo();
     renderizarOrcamentos();
@@ -1157,6 +1197,7 @@ function excluirTransacao(t) {
         _ctx.transacoes.splice(pos, 0, t);
         aplicarDelta(-sinalRemover);
         reverterParcela(true);
+        reverterFatura(true);   // RF-12: desfazer a exclusão requita a fatura
         _ctx.salvarDados();
         _ctx.atualizarTudo();
         renderizarOrcamentos();
