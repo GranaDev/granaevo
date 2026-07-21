@@ -230,6 +230,7 @@
 
     <!-- CSS local -->
     <link rel="stylesheet" href="src/styles/landingpage.css">
+    <link rel="stylesheet" href="src/styles/landing-demo.css">
 </head>
 
 <body>
@@ -594,6 +595,95 @@
     </section>
 
     <!-- ================================================
+         DEMO INTERATIVA — "experimente antes de assinar"
+         Vitrine pura: roda 100% no navegador, não cria conta, não salva nada.
+         Recarregar a página zera tudo. Nenhuma chamada de rede.
+         Promovida de /landingtest para a landing oficial em 2026-07-21.
+    ================================================ -->
+    <section class="trial-section" id="teste-gratis" aria-labelledby="trial-title">
+        <div class="container">
+            <div class="trial-head">
+                <span class="trial-badge">Teste agora · sem cadastro</span>
+                <h2 class="trial-title" id="trial-title">Veja o GranaEvo pensando por você</h2>
+                <p class="trial-sub">Duas formas de registrar: no painel, do seu jeito, ou pedindo ao assistente. Veja os números reagirem na hora.</p>
+            </div>
+
+            <!-- DOIS CARDS IRMÃOS: o painel à esquerda, o assistente à direita -->
+            <div class="trial-grid">
+
+                <!-- CARD 1 — painel de teste -->
+                <div class="trial-app" role="region" aria-label="Painel de demonstração">
+                    <div class="trial-card-head">
+                        <i class="fas fa-pen-to-square trial-card-ico" aria-hidden="true"></i>
+                        <div>
+                            <strong class="trial-card-tit">Transações manuais</strong>
+                            <span class="trial-card-sub">Registre e acompanhe em tempo real</span>
+                        </div>
+                    </div>
+                    <div class="trial-kpis">
+                        <div class="trial-kpi"><span class="trial-kpi-label">Entradas</span><strong class="trial-kpi-val trial-pos" id="demoEntradas">R$ 0,00</strong><span class="trial-kpi-sub" id="demoSubEntradas">—</span></div>
+                        <div class="trial-kpi"><span class="trial-kpi-label">Saídas</span><strong class="trial-kpi-val trial-neg" id="demoSaidas">R$ 0,00</strong><span class="trial-kpi-sub" id="demoSubSaidas">—</span></div>
+                        <div class="trial-kpi"><span class="trial-kpi-label">Reservado</span><strong class="trial-kpi-val trial-res" id="demoReservas">R$ 0,00</strong><span class="trial-kpi-sub" id="demoSubReservas">—</span></div>
+                        <div class="trial-kpi trial-kpi--saldo"><span class="trial-kpi-label">Saldo livre</span><strong class="trial-kpi-val" id="demoSaldo">R$ 0,00</strong><span class="trial-kpi-sub" id="demoSubSaldo">—</span></div>
+                    </div>
+
+                    <div class="trial-barra-saude" id="demoSaudeWrap" hidden>
+                        <div class="trial-saude-top"><span id="demoSaudeLbl">Saúde do mês</span><span id="demoSaudePct">0%</span></div>
+                        <div class="trial-saude-track"><span class="trial-saude-fill" id="demoSaudeFill"></span></div>
+                    </div>
+
+                    <form class="trial-form" id="demoForm" autocomplete="off">
+                        <select id="demoTipo" class="trial-input trial-select" aria-label="Tipo do lançamento">
+                            <option value="saida">Saída</option>
+                            <option value="entrada">Entrada</option>
+                            <option value="credito">Saída no crédito</option>
+                            <option value="reserva">Reserva</option>
+                        </select>
+                        <input id="demoDesc" class="trial-input trial-desc" type="text" maxlength="40" placeholder="Ex.: mercado, salário, uber" aria-label="Descrição">
+                        <input id="demoValor" class="trial-input trial-valor" type="text" inputmode="numeric" maxlength="14" placeholder="0,00" aria-label="Valor">
+                        <button class="trial-add" type="submit">Lançar</button>
+                    </form>
+                    <p class="trial-erro" id="demoErro" role="alert"></p>
+
+                    <div class="trial-lista-head"><span>Seus lançamentos</span><button type="button" class="trial-limpar" id="demoLimpar">Limpar tudo</button></div>
+                    <ul class="trial-lista" id="demoLista" aria-live="polite"></ul>
+
+                    <div class="trial-graf-wrap">
+                        <span class="trial-graf-titulo">Para onde foi o seu dinheiro</span>
+                        <div class="trial-graf-inner">
+                            <div class="trial-rosca-wrap">
+                                <svg class="trial-rosca" id="demoRosca" viewBox="0 0 42 42" role="img" aria-label="Distribuição dos gastos"></svg>
+                                <div class="trial-rosca-centro"><span id="demoRoscaTotal">R$ 0,00</span><small>em saídas</small></div>
+                            </div>
+                            <div class="trial-graf" id="demoGrafico"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CARD 2 — assistente, ao lado -->
+                <aside class="trial-app trial-app--chat" aria-label="Assistente de demonstração">
+                    <div class="trial-chat-head">
+                        <span class="trial-chat-avatar" aria-hidden="true"><i class="fas fa-robot"></i></span>
+                        <div>
+                            <strong class="trial-card-tit">Transações via chat</strong>
+                            <span class="trial-chat-status">Assistente pronto · toque numa frase</span>
+                        </div>
+                    </div>
+                    <div class="trial-chat" id="demoChat" aria-live="polite"></div>
+                    <div class="trial-chips" id="demoChips" role="group" aria-label="Sugestões de mensagem"></div>
+                </aside>
+
+            </div>
+
+            <!-- Insights e fecho, abaixo dos dois cards -->
+            <div class="trial-insights" id="demoInsights" aria-live="polite"></div>
+
+            <p class="trial-nota"><i class="fas fa-circle-info" aria-hidden="true"></i> Esta é uma demonstração para você experimentar à vontade — recarregue e comece de novo quando quiser. No GranaEvo, seus lançamentos ficam guardados e sincronizados entre seus aparelhos, protegidos por criptografia.</p>
+            <a class="btn-primary trial-cta" href="planos.html">Quero isso na minha vida financeira</a>
+        </div>
+    </section>
+
+    <!-- ================================================
          FEATURES SECTION
     ================================================ -->
     <section class="features-section" id="recursos" aria-labelledby="features-title">
@@ -879,7 +969,7 @@
         - Defer implícito (não bloqueia renderização)
         - Confiável via script-src 'self' no vercel.json
     -->
-    <script type="module" src="src/scripts/pages/script.js"></script>
+    <script type="module" src="src/scripts/pages/landing-demo.js"></script>
 
 </body>
 </html>

@@ -1,4 +1,4 @@
-/* landingtest-demo.css — só a seção de demonstração (Passo 20).
+/* landing-demo.css — seção de demonstração da landing (Passo 20).
    Arquivo separado de propósito: a landingtest é DESCARTÁVEL. Se o teste não
    compensar, some este CSS + landingtest.html + landingtest.js e nada da
    landing real é afetado. Só tokens — herda tema e contraste do resto. */
@@ -240,3 +240,26 @@
 /* Insights e fecho agora vivem FORA dos cards, alinhados à grade */
 .trial-insights { max-width: 1120px; margin: 20px auto 0; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .trial-nota { max-width: 1120px; margin-left: auto; margin-right: auto; }
+
+/* ── Cabeçalho dos cards (título + ícone) ─────────────────────────────────── */
+/* Sem emoji em lugar nenhum: ícones Font Awesome, mesma linguagem do app. */
+.trial-card-head {
+    display: flex; align-items: center; gap: 11px;
+    padding-bottom: 13px; margin-bottom: 15px;
+    border-bottom: 1px solid var(--color-border, rgba(255,255,255,.08));
+}
+.trial-card-ico {
+    width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; font-size: .95rem;
+    color: var(--color-primary, #10b981);
+    background: color-mix(in srgb, var(--color-primary, #10b981) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-primary, #10b981) 32%, transparent);
+}
+.trial-card-tit { display: block; font-size: .95rem; color: var(--color-text, #fff); letter-spacing: -.01em; }
+.trial-card-sub { display: block; font-size: .7rem; color: var(--color-text-muted, #9ca3af); margin-top: 1px; }
+.trial-chat-avatar i { font-size: .95rem; color: var(--color-primary, #10b981); }
+
+/* Ícone do insight vira <i>, não emoji */
+.trial-insight-ico { font-size: .95rem; line-height: 1.5; flex-shrink: 0; color: var(--color-primary, #10b981); }
+
+.trial-nota i { color: var(--color-text-muted, #9ca3af); margin-right: 5px; }

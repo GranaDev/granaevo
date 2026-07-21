@@ -1,5 +1,8 @@
-// landingtest.js — landing de teste com DEMO interativa (Passo 20)
+// landing-demo.js — demo interativa da landing (Passo 20, aprovado em 2026-07-21)
 // ---------------------------------------------------------------------------
+// Nasceu como /landingtest e foi PROMOVIDA para a landing oficial depois do
+// teste do usuário. A página de teste foi removida.
+//
 // Vitrine, não produto: o visitante lança valores (pelo formulário OU conversando
 // com o assistente) e vê o app reagindo, SEM criar conta e SEM nada sair do
 // navegador. Recarregar zera. Zero risco por construção — não há rede, não há
@@ -216,38 +219,39 @@ function renderInsights(t, cats) {
     const total = cats.reduce((s, [, v]) => s + v, 0);
 
     if (t.entradas > 0 && t.saidas > t.entradas) {
-        out.push(['🚨', 'Você gastou mais do que ganhou',
+        out.push(['fa-triangle-exclamation', 'Você gastou mais do que ganhou',
             `Saíram ${BRL.format(t.saidas)} contra ${BRL.format(t.entradas)} de entrada. No app, o alerta chega ANTES de virar dívida.`]);
     }
     if (cats.length > 0 && total > 0) {
         const [nome, val] = cats[0];
         const pct = Math.round((val / total) * 100);
-        if (pct >= 35) out.push(['🎯', `"${nome}" domina seus gastos`,
+        if (pct >= 35) out.push(['fa-bullseye', `"${nome}" domina seus gastos`,
             `Sozinho, é ${pct}% de tudo que saiu. Esse é o tipo de padrão que passa despercebido no extrato do banco.`]);
     }
     if (t.entradas > 0) {
         const taxa = Math.round((t.reservas / t.entradas) * 100);
-        if (t.reservas > 0) out.push(['🏦', `Você guardou ${taxa}% do que entrou`,
-            taxa >= 20 ? 'Acima da regra dos 50/30/20 — é assim que reserva de emergência nasce.'
+        if (t.reservas > 0) out.push(['fa-piggy-bank', `Você guardou ${taxa}% do que entrou`,
+            taxa >= 20 ? 'Acima da regra dos 50/30/20 — é assim que uma reserva de emergência nasce.'
                        : 'A regra dos 50/30/20 sugere 20%. O app te mostra quanto falta, mês a mês.']);
-        else out.push(['💡', 'Você ainda não reservou nada',
+        else out.push(['fa-lightbulb', 'Você ainda não reservou nada',
             'Quem separa antes de gastar chega ao fim do mês com sobra. O app calcula quanto dá para guardar sem apertar.']);
     }
     if (t.credito > 0) {
-        out.push(['💳', `${BRL.format(t.credito)} no crédito`,
+        out.push(['fa-credit-card', `${BRL.format(t.credito)} no crédito`,
             'No app, cada parcela cai no mês certo da fatura — você vê o compromisso futuro antes de assumir mais um.']);
     }
     if (itens.length >= 4 && out.length < 2) {
-        out.push(['📈', 'Seu padrão já está aparecendo',
+        out.push(['fa-chart-line', 'Seu padrão já está aparecendo',
             'Com poucos lançamentos o app já monta gráficos, previsão de fim de mês e alertas de vencimento.']);
     }
 
     for (const [ico, titulo, texto] of out.slice(0, 3)) {
         const d = document.createElement('div');
         d.className = 'trial-insight';
-        const i = document.createElement('span');
-        i.className = 'trial-insight-ico';
-        i.textContent = ico;
+        // Ícone Font Awesome (não emoji): mesma linguagem visual do app.
+        const i = document.createElement('i');
+        i.className = 'fas ' + ico + ' trial-insight-ico';
+        i.setAttribute('aria-hidden', 'true');
         const corpo = document.createElement('div');
         const h = document.createElement('strong');
         h.className = 'trial-insight-tit';
@@ -317,8 +321,8 @@ function montarChips() {
             setTimeout(() => {
                 if (s.acao) {
                     const { tipo, desc, valor } = s.acao();
-                    if (!addItem(tipo, desc, valor)) { chatMsg('bot', 'A demonstração já tem lançamentos demais 🙂'); return; }
-                    chatMsg('bot', `Lancei ${ROTULO[tipo].toLowerCase()} de ${BRL.format(valor)} em "${desc}". Olhe os números mudarem ao lado 👈`);
+                    if (!addItem(tipo, desc, valor)) { chatMsg('bot', 'A demonstração já tem lançamentos demais.'); return; }
+                    chatMsg('bot', `Lancei ${ROTULO[tipo].toLowerCase()} de ${BRL.format(valor)} em "${desc}". Veja os números mudarem no painel ao lado.`);
                     render();
                 } else {
                     chatMsg('bot', responder(s) || 'Não entendi essa.');
@@ -332,7 +336,7 @@ function montarChips() {
 // ── Init ────────────────────────────────────────────────────────────────────
 function init() {
     const form = el('demoForm');
-    if (!form) return;   // não é a landingtest
+    if (!form) return;   // página sem a demo
 
     // Máscara de moeda ao digitar.
     const inputValor = el('demoValor');
@@ -350,7 +354,7 @@ function init() {
         const valor = valorDaMascara(inputValor.value);
         if (!desc)          { erro.textContent = 'Escreva uma descrição.'; el('demoDesc').focus(); return; }
         if (valor === null) { erro.textContent = 'Informe um valor.'; inputValor.focus(); return; }
-        if (!addItem(el('demoTipo').value, desc, valor)) { erro.textContent = 'Esta é uma demonstração — 40 lançamentos já dão o recado 🙂'; return; }
+        if (!addItem(el('demoTipo').value, desc, valor)) { erro.textContent = 'Esta é uma demonstração — 40 lançamentos já dão o recado.'; return; }
         el('demoDesc').value = '';
         inputValor.value = '';
         el('demoDesc').focus();
@@ -365,7 +369,7 @@ function init() {
     });
 
     montarChips();
-    chatMsg('bot', 'Oi! Sou o assistente do GranaEvo. Toque numa frase abaixo e eu lanço para você.');
+    chatMsg('bot', 'Olá! Sou o assistente do GranaEvo. Toque numa das frases abaixo e eu registro para você.');
     render();
 }
 
