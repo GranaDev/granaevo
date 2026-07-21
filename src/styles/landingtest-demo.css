@@ -89,3 +89,42 @@
     .trial-valor { width: 100%; }
     .trial-desc  { flex: 1 1 100%; }
 }
+
+/* ── Enriquecimento: crédito, reserva, rosca e insight ────────────────────── */
+.trial-kpis { grid-template-columns: repeat(4, 1fr); }
+.trial-res { color: #fbbf24 !important; }
+
+.trial-item-tag {
+    display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 4px;
+    font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    vertical-align: middle;
+}
+.trial-tag-saida    { background: color-mix(in srgb, #ff6b6b 20%, transparent); color: #ff9d9d; }
+.trial-tag-entrada  { background: color-mix(in srgb, #34d399 20%, transparent); color: #6ee7b7; }
+.trial-tag-credito  { background: color-mix(in srgb, #60a5fa 20%, transparent); color: #93c5fd; }
+.trial-tag-reserva  { background: color-mix(in srgb, #fbbf24 20%, transparent); color: #fcd34d; }
+
+/* Rosca em SVG: o furo do meio carrega o total */
+.trial-rosca-wrap { position: relative; width: 148px; margin: 0 auto 16px; }
+.trial-rosca { width: 148px; height: 148px; transform: rotate(-90deg); }
+.trial-rosca circle { transition: stroke-dasharray .4s ease; }
+.trial-rosca-centro {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; pointer-events: none; text-align: center;
+}
+.trial-rosca-centro span  { font-size: .95rem; font-weight: 700; color: var(--color-text, #fff); font-variant-numeric: tabular-nums; }
+.trial-rosca-centro small { font-size: .62rem; text-transform: uppercase; letter-spacing: .07em; color: var(--color-text-muted, #9ca3af); margin-top: 2px; }
+
+.trial-insight {
+    display: flex; gap: 11px; align-items: flex-start; margin-top: 18px; padding: 13px 15px;
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--color-primary, #10b981) 9%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-primary, #10b981) 26%, transparent);
+}
+.trial-insight[hidden] { display: none; }
+.trial-insight-ico { font-size: 1.05rem; line-height: 1.4; flex-shrink: 0; }
+.trial-insight-txt { margin: 0; font-size: .87rem; line-height: 1.55; color: var(--color-text, #fff); }
+
+@media (max-width: 720px) {
+    .trial-kpis { grid-template-columns: repeat(2, 1fr); }
+}

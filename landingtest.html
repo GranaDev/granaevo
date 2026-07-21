@@ -611,6 +611,7 @@
                 <div class="trial-kpis">
                     <div class="trial-kpi"><span class="trial-kpi-label">Entradas</span><strong class="trial-kpi-val" id="demoEntradas">R$ 0,00</strong></div>
                     <div class="trial-kpi"><span class="trial-kpi-label">Saídas</span><strong class="trial-kpi-val trial-neg" id="demoSaidas">R$ 0,00</strong></div>
+                    <div class="trial-kpi"><span class="trial-kpi-label">Reservado</span><strong class="trial-kpi-val trial-res" id="demoReservas">R$ 0,00</strong></div>
                     <div class="trial-kpi"><span class="trial-kpi-label">Saldo</span><strong class="trial-kpi-val" id="demoSaldo">R$ 0,00</strong></div>
                 </div>
 
@@ -618,6 +619,8 @@
                     <select id="demoTipo" class="trial-input" aria-label="Tipo do lançamento">
                         <option value="saida">Saída</option>
                         <option value="entrada">Entrada</option>
+                        <option value="credito">Saída no crédito</option>
+                        <option value="reserva">Reserva</option>
                     </select>
                     <input id="demoDesc" class="trial-input trial-desc" type="text" maxlength="40" placeholder="Ex.: mercado, salário, uber" aria-label="Descrição">
                     <input id="demoValor" class="trial-input trial-valor" type="text" inputmode="decimal" maxlength="12" placeholder="0,00" aria-label="Valor">
@@ -632,8 +635,17 @@
                     </div>
                     <div class="trial-graf-wrap">
                         <span class="trial-graf-titulo">Para onde foi o dinheiro</span>
+                        <div class="trial-rosca-wrap">
+                            <svg class="trial-rosca" id="demoRosca" viewBox="0 0 42 42" role="img" aria-label="Distribuição dos gastos"></svg>
+                            <div class="trial-rosca-centro"><span id="demoRoscaTotal">R$ 0,00</span><small>em saídas</small></div>
+                        </div>
                         <div class="trial-graf" id="demoGrafico" aria-live="polite"></div>
                     </div>
+                </div>
+
+                <div class="trial-insight" id="demoInsight" aria-live="polite" hidden>
+                    <span class="trial-insight-ico">💡</span>
+                    <p class="trial-insight-txt" id="demoInsightTxt"></p>
                 </div>
 
                 <p class="trial-nota">🔒 Demonstração local: nada sai do seu navegador e nada é salvo. Ao recarregar, tudo é apagado.</p>
