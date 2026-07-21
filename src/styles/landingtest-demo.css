@@ -153,12 +153,6 @@
     background: color-mix(in srgb, var(--color-text, #fff) 9%, transparent); }
 .trial-saude-fill { display: block; height: 100%; width: 0; border-radius: 4px; transition: width .45s ease, background .3s ease; }
 
-/* Duas colunas: lançar | conversar */
-.trial-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 22px; }
-.trial-col { min-width: 0; }
-.trial-col-titulo { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
-    color: var(--color-text-muted, #9ca3af); margin-bottom: 10px; font-weight: 700; }
-.trial-col--chat { display: flex; flex-direction: column; }
 
 /* Chat */
 .trial-chat { flex: 1; min-height: 190px; max-height: 240px; overflow-y: auto; padding: 12px;
@@ -204,7 +198,45 @@
 
 .trial-cta { font-size: 1rem; padding: 14px 32px; }
 
-@media (max-width: 860px) {
-    .trial-cols { grid-template-columns: 1fr; }
+@media (max-width: 980px) {
+    .trial-grid { grid-template-columns: 1fr; }
+    .trial-app--chat { position: static; }
     .trial-graf-inner { gap: 18px; }
 }
+
+
+/* ══ v3 — DOIS CARDS IRMÃOS ════════════════════════════════════════════════
+   Correção de layout: o chat estava DENTRO do card de transações, o que
+   empilhava informação demais numa caixa só e pesava a estética. Agora são dois
+   cards lado a lado — o painel manda no espaço, o assistente acompanha. */
+.trial-grid {
+    display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: 20px; align-items: start; max-width: 1120px; margin: 0 auto;
+}
+.trial-app { max-width: none; margin: 0; }
+
+/* Card do assistente: mais leve que o painel, e acompanha a rolagem no desktop */
+.trial-app--chat {
+    display: flex; flex-direction: column; position: sticky; top: 24px;
+    background: color-mix(in srgb, var(--color-bg-card, #13141f) 92%, var(--color-primary, #10b981));
+}
+.trial-chat-head {
+    display: flex; align-items: center; gap: 11px; padding-bottom: 13px; margin-bottom: 13px;
+    border-bottom: 1px solid var(--color-border, rgba(255,255,255,.08));
+}
+.trial-chat-avatar {
+    width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 1.05rem;
+    background: color-mix(in srgb, var(--color-primary, #10b981) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-primary, #10b981) 38%, transparent);
+}
+.trial-chat-nome { display: block; font-size: .9rem; color: var(--color-text, #fff); }
+.trial-chat-status {
+    display: block; font-size: .68rem; color: var(--color-primary, #10b981);
+    letter-spacing: .02em;
+}
+.trial-chat { min-height: 230px; max-height: 300px; }
+
+/* Insights e fecho agora vivem FORA dos cards, alinhados à grade */
+.trial-insights { max-width: 1120px; margin: 20px auto 0; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.trial-nota { max-width: 1120px; margin-left: auto; margin-right: auto; }
