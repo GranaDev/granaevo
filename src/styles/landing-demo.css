@@ -415,4 +415,15 @@
     .trial-add, .trial-item-del, .trial-limpar { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
     /* Respiro no fim da seção para o CTA fixo nunca cobrir o último conteúdo. */
     .trial-section { padding-bottom: 96px; }
+
+    /* O ícone "i" ficava ACIMA do texto: como <svg> é inline e o parágrafo é
+       centralizado, com o texto quebrando em várias linhas ele sobrava sozinho
+       na primeira. Flex resolve de vez — ícone e texto sempre lado a lado, e o
+       `align-items: flex-start` alinha o ícone à PRIMEIRA linha, não ao meio do
+       bloco. `flex-shrink: 0` impede que ele seja esmagado no estreito. */
+    .trial-nota {
+        display: flex; align-items: flex-start; gap: 7px;
+        text-align: left; max-width: 30rem; margin-inline: auto;
+    }
+    .trial-nota-ico { flex-shrink: 0; margin: 2px 0 0; width: 15px; height: 15px; }
 }
