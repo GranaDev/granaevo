@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
+    <meta name="description" content="App de controle financeiro pessoal para organizar gastos, cartões e metas — sem conectar sua conta bancária. Para você, casal ou família. 7 dias de garantia.">
+    <meta name="theme-color" content="#10b981">
+
+    <!--
+        ============================================================
+        SECURITY HEADERS (meta equivalents — camada extra de defesa)
+
+        LIMITAÇÕES IMPORTANTES:
+        ─────────────────────────────────────────────────────────────
+        [A] frame-ancestors 'none'  → IGNORADO via <meta>. REMOVIDO.
+            Protegido via HTTP header no vercel.json:
+            "Content-Security-Policy: frame-ancestors 'none'"
+
+        [B] X-Frame-Options via <meta> → IGNORADO por todos os browsers
+            modernos. REMOVIDO. Protegido via HTTP header no vercel.json:
+            "X-Frame-Options: DENY"
+
+        [C] A CSP real e completa está no vercel.json (HTTP header).
+            Este <meta> é apenas defesa em profundidade — o browser
+            aplica a política MAIS restritiva entre header e meta.
+            Por isso ambos devem ser consistentes.
+
+        SOBRE O CLOUDFLARE BEACON:
+        ─────────────────────────────────────────────────────────────
+        O Cloudflare injeta beacon.min.js automaticamente via proxy.
+        Por isso static.cloudflareinsights.com está liberado no
+        script-src e cloudflareinsights.com no connect-src,
+        tanto aqui quanto no vercel.json.
+
+        SOBRE O INLINE SCRIPT:
+        ─────────────────────────────────────────────────────────────
+        O Cloudflare também injeta um inline script ao fazer proxy.
+        O hash sha256 abaixo corresponde exatamente a esse script.
+        Se o hash mudar (após atualização do Cloudflare), o novo hash
+        aparecerá na mensagem de erro do console — basta substituir
+        aqui e no vercel.json.
+        Hash atual: sha256-GL6A4jS7qMll1kMeDRcLJpoLrZk+ljJKJwKhAdGmTs8=
+        ============================================================
+    -->
+
+    <!--
+        META CSP: camada extra de defesa (não substitui o HTTP header).
+        A CSP real e completa está no vercel.json.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' 'sha256-JpSqkc4lJtTGdFgSBst3AQTsEudZFZAC9KIwl5YXKLo=' https://static.cloudflareinsights.com;
+        style-src 'self';
+        font-src 'self';
+        img-src 'self' data:;
+        connect-src 'self' https://cloudflareinsights.com;
+        frame-src 'none';
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self';
+        upgrade-insecure-requests;
+        require-trusted-types-for 'script';
+    ">
+
+    <!--
+        TRUSTED TYPES: bloqueia DOM XSS via innerHTML, document.write, etc.
+        Se você usar bibliotecas de terceiros que usam innerHTML,
+        será necessário criar uma policy explícita com createPolicy().
+    -->
+
+    <!-- Anti-MIME-Sniffing -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+
+    <!-- Referrer Policy -->
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <!--
+        Permissions Policy — desabilita APIs sensíveis não utilizadas.
+        X-Frame-Options e frame-ancestors foram REMOVIDOS daqui —
+        só funcionam via HTTP header (vercel.json já os aplica).
+    -->
+    <meta http-equiv="Permissions-Policy" content="
+        camera=(),
+        microphone=(),
+        geolocation=(),
+        payment=(),
+        usb=(),
+        interest-cohort=(),
+        browsing-topics=(),
+        join-ad-interest-group=(),
+        run-ad-auction=()
+    ">
+
+    <!--
+        X-Frame-Options via <meta> NÃO é suportado por nenhum browser
+        moderno — gera aviso no console e é ignorado. REMOVIDO.
+        Proteção real: HTTP header "X-Frame-Options: DENY" no vercel.json.
+    -->
+
+    <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
+
+    <!-- ============================================================
+         SEO + SOCIAL SHARING
+         ────────────────────────────────────────────────────────────
+         canonical evita conteúdo duplicado (www/não-www, com/sem barra).
+         Open Graph + Twitter Cards: preview bonito ao compartilhar o
+         link no WhatsApp/Instagram/Telegram — crítico para crescimento
+         por indicação.
+
+         IMAGEM OG: banner dedicado 1200×630 gerado por
+         scripts/build-og-image.mjs (node scripts/build-og-image.mjs para
+         regenerar após mudar marca/slogan).
+         ============================================================ -->
+    <link rel="canonical" href="https://www.granaevo.com/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="GranaEvo">
+    <meta property="og:locale" content="pt_BR">
+    <meta property="og:url" content="https://www.granaevo.com/">
+    <meta property="og:title" content="GranaEvo — Controle financeiro sem entregar seus dados ao banco">
+    <meta property="og:description" content="Organize gastos, cartões e metas em um só lugar — sem conectar sua conta bancária. Para você, casal ou família. Comece com 7 dias de garantia.">
+    <meta property="og:image" content="https://www.granaevo.com/assets/icons/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:alt" content="GranaEvo — Domine suas finanças com inteligência">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="GranaEvo — Controle financeiro sem entregar seus dados ao banco">
+    <meta name="twitter:description" content="Organize gastos, cartões e metas em um só lugar — sem conectar sua conta bancária. Para você, casal ou família. Comece com 7 dias de garantia.">
+    <meta name="twitter:image" content="https://www.granaevo.com/assets/icons/og-image.png">
+
+    <!--
+        JSON-LD structured data (Organization + SoftwareApplication + FAQPage).
+        <script type="application/ld+json"> é um DATA BLOCK, não executável —
+        NÃO é bloqueado pelo script-src da CSP nem pelo Trusted Types.
+        FAQPage habilita rich snippets (FAQ expansível direto na busca do Google).
+        Sem aggregateRating de propósito: não inventamos nota/reviews.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://www.granaevo.com/#organization",
+          "name": "GranaEvo",
+          "url": "https://www.granaevo.com/",
+          "logo": "https://www.granaevo.com/assets/icons/granaevo-logo.jpg",
+          "email": "suporte@granaevo.com",
+          "slogan": "Sua evolução financeira começa aqui"
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://www.granaevo.com/#app",
+          "name": "GranaEvo",
+          "applicationCategory": "FinanceApplication",
+          "operatingSystem": "Web, iOS, Android",
+          "url": "https://www.granaevo.com/",
+          "description": "App de controle financeiro pessoal para organizar gastos, cartões e metas sem conectar a conta bancária. Planos para uso individual, casal e família.",
+          "publisher": { "@id": "https://www.granaevo.com/#organization" },
+          "offers": {
+            "@type": "AggregateOffer",
+            "priceCurrency": "BRL",
+            "lowPrice": "19.99",
+            "highPrice": "54.99",
+            "offerCount": "3"
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://www.granaevo.com/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "O GranaEvo funciona no celular?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Sim! O GranaEvo é 100% responsivo e funciona perfeitamente em celulares, tablets e computadores — sem precisar instalar nada."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Como funciona a assinatura?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "A cobrança é mensal e automática. Você pode cancelar a qualquer momento pelo painel, sem multa nem burocracia. O acesso continua até o fim do período pago."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Meus dados financeiros estão seguros?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Absolutamente. Usamos criptografia AES-256, autenticação segura e nunca compartilhamos seus dados com terceiros. Conformidade total com a LGPD."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Posso usar com meu cônjuge ou família?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Sim! Temos planos Casal (2 perfis) e Família (4 perfis). Cada membro tem seu controle individual, com visão compartilhada das finanças da casa."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Há garantia de reembolso?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Sim. Garantia de 7 dias em cada cobrança mensal. Se não gostar por qualquer motivo, devolvemos 100% do valor — sem perguntas."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Posso trocar de plano depois?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Sim! Você pode fazer upgrade do plano a qualquer momento, pagando apenas a diferença. O downgrade entra em vigor no próximo ciclo."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+
+    <!-- Fonts: Inter auto-importado via landingpage.css → _fonts.css (@fontsource/inter) -->
+
+    <!-- CSS local -->
+    <link rel="stylesheet" href="src/styles/landingpage.css">
+    <link rel="stylesheet" href="src/styles/landingtest-demo.css">
+</head>
+
+<body>
+
+    <!-- Loading Screen com Logo -->
+    <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando página">
+        <div class="loader">
+            <div class="loader-logo">
+                <!--
+                    crossorigin="anonymous": evita leaks via canvas fingerprinting.
+                    Requer que o servidor envie CORS headers para a imagem.
+                    Se a imagem for local (same-origin), funciona sem configuração extra.
+                -->
+                <img
+                    src="/assets/icons/granaevo-logo.jpg"
+                    alt="GranaEvo"
+                    class="logo-img-loader"
+                    crossorigin="anonymous"
+                    loading="eager"
+                >
+            </div>
+            <div class="loader-bar">
+                <div class="loader-progress"></div>
+            </div>
+            <p class="loader-text">Carregando...</p>
+        </div>
+    </div>
+
+    <!-- Scroll Progress -->
+    <div
+        class="scroll-progress"
+        id="scrollProgress"
+        role="progressbar"
+        aria-label="Progresso de leitura"
+        aria-valuenow="0"
+        aria-valuemin="0"
+        aria-valuemax="100"
+    ></div>
+
+    <!-- Animated Background (puramente decorativo — aria-hidden) -->
+    <div class="animated-bg" aria-hidden="true">
+        <div class="grid-overlay"></div>
+        <canvas id="particlesCanvas"></canvas>
+        <div class="glow-orb glow-orb-1"></div>
+        <div class="glow-orb glow-orb-2"></div>
+        <div class="glow-orb glow-orb-3"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="header" id="header">
+        <nav class="nav-container" role="navigation" aria-label="Navegação principal">
+            <a href="#" class="logo" aria-label="GranaEvo — página inicial">
+                <img
+                    src="/assets/icons/granaevo-logo.jpg"
+                    alt="GranaEvo"
+                    class="logo-img"
+                    crossorigin="anonymous"
+                    loading="eager"
+                >
+                <span class="logo-text">GranaEvo</span>
+            </a>
+
+            <div class="nav-links" id="navLinks" role="menubar">
+                <a href="#recursos" class="nav-link" role="menuitem">Recursos</a>
+                <a href="#como-funciona" class="nav-link" role="menuitem">Como Funciona</a>
+                <!--
+                    Links internos: rel="noopener noreferrer" não é necessário aqui pois
+                    não usam target="_blank". Aplicado apenas em links externos abertos
+                    em nova aba para prevenir tabnabbing attack.
+                    REGRA: qualquer link com target="_blank" DEVE ter:
+                    rel="noopener noreferrer"
+                -->
+                <a href="#faq" class="nav-link" role="menuitem">FAQ</a>
+                <a href="login.html" class="nav-link" role="menuitem">Login</a>
+                <a href="planos.html" class="btn-nav" role="menuitem">Começar Agora</a>
+            </div>
+
+            <button
+                class="mobile-toggle"
+                id="mobileToggle"
+                aria-label="Abrir menu de navegação"
+                aria-expanded="false"
+                aria-controls="navLinks"
+                type="button"
+            >
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- Mobile CTA Floating -->
+    <div class="mobile-cta-float" id="mobileCTA" aria-hidden="true">
+        <a
+            href="planos.html"
+            class="btn-float"
+            tabindex="-1"
+            aria-label="Começar Agora — acesso rápido"
+        >
+            <span>Começar Agora</span>
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </a>
+    </div>
+
+    <!-- ================================================
+         HERO SECTION
+    ================================================ -->
+    <section class="hero" id="hero" aria-labelledby="hero-title">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text" data-parallax="0.1">
+                    <div class="badge" role="note">
+                        <span class="pulse-dot" aria-hidden="true"></span>
+                        <span>Sem conectar seu banco · Seus dados são só seus</span>
+                    </div>
+
+                    <h1 class="hero-title" id="hero-title">
+                        Para onde foi<br>
+                        <span class="gradient-text">o seu dinheiro?</span>
+                    </h1>
+
+                    <p class="hero-description">
+                        O GranaEvo organiza seus gastos, cartões e metas em um só lugar —
+                        sem conectar sua conta bancária e sem entregar seus dados.
+                        Em 30 dias você muda sua relação com o dinheiro.
+                    </p>
+
+                    <div class="hero-buttons">
+                        <a href="planos.html" class="btn-primary">
+                            <span>Começar AGORA!</span>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                                <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </a>
+                        <a href="login.html" class="btn-secondary">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                                <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 7L13 10L8 13V7Z" fill="currentColor"/>
+                            </svg>
+                            <span>Login</span>
+                        </a>
+                    </div>
+
+                    <span class="cta-note">A partir de R$ 19,99/mês · Cancele quando quiser · 7 dias de garantia</span>
+
+                </div>
+
+                <div class="hero-visual" data-parallax="0.05" aria-hidden="true">
+                    <div class="phone-3d-wrapper" id="phone3DWrapper">
+
+                        <!-- Phone body -->
+                        <div class="phone-3d-device" id="phone3DDevice">
+
+                            <!-- Physical side buttons -->
+                            <div class="pbtn pbtn-vol-up"></div>
+                            <div class="pbtn pbtn-vol-down"></div>
+                            <div class="pbtn pbtn-power"></div>
+
+                            <!-- Glass screen + frame -->
+                            <div class="phone-glass">
+                                <!-- Dynamic Island -->
+                                <div class="phone-pill"></div>
+
+                                <!-- App UI -->
+                                <div class="pui">
+                                    <!-- Status bar -->
+                                    <div class="pui-bar">
+                                        <span>9:41</span>
+                                        <div class="pui-bar-icons">
+                                            <svg width="13" height="10" viewBox="0 0 13 10" fill="currentColor"><rect x="0" y="5" width="2" height="5" rx="1" opacity="0.4"/><rect x="3.5" y="3" width="2" height="7" rx="1" opacity="0.65"/><rect x="7" y="1" width="2" height="9" rx="1" opacity="0.85"/><rect x="10.5" y="0" width="2" height="10" rx="1"/></svg>
+                                            <svg width="13" height="10" viewBox="0 0 13 10" fill="currentColor"><path d="M6.5 2C4.3 2 2.3 2.9.8 4.4l1.2 1.2C3.1 4.5 4.7 3.8 6.5 3.8S9.9 4.5 11 5.6l1.2-1.2C10.7 2.9 8.7 2 6.5 2z" opacity="0.5"/><path d="M6.5 5.5C5.4 5.5 4.4 6 3.7 6.7l1.2 1.2c.4-.4 1-.6 1.6-.6s1.2.2 1.6.6l1.2-1.2C8.6 6 7.6 5.5 6.5 5.5z"/><circle cx="6.5" cy="9.5" r="1"/></svg>
+                                            <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".5" y=".5" width="18" height="10" rx="2.5" stroke="currentColor" stroke-opacity="0.35"/><rect x="2" y="2" width="13" height="7" rx="1.5" fill="currentColor"/><path d="M20 3.5v4a2 2 0 000-4z" fill="currentColor" opacity="0.4"/></svg>
+                                        </div>
+                                    </div>
+
+                                    <!-- Header -->
+                                    <div class="pui-head">
+                                        <div class="pui-av">G</div>
+                                        <div class="pui-brand">GranaEvo</div>
+                                        <div class="pui-head-actions">
+                                            <div class="pui-ic">
+                                                <svg viewBox="0 0 20 20" fill="none" width="13" height="13"><path d="M10 2a6 6 0 00-6 6c0 4-2 5-2 5h16s-2-1-2-5a6 6 0 00-6-6z" stroke="currentColor" stroke-width="1.5"/><path d="M11.7 16a2 2 0 01-3.4 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Balance -->
+                                    <div class="pui-balance">
+                                        <div class="pui-bal-lbl">Saldo disponível</div>
+                                        <div class="pui-bal-val">R$ 2.000<span class="pui-bal-dec">,00</span></div>
+                                    </div>
+
+                                    <!-- 3 stat pills -->
+                                    <div class="pui-pills">
+                                        <div class="pui-pill pui-pill-g">
+                                            <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 11V3M7 3L3.5 6.5M7 3L10.5 6.5" stroke="#10b981" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+                                            <div class="pui-pill-txt">
+                                                <span class="pui-pill-lbl">Entradas</span>
+                                                <span class="pui-pill-val">R$&nbsp;5.500</span>
+                                            </div>
+                                        </div>
+                                        <div class="pui-pill pui-pill-r">
+                                            <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 3v8M7 11L3.5 7.5M7 11L10.5 7.5" stroke="#ef4444" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+                                            <div class="pui-pill-txt">
+                                                <span class="pui-pill-lbl">Saídas</span>
+                                                <span class="pui-pill-val">R$&nbsp;2.300</span>
+                                            </div>
+                                        </div>
+                                        <div class="pui-pill pui-pill-y">
+                                            <div class="pui-pill-icon"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M2 11h10M7 3v6M4.5 5.5L7 3l2.5 2.5" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                                            <div class="pui-pill-txt">
+                                                <span class="pui-pill-lbl">Reservas</span>
+                                                <span class="pui-pill-val">R$&nbsp;1.200</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Contas Fixas -->
+                                    <div class="pui-contas">
+                                        <div class="pui-contas-hd">
+                                            <svg viewBox="0 0 14 14" fill="none" width="11" height="11"><rect x="2" y="6" width="10" height="7" rx="1.5" stroke="#10b981" stroke-width="1.4"/><path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="#10b981" stroke-width="1.4" stroke-linecap="round"/></svg>
+                                            Contas Fixas
+                                        </div>
+                                        <div class="pui-contas-grid">
+                                            <div class="pui-cc">
+                                                <div class="pui-cc-hd">
+                                                    <span class="pui-cc-nm">Netflix</span>
+                                                    <span class="pui-cc-st pui-cc-pendente">Pendente</span>
+                                                </div>
+                                                <div class="pui-cc-vl">R$&nbsp;39,50</div>
+                                                <div class="pui-cc-sb">vence dia 15</div>
+                                            </div>
+                                            <div class="pui-cc">
+                                                <div class="pui-cc-hd">
+                                                    <span class="pui-cc-nm">Academia</span>
+                                                    <span class="pui-cc-st pui-cc-pago">Pago</span>
+                                                </div>
+                                                <div class="pui-cc-vl">R$&nbsp;83,30</div>
+                                                <div class="pui-cc-sb">mensal</div>
+                                            </div>
+                                            <div class="pui-cc">
+                                                <div class="pui-cc-hd">
+                                                    <span class="pui-cc-nm">Internet</span>
+                                                    <span class="pui-cc-st pui-cc-pago">Pago</span>
+                                                </div>
+                                                <div class="pui-cc-vl">R$&nbsp;129,90</div>
+                                                <div class="pui-cc-sb">mensal</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Bottom nav -->
+                                    <div class="pui-nav">
+                                        <div class="pui-nav-it pui-nav-on">
+                                            <img src="/assets/icons/Dashboard.webp" class="pui-nav-img" alt="">
+                                            <span>Home</span>
+                                        </div>
+                                        <div class="pui-nav-it">
+                                            <img src="/assets/icons/Extrato.webp" class="pui-nav-img" alt="">
+                                            <span>Extrato</span>
+                                        </div>
+                                        <div class="pui-nav-it">
+                                            <img src="/assets/icons/Reservas.webp" class="pui-nav-img" alt="">
+                                            <span>Reservas</span>
+                                        </div>
+                                        <div class="pui-nav-it">
+                                            <img src="/assets/icons/Cartoes.webp" class="pui-nav-img" alt="">
+                                            <span>Cartões</span>
+                                        </div>
+                                        <div class="pui-nav-it">
+                                            <img src="/assets/icons/Graficos.webp" class="pui-nav-img" alt="">
+                                            <span>Gráficos</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Glow effects -->
+                        <div class="phone-glow-ring" aria-hidden="true"></div>
+                        <div class="phone-3d-glow" aria-hidden="true"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================
+         PROBLEM SECTION
+    ================================================ -->
+    <section class="problem-section" id="problema" aria-labelledby="problem-title">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">O Problema</span>
+                <h2 class="section-title" id="problem-title">Você está cansado disso?</h2>
+                <p class="section-subtitle">Esses são os desafios que impedem você de ter controle financeiro</p>
+            </div>
+
+            <div class="problem-grid">
+                <div class="problem-card" data-tilt>
+                    <div class="problem-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Dinheiro Desaparece</h3>
+                    <p>Você recebe o salário mas não sabe para onde ele foi até o fim do mês</p>
+                </div>
+
+                <div class="problem-card" data-tilt>
+                    <div class="problem-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 10H21" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 3V8M17 3V8" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Fatura Surpresa</h3>
+                    <p>O cartão sempre vem maior do que você esperava e você não sabe o porquê</p>
+                </div>
+
+                <div class="problem-card" data-tilt>
+                    <div class="problem-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 7V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="12" cy="16" r="1" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <h3>Metas Impossíveis</h3>
+                    <p>Quer economizar mas nunca sobra dinheiro no final do mês</p>
+                </div>
+
+                <div class="problem-card" data-tilt>
+                    <div class="problem-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M3 3V18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M7 14L10 10L14 14L20 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Sem Visão</h3>
+                    <p>Não tem ideia de quanto gasta em cada categoria ou onde cortar custos</p>
+                </div>
+            </div>
+
+            <div class="solution-box" role="note">
+                <div class="solution-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="solution-content">
+                    <h3>O problema não é o quanto você ganha</h3>
+                    <p>É como você controla. O GranaEvo te dá visão total e controle inteligente de cada centavo.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================
+         TESTE GRÁTIS — DEMO INTERATIVA (landingtest)
+         Vitrine pura: roda 100% no navegador, não cria conta, não salva nada.
+         Recarregar a página zera tudo. Nenhuma chamada de rede.
+    ================================================ -->
+    <section class="trial-section" id="teste-gratis" aria-labelledby="trial-title">
+        <div class="container">
+            <div class="trial-head">
+                <span class="trial-badge">Teste agora · sem cadastro</span>
+                <h2 class="trial-title" id="trial-title">Experimente antes de criar conta</h2>
+                <p class="trial-sub">Lance alguns gastos e veja o GranaEvo trabalhando. Nada é salvo — é só para você sentir como funciona.</p>
+            </div>
+
+            <div class="trial-app" role="region" aria-label="Demonstração interativa">
+                <div class="trial-kpis">
+                    <div class="trial-kpi"><span class="trial-kpi-label">Entradas</span><strong class="trial-kpi-val" id="demoEntradas">R$ 0,00</strong></div>
+                    <div class="trial-kpi"><span class="trial-kpi-label">Saídas</span><strong class="trial-kpi-val trial-neg" id="demoSaidas">R$ 0,00</strong></div>
+                    <div class="trial-kpi"><span class="trial-kpi-label">Saldo</span><strong class="trial-kpi-val" id="demoSaldo">R$ 0,00</strong></div>
+                </div>
+
+                <form class="trial-form" id="demoForm" autocomplete="off">
+                    <select id="demoTipo" class="trial-input" aria-label="Tipo do lançamento">
+                        <option value="saida">Saída</option>
+                        <option value="entrada">Entrada</option>
+                    </select>
+                    <input id="demoDesc" class="trial-input trial-desc" type="text" maxlength="40" placeholder="Ex.: mercado, salário, uber" aria-label="Descrição">
+                    <input id="demoValor" class="trial-input trial-valor" type="text" inputmode="decimal" maxlength="12" placeholder="0,00" aria-label="Valor">
+                    <button class="trial-add" type="submit">Lançar</button>
+                </form>
+                <p class="trial-erro" id="demoErro" role="alert"></p>
+
+                <div class="trial-body">
+                    <div class="trial-lista-wrap">
+                        <div class="trial-lista-head"><span>Seus lançamentos</span><button type="button" class="trial-limpar" id="demoLimpar">Limpar</button></div>
+                        <ul class="trial-lista" id="demoLista" aria-live="polite"></ul>
+                    </div>
+                    <div class="trial-graf-wrap">
+                        <span class="trial-graf-titulo">Para onde foi o dinheiro</span>
+                        <div class="trial-graf" id="demoGrafico" aria-live="polite"></div>
+                    </div>
+                </div>
+
+                <p class="trial-nota">🔒 Demonstração local: nada sai do seu navegador e nada é salvo. Ao recarregar, tudo é apagado.</p>
+                <a class="btn-primary trial-cta" href="planos.html">Gostou? Ver planos</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================
+         FEATURES SECTION
+    ================================================ -->
+    <section class="features-section" id="recursos" aria-labelledby="features-title">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Recursos</span>
+                <h2 class="section-title" id="features-title">Tudo que você precisa</h2>
+                <p class="section-subtitle">Ferramentas poderosas para organizar sua vida financeira</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M3 3V18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M18 9L13 14L10 11L7 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Dashboard Completo</h3>
+                    <p>Visualize todas suas finanças de forma clara. Entradas, saídas, saldo e reservas em tempo real.</p>
+                </div>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M3 10H21" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 3V8M17 3V8" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Controle de Cartões</h3>
+                    <p>Nunca mais seja pego de surpresa. Acompanhe todos os gastos e parcelas do seu cartão.</p>
+                </div>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                            <path d="M12 6V12L16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Metas e Reservas</h3>
+                    <p>Crie objetivos financeiros e acompanhe seu progresso com gráficos intuitivos.</p>
+                </div>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="16" cy="17" r="3" stroke="currentColor" stroke-width="2"/>
+                            <path d="M13 7H20M5 16H13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Múltiplos Perfis</h3>
+                    <p>Perfeito para casais e famílias. Cada um com seu controle individual ou compartilhado.</p>
+                </div>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
+                            <path d="M7 11V7C7 4.79086 8.79086 3 11 3H13C15.2091 3 17 4.79086 17 7V11" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h3>Privacidade de Verdade</h3>
+                    <p>Diferente de outros apps, o GranaEvo não conecta sua conta bancária. Seus dados são criptografados (AES-256), seguem a LGPD e nunca são vendidos.</p>
+                </div>
+
+                <div class="feature-card" data-tilt>
+                    <div class="feature-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3>Automação Completa</h3>
+                    <p>Configure contas fixas e deixe o sistema trabalhar para você.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================
+         HOW IT WORKS
+    ================================================ -->
+    <section class="how-section" id="como-funciona" aria-labelledby="how-title">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Como Funciona</span>
+                <h2 class="section-title" id="how-title">Simples como deve ser</h2>
+                <p class="section-subtitle">Comece em minutos e veja resultados em dias</p>
+            </div>
+
+            <div class="timeline" role="list">
+                <div class="timeline-item" role="listitem">
+                    <div class="timeline-dot" aria-hidden="true">1</div>
+                    <div class="timeline-content">
+                        <h3>Selecione um Plano</h3>
+                        <p>Escolha o plano ideal para você. Em poucos minutos, o acesso é liberado!</p>
+                    </div>
+                </div>
+
+                <div class="timeline-item" role="listitem">
+                    <div class="timeline-dot" aria-hidden="true">2</div>
+                    <div class="timeline-content">
+                        <h3>Registre Transações</h3>
+                        <p>Adicione suas entradas e saídas de forma simples e rápida.</p>
+                    </div>
+                </div>
+
+                <div class="timeline-item" role="listitem">
+                    <div class="timeline-dot" aria-hidden="true">3</div>
+                    <div class="timeline-content">
+                        <h3>Acompanhe e Evolua</h3>
+                        <p>Veja relatórios, estabeleça metas e tome decisões inteligentes.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================
+         FAQ SECTION
+    ================================================ -->
+    <section class="faq-lp-section" id="faq" aria-labelledby="faq-lp-title">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">FAQ</span>
+                <h2 class="section-title" id="faq-lp-title">Dúvidas Frequentes</h2>
+                <p class="section-subtitle">Tudo que você precisa saber antes de começar</p>
+            </div>
+
+            <div class="faq-lp-grid" role="list">
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>O GranaEvo funciona no celular?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Sim! O GranaEvo é 100% responsivo e funciona perfeitamente em celulares, tablets e computadores — sem precisar instalar nada.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Como funciona a assinatura?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>A cobrança é mensal e automática. Você pode cancelar a qualquer momento pelo painel, sem multa nem burocracia. O acesso continua até o fim do período pago.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Meus dados financeiros estão seguros?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Absolutamente. Usamos criptografia AES-256, autenticação segura e nunca compartilhamos seus dados com terceiros. Conformidade total com a LGPD.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Posso usar com meu cônjuge ou família?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Sim! Temos planos Casal (2 perfis) e Família (4 perfis). Cada membro tem seu controle individual, com visão compartilhada das finanças da casa.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Há garantia de reembolso?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Sim. Garantia de 7 dias em cada cobrança mensal. Se não gostar por qualquer motivo, devolvemos 100% do valor — sem perguntas.</p>
+                    </div>
+                </div>
+
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Posso trocar de plano depois?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Sim! Você pode fazer upgrade do plano a qualquer momento, pagando apenas a diferença. O downgrade entra em vigor no próximo ciclo.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================
+         CTA SECTION
+    ================================================ -->
+    <section class="cta-section" aria-labelledby="cta-title">
+        <div class="container">
+            <div class="cta-box">
+                <div class="cta-content">
+                    <h2 id="cta-title">Comece hoje a saber para onde vai o seu dinheiro</h2>
+                    <p>Teste sem risco: se não gostar nos primeiros 7 dias, devolvemos 100% do valor — sem perguntas.</p>
+                    <a href="planos.html" class="btn-primary btn-large">
+                        <span>Quero ter controle</span>
+                        <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                            <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </a>
+                    <span class="cta-note">A partir de R$ 19,99/mês · Cancele quando quiser · Sem conectar seu banco</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================================================
+         FOOTER
+    ================================================ -->
+    <footer class="footer" role="contentinfo">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <a href="#" class="logo" aria-label="GranaEvo — início">
+                        <img
+                            src="/assets/icons/granaevo-logo.jpg"
+                            alt="GranaEvo"
+                            class="logo-img"
+                            crossorigin="anonymous"
+                            loading="lazy"
+                        >
+                        <span class="logo-text">GranaEvo</span>
+                    </a>
+                    <p>Sua evolução financeira começa aqui</p>
+                </div>
+
+                <div class="footer-links">
+                    <h4>Produto</h4>
+                    <a href="#recursos">Recursos</a>
+                    <a href="planos.html">Planos</a>
+                    <a href="#como-funciona">Como Funciona</a>
+                </div>
+
+                <div class="footer-links">
+                    <h4>Suporte</h4>
+                    <!--
+                        NOTA: Links externos com target="_blank" DEVEM conter
+                        rel="noopener noreferrer" para prevenir tabnabbing.
+                    -->
+                    <a href="mailto:suporte@granaevo.com">Contato</a>
+                    <a href="#faq">FAQ</a>
+                </div>
+
+                <div class="footer-links">
+                    <h4>Legal</h4>
+                    <a href="termos.html">Termos de Uso</a>
+                    <a href="privacidade.html">Privacidade</a>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                <p>&copy; 2026 GranaEvo. Todos os direitos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!--
+        type="module":
+        - Isola escopo (sem poluição do window)
+        - Ativa strict mode automaticamente
+        - Defer implícito (não bloqueia renderização)
+        - Confiável via script-src 'self' no vercel.json
+    -->
+    <script type="module" src="src/scripts/pages/landingtest.js"></script>
+
+</body>
+</html>

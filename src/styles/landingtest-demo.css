@@ -1,0 +1,91 @@
+/* landingtest-demo.css — só a seção de demonstração (Passo 20).
+   Arquivo separado de propósito: a landingtest é DESCARTÁVEL. Se o teste não
+   compensar, some este CSS + landingtest.html + landingtest.js e nada da
+   landing real é afetado. Só tokens — herda tema e contraste do resto. */
+
+.trial-section { padding: 72px 0; background: var(--color-bg-soft, #0f1020); }
+.trial-head { text-align: center; max-width: 640px; margin: 0 auto 34px; }
+.trial-badge {
+    display: inline-block; padding: 6px 14px; border-radius: 999px;
+    font-size: .75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--color-primary, #10b981);
+    background: color-mix(in srgb, var(--color-primary, #10b981) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-primary, #10b981) 35%, transparent);
+    margin-bottom: 14px;
+}
+.trial-title { font-size: clamp(1.6rem, 4vw, 2.3rem); margin: 0 0 10px; color: var(--color-text, #fff); }
+.trial-sub   { color: var(--color-text-muted, #9ca3af); font-size: 1rem; line-height: 1.6; }
+
+.trial-app {
+    max-width: 900px; margin: 0 auto; padding: 24px;
+    background: var(--color-bg-card, #13141f);
+    border: 1px solid var(--color-border, rgba(255,255,255,.08));
+    border-radius: 16px; box-shadow: var(--shadow-lg, 0 14px 28px rgba(0,0,0,.25));
+}
+
+.trial-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+.trial-kpi {
+    padding: 14px; border-radius: 11px; text-align: center;
+    background: color-mix(in srgb, var(--color-text, #fff) 4%, transparent);
+    border: 1px solid var(--color-border, rgba(255,255,255,.08));
+}
+.trial-kpi-label { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted, #9ca3af); margin-bottom: 6px; }
+.trial-kpi-val   { font-size: 1.25rem; color: var(--color-text, #fff); font-variant-numeric: tabular-nums; }
+.trial-neg { color: #ff6b6b !important; }
+.trial-pos { color: #34d399 !important; }
+
+.trial-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.trial-input {
+    padding: 11px 13px; border-radius: 9px; font-size: .92rem; font-family: inherit;
+    color: var(--color-text, #fff);
+    background: color-mix(in srgb, var(--color-text, #fff) 6%, transparent);
+    border: 1px solid var(--color-border-strong, rgba(255,255,255,.16));
+}
+.trial-desc  { flex: 1 1 220px; }
+.trial-valor { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+.trial-add {
+    padding: 11px 22px; border: none; border-radius: 9px; cursor: pointer;
+    font-weight: 700; font-size: .92rem; font-family: inherit;
+    background: var(--color-primary, #10b981); color: #04231a;
+}
+.trial-add:hover { filter: brightness(1.08); }
+.trial-erro { min-height: 18px; margin: 4px 0 12px; font-size: .82rem; color: #ff6b6b; }
+
+.trial-body { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.trial-lista-head {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--color-text-muted, #9ca3af); margin-bottom: 8px;
+}
+.trial-limpar {
+    background: none; border: none; cursor: pointer; font: inherit;
+    font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--color-text-muted, #9ca3af); text-decoration: underline;
+}
+.trial-lista { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.trial-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 4px;
+    border-bottom: 1px solid var(--color-border, rgba(255,255,255,.08));
+}
+.trial-item-desc { flex: 1; color: var(--color-text, #fff); font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trial-item-val  { font-size: .9rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.trial-item-del  { background: none; border: none; cursor: pointer; color: var(--color-text-muted, #9ca3af); font-size: .85rem; padding: 2px 4px; }
+.trial-item-del:hover { color: #ff6b6b; }
+.trial-vazio { color: var(--color-text-muted, #9ca3af); font-size: .86rem; padding: 14px 2px; line-height: 1.5; }
+
+.trial-graf-titulo { display: block; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted, #9ca3af); margin-bottom: 8px; }
+.trial-bar-row { display: grid; grid-template-columns: 84px 1fr auto; align-items: center; gap: 9px; margin-bottom: 9px; }
+.trial-bar-lbl { font-size: .8rem; color: var(--color-text, #fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trial-bar-track { height: 9px; border-radius: 5px; background: color-mix(in srgb, var(--color-text, #fff) 8%, transparent); overflow: hidden; }
+.trial-bar-fill  { display: block; height: 100%; border-radius: 5px; transition: width .35s ease; }
+.trial-bar-val   { font-size: .8rem; color: var(--color-text-muted, #9ca3af); font-variant-numeric: tabular-nums; }
+
+.trial-nota { margin: 18px 0 0; font-size: .8rem; color: var(--color-text-muted, #9ca3af); text-align: center; }
+.trial-cta  { display: block; width: fit-content; margin: 16px auto 0; }
+
+@media (max-width: 720px) {
+    .trial-body { grid-template-columns: 1fr; }
+    .trial-kpis { grid-template-columns: 1fr; }
+    .trial-valor { width: 100%; }
+    .trial-desc  { flex: 1 1 100%; }
+}

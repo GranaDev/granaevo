@@ -230,6 +230,7 @@ export default defineConfig(({ mode }) => ({
       input: {
         main:             'index.html',
         planos:           'planos.html',
+        landingtest:      'landingtest.html',
         login:            'login.html',
         privacidade:      'privacidade.html',
         dashboard:        'dashboard.html',
