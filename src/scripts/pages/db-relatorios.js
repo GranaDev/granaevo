@@ -497,18 +497,9 @@ function _exportPDF() {
         } catch { }
     });
 
-    // Ícone do site no cabeçalho: converto o logo real que já está no DOM para
-    // data URI. Custo ZERO de bundle — o dado vem do runtime, não do JS.
-    let markImg = '';
-    const logoEl = document.querySelector('img[src*="granaevo-logo"]');
-    if (logoEl && logoEl.naturalWidth) {
-        try {
-            const cv = document.createElement('canvas');
-            cv.width = logoEl.naturalWidth; cv.height = logoEl.naturalHeight;
-            cv.getContext('2d').drawImage(logoEl, 0, 0);
-            markImg = '<img class="ge-mark" src="' + cv.toDataURL('image/png') + '" alt="" aria-hidden="true">';
-        } catch { }
-    }
+    // Ícone do site no cabeçalho (data URI — custo ZERO de bundle, ver _logoDataUri)
+    const logoUri = _logoDataUri();
+    const markImg = logoUri ? '<img class="ge-mark" src="' + logoUri + '" alt="" aria-hidden="true">' : '';
 
     const clone = resultado.cloneNode(true);
     const origCanvases = [...resultado.querySelectorAll('canvas')];
@@ -900,6 +891,25 @@ function _brlLocal(v) {
 }
 
 // ── Apresentação HTML interativa com slides financeiros ───────────────────
+/**
+ * Logo real do GranaEvo (já carregado no DOM) convertido para data URI.
+ *
+ * POR QUE assim: o PDF e a apresentação são arquivos .html SOLTOS — um
+ * `src="/assets/..."` não resolve fora do site. Converter em runtime custa ZERO
+ * de bundle (o dado vem do DOM, não do JS). Devolve '' se o logo não carregou,
+ * e quem chama simplesmente omite a marca.
+ */
+function _logoDataUri() {
+    const el = document.querySelector('img[src*="granaevo-logo"]');
+    if (!el || !el.naturalWidth) return '';
+    try {
+        const cv = document.createElement('canvas');
+        cv.width = el.naturalWidth; cv.height = el.naturalHeight;
+        cv.getContext('2d').drawImage(el, 0, 0);
+        return cv.toDataURL('image/png');
+    } catch { return ''; }
+}
+
 function _exportApresentacao() {
     // Mesmo motivo do _exportPDF: clona o DOM, então expande antes.
     _relExpandirTx();
@@ -916,65 +926,127 @@ function _exportApresentacao() {
     const catMap = {};
     txs.filter(t=>t.categoria==='saida'||t.categoria==='saida_credito').forEach(t=>{catMap[t.tipo||'Outros']=(catMap[t.tipo||'Outros']||0)+Number(t.valor||0);});
     const top5 = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
-    const maxV = top5[0]?.[1]||1;
+    const logoUri = _logoDataUri();
     const metas = (_ctx.metas||[]).slice(0,5);
     const contas = (_ctx.contasFixas||[]).filter(c=>c.tipoContaFixa!=='fatura_cartao').slice(0,6);
 
-    const N = 5;
+    // Paleta categórica VALIDADA para fundo escuro (surface #0d1524) pelo
+    // validador do dataviz: banda de luminosidade, chroma, separação CVD,
+    // piso de visão normal e contraste — todos PASS. Ordem fixa, nunca ciclada.
+    const CORES = ['#0D9488','#D97706','#3B82F6','#F43F5E','#A855F7','#0891B2','#EC4899','#65A30D'];
+    const SURF = '#0d1524';
+
+    // Ícones em SVG (o deck é um arquivo solto: não há Font Awesome, e emoji
+    // está fora de questão). Traço fino, herda a cor do container.
+    const ico = p => '<svg class="kic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
+    const IC_UP   = ico('<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>');
+    const IC_DOWN = ico('<polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/>');
+    const IC_RES  = ico('<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>');
+    const IC_SLD  = ico('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>');
+
+    const nEnt = txs.filter(t=>t.categoria==='entrada').length;
+    const nSai = txs.filter(t=>t.categoria==='saida'||t.categoria==='saida_credito').length;
+    const pctRes = entradas>0 ? (reservas/entradas*100) : 0;
+    const pctSld = entradas>0 ? (saldo/entradas*100) : 0;
+    const totalTop = top5.reduce((s,[,v])=>s+v,0) || 1;
+
+    // Maiores lançamentos — dado NOVO (o donut já mostra composição por categoria,
+    // repetir top-5 de categoria em barras seria redundante).
+    const dataBR = d => {
+        const iso = _ctx.dataParaISO ? _ctx.dataParaISO(d) : d;
+        return (typeof iso === 'string' && iso.includes('-')) ? iso.slice(0,10).split('-').reverse().join('/') : String(d||'');
+    };
+    const topTx = txs.filter(t=>t.categoria==='saida'||t.categoria==='saida_credito')
+        .sort((a,b)=>Number(b.valor||0)-Number(a.valor||0)).slice(0,6);
+
+    // Donut por conic-gradient, com folga de 0.7% na cor da superfície entre as
+    // fatias (o "2px surface gap" das specs de marca do dataviz).
+    let acc = 0;
+    const segs = [];
+    top5.forEach(([,v],i)=>{
+        const a = acc/totalTop*100; acc += v; const b = acc/totalTop*100;
+        const corte = Math.max(a, b-0.7);
+        segs.push(CORES[i]+' '+a.toFixed(2)+'% '+corte.toFixed(2)+'%');
+        segs.push(SURF+' '+corte.toFixed(2)+'% '+b.toFixed(2)+'%');
+    });
+
+    const N = 7;
     const slideHTML = (id, content) => '<section class="slide" id="s'+id+'" aria-label="Slide '+id+'">'+content+'</section>';
-    const slideTitles = ['Capa','Visão Geral','Gastos','Reservas','Contas Fixas'];
+    const cab = (n, rot) => '<div class="shdr"><span class="snum">'+String(n).padStart(2,'0')+' / '+N+'</span><span class="sdiv"></span><span class="slbl">'+rot+'</span></div>';
+    const tit = (t, sub) => '<h2 class="stit">'+t+'</h2>'+(sub?'<p class="ssub">'+sub+'</p>':'');
+    const vazio = m => '<p class="empty-msg">'+m+'</p>';
 
     const slides = [
         slideHTML(1,
-            '<div class="cov"><div class="cov-logo">GranaEvo</div><div class="cov-title">Relatório Financeiro</div>' +
-            '<div class="cov-period">'+_escapeXml(mesNome)+' '+_escapeXml(anoNum)+'</div>' +
-            (perfilNome?'<div class="cov-tag">'+_escapeXml(perfilNome)+'</div>':'')+
-            '<div class="cov-date">Gerado em '+new Date().toLocaleDateString('pt-BR')+'</div></div>'),
+            '<div class="cov">'+
+            (logoUri?'<img class="cov-mark" src="'+logoUri+'" alt="" aria-hidden="true">':'')+
+            '<div class="cov-logo">Grana<span>Evo</span></div>'+
+            '<div class="cov-rule"></div>'+
+            '<div class="cov-title">Relatório Financeiro</div>'+
+            '<div class="cov-period">'+_escapeXml(mesNome)+' '+_escapeXml(anoNum)+'</div>'+
+            '<div class="cov-meta">'+
+            (perfilNome?'<span class="cov-tag">'+_escapeXml(perfilNome)+'</span>':'')+
+            '<span>Gerado em '+new Date().toLocaleDateString('pt-BR')+'</span></div></div>'),
 
         slideHTML(2,
-            '<div class="shdr"><span class="snum">02 / '+N+'</span><span class="slbl">Visão Geral</span></div>'+
-            '<h2 class="stit">Resumo Financeiro</h2>'+
-            '<div class="sgrid">'+
-            '<div class="scard green"><div class="sic">↑</div><div class="slabel">ENTRADAS</div><div class="sval">'+_escapeXml(_fmtBRL(entradas))+'</div></div>'+
-            '<div class="scard red"><div class="sic">↓</div><div class="slabel">SAÍDAS</div><div class="sval">'+_escapeXml(_fmtBRL(saidas))+'</div></div>'+
-            '<div class="scard '+(saldo>=0?'blue':'red')+'"><div class="sic">≡</div><div class="slabel">SALDO</div><div class="sval">'+_escapeXml(_fmtBRL(saldo))+'</div></div>'+
-            '<div class="scard yellow"><div class="sic">🏦</div><div class="slabel">RESERVAS</div><div class="sval">'+_escapeXml(_fmtBRL(reservas))+'</div></div>'+
+            cab(2,'Visão Geral')+tit('Resumo do mês','Como o dinheiro entrou, saiu e sobrou no período.')+
+            '<div class="kgrid">'+
+            '<div class="kcard pos">'+IC_UP+'<div class="klabel">Entradas</div><div class="kval">'+_escapeXml(_fmtBRL(entradas))+'</div><div class="ksub">'+nEnt+' lançamento'+(nEnt===1?'':'s')+'</div></div>'+
+            '<div class="kcard neg">'+IC_DOWN+'<div class="klabel">Saídas</div><div class="kval">'+_escapeXml(_fmtBRL(saidas))+'</div><div class="ksub">'+nSai+' lançamento'+(nSai===1?'':'s')+'</div></div>'+
+            '<div class="kcard warn">'+IC_RES+'<div class="klabel">Reservas</div><div class="kval">'+_escapeXml(_fmtBRL(reservas))+'</div><div class="ksub">'+pctRes.toFixed(1)+'% do que entrou</div></div>'+
+            '<div class="kcard '+(saldo>=0?'acc':'neg')+'">'+IC_SLD+'<div class="klabel">Saldo</div><div class="kval">'+_escapeXml(_fmtBRL(saldo))+'</div><div class="ksub">'+pctSld.toFixed(1)+'% da renda sobrou</div></div>'+
             '</div>'),
 
         slideHTML(3,
-            '<div class="shdr"><span class="snum">03 / '+N+'</span><span class="slbl">Análise</span></div>'+
-            '<h2 class="stit">Top 5 Categorias de Gasto</h2>'+
-            '<div class="cats">'+(top5.length===0?'<p class="empty-msg">Nenhum gasto no período</p>':top5.map(([cat,val],i)=>{
-                const pct=Math.round((val/maxV)*100);
-                const ptotal=saidas>0?((val/saidas)*100).toFixed(1):'0';
-                return '<div class="crow"><span class="cnum">'+String(i+1).padStart(2,'0')+'</span>'+
-                '<div class="cinfo"><span class="cname">'+_escapeXml(cat)+'</span>'+
-                '<div class="cbar-w"><div class="cbar" data-w="'+pct+'"></div></div></div>'+
-                '<div class="cvals"><span class="cval">'+_escapeXml(_fmtBRL(val))+'</span><span class="cpct">'+ptotal+'%</span></div></div>';
-            }).join(''))+'</div>'),
+            cab(3,'Composição')+tit('Para onde foi o dinheiro','Participação de cada categoria no total de saídas.')+
+            (top5.length===0?vazio('Nenhum gasto no período'):
+            '<div class="dwrap"><div class="dring">'+
+            '<div class="donut" style="background:conic-gradient('+segs.join(',')+')"></div>'+
+            '<div class="dhole"><span class="dhole-v">'+_escapeXml(_fmtBRL(saidas))+'</span><span class="dhole-l">Total de saídas</span></div>'+
+            '</div><div class="dleg">'+top5.map(([cat,val],i)=>
+                '<div class="dleg-i"><span class="dot" style="background:'+CORES[i]+'"></span>'+
+                '<span class="dleg-n">'+_escapeXml(cat)+'</span>'+
+                '<span class="dleg-v">'+_escapeXml(_fmtBRL(val))+'</span>'+
+                '<span class="dleg-p">'+(saidas>0?((val/saidas)*100).toFixed(1):'0')+'%</span></div>').join('')+
+            '</div></div>')),
 
         slideHTML(4,
-            '<div class="shdr"><span class="snum">04 / '+N+'</span><span class="slbl">Reservas</span></div>'+
-            '<h2 class="stit">Progresso das Metas</h2>'+
-            '<div class="metas">'+(metas.length===0?'<p class="empty-msg">Nenhuma reserva criada</p>':metas.map(m=>{
+            cab(4,'Detalhe')+tit('Maiores lançamentos','Os gastos individuais de maior peso no período.')+
+            '<div class="rows">'+(topTx.length===0?vazio('Nenhum gasto no período'):topTx.map((t,i)=>
+                '<div class="row"><span class="rnum">'+String(i+1).padStart(2,'0')+'</span>'+
+                '<span class="rname">'+_escapeXml(String(t.descricao||t.tipo||'Lançamento'))+'</span>'+
+                '<span class="rdate">'+_escapeXml(dataBR(t.data))+'</span>'+
+                '<span class="rval">'+_escapeXml(_fmtBRL(t.valor))+'</span></div>').join(''))+'</div>'),
+
+        slideHTML(5,
+            cab(5,'Reservas')+tit('Progresso das metas','Quanto já foi guardado de cada objetivo.')+
+            '<div class="metas">'+(metas.length===0?vazio('Nenhuma reserva criada'):metas.map(m=>{
                 const pct=m.objetivo>0?Math.min(100,((m.saved||0)/m.objetivo)*100):0;
                 return '<div class="mrow">'+
                 '<div class="minfo"><span class="mname">'+_escapeXml(m.descricao||'')+'</span>'+
-                '<div class="mbar-w"><div class="mbar" data-w="'+pct.toFixed(1)+'"></div></div></div>'+
+                '<div class="mbar-w"><div class="mbar" data-w="'+pct.toFixed(1)+'" style="--pw:'+pct.toFixed(1)+'%"></div></div></div>'+
                 '<div class="mvals"><span class="mval">'+_escapeXml(_fmtBRL(m.saved||0))+'</span><span class="mpct">'+pct.toFixed(0)+'%</span></div></div>';
             }).join(''))+'</div>'),
 
-        slideHTML(5,
-            '<div class="shdr"><span class="snum">05 / '+N+'</span><span class="slbl">Obrigações</span></div>'+
-            '<h2 class="stit">Contas Fixas</h2>'+
-            '<div class="conts">'+(contas.length===0?'<p class="empty-msg">Nenhuma conta fixa</p>':contas.map(cf=>{
+        slideHTML(6,
+            cab(6,'Obrigações')+tit('Contas fixas','Compromissos recorrentes do período.')+
+            '<div class="conts">'+(contas.length===0?vazio('Nenhuma conta fixa'):contas.map(cf=>{
                 const venc=cf.vencimento?cf.vencimento.split('-').reverse().join('/'):'';
                 return '<div class="cont-row">'+
                 '<span class="cont-name">'+_escapeXml(cf.descricao||'')+'</span>'+
                 '<span class="cont-venc">'+_escapeXml(venc)+'</span>'+
-                '<span class="cont-val '+(cf.pago?'pago':'pend')+'">'+_escapeXml(_fmtBRL(cf.valor))+'</span>'+
-                '<span class="cont-st '+(cf.pago?'pago':'pend')+'">'+(cf.pago?'✓ Pago':'● Pendente')+'</span></div>';
-            }).join(''))+'</div>')
+                '<span class="cont-val">'+_escapeXml(_fmtBRL(cf.valor))+'</span>'+
+                '<span class="chip '+(cf.pago?'ok':'due')+'">'+(cf.pago?'Pago':'Pendente')+'</span></div>';
+            }).join(''))+'</div>'),
+
+        slideHTML(7,
+            '<div class="end">'+
+            (logoUri?'<img class="end-mark" src="'+logoUri+'" alt="" aria-hidden="true">':'')+
+            '<div class="end-num">'+_escapeXml(_fmtBRL(saldo))+'</div>'+
+            '<div class="end-lbl">'+(saldo>=0?'sobrou no período':'de déficit no período')+'</div>'+
+            '<div class="cov-rule" style="margin:22px auto"></div>'+
+            '<div class="end-sub">'+_escapeXml(mesNome)+' '+_escapeXml(anoNum)+(perfilNome?' · '+_escapeXml(perfilNome):'')+'</div>'+
+            '<div class="end-brand">Grana<span>Evo</span></div></div>')
     ];
 
     const html = `<!DOCTYPE html>
@@ -985,85 +1057,142 @@ function _exportApresentacao() {
 <title>GranaEvo — Apresentação ${_escapeXml(mesNome)} ${_escapeXml(anoNum)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#09000f;color:#fff;overflow:hidden;height:100vh}
+:root{
+  --ink:#f1f5f9; --ink2:#94a3b8; --ink3:#64748b;
+  --acc:#2dd4bf;            /* teal claro: acento de INTERFACE (texto/filete) */
+  --line:rgba(255,255,255,.09); --panel:rgba(255,255,255,.035);
+  --pos:#34d399; --neg:#f87171; --warn:#fbbf24;
+}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,sans-serif;background:#0a0f1a;color:var(--ink);overflow:hidden;height:100vh;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
 .pres{width:100vw;height:100vh;position:relative}
-.slide{width:100%;height:100%;position:absolute;top:0;left:0;display:none;flex-direction:column;padding:52px 72px;background:linear-gradient(135deg,#0a0d16 0%,#0d1420 100%)}
+.slide{width:100%;height:100%;position:absolute;inset:0;display:none;flex-direction:column;padding:54px 76px 74px;
+  background:radial-gradient(1100px 620px at 78% -10%,rgba(13,148,136,.17),transparent 62%),linear-gradient(160deg,#0d1524 0%,#0a0f1a 100%)}
 .slide.active{display:flex}
-.cov{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;gap:14px}
-.cov-logo{font-size:3rem;font-weight:900;color:#10b981;letter-spacing:-0.04em}
-.cov-title{font-size:1.8rem;font-weight:700;margin-top:6px}
-.cov-period{font-size:1.1rem;color:rgba(255,255,255,0.55)}
-.cov-tag{background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);color:#10b981;padding:5px 18px;border-radius:99px;font-size:0.88rem;font-weight:600;margin-top:10px}
-.cov-date{font-size:0.75rem;color:rgba(255,255,255,0.28);margin-top:20px}
-.shdr{display:flex;align-items:center;gap:12px;margin-bottom:22px}
-.snum{font-size:0.72rem;font-weight:700;color:rgba(16,185,129,0.65);letter-spacing:0.08em}
-.slbl{font-size:0.72rem;color:rgba(255,255,255,0.32);letter-spacing:0.1em;text-transform:uppercase}
-.stit{font-size:1.75rem;font-weight:800;margin-bottom:28px;letter-spacing:-0.02em}
-.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
-.scard{padding:26px 18px;border-radius:18px;border:1px solid rgba(255,255,255,0.07);text-align:center}
-.scard.green{background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.22)}
-.scard.red{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.22)}
-.scard.blue{background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.22)}
-.scard.yellow{background:rgba(217,119,6,0.1);border-color:rgba(217,119,6,0.22)}
-.sic{font-size:1.3rem;margin-bottom:8px}
-.slabel{font-size:0.64rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:rgba(255,255,255,0.4);margin-bottom:7px}
-.sval{font-size:1.2rem;font-weight:800}
-.cats{display:flex;flex-direction:column;gap:16px}
-.crow{display:grid;grid-template-columns:36px 1fr 160px;align-items:center;gap:14px}
-.cnum{font-size:1.05rem;font-weight:800;color:rgba(16,185,129,0.55)}
-.cname{font-size:0.9rem;font-weight:600;display:block;margin-bottom:6px}
-.cbar-w{background:rgba(255,255,255,0.08);border-radius:99px;height:6px}
-.cbar{background:linear-gradient(90deg,#10b981,#34d399);height:6px;border-radius:99px;width:0;transition:width 0.5s ease}
-.cvals{text-align:right}
-.cval{display:block;font-weight:700;font-size:0.95rem}
-.cpct{font-size:0.72rem;color:rgba(255,255,255,0.38)}
+.prog{position:fixed;top:0;left:0;height:2px;width:0;background:var(--acc);z-index:120;transition:width .35s ease}
+
+/* Capa e fechamento */
+.cov{height:100%;display:flex;flex-direction:column;justify-content:center}
+.cov-mark{width:62px;height:62px;border-radius:14px;margin-bottom:28px}
+.cov-logo{font-size:3.4rem;font-weight:900;letter-spacing:-.045em;line-height:1;color:var(--acc)}
+.cov-logo span{color:var(--ink)}
+.cov-rule{width:76px;height:3px;background:var(--acc);border-radius:2px;margin:22px 0}
+.cov-title{font-size:1.05rem;color:var(--ink2);letter-spacing:.03em}
+.cov-period{font-size:2.1rem;font-weight:800;letter-spacing:-.03em;margin-top:4px}
+.cov-meta{margin-top:auto;display:flex;gap:14px;align-items:center;font-size:.76rem;color:var(--ink3)}
+.cov-tag{background:rgba(45,212,191,.1);border:1px solid rgba(45,212,191,.3);color:var(--acc);padding:5px 15px;border-radius:99px;font-weight:700;font-size:.74rem}
+.end{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.end-mark{width:52px;height:52px;border-radius:12px;margin-bottom:26px}
+.end-num{font-size:3.2rem;font-weight:900;letter-spacing:-.045em;line-height:1}
+.end-lbl{font-size:.9rem;color:var(--ink2);margin-top:8px}
+.end-sub{font-size:.8rem;color:var(--ink3)}
+.end-brand{font-size:1.1rem;font-weight:800;color:var(--acc);margin-top:26px;letter-spacing:-.02em}
+.end-brand span{color:var(--ink)}
+
+/* Cabeçalho e título de slide */
+.shdr{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.snum{font-size:.7rem;font-weight:800;color:var(--acc);letter-spacing:.1em}
+.sdiv{width:22px;height:1px;background:var(--line)}
+.slbl{font-size:.7rem;color:var(--ink3);letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.stit{font-size:2rem;font-weight:800;letter-spacing:-.03em}
+.stit::after{content:'';display:block;width:54px;height:3px;background:var(--acc);border-radius:2px;margin-top:13px}
+.ssub{font-size:.83rem;color:var(--ink2);margin:14px 0 26px}
+
+/* KPIs — mesmo sistema do Excel/PDF: filete no topo + rótulo, valor, contexto */
+.kgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.kcard{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--acc);border-radius:14px;padding:20px 18px}
+.kic{width:19px;height:19px;color:var(--acc);margin-bottom:13px;display:block}
+.klabel{font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--ink3);margin-bottom:8px}
+.kval{font-size:1.5rem;font-weight:800;letter-spacing:-.03em;line-height:1.1}
+.ksub{font-size:.7rem;color:var(--ink3);margin-top:8px}
+.kcard.pos .kval{color:var(--pos)} .kcard.neg .kval{color:var(--neg)}
+.kcard.warn .kval{color:var(--warn)} .kcard.acc .kval{color:var(--acc)}
+
+/* Donut de composição + legenda (rótulo direto = 2ª codificação além da cor) */
+.dwrap{display:grid;grid-template-columns:290px 1fr;gap:52px;align-items:center;flex:1}
+.dring{position:relative;width:290px;height:290px}
+.donut{width:100%;height:100%;border-radius:50%}
+.dhole{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:58%;height:58%;background:#0d1524;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 0 0 1px var(--line)}
+.dhole-v{font-size:1.25rem;font-weight:800;letter-spacing:-.02em}
+.dhole-l{font-size:.58rem;color:var(--ink3);text-transform:uppercase;letter-spacing:.12em;margin-top:5px}
+.dleg{display:flex;flex-direction:column;gap:11px}
+.dleg-i{display:grid;grid-template-columns:11px 1fr auto 52px;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.dot{width:11px;height:11px;border-radius:3px}
+.dleg-n{font-size:.86rem;font-weight:600}
+.dleg-v{font-size:.86rem;font-weight:700}
+.dleg-p{font-size:.74rem;color:var(--acc);font-weight:700;text-align:right}
+
+/* Maiores lançamentos */
+.rows{display:flex;flex-direction:column;gap:9px}
+.row{display:grid;grid-template-columns:30px 1fr 100px 130px;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 16px}
+.rnum{font-size:.78rem;font-weight:800;color:var(--acc)}
+.rname{font-size:.88rem;font-weight:600}
+.rdate{font-size:.76rem;color:var(--ink3)}
+.rval{font-size:.9rem;font-weight:700;text-align:right;color:var(--neg)}
+
+/* Metas */
 .metas{display:flex;flex-direction:column;gap:18px}
-.mrow{display:grid;grid-template-columns:1fr 160px;gap:14px;align-items:center}
-.mname{font-size:0.9rem;font-weight:600;display:block;margin-bottom:7px}
-.mbar-w{background:rgba(255,255,255,0.08);border-radius:99px;height:7px}
-.mbar{background:linear-gradient(90deg,#f59e0b,#fcd34d);height:7px;border-radius:99px;width:0;transition:width 0.5s ease}
+.mrow{display:grid;grid-template-columns:1fr 160px;gap:16px;align-items:center}
+.mname{font-size:.9rem;font-weight:600;display:block;margin-bottom:8px}
+.mbar-w{background:rgba(255,255,255,.08);border-radius:99px;height:7px}
+.mbar{background:var(--acc);height:7px;border-radius:99px;width:0;transition:width .55s ease}
 .mvals{text-align:right}
-.mval{display:block;font-weight:700;font-size:0.95rem}
-.mpct{font-size:0.75rem;color:rgba(255,255,255,0.38)}
-.conts{display:flex;flex-direction:column;gap:10px}
-.cont-row{display:grid;grid-template-columns:1fr 100px 130px 110px;align-items:center;gap:14px;background:rgba(255,255,255,0.04);border-radius:11px;padding:12px 16px;border:1px solid rgba(255,255,255,0.06)}
-.cont-name{font-weight:600;font-size:0.88rem}
-.cont-venc{font-size:0.8rem;color:rgba(255,255,255,0.4)}
-.cont-val,.cont-st{font-size:0.85rem;font-weight:700;text-align:right}
-.cont-val.pago,.cont-st.pago{color:#10b981}
-.cont-val.pend,.cont-st.pend{color:#f87171}
-.empty-msg{opacity:0.4;text-align:center;margin-top:60px;font-size:1rem}
-.nav{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:rgba(0,0,0,0.65);backdrop-filter:blur(14px);padding:9px 18px;border-radius:99px;border:1px solid rgba(255,255,255,0.08);z-index:100}
-.nbtn{background:none;border:none;color:rgba(255,255,255,0.65);cursor:pointer;font-size:1rem;padding:3px 6px;transition:color 0.2s}
-.nbtn:hover{color:#10b981}
-.ndot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,0.18);cursor:pointer;transition:background 0.2s}
-.ndot.a{background:#10b981}
-.ninfo{font-size:0.8rem;color:rgba(255,255,255,0.35);min-width:52px;text-align:center}
-.hint{position:fixed;top:16px;right:18px;font-size:0.7rem;color:rgba(255,255,255,0.2)}
-@media print{@page{size:1280px 720px;margin:0}body{overflow:visible;height:auto}.pres{width:1280px;height:auto}.slide{position:relative;display:flex!important;page-break-after:always;height:720px}.nav,.hint{display:none}}
+.mval{display:block;font-weight:700;font-size:.95rem}
+.mpct{font-size:.75rem;color:var(--acc);font-weight:700}
+
+/* Contas fixas */
+.conts{display:flex;flex-direction:column;gap:9px}
+.cont-row{display:grid;grid-template-columns:1fr 100px 130px 104px;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px 16px}
+.cont-name{font-weight:600;font-size:.88rem}
+.cont-venc{font-size:.79rem;color:var(--ink3)}
+.cont-val{font-size:.86rem;font-weight:700;text-align:right}
+.chip{font-size:.68rem;font-weight:800;text-align:center;padding:4px 0;border-radius:99px;letter-spacing:.04em}
+.chip.ok{background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.32);color:var(--pos)}
+.chip.due{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:var(--warn)}
+
+.empty-msg{color:var(--ink3);text-align:center;margin-top:56px;font-size:.95rem}
+
+/* Navegação */
+.nav{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:rgba(6,10,18,.72);backdrop-filter:blur(14px);padding:9px 18px;border-radius:99px;border:1px solid var(--line);z-index:100}
+.nbtn{background:none;border:none;color:var(--ink2);cursor:pointer;padding:3px 6px;display:flex;transition:color .2s}
+.nbtn:hover{color:var(--acc)}
+.nbtn svg{width:16px;height:16px}
+.ndot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.18);cursor:pointer;transition:background .2s,transform .2s}
+.ndot.a{background:var(--acc);transform:scale(1.3)}
+.ninfo{font-size:.78rem;color:var(--ink3);min-width:54px;text-align:center;font-weight:600}
+.hint{position:fixed;top:16px;right:20px;font-size:.68rem;color:var(--ink3);opacity:.55}
+@media print{@page{size:1280px 720px;margin:0}body{overflow:visible;height:auto}.pres{width:1280px;height:auto}
+  .slide{position:relative;display:flex!important;page-break-after:always;height:720px}
+  .nav,.hint,.prog{display:none}.mbar{width:var(--pw,0)!important}}
 </style>
 </head>
 <body>
 <div class="pres">
 ${slides.join('\n')}
 </div>
+<div class="prog" id="pg"></div>
 <nav class="nav">
-<button class="nbtn" onclick="go(-1)" aria-label="Anterior">&#8592;</button>
-<div id="dots" style="display:flex;gap:6px;align-items:center"></div>
+<button class="nbtn" onclick="go(-1)" aria-label="Slide anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
+<div id="dots" style="display:flex;gap:7px;align-items:center"></div>
 <span class="ninfo" id="ni">1 / ${N}</span>
-<button class="nbtn" onclick="go(1)" aria-label="Próximo">&#8594;</button>
+<button class="nbtn" onclick="go(1)" aria-label="Próximo slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
 </nav>
-<div class="hint">F11 = tela cheia &nbsp;&nbsp; ←→ = navegar &nbsp;&nbsp; Ctrl+P = imprimir slides</div>
+<div class="hint">F11 tela cheia &nbsp;·&nbsp; setas ou espaço navegam &nbsp;·&nbsp; Ctrl+P imprime os slides</div>
 <script>
 var cur=0;
 var sls=document.querySelectorAll('.slide');
 var dotsEl=document.getElementById('dots');
 var ni=document.getElementById('ni');
+var pg=document.getElementById('pg');
 sls.forEach(function(_,i){var d=document.createElement('div');d.className='ndot'+(i===0?' a':'');d.onclick=function(){goTo(i);};dotsEl.appendChild(d);});
-function animate(n){sls[n].querySelectorAll('.cbar,.mbar').forEach(function(b){var w=b.getAttribute('data-w');b.style.width='0';setTimeout(function(){b.style.width=(w||'0')+'%';},80);});}
-function goTo(n){sls[cur].classList.remove('active');dotsEl.children[cur].classList.remove('a');cur=Math.max(0,Math.min(n,sls.length-1));sls[cur].classList.add('active');dotsEl.children[cur].classList.add('a');ni.textContent=(cur+1)+' / '+sls.length;animate(cur);}
+function animate(n){sls[n].querySelectorAll('.mbar').forEach(function(b){var w=b.getAttribute('data-w');b.style.width='0';setTimeout(function(){b.style.width=(w||'0')+'%';},90);});}
+function goTo(n){sls[cur].classList.remove('active');dotsEl.children[cur].classList.remove('a');cur=Math.max(0,Math.min(n,sls.length-1));sls[cur].classList.add('active');dotsEl.children[cur].classList.add('a');ni.textContent=(cur+1)+' / '+sls.length;pg.style.width=((cur+1)/sls.length*100)+'%';animate(cur);}
 function go(d){goTo(cur+d);}
-document.addEventListener('keydown',function(e){if(e.key==='ArrowRight'||e.key==='ArrowDown')go(1);if(e.key==='ArrowLeft'||e.key==='ArrowUp')go(-1);});
+document.addEventListener('keydown',function(e){
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(1);}
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp'||e.key==='PageUp'){e.preventDefault();go(-1);}
+  if(e.key==='Home')goTo(0); if(e.key==='End')goTo(sls.length-1);
+});
 goTo(0);
 </script>
 </body>
@@ -1071,7 +1200,7 @@ goTo(0);
 
     const fn = 'GranaEvo_Apresentacao_' + anoNum + '-' + mesNum + '_' + (perfilNome||'perfil').replace(/\s+/g,'_') + '.html';
     _downloadBlob(html, fn, 'text/html;charset=utf-8');
-    _ctx.mostrarNotificacao('📊 Apresentação gerada! Abra o HTML no browser e pressione F11 para tela cheia.', 'success');
+    _ctx.mostrarNotificacao('Apresentação gerada. Abra o arquivo e pressione F11 para tela cheia.', 'success');
 }
 
 /**
@@ -1310,7 +1439,7 @@ window.abrirSelecaoPerfisCasal = function abrirSelecaoPerfisCasal(mes, ano) {
     });
 
     _ctx.criarPopup(`
-        <h3>👥 Selecione 2 Perfis para Relatório Casal</h3>
+        <h3>Selecione 2 Perfis para Relatório Casal</h3>
         <p style="color: var(--text-secondary); margin-bottom:20px; font-size:0.9rem;">
             Escolha exatamente 2 perfis para gerar o relatório conjunto
         </p>
@@ -1511,7 +1640,7 @@ window.gerarRelatorioCompartilhadoPersonalizado = async function gerarRelatorioC
         // ✅ _sanitizarHTMLRelatorio (DOMParser) — consistente com todo o módulo
         resultado.innerHTML = _sanitizarHTMLRelatorio(`
             <div class="relatorio-vazio">
-                <h3>📊 Nenhum relatório disponível</h3>
+                <h3>Nenhum relatório disponível</h3>
                 <p>Não há transações registradas para os perfis selecionados em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</p>
                 <p style="margin-top:12px; color: var(--text-muted);">
                     Perfis: ${perfisAtivos.map(p => sanitizeHTML(String(p.nome || ''))).join(', ')}
@@ -1658,7 +1787,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
         const div = document.createElement('div');
         div.className = 'relatorio-vazio';
         const h3 = document.createElement('h3');
-        h3.textContent = '📊 Nenhum relatório disponível';
+        h3.textContent = 'Nenhum relatório disponível';
         const p = document.createElement('p');
         p.textContent = `Não há transações ou contas registradas para ${perfilNome} em ${getMesNome(mes)} de ${ano}`;
         div.appendChild(h3);
@@ -2410,7 +2539,7 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
         //    Padrão agora é 100% consistente com o caminho renderizarRelatorioCompartilhado.
         resultado.innerHTML = _sanitizarHTMLRelatorio(`
             <div class="relatorio-vazio">
-                <h3>📊 Nenhum relatório disponível</h3>
+                <h3>Nenhum relatório disponível</h3>
                 <p>Não há transações registradas ${sanitizeHTML(tipoTexto)} em ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</p>
                 <p style="margin-top:12px; color:var(--text-muted);">
                     Perfis verificados: ${perfisAtivos.map(p => sanitizeHTML(String(p.nome || ''))).join(', ')}
@@ -2431,7 +2560,6 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
     if (!Array.isArray(dadosPorPerfil) || dadosPorPerfil.length === 0) return;
 
     const tipoTexto = _ctx.tipoRelatorioAtivo === 'casal' ? 'do Casal' : 'da Família';
-    const icone     = _ctx.tipoRelatorioAtivo === 'casal' ? '💑' : '👨‍👩‍👧‍👦';
 
     let totalGeralEntradas          = 0;
     let totalGeralSaidas            = 0;
@@ -2471,7 +2599,7 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
     //    E recebem uma segunda camada pelo DOMParser — defesa em profundidade real.
     let html = `
     <div class="rel-report-header">
-        <div class="rel-report-title">${icone} Relatório ${sanitizeHTML(tipoTexto)}</div>
+        <div class="rel-report-title">Relatório ${sanitizeHTML(tipoTexto)}</div>
         <span class="rel-report-badge"><i class="fas fa-calendar-alt"></i> ${sanitizeHTML(getMesNome(mes))} de ${sanitizeHTML(ano)}</span>
     </div>
     <div class="rel-kpi-grid">
@@ -2633,7 +2761,7 @@ function renderizarRelatorioCompartilhado(dadosPorPerfil, mes, ano, mesAnterior,
             const btn         = document.createElement('button');
             btn.className     = 'btn-primary';
             btn.style.cssText = 'width:100%; padding:10px;';
-            btn.textContent   = '🔍 Ver Detalhes Completos';
+            btn.textContent   = 'Ver Detalhes Completos';
             btn.addEventListener('click', () => {
                 abrirDetalhesPerfilRelatorio(d.perfil.id, mes, ano);
             });
@@ -2814,11 +2942,11 @@ function processarAnaliseOndeForDinheiro() {
             addInsightP(`⚠️ Atenção: ${percTop}% dos gastos foram em "${_sanitizeText(analise.top3[0][0])}" — mais da metade do orçamento! Analise oportunidades de redução nessa categoria.`);
         }
     }
-    addInsightP(`💳 Ticket médio: ${formatBRL(ticketMedio)} por transação. ${ticketMedio > 200 ? 'Valores altos — certifique-se de que cada gasto está alinhado com suas prioridades.' : 'Valores moderados — bom sinal de controle diário.'}`);
+    addInsightP(`Ticket médio: ${formatBRL(ticketMedio)} por transação. ${ticketMedio > 200 ? 'Valores altos — certifique-se de que cada gasto está alinhado com suas prioridades.' : 'Valores moderados — bom sinal de controle diário.'}`);
 
     if (analise.top3.length >= 2) {
         const ec = analise.top3.reduce((s, [, v]) => s + v * 0.1, 0);
-        addInsightP(`💡 Economizando 10% nas ${analise.top3.length} maiores categorias você teria ${formatBRL(ec)} a mais por mês.`);
+        addInsightP(`Economizando 10% nas ${analise.top3.length} maiores categorias você teria ${formatBRL(ec)} a mais por mês.`);
     }
 
     container.appendChild(insightDiv);
@@ -3247,7 +3375,8 @@ function mostrarRanking(tipo, dadosPorPerfil) {
     // ✅ Limpa via DOM — sem innerHTML vazio como surface
     container.innerHTML = '';
 
-    const emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+    // Posições em ordinal — nada de emoji (medalhas vazavam para o PDF/slides).
+    const posicoes = ['1º', '2º', '3º', '4º', '5º'];
 
     function _criarItemRanking({
         corFundo,
@@ -3266,7 +3395,7 @@ function mostrarRanking(tipo, dadosPorPerfil) {
 
         const posicao           = document.createElement('div');
         posicao.className       = 'ranking-posicao';
-        posicao.textContent     = posicaoTxt; // ✅ emoji ou número — valor interno
+        posicao.textContent     = posicaoTxt; // posição ordinal — valor interno
 
         const info              = document.createElement('div');
         info.className          = 'ranking-info';
@@ -3319,7 +3448,7 @@ function mostrarRanking(tipo, dadosPorPerfil) {
 
             const totalGastos = rankingGastos.reduce((sum, r) => sum + r.valor, 0);
 
-            container.appendChild(_criarTitulo('💸 Ranking: Quem Gastou Mais'));
+            container.appendChild(_criarTitulo('Ranking: Quem Gastou Mais'));
 
             rankingGastos.forEach((r, i) => {
                 const percentual = totalGastos > 0
@@ -3329,7 +3458,7 @@ function mostrarRanking(tipo, dadosPorPerfil) {
                 container.appendChild(_criarItemRanking({
                     corFundo:    'rgba(255,75,75,0.1)',
                     corBorda:    '#ff4b4b',
-                    posicaoTxt:  emojis[i] || String(i + 1),
+                    posicaoTxt:  posicoes[i] || String(i + 1),
                     nomeTxt:     r.nome,
                     detalhesTxt: `${percentual}% do total de gastos`,
                     valorTxt:    _ctx.formatBRL(r.valor),
@@ -3346,7 +3475,7 @@ function mostrarRanking(tipo, dadosPorPerfil) {
 
             const totalGuardado = rankingGuardou.reduce((sum, r) => sum + r.valor, 0);
 
-            container.appendChild(_criarTitulo('💰 Ranking: Quem Guardou Mais'));
+            container.appendChild(_criarTitulo('Ranking: Quem Guardou Mais'));
 
             rankingGuardou.forEach((r, i) => {
                 const percentual = totalGuardado > 0
@@ -3356,7 +3485,7 @@ function mostrarRanking(tipo, dadosPorPerfil) {
                 container.appendChild(_criarItemRanking({
                     corFundo:    'rgba(0,255,153,0.1)',
                     corBorda:    '#00ff99',
-                    posicaoTxt:  emojis[i] || String(i + 1),
+                    posicaoTxt:  posicoes[i] || String(i + 1),
                     nomeTxt:     r.nome,
                     detalhesTxt: `${percentual}% do total guardado`,
                     valorTxt:    _ctx.formatBRL(r.valor),
@@ -3377,14 +3506,14 @@ function mostrarRanking(tipo, dadosPorPerfil) {
                 }))
                 .sort((a, b) => b.taxa - a.taxa);
 
-            container.appendChild(_criarTitulo('📊 Ranking: Melhor Taxa de Economia'));
+            container.appendChild(_criarTitulo('Ranking: Melhor Taxa de Economia'));
             container.appendChild(_criarSubtitulo('Quanto % do que ganhou foi guardado'));
 
             rankingEconomia.forEach((r, i) => {
                 container.appendChild(_criarItemRanking({
                     corFundo:      'rgba(255,209,102,0.1)',
                     corBorda:      '#ffd166',
-                    posicaoTxt:    emojis[i] || String(i + 1),
+                    posicaoTxt:    posicoes[i] || String(i + 1),
                     nomeTxt:       r.nome,
                     // ✅ formatBRL retorna string numérica formatada — textContent seguro
                     detalhesTxt:   `Guardou ${formatBRL(r.guardado)} de ${formatBRL(r.entradas)}`,
@@ -3407,7 +3536,7 @@ function mostrarRanking(tipo, dadosPorPerfil) {
                 }))
                 .sort((a, b) => b.evolucao - a.evolucao);
 
-            container.appendChild(_criarTitulo('📈 Ranking: Maior Evolução na Economia'));
+            container.appendChild(_criarTitulo('Ranking: Maior Evolução na Economia'));
             container.appendChild(_criarSubtitulo('Comparação com o mês anterior'));
 
             rankingEvolucao.forEach((r, i) => {
@@ -3418,7 +3547,7 @@ function mostrarRanking(tipo, dadosPorPerfil) {
                 container.appendChild(_criarItemRanking({
                     corFundo:    'rgba(108,99,255,0.1)',
                     corBorda:    corEvolucao,
-                    posicaoTxt:  emojis[i] || String(i + 1),
+                    posicaoTxt:  posicoes[i] || String(i + 1),
                     nomeTxt:     r.nome,
                     detalhesTxt: `${r.taxaAnterior.toFixed(1)}% → ${r.taxaAtual.toFixed(1)}%`,
                     valorTxt:    `${simbolo} ${Math.abs(r.evolucao).toFixed(1)}%`,
@@ -3440,7 +3569,7 @@ function abrirDetalhesPerfilRelatorio(perfilId, mes, ano) {
     // ✅ HTML estático sem onclick inline — sanitizarHTMLPopup remove atributos on*,
     //    por isso o botão ficava morto. Substituído por addEventListener após criação.
     _ctx.criarPopup(`
-        <h3>🔍 Detalhes Completos</h3>
+        <h3>Detalhes Completos</h3>
         <div class="small">Carregando dados detalhados do período...</div>
         <button class="btn-primary" id="btnFecharDetalhesRelatorio">Fechar</button>
     `);
