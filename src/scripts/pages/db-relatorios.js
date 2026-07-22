@@ -662,6 +662,7 @@ function _exportExcel() {
     const P  = (frac) => ({ v: Number(frac) || 0, s: 6 });
     const kL = (v) => ({ v, s: 7 });
     const kV = (v, neg) => ({ v: Number(v) || 0, s: neg ? 16 : 8 });
+    const kS = (v) => ({ v, s: 17 });   // sublinha do KPI (dentro do card)
 
     const geradoEm = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -679,23 +680,26 @@ function _exportExcel() {
         [T('RESUMO DO MÊS')],                                                   // 5
         [kL('ENTRADAS'), '', kL('SAÍDAS'), '', kL('RESERVADO'), '', kL('SALDO LIVRE')], // 6
         [kV(entradas), '', kV(saidas, true), '', kV(reservas), '', kV(saldo, saldo < 0)], // 7
-        [Mu(`${txs.filter(t=>t.categoria==='entrada').length} lançamento(s)`), '',
-         Mu(entrCred > 0 ? `${_brlLocal(entrCred)} no crédito` : `${txs.filter(t=>t.categoria==='saida'||t.categoria==='saida_credito').length} gasto(s)`), '',
-         Mu(entradas>0 ? `${Math.round((reservas/entradas)*100)}% do que entrou` : '—'), '',
-         Mu(entradas>0 ? `${Math.round((saldo/entradas)*100)}% da renda sobrou` : '—')], // 8
+        [kS(`${txs.filter(t=>t.categoria==='entrada').length} lançamento(s)`), '',
+         kS(entrCred > 0 ? `${_brlLocal(entrCred)} no crédito` : `${txs.filter(t=>t.categoria==='saida'||t.categoria==='saida_credito').length} gasto(s)`), '',
+         kS(entradas>0 ? `${Math.round((reservas/entradas)*100)}% do que entrou` : '—'), '',
+         kS(entradas>0 ? `${Math.round((saldo/entradas)*100)}% da renda sobrou` : '—')], // 8
         [],                                                                     // 9
         [T('PARA ONDE FOI O DINHEIRO')],                                        // 10
         [H('CATEGORIA'), Hn('VALOR'), Hn('% DO TOTAL')],                        // 11
         ...categorias.map(([cat, val]) => [Tx(cat), M(val, false), P(saidas > 0 ? val / saidas : 0)]), // 12+
     ];
 
+    // Gráficos À DIREITA da tabela (cols A–C) e ABAIXO dos KPIs (linhas 6–8),
+    // começando alinhados ao cabeçalho da tabela (linha 11 = índice 10). Antes
+    // a âncora na linha 4 caía por cima do card "Saldo livre".
     const graficos = categorias.length > 0 ? [
         { tipo: 'pizza', titulo: 'Participação por categoria',
           catRef: q('A'), valRef: q('B'), pontos: categorias.length,
-          ancora: { col: 4, linha: 4, col2: 11, linha2: 19 } },
+          ancora: { col: 4, linha: 10, col2: 12, linha2: 26 } },
         { tipo: 'barra', titulo: 'Maiores gastos (R$)',
           catRef: q('A'), valRef: q('B'),
-          ancora: { col: 4, linha: 20, col2: 11, linha2: 38 } },
+          ancora: { col: 4, linha: 27, col2: 12, linha2: 46 } },
     ] : [];
 
     // ════════ ABA 2 — TRANSAÇÕES (data + descrição, o ledger completo) ══════
@@ -746,9 +750,11 @@ function _exportExcel() {
 
     const bytes = gerarXlsx([
         {
-            nome: 'Dashboard', linhas: dash, larguras: [22, 15, 3, 16, 15, 3, 16, 15],
+            // Larguras que igualam os 4 KPI cards: A:B=C:D=E:F=G:H=30, e a coluna
+            // C (% do total) larga o bastante para não mostrar "##".
+            nome: 'Dashboard', linhas: dash, larguras: [17, 13, 15, 15, 15, 15, 17, 13],
             congelar: false,
-            alturaCapa: { 2: 32, 5: 22, 6: 16, 7: 30, 8: 15, 10: 22 },
+            alturaCapa: { 2: 34, 5: 24, 6: 18, 7: 32, 8: 16, 10: 24 },
             mesclar: ['A2:B2', 'A3:B3', 'A5:H5', 'A10:H10',
                       'A6:B6', 'C6:D6', 'E6:F6', 'G6:H6',
                       'A7:B7', 'C7:D7', 'E7:F7', 'G7:H7',
