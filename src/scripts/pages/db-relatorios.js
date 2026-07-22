@@ -462,10 +462,53 @@ function _exportPDF() {
     const tipo = tipoLabel[_ctx.tipoRelatorioAtivo] || '';
     const geradoEm = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
 
+    // Metas: a tela usa um <select> interativo — um PDF é estático. Expando TODAS
+    // as metas reaproveitando o próprio renderizador (disparo 'change' por meta e
+    // capturo o HTML gerado). Restauro a tela ao fim.
+    let metasPdfHtml = '';
+    const selMeta = resultado.querySelector('#selectMetaRelatorio');
+    const detMeta = resultado.querySelector('#detalhesMetaRelatorio');
+    if (selMeta && detMeta) {
+        const prev = selMeta.value;
+        for (const opt of [...selMeta.options]) {
+            if (!opt.value) continue;
+            selMeta.value = opt.value;
+            selMeta.dispatchEvent(new Event('change'));
+            const h = detMeta.innerHTML.trim();
+            if (h) metasPdfHtml += '<div class="rel-meta-pdf-item">' + h + '</div>';
+        }
+        selMeta.value = prev;
+        selMeta.dispatchEvent(new Event('change'));  // restaura a tela
+    }
+
+    // Canvases (gráficos) e logos de banco dos cartões viram data URI: <img src=
+    // "/assets/..."> e <canvas> não sobrevivem no arquivo .html isolado.
     const canvasMap = new Map();
     resultado.querySelectorAll('canvas').forEach(canvas => {
         try { canvasMap.set(canvas, canvas.toDataURL('image/png')); } catch { }
     });
+    const imgMap = new Map();
+    resultado.querySelectorAll('.rel-card-visual-img').forEach(img => {
+        try {
+            const cv = document.createElement('canvas');
+            cv.width = img.naturalWidth || 48; cv.height = img.naturalHeight || 48;
+            cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+            imgMap.set(img, cv.toDataURL('image/png'));
+        } catch { }
+    });
+
+    // Ícone do site no cabeçalho: converto o logo real que já está no DOM para
+    // data URI. Custo ZERO de bundle — o dado vem do runtime, não do JS.
+    let markImg = '';
+    const logoEl = document.querySelector('img[src*="granaevo-logo"]');
+    if (logoEl && logoEl.naturalWidth) {
+        try {
+            const cv = document.createElement('canvas');
+            cv.width = logoEl.naturalWidth; cv.height = logoEl.naturalHeight;
+            cv.getContext('2d').drawImage(logoEl, 0, 0);
+            markImg = '<img class="ge-mark" src="' + cv.toDataURL('image/png') + '" alt="" aria-hidden="true">';
+        } catch { }
+    }
 
     const clone = resultado.cloneNode(true);
     const origCanvases = [...resultado.querySelectorAll('canvas')];
@@ -478,15 +521,28 @@ function _exportPDF() {
             c.parentNode.replaceChild(img, c);
         }
     });
+    const origImgs = [...resultado.querySelectorAll('.rel-card-visual-img')];
+    [...clone.querySelectorAll('.rel-card-visual-img')].forEach((im, idx) => {
+        const url = imgMap.get(origImgs[idx]);
+        if (url) im.src = url; else im.remove();
+    });
+    // Substitui o seletor interativo de metas pelas metas já expandidas
+    if (metasPdfHtml) {
+        const selWrap = clone.querySelector('.rel-meta-selector-wrap');
+        const detClone = clone.querySelector('#detalhesMetaRelatorio');
+        if (selWrap) selWrap.remove();
+        if (detClone) { detClone.removeAttribute('style'); detClone.innerHTML = metasPdfHtml; }
+    } else {
+        const secMetas = clone.querySelector('.rel-section--metas');
+        if (secMetas) secMetas.remove();  // sem metas expansíveis → não deixa seção vazia
+    }
     clone.querySelectorAll('button,.btn-primary,.btn-cancelar,.rel-header-actions').forEach(el => el.remove());
 
     const html = '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n<meta charset="UTF-8">\n<title>GranaEvo — ' + _escapeXml(tipo) + ' ' + _escapeXml(mesNome) + ' ' + _escapeXml(anoNum) + '</title>\n' +
 `<style>
-/* ── Documento de relatório ───────────────────────────────────────────────
-   O layout NÃO é reescrito aqui: as regras reais do app são injetadas logo
-   abaixo (ver _coletarCssDoRelatorio). Aqui ficam só (a) os TOKENS em versão
-   clara, que convertem o tema escuro do app para papel branco, e (b) os ajustes
-   próprios de documento impresso. */
+/* Base do documento: só TOKENS claros (convertem o tema escuro do app p/ papel)
+   e ajustes de impressão. O layout real vem de _coletarCssDoRelatorio + camada
+   editorial no fim. */
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   /* Tokens do app, em claro — é isto que "vira" o relatório para o papel. */
@@ -498,6 +554,17 @@ function _exportPDF() {
   --primary:#0d9488; --color-primary:#0d9488;
   --color-success:#0a7a4d; --color-danger:#b91c1c; --color-warning:#a16207;
   --color-info:#1d4ed8;
+  /* Nomes CURTOS de token do app (o CSS do relatório os usa direto). Estavam
+     faltando — por isso o miolo do donut caía p/ #1a1d2e e a legenda ficava
+     sem cor. Todos aqui em versão clara. */
+  --text-muted:#64748b; --text-tertiary:#94a3b8;
+  --bg-primary:#ffffff; --bg-secondary:#ffffff; --bg-tertiary:#f1f5f9; --dark-card:#f8fafc;
+  --primary-light:#14b8a6; --primary-dark:#0f766e; --secondary:#475569;
+  --border:#e5e7eb; --success:#047857; --danger:#b91c1c; --warning:#b45309;
+  --gradient-primary:linear-gradient(135deg,#0d9488,#0f766e);
+  --gradient-dark:linear-gradient(135deg,#f8fafc,#eef2f7);
+  --shadow-md:0 1px 3px rgba(15,23,42,.06); --shadow-lg:0 4px 12px rgba(15,23,42,.08);
+  --shadow-card:0 1px 3px rgba(15,23,42,.06); --radius-sm:6px; --radius-2xl:18px;
   /* Calendário/relatório por tipo, já em tons legíveis no branco */
   --cal-c-fatura:#b91c1c; --cal-c-conta:#b45309; --cal-c-assinatura:#7e22ce;
   --cal-c-lembrete:#a16207; --cal-c-entrada:#047857; --cal-c-saida:#1d4ed8;
@@ -514,17 +581,20 @@ body{
 }
 .ge-doc{max-width:880px;margin:0 auto;padding:40px 44px 64px}
 
-/* Cabeçalho: faixa de marca discreta, não um bloco colorido pesado */
+/* Masthead: uma faixa de marca sóbria, com filete teal — a "capa" do documento */
 .ge-hdr{
   display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;
   margin-bottom:34px;padding-bottom:18px;border-bottom:1px solid var(--linha-forte);
   position:relative;
 }
-.ge-hdr::after{content:'';position:absolute;left:0;bottom:-1px;width:72px;height:3px;background:var(--marca);border-radius:2px}
-.ge-logo{font-size:1.5rem;font-weight:800;color:var(--marca);letter-spacing:-0.02em;line-height:1.1}
+.ge-hdr::after{content:'';position:absolute;left:0;bottom:-1px;width:76px;height:3px;background:var(--marca);border-radius:2px}
+.ge-kicker{font-size:0.66rem;font-weight:700;text-transform:uppercase;letter-spacing:0.18em;color:var(--tinta-3);margin-bottom:6px}
+.ge-logo-row{display:flex;align-items:center;gap:10px}
+.ge-mark{width:30px;height:30px;border-radius:7px;border:none !important;flex-shrink:0}
+.ge-logo{font-size:1.75rem;font-weight:800;color:var(--marca);letter-spacing:-0.035em;line-height:1}
 .ge-logo span{color:var(--tinta)}
-.ge-meta{text-align:right;font-size:0.76rem;color:var(--tinta-3);line-height:1.6}
-.ge-meta strong{color:var(--tinta);font-size:0.95rem;font-weight:700;display:block;margin-bottom:1px;letter-spacing:-0.01em}
+.ge-meta{text-align:right;font-size:0.76rem;color:var(--tinta-3);line-height:1.65}
+.ge-meta strong{color:var(--tinta);font-size:0.95rem;font-weight:700;display:block;margin-bottom:2px;letter-spacing:-0.01em}
 
 .ge-btn{
   display:inline-flex;align-items:center;gap:8px;background:var(--marca);color:#fff;border:none;
@@ -532,29 +602,11 @@ body{
   margin-bottom:30px;font-family:inherit;letter-spacing:0.01em;
 }
 .ge-btn:hover{background:#0f766e}
+.ge-btn svg{width:15px;height:15px}
 
-/* Cards: barra de acento à esquerda em vez de caixa cinza chapada */
-.relatorio-resumo,.relatorio-cards-grid{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:30px;
-}
-.relatorio-card{
-  padding:15px 17px;border-radius:10px;border:1px solid var(--linha);
-  background:var(--papel-2);border-left:3px solid var(--linha-forte);
-}
-.relatorio-card-label{
-  font-size:0.63rem;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;
-  color:var(--tinta-3);margin-bottom:7px;
-}
-.relatorio-card-value{font-size:1.3rem;font-weight:700;color:var(--tinta);letter-spacing:-0.02em;line-height:1.2}
-
-.relatorio-section,.relatorio-bloco{margin-bottom:32px;page-break-inside:avoid;break-inside:avoid}
-.relatorio-section-title,.relatorio-titulo,.section-title,.grafico-titulo{
-  font-size:0.8rem;font-weight:700;color:var(--tinta-2);text-transform:uppercase;letter-spacing:0.08em;
-  padding-bottom:9px;border-bottom:1px solid var(--linha);margin-bottom:16px;
-  display:flex;align-items:center;gap:8px;page-break-after:avoid;break-after:avoid;
-}
-
-/* Tabelas: sem zebra pesada; respiro e alinhamento fazem o trabalho */
+/* Tabelas genéricas (ex.: patrimônio): sem zebra; respiro e alinhamento bastam.
+   Cards, seções e KPIs do relatório são estilizados na camada editorial lá
+   embaixo, sobre as classes rel-* reais que o app emite. */
 table{width:100%;border-collapse:collapse;font-size:0.8rem;margin-bottom:6px}
 thead{display:table-header-group}  /* repete o cabeçalho a cada página impressa */
 tr{page-break-inside:avoid;break-inside:avoid}
@@ -567,19 +619,6 @@ td:first-child,th:first-child{padding-left:2px}
 td:last-child,th:last-child{padding-right:2px;text-align:right;font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:none}
 
-.val-entrada,.text-success,.cor-entrada{color:var(--pos);font-weight:600}
-.val-saida,.text-danger,.cor-saida{color:var(--neg);font-weight:600}
-.val-reserva,.cor-reserva{color:var(--res);font-weight:600}
-
-.cat-badge{
-  display:inline-block;padding:3px 9px;border-radius:5px;font-size:0.66rem;font-weight:700;
-  letter-spacing:0.02em;
-}
-.cat-entrada{background:#e7f6ee;color:var(--pos)}
-.cat-saida{background:#fdeaea;color:var(--neg)}
-.cat-reserva{background:#fdf3e0;color:var(--res)}
-
-.grafico-container,.chart-wrapper,.grafico-wrapper{max-width:100%;overflow:hidden;text-align:center;margin:0 auto}
 img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--linha)}
 
 /* Impressão: margens de verdade, sem o botão, sem cortar bloco no meio */
@@ -596,32 +635,96 @@ img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--linha)}
      declarados acima é que as convertem para papel branco. -->
 <style>
 ` + _coletarCssDoRelatorio() + `
-/* Ajustes de documento aplicados por cima do CSS do app */
-#relatorioResultado,.rel-resultado{background:none !important;padding:0 !important;border:none !important;box-shadow:none !important}
-.rel-section{page-break-inside:avoid;break-inside:avoid;margin-bottom:26px}
-.rel-kpi-card{break-inside:avoid}
+/* ═══ CAMADA EDITORIAL (mesma linguagem do Excel aprovado) ═══════════════════
+   Vem por ÚLTIMO p/ vencer o CSS do app: card claro c/ filete teal no topo,
+   seção com sublinha teal, tipografia no lugar de ícone. Os <i> do Font Awesome
+   são escondidos (a fonte não existe no doc isolado → virariam caixa vazia). */
+#relatorioResultado,.rel-resultado{background:none !important;padding:0 !important;border:none !important;box-shadow:none !important;margin:0 !important}
+.rel-report-header{display:none !important}  /* capa .ge-hdr substitui — sem título duplo */
+
+/* Ícones FA escondidos; os "dots" (.rel-*-dot) são <span>, não <i>, e ficam. */
+.rel-section-header i,.rel-kpi-icon,.rel-insight-icon-wrap i,i.fas,i.far,i.fal,i.fab,i.fa,i[class*="fa-"]{display:none !important}
+
+.rel-section{page-break-inside:avoid;break-inside:avoid;margin-bottom:30px}
+.rel-section-header{
+  font-size:0.98rem !important;font-weight:800 !important;color:var(--tinta) !important;
+  letter-spacing:-0.01em !important;text-transform:none !important;
+  padding-bottom:9px !important;margin-bottom:18px !important;
+  border-bottom:2px solid var(--marca) !important;gap:0 !important;
+  page-break-after:avoid;break-after:avoid;
+}
+
+/* KPI cards: claro + filete teal no topo (idêntico ao Excel) */
+.rel-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:6px}
+.rel-kpi-card{
+  background:var(--papel-2) !important;border:1px solid var(--linha) !important;
+  border-top:3px solid var(--marca) !important;border-radius:10px !important;
+  padding:14px 16px !important;box-shadow:none !important;break-inside:avoid;display:block !important;
+}
+.rel-kpi-top{display:block !important;margin:0 !important;gap:0 !important}
+.rel-kpi-label{
+  font-size:0.63rem !important;font-weight:700 !important;text-transform:uppercase !important;
+  letter-spacing:0.09em !important;color:var(--tinta-3) !important;margin:0 0 7px !important;display:block !important;
+}
+.rel-kpi-value{
+  font-size:1.5rem !important;font-weight:800 !important;color:var(--tinta) !important;
+  letter-spacing:-0.02em !important;line-height:1.15 !important;font-variant-numeric:tabular-nums;display:block !important;
+}
+.rel-kpi-sub{font-size:0.7rem !important;color:var(--tinta-3) !important;margin:5px 0 0 !important;display:block !important}
+/* Cor semântica só no VALOR (entrada verde, saída vermelha, saldo teal) */
+.rel-kpi-card--entradas .rel-kpi-value{color:var(--pos) !important}
+.rel-kpi-card--saidas .rel-kpi-value{color:var(--neg) !important}
+.rel-kpi-card--saldo .rel-kpi-value,.rel-kpi-card--economia .rel-kpi-value,.rel-kpi-card--guardado .rel-kpi-value{color:var(--marca) !important}
+
+/* Barras de progresso (categorias/metas/cartões/patrimônio) na cor da marca */
+.rel-cat-bar-fill,.rel-card-visual-bar-fill,.rel-meta-bar-fill,.rel-patr-bar{background:var(--marca) !important}
+.rel-cat-bar-track,.rel-card-visual-bar-wrap,.rel-meta-bar-track,.rel-patr-bar-wrap{background:var(--linha) !important}
+.rel-meta-bar-label{color:var(--marca) !important}
+
+/* Visão Geral — donut: miolo branco (o --bg-secondary já resolve), texto legível,
+   legenda temática (rótulo slate, valor slate-900, % em teal). */
+.rel-vg-inner{background:#fff !important;box-shadow:0 0 0 1px var(--linha)}
+.rel-vg-center-val{color:var(--tinta) !important}
+.rel-vg-center-label{color:var(--tinta-3) !important}
+.rel-vg-leg-item{background:var(--papel-2) !important;border:1px solid var(--linha)}
+.rel-vg-leg-label{color:var(--tinta-2) !important}
+.rel-vg-leg-val{color:var(--tinta) !important}
+.rel-vg-leg-pct{color:var(--marca) !important}
+.rel-vg-cats-header{border-top:1px solid var(--linha) !important}
+
+/* Insights: o ícone FA não carrega → escondo o círculo e viro callout com
+   acento teal à esquerda (o texto é o que importa). */
+.rel-insight-icon-wrap{display:none !important}
+.rel-insight-item{border-left:3px solid var(--marca) !important;padding-left:12px !important;background:var(--papel-2) !important;border-radius:8px}
+.rel-insight-title{color:var(--tinta) !important}
+.rel-insight-text{color:var(--tinta-2) !important}
+
+/* Cartões: sem a dica "Toque para ver detalhes" (é PDF), logo do banco sem borda */
+.rel-card-visual-hint{display:none !important}
+.rel-card-visual-img{border:none !important;border-radius:6px}
+/* Metas expandidas no PDF: cada meta vira um card com filete teal */
+.rel-meta-pdf-item{padding:14px 16px;border:1px solid var(--linha);border-top:3px solid var(--marca);border-radius:10px;margin-bottom:12px;break-inside:avoid}
+
 canvas{max-width:100% !important;height:auto !important}
-.prog-bar-wrap{background:#e5e7eb;border-radius:99px;height:8px;margin:4px 0}
-.prog-bar{background:#10b981;height:8px;border-radius:99px}
-@media print{@page{margin:14mm 12mm}.ge-btn{display:none!important}body{font-size:13px}.relatorio-section,.relatorio-bloco{page-break-inside:avoid}}
+@media print{@page{margin:14mm 12mm}.ge-btn{display:none !important}body{font-size:12.5px}.rel-section{page-break-inside:avoid}.rel-kpi-card{break-inside:avoid}}
 </style>
 </head>
 <body>
 <div class="ge-doc">
   <div class="ge-hdr">
-    <div><div class="ge-logo">Grana<span>Evo</span></div><div style="font-size:0.82rem;color:#6b7280;margin-top:4px;">Relatório Financeiro</div></div>
+    <div class="ge-brand"><div class="ge-kicker">Relatório Financeiro</div><div class="ge-logo-row">` + markImg + `<span class="ge-logo">Grana<span>Evo</span></span></div></div>
     <div class="ge-meta"><strong>` + _escapeXml(tipo) + ' · ' + _escapeXml(mesNome) + ' ' + _escapeXml(anoNum) + `</strong>` +
     (perfilNome ? 'Perfil: ' + perfilNome + '<br>' : '') +
     'Gerado em: ' + _escapeXml(geradoEm) + `</div>
   </div>
-  <button class="ge-btn" onclick="window.print()">&#128438; Salvar como PDF (Ctrl+P)</button>
+  <button class="ge-btn" onclick="window.print()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Salvar como PDF (Ctrl + P)</button>
   ` + clone.innerHTML + `
 </div>
 </body>
 </html>`;
 
     _downloadBlob(html, 'GranaEvo_' + anoNum + '-' + mesNum + '_' + (perfilNome || 'relatorio') + '.html', 'text/html;charset=utf-8');
-    _ctx.mostrarNotificacao('📄 Relatório HTML baixado! Abra o arquivo e pressione Ctrl+P → Salvar como PDF.', 'success');
+    _ctx.mostrarNotificacao('Relatório baixado. Abra o arquivo e pressione Ctrl + P → Salvar como PDF.', 'success');
 }
 
 // ── Excel: SpreadsheetML XML (.xls) ─────────────────────────────────────
