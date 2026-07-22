@@ -641,112 +641,153 @@ function _exportExcel() {
     });
     const categorias = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
 
-    const _CAT_LBL = { entrada:'Entrada', saida:'Saída', saida_credito:'Crédito', reserva:'Reserva', retirada_reserva:'Retirada' };
-    // Estilos de modules/xlsx.js: 1=cabeçalho 2=título 3=moeda 4=moeda+ 5=moeda- 6=percentual
-    const H = (v) => ({ v, s: 1 });
-    const T = (v) => ({ v, s: 2 });
-    const M = (v, pos) => ({ v: Number(v) || 0, s: pos === true ? 4 : pos === false ? 5 : 3 });
-    const P = (frac) => ({ v: Number(frac) || 0, s: 6 });
+    const entrCred = txs.filter(t => t.categoria === 'saida_credito').reduce((s, t) => s + Number(t.valor || 0), 0);
+    const compromet = entradas > 0 ? Math.min(1, (saidas + reservas) / entradas) : 0;
 
-    const resumo = [
-        [T('GranaEvo — ' + mesNome + ' ' + anoNum + ' · ' + perfilNome)],
-        [],
-        [H('INDICADOR'), H('VALOR'), H('DETALHE')],
-        ['Entradas', M(entradas, true),   'Receitas do período'],
-        ['Saídas',   M(saidas, false),    'Gastos do período'],
-        ['Saldo',    M(saldo, saldo >= 0), 'Entradas − Saídas'],
-        ['Reservas', M(reservas),         'Aportes em metas'],
-        [],
-        [T('Gastos por Categoria')],
-        [H('CATEGORIA'), H('VALOR'), H('% DO TOTAL')],
-        ...categorias.map(([cat, val]) => [cat, M(val, false), P(saidas > 0 ? val / saidas : 0)]),
+    const _CAT_LBL = { entrada:'Entrada', saida:'Saída', saida_credito:'Crédito', reserva:'Reserva', retirada_reserva:'Retirada' };
+
+    // ── Helpers de célula (ids de estilo definidos em modules/xlsx.js) ──────
+    // 0 fundo · 1 header · 2 seção · 3 R$ · 4 R$+ · 5 R$− · 6 % · 7 KPI-rótulo
+    // 8 KPI-valor · 9 muted · 10 data · 11 capa · 12 capa-sub · 13 texto
+    // 14 R$ card · 15 header-num · 16 KPI-valor-neg
+    const H  = (v) => ({ v, s: 1 });
+    const Hn = (v) => ({ v, s: 15 });
+    const T  = (v) => ({ v, s: 2 });
+    const Cap = (v) => ({ v, s: 11 });
+    const Sub = (v) => ({ v, s: 12 });
+    const Tx  = (v) => ({ v, s: 13 });
+    const Mu  = (v) => ({ v, s: 9 });
+    const Dt  = (v) => ({ v, s: 10 });
+    const M  = (v, pos) => ({ v: Number(v) || 0, s: pos === true ? 4 : pos === false ? 5 : 3 });
+    const P  = (frac) => ({ v: Number(frac) || 0, s: 6 });
+    const kL = (v) => ({ v, s: 7 });
+    const kV = (v, neg) => ({ v: Number(v) || 0, s: neg ? 16 : 8 });
+
+    const geradoEm = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    // ════════ ABA 1 — DASHBOARD ════════
+    // Bloco de categorias começa na linha `catIni`; os gráficos apontam para ele.
+    const catIni = 12;
+    const catFim = Math.max(catIni, catIni + categorias.length - 1);
+    const q = (col) => `'Dashboard'!$${col}$${catIni}:$${col}$${catFim}`;
+
+    const dash = [
+        [],                                                                     // 1
+        [Cap('GranaEvo'), '', '', Sub('Relatório Financeiro')],                 // 2
+        [Sub(`${mesNome} de ${anoNum}  ·  ${perfilNome}`), '', '', Mu(`Gerado em ${geradoEm}`)], // 3
+        [],                                                                     // 4
+        [T('RESUMO DO MÊS')],                                                   // 5
+        [kL('ENTRADAS'), '', kL('SAÍDAS'), '', kL('RESERVADO'), '', kL('SALDO LIVRE')], // 6
+        [kV(entradas), '', kV(saidas, true), '', kV(reservas), '', kV(saldo, saldo < 0)], // 7
+        [Mu(`${txs.filter(t=>t.categoria==='entrada').length} lançamento(s)`), '',
+         Mu(entrCred > 0 ? `${_brlLocal(entrCred)} no crédito` : `${txs.filter(t=>t.categoria==='saida'||t.categoria==='saida_credito').length} gasto(s)`), '',
+         Mu(entradas>0 ? `${Math.round((reservas/entradas)*100)}% do que entrou` : '—'), '',
+         Mu(entradas>0 ? `${Math.round((saldo/entradas)*100)}% da renda sobrou` : '—')], // 8
+        [],                                                                     // 9
+        [T('PARA ONDE FOI O DINHEIRO')],                                        // 10
+        [H('CATEGORIA'), Hn('VALOR'), Hn('% DO TOTAL')],                        // 11
+        ...categorias.map(([cat, val]) => [Tx(cat), M(val, false), P(saidas > 0 ? val / saidas : 0)]), // 12+
     ];
 
+    const graficos = categorias.length > 0 ? [
+        { tipo: 'pizza', titulo: 'Participação por categoria',
+          catRef: q('A'), valRef: q('B'), pontos: categorias.length,
+          ancora: { col: 4, linha: 4, col2: 11, linha2: 19 } },
+        { tipo: 'barra', titulo: 'Maiores gastos (R$)',
+          catRef: q('A'), valRef: q('B'),
+          ancora: { col: 4, linha: 20, col2: 11, linha2: 38 } },
+    ] : [];
+
+    // ════════ ABA 2 — TRANSAÇÕES (data + descrição, o ledger completo) ══════
     const transacoes = [
-        [T('Transações — ' + mesNome + ' ' + anoNum)],
+        [Cap('Transações'), '', '', '', Sub(`${mesNome} ${anoNum}`)],
+        [Mu(`${txs.length} lançamento(s) no período`)],
         [],
-        [H('DATA'), H('DESCRIÇÃO'), H('CATEGORIA'), H('TIPO'), H('VALOR (R$)')],
+        [H('DATA'), H('DESCRIÇÃO'), H('CATEGORIA'), H('TIPO'), Hn('VALOR (R$)')],
         ...txs.slice().reverse().map(t => [
-            t.data || '',
-            t.descricao || '',
-            _CAT_LBL[t.categoria] || t.categoria || '',
-            t.tipo || '',
+            Dt(t.data || ''),
+            Tx(t.descricao || ''),
+            Tx(_CAT_LBL[t.categoria] || t.categoria || ''),
+            Tx(t.tipo || ''),
             M(t.valor, t.categoria === 'entrada' || t.categoria === 'retirada_reserva'),
         ]),
     ];
+    const txCab = 4;
 
+    // ════════ ABA 3 — RESERVAS E METAS ══════
     const metas = [
-        [T('Reservas e Metas')],
+        [Cap('Reservas e Metas'), '', '', '', Sub(`${anoNum}`)],
+        [Mu(`${(_ctx.metas || []).length} meta(s)`)],
         [],
-        [H('NOME'), H('OBJETIVO (R$)'), H('SALVO (R$)'), H('PROGRESSO'), H('PRAZO')],
+        [H('NOME'), Hn('OBJETIVO'), Hn('GUARDADO'), Hn('PROGRESSO'), H('PRAZO')],
         ...(_ctx.metas || []).map(m => [
-            m.descricao || '',
+            Tx(m.descricao || ''),
             M(m.objetivo),
             M(m.saved || 0, true),
             P(m.objetivo > 0 ? Math.min(1, (m.saved || 0) / m.objetivo) : 0),
-            m.prazo || 'Sem prazo',
+            Tx(m.prazo || 'Sem prazo'),
         ]),
     ];
 
+    // ════════ ABA 4 — CONTAS FIXAS ══════
+    const contasArr = (_ctx.contasFixas || []).filter(c2 => c2.tipoContaFixa !== 'fatura_cartao');
     const contas = [
-        [T('Contas Fixas')],
+        [Cap('Contas Fixas'), '', '', Sub(`${mesNome} ${anoNum}`)],
+        [Mu(`${contasArr.length} conta(s) · total ${_brlLocal(contasArr.reduce((s,c)=>s+Number(c.valor||0),0))}`)],
         [],
-        [H('DESCRIÇÃO'), H('VALOR (R$)'), H('VENCIMENTO'), H('STATUS')],
-        ...(_ctx.contasFixas || []).filter(c2 => c2.tipoContaFixa !== 'fatura_cartao').map(cf => [
-            cf.descricao || '',
+        [H('DESCRIÇÃO'), Hn('VALOR'), H('VENCIMENTO'), H('STATUS')],
+        ...contasArr.map(cf => [
+            Tx(cf.descricao || ''),
             M(cf.valor, false),
-            cf.vencimento ? cf.vencimento.split('-').reverse().join('/') : '',
-            cf.pago ? 'Pago' : 'Pendente',
+            Dt(cf.vencimento ? cf.vencimento.split('-').reverse().join('/') : ''),
+            Tx(cf.pago ? 'Pago' : 'Pendente'),
         ]),
     ];
-
-    // As categorias começam na linha 11 do Resumo (1: título, 3: cabeçalho KPI,
-    // 4-7: KPIs, 9: título, 10: cabeçalho) — os gráficos apontam para esse bloco.
-    const catIni = 11;
-    const catFim = Math.max(catIni, catIni + categorias.length - 1);
-    const q = (r) => `'Resumo'!$${r}$${catIni}:$${r}$${catFim}`;
-
-    const graficosResumo = categorias.length > 0 ? [
-        { tipo: 'pizza', titulo: 'Participação por categoria',
-          catRef: q('A'), valRef: q('B'), pontos: categorias.length,
-          ancora: { col: 4, linha: 1, col2: 11, linha2: 17 } },
-        { tipo: 'barra', titulo: 'Gastos por categoria (R$)',
-          catRef: q('A'), valRef: q('B'),
-          ancora: { col: 4, linha: 18, col2: 11, linha2: 36 } },
-    ] : [];
 
     const bytes = gerarXlsx([
         {
-            nome: 'Resumo', linhas: resumo, larguras: [28, 16, 34],
-            mesclar: ['A1:C1'],
-            // Barra de dados na coluna de % — "mini-gráfico" dentro da célula.
+            nome: 'Dashboard', linhas: dash, larguras: [22, 15, 3, 16, 15, 3, 16, 15],
+            fundo: 0, colunas: 12, linhasExtra: 6, congelar: false,
+            alturaCapa: { 2: 30, 6: 15, 7: 26 },
+            mesclar: ['A2:B2', 'A3:B3', 'A5:H5', 'A10:H10',
+                      'A6:B6', 'C6:D6', 'E6:F6', 'G6:H6',
+                      'A7:B7', 'C7:D7', 'E7:F7', 'G7:H7',
+                      'A8:B8', 'C8:D8', 'E8:F8', 'G8:H8'],
             barras: categorias.length ? [{ ref: `C${catIni}:C${catFim}`, cor: '0D9488' }] : [],
-            graficos: graficosResumo,
-            congelarLinha: 3,
+            graficos,
         },
         {
             nome: 'Transações', linhas: transacoes, larguras: [13, 42, 14, 20, 15],
-            mesclar: ['A1:E1'],
-            // Filtro no cabeçalho real da tabela (linha 3).
-            filtro: `A3:E${Math.max(3, 3 + txs.length)}`,
-            congelarLinha: 3,
+            fundo: 0, colunas: 6, linhasExtra: 4, congelarLinha: txCab,
+            alturaCapa: { 1: 26 },
+            mesclar: ['A1:D1'],
+            filtro: `A${txCab}:E${Math.max(txCab, txCab + txs.length)}`,
         },
         {
-            nome: 'Reservas e Metas', linhas: metas, larguras: [30, 16, 16, 13, 14],
-            mesclar: ['A1:E1'], congelarLinha: 3,
-            barras: (_ctx.metas || []).length
-                ? [{ ref: `D3:D${3 + (_ctx.metas || []).length}`, cor: '2563EB' }] : [],
+            nome: 'Reservas e Metas', linhas: metas, larguras: [30, 16, 16, 14, 14],
+            fundo: 0, colunas: 6, linhasExtra: 4, congelarLinha: 4,
+            alturaCapa: { 1: 26 },
+            mesclar: ['A1:D1'],
+            barras: (_ctx.metas || []).length ? [{ ref: `D5:D${4 + (_ctx.metas || []).length}`, cor: '3B82F6' }] : [],
         },
         {
             nome: 'Contas Fixas', linhas: contas, larguras: [32, 16, 15, 13],
-            mesclar: ['A1:D1'], congelarLinha: 3,
-            filtro: `A3:D${Math.max(3, 3 + (_ctx.contasFixas || []).length)}`,
+            fundo: 0, colunas: 5, linhasExtra: 4, congelarLinha: 4,
+            alturaCapa: { 1: 26 },
+            mesclar: ['A1:C1'],
+            filtro: `A4:D${Math.max(4, 4 + contasArr.length)}`,
         },
     ]);
 
     const nomArq = 'GranaEvo_' + anoNum + '-' + mesNum + '_' + perfilNome.replace(/\s+/g, '_') + '.xlsx';
     _downloadBlob(bytes, nomArq, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    _ctx.mostrarNotificacao('📊 Planilha gerada! Abre no Excel, Google Sheets e no celular.', 'success');
+    _ctx.mostrarNotificacao('Planilha gerada! Abre no Excel, Google Sheets e no celular.', 'success');
+}
+
+// Formatação BRL local — usada nas legendas/subtítulos do Excel, onde precisamos
+// do texto e não de um número formatado por célula.
+function _brlLocal(v) {
+    return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 // ── Apresentação HTML interativa com slides financeiros ───────────────────

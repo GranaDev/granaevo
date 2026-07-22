@@ -96,6 +96,36 @@ describe('gerarXlsx — peças obrigatórias do OOXML', () => {
   });
 });
 
+describe('tema escuro — fundo preenche o retângulo (opts.fundo/colunas)', () => {
+  const bytes = gerarXlsx([{
+    nome: 'Dark',
+    linhas: [['A', 'B'], ['C']],   // linha 2 mais curta de propósito
+    fundo: 0, colunas: 4, linhasExtra: 2,
+  }]);
+  const txt = dec.decode(bytes);
+  const folha = txt.slice(txt.indexOf('<sheetData>'), txt.indexOf('</sheetData>'));
+
+  test('toda célula do retângulo é pintada com o estilo de fundo, mesmo vazia', () => {
+    // 4 linhas (2 dadas + 2 extras) × 4 colunas = 16 células, todas com s="0".
+    const pintadas = (folha.match(/s="0"/g) || []).length;
+    assert.equal(pintadas, 16, 'faltou pintar célula do fundo escuro');
+  });
+
+  test('células vazias pintadas são <c .../> sem valor (não viram texto vazio)', () => {
+    assert.ok(folha.includes('<c r="D1" s="0"/>'), 'célula de margem deve existir e ser vazia');
+    // As células de TEXTO ('A','B','C') geram <is><t>; as VAZIAS não podem gerar
+    // uma string vazia. Confere que nenhum <t> abre logo em seguida vazio.
+    assert.ok(!/<is><t[^>]*><\/t>/.test(folha), 'nenhuma string vazia foi materializada');
+  });
+
+  test('sem opts.fundo, célula vazia continua sendo omitida (comportamento antigo)', () => {
+    const b2 = gerarXlsx([{ nome: 'X', linhas: [['a', '', 'c']] }]);
+    const t2 = dec.decode(b2);
+    // a coluna B vazia sem fundo não gera <c>.
+    assert.ok(!t2.includes('r="B1"'));
+  });
+});
+
 describe('gráficos nativos — todas as peças e referências fechadas', () => {
   const bytes = gerarXlsx([
     {
