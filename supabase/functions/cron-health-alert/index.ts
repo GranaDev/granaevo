@@ -5,10 +5,22 @@
 // que repassa com x-proxy-secret. Lê os jobs que falharam nas últimas 24h (RPC
 // get_cron_failures_24h, EXECUTE só service_role) e, havendo falhas, envia e-mail via Resend.
 //
-// Env necessárias: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PROXY_SECRET,
-//                  RESEND_API_KEY, SECURITY_ALERT_EMAIL (lista separada por vírgula).
+// Env necessárias: SUPABASE_URL, SUPABASE_SECRET_KEYS (fallback: SUPABASE_SERVICE_ROLE_KEY),
+//                  PROXY_SECRET, RESEND_API_KEY, SECURITY_ALERT_EMAIL (lista separada por vírgula).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.2";
+
+// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
+// com fallback na service_role legada — rollback = redeploy do commit anterior
+// enquanto a legada existir. Migração de API keys 2026-07-23.
+function getSecretKey(): string {
+  try {
+    const k = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}")?.default;
+    if (typeof k === "string" && k.startsWith("sb_secret_")) return k;
+  } catch { /* env ausente/inválida → usa a legada */ }
+  console.warn("[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)");
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+}
 
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder();
@@ -46,7 +58,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceKey  = getSecretKey();
   if (!supabaseUrl || !serviceKey) {
     console.error("[cron-health-alert] Variáveis Supabase ausentes");
     return json({ error: "Configuração interna incompleta" }, 500);
