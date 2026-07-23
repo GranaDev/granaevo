@@ -6,9 +6,9 @@ import '../../styles/dashboard/_db-reports-lazy.css';
 // essas regras (saíram do dashboard.css eager).
 import '../../styles/dashboard/_db-reports-desktop-lazy.css';
 import { dataManager } from '../modules/data-manager.js?v=8';
-// Gerador de .xlsx REAL (OOXML/ZIP). O export antigo era SpreadsheetML salvo
-// como .xls — o Excel avisava "formato não corresponde" e o celular nem abria.
-import { gerarXlsx } from '../modules/xlsx.js';
+// gerarXlsx (gerador OOXML/ZIP, ~414 linhas) NÃO é importado no topo: viaja num
+// chunk próprio carregado sob demanda dentro de _exportExcel (lazy). Assim o
+// gerador de planilha sai do chunk que carrega ao abrir Relatórios.
 // Motor do score extraído (puro/testável) — ver ../modules/score-financeiro.js
 import { calcScore as _calcScoreCore } from '../modules/score-financeiro.js?v=1';
 let _ctx = null;
@@ -719,10 +719,15 @@ canvas{max-width:100% !important;height:auto !important}
 }
 
 // ── Excel: SpreadsheetML XML (.xls) ─────────────────────────────────────
-function _exportExcel() {
+async function _exportExcel() {
     const { mesNome, anoNum, mesNum } = _getPeriodInfo();
     const perfilNome = _ctx.perfilAtivo?.nome || 'Perfil';
     const txs = _getTxsDoPeriodo();
+
+    // Gerador OOXML carregado sob demanda — fora do chunk de boot de Relatórios.
+    let gerarXlsx;
+    try { ({ gerarXlsx } = await import('../modules/xlsx.js')); }
+    catch { _ctx.mostrarNotificacao('Não foi possível carregar o gerador de planilha.', 'error'); return; }
 
     const entradas = txs.filter(t => t.categoria === 'entrada').reduce((s, t) => s + Number(t.valor || 0), 0);
     const saidas   = txs.filter(t => t.categoria === 'saida' || t.categoria === 'saida_credito').reduce((s, t) => s + Number(t.valor || 0), 0);

@@ -27,13 +27,14 @@ const BUDGETS_KB = {
   // Com 40, quem estourar é obrigado a lazy-ar em vez de engordar o boot.
   'dashboard.js':        40,
   'vendor-supabase.js':  40,   // Passo 8: realtime-js stubado (34,3 KB). Teto baixo TRAVA o ganho — se o realtime real voltar (~48,6), o CI barra.
-  // 40 → 43 (2026-07-22): reforma editorial das exportações (PDF nível
-  // multinacional) — theming completo por tokens, expansão de TODAS as metas,
-  // conversão de logos de banco + ícone do site p/ data URI, correções de donut/
-  // legenda/insights. Chunk LAZY (só carrega ao abrir Relatórios), fora do boot.
-  // Se continuar crescendo com slides/CSV, o certo é lazy-ar as funções de export
-  // num sub-chunk próprio (carregado só no clique), não subir mais este teto.
-  'db-relatorios.js':    43,
+  // 40 → 43 (2026-07-22): reforma editorial das exportações (PDF/slides nível
+  // multinacional) — theming por tokens, expansão de metas, logos/ícone em data URI.
+  // 43 → 41 (2026-07-23): gerarXlsx (gerador OOXML, ~4,5 KB gzip) virou import()
+  // dinâmico dentro de _exportExcel → chunk xlsx-*.js próprio, carregado só ao
+  // exportar Excel. db-relatorios caiu 42,7 → 38,5. Teto baixado de volta com folga
+  // p/ o CSV. PRÓXIMO passo p/ baixar mais: lazy-ar as 4 funções de export num
+  // sub-chunk (precisa de smoke-test dos 4 formatos por causa dos helpers partilhados).
+  'db-relatorios.js':    41,
   'main.css':            14,
   'convidados.css':      20,
 };
