@@ -14,6 +14,27 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
+// Keys novas (injetadas pela plataforma) com fallback nas legadas durante a
+// transição — rollback = redeploy do commit anterior. Migração 2026-07-23.
+function getSecretKey(): string {
+  try {
+    const k = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')?.default
+    if (typeof k === 'string' && k.startsWith('sb_secret_')) return k
+  } catch { /* env ausente/inválida → usa a legada */ }
+  console.warn('[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)')
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+}
+
+// Publishable (só como `apikey` do step-up de senha no GoTrue — pública por design).
+function getPublishableKey(): string {
+  try {
+    const k = JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') ?? '{}')?.default
+    if (typeof k === 'string' && k.startsWith('sb_publishable_')) return k
+  } catch { /* env ausente/inválida → usa a legada */ }
+  console.warn('[keys] SUPABASE_PUBLISHABLE_KEYS indisponível — usando anon legada (fallback)')
+  return Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+}
+
 const ALLOWED_ORIGINS = [
   'https://granaevo.vercel.app',
   'https://granaevo.com',
@@ -74,7 +95,7 @@ Deno.serve(async (req: Request) => {
 
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    getSecretKey(),
     { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } },
   )
 
@@ -109,7 +130,7 @@ Deno.serve(async (req: Request) => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'apikey': Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      'apikey': getPublishableKey(),
     },
     body: JSON.stringify({ email: accountEmail, password: senha }),
   }).catch(() => null)

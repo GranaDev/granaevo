@@ -436,6 +436,55 @@ verify_jwt = false
 [functions.link-user-subscription]
 verify_jwt = false
 
+# ── verify_jwt=false EXPLÍCITO para TODAS as demais (migração de API keys, onda 5, 2026-07-23) ──
+# ARMADILHA: `supabase functions deploy <nome>` aplica o DEFAULT verify_jwt=true quando a
+# função NÃO está listada aqui. Toda edge deste projeto faz a própria auth (x-proxy-secret,
+# HMAC do Stripe, ou auth.getUser ES256), então o gateway NUNCA deve validar JWT por conta
+# própria. Sem estes blocos, um deploy flipa a função p/ true; inofensivo p/ as atrás do proxy
+# (apikey satisfaz o gateway), mas FATAL p/ webhook-stripe (Stripe bate direto, sem apikey).
+
+# Webhook do Stripe: autenticado por HMAC-SHA256 (STRIPE_WEBHOOK_SECRET). Recebe a chamada
+# DIRETA do Stripe, sem apikey nem JWT — com verify_jwt=true o gateway rejeitaria os eventos
+# e as assinaturas parariam de atualizar. CRÍTICO manter false.
+[functions.webhook-stripe]
+verify_jwt = false
+
+# Stripe via proxy /api/stripe (proxy-secret + JWT do titular). Restauradas p/ false na onda 5.
+[functions.create-stripe-checkout]
+verify_jwt = false
+
+[functions.stripe-portal]
+verify_jwt = false
+
+[functions.stripe-subscription-details]
+verify_jwt = false
+
+[functions.preview-stripe-plan]
+verify_jwt = false
+
+[functions.update-stripe-plan]
+verify_jwt = false
+
+# Push e backup via proxy /api/user-data (proxy-secret + JWT). Restauradas p/ false na onda 5.
+[functions.save-push-subscription]
+verify_jwt = false
+
+[functions.delete-push-subscription]
+verify_jwt = false
+
+[functions.user-data-backup]
+verify_jwt = false
+
+# Senders de e-mail (server→server, proxy-secret). Já eram false; fixadas aqui p/ evitar flip futuro.
+[functions.send-access-revoked-email]
+verify_jwt = false
+
+[functions.send-cancellation-email]
+verify_jwt = false
+
+[functions.send-plan-change-email]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

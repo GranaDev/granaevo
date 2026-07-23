@@ -1,6 +1,18 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 import { isPasswordPwned } from '../_shared/hibp.ts'
 
+// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
+// com fallback na service_role legada — rollback = redeploy do commit anterior
+// enquanto a legada existir. Migração de API keys 2026-07-23.
+function getSecretKey(): string {
+  try {
+    const k = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')?.default
+    if (typeof k === 'string' && k.startsWith('sb_secret_')) return k
+  } catch { /* env ausente/inválida → usa a legada */ }
+  console.warn('[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)')
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  verify-and-reset-password — v7
 //
@@ -234,8 +246,8 @@ Deno.serve(async (req) => {
     return new Response('ok', { status: 200, headers: corsHeaders })
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')              ?? ''
-  const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const serviceKey  = getSecretKey()
   // Prefere a publishable key nova (SUPABASE_PUBLISHABLE_KEYS['default']) e cai
   // para a anon legada durante a transição. Usada só como `apikey` no recovery
   // flow. Ver docs/roadmap-melhorias-dev.md Passo 1, Estágio 3. (Migração 2026-07-14)
