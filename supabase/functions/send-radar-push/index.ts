@@ -8,11 +8,23 @@
 // Este código nunca calcula nem interpreta dados financeiros — só entrega
 // payloads prontos.
 //
-// Env necessárias: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PROXY_SECRET,
-//                  VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.
+// Env necessárias: SUPABASE_URL, SUPABASE_SECRET_KEYS (fallback: SUPABASE_SERVICE_ROLE_KEY),
+//                  PROXY_SECRET, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.2";
 import webpush from "npm:web-push@3.6.7";
+
+// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
+// com fallback na service_role legada — rollback = redeploy do commit anterior
+// enquanto a legada existir. Migração de API keys 2026-07-23.
+function getSecretKey(): string {
+  try {
+    const k = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}")?.default;
+    if (typeof k === "string" && k.startsWith("sb_secret_")) return k;
+  } catch { /* env ausente/inválida → usa a legada */ }
+  console.warn("[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)");
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+}
 
 function timingSafeEqual(a: string, b: string): boolean {
   const enc = new TextEncoder();
@@ -48,7 +60,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceKey  = getSecretKey();
   const vapidPub    = Deno.env.get("VAPID_PUBLIC_KEY");
   const vapidPriv   = Deno.env.get("VAPID_PRIVATE_KEY");
   if (!supabaseUrl || !serviceKey) {

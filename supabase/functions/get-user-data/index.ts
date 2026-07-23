@@ -1,5 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 
+// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
+// com fallback na service_role legada — rollback = redeploy do commit anterior
+// enquanto a legada existir. Migração de API keys 2026-07-23.
+function getSecretKey(): string {
+  try {
+    const k = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')?.default
+    if (typeof k === 'string' && k.startsWith('sb_secret_')) return k
+  } catch { /* env ausente/inválida → usa a legada */ }
+  console.warn('[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)')
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+}
+
 // ---------------------------------------------------------------------------
 // HKDF + AES-256-GCM — descriptografia com chave derivada por usuário
 // v2: chave derivada via HKDF(masterKey, userId) — atual
@@ -121,7 +133,7 @@ Deno.serve(async (req: Request) => {
   // [SEC-FIX R4-001] Substituído decodeJwtPayload (sem verificação de assinatura)
   // por supabaseAdmin.auth.getUser(token) que valida ES256 via JWKS.
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const serviceKey  = getSecretKey()
 
   const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
