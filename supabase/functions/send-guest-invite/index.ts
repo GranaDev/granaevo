@@ -4,10 +4,22 @@
  *
  * CORREÇÃO ES256: supabaseAdmin.auth.getUser(token) em vez de
  * createClient(url, anonKey) + getUser() com token no global header.
- * O Admin client usa SERVICE_ROLE_KEY (aceita pelo gateway) e delega
- * a validação do token ES256 ao servidor Auth via JWKS.
+ * O Admin client usa a secret key nova (sb_secret_, fallback service_role
+ * legada) e delega a validação do token ES256 ao servidor Auth via JWKS.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.2";
+
+// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
+// com fallback na service_role legada — rollback = redeploy do commit anterior
+// enquanto a legada existir. Migração de API keys 2026-07-23.
+function getSecretKey(): string {
+  try {
+    const k = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}")?.default;
+    if (typeof k === "string" && k.startsWith("sb_secret_")) return k;
+  } catch { /* env ausente/inválida → usa a legada */ }
+  console.warn("[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)");
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+}
 
 const ALLOWED_ORIGINS = [
   'https://granaevo.vercel.app',
@@ -83,7 +95,7 @@ Deno.serve(async (req: Request) => {
 
   // ── 2. Lê variáveis de ambiente ───────────────────────────────────────────
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceKey  = getSecretKey();
   const resendKey   = Deno.env.get("RESEND_API_KEY");
 
   if (!supabaseUrl || !serviceKey) {

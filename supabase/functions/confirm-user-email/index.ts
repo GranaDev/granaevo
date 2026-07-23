@@ -37,6 +37,18 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2';
 
+// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
+// com fallback na service_role legada — rollback = redeploy do commit anterior
+// enquanto a legada existir. Migração de API keys 2026-07-23.
+function getSecretKey(): string {
+    try {
+        const k = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')?.default;
+        if (typeof k === 'string' && k.startsWith('sb_secret_')) return k;
+    } catch { /* env ausente/inválida → usa a legada */ }
+    console.warn('[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)');
+    return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+}
+
 // ==========================================
 // CORS — permite origens do site (www e non-www)
 // ==========================================
@@ -136,7 +148,7 @@ Deno.serve(async (req) => {
     // ── Cria cliente Admin (Service Role Key) ───────────────────────────
     const supabaseAdmin = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        getSecretKey(),
         {
             auth: {
                 autoRefreshToken: false,

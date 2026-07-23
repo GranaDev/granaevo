@@ -424,12 +424,17 @@ verify_jwt = false
 [functions.delete-account]
 verify_jwt = false
 
-# Funções com JWT obrigatório (usuário autenticado) — HS256 compatível
+# send-guest-invite: auth própria (x-proxy-secret + auth.getUser ES256). O verify_jwt
+# do gateway só valida o secret HS256 LEGADO — com tokens ES256 ele devolveria 401
+# antes do código e QUEBRARIA convites no próximo deploy (em prod já rodava false).
+# Alinhado na onda 3 da migração de API keys (2026-07-23).
 [functions.send-guest-invite]
-verify_jwt = true
+verify_jwt = false
 
+# link-user-subscription: tombstone 410 (desativada por segurança em 2026-07-16).
+# false para o 410 chegar ao chamador em vez de um 401 do gateway, se um dia for chamada.
 [functions.link-user-subscription]
-verify_jwt = true
+verify_jwt = false
 
 [edge_runtime]
 enabled = true
