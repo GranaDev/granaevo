@@ -30,8 +30,10 @@ let _syncEmVoo = false;
 const MAX_EVENTOS   = 40;
 const HORA_DISPARO  = 8;   // 08:00 local — o cron da manhã roda depois disso
 const HORA_TARDE    = 15;  // 15:00 local — 2ª rodada (fan-out do cron-health 18:00 UTC)
+const HORA_RESUMO   = 19;  // 19:00 domingo — resumo semanal (RF-03) cai na janela da manhã seguinte
 const THROTTLE_MS   = 10 * 60 * 1000; // mín. 10 min entre sincronizações
 const LS_KEY        = 'ge_radar_last_sync';
+const LS_METAS      = 'ge_radar_metas_';   // + uid: metas já batidas (semeia sem avisar as antigas)
 
 // ── Helpers de data ───────────────────────────────────────────────────────────
 // _hoje0 e _proximaOcorrencia mudaram-se para modules/ciclo-fatura.js (meiaNoite
@@ -43,6 +45,14 @@ function _fireAt(dia) {
     d.setHours(HORA_DISPARO, 0, 0, 0);
     return d;
 }
+// Próxima janela de entrega a partir de agora (manhã 08h → tarde 15h → manhã seguinte).
+// Usada por eventos "assim que possível" (marco de meta, orçamento).
+function _proximaJanela(hoje, agora) {
+    const h = agora.getHours();
+    if (h < HORA_DISPARO) return _fireAt(hoje);
+    if (h < HORA_TARDE) { const d = new Date(hoje); d.setHours(HORA_TARDE, 0, 0, 0); return d; }
+    return _fireAt(new Date(hoje.getTime() + 86_400_000));
+}
 function _ymKey(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -51,7 +61,7 @@ function _clampTexto(s, max) {
 }
 
 // ── Cálculo dos eventos ───────────────────────────────────────────────────────
-function _computarEventos(ctx) {
+function _computarEventos(ctx, uid) {
     const eventos = [];
     const hoje = meiaNoite(new Date());
     const limite = new Date(hoje.getTime() + 35 * 86_400_000); // janela de 35 dias
@@ -84,6 +94,12 @@ function _computarEventos(ctx) {
         const desc = _clampTexto(c.descricao, 40) || 'Conta';
         const idFrag = String(c.id ?? desc).slice(0, 40);
 
+        // D-3: folga pra se programar (contas maiores agradecem). O silêncio
+        // inteligente do envio agrupa vários no mesmo dia em 1 push só.
+        const tresDias = new Date(venc.getTime() - 3 * 86_400_000);
+        add(`cf:${idFrag}:${c.vencimento}:d3`, 'conta_vence', tresDias,
+            `${desc} vence em 3 dias`,
+            `Vence em ${venc.toLocaleDateString('pt-BR')}. Programe-se — o valor está no app.`);
         const vespera = new Date(venc.getTime() - 86_400_000);
         add(`cf:${idFrag}:${c.vencimento}:d1`, 'conta_vence', vespera,
             `${desc} vence amanhã`,
@@ -166,6 +182,68 @@ function _computarEventos(ctx) {
         });
     }
 
+    // 5) Marco (RF-03): meta batida (100%). SEMEIA silenciosamente as já batidas
+    //    na 1ª vez — não avisa conquista antiga; só notifica quem cruzar daqui pra
+    //    frente. Mesmo padrão do confete (celebracao.js). Estado por usuário.
+    if (uid) {
+        try {
+            const chave = LS_METAS + uid;
+            const bruto = (() => { try { return localStorage.getItem(chave); } catch { return null; } })();
+            const vistas = new Set(bruto ? JSON.parse(bruto) : []);
+            const primeiraVez = bruto === null;
+            const batidasAgora = [];
+            for (const m of (ctx.metas || [])) {
+                if (!m || typeof m !== 'object') continue;
+                const objetivo = Number(m.objetivo), saved = Number(m.saved);
+                if (!Number.isFinite(objetivo) || objetivo <= 0 || !Number.isFinite(saved)) continue;
+                const id = String(m.id ?? m.descricao ?? '').slice(0, 40);
+                if (!id || saved + 0.005 < objetivo) continue;
+                batidasAgora.push(id);
+                if (!primeiraVez && !vistas.has(id)) {
+                    const nome = _clampTexto(m.descricao, 40) || 'sua meta';
+                    eventos.push({
+                        dedupe_key: _clampTexto(`meta:${id}:done`, 120),
+                        tipo: 'meta_batida',
+                        title: _clampTexto('Meta batida!', 80),
+                        body:  _clampTexto(`Você concluiu "${nome}". Parabéns — objetivo alcançado!`, 200),
+                        url:   '/dashboard',
+                        fire_at: _proximaJanela(hoje, agora).toISOString(),
+                    });
+                }
+            }
+            try { localStorage.setItem(chave, JSON.stringify(batidasAgora.slice(0, 100))); } catch {}
+        } catch (e) { _log('metas', e); }
+    }
+
+    // 6) Resumo semanal (RF-03): domingo à noite, quantas contas vencem na semana
+    //    seguinte. PRIVACIDADE: sem R$ — só a contagem; o usuário abre pra ver.
+    {
+        const diasAteDomingo = (7 - hoje.getDay()) % 7;      // 0 se hoje já é domingo
+        const domingo = new Date(hoje.getTime() + diasAteDomingo * 86_400_000);
+        const fimSemana = new Date(domingo.getTime() + 7 * 86_400_000);
+        let nContas = 0;
+        for (const c of (ctx.contasFixas || [])) {
+            if (c.pago === true || typeof c.vencimento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(c.vencimento)) continue;
+            const [yy, mm, dd] = c.vencimento.split('-').map(Number);
+            const v = new Date(yy, mm - 1, dd);
+            if (v >= domingo && v < fimSemana) nContas++;
+        }
+        if (nContas > 0) {
+            const fireResumo = new Date(domingo); fireResumo.setHours(HORA_RESUMO, 0, 0, 0);
+            if (fireResumo >= new Date(agora.getTime() - 3_600_000) && fireResumo <= limite) {
+                const plural = nContas > 1;
+                eventos.push({
+                    dedupe_key: _clampTexto(`resumo:${_ymKey(domingo)}:${domingo.getDate()}`, 120),
+                    tipo: 'resumo_semanal',
+                    title: _clampTexto('Sua semana no GranaEvo', 80),
+                    body:  _clampTexto(`${nContas} conta${plural ? 's' : ''} vence${plural ? 'm' : ''} na próxima semana. Abra pra ver os valores e se programar.`, 200),
+                    url:   '/dashboard',
+                    fire_at: fireResumo.toISOString(),
+                });
+            }
+        }
+    }
+
     // Mais próximos primeiro; teto de segurança
     eventos.sort((a, b) => new Date(a.fire_at) - new Date(b.fire_at));
     return eventos.slice(0, MAX_EVENTOS);
@@ -188,7 +266,7 @@ async function _sincronizar() {
         const uid = session?.user?.id;
         if (!uid) return;
 
-        const eventos = _computarEventos(_ctx).map(e => ({ ...e, user_id: uid }));
+        const eventos = _computarEventos(_ctx, uid).map(e => ({ ...e, user_id: uid }));
 
         // 1) Remove agendamentos pendentes antigos (dados podem ter mudado:
         //    conta paga, assinatura cancelada…). 'sent' fica — é o dedupe.
@@ -202,20 +280,36 @@ async function _sincronizar() {
         // que apagou o lembrete de teste minutos depois de ele ser criado.
         // A lista é explícita de propósito: tipo novo do Radar precisa ser incluído
         // aqui de forma consciente, e nada que não seja do Radar entra por descuido.
+        // 'resumo_semanal' entra (recalcula a contagem a cada sync). 'meta_batida'
+        // fica FORA: é one-shot — deletá-lo antes de disparar perderia o aviso, e a
+        // semeadura por localStorage não o reinsere. 'lembrete' (do usuário) nunca entra.
         const del = await supabase
             .from('radar_notifications')
             .delete()
             .eq('user_id', uid)
             .eq('status', 'pending')
-            .in('tipo', ['conta_vence', 'fatura_fecha', 'assinatura_renova', 'orcamento_estouro']);
+            .in('tipo', ['conta_vence', 'fatura_fecha', 'assinatura_renova', 'orcamento_estouro', 'resumo_semanal']);
         if (del.error) { _log('delete', del.error); return; }
 
         // 2) Insere o estado atual. Conflito com dedupe_key já enviada = ignora.
-        if (eventos.length > 0) {
-            const ins = await supabase
-                .from('radar_notifications')
-                .upsert(eventos, { onConflict: 'user_id,dedupe_key', ignoreDuplicates: true });
+        //    SPLIT PROPOSITAL: os tipos do RF-03 (resumo_semanal/meta_batida) só
+        //    passam se a migration 20260724000000 (novo CHECK de tipo) já estiver
+        //    aplicada. Num upsert separado, se ela ainda NÃO foi aplicada, só o
+        //    RF-03 falha (logado) — os avisos principais (conta_vence, fatura…)
+        //    continuam sendo agendados. Zero regressão na ordem migration→deploy.
+        const RF03 = new Set(['resumo_semanal', 'meta_batida']);
+        const legados = eventos.filter(e => !RF03.has(e.tipo));
+        const novos   = eventos.filter(e => RF03.has(e.tipo));
+        const upsert  = (linhas) => supabase
+            .from('radar_notifications')
+            .upsert(linhas, { onConflict: 'user_id,dedupe_key', ignoreDuplicates: true });
+        if (legados.length > 0) {
+            const ins = await upsert(legados);
             if (ins.error) { _log('insert', ins.error); return; }
+        }
+        if (novos.length > 0) {
+            const ins2 = await upsert(novos);
+            if (ins2.error) _log('insert-rf03', ins2.error);  // não derruba os principais
         }
 
         try { localStorage.setItem(LS_KEY, String(Date.now())); } catch {}

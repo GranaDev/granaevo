@@ -138,22 +138,51 @@ async function processarFila(admin: ReturnType<typeof createClient>) {
     subsPorUser.get(s.user_id)!.push(s);
   }
 
-  // ── 5. Entrega ───────────────────────────────────────────────────────────────
+  // ── 5. Entrega — SILÊNCIO INTELIGENTE (RF-03): 1 push por usuário por rodada ─
+  // Se o usuário tem vários avisos vencidos agora, agrupa num ÚNICO push (título =
+  // contagem, corpo = os títulos concatenados) em vez de disparar N notificações.
+  // Um aviso só já traz o usuário pro app; N seguidos é o "massante" que o item
+  // pediu pra matar. PRIVACIDADE mantida: os títulos nunca têm R$.
   const sentIds: string[] = [];
   const failedIds: string[] = [];
   const deadEndpoints = new Set<string>();
 
+  const porUser = new Map<string, typeof rows>();
   for (const n of rows) {
-    const alvos = subsPorUser.get(n.user_id) ?? [];
-    if (alvos.length === 0) { failedIds.push(n.id); continue; }
+    if (!porUser.has(n.user_id)) porUser.set(n.user_id, []);
+    porUser.get(n.user_id)!.push(n);
+  }
 
-    // Payload validado de novo aqui (defesa em profundidade; o SW valida uma 3ª vez)
-    const payload = JSON.stringify({
-      title: String(n.title ?? "GranaEvo").slice(0, 80),
-      body:  String(n.body ?? "").slice(0, 200),
-      tag:   `radar-${String(n.tipo ?? "evento").slice(0, 30)}`,
-      url:   typeof n.url === "string" && n.url.startsWith("/") ? n.url.slice(0, 200) : "/dashboard",
-    });
+  for (const [userId, avisos] of porUser) {
+    const alvos = subsPorUser.get(userId) ?? [];
+    if (alvos.length === 0) { for (const a of avisos) failedIds.push(a.id); continue; }
+
+    let payload: string;
+    if (avisos.length === 1) {
+      const n = avisos[0];
+      // Payload validado de novo aqui (defesa em profundidade; o SW valida a 3ª vez)
+      payload = JSON.stringify({
+        title: String(n.title ?? "GranaEvo").slice(0, 80),
+        body:  String(n.body ?? "").slice(0, 200),
+        tag:   `radar-${String(n.tipo ?? "evento").slice(0, 30)}`,
+        url:   typeof n.url === "string" && n.url.startsWith("/") ? n.url.slice(0, 200) : "/dashboard",
+      });
+    } else {
+      const titulos = avisos.map((a) => String(a.title ?? "").trim()).filter(Boolean);
+      let corpo = "", usados = 0;
+      for (const t of titulos) {
+        const proximo = corpo ? `${corpo} · ${t}` : t;
+        if (proximo.length > 180) break;
+        corpo = proximo; usados++;
+      }
+      if (usados < titulos.length) corpo = `${corpo} · +${titulos.length - usados}`.slice(0, 200);
+      payload = JSON.stringify({
+        title: `${avisos.length} avisos do GranaEvo`.slice(0, 80),
+        body:  (corpo || "Você tem novidades. Abra pra ver.").slice(0, 200),
+        tag:   "radar-resumo",
+        url:   "/dashboard",
+      });
+    }
 
     let entregou = false;
     const envios = alvos.map(async (s) => {
@@ -171,8 +200,7 @@ async function processarFila(admin: ReturnType<typeof createClient>) {
     });
     await Promise.allSettled(envios);
 
-    if (entregou) sentIds.push(n.id);
-    else failedIds.push(n.id);
+    for (const a of avisos) (entregou ? sentIds : failedIds).push(a.id);
   }
 
   // ── 6. Marca resultados + desativa endpoints mortos ─────────────────────────
