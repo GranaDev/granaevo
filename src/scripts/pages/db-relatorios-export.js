@@ -34,35 +34,42 @@ function _fmtBRL(v) {
     return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// ── CSV: transações do período (UTF-8 BOM) ───────────────────────────────
+// ── CSV: transações do período (UTF-8 BOM, separador pt-BR) ───────────────
 function _exportCSV() {
     const txs = _getTxsDoPeriodo();
     const { mesNome, anoNum, mesNum } = _getPeriodInfo();
-    const perfilNome = _ctx.perfilAtivo?.nome || 'relatorio';
+    const perfil = _ctx.perfilAtivo?.nome || '';
 
-    // Cabeçalho
-    const cols = ['Data','Hora','Categoria','Tipo','Descrição','Valor (R$)'];
+    // Separador ';' (padrão pt-BR): Excel/Google Sheets em português abrem em
+    // COLUNAS. Com vírgula, e com o decimal também em vírgula, o Excel pt-BR
+    // jogava tudo numa coluna só. O decimal segue vírgula (R$ 10,50).
+    const SEP = ';';
+    const cel = (val) => {
+        const s = String(val ?? '').replace(/"/g, '""');   // RFC 4180
+        return /[";\n\r]/.test(s) ? `"${s}"` : s;
+    };
+    const linha = (arr) => arr.map(cel).join(SEP);
 
-    function _csvCell(val) {
-        // RFC 4180: envolve em aspas se contém vírgula, aspas ou quebra de linha
-        const s = String(val ?? '').replace(/"/g, '""');
-        return /[",\n\r]/.test(s) ? `"${s}"` : s;
-    }
+    const geradoEm = new Date().toLocaleDateString('pt-BR') + ' ' +
+        new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    const linhas = [cols.map(_csvCell).join(',')];
+    // Cabeçalho editorial (contexto antes da tabela) + tabela.
+    const linhas = [
+        linha(['GranaEvo — Transações']),
+        linha([`Período: ${mesNome} ${anoNum}` + (perfil ? ` · Perfil: ${perfil}` : '')]),
+        linha([`Gerado em: ${geradoEm} · ${txs.length} lançamento${txs.length === 1 ? '' : 's'}`]),
+        '',
+        linha(['Data', 'Hora', 'Categoria', 'Tipo', 'Descrição', 'Valor (R$)']),
+    ];
     txs.forEach(t => {
-        linhas.push([
-            _csvCell(t.data  || ''),
-            _csvCell(t.hora  || ''),
-            _csvCell(t.categoria || ''),
-            _csvCell(t.tipo  || ''),
-            _csvCell(t.descricao || ''),
-            _csvCell(typeof t.valor === 'number' ? t.valor.toFixed(2).replace('.', ',') : (t.valor || '0,00')),
-        ].join(','));
+        linhas.push(linha([
+            t.data || '', t.hora || '', t.categoria || '', t.tipo || '', t.descricao || '',
+            typeof t.valor === 'number' ? t.valor.toFixed(2).replace('.', ',') : (t.valor || '0,00'),
+        ]));
     });
 
-    const csv     = '﻿' + linhas.join('\r\n'); // BOM UTF-8 para Excel abrir corretamente
-    const arquivo = `GranaEvo_${anoNum}-${mesNum}_${perfilNome}_transacoes.csv`;
+    const csv     = '﻿' + linhas.join('\r\n'); // BOM UTF-8 → Excel lê acento certo
+    const arquivo = `GranaEvo_${anoNum}-${mesNum}_${perfil || 'relatorio'}_transacoes.csv`;
     _downloadBlob(csv, arquivo, 'text/csv;charset=utf-8');
 }
 
