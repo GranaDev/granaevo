@@ -209,6 +209,58 @@ export function sincronizarReservaEmPerfis(profiles, reserva, cloneFn) {
     return profiles;
 }
 
+// Campos COMPARTILHADOS de uma reserva (iguais em toda cópia). As transações
+// (dinheiro) ficam à parte, com metaId, e não entram aqui.
+const CAMPOS_SINC = [
+    'saved', 'monthly', 'historicoRetiradas', 'objetivo', 'descricao', 'prazo',
+    'tipoRendimento', 'taxaJuros', 'cdiPct', 'rendimentoPeriodo', 'aporteRecorrente',
+    'valorAporte', 'lastRendimento', 'membros', 'movimentos', 'convites',
+    'tipoReserva', 'origemExistente', 'lastUpdate',
+];
+
+/** Carimba a reserva como atualizada AGORA (para reconciliar entre cópias). MUTA. */
+export function marcarReservaAtualizada(meta) {
+    if (meta && typeof meta === 'object') meta.lastUpdate = new Date().toISOString();
+    return meta;
+}
+
+/**
+ * A cópia MAIS RECENTE (maior `lastUpdate`) de uma reserva por id, varrendo todos
+ * os perfis. É a "verdade" quando as cópias divergem — e como o slot de quem
+ * escreveu SEMPRE persiste certo (o save reconstrói o slot ativo), a cópia mais
+ * nova está sempre no slot de quem mexeu por último. Pura. Retorna a meta ou null.
+ */
+export function copiaMaisRecente(profiles, reservaId) {
+    if (!Array.isArray(profiles) || reservaId == null) return null;
+    const rid = String(reservaId);
+    let melhor = null;
+    for (const p of profiles) {
+        for (const m of (Array.isArray(p?.metas) ? p.metas : [])) {
+            if (m && String(m.id) === rid &&
+                (!melhor || String(m.lastUpdate || '') > String(melhor.lastUpdate || ''))) {
+                melhor = m;
+            }
+        }
+    }
+    return melhor;
+}
+
+/**
+ * Reconcilia UMA reserva ativa contra as cópias nos perfis: se existe uma cópia
+ * mais recente (por lastUpdate), traz os campos compartilhados para a meta ativa.
+ * MUTA `metaAtiva`. Retorna true se mudou algo. É o que faz o perfil B ver o
+ * saldo que o perfil A depositou, sem depender da propagação em memória.
+ */
+export function reconciliarCopiaAtiva(metaAtiva, profiles) {
+    if (!ehCompartilhada(metaAtiva) || metaAtiva.id == null) return false;
+    const recente = copiaMaisRecente(profiles, metaAtiva.id);
+    if (!recente || recente === metaAtiva) return false;
+    if (String(recente.lastUpdate || '') <= String(metaAtiva.lastUpdate || '')) return false;
+    const clone = JSON.parse(JSON.stringify(recente));
+    for (const k of CAMPOS_SINC) if (k in clone) metaAtiva[k] = clone[k];
+    return true;
+}
+
 /**
  * Remove uma reserva (por id) das cópias de TODOS os perfis do array — usado ao
  * excluir/dissolver a reserva. MUTA `profiles`. Retorna profiles.

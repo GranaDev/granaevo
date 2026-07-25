@@ -16,6 +16,7 @@ import {
   convitesPendentes, temConvitePendente, contarConvitesPendentes,
   aceitarConvite, recusarConvite, montarRosterConvite,
   sincronizarReservaEmPerfis, removerReservaDePerfis,
+  marcarReservaAtualizada, copiaMaisRecente, reconciliarCopiaAtiva,
 } from '../../src/scripts/modules/reserva-familia.js'
 
 const mov = (tipo, valor, id, nome) => ({ memberId: id, memberNome: nome, tipo, valor })
@@ -358,5 +359,45 @@ describe('removerReservaDePerfis', () => {
     assert.deepEqual(profiles[0].metas.map(m => m.id), ['r2'])
     assert.equal(profiles[1].metas.length, 0)
     assert.equal(profiles[2].metas.length, 0)
+  })
+})
+
+// ── Reconciliação entre cópias (corrige "reserva zerada no perfil B") ─────────
+describe('reconciliação de cópias por lastUpdate', () => {
+  test('marcarReservaAtualizada carimba lastUpdate', () => {
+    const m = { id: 'r1' }
+    marcarReservaAtualizada(m)
+    assert.equal(typeof m.lastUpdate, 'string')
+    assert.ok(m.lastUpdate.length > 10)
+  })
+  test('copiaMaisRecente pega a de maior lastUpdate entre os perfis', () => {
+    const profiles = [
+      { id: 'A', metas: [{ id: 'r1', saved: 100, lastUpdate: '2026-07-24T10:00:00.000Z' }] },
+      { id: 'B', metas: [{ id: 'r1', saved: 0,   lastUpdate: '2026-07-24T09:00:00.000Z' }] },
+    ]
+    assert.equal(copiaMaisRecente(profiles, 'r1').saved, 100)
+  })
+  test('reconciliarCopiaAtiva traz o saldo mais novo do outro perfil (o bug relatado)', () => {
+    // Perfil B abriu com a cópia zerada; A depositou 100 (cópia mais nova no slot de A).
+    const metaAtivaB = { id: 'r1', compartilhada: true, saved: 0, movimentos: [], membros: ['A', 'B'], lastUpdate: '2026-07-24T09:00:00.000Z' }
+    const profiles = [
+      { id: 'A', metas: [{ id: 'r1', compartilhada: true, saved: 100, movimentos: [{ tipo: 'aporte', valor: 100 }], membros: ['A', 'B'], lastUpdate: '2026-07-24T10:00:00.000Z' }] },
+      { id: 'B', metas: [metaAtivaB] },
+    ]
+    const mudou = reconciliarCopiaAtiva(metaAtivaB, profiles)
+    assert.equal(mudou, true)
+    assert.equal(metaAtivaB.saved, 100)               // B agora vê os 100 de A
+    assert.equal(metaAtivaB.movimentos.length, 1)
+    assert.equal(metaAtivaB.lastUpdate, '2026-07-24T10:00:00.000Z')
+  })
+  test('não reconcilia se a cópia ativa já é a mais nova', () => {
+    const metaAtiva = { id: 'r1', compartilhada: true, saved: 200, lastUpdate: '2026-07-24T11:00:00.000Z' }
+    const profiles = [{ id: 'A', metas: [{ id: 'r1', compartilhada: true, saved: 100, lastUpdate: '2026-07-24T10:00:00.000Z' }] }]
+    assert.equal(reconciliarCopiaAtiva(metaAtiva, profiles), false)
+    assert.equal(metaAtiva.saved, 200)
+  })
+  test('reserva não compartilhada não reconcilia', () => {
+    const m = { id: 'r1', saved: 5 }
+    assert.equal(reconciliarCopiaAtiva(m, [{ id: 'A', metas: [{ id: 'r1', saved: 999, lastUpdate: 'x' }] }]), false)
   })
 })

@@ -1062,6 +1062,8 @@ const _ALLOWED_KEYS = Object.freeze({
         // Convite→aceite (v2): ids de perfil convidados ainda pendentes. Sem
         // esta chave o convite sumiria no primeiro save (allow-list).
         'convites',
+        // Carimbo p/ reconciliar cópias da reserva entre perfis (qual é a mais nova).
+        'lastUpdate',
         // `tipoReserva` (caixinha/poupança/CDB/…) e `origemExistente` eram
         // gravados por db-metas e DESCARTADOS aqui — o formulário perguntava o
         // tipo, validava a resposta e jogava fora. Detectado por

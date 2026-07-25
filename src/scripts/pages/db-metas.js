@@ -7,7 +7,8 @@ import {
     porMembro, divisaoSugerida, perfilParticipa,
     montarRosterConvite, aceitarConvite, recusarConvite,
     sincronizarReservaEmPerfis, removerReservaDePerfis,
-} from '../modules/reserva-familia.js?v=5';
+    marcarReservaAtualizada, reconciliarCopiaAtiva,
+} from '../modules/reserva-familia.js?v=6';
 
 // ── Reserva compartilhada v2: propagação entre perfis ───────────────────────
 // O blob é UMA linha (array de perfis), cada perfil com suas próprias `metas`.
@@ -22,8 +23,25 @@ function _outrosPerfis() {
     return profiles.filter(p => String(p?.id) !== ativoId);
 }
 function _sincReserva(reserva) {
+    if (!ehCompartilhada(reserva)) return;
+    // Carimba ANTES de propagar: o `lastUpdate` é o que a reconciliação usa para
+    // saber qual cópia é a mais nova quando o perfil B recarrega do servidor.
+    marcarReservaAtualizada(reserva);
     const outros = _outrosPerfis();
-    if (outros && ehCompartilhada(reserva)) sincronizarReservaEmPerfis(outros, reserva);
+    if (outros) sincronizarReservaEmPerfis(outros, reserva);
+}
+// Antes de renderizar, traz para cada reserva compartilhada do perfil ativo a
+// versão mais recente entre as cópias dos perfis (o saldo que outro perfil
+// depositou). Cada slot de quem escreveu SEMPRE persiste certo, então basta
+// puxar a cópia de maior lastUpdate. Persiste se algo mudou (heal permanente).
+function _reconciliarReservasAtivas() {
+    const profiles = _ctx.allProfilesData;
+    if (!Array.isArray(profiles) || !Array.isArray(_ctx.metas)) return;
+    let mudou = false;
+    for (const m of _ctx.metas) {
+        if (ehCompartilhada(m) && reconciliarCopiaAtiva(m, profiles)) mudou = true;
+    }
+    if (mudou) _ctx.salvarDados();
 }
 function _removerReserva(id) {
     const outros = _outrosPerfis();
@@ -1355,10 +1373,12 @@ function _renderConvitesPendentes(cont) {
             // ativo de convites → membros; como membro, ele passa a ter a própria
             // cópia — injetamos em _ctx.metas — e propagamos para os demais.
             if (aceitarConvite(m, perfilId)) {
+                // _sincReserva carimba m (lastUpdate) e propaga; clonar DEPOIS deixa
+                // a cópia do perfil ativo com o mesmo carimbo (sem reconciliar à toa).
+                _sincReserva(m);
                 if (!_ctx.metas.some(x => String(x.id) === String(m.id))) {
                     _ctx.metas.push(JSON.parse(JSON.stringify(m)));
                 }
-                _sincReserva(m);
                 _ctx.salvarDados();
                 _ctx.mostrarNotificacao('Reserva aceita! Agora ela aparece nas suas reservas.', 'success');
                 renderMetasList();
@@ -1395,6 +1415,11 @@ function _renderConvitesPendentes(cont) {
 function renderMetasList() {
     const cont = document.getElementById('listaMetas');
     if (!cont) return;
+
+    // Puxa o estado mais recente das reservas compartilhadas (saldo que outro
+    // perfil depositou) ANTES de renderizar. É o que corrige "reserva zerada no
+    // perfil B" sem depender da propagação em memória sobreviver ao refetch.
+    _reconciliarReservasAtivas();
 
     const searchVal  = (document.getElementById('metaSearchInput')?.value  || '').toLowerCase();
     const statusVal  = (document.getElementById('metaStatusFilter')?.value || '');
