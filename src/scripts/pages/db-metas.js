@@ -47,6 +47,23 @@ function _removerReserva(id) {
     const outros = _outrosPerfis();
     if (outros) removerReservaDePerfis(outros, id);
 }
+// Credita uma transação no saldo do perfil DONO daquela parte (dissolução).
+// Perfil ativo → _ctx.transacoes (o save reconstrói o slot dele). Outro perfil →
+// empurra no slot dele em _allProfilesData (persiste no save do blob inteiro).
+// Perfil não encontrado → cai no ativo, para NUNCA perder dinheiro.
+function _creditarPerfil(profileId, tx) {
+    const pid = String(profileId ?? '');
+    const ativoId = String(_ctx.perfilAtivo?.id ?? '');
+    if (!pid || pid === ativoId) { _ctx.transacoes.push(tx); return; }
+    const profiles = _ctx.allProfilesData;
+    const alvo = Array.isArray(profiles) ? profiles.find(p => String(p?.id) === pid) : null;
+    if (alvo) {
+        if (!Array.isArray(alvo.transacoes)) alvo.transacoes = [];
+        alvo.transacoes.push(tx);
+    } else {
+        _ctx.transacoes.push(tx); // fallback seguro
+    }
+}
 // Dispara o push do convite para os OUTROS membros da conta (via edge, pois o
 // cliente não pode inserir notificação para outro usuário). BEST-EFFORT: o banner
 // na aba Reservas é o caminho confiável; se o push falhar, não quebra nada.
@@ -1727,9 +1744,19 @@ function _dissolverReservaCompartilhada(meta) {
     // Rosters legados já são nomes e passam intactos pelo mapa.
     const perfis = Array.isArray(_ctx.usuarioLogado?.perfis) ? _ctx.usuarioLogado.perfis : [];
     const nomePorId = new Map(perfis.map(p => [String(p.id), String(p.nome || 'Perfil')]));
-    const rosterNomes = (meta.membros || []).map(m => nomePorId.get(String(m)) || String(m));
+    // Participantes = membros (IDS de perfil) com nome resolvido. É por perfil que
+    // o dinheiro volta na dissolução — cada um recebe a sua parte no PRÓPRIO saldo.
+    const participantes = (meta.membros || []).map(id => ({ id: String(id), nome: nomePorId.get(String(id)) || String(id) }));
 
-    const divisao = divisaoSugerida(meta.movimentos, total, rosterNomes);
+    // Sugestão proporcional ao líquido de cada PERFIL; roster {id,nome} p/ o fallback
+    // (divisão igual) também carregar o id de perfil.
+    const divisao = divisaoSugerida(meta.movimentos, total, participantes);
+    const sugPorId = new Map(divisao.map(d => [String(d.id ?? d.nome), Number(d.valor) || 0]));
+    // Linhas do diálogo = TODOS os membros (para poder redistribuir), já com a
+    // sugestão (0 para quem não contribuiu). Cada linha carrega o id do perfil.
+    const linhasBase = participantes.length
+        ? participantes.map(p => ({ profileId: p.id, nome: p.nome, valor: sugPorId.get(String(p.id)) ?? 0 }))
+        : [{ profileId: String(_ctx.perfilAtivo?.id ?? ''), nome: 'Você', valor: total }];
 
     _ctx.criarPopupDOM((popup) => {
         popup.style.cssText = 'max-width:440px; width:96%;';
@@ -1755,7 +1782,7 @@ function _dissolverReservaCompartilhada(meta) {
             totalLbl.style.color = Math.abs(soma - total) < 0.01 ? 'var(--primary)' : '#ff6b6b';
         };
 
-        (divisao.length ? divisao : [{ nome: 'Você', valor: total }]).forEach(d => {
+        linhasBase.forEach(d => {
             const linha = document.createElement('div');
             linha.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:8px;';
             const nome = document.createElement('span');
@@ -1766,7 +1793,7 @@ function _dissolverReservaCompartilhada(meta) {
             inp.style.cssText = 'width:130px; flex-shrink:0;';
             inp.value = Number(d.valor).toFixed(2);
             inp.addEventListener('input', recalc);
-            inputs.push({ nome: d.nome, input: inp });
+            inputs.push({ profileId: d.profileId, nome: d.nome, input: inp });
             linha.appendChild(nome); linha.appendChild(inp);
             linhasWrap.appendChild(linha);
         });
@@ -1783,16 +1810,17 @@ function _dissolverReservaCompartilhada(meta) {
         btnOk.className = 'btn-primary'; btnOk.type = 'button'; btnOk.style.flex = '2';
         btnOk.textContent = 'Dissolver e devolver';
         btnOk.addEventListener('click', () => {
-            const partes = inputs.map(it => ({ nome: it.nome, valor: Math.round((parseFloat(it.input.value) || 0) * 100) / 100 }));
+            const partes = inputs.map(it => ({ profileId: it.profileId, nome: it.nome, valor: Math.round((parseFloat(it.input.value) || 0) * 100) / 100 }));
             const soma = Math.round(partes.reduce((s, p) => s + p.valor, 0) * 100) / 100;
             if (Math.abs(soma - total) > 0.01) {
                 return _ctx.mostrarNotificacao(`A soma precisa dar ${formatBRL(total)} (está ${formatBRL(soma)}).`, 'error');
             }
             const dh = _ctx.agoraDataHora();
-            // Retorno por membro → o saldo recebe o total; o histórico mostra quem levou.
+            // Retorno por membro → cada parte volta ao saldo do PERFIL correspondente
+            // (não mais tudo no perfil que dissolveu). O histórico mostra quem levou.
             partes.forEach(p => {
                 if (p.valor <= 0) return;
-                _ctx.transacoes.push({
+                _creditarPerfil(p.profileId, {
                     categoria:      'retirada_reserva',
                     tipo:           'Retirada de Reserva',
                     descricao:      `Dissolução: ${p.nome} — ${meta.descricao}`.slice(0, 200),

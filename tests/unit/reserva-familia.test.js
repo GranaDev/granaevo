@@ -40,18 +40,19 @@ describe('contaCompartilhada — para quem a feature aparece', () => {
   })
 })
 
-describe('membroAtual — identidade de quem lança', () => {
-  test('usa o nome do perfil ativo', () => {
-    const m = membroAtual({ usuarioLogado: { userId: 'u1' }, perfilAtivo: { nome: 'Ana' } })
-    assert.deepEqual(m, { id: 'u1', nome: 'Ana' })
+describe('membroAtual — identidade por PERFIL (não por login)', () => {
+  test('usa o id e o nome do perfil ativo', () => {
+    const m = membroAtual({ usuarioLogado: { userId: 'u1' }, perfilAtivo: { id: 'A', nome: 'Ana' } })
+    assert.deepEqual(m, { id: 'A', nome: 'Ana' })
   })
-  test('sem perfil cai para "Você"', () => {
-    assert.equal(membroAtual({ usuarioLogado: { userId: 'u1' } }).nome, 'Você')
+  test('id de perfil numérico vira string (bate com membros/convites)', () => {
+    assert.equal(membroAtual({ perfilAtivo: { id: 5, nome: 'X' } }).id, '5')
+  })
+  test('sem perfil ativo → id null e nome "Você"', () => {
+    const m = membroAtual({ usuarioLogado: { userId: 'u1' } })
+    assert.equal(m.id, null)
+    assert.equal(m.nome, 'Você')
     assert.equal(membroAtual(null).nome, 'Você')
-  })
-  test('convidado usa effectiveUserId quando não há userId', () => {
-    const m = membroAtual({ usuarioLogado: { effectiveUserId: 'dono1' }, perfilAtivo: { nome: 'Bruno' } })
-    assert.equal(m.id, 'dono1')
   })
 })
 
@@ -150,6 +151,12 @@ describe('divisaoSugerida — C4, dividir ao dissolver', () => {
     assert.equal(d.length, 2)
     assert.equal(d.reduce((s, x) => s + x.valor, 0), 300)
     assert.equal(d[0].valor, 150)
+  })
+  test('roster {id,nome} carrega o id de perfil no fallback (p/ creditar o perfil certo)', () => {
+    const d = divisaoSugerida([], 200, [{ id: 'A', nome: 'Ana' }, { id: 'B', nome: 'Bruno' }])
+    assert.equal(d.length, 2)
+    assert.deepEqual(d.map(x => x.id).sort(), ['A', 'B'])
+    assert.equal(d.reduce((s, x) => s + x.valor, 0), 200)
   })
   test('roster vazio e sem trilha → tudo para "Você"', () => {
     const d = divisaoSugerida([], 250, [])

@@ -39,10 +39,18 @@ export function contaCompartilhada(usuarioLogado) {
     return p === 'casal' || p === 'família' || p === 'familia';
 }
 
-/** Identidade do membro logado — para atribuir aporte/retirada. */
+/**
+ * Identidade de quem lança — atribuído ao PERFIL ativo (não ao login).
+ *
+ * A reserva da família trata cada PERFIL como uma pessoa: os `membros` são ids de
+ * perfil e a dissolução devolve a cada PERFIL a sua parte. Antes o id era o do
+ * login (userId), então dois perfis do mesmo login colapsavam numa pessoa só e a
+ * dissolução mandava tudo pro perfil que dissolveu. Alinhar ao id de perfil faz a
+ * trilha e a divisão baterem com `membros` e com o crédito por perfil.
+ */
 export function membroAtual(ctx) {
     return {
-        id:   ctx?.usuarioLogado?.userId ?? ctx?.usuarioLogado?.effectiveUserId ?? null,
+        id:   ctx?.perfilAtivo?.id != null ? String(ctx.perfilAtivo.id) : null,
         nome: (ctx?.perfilAtivo?.nome || ctx?.usuarioLogado?.nome || 'Você').toString().trim().slice(0, 80) || 'Você',
     };
 }
@@ -367,9 +375,15 @@ export function divisaoSugerida(movimentos, saldoTotal, roster = []) {
         base = positivos.map(m => ({ id: m.id, nome: m.nome, valor: Math.floor((m.liquido / somaPos) * total * 100) / 100 }));
     } else {
         // Sem líquido positivo → divide igual entre o roster (ou "Você" se vazio).
-        const nomes = Array.isArray(roster) && roster.length ? roster : ['Você'];
-        const cada = Math.floor((total / nomes.length) * 100) / 100;
-        base = nomes.map(n => ({ id: null, nome: String(n).slice(0, 80) || 'Membro', valor: cada }));
+        // Roster aceita strings (nomes, legado) OU {id, nome} — o `id` de perfil,
+        // quando vem, é preservado para a dissolução creditar o perfil certo.
+        const itens = Array.isArray(roster) && roster.length ? roster : [{ id: null, nome: 'Você' }];
+        const cada = Math.floor((total / itens.length) * 100) / 100;
+        base = itens.map(r => {
+            const id   = (r && typeof r === 'object') ? (r.id ?? null) : null;
+            const nome = (r && typeof r === 'object') ? String(r.nome ?? 'Membro') : String(r);
+            return { id, nome: nome.slice(0, 80) || 'Membro', valor: cada };
+        });
     }
 
     // Ajuste de centavos: joga o resto no maior quinhão para Σ === total.
