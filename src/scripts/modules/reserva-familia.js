@@ -80,6 +80,95 @@ export function perfilParticipa(meta, perfilId) {
     return membros.map(String).includes(pid);
 }
 
+// ----------------------------------------------------------------------------
+// CONVITE → ACEITE (v2, intra-conta). O criador entra ACEITO em `meta.membros`;
+// os demais convidados ficam PENDENTES em `meta.convites` (ids de perfil) até
+// aceitarem. Como dono e convidado compartilham UM blob, o convite não precisa
+// de tabela nem edge: ele "chega" quando a pessoa entra no perfil convidado, e
+// aceitar/recusar é um save normal. Enquanto pendente, o perfil NÃO participa
+// (perfilParticipa=false → não contribui), só vê o convite para decidir.
+// ----------------------------------------------------------------------------
+
+/** Ids de perfil convidados que ainda não aceitaram. */
+export function convitesPendentes(meta) {
+    if (!ehCompartilhada(meta) || !Array.isArray(meta.convites)) return [];
+    return meta.convites.map(String).filter(Boolean);
+}
+
+/** Este perfil tem um convite pendente nesta reserva? */
+export function temConvitePendente(meta, perfilId) {
+    const pid = String(perfilId ?? '');
+    if (!pid) return false;
+    return convitesPendentes(meta).includes(pid);
+}
+
+/** Quantas reservas têm convite pendente para este perfil (para badge). */
+export function contarConvitesPendentes(metas, perfilId) {
+    if (!Array.isArray(metas)) return 0;
+    return metas.reduce((n, m) => n + (temConvitePendente(m, perfilId) ? 1 : 0), 0);
+}
+
+/**
+ * Aceitar: move o perfil de `convites` → `membros`. MUTA a meta. true se mudou.
+ * Idempotente: aceitar de novo (já membro) não duplica.
+ */
+export function aceitarConvite(meta, perfilId) {
+    const pid = String(perfilId ?? '');
+    if (!pid || !ehCompartilhada(meta) || !Array.isArray(meta.convites)) return false;
+    const idx = meta.convites.map(String).indexOf(pid);
+    if (idx === -1) return false;
+    meta.convites.splice(idx, 1);
+    if (!Array.isArray(meta.membros)) meta.membros = [];
+    if (!meta.membros.map(String).includes(pid)) meta.membros.push(pid);
+    return true;
+}
+
+/** Recusar: remove o perfil de `convites` (não vira membro). MUTA. true se mudou. */
+export function recusarConvite(meta, perfilId) {
+    const pid = String(perfilId ?? '');
+    if (!pid || !Array.isArray(meta?.convites)) return false;
+    const idx = meta.convites.map(String).indexOf(pid);
+    if (idx === -1) return false;
+    meta.convites.splice(idx, 1);
+    return true;
+}
+
+/**
+ * Monta `{ membros, convites }` a partir do roster escolhido na criação/edição.
+ * O criador entra ACEITO; os demais viram PENDENTES — exceto quem JÁ era membro
+ * (edição não re-convida quem já aceitou). Puro.
+ *
+ * @param rosterIds  ids de perfil marcados no formulário (inclui o criador)
+ * @param criadorId  id do perfil ativo que está criando/editando
+ * @param metaAtual  a meta sendo editada (para preservar membros já aceitos)
+ */
+export function montarRosterConvite(rosterIds, criadorId, metaAtual = {}) {
+    const criador = String(criadorId ?? '');
+    // Filtra nullish ANTES de String() — senão null/undefined viram 'null'/'undefined'.
+    const roster  = [...new Set(
+        (Array.isArray(rosterIds) ? rosterIds : [])
+            .filter(v => v != null && v !== '')
+            .map(String),
+    )];
+    const jaMembros  = new Set((Array.isArray(metaAtual?.membros)  ? metaAtual.membros  : []).map(String));
+    const jaConvites = new Set((Array.isArray(metaAtual?.convites) ? metaAtual.convites : []).map(String));
+    const membros = [];
+    const convites = [];
+    if (criador) membros.push(criador);
+    for (const id of roster) {
+        if (id === criador) continue;
+        if (jaMembros.has(id)) membros.push(id);   // já aceitou antes → continua membro
+        else convites.push(id);                     // novo no roster → convite pendente
+    }
+    // Preserva convites pendentes que NÃO estavam no roster: o form de EDIÇÃO
+    // lista só membros (db-metas.js:575), então não devemos apagar convites que
+    // ele nem mostra. Sem isto, qualquer edição zerava os convites em voo.
+    for (const id of jaConvites) {
+        if (id !== criador && !membros.includes(id) && !convites.includes(id)) convites.push(id);
+    }
+    return { membros: membros.slice(0, 12), convites: convites.slice(0, 12) };
+}
+
 /**
  * Registra um movimento de atribuição em `meta.movimentos` (MUTA a meta).
  * Chamado junto de guardar/retirar quando a caixinha é compartilhada — o

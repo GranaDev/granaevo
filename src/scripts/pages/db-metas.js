@@ -5,7 +5,8 @@ import {
 import {
     contaCompartilhada, ehCompartilhada, membroAtual, registrarMovimento,
     porMembro, divisaoSugerida, perfilParticipa,
-} from '../modules/reserva-familia.js?v=3';
+    montarRosterConvite, temConvitePendente, aceitarConvite, recusarConvite,
+} from '../modules/reserva-familia.js?v=4';
 
 let _ctx = null;
 let _metaLinePeriod = 'mensal'; // mensal | bimestral | trimestral | semestral | anual
@@ -1030,7 +1031,11 @@ function abrirMetaForm(editId = null) {
                 meta.valorAporte      = valorAporte;
                 meta.compartilhada    = compartilhada;
                 if (compartilhada) {
-                    meta.membros = rosterMembros.slice(0, 12);
+                    // O criador continua membro; perfis novos no roster viram
+                    // convites pendentes (quem já era membro segue aceito).
+                    const { membros, convites } = montarRosterConvite(rosterMembros, _ctx.perfilAtivo?.id, meta);
+                    meta.membros  = membros;
+                    meta.convites = convites;
                     if (!Array.isArray(meta.movimentos)) meta.movimentos = [];
                 }
 
@@ -1046,8 +1051,12 @@ function abrirMetaForm(editId = null) {
                     rendimentoPeriodo, aporteRecorrente, valorAporte,
                 };
                 if (compartilhada) {
+                    // Criador entra ACEITO; os demais do roster viram convites
+                    // pendentes — cada um decide aceitar/recusar no próprio perfil.
+                    const { membros, convites } = montarRosterConvite(rosterMembros, _ctx.perfilAtivo?.id, {});
                     novaMeta.compartilhada = true;
-                    novaMeta.membros = rosterMembros.slice(0, 12);
+                    novaMeta.membros  = membros;
+                    novaMeta.convites = convites;
                     novaMeta.movimentos = [];
                 }
                 _ctx.metas.push(novaMeta);
@@ -1246,6 +1255,81 @@ function _criarJarro(percentual, uid) {
 // Best-effort de ponta a ponta: se o chunk não baixar ou a query falhar, o slot
 // fica vazio e a tela de Reservas segue normal. Uma reserva de família não pode
 // derrubar a tela das metas individuais.
+// Renderiza no topo da lista os convites de reserva PENDENTES para o perfil
+// ativo, com Aceitar/Recusar. Enquanto pendente, o perfil não participa (não vê
+// o card normal nem contribui). Aceitar move o perfil p/ membros e re-renderiza;
+// recusar remove o convite. Ambos são um save normal (blob compartilhado).
+// Retorna quantos convites foram renderizados.
+function _renderConvitesPendentes(cont) {
+    const perfilId = String(_ctx.perfilAtivo?.id ?? '');
+    if (!perfilId) return 0;
+    const pendentes = _ctx.metas.filter(m => temConvitePendente(m, perfilId));
+    if (pendentes.length === 0) return 0;
+
+    // Nome do criador (membros[0]) para "Fulano quer criar… com você".
+    const nomePorId = new Map(
+        (Array.isArray(_ctx.usuarioLogado?.perfis) ? _ctx.usuarioLogado.perfis : [])
+            .map(p => [String(p.id), _ctx._sanitizeText(p.nome || 'Perfil')]),
+    );
+
+    pendentes.forEach(m => {
+        const criadorId   = String((Array.isArray(m.membros) && m.membros[0]) || '');
+        const criadorNome = nomePorId.get(criadorId) || 'Alguém';
+        const nomeReserva = _ctx._sanitizeText(m.descricao || 'Reserva');
+
+        const card = document.createElement('div');
+        card.className = 'meta-item';
+        card.style.cssText = 'border:1px solid rgba(67,160,71,0.35); background:rgba(67,160,71,0.06); display:block;';
+
+        const titulo = document.createElement('div');
+        titulo.style.cssText = 'font-size:0.9rem; font-weight:700; color:var(--text-primary); margin-bottom:4px;';
+        titulo.textContent = '👥 Convite de reserva compartilhada';
+
+        const corpo = document.createElement('div');
+        corpo.style.cssText = 'font-size:0.85rem; color:var(--text-secondary); line-height:1.5; margin-bottom:12px;';
+        // textContent (nunca innerHTML) — nome vem do usuário.
+        corpo.textContent = `${criadorNome} quer criar a reserva «${nomeReserva}» com você. Ao aceitar, você passa a ver e movimentar essa reserva.`;
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; gap:10px;';
+
+        const btnAceitar = document.createElement('button');
+        btnAceitar.type = 'button';
+        btnAceitar.className = 'btn-primary';
+        btnAceitar.style.flex = '1';
+        btnAceitar.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Aceitar';
+        btnAceitar.addEventListener('click', () => {
+            if (aceitarConvite(m, perfilId)) {
+                _ctx.salvarDados();
+                _ctx.mostrarNotificacao('Reserva aceita! Agora ela aparece nas suas reservas.', 'success');
+                renderMetasList();
+                _ctx.atualizarTudo?.();
+            }
+        });
+
+        const btnRecusar = document.createElement('button');
+        btnRecusar.type = 'button';
+        btnRecusar.className = 'btn-cancelar';
+        btnRecusar.style.flex = '1';
+        btnRecusar.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i> Recusar';
+        btnRecusar.addEventListener('click', () => {
+            if (recusarConvite(m, perfilId)) {
+                _ctx.salvarDados();
+                _ctx.mostrarNotificacao('Convite recusado.', 'info');
+                renderMetasList();
+            }
+        });
+
+        row.appendChild(btnAceitar);
+        row.appendChild(btnRecusar);
+        card.appendChild(titulo);
+        card.appendChild(corpo);
+        card.appendChild(row);
+        cont.appendChild(card);
+    });
+    return pendentes.length;
+}
+
 function renderMetasList() {
     const cont = document.getElementById('listaMetas');
     if (!cont) return;
@@ -1254,6 +1338,9 @@ function renderMetasList() {
     const statusVal  = (document.getElementById('metaStatusFilter')?.value || '');
 
     cont.innerHTML = '';
+
+    // Convites de reserva pendentes para o perfil ativo aparecem no topo.
+    const numConvites = _renderConvitesPendentes(cont);
 
     // Reserva compartilhada (item 13): NÃO é mais um card à parte. Reconstruída
     // como caixinha normal no blob (meta.compartilhada) — aparece na lista com
@@ -1298,10 +1385,13 @@ function renderMetasList() {
     });
 
     if (filtradas.length === 0) {
-        const p       = document.createElement('p');
-        p.className   = 'empty-state';
-        p.textContent = 'Nenhuma reserva encontrada.';
-        cont.appendChild(p);
+        // Se há convite pendente no topo, não contradiz com "nenhuma encontrada".
+        if (numConvites === 0) {
+            const p       = document.createElement('p');
+            p.className   = 'empty-state';
+            p.textContent = 'Nenhuma reserva encontrada.';
+            cont.appendChild(p);
+        }
         return;
     }
 

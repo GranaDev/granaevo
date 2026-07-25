@@ -13,6 +13,8 @@ import assert from 'node:assert/strict'
 import {
   porMembro, progressoDe, contaCompartilhada, membroAtual, ehCompartilhada,
   registrarMovimento, divisaoSugerida, perfilParticipa,
+  convitesPendentes, temConvitePendente, contarConvitesPendentes,
+  aceitarConvite, recusarConvite, montarRosterConvite,
 } from '../../src/scripts/modules/reserva-familia.js'
 
 const mov = (tipo, valor, id, nome) => ({ memberId: id, memberNome: nome, tipo, valor })
@@ -210,5 +212,92 @@ describe('perfilParticipa — visibilidade por perfil (A1)', () => {
     const m = { compartilhada: true, membros: [UUID_A] }
     assert.equal(perfilParticipa(m, null), true)
     assert.equal(perfilParticipa(m, ''), true)
+  })
+})
+
+// ── Convite → aceite (v2, intra-conta) ──────────────────────────────────────
+const compart = (extra = {}) => ({ compartilhada: true, membros: ['A'], convites: [], ...extra })
+
+describe('convitesPendentes / temConvitePendente', () => {
+  test('lista os ids pendentes; vazio quando não há', () => {
+    assert.deepEqual(convitesPendentes(compart({ convites: ['B', 'C'] })), ['B', 'C'])
+    assert.deepEqual(convitesPendentes(compart()), [])
+  })
+  test('não-compartilhada → sem convites', () => {
+    assert.deepEqual(convitesPendentes({ convites: ['B'] }), [])
+  })
+  test('temConvitePendente casa por string', () => {
+    const m = compart({ convites: ['B', 5] })
+    assert.equal(temConvitePendente(m, 'B'), true)
+    assert.equal(temConvitePendente(m, 5), true)
+    assert.equal(temConvitePendente(m, '5'), true)
+    assert.equal(temConvitePendente(m, 'A'), false)   // A é membro, não convidado
+    assert.equal(temConvitePendente(m, ''), false)
+  })
+  test('contarConvitesPendentes soma por perfil', () => {
+    const metas = [compart({ convites: ['B'] }), compart({ convites: ['B', 'C'] }), { compartilhada: false }]
+    assert.equal(contarConvitesPendentes(metas, 'B'), 2)
+    assert.equal(contarConvitesPendentes(metas, 'C'), 1)
+    assert.equal(contarConvitesPendentes(metas, 'Z'), 0)
+  })
+})
+
+describe('aceitarConvite', () => {
+  test('move de convites → membros; idempotente', () => {
+    const m = compart({ convites: ['B'] })
+    assert.equal(aceitarConvite(m, 'B'), true)
+    assert.deepEqual(m.convites, [])
+    assert.deepEqual(m.membros, ['A', 'B'])
+    // aceitar de novo (não é mais convidado) → false, sem duplicar
+    assert.equal(aceitarConvite(m, 'B'), false)
+    assert.deepEqual(m.membros, ['A', 'B'])
+  })
+  test('perfil não convidado → false, nada muda', () => {
+    const m = compart({ convites: ['B'] })
+    assert.equal(aceitarConvite(m, 'Z'), false)
+    assert.deepEqual(m.convites, ['B'])
+    assert.deepEqual(m.membros, ['A'])
+  })
+})
+
+describe('recusarConvite', () => {
+  test('remove de convites, NÃO vira membro', () => {
+    const m = compart({ convites: ['B', 'C'] })
+    assert.equal(recusarConvite(m, 'B'), true)
+    assert.deepEqual(m.convites, ['C'])
+    assert.deepEqual(m.membros, ['A'])
+  })
+  test('id inexistente → false', () => {
+    const m = compart({ convites: ['B'] })
+    assert.equal(recusarConvite(m, 'Z'), false)
+  })
+})
+
+describe('montarRosterConvite — criador aceito, demais pendentes', () => {
+  test('criação: criador em membros, resto em convites', () => {
+    const r = montarRosterConvite(['A', 'B', 'C'], 'A', {})
+    assert.deepEqual(r.membros, ['A'])
+    assert.deepEqual(r.convites, ['B', 'C'])
+  })
+  test('criador sempre entra mesmo se ausente do roster', () => {
+    const r = montarRosterConvite(['B'], 'A', {})
+    assert.deepEqual(r.membros, ['A'])
+    assert.deepEqual(r.convites, ['B'])
+  })
+  test('edição: quem já era membro continua membro (não re-convida)', () => {
+    const r = montarRosterConvite(['A', 'B', 'C'], 'A', { membros: ['A', 'B'] })
+    assert.deepEqual(r.membros, ['A', 'B'])   // B já aceitou → segue membro
+    assert.deepEqual(r.convites, ['C'])       // C é o novo → pendente
+  })
+  test('dedup e ignora vazios; string-normaliza', () => {
+    const r = montarRosterConvite(['A', 'A', 5, '', null, 5], 'A', {})
+    assert.deepEqual(r.membros, ['A'])
+    assert.deepEqual(r.convites, ['5'])
+  })
+  test('edição preserva convites pendentes que o form não mostra (não zera em voo)', () => {
+    // roster do form = só membros (A, B); C está pendente e não aparece no form.
+    const r = montarRosterConvite(['A', 'B'], 'A', { membros: ['A', 'B'], convites: ['C'] })
+    assert.deepEqual(r.membros, ['A', 'B'])
+    assert.deepEqual(r.convites, ['C'])   // C continua pendente, não sumiu
   })
 })
