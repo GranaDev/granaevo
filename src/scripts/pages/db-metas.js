@@ -5,10 +5,11 @@ import {
 import {
     contaCompartilhada, ehCompartilhada, membroAtual, registrarMovimento,
     porMembro, divisaoSugerida, perfilParticipa,
-    montarRosterConvite, aceitarConvite, recusarConvite,
+    montarRosterConvite,
     sincronizarReservaEmPerfis, removerReservaDePerfis,
     marcarReservaAtualizada, reconciliarCopiaAtiva,
-} from '../modules/reserva-familia.js?v=6';
+    planoDissolucao, estaDissolvida, parteDissolucao, marcarReclamado, dissolucaoCompleta,
+} from '../modules/reserva-familia.js?v=7';
 
 // ── Reserva compartilhada v2: propagação entre perfis ───────────────────────
 // O blob é UMA linha (array de perfis), cada perfil com suas próprias `metas`.
@@ -51,18 +52,42 @@ function _removerReserva(id) {
 // Perfil ativo → _ctx.transacoes (o save reconstrói o slot dele). Outro perfil →
 // empurra no slot dele em _allProfilesData (persiste no save do blob inteiro).
 // Perfil não encontrado → cai no ativo, para NUNCA perder dinheiro.
-function _creditarPerfil(profileId, tx) {
-    const pid = String(profileId ?? '');
-    const ativoId = String(_ctx.perfilAtivo?.id ?? '');
-    if (!pid || pid === ativoId) { _ctx.transacoes.push(tx); return; }
-    const profiles = _ctx.allProfilesData;
-    const alvo = Array.isArray(profiles) ? profiles.find(p => String(p?.id) === pid) : null;
-    if (alvo) {
-        if (!Array.isArray(alvo.transacoes)) alvo.transacoes = [];
-        alvo.transacoes.push(tx);
-    } else {
-        _ctx.transacoes.push(tx); // fallback seguro
+// Credita no saldo do PERFIL ATIVO a sua parte das reservas em dissolução que
+// ainda não reclamou (auto-crédito). Cada perfil faz isso no PRÓPRIO slot ao abrir
+// as Reservas — nunca escreve no slot de outro perfil (frágil). A reconciliação
+// leva o `claimed` de volta aos demais. Reservas totalmente reclamadas somem.
+function _processarDissolucoesPendentes() {
+    if (!Array.isArray(_ctx.metas)) return;
+    const pid = String(_ctx.perfilAtivo?.id ?? '');
+    if (!pid) return;
+    let mudou = false;
+    for (const m of _ctx.metas) {
+        if (!estaDissolvida(m)) continue;
+        const v = parteDissolucao(m, pid);
+        if (v > 0) {
+            const dh = _ctx.agoraDataHora();
+            _ctx.transacoes.push({
+                categoria:      'retirada_reserva',
+                tipo:           'Retirada de Reserva',
+                descricao:      `Dissolução: ${m.descricao}`.slice(0, 200),
+                valor:          v,
+                data:           dh.data,
+                hora:           dh.hora,
+                metaId:         null,
+                motivoRetirada: 'Dissolução da reserva',
+            });
+            marcarReclamado(m, pid);
+            marcarReservaAtualizada(m);
+            mudou = true;
+            _ctx.mostrarNotificacao(`Você recebeu ${formatBRL(v)} da dissolução de "${m.descricao}".`, 'success');
+        }
     }
+    // Some do PRÓPRIO view quando todos já reclamaram (nunca antes — os outros
+    // ainda precisam ver o plano para reclamar a parte deles).
+    const antes = _ctx.metas.length;
+    _ctx.metas = _ctx.metas.filter(m => !dissolucaoCompleta(m));
+    if (_ctx.metas.length !== antes) mudou = true;
+    if (mudou) _ctx.salvarDados();
 }
 // Dispara o push do convite para os OUTROS membros da conta (via edge, pois o
 // cliente não pode inserir notificação para outro usuário). BEST-EFFORT: o banner
@@ -85,16 +110,34 @@ async function _notificarConviteReserva(reservaId, reservaNome) {
 // convidado não guarda cópia, varremos as cópias dos MEMBROS (nos slots dos
 // outros perfis) procurando o id do perfil ativo em `convites`. Retorna as
 // referências canônicas (para aceitar/recusar agir direto nelas).
+// Recusar é um "dispensar" LOCAL (por perfil): guardamos o id no localStorage e o
+// banner some. Não escreve no slot de outro perfil (frágil) nem cria cópia (que
+// poluiria o total). O convite fica em `convites` do criador, mas este perfil não
+// é mais incomodado. (Trocar de aparelho pode reexibir — aceitável p/ um dispensar.)
+function _dismissKey() { return 'ge_convite_dismiss_' + (_ctx.perfilAtivo?.id || 'anon'); }
+function _getConvitesDispensados() {
+    try { return new Set(JSON.parse(localStorage.getItem(_dismissKey()) || '[]').map(String)); } catch { return new Set(); }
+}
+function _dispensarConvite(id) {
+    try { const s = _getConvitesDispensados(); s.add(String(id)); localStorage.setItem(_dismissKey(), JSON.stringify([...s])); } catch { /* ls bloqueado */ }
+}
+
 function _convitesReservaPendentes() {
     const profiles = _ctx.allProfilesData;
     const pid = String(_ctx.perfilAtivo?.id ?? '');
     if (!Array.isArray(profiles) || !pid) return [];
+    // Já tenho a reserva no meu slot? Então já aceitei — não mostrar convite (o
+    // slot do outro perfil pode ainda listar meu id em `convites`, stale, até a
+    // reconciliação passar).
+    const jaTenho = new Set((Array.isArray(_ctx.metas) ? _ctx.metas : []).map(m => String(m?.id)));
+    const dispensados = _getConvitesDispensados();
     const vistos = new Set();
     const out = [];
     for (const p of profiles) {
         for (const m of (Array.isArray(p?.metas) ? p.metas : [])) {
-            if (m && m.compartilhada === true && Array.isArray(m.convites) &&
-                m.convites.map(String).includes(pid) && !vistos.has(String(m.id))) {
+            if (m && m.compartilhada === true && !estaDissolvida(m) && Array.isArray(m.convites) &&
+                m.convites.map(String).includes(pid) &&
+                !jaTenho.has(String(m.id)) && !dispensados.has(String(m.id)) && !vistos.has(String(m.id))) {
                 vistos.add(String(m.id));
                 out.push(m);
             }
@@ -1409,21 +1452,20 @@ function _renderConvitesPendentes(cont) {
         btnAceitar.style.flex = '1';
         btnAceitar.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Aceitar';
         btnAceitar.addEventListener('click', () => {
-            // m é a cópia canônica (no slot de um membro). Aceitar move o perfil
-            // ativo de convites → membros; como membro, ele passa a ter a própria
-            // cópia — injetamos em _ctx.metas — e propagamos para os demais.
-            if (aceitarConvite(m, perfilId)) {
-                // _sincReserva carimba m (lastUpdate) e propaga; clonar DEPOIS deixa
-                // a cópia do perfil ativo com o mesmo carimbo (sem reconciliar à toa).
-                _sincReserva(m);
-                if (!_ctx.metas.some(x => String(x.id) === String(m.id))) {
-                    _ctx.metas.push(JSON.parse(JSON.stringify(m)));
-                }
-                _ctx.salvarDados();
-                _ctx.mostrarNotificacao('Reserva aceita! Agora ela aparece nas suas reservas.', 'success');
-                renderMetasList();
-                _ctx.atualizarTudo?.();
-            }
+            // Escreve SÓ no próprio slot (escrever no slot do outro perfil é frágil
+            // neste app): clona a reserva, entra em `membros`, sai de `convites`,
+            // carimba. A reconciliação (lastUpdate) leva a mudança aos demais.
+            if (_ctx.metas.some(x => String(x.id) === String(m.id))) { renderMetasList(); return; }
+            const minha = JSON.parse(JSON.stringify(m));
+            minha.convites = (Array.isArray(minha.convites) ? minha.convites : []).map(String).filter(x => x !== perfilId);
+            minha.membros  = Array.isArray(minha.membros) ? minha.membros.map(String) : [];
+            if (!minha.membros.includes(perfilId)) minha.membros.push(perfilId);
+            marcarReservaAtualizada(minha);
+            _ctx.metas.push(minha);
+            _ctx.salvarDados();
+            _ctx.mostrarNotificacao('Reserva aceita! Agora ela aparece nas suas reservas.', 'success');
+            renderMetasList();
+            _ctx.atualizarTudo?.();
         });
 
         const btnRecusar = document.createElement('button');
@@ -1432,14 +1474,10 @@ function _renderConvitesPendentes(cont) {
         btnRecusar.style.flex = '1';
         btnRecusar.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i> Recusar';
         btnRecusar.addEventListener('click', () => {
-            // O convidado não tem cópia própria: recusar só tira o id de `convites`
-            // na cópia canônica e propaga para os membros. Nada a remover daqui.
-            if (recusarConvite(m, perfilId)) {
-                _sincReserva(m);
-                _ctx.salvarDados();
-                _ctx.mostrarNotificacao('Convite recusado.', 'info');
-                renderMetasList();
-            }
+            // Dispensar LOCAL — sem escrever no slot do outro perfil nem criar cópia.
+            _dispensarConvite(m.id);
+            _ctx.mostrarNotificacao('Convite recusado.', 'info');
+            renderMetasList();
         });
 
         row.appendChild(btnAceitar);
@@ -1460,6 +1498,8 @@ function renderMetasList() {
     // perfil depositou) ANTES de renderizar. É o que corrige "reserva zerada no
     // perfil B" sem depender da propagação em memória sobreviver ao refetch.
     _reconciliarReservasAtivas();
+    // Credita a este perfil a sua parte de reservas em dissolução (auto-crédito).
+    _processarDissolucoesPendentes();
 
     const searchVal  = (document.getElementById('metaSearchInput')?.value  || '').toLowerCase();
     const statusVal  = (document.getElementById('metaStatusFilter')?.value || '');
@@ -1497,6 +1537,9 @@ function renderMetasList() {
     }
 
     const filtradas = _ctx.metas.filter(m => {
+        // Reserva em dissolução não aparece na lista (está sendo devolvida; o
+        // crédito de cada um já roda em _processarDissolucoesPendentes).
+        if (estaDissolvida(m)) return false;
         // Reserva compartilhada só aparece para os perfis que participam dela.
         // (Organização de tela — ver perfilParticipa em reserva-familia.js.)
         if (!perfilParticipa(m, _ctx.perfilAtivo?.id)) return false;
@@ -1815,34 +1858,30 @@ function _dissolverReservaCompartilhada(meta) {
             if (Math.abs(soma - total) > 0.01) {
                 return _ctx.mostrarNotificacao(`A soma precisa dar ${formatBRL(total)} (está ${formatBRL(soma)}).`, 'error');
             }
-            const dh = _ctx.agoraDataHora();
-            // Retorno por membro → cada parte volta ao saldo do PERFIL correspondente
-            // (não mais tudo no perfil que dissolveu). O histórico mostra quem levou.
-            partes.forEach(p => {
-                if (p.valor <= 0) return;
-                _creditarPerfil(p.profileId, {
-                    categoria:      'retirada_reserva',
-                    tipo:           'Retirada de Reserva',
-                    descricao:      `Dissolução: ${p.nome} — ${meta.descricao}`.slice(0, 200),
-                    valor:          p.valor,
-                    data:           dh.data,
-                    hora:           dh.hora,
-                    metaId:         null,
-                    motivoRetirada: 'Dissolução da reserva',
-                });
-            });
-            _ctx.metas = _ctx.metas.filter(m => m.id !== meta.id);
-            // Dissolvida → some das cópias de todos os outros perfis também.
-            _removerReserva(meta.id);
+            // AUTO-CRÉDITO (sem escrever no slot de outro perfil, que é frágil):
+            // grava o PLANO na reserva e zera o saldo dela. Cada perfil credita a
+            // SUA parte ao abrir as Reservas (_processarDissolucoesPendentes) e a
+            // reconciliação leva o plano/claimed a todos. Quando todos reclamam, some.
+            meta.dissolvida = planoDissolucao(partes);
+            meta.saved = 0;                       // já não é "reservado" — está sendo devolvido
+            marcarReservaAtualizada(meta);
+            // Orfaniza os aportes DESTE perfil ligados à reserva (saldo já conferido).
             _ctx.transacoes = _ctx.transacoes.map(t =>
                 (t.metaId && String(t.metaId) === String(meta.id)) ? Object.assign({}, t, { metaId: null }) : t);
             if (String(_ctx.metaSelecionadaId) === String(meta.id)) _ctx.metaSelecionadaId = null;
-            _ctx.salvarDados();
+            _ctx.fecharPopup();
+            // Credita a parte do próprio perfil AGORA + salva (roda dentro do render).
             _ctx.renderMetasList();
             _ctx.atualizarTudo();
             _ctx.atualizarHeaderReservas();
-            _ctx.fecharPopup();
-            _ctx.mostrarNotificacao(`Reserva dissolvida. ${formatBRL(total)} voltaram ao saldo.`, 'success');
+            const minhaParte = partes.find(p => String(p.profileId) === String(_ctx.perfilAtivo?.id));
+            const outros = partes.filter(p => p.valor > 0 && String(p.profileId) !== String(_ctx.perfilAtivo?.id)).length;
+            _ctx.mostrarNotificacao(
+                outros > 0
+                    ? `Reserva em dissolução. ${minhaParte && minhaParte.valor > 0 ? 'Sua parte voltou ao seu saldo; ' : ''}os outros recebem a parte deles ao abrir as Reservas.`
+                    : `Reserva dissolvida. ${formatBRL(total)} voltaram ao saldo.`,
+                'success',
+            );
         });
 
         rowBtns.appendChild(btnCancel); rowBtns.appendChild(btnOk);

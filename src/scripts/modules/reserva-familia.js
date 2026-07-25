@@ -223,8 +223,54 @@ const CAMPOS_SINC = [
     'saved', 'monthly', 'historicoRetiradas', 'objetivo', 'descricao', 'prazo',
     'tipoRendimento', 'taxaJuros', 'cdiPct', 'rendimentoPeriodo', 'aporteRecorrente',
     'valorAporte', 'lastRendimento', 'membros', 'movimentos', 'convites',
-    'tipoReserva', 'origemExistente', 'lastUpdate',
+    'tipoReserva', 'origemExistente', 'lastUpdate', 'dissolvida',
 ];
+
+// ── Dissolução por AUTO-CRÉDITO (sem escrita cross-perfil) ──────────────────
+// Escrever no slot de outro perfil é frágil neste app; o que funciona é cada
+// perfil mexer só no PRÓPRIO slot e a reconciliação (lastUpdate) propagar. Então
+// a dissolução NÃO credita os outros: grava um PLANO na reserva
+// (`meta.dissolvida = { partes:{profileId:valor}, claimed:[profileId] }`) que a
+// reconciliação leva a todos; cada perfil credita a SUA parte no próprio saldo ao
+// abrir, e marca-se como reclamado. Quando todos reclamam, a reserva some.
+
+/** Monta o plano a partir de [{profileId, valor}]. Ignora <= 0. */
+export function planoDissolucao(partes) {
+    const p = {};
+    for (const it of (Array.isArray(partes) ? partes : [])) {
+        const pid = String(it?.profileId ?? '');
+        const v = Number(it?.valor);
+        if (pid && isFinite(v) && v > 0) p[pid] = Math.round(v * 100) / 100;
+    }
+    return { partes: p, claimed: [] };
+}
+/** A reserva está em dissolução? */
+export function estaDissolvida(meta) {
+    return !!(meta && meta.dissolvida && typeof meta.dissolvida === 'object');
+}
+/** Valor que ESTE perfil ainda tem a receber da dissolução (0 se já reclamou / sem parte). */
+export function parteDissolucao(meta, perfilId) {
+    const pid = String(perfilId ?? '');
+    if (!estaDissolvida(meta) || !pid) return 0;
+    const claimed = Array.isArray(meta.dissolvida.claimed) ? meta.dissolvida.claimed.map(String) : [];
+    if (claimed.includes(pid)) return 0;
+    const v = Number(meta.dissolvida.partes?.[pid]);
+    return isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : 0;
+}
+/** Marca este perfil como já creditado. MUTA. */
+export function marcarReclamado(meta, perfilId) {
+    const pid = String(perfilId ?? '');
+    if (!estaDissolvida(meta) || !pid) return;
+    if (!Array.isArray(meta.dissolvida.claimed)) meta.dissolvida.claimed = [];
+    if (!meta.dissolvida.claimed.map(String).includes(pid)) meta.dissolvida.claimed.push(pid);
+}
+/** Todos os quinhões já foram reclamados? (aí a reserva pode sumir de vez.) */
+export function dissolucaoCompleta(meta) {
+    if (!estaDissolvida(meta)) return false;
+    const partes = Object.keys(meta.dissolvida.partes || {});
+    const claimed = new Set((Array.isArray(meta.dissolvida.claimed) ? meta.dissolvida.claimed : []).map(String));
+    return partes.length > 0 && partes.every(k => claimed.has(String(k)));
+}
 
 /** Carimba a reserva como atualizada AGORA (para reconciliar entre cópias). MUTA. */
 export function marcarReservaAtualizada(meta) {

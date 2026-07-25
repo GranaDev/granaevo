@@ -408,3 +408,38 @@ describe('reconciliação de cópias por lastUpdate', () => {
     assert.equal(reconciliarCopiaAtiva(m, [{ id: 'A', metas: [{ id: 'r1', saved: 999, lastUpdate: 'x' }] }]), false)
   })
 })
+
+// ── Dissolução por auto-crédito (cada perfil credita a si mesmo) ──────────────
+import {
+  planoDissolucao, estaDissolvida, parteDissolucao, marcarReclamado, dissolucaoCompleta,
+} from '../../src/scripts/modules/reserva-familia.js'
+
+describe('dissolução por auto-crédito', () => {
+  test('planoDissolucao monta {partes,claimed:[]} e ignora <=0', () => {
+    const p = planoDissolucao([{ profileId: 'A', valor: 100 }, { profileId: 'B', valor: 0 }, { profileId: 'C', valor: 50 }])
+    assert.deepEqual(p, { partes: { A: 100, C: 50 }, claimed: [] })
+  })
+  test('parteDissolucao devolve o valor não reclamado; 0 depois de reclamar', () => {
+    const meta = { dissolvida: { partes: { A: 100, B: 50 }, claimed: [] } }
+    assert.equal(estaDissolvida(meta), true)
+    assert.equal(parteDissolucao(meta, 'A'), 100)
+    assert.equal(parteDissolucao(meta, 'B'), 50)
+    marcarReclamado(meta, 'A')
+    assert.equal(parteDissolucao(meta, 'A'), 0)   // A já pegou
+    assert.equal(parteDissolucao(meta, 'B'), 50)  // B ainda não
+    assert.equal(parteDissolucao(meta, 'Z'), 0)   // Z não tem parte
+  })
+  test('dissolucaoCompleta só quando todos reclamaram', () => {
+    const meta = { dissolvida: { partes: { A: 100, B: 50 }, claimed: [] } }
+    assert.equal(dissolucaoCompleta(meta), false)
+    marcarReclamado(meta, 'A')
+    assert.equal(dissolucaoCompleta(meta), false)
+    marcarReclamado(meta, 'B')
+    assert.equal(dissolucaoCompleta(meta), true)
+  })
+  test('reserva sem dissolvida → helpers seguros', () => {
+    assert.equal(estaDissolvida({ id: 'r1' }), false)
+    assert.equal(parteDissolucao({ id: 'r1' }, 'A'), 0)
+    assert.equal(dissolucaoCompleta({ id: 'r1' }), false)
+  })
+})

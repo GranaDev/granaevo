@@ -1064,6 +1064,8 @@ const _ALLOWED_KEYS = Object.freeze({
         'convites',
         // Carimbo p/ reconciliar cópias da reserva entre perfis (qual é a mais nova).
         'lastUpdate',
+        // Plano de dissolução por auto-crédito: { partes:{perfilId:valor}, claimed:[] }.
+        'dissolvida',
         // `tipoReserva` (caixinha/poupança/CDB/…) e `origemExistente` eram
         // gravados por db-metas e DESCARTADOS aqui — o formulário perguntava o
         // tipo, validava a resposta e jogava fora. Detectado por
