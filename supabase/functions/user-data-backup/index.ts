@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { buildRestoredBlob } from './_restore-core.js'
 
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
 // com fallback na service_role legada — rollback = redeploy do commit anterior
@@ -202,15 +203,110 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Snapshot não encontrado' }, 404, cors)
   }
 
-  // Restaura: sobrescreve user_data com o blob do snapshot.
-  //
-  // `.select('user_id')` NÃO é decoração: sem ele, um UPDATE que não encontra
-  // linha alguma retorna SEM erro, e esta função respondia `success: true` para
-  // uma restauração que não gravou nada. O usuário via "Backup restaurado!",
-  // a página recarregava igual, e ele concluía que perdeu os dados de vez —
-  // no exato momento em que mais precisa confiar na ferramenta.
-  // Agora a resposta só é de sucesso se uma linha REALMENTE foi escrita.
   const now = new Date().toISOString()
+
+  // ── Restore POR PERFIL (RF-09) ──────────────────────────────────────────────
+  // Quando o cliente manda `profile_id`, restauramos SÓ o slot daquele perfil: o
+  // núcleo lê o blob ATUAL + o do snapshot (decifrando ambos), troca somente esse
+  // slot e re-cifra — os demais perfis da conta ficam intactos byte-a-byte. É a
+  // correção do RF-09: um convidado restaurando não reverte mais o trabalho de
+  // todos. Sem `profile_id`, cai no restore da conta inteira (fallback/rollback).
+  const rawProfileId = body.profile_id
+  const profileId =
+    typeof rawProfileId === 'string' && rawProfileId.length > 0 && rawProfileId.length <= 64
+      ? rawProfileId
+      : null
+  if (rawProfileId !== undefined && profileId === null) {
+    return json({ error: 'profile_id inválido' }, 400, cors)
+  }
+
+  if (profileId) {
+    // Lê o blob ATUAL + carimbo para concorrência otimista (CAS).
+    const { data: atual, error: curErr } = await admin
+      .from('user_data')
+      .select('data_json, last_modified')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (curErr) {
+      console.error('[user-data-backup] Erro ao ler blob atual:', curErr.message)
+      return json({ error: 'Erro interno' }, 500, cors)
+    }
+    if (!atual?.data_json) {
+      console.error(`[user-data-backup] RESTORE SEM DESTINO (slot): ${userId.slice(0, 8)}`)
+      return json({
+        error:   'restore_sem_destino',
+        message: 'Não foi possível aplicar o backup: os dados da conta não foram encontrados. Fale com o suporte — seu backup continua guardado.',
+      }, 409, cors)
+    }
+
+    let dataToStore: unknown
+    let outcome = 'replaced'
+    try {
+      const built = await buildRestoredBlob({
+        keyBase64:        Deno.env.get('DATA_ENCRYPTION_KEY') ?? '',
+        currentDataJson:  atual.data_json,
+        snapshotDataJson: snapshot.data_json,
+        profileId,
+        userId,
+        now,
+      })
+      dataToStore = built.dataToStore
+      outcome     = built.outcome
+    } catch (e) {
+      const msg = (e as Error)?.message ?? 'erro'
+      // Nada foi gravado: preferimos falhar alto a corromper o blob.
+      console.error(`[user-data-backup] Merge por-perfil falhou (${msg}) user ${userId.slice(0, 8)}`)
+      if (msg === 'perfil_ausente_no_snapshot') {
+        return json({ error: 'perfil_ausente', message: 'Este perfil não existe nesse backup.' }, 404, cors)
+      }
+      return json({
+        error:   'restore_falhou',
+        message: 'Não foi possível aplicar o backup com segurança. Seu backup continua guardado — fale com o suporte.',
+      }, 500, cors)
+    }
+
+    // CAS: só grava se o blob NÃO mudou desde a leitura (defesa contra 2ª aba /
+    // outro device). O cliente já congela gravações antes de restaurar; isto é o
+    // cinto de segurança. Reaplicar por cima de uma escrita concorrente
+    // corromperia a corrida — melhor abortar e pedir para tentar de novo.
+    let upd = admin
+      .from('user_data')
+      .update({ data_json: dataToStore, email: userEmail, last_modified: now })
+      .eq('user_id', userId)
+    upd = atual.last_modified === null
+      ? upd.is('last_modified', null)
+      : upd.eq('last_modified', atual.last_modified)
+    const { data: linhas, error: restoreErr } = await upd.select('user_id')
+
+    if (restoreErr) {
+      console.error('[user-data-backup] Erro ao restaurar (slot):', restoreErr.message)
+      return json({ error: 'Erro ao restaurar dados' }, 500, cors)
+    }
+    if (!linhas || linhas.length === 0) {
+      return json({
+        error:   'conflito_concorrencia',
+        message: 'Os dados mudaram durante a restauração. Recarregue e tente novamente.',
+      }, 409, cors)
+    }
+
+    console.log(
+      `[user-data-backup] Restore por-perfil (${outcome}): user ${userId.slice(0, 8)} perfil ${profileId} → snapshot ${snapshotDate}`
+    )
+    return json({
+      success:       true,
+      snapshot_date: snapshotDate,
+      restored_at:   now,
+      scope:         'profile',
+      profile_id:    profileId,
+    }, 200, cors)
+  }
+
+  // ── Restore da CONTA INTEIRA (fallback/rollback — o cliente não usa mais) ────
+  // Sobrescreve user_data com o blob do snapshot. Mantido para rollback (deploy
+  // antigo do cliente) e suporte. `.select('user_id')` NÃO é decoração: sem ele,
+  // um UPDATE que não encontra linha retorna SEM erro, e a função respondia
+  // `success: true` para uma restauração que não gravou nada.
   const { data: linhas, error: restoreErr } = await admin
     .from('user_data')
     .update({
@@ -227,9 +323,6 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!linhas || linhas.length === 0) {
-    // Existe snapshot mas não existe destino: estado inconsistente. Falhar alto
-    // é melhor do que fingir sucesso — o usuário precisa saber para pedir ajuda
-    // enquanto o snapshot ainda está dentro da janela de retenção (5 dias).
     console.error(`[user-data-backup] RESTORE SEM DESTINO: nenhuma linha user_data para ${userId.slice(0, 8)}`)
     return json({
       error:   'restore_sem_destino',
@@ -238,7 +331,7 @@ Deno.serve(async (req: Request) => {
   }
 
   console.log(
-    `[user-data-backup] Restaurado: user ${userId.slice(0, 8)} → snapshot ${snapshotDate}`
+    `[user-data-backup] Restaurado (conta inteira): user ${userId.slice(0, 8)} → snapshot ${snapshotDate}`
   )
 
   return json({

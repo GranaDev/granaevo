@@ -1077,6 +1077,17 @@ function _abrirConfirmacaoRestauracao(dateStr, dateBR, token, nomearInput, btnRe
     const nomeAtual = (nomearInput?.value || '').trim() ||
         ('Antes da restauração para ' + dateBR + ' — ' + new Date().toLocaleDateString('pt-BR'));
 
+    // RF-09: a restauração é POR PERFIL — só o perfil ativo é revertido; os
+    // outros perfis da conta não são tocados. Sem um perfil ativo não há slot a
+    // restaurar; barrar aqui evita cair no restore de conta inteira (o footgun
+    // antigo, que revertia todos os perfis).
+    const perfilNome = (_ctx._sanitizeText ? _ctx._sanitizeText(_ctx.perfilAtivo?.nome || 'Perfil') : (_ctx.perfilAtivo?.nome || 'Perfil')) || 'Perfil';
+    const perfilId   = String(_ctx.perfilAtivo?.id ?? '');
+    if (!perfilId) {
+        _ctx.mostrarNotificacao('Nenhum perfil ativo para restaurar.', 'error');
+        return;
+    }
+
     _ctx.criarPopupDOM((box2) => {
         box2.style.maxWidth = '420px';
 
@@ -1113,8 +1124,8 @@ function _abrirConfirmacaoRestauracao(dateStr, dateBR, token, nomearInput, btnRe
                 <i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Ação destrutiva
             </div>
             <div style="font-size:0.8rem; color:rgba(255,255,255,0.65); line-height:1.5;">
-                Será restaurado o backup de <strong>${sanitizeHTML(dateBR)}</strong>.<br>
-                Todos os dados atuais serão substituídos.
+                O perfil <strong>${sanitizeHTML(perfilNome)}</strong> será restaurado ao backup de <strong>${sanitizeHTML(dateBR)}</strong>.<br>
+                Os dados atuais <strong>deste perfil</strong> serão substituídos. Os outros perfis da conta <strong>não são afetados</strong>.
             </div>`;
 
         const row = document.createElement('div');
@@ -1160,7 +1171,7 @@ function _abrirConfirmacaoRestauracao(dateStr, dateBR, token, nomearInput, btnRe
                         'Content-Type':  'application/json',
                         'Authorization': `Bearer ${token}`,
                     },
-                    body: JSON.stringify({ action: 'restore', snapshot_date: dateStr }),
+                    body: JSON.stringify({ action: 'restore', snapshot_date: dateStr, profile_id: perfilId }),
                 });
 
                 const resultado = await resp.json().catch(() => ({}));

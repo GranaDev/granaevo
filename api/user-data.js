@@ -305,6 +305,16 @@ export default async function handler(req, res) {
             !/^\d{4}-\d{2}-\d{2}$/.test(parsed.snapshot_date))
             return res.status(400).json({ error: 'snapshot_date inválido (esperado YYYY-MM-DD)' });
 
+        // profile_id (RF-09): restaura SÓ o slot deste perfil. Opcional para
+        // compatibilidade — ausente = restore da conta inteira (comportamento
+        // antigo). Validação de forma; a autorização real (dono do blob) é no edge.
+        let profileId;
+        if (parsed?.profile_id !== undefined) {
+            if (typeof parsed.profile_id !== 'string' || parsed.profile_id.length === 0 || parsed.profile_id.length > 64)
+                return res.status(400).json({ error: 'profile_id inválido' });
+            profileId = parsed.profile_id;
+        }
+
         if (!await checkRL(`ip:${ip}:restore`, RL_RESTORE_MAX, RL_RESTORE_WIN_SECS)) {
             res.setHeader('Retry-After', '3600');
             return res.status(429).json({ error: 'Limite de restaurações atingido. Aguarde 1 hora.' });
@@ -326,7 +336,7 @@ export default async function handler(req, res) {
                     'x-proxy-secret':  PROXY_SECRET,
                     'x-request-id':   _rid,
                 },
-                body: JSON.stringify({ action: 'restore', snapshot_date: parsed.snapshot_date }),
+                body: JSON.stringify({ action: 'restore', snapshot_date: parsed.snapshot_date, ...(profileId ? { profile_id: profileId } : {}) }),
                 signal: AbortSignal.timeout(15_000),
             });
         } catch (e) {
