@@ -15,6 +15,7 @@ import {
   registrarMovimento, divisaoSugerida, perfilParticipa,
   convitesPendentes, temConvitePendente, contarConvitesPendentes,
   aceitarConvite, recusarConvite, montarRosterConvite,
+  sincronizarReservaEmPerfis, removerReservaDePerfis,
 } from '../../src/scripts/modules/reserva-familia.js'
 
 const mov = (tipo, valor, id, nome) => ({ memberId: id, memberNome: nome, tipo, valor })
@@ -299,5 +300,63 @@ describe('montarRosterConvite — criador aceito, demais pendentes', () => {
     const r = montarRosterConvite(['A', 'B'], 'A', { membros: ['A', 'B'], convites: ['C'] })
     assert.deepEqual(r.membros, ['A', 'B'])
     assert.deepEqual(r.convites, ['C'])   // C continua pendente, não sumiu
+  })
+})
+
+// ── Propagação entre perfis (o que faz a reserva aparecer em OUTRO perfil) ────
+const perfil = (id, metas = []) => ({ id, nome: 'P' + id, metas })
+
+describe('sincronizarReservaEmPerfis', () => {
+  test('injeta cópia só nos MEMBROS; convidado pendente NÃO recebe (não polui total)', () => {
+    const reserva = { id: 'r1', compartilhada: true, saved: 100, membros: ['A'], convites: ['B'] }
+    const profiles = [perfil('A'), perfil('B'), perfil('C')]
+    sincronizarReservaEmPerfis(profiles, reserva)
+    assert.equal(profiles[0].metas.length, 1)          // A (membro) → cópia
+    assert.equal(profiles[1].metas.length, 0)          // B (convidado pendente) → NADA
+    assert.equal(profiles[2].metas.length, 0)          // C fora → nada
+    assert.equal(profiles[0].metas[0].saved, 100)
+  })
+  test('cópias são independentes (deep clone, sem alias)', () => {
+    const reserva = { id: 'r1', compartilhada: true, saved: 10, movimentos: [{ v: 1 }], membros: ['A', 'B'], convites: [] }
+    const profiles = [perfil('A'), perfil('B')]
+    sincronizarReservaEmPerfis(profiles, reserva)
+    profiles[0].metas[0].saved = 999
+    profiles[0].metas[0].movimentos[0].v = 999
+    assert.equal(profiles[1].metas[0].saved, 10)       // B não mudou junto
+    assert.equal(profiles[1].metas[0].movimentos[0].v, 1)
+    assert.equal(reserva.saved, 10)                    // fonte intacta
+  })
+  test('atualiza cópia existente em vez de duplicar', () => {
+    const profiles = [perfil('A', [{ id: 'r1', compartilhada: true, saved: 1 }])]
+    sincronizarReservaEmPerfis(profiles, { id: 'r1', compartilhada: true, saved: 50, membros: ['A'], convites: [] })
+    assert.equal(profiles[0].metas.length, 1)
+    assert.equal(profiles[0].metas[0].saved, 50)
+  })
+  test('quem deixou de participar perde a cópia', () => {
+    const profiles = [perfil('A', [{ id: 'r1', compartilhada: true }]), perfil('B', [{ id: 'r1', compartilhada: true }])]
+    // Agora só A participa (B recusou/saiu)
+    sincronizarReservaEmPerfis(profiles, { id: 'r1', compartilhada: true, membros: ['A'], convites: [] })
+    assert.equal(profiles[0].metas.length, 1)
+    assert.equal(profiles[1].metas.length, 0)          // B perdeu a cópia
+  })
+  test('não-compartilhada ou sem id → no-op', () => {
+    const profiles = [perfil('A')]
+    sincronizarReservaEmPerfis(profiles, { id: 'r1', compartilhada: false, membros: ['A'] })
+    sincronizarReservaEmPerfis(profiles, { compartilhada: true, membros: ['A'] })
+    assert.equal(profiles[0].metas.length, 0)
+  })
+})
+
+describe('removerReservaDePerfis', () => {
+  test('remove a reserva de TODOS os perfis', () => {
+    const profiles = [
+      perfil('A', [{ id: 'r1' }, { id: 'r2' }]),
+      perfil('B', [{ id: 'r1' }]),
+      perfil('C', []),
+    ]
+    removerReservaDePerfis(profiles, 'r1')
+    assert.deepEqual(profiles[0].metas.map(m => m.id), ['r2'])
+    assert.equal(profiles[1].metas.length, 0)
+    assert.equal(profiles[2].metas.length, 0)
   })
 })

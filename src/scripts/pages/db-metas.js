@@ -5,8 +5,51 @@ import {
 import {
     contaCompartilhada, ehCompartilhada, membroAtual, registrarMovimento,
     porMembro, divisaoSugerida, perfilParticipa,
-    montarRosterConvite, temConvitePendente, aceitarConvite, recusarConvite,
-} from '../modules/reserva-familia.js?v=4';
+    montarRosterConvite, aceitarConvite, recusarConvite,
+    sincronizarReservaEmPerfis, removerReservaDePerfis,
+} from '../modules/reserva-familia.js?v=5';
+
+// ── Reserva compartilhada v2: propagação entre perfis ───────────────────────
+// O blob é UMA linha (array de perfis), cada perfil com suas próprias `metas`.
+// Para uma reserva compartilhada aparecer nos OUTROS perfis, gravamos uma cópia
+// no slot de cada MEMBRO (aceito). O perfil ATIVO é reconstruído de `_ctx.metas`
+// no save, então propagamos só nos demais. `_ctx.allProfilesData` é a fonte de
+// verdade (todos os perfis em memória) exposta pelo dashboard.
+function _outrosPerfis() {
+    const profiles = _ctx.allProfilesData;
+    if (!Array.isArray(profiles)) return null;
+    const ativoId = String(_ctx.perfilAtivo?.id ?? '');
+    return profiles.filter(p => String(p?.id) !== ativoId);
+}
+function _sincReserva(reserva) {
+    const outros = _outrosPerfis();
+    if (outros && ehCompartilhada(reserva)) sincronizarReservaEmPerfis(outros, reserva);
+}
+function _removerReserva(id) {
+    const outros = _outrosPerfis();
+    if (outros) removerReservaDePerfis(outros, id);
+}
+// Reservas compartilhadas com convite PENDENTE para o perfil ativo. Como o
+// convidado não guarda cópia, varremos as cópias dos MEMBROS (nos slots dos
+// outros perfis) procurando o id do perfil ativo em `convites`. Retorna as
+// referências canônicas (para aceitar/recusar agir direto nelas).
+function _convitesReservaPendentes() {
+    const profiles = _ctx.allProfilesData;
+    const pid = String(_ctx.perfilAtivo?.id ?? '');
+    if (!Array.isArray(profiles) || !pid) return [];
+    const vistos = new Set();
+    const out = [];
+    for (const p of profiles) {
+        for (const m of (Array.isArray(p?.metas) ? p.metas : [])) {
+            if (m && m.compartilhada === true && Array.isArray(m.convites) &&
+                m.convites.map(String).includes(pid) && !vistos.has(String(m.id))) {
+                vistos.add(String(m.id));
+                out.push(m);
+            }
+        }
+    }
+    return out;
+}
 
 let _ctx = null;
 let _metaLinePeriod = 'mensal'; // mensal | bimestral | trimestral | semestral | anual
@@ -1037,6 +1080,11 @@ function abrirMetaForm(editId = null) {
                     meta.membros  = membros;
                     meta.convites = convites;
                     if (!Array.isArray(meta.movimentos)) meta.movimentos = [];
+                    // Propaga a reserva para os slots dos outros perfis participantes.
+                    _sincReserva(meta);
+                } else {
+                    // Deixou de ser compartilhada → some das cópias dos outros perfis.
+                    _removerReserva(meta.id);
                 }
 
                 // Sincroniza conta fixa de aporte quando muda configuração
@@ -1060,6 +1108,9 @@ function abrirMetaForm(editId = null) {
                     novaMeta.movimentos = [];
                 }
                 _ctx.metas.push(novaMeta);
+                // Injeta a cópia da reserva nos slots dos perfis convidados —
+                // é o que faz o convite aparecer quando eles entrarem no perfil.
+                if (compartilhada) _sincReserva(novaMeta);
 
                 // Cria conta fixa de aporte recorrente
                 if (aporteRecorrente && valorAporte > 0) {
@@ -1263,7 +1314,8 @@ function _criarJarro(percentual, uid) {
 function _renderConvitesPendentes(cont) {
     const perfilId = String(_ctx.perfilAtivo?.id ?? '');
     if (!perfilId) return 0;
-    const pendentes = _ctx.metas.filter(m => temConvitePendente(m, perfilId));
+    // Varre as cópias dos membros (nos outros perfis) atrás de convites p/ mim.
+    const pendentes = _convitesReservaPendentes();
     if (pendentes.length === 0) return 0;
 
     // Nome do criador (membros[0]) para "Fulano quer criar… com você".
@@ -1299,7 +1351,14 @@ function _renderConvitesPendentes(cont) {
         btnAceitar.style.flex = '1';
         btnAceitar.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i> Aceitar';
         btnAceitar.addEventListener('click', () => {
+            // m é a cópia canônica (no slot de um membro). Aceitar move o perfil
+            // ativo de convites → membros; como membro, ele passa a ter a própria
+            // cópia — injetamos em _ctx.metas — e propagamos para os demais.
             if (aceitarConvite(m, perfilId)) {
+                if (!_ctx.metas.some(x => String(x.id) === String(m.id))) {
+                    _ctx.metas.push(JSON.parse(JSON.stringify(m)));
+                }
+                _sincReserva(m);
                 _ctx.salvarDados();
                 _ctx.mostrarNotificacao('Reserva aceita! Agora ela aparece nas suas reservas.', 'success');
                 renderMetasList();
@@ -1313,7 +1372,10 @@ function _renderConvitesPendentes(cont) {
         btnRecusar.style.flex = '1';
         btnRecusar.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i> Recusar';
         btnRecusar.addEventListener('click', () => {
+            // O convidado não tem cópia própria: recusar só tira o id de `convites`
+            // na cópia canônica e propaga para os membros. Nada a remover daqui.
             if (recusarConvite(m, perfilId)) {
+                _sincReserva(m);
                 _ctx.salvarDados();
                 _ctx.mostrarNotificacao('Convite recusado.', 'info');
                 renderMetasList();
@@ -1694,6 +1756,8 @@ function _dissolverReservaCompartilhada(meta) {
                 });
             });
             _ctx.metas = _ctx.metas.filter(m => m.id !== meta.id);
+            // Dissolvida → some das cópias de todos os outros perfis também.
+            _removerReserva(meta.id);
             _ctx.transacoes = _ctx.transacoes.map(t =>
                 (t.metaId && String(t.metaId) === String(meta.id)) ? Object.assign({}, t, { metaId: null }) : t);
             if (String(_ctx.metaSelecionadaId) === String(meta.id)) _ctx.metaSelecionadaId = null;
@@ -1726,6 +1790,8 @@ function removerMeta(id) {
     if(!confirm('Remover meta? Isso também removerá os valores mensais associados.')) return;
 
     _ctx.metas = _ctx.metas.filter(m => m.id !== id);
+    // Reserva compartilhada sem saldo removida → some das cópias dos outros perfis.
+    if (ehCompartilhada(alvo)) _removerReserva(id);
     _ctx.transacoes = _ctx.transacoes.map(t => {
         if(t.metaId && String(t.metaId) === String(id)) {
             return Object.assign({}, t, { metaId: null });
@@ -2732,6 +2798,8 @@ function abrirRetiradaForm() {
         if (ehCompartilhada(meta)) {
             const quem = membroAtual(_ctx);
             registrarMovimento(meta, { id: quem.id, nome: quem.nome, tipo: 'retirada', valor: valorRetirar, data: dh.data, hora: dh.hora });
+            // Propaga saldo/trilha para as cópias dos outros perfis.
+            _sincReserva(meta);
         }
 
         _ctx.salvarDados();
@@ -2935,6 +3003,8 @@ function abrirGuardarForm() {
             if (ehCompartilhada(meta)) {
                 const quem = membroAtual(_ctx);
                 registrarMovimento(meta, { id: quem.id, nome: quem.nome, tipo: 'aporte', valor, data: dh.data, hora: dh.hora });
+                // Propaga saldo/trilha para as cópias dos outros perfis.
+                _sincReserva(meta);
             }
 
             _ctx.salvarDados();

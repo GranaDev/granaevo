@@ -169,6 +169,61 @@ export function montarRosterConvite(rosterIds, criadorId, metaAtual = {}) {
     return { membros: membros.slice(0, 12), convites: convites.slice(0, 12) };
 }
 
+// ----------------------------------------------------------------------------
+// PROPAGAÇÃO ENTRE PERFIS (o que faz a reserva aparecer em OUTRO perfil).
+//
+// Cada perfil tem seu PRÓPRIO array de `metas` no blob — uma reserva criada no
+// perfil A não aparece no perfil B sozinha. Para o convite→aceite funcionar, a
+// reserva compartilhada ganha uma CÓPIA no slot de cada perfil participante
+// (membros ∪ convites). A meta inteira é estado COMPARTILHADO: o dinheiro real
+// são as transações (array à parte, com metaId), que ficam com quem contribuiu —
+// a meta em si (saved/movimentos/objetivo/…) é a mesma para todos. Por isso
+// propagamos a meta inteira, sem tocar em transações.
+// ----------------------------------------------------------------------------
+
+/**
+ * Garante a cópia de UMA reserva compartilhada em cada perfil MEMBRO (aceito) e a
+ * remove de quem não é mais membro. Os CONVIDADOS pendentes NÃO recebem cópia —
+ * senão a reserva contaria no total/patrimônio deles antes de aceitarem; o
+ * convite é descoberto varrendo a lista `convites` das cópias dos membros.
+ * MUTA `profiles` (o array de perfis do blob). `cloneFn` injeta o clone (default
+ * deep-clone) — testável. Retorna profiles.
+ */
+export function sincronizarReservaEmPerfis(profiles, reserva, cloneFn) {
+    if (!Array.isArray(profiles) || !ehCompartilhada(reserva) || reserva.id == null) return profiles;
+    const clone = typeof cloneFn === 'function' ? cloneFn : (x) => JSON.parse(JSON.stringify(x));
+    const rid = String(reserva.id);
+    const participantes = new Set(Array.isArray(reserva.membros) ? reserva.membros.map(String) : []);
+    for (const p of profiles) {
+        if (!p || typeof p !== 'object') continue;
+        if (!Array.isArray(p.metas)) p.metas = [];
+        const idx = p.metas.findIndex(m => m && String(m.id) === rid);
+        if (participantes.has(String(p.id))) {
+            const copia = clone(reserva);          // cópia independente (sem alias)
+            if (idx === -1) p.metas.push(copia);
+            else p.metas[idx] = copia;
+        } else if (idx !== -1) {
+            p.metas.splice(idx, 1);                 // não participa → remove a cópia
+        }
+    }
+    return profiles;
+}
+
+/**
+ * Remove uma reserva (por id) das cópias de TODOS os perfis do array — usado ao
+ * excluir/dissolver a reserva. MUTA `profiles`. Retorna profiles.
+ */
+export function removerReservaDePerfis(profiles, reservaId) {
+    if (!Array.isArray(profiles) || reservaId == null) return profiles;
+    const rid = String(reservaId);
+    for (const p of profiles) {
+        if (!p || !Array.isArray(p.metas)) continue;
+        const idx = p.metas.findIndex(m => m && String(m.id) === rid);
+        if (idx !== -1) p.metas.splice(idx, 1);
+    }
+    return profiles;
+}
+
 /**
  * Registra um movimento de atribuição em `meta.movimentos` (MUTA a meta).
  * Chamado junto de guardar/retirar quando a caixinha é compartilhada — o

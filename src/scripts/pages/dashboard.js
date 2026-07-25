@@ -2481,6 +2481,10 @@ function _makeCtx() {
         mostrarNotificacaoDesfazer: { value: (...a) => mostrarNotificacaoDesfazer(...a), enumerable: true },
         salvarDados:         { value: (...a) => salvarDados(...a),         enumerable: true },
         salvarDadosUrgente:  { value: () => salvarDados(true),            enumerable: true },
+        // Reserva compartilhada (v2): db-metas precisa ler/escrever nos slots dos
+        // OUTROS perfis (o blob é uma linha só, array de perfis). Expõe a fonte de
+        // verdade; a lógica de propagação vive em db-metas (chunk lazy, com folga).
+        allProfilesData:     { get: () => _allProfilesData,              enumerable: true },
         _throttledSave:      { value: (...a) => _throttledSave(...a),      enumerable: true },
         atualizarDashboardResumo:  { value: (...a) => atualizarDashboardResumo(...a),  enumerable: true },
         atualizarTudo:             { value: (...a) => atualizarTudo(...a),             enumerable: true },
