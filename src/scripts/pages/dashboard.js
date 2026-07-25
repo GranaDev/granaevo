@@ -8,6 +8,7 @@ import { initErrorTracking, setUserContext } from '../modules/error-tracking.js'
 import { perfMark, perfMeasure } from '../modules/perf-marks.js';
 import { migrarCompra, anexarParcelas, ehParcelaAntiga, valorAbertoFatura } from '../modules/fatura-parcelas.js?v=1';
 import { evaluate as evaluateConquistas, enqueueToasts as enqueueConquistaToasts, sanitizeUnlocked as sanitizeConquistas } from '../modules/achievements.js?v=2';
+import { sanitizarConfigPerfil as _sanitizarConfigPerfilPuro } from '../modules/config-perfil.js';
 
 // Inicializa rastreamento de erros o quanto antes (no-op sem VITE_SENTRY_DSN / fora de produção)
 initErrorTracking();
@@ -980,58 +981,13 @@ function _sanitizarOrcamentos(obj) {
     return clean;
 }
 
-const _ISO_DIA_RE = /^\d{4}-\d{2}-\d{2}$/;
-const _HORA_RE    = /^\d{2}:\d{2}:\d{2}$/;
-
 // Sanitiza as preferências do perfil (config) antes de persistir.
 // Whitelist estrita: só chaves conhecidas, só valores dentro dos limites.
-// Espelha os limites do módulo horas-vida.js (defesa em profundidade).
+// A lógica pura vive em modules/config-perfil.js (testável — ver
+// tests/unit/config-perfil.test.js); aqui é só o ponto de injeção do
+// _sanitizeText, mantido como wrapper para os call sites não mudarem.
 function _sanitizarConfigPerfil(cfg) {
-    const clean = Object.create(null);
-    if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return clean;
-    const hv = cfg.horasVida;
-    if (hv && typeof hv === 'object' && !Array.isArray(hv)) {
-        const valorHora = Number(hv.valorHora);
-        const modosValidos = ['hora', 'dia', 'mes'];
-        if (modosValidos.includes(hv.modo) &&
-            Number.isFinite(valorHora) && valorHora >= 0.01 && valorHora <= 100_000) {
-            const out = {
-                ativo:     hv.ativo === true,
-                modo:      hv.modo,
-                valorHora: Math.round(valorHora * 100) / 100,
-            };
-            const vb = Number(hv.valorBase);
-            if (Number.isFinite(vb) && vb >= 0.01 && vb <= 10_000_000) out.valorBase = Math.round(vb * 100) / 100;
-            const hd = Number(hv.horasDia);
-            if (Number.isInteger(hd) && hd >= 1 && hd <= 24) out.horasDia = hd;
-            const hs = Number(hv.horasSemana);
-            if (Number.isInteger(hs) && hs >= 1 && hs <= 120) out.horasSemana = hs;
-            clean.horasVida = out;
-        }
-    }
-    // Modo viagem (item 11). Guardado no config — e NÃO como marcador nas
-    // transações — porque o custo é derivado da janela [inicio, fim]; ver a
-    // decisão de modelagem no topo de modules/viagem.js. Sem esta chave aqui a
-    // viagem seria descartada no save seguinte: `dadosPerfil` é allow-list.
-    const vg = cfg.viagem;
-    if (vg && typeof vg === 'object' && !Array.isArray(vg) && _ISO_DIA_RE.test(String(vg.inicio || ''))) {
-        const out = {
-            ativa:  vg.ativa === true,
-            nome:   _sanitizeText(String(vg.nome ?? '')).slice(0, 60) || 'Viagem',
-            inicio: String(vg.inicio),
-            fim:    _ISO_DIA_RE.test(String(vg.fim || '')) ? String(vg.fim) : null,
-            // A HORA precisa estar aqui: sem ela a whitelist descartava o campo
-            // e a viagem voltava a contar o dia inteiro — inclusive o que foi
-            // lançado ANTES de ativar (bug relatado em 2026-07-16).
-            inicioHora: _HORA_RE.test(String(vg.inicioHora || '')) ? String(vg.inicioHora) : null,
-            fimHora:    _HORA_RE.test(String(vg.fimHora || ''))    ? String(vg.fimHora)    : null,
-        };
-        // Fim antes do início é incoerente: guarda só o início e deixa a viagem
-        // em aberto, em vez de persistir uma janela que o motor recusaria.
-        if (out.fim !== null && out.fim < out.inicio) { out.fim = null; out.fimHora = null; }
-        clean.viagem = out;
-    }
-    return clean;
+    return _sanitizarConfigPerfilPuro(cfg, _sanitizeText);
 }
 
 // Sanitiza a estrutura de desafios antes de persistir. Valida só a FORMA
