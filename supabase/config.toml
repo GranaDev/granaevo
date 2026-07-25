@@ -431,6 +431,12 @@ verify_jwt = false
 [functions.send-guest-invite]
 verify_jwt = false
 
+# notify-reserve-invite: push do convite de reserva compartilhada. Auth própria
+# (x-proxy-secret + auth.getUser ES256), então verify_jwt do gateway PRECISA ser
+# false — senão rejeitaria o JWT ES256 antes do código, como os demais acima.
+[functions.notify-reserve-invite]
+verify_jwt = false
+
 # link-user-subscription: tombstone 410 (desativada por segurança em 2026-07-16).
 # false para o 410 chegar ao chamador em vez de um 401 do gateway, se um dia for chamada.
 [functions.link-user-subscription]

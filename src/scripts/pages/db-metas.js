@@ -47,6 +47,23 @@ function _removerReserva(id) {
     const outros = _outrosPerfis();
     if (outros) removerReservaDePerfis(outros, id);
 }
+// Dispara o push do convite para os OUTROS membros da conta (via edge, pois o
+// cliente não pode inserir notificação para outro usuário). BEST-EFFORT: o banner
+// na aba Reservas é o caminho confiável; se o push falhar, não quebra nada.
+async function _notificarConviteReserva(reservaId, reservaNome) {
+    try {
+        const { supabase } = await import('../services/supabase-client.js?v=2');
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        await fetch('/api/reserve-invite-notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ reserva_id: String(reservaId), reserva_nome: String(reservaNome || '') }),
+        });
+    } catch { /* best-effort — o convite continua visível pelo banner */ }
+}
+
 // Reservas compartilhadas com convite PENDENTE para o perfil ativo. Como o
 // convidado não guarda cópia, varremos as cópias dos MEMBROS (nos slots dos
 // outros perfis) procurando o id do perfil ativo em `convites`. Retorna as
@@ -1100,6 +1117,8 @@ function abrirMetaForm(editId = null) {
                     if (!Array.isArray(meta.movimentos)) meta.movimentos = [];
                     // Propaga a reserva para os slots dos outros perfis participantes.
                     _sincReserva(meta);
+                    // Notifica quem ainda está pendente (dedupe no servidor evita repetir).
+                    if (meta.convites?.length) _notificarConviteReserva(meta.id, meta.descricao);
                 } else {
                     // Deixou de ser compartilhada → some das cópias dos outros perfis.
                     _removerReserva(meta.id);
@@ -1128,7 +1147,11 @@ function abrirMetaForm(editId = null) {
                 _ctx.metas.push(novaMeta);
                 // Injeta a cópia da reserva nos slots dos perfis convidados —
                 // é o que faz o convite aparecer quando eles entrarem no perfil.
-                if (compartilhada) _sincReserva(novaMeta);
+                if (compartilhada) {
+                    _sincReserva(novaMeta);
+                    // Push para os outros membros da conta (dedupe no servidor).
+                    if (novaMeta.convites?.length) _notificarConviteReserva(novaMeta.id, novaMeta.descricao);
+                }
 
                 // Cria conta fixa de aporte recorrente
                 if (aporteRecorrente && valorAporte > 0) {
