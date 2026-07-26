@@ -1064,8 +1064,6 @@ const _ALLOWED_KEYS = Object.freeze({
         'convites',
         // Carimbo p/ reconciliar cópias da reserva entre perfis (qual é a mais nova).
         'lastUpdate',
-        // Plano de dissolução por auto-crédito: { partes:{perfilId:valor}, claimed:[] }.
-        'dissolvida',
         // `tipoReserva` (caixinha/poupança/CDB/…) e `origemExistente` eram
         // gravados por db-metas e DESCARTADOS aqui — o formulário perguntava o
         // tipo, validava a resposta e jogava fora. Detectado por
@@ -2068,6 +2066,13 @@ function _bootFeatureModules() {
         import('../modules/radar.js?v=1')
             .then(m => m.initRadar(ctx))
             .catch(e => _log.error('FEAT_RADAR_001', e));
+        // Contagem real da caixa de entrada do sino. O badge já foi desenhado com
+        // o número em cache; isto o corrige (e é como um convite de reserva
+        // recebido com o app fechado acende o sino no próximo acesso).
+        import('../modules/notificacoes-inbox.js?v=1')
+            .then(m => m.atualizarContagem())
+            .then(() => atualizarBadgeNotificacoes())
+            .catch(e => _log.error('FEAT_INBOX_001', e));
         // Aviso proativo de assinaturas não registradas (mesmo módulo do detector
         // aberto em Cartões → Assinaturas — manter o ?v= igual nos dois imports
         // para não carregar duas instâncias do módulo).
@@ -3464,10 +3469,21 @@ function _notifHash(alertas) {
     ].sort().join(',');
 }
 
+// Avisos do servidor não dispensados, em cache local. O badge é desenhado no
+// boot, muito antes de qualquer rede — ler o cache evita o badge piscar (ou
+// mentir "0") até a contagem real chegar. Quem GRAVA a chave é
+// modules/notificacoes-inbox.js (LS_COUNT); manter os dois nomes iguais.
+function _inboxEmCache() {
+    try {
+        const n = parseInt(localStorage.getItem('ge_inbox_count') || '0', 10);
+        return Number.isInteger(n) && n > 0 ? n : 0;
+    } catch { return 0; }
+}
+
 // Atualiza badge (desktop) e bolinha (mobile) de notificações
 function atualizarBadgeNotificacoes() {
     const alertas = verificarVencimentos();
-    const total   = alertas?.total ?? 0;
+    const total   = (alertas?.total ?? 0) + _inboxEmCache();
 
     // Badge sidebar desktop
     const badgeSidebar = document.getElementById('notifBadgeSidebar');
@@ -3475,14 +3491,16 @@ function atualizarBadgeNotificacoes() {
         if (total > 0) {
             badgeSidebar.textContent   = String(total);
             badgeSidebar.style.display = 'flex';
-            badgeSidebar.style.background = alertas.vencidas.length > 0 ? '#ff4b4b' : '#ffd166';
+            badgeSidebar.style.background = (alertas?.vencidas?.length ?? 0) > 0 ? '#ff4b4b' : '#ffd166';
         } else {
             badgeSidebar.style.display = 'none';
         }
     }
 
-    // Bolinha mobile — aparece apenas quando há notificações novas (hash diferente do visto)
-    const hashAtual = alertas ? _notifHash(alertas) : '';
+    // Bolinha mobile — aparece apenas quando há notificações novas (hash diferente
+    // do visto). A contagem da caixa de entrada entra no hash: um aviso novo do
+    // servidor precisa acender a bolinha igual a uma conta a vencer.
+    const hashAtual = (alertas ? _notifHash(alertas) : '') + `|i:${_inboxEmCache()}`;
     const hashVisto = localStorage.getItem('granaevo_notif_hash_visto') ?? '';
     const temNovo   = total > 0 && hashAtual !== hashVisto;
 
@@ -3618,7 +3636,7 @@ function verificacaoAutomaticaVencimentos() {
 // Marca notificações como lidas e esconde a bolinha mobile
 function marcarNotificacoesLidas() {
     const alertas = verificarVencimentos();
-    const hash = alertas ? _notifHash(alertas) : '';
+    const hash = (alertas ? _notifHash(alertas) : '') + `|i:${_inboxEmCache()}`;
     localStorage.setItem('granaevo_notif_hash_visto', hash);
 
     const dotMobile = document.getElementById('mobileNotifDot');
@@ -3652,7 +3670,26 @@ async function abrirPainelNotificacoes() {
 
     const alertas = verificarVencimentos();
 
-    if (!alertas || alertas.total === 0) {
+    // Avisos vindos do servidor (Radar, lembretes, convite de reserva). Ficavam
+    // só no push do sistema: quem não viu a bolha na hora perdia o aviso. Agora
+    // moram aqui, com X para dispensar. Módulo LAZY — chunk próprio.
+    let inboxEl = null;
+    try {
+        const inbox = await import('../modules/notificacoes-inbox.js?v=1');
+        inboxEl = await inbox.montarInbox({
+            onAbrir: (tela) => {
+                fecharPainelNotificacoes();
+                if (tela) setTimeout(() => mostrarTela(tela), 260);
+            },
+            // Dispensar muda a contagem: sem remarcar como lido, o hash ficaria
+            // defasado e a bolinha de "tem novidade" acenderia por um item que a
+            // pessoa acabou de apagar, com o painel aberto na frente dela.
+            onDispensar: () => { marcarNotificacoesLidas(); atualizarBadgeNotificacoes(); },
+        });
+    } catch { inboxEl = null; }
+    if (inboxEl) lista.appendChild(inboxEl);
+
+    if ((!alertas || alertas.total === 0) && !inboxEl) {
         // Estado vazio
         const emptyDiv = document.createElement('div');
         emptyDiv.className = 'notificacoes-empty';
@@ -3668,7 +3705,7 @@ async function abrirPainelNotificacoes() {
         emptyDiv.appendChild(icon);
         emptyDiv.appendChild(p);
         lista.appendChild(emptyDiv);
-    } else {
+    } else if (alertas && alertas.total > 0) {
         // Render do painel: módulo LAZY (Passo 10). Best-effort — se o chunk não
         // carregar, o painel fica sem os cards em vez de quebrar o sino inteiro.
         let painelEl = null;

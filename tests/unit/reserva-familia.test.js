@@ -12,7 +12,8 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   porMembro, progressoDe, contaCompartilhada, membroAtual, ehCompartilhada,
-  registrarMovimento, divisaoSugerida, perfilParticipa,
+  registrarMovimento, perfilParticipa,
+  depositoLiquidoDe, ehUltimoMembro, sairDaReserva,
   convitesPendentes, temConvitePendente, contarConvitesPendentes,
   aceitarConvite, recusarConvite, montarRosterConvite,
   sincronizarReservaEmPerfis, removerReservaDePerfis,
@@ -130,50 +131,6 @@ describe('progressoDe', () => {
   test('metade do objetivo = 50%', () => assert.equal(progressoDe(500, 1000), 50))
   test('passou do objetivo trava em 100', () => assert.equal(progressoDe(1500, 1000), 100))
   test('sem objetivo → null', () => assert.equal(progressoDe(500, 0), null))
-})
-
-describe('divisaoSugerida — C4, dividir ao dissolver', () => {
-  test('proporcional ao líquido de cada um, somando o total exato', () => {
-    const ms = [mov('aporte', 600, 'u1', 'Ana'), mov('aporte', 400, 'u2', 'Bruno')]
-    const d = divisaoSugerida(ms, 1000, ['Ana', 'Bruno'])
-    const soma = d.reduce((s, x) => s + x.valor, 0)
-    assert.equal(soma, 1000, 'a divisão TEM que fechar com o saldo')
-    assert.equal(d.find(x => x.nome === 'Ana').valor, 600)
-    assert.equal(d.find(x => x.nome === 'Bruno').valor, 400)
-  })
-  test('centavos: 1000/3 fecha exatamente (resto vai no maior)', () => {
-    const ms = [mov('aporte', 100, 'u1', 'A'), mov('aporte', 100, 'u2', 'B'), mov('aporte', 100, 'u3', 'C')]
-    const d = divisaoSugerida(ms, 1000, [])
-    assert.equal(d.reduce((s, x) => s + x.valor, 0), 1000)
-  })
-  test('sem líquido positivo → divide igual entre o roster', () => {
-    const d = divisaoSugerida([], 300, ['Ana', 'Bruno'])
-    assert.equal(d.length, 2)
-    assert.equal(d.reduce((s, x) => s + x.valor, 0), 300)
-    assert.equal(d[0].valor, 150)
-  })
-  test('roster {id,nome} carrega o id de perfil no fallback (p/ creditar o perfil certo)', () => {
-    const d = divisaoSugerida([], 200, [{ id: 'A', nome: 'Ana' }, { id: 'B', nome: 'Bruno' }])
-    assert.equal(d.length, 2)
-    assert.deepEqual(d.map(x => x.id).sort(), ['A', 'B'])
-    assert.equal(d.reduce((s, x) => s + x.valor, 0), 200)
-  })
-  test('roster vazio e sem trilha → tudo para "Você"', () => {
-    const d = divisaoSugerida([], 250, [])
-    assert.equal(d.length, 1)
-    assert.equal(d[0].nome, 'Você')
-    assert.equal(d[0].valor, 250)
-  })
-  test('saldo zero → nada a dividir', () => {
-    assert.deepEqual(divisaoSugerida([mov('aporte', 100, 'u1', 'A')], 0, []), [])
-  })
-  test('quem retirou mais do que pôs não puxa o rateio para negativo', () => {
-    // Ana +1000, Bruno -200 (retirou). Saldo 800. Só Ana tem líquido positivo.
-    const ms = [mov('aporte', 1000, 'u1', 'Ana'), mov('retirada', 200, 'u2', 'Bruno')]
-    const d = divisaoSugerida(ms, 800, ['Ana', 'Bruno'])
-    assert.equal(d.reduce((s, x) => s + x.valor, 0), 800)
-    assert.ok(d.every(x => x.valor >= 0))
-  })
 })
 
 describe('perfilParticipa — visibilidade por perfil (A1)', () => {
@@ -409,37 +366,135 @@ describe('reconciliação de cópias por lastUpdate', () => {
   })
 })
 
-// ── Dissolução por auto-crédito (cada perfil credita a si mesmo) ──────────────
-import {
-  planoDissolucao, estaDissolvida, parteDissolucao, marcarReclamado, dissolucaoCompleta,
-} from '../../src/scripts/modules/reserva-familia.js'
+// ── SAIR DA RESERVA (substituiu a dissolução em bloco, 2026-07-26) ───────────
+// A regra de ouro dos testes daqui: sair NÃO pode criar nem sumir com dinheiro,
+// e NÃO pode mexer na vida de quem ficou além de reduzir o saldo pelo que levei.
+describe('depositoLiquidoDe — quanto ESTE perfil tem a receber', () => {
+  test('líquido do próprio perfil (aportes − retiradas dele)', () => {
+    const meta = { compartilhada: true, saved: 1000, movimentos: [
+      mov('aporte', 600, 'A', 'Ana'), mov('aporte', 400, 'B', 'Bruno'), mov('retirada', 100, 'A', 'Ana'),
+    ] }
+    assert.equal(depositoLiquidoDe(meta, 'A'), 500)
+    assert.equal(depositoLiquidoDe(meta, 'B'), 400)
+  })
+  test('nunca oferece mais do que a reserva tem hoje', () => {
+    // Ana pôs 600, mas o outro já sacou quase tudo: só há 50 na reserva.
+    const meta = { compartilhada: true, saved: 50, movimentos: [mov('aporte', 600, 'A', 'Ana')] }
+    assert.equal(depositoLiquidoDe(meta, 'A'), 50)
+  })
+  test('quem nunca pôs nada (ou tirou mais do que pôs) recebe 0, nunca negativo', () => {
+    const meta = { compartilhada: true, saved: 300, movimentos: [
+      mov('aporte', 100, 'A', 'Ana'), mov('retirada', 200, 'A', 'Ana'),
+    ] }
+    assert.equal(depositoLiquidoDe(meta, 'A'), 0)
+    assert.equal(depositoLiquidoDe(meta, 'Z'), 0)
+  })
+  test('reserva vazia → 0', () => {
+    assert.equal(depositoLiquidoDe({ compartilhada: true, saved: 0, movimentos: [] }, 'A'), 0)
+  })
+})
 
-describe('dissolução por auto-crédito', () => {
-  test('planoDissolucao monta {partes,claimed:[]} e ignora <=0', () => {
-    const p = planoDissolucao([{ profileId: 'A', valor: 100 }, { profileId: 'B', valor: 0 }, { profileId: 'C', valor: 50 }])
-    assert.deepEqual(p, { partes: { A: 100, C: 50 }, claimed: [] })
+describe('ehUltimoMembro', () => {
+  test('sozinho no roster = último', () => {
+    assert.equal(ehUltimoMembro({ compartilhada: true, membros: ['A'] }, 'A'), true)
   })
-  test('parteDissolucao devolve o valor não reclamado; 0 depois de reclamar', () => {
-    const meta = { dissolvida: { partes: { A: 100, B: 50 }, claimed: [] } }
-    assert.equal(estaDissolvida(meta), true)
-    assert.equal(parteDissolucao(meta, 'A'), 100)
-    assert.equal(parteDissolucao(meta, 'B'), 50)
-    marcarReclamado(meta, 'A')
-    assert.equal(parteDissolucao(meta, 'A'), 0)   // A já pegou
-    assert.equal(parteDissolucao(meta, 'B'), 50)  // B ainda não
-    assert.equal(parteDissolucao(meta, 'Z'), 0)   // Z não tem parte
+  test('com companhia = não é o último', () => {
+    assert.equal(ehUltimoMembro({ compartilhada: true, membros: ['A', 'B'] }, 'A'), false)
   })
-  test('dissolucaoCompleta só quando todos reclamaram', () => {
-    const meta = { dissolvida: { partes: { A: 100, B: 50 }, claimed: [] } }
-    assert.equal(dissolucaoCompleta(meta), false)
-    marcarReclamado(meta, 'A')
-    assert.equal(dissolucaoCompleta(meta), false)
-    marcarReclamado(meta, 'B')
-    assert.equal(dissolucaoCompleta(meta), true)
+  test('roster vazio = último (não deixa reserva órfã)', () => {
+    assert.equal(ehUltimoMembro({ compartilhada: true, membros: [] }, 'A'), true)
   })
-  test('reserva sem dissolvida → helpers seguros', () => {
-    assert.equal(estaDissolvida({ id: 'r1' }), false)
-    assert.equal(parteDissolucao({ id: 'r1' }, 'A'), 0)
-    assert.equal(dissolucaoCompleta({ id: 'r1' }), false)
+})
+
+describe('sairDaReserva', () => {
+  const nova = () => ({
+    id: 'r1', compartilhada: true, saved: 1000, membros: ['A', 'B'], convites: [],
+    movimentos: [mov('aporte', 600, 'A', 'Ana'), mov('aporte', 400, 'B', 'Bruno')],
+  })
+
+  test('quem sai leva a sua parte; a reserva CONTINUA viva para quem ficou', () => {
+    const meta = nova()
+    const r = sairDaReserva(meta, 'A', 600, 'Ana')
+    assert.equal(r.ok, true)
+    assert.equal(r.valor, 600)
+    assert.equal(r.ultimo, false)
+    assert.equal(meta.saved, 400, 'sobra exatamente o que era do Bruno')
+    assert.deepEqual(meta.membros, ['B'], 'Bruno segue na reserva')
+  })
+
+  test('a saída fica registrada na trilha (quem tirou, quanto)', () => {
+    const meta = nova()
+    sairDaReserva(meta, 'A', 600, 'Ana')
+    const ultimo = meta.movimentos[meta.movimentos.length - 1]
+    assert.equal(ultimo.tipo, 'retirada')
+    assert.equal(ultimo.valor, 600)
+    assert.equal(ultimo.memberId, 'A')
+    assert.equal(porMembro(meta.movimentos).find(m => m.id === 'A').liquido, 0)
+  })
+
+  test('"Outro valor" (rendimento) é aceito até o limite do saldo', () => {
+    const meta = nova()
+    const r = sairDaReserva(meta, 'A', 650, 'Ana')   // rendeu 50
+    assert.equal(r.ok, true)
+    assert.equal(meta.saved, 350)
+  })
+
+  test('não deixa sacar mais do que a reserva tem', () => {
+    const meta = nova()
+    const r = sairDaReserva(meta, 'A', 1200, 'Ana')
+    assert.equal(r.ok, false)
+    assert.equal(meta.saved, 1000, 'nada mudou')
+    assert.deepEqual(meta.membros, ['A', 'B'])
+  })
+
+  test('valor inválido não muta a reserva', () => {
+    const meta = nova()
+    assert.equal(sairDaReserva(meta, 'A', -1, 'Ana').ok, false)
+    assert.equal(sairDaReserva(meta, 'A', NaN, 'Ana').ok, false)
+    assert.equal(meta.saved, 1000)
+  })
+
+  test('sair com 0 é permitido (só quero fora dessa reserva)', () => {
+    const meta = nova()
+    const r = sairDaReserva(meta, 'A', 0, 'Ana')
+    assert.equal(r.ok, true)
+    assert.equal(meta.saved, 1000, 'o dinheiro fica com quem ficou')
+    assert.deepEqual(meta.membros, ['B'])
+  })
+
+  test('último membro leva TUDO — nunca sobra dinheiro numa reserva sem dono', () => {
+    const meta = { id: 'r1', compartilhada: true, saved: 400, membros: ['B'], movimentos: [] }
+    const r = sairDaReserva(meta, 'B', 10, 'Bruno')   // pediu 10; leva os 400
+    assert.equal(r.ok, true)
+    assert.equal(r.ultimo, true)
+    assert.equal(r.valor, 400)
+    assert.equal(meta.saved, 0)
+    assert.deepEqual(meta.membros, [])
+  })
+
+  test('sair também tira um convite pendente do meu id', () => {
+    const meta = { id: 'r1', compartilhada: true, saved: 0, membros: ['A', 'B'], convites: ['A'], movimentos: [] }
+    sairDaReserva(meta, 'A', 0, 'Ana')
+    assert.deepEqual(meta.convites, [])
+    assert.deepEqual(meta.membros, ['B'])
+  })
+
+  test('carimba lastUpdate — é o que leva a saída aos outros perfis', () => {
+    const meta = nova()
+    sairDaReserva(meta, 'A', 600, 'Ana')
+    assert.ok(meta.lastUpdate, 'sem lastUpdate a cópia do outro perfil nunca reconcilia')
+  })
+
+  test('reserva que não é compartilhada não entra neste fluxo', () => {
+    const meta = { id: 'r1', saved: 100, membros: ['A'] }
+    assert.equal(sairDaReserva(meta, 'A', 100, 'Ana').ok, false)
+    assert.equal(meta.saved, 100)
+  })
+
+  test('soma fecha: o que saiu do saldo da reserva é exatamente o que a pessoa levou', () => {
+    const meta = nova()
+    const antes = meta.saved
+    const r = sairDaReserva(meta, 'B', 400, 'Bruno')
+    assert.equal(antes - meta.saved, r.valor)
   })
 })

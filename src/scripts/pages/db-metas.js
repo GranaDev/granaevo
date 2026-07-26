@@ -4,12 +4,12 @@ import {
 } from '../modules/ritmo-metas.js?v=1';
 import {
     contaCompartilhada, ehCompartilhada, membroAtual, registrarMovimento,
-    porMembro, divisaoSugerida, perfilParticipa,
+    porMembro, perfilParticipa,
     montarRosterConvite,
     sincronizarReservaEmPerfis, removerReservaDePerfis,
     marcarReservaAtualizada, reconciliarCopiaAtiva,
-    planoDissolucao, estaDissolvida, parteDissolucao, marcarReclamado, dissolucaoCompleta,
-} from '../modules/reserva-familia.js?v=7';
+    depositoLiquidoDe, ehUltimoMembro, sairDaReserva,
+} from '../modules/reserva-familia.js?v=8';
 
 // ── Reserva compartilhada v2: propagação entre perfis ───────────────────────
 // O blob é UMA linha (array de perfis), cada perfil com suas próprias `metas`.
@@ -48,46 +48,22 @@ function _removerReserva(id) {
     const outros = _outrosPerfis();
     if (outros) removerReservaDePerfis(outros, id);
 }
-// Credita uma transação no saldo do perfil DONO daquela parte (dissolução).
-// Perfil ativo → _ctx.transacoes (o save reconstrói o slot dele). Outro perfil →
-// empurra no slot dele em _allProfilesData (persiste no save do blob inteiro).
-// Perfil não encontrado → cai no ativo, para NUNCA perder dinheiro.
-// Credita no saldo do PERFIL ATIVO a sua parte das reservas em dissolução que
-// ainda não reclamou (auto-crédito). Cada perfil faz isso no PRÓPRIO slot ao abrir
-// as Reservas — nunca escreve no slot de outro perfil (frágil). A reconciliação
-// leva o `claimed` de volta aos demais. Reservas totalmente reclamadas somem.
-function _processarDissolucoesPendentes() {
+// Reserva compartilhada que já não me tem no roster (outro perfil me removeu, ou
+// eu saí em outro aparelho): a cópia no MEU slot precisa sumir. A reconciliação
+// traz o `membros` novo; aqui só tiramos da lista o que deixou de ser meu.
+function _limparReservasQueSai() {
     if (!Array.isArray(_ctx.metas)) return;
     const pid = String(_ctx.perfilAtivo?.id ?? '');
     if (!pid) return;
-    let mudou = false;
-    for (const m of _ctx.metas) {
-        if (!estaDissolvida(m)) continue;
-        const v = parteDissolucao(m, pid);
-        if (v > 0) {
-            const dh = _ctx.agoraDataHora();
-            _ctx.transacoes.push({
-                categoria:      'retirada_reserva',
-                tipo:           'Retirada de Reserva',
-                descricao:      `Dissolução: ${m.descricao}`.slice(0, 200),
-                valor:          v,
-                data:           dh.data,
-                hora:           dh.hora,
-                metaId:         null,
-                motivoRetirada: 'Dissolução da reserva',
-            });
-            marcarReclamado(m, pid);
-            marcarReservaAtualizada(m);
-            mudou = true;
-            _ctx.mostrarNotificacao(`Você recebeu ${formatBRL(v)} da dissolução de "${m.descricao}".`, 'success');
-        }
-    }
-    // Some do PRÓPRIO view quando todos já reclamaram (nunca antes — os outros
-    // ainda precisam ver o plano para reclamar a parte deles).
     const antes = _ctx.metas.length;
-    _ctx.metas = _ctx.metas.filter(m => !dissolucaoCompleta(m));
-    if (_ctx.metas.length !== antes) mudou = true;
-    if (mudou) _ctx.salvarDados();
+    _ctx.metas = _ctx.metas.filter(m => {
+        if (!ehCompartilhada(m) || !Array.isArray(m.membros)) return true;
+        // Roster legado (nomes) nunca esconde nada — mesma regra de perfilParticipa.
+        const pareceId = (v) => /^[0-9a-f-]{16,}$/i.test(String(v)) || /^\d+$/.test(String(v));
+        if (!m.membros.some(pareceId)) return true;
+        return m.membros.map(String).includes(pid);
+    });
+    if (_ctx.metas.length !== antes) _ctx.salvarDados();
 }
 // Dispara o push do convite para os OUTROS membros da conta (via edge, pois o
 // cliente não pode inserir notificação para outro usuário). BEST-EFFORT: o banner
@@ -98,10 +74,18 @@ async function _notificarConviteReserva(reservaId, reservaNome) {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (!token) return;
-        await fetch('/api/reserve-invite-notify', {
+        // Rota consolidada em /api/user-data: a Vercel Hobby só aceita 12 Serverless
+        // Functions e uma 13ª (arquivo próprio) FAZ O BUILD INTEIRO FALHAR — foi o
+        // que congelou a produção entre 2026-07-25 e 26. Recurso novo entra como
+        // `action` numa rota existente, nunca como arquivo novo em api/.
+        await fetch('/api/user-data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ reserva_id: String(reservaId), reserva_nome: String(reservaNome || '') }),
+            body: JSON.stringify({
+                action:       'reserve-invite-notify',
+                reserva_id:   String(reservaId),
+                reserva_nome: String(reservaNome || ''),
+            }),
         });
     } catch { /* best-effort — o convite continua visível pelo banner */ }
 }
@@ -135,7 +119,7 @@ function _convitesReservaPendentes() {
     const out = [];
     for (const p of profiles) {
         for (const m of (Array.isArray(p?.metas) ? p.metas : [])) {
-            if (m && m.compartilhada === true && !estaDissolvida(m) && Array.isArray(m.convites) &&
+            if (m && m.compartilhada === true && Array.isArray(m.convites) &&
                 m.convites.map(String).includes(pid) &&
                 !jaTenho.has(String(m.id)) && !dispensados.has(String(m.id)) && !vistos.has(String(m.id))) {
                 vistos.add(String(m.id));
@@ -1498,8 +1482,8 @@ function renderMetasList() {
     // perfil depositou) ANTES de renderizar. É o que corrige "reserva zerada no
     // perfil B" sem depender da propagação em memória sobreviver ao refetch.
     _reconciliarReservasAtivas();
-    // Credita a este perfil a sua parte de reservas em dissolução (auto-crédito).
-    _processarDissolucoesPendentes();
+    // Reserva de que eu já não faço parte (saí, ou fui removido do roster) some.
+    _limparReservasQueSai();
 
     const searchVal  = (document.getElementById('metaSearchInput')?.value  || '').toLowerCase();
     const statusVal  = (document.getElementById('metaStatusFilter')?.value || '');
@@ -1537,9 +1521,6 @@ function renderMetasList() {
     }
 
     const filtradas = _ctx.metas.filter(m => {
-        // Reserva em dissolução não aparece na lista (está sendo devolvida; o
-        // crédito de cada um já roda em _processarDissolucoesPendentes).
-        if (estaDissolvida(m)) return false;
         // Reserva compartilhada só aparece para os perfis que participam dela.
         // (Organização de tela — ver perfilParticipa em reserva-familia.js.)
         if (!perfilParticipa(m, _ctx.perfilAtivo?.id)) return false;
@@ -1774,76 +1755,82 @@ function renderMetasList() {
         .catch(() => { /* sem festa, sem problema */ });
 }
 
-// C4 — dissolver reserva compartilhada devolvendo o saldo a cada membro.
-// O dinheiro volta a UM saldo (o blob é compartilhado); a divisão é o registro
-// de justiça: uma transação de retorno por pessoa, mostrando quem levou quanto.
-// A soma tem que fechar com meta.saved (nunca cria nem some dinheiro do saldo).
-function _dissolverReservaCompartilhada(meta) {
-    const total = Number(meta.saved || 0);
-
-    // `meta.membros` guarda IDS de perfil (desde 2026-07-19), mas divisaoSugerida
-    // usa o roster como NOMES no fallback (quando ninguém tem líquido positivo).
-    // Sem traduzir, a tela de dissolução listaria UUIDs crus no lugar das pessoas.
-    // Rosters legados já são nomes e passam intactos pelo mapa.
-    const perfis = Array.isArray(_ctx.usuarioLogado?.perfis) ? _ctx.usuarioLogado.perfis : [];
-    const nomePorId = new Map(perfis.map(p => [String(p.id), String(p.nome || 'Perfil')]));
-    // Participantes = membros (IDS de perfil) com nome resolvido. É por perfil que
-    // o dinheiro volta na dissolução — cada um recebe a sua parte no PRÓPRIO saldo.
-    const participantes = (meta.membros || []).map(id => ({ id: String(id), nome: nomePorId.get(String(id)) || String(id) }));
-
-    // Sugestão proporcional ao líquido de cada PERFIL; roster {id,nome} p/ o fallback
-    // (divisão igual) também carregar o id de perfil.
-    const divisao = divisaoSugerida(meta.movimentos, total, participantes);
-    const sugPorId = new Map(divisao.map(d => [String(d.id ?? d.nome), Number(d.valor) || 0]));
-    // Linhas do diálogo = TODOS os membros (para poder redistribuir), já com a
-    // sugestão (0 para quem não contribuiu). Cada linha carrega o id do perfil.
-    const linhasBase = participantes.length
-        ? participantes.map(p => ({ profileId: p.id, nome: p.nome, valor: sugPorId.get(String(p.id)) ?? 0 }))
-        : [{ profileId: String(_ctx.perfilAtivo?.id ?? ''), nome: 'Você', valor: total }];
+// SAIR DA RESERVA COMPARTILHADA (substituiu a tela de dissolução, 2026-07-26).
+//
+// A tela antiga pedia para quem clicava distribuir o bolo INTEIRO entre todos os
+// membros — decidindo, na prática, com quanto o outro ia ficar. Além de estranho,
+// dependia do outro perfil abrir o app para "reclamar" a parte, e matava a
+// reserva para os dois quando só uma pessoa queria sair.
+//
+// Agora a operação é individual e imediata: mostro quanto ESTE perfil depositou,
+// devolvo isso ao saldo dele, tiro ele do roster e a reserva segue viva para quem
+// ficou — com o saldo reduzido exatamente pelo que ele levou. "Outro valor" existe
+// para o caso de rendimento (a reserva rendeu e ele leva mais do que pôs).
+// Quem sai por último leva o que sobrou e a reserva acaba.
+function _sairDaReservaCompartilhada(meta) {
+    const pid       = String(_ctx.perfilAtivo?.id ?? '');
+    const total     = Math.round(Number(meta.saved || 0) * 100) / 100;
+    const ultimo    = ehUltimoMembro(meta, pid);
+    const sugerido  = ultimo ? total : depositoLiquidoDe(meta, pid);
 
     _ctx.criarPopupDOM((popup) => {
-        popup.style.cssText = 'max-width:440px; width:96%;';
+        popup.style.cssText = 'max-width:420px; width:96%;';
         const wrap = document.createElement('div');
         wrap.style.cssText = 'max-height:82vh; overflow-y:auto; overflow-x:hidden; padding-right:4px;';
 
         const titulo = document.createElement('h3');
         titulo.style.cssText = 'text-align:center; margin-bottom:6px;';
-        titulo.textContent = 'Dissolver reserva';
+        titulo.textContent = ultimo ? 'Encerrar reserva' : 'Sair da reserva';
+
+        // O número em destaque: é a única informação que importa na decisão.
+        const destaque = document.createElement('div');
+        destaque.style.cssText = 'text-align:center; font-size:1.6rem; font-weight:800; color:var(--primary); margin:10px 0 4px;';
+        destaque.textContent = formatBRL(sugerido);
 
         const sub = document.createElement('div');
-        sub.style.cssText = 'text-align:center; color:var(--text-secondary); font-size:0.88rem; margin-bottom:14px;';
-        sub.appendChild(document.createTextNode(`${formatBRL(total)} voltam ao saldo. Com quanto cada um fica?`));
+        sub.style.cssText = 'text-align:center; color:var(--text-secondary); font-size:0.88rem; line-height:1.5; margin-bottom:14px;';
+        sub.textContent = ultimo
+            ? 'É o que resta na reserva. O valor volta para o seu saldo e a reserva é encerrada. Deseja continuar?'
+            : (sugerido > 0
+                ? 'Foi o que você depositou nessa reserva até hoje. Esse valor será devolvido para o seu saldo. Deseja sair da reserva?'
+                : 'Você não tem valor a receber nessa reserva. Deseja sair mesmo assim?');
 
-        const linhasWrap = document.createElement('div');
-        const totalLbl = document.createElement('div');
-        totalLbl.style.cssText = 'text-align:right; font-size:0.85rem; margin:10px 2px;';
+        // "Outro valor" — fechado por padrão para não transformar a decisão num
+        // formulário. Só quem rendeu (ou combinou diferente) precisa disso.
+        const outroWrap = document.createElement('div');
+        outroWrap.className = 'js-hidden';
+        outroWrap.style.cssText = 'margin-bottom:12px;';
+        const outroLbl = document.createElement('label');
+        outroLbl.className = 'form-label';
+        outroLbl.textContent = 'Quanto você vai receber';
+        outroLbl.htmlFor = 'valorSaidaReserva';
+        const inp = document.createElement('input');
+        inp.className = 'form-input'; inp.type = 'number'; inp.step = '0.01'; inp.min = '0';
+        inp.max = String(total);
+        inp.id = 'valorSaidaReserva';
+        inp.value = Number(sugerido).toFixed(2);
+        const dica = document.createElement('div');
+        dica.style.cssText = 'font-size:0.78rem; color:var(--text-muted); margin-top:6px;';
+        dica.textContent = `A reserva tem ${formatBRL(total)}. Você não pode retirar mais do que isso.`;
+        outroWrap.appendChild(outroLbl); outroWrap.appendChild(inp); outroWrap.appendChild(dica);
 
-        const inputs = [];
-        const recalc = () => {
-            const soma = Math.round(inputs.reduce((s, it) => s + (parseFloat(it.input.value) || 0), 0) * 100) / 100;
-            totalLbl.textContent = `Soma: ${formatBRL(soma)} de ${formatBRL(total)}`;
-            totalLbl.style.color = Math.abs(soma - total) < 0.01 ? 'var(--primary)' : '#ff6b6b';
-        };
-
-        linhasBase.forEach(d => {
-            const linha = document.createElement('div');
-            linha.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:8px;';
-            const nome = document.createElement('span');
-            nome.style.cssText = 'flex:1; font-size:0.92rem;';
-            nome.textContent = d.nome;                     // textContent — sem XSS
-            const inp = document.createElement('input');
-            inp.className = 'form-input'; inp.type = 'number'; inp.step = '0.01'; inp.min = '0';
-            inp.style.cssText = 'width:130px; flex-shrink:0;';
-            inp.value = Number(d.valor).toFixed(2);
-            inp.addEventListener('input', recalc);
-            inputs.push({ profileId: d.profileId, nome: d.nome, input: inp });
-            linha.appendChild(nome); linha.appendChild(inp);
-            linhasWrap.appendChild(linha);
+        const btnOutro = document.createElement('button');
+        btnOutro.className = 'btn-cancelar'; btnOutro.type = 'button';
+        btnOutro.style.cssText = 'width:100%; margin-bottom:10px;';
+        btnOutro.textContent = 'Outro valor';
+        btnOutro.addEventListener('click', () => {
+            outroWrap.classList.remove('js-hidden');
+            btnOutro.classList.add('js-hidden');
+            destaque.classList.add('js-hidden');
+            inp.focus();
+            inp.select();
         });
-        recalc();
+        // Último membro não escolhe: levar menos deixaria dinheiro preso numa
+        // reserva sem ninguém dentro.
+        if (ultimo) btnOutro.classList.add('js-hidden');
 
         const rowBtns = document.createElement('div');
-        rowBtns.style.cssText = 'display:flex; gap:10px; margin-top:14px;';
+        rowBtns.style.cssText = 'display:flex; gap:10px;';
         const btnCancel = document.createElement('button');
         btnCancel.className = 'btn-cancelar'; btnCancel.type = 'button'; btnCancel.style.flex = '1';
         btnCancel.textContent = 'Cancelar';
@@ -1851,42 +1838,65 @@ function _dissolverReservaCompartilhada(meta) {
 
         const btnOk = document.createElement('button');
         btnOk.className = 'btn-primary'; btnOk.type = 'button'; btnOk.style.flex = '2';
-        btnOk.textContent = 'Dissolver e devolver';
+        btnOk.textContent = ultimo ? 'Encerrar e receber' : 'Sair da reserva';
         btnOk.addEventListener('click', () => {
-            const partes = inputs.map(it => ({ profileId: it.profileId, nome: it.nome, valor: Math.round((parseFloat(it.input.value) || 0) * 100) / 100 }));
-            const soma = Math.round(partes.reduce((s, p) => s + p.valor, 0) * 100) / 100;
-            if (Math.abs(soma - total) > 0.01) {
-                return _ctx.mostrarNotificacao(`A soma precisa dar ${formatBRL(total)} (está ${formatBRL(soma)}).`, 'error');
+            const valor = ultimo ? total : Math.round((parseFloat(inp.value) || 0) * 100) / 100;
+            if (!Number.isFinite(valor) || valor < 0) {
+                return _ctx.mostrarNotificacao('Digite um valor válido.', 'error');
             }
-            // AUTO-CRÉDITO (sem escrever no slot de outro perfil, que é frágil):
-            // grava o PLANO na reserva e zera o saldo dela. Cada perfil credita a
-            // SUA parte ao abrir as Reservas (_processarDissolucoesPendentes) e a
-            // reconciliação leva o plano/claimed a todos. Quando todos reclamam, some.
-            meta.dissolvida = planoDissolucao(partes);
-            meta.saved = 0;                       // já não é "reservado" — está sendo devolvido
-            marcarReservaAtualizada(meta);
-            // Orfaniza os aportes DESTE perfil ligados à reserva (saldo já conferido).
+            if (valor > total) {
+                return _ctx.mostrarNotificacao(`A reserva só tem ${formatBRL(total)}.`, 'error');
+            }
+
+            const quem = membroAtual(_ctx);
+            const r = sairDaReserva(meta, pid, valor, quem.nome);
+            if (!r.ok) return _ctx.mostrarNotificacao(r.erro || 'Não foi possível sair da reserva.', 'error');
+
+            // O dinheiro volta pelo mesmo caminho de uma retirada normal: uma
+            // transação 'retirada_reserva' no PRÓPRIO perfil (o saldo do dashboard
+            // é a soma das transações). Nunca escrevemos no slot de outro perfil.
+            if (r.valor > 0) {
+                const dh = _ctx.agoraDataHora();
+                _ctx.transacoes.push({
+                    categoria:      'retirada_reserva',
+                    tipo:           'Retirada de Reserva',
+                    descricao:      `Saída da reserva — ${meta.descricao}`.slice(0, 200),
+                    valor:          r.valor,
+                    data:           dh.data,
+                    hora:           dh.hora,
+                    metaId:         null,
+                    motivoRetirada: 'Saída da reserva compartilhada',
+                });
+            }
+            // Aportes antigos desta reserva ficam órfãos (o saldo já foi acertado).
             _ctx.transacoes = _ctx.transacoes.map(t =>
                 (t.metaId && String(t.metaId) === String(meta.id)) ? Object.assign({}, t, { metaId: null }) : t);
+
+            // Propaga o novo saldo/roster para as cópias dos outros perfis ANTES de
+            // sumir com a minha — quem ficou precisa ver a reserva reduzida. Se eu
+            // era o último, ela sai de todo mundo.
+            if (r.ultimo) _removerReserva(meta.id);
+            else          _sincReserva(meta);
+
+            _ctx.metas = _ctx.metas.filter(m => String(m.id) !== String(meta.id));
             if (String(_ctx.metaSelecionadaId) === String(meta.id)) _ctx.metaSelecionadaId = null;
+
             _ctx.fecharPopup();
-            // Credita a parte do próprio perfil AGORA + salva (roda dentro do render).
+            _ctx.salvarDados();
             _ctx.renderMetasList();
             _ctx.atualizarTudo();
             _ctx.atualizarHeaderReservas();
-            const minhaParte = partes.find(p => String(p.profileId) === String(_ctx.perfilAtivo?.id));
-            const outros = partes.filter(p => p.valor > 0 && String(p.profileId) !== String(_ctx.perfilAtivo?.id)).length;
             _ctx.mostrarNotificacao(
-                outros > 0
-                    ? `Reserva em dissolução. ${minhaParte && minhaParte.valor > 0 ? 'Sua parte voltou ao seu saldo; ' : ''}os outros recebem a parte deles ao abrir as Reservas.`
-                    : `Reserva dissolvida. ${formatBRL(total)} voltaram ao saldo.`,
+                r.valor > 0
+                    ? `${formatBRL(r.valor)} voltaram para o seu saldo.${r.ultimo ? ' Reserva encerrada.' : ' Você saiu da reserva.'}`
+                    : (r.ultimo ? 'Reserva encerrada.' : 'Você saiu da reserva.'),
                 'success',
             );
         });
 
         rowBtns.appendChild(btnCancel); rowBtns.appendChild(btnOk);
-        wrap.appendChild(titulo); wrap.appendChild(sub); wrap.appendChild(linhasWrap);
-        wrap.appendChild(totalLbl); wrap.appendChild(rowBtns);
+        wrap.appendChild(titulo); wrap.appendChild(destaque); wrap.appendChild(sub);
+        wrap.appendChild(outroWrap); wrap.appendChild(btnOutro); wrap.appendChild(rowBtns);
         popup.appendChild(wrap);
     });
 }
@@ -1895,10 +1905,12 @@ function removerMeta(id) {
     const alvo = _ctx.metas.find(m => m.id === id);
     if (!alvo) return;
 
-    // Reserva compartilhada COM saldo: não apaga seco — dissolve devolvendo a
-    // cada membro (C4). Sem saldo, segue o fluxo normal de remoção.
-    if (ehCompartilhada(alvo) && Number(alvo.saved || 0) > 0) {
-        _dissolverReservaCompartilhada(alvo);
+    // Reserva compartilhada: quem clica em remover está SAINDO dela, não apagando
+    // a reserva dos outros. Só cai no fluxo seco quando é o último membro e não há
+    // dinheiro para devolver (aí "sair" e "apagar" são a mesma coisa).
+    if (ehCompartilhada(alvo) &&
+        (Number(alvo.saved || 0) > 0 || !ehUltimoMembro(alvo, _ctx.perfilAtivo?.id))) {
+        _sairDaReservaCompartilhada(alvo);
         return;
     }
 

@@ -418,6 +418,55 @@ export default async function handler(req, res) {
                   .send(await efRes.text())
     }
 
+    // ── POST { action:"reserve-invite-notify" }: push do convite de reserva ──
+    //
+    // ⚠️ POR QUE MORA AQUI E NÃO EM api/reserve-invite-notify.js (2026-07-26):
+    // o plano Hobby da Vercel aceita 12 Serverless Functions por deployment. Este
+    // repositório já usa as 12. Quando isto nasceu como arquivo próprio (13ª), o
+    // BUILD INTEIRO passou a falhar — e a produção ficou congelada em três commits
+    // atrás, sem nenhum sinal na aplicação: a rota nova respondia 404 e o convite
+    // nunca notificava ninguém. Recurso novo que precise de servidor entra como
+    // `action` numa rota existente, igual a push-subscribe/chat-parse/login-notify.
+    //
+    // Best-effort de propósito: o banner na aba Reservas é o caminho confiável do
+    // convite; falhar aqui não pode quebrar a criação da reserva no cliente.
+    if (parsed?.action === 'reserve-invite-notify') {
+        if (!SUPABASE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
+
+        if (!await checkRL(`resinvite:ip:${ip}`, 20)) {
+            res.setHeader('Retry-After', '60');
+            return res.status(429).json({ error: 'Muitas requisições. Aguarde.' });
+        }
+
+        if (typeof parsed?.reserva_id !== 'string' || parsed.reserva_id.length === 0 || parsed.reserva_id.length > 64) {
+            return res.status(400).json({ error: 'reserva_id inválido' });
+        }
+        const reservaNome = typeof parsed?.reserva_nome === 'string' ? parsed.reserva_nome.slice(0, 60) : '';
+
+        try {
+            const riRes = await fetch(`${SUPABASE_URL}/functions/v1/notify-reserve-invite`, {
+                method:  'POST',
+                headers: {
+                    'Content-Type':    'application/json',
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
+                },
+                body:   JSON.stringify({ reserva_id: parsed.reserva_id, reserva_nome: reservaNome }),
+                signal: AbortSignal.timeout(15_000),
+            });
+            return res.status(riRes.status)
+                      .setHeader('Content-Type', 'application/json')
+                      .send(await riRes.text());
+        } catch (e) {
+            logger.error('gateway_error', PATH, { action: parsed.action, ip, error: e?.message });
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
+            return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
+        }
+    }
+
     // ── POST { action:"delete-account" }: exclusão de conta (LGPD art. 18, VI) ──
     // Destrutivo e irreversível → rate limit agressivo (ip + uid) + confirmação por e-mail.
     if (parsed?.action === 'delete-account') {

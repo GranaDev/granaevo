@@ -156,3 +156,27 @@ if (problemas) {
     process.exit(1);
 }
 console.log('✓ check-refs: nenhuma chamada órfã');
+
+// ── Teto de Serverless Functions da Vercel (plano Hobby) ────────────────────
+// O plano Hobby aceita 12 funções por deployment. A 13ª não degrada nada: ela
+// FAZ O DEPLOY INTEIRO FALHAR, e a produção fica servindo a build anterior sem
+// nenhum sinal na aplicação — a rota nova responde 404 e todo o resto do commit
+// (front, correções, features) simplesmente não está no ar. Aconteceu em
+// 2026-07-25 com api/reserve-invite-notify.js e passou 1 dia sem ser percebido.
+// Arquivos iniciados por `_` são módulos compartilhados, não viram função.
+const API_DIR = 'api';
+const MAX_VERCEL_FUNCTIONS = 12;
+if (fs.existsSync(API_DIR)) {
+    const rotas = fs.readdirSync(API_DIR)
+        .filter((f) => f.endsWith('.js') && !f.startsWith('_'));
+    if (rotas.length > MAX_VERCEL_FUNCTIONS) {
+        console.error(
+            `\n✗ ${rotas.length} Serverless Functions em ${API_DIR}/ — o limite do plano Hobby é ${MAX_VERCEL_FUNCTIONS}.\n` +
+            '  O deploy VAI FALHAR e a produção fica congelada na build anterior.\n' +
+            '  Consolide o endpoint novo como `action` numa rota existente (ver api/user-data.js).\n' +
+            `  Rotas: ${rotas.join(', ')}`,
+        );
+        process.exit(1);
+    }
+    console.log(`✓ vercel-functions: ${rotas.length}/${MAX_VERCEL_FUNCTIONS} rotas em ${API_DIR}/`);
+}

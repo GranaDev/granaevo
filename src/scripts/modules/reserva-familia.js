@@ -223,53 +223,72 @@ const CAMPOS_SINC = [
     'saved', 'monthly', 'historicoRetiradas', 'objetivo', 'descricao', 'prazo',
     'tipoRendimento', 'taxaJuros', 'cdiPct', 'rendimentoPeriodo', 'aporteRecorrente',
     'valorAporte', 'lastRendimento', 'membros', 'movimentos', 'convites',
-    'tipoReserva', 'origemExistente', 'lastUpdate', 'dissolvida',
+    'tipoReserva', 'origemExistente', 'lastUpdate',
 ];
 
-// ── Dissolução por AUTO-CRÉDITO (sem escrita cross-perfil) ──────────────────
-// Escrever no slot de outro perfil é frágil neste app; o que funciona é cada
-// perfil mexer só no PRÓPRIO slot e a reconciliação (lastUpdate) propagar. Então
-// a dissolução NÃO credita os outros: grava um PLANO na reserva
-// (`meta.dissolvida = { partes:{profileId:valor}, claimed:[profileId] }`) que a
-// reconciliação leva a todos; cada perfil credita a SUA parte no próprio saldo ao
-// abrir, e marca-se como reclamado. Quando todos reclamam, a reserva some.
+// ── SAIR DA RESERVA (substitui a dissolução em bloco) ───────────────────────
+// A dissolução dividia o bolo entre TODOS de uma vez e dependia de cada perfil
+// abrir o app para reclamar a parte dele. Errado por dois motivos: quem clica
+// decidia quanto o OUTRO leva, e a reserva morria para os dois mesmo quando só
+// uma pessoa queria sair. Agora a operação é individual e local: eu retiro o que
+// é meu, saio do roster, e a reserva continua viva para quem ficou — reduzida
+// exatamente pelo que levei. Quando o ÚLTIMO membro sai, ela acaba.
 
-/** Monta o plano a partir de [{profileId, valor}]. Ignora <= 0. */
-export function planoDissolucao(partes) {
-    const p = {};
-    for (const it of (Array.isArray(partes) ? partes : [])) {
-        const pid = String(it?.profileId ?? '');
-        const v = Number(it?.valor);
-        if (pid && isFinite(v) && v > 0) p[pid] = Math.round(v * 100) / 100;
-    }
-    return { partes: p, claimed: [] };
-}
-/** A reserva está em dissolução? */
-export function estaDissolvida(meta) {
-    return !!(meta && meta.dissolvida && typeof meta.dissolvida === 'object');
-}
-/** Valor que ESTE perfil ainda tem a receber da dissolução (0 se já reclamou / sem parte). */
-export function parteDissolucao(meta, perfilId) {
+/**
+ * Quanto ESTE perfil tem depositado na reserva (aportes − retiradas dele).
+ * É o valor que a tela oferece de volta ao sair. Nunca negativo, nunca maior
+ * que o saldo atual da reserva (se outro já retirou, não há o que devolver).
+ */
+export function depositoLiquidoDe(meta, perfilId) {
     const pid = String(perfilId ?? '');
-    if (!estaDissolvida(meta) || !pid) return 0;
-    const claimed = Array.isArray(meta.dissolvida.claimed) ? meta.dissolvida.claimed.map(String) : [];
-    if (claimed.includes(pid)) return 0;
-    const v = Number(meta.dissolvida.partes?.[pid]);
-    return isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : 0;
+    if (!meta || !pid) return 0;
+    const saldo = Math.round(Number(meta.saved || 0) * 100) / 100;
+    if (!isFinite(saldo) || saldo <= 0) return 0;
+    const eu = porMembro(meta.movimentos).find(m => String(m.id ?? '') === pid);
+    const liquido = eu ? Number(eu.liquido) : 0;
+    if (!isFinite(liquido) || liquido <= 0) return 0;
+    return Math.min(Math.round(liquido * 100) / 100, saldo);
 }
-/** Marca este perfil como já creditado. MUTA. */
-export function marcarReclamado(meta, perfilId) {
+
+/** Este perfil é o último membro? (então sair encerra a reserva) */
+export function ehUltimoMembro(meta, perfilId) {
     const pid = String(perfilId ?? '');
-    if (!estaDissolvida(meta) || !pid) return;
-    if (!Array.isArray(meta.dissolvida.claimed)) meta.dissolvida.claimed = [];
-    if (!meta.dissolvida.claimed.map(String).includes(pid)) meta.dissolvida.claimed.push(pid);
+    if (!ehCompartilhada(meta) || !pid) return false;
+    const membros = Array.isArray(meta.membros) ? meta.membros.map(String) : [];
+    return membros.length <= 1 && (membros.length === 0 || membros[0] === pid);
 }
-/** Todos os quinhões já foram reclamados? (aí a reserva pode sumir de vez.) */
-export function dissolucaoCompleta(meta) {
-    if (!estaDissolvida(meta)) return false;
-    const partes = Object.keys(meta.dissolvida.partes || {});
-    const claimed = new Set((Array.isArray(meta.dissolvida.claimed) ? meta.dissolvida.claimed : []).map(String));
-    return partes.length > 0 && partes.every(k => claimed.has(String(k)));
+
+/**
+ * Tira ESTE perfil da reserva levando `valor` de volta. MUTA a meta:
+ * desconta do saldo, registra a retirada na trilha e remove o perfil do roster.
+ *
+ * O `valor` é escolhido na tela (default = o que ele depositou; "Outro valor"
+ * cobre rendimento). Teto = saldo da reserva: ninguém pode sacar dinheiro que a
+ * reserva não tem. Último membro leva TUDO — senão sobraria dinheiro preso numa
+ * reserva sem dono.
+ *
+ * @returns {{ok:boolean, valor:number, ultimo:boolean, erro?:string}}
+ */
+export function sairDaReserva(meta, perfilId, valor, nome) {
+    const pid = String(perfilId ?? '');
+    if (!ehCompartilhada(meta) || !pid) return { ok: false, valor: 0, ultimo: false, erro: 'reserva inválida' };
+
+    const saldo = Math.round(Number(meta.saved || 0) * 100) / 100;
+    const ultimo = ehUltimoMembro(meta, pid);
+    let v = Math.round(Number(valor) * 100) / 100;
+    if (!isFinite(v) || v < 0) return { ok: false, valor: 0, ultimo, erro: 'valor inválido' };
+    if (v > saldo) return { ok: false, valor: 0, ultimo, erro: 'valor maior que o saldo da reserva' };
+    if (ultimo) v = Math.max(saldo, 0);   // fecha a reserva zerada, sem dinheiro órfão
+
+    meta.saved = Math.round((saldo - v) * 100) / 100;
+    if (meta.saved < 0) meta.saved = 0;
+    if (v > 0) registrarMovimento(meta, { id: pid, nome, tipo: 'retirada', valor: v });
+
+    if (Array.isArray(meta.membros)) meta.membros = meta.membros.map(String).filter(id => id !== pid);
+    if (Array.isArray(meta.convites)) meta.convites = meta.convites.map(String).filter(id => id !== pid);
+    marcarReservaAtualizada(meta);
+
+    return { ok: true, valor: v, ultimo };
 }
 
 /** Carimba a reserva como atualizada AGORA (para reconciliar entre cópias). MUTA. */
@@ -390,55 +409,4 @@ export function progressoDe(saldo, objetivo) {
     const o = Number(objetivo);
     if (!isFinite(o) || o <= 0) return null;
     return Math.max(0, Math.min(100, (Number(saldo) / o) * 100));
-}
-
-/**
- * C4 — divisão sugerida ao dissolver a reserva.
- *
- * Devolve, para cada participante, quanto ele "leva" ao dissolver. Precisa somar
- * EXATAMENTE `saldoTotal` (o dinheiro todo volta ao saldo compartilhado, atribuído).
- *
- * Regra: cada um leva proporcional ao que LÍQUIDO contribuiu; se ninguém tem
- * líquido positivo (reserva inicial sem trilha, ou tudo já retirado), divide
- * igualmente entre o roster. O resto de centavos vai para o maior quinhão, de
- * modo que Σ === saldoTotal sempre (nunca cria nem some dinheiro).
- *
- * @param movimentos  trilha da meta
- * @param saldoTotal  meta.saved (o que há para devolver)
- * @param roster      nomes do meta.membros (fallback quando não há líquido)
- * @returns {Array<{ id, nome, valor }>}
- */
-export function divisaoSugerida(movimentos, saldoTotal, roster = []) {
-    const total = Math.round(Number(saldoTotal) * 100) / 100;
-    if (!isFinite(total) || total <= 0) return [];
-
-    const membros = porMembro(movimentos);
-    const positivos = membros.filter(m => m.liquido > 0);
-    const somaPos = positivos.reduce((s, m) => s + m.liquido, 0);
-
-    let base;
-    if (somaPos > 0) {
-        base = positivos.map(m => ({ id: m.id, nome: m.nome, valor: Math.floor((m.liquido / somaPos) * total * 100) / 100 }));
-    } else {
-        // Sem líquido positivo → divide igual entre o roster (ou "Você" se vazio).
-        // Roster aceita strings (nomes, legado) OU {id, nome} — o `id` de perfil,
-        // quando vem, é preservado para a dissolução creditar o perfil certo.
-        const itens = Array.isArray(roster) && roster.length ? roster : [{ id: null, nome: 'Você' }];
-        const cada = Math.floor((total / itens.length) * 100) / 100;
-        base = itens.map(r => {
-            const id   = (r && typeof r === 'object') ? (r.id ?? null) : null;
-            const nome = (r && typeof r === 'object') ? String(r.nome ?? 'Membro') : String(r);
-            return { id, nome: nome.slice(0, 80) || 'Membro', valor: cada };
-        });
-    }
-
-    // Ajuste de centavos: joga o resto no maior quinhão para Σ === total.
-    const somaBase = base.reduce((s, x) => s + x.valor, 0);
-    const resto = Math.round((total - somaBase) * 100) / 100;
-    if (resto !== 0 && base.length) {
-        let idxMaior = 0;
-        for (let i = 1; i < base.length; i++) if (base[i].valor > base[idxMaior].valor) idxMaior = i;
-        base[idxMaior].valor = Math.round((base[idxMaior].valor + resto) * 100) / 100;
-    }
-    return base;
 }
