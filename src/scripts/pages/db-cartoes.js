@@ -1329,6 +1329,16 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
             fTitle.appendChild(fTitleText);
             scroll.appendChild(fTitle);
 
+            // "Fatura de Julho" (mês do vencimento) é mais legível que "Vence 24/07/2026".
+            const _MESES_FAT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            const _labelFatura = (venc) => {
+                let d;
+                if (typeof venc === 'string' && /^\d{4}-\d{2}-\d{2}/.test(venc)) {
+                    const [y, m, dd] = venc.split('-').map(Number); d = new Date(y, m - 1, dd);
+                } else { d = new Date(venc); }
+                return isNaN(d.getTime()) ? 'Fatura' : `Fatura de ${_MESES_FAT[d.getMonth()]}`;
+            };
+
             faturas.forEach(f => {
                 const fItem = document.createElement('div');
                 fItem.style.cssText = 'background: rgba(255,209,102,0.1); padding: 14px; border-radius: 12px; border-left: 3px solid #ffd166; cursor: pointer; margin-bottom: 8px; transition: background 0.2s;';
@@ -1337,7 +1347,7 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
                 fRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
                 const fDesc = document.createElement('div');
                 fDesc.style.cssText = 'font-weight: 600; font-size: 0.9rem; color: var(--text-primary);';
-                fDesc.textContent = `Vence ${formatarDataBR(f.vencimento)}`;
+                fDesc.textContent = _labelFatura(f.vencimento);
                 const fVal = document.createElement('div');
                 fVal.style.cssText = 'font-weight: 700; color: #ffd166;';
                 fVal.textContent = _ctx.formatBRL(f.valor);
@@ -1346,7 +1356,8 @@ function abrirDetalhesCartaoCompleto(cartaoId) {
 
                 const fSub = document.createElement('div');
                 fSub.style.cssText = 'font-size: 0.78rem; color: var(--text-secondary); margin-top: 5px;';
-                fSub.textContent = `${f.compras?.length || 0} compra(s) — toque para ver detalhes`;
+                const _nCompras = f.compras?.length || 0;
+                fSub.textContent = `Vence ${formatarDataBR(f.vencimento)} · ${_nCompras} compra${_nCompras === 1 ? '' : 's'}`;
 
                 fItem.appendChild(fRow);
                 fItem.appendChild(fSub);
