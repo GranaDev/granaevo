@@ -1065,3 +1065,247 @@ realmente quer offline (consultar, não lançar).
    A trava tem de ser no CAMINHO DE GRAVAÇÃO (o `salvarDados` já recusa quando
    `_gravacoesCongeladas`), não só nos botões — botão escondido não é trava.
 4. Manter relatórios/gráficos, que só leem.
+
+---
+---
+
+# 🎯 FASE 7 — CAMINHO PARA 10/10 EM TODAS AS DIMENSÕES
+> **Origem:** auditoria GOD MODE + GOD EYES de **2026-07-27** (relatório completo em
+> `security-audit/god-mode-REPORT-2026-07-27.md`, mapa em `docs/caminho-10-10-2026-07-27.md`).
+> **O usuário decidiu (2026-07-27): vamos fazer TODOS os itens.** Ordem de arranque: SEGURANÇA primeiro.
+>
+> Notas de partida: Segurança 9.4 · Blindagem 9.0 · Otimização 8.0 · Marketing 7.0 ·
+> Diferencial 7.5 · Proposta 8.0 · Chat 8.5 · **Global 8.4**
+
+## Índice da Fase 7
+| Passo | Dimensão | Itens | Status |
+|---|---|---|---|
+| 30 | Segurança 9.4 → 10 | S-1 … S-6 | 🔴 |
+| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟡 B-1 em andamento |
+| 32 | Otimização 8.0 → 10 | O-1 … O-8 | 🔴 |
+| 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🔴 |
+| 34 | Diferencial 7.5 → 10 | D-1 … D-7 | 🔴 |
+| 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | 🔴 |
+| 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🔴 |
+
+---
+
+## PASSO 30 — SEGURANÇA 9.4 → 10 🔴
+> Nenhum item aqui é vazamento de dados. São furo de receita, brute force e higiene de banco.
+
+### S-1 — Bypass do limite de perfis por INSERT em lote 🔴 `ALTO` ⭐
+**Gap (provado em prod):** o trigger `enforce_profile_limit_stripe` é `BEFORE ROW` e a policy
+`profiles_insert_own` usa `can_create_profile()`. Em PostgreSQL, uma query dentro de um trigger
+BEFORE ROW **não enxerga as linhas inseridas pelo mesmo comando** — as duas camadas caem juntas.
+Evidência: `has_table_privilege('authenticated','public.profiles','INSERT') = true`; o cliente
+insere direto via PostgREST (`dashboard.js:2300`); **não há UNIQUE de backstop**.
+Um `POST /rest/v1/profiles` com array JSON cria N perfis → plano Individual (limite 1) vira Família.
+- [ ] ⬜ Trocar por `CREATE CONSTRAINT TRIGGER ... AFTER INSERT ... DEFERRABLE INITIALLY IMMEDIATE`
+- [ ] ⬜ Backstop independente: coluna `slot smallint` + `UNIQUE (user_id, slot)` + `CHECK (slot BETWEEN 1 AND 4)`
+- [ ] ⬜ Backfill do `slot` por `row_number() OVER (PARTITION BY user_id ORDER BY created_at)`
+
+**Verificar:** JWT de conta Individual, `POST` com `[{},{},{}]` → **0** perfis criados.
+**Risco:** médio (mexe em INSERT de perfil). **Esforço:** ~2h.
+
+### S-2 — Lockout de login por conta 🔴 `MÉDIO` ⭐ (última lacuna real de segurança)
+**Gap:** a tabela `login_lockouts` existe no banco e **nenhum código a referencia**
+(0 linhas, nunca sofreu autovacuum). Única defesa server-side: 8 tentativas/10 min **por IP**
+(`auth-session.js:39`). O reCAPTCHA do login é acionado por contador em `localStorage` → quem
+chama `/api/auth-session` direto **nunca vê captcha**. Botnet de 100 IPs = 4.800 tentativas/hora
+contra UMA conta. Política de senha fraca (8 chars).
+- [ ] ⬜ Lockout progressivo **por e-mail** em `auth-session.js` gravando em `login_lockouts`
+      (5 falhas → 15 min · 10 → 1 h · 20 → 24 h); reset no login bem-sucedido
+- [ ] ⬜ Responder SEMPRE 401 genérico (não vazar "conta bloqueada" antes de acertar a senha)
+- [ ] ⬜ Subir a política de senha de 8 → 10 caracteres
+- [ ] ⬜ Estender o HIBP (Passo 15) ao **login** — avisar, não bloquear
+
+**Verificar:** 30 tentativas de 30 IPs contra o mesmo e-mail → barrado na 6ª.
+
+### S-3 — `user_data_snapshots.data_json` legível via PostgREST 🔴 `MÉDIO`
+Contraria a invariante escrita na própria tabela. Blob é AES-256-GCM (por isso não é ALTO).
+- [ ] ⬜ `REVOKE SELECT ON public.user_data_snapshots FROM authenticated;`
+- [ ] ⬜ `GRANT SELECT (id, user_id, snapshot_date, size_bytes, checksum, created_at) ... TO authenticated;`
+
+**Verificar:** `has_column_privilege(...,'data_json','SELECT') = false` e o backup segue funcionando.
+
+### S-4 — `terms_acceptance` com GRANT sem policy 🔴 `BAIXO`
+`authenticated` tem `UPDATE`/`DELETE` sem policy correspondente. Inerte hoje; é o lado perigoso
+do desalinhamento num registro de consentimento LGPD.
+- [ ] ⬜ `REVOKE UPDATE, DELETE ON public.terms_acceptance FROM authenticated;`
+
+### S-5 — Cruft de RLS 🔴 `BAIXO`
+- [ ] ⬜ `DROP` das 3 policies sem grant (`profiles`, `user_profile_management`, `feature_flags`)
+- [ ] ⬜ `FORCE ROW LEVEL SECURITY` em `chat_parse_usage`, `edge_rate_limits`, `login_lockouts`
+
+### S-6 — Imutabilidade do audit log depende de GUC de sessão 🔴 `BAIXO`
+- [ ] ⬜ `AND current_user = 'postgres'` na exceção de `bloquear_alteracao_audit_log`
+
+> 📅 **MARCO 01/08/2026:** o cron 24 fará o **primeiro DELETE real** do audit log (~670 linhas de
+> fevereiro). Primeiro teste da interação GUC × trigger de imutabilidade. Observar `cron.job_run_details`.
+
+---
+
+## PASSO 31 — BLINDAGEM 9.0 → 10 🟡
+> Blindagem = camadas independentes. Hoje são 6. Faltam as que dependem de **algo além da senha**.
+
+### B-1 — MFA / TOTP **OPT-IN** 🟡 EM ANDAMENTO (2026-07-27) ⭐⭐
+**✅ CORREÇÃO IMPORTANTE (verificado na doc oficial em 2026-07-27):** MFA TOTP é **GRÁTIS em todos
+os planos** — *"TOTP MFA API is free to use and is enabled on all Supabase projects by default."*
+A anotação antiga de que exigia Pro estava **ERRADA**. Só *Phone/SMS MFA* e *enforcement org-wide* são pagos.
+
+**Decisão do usuário (2026-07-27):** esquema **OPCIONAL**. Nasce **DESLIGADO**; o usuário ativa
+em Configurações → Segurança da conta se quiser. Ninguém é forçado.
+
+**⚠️ ARMADILHA CENTRAL DESTE APP:** `mfa.verify()` devolve um par access+refresh **NOVO** (aal2).
+Com a sessão híbrida httpOnly, o refresh **não pode chegar ao JS**. Por isso TODA operação de MFA
+passa pelo BFF `api/auth-session.js` — e **não** pelo `supabase.auth.mfa.*` do cliente.
+
+**⚠️ RESTRIÇÃO DA VERCEL:** o plano Hobby aceita 12 Serverless Functions e já estamos no teto.
+As ações de MFA entram como `action` em `api/auth-session.js`, **nunca** como arquivo novo em `api/`.
+
+- [ ] ⬜ BFF: `mfa-status`, `mfa-enroll`, `mfa-activate`, `mfa-disable`, `mfa-login-verify`, `mfa-login-recovery`
+- [ ] ⬜ Gate no `login`: se houver fator `verified`, NÃO setar `ge_rt`; setar `ge_mfa` (5 min) e devolver `mfa_required`
+- [ ] ⬜ Cliente: helpers em `supabase-client.js`
+- [ ] ⬜ Tela de desafio em `login.js`
+- [ ] ⬜ UI opt-in no `security-panel.js` (QR + segredo manual + desativar com senha)
+- [ ] ⬜ Códigos de recuperação (perder o celular ≠ perder a conta)
+- [ ] ⬜ Migration PENDENTE: enforcement aal2 **só para quem optou** (`as restrictive`)
+
+**Invariante para quem NÃO usa 2FA:** nenhuma tela nova, nenhum cookie novo, nenhum passo novo —
+o login continua sendo senha → dashboard.
+**Único custo real medido:** +1 round-trip (`GET /auth/v1/user`, ~50 ms) por login, para descobrir
+se a conta tem fator. O GoTrue não manda `factors` na resposta do `/token` (a query não faz preload),
+então não há como saber sem perguntar. Tem retry duplo; se ainda assim falhar, responde 503 "tente
+de novo" — falha FECHADA de propósito: deixar passar seria abrir justamente o buraco que o 2º fator
+tapa, e bastaria ao atacante provocar a falha.
+
+### B-2 — Anti-bot em signup + reset 🔴
+Você se absteve do Turnstile (Passo 26) por dor de cabeça com cache do Cloudflare.
+**Alternativa sem Cloudflare:** validar o reCAPTCHA que já existe **server-side, por e-mail**,
+após N falhas — não por contador de `localStorage`. ~80% do valor sem tocar no Cloudflare.
+
+### B-3 — Rate limit na borda 🔴
+Hoje o rate limit é de aplicação (Upstash): um flood chega a **executar** a função Vercel antes de
+ser barrado. Cloudflare Rate Limiting Rules em `/api/auth-session` e `/api/create-account`. Custo 0.
+
+### B-4 — Alerta que acorda o dono 🔴
+`_alert.js` rastreia, mas nada te avisa. `cron-health-alert` cobre cron, não cobre
+`rate_limit_burst` / `upload_abuse` / `ip_blocked`. Webhook via Resend (já existe) quando N eventos
+de segurança ocorrem em X minutos.
+
+### B-5 — Fechar S-1…S-6 (contam para blindagem também) 🔴
+
+### B-6 — Revogar a anon key legada 🔴
+Continua ATIVA server-side (Estágio E5 do Passo 1). Depende de completar a **Fase 4 do JWT
+hardening**: remover o fallback `SUPABASE_SERVICE_ROLE_KEY` das ~20 edges restantes.
+
+### B-7 — Testes de regressão dos vetores fechados 🔴
+REGRA 9 do god-mode: 100% dos vetores encontrados viram teste. Hoje `tests/security/` não cobre
+o bypass de lote (S-1) nem o grant do sino.
+
+---
+
+## PASSO 32 — OTIMIZAÇÃO 8.0 → 10 🔴
+**Medido em 2026-07-27:** 1.3 MB JS · 569 KB CSS · 46 chunks · dashboard 133 KB raw / **39 KB gz**.
+**Maior ofensor isolado: o CSS do dashboard — 217 KB raw / 40 KB gz** (maior que o JS da página).
+
+- **O-1** 🔴 `dashboard.js` 6.424 linhas → **< 1.500 no boot**. Extrair painel de alertas, conquistas
+  e viagem para chunks lazy. (continuação do Passo 10, que parou em 39,1 KB de 40,9)
+- **O-2** 🔴 CSS crítico inline + resto lazy. `css-unused-candidates.txt` tem **110 candidatos**.
+  Ganho estimado **150–200 KB** — o maior ganho de LCP disponível. (Passo 7, parqueado)
+- **O-3** 🔴 Dropar **25 índices não usados** + resolver 4 `multiple_permissive_policies`
+  (pesa em toda escrita de `financial_audit_log`, 21.577 linhas)
+- **O-4** 🔴 Lighthouse CI vira **gate de PR** (falha se LCP > 2,5 s). Hoje o relatório existe e ninguém lê.
+- **O-5** 🔴 Boot otimista com snapshot cifrado em IndexedDB (versão completa do Passo 9)
+- **O-6** 🔴 Estender a virtualização (feita em 2026-07-18) a relatórios e cartões
+- **O-7** 🔴 AVIF/WebP com `<picture>` + `fetchpriority="high"` no elemento do LCP
+- **O-8** 🔴 `modulepreload` nos 2 primeiros chunks do dashboard
+
+**Definição de 10:** LCP < 2,0 s em 4G simulado · INP < 200 ms · Performance ≥ 95 no dashboard
+logado · gate no CI impedindo regressão.
+
+---
+
+## PASSO 33 — MARKETING 7.0 → 10 🔴
+> A dimensão mais distante do 10 e a de maior retorno. Produto nota 9, aquisição nota 6.
+
+- **M-1** 🔴 ⚡ **`sitemap.xml` retorna 404** e está declarado no `robots.txt`. Gerar no build. **15 min.**
+- **M-2** 🔴 ⭐ **Zero prova social.** Em finanças pessoais, confiança **é** a conversão.
+  3 depoimentos com foto e primeiro nome · 1 número honesto · selo de segurança (provável após B-1).
+- **M-3** 🔴 Conteúdo de topo (Passo 24): 3 calculadoras públicas indexáveis (juros do cartão ·
+  quanto sobra por mês · quanto rende a reserva) + 10 artigos de cauda longa. Calculadora converte
+  melhor que artigo e os motores já existem (`simulador-ese.js`, `horas-vida.js`).
+- **M-4** 🔴 Ciclo de vida (Passo 22): boas-vindas em 3 partes · reativação D+3 ·
+  **"seu relatório do mês"** (maior retenção) · carrinho abandonado.
+- **M-5** 🔴 Programa de indicação (Passo 23) — natural no plano casal/família, que já tem convite.
+- **M-6** 🔴 Open Graph por página — hoje só a landing tem; `/planos` no WhatsApp não mostra card.
+- **M-7** 🔴 Pixel/analytics de funil — sem medir signup → ativação → pagamento, otimizar é chute.
+- **M-8** 🔴 `AggregateOffer` no JSON-LD com preço real → rich snippet de preço no Google.
+- **M-9** 🔴 Página "GranaEvo vs Mobills" — busca de alta intenção + endereça o Open Finance de frente.
+
+---
+
+## PASSO 34 — DIFERENCIAL 7.5 → 10 🔴
+> Os diferenciais são reais mas **invisíveis**. Metade produto, metade comunicação.
+
+- **D-1** 🔴 ⭐ **Promover o import OFX/CSV para o topo da landing.** Ele existe (OFX de todos os
+  bancos + CSV Nubank/Inter, `db-transacoes.js:2614`) e está **enterrado numa aba**. A objeção que
+  mata a venda é *"vou ter que digitar tudo?"* — e a resposta já está pronta.
+  Título sugerido: **"Importe do seu banco sem dar sua senha a ninguém."**
+  Neutraliza o Open Finance sem os R$ 2.500+/mês do Pluggy.
+- **D-2** 🔴 ⭐ **Push em background que funciona** (RF-05). Hoje só chega com o app aberto → lembrete
+  é inútil. iOS só entrega Web Push em PWA instalado (16.4+). **Trava o C-2.**
+- **D-3** 🔴 Detector de assinaturas fantasma — o mais "vendável": achado concreto, em reais, no 1º uso.
+- **D-4** 🔴 Previsão de fim de mês — "no seu ritmo você fecha com R$ X". Dados já existem.
+- **D-5** 🔴 Restauração por perfil (RF-09 fases 2 e 3) — hoje restaurar reverte TODOS os perfis do plano.
+- **D-6** 🔴 Share Target (Passo 12) — compartilhar print do comprovante direto pro app.
+- **D-7** 🔴 Modo casal de verdade — "quem pagou o quê" + acerto de contas.
+
+---
+
+## PASSO 35 — PROPOSTA DO SITE 8.0 → 10 🔴
+
+- **P-1** 🔴 ⭐⭐ **Trial de 7–14 dias SEM cartão** (Passo 20) — **a maior alavanca de receita de todo
+  o relatório.** Hoje pede cartão antes de o visitante saber se serve. "Garantia de 7 dias" é
+  psicologicamente muito mais fraca que "7 dias grátis" e **custa exatamente o mesmo**.
+  O Stripe suporta `trial_period_days` sem `payment_method`.
+- **P-2** 🔴 `ALTO (LGPD)` **Export JSON prometido e inexistente.** `privacidade.html:347` e
+  `docs/RoPA.md:41` prometem JSON; o app entrega PDF/CSV/Excel. Implementar (vira marketing:
+  "seus dados são seus") ou corrigir o texto. Art. 18 V + art. 6 VI.
+- **P-3** 🔴 Declarar `user_devices` / `notify-login` + os operadores faltantes (ImprovMX, push) →
+  bump `CURRENT_TERMS_VERSION = '1.2'`.
+- **P-4** 🔴 Onboarding com valor no 1º minuto — importar OFX antes do primeiro lançamento manual.
+- **P-5** 🔴 Ancoragem de preço — anual (R$ 13,75/mês) como padrão, mensal ao lado.
+- **P-6** 🔴 FAQ respondendo *"por que não conecta meu banco?"* com orgulho. Omitir levanta suspeita.
+
+---
+
+## PASSO 36 — CHAT ASSISTENTE 8.5 → 10 🔴
+> Arquitetura já é 10. Falta produto. **Nenhum item abaixo manda R$ para o modelo.**
+
+- **C-1** 🔴 ⭐ **Memória de conversa** — o gap nº 1. *"Gastei 50 no mercado"* → *"e mais 30 ontem"*
+  não funciona. Passar os últimos 2 turnos (só texto e intenção, **nunca valores**) no `contextLine`.
+  Não quebra a arquitetura nem o cache do prompt.
+- **C-2** 🔴 **Proatividade real** — o Passo 29 está marcado como feito, mas **o gatilho não dispara**.
+  Push semanal com 1 insight do Radar. **Depende de D-2.**
+- **C-3** 🔴 Sair do enum — `intencao: "conversa_livre"` caindo em template local (não em texto livre do modelo).
+- **C-4** 🔴 Medir a instalação real do PWA em subdomínio antes de investir mais nele.
+- **C-5** 🔴 TTS na confirmação do lançamento (o motor já existe).
+- **C-6** 🔴 Pagar conta pelo chat — já está no schema (`pagar_conta` + `conta_hint`), falta a ação.
+- **C-7** 🔴 Educação contextual — micro-lição derivada **no cliente**: "32% em delivery; a média é 12%".
+- **C-8** 🔴 Fallback honesto — `confianca < 0,6` → perguntar em vez de adivinhar.
+
+---
+
+## Sequenciamento — o que trava o quê
+- **D-2 trava C-2** — sem push em background, o assistente proativo não tem canal.
+- **B-6 depende da Fase 4 do JWT** — migrar as ~20 edges restantes para `sb_secret_`.
+- **O-1 destrava O-2** — CSS crítico fica muito mais fácil com o JS já particionado.
+- **P-1 deveria vir ANTES de M-3** — não faz sentido trazer tráfego para um funil que trava no cartão.
+
+## Se só der para fazer 5
+1. **P-1** trial sem cartão — receita
+2. **B-1** MFA/TOTP — blindagem, e agora sabemos que é grátis
+3. **S-1** bypass do limite de perfis — está vazando receita agora
+4. **D-1** import OFX no topo — mata a objeção nº 1 com o que já existe
+5. **D-2** push em background — destrava metade dos diferenciais

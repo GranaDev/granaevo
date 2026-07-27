@@ -13,6 +13,36 @@
 //   logout  {}                              → revoga sessão; limpa cookie
 //
 // Substitui supabase.auth.signInWithPassword / autoRefreshToken / signOut no client.
+//
+// ─── MFA / TOTP (Passo 31 · B-1, 2026-07-27) ──────────────────────────────────
+// Verificação em duas etapas OPCIONAL. Nasce DESLIGADA; o usuário liga em
+// Configurações → Segurança da conta. Quem não ativa passa por um caminho de
+// login byte-a-byte idêntico ao anterior — essa é a invariante desta feature.
+//
+//   mfa-status        {}                      → lista fatores do usuário logado
+//   mfa-enroll        {}                      → cria fator TOTP pendente; devolve QR + segredo
+//   mfa-activate      { factorId, code }      → confirma o fator; devolve códigos de recuperação
+//   mfa-disable       { password }            → step-up por senha; remove fatores e códigos
+//   mfa-login-verify  { code, remember? }     → 2º passo do login (usa o cookie ge_mfa)
+//   mfa-login-recovery{ recoveryCode, ... }   → destrava com código de recuperação e DESLIGA o MFA
+//
+// POR QUE TUDO PASSA POR AQUI (e não pelo supabase.auth.mfa.* do cliente):
+//   o `verify` do GoTrue devolve um par access+refresh NOVO (elevado a aal2). Se o
+//   cliente chamasse direto, o REFRESH TOKEN cairia no JavaScript — exatamente o que
+//   este arquivo inteiro existe para impedir. O BFF intercepta, guarda o refresh no
+//   cookie HttpOnly e devolve ao cliente só o access token.
+//
+// POR QUE NÃO VIRA UMA ROTA NOVA EM api/:
+//   o plano Hobby da Vercel aceita 12 Serverless Functions e o repo já usa as 12.
+//   A 13ª quebra o build inteiro e congela a produção em silêncio (incidente de
+//   2026-07-25). Recurso novo que precise de servidor entra como `action`.
+//
+// O COOKIE ge_mfa (sessão em trânsito):
+//   entre "senha correta" e "código correto" existe uma sessão aal1 real e válida.
+//   Ela NÃO pode ir para o cliente — senão bastaria a senha para ler os dados via
+//   PostgREST, e o segundo fator viraria teatro. Fica num cookie HttpOnly de 5
+//   minutos, com Path e SameSite iguais aos do ge_rt, e é destruída no primeiro
+//   dos três eventos: sucesso, 5 erros, ou expiração.
 
 import { checkRate, checkRateWindow, isIPBlocked } from './_rate-limit.js'
 import { logger } from './_logger.js'
@@ -24,6 +54,11 @@ const ANON_KEY     = process.env.SUPABASE_ANON_KEY ?? ''
 const COOKIE_NAME      = 'ge_rt'
 const COOKIE_PATH      = '/api/auth-session'
 const REMEMBER_MAX_AGE = 60 * 60 * 24 * 30   // 30 dias quando "lembrar de mim"
+
+// ── MFA: cookie da sessão em trânsito (entre a senha e o código) ──────────────
+const MFA_COOKIE_NAME  = 'ge_mfa'
+const MFA_TTL_SECS     = 300   // 5 min: tempo de pegar o celular, não mais que isso
+const MFA_MAX_ATTEMPTS = 5     // erros de código antes de exigir login do zero
 
 const ALLOWED_ORIGINS = new Set([
   'https://www.granaevo.com',
@@ -42,6 +77,18 @@ const RL_REFRESH_MAX   = 30     // refresh é frequente (a cada ~1h por aba, mai
 const RL_LOGOUT_MAX    = 15
 const MAX_BODY_BYTES   = 4096
 const EMAIL_RE         = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/
+
+// MFA — o código TOTP tem 6 dígitos e vale ~60s (janela de 30s + 1 de tolerância).
+// Sem teto por IP, uma botnet tenta ~1M de combinações dentro da validade. Os 5
+// erros por cookie (MFA_MAX_ATTEMPTS) travam UMA sessão; este teto trava o IP.
+const RL_MFA_VERIFY_MAX = 10
+const RL_MFA_VERIFY_WIN = 600   // 10 tentativas / 10 min por IP
+const RL_MFA_ADMIN_MAX  = 12    // enroll/activate/disable/status: uso humano normal
+const RL_MFA_ADMIN_WIN  = 600
+const TOTP_CODE_RE      = /^\d{6}$/
+// Formato dos códigos de recuperação: 10 grupos de "XXXX-XXXX" em base32 sem
+// caracteres ambíguos. Aceita com ou sem hífen, maiúscula ou minúscula.
+const RECOVERY_CODE_RE  = /^[A-Z2-7]{4}-?[A-Z2-7]{4}$/
 
 // ── Cookie helpers ────────────────────────────────────────────────────────────
 function buildRefreshCookie(value, { maxAge, clear, domain } = {}) {
@@ -94,16 +141,105 @@ function readRefreshCookie(cookieHeader) {
   return null
 }
 
+// ── Cookie ge_mfa: sessão aal1 em trânsito, esperando o 2º fator ───────────────
+//
+// Guarda o par access+refresh da sessão aal1 que o GoTrue já emitiu (a senha
+// estava certa) mas que o usuário ainda não completou. Fica HttpOnly com o mesmo
+// Path/SameSite/Domain do ge_rt — quem não pode ler o refresh de 30 dias também
+// não lê este, de 5 minutos.
+//
+// O refresh aal1 precisa estar aqui (e não só o access) por causa do caminho de
+// recuperação: quando o usuário destrava com um código de recuperação, os fatores
+// são removidos e a sessão aal1 passa a ser a sessão final — sem o refresh
+// guardado, ele entraria e seria deslogado uma hora depois sem poder renovar.
+function buildMfaCookie(payload, { clear, domain } = {}) {
+  const value = clear ? '' : Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+  const parts = [
+    `${MFA_COOKIE_NAME}=${value}`,
+    'HttpOnly', 'Secure', 'SameSite=Strict',
+    `Path=${COOKIE_PATH}`,
+    `Max-Age=${clear ? 0 : MFA_TTL_SECS}`,
+  ]
+  if (domain) parts.push(`Domain=${domain}`)
+  return parts.join('; ')
+}
+
+function readMfaCookie(cookieHeader) {
+  if (!cookieHeader) return null
+  for (const part of cookieHeader.split(';')) {
+    const idx = part.indexOf('=')
+    if (idx === -1) continue
+    if (part.slice(0, idx).trim() !== MFA_COOKIE_NAME) continue
+    const raw = part.slice(idx + 1).trim()
+    if (!raw) return null
+    try {
+      const d = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
+      // exp é a autoridade: o Max-Age do cookie é uma dica ao browser, não uma
+      // garantia — um cliente que reenvie o cookie vencido não ganha nada.
+      if (!d?.at || !d?.rt || typeof d.exp !== 'number' || Date.now() > d.exp) return null
+      return d
+    } catch { return null }
+  }
+  return null
+}
+
+// Emite Set-Cookie para ge_rt e ge_mfa ao mesmo tempo, preservando a limpeza do
+// cookie host-only legado que setRefreshCookie() já fazia.
+function setCookies(res, list) {
+  res.setHeader('Set-Cookie', list.filter(Boolean))
+}
+
 // ── Chamadas ao GoTrue (Supabase Auth REST) ────────────────────────────────────
-async function gotrue(pathname, { token, body } = {}) {
+async function gotrue(pathname, { token, body, method = 'POST' } = {}) {
   const headers = { 'Content-Type': 'application/json', 'apikey': ANON_KEY }
   if (token) headers['Authorization'] = `Bearer ${token}`
   return fetch(`${SUPABASE_URL}/auth/v1/${pathname}`, {
-    method:  'POST',
+    method,
     headers,
     body:    body ? JSON.stringify(body) : undefined,
     signal:  AbortSignal.timeout(12_000),
   })
+}
+
+// Fatores TOTP já confirmados pelo usuário. Só `verified` conta: um fator
+// `unverified` é lixo de um enroll abandonado e NUNCA pode barrar o login.
+function verifiedTotp(user) {
+  const factors = Array.isArray(user?.factors) ? user.factors : []
+  return factors.filter(f => f?.status === 'verified' && f?.factor_type === 'totp')
+}
+
+// Descobre os fatores do usuário logo após o password grant.
+//
+// POR QUE ISTO CUSTA UM ROUND-TRIP EXTRA
+//   O GoTrue serializa `factors` com `omitempty` e a consulta que atende o
+//   /token não faz preload dos fatores — na prática a chave quase nunca vem na
+//   resposta do login. `GET /auth/v1/user`, sim, carrega os fatores (é dali que
+//   o próprio supabase-js lê em listFactors). Então: usa o que veio no grant se
+//   veio, senão pergunta. São ~50ms no login, e só no login.
+//
+// POR QUE FALHA FECHADO
+//   Se não dá para saber se a conta tem 2º fator, deixar passar seria abrir
+//   exatamente o buraco que o 2º fator existe para tapar — e um atacante com a
+//   senha na mão só precisaria provocar a falha. O preço é uma tela de "tente de
+//   novo" num soluço de rede, o que é recuperável; o contrário não é.
+//   A tentativa dupla existe para que esse soluço quase nunca chegue ao usuário.
+async function fatoresDoGrant(grant) {
+  if (Array.isArray(grant?.user?.factors)) return { ok: true, factors: verifiedTotp(grant.user) }
+
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    try {
+      const r = await gotrue('user', { token: grant.access_token, method: 'GET' })
+      if (!r.ok) {
+        // 401/403 aqui significaria token recém-emitido e já inválido: não é
+        // falha transitória, e repetir não muda nada.
+        if (r.status === 401 || r.status === 403) return { ok: false, factors: [] }
+        continue
+      }
+      const user = await r.json()
+      return { ok: true, factors: verifiedTotp(user) }
+    } catch { /* rede/timeout → tenta de novo */ }
+  }
+  return { ok: false, factors: [] }
 }
 
 // Resposta de sucesso: devolve só o que o client guarda em memória — nunca o refresh.
@@ -211,9 +347,165 @@ export default async function handler(req, res) {
     if (!grant?.access_token || !grant?.refresh_token)
       return res.status(502).json({ error: 'Resposta de autenticação inválida' })
 
+    // ── Gate do 2º fator (B-1) ────────────────────────────────────────────────
+    // Só entra aqui quem ATIVOU o MFA. Sem fator verificado, o fluxo abaixo é o
+    // mesmo de sempre — nenhum request extra, nenhum cookie extra.
+    const { ok: fatoresOk, factors } = await fatoresDoGrant(grant)
+    if (!fatoresOk) {
+      logger.error('mfa_factor_lookup_failed', PATH, { ip })
+      return res.status(503).json({ error: 'Não foi possível concluir o login agora. Tente de novo.' })
+    }
+
+    if (factors.length > 0) {
+      // Senha certa, mas a sessão ainda NÃO vale. Ela não vai para o cliente:
+      // fica no ge_mfa (HttpOnly, 5 min) até o código confirmar.
+      const domain = cookieDomainDe(req)
+      setCookies(res, [
+        buildMfaCookie({
+          at:       grant.access_token,
+          rt:       grant.refresh_token,
+          fid:      factors[0].id,
+          remember: remember === true,
+          tries:    0,
+          exp:      Date.now() + MFA_TTL_SECS * 1000,
+        }, { domain }),
+        // Derruba qualquer ge_rt anterior: enquanto o 2º fator não vier, esta
+        // requisição não pode deixar sessão utilizável para trás.
+        buildRefreshCookie('', { clear: true, domain }),
+        ...(domain ? [buildRefreshCookie('', { clear: true })] : []),
+      ])
+      logger.warn('mfa_challenge_issued', PATH, { ip })
+      return res.status(200).json({
+        mfa_required: true,
+        factor_type:  'totp',
+        expires_in:   MFA_TTL_SECS,
+      })
+    }
+
     setRefreshCookie(res, grant.refresh_token,
       { ...(remember ? { maxAge: REMEMBER_MAX_AGE } : {}), domain: cookieDomainDe(req) })
     return res.status(200).json(sessionPayload(grant))
+  }
+
+  // ── MFA: 2º passo do login ────────────────────────────────────────────────
+  // Consome o ge_mfa, troca o código pelo par elevado (aal2) e só então emite o
+  // ge_rt. Erro de código NÃO devolve sessão nenhuma e queima uma tentativa.
+  if (action === 'mfa-login-verify' || action === 'mfa-login-recovery') {
+    const domain = cookieDomainDe(req)
+    const limparTudo = () => setCookies(res, [
+      buildMfaCookie(null, { clear: true, domain }),
+      ...(domain ? [buildMfaCookie(null, { clear: true })] : []),
+    ])
+
+    if (!await checkRateWindow(`mfa-verify:${ip}`, RL_MFA_VERIFY_MAX, RL_MFA_VERIFY_WIN)) {
+      logger.warn('rate_limit', PATH, { ip, action })
+      res.setHeader('Retry-After', String(RL_MFA_VERIFY_WIN))
+      return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos.' })
+    }
+
+    const pend = readMfaCookie(req.headers['cookie'] ?? '')
+    if (!pend) {
+      limparTudo()
+      return res.status(440).json({ error: 'mfa_expired' })
+    }
+
+    // ── Caminho A: código de recuperação (perdeu o celular) ──────────────────
+    if (action === 'mfa-login-recovery') {
+      const code = typeof body?.recoveryCode === 'string'
+        ? body.recoveryCode.trim().toUpperCase().replace(/\s+/g, '') : ''
+      if (!RECOVERY_CODE_RE.test(code)) return res.status(400).json({ error: 'codigo_invalido' })
+
+      // A Edge Function é quem tem service_role: confere o hash, marca o código
+      // como usado e REMOVE os fatores. Aqui não há chave privilegiada nenhuma.
+      let rec
+      try {
+        rec = await fetch(`${SUPABASE_URL}/functions/v1/mfa-recovery`, {
+          method:  'POST',
+          headers: {
+            'Content-Type':   'application/json',
+            'Authorization':  `Bearer ${pend.at}`,
+            'apikey':         ANON_KEY,
+            'x-proxy-secret': process.env.PROXY_SECRET ?? '',
+            'x-forwarded-for': ip,
+          },
+          body:   JSON.stringify({ action: 'consume', code }),
+          signal: AbortSignal.timeout(12_000),
+        })
+      } catch {
+        return res.status(502).json({ error: 'Gateway indisponível' })
+      }
+      if (!rec.ok) {
+        const tries = (pend.tries ?? 0) + 1
+        if (tries >= MFA_MAX_ATTEMPTS) { limparTudo(); return res.status(429).json({ error: 'mfa_locked' }) }
+        setCookies(res, [buildMfaCookie({ ...pend, tries }, { domain })])
+        logger.warn('mfa_recovery_failed', PATH, { ip })
+        return res.status(401).json({ error: 'codigo_invalido', attempts_left: MFA_MAX_ATTEMPTS - tries })
+      }
+
+      // Fatores removidos → a sessão aal1 guardada virou a sessão final.
+      // Rotaciona o refresh antes de entregá-la (higiene: o par que fica com o
+      // usuário nunca é o mesmo que passou pelo cookie intermediário).
+      let novo
+      try {
+        const rr = await gotrue('token?grant_type=refresh_token', { body: { refresh_token: pend.rt } })
+        novo = rr.ok ? await rr.json() : null
+      } catch { novo = null }
+      if (!novo?.access_token || !novo?.refresh_token) {
+        limparTudo()
+        return res.status(440).json({ error: 'mfa_expired' })
+      }
+      setCookies(res, [
+        buildRefreshCookie(novo.refresh_token, { ...(pend.remember ? { maxAge: REMEMBER_MAX_AGE } : {}), domain }),
+        buildMfaCookie(null, { clear: true, domain }),
+        ...(domain ? [buildRefreshCookie('', { clear: true })] : []),
+      ])
+      logger.warn('mfa_disabled_by_recovery', PATH, { ip })
+      return res.status(200).json({ ...sessionPayload(novo), mfa_disabled: true })
+    }
+
+    // ── Caminho B: código do app autenticador ────────────────────────────────
+    const code = typeof body?.code === 'string' ? body.code.trim().replace(/\s+/g, '') : ''
+    if (!TOTP_CODE_RE.test(code)) return res.status(400).json({ error: 'codigo_invalido' })
+
+    let chal
+    try {
+      const cr = await gotrue(`factors/${encodeURIComponent(pend.fid)}/challenge`, { token: pend.at })
+      chal = cr.ok ? await cr.json() : null
+    } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+    if (!chal?.id) { limparTudo(); return res.status(440).json({ error: 'mfa_expired' }) }
+
+    let vr
+    try {
+      vr = await gotrue(`factors/${encodeURIComponent(pend.fid)}/verify`, {
+        token: pend.at,
+        body:  { challenge_id: chal.id, code },
+      })
+    } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+
+    if (!vr.ok) {
+      const tries = (pend.tries ?? 0) + 1
+      if (tries >= MFA_MAX_ATTEMPTS) {
+        limparTudo()
+        logger.warn('mfa_locked', PATH, { ip })
+        return res.status(429).json({ error: 'mfa_locked' })
+      }
+      setCookies(res, [buildMfaCookie({ ...pend, tries }, { domain })])
+      logger.warn('mfa_code_failed', PATH, { ip })
+      return res.status(401).json({ error: 'codigo_invalido', attempts_left: MFA_MAX_ATTEMPTS - tries })
+    }
+
+    const elevado = await vr.json()
+    if (!elevado?.access_token || !elevado?.refresh_token) {
+      limparTudo()
+      return res.status(502).json({ error: 'Resposta de autenticação inválida' })
+    }
+
+    setCookies(res, [
+      buildRefreshCookie(elevado.refresh_token, { ...(pend.remember ? { maxAge: REMEMBER_MAX_AGE } : {}), domain }),
+      buildMfaCookie(null, { clear: true, domain }),
+      ...(domain ? [buildRefreshCookie('', { clear: true })] : []),
+    ])
+    return res.status(200).json(sessionPayload(elevado))
   }
 
   // ── REFRESH ───────────────────────────────────────────────────
@@ -277,5 +569,187 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true })
   }
 
-  return res.status(400).json({ error: 'action inválida: use login, refresh ou logout' })
+  // ── MFA: gerenciamento (usuário JÁ logado) ────────────────────────────────
+  // status · enroll · activate · disable. Todas exigem o access token no header
+  // Authorization; o GoTrue é quem valida a assinatura — aqui só repassamos.
+  if (action === 'mfa-status' || action === 'mfa-enroll' ||
+      action === 'mfa-activate' || action === 'mfa-disable') {
+
+    if (!await checkRateWindow(`mfa-admin:${ip}`, RL_MFA_ADMIN_MAX, RL_MFA_ADMIN_WIN)) {
+      res.setHeader('Retry-After', String(RL_MFA_ADMIN_WIN))
+      return res.status(429).json({ error: 'Muitas requisições. Aguarde.' })
+    }
+
+    const authHdr = req.headers['authorization'] ?? ''
+    const at = authHdr.startsWith('Bearer ') ? authHdr.slice(7).trim() : ''
+    if (!at) return res.status(401).json({ error: 'Não autenticado' })
+
+    // Uma única fonte de verdade sobre o usuário e seus fatores. Se o GoTrue
+    // recusar o token aqui, nenhuma das ações abaixo chega a acontecer.
+    let user
+    try {
+      const ur = await gotrue('user', { token: at, method: 'GET' })
+      if (!ur.ok) return res.status(401).json({ error: 'Não autenticado' })
+      user = await ur.json()
+    } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+    if (!user?.id) return res.status(401).json({ error: 'Não autenticado' })
+
+    const ativos = verifiedTotp(user)
+
+    // ── status: alimenta o painel de Segurança ──────────────────────────────
+    if (action === 'mfa-status') {
+      return res.status(200).json({
+        enabled: ativos.length > 0,
+        factors: ativos.map(f => ({
+          id:            f.id,
+          friendly_name: f.friendly_name ?? 'App autenticador',
+          created_at:    f.created_at ?? null,
+        })),
+      })
+    }
+
+    // ── enroll: cria o fator pendente e devolve o QR ────────────────────────
+    if (action === 'mfa-enroll') {
+      if (ativos.length > 0) return res.status(409).json({ error: 'mfa_ja_ativo' })
+
+      // Limpa fatores `unverified` de tentativas abandonadas. Sem isto, o GoTrue
+      // recusa o novo enroll por conflito de nome e o usuário fica travado num
+      // erro que ele não tem como entender nem resolver sozinho.
+      for (const f of (Array.isArray(user.factors) ? user.factors : [])) {
+        if (f?.status === 'unverified') {
+          try { await gotrue(`factors/${encodeURIComponent(f.id)}`, { token: at, method: 'DELETE' }) } catch { /* melhor esforço */ }
+        }
+      }
+
+      let er
+      try {
+        er = await gotrue('factors', {
+          token: at,
+          body:  { factor_type: 'totp', friendly_name: 'GranaEvo', issuer: 'GranaEvo' },
+        })
+      } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+      if (!er.ok) {
+        logger.warn('mfa_enroll_failed', PATH, { ip, status: er.status })
+        return res.status(502).json({ error: 'Não foi possível iniciar a ativação.' })
+      }
+      const f = await er.json()
+      if (!f?.id || !f?.totp) return res.status(502).json({ error: 'Resposta inválida do autenticador' })
+      return res.status(200).json({
+        factorId: f.id,
+        qrCode:   f.totp.qr_code ?? null,   // SVG pronto para <img src>
+        secret:   f.totp.secret  ?? null,   // digitação manual quando a câmera falha
+        uri:      f.totp.uri     ?? null,
+      })
+    }
+
+    // ── activate: confirma o fator e emite os códigos de recuperação ────────
+    if (action === 'mfa-activate') {
+      const factorId = typeof body?.factorId === 'string' ? body.factorId : ''
+      const code     = typeof body?.code === 'string' ? body.code.trim().replace(/\s+/g, '') : ''
+      if (!factorId || !TOTP_CODE_RE.test(code))
+        return res.status(400).json({ error: 'codigo_invalido' })
+
+      let chal
+      try {
+        const cr = await gotrue(`factors/${encodeURIComponent(factorId)}/challenge`, { token: at })
+        chal = cr.ok ? await cr.json() : null
+      } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+      if (!chal?.id) return res.status(400).json({ error: 'codigo_invalido' })
+
+      let vr
+      try {
+        vr = await gotrue(`factors/${encodeURIComponent(factorId)}/verify`, {
+          token: at, body: { challenge_id: chal.id, code },
+        })
+      } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+      if (!vr.ok) return res.status(401).json({ error: 'codigo_invalido' })
+
+      // O verify eleva a sessão: chega par novo (aal2). O refresh vai pro cookie.
+      const elevado = await vr.json()
+      if (elevado?.access_token && elevado?.refresh_token) {
+        const domain = cookieDomainDe(req)
+        setRefreshCookie(res, elevado.refresh_token, { maxAge: REMEMBER_MAX_AGE, domain })
+      }
+
+      // Códigos de recuperação: sem eles, perder o celular = perder a conta.
+      let recoveryCodes = []
+      try {
+        const gr = await fetch(`${SUPABASE_URL}/functions/v1/mfa-recovery`, {
+          method:  'POST',
+          headers: {
+            'Content-Type':    'application/json',
+            'Authorization':   `Bearer ${elevado?.access_token || at}`,
+            'apikey':          ANON_KEY,
+            'x-proxy-secret':  process.env.PROXY_SECRET ?? '',
+            'x-forwarded-for': ip,
+          },
+          body:   JSON.stringify({ action: 'generate' }),
+          signal: AbortSignal.timeout(12_000),
+        })
+        if (gr.ok) recoveryCodes = (await gr.json())?.codes ?? []
+      } catch { /* o MFA já está ativo; a UI avisa que os códigos falharam */ }
+
+      logger.warn('mfa_enabled', PATH, { ip })
+      return res.status(200).json({
+        ok: true,
+        ...(elevado?.access_token ? sessionPayload(elevado) : {}),
+        recoveryCodes,
+      })
+    }
+
+    // ── disable: step-up por senha antes de baixar a guarda ─────────────────
+    // Um access token roubado não pode desligar o 2º fator sozinho — se pudesse,
+    // o MFA protegeria contra tudo menos contra o cenário que ele existe para
+    // cobrir. Mesma regra do Passo 25 (excluir conta).
+    if (action === 'mfa-disable') {
+      const password = typeof body?.password === 'string' ? body.password : ''
+      if (!password || password.length > 128)
+        return res.status(400).json({ error: 'Confirme sua senha para desativar.' })
+      if (!user.email) return res.status(409).json({ error: 'conta_sem_email' })
+      if (ativos.length === 0) return res.status(200).json({ ok: true, enabled: false })
+
+      let checa
+      try {
+        checa = await gotrue('token?grant_type=password', {
+          body: { email: String(user.email).toLowerCase(), password },
+        })
+      } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+      if (!checa.ok) {
+        logger.warn('mfa_disable_bad_password', PATH, { ip })
+        return res.status(401).json({ error: 'senha_incorreta' })
+      }
+
+      let removidos = 0
+      for (const f of ativos) {
+        try {
+          const dr = await gotrue(`factors/${encodeURIComponent(f.id)}`, { token: at, method: 'DELETE' })
+          if (dr.ok) removidos++
+        } catch { /* segue e reporta abaixo */ }
+      }
+      if (removidos !== ativos.length)
+        return res.status(502).json({ error: 'Não foi possível desativar. Tente de novo.' })
+
+      // Códigos de recuperação de um MFA desligado não podem sobreviver: eles
+      // continuariam valendo como chave de destravamento de algo que não existe.
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/mfa-recovery`, {
+          method:  'POST',
+          headers: {
+            'Content-Type':    'application/json',
+            'Authorization':   `Bearer ${at}`,
+            'apikey':          ANON_KEY,
+            'x-proxy-secret':  process.env.PROXY_SECRET ?? '',
+            'x-forwarded-for': ip,
+          },
+          body:   JSON.stringify({ action: 'purge' }),
+          signal: AbortSignal.timeout(10_000),
+        })
+      } catch { /* melhor esforço */ }
+
+      logger.warn('mfa_disabled', PATH, { ip })
+      return res.status(200).json({ ok: true, enabled: false })
+    }
+  }
+
+  return res.status(400).json({ error: 'action inválida' })
 }

@@ -418,6 +418,13 @@ verify_jwt = false
 [functions.notify-login]
 verify_jwt = false
 
+# mfa-recovery: códigos de recuperação do 2FA (Passo 31 · B-1). Auth própria
+# (x-proxy-secret + auth.getUser ES256). PRECISA ser false: o verify_jwt do
+# gateway valida o secret HS256 LEGADO e devolveria 401 antes do código —
+# resultado, o usuário que perdeu o celular NÃO conseguiria destravar a conta.
+[functions.mfa-recovery]
+verify_jwt = false
+
 # delete-account: exclusão de conta self-service (LGPD art. 18, VI). Auth própria
 # (proxy-secret + auth.getUser). Sem este bloco, o gateway rejeitaria o JWT ES256
 # antes de chegar no código e o botão de excluir conta retornaria 401.

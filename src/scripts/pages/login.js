@@ -1,4 +1,6 @@
 import { supabase, SUPABASE_ANON_KEY, setRememberMe, loginWithPassword, logout, supabaseReady } from '../services/supabase-client.js';
+// Chunk separado: só é baixado por quem tem 2FA ativo (ver mfa-api.js).
+import { verifyMfaLogin, recoverMfaLogin } from '../services/mfa-api.js';
 import { initErrorTracking } from '../modules/error-tracking.js';
 
 // Rastreamento de erros (no-op sem VITE_SENTRY_DSN / fora de produção)
@@ -817,6 +819,29 @@ loginForm?.addEventListener('submit', async (e) => {
             throw err;
         }
 
+        // ── 2º fator (Passo 31 · B-1) ────────────────────────────────────────
+        // A senha estava certa, mas a conta tem 2FA. O servidor NÃO devolveu
+        // sessão: ela está num cookie HttpOnly de 5 min esperando o código.
+        // Enquanto isso não for resolvido, não há sessão nenhuma neste browser.
+        if (data?.mfaRequired) {
+            LoginAttempts.reset();
+            LoginCaptchaState.reset();
+            hideLoginCaptcha();
+            restoreButton(submitBtn);
+
+            const mfa = await pedirCodigoMfa(rememberChecked);
+            if (!mfa) {
+                // Cancelou, errou 5 vezes ou o cookie expirou → volta à estaca zero.
+                inputs.loginPassword.value = '';
+                return;
+            }
+            data = mfa.data;
+            if (mfa.mfaDisabled) {
+                showAuthMessage('Verificação em duas etapas desativada. Reative em Configurações → Segurança.', 'info');
+            }
+            setButtonLoading(submitBtn, 'Verificando plano...');
+        }
+
         // Login bem-sucedido
         LoginAttempts.reset();
         LoginCaptchaState.reset();
@@ -1513,3 +1538,201 @@ document.querySelector('.checkbox-wrapper')?.addEventListener('click', () => {
     custom.classList.add('checkbox-custom-bounce');
     setTimeout(() => custom.classList.remove('checkbox-custom-bounce'), 200);
 });
+
+
+// ═══════════════════════════════════════════════════════════════
+//  2º FATOR NO LOGIN (Passo 31 · B-1)
+// ═══════════════════════════════════════════════════════════════
+// Chamado quando o servidor responde `mfa_required`. Nesse ponto a senha já foi
+// aceita, mas a sessão está retida num cookie HttpOnly de 5 minutos — este
+// browser ainda não tem sessão nenhuma. Só o código certo (ou um código de
+// recuperação) a libera.
+//
+// Nada aqui vira HTML por string: todo nó é createElement + textContent. Um
+// modal de autenticação é o último lugar do app onde se pode aceitar markup
+// dinâmico.
+//
+// Retorna:
+//   { data, mfaDisabled }  → sessão aplicada, pode seguir o fluxo de login
+//   null                   → cancelou, esgotou tentativas ou o prazo venceu
+
+const MFA_CSS = `
+#geMfaGate { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+#geMfaGate .mfa-ov { position: absolute; inset: 0; background: rgba(3,7,18,0.86); backdrop-filter: blur(6px); }
+#geMfaGate .mfa-card { position: relative; background: #13141f; border: 1px solid rgba(16,185,129,0.22); border-radius: 20px; padding: 28px 24px; max-width: 380px; width: 100%; box-shadow: 0 24px 48px rgba(0,0,0,0.55); color: #d1d5db; text-align: center; }
+#geMfaGate .mfa-ico { font-size: 2rem; margin-bottom: 10px; }
+#geMfaGate h3 { color: #fff; font-size: 1.12rem; margin: 0 0 6px; }
+#geMfaGate .mfa-sub { color: #9ca3af; font-size: 0.85rem; margin: 0 0 20px; line-height: 1.5; }
+#geMfaGate input { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 14px; color: #fff; font-size: 1.35rem; text-align: center; letter-spacing: 0.34em; font-weight: 700; font-variant-numeric: tabular-nums; }
+#geMfaGate input.mfa-rec { font-size: 1rem; letter-spacing: 0.14em; text-transform: uppercase; }
+#geMfaGate input:focus { outline: none; border-color: rgba(16,185,129,0.6); box-shadow: 0 0 0 3px rgba(16,185,129,0.14); }
+#geMfaGate .mfa-err { color: #fca5a5; font-size: 0.8rem; margin: 10px 0 0; min-height: 1.1em; }
+#geMfaGate .mfa-go { width: 100%; margin-top: 16px; background: linear-gradient(135deg,#10b981,#059669); color: #fff; border: none; border-radius: 12px; padding: 14px; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+#geMfaGate .mfa-go[disabled] { opacity: 0.55; cursor: default; }
+#geMfaGate .mfa-alt { background: none; border: none; color: #6b7280; font-size: 0.8rem; margin-top: 14px; cursor: pointer; text-decoration: underline; padding: 4px; }
+#geMfaGate .mfa-alt:hover { color: #9ca3af; }
+#geMfaGate .mfa-warn { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d; border-radius: 10px; padding: 10px 12px; font-size: 0.78rem; margin-top: 14px; line-height: 1.45; text-align: left; }
+`;
+
+let _mfaCssPronto = false;
+function _injetarCssMfa() {
+    if (_mfaCssPronto) return;
+    try {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(MFA_CSS);
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    } catch {
+        const s = document.createElement('style');
+        s.textContent = MFA_CSS;
+        document.head.appendChild(s);
+    }
+    _mfaCssPronto = true;
+}
+
+function pedirCodigoMfa(remember) {
+    _injetarCssMfa();
+    document.getElementById('geMfaGate')?.remove();
+
+    return new Promise((resolve) => {
+        // `modoRecuperacao` alterna entre o código de 6 dígitos do app e o
+        // código de recuperação de 8 caracteres.
+        let modoRecuperacao = false;
+        let encerrado       = false;
+
+        const novo = (tag, cls, txt) => {
+            const e = document.createElement(tag);
+            if (cls) e.className = cls;
+            if (txt != null) e.textContent = txt;
+            return e;
+        };
+
+        const root  = novo('div'); root.id = 'geMfaGate';
+        const ov    = novo('div', 'mfa-ov');
+        const card  = novo('div', 'mfa-card');
+        root.append(ov, card);
+
+        const ico   = novo('div', 'mfa-ico', '🔐');
+        const tit   = novo('h3', null, 'Verificação em duas etapas');
+        const sub   = novo('p', 'mfa-sub', 'Digite o código de 6 dígitos do seu app autenticador.');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = 'numeric';
+        input.autocomplete = 'one-time-code';
+        input.maxLength = 6;
+        input.setAttribute('aria-label', 'Código de verificação');
+        const erro  = novo('p', 'mfa-err', '');
+        erro.setAttribute('role', 'alert');
+        erro.setAttribute('aria-live', 'assertive');
+        const btn   = novo('button', 'mfa-go', 'Entrar');
+        btn.type = 'button';
+        const alt   = novo('button', 'mfa-alt', 'Perdi o acesso ao meu autenticador');
+        alt.type = 'button';
+        const cancelar = novo('button', 'mfa-alt', 'Cancelar e voltar');
+        cancelar.type = 'button';
+
+        card.append(ico, tit, sub, input, erro, btn, alt, cancelar);
+        document.body.appendChild(root);
+        setTimeout(() => input.focus(), 60);
+
+        const fechar = (valor) => {
+            if (encerrado) return;
+            encerrado = true;
+            root.remove();
+            resolve(valor);
+        };
+
+        // Alterna app autenticador ↔ código de recuperação.
+        alt.addEventListener('click', () => {
+            modoRecuperacao = !modoRecuperacao;
+            erro.textContent = '';
+            input.value = '';
+            if (modoRecuperacao) {
+                tit.textContent   = 'Código de recuperação';
+                sub.textContent   = 'Digite um dos códigos que você guardou ao ativar a verificação.';
+                input.className   = 'mfa-rec';
+                input.maxLength   = 9;             // XXXX-XXXX
+                input.inputMode   = 'text';
+                input.autocomplete = 'off';
+                alt.textContent   = 'Voltar para o código do app';
+                if (!card.querySelector('.mfa-warn')) {
+                    const w = novo('div', 'mfa-warn',
+                        'Usar um código de recuperação DESATIVA a verificação em duas etapas. '
+                        + 'Sua conta volta a ser protegida só pela senha até você reativá-la em '
+                        + 'Configurações → Segurança da conta.');
+                    card.insertBefore(w, alt);
+                }
+            } else {
+                tit.textContent   = 'Verificação em duas etapas';
+                sub.textContent   = 'Digite o código de 6 dígitos do seu app autenticador.';
+                input.className   = '';
+                input.maxLength   = 6;
+                input.inputMode   = 'numeric';
+                input.autocomplete = 'one-time-code';
+                alt.textContent   = 'Perdi o acesso ao meu autenticador';
+                card.querySelector('.mfa-warn')?.remove();
+            }
+            input.focus();
+        });
+
+        cancelar.addEventListener('click', () => fechar(null));
+
+        // Envio automático ao completar os 6 dígitos: é o que o usuário espera de
+        // um campo de OTP, e evita o "digitei e não aconteceu nada".
+        input.addEventListener('input', () => {
+            if (modoRecuperacao) return;
+            input.value = input.value.replace(/\D/g, '').slice(0, 6);
+            if (input.value.length === 6) enviar();
+        });
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') enviar(); });
+
+        let enviando = false;
+        async function enviar() {
+            if (enviando || encerrado) return;
+            const valor = input.value.trim();
+            if (modoRecuperacao ? valor.replace(/-/g, '').length !== 8 : valor.length !== 6) {
+                erro.textContent = modoRecuperacao
+                    ? 'O código de recuperação tem 8 caracteres.'
+                    : 'O código tem 6 dígitos.';
+                return;
+            }
+
+            enviando = true;
+            btn.disabled = true;
+            btn.textContent = 'Verificando…';
+            erro.textContent = '';
+
+            try {
+                if (modoRecuperacao) {
+                    const r = await recoverMfaLogin(valor, remember);
+                    fechar({ data: null, mfaDisabled: r.mfaDisabled });
+                } else {
+                    const grant = await verifyMfaLogin(valor, remember);
+                    fechar({ data: grant, mfaDisabled: false });
+                }
+            } catch (err) {
+                const motivo = String(err?.message ?? '');
+                // 440 = o cookie de 5 min venceu · mfa_locked = 5 erros
+                if (err?.status === 440 || motivo === 'mfa_expired') {
+                    showAuthMessage('O tempo para confirmar expirou. Entre novamente.', 'error');
+                    return fechar(null);
+                }
+                if (motivo === 'mfa_locked' || err?.status === 429) {
+                    showAuthMessage('Muitas tentativas. Entre novamente daqui a pouco.', 'error');
+                    return fechar(null);
+                }
+                const restam = err?.attemptsLeft;
+                erro.textContent = typeof restam === 'number'
+                    ? `Código incorreto. ${restam} tentativa${restam === 1 ? '' : 's'} restante${restam === 1 ? '' : 's'}.`
+                    : 'Código incorreto.';
+                input.value = '';
+                input.focus();
+            } finally {
+                enviando = false;
+                btn.disabled = false;
+                btn.textContent = 'Entrar';
+            }
+        }
+
+        btn.addEventListener('click', enviar);
+    });
+}

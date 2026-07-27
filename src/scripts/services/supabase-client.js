@@ -102,6 +102,11 @@ async function _applyGrant(data) {
     return data;
 }
 
+// Exportado para o mfa-api.js (chunk separado). Mora aqui porque a URL do
+// endpoint e o `credentials: same-origin` — que é o que faz o cookie HttpOnly
+// viajar — precisam ser idênticos em todas as chamadas de sessão.
+export { _callAuth as callAuthEndpoint, _applyGrant as applyGrant };
+
 async function _callAuth(action, extra = {}, withAuthHeader = false) {
     const headers = { 'Content-Type': 'application/json' };
     if (withAuthHeader) {
@@ -116,7 +121,14 @@ async function _callAuth(action, extra = {}, withAuthHeader = false) {
     });
 }
 
-/** Login server-side. Lança Error com .status em falha. */
+/**
+ * Login server-side. Lança Error com .status em falha.
+ *
+ * Quando a conta tem 2FA ativo, o servidor NÃO devolve sessão: responde
+ * `{ mfa_required: true }` e guarda a sessão pendente num cookie HttpOnly de 5
+ * minutos. Nesse caso esta função retorna `{ mfaRequired: true }` sem aplicar
+ * grant nenhum — quem chama deve pedir o código e chamar `verifyMfaLogin()`.
+ */
 export async function loginWithPassword(email, password, remember) {
     const res = await _callAuth('login', { email, password, remember: !!remember });
     if (!res.ok) {
@@ -124,8 +136,12 @@ export async function loginWithPassword(email, password, remember) {
         try { err = (await res.json())?.error ?? err; } catch {}
         throw Object.assign(new Error(err), { status: res.status });
     }
-    return _applyGrant(await res.json());
+    const data = await res.json();
+    if (data?.mfa_required) return { mfaRequired: true, expiresIn: data.expires_in ?? 300 };
+    return _applyGrant(data);
 }
+
+
 
 /**
  * Renova o access via cookie HttpOnly. Single-flight.
