@@ -233,3 +233,88 @@ export async function blockIP(ip, ttlSecs = BLOCKLIST_DEFAULT_TTL) {
     })
   } catch { /* silêncio — in-memory já foi setado como fallback */ }
 }
+
+// ── Primitivas genéricas de trava (S-2: lockout de login por conta) ───────────
+// A blocklist acima é específica de IP. O lockout por CONTA precisa das mesmas
+// operações sobre uma chave arbitrária, mais um contador que devolva o valor
+// (e não só "passou/não passou") para escalonar a punição.
+
+const _blockedKeys = new Map()   // chave → expiry (ms), fallback sem Redis
+const _counters    = new Map()   // chave → { c, t, w }, fallback sem Redis
+
+setInterval(() => {
+  const now = Date.now()
+  for (const [k, exp] of _blockedKeys) if (now > exp) _blockedKeys.delete(k)
+  for (const [k, v] of _counters) if (now - v.t > v.w) _counters.delete(k)
+}, 60_000)
+
+/**
+ * Incrementa um contador e devolve o valor atual. Diferente de checkRateWindow,
+ * que só diz se estourou — aqui o número importa, porque a severidade da trava
+ * depende de QUANTAS falhas houve.
+ * @returns {Promise<number>} contagem após o incremento
+ */
+export async function bumpCounter(key, windowSecs) {
+  if (USE_REDIS) {
+    try {
+      const res = await fetch(`${REDIS_URL}/pipeline`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify([['INCR', key], ['EXPIRE', key, windowSecs, 'NX']]),
+        signal:  AbortSignal.timeout(3_000),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        return Number(data?.[0]?.result ?? 1)
+      }
+    } catch { /* cai no fallback */ }
+  }
+  const now = Date.now(), w = windowSecs * 1_000
+  const r = _counters.get(key)
+  if (!r || now - r.t > w) { _counters.set(key, { c: 1, t: now, w }); return 1 }
+  r.c++; return r.c
+}
+
+/** true se a chave está travada. */
+export async function isKeyBlocked(key) {
+  if (!key) return false
+  if (USE_REDIS) {
+    try {
+      const res = await fetch(`${REDIS_URL}/exists/${encodeURIComponent(key)}`, {
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+        signal:  AbortSignal.timeout(2_000),
+      })
+      if (res.ok) return ((await res.json())?.result ?? 0) > 0
+    } catch { /* cai no fallback */ }
+  }
+  return _blockedKeys.has(key) && Date.now() < (_blockedKeys.get(key) ?? 0)
+}
+
+/** Trava uma chave por ttlSecs. */
+export async function blockKey(key, ttlSecs) {
+  if (!key) return
+  _blockedKeys.set(key, Date.now() + ttlSecs * 1_000)
+  if (!USE_REDIS) return
+  try {
+    await fetch(`${REDIS_URL}/pipeline`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify([['SET', key, '1'], ['EXPIRE', key, ttlSecs]]),
+      signal:  AbortSignal.timeout(2_000),
+    })
+  } catch { /* in-memory já cobre */ }
+}
+
+/** Apaga chaves (usado no login bem-sucedido para zerar o histórico de falhas). */
+export async function clearKeys(...keys) {
+  for (const k of keys) { _blockedKeys.delete(k); _counters.delete(k) }
+  if (!USE_REDIS) return
+  try {
+    await fetch(`${REDIS_URL}/pipeline`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify(keys.map(k => ['DEL', k])),
+      signal:  AbortSignal.timeout(2_000),
+    })
+  } catch { /* melhor esforço */ }
+}

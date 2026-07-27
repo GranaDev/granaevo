@@ -1,0 +1,12 @@
+-- 20260727050000_storage_policies_as_code.down.sql
+-- GranaEvo — Rollback de 20260727050000_storage_policies_as_code.sql
+--
+-- ⚠️ NÃO EXISTE ROLLBACK ÚTIL AQUI, e isso é intencional.
+-- A migration UP apenas registra como código policies que JÁ EXISTIAM no banco —
+-- ela não mudou comportamento nenhum (conferido por fingerprint md5 antes/depois).
+-- Dropar estas policies não "reverte" nada: deixaria `storage.objects` sem
+-- proteção de leitura e QUALQUER usuário autenticado passaria a enxergar a foto
+-- de perfil de todos os outros.
+--
+-- Se precisar mesmo remover, faça manualmente e com plena consciência disso.
+SELECT 'rollback intencionalmente vazio — ver comentario acima' AS aviso;

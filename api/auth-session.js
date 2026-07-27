@@ -44,8 +44,10 @@
 //   minutos, com Path e SameSite iguais aos do ge_rt, e é destruída no primeiro
 //   dos três eventos: sucesso, 5 erros, ou expiração.
 
-import { checkRate, checkRateWindow, isIPBlocked } from './_rate-limit.js'
+import { checkRate, checkRateWindow, isIPBlocked,
+         bumpCounter, isKeyBlocked, blockKey, clearKeys } from './_rate-limit.js'
 import { logger } from './_logger.js'
+import { createHash } from 'node:crypto'
 
 const PATH         = '/api/auth-session'
 const SUPABASE_URL = process.env.SUPABASE_URL ?? ''
@@ -77,6 +79,31 @@ const RL_REFRESH_MAX   = 30     // refresh é frequente (a cada ~1h por aba, mai
 const RL_LOGOUT_MAX    = 15
 const MAX_BODY_BYTES   = 4096
 const EMAIL_RE         = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/
+
+// ── S-2: lockout de login POR CONTA ──────────────────────────────────────────
+// O limite por IP (RL_LOGIN_MAX) não cobre força bruta distribuída: 100 IPs dão
+// 4.800 tentativas/hora contra UMA conta. E o reCAPTCHA do login é acionado por
+// contador em localStorage — quem chama este endpoint direto nunca o vê. Este é
+// o único freio que acompanha a CONTA, não a origem.
+//
+// Escalonamento: quanto mais insiste, mais cara fica a próxima tentativa.
+const LOCK_DEGRAUS = [
+  { falhas: 20, ttl: 86_400 },   // 24 h
+  { falhas: 10, ttl:  3_600 },   //  1 h
+  { falhas:  5, ttl:    900 },   // 15 min
+]
+const LOCK_JANELA = 86_400       // o contador de falhas expira em 24 h
+//
+// COMPROMISSO ACEITO CONSCIENTEMENTE: qualquer lockout por conta permite que um
+// terceiro trave o login de uma vítima errando a senha de propósito. Vale a pena
+// porque (a) é progressivo e começa em 15 min, não é permanente; (b) a
+// recuperação de senha continua funcionando, então há saída; e (c) a alternativa
+// é deixar a força bruta distribuída livre, que é pior.
+//
+// A chave é o SHA-256 do e-mail, nunca o e-mail em claro: não há por que deixar
+// PII espalhada nas chaves do Redis (e resolve encoding de acento e '+' de uma vez).
+const chaveConta = (email) =>
+  createHash('sha256').update(email).digest('hex').slice(0, 32)
 
 // MFA — o código TOTP tem 6 dígitos e vale ~60s (janela de 30s + 1 de tolerância).
 // Sem teto por IP, uma botnet tenta ~1M de combinações dentro da validade. Os 5
@@ -329,6 +356,18 @@ export default async function handler(req, res) {
     if (!EMAIL_RE.test(email) || !password || password.length > 128)
       return res.status(400).json({ error: 'invalid_credentials' })
 
+    // ── S-2: a conta está travada? ────────────────────────────────────────
+    // Antes do password grant: uma conta travada não deve nem chegar ao GoTrue.
+    const kConta = chaveConta(email)
+    const kLock  = `loginlock:${kConta}`
+    const kFail  = `loginfail:${kConta}`
+
+    if (await isKeyBlocked(kLock)) {
+      logger.warn('login_locked', PATH, { ip })
+      res.setHeader('Retry-After', '900')
+      return res.status(429).json({ error: 'account_locked' })
+    }
+
     let grantRes
     try {
       grantRes = await gotrue('token?grant_type=password', { body: { email, password } })
@@ -338,10 +377,28 @@ export default async function handler(req, res) {
     }
 
     if (!grantRes.ok) {
+      // ── S-2: contabiliza a falha e escalona ─────────────────────────────
+      // Contamos MESMO se o e-mail não existir. Isso não é desperdício: se só
+      // contássemos para contas reais, a diferença de comportamento viraria um
+      // oráculo de enumeração — "travou, logo a conta existe". Contando sempre,
+      // o 429 não diz nada sobre a existência da conta.
+      try {
+        const falhas = await bumpCounter(kFail, LOCK_JANELA)
+        const degrau = LOCK_DEGRAUS.find(d => falhas >= d.falhas)
+        if (degrau) {
+          await blockKey(kLock, degrau.ttl)
+          logger.warn('login_lockout_aplicado', PATH, { ip, falhas, ttl: degrau.ttl })
+        }
+      } catch { /* o limite por IP segue valendo; nunca derruba o login por isto */ }
+
       // Não vaza se o email existe — sempre mensagem genérica
       logger.warn('login_failed', PATH, { ip })
       return res.status(401).json({ error: 'invalid_credentials' })
     }
+
+    // Acertou a senha: zera o histórico. Sem isto, falhas legítimas espalhadas
+    // ao longo de um dia se somariam até travar quem nunca foi atacado.
+    clearKeys(kFail, kLock).catch(() => {})
 
     const grant = await grantRes.json()
     if (!grant?.access_token || !grant?.refresh_token)

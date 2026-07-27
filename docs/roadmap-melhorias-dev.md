@@ -1080,8 +1080,8 @@ realmente quer offline (consultar, não lançar).
 ## Índice da Fase 7
 | Passo | Dimensão | Itens | Status |
 |---|---|---|---|
-| 30 | Segurança 9.4 → 10 | S-1 … S-6 | 🔴 |
-| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟡 B-1 ✅ em prod · B-2…B-7 🔴 |
+| 30 | Segurança 9.4 → 10 | S-1 … S-6 | ✅ **COMPLETO** |
+| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟡 B-1 ✅ COMPLETO (login+RLS+edges) · B-2…B-7 🔴 |
 | 32 | Otimização 8.0 → 10 | O-1 … O-8 | 🔴 |
 | 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🔴 |
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | 🔴 |
@@ -1090,10 +1090,11 @@ realmente quer offline (consultar, não lançar).
 
 ---
 
-## PASSO 30 — SEGURANÇA 9.4 → 10 🔴
+## PASSO 30 — SEGURANÇA 9.4 → 10 ✅ COMPLETO (2026-07-27)
 > Nenhum item aqui é vazamento de dados. São furo de receita, brute force e higiene de banco.
 
-### S-1 — Bypass do limite de perfis por INSERT em lote 🔴 `ALTO` ⭐
+### S-1 — Bypass do limite de perfis por INSERT em lote ✅ APLICADO (migration 20260727010000) `ALTO` ⭐
+> Trigger virou CONSTRAINT TRIGGER AFTER INSERT. **A comparação teve de virar `>` em vez de `>=`**: em AFTER a contagem já inclui a linha inserida, e manter `>=` bloquearia o PRIMEIRO perfil de todo plano Individual. 5 cenários testados em prod com rollback.
 **Gap (provado em prod):** o trigger `enforce_profile_limit_stripe` é `BEFORE ROW` e a policy
 `profiles_insert_own` usa `can_create_profile()`. Em PostgreSQL, uma query dentro de um trigger
 BEFORE ROW **não enxerga as linhas inseridas pelo mesmo comando** — as duas camadas caem juntas.
@@ -1107,7 +1108,8 @@ Um `POST /rest/v1/profiles` com array JSON cria N perfis → plano Individual (l
 **Verificar:** JWT de conta Individual, `POST` com `[{},{},{}]` → **0** perfis criados.
 **Risco:** médio (mexe em INSERT de perfil). **Esforço:** ~2h.
 
-### S-2 — Lockout de login por conta 🔴 `MÉDIO` ⭐ (última lacuna real de segurança)
+### S-2 — Lockout de login por conta ✅ APLICADO (commit desta leva) `MÉDIO` ⭐
+> Implementado em **Redis (Upstash)**, não em Postgres: o BFF só tem a ANON_KEY, e usar a tabela exigiria uma RPC DEFINER exposta ao `anon` — que deixaria qualquer um trancar a conta de qualquer pessoa. Escalonamento 5→15min · 10→1h · 20→24h, contador de 24h, zerado no login certo. Chave = SHA-256 do e-mail (sem PII no Redis). Conta falha MESMO para e-mail inexistente, senão o 429 viraria oráculo de enumeração. **Compromisso aceito:** todo lockout por conta permite que um terceiro trave a vítima de propósito — mitigado por ser progressivo, começar em 15min e a recuperação de senha seguir funcionando.
 **Gap:** a tabela `login_lockouts` existe no banco e **nenhum código a referencia**
 (0 linhas, nunca sofreu autovacuum). Única defesa server-side: 8 tentativas/10 min **por IP**
 (`auth-session.js:39`). O reCAPTCHA do login é acionado por contador em `localStorage` → quem
@@ -1121,23 +1123,25 @@ contra UMA conta. Política de senha fraca (8 chars).
 
 **Verificar:** 30 tentativas de 30 IPs contra o mesmo e-mail → barrado na 6ª.
 
-### S-3 — `user_data_snapshots.data_json` legível via PostgREST 🔴 `MÉDIO`
+### S-3 — `user_data_snapshots.data_json` legível via PostgREST ✅ APLICADO `MÉDIO`
+> REVOKE + GRANT por coluna. `user_email` saiu junto (PII em claro, nenhum caminho do cliente precisa).
 Contraria a invariante escrita na própria tabela. Blob é AES-256-GCM (por isso não é ALTO).
 - [ ] ⬜ `REVOKE SELECT ON public.user_data_snapshots FROM authenticated;`
 - [ ] ⬜ `GRANT SELECT (id, user_id, snapshot_date, size_bytes, checksum, created_at) ... TO authenticated;`
 
 **Verificar:** `has_column_privilege(...,'data_json','SELECT') = false` e o backup segue funcionando.
 
-### S-4 — `terms_acceptance` com GRANT sem policy 🔴 `BAIXO`
+### S-4 — `terms_acceptance` com GRANT sem policy ✅ APLICADO `BAIXO`
 `authenticated` tem `UPDATE`/`DELETE` sem policy correspondente. Inerte hoje; é o lado perigoso
 do desalinhamento num registro de consentimento LGPD.
 - [ ] ⬜ `REVOKE UPDATE, DELETE ON public.terms_acceptance FROM authenticated;`
 
-### S-5 — Cruft de RLS 🔴 `BAIXO`
+### S-5 — Cruft de RLS ✅ APLICADO `BAIXO`
 - [ ] ⬜ `DROP` das 3 policies sem grant (`profiles`, `user_profile_management`, `feature_flags`)
 - [ ] ⬜ `FORCE ROW LEVEL SECURITY` em `chat_parse_usage`, `edge_rate_limits`, `login_lockouts`
 
-### S-6 — Imutabilidade do audit log depende de GUC de sessão 🔴 `BAIXO`
+### S-6 — Imutabilidade do audit log depende de GUC de sessão ✅ APLICADO `BAIXO`
+> Agora exige GUC **E** `current_user = postgres`. Testado: retenção viva (o cron de 01/08 continua funcionando, `purge_audit_log_retention` é DEFINER de postgres), DELETE sem GUC bloqueado, e o vetor real — `service_role` setando o GUC — bloqueado.
 - [ ] ⬜ `AND current_user = 'postgres'` na exceção de `bloquear_alteracao_audit_log`
 
 > 📅 **MARCO 01/08/2026:** o cron 24 fará o **primeiro DELETE real** do audit log (~670 linhas de
