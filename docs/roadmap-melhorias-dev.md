@@ -1097,7 +1097,6 @@ Commits: `64f003e` → `e18eae3`.
 ### 🔴 Aberto, e NÃO depende de você
 | Item | Peso | Esforço |
 |---|---|---|
-| **A-3 / P-2** export JSON prometido e inexistente | **o último ALTO** · risco jurídico | ~3h |
 | **M-1** `sitemap.xml` retorna 404 (robots aponta pra ele) | SEO | 15 min |
 | **CSP** libera `cloudflareinsights` em 14 lugares sem Cloudflare no caminho | higiene | 15 min |
 | **M-5** `profile_backups` retém PII sem prazo em 3 status | LGPD | 1 migration |
@@ -1107,9 +1106,9 @@ Commits: `64f003e` → `e18eae3`.
 | **Passos 32-36** — Otimização, Marketing, Diferencial, Proposta, Chat | 38 itens | semanas |
 
 ### ▶️ Sugestão de retomada
-**A-3 primeiro** (fecha o último ALTO e vira feature vendável: "seus dados são
-seus"), depois o bloco de 30 min **M-1 + CSP**, depois a migration única
-**M-5 + guest_invitations**. Deixar **B-6** para uma sessão em que dê para
+**A-3 ✅ FEITO (aa0ef75) — zero achados ALTO em aberto.** Retomar por **M-1 + CSP**
+(30 min os dois juntos), depois a migration única **M-5 + guest_invitations**,
+depois **M-7**. Deixar **B-6** para uma sessão em que dê para
 acompanhar os logs das edges — remover o fallback às cegas derruba qualquer
 edge que não esteja recebendo a chave nova.
 
@@ -1345,9 +1344,12 @@ logado · gate no CI impedindo regressão.
   o relatório.** Hoje pede cartão antes de o visitante saber se serve. "Garantia de 7 dias" é
   psicologicamente muito mais fraca que "7 dias grátis" e **custa exatamente o mesmo**.
   O Stripe suporta `trial_period_days` sem `payment_method`.
-- **P-2** 🔴 `ALTO (LGPD)` **Export JSON prometido e inexistente.** `privacidade.html:347` e
-  `docs/RoPA.md:41` prometem JSON; o app entrega PDF/CSV/Excel. Implementar (vira marketing:
-  "seus dados são seus") ou corrigir o texto. Art. 18 V + art. 6 VI.
+- **P-2 / A-3** ✅ **APLICADO (2026-07-27, commit aa0ef75)** — export JSON existe.
+  Configurações → Privacidade → "Baixar meus dados". Blob vem do SERVIDOR (a memória só tem o
+  perfil ativo; portabilidade exige todos), metadados por PostgREST com RLS, **step-up por senha**
+  (Passo 25 já previa isso para "exportar dados"), chunk lazy de 3,28 KB, e nenhuma credencial no
+  arquivo. Verificado em prod: 401/400/403 corretos no step-up, `ua_label` certo e `device_hash`
+  fora. **Era o último achado ALTO em aberto.**
 - **P-3** 🔴 Declarar `user_devices` / `notify-login` + os operadores faltantes (ImprovMX, push) →
   bump `CURRENT_TERMS_VERSION = '1.2'`.
 - **P-4** 🔴 Onboarding com valor no 1º minuto — importar OFX antes do primeiro lançamento manual.
