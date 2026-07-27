@@ -1077,6 +1077,44 @@ realmente quer offline (consultar, não lançar).
 > Notas de partida: Segurança 9.4 · Blindagem 9.0 · Otimização 8.0 · Marketing 7.0 ·
 > Diferencial 7.5 · Proposta 8.0 · Chat 8.5 · **Global 8.4**
 
+## 📍 ONDE PAREI — 2026-07-27 (fim da sessão)
+
+**Fechado hoje, tudo em produção e verificado:** Passo 30 inteiro (S-1…S-6) ·
+B-1 (2FA opt-in: login + RLS + edges) · B-4 · B-5 · B-7 · M-3 · M-4 · M-6 ·
+notificações de e-mail de MFA · bug do QR na ativação.
+Commits: `64f003e` → `e18eae3`.
+
+### ⏳ Esperando VOCÊ (3 coisas, nenhuma exige código)
+1. **Conferir `RESEND_API_KEY` e `SECURITY_ALERT_EMAIL` nas env da Vercel.**
+   Sem as duas, todo o B-4 conta e loga mas **não manda e-mail** (`_alert.js:93`).
+2. **Cloudflare** — adiado por decisão sua. Precisa: site no Cloudflare +
+   nameservers no Hostinger + `CLOUDFLARE_API_TOKEN`. Depois é
+   `node scripts/cloudflare-setup.mjs`. Ver `docs/cloudflare-runbook.md`.
+   Destrava B-2 (Turnstile) e B-3 (rate limit na borda).
+3. **Testar o 2FA de ponta a ponta** — ativar, deslogar, entrar com o código,
+   e guardar os códigos de recuperação. Ninguém ativou ainda (0 fatores).
+
+### 🔴 Aberto, e NÃO depende de você
+| Item | Peso | Esforço |
+|---|---|---|
+| **A-3 / P-2** export JSON prometido e inexistente | **o último ALTO** · risco jurídico | ~3h |
+| **M-1** `sitemap.xml` retorna 404 (robots aponta pra ele) | SEO | 15 min |
+| **CSP** libera `cloudflareinsights` em 14 lugares sem Cloudflare no caminho | higiene | 15 min |
+| **M-5** `profile_backups` retém PII sem prazo em 3 status | LGPD | 1 migration |
+| **retenção `guest_invitations`** — 3 linhas, nenhum cron | LGPD | (mesma migration) |
+| **M-7** `user_devices` não declarado na Política/RoPA | LGPD | ~1h + bump p/ 1.2 |
+| **B-6** 28 de 36 edges com fallback da service_role legada | higiene | ~4h, arriscado às cegas |
+| **Passos 32-36** — Otimização, Marketing, Diferencial, Proposta, Chat | 38 itens | semanas |
+
+### ▶️ Sugestão de retomada
+**A-3 primeiro** (fecha o último ALTO e vira feature vendável: "seus dados são
+seus"), depois o bloco de 30 min **M-1 + CSP**, depois a migration única
+**M-5 + guest_invitations**. Deixar **B-6** para uma sessão em que dê para
+acompanhar os logs das edges — remover o fallback às cegas derruba qualquer
+edge que não esteja recebendo a chave nova.
+
+---
+
 ## Índice da Fase 7
 | Passo | Dimensão | Itens | Status |
 |---|---|---|---|
