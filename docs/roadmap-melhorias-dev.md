@@ -1081,7 +1081,7 @@ realmente quer offline (consultar, não lançar).
 | Passo | Dimensão | Itens | Status |
 |---|---|---|---|
 | 30 | Segurança 9.4 → 10 | S-1 … S-6 | ✅ **COMPLETO** |
-| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟡 B-1 ✅ COMPLETO (login+RLS+edges) · B-2…B-7 🔴 |
+| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟡 B-1·B-4·B-5·B-7 ✅ · B-2/B-3 ⏸️ Cloudflare · B-6 🔴 |
 | 32 | Otimização 8.0 → 10 | O-1 … O-8 | 🔴 |
 | 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🔴 |
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | 🔴 |
@@ -1211,10 +1211,25 @@ após N falhas — não por contador de `localStorage`. ~80% do valor sem tocar 
 Hoje o rate limit é de aplicação (Upstash): um flood chega a **executar** a função Vercel antes de
 ser barrado. Cloudflare Rate Limiting Rules em `/api/auth-session` e `/api/create-account`. Custo 0.
 
-### B-4 — Alerta que acorda o dono 🔴
-`_alert.js` rastreia, mas nada te avisa. `cron-health-alert` cobre cron, não cobre
-`rate_limit_burst` / `upload_abuse` / `ip_blocked`. Webhook via Resend (já existe) quando N eventos
-de segurança ocorrem em X minutos.
+### B-4 — Alerta que acorda o dono ✅ APLICADO (2026-07-27, commit e18eae3)
+> **A descrição original acima estava ERRADA** e fica registrada como lição: `_alert.js` já era
+> completo (6 thresholds, e-mail via Resend, bloqueio de IP em evento crítico, dead-letter queue).
+>
+> O buraco real era outro e pior: **dois thresholds sem NENHUM emissor**. `webhook_tamper`
+> (fraude de pagamento) e `proxy_bypass` (scan direto de EF) estavam definidos, rotulados,
+> calibrados — e mudos. Alerta configurado que ninguém dispara é pior que nenhum: dá sensação
+> de monitoramento sem monitorar. Um terceiro (`login_lockout`) era dívida do próprio S-2,
+> que usava `logger.warn`.
+>
+> **Ponte edge→Vercel** (`_shared/sec-report.ts` + `?sec=1` em `api/user-data.js`): o `_alert.js`
+> roda na Vercel (Upstash+Resend) e as edges em Deno. A inversão que torna a ponte possível:
+> quem ataca manda o secret ERRADO para a edge; a edge, que conhece o CERTO, se autentica na volta.
+> Blindagem: branch antes do JWT (um scan não tem usuário), proxy-secret timing-safe, allow-list
+> de eventos (sem ela, quem obtivesse o secret forjaria até os que BLOQUEIAM IP), meta truncada,
+> teto de 60/min e fire-and-forget dos dois lados.
+>
+> ⚠️ **INERTE sem `RESEND_API_KEY` e `SECURITY_ALERT_EMAIL` nas env da Vercel** (`_alert.js:93`
+> retorna cedo). Conferir no dashboard — é o único passo que faltou.
 
 ### B-5 — Fechar S-1…S-6 (contam para blindagem também) 🔴
 
