@@ -4,6 +4,7 @@
 // GOD MODE Round 7: correções STRIPE-001, STRIPE-002, STRIPE-004, STRIPE-006, STRIPE-007, STRIPE-015
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { reportarEventoSeguranca } from '../_shared/sec-report.ts'
 
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
 // com fallback na service_role legada — rollback = redeploy do commit anterior
@@ -148,6 +149,13 @@ Deno.serve(async (req: Request) => {
   // Substituiu RPC check_rate_limit que criava 1 DB round-trip por request inválido.
   const clientIp = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim()
   if (!await verifyStripeSignature(rawBytes, sigHeader, webhookSecret)) {
+    // B-4: assinatura inválida aqui é tentativa de forjar EVENTO DE PAGAMENTO —
+    // conceder plano sem pagar, marcar fatura como quitada. É o evento de maior
+    // stake do sistema, e até hoje morria num console.warn que ninguém lê.
+    // O threshold (3 em 1 min) e o e-mail vivem no _alert.js, do lado da Vercel.
+    reportarEventoSeguranca('webhook_tamper', 'webhook-stripe', req,
+      `assinatura invalida${sigHeader ? '' : ' (header ausente)'}`)
+
     const rlResult = _checkInvalidSigRL(clientIp)
     if (rlResult === 'alert') {
       console.warn('[webhook-stripe] Assinatura inválida — [GHOST-001] ip:', clientIp.slice(0, 20))

@@ -388,6 +388,14 @@ export default async function handler(req, res) {
         if (degrau) {
           await blockKey(kLock, degrau.ttl)
           logger.warn('login_lockout_aplicado', PATH, { ip, falhas, ttl: degrau.ttl })
+          // Um lockout isolado é ruído (alguém esqueceu a senha). VÁRIOS em
+          // pouco tempo é credential stuffing — e é isso que o threshold de
+          // `login_lockout` (5 em 10 min) existe para pegar. Sem esta linha o
+          // sinal mais valioso do S-2 morria no log.
+          // Fire-and-forget: monitoramento nunca atrasa nem derruba o login.
+          import('./_alert.js')
+            .then(({ trackSecurityEvent }) => trackSecurityEvent('login_lockout', { ip, falhas, ttl: degrau.ttl }))
+            .catch(() => {})
         }
       } catch { /* o limite por IP segue valendo; nunca derruba o login por isto */ }
 

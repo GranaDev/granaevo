@@ -269,3 +269,53 @@ describe('Segredos — nada de service_role no que vai ao browser', () => {
     }
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('B-4 — todo alerta configurado precisa ter quem o dispare', () => {
+  const alert = ler('api', '_alert.js')
+
+  /** Junta o código de todos os lugares que podem emitir evento de segurança. */
+  function fontesEmissoras() {
+    const arquivos = []
+    for (const d of readdirSync(join(RAIZ, 'api'))) {
+      if (d.endsWith('.js')) arquivos.push(ler('api', d))
+    }
+    for (const d of readdirSync(join(RAIZ, 'supabase', 'functions'))) {
+      try { arquivos.push(ler('supabase', 'functions', d, 'index.ts')) } catch { /* _shared */ }
+    }
+    arquivos.push(ler('supabase', 'functions', '_shared', 'sec-report.ts'))
+    return arquivos.join('\n')
+  }
+
+  test('nenhum threshold fica órfão (era o buraco do B-4)', () => {
+    const thresholds = [...alert.matchAll(/^\s{2}([a-z_]+):\s*\{\s*count:/gm)].map(m => m[1])
+    assert.ok(thresholds.length >= 5, 'THRESHOLDS encolheu — confira se algum alerta foi removido.')
+
+    const fontes = fontesEmissoras()
+    const orfaos = thresholds.filter(t => !fontes.includes(`'${t}'`))
+    assert.deepEqual(orfaos, [],
+      `Threshold sem emissor: ${orfaos.join(', ')}. Um alerta configurado que ninguém dispara `
+      + 'é pior que nenhum alerta: dá a sensação de estar monitorado sem estar. Foi assim que '
+      + 'webhook_tamper e proxy_bypass ficaram — definidos e mudos. Ou ligue o emissor, ou '
+      + 'remova o threshold.')
+  })
+
+  test('o lockout de login (S-2) reporta, não só loga', () => {
+    assert.match(ler('api', 'auth-session.js'), /trackSecurityEvent\('login_lockout'/,
+      'Um lockout isolado é ruído; vários em minutos é credential stuffing. Sem esta chamada '
+      + 'o sinal mais valioso do S-2 morre no log.')
+  })
+
+  test('a ponte edge→Vercel tem allow-list de eventos', () => {
+    const ud = ler('api', 'user-data.js')
+    assert.match(ud, /const PERMITIDOS = new Set\(\[/,
+      'Sem allow-list, quem obtivesse o proxy-secret forjaria qualquer evento — inclusive os '
+      + 'que BLOQUEIAM IP ao atingir o threshold.')
+  })
+
+  test('o reporte da edge é fire-and-forget', () => {
+    const sr = ler('supabase', 'functions', '_shared', 'sec-report.ts')
+    assert.doesNotMatch(sr, /await fetch\(ALVO/,
+      'Com await, uma falha do monitoramento atrasaria o caminho de segurança que ele observa.')
+  })
+})

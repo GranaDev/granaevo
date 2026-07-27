@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 import { mfaBloqueia } from '../_shared/mfa-gate.ts'
+import { reportarEventoSeguranca } from '../_shared/sec-report.ts'
 
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
 // com fallback na service_role legada — rollback = redeploy do commit anterior
@@ -155,6 +156,10 @@ Deno.serve(async (req: Request) => {
   }
   const received = req.headers.get('x-proxy-secret') ?? ''
   if (!timingSafeEqual(received, proxySecret)) {
+    // B-4: chamada direta à edge com secret errado = alguém varrendo as Edge
+    // Functions por fora do proxy. O threshold (5 em 2 min) BLOQUEIA o IP.
+    reportarEventoSeguranca('proxy_bypass', 'save-user-data', req,
+      received ? 'secret incorreto' : 'sem header x-proxy-secret')
     console.warn('[save-user-data] Proxy secret inválido — acesso bloqueado')
     return json({ success: false, error: 'Não autorizado' }, 401, corsHeaders)
   }

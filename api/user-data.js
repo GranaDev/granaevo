@@ -138,6 +138,71 @@ export default async function handler(req, res) {
         }
     }
 
+    // ── Ponte de eventos de segurança das Edge Functions (B-4) ───────────────
+    //
+    // O `_alert.js` (thresholds + e-mail via Resend + bloqueio de IP) roda na
+    // Vercel. As Edge Functions rodam em Deno e não têm como importá-lo — por
+    // isso `webhook_tamper` e `proxy_bypass` tinham threshold definido e ZERO
+    // emissores: o alerta existia no papel e nunca dispararia.
+    //
+    // Esta rota é o caminho de volta. Autenticada pelo mesmo x-proxy-secret que
+    // as edges já usam — e note a inversão que a torna possível: quem tenta
+    // burlar manda o secret ERRADO para a edge; a edge, que conhece o CERTO,
+    // reporta por aqui.
+    //
+    // Branch cedo, antes da exigência de JWT: um scan direto na edge não tem
+    // usuário nenhum, e é justamente esse o evento que queremos ver.
+    if (req.method === 'POST' && req.query?.sec === '1') {
+        if (!PROXY_SECRET) return res.status(503).json({ error: 'Serviço indisponível' });
+        const provided = req.headers['x-proxy-secret'] ?? '';
+        const okSecret = provided &&
+            Buffer.byteLength(provided) === Buffer.byteLength(PROXY_SECRET) &&
+            timingSafeEqual(Buffer.from(provided), Buffer.from(PROXY_SECRET));
+        if (!okSecret) return res.status(401).json({ error: 'Unauthorized' });
+
+        const ipSec = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
+            .toString().split(',')[0].trim();
+        // Teto próprio: se uma edge entrar em loop de erro, isto não pode virar
+        // um amplificador de e-mail nem de escrita no Redis.
+        if (!await checkRL(`secevent:${ipSec}`, 60)) return res.status(429).end();
+
+        let rawSec = '';
+        try {
+            rawSec = await new Promise((resolve, reject) => {
+                const chunks = []; let total = 0;
+                req.on('data', c => {
+                    total += c.length;
+                    if (total > 2048) { req.destroy(); return reject(new Error('TOO_LARGE')); }
+                    chunks.push(c);
+                });
+                req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+                req.on('error', reject);
+            });
+        } catch { return res.status(413).end(); }
+
+        let evt;
+        try { evt = JSON.parse(rawSec); } catch { return res.status(400).end(); }
+
+        // Allow-list: só os eventos que as edges têm motivo para reportar. Sem
+        // isto, quem obtivesse o proxy-secret poderia forjar qualquer evento —
+        // inclusive os que BLOQUEIAM IP ao atingir o threshold.
+        const PERMITIDOS = new Set(['webhook_tamper', 'proxy_bypass', 'jwt_forgery']);
+        if (!PERMITIDOS.has(evt?.eventType)) return res.status(400).end();
+
+        // Meta reconstruída do zero e truncada — nada do corpo entra inteiro no
+        // e-mail de alerta.
+        const meta = {
+            origem: typeof evt?.origem === 'string' ? evt.origem.slice(0, 40) : 'edge',
+            ip:     typeof evt?.ip === 'string' ? evt.ip.slice(0, 45) : ipSec,
+            ...(typeof evt?.detalhe === 'string' ? { detalhe: evt.detalhe.slice(0, 120) } : {}),
+        };
+
+        import('./_alert.js')
+            .then(({ trackSecurityEvent }) => trackSecurityEvent(evt.eventType, meta))
+            .catch(() => {});
+        return res.status(202).end();
+    }
+
     // ── CSP Report handler (consolidado de csp-report.js) ─────
     // Detectado por Content-Type antes de qualquer outra lógica.
     // O vercel.json redireciona /api/csp-report → /api/user-data via rewrite.
