@@ -634,6 +634,59 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true })
   }
 
+  // ── Step-up: confirma a senha de quem já está logado (Passo 25) ──────────
+  // Genérico de propósito: o `mfa-disable` faz a mesma checagem embutida, e a
+  // exportação de dados (A-3) precisa dela. Não emite sessão nem altera nada —
+  // só responde "essa senha é mesmo dessa conta agora".
+  //
+  // Por que a exportação exige isto: ela empacota TODA a vida financeira do
+  // usuário num arquivo, num clique. Ver os dados na tela exige navegar; baixar
+  // o arquivo não. Com uma sessão emprestada ou esquecida aberta, a diferença
+  // entre as duas coisas é o que separa bisbilhotar de exfiltrar.
+  if (action === 'verify-password') {
+    if (!await checkRateWindow(`stepup:${ip}`, 8, 600)) {
+      res.setHeader('Retry-After', '600')
+      return res.status(429).json({ error: 'Muitas tentativas. Aguarde.' })
+    }
+
+    const authHdr = req.headers['authorization'] ?? ''
+    const at = authHdr.startsWith('Bearer ') ? authHdr.slice(7).trim() : ''
+    if (!at) return res.status(401).json({ error: 'Não autenticado' })
+
+    const password = typeof body?.password === 'string' ? body.password : ''
+    if (!password || password.length > 128)
+      return res.status(400).json({ error: 'senha_obrigatoria' })
+
+    let user
+    try {
+      const ur = await gotrue('user', { token: at, method: 'GET' })
+      if (!ur.ok) return res.status(401).json({ error: 'Não autenticado' })
+      user = await ur.json()
+    } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+    if (!user?.email) return res.status(409).json({ error: 'conta_sem_email' })
+
+    let checa
+    try {
+      checa = await gotrue('token?grant_type=password', {
+        body: { email: String(user.email).toLowerCase(), password },
+      })
+    } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
+
+    if (!checa.ok) {
+      logger.warn('stepup_senha_incorreta', PATH, { ip })
+      return res.status(401).json({ error: 'senha_incorreta' })
+    }
+    // O grant acima criou uma sessão paralela que ninguém vai usar. Não a
+    // devolvemos (o cliente segue com a sessão dele) e revogamos na hora, para
+    // não deixar refresh token órfão vivo no GoTrue a cada confirmação.
+    try {
+      const g = await checa.json()
+      if (g?.access_token) await gotrue('logout', { token: g.access_token })
+    } catch { /* melhor esforço */ }
+
+    return res.status(200).json({ ok: true })
+  }
+
   // ── MFA: gerenciamento (usuário JÁ logado) ────────────────────────────────
   // status · enroll · activate · disable. Todas exigem o access token no header
   // Authorization; o GoTrue é quem valida a assinatura — aqui só repassamos.

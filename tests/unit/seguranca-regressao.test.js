@@ -319,3 +319,49 @@ describe('B-4 — todo alerta configurado precisa ter quem o dispare', () => {
       'Com await, uma falha do monitoramento atrasaria o caminho de segurança que ele observa.')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A-3 — a Política promete export JSON; ele precisa existir de verdade', () => {
+  test('a promessa segue na Política (se sair, o teste avisa para reavaliar)', () => {
+    assert.match(ler('privacidade.html'), /exporta[çc][ãa]o dos seus dados em formato JSON/i,
+      'Se a promessa foi removida da Política, este teste e o botão podem ser reavaliados. '
+      + 'Enquanto ela estiver lá, o recurso é obrigatório (LGPD art. 18, V).')
+  })
+
+  test('existe o botão e ele carrega o módulo de exportação', () => {
+    assert.match(ler('dashboard.html'), /id="btnExportarDados"/,
+      'Sem o botão, a promessa da Política volta a ser falsa.')
+    assert.match(ler('src', 'scripts', 'pages', 'db-configuracoes.js'),
+      /import\(['"]\.\.\/modules\/export-dados\.js['"]\)/,
+      'O módulo tem de ser lazy: só quem exporta paga o download.')
+  })
+
+  test('exporta TODOS os perfis, não só o aberto', () => {
+    const m = ler('src', 'scripts', 'modules', 'export-dados.js')
+    assert.match(m, /fetch\('\/api\/user-data'/,
+      'O blob tem de vir do servidor. A memória do dashboard só tem o perfil ATIVO, e '
+      + 'portabilidade exige todos os perfis do titular.')
+  })
+
+  test('nenhuma credencial entra no arquivo', () => {
+    const m = ler('src', 'scripts', 'modules', 'export-dados.js')
+    for (const proibido of ['code_hash', 'password', 'access_token', 'refresh_token',
+                            'DATA_ENCRYPTION', 'device_hash', 'p256dh']) {
+      const usos = m.split('\n').filter(l =>
+        l.includes(proibido) && !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+      // `password` aparece legitimamente no step-up (confirmar senha), nunca no pacote.
+      const noPacote = usos.some(l => /select\(|_montar|dados_financeiros|metadados/.test(l))
+      assert.ok(!noPacote,
+        `"${proibido}" não pode entrar no arquivo exportado: ele carrega os DADOS do titular, `
+        + 'não o ACESSO dele.')
+    }
+  })
+
+  test('exige confirmação de senha (step-up do Passo 25)', () => {
+    assert.match(ler('src', 'scripts', 'modules', 'export-dados.js'), /verify-password/,
+      'Ver os dados na tela exige navegar; baixar o arquivo é um clique. Com uma sessão '
+      + 'esquecida aberta, é a diferença entre bisbilhotar e exfiltrar.')
+    assert.match(ler('api', 'auth-session.js'), /action === 'verify-password'/,
+      'O endpoint de step-up sumiu — a confirmação viraria no-op.')
+  })
+})

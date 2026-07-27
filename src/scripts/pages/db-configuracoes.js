@@ -159,6 +159,20 @@ function _bindBtnBackup() {
     if (btnReset) btnReset.addEventListener('click', resetarPerfil);
     const btnDel = document.getElementById('btnExcluirConta');
     if (btnDel) btnDel.addEventListener('click', excluirConta);
+
+    // Portabilidade (LGPD art. 18, V) — chunk lazy: só baixa quem for exportar.
+    const btnExp = document.getElementById('btnExportarDados');
+    if (btnExp) btnExp.addEventListener('click', async () => {
+        btnExp.disabled = true;
+        try {
+            const { abrirExportacao } = await import('../modules/export-dados.js');
+            await abrirExportacao(_ctx);
+        } catch {
+            _ctx.mostrarNotificacao('Não foi possível abrir a exportação agora.', 'error');
+        } finally {
+            btnExp.disabled = false;
+        }
+    });
 }
 
 // "Instalar Chat Assistente" — leva o usuário ao app do assistente, que vive
