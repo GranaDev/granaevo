@@ -61,6 +61,9 @@ const CSS = `
 #geSecPanel .mfa-codes span { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.84rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; padding: 8px; text-align: center; color: #e5e7eb; }
 #geSecPanel .mfa-warn { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d; border-radius: 10px; padding: 10px 12px; font-size: 0.78rem; line-height: 1.45; margin-top: 10px; }
 #geSecPanel .mfa-link { background: none; border: none; color: #6b7280; font-size: 0.78rem; text-decoration: underline; cursor: pointer; margin-top: 10px; padding: 4px; width: 100%; }
+#geSecPanel .mfa-open { display: block; text-align: center; margin-top: 10px; padding: 9px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); color: #9ca3af; font-size: 0.8rem; text-decoration: none; }
+#geSecPanel .mfa-open:hover { color: #e5e7eb; border-color: rgba(255,255,255,0.22); }
+#geSecPanel .mfa-oculto { display: none; }
 `;
 
 function _injectCss() {
@@ -250,15 +253,27 @@ export async function openSecurityPanel() {
 
 const APPS_SUGERIDOS = 'Google Authenticator, Authy, 1Password, Bitwarden ou o gerenciador do seu celular.';
 
-/** Converte o SVG que o GoTrue devolve num src utilizável por <img>. */
+/**
+ * Converte o que o GoTrue devolve em `totp.qr_code` num src utilizável por <img>.
+ *
+ * ⚠️ O SVG do GoTrue NÃO começa com `<svg`. Ele é gerado pelo svgo (Go), que
+ * emite `<?xml version="1.0"?>` e um comentário ANTES da tag raiz. Um teste
+ * `startsWith('<svg')` falha e o QR some da tela, deixando só a chave manual —
+ * foi exatamente esse o bug da primeira versão. Por isso procuramos `<svg` em
+ * QUALQUER posição.
+ *
+ * Também encodamos com encodeURIComponent, diferente do que o próprio
+ * supabase-js faz (ele concatena o SVG cru na data URL). SVG tem `#` e aspas,
+ * que terminam ou quebram a data URL quando não escapados.
+ */
 function _qrSrc(qr) {
-    const s = String(qr || '');
+    const s = String(qr || '').trim();
     if (!s) return null;
-    if (s.startsWith('data:')) return s;                       // já é data URL
-    if (s.trimStart().startsWith('<svg')) {                     // SVG cru
+    if (s.startsWith('data:')) return s;                    // já veio pronto
+    if (s.includes('<svg')) {                                // SVG cru (com ou sem prólogo XML)
         return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
     }
-    return null;
+    return null;                                             // formato desconhecido
 }
 
 async function montarMfa(host) {
@@ -324,13 +339,39 @@ async function telaAtivar(host) {
         img.className = 'mfa-qr';
         img.src = src;                       // SVG dentro de <img> é inerte: não roda script
         img.alt = 'QR code para o app autenticador';
+        // Se o SVG vier num formato que o browser recuse, não deixa um buraco
+        // mudo na tela: some com a imagem e a chave manual assume.
+        img.addEventListener('error', () => {
+            img.remove();
+            host.querySelector('.mfa-noqr')?.classList.remove('mfa-oculto');
+        });
         host.appendChild(img);
+    }
+
+    // Aviso que só aparece quando NÃO há QR utilizável. Falhar calado aqui foi o
+    // bug da 1ª versão: o usuário via "Escaneie o código" e nada para escanear.
+    const semQr = el('p', 'mfa-desc mfa-noqr' + (src ? ' mfa-oculto' : ''),
+        'Não consegui desenhar o QR aqui. Use a chave abaixo — ela funciona igual.');
+    host.appendChild(semQr);
+
+    // Autenticador no MESMO aparelho: ninguém escaneia a própria tela. Este link
+    // abre o app já com a conta preenchida. Em desktop simplesmente não resolve
+    // e o usuário segue pelo QR ou pela chave.
+    if (dados.uri) {
+        const abrir = document.createElement('a');
+        abrir.className = 'mfa-open';
+        abrir.href = dados.uri;              // otpauth://totp/...
+        abrir.rel = 'noopener';
+        abrir.textContent = 'Abrir direto no app autenticador';
+        host.appendChild(abrir);
     }
 
     // Digitação manual: câmera quebrada, autenticador no mesmo aparelho, ou
     // simplesmente preferência. Sem isso, uma parte dos usuários trava aqui.
     if (dados.secret) {
-        host.appendChild(el('p', 'mfa-desc', 'Sem câmera? Digite esta chave no app (toque para copiar):'));
+        host.appendChild(el('p', 'mfa-desc', src
+            ? 'Sem câmera? Digite esta chave no app (toque para copiar):'
+            : 'Digite esta chave no app (toque para copiar):'));
         const seg = el('div', 'mfa-secret', dados.secret);
         seg.setAttribute('role', 'button');
         seg.setAttribute('tabindex', '0');
