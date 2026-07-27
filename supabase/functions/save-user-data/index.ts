@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { mfaBloqueia } from '../_shared/mfa-gate.ts'
 
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
 // com fallback na service_role legada — rollback = redeploy do commit anterior
@@ -185,6 +186,15 @@ Deno.serve(async (req: Request) => {
 
   const userId    = user.id
   const userEmail = user.email ?? ''
+
+  // ── 3.5 Gate do 2º fator (Passo 31 · B-1c) ───────────────────────────────
+  // Mesma razão do get-user-data: service_role BYPASSA RLS, então o enforcement
+  // de aal2 das policies não chega aqui. Vale para ESCRITA também — sem isto,
+  // uma sessão aal1 de quem ativou o 2FA poderia sobrescrever o blob inteiro.
+  if (await mfaBloqueia(supabaseAdmin, token, userId, 'save-user-data')) {
+    console.warn('[save-user-data] 2FA exigido e sessão não elevada:', userId.slice(0, 8))
+    return json({ success: false, error: 'Verificação em duas etapas necessária', mfa_required: true }, 403, corsHeaders)
+  }
 
   // ── 4. Resolver ID efetivo — convidados salvam nos dados do dono ─────────
   // O save opera sempre no registro do dono. O convidado nunca cria
