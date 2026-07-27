@@ -1081,7 +1081,7 @@ realmente quer offline (consultar, não lançar).
 | Passo | Dimensão | Itens | Status |
 |---|---|---|---|
 | 30 | Segurança 9.4 → 10 | S-1 … S-6 | 🔴 |
-| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟡 B-1 em andamento |
+| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟡 B-1 ✅ em prod · B-2…B-7 🔴 |
 | 32 | Otimização 8.0 → 10 | O-1 … O-8 | 🔴 |
 | 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🔴 |
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | 🔴 |
@@ -1148,7 +1148,26 @@ do desalinhamento num registro de consentimento LGPD.
 ## PASSO 31 — BLINDAGEM 9.0 → 10 🟡
 > Blindagem = camadas independentes. Hoje são 6. Faltam as que dependem de **algo além da senha**.
 
-### B-1 — MFA / TOTP **OPT-IN** 🟡 EM ANDAMENTO (2026-07-27) ⭐⭐
+### B-1 — MFA / TOTP **OPT-IN** ✅ APLICADO EM PROD (2026-07-27, commit 64f003e) ⭐⭐
+> **Estado em produção, verificado:** TOTP habilitado no projeto
+> (`mfa_totp_enroll_enabled` e `mfa_totp_verify_enabled` = true, máx. 10 fatores) ·
+> migration `20260727000000` aplicada e conferida **pelo data plane** (RLS on+forced,
+> policy deny-all, zero grant p/ `authenticated`/`anon`) e registrada no ledger ·
+> edge `mfa-recovery` ACTIVE com `verify_jwt=false` e 403 sem proxy-secret ·
+> BFF no ar. Smoke em prod: login inválido 401 · `mfa-status`/`enroll`/`disable`
+> sem token 401 · `mfa-login-verify`/`recovery` sem cookie 440 · `Origin` de fora 403.
+> Base zerada: 0 fatores, 0 códigos, 6 usuários — ninguém foi afetado.
+>
+> **FALTA (o 2FA hoje protege o LOGIN, não o DADO):** enforcement `aal2` no RLS
+> (variante opt-in, `as restrictive` + `auth.mfa_factors`) e checagem de `aal` nas
+> edges `get-user-data`/`save-user-data`. Sem isso, quem tiver senha + access token
+> ainda alcança o blob sem passar pelo 2º fator.
+>
+> **Sugestão de 5 min no painel:** `mailer_notifications_mfa_factor_enrolled_enabled`
+> e `..._unenrolled_enabled` estão **false**. Ligá-los faz o Supabase avisar por
+> e-mail quando um fator é cadastrado ou removido — é o sinal que denuncia um
+> sequestro de conta, e cobre justamente o caminho "código de recuperação desligou
+> o 2FA". Não mexi: altera e-mail de todos os usuários, decisão sua.
 **✅ CORREÇÃO IMPORTANTE (verificado na doc oficial em 2026-07-27):** MFA TOTP é **GRÁTIS em todos
 os planos** — *"TOTP MFA API is free to use and is enabled on all Supabase projects by default."*
 A anotação antiga de que exigia Pro estava **ERRADA**. Só *Phone/SMS MFA* e *enforcement org-wide* são pagos.
