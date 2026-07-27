@@ -1,0 +1,271 @@
+/**
+ * GranaEvo — Testes de regressão de segurança (B-7)
+ *
+ * REGRA 9 do /god-mode: todo vetor fechado vira teste. Este arquivo trava as
+ * correções da auditoria de 2026-07-27 para que nenhuma volte em silêncio numa
+ * refatoração futura.
+ *
+ * São testes de INVARIANTE DE ARQUITETURA sobre o código-fonte e as migrations,
+ * não testes de integração. É de propósito: rodam no CI sem banco, sem rede e
+ * sem segredo, e pegam justamente o tipo de erro que causou cada achado — uma
+ * palavra trocada num trigger, um GRANT esquecido, um import removido.
+ *
+ * Cada teste diz O QUE quebrou quando falhar, não só "assertion failed".
+ *
+ *   node --test tests/unit/
+ */
+
+import { test, describe } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const ler  = (...p) => readFileSync(join(RAIZ, ...p), 'utf8')
+
+/** Concatena todas as migrations UP (ignora .down.sql). */
+function todasAsMigrations() {
+  const dir = join(RAIZ, 'supabase', 'migrations')
+  return readdirSync(dir)
+    .filter(f => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+    .map(f => ler('supabase', 'migrations', f))
+    .join('\n')
+}
+
+/**
+ * assert.match() sobre o corpo das migrations despeja os ~160 KB de SQL no
+ * output quando falha, e a mensagem útil se perde no meio. Aqui o resultado é
+ * reduzido a um booleano ANTES da asserção, então o CI mostra só o porquê.
+ */
+function contemNasMigrations(regex, mensagem) {
+  assert.ok(regex.test(todasAsMigrations()), mensagem)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('S-1 — limite de perfis não pode voltar a ser burlável por lote', () => {
+  const mig = ler('supabase', 'migrations', '20260727010000_fix_profile_limit_batch_bypass.sql')
+
+  test('o trigger é CONSTRAINT TRIGGER AFTER INSERT, nunca BEFORE', () => {
+    assert.match(mig, /CREATE CONSTRAINT TRIGGER enforce_profile_limit_stripe/i,
+      'O trigger precisa ser CONSTRAINT TRIGGER: em BEFORE ROW, a query dentro dele '
+      + 'NÃO enxerga as linhas do próprio comando, e um INSERT com array JSON cria '
+      + 'N perfis num plano de 1.')
+    assert.match(mig, /AFTER INSERT ON public\.profiles/i,
+      'Voltar para BEFORE INSERT reabre o bypass em lote (achado S-1).')
+    assert.doesNotMatch(mig, /BEFORE INSERT ON public\.profiles/i,
+      'BEFORE INSERT em profiles é exatamente a falha que esta migration corrigiu.')
+  })
+
+  test('a comparação é `>` — com `>=` em AFTER, ninguém cria o primeiro perfil', () => {
+    assert.match(mig, /IF\s+v_count\s*>\s*v_max\s+THEN/i,
+      'Em AFTER a contagem JÁ INCLUI a linha inserida. Com `>=`, um usuário do plano '
+      + 'Individual (máx. 1) com 0 perfis insere 1, conta 1, e `1 >= 1` bloqueia o '
+      + 'PRIMEIRO perfil dele. As duas coisas (timing e comparação) andam em par.')
+    assert.doesNotMatch(mig, /IF\s+v_count\s*>=\s*v_max\s+THEN/i,
+      '`>=` só é correto em BEFORE. Ver o aviso no cabeçalho da migration.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A-2 — o X da caixa de entrada do sino precisa continuar funcionando', () => {
+  test('existe GRANT UPDATE (dismissed_at) e ele é POR COLUNA', () => {
+    contemNasMigrations(/GRANT\s+UPDATE\s*\(\s*dismissed_at\s*\)\s+ON\s+public\.radar_notifications/i,
+      'A policy radar_update_own_dismiss existe desde 20260726000000, mas o GRANT foi '
+      + 'esquecido — o botão de dispensar ficou morto em produção, engolindo o 42501 '
+      + 'em silêncio. O grant é POR COLUNA de propósito: mesmo que o trigger de '
+      + 'congelamento seja removido, só dismissed_at fica escrevível.')
+  })
+
+  test('o cliente ainda dispensa via UPDATE em dismissed_at', () => {
+    const js = ler('src', 'scripts', 'modules', 'notificacoes-inbox.js')
+    assert.match(js, /\.update\(\s*\{\s*dismissed_at/,
+      'Se o cliente mudar de UPDATE para DELETE, o grant acima vira cruft e a '
+      + 'notificação some do histórico em vez de ser marcada como lida.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('B-1 — 2FA: o refresh token elevado nunca pode chegar ao JavaScript', () => {
+  const bff = ler('api', 'auth-session.js')
+
+  test('o BFF devolve apenas o access token ao cliente', () => {
+    const payload = bff.match(/function sessionPayload\(grant\)\s*\{[\s\S]*?\n\}/)
+    assert.ok(payload, 'sessionPayload() sumiu — era ela que filtrava o que vai ao cliente.')
+    assert.doesNotMatch(payload[0], /refresh_token/,
+      'sessionPayload NUNCA pode incluir refresh_token: ele vive só no cookie HttpOnly. '
+      + 'É a razão de existir de todo o modelo híbrido.')
+  })
+
+  test('o cliente não usa supabase.auth.mfa.* (o verify devolve refresh novo)', () => {
+    for (const arq of [['src','scripts','services','mfa-api.js'],
+                       ['src','scripts','modules','security-panel.js'],
+                       ['src','scripts','pages','login.js']]) {
+      assert.doesNotMatch(ler(...arq), /auth\.mfa\.(enroll|challenge|verify|unenroll)/,
+        `${arq.join('/')} não pode falar com o GoTrue direto: mfa.verify() devolve um `
+        + 'par access+refresh NOVO, e o refresh cairia no JS. Tudo passa pelo BFF.')
+    }
+  })
+
+  test('o cookie da sessão em trânsito é HttpOnly, Secure e SameSite=Strict', () => {
+    const fn = bff.match(/function buildMfaCookie\([\s\S]*?\n\}/)
+    assert.ok(fn, 'buildMfaCookie() sumiu.')
+    for (const flag of ['HttpOnly', 'Secure', 'SameSite=Strict']) {
+      assert.match(fn[0], new RegExp(flag),
+        `ge_mfa sem ${flag}: entre "senha certa" e "código certo" existe uma sessão aal1 `
+        + 'válida. Se ela vazar para o JS, basta a senha e o 2º fator vira teatro.')
+    }
+  })
+
+  test('o gate do login só considera fator VERIFICADO', () => {
+    assert.match(bff, /status\s*===\s*'verified'/,
+      'Contar fator `unverified` faria um enroll abandonado barrar o login do próprio dono.')
+  })
+
+  test('o login falha FECHADO quando não dá para saber se há 2º fator', () => {
+    assert.match(bff, /if\s*\(!fatoresOk\)[\s\S]{0,200}?503/,
+      'Se a consulta de fatores falhar, o login tem de recusar. Falhar aberto daria a '
+      + 'um atacante com a senha um jeito de pular o 2º fator só provocando o erro.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('B-1c — as edges de dados bypassam RLS, então precisam do gate próprio', () => {
+  for (const edge of ['get-user-data', 'save-user-data']) {
+    test(`${edge} chama mfaBloqueia antes de tocar nos dados`, () => {
+      const src = ler('supabase', 'functions', edge, 'index.ts')
+      assert.match(src, /import\s*\{\s*mfaBloqueia\s*\}\s*from\s*'\.\.\/_shared\/mfa-gate\.ts'/,
+        `${edge} usa service_role e BYPASSA RLS — o enforcement de aal2 das policies não `
+        + 'chega aqui. Sem este import, o blob financeiro fica acessível em sessão aal1.')
+      assert.match(src, /await mfaBloqueia\(/,
+        `${edge} importa mas não chama mfaBloqueia — o gate existe e não protege nada.`)
+    })
+  }
+
+  test('o gate falha FECHADO se a RPC não responder', () => {
+    const gate = ler('supabase', 'functions', '_shared', 'mfa-gate.ts')
+    const corpo = gate.match(/export async function mfaBloqueia[\s\S]*$/)[0]
+    assert.doesNotMatch(corpo, /return false\s*\n\s*\}\s*\n\s*\}\s*$/,
+      'Falhar aberto daria ao atacante um jeito de contornar o 2º fator derrubando uma chamada.')
+    assert.match(corpo, /catch[\s\S]{0,200}return true/,
+      'No catch, mfaBloqueia tem de devolver true (recusar).')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('S-2 — lockout de login por conta', () => {
+  const bff = ler('api', 'auth-session.js')
+
+  test('a trava é consultada ANTES do password grant', () => {
+    const i = bff.indexOf('isKeyBlocked(kLock)')
+    const j = bff.indexOf("gotrue('token?grant_type=password'")
+    assert.ok(i > -1 && j > -1 && i < j,
+      'Uma conta travada não pode nem chegar ao GoTrue.')
+  })
+
+  test('a falha é contada mesmo para e-mail inexistente (anti-enumeração)', () => {
+    assert.match(bff, /bumpCounter\(kFail/,
+      'Contar só para contas reais transformaria o 429 em oráculo: "travou, logo existe".')
+  })
+
+  test('o histórico zera no login bem-sucedido', () => {
+    assert.match(bff, /clearKeys\(kFail,\s*kLock\)/,
+      'Sem isto, falhas legítimas espalhadas num dia somariam até travar quem nunca foi atacado.')
+  })
+
+  test('a chave é hash do e-mail, não o e-mail em claro', () => {
+    assert.match(bff, /createHash\('sha256'\)\.update\(email\)/,
+      'E-mail em claro nas chaves do Redis é PII espalhada sem necessidade.')
+  })
+
+  test('o escalonamento é progressivo e começa em minutos, não em dias', () => {
+    const m = bff.match(/const LOCK_DEGRAUS = \[[\s\S]*?\]/)
+    assert.ok(m, 'LOCK_DEGRAUS sumiu.')
+    const ttls = [...m[0].matchAll(/ttl:\s*([\d_]+)/g)].map(x => Number(x[1].replace(/_/g, '')))
+    assert.ok(Math.min(...ttls) <= 900,
+      'O primeiro degrau tem de ser curto (≤15min): todo lockout por conta permite que um '
+      + 'terceiro trave a vítima de propósito, e o preço disso não pode ser um dia fora do ar.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('S-3 / S-4 — grants que não podem voltar', () => {
+  const sql = todasAsMigrations()
+
+  test('user_data_snapshots não expõe o blob nem o e-mail', () => {
+    contemNasMigrations(/REVOKE SELECT ON public\.user_data_snapshots FROM authenticated/i,
+      'Sem o REVOKE, authenticated volta a ler data_json (o blob financeiro) via PostgREST.')
+    const grant = sql.match(/GRANT\s+SELECT\s*\(([^)]*)\)\s*\n?\s*ON public\.user_data_snapshots/i)
+    assert.ok(grant, 'O GRANT por coluna sumiu — sem ele o backup para de listar.')
+    for (const proibida of ['data_json', 'user_email']) {
+      assert.ok(!grant[1].includes(proibida),
+        `${proibida} não pode estar no GRANT: é o blob financeiro / PII em claro.`)
+    }
+  })
+
+  test('terms_acceptance é imutável para o cliente', () => {
+    contemNasMigrations(/REVOKE UPDATE, DELETE ON public\.terms_acceptance FROM authenticated/i,
+      'Aceite de termos é a prova do consentimento LGPD; o usuário não reescreve a própria prova.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('S-6 — imutabilidade do audit log', () => {
+  test('a exceção exige o GUC E ser postgres', () => {
+    const sql = ler('supabase', 'migrations', '20260727040000_seguranca_passo30.sql')
+    assert.match(sql, /current_setting\('granaevo\.audit_retention'[\s\S]{0,120}?current_user = 'postgres'/,
+      'Só o GUC não basta: GUCs de prefixo customizado são setáveis por qualquer role, '
+      + 'então uma Edge com service_role conseguiria zerar o registro financeiro.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('M-4 — purgas não podem apagar convidado ativo', () => {
+  test('purge_expired_cancelled_accounts tem a guarda de account_members', () => {
+    const sql = ler('supabase', 'migrations', '20260727040000_seguranca_passo30.sql')
+    const fn = sql.match(/CREATE OR REPLACE FUNCTION public\.purge_expired_cancelled_accounts[\s\S]*?\$function\$;/)
+    assert.ok(fn, 'A função sumiu da migration.')
+    assert.match(fn[0], /NOT EXISTS[\s\S]{0,200}account_members[\s\S]{0,200}is_active = true/,
+      'Foi o bug de 2026-07-01: os crons apagaram convidados de plano casal/família que '
+      + 'não têm assinatura própria. Esta era a única das 3 purgas sem a guarda.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Assistente — a IA continua sendo função, nunca interlocutor', () => {
+  const cp = ler('supabase', 'functions', 'chat-parse', 'index.ts')
+
+  test('tool use é forçado e o schema é estrito', () => {
+    assert.match(cp, /tool_choice:\s*\{\s*type:\s*'tool'/,
+      'Sem tool_choice forçado, o modelo volta a poder emitir texto livre.')
+    assert.match(cp, /strict:\s*true/)
+    assert.match(cp, /additionalProperties:\s*false/,
+      'É o que torna prompt injection estruturalmente inofensiva: o schema trava a saída.')
+  })
+
+  test('nenhum texto do modelo chega ao usuário', () => {
+    assert.match(cp, /parse:\s*toolUse\.input/,
+      'A resposta devolve só o objeto tipado. Devolver texto do modelo reabriria injeção.')
+  })
+
+  test('nenhum valor em R$ é enviado à IA', () => {
+    const body = cp.match(/const body = \{[\s\S]*?\n\s*\}/)[0]
+    assert.doesNotMatch(body, /saldo|valor_total|transacoes/i,
+      'A IA recebe só texto e rótulos. Mandar valores quebraria a promessa central do produto.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Segredos — nada de service_role no que vai ao browser', () => {
+  test('nenhum arquivo de src/ referencia a service_role key', () => {
+    const varrer = (dir) => readdirSync(join(RAIZ, dir), { withFileTypes: true })
+      .flatMap(d => d.isDirectory() ? varrer(join(dir, d.name))
+                  : d.name.endsWith('.js') ? [join(dir, d.name)] : [])
+    for (const arq of varrer('src')) {
+      const src = readFileSync(join(RAIZ, arq), 'utf8')
+        .split('\n').filter(l => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n')
+      assert.doesNotMatch(src, /SERVICE_ROLE|service_role_key|sb_secret_/,
+        `${arq} referencia a service_role — ela só existe nos secrets do Supabase.`)
+    }
+  })
+})
