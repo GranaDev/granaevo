@@ -418,3 +418,43 @@ describe('CSP — não liberar terceiro que não está no caminho', () => {
     assert.ok(cspsDoVercel.length >= 5, 'As CSPs do vercel.json sumiram — confira o arquivo.')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('M-5 — nenhuma tabela com PII pode ficar sem prazo de descarte', () => {
+  const mig = ler('supabase', 'migrations', '20260727070000_retencao_backups_e_convites.sql')
+
+  test('profile_backups cobre os status TERMINAIS, não só o active', () => {
+    assert.match(mig, /status IN \('pending', 'cancelled', 'restored'\)/,
+      'O cron granaevo-expire-profile-backups só trata status=active. O ciclo real também '
+      + 'produz cancelled (downgrade desfeito) e restored (upgrade de volta), além de pending '
+      + 'órfão — e nesses a linha guarda member_data, o SNAPSHOT COMPLETO do perfil.')
+  })
+
+  test('usa coalesce(updated_at, created_at), não backup_expires_at', () => {
+    assert.match(mig, /coalesce\(updated_at, created_at\)/,
+      'backup_expires_at só é preenchido pelo webhook e nesses status costuma ser NULL — '
+      + 'usá-lo faria a rotina rodar todo dia sem pegar nada, que é o pior tipo de falha: '
+      + 'a que parece funcionar.')
+  })
+
+  test('o prazo bate com o que a Política declara', () => {
+    assert.match(mig, /interval '90 days'/,
+      'privacidade.html promete "backups de perfil por 90 dias". Prazo no sistema diferente '
+      + 'do publicado é não-conformidade mesmo que o sistema seja mais rígido.')
+    assert.match(ler('privacidade.html'), /90 dias/,
+      'Se a Política mudou o prazo, a rotina precisa mudar junto.')
+  })
+
+  test('as duas rotinas estão agendadas', () => {
+    for (const job of ['granaevo-purge-profile-backups-terminais', 'granaevo-purge-guest-invitations']) {
+      assert.ok(mig.includes(`'${job}'`),
+        `Função sem cron é código morto: a PII continua acumulando. Falta agendar ${job}.`)
+    }
+  })
+
+  test('as funções DEFINER têm search_path fixo', () => {
+    const defs = mig.match(/SECURITY DEFINER\s*\n\s*SET search_path/g) ?? []
+    assert.equal(defs.length, 2,
+      'DEFINER sem search_path fixo é vetor de escalada — padrão do projeto e do advisor.')
+  })
+})

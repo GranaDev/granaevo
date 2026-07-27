@@ -1097,18 +1097,17 @@ Commits: `64f003e` → `e18eae3`.
 ### 🔴 Aberto, e NÃO depende de você
 | Item | Peso | Esforço |
 |---|---|---|
-| **M-1** `sitemap.xml` retorna 404 (robots aponta pra ele) | SEO | 15 min |
-| **CSP** libera `cloudflareinsights` em 14 lugares sem Cloudflare no caminho | higiene | 15 min |
-| **M-5** `profile_backups` retém PII sem prazo em 3 status | LGPD | 1 migration |
-| **retenção `guest_invitations`** — 3 linhas, nenhum cron | LGPD | (mesma migration) |
 | **M-7** `user_devices` não declarado na Política/RoPA | LGPD | ~1h + bump p/ 1.2 |
 | **B-6** 28 de 36 edges com fallback da service_role legada | higiene | ~4h, arriscado às cegas |
 | **Passos 32-36** — Otimização, Marketing, Diferencial, Proposta, Chat | 38 itens | semanas |
 
 ### ▶️ Sugestão de retomada
-**A-3 ✅ FEITO (aa0ef75) — zero achados ALTO em aberto.** Retomar por **M-1 + CSP**
-(30 min os dois juntos), depois a migration única **M-5 + guest_invitations**,
-depois **M-7**. Deixar **B-6** para uma sessão em que dê para
+**Feitos:** A-3 (`aa0ef75`) · M-1 + CSP (`1fc8c12`) · M-5 + retenção de convites
+(`20260727070000`). **Zero achados ALTO em aberto e nenhuma tabela com PII sem prazo.**
+
+Sobrou de LGPD só o **M-7** (`user_devices`/`notify-login` não declarados na
+Política e no RoPA — ~1h + bump de `CURRENT_TERMS_VERSION` para 1.2).
+Depois disso, os Passos 32-36. Deixar **B-6** para uma sessão em que dê para
 acompanhar os logs das edges — remover o fallback às cegas derruba qualquer
 edge que não esteja recebendo a chave nova.
 
