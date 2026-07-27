@@ -26,21 +26,22 @@
             aplica a política MAIS restritiva entre header e meta.
             Por isso ambos devem ser consistentes.
 
-        SOBRE O CLOUDFLARE BEACON:
+        SOBRE O CLOUDFLARE (removido da CSP em 2026-07-27):
         ─────────────────────────────────────────────────────────────
-        O Cloudflare injeta beacon.min.js automaticamente via proxy.
-        Por isso static.cloudflareinsights.com está liberado no
-        script-src e cloudflareinsights.com no connect-src,
-        tanto aqui quanto no vercel.json.
+        Este bloco dizia que "o Cloudflare injeta beacon.min.js via
+        proxy" e por isso liberava static.cloudflareinsights.com no
+        script-src e cloudflareinsights.com no connect-src.
 
-        SOBRE O INLINE SCRIPT:
-        ─────────────────────────────────────────────────────────────
-        O Cloudflare também injeta um inline script ao fazer proxy.
-        O hash sha256 abaixo corresponde exatamente a esse script.
-        Se o hash mudar (após atualização do Cloudflare), o novo hash
-        aparecerá na mensagem de erro do console — basta substituir
-        aqui e no vercel.json.
-        Hash atual: sha256-GL6A4jS7qMll1kMeDRcLJpoLrZk+ljJKJwKhAdGmTs8=
+        Era FALSO na data em que foi conferido: os nameservers de
+        granaevo.com são ns1/ns2.dns-parking.com (Hostinger) e nenhum
+        host devolve o header cf-ray. O Cloudflare NUNCA esteve no
+        caminho — a CSP liberava dois domínios de terceiro para nada,
+        que é superfície aberta sem contrapartida.
+
+        SE O CLOUDFLARE ENTRAR (ver docs/cloudflare-runbook.md), estes
+        dois hosts precisam voltar ao script-src/connect-src daqui E do
+        vercel.json, senão o beacon é bloqueado e o console enche de
+        violação de CSP. O relatório em /api/csp-report avisa.
         ============================================================
     -->
 
@@ -50,11 +51,11 @@
     -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
-        script-src 'self' 'sha256-JpSqkc4lJtTGdFgSBst3AQTsEudZFZAC9KIwl5YXKLo=' https://static.cloudflareinsights.com;
+        script-src 'self' 'sha256-JpSqkc4lJtTGdFgSBst3AQTsEudZFZAC9KIwl5YXKLo=';
         style-src 'self';
         font-src 'self';
         img-src 'self' data:;
-        connect-src 'self' https://cloudflareinsights.com;
+        connect-src 'self';
         frame-src 'none';
         object-src 'none';
         base-uri 'self';

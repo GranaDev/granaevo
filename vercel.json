@@ -92,7 +92,7 @@
         { "key": "Cache-Control", "value": "public, max-age=300, stale-while-revalidate=3600" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -103,7 +103,7 @@
         { "key": "Cache-Control", "value": "public, max-age=300, stale-while-revalidate=3600" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -114,7 +114,7 @@
         { "key": "Cache-Control", "value": "public, max-age=300, stale-while-revalidate=3600" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com https://*.ingest.us.sentry.io; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://*.ingest.us.sentry.io; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -124,7 +124,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https://www.gstatic.com; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://www.google.com https://www.recaptcha.net https://recaptcha.google.com https://cloudflareinsights.com https://*.ingest.us.sentry.io; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https://www.gstatic.com; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://www.google.com https://www.recaptcha.net https://recaptcha.google.com https://*.ingest.us.sentry.io; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -136,7 +136,7 @@
         { "key": "Pragma",        "value": "no-cache"                                      },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; style-src-elem 'self' 'sha256-OvmX0Vn3HoUl0gBRJaIbr1xVjfovZK/6MRPJnG7o2Zk='; style-src-attr 'unsafe-inline'; font-src 'self' data:; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co blob: data:; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com https://api.bcb.gov.br https://*.ingest.us.sentry.io; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'self'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; style-src-elem 'self' 'sha256-OvmX0Vn3HoUl0gBRJaIbr1xVjfovZK/6MRPJnG7o2Zk='; style-src-attr 'unsafe-inline'; font-src 'self' data:; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co blob: data:; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://api.bcb.gov.br https://*.ingest.us.sentry.io; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'self'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         },
         {
           "key": "Link",
@@ -152,7 +152,7 @@
         { "key": "Pragma",        "value": "no-cache"                                      },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'self'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; worker-src 'self'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -170,7 +170,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -180,7 +180,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -190,7 +190,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; font-src 'self'; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -200,7 +200,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://cloudflareinsights.com https://*.ingest.us.sentry.io; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://fvrhqqeofqedmhadzzqw.supabase.co wss://fvrhqqeofqedmhadzzqw.supabase.co https://*.ingest.us.sentry.io; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; report-to csp-endpoint; report-uri /api/csp-report;"
         }
       ]
     },
@@ -294,6 +294,14 @@
       "headers": [
         { "key": "Content-Type",  "value": "text/plain; charset=utf-8" },
         { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
+    },
+
+    {
+      "source": "/sitemap.xml",
+      "headers": [
+        { "key": "Content-Type",  "value": "application/xml; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
       ]
     },
 

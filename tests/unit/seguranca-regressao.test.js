@@ -365,3 +365,56 @@ describe('A-3 — a Política promete export JSON; ele precisa existir de verdad
       'O endpoint de step-up sumiu — a confirmação viraria no-op.')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('M-1 — o sitemap prometido no robots.txt precisa existir', () => {
+  test('sitemap.xml existe e é XML válido de sitemap', () => {
+    const xml = ler('public', 'sitemap.xml')
+    assert.match(xml, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/,
+      'O robots.txt aponta para /sitemap.xml desde sempre; sem o arquivo o Google leva 404.')
+  })
+
+  test('não anuncia nenhuma rota que o robots manda NÃO indexar', () => {
+    const robots = ler('public', 'robots.txt')
+    const xml    = ler('public', 'sitemap.xml')
+    const negadas = [...robots.matchAll(/^Disallow:\s*(\S+)/gm)].map(m => m[1])
+    const anunciadas = [...xml.matchAll(/<loc>https:\/\/www\.granaevo\.com(\/[^<]*)<\/loc>/g)].map(m => m[1])
+    const conflito = anunciadas.filter(r => negadas.some(d => d !== '/' && r.startsWith(d)))
+    assert.deepEqual(conflito, [],
+      `O sitemap anuncia rota bloqueada no robots: ${conflito.join(', ')}. Anunciar ao Google `
+      + 'uma URL que o robots proíbe é sinal contraditório — e as rotas negadas aqui são as '
+      + 'autenticadas (/dashboard, /convidados), que não têm conteúdo indexável.')
+  })
+
+  test('é gerado no prebuild, não mantido à mão', () => {
+    const pkg = JSON.parse(ler('package.json'))
+    assert.match(pkg.scripts.prebuild, /build-sitemap\.mjs/,
+      'Sitemap estático nasce com lastmod errado no dia seguinte, e lastmod mentiroso faz o '
+      + 'Google ignorar o arquivo inteiro.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('CSP — não liberar terceiro que não está no caminho', () => {
+  test('cloudflareinsights fora da CSP enquanto o Cloudflare não entrar', () => {
+    // Detecta a DIRETIVA de verdade, não o texto solto: o comentário que explica
+    // a remoção cita os dois hosts, e um regex ingênuo casaria com ele — foi
+    // exatamente o falso positivo que esta versão corrige.
+    const cspsDoVercel = JSON.parse(ler('vercel.json')).headers
+      .flatMap(h => h.headers)
+      .filter(h => h.key === 'Content-Security-Policy')
+      .map(h => h.value)
+
+    const metaCsp = (ler('index.html')
+      .match(/http-equiv="Content-Security-Policy"\s+content="([\s\S]*?)"/) ?? [])[1]
+
+    for (const csp of [...cspsDoVercel, metaCsp].filter(Boolean)) {
+      assert.ok(!csp.includes('cloudflareinsights'),
+        'Uma CSP libera cloudflareinsights. Conferido em 2026-07-27: os nameservers são do '
+        + 'Hostinger e nenhum host devolve cf-ray — o Cloudflare não está no caminho, então '
+        + 'isso é superfície aberta sem contrapartida. Se o Cloudflare entrar '
+        + '(docs/cloudflare-runbook.md), reverta este teste junto.')
+    }
+    assert.ok(cspsDoVercel.length >= 5, 'As CSPs do vercel.json sumiram — confira o arquivo.')
+  })
+})
