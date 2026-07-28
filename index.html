@@ -646,6 +646,17 @@
                     </form>
                     <p class="trial-erro" id="demoErro" role="alert"></p>
 
+                    <!-- A PAREDE — troca de lugar com o formulário no limite da demo.
+                         Não é erro nem paywall: é a frase interrompida. O visitante
+                         não bate num "não pode", bate num "continua lá dentro".
+                         Some se ele apagar um lançamento (o render controla os dois). -->
+                    <div class="trial-parede" id="demoParede" hidden>
+                        <strong class="trial-parede-tit">Seu mês está tomando forma</strong>
+                        <p class="trial-parede-txt">A demonstração vai até aqui. No app não há limite de lançamentos — e ele passa a avisar você <em>antes</em> de o mês apertar.</p>
+                        <a class="btn-primary trial-parede-cta" href="planos.html">Continuar no GranaEvo</a>
+                        <span class="trial-parede-hint">Pode continuar perguntando ao assistente ao lado.</span>
+                    </div>
+
                     <div class="trial-lista-head"><span>Seus lançamentos</span><button type="button" class="trial-limpar" id="demoLimpar">Limpar tudo</button></div>
                     <ul class="trial-lista" id="demoLista" aria-live="polite"></ul>
 
@@ -678,6 +689,16 @@
 
             <!-- Insights e fecho, abaixo dos dois cards -->
             <div class="trial-insights" id="demoInsights" aria-live="polite"></div>
+
+            <!-- A BORDA À VISTA — sem isto, o visitante assume que o que ele viu É o
+                 produto. Nomear o que ficou de fora faz dois trabalhos numa frase:
+                 mostra que ele viu uma fatia, e diz o que existe lá dentro sem
+                 entregar nada. É aqui que o import do extrato aparece — como
+                 promessa, não como demonstração. -->
+            <div class="trial-borda">
+                <span class="trial-borda-tit">Você viu 3 de mais de 20 recursos</span>
+                <p class="trial-borda-txt">Ficaram de fora: <strong>import do extrato do seu banco</strong> (OFX e CSV, sem dar sua senha a ninguém), cartões e faturas com parcelas no mês certo, reservas compartilhadas, radar de vencimentos, relatórios em PDF e Excel, modo casal e família.</p>
+            </div>
 
             <p class="trial-nota"><svg class="trial-nota-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg> Esta é uma demonstração para você experimentar à vontade — recarregue e comece de novo quando quiser. No GranaEvo, seus lançamentos ficam guardados e sincronizados entre seus aparelhos, protegidos por criptografia.</p>
             <a class="btn-primary trial-cta" href="planos.html">Quero isso na minha vida financeira</a>

@@ -492,3 +492,64 @@ describe('O-1 — o que saiu do boot do dashboard não pode voltar', () => {
       + 'fechar no mesmo toque.')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Landing — a vitrine prova capacidade sem entregar o valor', () => {
+  const demo = ler('src', 'scripts', 'pages', 'landing-demo.js')
+  const css  = ler('src', 'styles', 'landing-demo.css')
+  const html = ler('index.html')
+
+  test('a parede existe e é baixa o bastante para interromper', () => {
+    const m = demo.match(/const MAX_ITENS = (\d+)/)
+    assert.ok(m, 'MAX_ITENS sumiu.')
+    const max = Number(m[1])
+    assert.ok(max >= 2 && max <= 6,
+      `MAX_ITENS = ${max}. Acima de ~6 a parede deixa de existir na prática (ninguém digita `
+      + 'tanto numa landing) e a demo volta a saciar em vez de criar desejo. Abaixo de 2, os '
+      + 'insights não têm material — renderInsights exige 2 itens.')
+  })
+
+  test('o formulário some de verdade quando a parede aparece', () => {
+    assert.match(css, /\.trial-form\[hidden\]\s*\{\s*display:\s*none/,
+      'O `hidden` do HTML só funciona pela regra do user-agent, e `.trial-form{display:flex}` '
+      + 'a vence. Sem esta regra, a parede aparece COM o formulário ainda ativo ao lado — foi '
+      + 'exatamente o bug que quase subiu.')
+  })
+
+  test('a parede é reativa: apagar um lançamento devolve o formulário', () => {
+    assert.match(demo, /form\.hidden\s*=\s*naParede/,
+      'A parede tem de ser calculada no render(), não setada uma vez. Ela marca um momento, '
+      + 'não tranca uma porta.')
+  })
+
+  test('só o primeiro insight vem completo', () => {
+    assert.match(demo, /const \[primeiro, \.\.\.retidos\] = visiveis/,
+      'Os três insights completos entregavam o diagnóstico inteiro de graça — prova de '
+      + 'capacidade virava entrega de valor, e não sobrava razão para entrar.')
+    assert.match(demo, /trial-insight--retido/,
+      'Os retidos precisam de tratamento visual próprio, senão não se lê que estão fechados.')
+  })
+
+  test('o retido mostra o título e esconde o corpo', () => {
+    const bloco = demo.slice(demo.indexOf('const [primeiro'))
+    assert.match(bloco, /Encontrei mais/,
+      'Ver que o app ACHOU mais é mais forte que não mostrar nada.')
+    assert.ok(!/for \(const \[, titulo, texto\] of retidos/.test(bloco),
+      'Se o texto do insight retido for renderizado, o portão não fecha nada.')
+  })
+
+  test('a borda nomeia o que fica dentro, incluindo o import do extrato', () => {
+    assert.match(html, /trial-borda/,
+      'Sem a borda à vista, o visitante assume que o que ele viu É o produto.')
+    assert.match(html, /import do extrato do seu banco/,
+      '"Vou ter que digitar tudo?" é a objeção que mata a venda. A resposta tem de aparecer '
+      + 'como promessa nomeada — não como demonstração, que entregaria o diferencial.')
+  })
+
+  test('a demo continua sem persistir nada (invariante do arquivo)', () => {
+    assert.ok(!/localStorage|sessionStorage|indexedDB/.test(demo),
+      'O cabeçalho do arquivo trata a ausência de persistência como decisão de LGPD: guardar '
+      + 'o que o visitante digitou faz a landing deixar de ser vitrine e virar produto '
+      + '(consentimento, retenção, titular). Nem para "levar os dados ao cadastro".')
+  })
+})

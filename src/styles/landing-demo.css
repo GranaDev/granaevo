@@ -35,6 +35,11 @@
 .trial-pos { color: #34d399 !important; }
 
 .trial-form { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+/* ⚠️ OBRIGATÓRIO junto com o display acima: o atributo `hidden` do HTML só
+   funciona por causa da regra `[hidden]{display:none}` do user-agent, e QUALQUER
+   `display` declarado pelo autor a vence. Sem esta linha, `form.hidden = true`
+   não esconde nada e a parede aparece COM o formulário ainda ativo ao lado. */
+.trial-form[hidden] { display: none; }
 .trial-input {
     padding: 11px 13px; border-radius: 9px; font-size: .92rem; font-family: inherit;
     color: var(--color-text, #fff);
@@ -426,4 +431,78 @@
         text-align: left; max-width: 30rem; margin-inline: auto;
     }
     .trial-nota-ico { flex-shrink: 0; margin: 2px 0 0; width: 15px; height: 15px; }
+}
+
+
+/* ══ A PAREDE, O PORTÃO E A BORDA ═════════════════════════════════════════
+   Três peças com a mesma tese: a vitrine prova capacidade e cria desejo, mas
+   não entrega o valor recorrente. Ver a nota no topo de landing-demo.js. */
+
+/* ── A parede: troca de lugar com o formulário ao atingir MAX_ITENS ──────── */
+.trial-parede {
+    margin: 4px 0 12px; padding: 18px 16px; text-align: center;
+    border-radius: 13px;
+    background: color-mix(in srgb, var(--color-primary, #10b981) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-primary, #10b981) 30%, transparent);
+}
+.trial-parede[hidden] { display: none; }
+.trial-parede-tit {
+    display: block; font-size: .98rem; color: var(--color-text, #fff); margin-bottom: 5px;
+}
+.trial-parede-txt {
+    margin: 0 0 14px; font-size: .84rem; line-height: 1.55;
+    color: var(--color-text-muted, #cbd5e1);
+}
+.trial-parede-txt em { font-style: normal; color: var(--color-text, #fff); }
+.trial-parede-cta { display: inline-block; font-size: .92rem; padding: 11px 24px; }
+.trial-parede-hint {
+    display: block; margin-top: 10px; font-size: .76rem;
+    color: var(--color-text-muted, #9ca3af);
+}
+
+/* ── O portão: insights retidos (título à vista, corpo fechado) ──────────── */
+/* Tom deliberadamente mais frio que o insight liberado: o contraste entre os
+   dois é o que comunica "isto aqui está fechado" sem precisar dizer. */
+.trial-insight--retido {
+    background: color-mix(in srgb, var(--color-text-muted, #9ca3af) 7%, transparent);
+    border-color: color-mix(in srgb, var(--color-text-muted, #9ca3af) 22%, transparent);
+}
+.trial-retido-lista {
+    margin: 7px 0 8px; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: 5px;
+}
+.trial-retido-lista li {
+    font-size: .83rem; line-height: 1.4;
+    color: var(--color-text, #fff);
+    padding-left: 15px; position: relative;
+}
+/* O traço faz as vezes de item de lista sem marcador redondo, que na caixa
+   fria parecia bullet de erro. */
+.trial-retido-lista li::before {
+    content: ''; position: absolute; left: 0; top: .62em;
+    width: 8px; height: 1px;
+    background: color-mix(in srgb, var(--color-primary, #10b981) 60%, transparent);
+}
+
+/* ── A borda à vista: o que ficou de fora ────────────────────────────────── */
+.trial-borda {
+    max-width: 1120px; margin: 22px auto 0; padding: 15px 18px;
+    border-radius: 13px;
+    background: color-mix(in srgb, var(--color-text-muted, #9ca3af) 6%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--color-text-muted, #9ca3af) 26%, transparent);
+    text-align: center;
+}
+.trial-borda-tit {
+    display: block; font-size: .86rem; font-weight: 700;
+    color: var(--color-text, #fff); margin-bottom: 6px;
+}
+.trial-borda-txt {
+    margin: 0; font-size: .82rem; line-height: 1.6;
+    color: var(--color-text-muted, #cbd5e1);
+}
+.trial-borda-txt strong { color: var(--color-text, #fff); font-weight: 600; }
+
+@media (max-width: 640px) {
+    .trial-borda { padding: 14px; }
+    .trial-borda-txt { font-size: .79rem; }
 }

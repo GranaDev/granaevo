@@ -20,7 +20,18 @@
 import './script.js';   // mantém TODO o comportamento da landing original
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-const MAX_ITENS = 40;
+
+// A PAREDE. Era 40 — um teto de segurança que, na prática, ninguém alcançava:
+// ninguém digita 40 lançamentos numa landing, então não existia limite nenhum.
+//
+// 4 não é restrição por avareza: é onde a demonstração já provou o que sabe
+// fazer (saldo, categorias, saúde do mês, um insight de verdade) e ainda não
+// entregou o valor recorrente. Vitrine que sacia não vende.
+//
+// Por que exatamente 4: com 4 lançamentos dá para montar entrada + duas saídas
+// + reserva, que é o mínimo para os insights terem material — `renderInsights`
+// exige 2 itens, e o insight de "padrão aparecendo" exige 4.
+const MAX_ITENS = 4;
 // ORDEM VALIDADA — ver a nota em modules/xlsx.js. Âmbar ao lado de vermelho
 // reprovava no teste de separação (ΔE 13,2 na visão normal, piso 15). Atribuir
 // sempre NESTA ordem; nunca ciclar.
@@ -43,6 +54,7 @@ const ICONES = {
     ideia:   [['path', 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z']],
     cartao:  [['rect', null, { x: 2, y: 5, width: 20, height: 14, rx: 2 }], ['path', 'M2 10h20']],
     grafico: [['path', 'M3 3v18h18'], ['path', 'm7 14 4-4 3 3 5-6']],
+    cadeado: [['rect', null, { x: 4, y: 11, width: 16, height: 10, rx: 2 }], ['path', 'M8 11V7a4 4 0 0 1 8 0v4']],
 };
 
 function svgIcone(nome, classe) {
@@ -145,6 +157,18 @@ function render() {
         el('demoSaudeLbl').textContent = usado >= 100 ? 'Você passou do que ganhou'
             : usado >= 80 ? 'Atenção: pouco fôlego no mês' : 'Saúde do mês';
     } else wrap.hidden = true;
+
+    // A parede troca de lugar com o formulário. Reativa de propósito: se o
+    // visitante apagar um lançamento, o formulário volta — a parede marca um
+    // momento, não tranca uma porta.
+    const naParede = itens.length >= MAX_ITENS;
+    const form = el('demoForm');
+    const parede = el('demoParede');
+    if (form && parede) {
+        form.hidden   = naParede;
+        parede.hidden = !naParede;
+        if (naParede) el('demoErro').textContent = '';
+    }
 
     renderLista();
     renderGrafico(cats);
@@ -287,7 +311,21 @@ function renderInsights(t, cats) {
             'Com poucos lançamentos o app já monta gráficos, previsão de fim de mês e alertas de vencimento.']);
     }
 
-    for (const [ico, titulo, texto] of out.slice(0, 3)) {
+    // ── O PORTÃO ────────────────────────────────────────────────────────────
+    // Antes: os três insights vinham completos e o visitante saía com o
+    // diagnóstico inteiro na mão. Prova de capacidade era também entrega de
+    // valor — não sobrava razão para entrar.
+    //
+    // Agora: o PRIMEIRO vem inteiro (a capacidade fica provada, sem promessa
+    // vaga), e os demais aparecem só pelo TÍTULO. Ver que o app encontrou mais
+    // e não poder ler é mais forte do que não mostrar — o título prova que
+    // existe; o corpo é o que se compra.
+    const visiveis = out.slice(0, 3);
+    if (visiveis.length === 0) return;
+
+    const [primeiro, ...retidos] = visiveis;
+
+    const montar = (ico, titulo, texto) => {
         const d = document.createElement('div');
         d.className = 'trial-insight';
         const i = svgIcone(ico, 'trial-insight-ico');
@@ -300,8 +338,38 @@ function renderInsights(t, cats) {
         p.textContent = texto;
         corpo.append(h, p);
         d.append(i, corpo);
-        box.appendChild(d);
+        return d;
+    };
+
+    box.appendChild(montar(primeiro[0], primeiro[1], primeiro[2]));
+
+    if (retidos.length === 0) return;
+
+    const d = document.createElement('div');
+    d.className = 'trial-insight trial-insight--retido';
+    const corpo = document.createElement('div');
+
+    const h = document.createElement('strong');
+    h.className = 'trial-insight-tit';
+    h.textContent = retidos.length === 1
+        ? 'Encontrei mais 1 padrão nos seus lançamentos'
+        : `Encontrei mais ${retidos.length} padrões nos seus lançamentos`;
+
+    const ul = document.createElement('ul');
+    ul.className = 'trial-retido-lista';
+    for (const [, titulo] of retidos) {
+        const li = document.createElement('li');
+        li.textContent = titulo;          // textContent — parte vem do que o visitante digitou
+        ul.appendChild(li);
     }
+
+    const p = document.createElement('p');
+    p.className = 'trial-insight-txt';
+    p.textContent = 'Cada um vem com o que fazer a respeito. Essa parte fica no app.';
+
+    corpo.append(h, ul, p);
+    d.append(svgIcone('cadeado', 'trial-insight-ico'), corpo);
+    box.appendChild(d);
 }
 
 // ── Assistente (parser local de frases — NÃO é IA) ─────────────────────────
@@ -407,7 +475,11 @@ function montarChips() {
                 digitando.remove();
                 if (s.acao) {
                     const { tipo, desc, valor } = s.acao();
-                    if (!addItem(tipo, desc, valor)) { chatMsg('bot', 'A demonstração já tem lançamentos demais.'); return; }
+                    if (!addItem(tipo, desc, valor)) {
+                        chatMsg('bot', 'Aqui a demonstração para — mas pode continuar me perguntando sobre o que você já lançou.');
+                        render();
+                        return;
+                    }
                     chatMsg('bot', `Registrei ${ROTULO[tipo].toLowerCase()} de ${BRL.format(valor)} em "${desc}".`);
                     if (s.extra) setTimeout(() => chatMsg('bot', s.extra), 500);
                     render();
@@ -441,7 +513,7 @@ function init() {
         const valor = valorDaMascara(inputValor.value);
         if (!desc)          { erro.textContent = 'Escreva uma descrição.'; el('demoDesc').focus(); return; }
         if (valor === null) { erro.textContent = 'Informe um valor.'; inputValor.focus(); return; }
-        if (!addItem(el('demoTipo').value, desc, valor)) { erro.textContent = 'Esta é uma demonstração — 40 lançamentos já dão o recado.'; return; }
+        if (!addItem(el('demoTipo').value, desc, valor)) { render(); return; }   // a parede assume
         el('demoDesc').value = '';
         inputValor.value = '';
         el('demoDesc').focus();
