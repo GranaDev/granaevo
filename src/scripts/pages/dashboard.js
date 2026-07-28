@@ -5727,154 +5727,41 @@ window.mostrarNotificacaoDesfazer = mostrarNotificacaoDesfazer;
     if (navigator.onLine === false) aoFicarOffline();
 })();
 
-// ========== COMMAND PALETTE (Ctrl/Cmd + K) ==========
-(function initCommandPalette() {
-    const COMANDOS = [
-        { icon: 'fa-house',                 label: 'Ir para o Dashboard',   run: () => mostrarTela('dashboard') },
-        { icon: 'fa-right-left',            label: 'Ir para Transações',    run: () => mostrarTela('transacoes') },
-        { icon: 'fa-piggy-bank',            label: 'Ir para Reservas',      run: () => mostrarTela('reservas') },
-        { icon: 'fa-credit-card',           label: 'Ir para Cartões',       run: () => mostrarTela('cartoes') },
-        { icon: 'fa-chart-line',            label: 'Ir para Gráficos',      run: () => mostrarTela('graficos') },
-        { icon: 'fa-file-lines',            label: 'Ir para Relatórios',    run: () => mostrarTela('relatorios') },
-        { icon: 'fa-gear',                  label: 'Ir para Configurações', run: () => mostrarTela('configuracoes') },
-        { icon: 'fa-plus',                  label: 'Nova transação',        run: () => {
-            mostrarTela('transacoes');
-            setTimeout(() => {
-                const c = document.getElementById('selectCategoria');
-                c?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                c?.focus();
-            }, 140);
-        }},
-        { icon: 'fa-bullseye',              label: 'Nova reserva',          run: () => {
-            mostrarTela('reservas');
-            setTimeout(() => document.getElementById('btnNovaMeta')?.click(), 180);
-        }},
-        { icon: 'fa-credit-card',           label: 'Adicionar cartão',      run: () => {
-            mostrarTela('cartoes');
-            setTimeout(() => document.querySelector('.cartoes-novo-btn-add')?.click(), 180);
-        }},
-        { icon: 'fa-file-invoice-dollar',   label: 'Nova conta fixa',       run: () => {
-            mostrarTela('dashboard');
-            setTimeout(() => document.getElementById('btnNovaContaFixa')?.click(), 140);
-        }},
-    ];
+// ========== COMMAND PALETTE (Ctrl/Cmd + K) — chunk lazy ==========
+// A paleta saiu para modules/command-palette.js (O-1): ~150 linhas que só fazem
+// algo quando alguém aperta Ctrl+K. Fica aqui só o atalho; o módulo desce no
+// PRIMEIRO uso. Quem nunca aperta, nunca baixa.
+(function () {
+    let _paleta = null;
+    let _carregando = false;
 
-    let overlay, input, listEl, itens = [], selIdx = 0, focoAntes = null, construido = false;
+    document.addEventListener('keydown', async (e) => {
+        if (!((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K'))) return;
 
-    function appVisivel() {
+        // Não abre na tela de seleção de perfil. A checagem é duplicada aqui de
+        // propósito: sem ela, o módulo seria baixado só para descobrir que não
+        // devia abrir.
         const sel = document.getElementById('selecaoPerfis');
-        if (!sel) return true;
-        return sel.style.display === 'none' || getComputedStyle(sel).display === 'none';
-    }
+        const appVisivel = !sel || sel.style.display === 'none'
+                        || getComputedStyle(sel).display === 'none';
+        if (!appVisivel) return;
 
-    function construir() {
-        if (construido) return;
-        overlay = document.createElement('div');
-        overlay.className = 'ge-cmdk-overlay';
-        overlay.id = 'geCmdkOverlay';
-        overlay.innerHTML =
-            '<div class="ge-cmdk" role="dialog" aria-modal="true" aria-label="Paleta de comandos">' +
-                '<div class="ge-cmdk-search">' +
-                    '<i class="fas fa-magnifying-glass" aria-hidden="true"></i>' +
-                    '<input type="text" id="geCmdkInput" placeholder="Buscar ações e seções…" aria-label="Buscar comandos" autocomplete="off" spellcheck="false">' +
-                    '<kbd>ESC</kbd>' +
-                '</div>' +
-                '<ul class="ge-cmdk-list" id="geCmdkList" role="listbox" aria-label="Comandos"></ul>' +
-            '</div>';
-        document.body.appendChild(overlay);
-        input  = overlay.querySelector('#geCmdkInput');
-        listEl = overlay.querySelector('#geCmdkList');
+        e.preventDefault();
+        if (_carregando) return;
 
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) fechar(); });
-        input.addEventListener('input', () => render(input.value));
-        input.addEventListener('keydown', onKey);
-        construido = true;
-    }
-
-    function filtrados(q) {
-        const t = q.trim().toLowerCase();
-        if (!t) return COMANDOS;
-        return COMANDOS.filter(c => c.label.toLowerCase().includes(t));
-    }
-
-    function render(q) {
-        itens = filtrados(q);
-        selIdx = 0;
-        listEl.innerHTML = '';
-        if (itens.length === 0) {
-            const li = document.createElement('li');
-            li.className = 'ge-cmdk-empty';
-            li.textContent = 'Nenhum comando encontrado.';
-            listEl.appendChild(li);
-            return;
+        if (!_paleta) {
+            _carregando = true;
+            try {
+                _paleta = await import('../modules/command-palette.js');
+                _paleta.init({ mostrarTela });
+            } catch {
+                _paleta = null;
+                return;               // atalho falhou: o app segue normal
+            } finally {
+                _carregando = false;
+            }
         }
-        itens.forEach((c, i) => {
-            const li = document.createElement('li');
-            li.className = 'ge-cmdk-item';
-            li.setAttribute('role', 'option');
-            li.setAttribute('aria-selected', i === selIdx ? 'true' : 'false');
-            li.dataset.idx = i;
-            const ico = document.createElement('span');
-            ico.className = 'ge-cmdk-ico';
-            ico.innerHTML = `<i class="fas ${c.icon}" aria-hidden="true"></i>`; // ícone estático, sem dado de usuário
-            const lbl = document.createElement('span');
-            lbl.textContent = c.label;
-            li.append(ico, lbl);
-            li.addEventListener('click', () => executar(i));
-            li.addEventListener('mousemove', () => marcar(i));
-            listEl.appendChild(li);
-        });
-    }
-
-    function marcar(i) {
-        if (i === selIdx) return;
-        selIdx = i;
-        [...listEl.children].forEach((li, idx) => {
-            if (li.setAttribute) li.setAttribute('aria-selected', idx === selIdx ? 'true' : 'false');
-        });
-    }
-
-    function executar(i) {
-        const cmd = itens[i];
-        fechar();
-        if (cmd) { try { cmd.run(); } catch (_) {} }
-    }
-
-    function scrollSel() {
-        listEl.querySelector(`[data-idx="${selIdx}"]`)?.scrollIntoView({ block: 'nearest' });
-    }
-
-    function onKey(e) {
-        if (e.key === 'ArrowDown') { e.preventDefault(); if (itens.length) { marcar((selIdx + 1) % itens.length); scrollSel(); } }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); if (itens.length) { marcar((selIdx - 1 + itens.length) % itens.length); scrollSel(); } }
-        else if (e.key === 'Enter') { e.preventDefault(); if (itens.length) executar(selIdx); }
-        else if (e.key === 'Escape') { e.preventDefault(); fechar(); }
-    }
-
-    function abrir() {
-        construir();
-        focoAntes = document.activeElement;
-        overlay.classList.add('active');
-        input.value = '';
-        render('');
-        requestAnimationFrame(() => { try { input.focus(); } catch (_) {} });
-    }
-
-    function fechar() {
-        if (!overlay || !overlay.classList.contains('active')) return;
-        overlay.classList.remove('active');
-        if (focoAntes && typeof focoAntes.focus === 'function') { try { focoAntes.focus(); } catch (_) {} }
-        focoAntes = null;
-    }
-
-    function estaAberto() { return overlay && overlay.classList.contains('active'); }
-
-    document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
-            if (!estaAberto() && !appVisivel()) return; // não abre na tela de seleção de perfil
-            e.preventDefault();
-            if (estaAberto()) fechar(); else abrir();
-        }
+        _paleta.alternar();
     });
 })();
 
@@ -6030,123 +5917,24 @@ setTimeout(() => {
 }, 5000); // 5 segundos após carregar
 
 // ========== SISTEMA DE PARTÍCULAS OTIMIZADO (APENAS DESKTOP) ==========
-class ParticleSystem {
-    constructor() {
-        // ⚡ Desativado em mobile e para usuários que preferem menos movimento
-        if (window.innerWidth <= 768) return;
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-        this.canvas = document.getElementById('particles-canvas');
-        if (!this.canvas) return;
-
-        this.ctx          = this.canvas.getContext('2d');
-        this.particles    = [];
-        this.maxParticles = 50;
-        this.mouse        = { x: null, y: null, radius: 150 };
-        this._animFrameId = null;
-        this._destroyed   = false;
-
-        // ✅ Handlers nomeados para poder remover depois (sem memory leak)
-        this._onResize    = () => this._handleResize();
-        this._onMouseMove = (e) => this.handleMouse(e);
-
-        this.resize();
-        this.init();
-        this.animate();
-
-        window.addEventListener('resize',    this._onResize);
-        window.addEventListener('mousemove', this._onMouseMove);
-    }
-
-    _handleResize() {
-        if (window.innerWidth <= 768) {
-            this.particles = [];
-            if (this.ctx && this.canvas) {
-                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            }
-            return;
-        }
-        this.resize();
-    }
-
-    resize() {
-        if (!this.canvas) return;
-        this.canvas.width  = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-    }
-
-    init() {
-        this.particles = [];
-        for (let i = 0; i < this.maxParticles; i++) {
-            this.particles.push(this._criarParticula());
-        }
-    }
-
-    _criarParticula() {
-        const w = this.canvas?.width  || window.innerWidth;
-        const h = this.canvas?.height || window.innerHeight;
-        return {
-            x:      Math.random() * w,
-            y:      Math.random() * h,
-            vx:     (Math.random() - 0.5) * 0.5,
-            vy:     (Math.random() - 0.5) * 0.5,
-            radius: Math.random() * 2 + 1,
-            alpha:  Math.random() * 0.4 + 0.1,
-        };
-    }
-
-    handleMouse(e) {
-        this.mouse.x = e.clientX;
-        this.mouse.y = e.clientY;
-    }
-
-    _update() {
-        if (!this.canvas) return;
-        this.particles.forEach(p => {
-            p.x += p.vx;
-            p.y += p.vy;
-            if (p.x < 0 || p.x > this.canvas.width)  p.vx *= -1;
-            if (p.y < 0 || p.y > this.canvas.height)  p.vy *= -1;
-        });
-    }
-
-    _draw() {
-        if (!this.canvas || !this.ctx) return;
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.particles.forEach(p => {
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-            this.ctx.fillStyle = `rgba(108, 99, 255, ${p.alpha})`;
-            this.ctx.fill();
-        });
-    }
-
-    animate() {
-        if (this._destroyed) return;
-        this._update();
-        this._draw();
-        this._animFrameId = requestAnimationFrame(() => this.animate());
-    }
-
-    // ✅ Método de cleanup — evita memory leak se o sistema for destruído
-    destroy() {
-        this._destroyed = true;
-        if (this._animFrameId) {
-            cancelAnimationFrame(this._animFrameId);
-            this._animFrameId = null;
-        }
-        window.removeEventListener('resize',    this._onResize);
-        window.removeEventListener('mousemove', this._onMouseMove);
-    }
-}
-
-// ⚡ Inicializa APENAS em desktop
+// ========== FUNDO ANIMADO (decoração) — chunk lazy ==========
+// O ParticleSystem saiu para modules/particulas.js (O-1): eram ~120 linhas que
+// NÃO rodam em mobile nem para quem pediu menos movimento, mas viajavam no
+// chunk de boot do dashboard para todo mundo. As guardas ficam AQUI, antes do
+// import — o ponto é não baixar o código, e checar lá dentro seria tarde demais.
 document.addEventListener('DOMContentLoaded', () => {
-    if (window.innerWidth > 768) {
-        setTimeout(() => {
-            new ParticleSystem();
-        }, 500);
-    }
+    if (window.innerWidth <= 768) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // Enfeite não disputa banda com o carregamento dos dados: espera o load e
+    // ainda cede a vez ao primeiro ocioso.
+    const agendar = window.requestIdleCallback || ((fn) => setTimeout(fn, 500));
+    window.addEventListener('load', () => {
+        agendar(() => {
+            import('../modules/particulas.js')
+                .then(({ iniciarParticulas }) => iniciarParticulas())
+                .catch(() => { /* enfeite: falhar aqui não afeta o app */ });
+        });
+    }, { once: true });
 });
 
 // desenharGraficoLinha / desenharTopGastos REMOVIDAS (Passo 10): eram codigo

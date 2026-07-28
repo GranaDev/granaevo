@@ -458,3 +458,37 @@ describe('M-5 — nenhuma tabela com PII pode ficar sem prazo de descarte', () =
       'DEFINER sem search_path fixo é vetor de escalada — padrão do projeto e do advisor.')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('O-1 — o que saiu do boot do dashboard não pode voltar', () => {
+  const dash = ler('src', 'scripts', 'pages', 'dashboard.js')
+
+  test('partículas e paleta são importadas dinamicamente, nunca no topo', () => {
+    // Comparação de string, não regex: o caminho tem `(`, `.` e `/`, e escapar
+    // isso dentro de template literal já me custou um falso negativo — o `\(`
+    // virava `(` na fonte do RegExp e os parênteses viravam grupo de captura.
+    for (const mod of ['particulas', 'command-palette']) {
+      assert.ok(dash.includes(`import('../modules/${mod}.js')`),
+        `${mod} precisa continuar sendo import() dinâmico.`)
+      assert.ok(!dash.split('\n').some(l => l.startsWith(`import `) && l.includes(`modules/${mod}.js`)),
+        `${mod} virou import estático — volta inteiro para o chunk de boot, que já vive no teto.`)
+    }
+  })
+
+  test('as guardas ficam ANTES do import das partículas', () => {
+    const bloco = dash.match(/FUNDO ANIMADO[\s\S]*?\}\);/)[0]
+    const iMobile = bloco.indexOf('innerWidth <= 768')
+    const iImport = bloco.indexOf("import('../modules/particulas.js')")
+    assert.ok(iMobile > -1 && iMobile < iImport,
+      'O objetivo é NÃO BAIXAR o módulo em mobile. Checar lá dentro seria tarde demais — '
+      + 'o download já teria acontecido.')
+  })
+
+  test('o Ctrl+K NÃO é registrado dentro do módulo da paleta', () => {
+    const pal = ler('src', 'scripts', 'modules', 'command-palette.js')
+    assert.doesNotMatch(pal, /document\.addEventListener\('keydown'/,
+      'O atalho vive no stub do dashboard.js, que é quem decide carregar o módulo. '
+      + 'Registrar de novo aqui faria o Ctrl+K disparar duas vezes e a paleta abrir e '
+      + 'fechar no mesmo toque.')
+  })
+})
