@@ -108,7 +108,10 @@ async function auditarDns(Z) {
     }
   }
 
-  const extras = atuais.filter(a => !ESPERADOS.some(e => e.tipo === a.tipo && e.nome === a.nome))
+  // A API do Cloudflare devolve `type`/`name` (inglês), não `tipo`/`nome`. Comparar
+  // com os nomes em português fazia `some()` ser sempre false e TODO registro
+  // aparecer como "a mais" — o ruído esconderia um registro de verdade inesperado.
+  const extras = atuais.filter(a => !ESPERADOS.some(e => e.tipo === a.type && e.nome === a.name))
   if (extras.length) {
     console.log('\n  ℹ️  Registros a mais (podem ser legítimos — confira):')
     for (const x of extras) console.log(`      ${x.type} ${x.name} → ${String(x.content).slice(0, 50)}`)
@@ -220,7 +223,9 @@ async function main() {
 
   // ── 5. Cache — a parte que mais dá dor de cabeça ───────────────────────────
   console.log('\n5) Cache')
-  await setting(Z, 'cache_level', 'standard', '')
+  // "aggressive" é o nome de API do que o painel chama "Standard". Mandar
+  // 'standard' devolve "Invalid value for zone setting cache_level".
+  await setting(Z, 'cache_level', 'aggressive', 'o "Standard" do painel')
   await setting(Z, 'browser_cache_ttl', 0, 'respeita o Cache-Control que a Vercel manda')
   await setting(Z, 'always_online', 'off', 'OFF: servir página velha de app financeiro engana o usuário')
 
@@ -228,13 +233,6 @@ async function main() {
   // O free permite 5 regras customizadas. Estas são as 5 que valem a pena aqui.
   console.log('\n6) Regras de firewall (5 no free)')
   const regras = [
-    {
-      description: 'BYPASS de cache e proteção para /api/* (NUNCA cachear)',
-      expression: '(starts_with(http.request.uri.path, "/api/"))',
-      action: 'skip',
-      action_parameters: { ruleset: 'current', phases: ['http_request_cache_settings'] },
-      _nota: 'Sem isto, uma resposta de /api/user-data de um usuário pode ser servida a outro.',
-    },
     {
       description: 'Desafia acesso automatizado ao login e cadastro',
       expression: '(http.request.uri.path in {"/login" "/api/auth-session" "/api/create-account"} and cf.threat_score gt 14)',
@@ -286,7 +284,9 @@ async function main() {
     action: 'block',
     ratelimit: {
       characteristics: ['ip.src', 'cf.colo.id'],
-      period: 10, requests_per_period: 10, mitigation_timeout: 60,
+      // No free o mitigation_timeout PRECISA ser igual ao period — pedir 60
+      // devolve "not entitled to use a mitigation timeout different from 10".
+      period: 10, requests_per_period: 10, mitigation_timeout: 10,
     },
   }
   if (DRY) console.log(`  [dry] ${rl.description}`)
@@ -299,6 +299,33 @@ async function main() {
           body: { name: 'GranaEvo ratelimit', kind: 'zone', phase: 'http_ratelimit', rules: [rl] } })
     if (res.ok) { console.log('  ✅ rate limit aplicado'); ok++ }
     else { console.log(`  ⏭️  rate limit — ${res.errors?.[0]?.message ?? res.status}`); pulados++ }
+  }
+
+  // ── 7.5 Cache Rule: /api/* NUNCA é cacheado ───────────────────────────────
+  // Esta é a regra mais importante do arquivo inteiro. Sem ela, o Cloudflare
+  // pode guardar a resposta de /api/user-data de um usuário e servi-la a outro
+  // — o pior bug possível neste app.
+  //
+  // Tentei antes como `skip` dentro do ruleset de firewall e o free recusa
+  // ("phase http_request_cache_settings is not authorized" a partir dali).
+  // O caminho certo é uma regra na PRÓPRIA fase de cache, que o free permite.
+  console.log('\n7.5) Cache Rule — /api/* fora do cache (a regra mais crítica)')
+  const cacheRule = {
+    description: '/api/* nunca entra em cache',
+    expression: '(starts_with(http.request.uri.path, "/api/"))',
+    action: 'set_cache_settings',
+    action_parameters: { cache: false },
+  }
+  if (DRY) console.log(`  [dry] ${cacheRule.description}`)
+  else {
+    const rs = await cf(`/zones/${Z}/rulesets/phases/http_request_cache_settings/entrypoint`)
+    const id = rs.data?.id
+    const res = id
+      ? await cf(`/zones/${Z}/rulesets/${id}`, { method: 'PUT', body: { rules: [cacheRule] } })
+      : await cf(`/zones/${Z}/rulesets`, { method: 'POST',
+          body: { name: 'GranaEvo cache', kind: 'zone', phase: 'http_request_cache_settings', rules: [cacheRule] } })
+    if (res.ok) { console.log('  ✅ /api/* marcado como não-cacheável'); ok++ }
+    else { console.log(`  ❌ CACHE RULE — ${res.errors?.[0]?.message ?? res.status}`); falhas++ }
   }
 
   // ── 8. WAF gerenciado ─────────────────────────────────────────────────────
