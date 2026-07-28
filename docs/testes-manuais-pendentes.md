@@ -1,89 +1,153 @@
 # Testes manuais pendentes — sessão de 2026-07-27
 
-Tudo aqui foi verificado no que dá para verificar de fora (status HTTP, estado do
-banco, conteúdo dos chunks publicados, testes automatizados). O que sobrou exige
-uma **sessão de usuário real**, que eu não consigo criar.
+Tudo foi verificado no que dá para verificar de fora: status HTTP, estado do
+banco, conteúdo dos chunks publicados, 692 testes automatizados. O que sobrou
+aqui exige **uma sessão de usuário real** ou **olhar humano na tela** — nenhuma
+das duas coisas eu consigo fazer daqui.
 
-Marque conforme for testando. Se algo falhar, o rollback de cada item está no fim.
-
----
-
-## 1. Verificação em duas etapas (2FA) — B-1
-
-> Ninguém ativou ainda: `auth.mfa_factors` tem 0 fatores verificados.
-> Use uma conta descartável na primeira vez, não a principal.
-
-- [ ] **Ativar:** Configurações → Segurança da conta → "Ativar verificação em duas etapas"
-- [ ] **O QR aparece** (era o bug do `<?xml`; corrigido no commit `6da9681`)
-- [ ] Se estiver no celular: o link **"Abrir direto no app autenticador"** abre o app
-- [ ] **A chave manual** copia ao tocar
-- [ ] Digitar o código de 6 dígitos → **ativa** e mostra os **10 códigos de recuperação**
-- [ ] **Baixar os códigos** (.txt) — é a única vez que eles aparecem
-- [ ] Chega **e-mail** avisando que um fator foi cadastrado (liguei essa notificação)
-- [ ] **Deslogar e entrar de novo:** pede o código depois da senha
-- [ ] Código errado 1× → mensagem de erro com tentativas restantes
-- [ ] Código certo → entra normalmente
-- [ ] **Recarregar o app com 2FA ativo:** os dados carregam e salvam
-      (é o gate `aal2` das edges — se travar aqui, me avise, é o item mais delicado)
-- [ ] **Desativar:** Configurações → Segurança → "Desativar" → pede a senha
-- [ ] Senha errada → recusa · Senha certa → desativa e chega e-mail
-
-### Teste do caminho de recuperação (opcional, mas é o que salva quem perde o celular)
-- [ ] Ativar o 2FA de novo, guardar os códigos
-- [ ] Deslogar → na tela do código, clicar em **"Perdi o acesso ao meu autenticador"**
-- [ ] Ler o aviso (ele diz que isso DESATIVA o 2FA) e usar um código de recuperação
-- [ ] Entra, e o 2FA aparece como **Desativado** nas Configurações
+Ordenado por **risco**: os primeiros quebram o app se estiverem errados; os
+últimos são estética e conversão.
 
 ---
 
-## 2. Exportação de dados (LGPD) — A-3
+## 🔴 BLOCO 1 — Se algo aqui falhar, o app está quebrado
 
+> Faça este bloco primeiro, e de preferência antes de divulgar qualquer coisa.
+> Os dois itens mexem em caminhos que **todo mundo** usa.
+
+### 1.1 Os dados carregam e salvam normalmente
+- [ ] Abrir o dashboard: os lançamentos aparecem
+- [ ] Criar uma transação qualquer e recarregar: ela continua lá
+
+> **Por que isto é o teste nº 1:** `get-user-data` e `save-user-data` ganharam um
+> gate de 2FA que **falha fechado**. Se a RPC `mfa_bloqueia` não responder, elas
+> recusam. Ninguém tem 2FA ativo, então deve ser transparente — mas é o único
+> jeito de provar.
+
+### 1.2 Criar perfil ainda funciona
+- [ ] Criar um perfil novo (dentro do limite do seu plano)
+- [ ] Estourar o limite: o popup de limite aparece, como antes
+
+> **Por que:** o trigger virou `AFTER INSERT` e a comparação mudou de `>=` para
+> `>`. As duas coisas andam em par — se eu tivesse trocado só o timing, o
+> **primeiro** perfil de todo plano Individual seria bloqueado.
+
+---
+
+## 🟠 BLOCO 2 — Recursos novos, nunca exercitados por um humano
+
+### 2.1 Verificação em duas etapas (2FA)
+> **Use uma conta descartável na primeira vez.** Zero fatores ativos hoje.
+
+**Ativar**
+- [ ] Configurações → Segurança da conta → "Ativar verificação em duas etapas"
+- [ ] **O QR aparece** (era o bug do `<?xml`, corrigido em `6da9681`)
+- [ ] No celular: o link "Abrir direto no app autenticador" abre o app
+- [ ] A chave manual copia ao tocar
+- [ ] Código de 6 dígitos → ativa e mostra os **10 códigos de recuperação**
+- [ ] Baixar o `.txt` — é a única vez que eles aparecem
+- [ ] Chega e-mail avisando que um fator foi cadastrado
+
+**Usar**
+- [ ] Deslogar e entrar: pede o código depois da senha
+- [ ] Código errado → erro com tentativas restantes
+- [ ] Código certo → entra
+- [ ] **Com 2FA ativo, recarregar o app: dados carregam e salvam**
+      ← se travar aqui, me avise; é o ponto mais delicado de toda a sessão
+
+**Desativar**
+- [ ] Configurações → Segurança → "Desativar" → pede a senha
+- [ ] Senha errada recusa · senha certa desativa · chega e-mail
+
+**Recuperação** (o que salva quem perde o celular)
+- [ ] Reativar, guardar os códigos, deslogar
+- [ ] Na tela do código: "Perdi o acesso ao meu autenticador"
+- [ ] Ler o aviso (ele diz que isso **desativa** o 2FA) e usar um código
+- [ ] Entra, e o 2FA aparece como Desativado
+
+### 2.2 Exportação de dados (LGPD)
 - [ ] Configurações → **Privacidade** → "Baixar meus dados"
-- [ ] Pede a senha; senha errada → "Senha incorreta"
+- [ ] Senha errada → "Senha incorreta"
 - [ ] Senha certa → baixa `granaevo-meus-dados-AAAA-MM-DD.json`
-- [ ] Abrir o arquivo e conferir:
-  - [ ] `dados_financeiros` traz **todos os seus perfis**, não só o que estava aberto
-  - [ ] transações, cartões, contas fixas, assinaturas e metas estão lá
+- [ ] No arquivo:
+  - [ ] `dados_financeiros` traz **todos os perfis**, não só o aberto
   - [ ] `metadados_da_conta.aparelhos_reconhecidos` **não está null**
-        (era o bug de nome de coluna que corrigi antes de subir)
-  - [ ] **não existe** senha, token, `device_hash` ou chave de criptografia no arquivo
+        ← era o bug de nome de coluna que peguei antes de subir
+  - [ ] **não existe** senha, token, `device_hash` nem chave de criptografia
 
 ---
 
-## 3. Caixa de entrada do sino — A-2
+## 🟡 BLOCO 3 — Interações que mudaram de lugar
 
-- [ ] Abrir o sino e clicar no **X** de um aviso
-- [ ] O aviso **some** (estava morto em produção desde o commit `2d8de79`)
-- [ ] Recarregar: ele continua fora
+### 3.1 Paleta de comandos e fundo animado (O-1)
+> Os dois saíram do `dashboard.js` para chunks que só baixam quando usados.
+- [ ] **Ctrl+K** (ou Cmd+K) abre a paleta
+- [ ] Digitar filtra, setas navegam, Enter executa, Esc fecha
+- [ ] Apertar Ctrl+K de novo **fecha** (não abre uma segunda)
+- [ ] Na tela de seleção de perfil, Ctrl+K **não** abre
+- [ ] No desktop, o fundo de partículas aparece
+- [ ] No celular, **não** aparece (e nem baixa)
+
+### 3.2 Caixa de entrada do sino
+- [ ] Clicar no **X** de um aviso: ele some
+- [ ] Recarregar: continua fora
+
+> Estava morto em produção desde `2d8de79` — faltava o GRANT.
 
 ---
 
-## 4. Limite de perfis — S-1
+## 🔵 BLOCO 4 — A vitrine (olhar humano, não há como automatizar)
 
-- [ ] Criar um perfil normalmente **ainda funciona**
-      (esta é a parte que eu mais quis testar: a correção mudou o trigger para
-      AFTER, e junto a comparação de `>=` para `>`. Se a comparação estivesse
-      errada, o PRIMEIRO perfil de todo plano Individual seria bloqueado.)
-- [ ] Estourar o limite do plano → aparece o popup de limite, como antes
+> Mudança de estratégia: a demo agora **cria desejo em vez de saciar**.
+> Aqui o que importa não é "funciona?", é **"dá vontade de entrar?"**.
+
+- [ ] Lançar 4 itens: no 4º o formulário **dá lugar** à parede
+      ("Seu mês está tomando forma")
+- [ ] A parede parece **continuação**, não erro nem paywall
+- [ ] **Apagar** um lançamento: o formulário volta
+- [ ] "Limpar tudo": o formulário volta
+- [ ] Depois da parede, as **perguntas** do assistente ainda respondem
+      ("Quanto eu gastei?", "Me dá um resumo")
+- [ ] Um insight vem **inteiro**; os outros aparecem só com o **título**,
+      numa caixa visivelmente mais fria
+- [ ] A faixa "Você viu 3 de mais de 20 recursos" está legível e não parece aviso de erro
+- [ ] No celular, a parede e a faixa não quebram o layout
+
+**A pergunta de fundo, que só você responde:** depois de bater na parede, você
+sentiria vontade de entrar — ou de fechar a aba? Se for a segunda, o texto da
+parede é o que ajusta, não a existência dela.
 
 ---
 
-## 5. Alertas de segurança — B-4  ⚠️ ESTE É CONFIGURAÇÃO, NÃO TESTE
+## ⚙️ BLOCO 5 — Isto é configuração, não teste
 
-- [ ] Conferir no dashboard da **Vercel** se existem as duas env vars:
+- [ ] No dashboard da **Vercel**, confirmar que existem:
       - `RESEND_API_KEY`
       - `SECURITY_ALERT_EMAIL`
-- [ ] **Sem as duas, todo o B-4 conta e loga mas NÃO manda e-mail** (`api/_alert.js:93`
-      retorna cedo). É o único passo que faltou para o alerta funcionar de verdade.
+
+> **Sem as duas, todo o B-4 fica inerte**: os eventos de segurança são contados e
+> logados, e o e-mail nunca sai (`api/_alert.js:93` retorna cedo). É o item mais
+> barato da lista inteira e o de maior retorno.
 
 ---
 
 ## Rollback, se algo quebrar
 
-| Item | Como reverter |
+| Sintoma | Como reverter |
 |---|---|
-| 2FA trava o carregamento de dados | Redeploy das edges do commit anterior, **depois** `supabase/migrations/20260727030000_mfa_gate_edges.down.sql`. Nessa ordem — o gate falha fechado, então dropar a função com as edges no ar tranca todo mundo. |
-| Enforcement `aal2` bloqueando indevidamente | `20260727020000_mfa_aal2_enforcement.down.sql` |
-| Criação de perfil quebrada | `20260727010000_fix_profile_limit_batch_bypass.down.sql` (⚠️ reabre o bypass em lote) |
-| X do sino | `20260727060000_radar_dismiss_grant.down.sql` |
+| **Dados não carregam/salvam** | Redeploy das edges do commit anterior, **depois** `20260727030000_mfa_gate_edges.down.sql`. **Nessa ordem** — o gate falha fechado, então dropar a função com as edges no ar tranca todo mundo |
+| Leitura bloqueada indevidamente | `20260727020000_mfa_aal2_enforcement.down.sql` |
+| Não cria perfil | `20260727010000_fix_profile_limit_batch_bypass.down.sql` (⚠️ reabre o bypass em lote) |
+| X do sino parou | `20260727060000_radar_dismiss_grant.down.sql` |
 | Exportação / step-up | `git revert aa0ef75` |
+| Ctrl+K ou partículas | `git revert af2e498` |
+| Vitrine | `git revert 889e5f8` |
+
+---
+
+## O que já foi verificado — não precisa refazer
+
+Segurança em produção (401/403/429/440 nos lugares certos) · lockout de conta
+(429 com `Retry-After=900` na 6ª tentativa) · RLS `aal2` nos 4 cenários ·
+imutabilidade do audit log nos 4 cenários · retenção nas 2 tabelas · `sitemap.xml`
+200 · CSP sem Cloudflare · 692 testes automatizados · 18 crons ativos, 0 falhas.
