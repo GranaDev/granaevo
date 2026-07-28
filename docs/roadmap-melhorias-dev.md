@@ -1264,8 +1264,10 @@ ser barrado. Cloudflare Rate Limiting Rules em `/api/auth-session` e `/api/creat
 > de eventos (sem ela, quem obtivesse o secret forjaria até os que BLOQUEIAM IP), meta truncada,
 > teto de 60/min e fire-and-forget dos dois lados.
 >
-> ⚠️ **INERTE sem `RESEND_API_KEY` e `SECURITY_ALERT_EMAIL` nas env da Vercel** (`_alert.js:93`
-> retorna cedo). Conferir no dashboard — é o único passo que faltou.
+> ✅ **CONFIGURADO E TESTADO EM PROD (2026-07-27):** `RESEND_API_KEY` (chave própria da Vercel,
+> separada da do Supabase para revogação independente) + `SECURITY_ALERT_EMAIL` em
+> Production/Preview. Prova de ponta a ponta: 45 eventos `rate_limit_burst` em 39s cruzaram o
+> threshold de 40/300s e o e-mail chegou — **uma vez só**, confirmando o `count === cfg.count`.
 
 ### B-5 — Fechar S-1…S-6 (contam para blindagem também) 🔴
 

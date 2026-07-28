@@ -121,15 +121,17 @@ parede é o que ajusta, não a existência dela.
 
 ---
 
-## ⚙️ BLOCO 5 — Isto é configuração, não teste
+## ✅ BLOCO 5 — APROVADO em 2026-07-27
 
-- [ ] No dashboard da **Vercel**, confirmar que existem:
-      - `RESEND_API_KEY`
-      - `SECURITY_ALERT_EMAIL`
+- [x] `RESEND_API_KEY` (chave própria da Vercel, separada da do Supabase) e
+      `SECURITY_ALERT_EMAIL` adicionadas em Production + Preview, com redeploy
+- [x] **Testado de ponta a ponta:** 50 requisições contra `/api/auth-session`
+      geraram 45 eventos `rate_limit_burst` em 39s (threshold: 40 em 300s).
+      O e-mail chegou — assunto correto e **uma vez só**, confirmando que o
+      alerta dispara em `count === threshold` e ignora os seguintes.
 
-> **Sem as duas, todo o B-4 fica inerte**: os eventos de segurança são contados e
-> logados, e o e-mail nunca sai (`api/_alert.js:93` retorna cedo). É o item mais
-> barato da lista inteira e o de maior retorno.
+> O caminho inteiro está provado: evento emitido → contado no Redis → entregue
+> pelo Resend. **B-4 fechado.**
 
 ---
 
