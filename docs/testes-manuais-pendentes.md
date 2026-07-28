@@ -10,23 +10,25 @@ Ordenado por **risco**: os primeiros quebram o app se estiverem errados; os
 
 ---
 
-## 🔴 BLOCO 1 — Se algo aqui falhar, o app está quebrado
+## ✅ BLOCO 1 — APROVADO pelo usuário em 2026-07-27
 
-> Faça este bloco primeiro, e de preferência antes de divulgar qualquer coisa.
-> Os dois itens mexem em caminhos que **todo mundo** usa.
+> **Os dois passaram.** Era o único ponto da sessão que não dava para verificar
+> de fora — o gate de 2FA nas edges nunca tinha visto uma sessão real, e o
+> trigger de perfis só tinha sido provado por SQL com rollback. Agora ambos
+> estão validados na interface. **O risco alto da sessão está fechado.**
 
-### 1.1 Os dados carregam e salvam normalmente
-- [ ] Abrir o dashboard: os lançamentos aparecem
-- [ ] Criar uma transação qualquer e recarregar: ela continua lá
+### 1.1 Os dados carregam e salvam normalmente ✅
+- [x] Abrir o dashboard: os lançamentos aparecem
+- [x] Criar uma transação qualquer e recarregar: ela continua lá
 
 > **Por que isto é o teste nº 1:** `get-user-data` e `save-user-data` ganharam um
 > gate de 2FA que **falha fechado**. Se a RPC `mfa_bloqueia` não responder, elas
 > recusam. Ninguém tem 2FA ativo, então deve ser transparente — mas é o único
 > jeito de provar.
 
-### 1.2 Criar perfil ainda funciona
-- [ ] Criar um perfil novo (dentro do limite do seu plano)
-- [ ] Estourar o limite: o popup de limite aparece, como antes
+### 1.2 Criar perfil ainda funciona ✅
+- [x] Criar um perfil novo (dentro do limite do seu plano)
+- [x] Estourar o limite: o popup de limite aparece, como antes
 
 > **Por que:** o trigger virou `AFTER INSERT` e a comparação mudou de `>=` para
 > `>`. As duas coisas andam em par — se eu tivesse trocado só o timing, o
