@@ -66,6 +66,84 @@ async function setting(zone, nome, valor, porque) {
   }
 }
 
+// ── Registros que PRECISAM sobreviver à migração ────────────────────────────
+// Fotografados do DNS ativo em 2026-07-27, ANTES de qualquer mudança. O script
+// confere um por um contra o que o Cloudflare importou.
+//
+// Os três de e-mail são o item mais crítico da migração inteira: se um MX ou o
+// SPF se perder, `privacidade@granaevo.com` para de receber — e esse é o canal
+// do titular na LGPD, declarado na Política de Privacidade.
+const ESPERADOS = [
+  { tipo: 'A',     nome: 'granaevo.com',                    contem: '76.76.21.21',        papel: 'apex → Vercel',            proxy: true  },
+  { tipo: 'CNAME', nome: 'www.granaevo.com',                contem: 'vercel-dns',         papel: 'www → Vercel',             proxy: true  },
+  { tipo: 'CNAME', nome: 'assistente.granaevo.com',         contem: 'vercel-dns',         papel: 'PWA do assistente',        proxy: true  },
+  { tipo: 'MX',    nome: 'granaevo.com',                    contem: 'mx1.improvmx.com',   papel: '📧 recebe e-mail (prio 10)', proxy: false },
+  { tipo: 'MX',    nome: 'granaevo.com',                    contem: 'mx2.improvmx.com',   papel: '📧 recebe e-mail (prio 20)', proxy: false },
+  { tipo: 'TXT',   nome: 'granaevo.com',                    contem: 'spf.improvmx.com',   papel: '📧 SPF',                    proxy: false },
+  { tipo: 'TXT',   nome: 'resend._domainkey.granaevo.com',  contem: 'p=MIGfMA0',          papel: '📧 DKIM do Resend',         proxy: false },
+  { tipo: 'TXT',   nome: '_dmarc.granaevo.com',             contem: 'v=DMARC1',           papel: '📧 DMARC',                  proxy: false },
+  { tipo: 'TXT',   nome: 'send.granaevo.com',               contem: 'amazonses.com',      papel: '📧 SPF do envio (Resend)',  proxy: false },
+]
+
+/** Confere se o Cloudflare importou tudo. Só lê — não muda nada. */
+async function auditarDns(Z) {
+  console.log('\n📋 Conferindo os registros importados\n')
+  const r = await cf(`/zones/${Z}/dns_records?per_page=200`)
+  if (!r.ok) { console.error('  ❌ não consegui listar os registros'); return false }
+  const atuais = r.data ?? []
+
+  let faltando = 0
+  for (const e of ESPERADOS) {
+    const achou = atuais.find(a =>
+      a.type === e.tipo &&
+      a.name === e.nome &&
+      String(a.content ?? '').includes(e.contem))
+    if (achou) {
+      const nuvem = achou.proxied ? '🟠 proxy' : '⚪ dns-only'
+      console.log(`  ✅ ${e.tipo.padEnd(5)} ${e.papel.padEnd(32)} ${nuvem}`)
+    } else {
+      console.log(`  ❌ ${e.tipo.padEnd(5)} ${e.papel.padEnd(32)} FALTANDO — esperado conter "${e.contem}"`)
+      faltando++
+    }
+  }
+
+  const extras = atuais.filter(a => !ESPERADOS.some(e => e.tipo === a.tipo && e.nome === a.nome))
+  if (extras.length) {
+    console.log('\n  ℹ️  Registros a mais (podem ser legítimos — confira):')
+    for (const x of extras) console.log(`      ${x.type} ${x.name} → ${String(x.content).slice(0, 50)}`)
+  }
+
+  if (faltando) {
+    console.error(`\n  🛑 ${faltando} registro(s) faltando. NÃO troque os nameservers ainda —`)
+    console.error('     adicione o que falta no painel do Cloudflare primeiro.')
+    return false
+  }
+  console.log('\n  ✅ Todos os 9 registros presentes.')
+  return true
+}
+
+/**
+ * Liga/desliga o proxy (nuvem laranja) só nos hosts do SITE.
+ * Registro de e-mail NUNCA é tocado — MX não se proxia, e mexer no SPF/DKIM
+ * quebraria a entrega.
+ */
+async function proxy(Z, ligar) {
+  console.log(`\n🔶 ${ligar ? 'Ligando' : 'Desligando'} o proxy nos hosts do site\n`)
+  const r = await cf(`/zones/${Z}/dns_records?per_page=200`)
+  const atuais = r.data ?? []
+  for (const e of ESPERADOS.filter(x => x.proxy)) {
+    const rec = atuais.find(a => a.type === e.tipo && a.name === e.nome)
+    if (!rec) { console.log(`  ⏭️  ${e.papel} — registro não encontrado`); continue }
+    if (rec.proxied === ligar) { console.log(`  ✅ ${e.papel} — já estava ${ligar ? 'proxiado' : 'dns-only'}`); ok++; continue }
+    if (DRY) { console.log(`  [dry] ${e.papel} → ${ligar ? 'proxy' : 'dns-only'}`); continue }
+    const up = await cf(`/zones/${Z}/dns_records/${rec.id}`, {
+      method: 'PATCH', body: { proxied: ligar },
+    })
+    if (up.ok) { console.log(`  ✅ ${e.papel} → ${ligar ? '🟠 proxy' : '⚪ dns-only'}`); ok++ }
+    else { console.log(`  ❌ ${e.papel} — ${up.errors?.[0]?.message ?? up.status}`); falhas++ }
+  }
+}
+
 async function main() {
   console.log(`\n🛡️  Cloudflare — ${DOMAIN}${DRY ? '  (DRY RUN)' : ''}\n`)
 
@@ -83,6 +161,15 @@ async function main() {
     console.warn('    Pode aplicar mesmo assim; as regras passam a valer quando ativar.\n')
   }
   const Z = zona.id
+
+  // Modos dedicados: auditoria e controle de proxy saem antes de tudo.
+  if (process.argv.includes('--audit-dns')) { process.exit(await auditarDns(Z) ? 0 : 1) }
+  if (process.argv.includes('--proxy=on'))  { await proxy(Z, true);  process.exit(falhas ? 1 : 0) }
+  if (process.argv.includes('--proxy=off')) { await proxy(Z, false); process.exit(falhas ? 1 : 0) }
+
+  // O setup completo começa conferindo o DNS: aplicar regras numa zona com
+  // registro de e-mail faltando seria consolidar a quebra.
+  if (!await auditarDns(Z)) process.exit(1)
 
   // ── 1. TLS ────────────────────────────────────────────────────────────────
   console.log('1) TLS e transporte')

@@ -14,6 +14,62 @@ Os passos abaixo são os que **só você** pode fazer.
 
 ---
 
+## 📸 O DNS ATUAL — fotografado em 2026-07-27, antes de qualquer mudança
+
+Estes **9 registros precisam sobreviver**. O script confere um por um com
+`node scripts/cloudflare-setup.mjs --audit-dns`.
+
+| Tipo | Nome | Aponta para | Papel | Nuvem |
+|---|---|---|---|---|
+| A | `granaevo.com` | `76.76.21.21` | apex → Vercel | 🟠 proxy |
+| CNAME | `www` | `…vercel-dns-017.com` | site → Vercel | 🟠 proxy |
+| CNAME | `assistente` | `…vercel-dns-017.com` | PWA do assistente | 🟠 proxy |
+| MX 10 | `granaevo.com` | `mx1.improvmx.com` | 📧 **recebe e-mail** | ⚪ dns-only |
+| MX 20 | `granaevo.com` | `mx2.improvmx.com` | 📧 **recebe e-mail** | ⚪ dns-only |
+| TXT | `granaevo.com` | `v=spf1 include:spf.improvmx.com ~all` | 📧 SPF | ⚪ |
+| TXT | `resend._domainkey` | `p=MIGfMA0…` | 📧 DKIM do Resend | ⚪ |
+| TXT | `_dmarc` | `v=DMARC1; p=none;` | 📧 DMARC | ⚪ |
+| TXT | `send` | `v=spf1 include:amazonses.com ~all` | 📧 SPF do envio | ⚪ |
+
+> ⚠️ **Os 6 de e-mail são o maior risco da migração.** Perder um MX derruba
+> `privacidade@`, `suporte@` e `contato@` — e `privacidade@` é o canal do titular
+> declarado na Política de Privacidade. Não é só inconveniente: é não-conformidade.
+>
+> **MX nunca fica proxiado.** O Cloudflare nem oferece a opção, mas se alguém
+> tentar "ligar a nuvem em tudo", o e-mail para.
+
+## 🛡️ ORDEM SEGURA DO CUTOVER (revisada em 2026-07-27)
+
+A versão anterior deste runbook mandava trocar os nameservers com o proxy já
+ligado. **Isso abre uma janela de loop de redirecionamento**: zona nova entra com
+SSL em `Flexible`, o Cloudflare fala HTTP com a Vercel, a Vercel redireciona para
+HTTPS, e o ciclo não fecha. O site cai até alguém trocar o modo de SSL.
+
+A ordem abaixo elimina a janela — o proxy só liga depois do SSL estar `strict`:
+
+1. **Adicionar o site** ao Cloudflare (free) e conferir os 9 registros
+2. **Deixar TODOS em ⚪ dns-only** (nuvem cinza) por enquanto
+3. **Trocar os nameservers** no Hostinger → nada muda de comportamento: o
+   Cloudflare vira só um servidor de DNS, o tráfego continua indo direto à Vercel
+4. `--audit-dns` para provar que a zona está completa
+5. **Rodar o setup** — é ele que põe `ssl=strict`, HSTS, WAF, rate limit
+6. **Só então** `--proxy=on` — e aí o tráfego começa a passar pelo Cloudflare
+7. Verificar; se algo quebrar, `--proxy=off` devolve tudo em segundos
+
+**O rollback do passo 6 é instantâneo e não depende de propagação de DNS** —
+desligar a nuvem tira o Cloudflare do caminho sem mexer em nameserver.
+
+### Comandos
+```bash
+node scripts/cloudflare-setup.mjs --audit-dns    # só lê, não muda nada
+node scripts/cloudflare-setup.mjs --dry-run      # mostra o que faria
+node scripts/cloudflare-setup.mjs                # aplica settings + regras
+node scripts/cloudflare-setup.mjs --proxy=on     # liga a nuvem (último passo)
+node scripts/cloudflare-setup.mjs --proxy=off    # rollback imediato
+```
+
+---
+
 ## 1. Adicionar o site e trocar os nameservers
 
 1. https://dash.cloudflare.com → **Add a site** → `granaevo.com` → plano **Free**.
