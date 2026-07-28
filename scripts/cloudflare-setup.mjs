@@ -57,7 +57,19 @@ async function cf(path, { method = 'GET', body } = {}) {
 async function setting(zone, nome, valor, porque) {
   if (DRY) { console.log(`  [dry] ${nome} = ${JSON.stringify(valor)}  — ${porque}`); return }
   const r = await cf(`/zones/${zone}/settings/${nome}`, { method: 'PATCH', body: { value: valor } })
-  if (r.ok) { console.log(`  ✅ ${nome} = ${JSON.stringify(valor)}`); ok++ }
+  if (r.ok) {
+    // NÃO confiar no 200. Alguns settings aceitam o PATCH e NÃO aplicam — foi o
+    // caso de email_obfuscation e hotlink_protection, que reportaram sucesso e
+    // continuaram "off" no painel. Só a releitura prova.
+    const conf = await cf(`/zones/${zone}/settings/${nome}`)
+    const real = conf.data?.value
+    const bateu = JSON.stringify(real) === JSON.stringify(valor)
+    if (bateu) { console.log(`  ✅ ${nome} = ${JSON.stringify(valor)}`); ok++ }
+    else {
+      console.log(`  ⚠️  ${nome} — a API aceitou mas o valor continua ${JSON.stringify(real)}`)
+      falhas++
+    }
+  }
   else {
     const msg = r.errors?.[0]?.message ?? `HTTP ${r.status}`
     // Setting indisponível no plano é informação, não erro de execução.
@@ -209,8 +221,21 @@ async function main() {
 
   // ── 3. Scrape Shield ──────────────────────────────────────────────────────
   console.log('\n3) Scrape Shield')
-  await setting(Z, 'email_obfuscation', 'on', 'esconde e-mails de scrapers no HTML')
-  await setting(Z, 'hotlink_protection', 'on', 'impede uso das imagens por terceiros')
+  // email_obfuscation e hotlink_protection ficam DE FORA, e isso e uma REVERSAO
+  // consciente da primeira versao deste script:
+  //
+  //  • hotlink_protection bloqueia requisicao de imagem com Referer de outro
+  //    dominio — que e exatamente o que o crawler do WhatsApp/Twitter faz ao
+  //    montar o card de link compartilhado. Ligar isso e brigar com o M-6
+  //    (Open Graph por pagina), que existe para MELHORAR esse card.
+  //
+  //  • email_obfuscation REESCREVE o HTML e injeta um decodificador. Num site
+  //    com CSP estrita e Trusted Types, mexer no HTML servido e risco
+  //    desproporcional ao ganho (menos spam em 3 caixas de e-mail).
+  //
+  // Curiosidade que motivou a revisao: as duas reportaram sucesso no primeiro
+  // run e continuaram "off" no painel. Foi o que revelou que o `setting()` nao
+  // conferia o resultado.
   await setting(Z, 'server_side_exclude', 'on', '')
 
   // ── 4. Rede ───────────────────────────────────────────────────────────────
