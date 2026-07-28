@@ -79,6 +79,7 @@ const ESPERADOS = [
   { tipo: 'CNAME', nome: 'assistente.granaevo.com',         contem: 'vercel-dns',         papel: 'PWA do assistente',        proxy: true  },
   { tipo: 'MX',    nome: 'granaevo.com',                    contem: 'mx1.improvmx.com',   papel: '📧 recebe e-mail (prio 10)', proxy: false },
   { tipo: 'MX',    nome: 'granaevo.com',                    contem: 'mx2.improvmx.com',   papel: '📧 recebe e-mail (prio 20)', proxy: false },
+  { tipo: 'MX',    nome: 'send.granaevo.com',               contem: 'feedback-smtp',      papel: '📧 retorno do Resend',      proxy: false },
   { tipo: 'TXT',   nome: 'granaevo.com',                    contem: 'spf.improvmx.com',   papel: '📧 SPF',                    proxy: false },
   { tipo: 'TXT',   nome: 'resend._domainkey.granaevo.com',  contem: 'p=MIGfMA0',          papel: '📧 DKIM do Resend',         proxy: false },
   { tipo: 'TXT',   nome: '_dmarc.granaevo.com',             contem: 'v=DMARC1',           papel: '📧 DMARC',                  proxy: false },
@@ -118,7 +119,7 @@ async function auditarDns(Z) {
     console.error('     adicione o que falta no painel do Cloudflare primeiro.')
     return false
   }
-  console.log('\n  ✅ Todos os 9 registros presentes.')
+  console.log('\n  ✅ Todos os 10 registros presentes.')
   return true
 }
 

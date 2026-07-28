@@ -16,7 +16,7 @@ Os passos abaixo são os que **só você** pode fazer.
 
 ## 📸 O DNS ATUAL — fotografado em 2026-07-27, antes de qualquer mudança
 
-Estes **9 registros precisam sobreviver**. O script confere um por um com
+Estes **10 registros precisam sobreviver**. O script confere um por um com
 `node scripts/cloudflare-setup.mjs --audit-dns`.
 
 | Tipo | Nome | Aponta para | Papel | Nuvem |
@@ -26,12 +26,19 @@ Estes **9 registros precisam sobreviver**. O script confere um por um com
 | CNAME | `assistente` | `…vercel-dns-017.com` | PWA do assistente | 🟠 proxy |
 | MX 10 | `granaevo.com` | `mx1.improvmx.com` | 📧 **recebe e-mail** | ⚪ dns-only |
 | MX 20 | `granaevo.com` | `mx2.improvmx.com` | 📧 **recebe e-mail** | ⚪ dns-only |
+| MX 10 | `send` | `feedback-smtp…` | 📧 retorno do Resend | ⚪ dns-only |
 | TXT | `granaevo.com` | `v=spf1 include:spf.improvmx.com ~all` | 📧 SPF | ⚪ |
 | TXT | `resend._domainkey` | `p=MIGfMA0…` | 📧 DKIM do Resend | ⚪ |
 | TXT | `_dmarc` | `v=DMARC1; p=none;` | 📧 DMARC | ⚪ |
 | TXT | `send` | `v=spf1 include:amazonses.com ~all` | 📧 SPF do envio | ⚪ |
 
-> ⚠️ **Os 6 de e-mail são o maior risco da migração.** Perder um MX derruba
+> ⚠️ **ARMADILHA CONFIRMADA (2026-07-27):** o scan do Cloudflare **NÃO importou o
+> CNAME `assistente`** — o subdomínio do PWA do assistente. O próprio painel avisa
+> que "pode ter perdido subdomínios personalizados". Sem ele, `assistente.granaevo.com`
+> deixa de resolver na troca de nameserver. Foi preciso adicionar à mão.
+> **Sempre compare com esta tabela; nunca confie no que o scan trouxe.**
+>
+> ⚠️ **Os 7 de e-mail são o maior risco da migração.** Perder um MX derruba
 > `privacidade@`, `suporte@` e `contato@` — e `privacidade@` é o canal do titular
 > declarado na Política de Privacidade. Não é só inconveniente: é não-conformidade.
 >
