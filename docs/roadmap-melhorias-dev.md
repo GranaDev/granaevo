@@ -1137,7 +1137,7 @@ edge que não esteja recebendo a chave nova.
 | Passo | Dimensão | Itens | Status |
 |---|---|---|---|
 | 30 | Segurança 9.4 → 10 | S-1 … S-6 | ✅ **COMPLETO** |
-| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟡 B-1·B-4·B-5·B-7 ✅ · B-2/B-3 ⏸️ Cloudflare · B-6 🔴 |
+| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟢 B-1·B-2·B-3·B-4·B-5·B-7 ✅ · **só B-6 aberto** |
 | 32 | Otimização 8.0 → 10 | O-1 … O-8 | 🔴 |
 | 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🔴 |
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | 🔴 |
@@ -1258,10 +1258,29 @@ então não há como saber sem perguntar. Tem retry duplo; se ainda assim falhar
 de novo" — falha FECHADA de propósito: deixar passar seria abrir justamente o buraco que o 2º fator
 tapa, e bastaria ao atacante provocar a falha.
 
-### B-2 — Anti-bot em signup + reset 🔴
-Você se absteve do Turnstile (Passo 26) por dor de cabeça com cache do Cloudflare.
-**Alternativa sem Cloudflare:** validar o reCAPTCHA que já existe **server-side, por e-mail**,
-após N falhas — não por contador de `localStorage`. ~80% do valor sem tocar no Cloudflare.
+### B-2 — Anti-bot ✅ APLICADO E VALIDADO (2026-07-27, commits b909be0 + 8f21b5a)
+> **O captcha passou a ser exigido pelo SERVIDOR.** Antes, quem o disparava era um contador
+> em `localStorage` — e quem chama `/api/auth-session` direto (o atacante que importa) nunca
+> teve navegador, nunca teve localStorage, e nunca viu desafio. Trocar só o fornecedor teria
+> sido segurança cosmética.
+>
+> Usa o mesmo contador de falhas por conta do S-2 (Redis). Lê com `readCounter` (não
+> incrementa: o gate roda antes de saber se a senha está certa). Roda **antes** do password
+> grant. Limiar **3**, abaixo do lockout de 5 — o captcha é a rampa, o lockout é a parede.
+> **Falha aberto**: sem a secret ou com a Cloudflare fora do ar, o login segue; indisponibilidade
+> de terceiro não tranca ninguém fora da própria conta.
+>
+> Junto, o reCAPTCHA saiu: **5 domínios do Google deixaram a CSP do `/login`**. Um produto que
+> se vende por privacidade carregava rastreador do Google na tela de login.
+>
+> **Provado em produção:** 3 falhas → `403 captcha_required` · token falso → `captcha_invalid`
+> (prova que a secret chegou ao runtime) · widget renderiza e resolve, confirmado pelo usuário.
+>
+> ⚠️ **ARMADILHA CARA:** a troca foi mecânica demais e manteve duas sondas de `offsetWidth`
+> escritas para o reCAPTCHA. O Turnstile em modo Managed roda a verificação INVISÍVEL primeiro
+> e fica legitimamente 0x0 nesse intervalo — as sondas liam isso como defeito, destruíam o
+> widget e re-renderizavam. Sintoma: piscou 3x (= `_CAPTCHA_MAX_RENDER_ATTEMPTS`) e sumiu.
+> **Nunca sondar o DOM de um widget de captcha; use o `error-callback` dele.**
 
 ### B-3 — Rate limit na borda 🔴
 Hoje o rate limit é de aplicação (Upstash): um flood chega a **executar** a função Vercel antes de
