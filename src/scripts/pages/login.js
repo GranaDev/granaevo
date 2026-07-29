@@ -34,7 +34,10 @@ const CONFIG = Object.freeze({
     RATE_LIMIT_WINDOW_MS:           60_000,
     CAPTCHA_TOKEN_MAX_AGE_MS:      110_000,
     CAPTCHA_TOKEN_MIN_LENGTH:           50,
-    CAPTCHA_SITE_KEY: '6Lfxo3IsAAAAAFpfVxePWUYsyKjeWbP7PoXC3Hye',
+    // Chave PÚBLICA do Turnstile, injetada no build. Sem ela o widget não
+    // renderiza — e o gate do servidor falha ABERTO, então o login continua
+    // funcionando (ver turnstileOk() em api/auth-session.js).
+    CAPTCHA_SITE_KEY: import.meta.env?.VITE_TURNSTILE_SITE_KEY ?? '',
     KEYS: Object.freeze({
         loginAttempts:  '_ge_la',
         codeAttempts:   '_ge_ca',   // tentativas erradas de código OTP
@@ -103,10 +106,10 @@ function _createCaptchaState(resolvedCallbackName, expiredCallbackName, errorCal
     window[resolvedCallbackName] = (token) => {
         if (!_active) return;
         if (typeof token !== 'string' || token.length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) return;
-        if (typeof grecaptcha === 'undefined') return;
+        if (typeof turnstile === 'undefined') return;
         try {
             const widgetId = getWidgetId();
-            const widgetResponse = grecaptcha.getResponse(widgetId ?? undefined);
+            const widgetResponse = turnstile.getResponse(widgetId ?? undefined);
             if (!widgetResponse || widgetResponse !== token) return;
             _token = token; _resolved = true; _resolvedAt = Date.now();
         } catch {
@@ -127,11 +130,11 @@ function _createCaptchaState(resolvedCallbackName, expiredCallbackName, errorCal
         getToken() { return this.isResolved() ? _token : null; },
         reset() {
             _token = null; _resolved = false; _resolvedAt = 0;
-            if (typeof grecaptcha === 'undefined') return;
+            if (typeof turnstile === 'undefined') return;
             try {
                 const widgetId = getWidgetId();
-                if (widgetId !== null) grecaptcha.reset(widgetId);
-                else grecaptcha.reset();
+                if (widgetId !== null) turnstile.reset(widgetId);
+                else turnstile.reset();
             } catch {}
         },
     };
@@ -384,38 +387,41 @@ function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidge
     // Widget já existe e é válido
     if (getWidgetId() !== null) return;
 
-    if (typeof grecaptcha === 'undefined') {
-        console.warn(`[reCAPTCHA:${containerId}] API não carregada — aguardando`);
-        if (containerId === 'captchaContainer') window.__grPendingRender = () => _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidgetId, getRenderAttempt, setRenderAttempt);
+    if (typeof turnstile === 'undefined') {
+        console.warn(`[Turnstile:${containerId}] API não carregada — aguardando`);
+        if (containerId === 'captchaContainer') window.__tsPendingRender = () => _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidgetId, getRenderAttempt, setRenderAttempt);
         return;
     }
 
     const el = document.getElementById(containerId);
-    if (!el) { console.error(`[reCAPTCHA] #${containerId} não encontrado`); return; }
+    if (!el) { console.error(`[Turnstile] #${containerId} não encontrado`); return; }
 
     const computedDisplay = window.getComputedStyle(el).display;
     if (computedDisplay === 'none') {
-        console.warn(`[reCAPTCHA:${containerId}] Container oculto no momento do render`);
+        console.warn(`[Turnstile:${containerId}] Container oculto no momento do render`);
         return;
     }
 
-    const container = el.querySelector('.g-recaptcha');
-    if (!container) { console.error(`[reCAPTCHA] .g-recaptcha não encontrado em #${containerId}`); return; }
+    const container = el.querySelector('.cf-turnstile');
+    if (!container) { console.error(`[Turnstile] .cf-turnstile não encontrado em #${containerId}`); return; }
 
     while (container.firstChild) container.removeChild(container.firstChild);
 
     try {
-        grecaptcha.ready(() => {
+        // O Turnstile não tem equivalente ao turnstile.ready(): quando o objeto
+        // global existe, a API já está utilizável. A IIFE mantém o corpo abaixo
+        // sem alteração e preserva o mesmo escopo de antes.
+        (() => {
             if (getWidgetId() !== null) return;
 
             const currentEl = document.getElementById(containerId);
             if (!currentEl) return;
             if (window.getComputedStyle(currentEl).display === 'none') return;
-            const currentContainer = currentEl.querySelector('.g-recaptcha');
+            const currentContainer = currentEl.querySelector('.cf-turnstile');
             if (!currentContainer) return;
 
             try {
-                const widgetId = grecaptcha.render(currentContainer, {
+                const widgetId = turnstile.render(currentContainer, {
                     sitekey:            CONFIG.CAPTCHA_SITE_KEY,
                     callback:           callbacks.resolved,
                     'expired-callback': callbacks.expired,
@@ -427,7 +433,7 @@ function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidge
                 setTimeout(() => {
                     const iframe = currentContainer.querySelector('iframe');
                     if (!iframe || iframe.offsetWidth === 0) {
-                        console.warn(`[reCAPTCHA:${containerId}] Iframe 0x0 — tentando novamente`);
+                        console.warn(`[Turnstile:${containerId}] Iframe 0x0 — tentando novamente`);
                         while (currentContainer.firstChild) currentContainer.removeChild(currentContainer.firstChild);
                         setWidgetId(null);
                         const attempt = getRenderAttempt() + 1;
@@ -439,7 +445,7 @@ function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidge
                 }, 600);
 
             } catch (err) {
-                console.error(`[reCAPTCHA:${containerId}] render() falhou:`, err);
+                console.error(`[Turnstile:${containerId}] render() falhou:`, err);
                 setWidgetId(null);
                 const attempt = getRenderAttempt() + 1;
                 setRenderAttempt(attempt);
@@ -447,9 +453,9 @@ function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidge
                     setTimeout(() => _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidgetId, getRenderAttempt, setRenderAttempt), attempt * 500);
                 }
             }
-        });
+        })();
     } catch (err) {
-        console.error(`[reCAPTCHA:${containerId}] ready() falhou:`, err);
+        console.error(`[Turnstile:${containerId}] ready() falhou:`, err);
     }
 }
 
@@ -489,10 +495,10 @@ function _showCaptchaContainer(containerId, captchaState, renderFn, getWidgetId,
     captchaState.activate();
 
     if (getWidgetId() !== null) {
-        const container = el.querySelector('.g-recaptcha');
+        const container = el.querySelector('.cf-turnstile');
         const iframe    = container ? container.querySelector('iframe') : null;
         if (!iframe || iframe.offsetWidth === 0) {
-            try { if (typeof grecaptcha !== 'undefined') grecaptcha.reset(getWidgetId()); } catch {}
+            try { if (typeof turnstile !== 'undefined') turnstile.reset(getWidgetId()); } catch {}
             if (container) while (container.firstChild) container.removeChild(container.firstChild);
             setWidgetId(null);
         }
@@ -769,20 +775,20 @@ loginForm?.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Captcha obrigatório após N tentativas
-    if (LoginAttempts.get() >= CONFIG.MAX_LOGIN_ATTEMPTS_BEFORE_CAPTCHA) {
-        if (!LoginCaptchaState.isResolved()) {
-            showAuthMessage('Por favor, resolva a verificação de segurança.', 'error');
-            highlightLoginCaptcha();
-            return;
-        }
-        showAuthMessage('Verificando segurança...', 'info');
-        const captchaValid = await validateLoginCaptchaOnBackend(LoginCaptchaState.getToken());
-        if (!captchaValid) {
-            showAuthMessage('Falha na verificação de segurança. Tente novamente.', 'error');
-            LoginCaptchaState.reset();
-            return;
-        }
+    // ── Captcha (B-2) ────────────────────────────────────────────────────────
+    // Este bloco NÃO decide mais se o captcha é necessário — quem decide é o
+    // servidor, pelo contador de falhas por conta que ele mantém no Redis. Aqui
+    // ficou só a antecipação: se o contador LOCAL já sabe que houve erros, o
+    // widget aparece antes de o servidor pedir, poupando um round-trip.
+    //
+    // O contador local pode estar errado (aba nova, localStorage limpo, outro
+    // aparelho) e isso deixou de ser um problema: quando ele erra para menos, o
+    // servidor responde `captcha_required` e o fluxo abaixo se ajusta.
+    if (LoginAttempts.get() >= CONFIG.MAX_LOGIN_ATTEMPTS_BEFORE_CAPTCHA
+        && !LoginCaptchaState.isResolved()) {
+        showAuthMessage('Por favor, resolva a verificação de segurança.', 'error');
+        highlightLoginCaptcha();
+        return;
     }
 
     const submitBtn  = buttons.loginSubmit;
@@ -797,9 +803,29 @@ loginForm?.addEventListener('submit', async (e) => {
         try {
             // Login server-side: o refresh token fica em cookie HttpOnly,
             // só o access token volta (para a memória, via supabase-client).
-            data = await loginWithPassword(email, password, rememberChecked);
+            data = await loginWithPassword(email, password, rememberChecked,
+                                           LoginCaptchaState.getToken());
         } catch (err) {
             const status = err?.status ?? 0;
+
+            // ── O servidor exigiu o desafio (B-2) ────────────────────────────
+            // Acontece quando o contador de falhas por CONTA passou do limite —
+            // inclusive em aba nova, aparelho novo, ou depois de o usuário
+            // limpar o localStorage. É a diferença entre o captcha de antes
+            // (que o navegador escolhia mostrar) e o de agora.
+            if (err?.captchaRequired) {
+                LoginCaptchaState.reset();
+                showLoginCaptcha();
+                highlightLoginCaptcha();
+                showAuthMessage(
+                    err.message === 'captcha_invalid'
+                        ? 'Verificação expirou. Resolva de novo e tente outra vez.'
+                        : 'Por segurança, resolva a verificação abaixo e tente de novo.',
+                    'error');
+                inputs.loginPassword.value = '';
+                return;
+            }
+
             if (status === 429) {
                 // Rate limit server-side — não conta como tentativa de credencial
                 showAuthMessage('Muitas tentativas. Aguarde alguns minutos e tente novamente.', 'error');

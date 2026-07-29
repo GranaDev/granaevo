@@ -129,11 +129,20 @@ async function _callAuth(action, extra = {}, withAuthHeader = false) {
  * minutos. Nesse caso esta função retorna `{ mfaRequired: true }` sem aplicar
  * grant nenhum — quem chama deve pedir o código e chamar `verifyMfaLogin()`.
  */
-export async function loginWithPassword(email, password, remember) {
-    const res = await _callAuth('login', { email, password, remember: !!remember });
+export async function loginWithPassword(email, password, remember, captchaToken) {
+    const res = await _callAuth('login', {
+        email, password, remember: !!remember,
+        ...(captchaToken ? { captchaToken } : {}),
+    });
     if (!res.ok) {
         let err = 'login_failed';
-        try { err = (await res.json())?.error ?? err; } catch {}
+        let corpo = null;
+        try { corpo = await res.json(); err = corpo?.error ?? err; } catch {}
+        // B-2: quem decide se há captcha é o SERVIDOR, a partir do contador de
+        // falhas por conta. O cliente não escolhe — só obedece.
+        if (corpo?.captcha_required) {
+            throw Object.assign(new Error(err), { status: res.status, captchaRequired: true });
+        }
         throw Object.assign(new Error(err), { status: res.status });
     }
     const data = await res.json();

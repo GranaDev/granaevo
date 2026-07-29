@@ -43,7 +43,7 @@ const GLOBAIS = new Set([
     'createImageBitmap', 'OffscreenCanvas', 'SpeechSynthesisUtterance', 'PerformanceObserver',
     'ReadableStream', 'WritableStream', 'CompressionStream', 'DecompressionStream',
     // Do app (UMD carregado sob demanda / injetado)
-    'Chart', 'supabase', 'Sentry', 'grecaptcha', 'turnstile', 'workbox', '__vitePreload',
+    'Chart', 'supabase', 'Sentry', 'turnstile', 'workbox', '__vitePreload',
 ]);
 
 function ler(dir, out = []) {

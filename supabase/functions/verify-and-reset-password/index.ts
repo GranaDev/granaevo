@@ -1,6 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 import { isPasswordPwned } from '../_shared/hibp.ts'
 
+// TURNSTILE (troca do reCAPTCHA em 2026-07-27 — B-2).
+// A API de verificação é compatível: mesmo POST form-encoded, mesmo campo
+// `secret`, mesmo `success` na resposta. Só mudam a URL e o nome da env var.
+// Fallback na chave antiga NÃO existe de propósito: um token do Google jamais
+// validaria aqui, então aceitar a env legada só mascararia um deploy incompleto.
+
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
 // com fallback na service_role legada — rollback = redeploy do commit anterior
 // enquanto a legada existir. Migração de API keys 2026-07-23.
@@ -65,9 +71,9 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 async function verifyCaptchaToken(token: string): Promise<boolean> {
   try {
-    const secretKey = Deno.env.get('RECAPTCHA_SECRET_KEY')
+    const secretKey = Deno.env.get('TURNSTILE_SECRET_KEY')
     if (!secretKey) return false
-    const res  = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+    const res  = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body:    new URLSearchParams({ secret: secretKey, response: token.trim() }),

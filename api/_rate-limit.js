@@ -275,6 +275,29 @@ export async function bumpCounter(key, windowSecs) {
   r.c++; return r.c
 }
 
+/**
+ * Lê um contador SEM incrementá-lo.
+ *
+ * O `bumpCounter` só serve para quem está registrando uma falha. Quem precisa
+ * apenas *decidir* com base no histórico — como o gate de captcha, que roda
+ * ANTES de saber se a senha está certa — não pode incrementar: cada tentativa
+ * legítima empurraria o usuário para o próximo degrau de punição.
+ */
+export async function readCounter(key) {
+  if (USE_REDIS) {
+    try {
+      const res = await fetch(`${REDIS_URL}/get/${encodeURIComponent(key)}`, {
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+        signal:  AbortSignal.timeout(2_000),
+      })
+      if (res.ok) return Number((await res.json())?.result ?? 0) || 0
+    } catch { /* cai no fallback */ }
+  }
+  const r = _counters.get(key)
+  if (!r || Date.now() - r.t > r.w) return 0
+  return r.c
+}
+
 /** true se a chave está travada. */
 export async function isKeyBlocked(key) {
   if (!key) return false

@@ -15,15 +15,15 @@
     <link rel="stylesheet" href="src/styles/login.css">
 
     <!--
-        recaptcha-init.js — síncrono, define window.__grOnLoad ANTES
+        turnstile-init.js — síncrono, define window.__tsOnLoad ANTES
         que o api.js possa terminar de carregar.
     -->
-    <script src="/scripts/modules/recaptcha-init.js"></script>
+    <script src="/scripts/modules/turnstile-init.js"></script>
 
     <!--
         render=explicit → sem auto-render. Os dois widgets (login e
         código) são renderizados manualmente pelo login.js via
-        grecaptcha.render() com seus respectivos callbacks.
+        turnstile.render() com seus respectivos callbacks.
     -->
     <!--
         crossorigin="anonymous" isola o contexto de execução do reCAPTCHA
@@ -32,7 +32,7 @@
         dinâmico versionado — um hash fixo quebraria em cada deploy.
         A proteção real é o domínio allowlist na CSP do vercel.json.
     -->
-    <script src="https://www.google.com/recaptcha/api.js?render=explicit&onload=__grOnLoad"
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=__tsOnLoad"
             async
             defer
             crossorigin="anonymous"
@@ -482,7 +482,7 @@
                         <!--
                             CAPTCHA DO LOGIN
                             Exibido após MAX_LOGIN_ATTEMPTS_BEFORE_CAPTCHA tentativas erradas.
-                            Widget renderizado via grecaptcha.render() em login.js com
+                            Widget renderizado via turnstile.render() em login.js com
                             callback 'onLoginCaptchaResolved'.
                         -->
                         <div id="captchaContainer"
@@ -496,7 +496,7 @@
                                 </svg>
                                 Verificação de segurança necessária
                             </div>
-                            <div class="g-recaptcha"></div>
+                            <div class="cf-turnstile"></div>
                         </div>
 
                         <button type="submit" class="btn-submit" id="loginSubmitBtn">
@@ -611,7 +611,7 @@
                             CAPTCHA DA TELA DE CÓDIGO
                             Exibido após MAX_CODE_ATTEMPTS_BEFORE_CAPTCHA tentativas erradas.
                             Widget separado do captcha do login — renderizado via
-                            grecaptcha.render() com callback 'onCodeCaptchaResolved'.
+                            turnstile.render() com callback 'onCodeCaptchaResolved'.
                             Oculto por padrão via classe captcha-hidden.
                         -->
                         <div id="codeCaptchaContainer"
@@ -625,7 +625,7 @@
                                 </svg>
                                 Muitas tentativas — resolva a verificação
                             </div>
-                            <div class="g-recaptcha"></div>
+                            <div class="cf-turnstile"></div>
                         </div>
 
                         <button type="button" class="btn-submit" id="verifyCodeBtn">

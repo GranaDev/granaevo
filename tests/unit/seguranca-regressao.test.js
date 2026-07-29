@@ -553,3 +553,76 @@ describe('Landing — a vitrine prova capacidade sem entregar o valor', () => {
       + '(consentimento, retenção, titular). Nem para "levar os dados ao cadastro".')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('B-2 — o captcha é exigido pelo SERVIDOR, não pelo navegador', () => {
+  const bff = ler('api', 'auth-session.js')
+
+  test('o gate lê o contador SEM incrementar', () => {
+    assert.match(bff, /readCounter\(kFail\)/,
+      'Usar bumpCounter aqui puniria quem ACERTA a senha: o gate roda antes de saber '
+      + 'se a credencial está certa, então incrementar transformaria todo login válido '
+      + 'em mais um passo rumo ao lockout.')
+  })
+
+  test('o gate roda ANTES do password grant', () => {
+    const iGate  = bff.indexOf('precisaCaptcha')
+    const iGrant = bff.indexOf("gotrue('token?grant_type=password'")
+    assert.ok(iGate > -1 && iGate < iGrant,
+      'Se o captcha fosse checado depois do grant, o atacante já teria gastado uma '
+      + 'tentativa de senha — e o custo dele por tentativa continuaria zero.')
+  })
+
+  test('o limiar fica ABAIXO do primeiro degrau de lockout', () => {
+    const cap = Number(bff.match(/const CAPTCHA_APOS_FALHAS = (\d+)/)?.[1])
+    const menorLock = Math.min(...[...bff.matchAll(/falhas:\s*(\d+)/g)].map(m => Number(m[1])))
+    assert.ok(cap < menorLock,
+      `Captcha em ${cap} e lockout em ${menorLock}: o captcha PRECISA vir antes, senão o `
+      + 'usuário legítimo que errou a senha bate direto no bloqueio de 15 minutos sem '
+      + 'nunca ter a chance de provar que é humano.')
+  })
+
+  test('a validação do Turnstile falha ABERTO', () => {
+    const fn = bff.match(/async function turnstileOk[\s\S]*?\n\}/)[0]
+
+    // Contar retornos em vez de casar distância entre trechos: a 1ª versão deste
+    // teste limitava a 200 caracteres entre `if (!secret)` e `return true`, e o
+    // comentário que explica a decisão empurrou o retorno para além disso — teste
+    // frágil reprovando código correto.
+    const abre  = (fn.match(/return true/g)  ?? []).length
+    const fecha = (fn.match(/return false/g) ?? []).length
+
+    assert.ok(abre >= 3,
+      `turnstileOk tem só ${abre} caminho(s) que liberam. Precisa de 3: sem chave `
+      + 'configurada, gateway fora do ar, e timeout. Indisponibilidade da Cloudflare não '
+      + 'pode trancar o usuário fora da própria conta — o lockout por conta continua '
+      + 'barrando força bruta, e o captcha é a TERCEIRA camada deste caminho.')
+
+    assert.ok(fecha >= 1,
+      'turnstileOk precisa recusar token malformado — falhar aberto é para indisponibilidade '
+      + 'do fornecedor, não para entrada inválida.')
+
+    assert.match(fn, /if \(!secret\)/,
+      'Sem TURNSTILE_SECRET_KEY o gate tem de ser no-op, senão um deploy sem a env var '
+      + 'derruba o login de todo mundo que errou a senha 3 vezes.')
+  })
+
+  test('nenhum vestígio do Google no caminho do login', () => {
+    for (const arq of [['login.html'], ['vercel.json'], ['src','scripts','pages','login.js']]) {
+      assert.ok(!/google\.com\/recaptcha|gstatic\.com\/recaptcha|grecaptcha/.test(ler(...arq)),
+        `${arq.join('/')} ainda referencia o reCAPTCHA do Google. O produto se vende por `
+        + 'privacidade e carregava rastreador de terceiro justamente na tela de login.')
+    }
+  })
+
+  test('as edges validam contra a Cloudflare, sem fallback na chave antiga', () => {
+    for (const edge of ['verify-recaptcha', 'verify-and-reset-password']) {
+      const src = ler('supabase', 'functions', edge, 'index.ts')
+      assert.match(src, /challenges\.cloudflare\.com\/turnstile\/v0\/siteverify/,
+        `${edge} ainda chama o siteverify do Google.`)
+      assert.ok(!src.includes('RECAPTCHA_SECRET_KEY'),
+        `${edge} mantém fallback na env legada — um token do Google jamais validaria no `
+        + 'Turnstile, então aceitar a chave antiga só mascararia um deploy incompleto.')
+    }
+  })
+})

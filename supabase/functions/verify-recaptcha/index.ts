@@ -81,9 +81,9 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    const secretKey = Deno.env.get('RECAPTCHA_SECRET_KEY')
+    const secretKey = Deno.env.get('TURNSTILE_SECRET_KEY')
     if (!secretKey) {
-      console.error('[verify-recaptcha] RECAPTCHA_SECRET_KEY não configurada')
+      console.error('[verify-recaptcha] TURNSTILE_SECRET_KEY não configurada')
       return Response.json(
         { success: false },
         { headers: corsHeaders, status: 500 }
@@ -92,7 +92,7 @@ Deno.serve(async (req: Request) => {
 
     // ── Validação junto à API do Google ──────────────────────
     const verifyResponse = await fetch(
-      'https://www.google.com/recaptcha/api/siteverify',
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
