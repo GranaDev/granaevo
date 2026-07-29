@@ -1094,6 +1094,26 @@ Commits: `64f003e` → `e18eae3`.
 3. **Testar o 2FA de ponta a ponta** — ativar, deslogar, entrar com o código,
    e guardar os códigos de recuperação. Ninguém ativou ainda (0 fatores).
 
+### 🔴 LGPD — a Cloudflare virou operadora e NÃO está declarada (2026-07-27)
+
+Desde hoje **todo** o tráfego dos usuários passa pela Cloudflare: IP, user-agent,
+URLs visitadas, e o TLS é terminado lá. Isso a torna **operadora** no sentido da
+LGPD, exatamente como o Resend e o Upstash — e ela **não consta** em
+`privacidade.html` nem em `docs/RoPA.md`, porque até esta manhã realmente não
+estava no caminho.
+
+Some-se o **Precursor / detecção de bots**, que faz impressão digital da sessão,
+e a **transferência internacional** (edges fora do Brasil; o roteamento é global
+mesmo tendo caído no GRU).
+
+**Junta com o M-7** (`user_devices`/`notify-login` também não declarados). Os dois
+pedem o mesmo trabalho — atualizar Política + RoPA e bumpar
+`CURRENT_TERMS_VERSION` para `1.2` — e agora há **duas** razões para gastar o
+re-aceite, o que torna a decisão mais fácil.
+
+**Esforço:** ~1h30. **Risco de não fazer:** declaração de tratamento incompleta,
+que é exatamente o tipo de gap que uma fiscalização encontra primeiro.
+
 ### 🔴 Aberto, e NÃO depende de você
 | Item | Peso | Esforço |
 |---|---|---|
