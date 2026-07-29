@@ -430,19 +430,20 @@ function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidge
                 });
                 setWidgetId(widgetId);
 
-                setTimeout(() => {
-                    const iframe = currentContainer.querySelector('iframe');
-                    if (!iframe || iframe.offsetWidth === 0) {
-                        console.warn(`[Turnstile:${containerId}] Iframe 0x0 — tentando novamente`);
-                        while (currentContainer.firstChild) currentContainer.removeChild(currentContainer.firstChild);
-                        setWidgetId(null);
-                        const attempt = getRenderAttempt() + 1;
-                        setRenderAttempt(attempt);
-                        if (attempt <= _CAPTCHA_MAX_RENDER_ATTEMPTS) {
-                            setTimeout(() => _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidgetId, getRenderAttempt, setRenderAttempt), attempt * 500);
-                        }
-                    }
-                }, 600);
+                // ⚠️ NÃO sondar o tamanho do iframe aqui.
+                //
+                // Existia neste ponto uma verificação herdada do reCAPTCHA: depois
+                // de 600ms, se o iframe tivesse offsetWidth 0, o widget era
+                // destruído e re-renderizado (até 3 vezes).
+                //
+                // Com o reCAPTCHA aquilo funcionava, porque ele pinta uma caixinha
+                // visível imediatamente. O Turnstile em modo Managed faz a
+                // verificação INVISÍVEL primeiro — e nesse momento o iframe é
+                // legitimamente 0x0. A sonda lia isso como falha, destruía o
+                // widget e tentava de novo: 3 piscadas e depois nada na tela.
+                //
+                // O Turnstile já tem `error-callback` para falha de verdade. Uma
+                // heurística de DOM em cima disso não acrescenta nada e mente.
 
             } catch (err) {
                 console.error(`[Turnstile:${containerId}] render() falhou:`, err);
@@ -494,14 +495,19 @@ function _showCaptchaContainer(containerId, captchaState, renderFn, getWidgetId,
     el.classList.add('captcha-visible');
     captchaState.activate();
 
+    // Widget já existe: só devolve um desafio novo. NÃO destrói.
+    //
+    // Aqui havia a mesma sonda de `offsetWidth === 0` do render — e com o
+    // Turnstile ela era pior: como `showCaptcha()` pode ser chamado várias vezes
+    // (contador local, e depois o 403 do servidor), cada chamada destruía um
+    // widget que estava funcionando, só porque o modo Managed o mantém 0x0
+    // durante a verificação invisível.
+    //
+    // `reset()` já é o suficiente: limpa token velho e pede desafio novo,
+    // preservando o widget montado.
     if (getWidgetId() !== null) {
-        const container = el.querySelector('.cf-turnstile');
-        const iframe    = container ? container.querySelector('iframe') : null;
-        if (!iframe || iframe.offsetWidth === 0) {
-            try { if (typeof turnstile !== 'undefined') turnstile.reset(getWidgetId()); } catch {}
-            if (container) while (container.firstChild) container.removeChild(container.firstChild);
-            setWidgetId(null);
-        }
+        try { if (typeof turnstile !== 'undefined') turnstile.reset(getWidgetId()); } catch {}
+        return;
     }
 
     if (getWidgetId() !== null) return;

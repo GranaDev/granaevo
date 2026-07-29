@@ -626,3 +626,19 @@ describe('B-2 — o captcha é exigido pelo SERVIDOR, não pelo navegador', () =
     }
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('B-2 (UI) — não sondar o DOM do widget do Turnstile', () => {
+  test('nenhuma heurística de offsetWidth destrói o widget', () => {
+    const js = ler('src', 'scripts', 'pages', 'login.js')
+    const codigo = js.split('\n')
+      .filter(l => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+      .join('\n')
+    assert.ok(!codigo.includes('offsetWidth'),
+      'Sondar o tamanho do iframe era um truque válido para o reCAPTCHA, que pinta a '
+      + 'caixinha na hora. O Turnstile em modo Managed roda a verificação INVISÍVEL '
+      + 'primeiro e fica legitimamente 0x0 nesse intervalo — a sonda lia isso como '
+      + 'falha, destruía o widget e re-renderizava. Sintoma em produção: piscou 3 vezes '
+      + 'e sumiu. O error-callback do próprio Turnstile já cobre falha de verdade.')
+  })
+})
