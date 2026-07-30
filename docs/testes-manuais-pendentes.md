@@ -38,8 +38,27 @@ Ordenado por **risco**: os primeiros quebram o app se estiverem errados; os
 
 ## 🟠 BLOCO 2 — Recursos novos, nunca exercitados por um humano
 
+### 2.0 Conta descartável — criada em 2026-07-30
+`oliveiralucas00224+teste2fa@gmail.com` · plano `familia` (4 perfis) · senha **entregue no chat, não versionada**.
+
+Criada por SQL via Management API (a Admin API do GoTrue está bloqueada por WAF).
+Detalhes que importam se precisar criar outra:
+
+- `auth.identities` é **obrigatória** — sem ela o login por e-mail não existe.
+- `confirmation_token`, `recovery_token`, `email_change_token_new` e `email_change`
+  **não têm default** e o GoTrue lê em `string` não-anulável do Go: se ficarem `NULL`,
+  todo login devolve `500 Database error querying schema`. Preencher com `''`.
+- Sem linha em `stripe_subscriptions` (status `active` + `current_period_end` futuro)
+  o `check-user-access` nega e a conta cai em `/planos`. Os IDs Stripe são falsos e
+  nomeados `*_FAKE_TESTE_DESCARTAVEL` de propósito.
+- No primeiro login ela **pede aceite dos termos** — é comportamento real, não bug.
+- Ela nasce com **zero perfis**. Para o teste 2.2 provar "todos os perfis",
+  crie 2 ou 3 perfis antes de exportar.
+
+**Apagar quando terminar o bloco:** `node scripts/remove-conta-teste.mjs`
+
 ### 2.1 Verificação em duas etapas (2FA)
-> **Use uma conta descartável na primeira vez.** Zero fatores ativos hoje.
+> Use a conta descartável acima. A conta principal tem zero fatores ativos hoje.
 
 **Ativar**
 - [ ] Configurações → Segurança da conta → "Ativar verificação em duas etapas"
