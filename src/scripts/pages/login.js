@@ -103,7 +103,7 @@ function _createCaptchaState(resolvedCallbackName, expiredCallbackName, errorCal
     let _resolvedAt = 0;
     let _active     = false;
 
-    window[resolvedCallbackName] = (token) => {
+    const aoResolver = (token) => {
         if (!_active) return;
         if (typeof token !== 'string' || token.length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) return;
         if (typeof turnstile === 'undefined') return;
@@ -117,10 +117,31 @@ function _createCaptchaState(resolvedCallbackName, expiredCallbackName, errorCal
         }
     };
 
-    window[expiredCallbackName] = () => { _token = null; _resolved = false; _resolvedAt = 0; };
-    window[errorCallbackName]   = () => { _token = null; _resolved = false; _resolvedAt = 0; };
+    const aoLimpar = () => { _token = null; _resolved = false; _resolvedAt = 0; };
+
+    // Os globais continuam existindo: o login.html os cita e eles são o contrato
+    // público desta tela. Mas NÃO são mais o caminho pelo qual o widget chega
+    // aqui — ver `handlers` abaixo.
+    window[resolvedCallbackName] = aoResolver;
+    window[expiredCallbackName]  = aoLimpar;
+    window[errorCallbackName]    = aoLimpar;
 
     return {
+        // ⚠️ O Turnstile exige FUNÇÃO, não nome de função.
+        //
+        // O reCAPTCHA aceitava `callback: 'nomeDaGlobal'` — uma string — e
+        // resolvia o nome sozinho. O Turnstile não: ele guarda o que recebe e
+        // depois faz `s.call(...)`. Com uma string aquilo vira
+        // `TypeError: s.call is not a function`, lançado LÁ DENTRO do api.js.
+        //
+        // O sintoma era cruel: o desafio da Cloudflare passava e o widget
+        // mostrava "Sucesso!", mas o callback morria antes de marcar o token
+        // aqui — então `isResolved()` seguia falso e o login se recusava a
+        // enviar, pedindo um captcha que o usuário acabara de resolver.
+        //
+        // Passe SEMPRE estas referências ao `turnstile.render()`.
+        handlers: { resolved: aoResolver, expired: aoLimpar, error: aoLimpar },
+
         activate()   { _active = true;  },
         deactivate() { _active = false; },
         isResolved() {
@@ -420,6 +441,21 @@ function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidge
             const currentContainer = currentEl.querySelector('.cf-turnstile');
             if (!currentContainer) return;
 
+            // Trava contra a regressão de 2026-07-30: se algum callback vier
+            // como string (convenção do reCAPTCHA), o Turnstile só estoura lá
+            // dentro do api.js dele, com `s.call is not a function` — sem
+            // apontar para cá. Melhor barrar aqui, com o nome do culpado.
+            for (const nome of ['resolved', 'expired', 'error']) {
+                if (typeof callbacks[nome] !== 'function') {
+                    console.error(
+                        `[Turnstile:${containerId}] callback "${nome}" não é função ` +
+                        `(recebi ${typeof callbacks[nome]}). O Turnstile exige a função, ` +
+                        `não o nome dela. Render abortado.`,
+                    );
+                    return;
+                }
+            }
+
             try {
                 const widgetId = turnstile.render(currentContainer, {
                     sitekey:            CONFIG.CAPTCHA_SITE_KEY,
@@ -464,7 +500,7 @@ function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidge
 function _renderLoginCaptcha() {
     _renderCaptchaInContainer(
         'captchaContainer',
-        { resolved: 'onLoginCaptchaResolved', expired: 'onLoginCaptchaExpired', error: 'onLoginCaptchaError' },
+        LoginCaptchaState.handlers,
         () => _loginCaptchaWidgetId,
         (id) => { _loginCaptchaWidgetId = id; },
         () => _loginCaptchaRenderAttempt,
@@ -476,7 +512,7 @@ function _renderLoginCaptcha() {
 function _renderCodeCaptcha() {
     _renderCaptchaInContainer(
         'codeCaptchaContainer',
-        { resolved: 'onCodeCaptchaResolved', expired: 'onCodeCaptchaExpired', error: 'onCodeCaptchaError' },
+        CodeCaptchaState.handlers,
         () => _codeCaptchaWidgetId,
         (id) => { _codeCaptchaWidgetId = id; },
         () => _codeCaptchaRenderAttempt,

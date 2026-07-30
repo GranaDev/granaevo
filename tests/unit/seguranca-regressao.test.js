@@ -641,4 +641,47 @@ describe('B-2 (UI) — não sondar o DOM do widget do Turnstile', () => {
       + 'falha, destruía o widget e re-renderizava. Sintoma em produção: piscou 3 vezes '
       + 'e sumiu. O error-callback do próprio Turnstile já cobre falha de verdade.')
   })
+
+  test('os callbacks vão como FUNÇÃO, nunca como nome de função', () => {
+    const js = ler('src', 'scripts', 'pages', 'login.js')
+
+    // O que quebrou em produção: `_renderCaptchaInContainer` recebia
+    // { resolved: 'onLoginCaptchaResolved', ... } — strings, convenção do
+    // reCAPTCHA, que resolvia o nome contra o window sozinho. O Turnstile não
+    // resolve: guarda o valor e faz `s.call(...)`, que com string vira
+    // `TypeError: s.call is not a function` lançado dentro do api.js DELE.
+    //
+    // O sintoma enganava: o desafio da Cloudflare passava, o widget mostrava
+    // "Sucesso!", e mesmo assim o login respondia "resolva a verificação de
+    // segurança" — porque o callback morria antes de marcar o token.
+    const chamadas = js.match(/_renderCaptchaInContainer\(\s*[\s\S]{0,400}?\n\s*\)/g) ?? []
+    assert.ok(chamadas.length >= 2,
+      `Esperava as 2 chamadas de _renderCaptchaInContainer (login e código), achei ${chamadas.length}.`)
+
+    for (const chamada of chamadas) {
+      assert.ok(!/resolved:\s*['"]/.test(chamada),
+        'Callback do Turnstile passado como STRING. Ele exige a referência da função — '
+        + 'com string o widget resolve o desafio e mesmo assim o login barra o usuário, '
+        + 'porque o token nunca é marcado. Use os `handlers` do estado do captcha.')
+    }
+
+    // A trava dentro do render, que dá nome ao culpado em vez de deixar o
+    // erro estourar sem origem lá dentro do api.js da Cloudflare.
+    assert.match(js, /typeof callbacks\[nome\] !== 'function'/,
+      'Sumiu a guarda que recusa render com callback que não é função. Sem ela, esta '
+      + 'classe de bug volta a se manifestar como um TypeError sem origem aparente.')
+  })
+
+  test('os handlers e os globais são a MESMA função', () => {
+    const js = ler('src', 'scripts', 'pages', 'login.js')
+
+    // Os globais (window.onLoginCaptchaResolved…) são citados no login.html e
+    // continuam sendo o contrato público da tela. Se um dia alguém apontar os
+    // `handlers` para outra implementação, os dois caminhos divergem e só um
+    // deles marca o token — bug de novo, mais difícil de achar.
+    assert.match(js, /window\[resolvedCallbackName\]\s*=\s*aoResolver/,
+      'O global de sucesso precisa ser a MESMA referência que vai em handlers.resolved.')
+    assert.match(js, /handlers:\s*\{\s*resolved:\s*aoResolver/,
+      'handlers.resolved precisa reusar a função do global, não redeclarar outra.')
+  })
 })
