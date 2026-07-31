@@ -57,6 +57,23 @@ Detalhes que importam se precisar criar outra:
 
 **Apagar quando terminar o bloco:** `node scripts/remove-conta-teste.mjs`
 
+### Resultado da 1ª rodada — 2026-07-30
+
+O bloco foi executado e **achou dois bugs reais**, ambos já corrigidos e verificados
+em produção. Refazer 2.1 (só a parte de recuperação) e 2.2 inteiro.
+
+| # | Achado | Causa | Fix |
+|---|---|---|---|
+| 2.1 | Código de recuperação certo → "Erro de conexão"; F5 entrava | `data: null` no gate + `catch` cego traduzindo TypeError em erro de rede | `65c86d8` |
+| 2.2 | "Não consegui carregar seus dados agora" (401 no `user-data`) | `/logout` do GoTrue é **global**: confirmar a senha derrubava a sessão | `be28782` |
+
+O 2.2 não era bug da exportação — atingia **todo fluxo que pede senha**
+(exportar dados, excluir conta). Reproduzido em prod: `200 → step-up 200 → 401`;
+depois do fix: `200 → 200 → 200`.
+
+**Sinal que vale guardar:** *erro na tela + F5 funciona* significa que a operação
+**deu certo** no servidor e o cliente quebrou depois. Não comece pela rede.
+
 ### 2.1 Verificação em duas etapas (2FA)
 > Use a conta descartável acima. A conta principal tem zero fatores ativos hoje.
 
