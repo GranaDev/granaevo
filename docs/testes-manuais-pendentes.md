@@ -104,14 +104,31 @@ depois do fix: `200 → 200 → 200`.
 - [ ] Entra, e o 2FA aparece como Desativado
 
 ### 2.2 Exportação de dados (LGPD)
+> Agora com **dois formatos**. A escolha na tela é por propósito, não por
+> extensão: planilha para ler, JSON para levar a outro app. O JSON não saiu —
+> é ele que cumpre o art. 18, V, e é ele que a política de privacidade promete.
+
 - [ ] Configurações → **Privacidade** → "Baixar meus dados"
+- [ ] Aparecem as duas opções, com a **planilha marcada por padrão**
 - [ ] Senha errada → "Senha incorreta"
-- [ ] Senha certa → baixa `granaevo-meus-dados-AAAA-MM-DD.json`
-- [ ] No arquivo:
-  - [ ] `dados_financeiros` traz **todos os perfis**, não só o aberto
-  - [ ] `metadados_da_conta.aparelhos_reconhecidos` **não está null**
-        ← era o bug de nome de coluna que peguei antes de subir
-  - [ ] **não existe** senha, token, `device_hash` nem chave de criptografia
+
+**Planilha (Excel)**
+- [ ] Senha certa → baixa `granaevo-meus-dados-AAAA-MM-DD.xlsx`
+- [ ] **Abre sem aviso de arquivo corrompido** (desktop e celular)
+      ← o único ponto que teste automatizado não cobre
+- [ ] Aba **Resumo** na frente, com e-mail, perfis e a contagem de cada aba
+- [ ] Aba **Transações** traz os **três perfis**, com coluna "Perfil"
+- [ ] A coluna **Movimento** mostra "Entrada/Saída", e **Categoria** mostra
+      "Mercado/Salário" — se estiverem trocadas, o rótulo está mentindo
+- [ ] Os valores **somam** ao selecionar a coluna (são número, não texto)
+- [ ] O Resumo lista as abas que ficaram de fora por não ter registro
+
+**Arquivo completo (JSON)**
+- [ ] Escolhendo JSON → baixa `granaevo-meus-dados-AAAA-MM-DD.json`
+- [ ] `dados_financeiros` traz **todos os perfis**, não só o aberto
+- [ ] `metadados_da_conta.aparelhos_reconhecidos` **não está null**
+      ← era o bug de nome de coluna que peguei antes de subir
+- [ ] **não existe** senha, token, `device_hash` nem chave de criptografia
 
 ---
 
