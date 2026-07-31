@@ -555,6 +555,37 @@ describe('Landing — a vitrine prova capacidade sem entregar o valor', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
+describe('login por código de recuperação — entra sem alarme falso', () => {
+  test('a recuperação devolve a sessão, não só o aviso de 2FA desligado', () => {
+    const api = ler('src', 'scripts', 'services', 'mfa-api.js')
+    assert.match(api, /return \{ data, mfaDisabled/,
+      'recoverMfaLogin precisa devolver `data`. O servidor manda a sessão completa '
+      + '(mesmo sessionPayload do TOTP, com `user`); devolver só `mfaDisabled` deixava '
+      + 'o login sem dados para seguir.')
+  })
+
+  test('o login não recebe data:null no caminho de recuperação', () => {
+    const js = ler('src', 'scripts', 'pages', 'login.js')
+    assert.ok(!/fechar\(\{\s*data:\s*null/.test(js),
+      'O gate de MFA fechava com `data: null` na recuperação, e o fluxo de login lê '
+      + '`data.user` logo depois. O TypeError caía no catch geral e virava "Erro de '
+      + 'conexão" — com a sessão JÁ criada, então o F5 entrava. Bug que mente sobre a '
+      + 'própria causa e some ao recarregar.')
+  })
+
+  test('a leitura do usuário é opcional-chained', () => {
+    // Sem tirar os comentários, o teste casa com o comentário que EXPLICA o bug
+    // e reprova o código correto. Já aconteceu aqui antes, com a regra de CSP.
+    const js = ler('src', 'scripts', 'pages', 'login.js')
+      .split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+    assert.ok(!/[^?.]\bdata\.user\b/.test(js),
+      'Acesso direto a `data.user` no login. O catch daquele bloco é cego: ele traduz '
+      + 'qualquer exceção em "Erro de conexão", então um acesso não-protegido some do '
+      + 'radar em vez de aparecer.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
 describe('step-up de senha — provar a senha não pode deslogar quem provou', () => {
   const bff = ler('api', 'auth-session.js')
 

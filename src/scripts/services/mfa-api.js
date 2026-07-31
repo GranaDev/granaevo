@@ -56,7 +56,11 @@ export async function verifyMfaLogin(code, remember) {
 export async function recoverMfaLogin(recoveryCode, remember) {
     const data = await _post('mfa-login-recovery', { recoveryCode, remember: !!remember });
     await applyGrant(data);
-    return { mfaDisabled: data?.mfa_disabled === true };
+    // `data` vai junto de propósito: a resposta traz a sessão completa (o mesmo
+    // sessionPayload do caminho do TOTP, com `user`), e quem chama precisa dela
+    // para seguir o login. Devolver só `mfaDisabled` deixava o login sem `data`
+    // e ele estourava ao ler `data.user` — ver o comentário em login.js.
+    return { data, mfaDisabled: data?.mfa_disabled === true };
 }
 
 // ── Gerenciamento (usuário já logado) ────────────────────────────────────────

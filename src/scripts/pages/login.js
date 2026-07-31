@@ -953,7 +953,11 @@ loginForm?.addEventListener('submit', async (e) => {
             }
         } catch { /* best-effort */ }
 
-        const userName = sanitizeText(data.user?.user_metadata?.name || 'Usuário');
+        // `data?.` e não `data.`: o catch lá embaixo é cego — ele transforma
+        // QUALQUER exceção daqui, inclusive um TypeError nosso, na mensagem
+        // "Erro de conexão". Um acesso não-protegido neste ponto vira um bug que
+        // mente sobre a própria causa e some quando o usuário recarrega.
+        const userName = sanitizeText(data?.user?.user_metadata?.name || 'Usuário');
         showAuthMessage(`Bem-vindo de volta, ${userName}!`, 'success');
         const nextPage = getNextRedirect() ?? 'dashboard.html';
         // Caminho feliz: tempo curto só para registrar o "bem-vindo" sem travar a entrada.
@@ -1772,7 +1776,12 @@ function pedirCodigoMfa(remember) {
             try {
                 if (modoRecuperacao) {
                     const r = await recoverMfaLogin(valor, remember);
-                    fechar({ data: null, mfaDisabled: r.mfaDisabled });
+                    // `r.data`, não `null`. Aqui ficava `data: null` e o fluxo de
+                    // login logo adiante lia `data.user` — TypeError engolido pelo
+                    // catch geral, que anunciava "Erro de conexão" enquanto a
+                    // sessão já estava criada. Sintoma em produção (2026-07-30):
+                    // código de recuperação certo, erro na tela, e o F5 entrava.
+                    fechar({ data: r.data, mfaDisabled: r.mfaDisabled });
                 } else {
                     const grant = await verifyMfaLogin(valor, remember);
                     fechar({ data: grant, mfaDisabled: false });
