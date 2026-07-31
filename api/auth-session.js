@@ -756,9 +756,20 @@ export default async function handler(req, res) {
     // O grant acima criou uma sessão paralela que ninguém vai usar. Não a
     // devolvemos (o cliente segue com a sessão dele) e revogamos na hora, para
     // não deixar refresh token órfão vivo no GoTrue a cada confirmação.
+    //
+    // ⚠️ `scope=local` NÃO É OPCIONAL AQUI. O `/logout` do GoTrue tem escopo
+    // **global por padrão**: ele apaga TODAS as sessões do usuário, não só
+    // aquela cujo token foi passado. Sem o parâmetro, esta "limpeza" derrubava
+    // a sessão real de quem acabou de confirmar a senha — e a próxima chamada
+    // do fluxo respondia 401.
+    //
+    // Foi exatamente isso em 2026-07-30: a exportação LGPD confirmava a senha,
+    // recebia `{ok:true}`, e logo em seguida o `GET /api/user-data` devolvia
+    // "Token inválido". Parecia bug da exportação; era o step-up deslogando o
+    // usuário. Reproduzido em produção: 200 → step-up 200 → 401.
     try {
       const g = await checa.json()
-      if (g?.access_token) await gotrue('logout', { token: g.access_token })
+      if (g?.access_token) await gotrue('logout?scope=local', { token: g.access_token })
     } catch { /* melhor esforço */ }
 
     return res.status(200).json({ ok: true })
@@ -913,6 +924,16 @@ export default async function handler(req, res) {
         logger.warn('mfa_disable_bad_password', PATH, { ip })
         return res.status(401).json({ error: 'senha_incorreta' })
       }
+
+      // Mesma limpeza do step-up do Passo 25, pelo mesmo motivo: o grant acima
+      // é só uma prova de senha, mas cria uma sessão de verdade. Sem revogar,
+      // cada desativação de 2FA deixava um refresh token órfão vivo no GoTrue.
+      // `scope=local` é obrigatório — sem ele o /logout apaga TODAS as sessões
+      // do usuário e derruba quem está desativando (ver o aviso longo acima).
+      try {
+        const g = await checa.json()
+        if (g?.access_token) await gotrue('logout?scope=local', { token: g.access_token })
+      } catch { /* melhor esforço */ }
 
       let removidos = 0
       for (const f of ativos) {

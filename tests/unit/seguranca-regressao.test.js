@@ -555,6 +555,50 @@ describe('Landing — a vitrine prova capacidade sem entregar o valor', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
+describe('step-up de senha — provar a senha não pode deslogar quem provou', () => {
+  const bff = ler('api', 'auth-session.js')
+
+  test('todo /logout de sessão de VERIFICAÇÃO usa scope=local', () => {
+    // O bug de 2026-07-30. `verify-password` e `mfa-disable` fazem um
+    // grant_type=password só para provar que a pessoa sabe a senha. Isso cria
+    // uma sessão paralela de verdade, que precisa ser revogada — mas o
+    // `/logout` do GoTrue é **global por padrão** e apaga TODAS as sessões do
+    // usuário, inclusive a que ele está usando naquele instante.
+    //
+    // Em produção: exportação LGPD confirmava a senha, recebia {ok:true}, e o
+    // GET /api/user-data seguinte respondia 401 "Token inválido".
+    // Reproduzido: 200 → step-up 200 → 401.
+    const logouts = [...bff.matchAll(/gotrue\('logout([^']*)'/g)].map(m => m[1])
+    assert.ok(logouts.length >= 2,
+      `Esperava ao menos 2 chamadas de logout (step-up e mfa-disable), achei ${logouts.length}.`)
+
+    // A do action 'logout' (o usuário saindo de fato) é a única que pode ser
+    // global — ali derrubar todas as sessões é o comportamento desejado.
+    const semEscopo = logouts.filter(q => !q.includes('scope='))
+    assert.ok(semEscopo.length <= 1,
+      `${semEscopo.length} chamadas de /logout sem escopo. Só o logout de verdade pode ser `
+      + 'global; as sessões criadas para verificar senha PRECISAM de ?scope=local, senão '
+      + 'confirmar a senha desloga o usuário no meio do fluxo.')
+  })
+
+  test('os dois grants de verificação revogam a sessão que criaram', () => {
+    // Sem revogar, cada confirmação de senha deixa um refresh token órfão vivo
+    // no GoTrue — sessão que ninguém usa e que ninguém expira.
+    for (const acao of ['verify-password', 'mfa-disable']) {
+      // `if (action === ...)` e não só `action === ...`: 'mfa-disable' também
+      // aparece numa cadeia de OR bem antes do bloco de verdade, e casar com
+      // ela media o trecho errado do arquivo.
+      const i = bff.indexOf(`if (action === '${acao}')`)
+      assert.ok(i > -1, `Não achei o bloco de ${acao}.`)
+      const bloco = bff.slice(i, i + 4000)
+      assert.match(bloco, /gotrue\('logout\?scope=local'/,
+        `O bloco de ${acao} faz grant_type=password e não revoga a sessão criada — `
+        + 'refresh token órfão a cada uso.')
+    }
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
 describe('B-2 — o captcha é exigido pelo SERVIDOR, não pelo navegador', () => {
   const bff = ler('api', 'auth-session.js')
 
