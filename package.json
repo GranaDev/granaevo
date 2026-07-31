@@ -16,7 +16,7 @@
     "deadcode": "knip --no-progress",
     "coverage:summary": "node scripts/coverage-summary.mjs",
     "images:optimize": "node scripts/optimize-images.mjs",
-    "test": "node --test tests/security/",
+    "test": "node scripts/run-unit-tests.mjs",
     "test:security": "node --test tests/security/security.test.js",
     "test:unit": "node scripts/run-unit-tests.mjs",
     "check:refs": "node scripts/check-refs.mjs",

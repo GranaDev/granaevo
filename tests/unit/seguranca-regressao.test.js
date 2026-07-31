@@ -323,9 +323,29 @@ describe('B-4 — todo alerta configurado precisa ter quem o dispare', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 describe('A-3 — a Política promete export JSON; ele precisa existir de verdade', () => {
   test('a promessa segue na Política (se sair, o teste avisa para reavaliar)', () => {
-    assert.match(ler('privacidade.html'), /exporta[çc][ãa]o dos seus dados em formato JSON/i,
-      'Se a promessa foi removida da Política, este teste e o botão podem ser reavaliados. '
-      + 'Enquanto ela estiver lá, o recurso é obrigatório (LGPD art. 18, V).')
+    // Casar a FRASE inteira travava a redação: em 2026-07-30 a Política passou a
+    // citar também a planilha, e este teste reprovou uma mudança que só ampliou
+    // a promessa. O que precisa continuar verdadeiro é o COMPROMISSO — exportar,
+    // e em JSON —, não um conjunto exato de palavras.
+    const pol = ler('privacidade.html')
+    assert.match(pol, /\bJSON\b/,
+      'A Política deixou de citar JSON. É o formato "estruturado e interoperável" do '
+      + 'art. 18, V — se ele saiu do texto, a promessa mudou e este teste (e o botão) '
+      + 'precisam ser reavaliados de propósito, não por acidente.')
+    assert.match(pol, /exporta|baixar seus dados|baixar meus dados/i,
+      'Sumiu qualquer menção a exportar. Enquanto a promessa estiver lá, o recurso é '
+      + 'obrigatório (LGPD art. 18, V).')
+  })
+
+  test('a Política não promete formato que o app não entrega', () => {
+    // O caminho inverso do teste acima, e o mais perigoso: prometer no documento
+    // legal algo que o código não faz foi exatamente o achado A-3 original.
+    const pol  = ler('privacidade.html')
+    const mont = ler('src', 'scripts', 'modules', 'export-planilha.js')
+    if (/\.xlsx|planilha/i.test(pol)) {
+      assert.ok(mont.includes('montarPlanilha'),
+        'A Política cita planilha, mas o módulo que a monta não existe mais.')
+    }
   })
 
   test('existe o botão e ele carrega o módulo de exportação', () => {
