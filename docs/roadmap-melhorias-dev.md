@@ -1282,9 +1282,10 @@ tapa, e bastaria ao atacante provocar a falha.
 > widget e re-renderizavam. Sintoma: piscou 3x (= `_CAPTCHA_MAX_RENDER_ATTEMPTS`) e sumiu.
 > **Nunca sondar o DOM de um widget de captcha; use o `error-callback` dele.**
 
-### B-3 — Rate limit na borda 🔴
-Hoje o rate limit é de aplicação (Upstash): um flood chega a **executar** a função Vercel antes de
-ser barrado. Cloudflare Rate Limiting Rules em `/api/auth-session` e `/api/create-account`. Custo 0.
+### B-3 — Rate limit na borda ✅ APLICADO (2026-07-27, dentro do cutover da Cloudflare)
+Regra de rate limiting na borda cobrindo `/api/*`. Duas armadilhas do plano free, em
+`docs/cloudflare-runbook.md`: `mitigation_timeout` **precisa ser igual ao `period`**, e o bypass
+de cache **não sai** do ruleset de firewall (tem de ser Cache Rule na própria fase).
 
 ### B-4 — Alerta que acorda o dono ✅ APLICADO (2026-07-27, commit e18eae3)
 > **A descrição original acima estava ERRADA** e fica registrada como lição: `_alert.js` já era
@@ -1308,15 +1309,33 @@ ser barrado. Cloudflare Rate Limiting Rules em `/api/auth-session` e `/api/creat
 > Production/Preview. Prova de ponta a ponta: 45 eventos `rate_limit_burst` em 39s cruzaram o
 > threshold de 40/300s e o e-mail chegou — **uma vez só**, confirmando o `count === cfg.count`.
 
-### B-5 — Fechar S-1…S-6 (contam para blindagem também) 🔴
+### B-5 — Fechar S-1…S-6 (contam para blindagem também) ✅ APLICADO (2026-07-27)
+Os seis aplicados em prod via Management API, cada um com `.down.sql`. Detalhe no Passo 30.
 
-### B-6 — Revogar a anon key legada 🔴
-Continua ATIVA server-side (Estágio E5 do Passo 1). Depende de completar a **Fase 4 do JWT
-hardening**: remover o fallback `SUPABASE_SERVICE_ROLE_KEY` das ~20 edges restantes.
+### B-6 — Revogar a anon key legada 🟡 QUASE — o risco caiu, sobrou limpeza
+> ⚠️ **CORREÇÃO (verificado em 2026-07-30):** o texto anterior dizia que a legada continuava
+> ATIVA server-side. **Não continua.** `anon` **e** `service_role` estão **desativadas desde
+> 2026-07-23T20:03:16Z** — efeito colateral da migração de JWT. Requisição com elas volta
+> `401 {"message":"Legacy API keys are disabled"}`. Descoberto por acidente ao tentar criar a
+> conta de teste do Bloco 2.
+>
+> **O que isso muda:** o objetivo do B-6 já foi atingido de fato. O fallback
+> `SUPABASE_SERVICE_ROLE_KEY` nas 28 edges **já é código morto** — removê-lo virou limpeza, não
+> mudança de comportamento. Em compensação, não existe mais o rollback "restaurar a env antiga
+> e redeployar" para nada que dependesse delas.
+>
+> **Falta:** apagar o fallback morto das 28 edges. Risco baixo, número de arquivos alto.
 
-### B-7 — Testes de regressão dos vetores fechados 🔴
-REGRA 9 do god-mode: 100% dos vetores encontrados viram teste. Hoje `tests/security/` não cobre
-o bypass de lote (S-1) nem o grant do sino.
+### B-7 — Testes de regressão dos vetores fechados ✅ APLICADO (2026-07-27, ampliado em 2026-07-30)
+REGRA 9 do god-mode: 100% dos vetores viram teste. Invariantes de arquitetura em
+`tests/unit/seguranca-regressao.test.js` — rodam sem banco, sem rede e sem segredo. **722 testes**
+no total. A suíte já pegou drift real: o GRANT do sino, aplicado por API e nunca escrito como
+migration.
+
+Ampliada com os bugs achados no Bloco 2, todos verificados contra o código antigo:
+`scope=local` no `/logout` de verificação · callback do Turnstile como função e não string ·
+`data` no login por código de recuperação · a Política não pode prometer formato que o app não
+entrega.
 
 ---
 
