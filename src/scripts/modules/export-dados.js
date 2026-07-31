@@ -1,10 +1,21 @@
-// export-dados.js — portabilidade de dados em JSON (LGPD art. 18, V)  [A-3]
+// export-dados.js — portabilidade de dados (LGPD art. 18, V)  [A-3]
 // ---------------------------------------------------------------------------
 // POR QUE ISTO EXISTE
 //   `privacidade.html` §Portabilidade promete, com estas palavras: "o GranaEvo
 //   oferece exportação dos seus dados em formato JSON dentro da própria
 //   plataforma". Até 2026-07-27 isso não existia — o app só exportava PDF, CSV
 //   e Excel. Promessa documentada e não cumprida é o achado A-3 da auditoria.
+//
+// DOIS FORMATOS, DOIS TRABALHOS (2026-07-30)
+//   JSON  → levar os dados a outro serviço. É o "formato estruturado e
+//           interoperável" que a lei pede e que a política promete. Continua
+//           existindo exatamente por isso.
+//   .xlsx → a pessoa VER o que a gente guarda. Um usuário abriu o JSON e a
+//           pergunta foi direta: "o que é isso?". Estava certo — o JSON
+//           responde a outra pergunta. A planilha é a resposta a essa.
+//   Os dois saem do MESMO pacote (`_montar`): a planilha é uma leitura do que
+//   o JSON contém, nunca uma coleta paralela. Se divergissem, um dos dois
+//   estaria mentindo sobre o que a empresa guarda.
 //
 // DE ONDE VÊM OS DADOS
 //   O blob vem do servidor, NÃO da memória. A memória do dashboard só tem o
@@ -47,6 +58,12 @@ const CSS = `
 #geExp input { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px; color: #fff; font-size: 0.92rem; }
 #geExp input:focus { outline: none; border-color: rgba(16,185,129,0.55); }
 #geExp .exp-err { color: #fca5a5; font-size: 0.8rem; margin: 10px 0 0; min-height: 1em; }
+#geExp .exp-fmt { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; }
+#geExp .exp-op { display: flex; gap: 10px; align-items: flex-start; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 11px 12px; cursor: pointer; }
+#geExp .exp-op:has(input:checked) { border-color: rgba(16,185,129,0.55); background: rgba(16,185,129,0.07); }
+#geExp .exp-op input { width: auto; margin: 2px 0 0; accent-color: #10b981; flex: 0 0 auto; }
+#geExp .exp-op b { color: #e5e7eb; font-size: 0.86rem; font-weight: 600; display: block; }
+#geExp .exp-op span { color: #9ca3af; font-size: 0.78rem; line-height: 1.45; display: block; margin-top: 2px; }
 #geExp .exp-go { width: 100%; margin-top: 16px; background: linear-gradient(135deg,#10b981,#059669); color: #fff; border: none; border-radius: 12px; padding: 13px; font-weight: 700; font-size: 0.92rem; cursor: pointer; }
 #geExp .exp-go[disabled] { opacity: 0.55; cursor: default; }
 #geExp .exp-alt { background: none; border: none; color: #6b7280; font-size: 0.8rem; text-decoration: underline; cursor: pointer; margin-top: 12px; padding: 4px; width: 100%; }
@@ -118,16 +135,33 @@ async function _buscarMetadados() {
     return { perfis, termos, assinatura, aparelhos, avisos, atividade };
 }
 
-function _baixar(obj) {
-    const hoje = new Date().toISOString().slice(0, 10);
-    const url = URL.createObjectURL(
-        new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json;charset=utf-8' }),
-    );
+function _baixarArquivo(conteudo, nome, mime) {
+    const url = URL.createObjectURL(new Blob([conteudo], { type: mime }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `granaevo-meus-dados-${hoje}.json`;
+    a.download = nome;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+const _hoje = () => new Date().toISOString().slice(0, 10);
+
+function _baixar(obj) {
+    _baixarArquivo(JSON.stringify(obj, null, 2),
+        `granaevo-meus-dados-${_hoje()}.json`, 'application/json;charset=utf-8');
+}
+
+// A montagem da planilha mora em export-planilha.js — função pura, testável
+// sem browser. Aqui fica só o carregamento sob demanda e o download: quem
+// escolhe JSON não baixa os 27 KB do gerador OOXML à toa.
+async function _baixarPlanilha(pacote) {
+    const [{ gerarXlsx }, { montarPlanilha }] = await Promise.all([
+        import('./xlsx.js'),
+        import('./export-planilha.js'),
+    ]);
+    _baixarArquivo(gerarXlsx(montarPlanilha(pacote)),
+        `granaevo-meus-dados-${_hoje()}.xlsx`,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 }
 
 /** Monta o pacote final. Auto-descritivo: quem receber não precisa de nós. */
@@ -203,6 +237,31 @@ export async function abrirExportacao(ctx) {
     ]) lista.appendChild(el('li', null, item));
     card.appendChild(lista);
 
+    // Escolha por PROPÓSITO, não por extensão. "JSON" não diz nada para quem não
+    // é da área; "levar para outro aplicativo" diz. A planilha vem marcada por
+    // padrão porque é o que quase todo mundo quer — o JSON continua a um clique,
+    // e é ele que cumpre o art. 18, V da LGPD.
+    const fmt = el('div', 'exp-fmt');
+    const opcoes = [
+        ['xlsx', 'Planilha (Excel)', 'Para você abrir e ler. Abre no Excel, no Google Planilhas e no celular. Uma aba por tipo de dado, com todos os perfis.'],
+        ['json', 'Arquivo completo (JSON)', 'Para levar seus dados a outro aplicativo. É o formato exigido pela LGPD para portabilidade — feito para programas lerem.'],
+    ];
+    for (const [valor, titulo, desc] of opcoes) {
+        const lab = document.createElement('label');
+        lab.className = 'exp-op';
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'geExpFmt';
+        radio.value = valor;
+        radio.checked = valor === 'xlsx';
+        const txt = el('div');
+        txt.appendChild(el('b', null, titulo));
+        txt.appendChild(el('span', null, desc));
+        lab.append(radio, txt);
+        fmt.appendChild(lab);
+    }
+    card.appendChild(fmt);
+
     card.appendChild(el('p', null, 'Confirme sua senha para continuar:'));
 
     const input = document.createElement('input');
@@ -246,13 +305,24 @@ export async function abrirExportacao(ctx) {
             const [blob, meta] = await Promise.all([_buscarBlob(), _buscarMetadados()]);
 
             const { data: { user } } = await supabase.auth.getUser();
-            _baixar(_montar({
+            const pacote = _montar({
                 blob,
                 meta,
                 email:   user?.email ?? null,
                 userId:  user?.id ?? null,
                 isGuest: Boolean(ctx?.usuarioLogado?.isGuest),
-            }));
+            });
+
+            // Os dois saem do MESMO pacote: a planilha é uma leitura do que o
+            // JSON contém, nunca uma coleta separada. Se divergissem, um dos
+            // dois estaria mentindo sobre o que a empresa guarda.
+            const formato = card.querySelector('input[name="geExpFmt"]:checked')?.value ?? 'xlsx';
+            if (formato === 'xlsx') {
+                btn.textContent = 'Montando a planilha…';
+                await _baixarPlanilha(pacote);
+            } else {
+                _baixar(pacote);
+            }
 
             fechar();
             ctx?.mostrarNotificacao?.('Arquivo gerado! Confira seus downloads.', 'success');
