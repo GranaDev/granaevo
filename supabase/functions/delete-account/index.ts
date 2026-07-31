@@ -20,9 +20,8 @@ function getSecretKey(): string {
   try {
     const k = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')?.default
     if (typeof k === 'string' && k.startsWith('sb_secret_')) return k
-  } catch { /* env ausente/inválida → usa a legada */ }
-  console.warn('[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)')
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  } catch { /* JSON inválido: cai no throw abaixo */ }
+  throw new Error('SUPABASE_SECRET_KEYS ausente ou inválida')
 }
 
 // Publishable (só como `apikey` do step-up de senha no GoTrue — pública por design).
@@ -31,8 +30,7 @@ function getPublishableKey(): string {
     const k = JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') ?? '{}')?.default
     if (typeof k === 'string' && k.startsWith('sb_publishable_')) return k
   } catch { /* env ausente/inválida → usa a legada */ }
-  console.warn('[keys] SUPABASE_PUBLISHABLE_KEYS indisponível — usando anon legada (fallback)')
-  return Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+  throw new Error('SUPABASE_PUBLISHABLE_KEYS ausente ou inválida')
 }
 
 const ALLOWED_ORIGINS = [

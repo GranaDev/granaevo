@@ -7,16 +7,17 @@ import { isPasswordPwned } from '../_shared/hibp.ts'
 // Fallback na chave antiga NÃO existe de propósito: um token do Google jamais
 // validaria aqui, então aceitar a env legada só mascararia um deploy incompleto.
 
-// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
-// com fallback na service_role legada — rollback = redeploy do commit anterior
-// enquanto a legada existir. Migração de API keys 2026-07-23.
+// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS).
+// SEM fallback na legada: as chaves antigas (anon e service_role) foram
+// DESATIVADAS em 2026-07-23 e devolvem 401 "Legacy API keys are disabled".
+// Um fallback para uma chave morta não é rede de segurança — é um 401 confuso
+// no lugar de um erro de configuração legível. Se a env sumir, falhe alto.
 function getSecretKey(): string {
   try {
     const k = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')?.default
     if (typeof k === 'string' && k.startsWith('sb_secret_')) return k
-  } catch { /* env ausente/inválida → usa a legada */ }
-  console.warn('[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)')
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  } catch { /* JSON inválido: cai no throw abaixo */ }
+  throw new Error('SUPABASE_SECRET_KEYS ausente ou inválida')
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -254,15 +255,17 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
   const serviceKey  = getSecretKey()
-  // Prefere a publishable key nova (SUPABASE_PUBLISHABLE_KEYS['default']) e cai
-  // para a anon legada durante a transição. Usada só como `apikey` no recovery
-  // flow. Ver docs/roadmap-melhorias-dev.md Passo 1, Estágio 3. (Migração 2026-07-14)
+  // Publishable key nova (SUPABASE_PUBLISHABLE_KEYS['default']), usada só como
+  // `apikey` no recovery flow. A transição acabou: a anon legada foi DESATIVADA
+  // em 2026-07-23 e devolve 401 "Legacy API keys are disabled", então cair nela
+  // não era rede de segurança — era trocar um erro de configuração legível por
+  // um 401 sem explicação. Ver Passo 1 (Estágio 3) e B-6 do roadmap.
   const anonKey     = (() => {
     try {
       const pk = JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') ?? '{}')?.default
       if (pk) return pk
-    } catch { /* SUPABASE_PUBLISHABLE_KEYS ausente/inválida → usa a legada */ }
-    return Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    } catch { /* JSON inválido: cai no throw abaixo */ }
+    throw new Error('SUPABASE_PUBLISHABLE_KEYS ausente ou inválida')
   })()
   const proxySecret = Deno.env.get('PROXY_SECRET')              ?? ''
 

@@ -18,9 +18,8 @@ function getSecretKey(): string {
   try {
     const k = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')?.default
     if (typeof k === 'string' && k.startsWith('sb_secret_')) return k
-  } catch { /* env ausente/invalida -> usa a legada */ }
-  console.warn('[keys] SUPABASE_SECRET_KEYS indisponivel — usando service_role legada (fallback)')
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  } catch { /* JSON inválido: cai no throw abaixo */ }
+  throw new Error('SUPABASE_SECRET_KEYS ausente ou inválida')
 }
 
 const ALLOWED_ORIGINS = [

@@ -18,7 +18,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -571,6 +571,43 @@ describe('Landing — a vitrine prova capacidade sem entregar o valor', () => {
       'O cabeçalho do arquivo trata a ausência de persistência como decisão de LGPD: guardar '
       + 'o que o visitante digitou faz a landing deixar de ser vitrine e virar produto '
       + '(consentimento, retenção, titular). Nem para "levar os dados ao cadastro".')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('B-6 — nenhuma edge cai numa chave legada (elas estão desativadas)', () => {
+  const raiz = join(RAIZ, 'supabase', 'functions')
+
+  const tsDe = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? tsDe(join(dir, e.name)) : (e.name.endsWith('.ts') ? [join(dir, e.name)] : []))
+
+  test('SUPABASE_SERVICE_ROLE_KEY e SUPABASE_ANON_KEY não aparecem em nenhuma função', () => {
+    // As duas legadas foram DESATIVADAS em 2026-07-23 e devolvem
+    // 401 "Legacy API keys are disabled". Um fallback para chave morta não é
+    // rede de segurança: troca um erro de configuração legível por um 401 sem
+    // explicação — e ainda dá a impressão de que existe um plano B.
+    const culpados = []
+    for (const arq of tsDe(raiz)) {
+      const src = readFileSync(arq, 'utf8')
+      const codigo = src.split('\n')
+        .filter(l => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+        .join('\n')
+      if (/SUPABASE_(SERVICE_ROLE|ANON)_KEY/.test(codigo)) culpados.push(relative(RAIZ, arq))
+    }
+    assert.deepEqual(culpados, [],
+      'Estas funções voltaram a ler uma chave legada desativada:\n  ' + culpados.join('\n  '))
+  })
+
+  test('quem não acha a chave nova FALHA ALTO, não devolve string vazia', () => {
+    // `return '' ` cria um client com credencial vazia: a função sobe, aceita a
+    // requisição e só falha lá adiante, com 401. O erro real (env ausente) fica
+    // invisível. Falhar no getSecretKey aponta a causa de primeira.
+    const g = readFileSync(join(raiz, 'get-user-data', 'index.ts'), 'utf8')
+    const fn = g.match(/function getSecretKey[\s\S]*?\n\}/)?.[0] ?? ''
+    assert.match(fn, /throw new Error/,
+      'getSecretKey precisa lançar quando SUPABASE_SECRET_KEYS não serve.')
+    assert.ok(!/return\s*''/.test(fn),
+      'Sobrou um `return \'\'` — credencial vazia vira 401 confuso em vez de erro de config.')
   })
 })
 

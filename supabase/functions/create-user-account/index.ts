@@ -11,16 +11,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 import { isPasswordPwned } from '../_shared/hibp.ts'
 
-// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS)
-// com fallback na service_role legada — rollback = redeploy do commit anterior
-// enquanto a legada existir. Migração de API keys 2026-07-23.
+// Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS).
+// SEM fallback na legada: as chaves antigas (anon e service_role) foram
+// DESATIVADAS em 2026-07-23 e devolvem 401 "Legacy API keys are disabled".
+// Um fallback para uma chave morta não é rede de segurança — é um 401 confuso
+// no lugar de um erro de configuração legível. Se a env sumir, falhe alto.
 function getSecretKey(): string {
   try {
     const k = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}')?.default
     if (typeof k === 'string' && k.startsWith('sb_secret_')) return k
-  } catch { /* env ausente/inválida → usa a legada */ }
-  console.warn('[keys] SUPABASE_SECRET_KEYS indisponível — usando service_role legada (fallback)')
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  } catch { /* JSON inválido: cai no throw abaixo */ }
+  throw new Error('SUPABASE_SECRET_KEYS ausente ou inválida')
 }
 
 const corsHeaders = { 'Content-Type': 'application/json' }
