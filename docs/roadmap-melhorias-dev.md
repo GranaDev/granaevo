@@ -1345,10 +1345,24 @@ entrega.
 
 - **O-1** ✅ FEITO (2026-07-30) — partículas e paleta de comandos saíram para chunks lazy, com as
   guardas no CHAMADOR (antes do import), não dentro do módulo. `dashboard.js` em 38,4 KB de 40.
-- **O-2** 🔴 CSS crítico inline + resto lazy. `css-unused-candidates.txt` tem **110 candidatos**.
-  Ganho estimado **150–200 KB** — o maior ganho de LCP disponível. (Passo 7, parqueado)
-  **É o maior item aberto da otimização.** Risco real: CSS removido quebra tela em silêncio, e
-  não há teste que pegue. Precisa de método de verificação antes de método de remoção.
+- **O-2** 🟡 MÉTODO PRONTO + poda verificada (2026-07-31) — mas a estimativa antiga estava errada.
+  - ✅ `scripts/css-mortas.mjs` separa **USADA / DINÂMICA / MORTA**. A lista velha marcava tudo
+    sem ocorrência literal, então enchia de falso-positivo (`cat-entrada`, `tipo-icon-saida`,
+    `alerta-status` — montadas em runtime). No `_db-all.css`: das 104 "candidatas", **41 eram
+    dinâmicas** e só **19 mortas**.
+  - ✅ `scripts/css-podar.mjs` remove com cuidado: `.viva, .morta {}` perde só a metade morta,
+    seletor composto morre inteiro, bloco `@` vazio sai, e há trava de 12%.
+  - ⚠️ **A ferramenta nasceu errada:** exigia prefixo de 3+ caracteres, então `rf-` (2 letras)
+    nunca era testado e um componente **vivo** da reserva de família apareceu como morto.
+    Corrigido para 2 — os mortos do projeto caíram de 196 para 85.
+  - ❌ **A estimativa de 150–200 KB estava errada.** O real no `_db-all` foi **2,1 KB**
+    (`dashboard.css` 40,4 → 40,2 KB gz). Quase tudo que parecia morto era falso-positivo.
+  - ⬜ **Faltam 85 classes nos outros arquivos, e elas precisam de uma decisão sua**, não de
+    mais análise: o cluster `rf-*` pertence a uma feature cujo módulo está VIVO
+    (`db-metas.js` importa `reserva-familia.js`) mas que não aplica essas classes. É CSS de
+    tela abandonada ou de tela por construir? Apagar é limpeza num caso e destruição no outro.
+  - ⬜ **"CSS crítico inline + resto lazy" não foi feito.** O dashboard já carrega assíncrono
+    (`media="print"` + `css-boot.js`); as públicas carregam bloqueando, mas são 9–12 KB gz.
 - **O-3** 🟡 PARCIAL (2026-07-31) — feito o que dava ganho medível; o resto ficou de propósito:
   - ✅ **Dropados 2 índices GIN INUTILIZÁVEIS** (`20260731000000`). `idx_user_data_json` era GIN
     sobre `user_data.data_json`, que é **ciphertext** — verificado em prod: toda linha tem uma
@@ -1374,10 +1388,28 @@ entrega.
   execução real do CI: fixar limiar sem nunca ter visto a medição é o que o cabeçalho do
   `lighthouserc.cjs` adverte para não fazer. Não medi localmente — não há Chrome nesta máquina
   e o `gh` não está autenticado.
-- **O-5** 🔴 Boot otimista com snapshot cifrado em IndexedDB (versão completa do Passo 9)
-- **O-6** 🔴 Estender a virtualização (feita em 2026-07-18) a relatórios e cartões
-- **O-7** 🔴 AVIF/WebP com `<picture>` + `fetchpriority="high"` no elemento do LCP
-- **O-8** 🔴 `modulepreload` nos 2 primeiros chunks do dashboard
+- **O-5** ⛔ **CONTRADIZ UMA DECISÃO JÁ TOMADA — não fazer sem reabrir a discussão.**
+  Este item pede "a versão completa do Passo 9". Mas o Passo 9 foi fechado em 2026-07-19 na
+  versão segura, e a parte completa foi **recusada de propósito, em decisão tomada com o
+  usuário**. O motivo continua de pé: a versão atual é uma **impossibilidade estrutural** de
+  causar wipe (não toca nos arrays de dados nem no save path); a completa troca isso por uma
+  **guarda em tempo de execução**, num app que já perdeu dados **duas vezes**, sempre por
+  corrida entre memória e gravação. Pior: a janela otimista **cresce quanto pior a conexão** —
+  valor e risco sobem juntos, e é na conexão ruim que o usuário faz a edição que o servidor
+  sobrescreve calado.
+  **Pré-requisitos, se um dia for reaberto:** bloquear as ações de edição durante a janela
+  otimista e um **outbox de escrita**. Nenhum dos dois existe. Ver o Passo 9 neste documento.
+- **O-6** 🟢 FEITO (2026-07-31) — relatórios **já tinha** teto (`REL_TX_VISIVEIS` + "ver mais");
+  faltava a fatura, que renderizava TODAS as compras ao abrir o modal. Agora tem teto de 60
+  (menor que os 150 do relatório: uma compra é um card com botões, uma transação é uma linha).
+  Teste trava os dois tetos e a relação entre eles.
+- **O-7** ✅ FEITO (2026-07-31) — o dashboard já tinha; faltava nas **públicas**, que são
+  justamente as que o Lighthouse mede. `width`/`height` onde faltava (CLS), `fetchpriority="high"`
+  e `preload as=image` nas 5. ⚠️ O `crossorigin` do preload **precisa casar** com o da `<img>`:
+  divergiu, o navegador baixa a imagem duas vezes. Há teste para isso.
+- **O-8** ✅ JÁ ESTAVA FEITO — o Vite injeta `modulepreload` nos 6 primeiros chunks
+  (`modulePreload: { polyfill: false }`) e o script de entrada já fica dentro do `<head>`.
+  Verificado no `dist`. Não precisou de código.
 
 **Definição de 10:** LCP < 2,0 s em 4G simulado · INP < 200 ms · Performance ≥ 95 no dashboard
 logado · gate no CI impedindo regressão.
