@@ -556,64 +556,6 @@ button, a { touch-action: manipulation; }
 /* ==========================================
    PURCHASE NOTIFICATION
    ========================================== */
-.purchase-notification {
-    position: fixed;
-    bottom: var(--sp-5);
-    left: var(--sp-4);
-    right: var(--sp-4);
-    background: rgba(17, 18, 32, 0.96);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid var(--primary-20);
-    border-radius: var(--r-lg);
-    padding: var(--sp-4) var(--sp-5);
-    z-index: 998;
-    transform: translateY(calc(100% + var(--sp-6)));
-    transition: transform var(--t-slow) var(--ease-spring);
-    box-shadow: var(--shadow-xl), 0 0 0 1px rgba(16, 185, 129, 0.08) inset;
-}
-
-.purchase-notification.show { transform: translateY(0); }
-
-.notification-content {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-}
-
-.notification-icon {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 0 16px rgba(16, 185, 129, 0.45);
-}
-
-.notification-icon svg {
-    width: 18px;
-    height: 18px;
-    stroke: var(--dark);
-}
-
-.notification-text {
-    flex: 1;
-    font-size: 0.875rem;
-    line-height: 1.45;
-}
-
-.notification-name {
-    display: block;
-    font-weight: 700;
-    color: var(--primary-light);
-    margin-bottom: 1px;
-}
-
-.notification-action { color: var(--gray-light); }
-.notification-action strong { color: var(--white); font-weight: 600; }
 
 /* ==========================================
    HERO SECTION
@@ -746,74 +688,9 @@ button, a { touch-action: manipulation; }
 }
 
 /* Carousel Controls — mobile only */
-.carousel-controls {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--sp-4);
-    margin-bottom: var(--sp-5);
-}
 
 /* Oculto no desktop (sobrescrito no media query) */
 .mobile-only { display: flex; }
-
-.carousel-btn {
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-    background: var(--primary-15);
-    border: 1.5px solid var(--primary-30);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background var(--t-fast) ease, border-color var(--t-fast) ease, transform var(--t-fast) var(--ease-spring);
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
-}
-
-.carousel-btn:hover {
-    background: var(--primary-20);
-    border-color: var(--primary-60);
-    transform: scale(1.08);
-    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.25);
-}
-
-.carousel-btn:active { transform: scale(0.93); }
-.carousel-btn:active { transform: scale(0.92); }
-
-.carousel-btn svg {
-    width: 22px;
-    height: 22px;
-    stroke: var(--primary);
-}
-
-.carousel-indicators {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-}
-
-.indicator-dot {
-    width: 8px;
-    height: 8px;
-    min-width: 8px;
-    background: var(--primary-30);
-    border-radius: var(--r-full);
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    transition: width var(--t-base) var(--ease-spring), background var(--t-base) ease, box-shadow var(--t-base) ease;
-}
-
-.indicator-dot.active {
-    width: 28px;
-    background: var(--primary);
-    box-shadow: 0 0 10px var(--primary-60);
-}
 
 /* ==========================================
    CAROUSEL CONTAINER — FIX v4
@@ -1649,11 +1526,6 @@ button, a { touch-action: manipulation; }
     .footer-brand .logo { justify-content: flex-start; }
 
     /* Notification */
-    .purchase-notification {
-        left: var(--sp-6);
-        right: auto;
-        max-width: 310px;
-    }
 }
 
 /* ==========================================
@@ -1853,8 +1725,6 @@ button, a { touch-action: manipulation; }
     font-size: 0.875rem;
     line-height: 1.5;
 }
-.signup-alert.show-error   { display: block; background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.3);  color: #fca5a5; }
-.signup-alert.show-info    { display: block; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
 
 .signup-field { margin-bottom: 1rem; }
 .signup-field label {
@@ -2265,17 +2135,12 @@ input[type="password"]::-ms-clear {
 .glow-orb { will-change: transform; }
 
 /* ── Remove notification ─────────────────────────────────────────── */
-.purchase-notification { display: none !important; }
 
 /* ══════════════════════════════════════════════════════════════════
    MOBILE v7 — Truly compact scroll-snap cards
    Target: cards ≤ 260px wide, ≤ 340px tall
 ══════════════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
-    .carousel-controls,
-    .carousel-btn,
-    .carousel-indicators,
-    .indicator-dot { display: none !important; }
 
     /* ── Animated scroll hint ────────────────────────────────────── */
     .scroll-hint {

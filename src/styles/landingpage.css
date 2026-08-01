@@ -16,7 +16,6 @@
  *   _phone-mockup.css      — 3D phone mockup (dashboard preview)
  *   _features.css          — section commons + problem + features
  *   _how-it-works.css      — timeline / how it works
- *   _testimonials.css      — testimonials carousel
  *   _cta-faq-footer.css    — CTA + FAQ accordion + footer
  *   _animations-responsive.css — animations + perf + scrollbar + responsive
  */
@@ -36,6 +35,5 @@
 @import './landing/_phone-mockup.css';
 @import './landing/_features.css';
 @import './landing/_how-it-works.css';
-@import './landing/_testimonials.css';
 @import './landing/_cta-faq-footer.css';
 @import './landing/_animations-responsive.css';

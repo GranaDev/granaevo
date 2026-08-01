@@ -31,9 +31,6 @@
 //
 // MANTIDO DA V4.0:
 // ─────────────────────────────────────────────────────────────────
-// [1]  Testimonials: createElement + textContent, sem innerHTML
-// [2]  validateTestimonial(): validação estrutural + de tipos
-// [3]  TESTIMONIALS_DATA: imutável via deepFreeze
 // [4]  Console branding restrito a IS_DEV
 // [5]  counter animation: valores validados (isFinite, não-negativo)
 // [6]  Ripple effect: XY limitados aos bounds do elemento
@@ -76,88 +73,14 @@ function sanitizeText(value) {
     return node.nodeValue ?? '';
 }
 
-/**
- * Valida que um objeto testimonial possui as propriedades esperadas,
- * todas do tipo string e com comprimento razoável.
- * Protege contra prototype pollution e dados malformados.
- *
- * @param {unknown} obj
- * @returns {boolean}
- */
-function validateTestimonial(obj) {
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
-    if (!Object.prototype.hasOwnProperty.call(obj, 'stars'))  return false;
-    if (!Object.prototype.hasOwnProperty.call(obj, 'text'))   return false;
-    if (!Object.prototype.hasOwnProperty.call(obj, 'author')) return false;
-    if (typeof obj.stars  !== 'string' || obj.stars.length  > 20)  return false;
-    if (typeof obj.text   !== 'string' || obj.text.length   > 500) return false;
-    if (typeof obj.author !== 'string' || obj.author.length > 100) return false;
-    return true;
-}
-
-/**
- * Deep freeze recursivo — impede mutação de objetos e arrays de dados.
- * Protege contra ataques de prototype pollution em runtime.
- *
- * @param {object} obj
- * @returns {object}
- */
-function deepFreeze(obj) {
-    Object.getOwnPropertyNames(obj).forEach(name => {
-        const value = obj[name];
-        if (value && typeof value === 'object') {
-            deepFreeze(value);
-        }
-    });
-    return Object.freeze(obj);
-}
-
-// ==========================================
-// DADOS IMUTÁVEIS DE DEPOIMENTOS
-// deepFreeze impede que qualquer código externo modifique o array.
-// ==========================================
-const TESTIMONIALS_DATA = deepFreeze([
-    {
-        stars:  '★★★★★',
-        text:   'O GranaEvo mudou completamente minha relação com o dinheiro. Finalmente sei exatamente para onde vai cada centavo!',
-        author: 'Maria Silva'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Nunca mais fui pego de surpresa pela fatura do cartão. O controle é total e muito fácil de usar.',
-        author: 'João Santos'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Consegui economizar R$ 5.000 em 6 meses só organizando melhor meus gastos com o GranaEvo.',
-        author: 'Ana Costa'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Perfeito para casais! Agora eu e meu marido temos visão completa das nossas finanças juntos.',
-        author: 'Patricia Oliveira'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Interface super intuitiva. Até minha mãe de 65 anos conseguiu usar sem dificuldade!',
-        author: 'Carlos Pereira'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Vale cada centavo! O investimento se paga só na economia que você consegue fazer.',
-        author: 'Roberto Lima'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Tinha medo de apps financeiros, mas o GranaEvo é simples e seguro. Recomendo muito!',
-        author: 'Juliana Martins'
-    },
-    {
-        stars:  '★★★★★',
-        text:   'Os gráficos e relatórios me ajudaram a identificar gastos que eu nem sabia que tinha.',
-        author: 'Fernando Souza'
-    }
-]);
+// Os depoimentos saíram daqui em 2026-07-31. Eram 6 avaliações FIXAS, com
+// nomes e resultados inventados ("economizei R$ 5.000"), e a seção que as
+// renderizava já tinha sido tirada do index.html — #testimonialsTrack não
+// existe mais, então createTestimonialCards() saía na primeira linha. O texto,
+// porém, continuava viajando no bundle da landing.
+//
+// Não voltam: prova social inventada num produto sem usuários ativos é
+// mentira ao visitante, e foi decisão explícita do dono do produto.
 
 // ==========================================
 // LOADING SCREEN
@@ -462,70 +385,6 @@ statValues.forEach(stat => counterObserver.observe(stat));
     }, { passive: true });
 }());
 
-// ==========================================
-// TESTIMONIALS CAROUSEL
-// Sem innerHTML — usa apenas createElement e textContent.
-// Cada item é validado antes de renderizar.
-// Trusted Types compatível: nenhuma atribuição de HTML string.
-// ==========================================
-
-/**
- * Cria um card de depoimento de forma segura.
- * Nunca usa innerHTML. Todos os dados passam por textContent.
- *
- * @param {{ stars: string, text: string, author: string }} testimonial
- * @returns {HTMLElement}
- */
-function createTestimonialCard(testimonial) {
-    const card = document.createElement('div');
-    card.className = 'testimonial-card';
-
-    const stars = document.createElement('div');
-    stars.className = 'testimonial-stars';
-    stars.setAttribute('aria-label', 'Avaliação 5 estrelas');
-    stars.textContent = sanitizeText(testimonial.stars);
-
-    const text = document.createElement('p');
-    text.className = 'testimonial-text';
-    text.textContent = sanitizeText(testimonial.text);
-
-    const author = document.createElement('div');
-    author.className = 'testimonial-author';
-    author.textContent = sanitizeText(testimonial.author);
-
-    card.appendChild(stars);
-    card.appendChild(text);
-    card.appendChild(author);
-
-    return card;
-}
-
-function createTestimonialCards() {
-    const testimonialsTrack = document.getElementById('testimonialsTrack');
-    if (!testimonialsTrack) return;
-
-    // Duplica para efeito de carrossel infinito
-    const allTestimonials = [...TESTIMONIALS_DATA, ...TESTIMONIALS_DATA];
-
-    // DocumentFragment para uma única operação de DOM (performance)
-    const fragment = document.createDocumentFragment();
-
-    allTestimonials.forEach(testimonial => {
-        if (!validateTestimonial(testimonial)) {
-            if (IS_DEV) console.warn('GranaEvo: depoimento inválido ignorado', testimonial);
-            return;
-        }
-        fragment.appendChild(createTestimonialCard(testimonial));
-    });
-
-    // Limpa o container e insere tudo de uma vez (sem innerHTML)
-    while (testimonialsTrack.firstChild) {
-        testimonialsTrack.removeChild(testimonialsTrack.firstChild);
-    }
-    testimonialsTrack.appendChild(fragment);
-}
-
-createTestimonialCards();
 
 // ==========================================
 // INTERSECTION OBSERVER — REVEAL ANIMATIONS

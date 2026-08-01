@@ -31,10 +31,6 @@ body {
     position: relative;
 }
 
-body > *:not(.testimonials-section) {
-    max-width: 100vw;
-}
-
 img {
     max-width: 100%;
     display: block;

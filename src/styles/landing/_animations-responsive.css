@@ -166,10 +166,6 @@ img, svg {
         padding: 0;
     }
 
-    .dashboard-mockup {
-        max-width: 420px;
-    }
-
     .section-title {
         font-size: 2.5rem;
     }
@@ -205,11 +201,6 @@ img, svg {
         font-size: 1.25rem;
     }
 
-    .testimonial-card {
-        width: 340px;
-        padding: 2rem 1.75rem;
-    }
-    
     .cta-box {
         padding: 3.5rem 2.5rem;
     }
@@ -273,10 +264,6 @@ img, svg {
     .hero-stats {
         justify-content: flex-start;
     }
-    
-    .dashboard-mockup {
-        max-width: 500px;
-    }
 
     .problem-grid {
         grid-template-columns: repeat(4, 1fr);
@@ -297,10 +284,6 @@ img, svg {
     }
     
     /* Hover effects desktop */
-    .mockup-card:hover {
-        transform: translateY(-10px) scale(1.02);
-        box-shadow: 0 30px 80px rgba(16, 185, 129, 0.3);
-    }
     
     .problem-card:hover {
         transform: translateY(-8px);
@@ -377,9 +360,5 @@ img, svg {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
-    }
-    
-    .testimonials-track {
-        animation-duration: 60s !important;
     }
 }

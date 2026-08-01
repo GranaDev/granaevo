@@ -126,7 +126,6 @@
     .tendencia-card,
     .ranking-item-grafico,
     .insight-card,
-    .legenda-item,
     .perfil-comparacao-card {
         transition: none !important;
         animation: none !important;
@@ -275,44 +274,6 @@
     margin-top: 20px;
     padding-top: 16px;
     border-top: 1px solid var(--border);
-}
-
-.legenda-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.3s, transform 0.3s;
-}
-
-.legenda-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-    transform: translateY(-2px);
-}
-
-.legenda-cor {
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    /* R5: impede que imagens sejam carregadas via content/background-image de CSS externo */
-    background-clip: padding-box;
-}
-
-.legenda-texto {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
-.legenda-valor {
-    font-size: 0.9rem;
-    color: var(--text-primary);
-    font-weight: 700;
-    margin-left: 4px;
 }
 
 /* ========== ESTATÍSTICAS RÁPIDAS ========== */

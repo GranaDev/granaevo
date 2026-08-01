@@ -64,8 +64,7 @@
 
 /* ── Top bar / Mobile header ─────────────────────────────────── */
 [data-theme="light"] .topbar,
-[data-theme="light"] .mobile-topbar,
-[data-theme="light"] .dash-topbar {
+[data-theme="light"] .mobile-topbar {
     background: rgba(244,246,250,0.95);
     border-bottom-color: rgba(0,0,0,0.07);
     backdrop-filter: blur(12px);
@@ -376,8 +375,7 @@
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
 }
 
-[data-theme="light"] .toast,
-[data-theme="light"] .notificacao {
+[data-theme="light"] .toast {
     background: #ffffff;
     border-color: rgba(0,0,0,0.08);
     color: rgba(0,0,0,0.8);
@@ -390,11 +388,6 @@
 [data-theme="light"] canvas { filter: none; }
 
 /* ── Autocat chip ────────────────────────────────────────────── */
-[data-theme="light"] .autocat-chip {
-    background: rgba(16,185,129,0.08);
-    border-color: rgba(16,185,129,0.25);
-    color: rgba(0,0,0,0.75);
-}
 
 /* ── Swipe actions ───────────────────────────────────────────── */
 [data-theme="light"] .mov-item { background: #ffffff; }
@@ -724,10 +717,6 @@
 [data-theme="light"] .cat-retirada_reserva { background: rgba(234,88,12,0.09);   color: #ea580c; border-color: rgba(234,88,12,0.2); }
 
 /* ── Valores monetários na tabela ────────────────────────────── */
-[data-theme="light"] .val-entrada          { color: #059669; }
-[data-theme="light"] .val-saida            { color: #dc2626; }
-[data-theme="light"] .val-reserva          { color: #d97706; }
-[data-theme="light"] .val-retirada_reserva { color: #ea580c; }
 
 /* ── Botões de ação na tabela ────────────────────────────────── */
 [data-theme="light"] .btn-tx-edit          { background: rgba(99,102,241,0.09); color: #4338ca; }
@@ -1465,17 +1454,6 @@
 }
 
 /* ── Legenda dos gráficos ───────────────────────────────────────── */
-[data-theme="light"] .legenda-item {
-    background: rgba(0,0,0,0.03);
-    border: 1px solid rgba(0,0,0,0.06);
-}
-
-[data-theme="light"] .legenda-item:hover {
-    background: rgba(0,0,0,0.06);
-}
-
-[data-theme="light"] .legenda-texto { color: #4b5563; }
-[data-theme="light"] .legenda-valor { color: #111827; }
 
 /* ── Comparação de perfis ───────────────────────────────────────── */
 [data-theme="light"] .comparacao-container {

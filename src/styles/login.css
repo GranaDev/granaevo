@@ -458,50 +458,10 @@ body {
 /* ==========================================
    GROWTH CARD
    ========================================== */
-.growth-card {
-    width: 100%;
-    background: linear-gradient(135deg,
-        rgba(16, 185, 129, 0.15) 0%,
-        rgba(5, 150, 105, 0.2) 100%);
-
-    /* [2] backdrop-filter com fallback */
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-
-    border-radius: 24px;
-    border: 2px solid rgba(16, 185, 129, 0.2);
-    padding: 50px 40px;
-    box-shadow:
-        0 30px 80px rgba(0, 0, 0, 0.5),
-        0 0 60px rgba(16, 185, 129, 0.2),
-        inset 0 0 60px rgba(16, 185, 129, 0.05);
-    position: relative;
-    overflow: hidden;
-}
 
 /* [1] borda interna decorativa — sem interação */
-.growth-card::before {
-    content: '';
-    position: absolute;
-    inset: 30px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 18px;
-    pointer-events: none; /* [1] */
-}
 
 /* [1] orb decorativo de fundo */
-.growth-card::after {
-    content: '';
-    position: absolute;
-    bottom: -100px;
-    right: -100px;
-    width: 300px;
-    height: 300px;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
-    border-radius: 50%;
-    filter: blur(60px);
-    pointer-events: none; /* [1] */
-}
 
 .card-content {
     position: relative;
@@ -673,29 +633,6 @@ body {
 /* ==========================================
    DECORAÇÃO
    ========================================== */
-.decoration {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 15px;
-    margin: 40px 0;
-    pointer-events: none; /* [1] elemento puramente decorativo */
-}
-
-.deco-line {
-    width: 60px;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--neon-green), transparent);
-}
-
-.deco-dot {
-    width: 8px;
-    height: 8px;
-    background: var(--neon-green);
-    border-radius: 50%;
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.8);
-    animation: pulse 2s ease-in-out infinite;
-}
 
 /* ==========================================
    FEATURES LIST
@@ -1250,12 +1187,6 @@ body {
 /* ==========================================
    SOCIAL LOGIN
    ========================================== */
-.social-login {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
-    animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.6s backwards;
-}
 
 .btn-social {
     padding: 14px;
@@ -1620,16 +1551,7 @@ body {
     stroke: var(--error-red);
 }
 
-.g-recaptcha {
-    transform-origin: left top;
-    max-width: 100%;
-    overflow: hidden;
-}
-
 /* Iframe interno do reCAPTCHA — garante que não vaza do container */
-.g-recaptcha iframe {
-    max-width: 100%;
-}
 
 /*
     CONTROLE EXCLUSIVO DE VISIBILIDADE DO CAPTCHA — v2.5.
@@ -1689,10 +1611,6 @@ body {
         font-size: 32px;
     }
 
-    .social-login {
-        grid-template-columns: 1fr;
-    }
-
     .code-inputs {
         gap: 8px;
     }
@@ -1732,11 +1650,6 @@ body {
 
     .stat-item {
         padding: 16px;
-    }
-
-    .g-recaptcha {
-        transform: scale(0.82);
-        transform-origin: left top;
     }
 }
 
@@ -2032,80 +1945,6 @@ body {
 .pbar-fill-c { background: linear-gradient(90deg, #0891b2, #06b6d4); box-shadow: 0 0 8px rgba(6, 182, 212, 0.5); }
 
 /* ===== TELA CARTÕES ===== */
-.pcard {
-    margin: 0 14px 12px;
-    border-radius: 16px;
-    padding: 14px 15px;
-    position: relative;
-    overflow: hidden;
-    background:
-        radial-gradient(120% 140% at 0% 0%, rgba(16, 185, 129, 0.35), transparent 55%),
-        linear-gradient(135deg, #0f3b2f 0%, #0a1f1a 60%, #06110e 100%);
-    border: 1px solid rgba(16, 185, 129, 0.28);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), inset 0 0 30px rgba(16, 185, 129, 0.06);
-    flex-shrink: 0;
-}
-
-.pcard::after {
-    content: '';
-    position: absolute;
-    top: -40%;
-    right: -10%;
-    width: 120px;
-    height: 120px;
-    background: radial-gradient(circle, rgba(110, 231, 183, 0.25), transparent 70%);
-    pointer-events: none;
-}
-
-.pcard-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 18px;
-}
-
-.pcard-bank { font-size: 11px; font-weight: 700; color: rgba(255, 255, 255, 0.9); }
-.pcard-flag { font-size: 13px; font-weight: 900; font-style: italic; color: #fff; letter-spacing: 0.04em; }
-
-.pcard-chip {
-    width: 30px;
-    height: 22px;
-    border-radius: 5px;
-    background: linear-gradient(135deg, #f4d58d, #c79a3b);
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
-    margin-bottom: 12px;
-}
-
-.pcard-num {
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    color: #fff;
-    margin-bottom: 12px;
-}
-
-.pcard-bot {
-    display: flex;
-    justify-content: space-between;
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.6);
-    text-transform: uppercase;
-}
-
-.pcard-limit { padding: 0 16px 12px; flex-shrink: 0; }
-
-.pcard-limit-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 6px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.pcard-limit-val { font-weight: 700; color: rgba(255, 255, 255, 0.85); }
 
 .plist { padding: 0 12px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
 
@@ -2139,38 +1978,6 @@ body {
 .pli-amt { font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0; }
 
 /* ===== TELA RESERVAS ===== */
-.pgoal {
-    margin: 0 14px 11px;
-    padding: 11px 13px;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    flex-shrink: 0;
-}
-
-.pgoal-hd {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    margin-bottom: 9px;
-}
-
-.pgoal-emoji {
-    width: 28px;
-    height: 28px;
-    border-radius: 9px;
-    background: rgba(16, 185, 129, 0.12);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    flex-shrink: 0;
-}
-
-.pgoal-info { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.pgoal-nm { font-size: 12px; font-weight: 700; color: rgba(255, 255, 255, 0.92); }
-.pgoal-sub { font-size: 9px; color: rgba(255, 255, 255, 0.4); }
-.pgoal-pct { font-size: 13px; font-weight: 800; color: var(--accent-green); flex-shrink: 0; }
 
 /* ===== TELA RELATÓRIOS ===== */
 .prep-chart {
