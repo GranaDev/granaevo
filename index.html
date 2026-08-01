@@ -100,6 +100,9 @@
     -->
 
     <title>GranaEvo - Domine Suas Finanças Com Inteligência</title>
+    <!-- Preload do logo: e o LCP da tela de loading. O crossorigin PRECISA casar
+         com o da <img> — se divergir, o navegador baixa a imagem DUAS vezes. -->
+    <link rel="preload" as="image" href="/assets/icons/granaevo-logo.jpg" crossorigin="anonymous">
 
     <!-- ============================================================
          SEO + SOCIAL SHARING
@@ -251,6 +254,10 @@
                     class="logo-img-loader"
                     crossorigin="anonymous"
                     loading="eager"
+                    width="96"
+                    height="96"
+                    fetchpriority="high"
+                    decoding="async"
                 >
             </div>
             <div class="loader-bar">

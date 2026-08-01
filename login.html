@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/png" href="/assets/icons/favicon.png">
     <title>GranaEvo - Acesso Premium</title>
+    <!-- Preload do logo: e o LCP da tela de loading. O crossorigin PRECISA casar
+         com o da <img> — se divergir, o navegador baixa a imagem DUAS vezes. -->
+    <link rel="preload" as="image" href="/assets/icons/granaevo-logo.jpg">
 
     <!-- CSP definida via HTTP header em vercel.json — não duplicar aqui -->
 
@@ -44,7 +47,7 @@
     <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando GranaEvo">
         <div class="loader">
             <div class="loader-logo">
-                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96" fetchpriority="high" decoding="async">
             </div>
             <div class="loader-bar" aria-hidden="true">
                 <div class="loader-progress"></div>

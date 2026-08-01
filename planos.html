@@ -54,6 +54,9 @@
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
 
     <title>Planos - GranaEvo | Transforme Suas Finanças</title>
+    <!-- Preload do logo: e o LCP da tela de loading. O crossorigin PRECISA casar
+         com o da <img> — se divergir, o navegador baixa a imagem DUAS vezes. -->
+    <link rel="preload" as="image" href="/assets/icons/granaevo-logo.jpg">
     <meta name="description" content="Planos do GranaEvo a partir de R$ 19,99/mês: individual, casal e família. Controle total de gastos, cartões e metas, sem conectar seu banco. 7 dias de garantia.">
 
     <!-- SEO + Social Sharing -->
@@ -82,7 +85,7 @@
     <div class="loading-screen" id="loadingScreen" role="status" aria-label="Carregando GranaEvo">
         <div class="loader">
             <div class="loader-logo">
-                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96">
+                <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="logo-img-loader" width="96" height="96" fetchpriority="high" decoding="async">
             </div>
             <div class="loader-bar" aria-hidden="true">
                 <div class="loader-progress"></div>
