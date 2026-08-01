@@ -1,4 +1,4 @@
-﻿/* Design tokens â€” fonte Ãºnica de verdade para cores, espaÃ§amento e tipografia */
+/* Design tokens â€” fonte Ãºnica de verdade para cores, espaÃ§amento e tipografia */
 @import '../_tokens.css';
 
 /* Font Awesome self-hosted via npm â€” sem dependÃªncia de CDN externo */
@@ -231,16 +231,6 @@ body::before {
 @keyframes pulseGlow {
     0%, 100% { opacity: 0.3; }
     50% { opacity: 0.6; }
-}
-
-@media (max-width: 768px) {
-    
-
-    .particle-1,
-    .particle-2,
-    .particle-3 {
-        display: none !important;
-    }
 }
 
 /* Garantir que todo conteÃºdo fique acima do background */
@@ -1966,12 +1956,6 @@ body::before {
     border: 1px solid rgba(255, 75, 75, 0.4);
 }
 
-.alerta-status.a-vencer {
-    background: rgba(255, 209, 102, 0.2);
-    color: #ffd166;
-    border: 1px solid rgba(255, 209, 102, 0.4);
-}
-
 .alerta-info {
     color: var(--text-secondary);
     font-size: 0.85rem;
@@ -2804,11 +2788,6 @@ select.form-input option:checked {
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
 }
-
-.val-entrada          { color: var(--primary-light); }
-.val-saida            { color: #ff6b6b; }
-.val-reserva          { color: #ffd166; }
-.val-retirada_reserva { color: #ff9500; }
 
 
 
@@ -4181,43 +4160,6 @@ select.form-input option:checked {
 }
 
 /* ========== CONFIGURAÃ‡Ã•ES ========== */
-.config-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
-}
-
-.config-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--border);
-    padding: 24px;
-    border-radius: 16px;
-    cursor: pointer;
-    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    text-align: left;
-}
-
-.config-card:hover {
-    background: rgba(255, 255, 255, 0.08);
-    transform: translateX(8px);
-    border-color: var(--primary);
-}
-
-.config-danger:hover {
-    background: rgba(255, 75, 75, 0.15);
-    border-color: var(--danger);
-}
-
-.config-icon { font-size: 2rem; min-width: 50px; }
-
-.config-text { flex: 1; }
-.config-text h3 { font-size: 1.1rem; color: var(--text-primary); margin-bottom: 4px; }
-.config-text p  { font-size: 0.85rem; color: var(--text-secondary); }
-
-.config-arrow { font-size: 1.5rem; color: var(--text-secondary); }
 
 
 /* ========== MODAL/POPUP ========== */
@@ -4662,7 +4604,6 @@ select.form-input option:checked {
 .btn-warning:focus-visible,
 .nav-btn:focus-visible,
 .conta-btn:focus-visible,
-.config-card:focus-visible,
 .meta-item:focus-visible,
 .mov-item:focus-visible,
 .tipo-btn:focus-visible,
@@ -4982,7 +4923,6 @@ select.form-input option:checked {
 
     /* Grids */
     .comparacao-perfis  { grid-template-columns: 1fr; }
-    .config-grid        { grid-template-columns: 1fr; }
     .cartoes-grid       { grid-template-columns: 1fr; gap: 16px; }
 
     /* Tipo relatÃ³rio */
@@ -5080,11 +5020,6 @@ select.form-input option:checked {
     }
 
     .relatorio-card { padding: 16px; }
-
-    .config-card { padding: 16px; gap: 12px; }
-    .config-icon  { font-size: 1.5rem; min-width: 40px; }
-    .config-text h3 { font-size: 1rem; }
-    .config-text p  { font-size: 0.8rem; }
 
     .popup { padding: 24px 20px; max-width: 95%; }
     .popup h3 { font-size: 1.3rem; }
@@ -7396,12 +7331,6 @@ select.form-input option:checked {
         display: none !important;
     }
 
-    #relatoriosPage .page-header-premium .particle-1,
-    #relatoriosPage .page-header-premium .particle-2,
-    #relatoriosPage .page-header-premium .particle-3 {
-        display: none !important;
-    }
-
     #relatoriosPage .header-content {
         display: flex !important;
         align-items: flex-end !important;
@@ -7886,8 +7815,7 @@ button,
 .conta-card,
 .grafico-card,
 .meta-item,
-.relatorio-card,
-.config-card {
+.relatorio-card {
     contain: layout style;
 }
 
@@ -9588,7 +9516,6 @@ body.obw-no-scroll { overflow: hidden; }
     .btn-cancelar,
     .btn-danger,
     .modal-overlay,
-    .toast-container,
     #cookieBanner,
     .tut-backdrop,
     .tut-card,
@@ -9614,9 +9541,7 @@ body.obw-no-scroll { overflow: hidden; }
 
     /* Cards ficam brancos na impressÃ£o */
     .card,
-    .card-saldo,
-    .transacao-item,
-    .resumo-card {
+    .card-saldo {
         background: #ffffff !important;
         border: 1pt solid #cccccc !important;
         box-shadow: none !important;
@@ -9625,7 +9550,6 @@ body.obw-no-scroll { overflow: hidden; }
 
     /* Tabelas e listas nÃ£o quebram no meio */
     table,
-    .transacao-item,
     .meta-card {
         break-inside: avoid;
     }
@@ -9691,17 +9615,8 @@ body.obw-no-scroll { overflow: hidden; }
 .card-percent.skeleton{ min-height: 1rem;   min-width: 80px;  display: inline-block; }
 
 /* Skeleton para itens de lista (transaÃ§Ãµes, contas fixas) */
-.skeleton-row {
-    height: 52px;
-    border-radius: 10px;
-    margin-bottom: 8px;
-}
 
 /* Skeleton para grÃ¡ficos: placeholder de altura fixa */
-.skeleton-chart {
-    height: 240px;
-    border-radius: 12px;
-}
 
 /* ==========================================
    CFG-ITEM INSTALADO (PWA)
