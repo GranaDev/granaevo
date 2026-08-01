@@ -4,6 +4,12 @@ import { valorAbertoFatura, parcelasDaCompra } from '../modules/fatura-parcelas.
 
 let _ctx = null;
 
+// Quantas compras a fatura mostra antes de oferecer "ver mais" (O-6).
+// 60 e não 150 como nos relatórios: cada compra aqui vira um card com três
+// linhas e botões — muito mais DOM por item do que uma linha de relatório. E o
+// modal abre num espaço pequeno: ninguém rola 150 cards sem usar a busca.
+const COMPRAS_VISIVEIS = 60;
+
 // Proxies para utilitários de dashboard.js disponíveis via _ctx após init()
 const formatBRL      = (...a) => _ctx.formatBRL(...a);
 const formatarDataBR = (...a) => _ctx.formatarDataBR(...a);
@@ -1598,7 +1604,12 @@ function abrirVisualizacaoFatura(faturaId) {
             scrollWrap.appendChild(vazio);
         }
 
-        fatura.compras.forEach(compra => {
+        // O-6 — a lista de compras da fatura era renderizada INTEIRA de uma vez.
+        // Cada compra vira ~15 nós de DOM; numa fatura cheia de quem usa o cartão
+        // para tudo, isso trava a abertura do modal. Mesmo padrão já usado nos
+        // relatórios (`REL_TX_VISIVEIS`): mostra um lote e oferece o resto num
+        // clique, em vez de cobrar de todo mundo o custo do caso extremo.
+        const _renderCompra = (compra) => {
             if (!compra || typeof compra !== 'object') return;
             // Modelo novo: numeroParcela + pago. Fallback ao antigo por segurança
             // (a migração no load já converteu, mas não custa tolerar).
@@ -1703,7 +1714,35 @@ function abrirVisualizacaoFatura(faturaId) {
 
             card.appendChild(mainRow); card.appendChild(footRow); card.appendChild(btnRow);
             scrollWrap.appendChild(card);
-        });
+        };
+
+        fatura.compras.slice(0, COMPRAS_VISIVEIS).forEach(_renderCompra);
+
+        const _restantes = fatura.compras.slice(COMPRAS_VISIVEIS);
+        if (_restantes.length > 0) {
+            const btnMais = document.createElement('button');
+            btnMais.type = 'button';
+            btnMais.className = 'btn-primary';
+            btnMais.style.cssText = 'width:100%; margin-top:10px;';
+            btnMais.textContent = `Ver mais ${_restantes.length} compra${_restantes.length === 1 ? '' : 's'}`;
+            btnMais.addEventListener('click', () => {
+                // Renderiza o resto ANTES do próprio botão e some. Sem o
+                // insertBefore os cards apareceriam depois do botão, fora de
+                // ordem — o mesmo cuidado do `_relExpandirTx()`.
+                const pai = btnMais.parentNode;
+                const marco = btnMais;
+                for (const c of _restantes) {
+                    const antes = scrollWrap.childElementCount;
+                    _renderCompra(c);
+                    // _renderCompra sempre faz append no fim; move para o lugar certo.
+                    if (scrollWrap.childElementCount > antes) {
+                        pai.insertBefore(scrollWrap.lastElementChild, marco);
+                    }
+                }
+                btnMais.remove();
+            }, { once: true });
+            scrollWrap.appendChild(btnMais);
+        }
 
         // ── Botão fechar inferior
         const footerArea = document.createElement('div');
