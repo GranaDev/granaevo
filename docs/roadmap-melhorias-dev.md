@@ -1388,17 +1388,22 @@ entrega.
   execução real do CI: fixar limiar sem nunca ter visto a medição é o que o cabeçalho do
   `lighthouserc.cjs` adverte para não fazer. Não medi localmente — não há Chrome nesta máquina
   e o `gh` não está autenticado.
-- **O-5** ⛔ **CONTRADIZ UMA DECISÃO JÁ TOMADA — não fazer sem reabrir a discussão.**
-  Este item pede "a versão completa do Passo 9". Mas o Passo 9 foi fechado em 2026-07-19 na
-  versão segura, e a parte completa foi **recusada de propósito, em decisão tomada com o
-  usuário**. O motivo continua de pé: a versão atual é uma **impossibilidade estrutural** de
-  causar wipe (não toca nos arrays de dados nem no save path); a completa troca isso por uma
-  **guarda em tempo de execução**, num app que já perdeu dados **duas vezes**, sempre por
-  corrida entre memória e gravação. Pior: a janela otimista **cresce quanto pior a conexão** —
-  valor e risco sobem juntos, e é na conexão ruim que o usuário faz a edição que o servidor
-  sobrescreve calado.
-  **Pré-requisitos, se um dia for reaberto:** bloquear as ações de edição durante a janela
-  otimista e um **outbox de escrita**. Nenhum dos dois existe. Ver o Passo 9 neste documento.
+- **O-5** ⛔ **ENCERRADO — decisão do usuário, reafirmada em 2026-07-31. Não é pendência.**
+  O item pedia "a versão completa do Passo 9". A versão segura **já está feita e no ar**; a
+  completa foi recusada em 2026-07-19 e a recusa foi **reafirmada** quando o assunto voltou:
+  *"vamos manter assim o O5 sem mexer e considerar finalizado"*.
+
+  **O motivo, para quem ler isto no futuro:** a versão atual é uma **impossibilidade
+  estrutural** de causar perda de dados — ela só pinta a tela, não toca nos arrays nem no
+  caminho de gravação. A versão completa troca essa impossibilidade por uma **guarda em tempo
+  de execução**, num app que já perdeu dados **duas vezes**, as duas por corrida entre memória
+  e gravação. E a janela de risco **cresce quanto pior a conexão**: valor e risco sobem juntos,
+  e é justamente na conexão ruim que o usuário tem tempo de digitar algo que o servidor
+  sobrescreve em silêncio.
+
+  **Se um dia for reaberto, o que precisa existir ANTES:** travar as ações de edição durante a
+  janela otimista (senão a edição perdida é silenciosa) e um **outbox de escrita**. Nenhum dos
+  dois existe hoje. Isso é um bloco de trabalho próprio, não um item de lista.
 - **O-6** 🟢 FEITO (2026-07-31) — relatórios **já tinha** teto (`REL_TX_VISIVEIS` + "ver mais");
   faltava a fatura, que renderizava TODAS as compras ao abrir o modal. Agora tem teto de 60
   (menor que os 150 do relatório: uma compra é um card com botões, uma transação é uma linha).
