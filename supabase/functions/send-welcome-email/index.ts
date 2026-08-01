@@ -641,7 +641,7 @@ Deno.serve(async (req) => {
         <!-- CTA -->
         <div class="cta-section">
           <div class="cta-sub">Sua conta está pronta. Clique abaixo para acessar a plataforma</div>
-          <a href="https://granaevo.com/login.html" class="cta-btn">Acessar minha conta →</a>
+          <a href="https://www.granaevo.com/login.html" class="cta-btn">Acessar minha conta →</a>
           <div class="cta-note">Acesso imediato ✓</div>
         </div>
 
@@ -707,7 +707,7 @@ Deno.serve(async (req) => {
         <div class="footer-links">
           <a href="https://granaevo.com" class="footer-link">Plataforma</a>
           <span class="footer-sep">·</span>
-          <a href="https://granaevo.com/ajuda" class="footer-link">Ajuda</a>
+          <a href="https://www.granaevo.com/ajuda" class="footer-link">Ajuda</a>
           <span class="footer-sep">·</span>
           <a href="mailto:suporte@granaevo.com" class="footer-link">Suporte</a>
         </div>

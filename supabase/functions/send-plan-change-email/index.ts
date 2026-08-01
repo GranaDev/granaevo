@@ -248,7 +248,7 @@ const FOOTER_HTML = `
         <div class="footer-links">
           <a href="https://granaevo.com" class="footer-link">Plataforma</a>
           <span class="footer-sep">·</span>
-          <a href="https://granaevo.com/atualizarplano.html" class="footer-link">Meu Plano</a>
+          <a href="https://www.granaevo.com/atualizarplano.html" class="footer-link">Meu Plano</a>
           <span class="footer-sep">·</span>
           <a href="mailto:suporte@granaevo.com" class="footer-link">Suporte</a>
         </div>
@@ -409,7 +409,7 @@ function buildUpgradeEmail(params: {
       </div>
 
       <div class="cta-section">
-        <a href="https://granaevo.com/dashboard.html" class="cta-btn">Acessar o Dashboard →</a>
+        <a href="https://www.granaevo.com/dashboard.html" class="cta-btn">Acessar o Dashboard →</a>
       </div>
     </div>
 
@@ -569,13 +569,13 @@ function buildDowngradeEmail(params: {
         <p class="bn-text">
           Você pode cancelar este downgrade a qualquer momento antes de <strong>${escapeHtml(effectiveFmt)}</strong>
           diretamente no painel de gerenciamento do seu plano.
-          Basta acessar <a href="https://granaevo.com/atualizarplano.html" style="color:#10b981;text-decoration:none;">granaevo.com/atualizarplano.html</a>
+          Basta acessar <a href="https://www.granaevo.com/atualizarplano.html" style="color:#10b981;text-decoration:none;">granaevo.com/atualizarplano.html</a>
           e clicar em "Cancelar alteração agendada".
         </p>
       </div>
 
       <div class="cta-section">
-        <a href="https://granaevo.com/atualizarplano.html" class="cta-btn">Gerenciar meu plano →</a>
+        <a href="https://www.granaevo.com/atualizarplano.html" class="cta-btn">Gerenciar meu plano →</a>
       </div>
     </div>
 

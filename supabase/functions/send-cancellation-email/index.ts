@@ -318,12 +318,12 @@ Deno.serve(async (req) => {
         <!-- Nota de reativação -->
         <div class="reactivate-note">
           <div class="rn-title">Mudou de ideia?</div>
-          <p class="rn-text">Você pode reassinar a qualquer momento em <a href="https://granaevo.com/planos.html" style="color:#10b981;text-decoration:none;">granaevo.com/planos.html</a> sem taxas extras ou penalidades. Seu histórico financeiro permanece salvo.</p>
+          <p class="rn-text">Você pode reassinar a qualquer momento em <a href="https://www.granaevo.com/planos.html" style="color:#10b981;text-decoration:none;">granaevo.com/planos.html</a> sem taxas extras ou penalidades. Seu histórico financeiro permanece salvo.</p>
         </div>
 
         <!-- CTA -->
         <div class="cta-section">
-          <a href="https://granaevo.com/dashboard.html" class="cta-btn">Acessar o Dashboard →</a>
+          <a href="https://www.granaevo.com/dashboard.html" class="cta-btn">Acessar o Dashboard →</a>
         </div>
       </div>
 
@@ -333,7 +333,7 @@ Deno.serve(async (req) => {
         <div class="footer-links">
           <a href="https://granaevo.com" class="footer-link">Plataforma</a>
           <span class="footer-sep">·</span>
-          <a href="https://granaevo.com/ajuda" class="footer-link">Ajuda</a>
+          <a href="https://www.granaevo.com/ajuda" class="footer-link">Ajuda</a>
           <span class="footer-sep">·</span>
           <a href="mailto:suporte@granaevo.com" class="footer-link">Suporte</a>
         </div>

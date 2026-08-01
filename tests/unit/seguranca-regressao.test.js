@@ -575,6 +575,46 @@ describe('Landing — a vitrine prova capacidade sem entregar o valor', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
+describe('apex → www — nenhuma URL aponta para o domínio sem www', () => {
+  // `granaevo.com` responde 308 para `www.granaevo.com`. Como apex e www são
+  // ORIGENS DIFERENTES, o fetch **remove o header Authorization** no redirect
+  // (regra da spec). Uma chamada autenticada ao apex volta 401 com token válido
+  // — verificado em produção em 2026-07-30: mesmo token deu 200 no www e 401 no
+  // apex.
+  //
+  // Hoje nada quebra: o 308 leva a navegação para www e os fetches do app são
+  // relativos. O risco é o dia em que alguém escrever a URL inteira à mão.
+  //
+  // Origem SEM caminho (`'https://granaevo.com'`) continua permitida de
+  // propósito: são entradas de ALLOWED_ORIGINS, e recusar a origem apex não
+  // ajudaria em nada.
+  const dirs = [['api'], ['src', 'scripts'], ['supabase', 'functions']]
+
+  const arquivos = (partes) => {
+    const raiz = join(RAIZ, ...partes)
+    const anda = (d) => readdirSync(d, { withFileTypes: true }).flatMap(e =>
+      e.isDirectory() ? anda(join(d, e.name))
+        : (/\.(ts|js|mjs)$/.test(e.name) ? [join(d, e.name)] : []))
+    return anda(raiz)
+  }
+
+  test('nenhum arquivo escreve https://granaevo.com/<caminho>', () => {
+    const culpados = []
+    for (const partes of dirs) {
+      for (const arq of arquivos(partes)) {
+        const src = readFileSync(arq, 'utf8')
+        if (/https:\/\/granaevo\.com\//.test(src)) culpados.push(relative(RAIZ, arq))
+      }
+    }
+    assert.deepEqual(culpados, [],
+      'Estes arquivos apontam para o domínio SEM www:\n  ' + culpados.join('\n  ')
+      + '\n\nUse https://www.granaevo.com/ — é o canônico do site (canonical e sitemap), '
+      + 'evita um salto 308 em cada link, e fecha a armadilha do Authorization sumindo '
+      + 'em redirect entre origens.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
 describe('B-6 — nenhuma edge cai numa chave legada (elas estão desativadas)', () => {
   const raiz = join(RAIZ, 'supabase', 'functions')
 

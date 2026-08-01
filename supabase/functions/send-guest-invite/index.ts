@@ -356,7 +356,7 @@ function buildInviteEmail(
   const safeOwnerName = escapeHtml(ownerName)
   const safePlanName  = escapeHtml(planName)
   const safeInvId     = encodeURIComponent(invId)
-  const inviteUrl = `https://granaevo.com/convidados?ref=${safeInvId}`;
+  const inviteUrl = `https://www.granaevo.com/convidados?ref=${safeInvId}`;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">

@@ -111,15 +111,15 @@ Deno.serve(async (req: Request) => {
   // ── 4. Criar Checkout Session ─────────────────────────────────────────────
   // success_url: logado → dashboard; anônimo → planos com mensagem de sucesso
   const successUrl = userId
-    ? 'https://granaevo.com/dashboard.html?stripe=success'
-    : 'https://granaevo.com/planos.html?stripe_paid=1'
+    ? 'https://www.granaevo.com/dashboard.html?stripe=success'
+    : 'https://www.granaevo.com/planos.html?stripe_paid=1'
 
   const params = new URLSearchParams()
   params.set('mode', 'subscription')
   params.set('line_items[0][price]', priceId)
   params.set('line_items[0][quantity]', '1')
   params.set('success_url', successUrl)
-  params.set('cancel_url',  'https://granaevo.com/planos.html')
+  params.set('cancel_url',  'https://www.granaevo.com/planos.html')
   params.set('locale', 'pt-BR')
   params.set('allow_promotion_codes', 'true')
 

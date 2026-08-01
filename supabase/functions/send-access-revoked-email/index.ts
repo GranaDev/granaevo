@@ -173,7 +173,7 @@ function buildHtml(safeName: string, ownerEmail: string, reason: 'downgrade' | '
       <div class="divider"></div>
 
       <div class="cta-section">
-        <a href="https://granaevo.com/planos.html" class="cta-btn">Ver planos disponíveis →</a>
+        <a href="https://www.granaevo.com/planos.html" class="cta-btn">Ver planos disponíveis →</a>
       </div>
     </div>
 
@@ -182,7 +182,7 @@ function buildHtml(safeName: string, ownerEmail: string, reason: 'downgrade' | '
       <div class="footer-links">
         <a href="https://granaevo.com" class="footer-link">Plataforma</a>
         <span class="footer-sep">·</span>
-        <a href="https://granaevo.com/planos.html" class="footer-link">Planos</a>
+        <a href="https://www.granaevo.com/planos.html" class="footer-link">Planos</a>
         <span class="footer-sep">·</span>
         <a href="mailto:suporte@granaevo.com" class="footer-link">Suporte</a>
       </div>

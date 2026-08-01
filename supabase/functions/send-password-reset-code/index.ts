@@ -850,7 +850,7 @@ Deno.serve(async (req) => {
         <div class="footer-links">
           <a href="https://granaevo.com" class="footer-link">Plataforma</a>
           <span class="footer-sep">·</span>
-          <a href="https://granaevo.com/ajuda" class="footer-link">Ajuda</a>
+          <a href="https://www.granaevo.com/ajuda" class="footer-link">Ajuda</a>
           <span class="footer-sep">·</span>
           <a href="mailto:suporte@granaevo.com" class="footer-link">Suporte</a>
         </div>
