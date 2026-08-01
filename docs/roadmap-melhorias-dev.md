@@ -1357,12 +1357,21 @@ entrega.
     Corrigido para 2 — os mortos do projeto caíram de 196 para 85.
   - ❌ **A estimativa de 150–200 KB estava errada.** O real no `_db-all` foi **2,1 KB**
     (`dashboard.css` 40,4 → 40,2 KB gz). Quase tudo que parecia morto era falso-positivo.
-  - ⬜ **Faltam 85 classes nos outros arquivos, e elas precisam de uma decisão sua**, não de
-    mais análise: o cluster `rf-*` pertence a uma feature cujo módulo está VIVO
-    (`db-metas.js` importa `reserva-familia.js`) mas que não aplica essas classes. É CSS de
-    tela abandonada ou de tela por construir? Apagar é limpeza num caso e destruição no outro.
+  - ✅ **As outras 51 podadas (2026-07-31).** O usuário confirmou que `rf-*` e `saude-*` são
+    telas **planejadas** — CSS de tela por construir não é CSS morto, então as 34 ficam. As 51
+    restantes eram de coisas que já saíram: reCAPTCHA, popup de "fulano comprou agora", mockup
+    antigo do login, carrossel de depoimentos e órfãs do tema claro. ~10,7 KB fora.
+  - ✅ **Depoimentos inventados removidos do bundle.** Dentro de `script.js` (que está VIVO)
+    havia 6 depoimentos fixos com nomes e resultados inventados. A seção já tinha saído do
+    HTML, mas o texto continuava viajando no bundle da landing. −141 linhas.
+    ⚠️ No caminho eu concluí que `script.js` era órfão e apaguei — **não era**:
+    `landing-demo.js` faz `import './script.js'`, import de efeito colateral, que é *inlinado*
+    em quem importa e por isso não vira chunk no `dist`. O build pegou. Restaurado.
+  - ⬜ **Restam 34 mortas — as preservadas de propósito** (`rf-*`, `saude-*`). Reavaliar quando
+    as telas forem construídas ou abandonadas.
   - ⬜ **"CSS crítico inline + resto lazy" não foi feito.** O dashboard já carrega assíncrono
-    (`media="print"` + `css-boot.js`); as públicas carregam bloqueando, mas são 9–12 KB gz.
+    (`media="print"` + `css-boot.js`); as públicas carregam bloqueando, mas são 9–12 KB gz —
+    ganho pequeno para a complexidade de manter o crítico em sincronia.
 - **O-3** 🟡 PARCIAL (2026-07-31) — feito o que dava ganho medível; o resto ficou de propósito:
   - ✅ **Dropados 2 índices GIN INUTILIZÁVEIS** (`20260731000000`). `idx_user_data_json` era GIN
     sobre `user_data.data_json`, que é **ciphertext** — verificado em prod: toda linha tem uma
@@ -1381,13 +1390,19 @@ entrega.
   - ⬜ **Os outros 2 pares de policy ficam.** `profiles` (10 linhas) e `stripe_subscriptions`
     (7 linhas): ganho imensurável, e a de `profiles` é INSERT — a área exata do S-1. Trocar
     risco de RLS por ganho que não dá para medir é mau negócio.
-- **O-4** 🟢 QUASE — o gate **já existe e já reprova**: `.github/workflows/ci.yml` roda `lhci` em
-  todo push e PR, com LCP/CLS/TBT como `error` (limiares "good" do Google). A descrição antiga
-  ("o relatório existe e ninguém lê") estava desatualizada.
-  ⬜ **Falta só** promover os *scores* de categoria de `warn` para `error`. Depende de olhar UMA
-  execução real do CI: fixar limiar sem nunca ter visto a medição é o que o cabeçalho do
-  `lighthouserc.cjs` adverte para não fazer. Não medi localmente — não há Chrome nesta máquina
-  e o `gh` não está autenticado.
+- **O-4** ✅ FEITO (2026-07-31) — o gate roda em todo push/PR e agora **reprova de verdade**.
+  A primeira medição real do CI mostrou: nenhum `error`, performance e acessibilidade acima de
+  0,90 nas três páginas, e só o login com `seo 0,54` / `best-practices 0,85`.
+  - **O 0,54 do login não é defeito** — é a decisão certa medida pela régua errada. O
+    `robots.txt` proíbe `/login` de propósito, ele não está no sitemap e não tem meta
+    description. Buscar 0,9 ali seria tornar a tela de login indexável: deixar a métrica mandar
+    no produto. SEO agora é exigido só de `index` e `planos`, via `assertMatrix`.
+  - **Performance vai a `error` em 0,85, não 0,90** — score de performance varia entre execuções
+    (runner compartilhado); acessibilidade e SEO não variam, são auditorias de regra. Gate que
+    falha sozinho de vez em quando é pior que gate nenhum: ensina o time a ignorar vermelho.
+  - ⚠️ A "definição de 10" pede `Performance ≥ 95 no dashboard logado`, e **o gate não mede o
+    dashboard** (exige login; sem sessão mediria a tela de redirect). Ou o CI ganha uma sessão de
+    teste, ou a definição muda para o que é verificável. Alvo que ninguém confere não é alvo.
 - **O-5** ⛔ **ENCERRADO — decisão do usuário, reafirmada em 2026-07-31. Não é pendência.**
   O item pedia "a versão completa do Passo 9". A versão segura **já está feita e no ar**; a
   completa foi recusada em 2026-07-19 e a recusa foi **reafirmada** quando o assunto voltou:
