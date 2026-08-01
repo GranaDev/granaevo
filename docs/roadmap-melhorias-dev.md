@@ -1343,13 +1343,37 @@ entrega.
 **Medido em 2026-07-27:** 1.3 MB JS · 569 KB CSS · 46 chunks · dashboard 133 KB raw / **39 KB gz**.
 **Maior ofensor isolado: o CSS do dashboard — 217 KB raw / 40 KB gz** (maior que o JS da página).
 
-- **O-1** 🔴 `dashboard.js` 6.424 linhas → **< 1.500 no boot**. Extrair painel de alertas, conquistas
-  e viagem para chunks lazy. (continuação do Passo 10, que parou em 39,1 KB de 40,9)
+- **O-1** ✅ FEITO (2026-07-30) — partículas e paleta de comandos saíram para chunks lazy, com as
+  guardas no CHAMADOR (antes do import), não dentro do módulo. `dashboard.js` em 38,4 KB de 40.
 - **O-2** 🔴 CSS crítico inline + resto lazy. `css-unused-candidates.txt` tem **110 candidatos**.
   Ganho estimado **150–200 KB** — o maior ganho de LCP disponível. (Passo 7, parqueado)
-- **O-3** 🔴 Dropar **25 índices não usados** + resolver 4 `multiple_permissive_policies`
-  (pesa em toda escrita de `financial_audit_log`, 21.577 linhas)
-- **O-4** 🔴 Lighthouse CI vira **gate de PR** (falha se LCP > 2,5 s). Hoje o relatório existe e ninguém lê.
+  **É o maior item aberto da otimização.** Risco real: CSS removido quebra tela em silêncio, e
+  não há teste que pegue. Precisa de método de verificação antes de método de remoção.
+- **O-3** 🟡 PARCIAL (2026-07-31) — feito o que dava ganho medível; o resto ficou de propósito:
+  - ✅ **Dropados 2 índices GIN INUTILIZÁVEIS** (`20260731000000`). `idx_user_data_json` era GIN
+    sobre `user_data.data_json`, que é **ciphertext** — verificado em prod: toda linha tem uma
+    única chave de topo, `_enc`. Índice que nenhuma consulta pode ler, pago em **toda escrita**
+    do caminho mais quente do app. Os índices de `user_data` caíram de ~3,37 MB para **48 kB**.
+    Mais `idx_payment_events_data` (GIN, 272 kB, tabela legada Cakto).
+  - ✅ **Fundidas as 2 policies permissivas de SELECT** do `financial_audit_log` (`20260731010000`),
+    a maior tabela do banco (21.577 linhas). Cobriam colunas independentes (`user_id`/`actor_id`),
+    então `A OR B` é idêntico ao que o Postgres já fazia. Censo antes/depois confirmou que a
+    RESTRICTIVE `exige_aal2` sobreviveu, e o isolamento foi provado pelo plano de dados: 268
+    linhas visíveis, **0** de outro usuário.
+  - ⬜ **Os outros 29 índices "não usados" ficam.** São 16 kB em tabelas com < 60 linhas: o
+    planejador ignora índice em tabela minúscula, então "nunca usado" ali só quer dizer "ainda
+    é pequena". Dropar não economiza nada mensurável e tira a rede para quando crescer. Vários
+    são UNIQUE/constraint, onde "uso" é integridade, não leitura.
+  - ⬜ **Os outros 2 pares de policy ficam.** `profiles` (10 linhas) e `stripe_subscriptions`
+    (7 linhas): ganho imensurável, e a de `profiles` é INSERT — a área exata do S-1. Trocar
+    risco de RLS por ganho que não dá para medir é mau negócio.
+- **O-4** 🟢 QUASE — o gate **já existe e já reprova**: `.github/workflows/ci.yml` roda `lhci` em
+  todo push e PR, com LCP/CLS/TBT como `error` (limiares "good" do Google). A descrição antiga
+  ("o relatório existe e ninguém lê") estava desatualizada.
+  ⬜ **Falta só** promover os *scores* de categoria de `warn` para `error`. Depende de olhar UMA
+  execução real do CI: fixar limiar sem nunca ter visto a medição é o que o cabeçalho do
+  `lighthouserc.cjs` adverte para não fazer. Não medi localmente — não há Chrome nesta máquina
+  e o `gh` não está autenticado.
 - **O-5** 🔴 Boot otimista com snapshot cifrado em IndexedDB (versão completa do Passo 9)
 - **O-6** 🔴 Estender a virtualização (feita em 2026-07-18) a relatórios e cartões
 - **O-7** 🔴 AVIF/WebP com `<picture>` + `fetchpriority="high"` no elemento do LCP

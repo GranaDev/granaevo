@@ -1,0 +1,32 @@
+-- O-3 (Passo 32) — dropa dois índices GIN que NÃO PODEM ser usados
+-- ===========================================================================
+-- POR QUE ESTES DOIS, E NÃO OS OUTROS 29 "NÃO USADOS"
+--
+-- O banco tem 31 índices com `idx_scan = 0`. A tentação é dropar todos. Não é
+-- o certo: 29 deles ocupam 16 kB em tabelas com menos de 60 linhas — o
+-- planejador ignora índice em tabela minúscula, então "nunca usado" ali só
+-- significa "a tabela ainda é pequena". Dropar não economiza nada mensurável e
+-- tira a rede justamente para quando a tabela crescer. Vários, ainda, são
+-- UNIQUE ou de constraint: ali "uso" é a integridade, não a leitura.
+--
+-- Estes dois são diferentes: eles não são apenas *não usados*, são
+-- **inutilizáveis**.
+--
+--   idx_user_data_json — GIN sobre `user_data.data_json`, que é CIPHERTEXT.
+--   Verificado em produção: todas as linhas têm exatamente uma chave de topo,
+--   `_enc` (envelope AES-256-GCM, decifrado só na Edge Function). Um índice GIN
+--   sobre isso indexa o literal "_enc" e um blob base64 — nenhuma consulta
+--   consegue casar o conteúdo, porque o conteúdo não existe em claro no banco.
+--   Custo: 3,3 MB **e** manutenção de GIN em toda escrita de `user_data`, que é
+--   o caminho mais quente do app (todo save do dashboard passa por aqui).
+--   Índice que não pode ser lido e é pago em toda escrita é puro prejuízo.
+--
+--   idx_payment_events_data — GIN sobre `payment_events.event_data`, tabela
+--   legada da Cakto (51 linhas, sem escrita nova). 272 kB parados.
+--
+-- Nenhum dos dois é UNIQUE nem apoia constraint — conferido em pg_index/
+-- pg_constraint antes de escrever esta migration.
+-- ===========================================================================
+
+DROP INDEX IF EXISTS public.idx_user_data_json;
+DROP INDEX IF EXISTS public.idx_payment_events_data;
