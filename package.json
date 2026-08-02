@@ -36,7 +36,7 @@
     "@fontsource/inter": "^5.2.8",
     "@fontsource/outfit": "^5.2.8",
     "@fontsource/syne": "^5.2.7",
-    "@lhci/cli": "^0.14.0",
+    "@lhci/cli": "^0.15.1",
     "esbuild": "^0.28.0",
     "knip": "^6.17.1",
     "rollup-plugin-visualizer": "^7.0.1",

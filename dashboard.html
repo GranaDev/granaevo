@@ -92,6 +92,18 @@
          receber foco — é o primeiro elemento focável da página. -->
     <a href="#mainContent" class="skip-link">Pular para o conteúdo</a>
 
+    <!-- Fundo de partículas — puramente decorativo, por isso aria-hidden.
+         ESTE ELEMENTO FALTAVA. O CSS (#particles-canvas em _db-all.css) e o
+         módulo modules/particulas.js sempre existiram e sempre se procuraram,
+         mas o dashboard.html nunca teve o canvas — conferido no histórico, não
+         é regressão recente. Resultado: o módulo fazia getElementById, não
+         achava, e retornava em silêncio. O import lazy acontecia à toa em todo
+         desktop desde sempre.
+         Não precisa de estilo aqui: o CSS já posiciona (fixed, tela cheia,
+         z-index 0, pointer-events none) e o esconde no mobile. O conteúdo do
+         app está em z-index 1 justamente para ficar por cima disto. -->
+    <canvas id="particles-canvas" aria-hidden="true"></canvas>
+
     <!-- LOADING DE AUTENTICAÇÃO -->
     <div class="loading-screen" id="authLoading" role="status" aria-label="Verificando acesso">
         <div class="loader">
