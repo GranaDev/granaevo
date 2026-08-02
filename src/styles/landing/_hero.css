@@ -70,6 +70,38 @@
     margin-right: auto;
 }
 
+/* Resposta à objeção que o próprio hero levanta (D-1).
+   "Sem conectar seu banco" soa como limitação — o visitante pensa "então digito
+   tudo à mão?". O import de OFX/CSV é a resposta, e estava enterrado numa lista
+   de "ficaram de fora" lá embaixo. Uma linha só, deliberadamente: qualquer
+   bloco maior empurra o CTA para baixo da dobra no celular. */
+.hero-import {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    max-width: 500px;
+    margin: -0.5rem auto 1.25rem;
+    padding: 0.625rem 0.75rem;
+    background: rgba(16, 185, 129, 0.07);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    border-radius: 10px;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--gray-light);
+    text-align: left;
+    animation: fadeInUp 0.8s ease 0.25s backwards;
+}
+
+/* SVG inline, não Font Awesome: ícone novo do FA exigiria rodar `npm run
+   fa:subset` e crescer a fonte, e a landing já usa SVG inline nos botões. */
+.hero-import svg {
+    color: #10b981;
+    margin-top: 0.15rem;
+    flex: 0 0 auto;
+}
+
+.hero-import strong { color: #e5e7eb; font-weight: 600; }
+
 .hero-buttons {
     display: flex;
     flex-direction: column;

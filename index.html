@@ -369,6 +369,20 @@
                         Em 30 dias você muda sua relação com o dinheiro.
                     </p>
 
+                    <!-- D-1: a resposta à objeção que o parágrafo acima levanta.
+                         "Sem conectar seu banco" faz o visitante pensar "então
+                         digito tudo à mão?". O importador de OFX/CSV existe desde
+                         sempre (db-transacoes.js), com deduplicação por data +
+                         valor + FITID — e só aparecia numa lista de "ficaram de
+                         fora" lá no fim da página. -->
+                    <p class="hero-import">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                            <path d="M10 3v9m0 0l-3.5-3.5M10 12l3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M3.5 13.5v1.5a2 2 0 002 2h9a2 2 0 002-2v-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                        <span><strong>Não precisa digitar tudo:</strong> importe o extrato que seu banco já exporta (OFX ou CSV) e o GranaEvo lança sozinho — sem senha do banco e sem Open Finance.</span>
+                    </p>
+
                     <div class="hero-buttons">
                         <a href="planos.html" class="btn-primary">
                             <span>Começar AGORA!</span>
@@ -781,14 +795,19 @@
                     <p>Diferente de outros apps, o GranaEvo não conecta sua conta bancária. Seus dados são criptografados (AES-256), seguem a LGPD e nunca são vendidos.</p>
                 </div>
 
+                <!-- D-1: este card dizia "Automação Completa — configure contas
+                     fixas e deixe o sistema trabalhar", uma promessa vaga que
+                     qualquer app faz. O import de extrato é a automação concreta,
+                     existe desde sempre e não aparecia em lugar nenhum do topo. -->
                 <div class="feature-card" data-tilt>
                     <div class="feature-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none">
-                            <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M12 3v11m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M4 16v2a3 3 0 003 3h10a3 3 0 003-3v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                         </svg>
                     </div>
-                    <h3>Automação Completa</h3>
-                    <p>Configure contas fixas e deixe o sistema trabalhar para você.</p>
+                    <h3>Importe seu extrato</h3>
+                    <p>Baixe o extrato no app do seu banco (OFX ou CSV) e arraste aqui. O GranaEvo lança tudo, ignora o que já existe e ainda categoriza — sem você entregar a senha do banco a ninguém. Contas fixas continuam no automático.</p>
                 </div>
             </div>
         </div>
