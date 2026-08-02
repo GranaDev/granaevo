@@ -20,6 +20,7 @@
     "test:security": "node --test tests/security/security.test.js",
     "test:unit": "node scripts/run-unit-tests.mjs",
     "check:refs": "node scripts/check-refs.mjs",
+    "check:roadmap": "node scripts/check-roadmap.mjs",
     "lh": "lhci autorun --config=lighthouserc.cjs",
     "check:allowlist": "node scripts/check-allowlist.mjs",
     "check:dead": "node scripts/check-dead-code.mjs",

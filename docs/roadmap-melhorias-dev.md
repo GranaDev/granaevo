@@ -4,37 +4,67 @@
 produto**. A intenção é consertar **aos poucos, uma etapa por vez**, juntos.
 
 > Como trabalhamos: cada PASSO é independente na medida do possível e traz **objetivo → por quê →
-> passos → risco → como verificar → esforço**. Ao concluir, trocamos o status 🔴/🟡 por ✅ e anotamos
-> a data. Sempre rodar `/god-eyes` após qualquer migration (regra do `CLAUDE.md`).
+> passos → risco → como verificar → esforço**. O status segue a **Regra de Ouro** logo abaixo —
+> 🔴 → 🔵 → 🟡 → ✅, e todo 🟡 diz o que falta. Sempre rodar `/god-eyes` após qualquer migration
+> (regra do `CLAUDE.md`).
 
 **Ordem sugerida:** Fase 0 (higiene barata, ganha momentum) → Fase 1 (segurança/confiança) →
 Fase 2 (performance) → Fase 3 (produto). Não é obrigatório seguir à risca — dá pra pular por vontade.
 
-> ## ⚠️ CONFIRA ANTES DE EXECUTAR QUALQUER ITEM 🔴
+> # 🔒 REGRA DE OURO — o status de tudo se escreve assim
+>
+> **Todo PASSO, todo item e todo subitem tem exatamente UM destes quatro estados.**
+> Vale para tarefa e subtarefa, sem exceção.
+>
+> | | Estado | O que significa |
+> |:--:|---|---|
+> | 🔴 | **NÃO INICIADO** | Ninguém encostou. |
+> | 🔵 | **INICIADO** | Trabalho em andamento. Ainda não dá para usar. |
+> | 🟡 | **PENDENTE** | Praticamente pronto — **e é OBRIGATÓRIO escrever `Falta:` dizendo exatamente o que falta.** |
+> | ✅ | **FINALIZADO** | Feito, verificado e no ar. Anotar a data e o commit. |
+>
+> ### As três regras que fazem isso funcionar
+>
+> **1. 🟡 sem `Falta:` é erro.** Um "quase pronto" que não diz o que falta é exatamente a mentira
+> que essa regra existe para matar. Se não souber descrever a pendência, o item não é 🟡 — é 🔵.
+>
+> **2. Atualizar NA HORA, não no fim.** O status muda no mesmo commit que muda o código. Roadmap
+> atualizado "depois" é roadmap desatualizado.
+>
+> **3. Antes de EXECUTAR um 🔴, prove que ele ainda é 🔴.** Dois minutos: `grep` pelo módulo,
+> `curl` na URL, rodar o teste. Se já estiver feito, **corrija a linha aqui primeiro** — é isso
+> que impede o próximo (humano ou agente) de cair no mesmo buraco.
+>
+> *Exceção fora do fluxo:* **⛔ RECUSADO** — decisão explícita de **não fazer**. Não é atraso, é
+> escolha, e some da fila. Exige registrar **quem decidiu, quando e por quê** (ver O-5 e P-1).
+>
+> ### Por que essa regra existe
 >
 > **Em 2026-07-31, OITO itens marcados 🔴 já estavam prontos:** B-3, B-5, B-7, O-1, O-4, O-8, M-1
-> e D-3. O D-3 (detector de assinaturas fantasma) estava implementado, ligado em três telas e com
-> 13 testes — e continuava listado como "a fazer". O M-1 dizia que o `sitemap.xml` retornava 404;
-> retorna 200 há tempos.
+> e D-3. O D-3 (detector de assinaturas fantasma) estava implementado, ligado em **três** telas e
+> com 13 testes — e seguia listado como "a fazer", descrito como "o mais vendável". O M-1 dizia
+> que o `sitemap.xml` retornava 404; retorna 200 há tempos.
 >
-> Isso não é detalhe de organização. Um roadmap que mente sobre o próprio estado faz **priorizar
-> errado** (o D-3 era candidato a "próxima grande feature" e já existia) e faz **refazer trabalho
-> pronto**. Duas vezes hoje o documento mandou desfazer decisão registrada — ver O-5 e P-1.
->
-> **Regra:** antes de começar um item, gaste 2 minutos provando que ele ainda é verdade. `grep`
-> pelo módulo, `curl` na URL, rodar o teste. Se já estiver feito, **corrija a linha aqui** — é o
-> que impede o próximo (humano ou agente) de cair no mesmo buraco.
+> Isso não é desorganização inofensiva. Um roadmap que mente sobre o próprio estado faz
+> **priorizar errado** (o D-3 era candidato a "próxima grande feature" e já existia) e faz
+> **refazer trabalho pronto**. Duas vezes no mesmo dia o documento mandou desfazer decisão que já
+> tinha sido tomada — ver O-5 e P-1.
 
 ---
 
 ## Legenda de status
-`✅ feito` · `🟡 em andamento` · `🔴 a fazer` · `⬜ subtarefa pendente` · `☑️ subtarefa feita`
+Os quatro estados da **Regra de Ouro** (topo do documento):
+
+`🔴 não iniciado` · `🔵 iniciado` · `🟡 pendente — com **Falta:**` · `✅ finalizado`
+
+Fora do fluxo: `⛔ recusado` (decisão de não fazer, com autor/data/motivo).
+Dentro de um item: `⬜ subtarefa não feita` · `☑️ / ✅ subtarefa feita`.
 
 ---
 
 # FASE 0 — Higiene rápida e baixo risco
 
-## PASSO 1 — Rotacionar a anon key para `sb_publishable_` 🟡
+## PASSO 1 — Rotacionar a anon key para `sb_publishable_` ✅ FINALIZADO (2026-07-31)
 **Objetivo:** trocar a chave pública legada (JWT antigo, exp. 2082) pelo formato novo do Supabase.
 **Por quê:** não é um segredo (a anon key sempre foi pública), mas o formato novo `sb_publishable_`
 é o padrão atual e **rotacionável isoladamente** (dá pra revogar uma key vazada sem invalidar todas
@@ -89,7 +119,7 @@ injeta `SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS` (dicionários JSON) na
 - [x] ☑️ **FEITO (2026-07-14):** `security.test.js` (4 refs) + `purple-validator.mjs` (1 ref) agora usam a
       publishable. `git grep` do JWT legado = **vazio** (0 ocorrências no repo). Syntax check OK.
 
-**Estágio 5 — revogação (REBAIXADO p/ baixa prioridade):** 🟢
+**Estágio 5 — revogação:** ✅ FINALIZADO (2026-07-31) — as legadas estão desativadas desde 2026-07-23 e o fallback saiu das 29 edges (B-6, `fb893af`). O texto abaixo é o raciocínio de julho, mantido como histórico.
 > **Achado 2026-07-14:** as chaves legadas são `ANON_KEY` **e** `SERVICE_ROLE_KEY`. Como ~20 edge
 > functions usam `SUPABASE_SERVICE_ROLE_KEY`, revogar as legadas exigiria migrar TODAS elas para
 > `SUPABASE_SECRET_KEYS` — um esforço à parte ("migração service_role → secret"). **O ganho de segurança
@@ -226,7 +256,8 @@ TOTP no Supabase é nativo e gratuito em todos os planos (só SMS custa; TOTP n�
 
 # FASE 2 — Performance
 
-## PASSO 7 — Podar CSS morto + virtualizar listas longas 🟡 VIRTUALIZAÇÃO FEITA (2026-07-18) · PODA SEGUE PARQUEADA
+## PASSO 7 — Podar CSS morto + virtualizar listas longas 🟡 PENDENTE
+**Falta:** decidir o destino das 34 classes `rf-*`/`saude-*` quando as telas planejadas forem construídas ou abandonadas. Virtualização ✅ (2026-07-18, estendida à fatura em 2026-07-31); poda ✅ (2026-07-31, 70 classes + método em `scripts/css-mortas.mjs`). Ver O-2 e O-6 do Passo 32.
 > **2026-07-18:** a poda continua parqueada pelos motivos abaixo (que revisei e seguem válidos). Fiz a OUTRA metade: Relatórios montava HTML para TODAS as transações do período sem limite → agora 150 + "Ver todas — mais N". Cuidado essencial: PDF/apresentação CLONAM o DOM, então expandem antes (senão o PDF omitiria transações em silêncio); CSV/Excel leem dados crus e nunca dependeram disso. Transações já paginava.
 > **Análise 2026-07-14 (com Coverage real + script novo `scripts/css-coverage-report.mjs`):** medido no
 > build — `dashboard.css` = 200 KB fonte / **39 KB gzip, e é ASSÍNCRONO** (media=print + css-boot.js →
@@ -254,7 +285,8 @@ falso-positivo para classes dinâmicas). Listas de transações/relatórios rend
 
 ---
 
-## PASSO 8 — Aliviar os vendors pesados 🟡 INVESTIGADO + GANHO PROVADO (2026-07-17)
+## PASSO 8 — Aliviar os vendors pesados 🟡 PENDENTE
+**Falta:** aplicar o ganho que já foi medido e provado em 2026-07-17 — a investigação terminou, nada foi implementado. (Chart: nada a fazer, ver abaixo.)
 > **MEDIDO com `ANALYZE=1 npm run build` + experimento de build descartável.**
 >
 > **CHART: nada a fazer.** Confirmado que `chart.umd.min.js` (68,2 KB gzip) é asset self-hosted
@@ -356,7 +388,8 @@ Ganho: tempo percebido despenca + offline-first de brinde.
 
 ---
 
-## PASSO 10 — Quebrar o monólito `dashboard.js` (< 1.500 linhas no boot) 🟡 EM ANDAMENTO (2026-07-16)
+## PASSO 10 — Quebrar o monólito `dashboard.js` (< 1.500 linhas no boot) 🟡 PENDENTE
+**Falta:** a meta é < 1.500 linhas no boot e o arquivo tem ~6.400. Hoje está em 38,4 KB gzip de um teto de 40 (96%) — dentro do orçamento, mas sem folga. Fatias já feitas: exportação, código morto, partículas e paleta de comandos (O-1).
 > **2 fatias seguras feitas (commits f63e9c2, 572b34c): 40,9 → 39,1 KB gzip (97% → 93%).**
 > - Fatia 1: exportação JSON/CSV → `modules/exportar-dados.js` lazy (só baixa no clique).
 > - Fatia 2: `desenharGraficoLinha`/`desenharTopGastos` eram **código morto** — deletadas.
@@ -493,7 +526,8 @@ aceitaram o texto anterior e **não houve re-aceite**. A própria política prom
 
 ---
 
-## PASSO 14 — LGPD: aceite dos 4 usuários legados (gap M1) 🟡 GATE ARMADO, ESPERANDO LOGIN
+## PASSO 14 — LGPD: aceite dos 4 usuários legados (gap M1) 🟡 PENDENTE
+**Falta:** que os 4 usuários sem aceite façam login — o gate já está armado e coleta o aceite na entrada. Não há trabalho de código; é espera.
 > **Censo no banco de prod (2026-07-16):** 8 usuários em `auth.users`; 5 linhas em `terms_acceptance`
 > (**4 na v1.0**, 1 na v1.1). **4 usuários sem NENHUMA linha de aceite — 3 deles ATIVOS** (com
 > assinatura ativa/trialing ou membro ativo de conta casal/família).
@@ -588,7 +622,7 @@ tema claro, navegação por teclado no dashboard). É inclusão **e** um selo de
 > Suíte total: **189 → 419 testes** na sessão de 2026-07-16. Também entraram `sugestao-corte`,
 > `viagem`, `reserva-familia`, `categorizacao`. Todos puros, `hoje` injetável, no CI.
 >
-> **Histórico:** 🟡 PARCIAL — money.js coberto (2026-07-14)
+> **Histórico:** 🟡 PENDENTE — **Falta:** extrair a lógica de fatura/saldo para poder testá-la. money.js coberto (2026-07-14)
 > **FEITO 2026-07-14:** `tests/unit/money.test.js` — **57 testes** cobrindo o parser de valores do
 > assistente (`assistant/money.js`, 100% puro): `parseValorBR` ("1,5k"→1500, "1.234,56", ignora "3x"),
 > `parseAritmetica` (2×8=16), `parseParcelas`, `parseExtenso` ("mil e duzentos"→1200), `formatBRL`,
@@ -787,12 +821,12 @@ reativação de inativo, aviso de fatura.
 | 1.5 | 15 — HIBP no signup/reset (k-anonymity) ⭐ | 🔴 alto valor | ~2–3h | ✅ aplicado em prod (2026-07-14) |
 | 1.5 | 16 — Dependabot + npm audit | 🟢 baixo | ~15 min | ✅ npm audit já existia + dependabot criado (2026-07-14) |
 | 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | 🔴 |
-| 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🟡 analisado — poda baixo-ROI/arriscada, CSS já async+budget → parqueado (2026-07-14) |
+| 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🟡 **Falta:** destino das 34 classes de telas planejadas — poda e método feitos em 2026-07-31 |
 | 2 | 8 — Aliviar vendors (Chart/Supabase) | 🟡 médio | half-day+ | 🔴 |
 | 2 | 9 — Boot otimista (IndexedDB) | 🔴 alto valor | 1–2 dias | 🔴 |
 | 2 | 10 — Split do `dashboard.js` ⭐ | 🔴 alto valor | 2–3 dias | 🔴 |
 | 4 | 17 — Auditoria WCAG AA | 🟡 médio | ~1 dia | 🔴 |
-| 4 | 18 — Testes de lógica financeira | 🟢 baixo | ~1 dia | 🟡 money.js coberto (57 testes, CI); fatura/saldo pendem extração |
+| 4 | 18 — Testes de lógica financeira | 🟢 baixo | ~1 dia | 🟡 **Falta:** extrair fatura/saldo para testar; money.js coberto (57 testes, CI) |
 | 4 | 19 — Índices/policies (higiene DB) | 🟡 médio | ~1–2h | ✅ 12 índices duplicados dropados (2026-07-14); policies OR mantidas |
 | 3 | 11 — Calendário financeiro visual | 🟢 baixo | 1–2 dias | 🔴 |
 | 3 | 12 — Share Target no manifest | 🟢 baixo | ~1 dia | 🔴 |
@@ -1152,7 +1186,7 @@ edge que não esteja recebendo a chave nova.
 | Passo | Dimensão | Itens | Status |
 |---|---|---|---|
 | 30 | Segurança 9.4 → 10 | S-1 … S-6 | ✅ **COMPLETO** |
-| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | 🟢 B-1·B-2·B-3·B-4·B-5·B-7 ✅ · **só B-6 aberto** |
+| 31 | Blindagem 9.0 → 10 | B-1 … B-7 | ✅ FINALIZADO — B-1 a B-7 fechados (B-6 em 2026-07-31) |
 | 32 | Otimização 8.0 → 10 | O-1 … O-8 | 🔴 |
 | 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🔴 |
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | 🔴 |
@@ -1220,7 +1254,7 @@ do desalinhamento num registro de consentimento LGPD.
 
 ---
 
-## PASSO 31 — BLINDAGEM 9.0 → 10 🟡
+## PASSO 31 — BLINDAGEM 9.0 → 10 ✅ FINALIZADO (2026-07-31)
 > Blindagem = camadas independentes. Hoje são 6. Faltam as que dependem de **algo além da senha**.
 
 ### B-1 — MFA / TOTP **OPT-IN** ✅ APLICADO EM PROD (2026-07-27, commit 64f003e) ⭐⭐
@@ -1327,7 +1361,7 @@ de cache **não sai** do ruleset de firewall (tem de ser Cache Rule na própria 
 ### B-5 — Fechar S-1…S-6 (contam para blindagem também) ✅ APLICADO (2026-07-27)
 Os seis aplicados em prod via Management API, cada um com `.down.sql`. Detalhe no Passo 30.
 
-### B-6 — Revogar a anon key legada 🟡 QUASE — o risco caiu, sobrou limpeza
+### B-6 — Revogar a anon key legada ✅ FINALIZADO (2026-07-31, `fb893af` + deploy das 28 edges)
 > ⚠️ **CORREÇÃO (verificado em 2026-07-30):** o texto anterior dizia que a legada continuava
 > ATIVA server-side. **Não continua.** `anon` **e** `service_role` estão **desativadas desde
 > 2026-07-23T20:03:16Z** — efeito colateral da migração de JWT. Requisição com elas volta
@@ -1339,7 +1373,11 @@ Os seis aplicados em prod via Management API, cada um com `.down.sql`. Detalhe n
 > mudança de comportamento. Em compensação, não existe mais o rollback "restaurar a env antiga
 > e redeployar" para nada que dependesse delas.
 >
-> **Falta:** apagar o fallback morto das 28 edges. Risco baixo, número de arquivos alto.
+> **✅ Fechado em 2026-07-31** (`fb893af`): fallback removido de **29 arquivos** (28 pelo
+> codemod + 1 que ele não casou — `verify-and-reset-password` tinha a forma numa IIFE), as 28
+> edges deployadas, e o caminho crítico provado de ponta a ponta na conta de teste (login →
+> acesso → leitura → escrita → releitura, dado intacto). Agora falha **alto**: `throw` em vez
+> de `return ''`, porque credencial vazia vira 401 confuso em vez de erro de config legível.
 
 ### B-7 — Testes de regressão dos vetores fechados ✅ APLICADO (2026-07-27, ampliado em 2026-07-30)
 REGRA 9 do god-mode: 100% dos vetores viram teste. Invariantes de arquitetura em
@@ -1360,7 +1398,8 @@ entrega.
 
 - **O-1** ✅ FEITO (2026-07-30) — partículas e paleta de comandos saíram para chunks lazy, com as
   guardas no CHAMADOR (antes do import), não dentro do módulo. `dashboard.js` em 38,4 KB de 40.
-- **O-2** 🟡 MÉTODO PRONTO + poda verificada (2026-07-31) — mas a estimativa antiga estava errada.
+- **O-2** 🟡 PENDENTE (2026-07-31)
+  **Falta:** (a) decidir o destino das **34 classes** `rf-*` e `saude-*` quando as telas de reserva de família e saúde financeira forem construídas ou abandonadas — hoje ficam porque são telas **planejadas**; (b) "CSS crítico inline + resto lazy", que **avaliei e não recomendo** (9–12 KB gz de ganho para a complexidade de manter o crítico em sincronia).
   - ✅ `scripts/css-mortas.mjs` separa **USADA / DINÂMICA / MORTA**. A lista velha marcava tudo
     sem ocorrência literal, então enchia de falso-positivo (`cat-entrada`, `tipo-icon-saida`,
     `alerta-status` — montadas em runtime). No `_db-all.css`: das 104 "candidatas", **41 eram
@@ -1387,7 +1426,8 @@ entrega.
   - ⬜ **"CSS crítico inline + resto lazy" não foi feito.** O dashboard já carrega assíncrono
     (`media="print"` + `css-boot.js`); as públicas carregam bloqueando, mas são 9–12 KB gz —
     ganho pequeno para a complexidade de manter o crítico em sincronia.
-- **O-3** 🟡 PARCIAL (2026-07-31) — feito o que dava ganho medível; o resto ficou de propósito:
+- **O-3** 🟡 PENDENTE (2026-07-31)
+  **Falta:** nada obrigatório — o que sobrou foi **deixado de fora por decisão**, não por atraso (29 índices de 16 kB em tabelas minúsculas e 2 pares de policy em tabelas de 7 e 10 linhas). Só reabrir se alguma dessas tabelas crescer de verdade. Detalhe do que foi feito e do porquê:
   - ✅ **Dropados 2 índices GIN INUTILIZÁVEIS** (`20260731000000`). `idx_user_data_json` era GIN
     sobre `user_data.data_json`, que é **ciphertext** — verificado em prod: toda linha tem uma
     única chave de topo, `_enc`. Índice que nenhuma consulta pode ler, pago em **toda escrita**
@@ -1434,7 +1474,7 @@ entrega.
   **Se um dia for reaberto, o que precisa existir ANTES:** travar as ações de edição durante a
   janela otimista (senão a edição perdida é silenciosa) e um **outbox de escrita**. Nenhum dos
   dois existe hoje. Isso é um bloco de trabalho próprio, não um item de lista.
-- **O-6** 🟢 FEITO (2026-07-31) — relatórios **já tinha** teto (`REL_TX_VISIVEIS` + "ver mais");
+- **O-6** ✅ FINALIZADO (2026-07-31) — relatórios **já tinha** teto (`REL_TX_VISIVEIS` + "ver mais");
   faltava a fatura, que renderizava TODAS as compras ao abrir o modal. Agora tem teto de 60
   (menor que os 150 do relatório: uma compra é um card com botões, uma transação é uma linha).
   Teste trava os dois tetos e a relação entre eles.

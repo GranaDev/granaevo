@@ -46,6 +46,14 @@ jobs:
       - name: Campos descartados pelo save (allowlist)
         run: npm run check:allowlist
 
+      # Em 2026-07-31 o roadmap tinha OITO itens marcados "a fazer" que já
+      # estavam prontos — inclusive uma feature completa, com 13 testes, que
+      # quase foi reconstruída. A Regra de Ouro resolveu no papel; isto tira a
+      # lembrança da equação. Não verifica se o status é VERDADE (nenhum script
+      # sabe), só que todo 🟡 diz o que falta — que é o que o torna acionável.
+      - name: Regra de Ouro do roadmap (todo 🟡 diz o que falta)
+        run: npm run check:roadmap
+
       - name: Build
         run: npm run build
 
