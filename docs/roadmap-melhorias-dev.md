@@ -10,6 +10,21 @@ produto**. A intenção é consertar **aos poucos, uma etapa por vez**, juntos.
 **Ordem sugerida:** Fase 0 (higiene barata, ganha momentum) → Fase 1 (segurança/confiança) →
 Fase 2 (performance) → Fase 3 (produto). Não é obrigatório seguir à risca — dá pra pular por vontade.
 
+> ## ⚠️ CONFIRA ANTES DE EXECUTAR QUALQUER ITEM 🔴
+>
+> **Em 2026-07-31, OITO itens marcados 🔴 já estavam prontos:** B-3, B-5, B-7, O-1, O-4, O-8, M-1
+> e D-3. O D-3 (detector de assinaturas fantasma) estava implementado, ligado em três telas e com
+> 13 testes — e continuava listado como "a fazer". O M-1 dizia que o `sitemap.xml` retornava 404;
+> retorna 200 há tempos.
+>
+> Isso não é detalhe de organização. Um roadmap que mente sobre o próprio estado faz **priorizar
+> errado** (o D-3 era candidato a "próxima grande feature" e já existia) e faz **refazer trabalho
+> pronto**. Duas vezes hoje o documento mandou desfazer decisão registrada — ver O-5 e P-1.
+>
+> **Regra:** antes de começar um item, gaste 2 minutos provando que ele ainda é verdade. `grep`
+> pelo módulo, `curl` na URL, rodar o teste. Se já estiver feito, **corrija a linha aqui** — é o
+> que impede o próximo (humano ou agente) de cair no mesmo buraco.
+
 ---
 
 ## Legenda de status
@@ -1439,7 +1454,9 @@ logado · gate no CI impedindo regressão.
 ## PASSO 33 — MARKETING 7.0 → 10 🔴
 > A dimensão mais distante do 10 e a de maior retorno. Produto nota 9, aquisição nota 6.
 
-- **M-1** 🔴 ⚡ **`sitemap.xml` retorna 404** e está declarado no `robots.txt`. Gerar no build. **15 min.**
+- **M-1** ✅ **JÁ RESOLVIDO** — verificado em 2026-07-31:
+  `https://www.granaevo.com/sitemap.xml` responde **HTTP 200** (841 bytes, 4 URLs). O
+  `build-sitemap.mjs` roda no `prebuild`.
 - **M-2** 🔴 ⭐ **Zero prova social.** Em finanças pessoais, confiança **é** a conversão.
   3 depoimentos com foto e primeiro nome · 1 número honesto · selo de segurança (provável após B-1).
 - **M-3** 🔴 Conteúdo de topo (Passo 24): 3 calculadoras públicas indexáveis (juros do cartão ·
@@ -1458,14 +1475,27 @@ logado · gate no CI impedindo regressão.
 ## PASSO 34 — DIFERENCIAL 7.5 → 10 🔴
 > Os diferenciais são reais mas **invisíveis**. Metade produto, metade comunicação.
 
-- **D-1** 🔴 ⭐ **Promover o import OFX/CSV para o topo da landing.** Ele existe (OFX de todos os
-  bancos + CSV Nubank/Inter, `db-transacoes.js:2614`) e está **enterrado numa aba**. A objeção que
-  mata a venda é *"vou ter que digitar tudo?"* — e a resposta já está pronta.
+- **D-1** ✅ FEITO (2026-07-31) — duas mudanças, nenhuma quebrando layout:
+  **(1)** uma linha no hero, respondendo à objeção que o próprio parágrafo acima levanta
+  (*"sem conectar seu banco"* soa como limitação). Uma linha só de propósito: bloco maior empurra
+  o CTA para baixo da dobra no celular.
+  **(2)** o 6º card de recurso dizia *"Automação Completa: configure contas fixas"* — promessa
+  vaga que qualquer app faz. Virou **"Importe seu extrato"**, que é a automação concreta. Grade
+  3×2 intacta: substituição, não adição.
+  Cada afirmação foi conferida no código antes de entrar na vitrine — inclusive "ainda categoriza"
+  (`_autoCategorizar` é chamado nos dois parsers) e "ignora o que já existe" (`_isDuplicata`, com
+  3 critérios). Prometer o que o código não faz foi o erro do A-3; não repetir.
   Título sugerido: **"Importe do seu banco sem dar sua senha a ninguém."**
   Neutraliza o Open Finance sem os R$ 2.500+/mês do Pluggy.
 - **D-2** 🔴 ⭐ **Push em background que funciona** (RF-05). Hoje só chega com o app aberto → lembrete
   é inútil. iOS só entrega Web Push em PWA instalado (16.4+). **Trava o C-2.**
-- **D-3** 🔴 Detector de assinaturas fantasma — o mais "vendável": achado concreto, em reais, no 1º uso.
+- **D-3** ✅ **JÁ ESTAVA FEITO** — verificado em 2026-07-31. `modules/recorrencias.js` é exatamente
+  este detector, e está ligado em **três** pontos: aviso automático no dashboard
+  (`dashboard.js:2079`, que ainda recalcula a cada `ge:save-done`), botão em Cartões → Assinaturas
+  (`db-cartoes.js:362`) e no chat do assistente (`assistant/insights.js`).
+  Critérios conservadores e **13 testes**, incluindo os falsos-positivos difíceis: pedágio com
+  valor fixo em dias aleatórios, conta fixa, pagamento de fatura, valor instável, 2 ocorrências
+  (evidência fraca). O discriminador forte é o **dia do mês consistente (±3)**.
 - **D-4** 🔴 Previsão de fim de mês — "no seu ritmo você fecha com R$ X". Dados já existem.
 - **D-5** 🔴 Restauração por perfil (RF-09 fases 2 e 3) — hoje restaurar reverte TODOS os perfis do plano.
 - **D-6** 🔴 Share Target (Passo 12) — compartilhar print do comprovante direto pro app.
@@ -1475,10 +1505,22 @@ logado · gate no CI impedindo regressão.
 
 ## PASSO 35 — PROPOSTA DO SITE 8.0 → 10 🔴
 
-- **P-1** 🔴 ⭐⭐ **Trial de 7–14 dias SEM cartão** (Passo 20) — **a maior alavanca de receita de todo
-  o relatório.** Hoje pede cartão antes de o visitante saber se serve. "Garantia de 7 dias" é
-  psicologicamente muito mais fraca que "7 dias grátis" e **custa exatamente o mesmo**.
-  O Stripe suporta `trial_period_days` sem `payment_method`.
+- **P-1** ⛔ **RECUSADO pelo dono do produto (2026-07-31). Não é pendência.**
+  *"P1 já existe dentro da landingpage, há a possibilidade de melhorias, porém, um trial mesmo
+  dentro da dashboard sem cartão não compensa e está fora de questão."*
+
+  A landing **já tem** uma amostra jogável (`landing-demo.js`, com a parede no 4º lançamento —
+  ver o Bloco 4 dos testes manuais), então a parte "deixar experimentar antes de pagar" está
+  atendida por outro caminho. Trial dentro do dashboard sem cartão está **fora de questão**.
+
+  <details><summary>Argumento original (mantido para histórico, não para execução)</summary>
+
+  Era descrito como "a maior alavanca de receita de todo o relatório": hoje pede cartão antes de
+  o visitante saber se serve, e "garantia de 7 dias" é psicologicamente mais fraca que "7 dias
+  grátis" custando o mesmo. O Stripe suporta `trial_period_days` sem `payment_method`.
+  </details>
+
+  **Aberto, se um dia quiser:** melhorar a amostra da landing. Isso o dono deixou em aberto.
 - **P-2 / A-3** ✅ **APLICADO (2026-07-27, commit aa0ef75)** — export JSON existe.
   Configurações → Privacidade → "Baixar meus dados". Blob vem do SERVIDOR (a memória só tem o
   perfil ativo; portabilidade exige todos), metadados por PostgREST com RLS, **step-up por senha**
