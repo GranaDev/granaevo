@@ -22,6 +22,7 @@
 
 import { supabase } from '../services/supabase-client.js?v=2';
 import { proximaOcorrencia, meiaNoite } from './ciclo-fatura.js?v=1';
+import { microLicao, assinaturaNaoCadastrada } from './assistant/insights.js';
 
 let _ctx = null;
 let _debounceTimer = null;
@@ -58,6 +59,39 @@ function _ymKey(d) {
 }
 function _clampTexto(s, max) {
     return String(s || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max);
+}
+
+/**
+ * C-2 — o insight que vira push quando a semana não tem conta vencendo.
+ *
+ * ⚠️ REGRA DE PRIVACIDADE DESTE ARQUIVO: notificação NÃO carrega R$.
+ * O corpo de um push aparece na tela de bloqueio, à vista de quem estiver por
+ * perto. Por isso o resumo de contas diz "abra pra ver os valores" em vez do
+ * total — e o mesmo vale aqui.
+ *   • assinatura fantasma → só o NOME (o valor mensal fica pro app)
+ *   • micro-lição → percentual, que não revela quanto a pessoa ganha ou gasta
+ *
+ * Devolve string ou null. null = não há o que dizer, e aí não se manda push
+ * nenhum: notificação sem conteúdo é a forma mais rápida de ser silenciado.
+ */
+function _insightDaSemana(ctx) {
+    try {
+        const assin = assinaturaNaoCadastrada(ctx.transacoes, ctx.assinaturas);
+        if (assin?.nome) {
+            return `Achei uma cobrança que se repete e não está nas suas assinaturas: `
+                 + `${assin.nome}. Abra pra ver o quanto ela custa por ano.`;
+        }
+    } catch { /* insight é complemento: nunca derruba o radar */ }
+
+    try {
+        const licao = microLicao(ctx.transacoes);
+        if (licao?.tipo && Number.isFinite(licao.pctAtual)) {
+            return `Este mês, ${licao.pctAtual}% dos seus gastos foram em ${licao.tipo} — `
+                 + `bem acima do seu normal. Abra pra ver o quadro completo.`;
+        }
+    } catch { /* idem */ }
+
+    return null;
 }
 
 // ── Cálculo dos eventos ───────────────────────────────────────────────────────
@@ -228,15 +262,32 @@ function _computarEventos(ctx, uid) {
             const v = new Date(yy, mm - 1, dd);
             if (v >= domingo && v < fimSemana) nContas++;
         }
+        // C-2 — semana sem conta vencendo NÃO pode virar silêncio.
+        //
+        // Antes, este bloco só existia quando `nContas > 0`: quem tinha as contas
+        // em dia — justamente quem está indo bem — nunca recebia nada. O
+        // assistente sumia da vida de quem mais o usa.
+        //
+        // O insight vem de `insights.js`, o MESMO motor da abertura do chat
+        // (C-7), calculado 100% no aparelho. Nada disso passa pela IA nem pelo
+        // servidor: o que sobe é só o texto pronto da notificação.
+        let corpo = null;
         if (nContas > 0) {
+            const plural = nContas > 1;
+            corpo = `${nContas} conta${plural ? 's' : ''} vence${plural ? 'm' : ''} na próxima semana. `
+                  + 'Abra pra ver os valores e se programar.';
+        } else {
+            corpo = _insightDaSemana(ctx);
+        }
+
+        if (corpo) {
             const fireResumo = new Date(domingo); fireResumo.setHours(HORA_RESUMO, 0, 0, 0);
             if (fireResumo >= new Date(agora.getTime() - 3_600_000) && fireResumo <= limite) {
-                const plural = nContas > 1;
                 eventos.push({
                     dedupe_key: _clampTexto(`resumo:${_ymKey(domingo)}:${domingo.getDate()}`, 120),
                     tipo: 'resumo_semanal',
                     title: _clampTexto('Sua semana no GranaEvo', 80),
-                    body:  _clampTexto(`${nContas} conta${plural ? 's' : ''} vence${plural ? 'm' : ''} na próxima semana. Abra pra ver os valores e se programar.`, 200),
+                    body:  _clampTexto(corpo, 200),
                     url:   '/dashboard',
                     fire_at: fireResumo.toISOString(),
                 });
