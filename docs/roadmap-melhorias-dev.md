@@ -1604,7 +1604,18 @@ logado · gate no CI impedindo regressão.
   (Passo 25 já previa isso para "exportar dados"), chunk lazy de 3,28 KB, e nenhuma credencial no
   arquivo. Verificado em prod: 401/400/403 corretos no step-up, `ua_label` certo e `device_hash`
   fora. **Era o último achado ALTO em aberto.**
-- **P-3** 🔴 Declarar `user_devices` / `notify-login` + os operadores faltantes (ImprovMX, push) →
+- **P-3** ✅ FINALIZADO (2026-07-31) — o último bloqueante de LGPD.
+  Declarados: **aparelhos reconhecidos** (, com o que NÃO guardamos escrito por
+  extenso), **Cloudflare Turnstile** e **ImprovMX** (1º operador fora dos EUA). Removido o
+  **Google reCAPTCHA**, que saiu em 2026-07-27 e seguia listado como operador — declarar operador
+  errado manda o titular reclamar no lugar errado. Corrigido também que **não** usamos o Cloudflare
+  Insights (a CSP bloqueia; declarávamos o que não acontece).
+  RoPA em 1.2 com duas atividades novas.  subiu para  e as 3 edges
+  foram deployadas — **caminho inteiro verificado em produção**: o gate voltou a pedir aceite,
+  o aceite gravou 1.2 e parou de pedir (sem o loop que o pré-requisito do unique poderia causar).
+  <details><summary>Descrição original</summary>
+
+  Declarar  /  + os operadores faltantes (ImprovMX, push) →
   bump `CURRENT_TERMS_VERSION = '1.2'`.
 - **P-4** 🔴 Onboarding com valor no 1º minuto — importar OFX antes do primeiro lançamento manual.
 - **P-5** 🔴 Ancoragem de preço — anual (R$ 13,75/mês) como padrão, mensal ao lado.
