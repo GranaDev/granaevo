@@ -179,6 +179,7 @@
                                 <li>Logs de auditoria internos (ações do usuário dentro da plataforma — sem conteúdo financeiro);</li>
                                 <li>Registros de rate-limiting (endereço IP ou chave de sessão — apenas para prevenção de abuso);</li>
                                 <li>Nonces de convite (tokens de uso único para convite de perfis);</li>
+                                <li><strong>Aparelhos reconhecidos:</strong> para avisar você quando alguém entra na sua conta de um aparelho novo, guardamos um <strong>identificador técnico do aparelho</strong> (um código derivado por cálculo, que não permite reconstruir o aparelho nem identificá-lo em outros sites) e um <strong>rótulo curto do navegador e sistema</strong> — por exemplo, "Chrome no Windows". Não guardamos o modelo do aparelho, número de série, IMEI, localização, lista de aplicativos nem qualquer identificador de publicidade. Você vê a lista completa em <strong>Configurações → Privacidade → Baixar meus dados</strong>, e ela é apagada junto com a conta.</li>
                                 <li><strong>Diagnóstico de erros:</strong> quando ocorre uma falha técnica na aplicação, podemos registrar detalhes do erro (mensagem, tela, navegador e um identificador técnico de sessão) para correção de bugs. Esses relatórios <strong>não incluem seus dados financeiros</strong>.</li>
                             </ul>
                         </div>
@@ -245,10 +246,11 @@
                                 <li><strong>Supabase (PostgreSQL + Auth):</strong> banco de dados principal e autenticação. Dados armazenados em servidores AWS com criptografia em repouso. Política de privacidade: <em>supabase.com/privacy</em>.</li>
                                 <li><strong>Stripe:</strong> processamento de pagamentos e gestão de assinaturas (PCI-DSS Nível 1). O GranaEvo não armazena dados de cartão — estes ficam exclusivamente com a Stripe. Política: <em>stripe.com/privacy</em>.</li>
                                 <li><strong>Vercel:</strong> hospedagem da aplicação web e funções serverless. Política: <em>vercel.com/legal/privacy-policy</em>.</li>
-                                <li><strong>Cloudflare:</strong> proteção contra DDoS, CDN e análise de tráfego (Cloudflare Insights). Pode processar endereços IP de forma anonimizada. Política: <em>cloudflare.com/privacypolicy</em>.</li>
+                                <li><strong>Cloudflare:</strong> rede que fica na frente do site — proteção contra ataques de negação de serviço, bloqueio de tráfego malicioso e entrega mais rápida das páginas. Como todo o acesso passa por ela, processa o <strong>endereço IP</strong> da conexão. <strong>Não usamos a análise de tráfego (Cloudflare Insights):</strong> ela é bloqueada pela política de segurança de conteúdo do próprio site. Política: <em>cloudflare.com/privacypolicy</em>.</li>
                                 <li><strong>Anthropic PBC:</strong> provedor do modelo de Inteligência Artificial que interpreta as mensagens do assistente. Recebe <strong>apenas o texto da mensagem e rótulos não sensíveis</strong> — sem seu nome, e-mail, identificador de conta ou dados financeiros. Utilizado somente quando você usa o assistente. Política: <em>anthropic.com/legal/privacy</em>.</li>
                                 <li><strong>Sentry (Functional Software, Inc.):</strong> monitoramento e diagnóstico de erros técnicos da aplicação. Recebe detalhes de falhas e um identificador técnico de sessão para correção de bugs — <strong>sem dados financeiros</strong>. Política: <em>sentry.io/privacy</em>.</li>
-                                <li><strong>Google reCAPTCHA:</strong> usado na página de login para prevenção de bots. Pode coletar sinais comportamentais anônimos. Política: <em>policies.google.com/privacy</em>.</li>
+                                <li><strong>Cloudflare Turnstile:</strong> verificação de que você é uma pessoa, e não um robô, nas telas de <strong>login, cadastro e redefinição de senha</strong>. Para decidir isso, analisa sinais técnicos do navegador (como tempo de carregamento e características do ambiente) durante a verificação. <strong>Não usa cookie de rastreamento e não acompanha você por outros sites.</strong> Substituiu o Google reCAPTCHA em julho de 2026, justamente para tirar um rastreador de terceiro do caminho de quem faz login. Política: <em>cloudflare.com/privacypolicy</em>.</li>
+                                <li><strong>ImprovMX:</strong> recebimento dos e-mails enviados para os endereços <em>@granaevo.com</em> (privacidade, suporte, contato). Se você nos escrever, a mensagem passa por eles antes de chegar até nós — portanto recebem <strong>o que você mesmo escrever no e-mail</strong>, incluindo seu endereço de remetente. Não têm acesso à sua conta nem aos seus dados financeiros. Política: <em>improvmx.com/privacy</em>.</li>
                                 <li><strong>Resend (Plus Five Five, Inc.):</strong> envio de e-mails transacionais (boas-vindas, confirmação de conta, redefinição de senha, avisos de assinatura). Recebe seu <strong>e-mail e nome</strong> para entregar a mensagem — <strong>sem dados financeiros</strong>. Política: <em>resend.com/legal/privacy-policy</em>.</li>
                                 <li><strong>Upstash:</strong> limitação de requisições (rate limiting) para proteção contra abuso e ataques. Pode processar seu <strong>endereço IP</strong> de forma efêmera. Política: <em>upstash.com/trust/privacy.pdf</em>.</li>
                             </ul>
@@ -271,7 +273,8 @@
                                 <li><strong>Vercel</strong> e <strong>Cloudflare</strong> (hospedagem e rede, EUA);</li>
                                 <li><strong>Stripe</strong> (pagamentos, EUA);</li>
                                 <li><strong>Anthropic</strong> (assistente por IA, EUA) — recebe apenas o texto pseudonimizado das mensagens do assistente;</li>
-                                <li><strong>Sentry</strong> (diagnóstico de erros, EUA) e <strong>Google</strong> (reCAPTCHA, EUA);</li>
+                                <li><strong>Sentry</strong> (diagnóstico de erros, EUA);</li>
+                                <li><strong>ImprovMX</strong> (recebimento dos e-mails <em>@granaevo.com</em>, França — União Europeia);</li>
                                 <li><strong>Resend</strong> (envio de e-mails, EUA) e <strong>Upstash</strong> (proteção contra abuso, EUA).</li>
                             </ul>
                         </div>
@@ -331,7 +334,7 @@
                             <li><strong>Fotos de perfil:</strong> validadas por assinatura de arquivo (apenas JPEG, PNG ou WebP) e sanitizadas com remoção de metadados EXIF/XMP, incluindo coordenadas de GPS, antes do armazenamento;</li>
                             <li><strong>Assistente por IA:</strong> recebe apenas o texto da mensagem, sem identificadores ou dados financeiros armazenados;</li>
                             <li><strong>Rate limiting:</strong> proteção contra ataques de força bruta e enumeração;</li>
-                            <li><strong>Proteção contra bots:</strong> Google reCAPTCHA na página de autenticação;</li>
+                            <li><strong>Proteção contra bots:</strong> Cloudflare Turnstile nas páginas de autenticação;</li>
                             <li><strong>CSP e headers de segurança:</strong> Content-Security-Policy estrito, HSTS, X-Frame-Options e outros headers em todas as páginas.</li>
                         </ul>
                         <p>Nenhum sistema é absolutamente inviolável. Em caso de incidente de segurança que possa acarretar risco ou dano relevante aos titulares, notificaremos a <strong>ANPD</strong> e os usuários afetados em prazo razoável, conforme o art. 48 da LGPD.</p>

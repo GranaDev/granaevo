@@ -25,11 +25,13 @@
 | 9 | Aceite de termos | E-mail, IP, UA, versão, data | Usuários | Prova de consentimento | Execução de contrato (V) | Supabase | EUA | Vida da conta |
 | 10 | Notificações push (opcional) | Endpoint/chaves push | Usuários que optam | Enviar notificações | Consentimento (I) | Supabase, serviços de push do navegador | EUA | 180d inativo |
 | 11 | E-mails transacionais | E-mail, nome | Usuários | Boas-vindas/reset/avisos | Consentimento (I) / Contrato (V) | Resend (envio) | EUA | Efêmero |
-| 12 | Proteção contra bots | Sinais comportamentais (reCAPTCHA) | Visitantes do login | Anti-bot | Legítimo interesse (IX) | Google | EUA | Conforme Google |
+| 12 | Proteção contra bots | Sinais técnicos do navegador durante a verificação (**sem cookie de rastreamento, sem rastreio entre sites**) | Visitantes de login, cadastro e redefinição de senha | Anti-bot | Legítimo interesse (IX) | **Cloudflare Turnstile** (substituiu o Google reCAPTCHA em 2026-07-27) | EUA | Conforme Cloudflare |
+| 13 | **Aparelhos reconhecidos** | Identificador técnico derivado do aparelho (`device_hash`) + rótulo curto de navegador/SO (ex.: "Chrome no Windows"). **Sem** modelo, IMEI, localização ou ID de publicidade | Usuários | Avisar o titular quando a conta é acessada de um aparelho novo | Legítimo interesse (IX) — segurança da conta do próprio titular | Supabase (armazenamento), Resend (envio do aviso) | EUA | Vida da conta (apagado junto com ela); exportável em Configurações → Privacidade |
+| 14 | **Recebimento de e-mails** | Endereço do remetente e o conteúdo que a própria pessoa escrever | Quem nos escreve em @granaevo.com | Receber contato de privacidade/suporte | Legítimo interesse (IX) / Contrato (V) | **ImprovMX** | **França (UE)** | Conforme ImprovMX; encaminhado e não armazenado por nós |
 
 ## 3. Salvaguardas de transferência internacional (art. 33)
 Cláusulas contratuais padrão constantes dos DPAs firmados com cada operador (Supabase, Stripe,
-Vercel, Cloudflare, Anthropic, Sentry, Google, Resend, Upstash). Ver `docs/compliance/DPAs.md`
+Vercel, Cloudflare, Anthropic, Sentry, Resend, Upstash, ImprovMX). Ver `docs/compliance/DPAs.md`
 (checklist de assinatura). Padrões de segurança: SOC 2, ISO 27001, GDPR.
 
 ## 4. Medidas de segurança (art. 46)
@@ -54,4 +56,5 @@ Não há novos registros nessas tabelas.
 | Data | Versão | Mudança |
 |---|---|---|
 | 2026-07-07 | 1.0 | Criação. Inclui assistente IA (Anthropic) e diagnóstico (Sentry). |
+| 2026-07-31 | 1.2 | **Turnstile substitui o Google reCAPTCHA** (nº 12 — o Google deixa de ser operador). Duas atividades que existiam no código e faltavam aqui: **nº 13 aparelhos reconhecidos** (`user_devices`, base do alerta de login novo) e **nº 14 recebimento de e-mails** (ImprovMX, França/UE — 1º operador fora dos EUA). Corrigido também que **não usamos o Cloudflare Insights**: a análise de tráfego é bloqueada pela CSP do próprio site, e estava declarada como se acontecesse. |
 | 2026-07-12 | 1.1 | DPAs firmados (com SCCs); DPO "Equipe GranaEvo"; canais privacidade@/suporte@/contato@; retenção Anthropic confirmada (30d); redação de PII legada Cakto (`payment_events` + `subscriptions_cakto_archive`); Resend/Upstash na política. Pós-auditoria /god-mode. |
