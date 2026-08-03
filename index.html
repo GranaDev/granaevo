@@ -202,6 +202,14 @@
             },
             {
               "@type": "Question",
+              "name": "Por que o GranaEvo não conecta com o meu banco?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Porque conectar exige entregar o acesso à sua conta bancária — a um intermediário de Open Finance ou ao próprio aplicativo. Nós escolhemos não pedir isso. Não é limitação técnica: é a decisão que define o produto. Quem conecta precisa manter um acesso permanente à sua conta viva em algum servidor; se aquele servidor for invadido, o problema deixa de ser o app e passa a ser o seu banco. Aqui esse acesso nunca é criado, então esse risco não existe. E você não digita tudo à mão: baixe o extrato no aplicativo do seu banco (OFX ou CSV, que todo banco brasileiro exporta) e arraste no GranaEvo. Ele lança tudo, ignora o que já foi lançado e ainda categoriza. A troca é honesta: de vez em quando você baixa um arquivo, em vez de a sincronização acontecer sozinha. Em troca, ninguém — nem nós — tem acesso à sua conta bancária."
+              }
+            },
+            {
+              "@type": "Question",
               "name": "Posso usar com meu cônjuge ou família?",
               "acceptedAnswer": {
                 "@type": "Answer",
@@ -927,6 +935,30 @@
                     </button>
                     <div class="faq-lp-answer">
                         <p>Absolutamente. Usamos criptografia AES-256, autenticação segura e nunca compartilhamos seus dados com terceiros. Conformidade total com a LGPD.</p>
+                    </div>
+                </div>
+
+                <!-- P-6: a pergunta que o visitante faz de qualquer jeito.
+                     Ela já era respondida de passagem ("sem conectar seu banco"),
+                     o que soa como desculpa. Omitir a objeção não a apaga — só
+                     deixa o visitante concluir sozinho, e provavelmente errado.
+                     Aqui a escolha é explicada de frente, com o custo assumido:
+                     quem lê entende que é decisão de projeto, não limitação.
+                     ⚠️ Toda pergunta daqui precisa existir IGUAL no JSON-LD do
+                     <head> (FAQPage). Divergir viola as diretrizes do Google e
+                     derruba o rich snippet — há teste travando isso. -->
+                <div class="faq-lp-item" role="listitem">
+                    <button class="faq-lp-question" aria-expanded="false" type="button">
+                        <span>Por que o GranaEvo não conecta com o meu banco?</span>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="faq-lp-answer">
+                        <p>Porque conectar exige entregar o acesso à sua conta bancária — a um intermediário de Open Finance ou ao próprio aplicativo. Nós escolhemos não pedir isso. <strong>Não é limitação técnica: é a decisão que define o produto.</strong></p>
+                        <p>Quem conecta precisa manter um acesso permanente à sua conta vivo em algum servidor. Se aquele servidor for invadido, o problema deixa de ser o app e passa a ser o seu banco. Aqui esse acesso <strong>nunca é criado</strong>, então esse risco não existe.</p>
+                        <p>E você não digita tudo à mão: baixe o extrato no aplicativo do seu banco (<strong>OFX ou CSV</strong>, que todo banco brasileiro exporta) e arraste no GranaEvo. Ele lança tudo, ignora o que já foi lançado e ainda categoriza.</p>
+                        <p>A troca é honesta: de vez em quando você baixa um arquivo, em vez de a sincronização acontecer sozinha. Em troca, <strong>ninguém — nem nós — tem acesso à sua conta bancária</strong>.</p>
                     </div>
                 </div>
 

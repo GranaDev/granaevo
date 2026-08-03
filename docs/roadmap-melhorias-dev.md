@@ -1503,14 +1503,23 @@ logado · gate no CI impedindo regressão.
 - **M-1** ✅ **JÁ RESOLVIDO** — verificado em 2026-07-31:
   `https://www.granaevo.com/sitemap.xml` responde **HTTP 200** (841 bytes, 4 URLs). O
   `build-sitemap.mjs` roda no `prebuild`.
-- **M-2** 🔴 ⭐ **Zero prova social.** Em finanças pessoais, confiança **é** a conversão.
+- **M-2** ⛔ **RECUSADO por ora — decisão do dono (2026-08-03).** Não é pendência.
+  *"Não temos usuários ainda, quem sabe futuramente, mas por hora fora de mão."*
+
+  Coerente com a recusa anterior de inventar depoimentos: prova social fabricada num produto
+  sem usuários é mentira ao visitante, e foi por isso que o carrossel de avaliações saiu da
+  landing (e o `TESTIMONIALS_DATA` saiu do bundle em 2026-07-31).
+
+  **Reabrir quando:** houver cliente satisfeito disposto a depor com nome. Aí é o item de maior
+  retorno do Marketing — em finanças, confiança É a conversão.
   3 depoimentos com foto e primeiro nome · 1 número honesto · selo de segurança (provável após B-1).
 - **M-3** 🔴 Conteúdo de topo (Passo 24): 3 calculadoras públicas indexáveis (juros do cartão ·
   quanto sobra por mês · quanto rende a reserva) + 10 artigos de cauda longa. Calculadora converte
   melhor que artigo e os motores já existem (`simulador-ese.js`, `horas-vida.js`).
 - **M-4** 🔴 Ciclo de vida (Passo 22): boas-vindas em 3 partes · reativação D+3 ·
   **"seu relatório do mês"** (maior retenção) · carrinho abandonado.
-- **M-5** 🔴 Programa de indicação (Passo 23) — natural no plano casal/família, que já tem convite.
+- **M-5** ⛔ **RECUSADO — decisão do dono (2026-08-03).** Não é pendência.
+  *"Também não quero programa de indicação."*
 - **M-6** ✅ FINALIZADO — verificado em 2026-07-31: `index.html` **e** `planos.html` têm `og:title`,
   `og:description` e `og:image`. O texto antigo ("só a landing tem") estava desatualizado.
   `/login` fica de fora **de propósito**: é `Disallow` no robots.txt, não existe para ser compartilhado.
@@ -1580,8 +1589,27 @@ logado · gate no CI impedindo regressão.
   (evidência fraca). O discriminador forte é o **dia do mês consistente (±3)**.
 - **D-4** ✅ FINALIZADO — verificado em 2026-07-31: `modules/previsao-mes.js` existe, tem testes
   (`previsao-mes.test.js`) e **está ligado** — `db-relatorios.js:2504` faz o import lazy.
-- **D-5** 🔴 Restauração por perfil (RF-09 fases 2 e 3) — hoje restaurar reverte TODOS os perfis do plano.
-- **D-6** 🔴 Share Target (Passo 12) — compartilhar print do comprovante direto pro app.
+- **D-5** ✅ **JÁ ESTAVA FEITO** — verificado em 2026-08-03. As três fases do RF-09 estão no ar:
+  - **Fase 1** (`_restore-core.js`): o restore troca APENAS o slot do perfil pedido. Antes
+    sobrescrevia o `data_json` inteiro — um convidado restaurando revertia TODOS os perfis do
+    plano à data do snapshot, que era a dor nº 1 do RF-09. O blob é cifrado em repouso, então o
+    núcleo decifra current + snapshot, troca um slot e re-cifra, com CAS em `last_modified` para
+    abortar em corrida.
+  - **Fase 2**: config por perfil extraída para `modules/config-perfil.js` (pura, testável).
+  - **Fase 3**: reserva compartilhada v2 intra-conta, com convite → aceite.
+
+  95 testes verdes entre `restore-slot`, `config-perfil` e `reserva-familia`. O núcleo é
+  runtime-agnóstico de propósito: o edge importa **o mesmo arquivo** que o `node --test` exercita,
+  em vez de manter uma cópia que diverge.
+
+  ⬜ **Falta só teste humano:** a bateria `docs/rf09-bateria-testes.md` numa conta família.
+- **D-6** ⛔ **RECUSADO — decisão do dono (2026-08-03).** Não é pendência.
+  *"Perda de tempo. O tempo que a pessoa leva pra tirar um print e enviar é até menor do que
+  ela lançar a transação, não compensa."*
+
+  O argumento é bom e vale registrar: um atalho só vale se for mais curto que o caminho que
+  substitui. Compartilhar um print exige abrir a galeria, escolher a imagem e escolher o app —
+  e no fim alguém ainda teria de conferir o valor lido. Lançar direto tem menos passos.
 - **D-7** 🔴 Modo casal de verdade — "quem pagou o quê" + acerto de contas.
 
 ---
@@ -1632,7 +1660,16 @@ logado · gate no CI impedindo regressão.
   bump `CURRENT_TERMS_VERSION = '1.2'`.
 - **P-4** 🔴 Onboarding com valor no 1º minuto — importar OFX antes do primeiro lançamento manual.
 - **P-5** 🔴 Ancoragem de preço — anual (R$ 13,75/mês) como padrão, mensal ao lado.
-- **P-6** 🔴 FAQ respondendo *"por que não conecta meu banco?"* com orgulho. Omitir levanta suspeita.
+- **P-6** ✅ FINALIZADO (2026-08-03) — *"Por que o GranaEvo não conecta com o meu banco?"* entrou
+  no FAQ da landing, respondida de frente.
+  A resposta faz três coisas: diz que é **escolha, não limitação** ("quem conecta precisa manter
+  um acesso permanente à sua conta vivo em algum servidor"), oferece o **caminho prático** (o
+  import de OFX/CSV, senão a pergunta seguinte fica no ar: "então digito tudo à mão?") e **admite
+  o custo** ("de vez em quando você baixa um arquivo"). Vender só o lado bom de uma escolha é o
+  que faz o visitante desconfiar do resto.
+  ⚠️ O FAQ vive em DOIS lugares — HTML visível e JSON-LD do `<head>`. Divergir viola as diretrizes
+  do Google e derruba o rich snippet **em silêncio**: a página continua no ar, o snippet só nunca
+  aparece. Há teste comparando os dois, item a item e na ordem.
 
 ---
 
