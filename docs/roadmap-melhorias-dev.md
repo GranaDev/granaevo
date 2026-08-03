@@ -1505,9 +1505,17 @@ logado · gate no CI impedindo regressão.
 - **M-4** 🔴 Ciclo de vida (Passo 22): boas-vindas em 3 partes · reativação D+3 ·
   **"seu relatório do mês"** (maior retenção) · carrinho abandonado.
 - **M-5** 🔴 Programa de indicação (Passo 23) — natural no plano casal/família, que já tem convite.
-- **M-6** 🔴 Open Graph por página — hoje só a landing tem; `/planos` no WhatsApp não mostra card.
-- **M-7** 🔴 Pixel/analytics de funil — sem medir signup → ativação → pagamento, otimizar é chute.
-- **M-8** 🔴 `AggregateOffer` no JSON-LD com preço real → rich snippet de preço no Google.
+- **M-6** ✅ FINALIZADO — verificado em 2026-07-31: `index.html` **e** `planos.html` têm `og:title`,
+  `og:description` e `og:image`. O texto antigo ("só a landing tem") estava desatualizado.
+  `/login` fica de fora **de propósito**: é `Disallow` no robots.txt, não existe para ser compartilhado.
+- **M-7** 🟡 PENDENTE
+  **Falta:** carregar as tags. O código de evento **já existe** (`planos.js:823-830` dispara
+  `gtag('event')` e `fbq('track')`, e a CSP de `planos.html` já libera googletagmanager e
+  connect.facebook.net) — mas **nenhuma tag é carregada** em `index.html` nem `planos.html`, então
+  as chamadas caem em `if (window.gtag)` e não medem nada. Falta o snippet e o ID da conta.
+- **M-8** 🟡 PENDENTE
+  **Falta:** o JSON-LD de preço em `planos.html` — que é a página que deveria ganhar o rich
+  snippet. `index.html` já tem `Offer` (verificado em 2026-07-31).
 - **M-9** 🔴 Página "GranaEvo vs Mobills" — busca de alta intenção + endereça o Open Finance de frente.
 
 ---
@@ -1527,7 +1535,15 @@ logado · gate no CI impedindo regressão.
   3 critérios). Prometer o que o código não faz foi o erro do A-3; não repetir.
   Título sugerido: **"Importe do seu banco sem dar sua senha a ninguém."**
   Neutraliza o Open Finance sem os R$ 2.500+/mês do Pluggy.
-- **D-2** 🔴 ⭐ **Push em background que funciona** (RF-05). Hoje só chega com o app aberto → lembrete
+- **D-2** ✅ FINALIZADO — verificado em 2026-07-31. A edge `send-radar-push` existe e é disparada
+  por dois caminhos: o **cron diário** do Radar e a **entrega imediata** de
+  `notify-reserve-invite`. O RF-05 (toggle que mentia "Ativas" e subscription que nunca era
+  salva) foi corrigido em `c5b99a0`. O texto antigo dizia que só chegava com o app aberto —
+  desatualizado.
+
+  <details><summary>Descrição original</summary>
+
+  Hoje só chega com o app aberto → lembrete
   é inútil. iOS só entrega Web Push em PWA instalado (16.4+). **Trava o C-2.**
 - **D-3** ✅ **JÁ ESTAVA FEITO** — verificado em 2026-07-31. `modules/recorrencias.js` é exatamente
   este detector, e está ligado em **três** pontos: aviso automático no dashboard
@@ -1536,7 +1552,8 @@ logado · gate no CI impedindo regressão.
   Critérios conservadores e **13 testes**, incluindo os falsos-positivos difíceis: pedágio com
   valor fixo em dias aleatórios, conta fixa, pagamento de fatura, valor instável, 2 ocorrências
   (evidência fraca). O discriminador forte é o **dia do mês consistente (±3)**.
-- **D-4** 🔴 Previsão de fim de mês — "no seu ritmo você fecha com R$ X". Dados já existem.
+- **D-4** ✅ FINALIZADO — verificado em 2026-07-31: `modules/previsao-mes.js` existe, tem testes
+  (`previsao-mes.test.js`) e **está ligado** — `db-relatorios.js:2504` faz o import lazy.
 - **D-5** 🔴 Restauração por perfil (RF-09 fases 2 e 3) — hoje restaurar reverte TODOS os perfis do plano.
 - **D-6** 🔴 Share Target (Passo 12) — compartilhar print do comprovante direto pro app.
 - **D-7** 🔴 Modo casal de verdade — "quem pagou o quê" + acerto de contas.
@@ -1585,8 +1602,13 @@ logado · gate no CI impedindo regressão.
   Push semanal com 1 insight do Radar. **Depende de D-2.**
 - **C-3** 🔴 Sair do enum — `intencao: "conversa_livre"` caindo em template local (não em texto livre do modelo).
 - **C-4** 🔴 Medir a instalação real do PWA em subdomínio antes de investir mais nele.
-- **C-5** 🔴 TTS na confirmação do lançamento (o motor já existe).
-- **C-6** 🔴 Pagar conta pelo chat — já está no schema (`pagar_conta` + `conta_hint`), falta a ação.
+- **C-5** 🟡 PENDENTE
+  **Falta:** chamar o motor. `assistant/ui.js` tem `speak()`/`stopSpeak()` funcionando sobre
+  `speechSynthesis`, mas **ninguém chama** `speak()` fora do próprio arquivo (verificado em
+  2026-07-31). Falta só disparar na confirmação do lançamento.
+- **C-6** 🟡 PENDENTE
+  **Falta:** a ação. O schema já reconhece `pagar_conta` + `conta_hint` (confirmado em
+  2026-07-31) — o parser classifica a intenção, mas nada executa o pagamento.
 - **C-7** 🔴 Educação contextual — micro-lição derivada **no cliente**: "32% em delivery; a média é 12%".
 - **C-8** 🔴 Fallback honesto — `confianca < 0,6` → perguntar em vez de adivinhar.
 
