@@ -298,6 +298,23 @@ Deno.serve(async (req: Request) => {
   const metaLabels    = sanitizeLabels(payload.meta_labels)
   const cartaoLabels  = sanitizeLabels(payload.cartao_labels)
 
+  // ── C-4: contagem AGREGADA de instalação do PWA ──────────────────────────
+  // O cliente manda `pwa_standalone` UMA vez por sessão, junto da primeira
+  // mensagem. Pegar carona aqui evita criar rota nova (o Vercel trava em 12
+  // funções) e usa a única edge que o assistente já chama e que já tem
+  // service_role para executar a RPC.
+  //
+  // O denominador vira "quem usa o assistente" — que é justamente a base da
+  // decisão "vale investir mais no PWA?". Contar aberturas de página incluiria
+  // quem nunca falou com o assistente e diluiria a resposta.
+  //
+  // A RPC não recebe nem grava identidade: só incrementa um contador do dia.
+  // Fail-open e fire-and-forget — telemetria jamais atrasa ou derruba o chat.
+  if (typeof payload.pwa_standalone === 'boolean') {
+    supabaseAdmin.rpc('pwa_ping', { p_standalone: payload.pwa_standalone })
+      .then(() => {}, () => {})
+  }
+
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) return json({ ok: false, error: 'config' }, 500, cors)
 

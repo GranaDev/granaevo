@@ -656,10 +656,15 @@ export default async function handler(req, res) {
         const clampLabels = (v) => Array.isArray(v)
             ? v.filter(s => typeof s === 'string').slice(0, 30).map(s => s.slice(0, 40))
             : [];
+        // Allow-list de campos: o corpo do cliente NUNCA é repassado inteiro.
+        // C-4: `pwa_standalone` só passa se for booleano de verdade — qualquer
+        // outra coisa vira `undefined` e some do JSON, em vez de viajar como
+        // string e a edge ter de adivinhar o que fazer com ela.
         const safeBody = JSON.stringify({
             text:          parsed.text.slice(0, 500),
             meta_labels:   clampLabels(parsed.meta_labels),
             cartao_labels: clampLabels(parsed.cartao_labels),
+            pwa_standalone: typeof parsed.pwa_standalone === 'boolean' ? parsed.pwa_standalone : undefined,
         });
 
         let cpRes;

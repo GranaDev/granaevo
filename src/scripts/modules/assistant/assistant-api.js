@@ -29,6 +29,37 @@ function _clampLabels(list) {
     return out;
 }
 
+// ── C-4: sinal de instalação do PWA, UMA vez por sessão ─────────────────────
+// Responde "vale investir mais no PWA do assistente?" — que hoje não tem
+// resposta: o install.js sabe detectar instalação, mas ninguém contava.
+//
+// O que sobe é UM BOOLEANO, e o servidor grava num contador por DIA, sem
+// user_id, sem aparelho, sem IP. Não dá para reconstruir quem abriu o quê, então
+// não é dado pessoal — e por isso não reabre a declaração de LGPD.
+//
+// `sessionStorage` e não `localStorage`: a pergunta é "quantas SESSÕES vêm de um
+// app instalado". Com localStorage o sinal iria uma vez na vida e a série
+// temporal (que é o que mostra se está crescendo) nunca se formaria.
+const PWA_PING_KEY = 'ge_pwa_ping';
+
+function _ehStandalone() {
+    try {
+        return window.matchMedia?.('(display-mode: standalone)').matches === true
+            || window.navigator?.standalone === true;
+    } catch { return false; }
+}
+
+/** true na primeira chamada da sessão; false nas seguintes. Marca ao ser lido. */
+function _pwaPingPendente() {
+    try {
+        if (sessionStorage.getItem(PWA_PING_KEY)) return false;
+        sessionStorage.setItem(PWA_PING_KEY, '1');
+        return true;
+    } catch {
+        return false; // modo privado: telemetria é o primeiro a ser sacrificado
+    }
+}
+
 /**
  * Estrutura uma mensagem via IA (fallback do parser local).
  * @param {string} text  Texto cru do usuário.
@@ -55,6 +86,8 @@ export async function parseWithAI(text, ctx = {}) {
                 text:          clean.slice(0, MAX_TEXT),
                 meta_labels:   _clampLabels(ctx.metaLabels),
                 cartao_labels: _clampLabels(ctx.cartaoLabels),
+                // C-4 — vai UMA vez por sessão (undefined nas demais some do JSON).
+                ...(_pwaPingPendente() ? { pwa_standalone: _ehStandalone() } : {}),
             }),
             signal: controller.signal,
         });

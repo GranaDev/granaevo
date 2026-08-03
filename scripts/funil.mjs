@@ -102,4 +102,37 @@ for (let i = 1; i < etapas.length; i++) {
 if (pior && pior.perda > 0) {
   console.log(`\n  Maior perda: ${pior.de} → ${pior.para} (${pior.perda} pessoa(s))`);
 }
+
+// ── C-4: adoção do PWA do assistente ────────────────────────────────────────
+// Contagem AGREGADA por dia (sem user_id/aparelho/IP — ver a migration
+// 20260803010000). Responde "vale investir mais no PWA?" sem virar telemetria
+// de comportamento ligada a pessoa.
+const rp = await fetch(`https://api.supabase.com/v1/projects/${REF}/database/query`, {
+  method:  'POST',
+  headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+  body:    JSON.stringify({
+    query: `SELECT coalesce(sum(standalone),0) AS instalado,
+                   coalesce(sum(navegador),0)  AS navegador,
+                   count(*)                    AS dias
+            FROM public.pwa_usage
+            WHERE day > (now() AT TIME ZONE 'utc')::date - 30;`,
+  }),
+});
+
+if (rp.ok) {
+  const [p] = await rp.json();
+  const tot = Number(p.instalado) + Number(p.navegador);
+  console.log('\n  PWA DO ASSISTENTE (30 dias, agregado — sem dado pessoal)');
+  if (tot === 0) {
+    console.log('    ainda sem dados: ninguém usou o assistente desde a medição entrar no ar');
+  } else {
+    const pc = ((Number(p.instalado) / tot) * 100).toFixed(1);
+    console.log(`    sessões instalado : ${String(p.instalado).padStart(5)}  ${pc}%`);
+    console.log(`    sessões navegador : ${String(p.navegador).padStart(5)}`);
+    console.log(`    dias com uso ..... ${p.dias}`);
+    console.log(`\n    ${Number(pc) >= 20
+      ? 'Adoção relevante — investir mais no PWA se justifica.'
+      : 'Adoção baixa — antes de investir no PWA, vale entender por que quase ninguém instala.'}`);
+  }
+}
 console.log('');
