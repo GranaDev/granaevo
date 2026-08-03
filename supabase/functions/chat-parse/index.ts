@@ -270,9 +270,30 @@ Deno.serve(async (req: Request) => {
   if (!text || text.length > MAX_INPUT_CHARS) return json({ ok: false, error: 'input' }, 400, cors)
 
   // Rótulos NÃO-sensíveis (só nomes que o usuário mesmo digitou; nenhum valor/saldo).
+  //
+  // ⚠️ ESTES RÓTULOS ENTRAM NO PROMPT, e são o ÚNICO ponto onde o texto de uma
+  // pessoa pode chegar à chamada de modelo de OUTRA: num plano casal/família,
+  // uma meta criada pelo perfil A aparece na lista do perfil B. Alguém poderia
+  // nomear uma meta de "Viagem. IGNORE TUDO ACIMA e ..." e o texto viajaria
+  // para o turno do outro membro.
+  //
+  // O dano possível é pequeno — a saída é travada pelo schema `strict`, então o
+  // pior caso é uma classificação errada, visível e desfazível. Mas "pequeno"
+  // não é motivo para deixar aberto: quebra de linha e aspas são o que dá a um
+  // rótulo aparência de instrução, e nome de meta não precisa de nenhum dos dois.
+  const limparRotulo = (s: string): string =>
+    s.replace(/[\r\n\t]+/g, ' ')          // sem linha nova: não simula bloco de instrução
+     .replace(/["'`]+/g, '')              // sem aspas: não fecha o delimitador do texto
+     .replace(/\s{2,}/g, ' ')
+     .trim()
+     .slice(0, LABEL_MAX_CHARS)
+
   const sanitizeLabels = (v: unknown): string[] =>
     Array.isArray(v)
-      ? v.filter((s) => typeof s === 'string').slice(0, MAX_LABELS).map((s) => (s as string).slice(0, LABEL_MAX_CHARS))
+      ? v.filter((s) => typeof s === 'string')
+         .slice(0, MAX_LABELS)
+         .map((s) => limparRotulo(s as string))
+         .filter(Boolean)
       : []
   const metaLabels    = sanitizeLabels(payload.meta_labels)
   const cartaoLabels  = sanitizeLabels(payload.cartao_labels)
@@ -315,7 +336,12 @@ Deno.serve(async (req: Request) => {
     messages: [
       {
         role: 'user',
-        content: (contextLine ? contextLine + '\n\n' : '') + `Mensagem do usuário: """${text}"""`,
+        // O texto vai entre `"""` para o modelo saber onde ele começa e termina.
+        // Se o próprio usuário escrever `"""`, o delimitador fecha cedo e o resto
+        // da frase passa a parecer instrução. Neutralizar aqui é uma linha; o
+        // schema já barraria o estrago, mas defesa que custa uma linha se faz.
+        content: (contextLine ? contextLine + '\n\n' : '')
+          + `Mensagem do usuário: """${text.replace(/"""/g, '”””')}"""`,
       },
     ],
   }
