@@ -25,4 +25,10 @@
 //         re-aceite de todos os usuários (gap LGPD M2 da auditoria 2026-07-14).
 // =============================================================================
 
-export const CURRENT_TERMS_VERSION = '1.1'
+// 1.2 (2026-07-31) — re-aceite disparado por TRÊS tratamentos que já
+// aconteciam e não estavam declarados: aparelhos reconhecidos (`user_devices`,
+// base do alerta de login novo), Cloudflare Turnstile (que substituiu o Google
+// reCAPTCHA em 2026-07-27, e o Google seguia listado como operador) e ImprovMX
+// (recebe os e-mails de @granaevo.com). Ver privacidade.html e
+// docs/compliance/RoPA.md §7.
+export const CURRENT_TERMS_VERSION = '1.2'
