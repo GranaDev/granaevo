@@ -1398,8 +1398,11 @@ entrega.
 
 - **O-1** ✅ FEITO (2026-07-30) — partículas e paleta de comandos saíram para chunks lazy, com as
   guardas no CHAMADOR (antes do import), não dentro do módulo. `dashboard.js` em 38,4 KB de 40.
-- **O-2** 🟡 PENDENTE (2026-07-31)
-  **Falta:** (a) decidir o destino das **34 classes** `rf-*` e `saude-*` quando as telas de reserva de família e saúde financeira forem construídas ou abandonadas — hoje ficam porque são telas **planejadas**; (b) "CSS crítico inline + resto lazy", que **avaliei e não recomendo** (9–12 KB gz de ganho para a complexidade de manter o crítico em sincronia).
+- **O-2** ✅ FINALIZADO (2026-08-03, `4edc50d`)
+  **Poda:** 70 classes mortas removidas + `scripts/css-mortas.mjs`, que separa USADA / DINÂMICA / MORTA.
+  **CSS crítico:** o logo do loader é o LCP da landing e ficava preso atrás de 12 KB de folha. Agora é inline (1.840 bytes), **gerado** de `_loading.css` a cada build com as variáveis resolvidas em cadeia — não copiado, para não repetir a divergência que quebrou o tema claro.
+  ⚠️ A landing tem `style-src 'self'` sem `unsafe-inline`: o inline seria descartado e a página nasceria sem estilo. Resolvido com **hash**, propagado pelo gerador para o `<meta>` e para o `vercel.json` — sem afrouxar a CSP da página mais exposta do site. 6 testes travam a sincronia.
+  ⬜ **Fora do escopo, por decisão:** as 34 classes `rf-*`/`saude-*` ficam, porque são telas **planejadas**. Reavaliar quando forem construídas ou abandonadas.
   - ✅ `scripts/css-mortas.mjs` separa **USADA / DINÂMICA / MORTA**. A lista velha marcava tudo
     sem ocorrência literal, então enchia de falso-positivo (`cat-entrada`, `tipo-icon-saida`,
     `alerta-status` — montadas em runtime). No `_db-all.css`: das 104 "candidatas", **41 eram
@@ -1426,8 +1429,11 @@ entrega.
   - ⬜ **"CSS crítico inline + resto lazy" não foi feito.** O dashboard já carrega assíncrono
     (`media="print"` + `css-boot.js`); as públicas carregam bloqueando, mas são 9–12 KB gz —
     ganho pequeno para a complexidade de manter o crítico em sincronia.
-- **O-3** 🟡 PENDENTE (2026-07-31)
-  **Falta:** nada obrigatório — o que sobrou foi **deixado de fora por decisão**, não por atraso (29 índices de 16 kB em tabelas minúsculas e 2 pares de policy em tabelas de 7 e 10 linhas). Só reabrir se alguma dessas tabelas crescer de verdade. Detalhe do que foi feito e do porquê:
+- **O-3** ✅ FINALIZADO (2026-08-03, `44f15e5`) — **advisor de performance com ZERO warnings.**
+  Além dos 2 índices GIN inutilizáveis (sobre coluna cifrada) e da fusão no `financial_audit_log`, os 3 `multiple_permissive_policies` restantes foram eliminados.
+  ⚠️ `account_members` **não era fusão**: juntar as duas policies daria ao MEMBRO direito de escrita na própria membresia — ele poderia se reativar sozinho após ser removido. A saída foi **separar o `ALL` por comando**. Verificado com censo + plano de dados: INSERT como não-dono devolve 403.
+  Foi o próprio advisor que revelou esse par, que a consulta manual anterior deixou passar — a prova de que relatório limpo tem valor: ruído esconde o próximo aviso de verdade.
+  ⬜ **Fora do escopo, por decisão:** os 29 índices INFO de 16 kB em tabelas com < 60 linhas. "Nunca usado" ali só quer dizer "ainda é pequena".
   - ✅ **Dropados 2 índices GIN INUTILIZÁVEIS** (`20260731000000`). `idx_user_data_json` era GIN
     sobre `user_data.data_json`, que é **ciphertext** — verificado em prod: toda linha tem uma
     única chave de topo, `_enc`. Índice que nenhuma consulta pode ler, pago em **toda escrita**
