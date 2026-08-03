@@ -1508,14 +1508,34 @@ logado · gate no CI impedindo regressão.
 - **M-6** ✅ FINALIZADO — verificado em 2026-07-31: `index.html` **e** `planos.html` têm `og:title`,
   `og:description` e `og:image`. O texto antigo ("só a landing tem") estava desatualizado.
   `/login` fica de fora **de propósito**: é `Disallow` no robots.txt, não existe para ser compartilhado.
-- **M-7** 🟡 PENDENTE
-  **Falta:** carregar as tags. O código de evento **já existe** (`planos.js:823-830` dispara
+- **M-7** ✅ FINALIZADO (2026-07-31) — **resolvido SEM rastreador**, por `scripts/funil.mjs`.
+
+  ⛔ **As tags não serão carregadas, e isso é decisão — não pendência.** `privacidade.html` afirma
+  que "o GranaEvo não utiliza cookies de rastreamento", e a landing vende "Privacidade de Verdade
+  — diferente de outros apps". GA4 + Meta Pixel tornariam essa frase **falsa**, obrigariam a
+  declarar Google e Meta como operadores + transferência internacional, e — pela LGPD — exigiriam
+  **consentimento explícito**, porque cookie de marketing não se sustenta em legítimo interesse.
+  Num produto que se vende por privacidade, o custo não é o banner: é a contradição.
+
+  E era desnecessário: o funil pedido (cadastro → ativação → pagamento) está **inteiro no nosso
+  banco** — `auth.users`, `profiles`, `stripe_subscriptions` e `financial_audit_log` respondem
+  tudo, sem terceiro nenhum ver o usuário. O script exclui contas de teste, porque contá-las infla
+  a conversão e a gente acaba acreditando na própria maquiagem.
+
+  **Fora do alcance disto, e é honesto dizer:** origem do tráfego e comportamento ANTES do
+  cadastro. Se um dia for preciso, o caminho digno é analytics sem cookie (Plausible/Umami
+  self-hosted), não pixel de rede social.
+
+  <details><summary>Descrição original</summary>
+
+  Falta: carregar as tags. O código de evento **já existe** (`planos.js:823-830` dispara
   `gtag('event')` e `fbq('track')`, e a CSP de `planos.html` já libera googletagmanager e
   connect.facebook.net) — mas **nenhuma tag é carregada** em `index.html` nem `planos.html`, então
   as chamadas caem em `if (window.gtag)` e não medem nada. Falta o snippet e o ID da conta.
-- **M-8** 🟡 PENDENTE
-  **Falta:** o JSON-LD de preço em `planos.html` — que é a página que deveria ganhar o rich
-  snippet. `index.html` já tem `Offer` (verificado em 2026-07-31).
+- **M-8** ✅ FINALIZADO (2026-07-31, `b9baac3`) — `planos.html` declara as três ofertas com preço
+  individual. Conferido contra `PLAN_PRICES_CENTS` da edge que cobra de verdade, com teste que
+  trava a divergência: preço errado no snippet é a primeira informação que o cliente vê, e ele só
+  descobriria a diferença no checkout.
 - **M-9** 🔴 Página "GranaEvo vs Mobills" — busca de alta intenção + endereça o Open Finance de frente.
 
 ---
@@ -1602,13 +1622,18 @@ logado · gate no CI impedindo regressão.
   Push semanal com 1 insight do Radar. **Depende de D-2.**
 - **C-3** 🔴 Sair do enum — `intencao: "conversa_livre"` caindo em template local (não em texto livre do modelo).
 - **C-4** 🔴 Medir a instalação real do PWA em subdomínio antes de investir mais nele.
-- **C-5** 🟡 PENDENTE
-  **Falta:** chamar o motor. `assistant/ui.js` tem `speak()`/`stopSpeak()` funcionando sobre
-  `speechSynthesis`, mas **ninguém chama** `speak()` fora do próprio arquivo (verificado em
-  2026-07-31). Falta só disparar na confirmação do lançamento.
-- **C-6** 🟡 PENDENTE
-  **Falta:** a ação. O schema já reconhece `pagar_conta` + `conta_hint` (confirmado em
-  2026-07-31) — o parser classifica a intenção, mas nada executa o pagamento.
+- **C-5** ✅ FINALIZADO (2026-07-31, `b9baac3`) — fala **opt-in**, com o controle no próprio chip
+  de confirmação: onde a voz acontece é onde se descobre que ela existe e onde se desliga. Nasce
+  desligada — inclusive se o `localStorage` falhar (modo privado) — e o Desfazer chama
+  `stopSpeak()`, porque narrar um lançamento sendo desfeito é falar de algo que deixou de ser
+  verdade. 5 testes.
+- **C-6** ✅ **JÁ ESTAVA FEITO** — verificado em 2026-07-31. `#doPagarConta` resolve a conta,
+  trata ambiguidade (pergunta em vez de adivinhar), handoff de fatura de cartão, conta já paga,
+  aplica o pagamento e **desfaz se o save falhar**.
+  O que faltava de verdade era **teste**: um caminho que mexe em dinheiro por comando de texto
+  estava sem nenhum. 14 testes adicionados, todos passando de primeira — inclusive os limites que
+  importam (valor absurdo recusado, não paga duas vezes, e o desfazer não leva junto uma
+  transação parecida do usuário).
 - **C-7** 🔴 Educação contextual — micro-lição derivada **no cliente**: "32% em delivery; a média é 12%".
 - **C-8** 🔴 Fallback honesto — `confianca < 0,6` → perguntar em vez de adivinhar.
 
