@@ -52,7 +52,7 @@
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         script-src 'self' 'sha256-JpSqkc4lJtTGdFgSBst3AQTsEudZFZAC9KIwl5YXKLo=';
-        style-src 'self';
+        style-src 'self' 'sha256-PlLVk5aIklTLyak+ayZaXIf1v1imIaDEv0ylhj5MUZM=';
         font-src 'self';
         img-src 'self' data:;
         connect-src 'self';
@@ -232,9 +232,39 @@
 
     <!-- Fonts: Inter auto-importado via landingpage.css → _fonts.css (@fontsource/inter) -->
 
-    <!-- CSS local -->
-    <link rel="stylesheet" href="src/styles/landingpage.css">
-    <link rel="stylesheet" href="src/styles/landing-demo.css">
+    <!--
+        O-2 — CSS crítico inline + o resto sem bloquear a pintura.
+
+        O LCP desta página é o logo dentro da tela de carregamento. Antes, ele
+        só podia ser pintado depois que os 12 KB (gzip) de CSS baixassem e
+        fossem processados — o primeiro pixel ficava preso atrás de uma folha
+        inteira, sendo que o loader usa ~40 linhas dela.
+
+        O bloco abaixo é GERADO a partir do próprio `landing/_loading.css`, com
+        as variáveis resolvidas (elas ainda não existem neste ponto do HTML).
+        Não editar à mão: `npm run critical:build` reescreve. Gerar em vez de
+        copiar evita a armadilha das duas cópias que divergem — foi assim que o
+        tema claro regrediu no commit 4ac7c64.
+    -->
+    <!-- CRITICAL-CSS:START (gerado por scripts/build-critical-css.mjs — não editar à mão) -->
+    <style>.loading-screen{position:fixed;inset:0;background:#0a0b14;display:flex;align-items:center;justify-content:center;z-index:10000;transition:opacity 0.5s ease,visibility 0.5s ease}.loading-screen.hidden{opacity:0;visibility:hidden;pointer-events:none}.loader{text-align:center}.loader-logo{width:96px;height:96px;margin:0 auto 2rem;position:relative}.loader-logo::before{content:'';position:absolute;inset:-8px;border-radius:24px;border:2px solid transparent;background:linear-gradient(135deg,#10b981,transparent) border-box;-webkit-mask:linear-gradient(#fff 0 0) padding-box,linear-gradient(#fff 0 0);-webkit-mask-composite:destination-out;mask-composite:exclude;animation:spin 3s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.logo-img-loader{width:100%;height:100%;object-fit:contain;border-radius:16px;box-shadow:0 0 40px rgba(16,185,129,0.60);animation:logoFloat 2.5s ease-in-out infinite}@keyframes logoFloat{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-8px) scale(1.04)}}.loader-bar{width:220px;height:5px;background:rgba(16,185,129,0.12);border-radius:9999px;overflow:hidden;margin:0 auto 1rem}.loader-progress{height:100%;width:40%;background:linear-gradient(90deg,transparent,#6ee7b7,#10b981,transparent);border-radius:9999px;animation:loadIndeterminate 1.1s ease-in-out infinite;box-shadow:0 0 14px rgba(16,185,129,0.7);will-change:transform}.loader-text{font-size:0.8125rem;font-weight:500;color:#9ca3af;letter-spacing:0.03em;animation:pulse 2s ease-in-out infinite}@keyframes loadIndeterminate{0%{transform:translateX(-130%)}100%{transform:translateX(320%)}}@media (prefers-reduced-motion:reduce){.loader-progress{animation:none;width:100%;transform:none}}@keyframes shimmerBg{0%{background-position:100% 0}100%{background-position:-100% 0}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}</style>
+    <!-- CRITICAL-CSS:END -->
+
+    <!--
+        `media="print"` faz o navegador BAIXAR sem bloquear a pintura;
+        `public/css-boot.js` troca para `media="all"` quando chega. O <noscript>
+        garante estilo para quem desativa JavaScript.
+        A rede de segurança do css-boot (load + error + window.load + timeout)
+        existe porque o evento `load` de um stylesheet `media="print"` nem
+        sempre dispara, e sem ela a página poderia ficar sem estilo.
+    -->
+    <link rel="stylesheet" href="src/styles/landingpage.css" media="print" data-async-style>
+    <link rel="stylesheet" href="src/styles/landing-demo.css" media="print" data-async-style>
+    <noscript>
+        <link rel="stylesheet" href="src/styles/landingpage.css">
+        <link rel="stylesheet" href="src/styles/landing-demo.css">
+    </noscript>
+    <script src="/css-boot.js"></script>
 </head>
 
 <body>

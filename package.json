@@ -9,7 +9,7 @@
     "fa:subset": "node scripts/build-fa-subset.mjs",
     "fonts:subset": "node scripts/build-fonts-subset.mjs",
     "lighttheme:build": "node scripts/build-light-theme.mjs",
-    "prebuild": "node scripts/check-refs.mjs && node scripts/build-fa-subset.mjs && node scripts/build-fonts-subset.mjs && node scripts/build-light-theme.mjs && node scripts/build-sitemap.mjs",
+    "prebuild": "node scripts/check-refs.mjs && node scripts/build-fa-subset.mjs && node scripts/build-fonts-subset.mjs && node scripts/build-light-theme.mjs && node scripts/build-critical-css.mjs && node scripts/build-sitemap.mjs",
     "build": "vite build",
     "postbuild": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview",
@@ -24,7 +24,8 @@
     "lh": "lhci autorun --config=lighthouserc.cjs",
     "check:allowlist": "node scripts/check-allowlist.mjs",
     "check:dead": "node scripts/check-dead-code.mjs",
-    "sitemap:build": "node scripts/build-sitemap.mjs"
+    "sitemap:build": "node scripts/build-sitemap.mjs",
+    "critical:build": "node scripts/build-critical-css.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",
