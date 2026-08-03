@@ -1636,8 +1636,13 @@ logado · gate no CI impedindo regressão.
 - **C-1** 🔴 ⭐ **Memória de conversa** — o gap nº 1. *"Gastei 50 no mercado"* → *"e mais 30 ontem"*
   não funciona. Passar os últimos 2 turnos (só texto e intenção, **nunca valores**) no `contextLine`.
   Não quebra a arquitetura nem o cache do prompt.
-- **C-2** 🔴 **Proatividade real** — o Passo 29 está marcado como feito, mas **o gatilho não dispara**.
-  Push semanal com 1 insight do Radar. **Depende de D-2.**
+- **C-2** 🔴 NÃO INICIADO — **push semanal** com um insight do Radar.
+  ⚠️ Corrigindo o texto antigo, que confundia duas coisas: a proatividade **na abertura do chat**
+  funciona (é o `aberturaInsights()` do C-7, com fatura, orçamento, assinatura não cadastrada e
+  micro-lição). O que não existe é o **push que chega sem o usuário abrir o app**.
+  ✅ **A dependência caiu:** o D-2 foi verificado e está funcionando — `send-radar-push` é disparada
+  pelo cron diário e pela entrega imediata. Falta só decidir a régua (o que merece interromper
+  alguém uma vez por semana) e agendar.
 - **C-3** 🔴 Sair do enum — `intencao: "conversa_livre"` caindo em template local (não em texto livre do modelo).
 - **C-4** 🔴 Medir a instalação real do PWA em subdomínio antes de investir mais nele.
 - **C-5** ✅ FINALIZADO (2026-07-31, `b9baac3`) — fala **opt-in**, com o controle no próprio chip
@@ -1652,7 +1657,11 @@ logado · gate no CI impedindo regressão.
   estava sem nenhum. 14 testes adicionados, todos passando de primeira — inclusive os limites que
   importam (valor absurdo recusado, não paga duas vezes, e o desfazer não leva junto uma
   transação parecida do usuário).
-- **C-7** 🔴 Educação contextual — micro-lição derivada **no cliente**: "32% em delivery; a média é 12%".
+- **C-7** ✅ **JÁ ESTAVA FEITO** — verificado em 2026-07-31. `insights.js` exporta `microLicao()`,
+  o `engine.js` a importa e chama dentro de `aberturaInsights()`, e essa função é chamada de
+  verdade por `assistente.js:154` quando o chat abre. Os números são derivados **no cliente**: a
+  IA não vê nenhum deles. Entra depois dos avisos urgentes de propósito — uma lição de padrão não
+  passa na frente de uma fatura vencendo.
 - **C-8** 🔴 Fallback honesto — `confianca < 0,6` → perguntar em vez de adivinhar.
 
 ---
