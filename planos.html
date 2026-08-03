@@ -76,6 +76,85 @@
 
     <!-- Fonts: Inter auto-importado via planos.css → _fonts.css (@fontsource/inter) -->
 
+    <!--
+        JSON-LD (M-8) — esta é a página do rich snippet de PREÇO, e era a única
+        que não tinha dado estruturado nenhum. O index já declara um
+        AggregateOffer (faixa 19,99–54,99); aqui vão as TRÊS ofertas com preço
+        individual, que é o que o Google precisa para mostrar valor na busca.
+
+        `application/ld+json` é DATA BLOCK, não script executável — não é
+        bloqueado pelo script-src da CSP nem por Trusted Types.
+
+        ⚠️ Os preços aqui têm de bater com `PLAN_PRICES_CENTS` em
+        supabase/functions/update-stripe-plan/index.ts (1999/3499/5499). Preço
+        errado no snippet é promessa falsa na primeira impressão que o cliente
+        tem do produto. Sem aggregateRating de propósito: não há usuários para
+        avaliar, e nota inventada é mentira.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "@id": "https://www.granaevo.com/planos#software",
+      "name": "GranaEvo",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web, Android, iOS",
+      "url": "https://www.granaevo.com/planos",
+      "description": "Controle financeiro pessoal sem conectar sua conta bancária. Importe o extrato do seu banco (OFX ou CSV), organize gastos, cartões e metas.",
+      "publisher": { "@id": "https://www.granaevo.com/#organization" },
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Individual",
+          "description": "1 perfil",
+          "price": "19.99",
+          "priceCurrency": "BRL",
+          "availability": "https://schema.org/InStock",
+          "url": "https://www.granaevo.com/planos",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "19.99",
+            "priceCurrency": "BRL",
+            "billingIncrement": 1,
+            "unitCode": "MON"
+          }
+        },
+        {
+          "@type": "Offer",
+          "name": "Casal",
+          "description": "2 perfis",
+          "price": "34.99",
+          "priceCurrency": "BRL",
+          "availability": "https://schema.org/InStock",
+          "url": "https://www.granaevo.com/planos",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "34.99",
+            "priceCurrency": "BRL",
+            "billingIncrement": 1,
+            "unitCode": "MON"
+          }
+        },
+        {
+          "@type": "Offer",
+          "name": "Família",
+          "description": "até 4 perfis",
+          "price": "54.99",
+          "priceCurrency": "BRL",
+          "availability": "https://schema.org/InStock",
+          "url": "https://www.granaevo.com/planos",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "54.99",
+            "priceCurrency": "BRL",
+            "billingIncrement": 1,
+            "unitCode": "MON"
+          }
+        }
+      ]
+    }
+    </script>
+
     <!-- CSS -->
     <link rel="stylesheet" href="src/styles/planos.css">
 </head>

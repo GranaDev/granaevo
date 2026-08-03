@@ -101,6 +101,19 @@ html, body {
 .ge-undo-btn:hover { background: var(--color-bg-soft); color: var(--color-text); }
 .ge-undo-btn:disabled { opacity: 0.4; cursor: default; }
 
+/* C-5 — liga/desliga a leitura em voz alta da confirmação.
+   Discreto de propósito: fica ao lado do "Desfazer", que é a ação importante
+   do chip. Só ganha cor quando ligado, para o estado ser visível de relance. */
+.ge-falar-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex: 0 0 auto;
+  border: 1px solid var(--color-border-strong); background: transparent;
+  color: var(--color-text-faint); border-radius: var(--radius-full);
+  cursor: pointer; transition: var(--transition-fast);
+}
+.ge-falar-btn:hover { background: var(--color-bg-soft); color: var(--color-text); }
+.ge-falar-btn.is-on { color: var(--color-primary); border-color: var(--color-primary); }
+
 /* Indicador "digitando" */
 .ge-typing { display: inline-flex; gap: 4px; padding: var(--space-3) var(--space-4);
   background: var(--color-bg-card); border: 1px solid var(--color-border);

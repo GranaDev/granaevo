@@ -186,6 +186,78 @@ export function speak(text) {
 }
 export function stopSpeak() { try { window.speechSynthesis?.cancel(); } catch { /* ignore */ } }
 
+// ── C-5: falar a confirmação do lançamento ──────────────────────────────────
+// O motor (speak/stopSpeak) existia desde o D37 e NINGUÉM o chamava. Faltava
+// decidir *quando* falar — e a resposta não é "sempre".
+//
+// É OPT-IN, e por um motivo prático: o assistente é só texto (não há entrada
+// por voz), então falar toda confirmação em voz alta pegaria o usuário de
+// surpresa no ônibus. Quem quiser ouvir liga uma vez e fica ligado.
+//
+// O controle mora no PRÓPRIO chip de confirmação: é onde a voz acontece, então
+// é onde se descobre que ela existe e onde se desliga. Um botão em tela de
+// configurações seria mais "organizado" e ninguém acharia.
+const TTS_KEY = 'ge:falar-confirmacoes';
+
+export function ttsAtivo() {
+    try { return localStorage.getItem(TTS_KEY) === '1'; } catch { return false; }
+}
+
+function _setTts(v) {
+    try { localStorage.setItem(TTS_KEY, v ? '1' : '0'); } catch { /* modo privado */ }
+}
+
+/** Ícone de som em SVG inline — `fa-volume-*` não está no subset, e incluir
+ *  exigiria rodar `npm run fa:subset` e engordar a fonte por um botão só. */
+function _iconeSom(ligado) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 20 20');
+    svg.setAttribute('width', '15'); svg.setAttribute('height', '15');
+    svg.setAttribute('fill', 'none'); svg.setAttribute('aria-hidden', 'true');
+    const alto = document.createElementNS(NS, 'path');
+    alto.setAttribute('d', 'M4 8v4h2.5L10 15V5L6.5 8H4z');
+    alto.setAttribute('fill', 'currentColor');
+    svg.appendChild(alto);
+    const onda = document.createElementNS(NS, 'path');
+    onda.setAttribute('d', ligado ? 'M12.5 7.5a3.5 3.5 0 010 5' : 'M12.5 8l4 4m0-4l-4 4');
+    onda.setAttribute('stroke', 'currentColor');
+    onda.setAttribute('stroke-width', '1.6');
+    onda.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(onda);
+    return svg;
+}
+
+/** Botão que liga/desliga a fala e já demonstra o efeito ao ligar. */
+function _botaoFalar(texto) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ge-falar-btn';
+
+    const pintar = () => {
+        const on = ttsAtivo();
+        b.replaceChildren(_iconeSom(on));
+        b.setAttribute('aria-pressed', String(on));
+        b.classList.toggle('is-on', on);
+        // O rótulo diz o que ACONTECE ao clicar, não o estado atual — é o que
+        // funciona para leitor de tela e para quem passa o mouse.
+        b.title = on ? 'Parar de falar as confirmações' : 'Falar as confirmações em voz alta';
+        b.setAttribute('aria-label', b.title);
+    };
+
+    b.addEventListener('click', () => {
+        const novo = !ttsAtivo();
+        _setTts(novo);
+        pintar();
+        // Ligou: fala esta mesma confirmação, para o efeito ser imediato e
+        // óbvio. Desligou: cala na hora, sem esperar a frase terminar.
+        if (novo) speak(texto); else stopSpeak();
+    });
+
+    pintar();
+    return b;
+}
+
 /** Chip de confirmação com botão Desfazer (+ Corrigir p/ saída/entrada). onUndo é async. */
 export function addConfirm({ text, chip }, onUndo) {
     haptic(); // D39: feedback tátil sutil ao confirmar
@@ -198,6 +270,10 @@ export function addConfirm({ text, chip }, onUndo) {
     t.className = 'ge-confirm-text';
     renderFormatted(t, text);
     wrap.appendChild(t);
+
+    // C-5: fala a confirmação, se o usuário tiver ligado.
+    if (ttsAtivo()) speak(text);
+    wrap.appendChild(_botaoFalar(text));
 
     // D35: "Corrigir" — só pra saída/entrada (onde a correção inline funciona).
     if (chip?.categoria === 'saida' || chip?.categoria === 'entrada') {
@@ -214,6 +290,9 @@ export function addConfirm({ text, chip }, onUndo) {
     btn.textContent = chip?.undoLabel || 'Desfazer';
     btn.addEventListener('click', async () => {
         btn.disabled = true;
+        // Cala na hora: continuar narrando um lançamento que está sendo desfeito
+        // é o assistente falando de algo que deixou de ser verdade.
+        stopSpeak();
         const res = await onUndo();
         btn.replaceChildren(faIcon('fa-check'));
         if (res?.text) addAssistantMessage(res.text);
