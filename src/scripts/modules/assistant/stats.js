@@ -12,7 +12,14 @@ let _s = null;
 
 function _load() {
     if (_s) return _s;
-    _s = { local: 0, ia_ok: 0, ia_fail: 0, offline: 0 };
+    // ⚠️ Contador não declarado aqui é IGNORADO em silêncio pelo bump()
+    // (`if (kind in s)`). Ao criar um bump('novo'), some o nome nas DUAS linhas
+    // de inicialização — senão a telemetria parece existir e não conta nada.
+    //
+    // `ia_incerta` (C-8): a IA respondeu, mas com confiança abaixo do limiar e o
+    // assistente preferiu perguntar. É o número que diz se o limiar está bom —
+    // alto demais e ele vira chato; baixo demais e volta a adivinhar.
+    _s = { local: 0, ia_ok: 0, ia_fail: 0, offline: 0, ia_incerta: 0 };
     try {
         const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
         if (raw && typeof raw === 'object') {
@@ -44,6 +51,6 @@ export function snapshot() {
 
 /** Zera tudo (logout). */
 export function clearStats() {
-    _s = { local: 0, ia_ok: 0, ia_fail: 0, offline: 0 };
+    _s = { local: 0, ia_ok: 0, ia_fail: 0, offline: 0, ia_incerta: 0 };
     try { localStorage.removeItem(KEY); } catch { /* ignore */ }
 }

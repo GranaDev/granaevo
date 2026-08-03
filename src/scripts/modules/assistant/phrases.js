@@ -365,6 +365,40 @@ export function confirmCancelado() {
     return pick(['Beleza, cancelei.', 'Ok, não lancei nada.', 'Tranquilo, deixei pra lá.']);
 }
 
+/**
+ * C-8 — a IA entendeu, mas com pouca certeza. Em vez de gravar e torcer,
+ * mostra o que entendeu e pergunta.
+ *
+ * A frase REPETE a interpretação em vez de perguntar "é isso?" no vazio: sem
+ * ver o que foi entendido, o usuário responde "sim" no automático e a dúvida
+ * não serviu para nada. Admitir a incerteza também é honesto — um assistente
+ * que finge certeza em dinheiro perde a confiança de uma vez só.
+ */
+export function confirmarIncerto(cmd) {
+    if (cmd.intent === 'pagar_conta') {
+        return `Não tenho certeza se entendi. Você quer marcar como paga a conta `
+             + `“${cmd.contaHint || 'que você citou'}”? Responda *sim* ou *não*.`;
+    }
+    if (cmd.intent === 'definir_orcamento') {
+        return `Não tenho certeza se entendi. Você quer definir orçamento de `
+             + `${formatBRL(cmd.valor)} para “${cmd.tipo || 'essa categoria'}”? Responda *sim* ou *não*.`;
+    }
+    if (cmd.intent === 'lembrete') {
+        return `Não tenho certeza se entendi. Crio um lembrete de `
+             + `“${cmd.lembreteTexto || 'isso'}”? Responda *sim* ou *não*.`;
+    }
+
+    // lancar — o caso mais comum e o de maior estrago se errar.
+    const onde = cmd.tipo ? ` em ${cmd.tipo}` : '';
+    const oQue = cmd.descricao ? ` (${cmd.descricao})` : '';
+    const acao = cmd.categoria === 'entrada' ? 'entrada'
+        : cmd.categoria === 'reserva' ? 'reserva'
+        : cmd.categoria === 'retirada_reserva' ? 'retirada da reserva'
+        : 'saída';
+    return `Não tenho certeza se entendi. Você quis lançar uma ${acao} de `
+         + `${formatBRL(cmd.valor)}${onde}${oQue}? Responda *sim* ou *não*.`;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // INSIGHTS & PROATIVIDADE (voz do Ge sobre dados 100% locais)
 // Retornam string OU null (null = "não há o que dizer" → o engine não mostra).

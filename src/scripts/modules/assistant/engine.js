@@ -27,6 +27,17 @@ import * as P from './phrases.js';
 import { microLicao, assinaturaNaoCadastrada } from './insights.js';
 
 const CONF_LOCAL_OK = 0.7;   // acima disso confiamos no parser local (sem gastar IA)
+
+// C-8 — abaixo disto a IA está chutando, e chute não vira gravação sem perguntar.
+// 0,6 e não 0,7: o limiar do parser local é mais rígido porque ele é literal
+// (casa palavra, não entende contexto). A IA erra menos na faixa média, então
+// exigir 0,7 dela transformaria em pergunta um monte de parse que estava certo —
+// e assistente que pergunta demais é tão inútil quanto o que adivinha demais.
+const CONF_IA_MIN = 0.6;
+
+// Só intenção que ESCREVE. Errar numa consulta custa uma resposta boba; errar
+// num lançamento cria dinheiro que não existe.
+const ESCREVE = new Set(['lancar', 'pagar_conta', 'definir_orcamento', 'lembrete']);
 const LIMITE_CONFIRM = 50000; // lançamentos acima disso pedem confirmação (anti-typo)
 const RE_SIM = /^(sim|s|isso|isso ai|confirmo|confirma|pode|pode ser|claro|com certeza|aha|ok|blz|manda|vai)\b/;
 const RE_NAO = /^(nao|n|cancela|deixa|esquece|para|nem|negativo)\b/;
@@ -342,7 +353,11 @@ class AssistantEngine {
             if (RE_SIM.test(t)) {
                 const pend = this.#pendingConfirm;
                 this.#pendingConfirm = null;
-                return pend.kind === 'retirada' ? this.#doRetirada(pend.cmd) : this.#doLancamento(pend.cmd);
+                // `incerto` (C-8) volta pelo #route: a dúvida pode ser sobre
+                // qualquer intenção que escreve, não só um lançamento.
+                if (pend.kind === 'incerto')  return this.#route(pend.cmd);
+                if (pend.kind === 'retirada') return this.#doRetirada(pend.cmd);
+                return this.#doLancamento(pend.cmd);
             }
             if (RE_NAO.test(t)) {
                 this.#pendingConfirm = null;
@@ -350,6 +365,9 @@ class AssistantEngine {
             }
             this.#pendingConfirm = null; // resposta não foi sim/não → segue o fluxo
         }
+
+        // C-8: confirmação por BAIXA CONFIANÇA da IA (mesmo mecanismo do valor alto).
+        // Tratada junto com as outras porque `kind` decide o destino do "sim".
 
         // Correção inline do último lançamento ("não, foram 50", "na verdade foi 80") — B20
         // Roda SEM depender de haver um lançamento recente: "muda o valor pra 80"
@@ -518,6 +536,27 @@ class AssistantEngine {
                 // exatamente o bug que o describe.js veio matar. A extração local
                 // segura a ponta: veio das palavras literais do usuário.
                 const cmd = toCommand({ ...ai.parse, descricao: ai.parse?.descricao || local.descricao, source: 'ia' });
+
+                // C-8 — quando a própria IA diz que não tem certeza, PERGUNTA.
+                //
+                // Até aqui, `ai.ok` bastava: a confiança que o modelo devolve era
+                // pedida no schema e nunca lida. Um palpite fraco virava lançamento
+                // com a mesma naturalidade de um parse certo.
+                //
+                // Só vale para intenção que ESCREVE. Errar numa consulta custa uma
+                // resposta boba, que o usuário relê e reformula; errar num
+                // lançamento cria dinheiro que não existe e contamina saldo,
+                // previsão e relatório — e o usuário pode nem notar na hora.
+                //
+                // Reusa o `#pendingConfirm` do valor alto: mesma pergunta de sim/não,
+                // mesmo cancelamento, nada de mecanismo paralelo.
+                const conf = Number(ai.parse?.confianca);
+                if (ESCREVE.has(cmd.intent) && Number.isFinite(conf) && conf < CONF_IA_MIN) {
+                    bump('ia_incerta');
+                    this.#pendingConfirm = { cmd, kind: 'incerto' };
+                    return { text: P.confirmarIncerto(cmd) };
+                }
+
                 // B12: aprende o comerciante que a IA resolveu (o parser não sabia).
                 if (cmd.intent === 'lancar' && cmd.categoria && cmd.tipo) {
                     try { learnMerchant(text, cmd.categoria, cmd.tipo); } catch { /* ignore */ }
