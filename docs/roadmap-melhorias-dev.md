@@ -1634,7 +1634,14 @@ logado · gate no CI impedindo regressão.
   O argumento é bom e vale registrar: um atalho só vale se for mais curto que o caminho que
   substitui. Compartilhar um print exige abrir a galeria, escolher a imagem e escolher o app —
   e no fim alguém ainda teria de conferir o valor lido. Lançar direto tem menos passos.
-- **D-7** 🔴 Modo casal de verdade — "quem pagou o quê" + acerto de contas.
+- **D-7** ⛔ **RECUSADO — decisão do dono (2026-08-03).** Não é pendência.
+  *"Está bom assim. Nem todos os casais querem dividir despesas — muitos querem administrar os
+  próprios gastos sozinhos. Por exemplo, dois amigos que dividem o plano."*
+
+  O argumento corrige uma premissa que o item embutia: que "plano Casal" significa "finanças
+  conjuntas". Não significa. O plano vende **perfis separados no mesmo assinatura** — e quem
+  compra pode ser um casal com contas separadas, dois amigos ou pai e filho. Construir acerto de
+  contas assumiria um único modelo de convivência e atrapalharia os demais.
 
 ---
 
@@ -1682,8 +1689,14 @@ logado · gate no CI impedindo regressão.
 
   Declarar `user_devices` / `notify-login` + os operadores faltantes (ImprovMX, push) →
   bump `CURRENT_TERMS_VERSION = '1.2'`.
-- **P-4** 🔴 Onboarding com valor no 1º minuto — importar OFX antes do primeiro lançamento manual.
-- **P-5** 🔴 Ancoragem de preço — anual (R$ 13,75/mês) como padrão, mensal ao lado.
+- **P-4** ⛔ **RECUSADO — decisão do dono (2026-08-03).** Não é pendência.
+  *"Não quero mais."*
+- **P-5** ⛔ **RECUSADO por ora — decisão do dono (2026-08-03).** Não é pendência.
+  *"Prefiro só mensal mesmo por hora."*
+
+  ⚠️ Se um dia for reaberto: criar plano anual mexe no Stripe (novos preços), no
+  `PLAN_PRICES_CENTS` e no JSON-LD de `/planos` — que tem teste travando a igualdade entre o
+  preço anunciado e o cobrado. Não é só texto na página.
 - **P-6** ✅ FINALIZADO (2026-08-03) — *"Por que o GranaEvo não conecta com o meu banco?"* entrou
   no FAQ da landing, respondida de frente.
   A resposta faz três coisas: diz que é **escolha, não limitação** ("quem conecta precisa manter
