@@ -7,7 +7,8 @@
 // ---------------------------------------------------------------------------
 
 import { dataManager } from '../data-manager.js';
-import { parseLocal, splitCompound, parseFollowup, keywordMatch, mencionaLancamentoAntigo } from './parser-local.js';
+import { parseLocal, splitCompound, parseFollowup, keywordMatch, mencionaLancamentoAntigo,
+         ehContinuacao, descricaoVazia } from './parser-local.js';
 import { extractDescricao, textoParaModelo } from './describe.js';
 import { parseValorBR, parseDataFutura } from './money.js';
 import { toCommand } from './normalize.js';
@@ -38,6 +39,11 @@ const CONF_IA_MIN = 0.6;
 // Só intenção que ESCREVE. Errar numa consulta custa uma resposta boba; errar
 // num lançamento cria dinheiro que não existe.
 const ESCREVE = new Set(['lancar', 'pagar_conta', 'definir_orcamento', 'lembrete']);
+// C-1 — validade do contexto de conversa. Uma aba esquecida aberta desde ontem
+// não é uma conversa: o "e mais 30" de agora não continua o mercado de ontem à
+// noite. Fora da janela o assistente volta a perguntar, que é o comportamento
+// seguro. Não vale para o "de novo" (B15), que é um pedido explícito e sem prazo.
+const JANELA_CONTEXTO_MS = 10 * 60 * 1000;
 const LIMITE_CONFIRM = 50000; // lançamentos acima disso pedem confirmação (anti-typo)
 const RE_SIM = /^(sim|s|isso|isso ai|confirmo|confirma|pode|pode ser|claro|com certeza|aha|ok|blz|manda|vai)\b/;
 const RE_NAO = /^(nao|n|cancela|deixa|esquece|para|nem|negativo)\b/;
@@ -62,7 +68,7 @@ class AssistantEngine {
     #lastUndo = null;       // fn de desfazer do último lançamento (desfazer por texto)
     #lastQuery = null;      // { consultaAlvo, palavrasChave, periodo } p/ follow-up
     #lastTxInfo = null;     // { profileId, txSnap, cmd } p/ correção inline (B20)
-    #lastLancamentoCmd = null; // último lançamento saida/entrada/reserva (p/ "de novo" — B15)
+    #lastLancamentoCmd = null; // último lançamento saida/entrada/reserva (p/ "de novo" — B15 — e contexto do C-1)
 
     get ready() { return this.#ready; }
 
@@ -513,6 +519,43 @@ class AssistantEngine {
             }
         }
 
+        // C-1 — MEMÓRIA DE CONVERSA. "gastei 50 no mercado" → "e mais 30".
+        //
+        // Até aqui cada mensagem era um universo isolado: o "30" chegava sem
+        // direção e o assistente perguntava "foi gasto ou entrada?" — uma
+        // pergunta cuja resposta ele tinha acabado de ouvir. Ditando no meio do
+        // mercado, é o bastante pra pessoa desistir e voltar pra planilha.
+        //
+        // Vem DEPOIS do B12 de propósito: comerciante aprendido é sinal mais
+        // forte que herança. "e mais 30 no ifood" merece a categoria do ifood,
+        // não a da frase anterior.
+        //
+        // Herda só o que falta, e só com marcador explícito ("e", "mais"): o
+        // "e" é o consentimento do usuário de que ainda é o mesmo assunto.
+        if (local.intencao === 'valor_ambiguo' && ehContinuacao(text)) {
+            const ctx = this.#contextoLancamento();
+            if (ctx) {
+                bump('local'); // resolvido no aparelho, sem gastar token de IA
+                return this.#route(toCommand({
+                    ...local,
+                    intencao: 'lancar',
+                    categoria: ctx.categoria,
+                    tipo: local.tipo || ctx.tipo,
+                    // `meta_hint` em snake_case: é assim que o toCommand lê (ele
+                    // converte pra metaHint). Escrever `metaHint:` aqui compila,
+                    // não quebra teste nenhum e é silenciosamente ignorado — a
+                    // continuação de reserva perderia a meta e viraria pergunta.
+                    meta_hint: local.meta_hint || ctx.metaHint,
+                    // A descrição NUNCA é herdada: "e mais 30" depois de "50 de
+                    // pão" é outro item, não mais pão. E quando o texto só tem o
+                    // marcador, o extractDescricao devolve "Também"/"Outro" —
+                    // que viraria o nome da transação na lista do usuário.
+                    descricao: descricaoVazia(local.descricao) ? null : local.descricao,
+                    source: 'local', confianca: 0.9,
+                }));
+            }
+        }
+
         // R5 — o portão agora tem DUAS perguntas, não uma.
         //   confianca  = "sei o que ele quer?"
         //   completude = "li tudo que estava na frase?"
@@ -724,7 +767,8 @@ class AssistantEngine {
             ? { profileId, txSnap, cmd: { intent: 'lancar', categoria: cmd.categoria, tipo: cmd.tipo, descricao: cmd.descricao } }
             : null;
         // B15: guarda o último lançamento (saida/entrada/reserva) p/ "de novo".
-        this.#lastLancamentoCmd = { intent: 'lancar', categoria: cmd.categoria, tipo: cmd.tipo, descricao: cmd.descricao, valor: cmd.valor, metaHint: cmd.metaHint };
+        // `_em` (C-1): contexto de conversa vence; "de novo" continua sem prazo.
+        this.#lastLancamentoCmd = { intent: 'lancar', categoria: cmd.categoria, tipo: cmd.tipo, descricao: cmd.descricao, valor: cmd.valor, metaHint: cmd.metaHint, _em: Date.now() };
         // Insight opcional pós-lançamento (A6/C24/C28/A9) — no máximo UM, e só quando faz sentido.
         const extra = this.#insightPos(res.transaction);
         return extra ? { multi: [view, { text: extra }] } : view;
@@ -876,6 +920,18 @@ class AssistantEngine {
         const fn = this.#lastUndo;
         this.#lastUndo = null;
         try { return await fn(); } catch { return { text: P.SISTEMA.erro() }; }
+    }
+
+    // ── C-1: contexto da conversa, se ainda estiver fresco ─────────────────────
+    // Devolve o último lançamento só enquanto ele ainda é "a frase anterior".
+    // A comparação é `!(dt < janela)` e não `dt >= janela` de propósito: sem
+    // `_em` (contexto gravado por uma versão antiga, ainda em memória num
+    // aparelho que não recarregou) a conta dá NaN, e NaN precisa reprovar.
+    #contextoLancamento() {
+        const c = this.#lastLancamentoCmd;
+        if (!c || !c.categoria) return null;
+        if (!(Date.now() - c._em < JANELA_CONTEXTO_MS)) return null;
+        return c;
     }
 
     // ── Repetir o último lançamento ("de novo", "mesma coisa") — B15 ────────────

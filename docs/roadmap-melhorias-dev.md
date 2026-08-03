@@ -1191,7 +1191,7 @@ edge que não esteja recebendo a chave nova.
 | 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🔴 |
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | 🔴 |
 | 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | 🔴 |
-| 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🔴 |
+| 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🟡 **Falta:** C-3 (conversa livre, não iniciado) e a data em C-1; C-2/C-4/C-5/C-6/C-7/C-8 ✅ |
 
 ---
 
@@ -1710,21 +1710,47 @@ logado · gate no CI impedindo regressão.
 
 ---
 
-## PASSO 36 — CHAT ASSISTENTE 8.5 → 10 🔴
+## PASSO 36 — CHAT ASSISTENTE 8.5 → 10 🟡
 > Arquitetura já é 10. Falta produto. **Nenhum item abaixo manda R$ para o modelo.**
+> **Falta:** só o **C-3** (conversa livre) não foi iniciado, e a palavra de data no C-1.
+> Os outros seis estão ✅ — e nenhum deles precisou mandar um centavo para o modelo.
 
-- **C-1** 🔴 ⭐ **Memória de conversa** — o gap nº 1. *"Gastei 50 no mercado"* → *"e mais 30 ontem"*
-  não funciona. Passar os últimos 2 turnos (só texto e intenção, **nunca valores**) no `contextLine`.
-  Não quebra a arquitetura nem o cache do prompt.
-- **C-2** 🔴 NÃO INICIADO — **push semanal** com um insight do Radar.
-  ⚠️ Corrigindo o texto antigo, que confundia duas coisas: a proatividade **na abertura do chat**
-  funciona (é o `aberturaInsights()` do C-7, com fatura, orçamento, assinatura não cadastrada e
-  micro-lição). O que não existe é o **push que chega sem o usuário abrir o app**.
-  ✅ **A dependência caiu:** o D-2 foi verificado e está funcionando — `send-radar-push` é disparada
-  pelo cron diário e pela entrega imediata. Falta só decidir a régua (o que merece interromper
-  alguém uma vez por semana) e agendar.
+- **C-1** 🟡 PENDENTE (2026-08-03) — ⭐ **Memória de conversa**. *"Gastei 50 no mercado"* → *"e mais
+  30"* agora lança sozinho, herdando categoria e tipo da frase anterior.
+  **Falta:** (a) a palavra de data é ignorada — *"e mais 30 **ontem**"* lança com a data de hoje.
+  Não é regressão: o parser local **nunca** leu "ontem" (`dataOverride` não existe nele), então
+  *"gastei 30 ontem"* já se comportava assim. Consertar é mexer no parser compartilhado, fora do
+  escopo do C-1. (b) continuação de compra no **crédito** não herda — `#lastLancamentoCmd` só é
+  gravado para saída/entrada/reserva; crédito segue outro caminho (`#doCredito`).
+  **Desvio consciente do plano original:** o texto acima mandava passar os 2 últimos turnos no
+  `contextLine`, ou seja, **mandar mais conversa do usuário para o modelo**. Não fiz: resolvi no
+  aparelho, com zero token e sem enviar nada novo para a IA. Sai mais barato, mais rápido, é
+  determinístico (dá pra testar) e não alarga a superfície de dados que sai daqui — coerente com a
+  regra de ouro "IA como função".
+  Três decisões que valem mais que o código:
+  · **Só herda com marcador explícito** ("e", "mais", "também"). Um valor solto (*"30"*) continua
+    virando pergunta. O "e" é o consentimento — herdar a direção errada em silêncio grava dinheiro
+    que não existe, e o usuário só descobriria no fim do mês sem pista de onde veio.
+  · **Nunca herda a descrição** — *"e mais 30"* depois de *"50 de pão"* é outro item, não mais pão.
+  · **O contexto vence em 10 min.** Aba esquecida aberta desde ontem não é conversa.
+  Vem depois do comerciante aprendido (B12) e antes da IA. 19 testes.
+- **C-2** ✅ FINALIZADO (2026-08-03) — **push semanal** com insight do Radar.
+  A semana sem conta vencendo virava silêncio: o resumo só era criado quando havia conta a vencer,
+  então justamente quem mantém as contas em dia — quem usa bem o app — nunca recebia nada. O portão
+  passou a ser "há o que dizer?" (`if (corpo)`) em vez de "há conta?". Reusa o mesmo motor de
+  insight do chat (`insights.js`), não uma cópia — duas versões do mesmo cálculo já divergiram
+  antes, no fechamento de fatura. Cada insight tem o próprio `catch`: erro no complemento não pode
+  engolir o aviso de conta vencendo, que é o essencial. **Nenhum R$ no corpo** — a notificação é
+  lida por quem passa pelo celular na mesa; vai só o nome da assinatura e percentual.
 - **C-3** 🔴 Sair do enum — `intencao: "conversa_livre"` caindo em template local (não em texto livre do modelo).
-- **C-4** 🔴 Medir a instalação real do PWA em subdomínio antes de investir mais nele.
+- **C-4** ✅ FINALIZADO (2026-08-03) — medição da instalação real do PWA.
+  Sobe **um booleano**, uma vez por sessão, e o servidor grava num contador **por dia**: sem
+  `user_id`, sem aparelho, sem IP (tabela `pwa_usage`, RLS forçada e zero policies; `pwa_ping` só
+  executável pelo `service_role`). Não dá para reconstruir quem abriu o quê, então não é dado
+  pessoal e **não reabre a declaração de LGPD**. `sessionStorage` e não `localStorage` de
+  propósito: a pergunta é "quantas *sessões* vêm de app instalado" — com `localStorage` o sinal iria
+  uma vez na vida e a série temporal, que é o que mostra se está crescendo, nunca se formaria.
+  Leitura em `node scripts/funil.mjs`.
 - **C-5** ✅ FINALIZADO (2026-07-31, `b9baac3`) — fala **opt-in**, com o controle no próprio chip
   de confirmação: onde a voz acontece é onde se descobre que ela existe e onde se desliga. Nasce
   desligada — inclusive se o `localStorage` falhar (modo privado) — e o Desfazer chama
@@ -1742,7 +1768,18 @@ logado · gate no CI impedindo regressão.
   verdade por `assistente.js:154` quando o chat abre. Os números são derivados **no cliente**: a
   IA não vê nenhum deles. Entra depois dos avisos urgentes de propósito — uma lição de padrão não
   passa na frente de uma fatura vencendo.
-- **C-8** 🔴 Fallback honesto — `confianca < 0,6` → perguntar em vez de adivinhar.
+- **C-8** ✅ FINALIZADO (2026-08-03) — **fallback honesto**: `confianca < 0,6` → pergunta.
+  A confiança já era pedida no schema e **nunca era lida** — `ai.ok` bastava, então um palpite fraco
+  do modelo virava lançamento com a mesma naturalidade de um parse certo. Vale só para intenção que
+  **escreve** (`lancar`, `pagar_conta`, `definir_orcamento`, `lembrete`): errar numa consulta custa
+  uma resposta boba que a pessoa relê; errar num lançamento cria dinheiro que não existe e contamina
+  saldo, previsão e relatório. Limiar 0,6 e não 0,7 (o do parser local) porque a IA erra menos na
+  faixa média — exigir 0,7 dela transformaria em pergunta um monte de parse que estava certo, e
+  assistente que pergunta demais é tão inútil quanto o que adivinha demais. Reusa o `#pendingConfirm`
+  do valor alto, sem mecanismo paralelo.
+  ⚠️ Armadilha achada aqui: o contador `ia_incerta` precisou ser declarado nas **duas** linhas de
+  init do `stats.js` — o `bump()` ignora contador não declarado **em silêncio**, e a telemetria
+  ficaria sempre zerada sem ninguém notar.
 
 ---
 

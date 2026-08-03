@@ -316,6 +316,42 @@ export function parseFollowup(rawText) {
     return { isFollowup, periodo: per, palavrasChave: kws };
 }
 
+// ── C-1: continuação de LANÇAMENTO ("gastei 50 no mercado" → "e mais 30") ───
+// Irmã do parseFollowup acima: aquele reaproveita o contexto de uma CONSULTA,
+// esta o de um LANÇAMENTO.
+//
+// Só reconhece o marcador EXPLÍCITO ("e", "mais", "também"). Um valor solto
+// ("30") continua virando pergunta de propósito: herdar a direção errada em
+// silêncio grava dinheiro que não existe, e o usuário só descobriria no fim do
+// mês, sem pista de onde veio. O "e" é o consentimento — sem ele, não há herança.
+const RE_CONTINUACAO = /^(e\s+)?(mais|tambem|tb|outro|outra)\b|^e\s+(?:r\$\s*)?\d/;
+
+// Marcadores de ligação que o extractDescricao lê como se fossem o item
+// comprado ("também 15" → descrição "Também"). Eles emendam frases, não
+// descrevem nada — e virariam o nome da transação na lista do usuário.
+const RE_SO_MARCADOR = /^(e|mais|tambem|tb|outro|outra|de|ainda|foi)$/;
+
+/** O texto é a continuação da frase anterior, e não um assunto novo? */
+export function ehContinuacao(rawText) {
+    const t = norm(rawText).trim();
+    if (!RE_CONTINUACAO.test(t)) return false;
+    // Continuação de lançamento traz um valor novo. Sem número, "mais alguma
+    // coisa" passaria por continuação — o chamador já exigiria o valor, mas uma
+    // função que mente sozinha vira armadilha pro próximo que a reaproveitar.
+    if (!/\d/.test(t)) return false;
+    // Parcelamento já tem mecânica própria (saida_credito) — não é continuação.
+    if (/\b\d+\s*x\b|parcel/.test(t)) return false;
+    // Continuação é curta por natureza; frase longa traz assunto novo.
+    return t.split(/\s+/).length <= 6;
+}
+
+/** Descrição feita só de marcador de ligação não descreve nada. */
+export function descricaoVazia(desc) {
+    const t = norm(desc).trim();
+    if (!t) return true;
+    return t.split(/\s+/).every((w) => RE_SO_MARCADOR.test(w));
+}
+
 // Palavras-chave para consultas (casa contra descrição/tipo/categoria depois).
 export function extractPalavrasChave(t) {
     const out = [];
