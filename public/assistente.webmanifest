@@ -11,6 +11,11 @@
   "start_url": "/assistente",
   "scope": "/assistente",
   "launch_handler": { "client_mode": "navigate-existing" },
+  "share_target": {
+    "action": "/assistente",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  },
   "prefer_related_applications": false,
   "related_applications": [
     { "platform": "webapp", "url": "https://granaevo.com/assistente.webmanifest" },

@@ -25,6 +25,36 @@ const el = (tag, cls, txt) => {
     return e;
 };
 
+const SHARE_MAX = 500; // mesmo teto do assistant-api.js
+
+/**
+ * Lê o texto compartilhado e LIMPA a URL na mesma tacada.
+ *
+ * Roda no topo do módulo, antes do boot, de propósito: o boot pode abortar em
+ * três pontos (sem sessão → /login, trava por PIN cancelada, falha no init).
+ * Se a limpeza morasse no consumo lá embaixo, uma notificação de banco — com
+ * valor e estabelecimento — ficaria na barra de endereço e no histórico
+ * justamente nos caminhos em que o usuário nem chegou a entrar. Capturar cedo
+ * também evita que um F5 reinjete um texto já descartado.
+ */
+function capturarCompartilhado() {
+    try {
+        const p = new URLSearchParams(window.location.search);
+        const partes = [p.get('title'), p.get('text'), p.get('url')]
+            .filter((v) => typeof v === 'string' && v.trim());
+        if (!partes.length) return null;
+        history.replaceState(null, '', window.location.pathname);
+        return partes.join(' ').replace(/\s+/g, ' ').trim().slice(0, SHARE_MAX) || null;
+    } catch {
+        return null; // sem query, sem History API: não é um share
+    }
+}
+
+// Só na memória desta aba. Nunca vai pra localStorage: o histórico do chat já é
+// texto em claro (caveat D37) e um gasto que o usuário ainda nem confirmou não
+// tem por que sobreviver ao fechamento da aba.
+const TEXTO_COMPARTILHADO = capturarCompartilhado();
+
 // ── Instalação nativa ─────────────────────────────────────────────────────────
 // Todo o fluxo de instalação (prompt nativo, intent:// pro Chrome no Android,
 // instruções por navegador, detecção de "já instalado" e o diagnóstico
@@ -270,6 +300,7 @@ function setupSearch() {
     document.getElementById('geSettings').addEventListener('click', () => openSettings(userId));
     setupSearch(); // D35
     setupChrome();
+    receberCompartilhado(); // Passo 12 — depois do wireInput, senão o input não reage
 
     // Outbox offline: sincroniza lançamentos pendentes agora e quando a rede voltar.
     const flushOutbox = async () => {
@@ -652,6 +683,28 @@ function showLockScreen(userId) {
 }
 
 // ── Chrome do app: voltar ao dashboard (navegador) + instalar PWA ─────────────
+// ── Share Target (Passo 12): texto compartilhado de outro app ───────────────
+// O Android entrega `title`/`text`/`url` na query, conforme declarado no
+// `assistente.webmanifest`. Compartilhar a notificação do banco vira lançamento
+// sem digitar nada.
+//
+// Por que o manifesto do ASSISTENTE e não o do app principal (como o roadmap
+// dizia): em prod `granaevo.com/assistente` responde **307 para
+// `assistente.granaevo.com`**. Um share target declarado no app principal
+// apontando pra cá atravessaria origem, jogando o usuário pra fora da janela do
+// PWA instalado. Aqui a ação é same-origin e dentro do escopo — sem redirect.
+//
+// O texto vem de OUTRO APP: é entrada não confiável e é tratada como tal.
+function receberCompartilhado() {
+    if (!TEXTO_COMPARTILHADO) return;
+    // NUNCA envia sozinho. O conteúdo veio de outro app e pode ser qualquer
+    // coisa — um artigo inteiro, uma propaganda. O usuário lê o que vai lançar e
+    // toca em enviar; daí em diante é o fluxo normal, com chip e desfazer.
+    // Reusa o focusInput do botão Corrigir (D35), não um caminho paralelo.
+    UI.addAssistantMessage('Recebi o texto compartilhado. Confere aí embaixo e toca em enviar que eu lanço.');
+    UI.focusInput(TEXTO_COMPARTILHADO);
+}
+
 function setupChrome() {
     // Voltar ao dashboard — SEMPRE visível (útil no navegador e no app instalado).
     const back = document.getElementById('geBack');

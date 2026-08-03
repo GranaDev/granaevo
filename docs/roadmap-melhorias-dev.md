@@ -470,7 +470,39 @@ fixas, faturas, assinaturas do detector, previsão de fim de mês).
 
 ---
 
-## PASSO 12 — Share Target no manifest (compartilhar → lançamento) 🔴
+## PASSO 12 — Share Target no manifest (compartilhar → lançamento) 🟡
+> **PENDENTE (2026-08-03)** — implementado e no build; **Falta:** o teste real no Android com o
+> PWA instalado (compartilhar de outro app → o Assistente aparece na folha → abre pré-preenchido).
+> É o único passo que não dá pra provar daqui: depende de aparelho.
+>
+> **Desvio consciente do plano abaixo:** o texto original mandava declarar o `share_target` no
+> manifesto do VitePWA (app principal). **Não fiz, e o plano estava desatualizado:** em prod
+> `granaevo.com/assistente` responde **307 → `assistente.granaevo.com`** (verificado por curl).
+> Um share target declarado no app principal (scope `/`) apontando pra cá **atravessaria origem** e
+> jogaria o usuário pra fora da janela do PWA instalado. Foi declarado no
+> `public/assistente.webmanifest`, onde a ação é same-origin e dentro do escopo — sem redirect.
+> Bônus: só **uma** entrada "GranaEvo" na folha de compartilhamento, em vez de duas confusas.
+>
+> **`method: GET`** e não POST: POST obrigaria o service worker a interceptar e remontar o
+> formulário. GET entrega na query e a página lê de `location.search`, sem peça nova no caminho.
+> O SW do assistente já serve a navegação por uma chave fixa (`SHELL`), então a query string **não**
+> causa cache miss — compartilhar offline continua abrindo o app.
+>
+> **O texto vem de outro app, então é tratado como hostil:**
+> · **Nunca envia sozinho.** Pré-preenche o input e espera o toque — o conteúdo pode ser um artigo
+>   inteiro ou uma propaganda, e lançar sozinho criaria transação que ninguém pediu.
+> · **A URL é limpa antes de tudo.** A captura roda na avaliação do módulo, **acima do boot**, de
+>   propósito: o boot desvia em três pontos (sem sessão → `/login`, trava por PIN cancelada, falha
+>   no init) e a limpeza no fim deixaria a notificação do banco — com valor e estabelecimento — na
+>   barra de endereço justamente nos caminhos em que o usuário nem entrou.
+> · **Só em memória.** Nada de `localStorage`: um gasto ainda não confirmado não sobrevive à aba.
+> · Cortado em 500 chars, o mesmo teto do `assistant-api.js`.
+>
+> **O header `web-share=()` foi verificado** (presente no `vercel.json` e servido em prod): ele
+> governa o `navigator.share()`, que é o compartilhamento de **saída**. O Share Target é entrada —
+> navegação declarada no manifesto, sem token de Permissions-Policy — e por isso funciona com o
+> header fechado. Há teste travando isso: se alguém usar `navigator.share` aqui, o teste lembra de
+> liberar `web-share=(self)`. 11 testes.
 **Objetivo:** o app aparece na **folha de compartilhamento** do Android; compartilhar um texto
 (ex.: notificação do banco "Compra aprovada R$…") **abre o app já com um lançamento pré-preenchido**.
 **Por quê:** reduz o atrito de entrada manual a quase zero e reusa o **parser do assistente** (`chat-parse`).
@@ -834,7 +866,7 @@ reativação de inativo, aviso de fatura.
 | 4 | 18 — Testes de lógica financeira | 🟢 baixo | ~1 dia | 🟡 **Falta:** extrair fatura/saldo para testar; money.js coberto (57 testes, CI) |
 | 4 | 19 — Índices/policies (higiene DB) | 🟡 médio | ~1–2h | ✅ 12 índices duplicados dropados (2026-07-14); policies OR mantidas |
 | 3 | 11 — Calendário financeiro visual | 🟢 baixo | 1–2 dias | ✅ no ar — `modules/calendario.js` + `db-calendario.js` (lazy) + nav e seção no dashboard.html + testes |
-| 3 | 12 — Share Target no manifest | 🟢 baixo | ~1 dia | 🔴 |
+| 3 | 12 — Share Target no manifest | 🟢 baixo | ~1 dia | 🟡 **Falta:** teste no Android com o PWA instalado — implementado e no build |
 | 5 ⚖️ | 20 — Trial/demo sem cartão ⭐ | ⚖️ decisão | 2–4 dias | 🔴 avaliar |
 | 5 ⚖️ | 21 — Prova social real | ⚖️ decisão | meio dia | 🔴 avaliar |
 | 5 ⚖️ | 22 — Ciclo de vida e-mail/push | ⚖️ decisão | 1–2 dias | 🔴 avaliar |
