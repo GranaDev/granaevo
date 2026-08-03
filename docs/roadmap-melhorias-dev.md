@@ -1516,8 +1516,20 @@ logado · gate no CI impedindo regressão.
 - **M-3** 🔴 Conteúdo de topo (Passo 24): 3 calculadoras públicas indexáveis (juros do cartão ·
   quanto sobra por mês · quanto rende a reserva) + 10 artigos de cauda longa. Calculadora converte
   melhor que artigo e os motores já existem (`simulador-ese.js`, `horas-vida.js`).
-- **M-4** 🔴 Ciclo de vida (Passo 22): boas-vindas em 3 partes · reativação D+3 ·
-  **"seu relatório do mês"** (maior retenção) · carrinho abandonado.
+- **M-4** ⛔ **RECUSADO — decisão do dono (2026-08-03).** Não é pendência.
+  *"Vira spam, e temos o tutorial dentro do próprio app. Quando o usuário compra, a primeira
+  coisa que ele quer é usar o app, não ler e-mail. E não compensa ficar implorando pro usuário
+  voltar."*
+
+  Cobre as duas metades do item: a sequência de boas-vindas **e** a reativação em D+3.
+
+  O argumento se sustenta no que já existe: o onboarding e o tutorial estão **dentro** do
+  produto, onde a pessoa já está com a intenção de usar. E-mail de boas-vindas concorre com a
+  vontade dela de abrir o app — chega quando ela menos precisa.
+
+  **O que continua valendo:** e-mail TRANSACIONAL (confirmação, redefinição de senha, aviso de
+  aparelho novo, mudança de assinatura). Esses respondem a uma ação da pessoa; a recusa aqui é
+  de e-mail de MARKETING, que ela não pediu.
 - **M-5** ⛔ **RECUSADO — decisão do dono (2026-08-03).** Não é pendência.
   *"Também não quero programa de indicação."*
 - **M-6** ✅ FINALIZADO — verificado em 2026-07-31: `index.html` **e** `planos.html` têm `og:title`,
@@ -1551,7 +1563,19 @@ logado · gate no CI impedindo regressão.
   individual. Conferido contra `PLAN_PRICES_CENTS` da edge que cobra de verdade, com teste que
   trava a divergência: preço errado no snippet é a primeira informação que o cliente vê, e ele só
   descobriria a diferença no checkout.
-- **M-9** 🔴 Página "GranaEvo vs Mobills" — busca de alta intenção + endereça o Open Finance de frente.
+- **M-9** ⛔ **RECUSADO — decisão do dono (2026-08-03).** Não é pendência.
+  *"Não devemos nos comparar, pois somos melhores."*
+
+  **Observação registrada, não objeção:** o valor da página não estava em provar superioridade —
+  estava em capturar quem já está comparando por conta própria e decidindo naquele momento. Essa
+  busca continua acontecendo com ou sem a página.
+
+  A objeção do dono ao formato, porém, é legítima e tem risco real do outro lado: comparativo
+  que distorce o concorrente destrói mais confiança do que a página constrói — e confiança é
+  exatamente o que este produto vende.
+
+  **Se um dia for reaberto**, o ângulo honesto é o P-6 virado em página: explicar a escolha de
+  não conectar ao banco, sem citar nome de concorrente.
 
 ---
 
