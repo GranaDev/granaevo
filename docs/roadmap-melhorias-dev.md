@@ -228,7 +228,12 @@ disaster-recovery não os recria. **Sem risco de segurança**, é pura governan�
 
 ---
 
-## PASSO 6 — MFA / 2FA por TOTP (GRÁTIS, via Supabase Auth) 🔴 ⭐
+## PASSO 6 — MFA / 2FA por TOTP (GRÁTIS, via Supabase Auth) ✅ ⭐
+> ✅ **NO AR.** Verificado em 2026-08-03 contra o código: `src/scripts/services/mfa-api.js`
+> (chunk separado, só baixado por quem tem 2FA ativo), 45 referências a MFA em
+> `api/auth-session.js`, e o gate `data?.mfaRequired` no `login.js`. A recuperação por código
+> de backup foi **corrigida nesta data** (devolvia "Erro de conexão" quando dava certo).
+> A tabela mestre dizia 🔴 — era mentira. O texto de planejamento abaixo fica como registro.
 **Objetivo:** verificação em duas etapas com app autenticador (Google Authenticator/Authy/etc.).
 **Por quê:** blindagem real de conta financeira **+ selo de confiança de marketing**. Custo **R$0** —
 TOTP no Supabase é nativo e gratuito em todos os planos (só SMS custa; TOTP não usa SMS).
@@ -820,7 +825,7 @@ reativação de inativo, aviso de fatura.
 | 1.5 | 14 — LGPD: aceite dos legados (M1) | 🔴 importante | ~30 min | ✅ coberto pelo mecanismo do Passo 13 (re-aceite no login) |
 | 1.5 | 15 — HIBP no signup/reset (k-anonymity) ⭐ | 🔴 alto valor | ~2–3h | ✅ aplicado em prod (2026-07-14) |
 | 1.5 | 16 — Dependabot + npm audit | 🟢 baixo | ~15 min | ✅ npm audit já existia + dependabot criado (2026-07-14) |
-| 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | 🔴 |
+| 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | ✅ no ar — `mfa-api.js` + `auth-session.js` (45 refs) + login.js; recovery corrigido em 2026-08-03 |
 | 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🟡 **Falta:** destino das 34 classes de telas planejadas — poda e método feitos em 2026-07-31 |
 | 2 | 8 — Aliviar vendors (Chart/Supabase) | 🟡 médio | half-day+ | 🔴 |
 | 2 | 9 — Boot otimista (IndexedDB) | 🔴 alto valor | 1–2 dias | 🔴 |
@@ -828,7 +833,7 @@ reativação de inativo, aviso de fatura.
 | 4 | 17 — Auditoria WCAG AA | 🟡 médio | ~1 dia | 🔴 |
 | 4 | 18 — Testes de lógica financeira | 🟢 baixo | ~1 dia | 🟡 **Falta:** extrair fatura/saldo para testar; money.js coberto (57 testes, CI) |
 | 4 | 19 — Índices/policies (higiene DB) | 🟡 médio | ~1–2h | ✅ 12 índices duplicados dropados (2026-07-14); policies OR mantidas |
-| 3 | 11 — Calendário financeiro visual | 🟢 baixo | 1–2 dias | 🔴 |
+| 3 | 11 — Calendário financeiro visual | 🟢 baixo | 1–2 dias | ✅ no ar — `modules/calendario.js` + `db-calendario.js` (lazy) + nav e seção no dashboard.html + testes |
 | 3 | 12 — Share Target no manifest | 🟢 baixo | ~1 dia | 🔴 |
 | 5 ⚖️ | 20 — Trial/demo sem cartão ⭐ | ⚖️ decisão | 2–4 dias | 🔴 avaliar |
 | 5 ⚖️ | 21 — Prova social real | ⚖️ decisão | meio dia | 🔴 avaliar |
@@ -1187,10 +1192,10 @@ edge que não esteja recebendo a chave nova.
 |---|---|---|---|
 | 30 | Segurança 9.4 → 10 | S-1 … S-6 | ✅ **COMPLETO** |
 | 31 | Blindagem 9.0 → 10 | B-1 … B-7 | ✅ FINALIZADO — B-1 a B-7 fechados (B-6 em 2026-07-31) |
-| 32 | Otimização 8.0 → 10 | O-1 … O-8 | 🔴 |
-| 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🔴 |
-| 34 | Diferencial 7.5 → 10 | D-1 … D-7 | 🔴 |
-| 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | 🔴 |
+| 32 | Otimização 8.0 → 10 | O-1 … O-8 | ✅ O-1..O-4, O-6..O-8 feitos; O-5 ⛔ recusado pelo dono |
+| 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🟡 **Falta:** só o M-3 (3 calculadoras públicas). M-1/M-6/M-7/M-8 ✅; M-2/M-4/M-5/M-9 ⛔ recusados |
+| 34 | Diferencial 7.5 → 10 | D-1 … D-7 | ✅ D-1..D-5 feitos; D-6/D-7 ⛔ recusados pelo dono |
+| 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | ✅ P-2/P-3/P-6 feitos; P-1/P-4/P-5 ⛔ recusados pelo dono |
 | 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🟡 **Falta:** C-3 (conversa livre, não iniciado) e a data em C-1; C-2/C-4/C-5/C-6/C-7/C-8 ✅ |
 
 ---
@@ -1392,7 +1397,7 @@ entrega.
 
 ---
 
-## PASSO 32 — OTIMIZAÇÃO 8.0 → 10 🔴
+## PASSO 32 — OTIMIZAÇÃO 8.0 → 10 ✅
 **Medido em 2026-07-27:** 1.3 MB JS · 569 KB CSS · 46 chunks · dashboard 133 KB raw / **39 KB gz**.
 **Maior ofensor isolado: o CSS do dashboard — 217 KB raw / 40 KB gz** (maior que o JS da página).
 
@@ -1497,7 +1502,8 @@ logado · gate no CI impedindo regressão.
 
 ---
 
-## PASSO 33 — MARKETING 7.0 → 10 🔴
+## PASSO 33 — MARKETING 7.0 → 10 🟡
+> **Falta:** só o **M-3** (3 calculadoras públicas). Todo o resto está ✅ ou ⛔ recusado pelo dono.
 > A dimensão mais distante do 10 e a de maior retorno. Produto nota 9, aquisição nota 6.
 
 - **M-1** ✅ **JÁ RESOLVIDO** — verificado em 2026-07-31:
@@ -1579,7 +1585,7 @@ logado · gate no CI impedindo regressão.
 
 ---
 
-## PASSO 34 — DIFERENCIAL 7.5 → 10 🔴
+## PASSO 34 — DIFERENCIAL 7.5 → 10 ✅
 > Os diferenciais são reais mas **invisíveis**. Metade produto, metade comunicação.
 
 - **D-1** ✅ FEITO (2026-07-31) — duas mudanças, nenhuma quebrando layout:
@@ -1645,7 +1651,7 @@ logado · gate no CI impedindo regressão.
 
 ---
 
-## PASSO 35 — PROPOSTA DO SITE 8.0 → 10 🔴
+## PASSO 35 — PROPOSTA DO SITE 8.0 → 10 ✅
 
 - **P-1** ⛔ **RECUSADO pelo dono do produto (2026-07-31). Não é pendência.**
   *"P1 já existe dentro da landingpage, há a possibilidade de melhorias, porém, um trial mesmo
