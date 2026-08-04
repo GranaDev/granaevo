@@ -581,7 +581,33 @@ class AssistantEngine {
                 // devolver descrição, o normalize cairia no rótulo do tipo — que é
                 // exatamente o bug que o describe.js veio matar. A extração local
                 // segura a ponta: veio das palavras literais do usuário.
-                const cmd = toCommand({ ...ai.parse, descricao: ai.parse?.descricao || local.descricao, source: 'ia' });
+                // ── A IA ENRIQUECE, NÃO INVERTE ─────────────────────────────
+                // Este `{...ai.parse}` substituía a `categoria` local inteira —
+                // ou seja, a DIREÇÃO do dinheiro. É a causa provável do bug de
+                // 2026-08-04: "tirei da reserva" era lido certo aqui, ia à IA só
+                // para ganhar categoria (completude < 1), e voltava como
+                // ENTRADA. Do ponto de vista do modelo é um palpite razoável —
+                // tirar da reserva realmente põe dinheiro na conta. Só que a
+                // transação certa é `retirada_reserva`, e a diferença some do
+                // saldo da reserva sem ninguém ver.
+                //
+                // A regra: quando o parser local já tinha CERTEZA da direção
+                // (casou verbo, confiança ≥ limiar), ela vence. A IA foi chamada
+                // porque faltava CATEGORIA, não porque a direção estava em
+                // dúvida — e ela é determinística e medida (36/36 nas quatro
+                // direções), enquanto a IA é palpite e não vê o contexto de
+                // reserva. Com confiança baixa, o local é chute também: aí a IA
+                // decide, como antes.
+                const direcaoLocalConfiavel = local.categoria && local.confianca >= CONF_LOCAL_OK;
+                const cmd = toCommand({
+                    ...ai.parse,
+                    ...(direcaoLocalConfiavel ? { categoria: local.categoria } : {}),
+                    descricao: ai.parse?.descricao || local.descricao,
+                    source: 'ia',
+                });
+                if (direcaoLocalConfiavel && ai.parse?.categoria && ai.parse.categoria !== local.categoria) {
+                    bump('ia_direcao_ignorada'); // telemetria: com que frequência a IA tentaria inverter
+                }
 
                 // C-8 — quando a própria IA diz que não tem certeza, PERGUNTA.
                 //

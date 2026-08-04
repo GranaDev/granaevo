@@ -24,6 +24,9 @@
  */
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { parseLocal } from '../../src/scripts/modules/assistant/parser-local.js'
 
 const cat = (t) => parseLocal(t).categoria
@@ -44,6 +47,48 @@ describe('o bug relatado, travado pelo nome', () => {
     // Se voltar a cair em `valor_ambiguo`, o assistente pergunta "gasto ou
     // entrada?" e o usuário responde "entrada" com toda a razão do mundo.
     assert.equal(parseLocal('tirei 100 reais da reserva').intencao, 'lancar')
+  })
+})
+
+describe('a IA enriquece, mas NUNCA inverte a direção', () => {
+  // A causa mais provável do bug relatado, e a mais perigosa porque independe
+  // de vocabulário: o parser lia "retirada" certo, a mensagem ia à IA só para
+  // ganhar CATEGORIA (completude < 1), e o `{...ai.parse}` substituía a
+  // categoria inteira. A IA devolvendo "entrada" é até razoável do ponto de
+  // vista dela — tirar da reserva põe dinheiro na conta. Só que a transação
+  // certa é `retirada_reserva`, e a diferença some do saldo da reserva.
+  const ENGINE = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '..', '..',
+         'src/scripts/modules/assistant/engine.js'), 'utf8')
+
+  test('a direção local vence quando o parser tinha certeza', () => {
+    assert.match(ENGINE, /const direcaoLocalConfiavel = local\.categoria && local\.confianca >= CONF_LOCAL_OK/)
+    assert.match(ENGINE, /\.\.\.\(direcaoLocalConfiavel \? \{ categoria: local\.categoria \} : \{\}\)/)
+  })
+
+  test('o override vem DEPOIS do spread da IA, senão não sobrescreve nada', () => {
+    // Ordem em objeto literal é o comportamento: `{...ai.parse}` primeiro,
+    // categoria local depois. Invertido, o guard existe e não guarda nada.
+    const bloco = ENGINE.slice(ENGINE.indexOf('const cmd = toCommand({'),
+                               ENGINE.indexOf('source: \'ia\','))
+    assert.ok(bloco.indexOf('...ai.parse') < bloco.indexOf('direcaoLocalConfiavel'),
+      'o override precisa vir depois do spread')
+  })
+
+  test('com confiança baixa a IA decide — o local também é chute ali', () => {
+    assert.match(ENGINE, /local\.confianca >= CONF_LOCAL_OK/)
+  })
+
+  test('a tentativa de inversão é contada', () => {
+    // Se este número subir, o vocabulário local está bom e o prompt da IA é que
+    // precisa de revisão.
+    assert.match(ENGINE, /bump\('ia_direcao_ignorada'\)/)
+    const STATS = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '..', '..',
+           'src/scripts/modules/assistant/stats.js'), 'utf8')
+    // Nas DUAS linhas de init: o bump ignora contador não declarado em SILÊNCIO,
+    // e a telemetria ficaria zerada para sempre sem ninguém notar.
+    assert.equal((STATS.match(/ia_direcao_ignorada: 0/g) ?? []).length, 2)
   })
 })
 

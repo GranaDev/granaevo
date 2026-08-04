@@ -16,10 +16,13 @@ function _load() {
     // (`if (kind in s)`). Ao criar um bump('novo'), some o nome nas DUAS linhas
     // de inicialização — senão a telemetria parece existir e não conta nada.
     //
+    // `ia_direcao_ignorada`: a IA tentou trocar a DIREÇÃO do dinheiro e foi
+    // ignorada porque o parser local tinha certeza. Se este número subir, o
+    // vocabulário local está bom e o prompt da IA é que precisa de revisão.
     // `ia_incerta` (C-8): a IA respondeu, mas com confiança abaixo do limiar e o
     // assistente preferiu perguntar. É o número que diz se o limiar está bom —
     // alto demais e ele vira chato; baixo demais e volta a adivinhar.
-    _s = { local: 0, ia_ok: 0, ia_fail: 0, offline: 0, ia_incerta: 0 };
+    _s = { local: 0, ia_ok: 0, ia_fail: 0, offline: 0, ia_incerta: 0, ia_direcao_ignorada: 0 };
     try {
         const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
         if (raw && typeof raw === 'object') {
@@ -51,6 +54,6 @@ export function snapshot() {
 
 /** Zera tudo (logout). */
 export function clearStats() {
-    _s = { local: 0, ia_ok: 0, ia_fail: 0, offline: 0, ia_incerta: 0 };
+    _s = { local: 0, ia_ok: 0, ia_fail: 0, offline: 0, ia_incerta: 0, ia_direcao_ignorada: 0 };
     try { localStorage.removeItem(KEY); } catch { /* ignore */ }
 }
