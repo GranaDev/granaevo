@@ -36,12 +36,12 @@
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self';
         upgrade-insecure-requests;
-        script-src 'self' https://www.googletagmanager.com https://connect.facebook.net;
+        script-src 'self' https://www.googletagmanager.com https://connect.facebook.net https://challenges.cloudflare.com;
         style-src 'self';
         font-src 'self';
         img-src 'self' data: https:;
-        connect-src 'self' https://*.supabase.co;
-        frame-src 'none';
+        connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com;
+        frame-src https://challenges.cloudflare.com;
         object-src 'none';
         base-uri 'self';
         form-action 'self';
@@ -54,6 +54,28 @@
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
 
     <title>Planos - GranaEvo | Transforme Suas Finanças</title>
+
+    <!--
+        TURNSTILE (Passo 26) — mesmo par de scripts do login.html.
+        `turnstile-init.js` é SÍNCRONO e vem ANTES do api.js: ele define
+        window.__tsOnLoad. O planos.js é type="module" (sempre diferido), então o
+        api.js com async pode terminar de carregar antes dele e chamar o onload
+        quando o callback ainda não existe. Este script garante que esteja lá.
+    -->
+    <script src="/scripts/modules/turnstile-init.js"></script>
+    <!--
+        render=explicit → nada é renderizado sozinho. O planos.js chama
+        turnstile.render() quando o modal de cadastro abre — quem só olha preço
+        não paga por widget nenhum.
+        crossorigin/referrerpolicy: isolam o contexto e não vazam a URL desta
+        página para a Cloudflare. SRI não se aplica (a Cloudflare serve conteúdo
+        versionado dinamicamente); a proteção é o allowlist na CSP.
+    -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=__tsOnLoad"
+            async
+            defer
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"></script>
     <!-- Preload do logo: e o LCP da tela de loading. O crossorigin PRECISA casar
          com o da <img> — se divergir, o navegador baixa a imagem DUAS vezes. -->
     <link rel="preload" as="image" href="/assets/icons/granaevo-logo.jpg">
@@ -782,6 +804,24 @@
                         Vale por 15 minutos. Não recebeu?
                         <button type="button" id="signupResendCode" class="signup-link-btn">Reenviar</button>
                     </p>
+                </div>
+
+                <!--
+                    CAPTCHA DO CADASTRO (Passo 26)
+                    Diferente do login, aqui ele é SEMPRE exigido. No login o
+                    servidor só pede depois de 3 senhas erradas NA CONTA — há uma
+                    conta para ancorar o contador. No cadastro não existe conta
+                    ainda; o único âncora seria o IP, e contra bot distribuído
+                    (uma requisição por IP) o gate nunca dispararia — justamente o
+                    ataque que o Turnstile existe para barrar.
+                    O widget é quase sempre invisível, então o custo em atrito é
+                    baixo. Renderizado por planos.js quando o modal abre.
+                -->
+                <div id="signupCaptcha"
+                     role="region"
+                     aria-label="Verificação de segurança"
+                     aria-live="polite">
+                    <div class="cf-turnstile"></div>
                 </div>
 
                 <button type="submit" id="signupSubmitBtn" class="signup-submit-btn">

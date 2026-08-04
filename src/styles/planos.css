@@ -1868,6 +1868,18 @@ input[type="password"]::-ms-clear {
     text-align: center;
 }
 
+/* Captcha do cadastro (Passo 26). O widget da Cloudflare tem largura fixa de
+   300px; centralizar evita que ele fique encostado à esquerda num modal mais
+   largo. `min-height` reserva o espaço ANTES de o iframe chegar — sem isso o
+   botão de enviar pula para baixo quando o widget carrega, e alguém já estará
+   com o dedo no lugar onde o botão estava. */
+#signupCaptcha {
+    display: flex;
+    justify-content: center;
+    min-height: 65px;
+    margin-bottom: 1rem;
+}
+
 .signup-submit-btn {
     width: 100%;
     padding: 0.9375rem 1.25rem;

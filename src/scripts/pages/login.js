@@ -2,6 +2,7 @@ import { supabase, SUPABASE_ANON_KEY, setRememberMe, loginWithPassword, logout, 
 // Chunk separado: só é baixado por quem tem 2FA ativo (ver mfa-api.js).
 import { verifyMfaLogin, recoverMfaLogin } from '../services/mfa-api.js';
 import { initErrorTracking } from '../modules/error-tracking.js';
+import { createCaptchaState, callbacksValidos } from '../modules/turnstile-state.js';
 
 // Rastreamento de erros (no-op sem VITE_SENTRY_DSN / fora de produção)
 initErrorTracking();
@@ -32,8 +33,6 @@ const CONFIG = Object.freeze({
     SEND_CODE_COOLDOWN_MS:          30_000,
     RATE_LIMIT_MAX:                     10,
     RATE_LIMIT_WINDOW_MS:           60_000,
-    CAPTCHA_TOKEN_MAX_AGE_MS:      110_000,
-    CAPTCHA_TOKEN_MIN_LENGTH:           50,
     // Chave PÚBLICA do Turnstile, injetada no build. Sem ela o widget não
     // renderiza — e o gate do servidor falha ABERTO, então o login continua
     // funcionando (ver turnstileOk() em api/auth-session.js).
@@ -92,88 +91,19 @@ let _codeCaptchaWidgetId       = null;
 let _codeCaptchaRenderAttempt  = 0;
 const _CAPTCHA_MAX_RENDER_ATTEMPTS = 3;
 
-// ═══════════════════════════════════════════════════════════════
-//  FACTORY: CaptchaStateFactory
-//  Cria um módulo de estado de captcha para um dado widget.
-//  Usado para o captcha do login E para o captcha da tela de código.
-// ═══════════════════════════════════════════════════════════════
-function _createCaptchaState(resolvedCallbackName, expiredCallbackName, errorCallbackName, getWidgetId) {
-    let _token      = null;
-    let _resolved   = false;
-    let _resolvedAt = 0;
-    let _active     = false;
+const LoginCaptchaState = createCaptchaState({
+    resolvedCallbackName: 'onLoginCaptchaResolved',
+    expiredCallbackName:  'onLoginCaptchaExpired',
+    errorCallbackName:    'onLoginCaptchaError',
+    getWidgetId:          () => _loginCaptchaWidgetId,
+});
 
-    const aoResolver = (token) => {
-        if (!_active) return;
-        if (typeof token !== 'string' || token.length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) return;
-        if (typeof turnstile === 'undefined') return;
-        try {
-            const widgetId = getWidgetId();
-            const widgetResponse = turnstile.getResponse(widgetId ?? undefined);
-            if (!widgetResponse || widgetResponse !== token) return;
-            _token = token; _resolved = true; _resolvedAt = Date.now();
-        } catch {
-            _token = null; _resolved = false; _resolvedAt = 0;
-        }
-    };
-
-    const aoLimpar = () => { _token = null; _resolved = false; _resolvedAt = 0; };
-
-    // Os globais continuam existindo: o login.html os cita e eles são o contrato
-    // público desta tela. Mas NÃO são mais o caminho pelo qual o widget chega
-    // aqui — ver `handlers` abaixo.
-    window[resolvedCallbackName] = aoResolver;
-    window[expiredCallbackName]  = aoLimpar;
-    window[errorCallbackName]    = aoLimpar;
-
-    return {
-        // ⚠️ O Turnstile exige FUNÇÃO, não nome de função.
-        //
-        // O reCAPTCHA aceitava `callback: 'nomeDaGlobal'` — uma string — e
-        // resolvia o nome sozinho. O Turnstile não: ele guarda o que recebe e
-        // depois faz `s.call(...)`. Com uma string aquilo vira
-        // `TypeError: s.call is not a function`, lançado LÁ DENTRO do api.js.
-        //
-        // O sintoma era cruel: o desafio da Cloudflare passava e o widget
-        // mostrava "Sucesso!", mas o callback morria antes de marcar o token
-        // aqui — então `isResolved()` seguia falso e o login se recusava a
-        // enviar, pedindo um captcha que o usuário acabara de resolver.
-        //
-        // Passe SEMPRE estas referências ao `turnstile.render()`.
-        handlers: { resolved: aoResolver, expired: aoLimpar, error: aoLimpar },
-
-        activate()   { _active = true;  },
-        deactivate() { _active = false; },
-        isResolved() {
-            if (!_resolved || !_token) return false;
-            return (Date.now() - _resolvedAt) < CONFIG.CAPTCHA_TOKEN_MAX_AGE_MS;
-        },
-        getToken() { return this.isResolved() ? _token : null; },
-        reset() {
-            _token = null; _resolved = false; _resolvedAt = 0;
-            if (typeof turnstile === 'undefined') return;
-            try {
-                const widgetId = getWidgetId();
-                if (widgetId !== null) turnstile.reset(widgetId);
-                else turnstile.reset();
-            } catch {}
-        },
-    };
-}
-
-const LoginCaptchaState = _createCaptchaState(
-    'onLoginCaptchaResolved',
-    'onLoginCaptchaExpired',
-    'onLoginCaptchaError',
-    () => _loginCaptchaWidgetId,
-);
-
-const CodeCaptchaState = _createCaptchaState(
-    'onCodeCaptchaResolved',
-    'onCodeCaptchaExpired',
-    'onCodeCaptchaError',
-    () => _codeCaptchaWidgetId,
-);
+const CodeCaptchaState = createCaptchaState({
+    resolvedCallbackName: 'onCodeCaptchaResolved',
+    expiredCallbackName:  'onCodeCaptchaExpired',
+    errorCallbackName:    'onCodeCaptchaError',
+    getWidgetId:          () => _codeCaptchaWidgetId,
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  RECOVERY STATE
@@ -444,17 +374,9 @@ function _renderCaptchaInContainer(containerId, callbacks, getWidgetId, setWidge
             // Trava contra a regressão de 2026-07-30: se algum callback vier
             // como string (convenção do reCAPTCHA), o Turnstile só estoura lá
             // dentro do api.js dele, com `s.call is not a function` — sem
-            // apontar para cá. Melhor barrar aqui, com o nome do culpado.
-            for (const nome of ['resolved', 'expired', 'error']) {
-                if (typeof callbacks[nome] !== 'function') {
-                    console.error(
-                        `[Turnstile:${containerId}] callback "${nome}" não é função ` +
-                        `(recebi ${typeof callbacks[nome]}). O Turnstile exige a função, ` +
-                        `não o nome dela. Render abortado.`,
-                    );
-                    return;
-                }
-            }
+            // apontar para cá. Vive no módulo compartilhado porque a tela de
+            // cadastro precisa exatamente da mesma trava.
+            if (!callbacksValidos(callbacks, `Turnstile:${containerId}`)) return;
 
             try {
                 const widgetId = turnstile.render(currentContainer, {

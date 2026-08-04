@@ -5,6 +5,7 @@
 
 import { checkRateWindow } from './_rate-limit.js'
 import { logger }          from './_logger.js'
+import { turnstileOk }     from './_turnstile.js'
 
 const PATH = '/api/create-account'
 
@@ -93,6 +94,9 @@ export default async function handler(req, res) {
   const action   = typeof parsed?.action   === 'string' ? parsed.action.trim()                 : ''
   if (action && action !== 'send-code' && action !== 'create')
     return res.status(400).json({ error: 'action inválida.' })
+  // Passo 26: token do widget Turnstile. Tipagem defensiva — o `turnstileOk`
+  // recusa qualquer coisa que não seja string no tamanho esperado.
+  const captchaToken = typeof parsed?.captchaToken === 'string' ? parsed.captchaToken : ''
   const _hp_email = typeof parsed?._hp_email === 'string' ? parsed._hp_email : null
   const _hp_url   = typeof parsed?._hp_url   === 'string' ? parsed._hp_url   : null
 
@@ -137,6 +141,23 @@ export default async function handler(req, res) {
 
     if (plan && !VALID_PLANS.has(plan))
       return res.status(400).json({ error: 'Plano inválido.' })
+
+    // ── Captcha (Passo 26) ───────────────────────────────────────────────────
+    // Vem DEPOIS dos rate limits de propósito: eles são locais e baratos, este
+    // é uma ida à rede. Quem já estourou a cota não merece uma chamada externa.
+    //
+    // E vem ANTES do envio: é este ponto que dispara um e-mail para um endereço
+    // que o solicitante não provou possuir. Os limites acima seguram o volume
+    // por IP e por endereço, mas nada neles distingue pessoa de robô — e contra
+    // botnet, onde cada IP pede uma vez só, eles nunca chegam a disparar.
+    //
+    // O gate FALHA ABERTO se a Cloudflare não responder (ver api/_turnstile.js):
+    // derrubar a porta de entrada paga por indisponibilidade de terceiro custa
+    // mais do que aceitar alguns bots durante a janela, com o rate limit de pé.
+    if (!await turnstileOk(captchaToken, ipSC, PATH)) {
+      logger.warn('captcha_falhou', PATH, { ip: ipSC, action })
+      return res.status(400).json({ error: 'Verificação de segurança falhou. Recarregue a página e tente de novo.' })
+    }
 
     try {
       const scRes = await fetch(`${SUPABASE_URL}/functions/v1/send-signup-code`, {

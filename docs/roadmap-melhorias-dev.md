@@ -839,19 +839,45 @@ reativação de inativo, aviso de fatura.
 
 **Risco:** médio (mexe em fluxos sensíveis). **Esforço:** 1–2 dias. **Verificar:** excluir conta sem re-auth recente é barrado.
 
-## PASSO 26 — Turnstile (Cloudflare) em signup + reset 🟡 PENDENTE
-> **Falta: só o SIGNUP.** Verificado no código em 2026-08-04 — o roadmap dizia 🔴 e metade já estava
-> feita.
-> · **Reset ✅:** `supabase/functions/verify-and-reset-password/index.ts` valida contra o
->   `challenges.cloudflare.com/turnstile/v0/siteverify` com `TURNSTILE_SECRET_KEY`, exigido pelo
->   SERVIDOR após 3 falhas (`CAPTCHA_REQUIRED_AFTER = 3`). Login idem (via `captchaToken` do Supabase).
-> · **Signup 🔴:** `api/create-account.js` **não valida captcha nenhum**, e o `planos.js` (único
->   chamador) não coleta token. Hoje a porta é defendida só por rate-limit (3 criações por IP/hora) +
->   honeypot — que segura script bobo, não credential-stuffing distribuído.
+## PASSO 26 — Turnstile (Cloudflare) em signup + reset ✅ APLICADO (2026-08-04)
+> **Feito.** O reset e o login já validavam; faltava o **signup**, que era a única porta do produto
+> sem captcha — e a porta **paga**. Antes disto o `send-code` tinha só rate-limit (5/h por IP, 3/h
+> por e-mail) e honeypot: segura script bobo, não botnet, onde cada IP pede uma vez e nenhum
+> contador chega a disparar.
 >
-> ⚠️ **O plano abaixo está desatualizado num ponto:** ele manda "reusar a edge `verify-recaptcha`".
-> Essa edge foi **apagada em 2026-08-04** (era resquício morto do reCAPTCHA). O molde a copiar é o
-> `verifyCaptchaToken()` do `verify-and-reset-password`, que já faz exatamente isso.
+> **Sempre exigido, e não "após N falhas" como no login.** No login existe uma CONTA para ancorar o
+> contador; no cadastro não existe nada além do IP — e ancorar no IP faria o gate nunca disparar
+> justamente contra o ataque que ele existe para barrar.
+>
+> **O widget só carrega quando o modal de cadastro abre.** Quem chega em /planos está olhando preço;
+> não paga por widget nem por terceiro no caminho.
+>
+> **Duas extrações, para não duplicar decisão sutil:**
+> · `src/scripts/modules/turnstile-state.js` — o estado do widget, que já servia a 2 widgets dentro
+>   do login e agora serve 3. Junto foi a invariante que custou produção em 2026-07-30: **callbacks
+>   vão como FUNÇÃO, nunca como nome**. Uma cópia divergente reintroduz aquilo em silêncio.
+> · `api/_turnstile.js` — a validação server-side. Prefixo `_` porque a Vercel não conta o arquivo
+>   como função (o teto de 12 segue em 10). A política de **falhar aberto** agora protege dois
+>   caminhos com custos diferentes: no login, trancar o dono fora da conta; no cadastro, fechar a
+>   porta paga numa queda da Cloudflare. Em ambos o captcha é a camada de cima, nunca a única.
+>
+> **Ordem do gate:** depois dos rate limits (locais e baratos — quem estourou a cota não merece uma
+> ida à rede) e antes do envio do e-mail (é o disparo que se quer impedir).
+>
+> **CSP:** `challenges.cloudflare.com` liberado em `script-src`, `connect-src` e **`frame-src`** (o
+> widget roda em iframe; com `'none'` ele não aparece e o console não explica direito) — nas DUAS
+> declarações, `<meta>` do `planos.html` e header do `/planos` no `vercel.json`. O navegador aplica
+> a interseção: liberar só numa continua bloqueando.
+>
+> ⚠️ **Armadilha ao conferir num build local:** sem `VITE_TURNSTILE_SITE_KEY`, o Vite torna
+> `CAPTCHA_SITE_KEY` uma constante vazia e **todo o render some por tree-shaking** — `grep` no
+> `dist/` dá zero e parece que nada subiu. Em prod a env var existe (verificada no bundle do login).
+> Para ver de verdade: `VITE_TURNSTILE_SITE_KEY=... npm run build`.
+>
+> 16 testes novos (872 no total). **Nenhuma env var nova**: o `TURNSTILE_SECRET_KEY` já estava na
+> Vercel e a site key já vinha do build.
+>
+> ── plano original abaixo ──
 **Objetivo:** captcha invisível anti-bot no cadastro e no reset (já usamos Cloudflare).
 **Por quê:** honeypot + rate-limit cobrem bem, mas Turnstile fecha bot/credential-stuffing na porta. Grátis no Cloudflare.
 - [ ] ⬜ Criar o widget Turnstile no painel Cloudflare; adicionar o site key ao frontend e o secret aos edge secrets.
@@ -961,7 +987,7 @@ reativação de inativo, aviso de fatura.
 | 5 ⚖️ | 23 — Programa de indicação | ⚖️ decisão | 1–2 dias | 🔴 avaliar |
 | 5 ⚖️ | 24 — Conteúdo/SEO de topo | ⚖️ decisão | contínuo | 🔴 avaliar |
 | 6 | 25 — Step-up auth em ações sensíveis | 🔴 alto | 1–2 dias | 🔴 |
-| 6 | 26 — Turnstile em signup + reset | 🟡 médio | ~1 dia | 🟡 **Falta:** só o signup — reset e login ✅ |
+| 6 | 26 — Turnstile em signup + reset | 🟡 médio | ~1 dia | ✅ signup + reset + login (2026-08-04) |
 | 6 | 27 — Observabilidade + Lighthouse CI | 🟡 médio | 1–2 dias | 🔴 |
 | 6 | 28 — LGPD B1: aviso retenção audit-log | 🟢 baixo | ~30 min | ✅ aplicado em prod (2026-07-14) |
 | 6 | 29 — Assistente proativo (memória/insight) ⭐ | 🔴 alto valor | vários dias | 🔴 |

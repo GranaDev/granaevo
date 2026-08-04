@@ -5,9 +5,68 @@
 
 import { supabase, loginWithPassword } from '../services/supabase-client.js?v=2';
 import { initErrorTracking } from '../modules/error-tracking.js';
+import { createCaptchaState, callbacksValidos } from '../modules/turnstile-state.js';
 
 // Rastreamento de erros (no-op sem VITE_SENTRY_DSN / fora de produção)
 initErrorTracking();
+
+// ==========================================
+// CAPTCHA DO CADASTRO (Passo 26)
+// ==========================================
+// Chave PÚBLICA, injetada no build. Sem ela o widget não renderiza — e o gate
+// do servidor falha ABERTO, então o cadastro continua funcionando (mesma
+// política de `turnstileOk` em api/_turnstile.js).
+//
+// ⚠️ ARMADILHA AO DEPURAR LOCALMENTE: sem `VITE_TURNSTILE_SITE_KEY` no ambiente,
+// o Vite substitui isto por uma constante vazia, o `if (!CAPTCHA_SITE_KEY)`
+// abaixo vira sempre-verdadeiro e TODO o `renderSignupCaptcha` some do bundle
+// por tree-shaking. Um `grep signupCaptcha dist/` num build local dá zero e
+// parece que o código não subiu — mas em produção a env var existe (é a mesma
+// que o login usa desde 2026-07-27) e ele entra. Para conferir de verdade:
+//   VITE_TURNSTILE_SITE_KEY=... npm run build
+const CAPTCHA_SITE_KEY = import.meta.env?.VITE_TURNSTILE_SITE_KEY ?? '';
+
+let _signupWidgetId = null;
+
+// Sem nomes globais: o `planos.html` não cita callback nenhum (ao contrário do
+// login.html, que os tem no contrato da tela). Os handlers vão direto ao render.
+const SignupCaptcha = createCaptchaState({ getWidgetId: () => _signupWidgetId });
+
+/**
+ * Renderiza o widget UMA vez, quando o modal de cadastro abre.
+ *
+ * Não é no load da página de propósito: quem chega em /planos está olhando
+ * preço. Só quem decide criar conta paga o custo do widget.
+ */
+function renderSignupCaptcha() {
+    if (_signupWidgetId !== null) { SignupCaptcha.reset(); return; }
+    if (!CAPTCHA_SITE_KEY) return;                  // sem chave → gate falha aberto
+    if (typeof turnstile === 'undefined' || !window.__tsCaptchaReady) {
+        // O api.js ainda não chegou. O turnstile-init.js guarda UM render
+        // pendente e o dispara no `__tsOnLoad` — é exatamente para esta corrida
+        // que aquele script existe e é síncrono.
+        window.__tsPendingRender = renderSignupCaptcha;
+        return;
+    }
+    const box = document.querySelector('#signupCaptcha .cf-turnstile');
+    if (!box) return;
+    if (!callbacksValidos(SignupCaptcha.handlers, 'Turnstile:signup')) return;
+
+    try {
+        _signupWidgetId = turnstile.render(box, {
+            sitekey:  CAPTCHA_SITE_KEY,
+            // ⚠️ FUNÇÃO, nunca nome de função — ver turnstile-state.js.
+            callback:          SignupCaptcha.handlers.resolved,
+            'expired-callback': SignupCaptcha.handlers.expired,
+            'error-callback':   SignupCaptcha.handlers.error,
+            theme:    'dark',
+            action:   'signup',
+        });
+        SignupCaptcha.activate();
+    } catch {
+        _signupWidgetId = null;   // gate do servidor falha aberto; não trava o cadastro
+    }
+}
 
 // ==========================================
 // MODAL DE CADASTRO PRÉ-CHECKOUT
@@ -97,6 +156,10 @@ const SignupModal = (() => {
                     action: 'send-code',
                     email,
                     plan: _pendingPlan || 'individual',
+                    // Passo 26: o servidor decide o que fazer com a ausência do
+                    // token (hoje falha aberto se a Cloudflare não responder).
+                    // O cliente só entrega o que tem.
+                    captchaToken: SignupCaptcha.getToken() ?? undefined,
                     _hp_email: '',
                     _hp_url:   '',
                 }),
@@ -134,6 +197,7 @@ const SignupModal = (() => {
         if (f) f.reset();
         m.classList.add('open');
         m.setAttribute('aria-hidden', 'false');
+        renderSignupCaptcha();   // Passo 26 — só agora, não no load da página
         setTimeout(() => emailInput()?.focus(), 100);
     }
 

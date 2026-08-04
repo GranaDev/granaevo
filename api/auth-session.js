@@ -47,6 +47,7 @@
 import { checkRate, checkRateWindow, isIPBlocked,
          bumpCounter, readCounter, isKeyBlocked, blockKey, clearKeys } from './_rate-limit.js'
 import { logger } from './_logger.js'
+import { turnstileOk } from './_turnstile.js'
 import { createHash } from 'node:crypto'
 
 const PATH         = '/api/auth-session'
@@ -120,44 +121,7 @@ const chaveConta = (email) =>
 // legítimo que errou a senha resolve um desafio (quase sempre invisível) antes
 // de bater no bloqueio de 15 minutos. O captcha é a rampa; o lockout é a parede.
 const CAPTCHA_APOS_FALHAS = 3
-const TURNSTILE_VERIFY    = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 
-/**
- * Valida um token do Turnstile contra a Cloudflare.
- *
- * FALHA ABERTO de propósito. Se a Cloudflare não responder, o login segue sem
- * captcha — porque o lockout por conta continua valendo e barra a força bruta
- * de qualquer jeito. Falhar fechado aqui deixaria seus usuários trancados para
- * fora da própria conta por uma indisponibilidade de terceiro, o que é um preço
- * alto demais para uma camada que é a TERCEIRA a proteger este caminho.
- */
-async function turnstileOk(token, ip) {
-  const secret = process.env.TURNSTILE_SECRET_KEY
-  if (!secret) {
-    // Sem chave configurada o gate inteiro é no-op — evita que um deploy sem a
-    // env var derrube o login de todo mundo que errou a senha 3 vezes.
-    logger.warn('turnstile_sem_secret', PATH, {})
-    return true
-  }
-  if (typeof token !== 'string' || token.length < 10 || token.length > 4096) return false
-
-  try {
-    const form = new URLSearchParams({ secret, response: token })
-    if (ip && ip !== 'unknown') form.set('remoteip', ip)
-    const r = await fetch(TURNSTILE_VERIFY, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    form,
-      signal:  AbortSignal.timeout(8_000),
-    })
-    if (!r.ok) { logger.warn('turnstile_gateway', PATH, { status: r.status }); return true }
-    const j = await r.json()
-    return j?.success === true
-  } catch {
-    logger.warn('turnstile_timeout', PATH, {})
-    return true          // ver o comentário acima: falha aberto
-  }
-}
 
 // MFA — o código TOTP tem 6 dígitos e vale ~60s (janela de 30s + 1 de tolerância).
 // Sem teto por IP, uma botnet tenta ~1M de combinações dentro da validade. Os 5
@@ -439,7 +403,7 @@ export default async function handler(req, res) {
         logger.warn('captcha_exigido', PATH, { ip })
         return res.status(403).json({ error: 'captcha_required', captcha_required: true })
       }
-      if (!await turnstileOk(tok, ip)) {
+      if (!await turnstileOk(tok, ip, PATH)) {
         logger.warn('captcha_invalido', PATH, { ip })
         return res.status(403).json({ error: 'captcha_invalid', captcha_required: true })
       }

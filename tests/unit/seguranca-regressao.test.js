@@ -755,7 +755,10 @@ describe('B-2 — o captcha é exigido pelo SERVIDOR, não pelo navegador', () =
   })
 
   test('a validação do Turnstile falha ABERTO', () => {
-    const fn = bff.match(/async function turnstileOk[\s\S]*?\n\}/)[0]
+    // Extraída para api/_turnstile.js em 2026-08-04, quando o cadastro (Passo 26)
+    // virou o 2º chamador. O prefixo `_` importa: a Vercel não conta o arquivo
+    // como Serverless Function, e o plano Hobby já está no teto de 12.
+    const fn = ler('api', '_turnstile.js').match(/export async function turnstileOk[\s\S]*?\n\}/)[0]
 
     // Contar retornos em vez de casar distância entre trechos: a 1ª versão deste
     // teste limitava a 200 caracteres entre `if (!secret)` e `return true`, e o
@@ -777,6 +780,17 @@ describe('B-2 — o captcha é exigido pelo SERVIDOR, não pelo navegador', () =
     assert.match(fn, /if \(!secret\)/,
       'Sem TURNSTILE_SECRET_KEY o gate tem de ser no-op, senão um deploy sem a env var '
       + 'derruba o login de todo mundo que errou a senha 3 vezes.')
+
+    // Uma implementação só. A política de falhar aberto é sutil demais para
+    // viver em duas cópias que divergem — ainda mais agora que ela protege dois
+    // caminhos com custos diferentes: conta trancada (login) e porta paga
+    // fechada (cadastro).
+    for (const rota of ['auth-session.js', 'create-account.js']) {
+      assert.match(ler('api', rota), /import \{ turnstileOk \}\s+from '\.\/_turnstile\.js'/,
+        `api/${rota} precisa IMPORTAR o gate compartilhado, não reimplementá-lo.`)
+      assert.doesNotMatch(ler('api', rota), /async function turnstileOk/,
+        `api/${rota} voltou a ter cópia local do gate — é assim que duas versões divergem.`)
+    }
   })
 
   test('nenhum vestígio do Google no caminho do login', () => {
@@ -841,15 +855,22 @@ describe('B-2 (UI) — não sondar o DOM do widget do Turnstile', () => {
         + 'porque o token nunca é marcado. Use os `handlers` do estado do captcha.')
     }
 
-    // A trava dentro do render, que dá nome ao culpado em vez de deixar o
-    // erro estourar sem origem lá dentro do api.js da Cloudflare.
-    assert.match(js, /typeof callbacks\[nome\] !== 'function'/,
+    // A trava que dá nome ao culpado em vez de deixar o erro estourar sem
+    // origem lá dentro do api.js da Cloudflare. Migrou para o módulo
+    // compartilhado em 2026-08-04, quando o cadastro virou o 3º widget: ela
+    // precisa valer para TODAS as telas, não só para o login.
+    const mod = ler('src', 'scripts', 'modules', 'turnstile-state.js')
+    assert.match(mod, /typeof callbacks\?\.\[nome\] !== 'function'/,
       'Sumiu a guarda que recusa render com callback que não é função. Sem ela, esta '
       + 'classe de bug volta a se manifestar como um TypeError sem origem aparente.')
+    assert.match(js, /callbacksValidos\(callbacks/,
+      'O login precisa CHAMAR a guarda compartilhada — tê-la no módulo não basta.')
   })
 
   test('os handlers e os globais são a MESMA função', () => {
-    const js = ler('src', 'scripts', 'pages', 'login.js')
+    // Mora no módulo compartilhado desde 2026-08-04 (login, tela de código e
+    // cadastro usam a mesma fábrica).
+    const js = ler('src', 'scripts', 'modules', 'turnstile-state.js')
 
     // Os globais (window.onLoginCaptchaResolved…) são citados no login.html e
     // continuam sendo o contrato público da tela. Se um dia alguém apontar os
