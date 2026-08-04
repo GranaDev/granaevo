@@ -74,10 +74,11 @@ Dentro de um item: `⬜ subtarefa não feita` · `☑️ / ✅ subtarefa feita`.
 | ⬜ 1 | **Cadastro completo** em `/planos`: escolher plano → o widget do Turnstile aparece no modal, acima do botão → preencher e receber o código de 6 dígitos por e-mail | Que o captcha novo **não quebrou a porta paga**. É o único fluxo que gera receita e o mais recente a mudar | 26 |
 | ⬜ 2 | **Login + abrir uma tela com dados** (transações ou relatórios) | Que os stubs de `realtime-js`/`functions-js` não afetaram auth nem queries. Mexeu no caminho do cliente Supabase | 8 |
 | ⬜ 3 | **Foto de perfil** carregando no dashboard | Que `supabase.storage` segue intacto — foi o que quase stubei por acreditar num roadmap que dizia "storage não é usado" | 8 |
-| ⬜ 4 | **Assistente:** *"gastei 50 no mercado"* e depois *"e mais 30"* | Que a memória de conversa (C-1) lança sozinha herdando categoria e tipo, sem perguntar "gasto ou entrada?" | 36 |
+| ⬜ 4 | **Assistente**, quatro frases: *"gastei 50 no mercado"* → *"e mais 30"* · *"tirei 100 da reserva"* · *"obrigado"* · *"quem é você"* | (a) memória de conversa herda categoria sem reperguntar; (b) **a retirada entra como RETIRADA, não entrada** — o bug relatado em 2026-08-04; (c) cortesia não vira "não entendi" | 36 |
 | ⬜ 5 | **2FA:** ativar, sair, entrar com o código; depois testar um **código de recuperação** | O 2FA nunca foi testado de ponta a ponta; a recuperação teve bug de "Erro de conexão" corrigido em 2026-08-03 | 6 |
 | ⬜ 6 | **Blocos 2, 3 e 4** do roteiro de testes da conta descartável | Pendentes desde 2026-08-02 | — |
-| ⬜ 7 | **Depois dos testes:** `node scripts/remove-conta-teste.mjs` | Apaga a conta descartável. **Só depois** — é a única já nos termos 1.2 | — |
+| ⬜ 8 | ⭐ **Dois aparelhos ao mesmo tempo:** você num, sua esposa no outro; cada um lança no SEU perfil, quase junto. Depois recarreguem os dois | Que o merge por perfil funciona. **Antes um apagava o outro** — era o defeito mais caro do sistema, e sumia sem erro. Testar também **apagar um perfil** num aparelho e conferir que ele não ressuscita no outro | — |
+| ⬜ 9 | **Depois dos testes:** `node scripts/remove-conta-teste.mjs` | Apaga a conta descartável. **Só depois** — é a única já nos termos 1.2 | — |
 
 **Ações de configuração (não são teste, mas só o dono faz):**
 
@@ -1894,8 +1895,9 @@ logado · gate no CI impedindo regressão.
 
 ## PASSO 36 — CHAT ASSISTENTE 8.5 → 10 🟡
 > Arquitetura já é 10. **Nenhum item abaixo manda R$ para o modelo** — e nenhum precisou.
-> **Falta:** só a continuação de compra no **crédito** herdar contexto (C-1). Os oito itens
-> C-1..C-8 estão ✅; sete deles foram resolvidos SEM tocar no schema da IA.
+> **Falta:** o **C-9** — achados da análise profunda de 2026-08-04, medidos e não corrigidos.
+> O mais grave: *"quero gastar no máximo 500 em mercado"* **grava um gasto falso de R$500**.
+> Os itens C-1..C-8 estão ✅ (sete deles resolvidos sem tocar no schema da IA).
 
 - **C-1** 🟡 PENDENTE (2026-08-03) — ⭐ **Memória de conversa**. *"Gastei 50 no mercado"* → *"e mais
   30"* agora lança sozinho, herdando categoria e tipo da frase anterior.
@@ -1929,6 +1931,28 @@ logado · gate no CI impedindo regressão.
   antes, no fechamento de fatura. Cada insight tem o próprio `catch`: erro no complemento não pode
   engolir o aviso de conta vencendo, que é o essencial. **Nenhum R$ no corpo** — a notificação é
   lida por quem passa pelo celular na mesa; vai só o nome da assinatura e percentual.
+- **C-9** 🔴 **ACHADOS DA ANÁLISE PROFUNDA (2026-08-04) — medidos, não corrigidos.**
+  A varredura por corpus achou estes; nenhum foi consertado ainda:
+  (⚠️ Nota: a 1ª versão desta lista usava os marcadores de PENDENTE e de risco-médio como se
+  fossem GRAVIDADE. O validador reprovou, e com razão — os marcadores são STATUS. Item não
+  iniciado é NÃO INICIADO por mais leve que seja; gravidade se escreve por extenso.)
+  · 🔴 **GRAVE — orçamento grava gasto falso.** *"quero gastar no máximo 500 em mercado"* e
+    *"orcamento mercado 500"* criam uma **despesa de R$500 que não existe** (2 de 4 formas testadas).
+    `RE_DEF_ORCAMENTO` exige "orçamento/limite/teto" colado a uma preposição; sem ela, escapa.
+    **É o único item aberto que inventa dinheiro.**
+  · 🔴 **MÉDIO — "parcelado" não vira crédito.** `parcelad` com `` no fim não casa "parcelado"/"parcelada"/
+    "parcelados" — a compra parcelada vira saída à vista e **some da fatura do cartão**.
+    ⚠️ **É a 4ª vez que essa fronteira de palavra morde este arquivo** (`gasto`/`gastos`,
+    `deposit`/`depósito`, agora `parcelad`). Virou propriedade do arquivo, não azar: português
+    flexiona e `` não perdoa. **O conserto certo é um teste de flexões** sobre cada radical das
+    listas de verbos — senão a 5ª vem.
+  · 🔴 BAIXO — continuação no **crédito** não herda contexto (`#lastLancamentoCmd` só grava saída/entrada/reserva).
+  · 🔴 BAIXO — *"minhas conquistas"* cai em "não entendi" — a consulta existe no app, falta a frase.
+  · 🔴 BAIXO — *"não me deixa esquecer do X"* não vira lembrete.
+  · 🔴 BAIXO — dia da semana (*"gastei 30 na segunda"*) não vira data.
+  **O que foi MEDIDO e está sólido:** valores 9/9 · consultas 24/25 · conta fixa 8/8 ·
+  desfazer/repetir 7/7 · direção do dinheiro 36/36 · robustez 13/13 sem explodir · injeção barrada ·
+  as 7 gavetas de pendência têm escotilha de saída · undo é transação compensatória de verdade.
 - **C-3** ✅ FINALIZADO (2026-08-04) — **conversa livre**.
   *"obrigado"*, *"valeu"*, *"tchau"*, *"quem é você"* caíam em `desconhecido` com confiança 0, iam
   para a IA e voltavam como *"não entendi — tente: gastei 50 no mercado"*. Custava token, ~1s de
