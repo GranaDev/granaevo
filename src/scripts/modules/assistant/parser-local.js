@@ -66,18 +66,68 @@ const RE_INJECT = /\b(ignore? (as |todas as |suas )?(instru|regras|ordens)|esque
 // "caixa" (eletrônico) NÃO entra: `\bcaixinha` não casa "caixa".
 
 // ── Verbos → categoria (ordem importa: específicos antes de genéricos) ───────
+// ── Retirada de reserva — o bug de 2026-08-04 ───────────────────────────────
+// RELATADO EM PRODUÇÃO: "tirei 100 da reserva" virou ENTRADA.
+//
+// A causa não foi o parser errar a direção: foi ele **não reconhecer a frase**.
+// Uma medição com 23 formas naturais de dizer "tirei da reserva" reprovou 12.
+// Todas caíam em `valor_ambiguo`, e aí o assistente perguntava "foi gasto ou
+// entrada?".
+//
+// Essa pergunta é uma ARMADILHA para retirada: tirar da reserva **é** dinheiro
+// entrando na conta, então "entrada" é a resposta honesta à pergunta errada. O
+// usuário não errou — a pergunta é que não devia existir.
+//
+// O conserto é vocabulário, não lógica. A ÂNCORA DE SEGURANÇA é o nome da
+// reserva: só há retirada quando a frase nomeia uma. Por isso dá para aceitar
+// verbos genéricos ("peguei", "usei", "mexi") sem risco — "usei 100 no mercado"
+// não tem âncora e continua sendo saída.
+const RESERVA_ALVO = '(reserv|caixinha|cofrinho|porquinho|poupanc|guardadinho|vaquinha|dinheiro guardado|grana guardada|pe de meia)';
+
+// Passado, infinitivo E imperativo. A lista antiga só tinha o passado — "vou
+// tirar 100 da reserva" e "tira 100 da caixinha" não casavam verbo nenhum.
+const V_RETIRAR = '(tirei|tirar|tira|tire|tirando|retirei|retirar|retira|saquei|sacar|saca|resgatei|resgatar|resgate|retirada|peguei|pegar|pega|usei|usar|usa|usando|mexi|mexer|puxei|puxar|tomei|removi|remover)';
+
+// Verbos de GUARDAR. Genéricos ("coloquei", "meti", "joguei") só são aceitos
+// junto da âncora — sem ela, "meti 100 no bar" é gasto, não poupança.
+const V_GUARDAR = '(guardei|guardar|guarda|guardando|poupei|poupar|juntei|juntar|separei|separar|aportei|aportar|reservei|reservar|economizei|economizar|coloquei|colocar|coloca|botei|botar|bota|pus|meti|meter|depositei|depositar|deposito|adicionei|adicionar|joguei|jogar|transferi|mandei)';
+
 const VERBOS = [
-    { cat: 'retirada_reserva', re: /\b(tirei|resgatei|retirei|saquei|resgate|retirada|puxei|peguei de volta)\b.*\b(reserv|caixinha|cofrinho|porquinho|poupanc|guardadinho|vaquinha)/ },
-    { cat: 'retirada_reserva', re: /\b(d[ao]|na|no) (reserva|caixinha|cofrinho|porquinho|poupanca|vaquinha)\b.*\b(tirei|resgatei|retirei|saquei|puxei)/ },
-    { cat: 'reserva',          re: /\b(guardei|reservei|poupei|juntei|separei|aportei|guardar|poupar|reservar|economizei|botei de lado|coloquei de lado)\b/ },
+    { cat: 'retirada_reserva', re: new RegExp(`\\b${V_RETIRAR}\\b[\\s\\S]*\\b${RESERVA_ALVO}`) },
+    { cat: 'retirada_reserva', re: new RegExp(`\\b${RESERVA_ALVO}[\\s\\S]*\\b${V_RETIRAR}\\b`) },
+    // Sem âncora: neste app "retirada"/"resgate" como SUBSTANTIVO só significa
+    // reserva (o campo `motivoRetirada` existe só lá). Sem isto, "retirada de
+    // 100" — a forma que o próprio app usa nos rótulos — virava valor solto.
+    { cat: 'retirada_reserva', re: /^(fiz |fazer |uma |fiz uma |fazer uma )*(retirada|resgate)\b/ },
+    // ── Depósito na reserva ─────────────────────────────────────────────────
+    // Mesmo defeito da retirada, medido no mesmo dia: 7 de 15 formas naturais
+    // falhavam, e "meti 100 na poupança" virava **saída** — a direção errada,
+    // exatamente o sintoma que o usuário relatou do outro lado.
+    //
+    // Mesma solução: com o nome da reserva como âncora, verbos genéricos
+    // ("coloquei", "botei", "meti", "joguei") são seguros. Sem âncora, só os
+    // verbos que já significam poupar sozinhos.
+    { cat: 'reserva', re: new RegExp(`\\b${V_GUARDAR}\\b[\\s\\S]*\\b${RESERVA_ALVO}`) },
+    { cat: 'reserva', re: new RegExp(`\\b${RESERVA_ALVO}[\\s\\S]*\\b${V_GUARDAR}\\b`) },
+    // "pus/botei/coloquei 100 DE LADO" — o idioma vale como âncora própria.
+    { cat: 'reserva', re: /\b(pus|botei|coloquei|meti|joguei|deixei)\b[\s\S]*\bde lado\b/ },
+    { cat: 'reserva', re: /\b(guardei|guardar|guarda|guardando|reservei|reservar|poupei|poupar|juntei|juntar|separei|separar|aportei|aportar|economizei|economizar)\b/ },
     { cat: 'assinatura',       re: /\b(assinatura|assinei|mensalidade|plano mensal|recorrente|todo mes pago)\b/ },
     { cat: 'saida_credito',    re: /\b(no credito|no cartao|parcelad|parcelei|em \d+x|\d+x de|no cartao de credito)\b/ },
-    { cat: 'entrada',          re: /\b(recebi|ganhei|caiu|entrou|pingou|embolsei|faturei|recebimento|salario|me pagaram|pagaram|ganho|recebe?r|pix de|deposit|caiu na conta|entrou na conta)\b/ },
+    // `deposit\w*` e não `deposit`: com o \b no fim, "deposito"/"depósito" — a
+    // palavra que as pessoas realmente escrevem — não casava. É a mesma
+    // armadilha do `gasto`/`gastos` explicada logo abaixo, e já é a 3ª vez que
+    // essa fronteira de palavra morde este arquivo.
+    //
+    // VENDER entrou aqui, e não só como palavra-chave: "vendi meu celular por
+    // 500" virava SAÍDA/Eletrônico porque a keyword do objeto ("celular")
+    // vencia. O objeto de uma venda é o que saiu de casa — o dinheiro ENTROU.
+    { cat: 'entrada',          re: /\b(recebi|ganhei|caiu|entrou|pingou|embolsei|faturei|recebimento|salario|me pagaram|pagaram|ganho|recebe?r|pix de|deposit\w*|caiu na conta|entrou na conta|vend(i|eu|emos|er|endo|a)|devolveram|devolveu|estorn\w*|reembols\w*|cashback|rendimento|rendeu)\b/ },
     // `gastos?` e não `gasto`: a fronteira \b no fim de "gasto" cai no MEIO de
     // "gastos" e não casa o plural — era por isso que a frase "75,69 gastos na
     // shopee" só virava saída por acidente (via a keyword "shopee"), e que
     // "75,69 gastos com fita de led" era perguntada como "gasto ou entrada?".
-    { cat: 'saida',            re: /\b(gastei|paguei|comprei|gastos?|saiu|torrei|mandei|meti|queimei|desembolsei|estourei|fritei|gastar|comprar|pagar|debit|paguei por|deu de)\b/ },
+    { cat: 'saida',            re: /\b(gastei|paguei|comprei|gastos?|saiu|torrei|mandei|meti|queimei|desembolsei|estourei|fritei|gastar|comprar|pagar|debit\w*|paguei por|deu de|custou|custa|custaram|ficou em|saiu por|fiz uma compra|compra de|torrar|gastando|comprando|pagando)\b/ },
 ];
 
 // ── Palavras-chave → {categoria, tipo} ──────────────────────────────────────
