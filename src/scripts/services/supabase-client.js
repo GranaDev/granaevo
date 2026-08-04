@@ -49,7 +49,7 @@ export function setRememberMe(remember) {
         else          localStorage.removeItem(_REMEMBER_KEY);
     } catch {}
 }
-export function isRememberMe() {
+function isRememberMe() {
     try { return localStorage.getItem(_REMEMBER_KEY) === '1'; } catch { return false; }
 }
 export function clearRememberMe() {
@@ -185,6 +185,11 @@ export async function logout() {
     await supabase.auth.signOut().catch(() => {});
     _expiresAt = 0;
     clearRememberMe();
+    // O pseudônimo do Sentry morre junto com a sessão. Sem isto, num aparelho
+    // compartilhado (conta casal/família) os erros de quem entrar depois sairiam
+    // agrupados sob quem saiu. Import dinâmico: quem só faz login não paga por
+    // um módulo que, sem DSN configurada, não faz nada.
+    try { (await import('../modules/error-tracking.js')).clearUserContext(); } catch { /* nunca quebra o logout */ }
 }
 
 /** Garante um access token válido (renova se perto de expirar). */

@@ -788,7 +788,11 @@ describe('B-2 — o captcha é exigido pelo SERVIDOR, não pelo navegador', () =
   })
 
   test('as edges validam contra a Cloudflare, sem fallback na chave antiga', () => {
-    for (const edge of ['verify-recaptcha', 'verify-and-reset-password']) {
+    // `verify-recaptcha` saiu da lista em 2026-08-03: a edge foi apagada junto
+    // com o proxy `/api/verify-recaptcha` e a função morta que a chamava. Era
+    // resquício da migração pro Turnstile — o captcha do login é exigido pelo
+    // servidor via `captchaToken` do Supabase, não por esse caminho.
+    for (const edge of ['verify-and-reset-password']) {
       const src = ler('supabase', 'functions', edge, 'index.ts')
       assert.match(src, /challenges\.cloudflare\.com\/turnstile\/v0\/siteverify/,
         `${edge} ainda chama o siteverify do Google.`)

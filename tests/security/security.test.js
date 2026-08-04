@@ -116,15 +116,6 @@ describe('Rate Limiting & Brute Force', () => {
     assert.ok(has429, `deve ter rate limit: ${results}`)
   })
 
-  test('verify-recaptcha tem rate limit por IP', async () => {
-    const results = []
-    for (let i = 0; i < 12; i++) {
-      const { status } = await post('/api/verify-recaptcha', { token: 'a'.repeat(60) })
-      results.push(status)
-    }
-    const has429 = results.some(s => s === 429)
-    assert.ok(has429, `deve ter rate limit: ${results}`)
-  })
 
   test('reset password tem rate limit progressivo por step', async () => {
     const results = []
@@ -419,11 +410,6 @@ describe('Input Validation', () => {
     assert.ok([400, 429].includes(status), `sem email deve dar 400: ${status}`)
   })
 
-  test('verify-recaptcha rejeita token muito curto', async () => {
-    const { status, json } = await post('/api/verify-recaptcha', { token: 'short' })
-    assert.ok([400, 429].includes(status) || json?.success === false,
-      `token curto deve ser rejeitado: ${status}`)
-  })
 
 })
 
@@ -434,7 +420,6 @@ describe('HTTP Method Restrictions', () => {
   const endpoints = [
     ['/api/check-email',       'GET'],
     ['/api/reset-password',    'GET'],
-    ['/api/verify-recaptcha',  'PUT'],
     ['/api/check-user-access', 'DELETE'],
     ['/api/send-guest-invite', 'PATCH'],
   ]
@@ -1062,47 +1047,6 @@ describe('GOD MODE Round 1 — Infrastructure & Vault Regressions', () => {
 describe('GOD MODE Round 2 — Proxy-Secret & Nonce Coverage', () => {
 
   const SUPABASE_EF_URL = process.env.SUPABASE_URL ?? 'https://fvrhqqeofqedmhadzzqw.supabase.co'
-
-  // ── GAP-02: verify-recaptcha proxy-secret ────────────────────────────────
-
-  test('[GM2-01] verify-recaptcha EF direto sem proxy-secret retorna 401 ou 400', async () => {
-    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/verify-recaptcha`, {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'apikey':        process.env.SUPABASE_ANON_KEY ?? 'test',
-        'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY ?? 'test'}`,
-        'Origin':        'https://www.granaevo.com',
-      },
-      body: JSON.stringify({ token: 'a'.repeat(100) }),
-    }).catch(() => ({ status: 0 }))
-    assert.ok(
-      [0, 401, 400, 403].includes(r.status),
-      `[GM2-01] EF direto sem proxy-secret deve ser bloqueado: ${r.status}`
-    )
-  })
-
-  test('[GM2-02] /api/verify-recaptcha rejeita token curto com 400', async () => {
-    const { status } = await post('/api/verify-recaptcha', { token: 'curto' })
-    assert.ok(
-      [400, 429].includes(status),
-      `[GM2-02] token inválido deve retornar 400 ou 429: ${status}`
-    )
-  })
-
-  test('[GM2-03] /api/verify-recaptcha sem Origin retorna 403', async () => {
-    const r = await fetch(`${BASE_URL}/api/verify-recaptcha`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ token: 'a'.repeat(100) }),
-    }).catch(() => ({ status: 0 }))
-    assert.ok(
-      [0, 403, 429].includes(r.status),
-      `[GM2-03] sem Origin deve retornar 403: ${r.status}`
-    )
-  })
-
-  // ── GAP-01: link-subscription proxy-secret ───────────────────────────────
 
   test('[GM2-04] link-user-subscription EF direto sem proxy-secret retorna 401', async () => {
     const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/link-user-subscription`, {
@@ -1763,24 +1707,6 @@ describe('GOD MODE Round 5 — Fail-Closed PROXY_SECRET & confirm-user-email', (
     assert.ok(
       [0, 401, 403, 500].includes(r.status),
       `[GOD5-M01-V4] upload sem proxy-secret deve ser bloqueado: ${r.status}`
-    )
-  })
-
-  // ── [GOD5-M01] Vetor 5: verify-recaptcha EF direta sem proxy-secret → 401 ou 500 ──
-
-  test('[GOD5-M01-V5] verify-recaptcha EF direta sem proxy-secret retorna 401 ou 500', async () => {
-    const r = await fetch(`${SUPABASE_EF_URL}/functions/v1/verify-recaptcha`, {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${ANON_KEY}`,
-        'apikey':        ANON_KEY,
-      },
-      body: JSON.stringify({ token: 'a'.repeat(100) }),
-    }).catch(() => ({ status: 0 }))
-    assert.ok(
-      [0, 401, 403, 500].includes(r.status),
-      `[GOD5-M01-V5] verify-recaptcha sem proxy-secret deve ser bloqueado: ${r.status}`
     )
   })
 

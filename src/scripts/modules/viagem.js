@@ -56,7 +56,7 @@ export function dataParaIso(d) {
 }
 
 /** Date → 'HH:MM:SS' local — mesmo formato do `hora` gravado em cada transação. */
-export function horaDe(d) {
+function horaDe(d) {
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 

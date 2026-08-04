@@ -55,23 +55,6 @@ const IS_DEV = (
 // UTILITÁRIOS DE SEGURANÇA
 // ==========================================
 
-/**
- * Retorna a string segura para uso em textContent.
- * createTextNode faz o escape automático de qualquer HTML.
- * Não usa innerHTML em nenhum momento.
- *
- * [D] Versão simplificada: a versão anterior criava um <span>
- *     desnecessário. O nó de texto já expõe .nodeValue sem HTML.
- *
- * @param {unknown} value
- * @returns {string}
- */
-function sanitizeText(value) {
-    if (typeof value !== 'string') return '';
-    // createTextNode escapa automaticamente < > & " ' etc.
-    const node = document.createTextNode(value);
-    return node.nodeValue ?? '';
-}
 
 // Os depoimentos saíram daqui em 2026-07-31. Eram 6 avaliações FIXAS, com
 // nomes e resultados inventados ("economizei R$ 5.000"), e a seção que as

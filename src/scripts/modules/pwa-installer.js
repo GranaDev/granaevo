@@ -47,16 +47,10 @@ function _detectBrowser() {
 // ── API pública ────────────────────────────────────────────────────────────────
 
 /**
- * Retorna o estado atual da instalação.
- * @returns {PWAState}
- */
-export function getPWAInstallState() { return _state; }
-
-/**
  * Registra callback para mudanças de estado.
  * @param {function(PWAState): void} callback
  */
-export function onPWAStateChange(callback) { _listeners.push(callback); }
+function onPWAStateChange(callback) { _listeners.push(callback); }
 
 function _setState(s) {
   _state = s;
@@ -140,7 +134,7 @@ function _esperarPrompt(ms = 3500) {
  * Para outros browsers, abre modal com instruções manuais.
  * @returns {Promise<'accepted'|'dismissed'|'manual'>}
  */
-export async function promptInstall() {
+async function promptInstall() {
   // Chromium: usa o prompt já capturado; se ainda não chegou, espera um pouco
   // (dentro da janela de gesto) antes de desistir. Opera/Firefox/Safari não
   // emitem o evento → vão direto às instruções, sem espera inútil.
@@ -355,38 +349,11 @@ export function initInstallButton() {
   });
 }
 
-/**
- * Controla quando mostrar o prompt de instalação PWA.
- * Lógica de engajamento progressivo:
- *   - 1ª visita: aguarda 60s de uso antes de exibir banner
- *   - 2ª visita: exibe após 10s
- *   - 3ª+ visita: não interrompe (usuário já decidiu não instalar)
- */
-export function shouldShowInstallPrompt() {
-  if (_state === 'installed' || _state === 'pending') return false;
-  const visits    = parseInt(sessionStorage.getItem('ge:pwa_visits') ?? '0', 10);
-  const newVisits = visits + 1;
-  sessionStorage.setItem('ge:pwa_visits', String(newVisits));
-
-  if (newVisits === 1) {
-    // Primeira visita: mostrar prompt após 60s de engajamento
-    setTimeout(() => _showBannerIfNotInstalled(), 60_000);
-    return false;
-  }
-  if (newVisits === 2) {
-    // Segunda visita: mostrar após 10s
-    setTimeout(() => _showBannerIfNotInstalled(), 10_000);
-    return false;
-  }
-  // Terceira+ visita: não interromper
-  return false;
-}
-
-function _showBannerIfNotInstalled() {
-  if (_state === 'installed') return;
-  // Dispara evento customizado para o dashboard mostrar um banner suave
-  document.dispatchEvent(new CustomEvent('ge:pwa-show-banner'));
-}
+// `_showBannerIfNotInstalled` saiu em 2026-08-04, junto com o
+// `shouldShowInstallPrompt` que a chamava. Ela disparava `ge:pwa-show-banner`
+// para "o dashboard mostrar um banner suave" — e a busca no repo inteiro não
+// achou UM ouvinte desse evento. O banner nunca existiu do outro lado: era
+// metade de uma feature, gritando para uma sala vazia.
 
 function _updateInstallButton() {
   const btn = document.getElementById('btnInstalarApp');

@@ -107,4 +107,6 @@ if (document.readyState === 'loading') {
     init();
 }
 
-export { init };
+// Sem export: este módulo é importado só pelo efeito colateral
+// (`import '../modules/scroll-lock.js'`) e se inicializa sozinho logo acima.
+// Expor `init` sugeria um segundo modo de uso que nunca existiu.

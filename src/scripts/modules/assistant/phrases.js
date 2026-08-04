@@ -11,7 +11,7 @@ import { TIPO_ICONE } from './parser-local.js';
 // A5: pick que evita repetir a última escolha do MESMO array (soa menos robótico).
 // WeakMap por referência do array (os pools são constantes de módulo, estáveis).
 const _lastPick = new WeakMap();
-export function pick(arr) {
+function pick(arr) {
     if (!Array.isArray(arr) || arr.length === 0) return '';
     if (arr.length === 1) return arr[0];
     let i = Math.floor(Math.random() * arr.length);
@@ -72,7 +72,7 @@ const PERIODO_LABEL = {
 };
 
 // Rótulo de período — cobre também mês nomeado ("mes:2026-05" → "em maio"). A3.
-export function perLabel(p) {
+function perLabel(p) {
     if (typeof p === 'string' && p.startsWith('mes:')) { const l = mesLabel(p.slice(4)); return l ? `em ${l}` : 'no mês'; }
     return PERIODO_LABEL[p] || 'no período';
 }
@@ -159,9 +159,6 @@ export function creditoQuantoFoi() {
 export function semCartao() {
     return '{{fa-credit-card}} Você ainda não tem um cartão cadastrado. Crie um no menu **Cartões** do GranaEvo que aí eu registro suas compras no crédito.';
 }
-export function todosCongelados() {
-    return '{{fa-snowflake}} Todos os seus cartões estão congelados. Descongele um no menu **Cartões** pra usar.';
-}
 export function cartaoCongelado() {
     return '{{fa-snowflake}} Esse cartão está congelado. Descongele no menu **Cartões** pra usá-lo.';
 }
@@ -172,10 +169,6 @@ export function confirmacaoRetirada(res) {
         text: `{{fa-check}} ${pick(['Retirei', 'Feito', 'Prontinho'])} · ${formatBRL(res.transaction.valor)} · {{fa-piggy-bank}} de ${res.meta} — voltou pro seu saldo.`,
         chip: { categoria: 'retirada_reserva', undoLabel: 'Desfazer' },
     };
-}
-export function escolherReservaRetirada(opcoes = []) {
-    if (!opcoes.length) return '{{fa-piggy-bank}} Você não tem reservas pra retirar. Crie uma no menu “Reservas”.';
-    return `De qual reserva você quer tirar? ${opcoes.map((o) => `“${o}”`).join(', ')}. Me diz o nome.`;
 }
 export function reservaVazia(meta) {
     return `A reserva “${meta}” está zerada — não tem o que retirar.`;
@@ -579,15 +572,6 @@ export function statsResumo(s) {
     const pct = s.pctLocal !== null ? `${s.pctLocal}%` : '—';
     return `{{fa-shield-halved}} Das suas ${s.total} mensagens, *${pct}* foram entendidas 100% no aparelho (sem IA).`;
 }
-
-// E45: rate-limit com espera explícita (educar, não frustrar)
-export function rateEspera(seg) {
-    const s = Number.isFinite(seg) && seg > 0 ? seg : 30;
-    return `{{fa-hourglass-half}} Opa, muita coisa de uma vez! Aguarda ${s}s e manda de novo — é só proteção, teu histórico tá salvo.`;
-}
-
-// E46: rótulo do selo "modo local" (usado pela UI quando a IA está indisponível)
-export const LABEL_MODO_LOCAL = 'entendendo localmente';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // BLOCO C — novos insights de proatividade (todos sobre dados 100% locais)

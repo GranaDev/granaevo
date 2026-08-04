@@ -588,27 +588,6 @@ function highlightCodeCaptcha() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  VERIFICAÇÃO DE CAPTCHA NO BACKEND (para o login)
-//  Usa o proxy Vercel /api/verify-recaptcha — nunca expõe a URL
-//  da Edge Function diretamente no frontend.
-// ═══════════════════════════════════════════════════════════════
-async function validateLoginCaptchaOnBackend(token) {
-    if (!token || typeof token !== 'string' || token.trim().length < CONFIG.CAPTCHA_TOKEN_MIN_LENGTH) return false;
-    try {
-        const response = await fetch('/api/verify-recaptcha', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: token.trim() }),
-        });
-        if (!response.ok) return false;
-        const result = await response.json();
-        return result?.success === true;
-    } catch {
-        return false;
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
 //  VERIFICAÇÃO DE ACESSO
 //  Usa o proxy Vercel /api/check-user-access — nunca expõe a URL
 //  da Edge Function diretamente no frontend.

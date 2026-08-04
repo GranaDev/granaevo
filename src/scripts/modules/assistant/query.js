@@ -546,7 +546,7 @@ export function fimDeMes(profile) {
 }
 
 /** Patrimônio guardado (soma de metas.saved). */
-export function totalReservado(profile) {
+function totalReservado(profile) {
     return _round((Array.isArray(profile?.metas) ? profile.metas : []).reduce((s, m) => s + Math.max(0, Number(m.saved) || 0), 0));
 }
 

@@ -394,7 +394,11 @@ Ganho: tempo percebido despenca + offline-first de brinde.
 ---
 
 ## PASSO 10 — Quebrar o monólito `dashboard.js` (< 1.500 linhas no boot) 🟡 PENDENTE
-**Falta:** a meta é < 1.500 linhas no boot e o arquivo tem ~6.400. Hoje está em 38,4 KB gzip de um teto de 40 (96%) — dentro do orçamento, mas sem folga. Fatias já feitas: exportação, código morto, partículas e paleta de comandos (O-1).
+**Falta:** a meta é < 1.500 linhas no boot e o arquivo tem **6.212** (medido em 2026-08-04).
+> ⛔ **CONGELADO POR DECISÃO DO DONO (2026-08-04):** *"mexer no dashboard é pisar em ovos"*.
+> A varredura de código daquele dia reapontou o arquivo (38,4 KB de 40 = **96% do orçamento**, sem
+> folga pra feature nova), e a resposta foi anotar, não fatiar. **Não extrair nada daqui sem pedido
+> explícito.** As fatias que restam mexem em dinheiro e em auth — ver a lista abaixo. Hoje está em 38,4 KB gzip de um teto de 40 (96%) — dentro do orçamento, mas sem folga. Fatias já feitas: exportação, código morto, partículas e paleta de comandos (O-1).
 > **2 fatias seguras feitas (commits f63e9c2, 572b34c): 40,9 → 39,1 KB gzip (97% → 93%).**
 > - Fatia 1: exportação JSON/CSV → `modules/exportar-dados.js` lazy (só baixa no clique).
 > - Fatia 2: `desenharGraficoLinha`/`desenharTopGastos` eram **código morto** — deletadas.
@@ -819,7 +823,37 @@ reativação de inativo, aviso de fatura.
 ## PASSO 27 — Observabilidade + Lighthouse CI 🟡 APLICADO EM PROD (2026-07-18)
 > `x-request-id` propagado nas 10 chamadas proxy→edge + ecoado na resposta; edge carimba nos logs. Lighthouse CI com LCP/CLS/TBT como **error** (limiares Core Web Vitals) e scores como **warn** — não foi possível medir a base local (chrome-launcher quebra no Windows), e travar CI com limiar nunca visto seria irresponsável. **INP não entra: é métrica de campo, o Lighthouse em lab não mede — o substituto honesto é TBT.** Falta: dashboards de negócio (depende de serviço externo).
 **Objetivo:** tracing correlacionado proxy↔edge, dashboards de negócio (ativação/retenção/churn) e orçamento de LCP/INP no CI.
-**Por quê:** hoje há logs + Sentry, mas falta correlação ponta a ponta e métrica de negócio; e o guard de perf é só de bytes.
+**Por quê:** falta correlação ponta a ponta e métrica de negócio; e o guard de perf é só de bytes.
+> ⚠️ **A frase anterior aqui dizia "hoje há logs + Sentry". Era falsa** — descoberto na varredura de
+> 2026-08-04. O `error-tracking.js` (170 linhas, importado por 4 páginas, com `@sentry/browser`
+> instalado) compilava em produção para **`async function n(){}function t(n){}`**: duas funções
+> vazias. Sem `VITE_SENTRY_DSN`, todo o corpo era ramo morto e o bundler descartava. **O app nunca
+> teve visibilidade de erro em produção.**
+>
+> **Corrigido em 2026-08-04** (código pronto e testado, 21 testes):
+> · **Contradição removida:** o comentário dizia "sem rastreamento de performance" e o código ligava
+>   `browserTracing` com 10% de amostragem. Agora é só erro — `integrations: []`,
+>   `autoSessionTracking: false`, `sendDefaultPii: false`. Tracing mandaria a URL de cada navegação
+>   e cada request pra um operador nos EUA, em troca de quase nada.
+> · **A peneira que faltava:** o `beforeSend` limpava só o envelope (cookies, headers). O TEXTO do
+>   erro saía inteiro — e é ali que o dinheiro aparece ("falha ao salvar R$ 1.234,56 de
+>   fulano@email.com"). Agora mensagem, valor de exceção e breadcrumb passam por `_limpar`
+>   (R$ → `[valor]`, e-mail → `[email]`, número de 6+ dígitos → `[num]`), e URLs perdem query e hash.
+>   Número curto sobrevive de propósito: "status 500" é o que ajuda a depurar.
+> · **O e-mail parou de ser passado** no `dashboard.js` — a função sempre o descartou, mas ler
+>   `email:` ali dava a impressão contrária.
+> · **`clearUserContext` foi ligado ao `logout`** (nunca era chamado): em aparelho compartilhado,
+>   os erros de quem entrasse depois sairiam agrupados sob quem saiu.
+> · **Peso:** com a DSN ativa o SDK são 132 KB gzip (era 142; `__SENTRY_TRACING__`/`__SENTRY_DEBUG__`
+>   em `false` no `vite.config.js` podaram 10). Carrega **no ocioso**, não no boot — mas com dois
+>   listeners baratos instalados ANTES, que enfileiram (teto 10) e despejam no SDK quando ele chega.
+>   Sem isso, adiar o carregamento perderia justamente os erros de boot, que são os piores.
+>
+> **Falta:** a **DSN** — só o dono pode criar. `sentry.io` → projeto **Browser JavaScript** → copiar
+> a DSN → `vercel env add VITE_SENTRY_DSN production` → redeploy. Enquanto não existir, o módulo
+> segue inerte **por projeto**, não por defeito. O Sentry **já está declarado** em `privacidade.html`
+> §04/§05 e no RoPA como operador nos EUA — ativar torna a declaração verdadeira; hoje ela descreve
+> um tratamento que não acontece. Falta também o painel de métricas de negócio (serviço externo).
 - [ ] ⬜ Propagar um `x-request-id` do proxy Vercel → edge functions; logar em ambos p/ correlação.
 - [ ] ⬜ Lighthouse CI no pipeline com orçamento de LCP/INP (análogo ao `check-bundle-size.mjs`).
 - [ ] ⬜ (Futuro) painel de métricas de negócio (pode ser query agendada + Sentry/simple dashboard).

@@ -28,8 +28,6 @@ const _now = () => (typeof performance !== 'undefined' && performance.now
 
 const _open = new Map();   // label -> startTime
 
-export const perfEnabled = _enabled;
-
 // Marca o início de uma fase. Casa com perfMeasure(label).
 export function perfMark(label) {
     if (!_enabled) return;
@@ -52,15 +50,6 @@ export function perfMeasure(label, extra = '') {
     return dur;
 }
 
-// Mede uma função síncrona em uma chamada. Retorna o valor da função.
-export function perfTime(label, fn) {
-    if (!_enabled) return fn();
-    perfMark(label);
-    const r = fn();
-    perfMeasure(label);
-    return r;
-}
-
 // Loga uma contagem (ex.: nós DOM criados numa lista) — métrica estrutural determinística.
 export function perfCount(label, n, extra = '') {
     if (!_enabled) return;
@@ -69,8 +58,3 @@ export function perfCount(label, n, extra = '') {
         'color:#38bdf8;font-weight:600');
 }
 
-// Conta nós descendentes de um elemento (inclui o próprio). Seguro com null.
-export function perfNodeCount(el) {
-    if (!_enabled || !el) return 0;
-    return el.querySelectorAll('*').length;
-}

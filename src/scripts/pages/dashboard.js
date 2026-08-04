@@ -1687,8 +1687,10 @@ async function verificarLogin() {
 
         _log.info('[VERIFICAR LOGIN] Usuário inicializado. isGuest:', usuarioLogado.isGuest);
 
-        // Contexto do usuário no Sentry (id + plano; email é mascarado internamente; sem dados financeiros)
-        setUserContext({ id: usuarioLogado.userId, email: usuarioLogado.email, plan: usuarioLogado.plano });
+        // Contexto do usuário no Sentry: pseudônimo derivado do id + plano.
+        // O e-mail NÃO é passado — antes era, e a função sempre o descartou. Ler
+        // `email:` aqui dava a impressão de que ele viajava pro Sentry.
+        setUserContext({ id: usuarioLogado.userId, plan: usuarioLogado.plano });
 
         _log.info('[VERIFICAR LOGIN] Inicializando DataManager...');
         await dataManager.initialize(effectiveUserId, effectiveEmail);

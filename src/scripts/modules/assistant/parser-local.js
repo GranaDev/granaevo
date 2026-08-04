@@ -353,7 +353,7 @@ export function descricaoVazia(desc) {
 }
 
 // Palavras-chave para consultas (casa contra descrição/tipo/categoria depois).
-export function extractPalavrasChave(t) {
+function extractPalavrasChave(t) {
     const out = [];
     for (const [re, , tipo] of KEYWORDS) {
         if (re.test(t)) out.push(tipo.toLowerCase());

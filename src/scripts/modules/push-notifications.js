@@ -42,12 +42,6 @@ export function isPushSupported() {
          'Notification'  in window
 }
 
-/** Retorna o estado da PERMISSÃO do browser (não é o estado do push — ver getPushState) */
-export function getPushPermission() {
-  if (!('Notification' in window)) return 'not-supported'
-  return Notification.permission // 'default' | 'granted' | 'denied'
-}
-
 /**
  * Estado REAL do push, baseado na SUBSCRIPTION ativa — não na permissão.
  *

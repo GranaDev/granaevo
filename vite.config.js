@@ -12,6 +12,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig(({ mode }) => ({
   publicDir: 'public',
 
+  // Sentry: flags oficiais de build. O pacote traz tracing e logs de debug ligados
+  // por padrão, e o barril reexporta tudo — com a DSN configurada o chunk media
+  // 142 KB gzip. Como o error-tracking.js roda com `integrations: []` (só erro,
+  // sem performance e sem sessão), esse peso era de código que nunca executaria.
+  // Trocar as flags por `false` deixa o bundler podar os ramos na origem.
+  define: {
+    __SENTRY_DEBUG__:   false,
+    __SENTRY_TRACING__: false,
+  },
+
   // Passo 8: o app NÃO usa Supabase Realtime, mas o construtor do SupabaseClient
   // instancia RealtimeClient sempre → o realtime-js real (~19 KB gzip) viajava no
   // bundle de boot. Aliasar para um stub no-op tira −14,4 KB do vendor-supabase

@@ -10,13 +10,15 @@
     "public/scripts/modules/graficos.js",
     "public/scripts/modules/turnstile-init.js",
     "public/scripts/vendor/chart.umd.min.js",
-    "scripts/*.mjs"
+    "scripts/*.mjs",
+    "tests/**/*.test.js"
   ],
   "project": [
     "src/**/*.js",
     "public/scripts/**/*.js",
     "public/*.js",
-    "scripts/**/*.mjs"
+    "scripts/**/*.mjs",
+    "tests/**/*.js"
   ],
   "ignore": [
     "supabase/**"

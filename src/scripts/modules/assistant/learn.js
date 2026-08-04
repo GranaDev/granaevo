@@ -52,7 +52,7 @@ const STOP = new Set([
  * (na/no/em/da/do/de/pra/para/com); se não houver, o token significativo mais
  * longo. Números e cifrões são removidos antes. Retorna null se nada servir.
  */
-export function merchantKey(text) {
+function merchantKey(text) {
     const t = _norm(text).replace(/r\$\s*/g, ' ').replace(/\d[\d.,]*\s*(k|mil)?\b/g, ' ');
     const m = t.match(/\b(?:na|no|em|da|do|de|pra|para|com)\s+([a-z][a-z]{2,20})/);
     let cand = m ? m[1] : null;

@@ -32,7 +32,7 @@ const INSTALL_PATH   = '/assistente';
 
 // ── Ambiente ──────────────────────────────────────────────────────────────────
 
-export function isStandalone() {
+function isStandalone() {
     return window.matchMedia('(display-mode: standalone)').matches
         || window.navigator.standalone === true;
 }
@@ -105,7 +105,7 @@ function chromeIntentUrl() {
     return 'intent://' + alvo + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + fallback + ';end';
 }
 
-export function abrirNoChrome(onFalha) {
+function abrirNoChrome(onFalha) {
     // Navegação via <a> REAL + click(): é o único caminho que o Chromium trata
     // como "clique de link" e roteia pro handler de protocolo externo. Navegar
     // via location.href falha com "scheme does not have a registered handler"
@@ -130,7 +130,7 @@ export function abrirNoChrome(onFalha) {
 // ── Instalação (chamar SEMPRE a partir de um gesto do usuário) ────────────────
 
 /** @returns {Promise<'accepted'|'dismissed'|'installed'|'standalone'|'unavailable'>} */
-export async function instalar() {
+async function instalar() {
     if (isStandalone()) {
         UI.addAssistantMessage('Você já está no modo app. Pra instalar o **Chat Assistente** como app separado, abra **assistente.granaevo.com** pelo navegador e toque em **Baixar** {{fa-download}}.');
         return 'standalone';

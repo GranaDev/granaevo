@@ -55,7 +55,7 @@ export function setQuickReplies(items, onPick) {
 }
 
 /** Pré-preenche e foca o input (usado pelo botão Corrigir — D35). */
-export function focusInput(prefill) {
+function focusInput(prefill) {
     if (!els?.input) return;
     if (typeof prefill === 'string') {
         els.input.value = prefill;
@@ -115,7 +115,7 @@ export function addUserMessage(text) {
 }
 
 // Remove tokens de formatação ({{fa-*}} e *negrito*) → texto puro (p/ copiar/TTS).
-export function stripTokens(text) {
+function stripTokens(text) {
     return String(text ?? '').replace(/\{\{fa-[a-z0-9-]+\}\}/g, '').replace(/\*([^*\n]+)\*/g, '$1').replace(/\s+\n/g, '\n').trim();
 }
 
