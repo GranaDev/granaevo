@@ -62,6 +62,33 @@ Dentro de um item: `⬜ subtarefa não feita` · `☑️ / ✅ subtarefa feita`.
 
 ---
 
+# 🧪 FILA DE TESTES MANUAIS — o que só o dono pode verificar
+
+> **Por que esta seção existe.** Vários passos ficam PENDENTES esperando UMA verificação que nenhum teste
+> automatizado alcança: precisa de navegador logado, de aparelho, de e-mail real. Espalhados pelos
+> passos, esses pedidos somem. Aqui eles ficam juntos, e cada um diz **o que provar**, não só
+> "testar". Ao confirmar, marcar ✅ aqui **e** fechar o passo correspondente.
+
+| # | O que testar | O que isso PROVA | Passo |
+|:--|---|---|:--|
+| ⬜ 1 | **Cadastro completo** em `/planos`: escolher plano → o widget do Turnstile aparece no modal, acima do botão → preencher e receber o código de 6 dígitos por e-mail | Que o captcha novo **não quebrou a porta paga**. É o único fluxo que gera receita e o mais recente a mudar | 26 |
+| ⬜ 2 | **Login + abrir uma tela com dados** (transações ou relatórios) | Que os stubs de `realtime-js`/`functions-js` não afetaram auth nem queries. Mexeu no caminho do cliente Supabase | 8 |
+| ⬜ 3 | **Foto de perfil** carregando no dashboard | Que `supabase.storage` segue intacto — foi o que quase stubei por acreditar num roadmap que dizia "storage não é usado" | 8 |
+| ⬜ 4 | **Assistente:** *"gastei 50 no mercado"* e depois *"e mais 30"* | Que a memória de conversa (C-1) lança sozinha herdando categoria e tipo, sem perguntar "gasto ou entrada?" | 36 |
+| ⬜ 5 | **2FA:** ativar, sair, entrar com o código; depois testar um **código de recuperação** | O 2FA nunca foi testado de ponta a ponta; a recuperação teve bug de "Erro de conexão" corrigido em 2026-08-03 | 6 |
+| ⬜ 6 | **Blocos 2, 3 e 4** do roteiro de testes da conta descartável | Pendentes desde 2026-08-02 | — |
+| ⬜ 7 | **Depois dos testes:** `node scripts/remove-conta-teste.mjs` | Apaga a conta descartável. **Só depois** — é a única já nos termos 1.2 | — |
+
+**Ações de configuração (não são teste, mas só o dono faz):**
+
+| # | O quê | Efeito |
+|:--|---|---|
+| ⬜ A | `sentry.io` → projeto **Browser JavaScript** → `vercel env add VITE_SENTRY_DSN production` → redeploy | Liga o rastreamento de erros. Hoje o app **não tem visibilidade nenhuma** de erro em produção, e a política de privacidade já declara o Sentry como operador |
+| ⬜ B | `supabase functions delete verify-recaptcha` | Remove a edge órfã do reCAPTCHA. Apagar o arquivo local não desfaz o deploy. Sem pressa — a vaga da Vercel, que era o que importava, já está livre |
+| ⬜ C | Revogar o token da Cloudflare, se não for usar | Foi gerado e nunca consumido |
+
+---
+
 # FASE 0 — Higiene rápida e baixo risco
 
 ## PASSO 1 — Rotacionar a anon key para `sb_publishable_` ✅ FINALIZADO (2026-07-31)
