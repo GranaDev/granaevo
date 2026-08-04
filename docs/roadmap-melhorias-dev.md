@@ -1625,7 +1625,7 @@ logado · gate no CI impedindo regressão.
 ## PASSO 33 — MARKETING 7.0 → 10 ✅ ENCERRADO
 > **Nada pendente.** M-1/M-6/M-7/M-8 ✅ feitos; M-2/M-4/M-5/M-9 ⛔ recusados pelo dono; e o **M-3
 > também é ⛔** — ele É o Passo 24 (conteúdo/SEO), recusado junto com a Fase 5.
-> ⚠️ Este cabeçalho ficou 🟡 apontando o M-3 por algumas horas em 2026-08-04, depois de o próprio
+> ⚠️ Este cabeçalho ficou como PENDENTE apontando o M-3 por algumas horas em 2026-08-04, depois de o próprio
 > M-3 já ter virado ⛔ na mesma sessão. Corrigido ao levantar pendências: **marcar um item exige
 > varrer quem o cita** — senão o pai continua contando um filho que já morreu.
 > A dimensão mais distante do 10 e a de maior retorno. Produto nota 9, aquisição nota 6.
