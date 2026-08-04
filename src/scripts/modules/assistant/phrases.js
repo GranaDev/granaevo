@@ -349,6 +349,54 @@ export function naoEntendiEsperto(local) {
     return pick(NAO_ENTENDI) + '\nPode ser: lançar (“gastei 40 no mercado”), consultar (“quanto gastei em transporte”) ou pedir resumo (“meu resumo do mês”).';
 }
 
+// ── C-3: conversa livre ─────────────────────────────────────────────────────
+// Cortesia responde cortesia. Antes, "obrigado" e "tchau" recebiam
+// "não entendi — tente: gastei 50 no mercado", que soa como um robô que não
+// estava ouvindo.
+//
+// TODO texto aqui é template meu. É a regra de ouro do projeto: a IA age como
+// função e nunca fala com o usuário. Um "conversa_livre" gerado pelo modelo
+// seria justamente a porta por onde ele começaria a falar — e num app de
+// finanças, uma frase inventada sobre dinheiro é um risco que não se corre por
+// simpatia.
+const CONVERSA_TOM = {
+    agradecimento: [
+        'De nada! Quando tiver um gasto ou entrada, é só mandar.',
+        'Por nada. Tô por aqui.',
+        'Tamo junto. Qualquer movimentação, me diz.',
+    ],
+    despedida: [
+        'Até! Volta quando gastar alguma coisa. {{fa-hand-peace}}',
+        'Falou! Deixo tudo anotado por aqui.',
+        'Até a próxima.',
+    ],
+    elogio: [
+        'Valeu! Fico por aqui pro que precisar.',
+        'Obrigado. Manda a próxima movimentação quando quiser.',
+        'Que bom que tá ajudando. {{fa-heart}}',
+    ],
+    ok: [
+        'Beleza.',
+        'Show. Qualquer coisa é só chamar.',
+        'Certo.',
+    ],
+};
+
+/**
+ * Resposta a fala coloquial. `identidade` fica fora do pool de propósito:
+ * "quem é você" merece resposta honesta e estável, não uma variação aleatória.
+ */
+export function conversaLivre(tom) {
+    if (tom === 'identidade') {
+        return 'Sou o *Ge*, o assistente do GranaEvo — software, não pessoa. '
+            + 'Leio o que você escreve pra transformar em lançamento e responder sobre suas contas.\n\n'
+            + '{{fa-shield-halved}} Uma parte da leitura usa IA, mas ela recebe só o *texto* da '
+            + 'mensagem: seus valores, saldos e transações nunca saem do seu aparelho pra ela. '
+            + 'Quem faz as contas é o app, aqui.';
+    }
+    return pick(CONVERSA_TOM[tom] ?? CONVERSA_TOM.ok);
+}
+
 // ── Confirmação de valor alto (anti-typo) ───────────────────────────────────────
 export function confirmarValorAlto(cmd) {
     const desc = cmd.descricao || cmd.tipo || 'esse lançamento';

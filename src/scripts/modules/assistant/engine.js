@@ -64,7 +64,7 @@ class AssistantEngine {
     // ("retirada da caixinha") perdia os 109,05 e o chat repetia a pergunta.
     // Guarda a DESCRIÇÃO junto: em "109,05 com fita de led" o item também morreria
     // na pergunta — o chip devolve só o número, e o lançamento sairia como "Gasto".
-    #pendingValorAmbiguo = null; // { valor, descricao }
+    #pendingValorAmbiguo = null; // { valor, descricao, dataOverride }
     #lastUndo = null;       // fn de desfazer do último lançamento (desfazer por texto)
     #lastQuery = null;      // { consultaAlvo, palavrasChave, periodo } p/ follow-up
     #lastTxInfo = null;     // { profileId, txSnap, cmd } p/ correção inline (B20)
@@ -452,6 +452,9 @@ class AssistantEngine {
                     // A descrição da resposta ("foi um gasto") não descreve nada —
                     // vale a que veio junto do valor ("109,05 com fita de led").
                     descricao: p.descricao || pend.descricao,
+                    // Mesma lógica para a data: a resposta não repete o "ontem".
+                    // `data_override` em snake_case porque é o que o toCommand LÊ.
+                    data_override: p.data_override || pend.dataOverride,
                     confianca: 0.9, source: 'local',
                 }));
             }
@@ -639,6 +642,10 @@ class AssistantEngine {
             case 'repetir':  return this.#repetirUltimo();                          // B15
             case 'recusa':      return { text: P.SISTEMA.recusa() };
             case 'privacidade': return { text: P.privacidadeMsg() };
+            // C-3 — cortesia responde cortesia, com template LOCAL. Antes,
+            // "obrigado"/"tchau" caíam em desconhecido, gastavam uma chamada de
+            // IA e voltavam como "não entendi — tente: gastei 50 no mercado".
+            case 'conversa_livre': { bump('local'); return { text: P.conversaLivre(cmd.tom) }; }
             // Mexer em lançamento antigo: eu só alcanço o último. Handoff honesto —
             // melhor que fingir que entendi e gravar um lançamento que ninguém pediu.
             case 'editar_antigo': return {
@@ -652,7 +659,11 @@ class AssistantEngine {
                 if (!(v > 0)) return { text: P.SISTEMA.semValor() };
                 // Guarda valor + descrição: agora responder por ESCRITO também
                 // resolve, e o item ("fita de led") sobrevive à pergunta.
-                this.#pendingValorAmbiguo = { valor: v, descricao: cmd.descricao || null };
+                // `dataOverride` junto: quem escreveu "30 ontem" disse a data ANTES
+                // de saber que seria perguntado a direção. A resposta ("foi um gasto")
+                // não repete o "ontem", então sem guardar aqui o lançamento sai com a
+                // data de hoje — silenciosamente, num dado que a pessoa já tinha dado.
+                this.#pendingValorAmbiguo = { valor: v, descricao: cmd.descricao || null, dataOverride: cmd.dataOverride || null };
                 return {
                     text: P.perguntarGastoOuEntrada(v),
                     quickReplies: [

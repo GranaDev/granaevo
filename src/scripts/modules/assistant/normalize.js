@@ -81,6 +81,10 @@ export function toCommand(parse) {
             : [],
         consultaAlvo: ['saldo', 'entrada', 'reserva', 'gasto', 'maior_gasto', 'listar', 'comparar', 'media', 'fatura', 'falta_meta', 'orcamento', 'assinaturas', 'narrativa', 'curiosidade', 'conquistas'].includes(parse.consulta_alvo) ? parse.consulta_alvo : 'gasto',
         dataOverride: typeof parse.data_override === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(parse.data_override) ? parse.data_override : null,
+        // C-3: tom da conversa livre. Whitelist mesmo vindo só do parser local
+        // hoje — este valor INDEXA o mapa de frases, e um índice vindo de fora
+        // sem validação é como se escolhe uma frase que ninguém escreveu.
+        tom: ['agradecimento', 'despedida', 'elogio', 'identidade', 'ok'].includes(parse.tom) ? parse.tom : 'ok',
         // pagar_conta / definir_orcamento / lembrete (locais ou via IA)
         contaHint: clampStr(parse.conta_hint, 60),
         lembreteTexto: clampStr(parse.lembrete_texto, 120),

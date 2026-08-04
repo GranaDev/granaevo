@@ -55,7 +55,7 @@ function corrigirTypos(t) {
 // Roteia direto para uma recusa amigável SEM chamar a IA. Blindagem + economia
 // de token. Casa pedidos de "ignore instruções", troca de papel, ou pesca por
 // dados de sistema/senha. A IA já ignoraria isso; aqui fechamos antes.
-const RE_INJECT = /\b(ignore? (as |todas as |suas )?(instru|regras|ordens)|esque[cç]a (as |suas )?(instru|regras)|aja como|finja (que|ser)|voce (agora )?e (um|uma|o|a)\b|assuma o papel|system prompt|prompt do sistema|jailbreak|dan mode|modo desenvolvedor|developer mode|revele? (suas |as )?(instru|regras|senha|chave|token|api)|(repita|mostra|mostre|imprima|print|exiba|cole|liste) (o |as |suas |seu )?(texto acima|instru|regras|system|prompt|mensagem de sistema)|quais (sao|são) (suas |as )?(instru|regras)|your (instructions|system prompt|rules)|qual (e |é )?(sua|a) (senha|chave|api|token)|service.?role|\bsudo\b|\bbypass\b)/;
+const RE_INJECT = /\b(ignore? (as |todas as |suas )?(instru|regras|ordens)|esque[cç]a (as |suas )?(instru|regras)|aja como|finja (que|ser)|voce (agora )?e (um|uma|o|a)(?! (rob[oô]|ia|bot|humano|pessoa)\b)\b|assuma o papel|system prompt|prompt do sistema|jailbreak|dan mode|modo desenvolvedor|developer mode|revele? (suas |as )?(instru|regras|senha|chave|token|api)|(repita|mostra|mostre|imprima|print|exiba|cole|liste) (o |as |suas |seu )?(texto acima|instru|regras|system|prompt|mensagem de sistema)|quais (sao|são) (suas |as )?(instru|regras)|your (instructions|system prompt|rules)|qual (e |é )?(sua|a) (senha|chave|api|token)|service.?role|\bsudo\b|\bbypass\b)/;
 
 // ── Vocabulário de reserva ──────────────────────────────────────────────────
 // O brasileiro quase nunca diz "reserva": diz "caixinha" (é como o Nubank chama),
@@ -145,6 +145,47 @@ export const TIPO_ICONE = {
 // (texto já vem normalizado: minúsculo e sem acento)
 const RE_SAUDACAO  = /^(oi+|ola|opa|e ?ai|eae|eai|opa|salve|fala|coe|hey|help|bom dia|boa tarde|boa noite|blz|beleza|tudo (bem|bom|certo))\b/;
 const RE_AJUDA     = /\b(ajuda|me ajuda|como funciona|como (usa|uso|te uso)|o que (voce|vc|da pra) (faz|fazer)|que comandos|comandos|nao sei usar|tutorial|dicas)\b/;
+
+// ── C-3: conversa livre ─────────────────────────────────────────────────────
+// "obrigado", "valeu", "tchau", "quem é você" caíam em `desconhecido` (confiança
+// 0), iam para a IA, e voltavam como "não entendi — tente: gastei 50 no
+// mercado". Gastava token, ~1s de rede e uma vaga do teto diário para responder
+// mal a uma frase que não precisa de IA nenhuma.
+//
+// Resolvido AQUI, não no enum da IA (que era o plano original do C-3): sai de
+// graça, é instantâneo, é determinístico e não exige redeploy da edge. E o texto
+// de resposta continua sendo template meu — a regra de ouro do projeto é que a
+// IA nunca fala com o usuário, e um "conversa_livre" vindo do modelo tentaria
+// justamente isso.
+//
+// A ordem importa: o mais específico primeiro. "valeu" é agradecimento, mas
+// "beleza" já é saudação (RE_SAUDACAO ganha, e está certo).
+const CONVERSA = [
+    [/^(muito )?(obrigad[oa]|brigad[oa]|obg|vlw|valeu|agradec|tks|thanks|grat[oa])\b/, 'agradecimento'],
+    [/^(tchau|falou|flw|ate mais|ate logo|adeus|xau|fui|ate a proxima)\b/,             'despedida'],
+    // `(voce|vc|tu)` e o artigo OPCIONAL num grupo só: escrever a forma abreviada
+    // numa alternativa separada ("vc e (ia|robo)") deixava "vc e uma ia" de fora,
+    // porque o artigo não estava previsto ali. Uma regra, todas as formas.
+    [/\b(quem (e|eh) (voce|vc|tu)|(voce|vc|tu) (e|eh) (um |uma )?(rob[oô]|ia|bot|humano|pessoa|real|de verdade)|o que (voce|vc) (e|eh))\b/, 'identidade'],
+    [/^(voce|vc|tu) (e|eh) (muito )?(legal|top|bom|boa|otim[oa]|foda|show|demais)\b|^(muito bom|bom trabalho|adorei|amei|gostei|perfeito|excelente|show de bola|maravilha)\b/, 'elogio'],
+    // `(?:h[ae]){2,}` e não `h[ae]{2,}`: o riso é a SÍLABA repetida ("haha",
+    // "hehe", "hahaha"), não a vogal. O padrão errado exigia duas vogais
+    // seguidas e deixava justamente "haha" de fora.
+    [/^(k{2,}|(?:h[ae]){2,}|rs+|ok+|okay|certo|entendi|entendido|isso ai|show)\b/, 'ok'],
+];
+
+/**
+ * Classifica fala coloquial. Devolve o TOM, ou null se não for conversa.
+ *
+ * Recusa qualquer frase com valor monetário: "valeu, gastei 30" é lançamento
+ * com cortesia junto, não conversa — e engolir isso perderia os 30.
+ */
+function detectConversa(t) {
+    if (parseValorBR(t) !== null) return null;
+    if (t.split(/\s+/).length > 8) return null;   // frase longa é assunto, não cortesia
+    for (const [re, tom] of CONVERSA) if (re.test(t)) return tom;
+    return null;
+}
 const RE_RELATORIO = /\b(relatorio|resumo(?! do dia)|balanco|extrato|fechamento (do mes|da semana|do trimestre|do ano|mensal|semanal)|como fechei|prestacao de contas|raio-?x|diagnostico( financeiro)?|panorama|visao geral|como (estou|esta|ta|andam|estao) (as |os |de )?(minhas |meus )?(financas|contas|grana|gastos)|minha situacao financeira)\b/;
 const RE_CONSULTA  = /\b(quanto|quantos|qual|quais|total de|gastei com|tenho|quanto sobrou|quanto (ja )?(gastei|recebi)|meu saldo|minhas reservas|me mostra|mostra|como (esta|estao|esta|estao))\b/;
 const RE_PROJECAO  = /\b(quanto tempo|em quanto tempo|se eu (investir|guardar|aportar|poupar)|vou levar|leva pra|daqui quanto|falta quanto pra)\b/;
@@ -441,6 +482,9 @@ export function parseLocal(rawText) {
     // 1) Saudação / ajuda / desfazer / repetir (curtas, alta confiança)
     if (RE_SAUDACAO.test(text) && text.length <= 25) return { ...base, intencao: 'saudacao', confianca: 0.97 };
     if (RE_AJUDA.test(text)) return { ...base, intencao: 'ajuda', confianca: 0.9 };
+    // C-3 — depois de saudação e ajuda (mais específicas), antes de tudo que
+    // envolve dinheiro: nada aqui casa frase com valor (ver detectConversa).
+    { const tom = detectConversa(text); if (tom) return { ...base, intencao: 'conversa_livre', tom, confianca: 0.95 }; }
     if (RE_DESFAZER.test(text)) return { ...base, intencao: 'desfazer', confianca: 0.9 };
     // Mexer em lançamento antigo → handoff honesto (o chat só alcança o último).
     // DEPOIS do desfazer, para "apaga o último" continuar sendo desfazer.
@@ -630,7 +674,17 @@ export function parseLocal(rawText) {
     //    com um item ("109,05 com fita de led") É — e perguntar a direção resolve
     //    ali mesmo, de graça e OFFLINE, sem depender da IA.
     if (valor && !RE_COMANDO.test(text)) {
-        return { ...base, intencao: 'valor_ambiguo', valor, descricao: extractDescricao(rawText).descricao, confianca: 0.9 };
+        return {
+            ...base, intencao: 'valor_ambiguo', valor,
+            descricao: extractDescricao(rawText).descricao,
+            // A data vinha só no ramo `lancar` (acima). Sem ela aqui, "30 ontem"
+            // e "e mais 30 ontem" perdiam o "ontem" no caminho: um porque o
+            // usuário ainda vai responder a direção, o outro porque a
+            // continuação (C-1) herda deste objeto. Nos dois casos a frase
+            // dizia a data e o lançamento saía com a de hoje.
+            data_override: parseDataRelativa(rawText),
+            confianca: 0.9,
+        };
     }
     return base;
 }
