@@ -811,7 +811,19 @@ reativação de inativo, aviso de fatura.
 
 **Risco:** médio (mexe em fluxos sensíveis). **Esforço:** 1–2 dias. **Verificar:** excluir conta sem re-auth recente é barrado.
 
-## PASSO 26 — Turnstile (Cloudflare) em signup + reset 🔴
+## PASSO 26 — Turnstile (Cloudflare) em signup + reset 🟡 PENDENTE
+> **Falta: só o SIGNUP.** Verificado no código em 2026-08-04 — o roadmap dizia 🔴 e metade já estava
+> feita.
+> · **Reset ✅:** `supabase/functions/verify-and-reset-password/index.ts` valida contra o
+>   `challenges.cloudflare.com/turnstile/v0/siteverify` com `TURNSTILE_SECRET_KEY`, exigido pelo
+>   SERVIDOR após 3 falhas (`CAPTCHA_REQUIRED_AFTER = 3`). Login idem (via `captchaToken` do Supabase).
+> · **Signup 🔴:** `api/create-account.js` **não valida captcha nenhum**, e o `planos.js` (único
+>   chamador) não coleta token. Hoje a porta é defendida só por rate-limit (3 criações por IP/hora) +
+>   honeypot — que segura script bobo, não credential-stuffing distribuído.
+>
+> ⚠️ **O plano abaixo está desatualizado num ponto:** ele manda "reusar a edge `verify-recaptcha`".
+> Essa edge foi **apagada em 2026-08-04** (era resquício morto do reCAPTCHA). O molde a copiar é o
+> `verifyCaptchaToken()` do `verify-and-reset-password`, que já faz exatamente isso.
 **Objetivo:** captcha invisível anti-bot no cadastro e no reset (já usamos Cloudflare).
 **Por quê:** honeypot + rate-limit cobrem bem, mas Turnstile fecha bot/credential-stuffing na porta. Grátis no Cloudflare.
 - [ ] ⬜ Criar o widget Turnstile no painel Cloudflare; adicionar o site key ao frontend e o secret aos edge secrets.
@@ -921,7 +933,7 @@ reativação de inativo, aviso de fatura.
 | 5 ⚖️ | 23 — Programa de indicação | ⚖️ decisão | 1–2 dias | 🔴 avaliar |
 | 5 ⚖️ | 24 — Conteúdo/SEO de topo | ⚖️ decisão | contínuo | 🔴 avaliar |
 | 6 | 25 — Step-up auth em ações sensíveis | 🔴 alto | 1–2 dias | 🔴 |
-| 6 | 26 — Turnstile em signup + reset | 🟡 médio | ~1 dia | 🔴 |
+| 6 | 26 — Turnstile em signup + reset | 🟡 médio | ~1 dia | 🟡 **Falta:** só o signup — reset e login ✅ |
 | 6 | 27 — Observabilidade + Lighthouse CI | 🟡 médio | 1–2 dias | 🔴 |
 | 6 | 28 — LGPD B1: aviso retenção audit-log | 🟢 baixo | ~30 min | ✅ aplicado em prod (2026-07-14) |
 | 6 | 29 — Assistente proativo (memória/insight) ⭐ | 🔴 alto valor | vários dias | 🔴 |
