@@ -26,7 +26,10 @@ const BUDGETS_KB = {
   // Passo 10 foi silenciosamente reocupado por features novas até voltar a 98%.
   // Com 40, quem estourar é obrigado a lazy-ar em vez de engordar o boot.
   'dashboard.js':        40,
-  'vendor-supabase.js':  40,   // Passo 8: realtime-js stubado (34,3 KB). Teto baixo TRAVA o ganho — se o realtime real voltar (~48,6), o CI barra.
+  // Passo 8: realtime-js E functions-js stubados → 34,3 KB. O teto era 40, e 40
+  // só pegava a volta do realtime (~48,6). A volta do functions-js sozinho daria
+  // 35,1 — passaria despercebida. 36 dá 1,7 KB de folga e barra as duas.
+  'vendor-supabase.js':  36,
   // 40 → 43 (2026-07-22): reforma editorial das exportações (PDF/slides).
   // 43 → 41 (2026-07-23): gerarXlsx virou import() dinâmico (chunk xlsx-*.js).
   // 41 → 30 (2026-07-23): as 4 funções de export (PDF/CSV/Excel/slides) + helpers

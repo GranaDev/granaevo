@@ -291,7 +291,35 @@ falso-positivo para classes dinâmicas). Listas de transações/relatórios rend
 ---
 
 ## PASSO 8 — Aliviar os vendors pesados 🟡 PENDENTE
-**Falta:** aplicar o ganho que já foi medido e provado em 2026-07-17 — a investigação terminou, nada foi implementado. (Chart: nada a fazer, ver abaixo.)
+**Falta:** só a verificação em prod — **um login e uma tela com dados** depois do deploy. É o único jeito de provar que o cliente Supabase seguiu intacto; o resto do passo está feito.
+
+> ### 2026-08-04 — o passo estava contando duas coisas erradas
+> **(1) O stub de realtime JÁ ESTAVA NO AR.** O texto abaixo diz *"POR QUE NÃO DEIXEI NO AR"* e
+> *"pendente de teste do usuário"*. Falso: o alias está no `vite.config.js` e
+> `src/scripts/vendor/realtime-stub.js` existe desde **17/07** — mesmo dia da medição. O ganho de
+> **−14,4 KB foi realizado e está em produção há semanas.** Quase refiz trabalho pronto.
+>
+> **(2) "0 arquivos com `.storage.`" era FALSO — e stubar teria quebrado produção.**
+> `dashboard.js:2841` faz `supabase.storage.from('profile-photos').createSignedUrl()`: é o que gera
+> a URL assinada da **foto de perfil**. Storage FICA. Há teste travando isso (`vendor-stubs.test.js`),
+> porque a próxima pessoa a ler "storage não é usado" ia direto stubar.
+>
+> ### O que foi feito hoje
+> **`functions-js` stubado** (`src/scripts/vendor/functions-stub.js`): **34,3 KB** (era 35,1, −0,8).
+> Ganho pequeno, mas de risco praticamente nulo — e o motivo é estrutural: o `FunctionsClient` nasce
+> num **getter preguiçoso** (`get functions()`, index.mjs:412), ao contrário do `RealtimeClient`, que
+> o construtor instancia SEMPRE. Nada no app lê `supabase.functions` (Edge Functions são chamadas
+> pelos proxies em `api/`, server-side) — então o stub nunca é construído. Se alguém passar a usar,
+> ele **lança na hora com o motivo escrito**, em vez de devolver um objeto que finge funcionar.
+>
+> **O teto do orçamento desceu de 40 → 36 KB.** Com 40, a volta do realtime (~48,6) era barrada, mas
+> a do functions-js sozinho (35,1) passaria despercebida. Agora as duas quebram o CI.
+>
+> **O Supabase acabou aqui.** O que resta no chunk é GoTrue (auth) e postgrest (queries) — os dois em
+> uso real. Sem polyfill de `node-fetch` viajando (verificado: 0 ocorrências). 8 testes novos travam
+> os aliases, a lista exata de símbolos que o SDK importa, o getter preguiçoso e a versão pinada.
+>
+> ── medição original de 2026-07-17 abaixo ──
 > **MEDIDO com `ANALYZE=1 npm run build` + experimento de build descartável.**
 >
 > **CHART: nada a fazer.** Confirmado que `chart.umd.min.js` (68,2 KB gzip) é asset self-hosted
@@ -919,7 +947,7 @@ reativação de inativo, aviso de fatura.
 | 1.5 | 16 — Dependabot + npm audit | 🟢 baixo | ~15 min | ✅ npm audit já existia + dependabot criado (2026-07-14) |
 | 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | ✅ no ar — `mfa-api.js` + `auth-session.js` (45 refs) + login.js; recovery corrigido em 2026-08-03 |
 | 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🟡 **Falta:** destino das 34 classes de telas planejadas — poda e método feitos em 2026-07-31 |
-| 2 | 8 — Aliviar vendors (Chart/Supabase) | 🟡 médio | half-day+ | 🔴 |
+| 2 | 8 — Aliviar vendors (Chart/Supabase) | 🟡 médio | half-day+ | 🟡 **Falta:** só um login em prod pós-deploy — realtime+functions stubados, 48,6 para 34,3 KB |
 | 2 | 9 — Boot otimista (IndexedDB) | 🔴 alto valor | 1–2 dias | 🔴 |
 | 2 | 10 — Split do `dashboard.js` ⭐ | 🔴 alto valor | 2–3 dias | 🔴 |
 | 4 | 17 — Auditoria WCAG AA | 🟡 médio | ~1 dia | 🔴 |

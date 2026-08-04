@@ -31,6 +31,12 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       '@supabase/realtime-js': path.resolve(__dirname, 'src/scripts/vendor/realtime-stub.js'),
+      // Mesma ideia para functions-js: o app NUNCA chama `supabase.functions.invoke()`
+      // (Edge Functions são chamadas pelos proxies em api/, server-side). O
+      // supabase-js importa o pacote ESTATICAMENTE, então ele viajava no boot sem
+      // nunca ser executado. Storage ficou de FORA de propósito — `supabase.storage`
+      // é usado de verdade em dashboard.js (signed URL das fotos de perfil).
+      '@supabase/functions-js': path.resolve(__dirname, 'src/scripts/vendor/functions-stub.js'),
     },
   },
 
