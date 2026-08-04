@@ -329,7 +329,9 @@ async function retiradaFlow(retirada, reservas) {
     if (!meta) { UI.addAssistantMessage('Ok, cancelei a retirada.'); return; }
     UI.showTyping();
     let res;
-    try { res = await assistant.retirarDe({ valor: retirada.valor, metaId: meta.id }); }
+    // `aposUso` atravessa a pergunta "de qual reserva?": sem isto, a 2ª metade
+    // da frase ("e usei pra pagar um boleto") morria no picker.
+    try { res = await assistant.retirarDe({ valor: retirada.valor, metaId: meta.id, aposUso: retirada.aposUso }); }
     catch { res = { text: SISTEMA.erro() }; }
     UI.hideTyping();
     renderResponse(res);

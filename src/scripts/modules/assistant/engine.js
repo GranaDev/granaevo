@@ -8,7 +8,7 @@
 
 import { dataManager } from '../data-manager.js';
 import { parseLocal, splitCompound, parseFollowup, keywordMatch, mencionaLancamentoAntigo,
-         ehContinuacao, descricaoVazia } from './parser-local.js';
+         ehContinuacao, descricaoVazia, parseRetiradaComUso } from './parser-local.js';
 import { extractDescricao, textoParaModelo } from './describe.js';
 import { parseValorBR, parseDataFutura } from './money.js';
 import { toCommand } from './normalize.js';
@@ -488,6 +488,38 @@ class AssistantEngine {
 
     // Processa UMA cláusula: aprendizado local → parser local → (se incerto) IA.
     async #handleOne(text) {
+        // "tirei 50 da reserva e usei pra pagar um boleto" — UM valor, DOIS
+        // eventos. Vem antes de tudo porque o parser normal enxerga só a
+        // retirada e descarta o resto da frase, registrando metade do que a
+        // pessoa disse. O detector recusa frases com 2+ valores: aquelas são
+        // compostas comuns e o splitCompound já as trata bem.
+        const comUso = parseRetiradaComUso(text);
+        if (comUso) {
+            bump('local');
+            if (comUso.origem === 'retirada_reserva') {
+                // A retirada pode precisar perguntar DE QUAL reserva. O uso
+                // viaja junto e é aplicado depois que a resposta chega.
+                return this.#doRetirada({
+                    categoria: 'retirada_reserva',
+                    valor: comUso.valor,
+                    metaHint: comUso.metaHint,
+                    _aposUso: comUso.uso,
+                });
+            }
+            // Entrada + destino: as duas pernas são diretas, nada a perguntar.
+            const entrada = await this.#doLancamento(toCommand({
+                intencao: 'lancar', categoria: 'entrada', valor: comUso.valor,
+                descricao: null, source: 'local', confianca: 0.9,
+            }));
+            const destino = await this.#doLancamento(toCommand({
+                intencao: 'lancar', categoria: comUso.uso.categoria,
+                valor: comUso.valor,          // o MESMO dinheiro que entrou
+                tipo: comUso.uso.tipo, descricao: comUso.uso.descricao,
+                meta_hint: comUso.metaHint, source: 'local', confianca: 0.9,
+            }));
+            return { multi: [entrada, destino] };
+        }
+
         const local = parseLocal(text);
 
         // R6 — 1ª fonte: SEU HISTÓRICO. O parser sabe a direção e leu a descrição,
@@ -1020,8 +1052,8 @@ class AssistantEngine {
     }
 
     // Chamado pela UI depois que o usuário escolhe a reserva no picker.
-    async retirarDe({ valor, metaId }) {
-        return this.#doRetirada({ categoria: 'retirada_reserva', valor, metaId });
+    async retirarDe({ valor, metaId, aposUso }) {
+        return this.#doRetirada({ categoria: 'retirada_reserva', valor, metaId, _aposUso: aposUso ?? null });
     }
 
     // ── Retirada de reserva: mostra o picker (ou aplica se já tem a meta) ────────
@@ -1047,7 +1079,7 @@ class AssistantEngine {
                 if (r.status !== 'ok') precisaEscolher = true;
             }
             if (precisaEscolher) {
-                return { reservaPicker: comSaldo, retirada: { valor: cmd.valor } };
+                return { reservaPicker: comSaldo, retirada: { valor: cmd.valor, aposUso: cmd._aposUso ?? null } };
             }
         }
 
@@ -1057,7 +1089,7 @@ class AssistantEngine {
             if (res.reason === 'meta') {
                 const comSaldo = this.#reservasComSaldo();
                 if (comSaldo.length === 0) return { text: P.escolherMeta([]) };
-                return { reservaPicker: comSaldo, retirada: { valor: cmd.valor } };
+                return { reservaPicker: comSaldo, retirada: { valor: cmd.valor, aposUso: cmd._aposUso ?? null } };
             }
             if (res.reason === 'reserva_vazia') return { text: P.reservaVazia(res.meta) };
             if (res.reason === 'excede') return { text: P.retiradaExcede(res.meta, res.disponivel) };
@@ -1073,6 +1105,24 @@ class AssistantEngine {
         const view = P.confirmacaoRetirada(res);
         view.undo = () => this.#undoTx(profileId, txSnap);
         this.#lastUndo = view.undo; // undoLancamento já reverte a retirada
+
+        // ── "tirei X da reserva e usei pra Y" — a 2ª metade da frase ─────────
+        // Antes, o app registrava METADE do que a pessoa disse: a reserva
+        // baixava e o gasto nunca existia, então o saldo mentia dos dois lados.
+        //
+        // Vem DEPOIS de a retirada estar salva de propósito. Se o gasto falhar,
+        // a retirada continua correta e o usuário refaz só o que faltou —
+        // melhor que desfazer as duas e deixá-lo sem saber qual quebrou.
+        if (cmd._aposUso) {
+            const gasto = await this.#doLancamento(toCommand({
+                intencao: 'lancar', categoria: 'saida',
+                valor: cmd.valor,                       // o MESMO dinheiro que saiu da reserva
+                tipo: cmd._aposUso.tipo,
+                descricao: cmd._aposUso.descricao,
+                source: 'local', confianca: 0.9,
+            }));
+            return { multi: [view, gasto] };
+        }
         return view;
     }
 

@@ -454,6 +454,99 @@ const RE_CONTINUACAO = /^(e\s+)?(mais|tambem|tb|outro|outra)\b|^e\s+(?:r\$\s*)?\
 // descrevem nada — e virariam o nome da transação na lista do usuário.
 const RE_SO_MARCADOR = /^(e|mais|tambem|tb|outro|outra|de|ainda|foi)$/;
 
+// ── Retirada + uso: DUAS transações, UM valor ───────────────────────────────
+// Pedido do dono (2026-08-04): *"retirei 50 reais da reserva e usei pra pagar
+// um boleto"* deve perguntar de qual reserva, lançar a retirada, e EM SEGUIDA
+// lançar uma saída de "Boleto".
+//
+// Por que o `splitCompound` não resolve: ele exige que cada pedaço tenha o
+// SEU valor ("gastei 50 no mercado e 30 na farmácia"). Aqui o valor é um só e
+// aparece uma vez — o dinheiro sai da reserva e vai para o gasto. Sem isto, o
+// app registrava metade do que a pessoa disse: a reserva baixava e o gasto
+// nunca existia, então o saldo mentia para os dois lados.
+//
+// Casos irmãos, medidos e cobertos pelo mesmo padrão:
+//   "tirei 100 da reserva e paguei a luz"        (esse nem categoria tinha)
+//   "tirei 200 da caixinha pra comprar um presente"
+//   "usei 80 da reserva no mercado"
+const RE_USO_APOS = new RegExp(
+    // Gastar OU guardar: "vendi o celular por 500 e guardei" precisava virar
+    // entrada + reserva. Sem os verbos de poupar aqui, ele registrava só a
+    // reserva — dinheiro aparecendo do nada no cofrinho.
+    '\\b(?:e\\s+)?(?:usei|gastei|paguei|comprei|utilizei|torrei|foi|guardei|guardar|poupei|separei|juntei|reservei)\\b|' +
+    '\\b(?:pra|para|pro|p/)\\s+(?:pagar|comprar|quitar|cobrir|bancar)\\b|' + // "pra pagar…"
+    '\\b(?:n[ao]|em|no|na)\\s+(?!reserv|caixinha|cofrinho|poupanc)',         // "no mercado" (não a reserva)
+);
+
+/**
+ * "tirei X da reserva e usei pra Y" → a retirada MAIS o gasto que ela pagou.
+ * @returns {{valor:number, metaHint:string|null, uso:{tipo:string|null, descricao:string|null}}|null}
+ */
+export function parseRetiradaComUso(rawText) {
+    const t = corrigirTypos(norm(rawText));
+    const valor = parseValorBR(t);
+    if (!(valor > 0)) return null;
+
+    // ORIGEM do dinheiro. Os dois casos têm a mesma forma — um valor, dois
+    // eventos — e o mesmo estrago quando só metade é registrada. Medido:
+    //   "vendi o celular por 500 e guardei"   → gravava a RESERVA e não a venda
+    //                                           (dinheiro aparecendo do nada)
+    //   "ganhei 200 e gastei tudo no mercado" → gravava só a entrada
+    //   "recebi 100 e paguei a conta"         → não gravava NADA
+    const ehRetirada = VERBOS.some((v) => v.cat === 'retirada_reserva' && v.re.test(t));
+    const ehEntrada  = !ehRetirada && VERBOS.some((v) => v.cat === 'entrada' && v.re.test(t));
+    if (!ehRetirada && !ehEntrada) return null;
+
+    // Dois valores = frase composta comum, que o splitCompound já trata bem.
+    // Interferir aqui duplicaria lançamento, que é pior que não entender.
+    const numeros = t.match(/\b\d[\d.,]*\b/g) ?? [];
+    if (numeros.length > 1) return null;
+
+    // A parte DEPOIS da origem é onde o destino do dinheiro é descrito.
+    let depois;
+    if (ehRetirada) {
+        const mReserva = t.match(new RegExp(RESERVA_ALVO + '\\w*'));
+        if (!mReserva) return null;
+        depois = t.slice(t.indexOf(mReserva[0]) + mReserva[0].length);
+    } else {
+        // Na entrada a fronteira é o conectivo: "ganhei 200 E gastei tudo…".
+        const m = t.match(/\s(?:e|entao|ai)\s/);
+        if (!m) return null;
+        depois = t.slice(t.indexOf(m[0]) + m[0].length);
+    }
+    if (!RE_USO_APOS.test(depois)) return null;
+
+    // O destino pode ser GASTO ou RESERVA ("…e guardei"). Sem distinguir, um
+    // "guardei" viraria despesa e o dinheiro sumiria em vez de ser poupado.
+    const destino = VERBOS.some((v) => v.cat === 'reserva' && v.re.test(depois)) ? 'reserva' : 'saida';
+
+    // Categoriza o uso pelas MESMAS palavras-chave dos lançamentos normais —
+    // "boleto" e "luz" caem em Conta fixa, "mercado" em Mercado, e assim por
+    // diante. Reimplementar aqui criaria uma segunda tabela para divergir.
+    let tipo = null;
+    if (destino === 'saida') {
+        for (const [re, cat, tp] of KEYWORDS) {
+            if (cat === 'saida' && re.test(depois)) { tipo = tp; break; }
+        }
+    }
+    // Tira o conectivo antes de extrair, senão a descrição sai com ele dentro:
+    // "e usei pra pagar um boleto" virava a descrição **"Usei pra um boleto"**.
+    // O que o usuário quer ver no extrato é "Boleto".
+    const limpo = depois
+        .replace(/^\s*(e|entao|então|ai|aí)\s+/, ' ')
+        .replace(/\b(usei|utilizei|foi)\s+(pra|para|pro|p\/|em|no|na)\s+/g, ' ')
+        .replace(/\b(pra|para|pro|p\/)\s+(pagar|comprar|quitar|cobrir|bancar)\s+/g, ' ')
+        .replace(/\b(usei|utilizei)\b/g, ' ');
+
+    const ex = extractDescricao(limpo);
+    return {
+        origem: ehRetirada ? 'retirada_reserva' : 'entrada',
+        valor,
+        metaHint: _extractMetaHint(t),
+        uso: { categoria: destino, tipo, descricao: ex.descricao },
+    };
+}
+
 /** O texto é a continuação da frase anterior, e não um assunto novo? */
 export function ehContinuacao(rawText) {
     const t = norm(rawText).trim();
