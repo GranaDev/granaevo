@@ -78,7 +78,8 @@ Dentro de um item: `⬜ subtarefa não feita` · `☑️ / ✅ subtarefa feita`.
 | ⬜ 5 | **2FA:** ativar, sair, entrar com o código; depois testar um **código de recuperação** | O 2FA nunca foi testado de ponta a ponta; a recuperação teve bug de "Erro de conexão" corrigido em 2026-08-03 | 6 |
 | ⬜ 6 | **Blocos 2, 3 e 4** do roteiro de testes da conta descartável | Pendentes desde 2026-08-02 | — |
 | ⬜ 8 | ⭐ **Dois aparelhos ao mesmo tempo:** você num, sua esposa no outro; cada um lança no SEU perfil, quase junto. Depois recarreguem os dois | Que o merge por perfil funciona. **Antes um apagava o outro** — era o defeito mais caro do sistema, e sumia sem erro. Testar também **apagar um perfil** num aparelho e conferir que ele não ressuscita no outro | — |
-| ⬜ 9 | **Depois dos testes:** `node scripts/remove-conta-teste.mjs` | Apaga a conta descartável. **Só depois** — é a única já nos termos 1.2 | — |
+| ⬜ 10 | ⭐ **Uma frase, duas transações** (use valor pequeno, R$1): *"tirei 1 da reserva e usei pra pagar um boleto"* e *"tirei 1 da caixinha pra comprar um presente"* | Que a retirada pergunta a reserva e o gasto entra DEPOIS, com a descrição limpa. Único fluxo que cria **duas** transações de uma frase — o risco aqui é duplicar, não faltar | 36 |
+| ⬜ 11 | **Depois dos testes:** `node scripts/remove-conta-teste.mjs` | Apaga a conta descartável. **Só depois** — é a única já nos termos 1.2 | — |
 
 **Ações de configuração (não são teste, mas só o dono faz):**
 
