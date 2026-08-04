@@ -965,7 +965,7 @@ function _sanitizeObject(obj, allowedKeys) {
 const _TIPOS_SAIDA_VALIDOS = Object.freeze([
     'Mercado','Farmácia','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
     'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre',
-    'Ifood','Amazon','Outros',
+    'Ifood','Amazon','Casa','Jogos','Outros',
 ]);
 function _sanitizarOrcamentos(obj) {
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};

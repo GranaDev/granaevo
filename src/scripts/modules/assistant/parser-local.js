@@ -14,7 +14,7 @@ import { extractDescricao } from './describe.js';
 // Saúde/Educação/Viagem/Pet/Investimento — o app já cria essas categorias.
 export const TIPOS_SAIDA = ['Mercado', 'Farmácia', 'Saúde', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza',
     'Presente', 'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Viagem', 'Pet', 'Educação',
-    'Shopee', 'Mercado Livre', 'Ifood', 'Amazon', 'Outros'];
+    'Shopee', 'Mercado Livre', 'Ifood', 'Amazon', 'Casa', 'Jogos', 'Outros'];
 export const TIPOS_ENTRADA = ['Salário', 'Renda Extra', 'Investimento', 'Outros Recebimentos'];
 
 // Tipos aceitos como CHAVE de orçamento — espelha _TIPOS_SAIDA_VALIDOS do
@@ -22,7 +22,7 @@ export const TIPOS_ENTRADA = ['Salário', 'Renda Extra', 'Investimento', 'Outros
 // seria descartada silenciosamente no próximo save do dashboard.
 export const ORCAMENTO_TIPOS = ['Mercado', 'Farmácia', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza',
     'Presente', 'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Shopee', 'Mercado Livre',
-    'Ifood', 'Amazon', 'Outros'];
+    'Ifood', 'Amazon', 'Casa', 'Jogos', 'Outros'];
 
 // Normaliza: minúsculas, sem acento — para casar palavras-chave de forma robusta.
 function norm(s) {
@@ -113,7 +113,11 @@ const VERBOS = [
     { cat: 'reserva', re: /\b(pus|botei|coloquei|meti|joguei|deixei)\b[\s\S]*\bde lado\b/ },
     { cat: 'reserva', re: /\b(guardei|guardar|guarda|guardando|reservei|reservar|poupei|poupar|juntei|juntar|separei|separar|aportei|aportar|economizei|economizar)\b/ },
     { cat: 'assinatura',       re: /\b(assinatura|assinei|mensalidade|plano mensal|recorrente|todo mes pago)\b/ },
-    { cat: 'saida_credito',    re: /\b(no credito|no cartao|parcelad|parcelei|em \d+x|\d+x de|no cartao de credito)\b/ },
+    // `parcelad\w*` e não `parcelad`: com o \b no fim, "parcelado"/"parcelada"/
+    // "parcelados" NÃO casavam, e a compra parcelada virava saída à vista —
+    // sumindo da fatura do cartão. É a 4ª vez que essa fronteira de palavra
+    // morde este arquivo (gasto/gastos, deposit/depósito, atacad/atacado).
+    { cat: 'saida_credito',    re: /\b(no credito|no cartao|parcelad\w*|parcelei|em \d+x|\d+x de|no cartao de credito)\b/ },
     // `deposit\w*` e não `deposit`: com o \b no fim, "deposito"/"depósito" — a
     // palavra que as pessoas realmente escrevem — não casava. É a mesma
     // armadilha do `gasto`/`gastos` explicada logo abaixo, e já é a 3ª vez que
@@ -149,7 +153,10 @@ const KEYWORDS = [
     [/\b(shopee)\b/, 'saida', 'Shopee'],
     [/\b(amazon)\b/, 'saida', 'Amazon'],
     // Supermercado (termos claros de super — sem "extra"/"dia" soltos)
-    [/\b(supermercado|mercado|atacad|atacadao|carrefour|hortifruti|sacolao|feira|assai|makro|pao de acucar|prezunic)\b/, 'saida', 'Mercado'],
+    // `atacad\w*` cobre atacado/atacadão/atacadista — antes era `atacad|atacadao`,
+    // e "atacado" (a forma mais comum) não casava nenhum dos dois: o primeiro
+    // por causa do \b no fim, o segundo por ser outra palavra.
+    [/\b(supermercado|mercado|atacad\w*|carrefour|hortifruti|sacolao|feira|assai|makro|pao de acucar|prezunic)\b/, 'saida', 'Mercado'],
     [/\b(mercadinho|mercearia|acougue|quitanda|emporio|verdurao|peixaria|granja|minimercado|padoca)\b/, 'saida', 'Mercado'],
     [/\b(farmacia|remedio|drogaria|drogasil|pacheco|raia|panvel|ultrafarma)\b/, 'saida', 'Farmácia'],
     [/\b(medico|dentista|clinica|hospital|consulta|exame|plano de saude|unimed|amil|hapvida|fisioterapia|psicologo|psicologa|terapia|nutricionista)\b/, 'saida', 'Saúde'],
@@ -161,7 +168,12 @@ const KEYWORDS = [
     [/\b(livraria|papelaria|xerox|impressao|caderno|apostilas|material escolar)\b/, 'saida', 'Educação'],
     [/\b(airbnb|hotel|pousada|hostel|hospedagem|passagem aerea|booking|decolar|latam|\bgol\b|\bazul\b)\b/, 'saida', 'Viagem'],
     [/\b(veterinario|petshop|pet shop|racao|petz|cobasi|\bpet\b)\b/, 'saida', 'Pet'],
-    [/\b(cinema|teatro|show|balada|lazer|passeio|role|rolezinho|festa|ingresso|netflix|spotify|disney|hbo max|prime video|youtube premium|steam|playstation|xbox|nintendo|jogo|game)\b/, 'saida', 'Lazer'],
+    // Jogos ganhou categoria própria em 2026-08-04, a pedido do dono: gamer que
+    // compra jogo tinha de lançar como "Eletrônico", e o gasto com o hobby sumia
+    // dentro de outra coisa. Vem ANTES do Lazer porque steam/xbox moravam lá —
+    // em lista de palavras-chave, a ordem é que decide quem vence.
+    [/\b(steam|playstation|ps4|ps5|xbox|nintendo|switch|epic games|battle ?net|riot games|blizzard|game ?pass|psn|jogo|jogos|game|games|dlc|gacha|valorant|fortnite|minecraft)\b/, 'saida', 'Jogos'],
+    [/\b(cinema|teatro|show|balada|lazer|passeio|role|rolezinho|festa|ingresso|netflix|spotify|disney|hbo max|prime video|youtube premium)\b/, 'saida', 'Lazer'],
     [/\b(roupa|roupas|calca|camisa|camiseta|tenis|sapato|vestido|zara|renner|riachuelo|\bcea\b|shein|blusa|shorts|hering|nike|adidas)\b/, 'saida', 'Roupas'],
     [/\b(celular|notebook|eletronico|fone|monitor|carregador|mouse|teclado|headset|computador|tablet|kabum|magalu|magazine)\b/, 'saida', 'Eletrônico'],
     [/\b(salao|cabelo|beleza|manicure|barbearia|barbeiro|maquiagem|barba|unha|sobrancelha|depilacao|estetica|boticario|natura)\b/, 'saida', 'Beleza'],
@@ -171,7 +183,10 @@ const KEYWORDS = [
     [/\b(seguro|recarga|plano de celular|financiamento|prestacao|parcela do|mensalidade)\b/, 'saida', 'Conta fixa'],
     // Casa/manutenção: o app não tem categoria "Casa" — 'Outros' É a resposta certa
     // aqui, e marcá-la explicitamente evita uma ida à IA que não teria nada melhor.
-    [/\b(material de construcao|ferragem|cimento|tinta|lavanderia|chaveiro|encanador|eletricista|pedreiro|marceneiro|faxina|diarista|movel|moveis)\b/, 'saida', 'Outros'],
+    // Casa também nasceu em 2026-08-04, e o gatilho foi "gastei 50 num paflon":
+    // luminária, torneira, panela — coisa de casa — não tinha onde cair. Ia pra
+    // Outros ou, pior, pro chute do modelo (o dono viu virar "Mercado").
+    [/\b(material de construcao|ferragem|cimento|tinta|lavanderia|chaveiro|encanador|eletricista|pedreiro|marceneiro|faxina|diarista|movel|moveis|paflon|plafon|luminaria|lampada|chuveiro|torneira|panela|talher|louca|colchao|lencol|toalha|cortina|tapete|vassoura|balde|leroy|obramax|casas bahia)\b/, 'saida', 'Casa'],
     // Entrada
     [/\b(salario|salário|pagamento do mes|holerite|folha de pagamento)\b/, 'entrada', 'Salário'],
     [/\b(dividendo|dividendos|rendimento|rendimentos|proventos|resgate|tesouro|jscp)\b/, 'entrada', 'Investimento'],
@@ -287,7 +302,24 @@ const RE_REPETIR   = /\b(de novo|denovo|(a )?mesma coisa|igual (a |ao )?(ontem|a
 const RE_PAGAR_CONTA = /\b(paguei|quitei|ja paguei|acabei de pagar)\b.*\b(a |o |as |os )?(conta|boleto|aluguel|condominio|luz|agua|energia|internet|iptu|ipva|gas|telefone)\b|\b(conta|boleto)\s+(de\s+)?[\p{L}\s]{1,20}\s+(paga|pago|quitad[ao])\b/u;
 
 // Definir orçamento: "põe/define orçamento de 600 pra mercado", "limite de 300 no lazer".
-const RE_DEF_ORCAMENTO = /\b(define|definir|poe|poe ai|coloca|colocar|cria|criar|ajusta|ajustar|muda|mudar|quero)\b.*\b(orcamento|limite|teto)\b|\b(orcamento|limite|teto)\s+(de|do|da|pra|para|no|na)\b/;
+// ── Definir orçamento ───────────────────────────────────────────────────────
+// BUG MEDIDO EM 2026-08-04: 2 de 4 formas de definir orçamento GRAVAVAM UM
+// GASTO. "quero gastar no maximo 500 em mercado" e "orcamento mercado 500"
+// viravam despesa de R$500 — dinheiro que não existe, criado em silêncio.
+//
+// A regra antiga exigia a palavra "orçamento/limite/teto" **colada a uma
+// preposição** ("orçamento DE 500"). Quem escreve "orcamento mercado 500"
+// escapava; e quem descreve o teto sem usar a palavra ("no máximo") também.
+//
+// Agora basta (a) a palavra, ou (b) uma expressão de teto. A separação da
+// CONSULTA continua natural e não depende de regex: o bloco só dispara se
+// houver VALOR, e "quanto posso gastar?" não tem valor nenhum.
+const RE_DEF_ORCAMENTO = /\b(orcamento|limite|teto)\b|\b(no maximo|no max|ate no maximo|gastar ate|nao passar de|nao gastar mais de|nao quero gastar mais de|limitar em|limitar a)\b/;
+
+// Verbo no passado = já aconteceu, é lançamento. Sem esta guarda, "gastei 500
+// do orçamento de mercado" viraria uma DEFINIÇÃO de orçamento e o gasto real
+// nunca seria registrado — o espelho exato do bug que estamos consertando.
+const RE_JA_ACONTECEU = /\b(gastei|paguei|comprei|torrei|recebi|ganhei|guardei|tirei|retirei|saquei|custou|debitei)\b/;
 
 // Lembrete: "me lembra de pagar o aluguel dia 5", "me avisa amanhã de renovar o seguro".
 const RE_LEMBRETE = /\b(me )?(lembra|lembre|avisa|avise|notifica|notifique)\b|\blembrete\b/;
@@ -568,7 +600,7 @@ export function parseLocal(rawText) {
     }
 
     // 1d) Definir orçamento ("põe orçamento de 600 pra mercado") — precisa de valor.
-    if (RE_DEF_ORCAMENTO.test(text)) {
+    if (RE_DEF_ORCAMENTO.test(text) && !RE_JA_ACONTECEU.test(text)) {
         const v = parseValorBR(text) ?? parseExtenso(text);
         if (v) {
             return {

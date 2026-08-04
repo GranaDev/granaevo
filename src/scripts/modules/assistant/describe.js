@@ -47,13 +47,18 @@ const RE_PARCELA = /\b(em\s+)?\d{1,3}\s*x\b/gi;
 const STOP_EDGE = new Set([
     'de', 'do', 'da', 'das', 'dos', 'na', 'no', 'nas', 'nos', 'em', 'pra', 'para', 'pro', 'pros',
     'com', 'por', 'pelo', 'pela', 'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas',
+    // Contrações de em+um. Faltavam, e o resultado aparecia no extrato do
+    // usuário: "gastei 50 num paflon" gravava a descrição **"Num paflon"**.
+    // Relatado em 2026-08-04. "em uma tomada" já saía limpo ("Tomada") porque
+    // ali são duas palavras, e as duas estavam na lista — a contração não.
+    'num', 'numa', 'nuns', 'numas', 'dum', 'duma', 'duns', 'dumas',
     'meu', 'minha', 'meus', 'minhas', 'e', 'que', 'foi', 'ai', 'ali', 'aqui', 'la', 'mais',
     'menos', 'so', 'tudo', 'ja', 'aí', 'lá', 'já', 'só',
 ]);
 
 // Preposições que sobram ÓRFÃS quando o valor é removido do meio da frase:
 // "fone de ouvido |por| |120| na amazon" → "... ouvido por na amazon".
-const PREP = new Set(['de', 'do', 'da', 'na', 'no', 'em', 'pra', 'para', 'pro', 'com', 'por', 'a', 'o', 'pelo', 'pela']);
+const PREP = new Set(['de', 'do', 'da', 'na', 'no', 'em', 'pra', 'para', 'pro', 'com', 'por', 'a', 'o', 'pelo', 'pela', 'num', 'numa', 'dum', 'duma']);
 
 function limparBordas(s) {
     let toks = String(s).split(/\s+/).filter(Boolean);

@@ -75,7 +75,7 @@ function atualizarTiposDinamicos() {
     } else if(cat === 'saida' || cat === 'saida_credito' || !cat) {
         const tiposPadrao = ['Mercado', 'Farmácia', 'Saúde', 'Eletrônico', 'Roupas', 'Assinaturas',
          'Beleza', 'Presente', 'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte',
-         'Viagem', 'Pet', 'Shopee', 'Mercado Livre', 'Ifood', 'Amazon', 'Educação', 'Outros'];
+         'Viagem', 'Pet', 'Shopee', 'Mercado Livre', 'Ifood', 'Amazon', 'Educação', 'Casa','Jogos','Outros'];
         const personalizados = (_ctx?.tiposPersonalizados || []).filter(t => typeof t === 'string' && t.trim());
         [...tiposPadrao, ...personalizados].forEach(x => {
             const o = document.createElement('option');
@@ -973,7 +973,7 @@ function editarTransacao(t) {
     if (!t) return;
 
     const _TIPOS_SAIDA   = ['Mercado','Farmácia','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
-        'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre','Ifood','Amazon','Outros'];
+        'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre','Ifood','Amazon','Casa','Jogos','Outros'];
     const _TIPOS_ENTRADA = ['Salário','Renda Extra','Outros Recebimentos'];
     const _CATS_EDIT = [
         { value: 'entrada',          label: 'Entrada' },
@@ -1214,7 +1214,7 @@ function abrirDetalhesTransacao(t) {
 const _TIPOS_ORCAMENTO = Object.freeze([
     'Mercado','Farmácia','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
     'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre',
-    'Ifood','Amazon','Outros',
+    'Ifood','Amazon','Casa','Jogos','Outros',
 ]);
 
 function _gastoMesAtualPorTipo(tipo) {
@@ -1645,7 +1645,7 @@ function _verificarAlertasOrcamento(categoria, tipo, valorAdicionado) {
 const _CATEGORIAS_IMPORT = Object.freeze([
     'Mercado','Farmácia','Saúde','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
     'Conta fixa','Cartão','Academia','Lazer','Transporte','Viagem','Pet','Shopee','Mercado Livre',
-    'Ifood','Amazon','Educação','Outros','Salário','Renda Extra','Outros Recebimentos',
+    'Ifood','Amazon','Educação','Casa','Jogos','Outros','Salário','Renda Extra','Outros Recebimentos',
 ]);
 
 const _AUTO_CAT = Object.freeze([
@@ -1714,7 +1714,11 @@ const _AUTO_CAT = Object.freeze([
     // ══ LAZER & ENTRETENIMENTO ═════════════════════════════════════════════════
     [/cinema|teatro|\bshow\b|evento|ingresso|sympla|bilheteria|parque/i,     { cat: 'saida', tipo: 'Lazer' }],
     [/boliche|karaoke|escape room|fliperamas|laser.*tag|paintball/i,         { cat: 'saida', tipo: 'Lazer' }],
-    [/steam\b|playstation|xbox\b|nintendo|games\b|jogo.*digital/i,           { cat: 'saida', tipo: 'Lazer' }],
+    // Jogos e Casa nasceram em 2026-08-04. O auto-categorizador do dashboard e
+    // o do assistente precisam concordar: divergirem faz a MESMA compra receber
+    // categorias diferentes conforme onde foi lançada.
+    [/steam\b|playstation|ps4|ps5|xbox\b|nintendo|switch\b|epic games|game ?pass|psn|games\b|jogo/i, { cat: 'saida', tipo: 'Jogos' }],
+    [/paflon|plafon|luminaria|lampada|chuveiro|torneira|panela|colchao|cortina|tapete|leroy|obramax|material de constru/i, { cat: 'saida', tipo: 'Casa' }],
 
     // ══ TRANSPORTE ════════════════════════════════════════════════════════════
     [/\buber\b|99pop|\b99\b.*taxi|cabify|lady.*driver/i,                     { cat: 'saida', tipo: 'Transporte' }],
