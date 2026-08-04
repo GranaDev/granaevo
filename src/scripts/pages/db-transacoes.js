@@ -1015,9 +1015,24 @@ function editarTransacao(t) {
 
         function _popularTipos(catVal) {
             selTipo.innerHTML = '';
-            const lista = (catVal === 'entrada' || catVal === 'retirada_reserva')
-                ? _TIPOS_ENTRADA : _TIPOS_SAIDA;
-            const personalizados = (_ctx.tiposPersonalizados || []).filter(tp => typeof tp === 'string' && tp.trim());
+            // Reserva e retirada têm tipo PRÓPRIO — o mesmo que o app grava
+            // (ver tx-builder.js e db-metas.js). Antes, retirada caía na lista
+            // de ENTRADAS: como "Retirada de Reserva" não estava lá, nenhuma
+            // opção casava e o navegador exibia a primeira — **"Salário"**.
+            // Relatado pelo dono em 2026-08-04: "não recebemos um salário, e
+            // sim retiramos da reserva". Reserva tinha o espelho do problema,
+            // exibindo "Mercado".
+            const lista = catVal === 'retirada_reserva' ? ['Retirada de Reserva']
+                : catVal === 'reserva'                  ? ['Reserva']
+                : catVal === 'entrada'                  ? _TIPOS_ENTRADA
+                : _TIPOS_SAIDA;
+            // Tipo personalizado é de gasto/entrada. Oferecê-lo numa retirada
+            // deixaria gravar "Retirada de Reserva" com tipo "Uber", e o
+            // extrato passaria a mentir sobre o que aconteceu.
+            const aceitaPersonalizado = catVal !== 'retirada_reserva' && catVal !== 'reserva';
+            const personalizados = aceitaPersonalizado
+                ? (_ctx.tiposPersonalizados || []).filter(tp => typeof tp === 'string' && tp.trim())
+                : [];
             [...lista, ...personalizados].forEach(tp => {
                 const o = document.createElement('option'); o.value = tp; o.textContent = tp;
                 if (tp === t.tipo) o.selected = true;

@@ -1932,6 +1932,13 @@ logado · gate no CI impedindo regressão.
   antes, no fechamento de fatura. Cada insight tem o próprio `catch`: erro no complemento não pode
   engolir o aviso de conta vencendo, que é o essencial. **Nenhum R$ no corpo** — a notificação é
   lida por quem passa pelo celular na mesa; vai só o nome da assinatura e percentual.
+- **C-10** 🔴 **Retirar da reserva pela tela de Transações** — pedido do dono (2026-08-04).
+  Hoje só dá para retirar entrando em Reservas (ou pelo chat). O tipo já existe no seletor de
+  categoria da edição; falta o fluxo de CRIAÇÃO com as travas que o dono listou: perguntar de qual
+  reserva, bloquear se o saldo não cobre, e rate limit.
+  ⚠️ **Risco descoberto junto:** o formulário de edição já permite trocar a categoria para
+  `retirada_reserva`, e isso grava a transação **sem mexer no saldo da reserva** — a transação diz
+  que saiu dinheiro da reserva e a reserva não sabe. Vale conferir antes de expor o fluxo novo.
 - **C-9** 🔴 **ACHADOS DA ANÁLISE PROFUNDA (2026-08-04) — medidos, não corrigidos.**
   A varredura por corpus achou estes; nenhum foi consertado ainda:
   (⚠️ Nota: a 1ª versão desta lista usava os marcadores de PENDENTE e de risco-médio como se

@@ -5219,9 +5219,11 @@ function setupSidebarToggle() {
     }
 
     // ── Chat — Assistente GranaEvo (página leve /assistente; mesma sessão)
-    const chatNavBtn = document.getElementById('chatNavBtn');
-    if (chatNavBtn) {
-        chatNavBtn.addEventListener('click', () => { window.location.href = '/assistente'; });
+    // Dois botões, um destino: a barra do mobile e a lateral do desktop. O do
+    // desktop faltava — quem não usa celular não tinha como chegar no chat.
+    for (const id of ['chatNavBtn', 'chatNavBtnDesktop']) {
+        const btn = document.getElementById(id);
+        if (btn) btn.addEventListener('click', () => { window.location.href = '/assistente'; });
     }
 
     // ── Fechar painel: botão X

@@ -297,14 +297,7 @@ async function onSend(text) {
     const elapsed = Date.now() - started;
     if (elapsed < minDelay) await sleep(minDelay - elapsed);
     UI.hideTyping();
-    if (res && Array.isArray(res.multi)) {
-        UI.beginGroup();                     // D38: agrupa os lançamentos do envio
-        UI.addMultiHeader(res.multi.length); // D36
-        res.multi.forEach(renderResponse);
-        UI.endGroup();
-    } else {
-        renderResponse(res);
-    }
+    renderResponse(res);   // trata `multi` por dentro — ver o comentário lá
     // C25/B13/F50: chips específicos da resposta vencem os genéricos.
     const quick = (res && res.quickReplies) ? res.quickReplies : quickFor(res); // D33
     UI.setQuickReplies(quick, onSend);
@@ -312,6 +305,19 @@ async function onSend(text) {
 
 function renderResponse(res) {
     if (!res) return;
+    // Múltiplas respostas (frase composta, ou retirada + o gasto que ela pagou).
+    // MORA AQUI, e não só no onSend, porque havia DOIS caminhos até a tela e um
+    // deles não sabia de `multi`: a retirada que passa pelo picker chamava
+    // renderResponse direto, caía no `res.text` (undefined) e desenhava um
+    // BALÃO VAZIO — relatado pelo dono em 2026-08-04. As transações estavam
+    // certas; era a resposta que sumia.
+    if (Array.isArray(res.multi)) {
+        UI.beginGroup();                     // D38
+        UI.addMultiHeader(res.multi.length); // D36
+        for (const r of res.multi) { if (r && !Array.isArray(r.multi)) renderResponse(r); }
+        UI.endGroup();
+        return;
+    }
     if (res.creditoCards) { creditoFlow(res.credito, res.creditoCards); return; }
     if (res.reservaPicker) { retiradaFlow(res.retirada, res.reservaPicker); return; }
     if (res.chip) { UI.addConfirm(res, res.undo); pushHist('a', res.text); return; }

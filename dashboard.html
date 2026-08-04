@@ -259,6 +259,15 @@
                 <span class="nav-text">Relatórios</span>
             </button>
 
+            <!-- Assistente. Existia só na barra do MOBILE (`chatNavBtn`), então
+                 quem usa no desktop não tinha como chegar nele — relatado pelo
+                 dono em 2026-08-04, que só testava no celular e nunca reparou.
+                 Id próprio porque não é uma aba (`data-page`): navega pra fora. -->
+            <button class="nav-btn" id="chatNavBtnDesktop" data-tooltip="Assistente" type="button">
+                <span class="nav-icon"><i class="fas fa-comments" aria-hidden="true"></i></span>
+                <span class="nav-text">Assistente</span>
+            </button>
+
             <!-- Spacer empurra configurações para o fundo -->
             <div class="sidebar-nav-spacer"></div>
 

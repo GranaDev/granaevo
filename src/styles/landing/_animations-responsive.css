@@ -130,7 +130,14 @@ img, svg {
 
     .hero-buttons {
         flex-direction: row;
-        justify-content: center;
+        /* Alinhado à ESQUERDA dentro da mesma coluna de 500px da `.hero-import`.
+           Antes os dois eram centralizados com larguras diferentes: os centros
+           coincidiam e as bordas esquerdas não, e a caixa do "importe o extrato"
+           ficava deslocada em relação ao "Começar agora". No mobile não aparecia
+           porque a tela é menor que 500px e as duas ocupam a largura toda. */
+        justify-content: flex-start;
+        max-width: 500px;
+        margin-inline: auto;
         gap: 1rem;
         padding: 0;
     }
