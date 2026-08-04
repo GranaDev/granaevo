@@ -470,39 +470,25 @@ fixas, faturas, assinaturas do detector, previsão de fim de mês).
 
 ---
 
-## PASSO 12 — Share Target no manifest (compartilhar → lançamento) 🟡
-> **PENDENTE (2026-08-03)** — implementado e no build; **Falta:** o teste real no Android com o
-> PWA instalado (compartilhar de outro app → o Assistente aparece na folha → abre pré-preenchido).
-> É o único passo que não dá pra provar daqui: depende de aparelho.
+## PASSO 12 — Share Target no manifest (compartilhar → lançamento) ⛔ RECUSADO
+> ⛔ **RECUSADO PELO DONO — NÃO IMPLEMENTAR. Não é pendência.**
 >
-> **Desvio consciente do plano abaixo:** o texto original mandava declarar o `share_target` no
-> manifesto do VitePWA (app principal). **Não fiz, e o plano estava desatualizado:** em prod
-> `granaevo.com/assistente` responde **307 → `assistente.granaevo.com`** (verificado por curl).
-> Um share target declarado no app principal (scope `/`) apontando pra cá **atravessaria origem** e
-> jogaria o usuário pra fora da janela do PWA instalado. Foi declarado no
-> `public/assistente.webmanifest`, onde a ação é same-origin e dentro do escopo — sem redirect.
-> Bônus: só **uma** entrada "GranaEvo" na folha de compartilhamento, em vez de duas confusas.
+> O dono recusou **duas vezes**, em sessão anterior, e o roadmap não registrou nenhuma delas:
 >
-> **`method: GET`** e não POST: POST obrigaria o service worker a interceptar e remontar o
-> formulário. GET entrega na query e a página lê de `location.search`, sem peça nova no caminho.
-> O SW do assistente já serve a navegação por uma chave fixa (`SHELL`), então a query string **não**
-> causa cache miss — compartilhar offline continua abrindo o app.
+> 1. *"**Passo 12** — Stand-by por hora pois apesar de parecer simples é complexo fazer um sistema
+>    ler e entender um comprovante, principalmente pra um 'APP' PWA que nem app de verdade é."*
+> 2. *"**Eu não quero o share Target por hora, podemos remove-lo da lista?**"*
 >
-> **O texto vem de outro app, então é tratado como hostil:**
-> · **Nunca envia sozinho.** Pré-preenche o input e espera o toque — o conteúdo pode ser um artigo
->   inteiro ou uma propaganda, e lançar sozinho criaria transação que ninguém pediu.
-> · **A URL é limpa antes de tudo.** A captura roda na avaliação do módulo, **acima do boot**, de
->   propósito: o boot desvia em três pontos (sem sessão → `/login`, trava por PIN cancelada, falha
->   no init) e a limpeza no fim deixaria a notificação do banco — com valor e estabelecimento — na
->   barra de endereço justamente nos caminhos em que o usuário nem entrou.
-> · **Só em memória.** Nada de `localStorage`: um gasto ainda não confirmado não sobrevive à aba.
-> · Cortado em 500 chars, o mesmo teto do `assistant-api.js`.
+> **Por que este bloco existe em vez de o passo simplesmente sumir:** em 2026-08-03 ele foi
+> implementado e deployado por engano. A Regra de Ouro manda provar que um 🔴 ainda é 🔴 antes de
+> executar — e essa prova foi feita **só contra o código** (`grep share_target` → ausente → "logo é
+> pendência real"). O código não sabe o que o dono cancelou. Foi revertido no mesmo dia.
 >
-> **O header `web-share=()` foi verificado** (presente no `vercel.json` e servido em prod): ele
-> governa o `navigator.share()`, que é o compartilhamento de **saída**. O Share Target é entrada —
-> navegação declarada no manifesto, sem token de Permissions-Policy — e por isso funciona com o
-> header fechado. Há teste travando isso: se alguém usar `navigator.share` aqui, o teste lembra de
-> liberar `web-share=(self)`. 11 testes.
+> **A lição, que vale para TODO o documento:** ausência no código prova "não foi feito", nunca
+> "deve ser feito". Decisão do dono só sobrevive se estiver ESCRITA aqui — e um passo apagado da
+> lista volta na próxima varredura. Por isso recusa vira ⛔ com a citação, nunca uma linha deletada.
+>
+> O texto de planejamento abaixo fica como registro histórico. **Não executar.**
 **Objetivo:** o app aparece na **folha de compartilhamento** do Android; compartilhar um texto
 (ex.: notificação do banco "Compra aprovada R$…") **abre o app já com um lançamento pré-preenchido**.
 **Por quê:** reduz o atrito de entrada manual a quase zero e reusa o **parser do assistente** (`chat-parse`).
@@ -715,7 +701,14 @@ permissivas (OR) são avaliadas a cada query. **Sem risco de segurança** — pu
 > (modelo de cobrança, esforço de conteúdo). Aqui é onde **você decide, passo a passo, se compensa** antes
 > de eu executar. Ordenados por impacto estimado na conversão/retenção.
 
-## PASSO 20 — Trial / demo sem cartão ⚖️ ⭐ (maior alavanca do produto)
+## PASSO 20 — Trial / demo sem cartão ⛔ RECUSADO
+> ⛔ **RECUSADO PELO DONO — não é pendência.** Verbatim (sessão anterior): *"Fase 5
+> crescimento: trial, prova social, ciclo de vida, indicação, SEO **Remova da lista pois também
+> não quero**, isso apesar de passar credibilidade, hoje em dia pelo menos no Brasil é muito
+> artificial."* O texto abaixo fica como registro histórico. **Não executar.**
+> ⚠️ **Único ponto de dúvida da Fase 5:** a justificativa ("artificial") fala de prova social; o
+> "não quero" cobre a lista inteira. Mantido ⛔ porque foi o que o dono escreveu — reabrir é trocar
+> esta linha, e nada mais.
 **Objetivo:** deixar a pessoa **experimentar antes de pagar** — trial de 7–14 dias sem cartão, ou um "modo
 demonstração" com dados fictícios.
 **Por quê:** hoje o funil é pago-desde-o-primeiro-clique — o usuário só sente valor depois de assinar.
@@ -731,7 +724,12 @@ de acesso e cobrança — por isso é decisão de negócio, não técnica. **Me 
 
 ---
 
-## PASSO 21 — Prova social real na landing ⚖️
+## PASSO 21 — Prova social real na landing ⛔ RECUSADO
+> ⛔ **RECUSADO PELO DONO — não é pendência.** Verbatim (sessão anterior): *"Fase 5
+> crescimento: trial, prova social, ciclo de vida, indicação, SEO **Remova da lista pois também
+> não quero**, isso apesar de passar credibilidade, hoje em dia pelo menos no Brasil é muito
+> artificial."* O texto abaixo fica como registro histórico. **Não executar.**
+> Reafirmado em 2026-08-03: *"Prova social — pois não temos usuários ainda"* (= M-2).
 **Objetivo:** trocar depoimentos genéricos por prova concreta (nº de usuários, R$ organizados, prints, avaliações).
 **Por quê:** o visitante frio não confia tão rápido quanto o código merece. Prova social é o maior
 multiplicador de conversão de uma landing depois da oferta.
@@ -743,7 +741,12 @@ multiplicador de conversão de uma landing depois da oferta.
 
 ---
 
-## PASSO 22 — Ciclo de vida por e-mail + push ⚖️
+## PASSO 22 — Ciclo de vida por e-mail + push ⛔ RECUSADO
+> ⛔ **RECUSADO PELO DONO — não é pendência.** Verbatim (sessão anterior): *"Fase 5
+> crescimento: trial, prova social, ciclo de vida, indicação, SEO **Remova da lista pois também
+> não quero**, isso apesar de passar credibilidade, hoje em dia pelo menos no Brasil é muito
+> artificial."* O texto abaixo fica como registro histórico. **Não executar.**
+> Reafirmado em 2026-08-03: *"M-4 não, pois vira spam e temos o tutorial dentro do próprio app"*.
 **Objetivo:** o app hoje é 100% *pull*. Criar o *push*: boas-vindas educativo, "seu relatório do mês",
 reativação de inativo, aviso de fatura.
 **Por quê:** retenção. Reusa a infra que já existe (Resend + Radar/Web Push + previsão de fim de mês).
@@ -756,7 +759,12 @@ reativação de inativo, aviso de fatura.
 
 ---
 
-## PASSO 23 — Programa de indicação ⚖️
+## PASSO 23 — Programa de indicação ⛔ RECUSADO
+> ⛔ **RECUSADO PELO DONO — não é pendência.** Verbatim (sessão anterior): *"Fase 5
+> crescimento: trial, prova social, ciclo de vida, indicação, SEO **Remova da lista pois também
+> não quero**, isso apesar de passar credibilidade, hoje em dia pelo menos no Brasil é muito
+> artificial."* O texto abaixo fica como registro histórico. **Não executar.**
+> Reafirmado em 2026-08-03: *"M5 também não quero programa de indicação"*.
 **Objetivo:** referral — natural num produto casal/família.
 **Por quê:** crescimento orgânico barato; quem usa em casal já convida o par.
 
@@ -767,7 +775,13 @@ reativação de inativo, aviso de fatura.
 
 ---
 
-## PASSO 24 — Conteúdo / SEO de topo ⚖️
+## PASSO 24 — Conteúdo / SEO de topo ⛔ RECUSADO
+> ⛔ **RECUSADO PELO DONO — não é pendência.** Verbatim (sessão anterior): *"Fase 5
+> crescimento: trial, prova social, ciclo de vida, indicação, SEO **Remova da lista pois também
+> não quero**, isso apesar de passar credibilidade, hoje em dia pelo menos no Brasil é muito
+> artificial."* O texto abaixo fica como registro histórico. **Não executar.**
+> **É o mesmo item que o M-3** (3 calculadoras públicas) — que eu apresentei ao dono em 2026-08-03
+> como "o único item não-chat que sobrou", sem notar que ele já estava recusado aqui.
 **Objetivo:** tráfego orgânico barato (calculadoras, comparativos, blog de finanças pessoais).
 **Por quê:** aquisição de baixo custo e autoridade de marca; casa com o ângulo de privacidade.
 
@@ -866,7 +880,7 @@ reativação de inativo, aviso de fatura.
 | 4 | 18 — Testes de lógica financeira | 🟢 baixo | ~1 dia | 🟡 **Falta:** extrair fatura/saldo para testar; money.js coberto (57 testes, CI) |
 | 4 | 19 — Índices/policies (higiene DB) | 🟡 médio | ~1–2h | ✅ 12 índices duplicados dropados (2026-07-14); policies OR mantidas |
 | 3 | 11 — Calendário financeiro visual | 🟢 baixo | 1–2 dias | ✅ no ar — `modules/calendario.js` + `db-calendario.js` (lazy) + nav e seção no dashboard.html + testes |
-| 3 | 12 — Share Target no manifest | 🟢 baixo | ~1 dia | 🟡 **Falta:** teste no Android com o PWA instalado — implementado e no build |
+| 3 | 12 — Share Target no manifest | 🟢 baixo | ~1 dia | ⛔ RECUSADO pelo dono (2×) — não é pendência |
 | 5 ⚖️ | 20 — Trial/demo sem cartão ⭐ | ⚖️ decisão | 2–4 dias | 🔴 avaliar |
 | 5 ⚖️ | 21 — Prova social real | ⚖️ decisão | meio dia | 🔴 avaliar |
 | 5 ⚖️ | 22 — Ciclo de vida e-mail/push | ⚖️ decisão | 1–2 dias | 🔴 avaliar |
@@ -1551,9 +1565,8 @@ logado · gate no CI impedindo regressão.
   **Reabrir quando:** houver cliente satisfeito disposto a depor com nome. Aí é o item de maior
   retorno do Marketing — em finanças, confiança É a conversão.
   3 depoimentos com foto e primeiro nome · 1 número honesto · selo de segurança (provável após B-1).
-- **M-3** 🔴 Conteúdo de topo (Passo 24): 3 calculadoras públicas indexáveis (juros do cartão ·
-  quanto sobra por mês · quanto rende a reserva) + 10 artigos de cauda longa. Calculadora converte
-  melhor que artigo e os motores já existem (`simulador-ese.js`, `horas-vida.js`).
+- **M-3** ⛔ **RECUSADO — é o Passo 24, que o dono mandou remover junto com a Fase 5.**
+  Eu o listei como pendente em 2026-08-03 sem cruzar com a recusa. Não é pendência.
 - **M-4** ⛔ **RECUSADO — decisão do dono (2026-08-03).** Não é pendência.
   *"Vira spam, e temos o tutorial dentro do próprio app. Quando o usuário compra, a primeira
   coisa que ele quer é usar o app, não ler e-mail. E não compensa ficar implorando pro usuário
