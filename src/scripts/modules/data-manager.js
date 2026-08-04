@@ -91,6 +91,41 @@ class DataManager {
     //  - #idsWithData: ids de perfis que JÁ tiveram dados (persistido em localStorage
     //    p/ sobreviver a reloads — cobre o caso do 1º load da sessão falhar).
     #lastLoadOk  = false;
+
+    // ── Retrato dos perfis como vieram do servidor (merge por perfil) ───────
+    // Guarda id → JSON do perfil no último load/save bem-sucedido. No save,
+    // comparar contra isto diz QUAIS perfis este cliente realmente mexeu.
+    //
+    // Por que aqui e não em cada tela: este é o ponto único por onde todo save
+    // do app passa. Pedir a cada chamador que declare o que tocou exigiria
+    // auditar dezenas de pontos de mutação — e bastaria um esquecido para o
+    // dado de outro membro ser sobrescrito de novo, em silêncio.
+    #retrato = new Map();
+
+    #tirarRetrato(profiles) {
+        this.#retrato = new Map();
+        if (!Array.isArray(profiles)) return;
+        for (const p of profiles) {
+            try { this.#retrato.set(String(p?.id), JSON.stringify(p)); } catch { /* ciclo: fica de fora e conta como tocado */ }
+        }
+    }
+
+    /** Ids que mudaram, sumiram ou nasceram desde o último load/save. */
+    #perfisTocados(profiles) {
+        const tocados = new Set();
+        const agora = new Set();
+        for (const p of profiles) {
+            const id = String(p?.id);
+            agora.add(id);
+            let json = null;
+            try { json = JSON.stringify(p); } catch { /* ignore */ }
+            if (json === null || this.#retrato.get(id) !== json) tocados.add(id);
+        }
+        // Sumiu do array = exclusão. Precisa ser DECLARADA, senão o servidor
+        // preserva o perfil (para ele, ausência passou a significar "não mexi").
+        for (const id of this.#retrato.keys()) if (!agora.has(id)) tocados.add(id);
+        return [...tocados];
+    }
     #idsWithData = new Set();
 
     // ── Getter público — somente leitura ─────────────────────────────────────
@@ -158,6 +193,7 @@ class DataManager {
         // NÃO limpa o localStorage de #idsWithData — a memória do que tinha dados
         // deve sobreviver ao logout p/ proteger o próximo login no mesmo browser.
         this.#lastLoadOk           = false;
+        this.#retrato              = new Map();
         this.#idsWithData          = new Set();
         if (IS_DEV) console.log('🔒 [DATA-MANAGER] Estado limpo — usuário deslogado');
     }
@@ -244,6 +280,7 @@ class DataManager {
             // Load real bem-sucedido: confia no estado e memoriza quem tinha dados.
             this.#lastLoadOk = true;
             this.#rememberProfilesWithData(userData.profiles);
+            this.#tirarRetrato(userData.profiles);
 
             if (IS_DEV) {
                 console.log('✅ [DATA-MANAGER] Dados carregados:', {
@@ -364,9 +401,16 @@ class DataManager {
 
             // ✅ userId e email NÃO vão no payload — servidor identifica via JWT.
             //    Apenas dados estruturais são enviados ao banco.
+            // Merge por perfil: declara o que ESTE cliente realmente mexeu, para
+            // o servidor preservar o trabalho dos outros membros da conta.
+            // Calculado contra o retrato do último load/save — nenhuma tela
+            // precisa declarar nada, e nenhuma pode esquecer de declarar.
+            const tocados = this.#perfisTocados(safeProfiles);
+
             const dataToSave = {
                 version:  '1.0',
                 profiles: safeProfiles,
+                touched_profile_ids: tocados,
                 metadata: {
                     lastSync:      new Date().toISOString(),
                     totalProfiles: safeProfiles.length
@@ -438,6 +482,10 @@ class DataManager {
             }
 
             this.#lastSaveTime = new Date();
+            // O que acabou de subir vira o novo retrato: sem isto, o MESMO
+            // perfil seria declarado como tocado em todo save seguinte, e a
+            // proteção viraria enfeite (declarar tudo = substituir tudo).
+            this.#tirarRetrato(safeProfiles);
             document.dispatchEvent(new CustomEvent('ge:save-done'));
             return true;
 

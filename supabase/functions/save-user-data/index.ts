@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { mergeProfiles } from '../_shared/merge-profiles.ts'
 import { mfaBloqueia } from '../_shared/mfa-gate.ts'
 import { reportarEventoSeguranca } from '../_shared/sec-report.ts'
 
@@ -246,24 +247,9 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: `Número de perfis excede o limite de ${MAX_PROFILES}` }, 400, corsHeaders)
     }
 
-    // ── 6. Montar payload e criptografar ────────────────────────────────────
-    // Usa effectiveUserId/Email — para convidados, isso é o ID/email do dono
-    const dataToSave = {
-      version:  '1.0',
-      user:     { userId: effectiveUserId, email: effectiveUserEmail },
-      profiles,
-      metadata: {
-        lastSync:      new Date().toISOString(),
-        totalProfiles: profiles.length,
-      },
-    }
-
-    const encrypted   = await encryptData(JSON.stringify(dataToSave), effectiveUserId)
-    const dataToStore = encrypted ? { _enc: encrypted } : dataToSave
-
-    const now = new Date().toISOString()
-
-    // ── 7. INSERT ou UPDATE — funciona independente de constraints ──────────
+    // ── 6. Ler o que já está gravado ────────────────────────────────────────
+    // Vem ANTES de cifrar de propósito: tanto o merge (6.4) quanto a guarda
+    // anti-wipe (6.5) precisam comparar o payload com o estado atual.
     const { data: existing, error: selectErr } = await supabaseAdmin
       .from('user_data')
       .select('user_id, data_json')
@@ -275,6 +261,76 @@ Deno.serve(async (req: Request) => {
       throw selectErr
     }
 
+    // ── 6.4 MERGE POR PERFIL — casal e família param de se sobrescrever ──────
+    //
+    // O PROBLEMA (relatado pelo dono em 2026-08-04, e reproduzível):
+    // casal/família compartilham UMA linha (a do dono — ver o bloco do
+    // `effectiveUserId`). Cada save reescrevia o ARRAY INTEIRO de perfis:
+    //
+    //   ela carrega [A,B] · ele carrega [A,B]
+    //   ela edita B → grava [A(velho), B(novo)]
+    //   ele edita A → grava [A(novo), B(VELHO)]   ← o trabalho dela morre
+    //
+    // Repare que eles NEM MEXERAM no mesmo perfil. O conflito era do formato,
+    // não do conteúdo — e some sem erro, sem aviso, sem log.
+    //
+    // A SOLUÇÃO: o cliente declara quais perfis realmente tocou. Para esses, o
+    // que chegou vale; para os demais, mantém-se o que está gravado. Ninguém
+    // afirma nada sobre perfil que não editou.
+    //
+    // Não usa relógio de propósito: celular e desktop dessincronizam, e
+    // "quem salvou por último" é a pergunta errada — a certa é "sobre o que
+    // este cliente tem autoridade para falar".
+    //
+    // COMPATÍVEL PARA TRÁS: sem `touched_profile_ids` no corpo, o
+    // comportamento é exatamente o de antes (substitui tudo). Isso permite
+    // deployar o servidor sozinho, sem mudar nada, e só depois os clientes.
+    //
+    // LIMITE ASSUMIDO: se dois editarem O MESMO perfil ao mesmo tempo, o último
+    // ainda vence. Aí é conflito de verdade, e resolver exigiria mesclar
+    // transação a transação — custo alto para um caso raro.
+    let profilesFinais = profiles
+    const touched = Array.isArray((body as any)?.touched_profile_ids)
+      ? (body as any).touched_profile_ids.map((x: unknown) => String(x)).filter(Boolean)
+      : null
+
+    if (touched && existing?.data_json) {
+      const guardados = await extractStoredProfiles(existing.data_json, effectiveUserId)
+      if (guardados === null) {
+        // Não deu para decifrar o que está lá. Mesclar às cegas apagaria dados;
+        // seguir sem merge é o comportamento antigo, que é ruim mas conhecido.
+        console.warn('[save-user-data] merge pulado: blob atual ilegível. user:', effectiveUserId.slice(0, 8))
+      } else {
+        const r = mergeProfiles(guardados as any[], profiles as any[], touched)
+
+        if (r.profiles.length > MAX_PROFILES) {
+          return json({ success: false, error: `Número de perfis excede o limite de ${MAX_PROFILES}` }, 400, corsHeaders)
+        }
+        if (r.preservados > 0 || r.removidos.length > 0) {
+          console.log('[save-user-data] merge: preservou', r.preservados,
+                      '| removeu', r.removidos.length, '| user:', effectiveUserId.slice(0, 8))
+        }
+        profilesFinais = r.profiles
+      }
+    }
+
+    // ── 6.45 Payload final (já mesclado) ────────────────────────────────────
+    // Usa effectiveUserId/Email — para convidados, isso é o ID/email do dono
+    const dataToSave = {
+      version:  '1.0',
+      user:     { userId: effectiveUserId, email: effectiveUserEmail },
+      profiles: profilesFinais,
+      metadata: {
+        lastSync:      new Date().toISOString(),
+        totalProfiles: profilesFinais.length,
+      },
+    }
+
+    const encrypted   = await encryptData(JSON.stringify(dataToSave), effectiveUserId)
+    const dataToStore = encrypted ? { _enc: encrypted } : dataToSave
+
+    const now = new Date().toISOString()
+
     // ── 6.5 GUARDA ANTI-WIPE (autoritativa, server-side) ────────────────────
     // Bug recorrente: após um load falho, o cliente reenvia perfis VAZIOS e
     // sobrescrevia dados reais. Esta checagem é IMUNE a bundle/Service Worker
@@ -282,7 +338,10 @@ Deno.serve(async (req: Request) => {
     // e o payload zeraria todos OU esvaziaria um perfil que tinha dados.
     // (Remoção legítima de um perfil — perfil ausente no payload — NÃO bloqueia.)
     if (existing?.data_json) {
-      const incomingHasAnyData = (profiles as any[]).some(profileHasData)
+      // Valida o RESULTADO FINAL (já mesclado), não o payload cru: é ele que
+      // vai para o disco. Com merge, um payload que traz um perfil só é
+      // normal — e conferir o payload faria a guarda ver um falso wipe.
+      const incomingHasAnyData = (profilesFinais as any[]).some(profileHasData)
       const existingProfiles   = await extractStoredProfiles(existing.data_json, effectiveUserId)
       let wouldWipe = false
 
@@ -297,8 +356,8 @@ Deno.serve(async (req: Request) => {
           existingProfiles.filter(profileHasData).map((p: any) => String(p?.id)),
         )
         if (hadDataIds.size > 0) {
-          const incomingById = new Map((profiles as any[]).map(p => [String(p?.id), p]))
-          wouldWipe = profiles.length === 0 // zerou todos os perfis
+          const incomingById = new Map((profilesFinais as any[]).map(p => [String(p?.id), p]))
+          wouldWipe = profilesFinais.length === 0 // zerou todos os perfis
           if (!wouldWipe) {
             for (const id of hadDataIds) {
               const incoming = incomingById.get(id)
