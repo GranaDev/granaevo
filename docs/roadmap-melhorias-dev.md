@@ -1313,7 +1313,7 @@ edge que não esteja recebendo a chave nova.
 | 30 | Segurança 9.4 → 10 | S-1 … S-6 | ✅ **COMPLETO** |
 | 31 | Blindagem 9.0 → 10 | B-1 … B-7 | ✅ FINALIZADO — B-1 a B-7 fechados (B-6 em 2026-07-31) |
 | 32 | Otimização 8.0 → 10 | O-1 … O-8 | ✅ O-1..O-4, O-6..O-8 feitos; O-5 ⛔ recusado pelo dono |
-| 33 | Marketing 7.0 → 10 | M-1 … M-9 | 🟡 **Falta:** só o M-3 (3 calculadoras públicas). M-1/M-6/M-7/M-8 ✅; M-2/M-4/M-5/M-9 ⛔ recusados |
+| 33 | Marketing 7.0 → 10 | M-1 … M-9 | ✅ M-1/M-6/M-7/M-8 feitos; M-2/M-3/M-4/M-5/M-9 ⛔ recusados pelo dono |
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | ✅ D-1..D-5 feitos; D-6/D-7 ⛔ recusados pelo dono |
 | 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | ✅ P-2/P-3/P-6 feitos; P-1/P-4/P-5 ⛔ recusados pelo dono |
 | 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🟡 **Falta:** C-3 (conversa livre, não iniciado) e a data em C-1; C-2/C-4/C-5/C-6/C-7/C-8 ✅ |
@@ -1622,8 +1622,12 @@ logado · gate no CI impedindo regressão.
 
 ---
 
-## PASSO 33 — MARKETING 7.0 → 10 🟡
-> **Falta:** só o **M-3** (3 calculadoras públicas). Todo o resto está ✅ ou ⛔ recusado pelo dono.
+## PASSO 33 — MARKETING 7.0 → 10 ✅ ENCERRADO
+> **Nada pendente.** M-1/M-6/M-7/M-8 ✅ feitos; M-2/M-4/M-5/M-9 ⛔ recusados pelo dono; e o **M-3
+> também é ⛔** — ele É o Passo 24 (conteúdo/SEO), recusado junto com a Fase 5.
+> ⚠️ Este cabeçalho ficou 🟡 apontando o M-3 por algumas horas em 2026-08-04, depois de o próprio
+> M-3 já ter virado ⛔ na mesma sessão. Corrigido ao levantar pendências: **marcar um item exige
+> varrer quem o cita** — senão o pai continua contando um filho que já morreu.
 > A dimensão mais distante do 10 e a de maior retorno. Produto nota 9, aquisição nota 6.
 
 - **M-1** ✅ **JÁ RESOLVIDO** — verificado em 2026-07-31:
