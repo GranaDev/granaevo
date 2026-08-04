@@ -196,7 +196,13 @@ const PARSE_TOOL = {
       },
       confianca: {
         type: 'number',
-        description: 'Confiança de 0 a 1 na interpretação.',
+        description:
+          'Confiança de 0 a 1 na interpretação. CALIBRE DE VERDADE — este número é lido: ' +
+          'abaixo de 0,6 o app PERGUNTA ao usuário em vez de gravar. ' +
+          'Use 0,9+ só quando a frase é inequívoca ("gastei 50 no mercado"). ' +
+          'Use 0,3 a 0,5 quando: a frase couber em mais de uma leitura; faltar algo essencial; ' +
+          'ou você estiver DEDUZINDO a direção do dinheiro em vez de lê-la na frase. ' +
+          'Responder 0,9 por hábito desliga a proteção e transforma palpite em lançamento gravado.',
       },
     },
     required: [
@@ -222,6 +228,22 @@ const SYSTEM_PROMPT =
   'repetido não diz nada. Se a frase não disser o que foi comprado, descricao=null. ' +
   'O brasileiro chama reserva de "caixinha" (Nubank), "cofrinho" (PicPay), "porquinho", "poupança": ' +
   '"tirei 100 da caixinha" = categoria="retirada_reserva". ' +
+  // ── A armadilha que causou um bug real em produção (2026-08-04) ──────────
+  // O usuário disse "tirei 100 da reserva" e a transação foi gravada como
+  // ENTRADA. Do ponto de vista do modelo é uma dedução natural — o dinheiro
+  // realmente aparece na conta. Dizer a regra positiva ("tirei da reserva =
+  // retirada_reserva") não bastava: faltava dizer o que ela NÃO é, porque é a
+  // inferência plausível que precisa ser bloqueada, não a implausível.
+  'DIREÇÃO DO DINHEIRO — leia a frase, não deduza pelo efeito no saldo: ' +
+  'retirar da reserva NÃO é entrada, mesmo que o dinheiro volte para a conta ' +
+  '(é categoria="retirada_reserva"); guardar na reserva NÃO é saída, mesmo que ' +
+  'saia da conta (é categoria="reserva"). ' +
+  'VENDER é entrada, e o objeto vendido não muda isso: ' +
+  '"vendi meu celular por 500" → categoria="entrada", NUNCA saida/Eletrônico — ' +
+  'o celular saiu de casa, o dinheiro entrou. ' +
+  'Na dúvida entre duas direções, NÃO escolha uma: devolva confianca baixa (0,3-0,5) ' +
+  'e deixe o app perguntar. Gravar a direção errada é o pior erro possível aqui — ' +
+  'ela contamina saldo, previsão e relatório, e o usuário pode nem notar. ' +
   'Para perguntas sobre os dados use intencao="consultar" e preencha consulta_alvo; ' +
   '"gráficos"/"onde mais gastei"/"no que gastei mais" = consulta_alvo="maior_gasto"; ' +
   '"minhas últimas transações"/"o que lancei hoje" = consulta_alvo="listar"; ' +
