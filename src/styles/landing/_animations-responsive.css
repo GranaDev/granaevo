@@ -108,15 +108,6 @@ img, svg {
         height: 44px;
     }
     
-    /* O `padding` saiu daqui em 2026-08-04. Havia TRÊS regras para o mesmo
-       botão (base 2,5rem · 768px 2rem · 1024px 2,25rem) e a última vencia — ou
-       seja, aumentar a folga na regra base não mudava nada no desktop, que é
-       exatamente onde o dono reclamava. Agora só a base define o padding; aqui
-       fica apenas o que de fato muda por tamanho de tela. */
-    .btn-nav {
-        font-size: 0.9375rem;
-    }
-
     .hero {
         padding: 8rem 0 5rem;
     }
@@ -256,10 +247,6 @@ img, svg {
         padding: 0 3rem;
     }
     
-    .btn-nav {
-        font-size: 1rem;
-    }
-
     .hero-content {
         grid-template-columns: 1.1fr 1fr;
         gap: 4rem;

@@ -107,25 +107,34 @@
 }
 
 .btn-nav {
-    background: var(--primary);
-    color: var(--dark);
-    /* O padding só passou a valer em 2026-08-04, quando o `:not(.btn-nav)`
-       entrou na regra acima. Antes, `.nav-links a` vencia por especificidade
-       e o botão ficava com 8px em cima e ZERO nas laterais.
-       `line-height: 1.2` porque o 1.6 herdado do body é medida de parágrafo:
-       num botão ele infla a caixa da linha sem dar respiro à volta da letra. */
-    padding: 0.875rem 2rem;
-    line-height: 1.2;
-    border-radius: 10px;
-    font-weight: 700;
-    font-size: 0.9375rem;
-    box-shadow: var(--neon-glow);
-    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
-    white-space: nowrap;
-    min-height: 44px;
+    /* ESPELHA o `.btn-primary` do hero, a pedido do dono: os dois dizem
+       "Começar agora" e aparecem na MESMA tela, então qualquer diferença de
+       cor, raio ou folga faz um parecer errado. Copiado propriedade a
+       propriedade — só muda o que o contexto de navbar exige.
+
+       O padding só passou a valer em 2026-08-04, quando o `:not(.btn-nav)`
+       entrou na regra acima: antes `.nav-links a` vencia por especificidade e
+       o botão ficava com 8px em cima e ZERO nas laterais. */
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 2.5rem;
+    background: var(--primary);
+    /* Branco, igual ao do hero. Era `var(--dark)` — texto escuro sobre verde. */
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.9375rem;
+    border-radius: 12px;
+    box-shadow: var(--neon-glow);
+    transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
+
+    /* As duas únicas diferenças, e as duas são exigência da navbar:
+       largura pelo conteúdo (o do hero é 100% da coluna) e o texto sem quebrar. */
+    white-space: nowrap;
+    min-height: 44px;
 }
+
 
 .btn-nav:hover {
     transform: translateY(-2px);
