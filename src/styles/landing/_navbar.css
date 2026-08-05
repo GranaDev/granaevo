@@ -71,7 +71,14 @@
     display: none;
 }
 
-.nav-links a {
+/* `:not(.btn-nav)` — a CAUSA do botão "Começar Agora" ficar espremido.
+   Esta regra tem especificidade (0,1,1) e vencia o `.btn-nav`, que tem (0,1,0):
+   o botão herdava `padding: .5rem 0` daqui, ou seja, 8px em cima e ZERO nas
+   laterais. Todo ajuste feito no `.btn-nav` era descartado pelo navegador —
+   três tentativas mexendo numa regra que nunca chegava a valer.
+   As regras logo abaixo (:hover, ::after) JÁ excluíam o botão; só esta ficou
+   sem, e o padding é justamente a propriedade em que isso aparece. */
+.nav-links a:not(.btn-nav) {
     color: var(--white);
     font-weight: 500;
     font-size: 0.9375rem;
@@ -102,15 +109,12 @@
 .btn-nav {
     background: var(--primary);
     color: var(--dark);
-    /* Mesma folga do CTA do hero — os dois dizem "Começar agora" e ficam
-       visíveis na mesma tela; padding diferente faria um parecer errado. */
-    /* Vertical subiu de .875rem em 2026-08-04 (3ª tentativa neste botão). As
-       duas primeiras mexeram no HORIZONTAL — e o aperto era em cima e embaixo.
-       Seguro no mobile: abaixo de 768px o botão vive dentro do menu dropdown,
-       então a altura da barra não depende dele e o `100vh - 64px` do menu não
-       muda. `line-height: 1.2` porque o 1.6 herdado do body é medida de
-       parágrafo: num botão ele infla a caixa sem dar respiro ao redor da letra. */
-    padding: 1.25rem 2.5rem;
+    /* O padding só passou a valer em 2026-08-04, quando o `:not(.btn-nav)`
+       entrou na regra acima. Antes, `.nav-links a` vencia por especificidade
+       e o botão ficava com 8px em cima e ZERO nas laterais.
+       `line-height: 1.2` porque o 1.6 herdado do body é medida de parágrafo:
+       num botão ele infla a caixa da linha sem dar respiro à volta da letra. */
+    padding: 0.875rem 2rem;
     line-height: 1.2;
     border-radius: 10px;
     font-weight: 700;
