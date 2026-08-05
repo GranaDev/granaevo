@@ -104,7 +104,14 @@
     color: var(--dark);
     /* Mesma folga do CTA do hero — os dois dizem "Começar agora" e ficam
        visíveis na mesma tela; padding diferente faria um parecer errado. */
-    padding: 0.875rem 2.5rem;
+    /* Vertical subiu de .875rem em 2026-08-04 (3ª tentativa neste botão). As
+       duas primeiras mexeram no HORIZONTAL — e o aperto era em cima e embaixo.
+       Seguro no mobile: abaixo de 768px o botão vive dentro do menu dropdown,
+       então a altura da barra não depende dele e o `100vh - 64px` do menu não
+       muda. `line-height: 1.2` porque o 1.6 herdado do body é medida de
+       parágrafo: num botão ele infla a caixa sem dar respiro ao redor da letra. */
+    padding: 1.25rem 2.5rem;
+    line-height: 1.2;
     border-radius: 10px;
     font-weight: 700;
     font-size: 0.9375rem;
