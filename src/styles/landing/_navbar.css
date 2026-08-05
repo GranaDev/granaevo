@@ -107,10 +107,12 @@
 }
 
 .btn-nav {
-    /* ESPELHA o `.btn-primary` do hero, a pedido do dono: os dois dizem
-       "Começar agora" e aparecem na MESMA tela, então qualquer diferença de
-       cor, raio ou folga faz um parecer errado. Copiado propriedade a
-       propriedade — só muda o que o contexto de navbar exige.
+    /* MESMA LINGUAGEM do `.btn-primary` do hero (verde, texto branco,
+       arredondado), PESO diferente — e isso é deliberado.
+       Copiar o hero inteiro deixou o botão grande demais para uma barra: ele
+       competia com o conteúdo em vez de ser um atalho. Um CTA de navbar é
+       persistente e discreto; o do hero é a ação principal da página e pode
+       ocupar espaço. O que une os dois é a identidade, não a dimensão.
 
        O padding só passou a valer em 2026-08-04, quando o `:not(.btn-nav)`
        entrou na regra acima: antes `.nav-links a` vencia por especificidade e
@@ -119,13 +121,16 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 0.875rem 2.5rem;
+    /* Compacto: a altura passa a ser ditada pelo `min-height: 44px` abaixo,
+       contra os ~50px de antes. Assim o botão para de esticar a barra — quem
+       define a altura volta a ser o logo, de 40px. */
+    padding: 0.625rem 1.5rem;
     background: var(--primary);
     /* Branco, igual ao do hero. Era `var(--dark)` — texto escuro sobre verde. */
     color: #ffffff;
     font-weight: 700;
     font-size: 0.9375rem;
-    border-radius: 12px;
+    border-radius: 10px;   /* botão menor pede canto menor que o do hero (12px) */
     box-shadow: var(--neon-glow);
     transition: color var(--transition), background-color var(--transition), border-color var(--transition), box-shadow var(--transition), opacity var(--transition), transform var(--transition);
 
