@@ -57,7 +57,13 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 0.875rem 1.75rem;
+    /* O texto ficava colado nas bordas laterais — incomodava o dono "há tempos".
+       1.75rem parecia folgado lendo o CSS, mas o botão tem `gap` + ícone: o
+       conjunto cresce por dentro e come a folga. 2.25rem devolve respiro sem
+       mexer na altura, que já estava boa. Aplicado aos DOIS (primary e
+       secondary) porque eles ficam lado a lado no hero — mudar só um deixaria
+       o par visivelmente desigual. */
+    padding: 0.875rem 2.5rem;
     background: var(--primary);
     /* Era `var #ffffff` — sintaxe INVÁLIDA, então o navegador descartava a
        declaração e o texto herdava a cor escura. Corrigido em 2026-07-21. */
@@ -85,7 +91,13 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 0.875rem 1.75rem;
+    /* O texto ficava colado nas bordas laterais — incomodava o dono "há tempos".
+       1.75rem parecia folgado lendo o CSS, mas o botão tem `gap` + ícone: o
+       conjunto cresce por dentro e come a folga. 2.25rem devolve respiro sem
+       mexer na altura, que já estava boa. Aplicado aos DOIS (primary e
+       secondary) porque eles ficam lado a lado no hero — mudar só um deixaria
+       o par visivelmente desigual. */
+    padding: 0.875rem 2.5rem;
     background: rgba(255, 255, 255, 0.05);
     color: var(--white);
     font-weight: 600;

@@ -102,7 +102,9 @@
 .btn-nav {
     background: var(--primary);
     color: var(--dark);
-    padding: 0.875rem 2.25rem;
+    /* Mesma folga do CTA do hero — os dois dizem "Começar agora" e ficam
+       visíveis na mesma tela; padding diferente faria um parecer errado. */
+    padding: 0.875rem 2.5rem;
     border-radius: 10px;
     font-weight: 700;
     font-size: 0.9375rem;

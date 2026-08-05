@@ -128,16 +128,22 @@ img, svg {
         max-width: 600px;
     }
 
+    /* ── A coluna do hero ────────────────────────────────────────────────────
+       Descrição, caixa de import e botões dividem a MESMA largura (600px,
+       centralizada). Sem isso as bordas esquerdas não batem: a descrição tinha
+       600px e a `.hero-import` 500px, as duas centralizadas — a caixa ficava
+       50px para dentro do texto de cada lado, e foi isso que o dono viu.
+       A 1ª tentativa alinhou os botões pela caixa de 500px, ou seja, pela
+       referência errada: ficaram alinhados entre si e desalinhados do texto. */
+    .hero-import,
+    .hero-buttons {
+        max-width: 600px;
+        margin-inline: auto;
+    }
+
     .hero-buttons {
         flex-direction: row;
-        /* Alinhado à ESQUERDA dentro da mesma coluna de 500px da `.hero-import`.
-           Antes os dois eram centralizados com larguras diferentes: os centros
-           coincidiam e as bordas esquerdas não, e a caixa do "importe o extrato"
-           ficava deslocada em relação ao "Começar agora". No mobile não aparecia
-           porque a tela é menor que 500px e as duas ocupam a largura toda. */
-        justify-content: flex-start;
-        max-width: 500px;
-        margin-inline: auto;
+        justify-content: flex-start;   /* borda do botão = borda do texto */
         gap: 1rem;
         padding: 0;
     }
