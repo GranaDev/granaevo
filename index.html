@@ -351,7 +351,18 @@
                 -->
                 <a href="#faq" class="nav-link" role="menuitem">FAQ</a>
                 <a href="login.html" class="nav-link" role="menuitem">Login</a>
-                <a href="planos.html" class="btn-nav" role="menuitem">Começar Agora</a>
+                <!-- Mesma seta do CTA do hero. SVG inline, não Font Awesome: um
+                     ícone novo do FA obrigaria rodar `npm run fa:subset` e engordar
+                     a fonte de produção por causa de uma flecha. `currentColor` faz
+                     ela seguir a cor do texto sem regra extra.
+                     16px e não 20px como no hero: o botão da barra é menor, e uma
+                     seta do mesmo tamanho pesaria mais que a própria palavra. -->
+                <a href="planos.html" class="btn-nav" role="menuitem">
+                    <span>Começar Agora</span>
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                        <path d="M7 13L13 7M13 7H7M13 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </a>
             </div>
 
             <button
