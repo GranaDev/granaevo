@@ -5522,7 +5522,31 @@ function _aplicarMudancaRemota() {
     }
     _tempoRealPendente = false;
     if (!perfilAtivo) return;
-    carregarDadosPerfil(perfilAtivo.id).catch((e) => _log.warn('[TEMPO-REAL] refetch falhou:', e?.message ?? e));
+
+    (async () => {
+        // Save em voo pousa primeiro. Recarregar no meio de um POST traz o
+        // estado de ANTES dele — a tela mostraria o dado que acabou de ser
+        // gravado como se não existisse. É a mesma ordem que a troca de perfil
+        // usa, e pelo mesmo motivo.
+        if (_saveEmVoo) { try { await _saveEmVoo; } catch { /* segue */ } }
+
+        await carregarDadosPerfil(perfilAtivo.id);
+
+        // ⚠️ `carregarDadosPerfil` NÃO repinta. Ele enche os arrays e termina em
+        // `atualizarReferenciasGlobais()` — foi escrito para o boot e para a
+        // troca de perfil, onde QUEM CHAMA renderiza depois (ver o trecho após a
+        // linha 1971). Chamado sozinho, ele atualizava a memória e deixava a tela
+        // parada: o dado só aparecia no próximo F5.
+        //
+        // Este é o mesmo `atualizarTudo()` que todo caminho de escrita chama —
+        // é ele que manda `_dbTransacoes.atualizarMovimentacoesUI()` repintar a
+        // lista de Movimentações.
+        atualizarTudo();
+        try { window.__tempoReal.ultimo = 'aplicado'; } catch { /* diagnóstico */ }
+    })().catch((e) => {
+        try { window.__tempoReal.ultimo = `falhou: ${String(e?.message ?? e).slice(0, 60)}`; } catch {}
+        _log.warn('[TEMPO-REAL] refetch falhou:', e?.message ?? e);
+    });
 }
 
 function iniciarAutoSave() {

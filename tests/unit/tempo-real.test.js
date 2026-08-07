@@ -22,21 +22,24 @@ import { fileURLToPath } from 'node:url'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const SRC  = readFileSync(join(RAIZ, 'src/scripts/modules/tempo-real.js'), 'utf8')
-// Os comentários deste projeto citam o próprio código que explicam — casar com
-// um comentário já deu falso positivo aqui (o nome do pacote aparece no texto
-// que explica por que ele NÃO é importado). Para "o que o código faz", só código.
-const CODIGO = SRC.split('\n')
+// ⚠️ REGRA DESTE ARQUIVO: asserção sobre COMPORTAMENTO olha só o código.
+//
+// Os comentários deste projeto citam o próprio código que explicam, e isso
+// produziu TRÊS falsos positivos numa só sessão — todos verificados por mutação:
+//   · o nome do pacote aparecia no texto que explica por que ele NÃO é importado;
+//   · `private: true` (uma verificação de SEGURANÇA) passava com a linha removida;
+//   · `atualizarTudo()` aparece duas vezes na função — uma no código, uma no
+//     comentário — e a mutação que apagava a chamada passava batido.
+//
+// Quando um teste destes passa, ele tem de ter olhado CÓDIGO.
+const soCodigo = (txt) => txt.split('\n')
   .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*') && !l.trim().startsWith('/*'))
   .join('\n')
+
+const CODIGO = soCodigo(SRC)
 const VITE = readFileSync(join(RAIZ, 'vite.config.js'), 'utf8')
 const EDGE = readFileSync(join(RAIZ, 'supabase/functions/save-user-data/index.ts'), 'utf8')
-// Mesma peneira, e pelo mesmo motivo — desta vez comprovado por mutação: a
-// asserção de `private: true` PASSAVA com a linha removida do código, porque o
-// comentário que explica a linha também a cita. A verificação de segurança
-// estava decorativa.
-const EDGE_CODIGO = EDGE.split('\n')
-  .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*') && !l.trim().startsWith('/*'))
-  .join('\n')
+const EDGE_CODIGO = soCodigo(EDGE)
 const MIG  = readFileSync(join(RAIZ, 'supabase/migrations/20260807120000_realtime_conta_broadcast.sql'), 'utf8')
 
 // O CLIENT_ID é puro e não depende de rede — dá para importar de verdade.
@@ -183,6 +186,50 @@ describe('o diagnóstico existe, porque isto falha calado', () => {
     // Conta aparece truncada; o resto é estado, contagem e motivo.
     assert.match(CODIGO, /String\(conta\)\.slice\(0, 8\)/)
     assert.ok(!/_diag\('[a-z]+', (p\.perfis|msg|jwt)\)/.test(CODIGO))
+  })
+})
+
+describe('⭐ receber o aviso não é o fim — a tela precisa repintar', () => {
+  const DASH = soCodigo(readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8'))
+  const APLICAR = (() => {
+    const i = DASH.indexOf('function _aplicarMudancaRemota()')
+    return i > 0 ? DASH.slice(i, DASH.indexOf('\nfunction ', i + 10)) : ''
+  })()
+
+  test('depois de recarregar, chama atualizarTudo()', () => {
+    // `carregarDadosPerfil` NÃO repinta: enche os arrays e termina em
+    // `atualizarReferenciasGlobais()`. Foi escrito para o boot e para a troca de
+    // perfil, onde QUEM CHAMA renderiza depois. Chamado sozinho, atualizava a
+    // memória e deixava a tela parada — o dado só aparecia no próximo F5.
+    // Diagnosticado em produção: estado 'ligado', avisos 1, ultimo 'aplicando',
+    // e nada na tela.
+    assert.ok(APLICAR, 'a função sumiu')
+    assert.match(APLICAR, /await carregarDadosPerfil\(perfilAtivo\.id\)/)
+    assert.match(APLICAR, /atualizarTudo\(\)/)
+    const i = APLICAR.indexOf('carregarDadosPerfil')
+    const j = APLICAR.indexOf('atualizarTudo()')
+    assert.ok(j > i, 'repintar antes de carregar não mostra nada de novo')
+  })
+
+  test('e `atualizarTudo` é mesmo quem repinta a lista de movimentações', () => {
+    // Se um dia isto mudar, o tempo real para de aparecer na tela de Transações
+    // sem nenhum erro — exatamente o sintoma que custou esta rodada.
+    const fn = DASH.match(/function atualizarTudo\(\) \{[\s\S]*?\n\}/)[0]
+    assert.match(fn, /_dbTransacoes\?\.atualizarMovimentacoesUI\?\.\(\)/)
+  })
+
+  test('save em voo pousa antes de recarregar', () => {
+    // Recarregar no meio de um POST traz o estado de ANTES dele: a tela
+    // mostraria o dado recém-gravado como se não existisse.
+    assert.match(APLICAR, /if \(_saveEmVoo\)/)
+    const i = APLICAR.indexOf('_saveEmVoo')
+    const j = APLICAR.indexOf('carregarDadosPerfil')
+    assert.ok(i < j)
+  })
+
+  test('formulário aberto adia, não descarta', () => {
+    assert.match(APLICAR, /_tempoRealPendente = true/)
+    assert.match(DASH, /if \(_tempoRealPendente\) setTimeout/)
   })
 })
 
