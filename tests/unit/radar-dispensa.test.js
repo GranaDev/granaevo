@@ -88,6 +88,32 @@ describe('radar.js — o reagendamento não pode ressuscitar aviso dispensado', 
   })
 })
 
+describe('purga — não pode apagar a dispensa antes do evento morrer', () => {
+  // 3ª porta do mesmo bug: a dispensa só vale enquanto a LINHA existir. A purga
+  // apagava 'pending' aos 30 dias, dispensada ou não — e como o Radar enxerga
+  // 35 dias à frente, um aviso dispensado de conta que vence em 33+ dias voltava
+  // sozinho ~30 dias depois. Retenção de 40 > janela de 35 fecha a porta.
+  const sql = ler('supabase', 'migrations', '20260807000000_purge_preserva_dispensadas.sql')
+
+  test('linha dispensada tem retenção maior que a janela de 35 dias do Radar', () => {
+    const m = /dismissed_at IS NOT NULL[\s\S]{0,120}?interval\s*'(\d+) days'/.exec(sql)
+    assert.ok(m, 'a purga não trata mais `dismissed_at IS NOT NULL` em separado — ' +
+                 'ela voltou a apagar dispensas junto com as pendentes comuns.')
+    const dias = Number(m[1])
+    assert.ok(dias > 35,
+      `retenção de ${dias} dias para linha dispensada é MENOR que a janela de 35 dias\n` +
+      'do Radar (limite = hoje + 35 em _computarEventos). Nessa faixa, apagar a\n' +
+      'linha faz o Radar recriar o evento e o aviso dispensado volta sozinho.')
+  })
+
+  test('a migration tem rollback e preserva o search_path endurecido', () => {
+    ler('supabase', 'migrations', '20260807000000_purge_preserva_dispensadas.down.sql')
+    assert.match(sql, /SET search_path TO 'public', 'extensions', 'pg_temp'/,
+      'reescrever a função com o search_path original (só `public`) desfaria em ' +
+      'silêncio um hardening de segurança aplicado depois da migration original.')
+  })
+})
+
 describe('send-radar-push — aviso dispensado não vira push no celular', () => {
   const fonte = ler('supabase', 'functions', 'send-radar-push', 'index.ts')
   const fila  = cadeiaAPartirDe(fonte, /\.select\("id, user_id, tipo, title, body, url"\)/)
