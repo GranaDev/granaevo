@@ -266,20 +266,39 @@ describe('como o data-manager liga isso — ordem e condições', () => {
     assert.ok(i > 0 && j > i, 'derivar precisa do conjunto de tocados')
   })
 
-  test('as operações vão no payload, e o servidor ainda não as usa', () => {
+  test('as três chaves viajam juntas — a sombra virou sincronização real', () => {
+    // A fase de sombra ACABOU em 2026-08-07, depois de a Edge ser deployada como
+    // no-op e o dono confirmar em produção que lançar, recarregar e excluir
+    // seguiam normais (a prova do 37.2d: cliente antigo × Edge nova).
     assert.match(DM, /profile_ops:\s*sombra\.ops/)
     assert.match(DM, /ops_completo:\s*sombra\.completo/)
+    assert.match(DM, /ops_aplicar:\s*true/)
+  })
 
-    // A Edge JÁ sabe aplicar operações (37.2a), mas só age quando o CLIENTE
-    // pede com `ops_aplicar: true`. Enquanto este teste passar, a sombra segue:
-    // a Edge pode ser deployada sem mudar nada em produção, e o dia da virada é
-    // um deploy do front — rápido e reversível.
-    //
-    // ⚠️ Ao ligar de verdade, este teste é o que precisa mudar, de propósito:
-    // ele é o interruptor, e não um detalhe a "consertar".
-    assert.ok(!/ops_aplicar/.test(DM),
-      'o cliente passou a pedir ops_aplicar — a fase de sombra acabou. ' +
-      'Se foi intencional, troque este teste pelo que verifica a virada.')
+  test('o interruptor mora no CLIENTE, e é uma linha', () => {
+    // Desligar tem de ser um deploy do front (rápido, reversível pela Vercel),
+    // não um redeploy da Edge no meio de um incidente. Se algum dia o valor
+    // virar condicional, que seja de propósito — e não por acidente de merge.
+    const linhas = DM.match(/^\s*ops_aplicar:.*$/gm)
+    assert.equal(linhas.length, 1, 'o interruptor tem de ser um lugar só')
+    assert.match(linhas[0], /ops_aplicar:\s*true,\s*$/)
+  })
+
+  test('quem decide se PODE aplicar continua sendo o servidor', () => {
+    // `ops_aplicar` diz "eu sei sincronizar por operação", não "pode aplicar".
+    // A Edge exige `ops_completo` por conta própria — um cliente adulterado que
+    // mandasse só `ops_aplicar` não ganha nada.
+    const EDGE = readFileSync(join(RAIZ, 'supabase/functions/save-user-data/index.ts'), 'utf8')
+    assert.match(EDGE, /ops_aplicar\s*===\s*true\s*&&\s*\n?\s*\(body as any\)\?\.ops_completo\s*===\s*true/)
+  })
+
+  test('o save do UNLOAD não pede operações — e isso é intencional', () => {
+    // Ele não deriva a sombra (não há tempo, e o payload tem teto de 60 KB no
+    // keepalive). Sem `ops_aplicar`, a Edge usa o merge por perfil, que é
+    // correto — só mais grosso.
+    const IMEDIATO = DM.slice(DM.indexOf('async saveImmediate('), DM.indexOf('async saveImmediate(') + 2500)
+    assert.ok(!/ops_aplicar/.test(IMEDIATO))
+    assert.match(IMEDIATO, /touched_profile_ids/)
   })
 
   test('a sombra NUNCA pode ser o motivo de um save falhar', () => {

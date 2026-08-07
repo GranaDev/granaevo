@@ -1363,7 +1363,10 @@ realmente quer offline (consultar, não lançar).
 
 ## PASSO 37 — Sincronização por OPERAÇÃO 🟡 EM ANDAMENTO ⭐
 
-**Falta:** os blocos 37.2 a 37.4 (10 pedaços). Os blocos 37.0 (IDENTIDADE) e
+**Falta:** os blocos 37.3 (versão/conflito) e 37.4 (fila local) — 6 pedaços.
+O **37.2 está NO AR**: a Edge aplica operações e o cliente já pede. O Lost Update
+do caso relatado (duas abas, mesmo perfil) deve estar resolvido — falta o dono
+reproduzir o cenário original para confirmar. Os blocos 37.0 (IDENTIDADE) e
 37.1 (O CLIENTE MANDA O DIFF) estão COMPLETOS: as operações já viajam no payload
 e o cliente já prova, a cada save, que aplicá-las reconstrói o perfil inteiro.
 O servidor ainda as ignora — é a fase de sombra, de propósito.
@@ -1539,8 +1542,21 @@ Coleções que precisam de diff, por frequência de uso no código:
     metade pode estar certa sozinha e o conjunto não fechar.
 
 **37.2 · O SERVIDOR APLICA**
-- **37.2a** 🔴 Aplicar as operações sobre o blob decifrado, em vez de substituir.
-  Reusa o que a guarda anti-wipe e o merge por perfil já fazem.
+- **37.2a** ✅ **NO AR** (Edge deployada + cliente ligado, 2026-08-07). A Edge
+  aplica as operações sobre o blob decifrado; o que o cliente não mencionou não é
+  tocado. **É aqui que o Lost Update morre.**
+  · **O interruptor mora no CLIENTE** (`ops_aplicar: true`). Desligar é um deploy
+    do front — rápido e reversível pela Vercel — em vez de um redeploy da Edge no
+    meio de um incidente. E permitiu deployar a Edge como no-op verificável.
+  · **Ordem seguida:** Edge (no-op) → smoke test (OPTIONS 204, provando que o
+    módulo carregou) → dono confirmou em produção que lançar/recarregar/excluir
+    seguiam normais → só então o cliente.
+  · ⚠️ **Operações não sabem criar nem apagar perfil.** Se o conjunto de perfis
+    mudou, elas são canceladas e o caminho de estado inteiro assume. Sem essa
+    guarda, um perfil recém-apagado **sobreviveria calado** — nenhuma operação
+    fala dele — e voltaria no reload.
+  · **Operação inválida não rejeita o save:** cai no caminho de sempre e loga.
+    Devolver 400 perderia o trabalho do usuário por um defeito que é nosso.
 - **37.2b** ✅ **Idempotência — e SEM o livro-caixa que eu tinha planejado.**
   O plano era a Edge guardar os últimos N ids aplicados. Não precisa: **toda
   operação já é idempotente por construção**, e isso é mais forte — não expira,
@@ -1563,9 +1579,11 @@ Coleções que precisam de diff, por frequência de uso no código:
     perfil pelo caminho de dados e cair em cima do perfil de outro membro.
   · 🔒 **`set` numa COLEÇÃO barrado** — substituiria a coleção inteira: o "manda
     tudo" que este passo veio eliminar, entrando pela porta dos fundos.
-- **37.2d** 🔴 **Compatibilidade:** payload sem operações continua funcionando
-  como hoje. Sem isso, um cliente com bundle velho (Service Worker em cache)
-  perde dados no dia do deploy.
+- **37.2d** ✅ **Provado em produção, não só em teste.** Com a Edge nova já no ar
+  e o cliente ainda antigo, o dono lançou, recarregou (estava lá), excluiu e
+  recarregou (sumiu). Um cliente com bundle velho em cache de Service Worker
+  salva exatamente como antes. Qualquer chave faltando no gate cai no caminho de
+  sempre.
 
 **37.3 · VERSÃO E CONFLITO**
 - **37.3a** 🔴 Contador de versão por perfil, incrementado a cada escrita aceita.

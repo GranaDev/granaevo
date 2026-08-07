@@ -588,6 +588,15 @@ class DataManager {
                 touched_profile_ids: tocados,
                 profile_ops:  sombra.ops,
                 ops_completo: sombra.completo,
+                // A VIRADA (37.2a): declara que este cliente sabe sincronizar por
+                // operação. A Edge só age quando as três chegam — e é ela que
+                // exige `ops_completo`, então mandar isto sempre é honesto: diz
+                // "eu sei", não "pode aplicar".
+                //
+                // O interruptor mora AQUI, no cliente, de propósito: desligar é um
+                // deploy do front (rápido, reversível pela Vercel) em vez de um
+                // redeploy da Edge no meio de um incidente.
+                ops_aplicar: true,
                 metadata: {
                     lastSync:      new Date().toISOString(),
                     totalProfiles: safeProfiles.length
