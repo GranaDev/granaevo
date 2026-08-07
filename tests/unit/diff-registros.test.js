@@ -13,34 +13,45 @@
  */
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { diffColecao, diffVazio, contarOperacoes, aplicarOperacoes }
+import { readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { diffColecao, diffVazio, contarOperacoes, aplicarOperacoes, operacoesDe, comEndereco }
   from '../../src/scripts/modules/diff-registros.js'
+
+const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 const r = (id, over = {}) => ({ id, categoria: 'saida', valor: 10, descricao: 'x', ...over })
 const ids = (lista) => lista.map((x) => x.id)
-// `add` carrega posição — `{apos, registro}` —, então o id mora um nível abaixo.
-const idsAdd = (lista) => lista.map((x) => x.registro.id)
+// O formato do fio é uma lista PLANA de operações — ver o cabeçalho do módulo
+// (o teto de profundidade do proxy). Estes ajudantes leem uma fatia dela.
+const add  = (d) => operacoesDe(d, 'add')
+const edit = (d) => operacoesDe(d, 'edit')
+const rm   = (d) => operacoesDe(d, 'rm').map((o) => o.id)
+const idsAdd  = (d) => add(d).map((o) => o.r.id)
+const idsEdit = (d) => edit(d).map((o) => o.r.id)
 
 describe('o que mudou, e só o que mudou', () => {
   test('registro novo sai como add', () => {
     const d = diffColecao([r('a')], [r('a'), r('b')])
     assert.equal(d.ok, true)
-    assert.deepEqual(idsAdd(d.add), ['b'])
-    assert.deepEqual(d.edit, [])
-    assert.deepEqual(d.remove, [])
+    assert.deepEqual(idsAdd(d), ['b'])
+    assert.deepEqual(edit(d), [])
+    assert.deepEqual(rm(d), [])
   })
 
   test('registro alterado sai como edit, com o conteúdo novo inteiro', () => {
     const d = diffColecao([r('a', { valor: 10 })], [r('a', { valor: 99 })])
-    assert.deepEqual(ids(d.edit), ['a'])
-    assert.equal(d.edit[0].valor, 99)
-    assert.deepEqual(d.add, [])
+    assert.deepEqual(idsEdit(d), ['a'])
+    assert.equal(edit(d)[0].r.valor, 99)
+    assert.deepEqual(add(d), [])
   })
 
   test('registro que sumiu sai como remove — só o id', () => {
     const d = diffColecao([r('a'), r('b')], [r('a')])
-    assert.deepEqual(d.remove, ['b'])
-    assert.deepEqual(d.add, [])
+    assert.deepEqual(rm(d), ['b'])
+    assert.deepEqual(add(d), [])
   })
 
   test('nada mudou, nenhuma operação', () => {
@@ -54,16 +65,16 @@ describe('o que mudou, e só o que mudou', () => {
       [r('a'), r('b'), r('c')],
       [r('a'), r('c', { valor: 50 }), r('d')],
     )
-    assert.deepEqual(idsAdd(d.add), ['d'])
-    assert.deepEqual(ids(d.edit), ['c'])
-    assert.deepEqual(d.remove, ['b'])
+    assert.deepEqual(idsAdd(d), ['d'])
+    assert.deepEqual(idsEdit(d), ['c'])
+    assert.deepEqual(rm(d), ['b'])
     assert.equal(contarOperacoes(d), 3)
   })
 
   test('coleção que nasceu do zero: tudo é add', () => {
     const d = diffColecao(undefined, [r('a')])
-    assert.deepEqual(idsAdd(d.add), ['a'])
-    assert.equal(d.add[0].apos, null, 'o primeiro de todos não tem âncora')
+    assert.deepEqual(idsAdd(d), ['a'])
+    assert.equal(add(d)[0].apos, null, 'o primeiro de todos não tem âncora')
   })
 
   test('coleção que não existe dos dois lados não gera nada', () => {
@@ -105,7 +116,7 @@ describe('o que NÃO conta como mudança', () => {
       [{ id: 'm', monthly: { '2026-08': 3 } }],
       [{ id: 'm', monthly: { '2026-08': 4 } }],
     )
-    assert.deepEqual(ids(d.edit), ['m'])
+    assert.deepEqual(idsEdit(d), ['m'])
   })
 
   test('id numérico e id string do mesmo valor são o mesmo registro', () => {
@@ -166,20 +177,20 @@ describe('posição: o add sabe onde entrar', () => {
     // âncora o servidor anexaria no fim e a transação apareceria no topo da
     // lista no próximo reload — a tela mostra o array ao contrário.
     const d = diffColecao([r('a'), r('c')], [r('a'), r('b'), r('c')])
-    assert.deepEqual(idsAdd(d.add), ['b'])
-    assert.equal(d.add[0].apos, 'a')
+    assert.deepEqual(idsAdd(d), ['b'])
+    assert.equal(add(d)[0].apos, 'a')
   })
 
   test('inserido no começo tem âncora nula', () => {
     const d = diffColecao([r('b')], [r('a'), r('b')])
-    assert.equal(d.add[0].apos, null)
+    assert.equal(add(d)[0].apos, null)
   })
 
   test('vários novos seguidos se ancoram em cadeia', () => {
     // Cada um aponta para o anterior, inclusive quando o anterior também é
     // novo — funciona porque as operações são aplicadas na ordem em que vêm.
     const d = diffColecao([r('a')], [r('a'), r('b'), r('c')])
-    assert.deepEqual(d.add.map((x) => [x.apos, x.registro.id]), [['a', 'b'], ['b', 'c']])
+    assert.deepEqual(add(d).map((o) => [o.apos, o.r.id]), [['a', 'b'], ['b', 'c']])
   })
 })
 
@@ -240,6 +251,82 @@ describe('aplicar o diff reconstrói exatamente o estado — a prova da fase de 
   })
 })
 
+describe('o formato cabe no que o proxy aceita — o motivo de a lista ser plana', () => {
+  // Os tetos são lidos de api/user-data.js: se alguém apertá-los, este teste
+  // aperta junto. Copiar os números aqui deixaria o teste passar enquanto a
+  // produção rejeitava.
+  const PROXY = readFileSync(join(RAIZ, 'api/user-data.js'), 'utf8')
+  const num = (nome) => Number(new RegExp(nome + String.raw`\s*=\s*([\d_]+)`).exec(PROXY)[1].replace(/_/g, ''))
+  const MAX_DEPTH = num('MAX_JSON_DEPTH')
+  const MAX_KEYS = num('MAX_KEYS_OBJ')
+
+  // Mesmo algoritmo do proxy (`analyzeJson`): arrays não contam chaves.
+  const medir = (root) => {
+    if (root === null || typeof root !== 'object') return { depth: 0, keys: 0 }
+    const pilha = [[root, 1]]
+    let depth = 0, keys = 0
+    while (pilha.length) {
+      const [no, d] = pilha.pop()
+      if (d > depth) depth = d
+      if (!Array.isArray(no)) keys = Math.max(keys, Object.keys(no).length)
+      for (const filho of (Array.isArray(no) ? no : Object.values(no))) {
+        if (filho !== null && typeof filho === 'object') pilha.push([filho, d + 1])
+      }
+    }
+    return { depth, keys }
+  }
+
+  // A coleção mais funda do app: contaFixa → compras → compra.
+  const fatura = (id) => ({
+    id, descricao: 'Fatura Nu', valor: 300, vencimento: '2026-09-10',
+    pago: false, cartaoId: 'c1', tipoContaFixa: 'fatura_cartao',
+    compras: [{ id: 'cp1', tipo: 'Mercado', descricao: 'x', valorParcela: 100, totalParcelas: 3 }],
+  })
+
+  test('save com fatura de cartão cabe no teto de profundidade', () => {
+    // Este é o teste que justifica o formato. Agrupado por perfil e coleção
+    // (`{p1: {contasFixas: {add: [{apos, registro}]}}}`) dava 9 níveis: TODO
+    // save com fatura voltaria 400, em produção, para todos os usuários.
+    const d = diffColecao([], [fatura('f1')])
+    const payload = {
+      version: '1.0',
+      profiles: [{ id: 'p1', name: 'n', transacoes: [], contasFixas: [fatura('f1')] }],
+      touched_profile_ids: ['p1'],
+      profile_ops: comEndereco(d.ops, 'p1', 'contasFixas'),
+      metadata: { lastSync: 'x', totalProfiles: 1 },
+    }
+    const { depth } = medir(payload)
+    assert.ok(depth <= MAX_DEPTH, `profundidade ${depth} passa do teto ${MAX_DEPTH}`)
+  })
+
+  test('as operações não são mais fundas que o estado que elas descrevem', () => {
+    // Enquanto valer, o `profile_ops` nunca é o motivo de um 400 — o próprio
+    // `profiles`, que já viaja hoje, estoura antes.
+    const d = diffColecao([], [fatura('f1')])
+    const so_estado = medir({ profiles: [{ id: 'p1', contasFixas: [fatura('f1')] }] })
+    const so_ops = medir({ profile_ops: comEndereco(d.ops, 'p1', 'contasFixas') })
+    assert.ok(so_ops.depth <= so_estado.depth, `ops ${so_ops.depth} > estado ${so_estado.depth}`)
+  })
+
+  test('importar 100 transações de uma vez não estoura o teto de chaves', () => {
+    // Um mapa de âncoras indexado por id teria 100 chaves e voltaria 400. Lista
+    // não conta chaves — foi o segundo motivo de o formato ser plano.
+    const cem = Array.from({ length: 100 }, (_, i) => r(`t${i}`))
+    const d = diffColecao([], cem)
+    assert.equal(contarOperacoes(d), 100)
+    const { keys } = medir({ profile_ops: comEndereco(d.ops, 'p1', 'transacoes') })
+    assert.ok(keys <= MAX_KEYS, `${keys} chaves passa do teto ${MAX_KEYS}`)
+  })
+
+  test('cada operação carrega o próprio endereço', () => {
+    const d = diffColecao([r('a')], [r('a'), r('b')])
+    const [op] = comEndereco(d.ops, 'p1', 'transacoes')
+    assert.equal(op.p, 'p1')
+    assert.equal(op.c, 'transacoes')
+    assert.equal(op.op, 'add')
+  })
+})
+
 describe('volume real', () => {
   test('mil registros, uma edição — o diff carrega uma operação', () => {
     // É o ponto do passo inteiro: hoje esse save empurra as mil transações e
@@ -248,6 +335,6 @@ describe('volume real', () => {
     const depois = antes.map((x) => (x.id === 't500' ? { ...x, valor: 77 } : x))
     const d = diffColecao(antes, depois)
     assert.equal(contarOperacoes(d), 1)
-    assert.deepEqual(ids(d.edit), ['t500'])
+    assert.deepEqual(idsEdit(d), ['t500'])
   })
 })

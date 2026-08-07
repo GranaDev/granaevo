@@ -1459,9 +1459,30 @@ Coleções que precisam de diff, por frequência de uso no código:
     edit por save vira um conflito por save quando o 37.3 chegar).
   · Limitação assumida e testada: REORDENAR registros existentes sai como "nada
     mudou". Nada no app reordena hoje; a sombra vai medir.
-- **37.1b** 🔴 Ligar em `transacoes` e enviar junto do payload, **sem** ainda o
-  servidor usar. Fase de sombra: dá para comparar diff × estado e provar que
-  batem antes de confiar.
+- **37.1b** ✅ Ligado em `transacoes`, viajando no payload como `profile_ops` +
+  `ops_completo`. A Edge **ignora** (um teste trava isso: se ela passar a ler
+  `profile_ops`, deixou de ser sombra e virou 37.2a).
+  · **O autoteste é o que faz disto uma prova.** O cliente aplica o próprio diff
+    sobre o retrato e confere que o resultado é IDÊNTICO ao estado atual. Só
+    quando isso bater sempre, em produção, com dados reais, o servidor passa a
+    aplicar operações. Divergência sobe ao Sentry **uma vez por sessão** (motivo
+    + contagem; nunca id de perfil nem valor).
+  · **A sombra nunca pode derrubar um save:** se o payload com operações passar
+    do teto de 4,9 MB, as operações saem e o save segue como sempre foi.
+  · ⚠️ **O FORMATO MUDOU por causa de um limite do proxy, não por estilo.**
+    `api/user-data.js` recusa corpo com mais de 8 níveis de aninhamento, e o
+    payload de hoje **já chega a 7**. O formato agrupado
+    (`{perfil: {colecao: {add: [{apos, registro}]}}}`) dava **9**: todo save com
+    fatura de cartão voltaria 400, em produção, para todo mundo. Virou uma LISTA
+    PLANA (`[{p, c, op, id?, r?, apos?}]`), que chega a 6. Segundo motivo: o mesmo
+    proxy recusa objeto com mais de 80 chaves, então um mapa de âncoras indexado
+    por id quebraria numa importação de extrato com 100 linhas. Teste lê os dois
+    tetos do próprio `api/user-data.js`.
+  · 🔴→✅ **Achado de tabela:** `saveImmediate` (o save do *unload*) mandava só
+    `{profiles}`. Para a Edge, corpo sem `touched_profile_ids` significa
+    "substitua tudo" — ou seja, **fechar a aba desligava o merge por perfil** e
+    sobrescrevia o trabalho dos outros membros. Corrigido junto (declara os
+    tocados e carimba ids).
 - **37.1c** 🔴 Estender a `metas`, `cartoesCredito`, `contasFixas`, `orcamentos`,
   `conquistas`.
 - **37.1d** 🔴 Campos escalares do perfil (nome, foto, config) como `set`.

@@ -1,6 +1,8 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
 import { supabase, getValidAccessToken, refreshSession as hybridRefresh } from '../services/supabase-client.js?v=2';
-import { backfillIds, carimbarNovos } from './registro-id.js?v=1';
+import { backfillIds, carimbarNovos, serializarEstavel } from './registro-id.js?v=1';
+import { diffColecao, aplicarOperacoes, comEndereco } from './diff-registros.js?v=1';
+import { captureError } from './error-tracking.js';
 
 // ========== CONSTANTES PRIVADAS ==========
 const MAX_PAYLOAD_BYTES  = 4_900_000;
@@ -126,6 +128,66 @@ class DataManager {
         // preserva o perfil (para ele, ausência passou a significar "não mexi").
         for (const id of this.#retrato.keys()) if (!agora.has(id)) tocados.add(id);
         return [...tocados];
+    }
+
+    // ── FASE DE SOMBRA (37.1b) ──────────────────────────────────────────────
+    // As operações viajam no payload e o servidor as IGNORA. O ganho não é
+    // funcional, é de confiança: o cliente aplica o próprio diff sobre o retrato
+    // e confere que o resultado é idêntico ao estado atual. Se bater sempre, em
+    // produção, com dados reais, então a derivação está certa — e só aí o
+    // servidor passa a aplicar operações em vez de substituir tudo (37.2a).
+    //
+    // Ligar o servidor direto seria apostar que o diff está certo num caminho
+    // que grava todo o dinheiro do app.
+    #opsAvisado = false;
+
+    #derivarOperacoes(profiles, tocados) {
+        const alvo = new Set(tocados.map(String));
+        const ops = [];
+        const motivos = new Set();
+        let completo = true;
+
+        for (const p of profiles) {
+            const id = String(p?.id);
+            if (!alvo.has(id)) continue;
+
+            let antes = null;
+            const bruto = this.#retrato.get(id);
+            if (bruto !== undefined) { try { antes = JSON.parse(bruto); } catch { /* retrato ilegível */ } }
+            // Sem retrato: perfil que nasceu nesta sessão. Tudo nele é inserção.
+            const base = (antes && typeof antes === 'object') ? antes : {};
+
+            const d = diffColecao(base.transacoes, p.transacoes);
+            if (d.ok !== true) { completo = false; motivos.add(d.motivo); continue; }
+
+            // O AUTOTESTE. É ele que transforma a sombra em prova.
+            const refeito = aplicarOperacoes(base.transacoes || [], d);
+            if (serializarEstavel(refeito) !== serializarEstavel(p.transacoes || [])) {
+                completo = false; motivos.add('reconstrucao_divergente'); continue;
+            }
+
+            ops.push(...comEndereco(d.ops, id, 'transacoes'));
+        }
+
+        // Divergência é a notícia; acordo é o esperado. Uma vez por sessão, para
+        // um defeito sistemático não virar enxurrada. Sem id de perfil e sem
+        // conteúdo: só o motivo e a contagem.
+        if (!completo && !this.#opsAvisado) {
+            this.#opsAvisado = true;
+            try {
+                captureError(new Error('ops_sombra_divergente'), {
+                    motivos: [...motivos].join(','),
+                    perfis_tocados: tocados.length,
+                    operacoes: ops.length,
+                });
+            } catch { /* telemetria nunca derruba o save */ }
+        }
+        if (IS_DEV) {
+            console.log(`🔬 [DATA-MANAGER] sombra: ${ops.length} operação(ões), completo=${completo}`,
+                completo ? '' : [...motivos].join(','));
+        }
+
+        return { ops, completo };
     }
     #idsWithData = new Set();
 
@@ -432,10 +494,15 @@ class DataManager {
             // precisa declarar nada, e nenhuma pode esquecer de declarar.
             const tocados = this.#perfisTocados(safeProfiles);
 
+            // Sombra: as operações viajam, o servidor ainda ignora (37.1b).
+            const sombra = this.#derivarOperacoes(safeProfiles, tocados);
+
             const dataToSave = {
                 version:  '1.0',
                 profiles: safeProfiles,
                 touched_profile_ids: tocados,
+                profile_ops:  sombra.ops,
+                ops_completo: sombra.completo,
                 metadata: {
                     lastSync:      new Date().toISOString(),
                     totalProfiles: safeProfiles.length
@@ -448,6 +515,17 @@ class DataManager {
             } catch (serErr) {
                 console.error('❌ [DATA-MANAGER] Falha ao serializar dados:', serErr?.message);
                 return false;
+            }
+
+            // A sombra NUNCA pode ser o motivo de um save falhar. Numa conta com
+            // milhares de transações, o primeiro save da sessão descreve todas
+            // elas — e o payload passa a carregar o estado E as operações. Se
+            // isso estourar o teto, a sombra sai e o save segue como sempre foi.
+            if (serialized.length > MAX_PAYLOAD_BYTES && dataToSave.profile_ops.length > 0) {
+                delete dataToSave.profile_ops;
+                dataToSave.ops_completo = false;
+                serialized = JSON.stringify(dataToSave);
+                if (IS_DEV) console.warn('🔬 [DATA-MANAGER] sombra descartada: payload no limite');
             }
 
             if (serialized.length > MAX_PAYLOAD_BYTES) {
@@ -609,9 +687,20 @@ class DataManager {
             return false;
         }
 
+        // Identidade e declaração do que foi tocado valem AQUI TAMBÉM. Este
+        // caminho mandava só `{profiles}` — e, para a Edge, corpo sem
+        // `touched_profile_ids` significa "substitua tudo" (compatibilidade com
+        // clientes antigos). Ou seja: fechar a aba desligava o merge por perfil e
+        // sobrescrevia o trabalho dos outros membros da conta. Mesmo defeito que
+        // o Passo 37 ataca, escondido no caminho do unload.
+        carimbarNovos(profilesData);
+
         let payload;
         try {
-            payload = JSON.stringify({ profiles: profilesData });
+            payload = JSON.stringify({
+                profiles: profilesData,
+                touched_profile_ids: this.#perfisTocados(profilesData),
+            });
         } catch (serErr) {
             console.error('❌ [SAVE-IMMEDIATE] Falha ao serializar:', serErr?.message);
             return false;
