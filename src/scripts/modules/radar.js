@@ -334,11 +334,23 @@ async function _sincronizar() {
         // 'resumo_semanal' entra (recalcula a contagem a cada sync). 'meta_batida'
         // fica FORA: é one-shot — deletá-lo antes de disparar perderia o aviso, e a
         // semeadura por localStorage não o reinsere. 'lembrete' (do usuário) nunca entra.
+        //
+        // 🔴 E NUNCA O QUE O USUÁRIO JÁ DISPENSOU (bug encontrado em 2026-08-07).
+        // Dispensar no sino grava `dismissed_at` mas NÃO muda o status: a linha
+        // continua 'pending'. Sem o filtro abaixo, este delete apagava a linha
+        // junto com a dispensa, e o upsert do passo 2 recriava o MESMO evento com
+        // dismissed_at nulo — o aviso ressuscitava no login seguinte. O
+        // ignoreDuplicates não protegia: a linha que causaria o conflito tinha
+        // acabado de ser deletada por este delete.
+        // Mantendo a linha dispensada viva, ela é justamente o que faz o
+        // ignoreDuplicates do passo 2 pular o evento. A dispensa vira permanente
+        // enquanto o evento for o mesmo (mesmo dedupe_key).
         const del = await supabase
             .from('radar_notifications')
             .delete()
             .eq('user_id', uid)
             .eq('status', 'pending')
+            .is('dismissed_at', null)
             .in('tipo', ['conta_vence', 'fatura_fecha', 'assinatura_renova', 'orcamento_estouro', 'resumo_semanal']);
         if (del.error) { _log('delete', del.error); return; }
 

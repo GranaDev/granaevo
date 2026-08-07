@@ -105,10 +105,15 @@ async function processarFila(admin: ReturnType<typeof createClient>) {
   if (staleErr) console.error("[send-radar-push] Falha ao expirar antigas:", staleErr.message);
 
   // ── 3. Busca o que está vencido agora ───────────────────────────────────────
+  // `dismissed_at IS NULL`: dispensar no sino não muda o status (a linha segue
+  // 'pending'), então sem este filtro a pessoa apagava o aviso no app e ele
+  // chegava no celular mesmo assim. Dispensou = não quer mais ver, em lugar
+  // nenhum. Par obrigatório do filtro equivalente no delete do radar.js.
   const { data: due, error: dueErr } = await admin
     .from("radar_notifications")
     .select("id, user_id, tipo, title, body, url")
     .eq("status", "pending")
+    .is("dismissed_at", null)
     .lte("fire_at", nowIso)
     .order("fire_at", { ascending: true })
     .limit(BATCH_MAX);
