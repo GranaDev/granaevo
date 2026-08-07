@@ -60,6 +60,52 @@ Os quatro estados da **Regra de Ouro** (topo do documento):
 Fora do fluxo: `⛔ recusado` (decisão de não fazer, com autor/data/motivo).
 Dentro de um item: `⬜ subtarefa não feita` · `☑️ / ✅ subtarefa feita`.
 
+
+---
+
+# 📍 ONDE ESTAMOS — fechamento de 2026-08-04
+
+> Sessão longa, com o dono testando em produção e reportando. O que mudou:
+
+**Passos fechados hoje:** 8 (vendors), 12 (⛔ recusado), 26 (captcha no signup),
+33 (marketing), 36 (chat C-1..C-8), mais a varredura de código (Sentry ligado de
+verdade, reCAPTCHA morto removido, 1 vaga da Vercel liberada).
+
+**Bugs de PRODUÇÃO corrigidos, todos relatados pelo dono:**
+- `"tirei 100 da reserva"` entrava como **ENTRADA**. Duas causas: vocabulário
+  (12 de 23 formas não eram reconhecidas) e a IA podendo **inverter a direção**
+  do dinheiro. Hoje a IA enriquece, nunca inverte.
+- Orçamento gravava **gasto falso** de R$500.
+- `"meti 100 na poupança"` virava saída; `"vendi o celular por 500"` virava
+  saída/Eletrônico.
+- Retirada aparecia com tipo **"Salário"** na tela de Transações.
+- Balão de resposta **vazio** depois da frase com duas transações.
+- `parcelado` e `atacado` não casavam (a 4ª e 5ª ocorrência da armadilha do ``).
+- Descrição saía como **"Num paflon"**.
+- Botão do assistente **não existia no desktop**.
+- Landing: alinhamento do hero, folga e seta dos CTAs, frase que prometia algo
+  que não acontecia.
+
+**Capacidades novas:** categorias **Casa** e **Jogos**; conversa livre (cortesia
+não vira "não entendi"); memória de conversa; uma frase virando **duas
+transações** ("tirei da reserva e paguei o boleto").
+
+**Testes:** 972 → **1008**.
+
+**O que a sessão DEIXOU aberto, e é o mais importante:** o **Lost Update**
+(Passo 37). O dono reproduziu: chat e dashboard abertos ao mesmo tempo, um
+sobrescreve o outro. É a maior dívida de arquitetura que resta e a única que faz
+o app perder dado sem avisar.
+
+**Lições que viraram regra** (custaram tempo hoje):
+- Verificar que uma declaração CSS existe ≠ verificar que ela **vence**. Listar
+  tudo que casa o seletor e comparar especificidade. (3 rodadas perdidas no CTA.)
+- Ausência no código prova "não foi feito", **nunca** "deve ser feito" — cruzar
+  sempre com a decisão do dono antes de construir. (Share Target foi construído
+  já tendo sido recusado 2×.)
+- Vocabulário não se deduz, se **mede**: corpus + controle negativo.
+- `git add -A` varre trabalho alheio. Conferir `git status` antes de commitar.
+
 ---
 
 # 🧪 FILA DE TESTES MANUAIS — o que só o dono pode verificar
@@ -69,24 +115,25 @@ Dentro de um item: `⬜ subtarefa não feita` · `☑️ / ✅ subtarefa feita`.
 > passos, esses pedidos somem. Aqui eles ficam juntos, e cada um diz **o que provar**, não só
 > "testar". Ao confirmar, marcar ✅ aqui **e** fechar o passo correspondente.
 
-| # | O que testar | O que isso PROVA | Passo |
+| # | O que testar | Resultado | Passo |
 |:--|---|---|:--|
-| ✅ 1 | Cadastro completo em `/planos` com o widget do Turnstile | **APROVADO 2026-08-04** — captcha não quebrou a porta paga | 26 |
-| ✅ 2 | Login + tela com dados | **APROVADO 2026-08-04** — stubs do Supabase não afetaram auth nem queries | 8 |
-| ✅ 3 | Foto de perfil no dashboard | **APROVADO 2026-08-04** — `supabase.storage` intacto | 8 |
-| ✅ 4 | Assistente: memória de conversa, retirada, cortesia, identidade | **APROVADO 2026-08-04** | 36 |
-| ⬜ 5 | **2FA na conta descartável:** ativar · usar · desativar · recuperar. ⚠️ Com 2FA ativo, recarregar e conferir que os dados **carregam e salvam** | O 2FA nunca foi exercitado ponta a ponta; é o ponto mais delicado da fila | 6 |
-| ⬜ 6 | **Exportação (Bloco 2.2):** planilha e JSON, com 2–3 perfis criados antes | Abrir sem "arquivo corrompido" é o único ponto que teste automatizado não cobre | — |
-| ✅ 7 | Blocos 3 e 4 (paleta, sino, vitrine) | **APROVADO 2026-08-04** — achou 2 problemas na landing, os dois corrigidos | — |
-| ⬜ 8 | ⭐ **Duas janelas ao mesmo tempo** (normal + anônima), cada uma lançando num perfil diferente. Depois **apagar um perfil** numa e conferir que não ressuscita na outra | O merge por perfil. Antes um apagava o outro, sem erro. A exclusão mudou de significado — é o caso que só olho humano pega | — |
-| ⬜ 9 | **Retirada pelo chat, olhando a tela de Transações:** o **tipo** deve ser "Retirada de Reserva", não "Salário" | Corrigido hoje: a lista de tipos da retirada era a de ENTRADAS, então o navegador exibia o primeiro item | — |
-| ⬜ 10 | ⭐ **Uma frase, duas transações** (R$1): *"tirei 1 da reserva e usei pra pagar um boleto"*. Confirmar que o chat **responde** (havia balão vazio) e que saem **duas** linhas, não quatro | Único fluxo que cria duas transações de uma frase. O risco é duplicar | 36 |
-| ⬜ 11 | **Entrada + destino** (R$1): *"vendi 1 e guardei"* e *"ganhei 1 e gastei tudo no mercado"* | Nunca testado. Antes gravava só metade — *"vendi e guardei"* criava a reserva **sem** a venda | 36 |
-| ⬜ 12 | **Categorias novas:** *"gastei 50 num paflon"* → Casa, descrição "Paflon" · *"comprei 200 na steam"* → Jogos · conferir que aparecem no seletor de tipo em Transações | Casa e Jogos entraram em 7 listas do app; faltando numa, a categoria some da tela de edição | — |
-| ⬜ 13 | **Orçamento:** *"quero gastar no máximo 500 em mercado"* deve **definir orçamento**, nunca gravar gasto | Gravava uma despesa falsa de R$500 — o único item que inventava dinheiro | — |
-| ⬜ 14 | **Parcelado:** *"comprei 300 parcelado"* deve virar compra no **crédito** e aparecer na fatura | Virava saída à vista e sumia do cartão | — |
-| ⬜ 15 | **Botão Assistente na barra lateral do desktop** | Existia só no mobile — quem usa no desktop não chegava no chat | — |
-| ⬜ 16 | **Depois de tudo:** `node scripts/remove-conta-teste.mjs` | Apaga a conta descartável. **Só no fim** — é a única nos termos 1.2 | — |
+| ✅ 1 | Cadastro com Turnstile | **APROVADO 2026-08-04** | 26 |
+| ✅ 2 | Login + tela com dados | **APROVADO** — stubs do Supabase não afetaram auth nem queries | 8 |
+| ✅ 3 | Foto de perfil | **APROVADO** — `supabase.storage` intacto | 8 |
+| ✅ 4 | Assistente: memória, retirada, cortesia, identidade | **APROVADO** | 36 |
+| ✅ 5 | 2FA: ativar · usar · recuperar | **APROVADO 2026-08-04** (C1/C2/C4). Falta só o C3 (desativar) | 6 |
+| 🟡 6 | Exportação | **REPROVADO em parte.** **Falta:** aba Transações inexistente, "Perfis" em "-", aba Atividade ilegível → virou o **38.2** | — |
+| ✅ 7 | Blocos 3 e 4 (paleta, sino, vitrine) | **APROVADO** — achou 2 problemas na landing, os dois corrigidos | — |
+| 🔴 8 | ⭐ Duas abas ao mesmo tempo | **REPROVADO.** Um sobrescreve o outro — Lost Update confirmado. Virou a **FASE 8 / Passo 37** | 37 |
+| ✅ 9 | Tipo da retirada ("Salário") | **APROVADO** — corrigido e verificado | — |
+| ✅ 10 | ⭐ Uma frase, duas transações | **APROVADO** — retirada + boleto, sem duplicar | 36 |
+| 🟡 11 | Entrada + destino ("recebi X e gastei") | **Categoria certa, DESCRIÇÃO errada.** **Falta:** "Outros recebimentos" e "Ele no Mercado" em vez do que o usuário escreveu → virou o **38.1** | 36 |
+| 🟡 12 | Categorias Casa e Jogos | **Categoria certa, DESCRIÇÃO com o mesmo defeito do 11** → **38.1** | — |
+| ✅ 13 | Orçamento não grava gasto falso | **APROVADO** | — |
+| ✅ 14 | Parcelado vira crédito | **APROVADO** | — |
+| ✅ 15 | Botão Assistente no desktop | **APROVADO** | — |
+| ⬜ 16 | **Depois de tudo:** `node scripts/remove-conta-teste.mjs` | Apaga a conta descartável. **Só no fim** | — |
+| ⬜ 17 | **Perfil some no chat:** com 4 perfis, o seletor DENTRO do chat mostra quantos? | Descartado que seja o merge. Falta o dado para diagnosticar → **38.3** | — |
 
 **Ações de configuração:**
 
@@ -1305,6 +1352,92 @@ realmente quer offline (consultar, não lançar).
 ---
 ---
 
+
+---
+
+# 🔄 FASE 8 — CONCORRÊNCIA: o cliente para de mandar o estado inteiro
+
+> **Aberta em 2026-08-04, depois de o dono reproduzir o defeito.** É a maior
+> dívida de arquitetura que sobrou, e a única que faz o app **perder dado do
+> usuário sem avisar**.
+
+## PASSO 37 — Sincronização por OPERAÇÃO 🔴 NÃO INICIADO ⭐
+
+**O defeito, nas palavras de quem viu:** *"se eu mexo no chat assistente com a aba
+do GranaEvo aberta, um sobrescreve o outro"*. Reproduzido: uma retirada lançada
+pelo chat sumiu porque a aba de Transações salvou sua cópia antiga por cima.
+
+O nome disso é **Lost Update**.
+
+### Por que o merge por perfil (Passo já feito) não cobre
+O merge preserva perfis que o cliente **não declarou** ter tocado. Resolve *duas
+pessoas em perfis diferentes*. **Não resolve o mesmo perfil** — aí os dois
+declaram, e o último vence. E o caso do mesmo perfil é muito mais comum do que
+foi estimado: **uma pessoa só, com duas abas, já cai nele**.
+
+A raiz é anterior: **o cliente manda o ESTADO INTEIRO, não a mudança.** Quem diz
+"aqui estão todos os meus dados" está sempre sobrescrevendo alguém.
+
+### A decisão de arquitetura, e por que não a "certa de livro"
+O caminho ortodoxo seria transações em **tabela própria**, com RLS por linha e
+concorrência real do Postgres. Foi **descartado**: quebraria a cifragem em
+repouso (hoje a Edge cifra o blob inteiro) e o desenho de backup/restore, que é
+por conta. Migração grande, risco alto, para um ganho que as operações entregam.
+
+**Escolhido: operações sobre o blob.** A Edge Function **já decifra** o registro
+atual — é o que a guarda anti-wipe e o merge por perfil fazem. Ela pode aplicar
+uma operação e recifrar. Sem migração de dados.
+
+### As quatro fases
+
+- **37.1** 🔴 **Append como operação + UUID + idempotência.** O cliente manda
+  *"adicione esta transação ao perfil X"*, não o estado. Dois lançando ao mesmo
+  tempo viram dois appends e **nunca** conflitam. O UUID vem do cliente (funciona
+  offline) e serve de chave de idempotência: se o save der timeout e for repetido,
+  o servidor reconhece a operação e não duplica — hoje **duplica**.
+  **É o grosso do valor: resolve o caso relatado.**
+- **37.2** 🔴 **Versão por perfil + 409 em edição/exclusão.** Append não precisa;
+  editar a MESMA transação em dois lugares é conflito de verdade e deve ser
+  recusado, com o cliente recarregando e reaplicando. Sem isso, edição continua
+  last-write-wins.
+- **37.3** 🔴 **Fila local como via única de escrita.** Já existe pela metade: o
+  assistente tem `Outbox` para quando cai a rede. Falta estender ao dashboard e
+  fazer com que TODA escrita passe por ela.
+- **37.4** ⛔ **Tempo real (WebSocket/SSE) — RECUSADO POR ORA.** O Realtime do
+  Supabase foi **removido do bundle** em 2026-08-04 (−14,4 KB, ver Passo 8) porque
+  o app não usa. Trazer de volta custa peso e complexidade para resolver "o outro
+  aparelho demora a ver". Com 2–4 pessoas por conta, o reload no `visibilitychange`
+  cobre. Revisitar só se houver reclamação real de dado desatualizado.
+
+**Também avaliado e dispensado:** tela de resolução assistida de conflito (com
+operações, conflito real vira raro — só edição do mesmo registro); logs de
+auditoria (**já existem**: `financial_audit_log`, com retenção e imutabilidade).
+
+**Risco:** ALTO — mexe no caminho que grava todo o dinheiro do app.
+**Verificar a cada fase:** duas abas lançando ao mesmo tempo no MESMO perfil, e
+nada se perde. É o teste que hoje falha.
+
+## PASSO 38 — Descrição e exportação: os achados dos testes de 2026-08-04 🔴
+
+- **38.1** 🔴 **A descrição não usa o que o usuário escreveu.** Medido pelo dono:
+  *"Recebi um pix de 70 reais da Ke"* → descrição **"Outros recebimentos"** (o
+  rótulo da categoria, não o que ele disse); *"e gastei ele no mercado"* →
+  **"Ele no Mercado"** (pronome solto virou descrição). O certo seria "Da Ke" e
+  "Mercado". Está no `describe.js`: ele cai no rótulo quando não acha item, e não
+  limpa pronomes. **Consertar MEDINDO com corpus**, como foi feito com a direção
+  do dinheiro — não a olho.
+- **38.2** 🔴 **A exportação está furada** — e é o entregável central do direito
+  de portabilidade (art. 18, V). Achados do dono: **não existe aba "Transações"**;
+  "Perfis" mostra **"-"** em vez da contagem/nomes; a aba "Atividade" traz ~500
+  linhas de `UPDATE`/`DATA` ilegíveis. **Esse log de auditoria NÃO deve ir para o
+  titular** — o que a LGPD pede é o dado dele, não o diário interno do sistema.
+- **38.3** 🔴 **Perfil some no chat.** Conta com 4 perfis (dois de nome igual) e o
+  assistente mostra 1. **Descartado** que seja o merge: testado com ids repetidos,
+  ele preserva os três. Falta o dado do dono: o seletor DENTRO do chat mostra
+  quantos?
+
+**Risco:** baixo (nenhum grava dado errado). **Esforço:** ~1 dia somados.
+
 # 🎯 FASE 7 — CAMINHO PARA 10/10 EM TODAS AS DIMENSÕES
 > **Origem:** auditoria GOD MODE + GOD EYES de **2026-07-27** (relatório completo em
 > `security-audit/god-mode-REPORT-2026-07-27.md`, mapa em `docs/caminho-10-10-2026-07-27.md`).
@@ -1379,6 +1512,8 @@ edge que não esteja recebendo a chave nova.
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | ✅ D-1..D-5 feitos; D-6/D-7 ⛔ recusados pelo dono |
 | 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | ✅ P-2/P-3/P-6 feitos; P-1/P-4/P-5 ⛔ recusados pelo dono |
 | 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🟡 **Falta:** só herdar contexto em compra no crédito (C-1). C-1..C-8 ✅ |
+| **37** | ⭐ **Concorrência: sincronizar por OPERAÇÃO** | 37.1 … 37.4 | 🔴 **Lost Update confirmado em 2026-08-04.** O app perde dado do usuário sem avisar |
+| 38 | Descrição do lançamento + exportação | 38.1 … 38.3 | 🔴 Achados dos testes manuais de 2026-08-04 |
 
 ---
 
