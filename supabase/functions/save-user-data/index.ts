@@ -103,6 +103,68 @@ async function extractStoredProfiles(stored: any, userId: string): Promise<any[]
 
 
 // ---------------------------------------------------------------------------
+// A CAMPAINHA — Passo 37, tempo real
+//
+// Anuncia "a conta X mudou, nos perfis Y". NÃO manda o dado: quem ouve busca
+// pelo caminho normal (get-user-data), que autentica e decifra server-side.
+// Nenhum centavo trafega pelo websocket.
+//
+// `private: true` é a linha que importa. A autorização do Realtime (a política
+// `conta_broadcast_ouvir`) só vale para canal PRIVADO. Mensagem sem esta marca
+// chegaria também a quem assinasse o canal público de mesmo nome — e o nome é
+// só um uuid, que não é segredo.
+//
+// Nunca derruba o save: a gravação já aconteceu quando isto roda. Falhar aqui
+// custa o outro lado descobrir a mudança pelo caminho lento (recarregar), e não
+// perder dado.
+// ---------------------------------------------------------------------------
+async function anunciarMudanca(
+  supabaseUrl: string,
+  contaId: string,
+  perfis: string[],
+  origem: string | null,
+): Promise<void> {
+  let secretKey: string
+  try { secretKey = getSecretKey() } catch { return }
+
+  const envio = fetch(`${supabaseUrl}/realtime/v1/api/broadcast`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': secretKey,
+      'Authorization': `Bearer ${secretKey}`,
+    },
+    body: JSON.stringify({
+      messages: [{
+        topic: `conta:${contaId}`,
+        event: 'mudou',
+        private: true,
+        payload: {
+          // Ids de perfil tocados: quem ouve decide se aquilo lhe interessa
+          // antes de gastar um refetch. Id de perfil não é dado financeiro.
+          perfis: perfis.slice(0, 20).map(String),
+          // Quem causou. A aba de origem usa isto para ignorar o próprio eco —
+          // sem ele, todo save faria a própria tela recarregar sozinha.
+          origem,
+          em: new Date().toISOString(),
+        },
+      }],
+    }),
+    signal: AbortSignal.timeout(2_000),
+  }).catch((e) => {
+    console.warn('[save-user-data] campainha falhou (save já gravado):', e?.name ?? e)
+  })
+
+  // `waitUntil` deixa o anúncio terminar DEPOIS da resposta: o usuário não
+  // espera pela campainha. Sem ele a promessa solta seria morta junto com a
+  // requisição, então aí vale esperar — o custo é uma chamada curta, dentro da
+  // mesma região, e é melhor que o aviso simplesmente não sair.
+  const rt = (globalThis as any).EdgeRuntime
+  if (rt && typeof rt.waitUntil === 'function') { rt.waitUntil(envio); return }
+  await envio
+}
+
+// ---------------------------------------------------------------------------
 // CORS
 // ---------------------------------------------------------------------------
 const ALLOWED_ORIGINS = [
@@ -473,6 +535,17 @@ Deno.serve(async (req: Request) => {
         throw insertErr
       }
     }
+
+    // ── 7. A CAMPAINHA (Passo 37 · tempo real) ──────────────────────────────
+    // Grava primeiro, avisa depois. Nesta ordem porque avisar antes faria quem
+    // ouve buscar dado que ainda não existe — e um refetch que chega cedo demais
+    // volta com o estado ANTIGO, que é pior que aviso nenhum.
+    await anunciarMudanca(
+      supabaseUrl,
+      effectiveUserId,
+      touched ?? (profilesFinais as any[]).map((p) => String(p?.id)),
+      typeof (body as any)?.client_id === 'string' ? (body as any).client_id.slice(0, 64) : null,
+    )
 
     // `ops` no corpo é DIAGNÓSTICO, não contrato: diz por que este save usou (ou
     // não usou) operações. Sem valor nenhum do usuário — só o motivo e contagens.

@@ -31,6 +31,18 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       '@supabase/realtime-js': path.resolve(__dirname, 'src/scripts/vendor/realtime-stub.js'),
+      // Passo 37 · tempo real: o stub acima continua valendo para o
+      // `SupabaseClient`, que instancia RealtimeClient no boot e nunca o usa. Só
+      // que agora o app PRECISA do realtime de verdade — para ouvir a campainha
+      // da conta. Este apelido dá um caminho até ele que o alias acima não pega.
+      //
+      // Um caminho profundo (`@supabase/realtime-js/dist/...`) NÃO serviria: o
+      // alias do Rollup casa por prefixo seguido de `/`, então o stub venceria e
+      // o tempo real morreria em silêncio — funcionando em dev, mudo no build.
+      //
+      // Nome próprio, sem colisão possível. Importado só por tempo-real.js, que
+      // é carregado sob demanda: o boot continua sem os 14,4 KB.
+      'granaevo:realtime': path.resolve(__dirname, 'node_modules/@supabase/realtime-js/dist/module/index.js'),
       // Mesma ideia para functions-js: o app NUNCA chama `supabase.functions.invoke()`
       // (Edge Functions são chamadas pelos proxies em api/, server-side). O
       // supabase-js importa o pacote ESTATICAMENTE, então ele viajava no boot sem
@@ -262,6 +274,17 @@ export default defineConfig(({ mode }) => ({
           // db-graficos.js). Nunca é importado como ESM — sem chunk vendor-charts.
           // Supabase SDK em chunk próprio — cacheado separado entre páginas.
           // supabase-client.js entra junto para evitar chunk de 0.6 kB que pode 404.
+          // ⚠️ O realtime-js fica de FORA deste grupo, de propósito.
+          // `vendor-supabase` é chunk de BOOT: cair aqui significa carregar no
+          // primeiro byte de toda página. Como a regra abaixo casa qualquer
+          // `node_modules/@supabase`, o realtime importado sob demanda pelo
+          // tempo-real.js era arrastado para cá e desfazia o Passo 8 —
+          // o teto de bundle pegou em 48,3/36 KB (134%).
+          // Sem esta exceção, o `await import()` vira decoração: o peso entra
+          // no boot de todo jeito, e ninguém percebe até medir.
+          if (id.includes('node_modules/@supabase/realtime-js')) {
+            return 'vendor-realtime';
+          }
           if (
             id.includes('@supabase/supabase-js') ||
             id.includes('node_modules/@supabase') ||

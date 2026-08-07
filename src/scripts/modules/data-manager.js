@@ -2,6 +2,7 @@
 import { supabase, getValidAccessToken, refreshSession as hybridRefresh } from '../services/supabase-client.js?v=2';
 import { backfillIds, carimbarNovos, serializarEstavel, COLECOES } from './registro-id.js?v=1';
 import { diffColecao, aplicarOperacoes, diffCampos, aplicarCampos, comEndereco } from './diff-registros.js?v=1';
+import { CLIENT_ID } from './tempo-real.js?v=1';
 import { captureError } from './error-tracking.js';
 
 // ========== CONSTANTES PRIVADAS ==========
@@ -133,6 +134,9 @@ class DataManager {
     // do app passa. Pedir a cada chamador que declare o que tocou exigiria
     // auditar dezenas de pontos de mutação — e bastaria um esquecido para o
     // dado de outro membro ser sobrescrito de novo, em silêncio.
+    // Id da conta (dono da linha), aprendido no load. Ver `get contaId`.
+    #conta = null;
+
     #retrato = new Map();
 
     #tirarRetrato(profiles) {
@@ -276,9 +280,14 @@ class DataManager {
     }
     #idsWithData = new Set();
 
-    // ── Getter público — somente leitura ─────────────────────────────────────
+    // ── Getters públicos — somente leitura ───────────────────────────────────
     get userId() {
         return this.#userId;
+    }
+
+    /** Dono da linha desta conta. Só existe depois de um load bem-sucedido. */
+    get contaId() {
+        return this.#conta;
     }
 
     async #getAuthToken() {
@@ -342,6 +351,7 @@ class DataManager {
         // deve sobreviver ao logout p/ proteger o próximo login no mesmo browser.
         this.#lastLoadOk           = false;
         this.#retrato              = new Map();
+        this.#conta                = null;
         this.#idsWithData          = new Set();
         if (IS_DEV) console.log('🔒 [DATA-MANAGER] Estado limpo — usuário deslogado');
     }
@@ -405,6 +415,12 @@ class DataManager {
             }
 
             const userData = result.data_json;
+
+            // Id do DONO da linha — para o titular é ele mesmo; para um convidado
+            // de casal/família é o dono. O cliente precisa dele para saber QUAL
+            // canal de tempo real ouvir (`conta:<id>`). Quem autoriza ouvir é a
+            // política no servidor; saber o nome do tópico não dá acesso a ele.
+            if (typeof result.conta === 'string' && result.conta) this.#conta = result.conta;
 
             if (!Array.isArray(userData.profiles)) userData.profiles = [];
             if (!userData.version)                  userData.version  = '1.0';
@@ -624,6 +640,10 @@ class DataManager {
                 // deploy do front (rápido, reversível pela Vercel) em vez de um
                 // redeploy da Edge no meio de um incidente.
                 ops_aplicar: true,
+                // Id DESTA aba. Volta no aviso de tempo real para que a aba de
+                // origem ignore o próprio eco — sem ele, todo save faria a
+                // própria tela recarregar, e o refetch dispararia outro save.
+                client_id: CLIENT_ID,
                 metadata: {
                     lastSync:      new Date().toISOString(),
                     totalProfiles: safeProfiles.length

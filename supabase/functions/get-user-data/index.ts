@@ -217,7 +217,15 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return json({ success: true, data_json: dataJson }, 200, corsHeaders)
+    // `conta` é o id do DONO da linha — para o titular é ele mesmo; para um
+    // convidado de casal/família é o dono. O cliente precisa dele para saber
+    // QUAL canal de tempo real ouvir (`conta:<id>`).
+    //
+    // Devolver isto a um membro não expõe nada: ele já lê os dados desta conta
+    // (é o que a política `user_data_select` permite, e é o que esta resposta
+    // acabou de entregar). O que autoriza ouvir o canal é a MESMA política, no
+    // servidor — saber o nome do tópico não dá acesso a ele.
+    return json({ success: true, data_json: dataJson, conta: effectiveUserId }, 200, corsHeaders)
 
   } catch (error: any) {
     console.error('[get-user-data] Erro:', error?.message)

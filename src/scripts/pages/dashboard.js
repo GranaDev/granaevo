@@ -1,5 +1,5 @@
 // ========== IMPORTS ESSENCIAIS ==========
-import { supabase, refreshSession as hybridRefresh } from '../services/supabase-client.js?v=2';
+import { supabase, refreshSession as hybridRefresh, getValidAccessToken } from '../services/supabase-client.js?v=2';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?v=2';
 import { dataManager } from '../modules/data-manager.js?v=8';
 import AuthGuard from '../modules/auth-guard.js?v=2';
@@ -2018,6 +2018,7 @@ async function entrarNoPerfil(index, { silent = false } = {}) {
         }
 
         iniciarAutoSave();
+        ligarTempoReal();
 
         await salvarDados();
 
@@ -4731,6 +4732,9 @@ function criarPopup(html) {
 
 function fecharPopup() {
     _desativarFocusTrap();
+    // Chegou aviso de tempo real enquanto o formulário estava aberto: agora que
+    // não há nada sendo digitado, a atualização pode entrar.
+    if (_tempoRealPendente) setTimeout(() => _aplicarMudancaRemota(), 350);
     // Fecha bottom sheet se estiver ativo
     const bs = document.getElementById('bottomSheetOverlay');
     if (bs && bs.classList.contains('active')) {
@@ -5454,6 +5458,59 @@ if (widgetOndeFoi) {
 let autoSaveInterval = null;
 let _autoSaveFailCount = 0;
 const _AUTO_SAVE_MAX_FAILS = 3;
+
+// ── TEMPO REAL (Passo 37 · Camada 1) ────────────────────────────────────────
+// "Um usuário altera, outro já vê" — sem recarregar. O canal é uma CAMPAINHA:
+// avisa que a conta mudou, e a tela busca pelo caminho normal. Nenhum centavo
+// trafega pelo websocket.
+//
+// O que chega é sempre de OUTRA aba ou de outra pessoa: o próprio eco é cortado
+// dentro de tempo-real.js, pelo id desta aba.
+let _tempoRealPendente = false;
+
+async function ligarTempoReal() {
+    const conta = dataManager.contaId;
+    if (!conta) return;   // load ainda não trouxe a conta
+
+    try {
+        const { ligar } = await import('../modules/tempo-real.js?v=1');
+        await ligar({
+            url:    SUPABASE_URL,
+            apikey: SUPABASE_ANON_KEY,
+            conta,
+            token:  () => getValidAccessToken(),
+            aoMudar: (aviso) => {
+                // Só interessa se mexeram no perfil que está na tela. Numa conta
+                // de família, o lançamento do outro no perfil dele não deve
+                // sacudir a minha.
+                const meu = String(perfilAtivo?.id ?? '');
+                if (aviso.perfis.length && !aviso.perfis.includes(meu)) return;
+                _aplicarMudancaRemota();
+            },
+        });
+    } catch (e) {
+        // Tempo real é conforto, não integridade. Sem ele o app funciona como
+        // sempre funcionou — só exige um F5 para ver o que o outro fez.
+        _log.warn('[TEMPO-REAL] não ligou:', e?.message ?? e);
+    }
+}
+
+// Recarrega o perfil ativo por causa de um aviso do canal.
+//
+// ⚠️ NÃO recarrega com formulário aberto. Trocar os arrays embaixo de alguém que
+// está digitando apaga o que a pessoa escreveu — o mesmo tipo de perda que este
+// passo inteiro veio consertar, só que vindo de dentro. Fica pendente e entra
+// quando o popup fecha.
+function _aplicarMudancaRemota() {
+    if (document.getElementById('modalOverlay')?.classList.contains('active') ||
+        document.getElementById('bottomSheetOverlay')?.classList.contains('active')) {
+        _tempoRealPendente = true;
+        return;
+    }
+    _tempoRealPendente = false;
+    if (!perfilAtivo) return;
+    carregarDadosPerfil(perfilAtivo.id).catch((e) => _log.warn('[TEMPO-REAL] refetch falhou:', e?.message ?? e));
+}
 
 function iniciarAutoSave() {
     if (!perfilAtivo) return;
