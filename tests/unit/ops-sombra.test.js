@@ -269,9 +269,17 @@ describe('como o data-manager liga isso — ordem e condições', () => {
   test('as operações vão no payload, e o servidor ainda não as usa', () => {
     assert.match(DM, /profile_ops:\s*sombra\.ops/)
     assert.match(DM, /ops_completo:\s*sombra\.completo/)
-    const EDGE = readFileSync(join(RAIZ, 'supabase/functions/save-user-data/index.ts'), 'utf8')
-    assert.ok(!/profile_ops/.test(EDGE),
-      'a Edge passou a ler profile_ops — isto deixou de ser fase de sombra (é o 37.2a)')
+
+    // A Edge JÁ sabe aplicar operações (37.2a), mas só age quando o CLIENTE
+    // pede com `ops_aplicar: true`. Enquanto este teste passar, a sombra segue:
+    // a Edge pode ser deployada sem mudar nada em produção, e o dia da virada é
+    // um deploy do front — rápido e reversível.
+    //
+    // ⚠️ Ao ligar de verdade, este teste é o que precisa mudar, de propósito:
+    // ele é o interruptor, e não um detalhe a "consertar".
+    assert.ok(!/ops_aplicar/.test(DM),
+      'o cliente passou a pedir ops_aplicar — a fase de sombra acabou. ' +
+      'Se foi intencional, troque este teste pelo que verifica a virada.')
   })
 
   test('a sombra NUNCA pode ser o motivo de um save falhar', () => {

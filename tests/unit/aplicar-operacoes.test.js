@@ -264,6 +264,75 @@ describe('o carimbo do lastUpdate é do SERVIDOR agora', () => {
   })
 })
 
+describe('37.2a/37.2d — como a Edge liga isso, e o que ela NÃO deixa passar', () => {
+  const EDGE = readFileSync(join(RAIZ, 'supabase/functions/save-user-data/index.ts'), 'utf8')
+
+  test('o gate exige as TRÊS chaves', () => {
+    // ops_aplicar  : o cliente pede. Permite deployar a Edge sozinha sem mudar
+    //                nada, e desligar depois por um deploy do front.
+    // ops_completo : o cliente PROVOU que as operações reconstroem o estado.
+    // profile_ops  : é uma lista.
+    assert.match(EDGE, /ops_aplicar\s*===\s*true/)
+    assert.match(EDGE, /ops_completo\s*===\s*true/)
+    assert.match(EDGE, /Array\.isArray\(\(body as any\)\?\.profile_ops\)/)
+  })
+
+  test('37.2d — sem as chaves, o caminho de sempre continua valendo', () => {
+    // Um cliente com bundle velho em cache de Service Worker tem de continuar
+    // salvando exatamente como antes. Sem isto, o dia do deploy perde dados.
+    assert.match(EDGE, /if \(!viaOperacoes && touched && existing\?\.data_json\)/)
+    const i = EDGE.indexOf('let profilesFinais = profiles')
+    assert.ok(i > 0, 'o padrão continua sendo o payload cru')
+  })
+
+  test('as operações são tentadas ANTES do merge, e o merge cede a elas', () => {
+    const i = EDGE.indexOf('const querOps =')
+    const j = EDGE.indexOf('if (!viaOperacoes && touched')
+    assert.ok(i > 0 && j > i)
+  })
+
+  test('⭐ conjunto de perfis diferente cancela as operações', () => {
+    // Operações não sabem criar nem apagar perfil. Se o conjunto mudou, o
+    // caminho de estado inteiro tem de assumir — senão um perfil recém-apagado
+    // sobreviveria calado, porque nenhuma operação fala dele.
+    assert.match(EDGE, /const mesmoConjunto =/)
+    assert.match(EDGE, /if \(!mesmoConjunto\)/)
+    assert.match(EDGE, /conjunto de perfis mudou/)
+  })
+
+  test('operação inválida NÃO rejeita o save — cai no caminho de sempre', () => {
+    // Rejeitar o save inteiro por operação malformada perderia o trabalho do
+    // usuário por um defeito que é nosso.
+    const bloco = EDGE.match(/const v = validarOperacoes[\s\S]*?\n {10}\} else \{/)[0]
+    assert.ok(!/return json/.test(bloco), 'ops inválidas não podem devolver erro ao usuário')
+    assert.match(bloco, /console\.warn/)
+  })
+
+  test('a guarda anti-wipe continua valendo sobre o resultado das operações', () => {
+    // `profilesFinais` agora pode vir das operações. A guarda tem de olhar o que
+    // VAI PARA O DISCO, não o payload cru.
+    assert.match(EDGE, /const incomingHasAnyData = \(profilesFinais as any\[\]\)\.some\(profileHasData\)/)
+    const iOps = EDGE.indexOf('viaOperacoes = true')
+    const iWipe = EDGE.indexOf('GUARDA ANTI-WIPE')
+    assert.ok(iWipe > iOps, 'a guarda tem de rodar depois de as operações comporem o resultado')
+  })
+
+  test('as operações NUNCA são persistidas', () => {
+    // O blob guardado é reconstruído a partir de um shape conhecido. Se
+    // `profile_ops` vazasse para lá, cresceria a cada save.
+    const salvo = EDGE.match(/const dataToSave = \{[\s\S]*?\n {4}\}/)[0]
+    assert.ok(!/profile_ops|ops_completo|ops_aplicar/.test(salvo))
+  })
+
+  test('o log não vaza dado do usuário', () => {
+    // user id truncado em 8, contagens, e o motivo da recusa. Nada de valor.
+    for (const linha of EDGE.match(/console\.(log|warn)\([^)]*ops[^)]*\)/g) || []) {
+      assert.ok(!/profile_ops|v\.valor\)|r\.valor\.profiles/.test(linha), linha)
+      if (/user:/.test(linha)) assert.match(linha, /slice\(0, 8\)/)
+    }
+  })
+})
+
 describe('as duas pontas concordam — diff do cliente × aplicação do servidor', () => {
   // Qualquer divergência entre diff-registros.js e aplicar-operacoes.ts vira
   // dado errado gravado. Estes testes fecham o ciclo completo: o cliente deriva,

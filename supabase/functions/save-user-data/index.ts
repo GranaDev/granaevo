@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 import { mergeProfiles } from '../_shared/merge-profiles.ts'
+import { validarOperacoes, aplicarOperacoes } from '../_shared/aplicar-operacoes.ts'
 import { mfaBloqueia } from '../_shared/mfa-gate.ts'
 import { reportarEventoSeguranca } from '../_shared/sec-report.ts'
 
@@ -294,7 +295,75 @@ Deno.serve(async (req: Request) => {
       ? (body as any).touched_profile_ids.map((x: unknown) => String(x)).filter(Boolean)
       : null
 
-    if (touched && existing?.data_json) {
+    // ── 6.42 SINCRONIZAÇÃO POR OPERAÇÃO (Passo 37.2a) ───────────────────────
+    //
+    // O merge abaixo resolve pessoas em perfis DIFERENTES. Não resolve o mesmo
+    // perfil — aí os dois declaram, e o último vence. E o mesmo perfil é o caso
+    // comum: uma pessoa só, com duas abas, já cai nele.
+    //
+    // A raiz é o formato: quem manda o estado inteiro está sempre afirmando algo
+    // sobre registros que não tocou. Aqui o cliente manda O QUE MUDOU, e o que
+    // ele não mencionou não é tocado.
+    //
+    // 37.2d · COMPATIBILIDADE — o gate tem três chaves, e cada uma existe por um
+    // motivo:
+    //   `ops_aplicar`  o CLIENTE pede explicitamente. Permite deployar esta
+    //                  função sozinha sem mudar nada em produção (nenhum cliente
+    //                  manda o campo ainda) e, depois, desligar o recurso por um
+    //                  deploy do front — que é rápido e reversível — sem tocar
+    //                  na Edge.
+    //   `ops_completo` o cliente PROVOU que aplicar essas operações reconstrói o
+    //                  estado dele. Falso quando algo escapou da derivação.
+    //   blob legível   sem o estado atual não há sobre o que aplicar.
+    //
+    // Qualquer chave faltando cai no caminho de sempre. Um cliente com bundle
+    // velho em cache de Service Worker continua salvando exatamente como antes.
+    let viaOperacoes = false
+    const querOps = (body as any)?.ops_aplicar === true &&
+                    (body as any)?.ops_completo === true &&
+                    Array.isArray((body as any)?.profile_ops)
+
+    if (querOps && existing?.data_json) {
+      const guardados = await extractStoredProfiles(existing.data_json, effectiveUserId)
+      if (guardados === null) {
+        console.warn('[save-user-data] ops puladas: blob atual ilegível. user:', effectiveUserId.slice(0, 8))
+      } else {
+        // Operações não sabem CRIAR nem APAGAR perfil. Se o conjunto de perfis
+        // mudou, o caminho de estado inteiro (que sabe) tem de assumir — senão
+        // um perfil recém-apagado sobreviveria calado, porque nenhuma operação
+        // fala dele.
+        const idsGuardados = new Set((guardados as any[]).map((p) => String(p?.id)))
+        const idsChegando  = new Set((profiles as any[]).map((p: any) => String(p?.id)))
+        const mesmoConjunto = idsGuardados.size === idsChegando.size &&
+                              [...idsGuardados].every((id) => idsChegando.has(id))
+
+        if (!mesmoConjunto) {
+          console.log('[save-user-data] ops puladas: conjunto de perfis mudou. user:', effectiveUserId.slice(0, 8))
+        } else {
+          const v = validarOperacoes((body as any).profile_ops)
+          if (!v.ok) {
+            // Recusa a remessa, não o save: cai no caminho de sempre. Rejeitar o
+            // save inteiro por operação malformada perderia o trabalho do
+            // usuário por um defeito que é nosso.
+            console.warn('[save-user-data] ops inválidas:', v.erro, '| user:', effectiveUserId.slice(0, 8))
+          } else {
+            const r = aplicarOperacoes(guardados as unknown[], v.valor)
+            if (!r.ok) {
+              console.warn('[save-user-data] ops não aplicadas:', r.erro, '| user:', effectiveUserId.slice(0, 8))
+            } else {
+              profilesFinais = r.valor.profiles
+              viaOperacoes = true
+              if (v.valor.length > 0) {
+                console.log('[save-user-data] ops:', r.valor.aplicadas, 'aplicadas,',
+                            r.valor.ignoradas, 'ignoradas | user:', effectiveUserId.slice(0, 8))
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!viaOperacoes && touched && existing?.data_json) {
       const guardados = await extractStoredProfiles(existing.data_json, effectiveUserId)
       if (guardados === null) {
         // Não deu para decifrar o que está lá. Mesclar às cegas apagaria dados;
