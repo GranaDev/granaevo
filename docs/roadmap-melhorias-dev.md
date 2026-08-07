@@ -504,7 +504,14 @@ Ganho: tempo percebido despenca + offline-first de brinde.
 
 ---
 
-## PASSO 10 — Quebrar o monólito `dashboard.js` (< 1.500 linhas no boot) 🟡 PENDENTE
+## PASSO 10 — Quebrar o monólito `dashboard.js` (< 1.500 linhas no boot) 🟡 PENDENTE ⭐
+
+> ⚠️ **PASSOU A SER BLOQUEANTE em 2026-08-07.** O teto de bundle deste arquivo
+> foi elevado 40 → 42 KB porque o caminho de save do Passo 37 não tem como ser
+> adiado. Já foi tudo que dava para carga sob demanda (lógica de tempo real,
+> `diff-registros`, realtime-js). **Não há mais espaço no boot**: a próxima
+> feature que precisar de bytes aqui divide o arquivo antes. É a SEGUNDA vez
+> que o teto sobe, e a nota de 2026-07-18 previu exatamente isso.
 **Falta:** a meta é < 1.500 linhas no boot e o arquivo tem **6.212** (medido em 2026-08-04).
 > ⛔ **CONGELADO POR DECISÃO DO DONO (2026-08-04):** *"mexer no dashboard é pisar em ovos"*.
 > A varredura de código daquele dia reapontou o arquivo (38,4 KB de 40 = **96% do orçamento**, sem
@@ -1361,12 +1368,32 @@ realmente quer offline (consultar, não lançar).
 > dívida de arquitetura que sobrou, e a única que faz o app **perder dado do
 > usuário sem avisar**.
 
-## PASSO 37 — Sincronização por OPERAÇÃO 🟡 EM ANDAMENTO ⭐
+## PASSO 37 — Sincronização por OPERAÇÃO + tempo real 🟡 EM ANDAMENTO ⭐
 
-**Falta:** os blocos 37.3 (versão/conflito) e 37.4 (fila local) — 6 pedaços.
-O **37.2 está NO AR**: a Edge aplica operações e o cliente já pede. O Lost Update
-do caso relatado (duas abas, mesmo perfil) deve estar resolvido — falta o dono
-reproduzir o cenário original para confirmar. Os blocos 37.0 (IDENTIDADE) e
+**Falta:** 37.3 (versão/conflito), 37.4 (fila local) e as Camadas 2–3 do tempo
+real (o chat ainda não escuta). O defeito que abriu o passo — perda de dado por
+gravação simultânea — está RESOLVIDO e confirmado em produção.
+
+**✅ O LOST UPDATE ACABOU — confirmado pelo dono em produção (2026-08-07).**
+Lançamento no chat aparece no dashboard **em tempo real**, sem recarregar. E o
+`__sombra` mostrou `completo: true, add: 1` no save que antes se perdia.
+
+**A prova de que era real, em números.** O `financial_audit_log` registra tamanho
+antes/depois de cada gravação. Durante o teste do dono:
+
+| hora (BR) | antes | depois | delta |
+|---|---|---|---|
+| 19:45:24 | 8259 | 9395 | +1136 |
+| 19:45:38 | 9395 | 9615 | +220 |
+| **19:45:58** | **9615** | **8259** | **−1356** ⚠️ |
+
+Às 19:45:58 uma aba gravou o estado exato de 34 segundos antes. Não "deixou de
+adicionar" — **regravou o passado por cima do presente**. Esse padrão não aparece
+mais.
+
+**Falta:** 37.3 (versão/conflito) e 37.4 (fila local) — 6 pedaços, e agora são
+**defesa em profundidade**, não o conserto. O buraco está fechado por operações +
+"save sem nada a dizer não é enviado". Os blocos 37.0 (IDENTIDADE) e
 37.1 (O CLIENTE MANDA O DIFF) estão COMPLETOS: as operações já viajam no payload
 e o cliente já prova, a cada save, que aplicá-las reconstrói o perfil inteiro.
 O servidor ainda as ignora — é a fase de sombra, de propósito.
@@ -1585,11 +1612,32 @@ Coleções que precisam de diff, por frequência de uso no código:
   salva exatamente como antes. Qualquer chave faltando no gate cai no caminho de
   sempre.
 
+**37.2e · O SAVE QUE NÃO TEM NADA A DIZER NÃO É ENVIADO ✅**
+Achado nos logs da Edge quando o conserto "estava pronto" e o dado ainda sumia:
+**o dashboard salva a cada 30 segundos, incondicionalmente**
+([dashboard.js:5466](../src/scripts/pages/dashboard.js#L5466)) — POST a cada ~30s
+com a aba só *aberta*.
+
+Eu tinha desenhado o passo para "duas pessoas editando ao mesmo tempo". O gatilho
+real é muito mais fácil de puxar: **basta DEIXAR uma aba aberta**, e ele rearma a
+cada meio minuto, para sempre.
+
+Agora, zero operações num save `completo` = não vai para a rede. Só é seguro
+porque `completo` significa "as operações descrevem TUDO que mudou": zero
+operações é a afirmação "não mexi em nada", não um palpite. Efeito colateral bom:
+aba aberta sem uso parou de falar com o servidor.
+
 **37.3 · VERSÃO E CONFLITO**
 - **37.3a** 🔴 Contador de versão por perfil, incrementado a cada escrita aceita.
 - **37.3b** 🔴 Edição e exclusão mandam a versão que leram; divergiu → **409**.
 - **37.3c** 🔴 Cliente recarrega e reaplica a operação sozinho; só pede ajuda ao
   usuário se a reaplicação também falhar.
+  💡 **Por que ainda vale, com o Lost Update já resolvido:** o caminho por
+  operações tem CINCO motivos para cair no de estado inteiro (`sem_pedido`,
+  `perfis_mudaram`, `invalidas:*`, blob ilegível, `ops_completo:false`) — e o
+  caminho de estado inteiro sobrescreve. A versão barra a gravação baseada em
+  leitura velha **venha ela por qual caminho for**. É a trava categórica; hoje
+  cada porta é fechada uma a uma.
 
 **37.4 · FILA LOCAL ÚNICA**
 - **37.4a** 🔴 Promover o `Outbox` do assistente a módulo compartilhado.
@@ -1597,10 +1645,48 @@ Coleções que precisam de diff, por frequência de uso no código:
 - **37.4c** 🔴 Reenvio com recuo exponencial; a idempotência do 37.2b é o que
   torna o reenvio seguro.
 
-**37.5** ⛔ **Tempo real — RECUSADO POR ORA.** O Realtime do Supabase foi removido
-do bundle em 2026-08-04 (−14,4 KB, Passo 8) porque o app não usa. Com 2–4 pessoas
-por conta, o reload no `visibilitychange` cobre. Revisitar só diante de
-reclamação real de dado desatualizado.
+**37.5 · TEMPO REAL ✅ NO AR (Camada 1) — recusado antes por premissa FALSA**
+
+Eu havia recusado isto dizendo que *"o reload no `visibilitychange` cobre"*.
+**Não cobre.** O handler ([dashboard.js:6085](../src/scripts/pages/dashboard.js#L6085))
+só SALVA quando a aba fica oculta; não existe recarregamento ao voltar. Uma aba
+aberta nunca ficava sabendo de nada até um F5 manual. Recusei um recurso com base
+em algo que eu não tinha verificado — e o dono cobrou, com razão.
+
+**O desenho: CAMPAINHA, não entrega.** O servidor anuncia "a conta X mudou, nos
+perfis Y"; quem ouve busca pelo caminho normal, que autentica e decifra no
+servidor. Nenhum centavo trafega pelo websocket. O blob ser cifrado, que parecia
+complicação, é o que simplifica: não há o que entregar, só o que avisar.
+
+**Broadcast, e não replicação da tabela.** `postgres_changes` exigiria publicar
+mudanças de `user_data` no WAL, e o CLAUDE.md avisa que Realtime mal configurado
+ignora RLS. Com broadcast: o cliente **só escuta** (não existe política de INSERT
+— ninguém forja "a conta mudou"), a publicação continua VAZIA, e o aviso é nosso
+(leva os ids dos perfis, então quem ouve só busca quando lhe interessa).
+A autorização (`conta_broadcast_ouvir`) **espelha** o `user_data_select` que já
+existe — duas definições de "quem é da conta" divergem com o tempo, e a que
+diverge vira o furo.
+
+**Cinco armadilhas, todas medidas em produção:**
+1. **Canal público não passa pela política.** A autorização só vale para canal
+   PRIVADO. As duas pontas marcam `private: true`.
+2. **O alias do Rollup casa por PREFIXO** — um caminho profundo cairia no stub do
+   Passo 8, e o tempo real funcionaria em dev e ficaria MUDO em produção. Daí o
+   apelido `granaevo:realtime`.
+3. **`setAuth` é `async`.** Sem `await`, o canal entrava antes do token e era
+   recusado — sem erro, sem aviso, a campainha nunca tocava.
+4. **`carregarDadosPerfil` NÃO repinta.** Ele enche os arrays e termina; foi
+   escrito para o boot, onde quem chama renderiza depois. O aviso chegava, o
+   aplicador rodava, e a tela ficava parada até o F5.
+5. **O `await import()` virava decoração** se o chunk caísse no `vendor-supabase`
+   (boot). Chunk próprio: `vendor-realtime`, 15 KB, sob demanda.
+
+**Falta (Camadas 2 e 3):**
+- 🔴 **O chat não escuta.** Só o dashboard. Lançar no dashboard e ver no chat na
+  hora exige um método público de recarga no engine (não existe: eu assumi um
+  `refresh()` que não havia).
+- 🔴 Regras mais finas de quando aplicar calado × avisar ("nova transação de Ke").
+- 🔴 Acabamento: indicador de sincronizado, presença ("Ke está online").
 
 ### Ordem sugerida
 `37.0 → 37.1 → 37.2 → 37.3 → 37.4`. A identidade bloqueia tudo; o diff sem o
@@ -1721,7 +1807,7 @@ edge que não esteja recebendo a chave nova.
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | ✅ D-1..D-5 feitos; D-6/D-7 ⛔ recusados pelo dono |
 | 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | ✅ P-2/P-3/P-6 feitos; P-1/P-4/P-5 ⛔ recusados pelo dono |
 | 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🟡 **Falta:** só herdar contexto em compra no crédito (C-1). C-1..C-8 ✅ |
-| **37** | ⭐ **Concorrência: sincronizar por OPERAÇÃO** | 37.0 … 37.5 (18 pedaços) | 🔴 **Lost Update confirmado em 2026-08-04.** O app perde dado do usuário sem avisar. Cobre TODAS as escritas: lançar, pagar conta, reserva, retirada, crédito, orçamento, metas, cartões, perfis |
+| **37** | ⭐ **Concorrência: sincronizar por OPERAÇÃO + TEMPO REAL** | 37.0 ✅ · 37.1 ✅ · 37.2 ✅ · 37.5 ✅ (Camada 1) · **falta 37.3, 37.4 e as Camadas 2-3** | ✅ **RESOLVIDO em 2026-08-07**, confirmado pelo dono em produção: lançamento no chat aparece no dashboard em tempo real. O que falta é defesa em profundidade e acabamento |
 | 38 | Descrição do lançamento + exportação | 38.1 … 38.3 | 🔴 Achados dos testes manuais de 2026-08-04 |
 
 ---

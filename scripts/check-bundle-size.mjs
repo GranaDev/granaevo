@@ -46,7 +46,7 @@ const BUDGETS_KB = {
   // como ser adiado sem atrasar o save do usuário.
   //
   // ⚠️ Segunda vez que este teto é elevado, e a nota de 2026-07-18 previu
-  // exatamente isso. O conserto de verdade é o PASSO 33 (dividir o dashboard.js),
+  // exatamente isso. O conserto de verdade é o PASSO 10 (quebrar o monólito dashboard.js),
   // que deixa de ser opcional: com 42 não há espaço para mais nenhuma feature no
   // boot. A próxima que precisar de espaço aqui divide o arquivo antes.
   'dashboard.js':        42,
