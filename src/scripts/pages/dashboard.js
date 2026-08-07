@@ -3880,11 +3880,13 @@ function atualizarListaContasFixas() {
             const totalCompras = c.compras.length;
 
             title.textContent = `💳 ${c.descricao}`;
+            title.title       = c.descricao;   // título é cortado em 2 linhas no card
 
+            // Classe em vez de style inline: inline não dá para afinar no
+            // mobile, e era esse 1.1rem que fazia o card de fatura ficar bem
+            // mais alto que o de uma conta simples ao lado.
             const divValor = document.createElement('div');
-            divValor.style.fontWeight = '600';
-            divValor.style.fontSize   = '1.1rem';
-            divValor.style.color      = 'var(--text-primary)';
+            divValor.className = 'conta-valor-destaque';
             divValor.textContent = `Valor: ${formatBRL(c.valor)}`;
 
             // Rótulo por mês em vez da data cheia — mais limpo, menos número.
@@ -3950,6 +3952,7 @@ function atualizarListaContasFixas() {
             _icConta.style.cssText = 'color:rgba(67,160,71,0.85); margin-right:4px; font-size:0.88em;';
             title.appendChild(_icConta);
             title.appendChild(document.createTextNode(_sanitizeText(c.descricao)));
+            title.title = _sanitizeText(c.descricao);   // cortado em 2 linhas no card
 
             const divValor = document.createElement('div');
             divValor.textContent = `Valor: ${formatBRL(c.valor)}`;

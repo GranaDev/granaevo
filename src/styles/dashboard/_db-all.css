@@ -1601,7 +1601,12 @@ body::before {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 220px));
     gap: 16px;
-    align-items: start;
+    /* stretch (e não `start`): com `start` cada card ficava só com a altura do
+       próprio conteúdo, então um card de título curto ao lado de uma fatura
+       (que tem valor grande + nº de compras + faturas futuras) terminava muito
+       antes — a lista virava uma escada. Esticando, todos os cards da MESMA
+       linha terminam juntos e os botões ficam alinhados. */
+    align-items: stretch;
     width: 100%;
 }
 
@@ -1680,25 +1685,48 @@ body::before {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 
+/* Etiqueta de status em LINHA PRÓPRIA (acima, à direita), e não ao lado do
+   título. Lado a lado, ela comia metade da largura de um card estreito: sobrava
+   tão pouco que "IPVA Licenciamento de veículos" era cortado para "IPVA
+   Licencia…" e a etiqueta ainda vazava para fora do card. Com o título usando a
+   largura inteira, o mesmo nome cabe em 2 linhas e nada é truncado.
+   `column-reverse`: a etiqueta sobe visualmente sem inverter o DOM — leitor de
+   tela continua lendo "Luz, Pendente", na ordem que faz sentido. */
 .conta-header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    flex-direction: column-reverse;
+    align-items: flex-end;
     margin-bottom: 8px;
-    gap: 5px;
+    gap: 4px;
 }
 
+/* O título é quem manda na altura do card, então ele ocupa SEMPRE 2 linhas:
+   - `min-height` de 2 linhas: um título de 1 linha ("Luz") reserva o mesmo
+     espaço de um de 2 ("Fatura Mercado Pago"), então o bloco "Valor/Vencimento"
+     começa na MESMA altura em todos os cards da linha — era isso que fazia os
+     cards parecerem desalinhados;
+   - `line-clamp: 2`: teto de segurança para um nome absurdo não voltar a
+     esticar o card. Com a largura inteira (ver .conta-header) os nomes reais
+     cabem; se algum passar, o texto completo está no atributo title e no popup.
+   ATENÇÃO: `overflow: hidden` (exigido pelo line-clamp) cria um contexto de
+   formatação que DESVIA DE FLOATS por inteiro — não adianta tentar flutuar a
+   etiqueta ao lado para ganhar largura na 2ª linha; já foi tentado e o título
+   continua estreito nas duas. */
 .conta-title {
     font-size: 0.88rem;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.2px;
     text-shadow: 0 0 10px rgba(67, 160, 71, 0.28);
-    flex: 1;
     line-height: 1.35;
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    min-height: 2.7em;            /* 2 linhas × 1.35 */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: break-word;
+    align-self: stretch;          /* largura inteira do card — ver .conta-header */
 }
 
 .conta-status {
@@ -1749,6 +1777,17 @@ body::before {
     padding: 7px 0;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    /* Cresce para ocupar a sobra de altura do card. Sem isto, um card baixo
+       esticado até a altura da fatura ao lado ficava com um buraco solto entre
+       a linha de baixo da info e o botão. */
+    flex: 1 1 auto;
+}
+
+/* Valor da fatura de cartão — o único número em destaque dentro do card. */
+.conta-valor-destaque {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: var(--text-primary);
 }
 
 .conta-actions {
@@ -1859,10 +1898,16 @@ body::before {
     .conta-card:hover   { transform: none; }
 
     .conta-title   { font-size: 0.74rem; }
-    .conta-info    { font-size: 0.68rem; }
     .conta-btn     { font-size: 0.65rem; padding: 7px 6px; }
     .conta-status  { font-size: 0.58rem; padding: 2px 6px; }
     .conta-actions { flex-direction: row; }
+
+    /* Em 2 colunas estreitas a fatura (valor grande + 2 linhas extras) ficava
+       quase o dobro da altura de uma conta simples ao lado. Apertando o entre-
+       linhas e o valor em destaque, a diferença de altura entre os dois tipos
+       de card praticamente some. */
+    .conta-info { font-size: 0.68rem; line-height: 1.55; }
+    .conta-valor-destaque { font-size: 0.92rem; }
 }
 
 /* ========== PAINEL DE ALERTAS DE VENCIMENTO ========== */
