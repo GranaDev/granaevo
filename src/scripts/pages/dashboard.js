@@ -5470,7 +5470,9 @@ let _tempoRealPendente = false;
 
 async function ligarTempoReal() {
     const conta = dataManager.contaId;
-    if (!conta) return;   // load ainda não trouxe a conta
+    // `return` silencioso é o suspeito nº 1 quando "nada acontece": deixa
+    // registrado POR QUE não ligou, em vez de sumir sem deixar rastro.
+    if (!conta) { try { window.__tempoReal = { estado: 'sem_conta_no_load' }; } catch {} return; }
 
     try {
         const { ligar } = await import('../modules/tempo-real.js?v=1');
@@ -5484,13 +5486,18 @@ async function ligarTempoReal() {
                 // de família, o lançamento do outro no perfil dele não deve
                 // sacudir a minha.
                 const meu = String(perfilAtivo?.id ?? '');
-                if (aviso.perfis.length && !aviso.perfis.includes(meu)) return;
+                if (aviso.perfis.length && !aviso.perfis.includes(meu)) {
+                    try { window.__tempoReal.ultimo = `ignorado: outro perfil (${aviso.perfis.length})`; } catch {}
+                    return;
+                }
+                try { window.__tempoReal.ultimo = 'aplicando'; } catch {}
                 _aplicarMudancaRemota();
             },
         });
     } catch (e) {
         // Tempo real é conforto, não integridade. Sem ele o app funciona como
         // sempre funcionou — só exige um F5 para ver o que o outro fez.
+        try { window.__tempoReal = { estado: 'erro_ao_ligar', erro: String(e?.message ?? e).slice(0, 120) }; } catch {}
         _log.warn('[TEMPO-REAL] não ligou:', e?.message ?? e);
     }
 }

@@ -34,6 +34,22 @@ let _tentativa = 0;
 let _parado = false;
 
 /**
+ * Diagnóstico em produção: `__tempoReal` no console.
+ *
+ * Existe porque este recurso falha CALADO — canal recusado, token não aplicado,
+ * aviso filtrado: nenhum deles aparece na tela, e `console.*` não sobrevive ao
+ * build (`drop_console: true` no vite.config). Atribuição a um global sobrevive.
+ *
+ * Sem valor nenhum do usuário: estado, contagem e motivo.
+ */
+function _diag(campo, valor) {
+    try {
+        if (!window.__tempoReal) window.__tempoReal = { estado: 'nao_iniciado', avisos: 0, ultimo: null };
+        window.__tempoReal[campo] = valor;
+    } catch { /* sem window (teste) */ }
+}
+
+/**
  * Id desta ABA. Vai junto de cada save e volta no aviso, para a aba de origem
  * ignorar o próprio eco — sem isso, todo save faria a própria tela recarregar.
  * Por aba, não por usuário: duas abas do mesmo login precisam se ouvir.
@@ -58,11 +74,12 @@ export const CLIENT_ID = (() => {
  * @returns {Promise<boolean>} true se assinou.
  */
 export async function ligar({ url, apikey, conta, token, aoMudar, aoEstado }) {
-    if (!url || !apikey || !conta || typeof token !== 'function') return false;
+    if (!url || !apikey || !conta || typeof token !== 'function') { _diag('estado', 'faltou_config'); return false; }
     _parado = false;
+    _diag('conta', String(conta).slice(0, 8) + '…');
 
     const jwt = await token();
-    if (!jwt) return false;
+    if (!jwt) { _diag('estado', 'sem_token'); return false; }
 
     // Importado aqui dentro, não no topo: é este `await import` que mantém os
     // 14,4 KB fora do boot.
@@ -72,11 +89,20 @@ export async function ligar({ url, apikey, conta, token, aoMudar, aoEstado }) {
 
     _cliente = new RealtimeClient(`${String(url).replace(/^http/, 'ws')}/realtime/v1`, {
         params: { apikey },
-        // A reconexão é nossa (abaixo): a do pacote não sabe que o JWT expira, e
-        // reconectar com token velho dá "sem permissão" para sempre.
+        // O pacote chama isto sempre que precisa de token — inclusive ao
+        // reconectar. Melhor que fixar um JWT: canal privado com token expirado
+        // é recusado, e a recusa não se resolve tentando de novo.
+        accessToken: async () => (await token()) ?? null,
+        // A reconexão é nossa (abaixo): a do pacote não conhece nossa política
+        // de recuo nem distingue queda de recusa.
         reconnectAfterMs: () => 1e9,
     });
-    _cliente.setAuth(jwt);
+
+    // `setAuth` é ASSÍNCRONO. Sem o await, o canal entrava antes do token ser
+    // aplicado — e canal privado sem token é recusado pela autorização. O
+    // sintoma é o pior possível: nenhum erro, nenhum aviso, a campainha
+    // simplesmente nunca toca.
+    await _cliente.setAuth(jwt);
 
     _canal = _cliente.channel(`conta:${conta}`, { config: { private: true } });
 
@@ -84,7 +110,9 @@ export async function ligar({ url, apikey, conta, token, aoMudar, aoEstado }) {
         const p = msg?.payload ?? {};
         // O próprio eco. Sem este corte, cada save que a aba faz voltaria como
         // "alguém mudou" e ela recarregaria sozinha, em looping.
-        if (p.origem && p.origem === CLIENT_ID) return;
+        if (p.origem && p.origem === CLIENT_ID) { _diag('ultimo', 'proprio_eco'); return; }
+        _diag('avisos', (window.__tempoReal?.avisos ?? 0) + 1);
+        _diag('ultimo', `mudou perfis=${(p.perfis || []).length}`);
         try {
             aoMudar?.({ perfis: Array.isArray(p.perfis) ? p.perfis.map(String) : [], em: p.em ?? null });
         } catch { /* o ouvinte quebrar não pode derrubar o canal */ }
@@ -97,6 +125,7 @@ export async function ligar({ url, apikey, conta, token, aoMudar, aoEstado }) {
         _canal.subscribe((estado, erro) => {
             if (estado === 'SUBSCRIBED') {
                 _tentativa = 0;
+                _diag('estado', 'ligado');
                 aoEstado?.('ligado');
                 responder(true);
                 return;
@@ -106,6 +135,8 @@ export async function ligar({ url, apikey, conta, token, aoMudar, aoEstado }) {
                 // política negou, e insistir só gera ruído. Cai para o caminho
                 // lento (recarregar a página) sem barulho para o usuário.
                 const semPermissao = /unauthorized|not authorized|permission/i.test(String(erro?.message ?? erro ?? ''));
+                _diag('estado', semPermissao ? 'sem_permissao' : `caiu:${estado}`);
+                _diag('erro', String(erro?.message ?? erro ?? '').slice(0, 120) || null);
                 aoEstado?.(semPermissao ? 'sem_permissao' : 'caiu');
                 responder(false);
                 if (!semPermissao) _reconectar({ url, apikey, conta, token, aoMudar, aoEstado });

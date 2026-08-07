@@ -97,7 +97,7 @@ describe('o próprio eco não pode voltar', () => {
   test('aviso com a própria origem é descartado antes de chamar quem ouve', () => {
     // Sem este corte, cada save que a aba faz voltaria como "alguém mudou" e ela
     // recarregaria sozinha — em looping, porque o refetch dispara outro save.
-    assert.match(SRC, /if \(p\.origem && p\.origem === CLIENT_ID\) return/)
+    assert.match(SRC, /if \(p\.origem && p\.origem === CLIENT_ID\) \{[^}]*return; \}/)
   })
 
   test('o save leva o client_id, e a Edge o devolve no aviso', () => {
@@ -139,6 +139,50 @@ describe('o peso não pode voltar para o boot', () => {
   test('o import é dinâmico — carga sob demanda, não no boot', () => {
     assert.ok(!/^import .* from 'granaevo:realtime'/m.test(CODIGO))
     assert.match(SRC, /await import\('granaevo:realtime'\)/)
+  })
+})
+
+describe('⭐ o token precisa estar aplicado ANTES de entrar no canal', () => {
+  test('setAuth é aguardado', () => {
+    // `setAuth` é async no realtime-js 2.104.1 (`async setAuth(token = null)`).
+    // Sem o await, o canal entrava antes do token ser aplicado — e canal PRIVADO
+    // sem token é recusado pela autorização. O sintoma é o pior possível:
+    // nenhum erro, nenhum aviso, a campainha simplesmente nunca toca.
+    assert.match(CODIGO, /await _cliente\.setAuth\(jwt\)/)
+    const iAuth  = CODIGO.indexOf('await _cliente.setAuth(jwt)')
+    const iCanal = CODIGO.indexOf('_cliente.channel(')
+    assert.ok(iAuth > 0 && iCanal > iAuth, 'o canal só pode ser criado depois do token')
+  })
+
+  test('e o pacote recebe um callback de token para as reconexões', () => {
+    // Fixar um JWT só serve para a primeira conexão: ao reconectar com token
+    // expirado, canal privado é recusado — e recusa não se resolve insistindo.
+    assert.match(CODIGO, /accessToken: async \(\) => \(await token\(\)\) \?\? null/)
+  })
+})
+
+describe('o diagnóstico existe, porque isto falha calado', () => {
+  test('estado e motivo vão para um global — console não sobrevive ao build', () => {
+    // Canal recusado, token não aplicado, aviso filtrado: nenhum aparece na
+    // tela, e `drop_console: true` apaga todo console.* do bundle.
+    assert.match(CODIGO, /window\.__tempoReal/)
+    assert.match(CODIGO, /_diag\('estado', 'sem_token'\)/)
+    assert.match(CODIGO, /_diag\('estado', semPermissao \? 'sem_permissao'/)
+  })
+
+  test('o return silencioso do dashboard deixa rastro', () => {
+    // "Nada acontece, sem erro e sem log" começa pelo GATILHO — e um `return`
+    // sem rastro é o suspeito nº 1. Já custou caro neste projeto.
+    const DASH = readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8')
+    assert.match(DASH, /estado: 'sem_conta_no_load'/)
+    assert.match(DASH, /estado: 'erro_ao_ligar'/)
+    assert.match(DASH, /ignorado: outro perfil/)
+  })
+
+  test('o diagnóstico não carrega dado do usuário', () => {
+    // Conta aparece truncada; o resto é estado, contagem e motivo.
+    assert.match(CODIGO, /String\(conta\)\.slice\(0, 8\)/)
+    assert.ok(!/_diag\('[a-z]+', (p\.perfis|msg|jwt)\)/.test(CODIGO))
   })
 })
 
