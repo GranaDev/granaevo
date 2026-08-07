@@ -53,12 +53,16 @@ export function novoId() {
 /**
  * Serialização estável: mesmas chaves, mesma ordem, sempre. `JSON.stringify`
  * puro preserva a ordem de inserção, que muda conforme o caminho de código que
- * criou o objeto — e id derivado precisa depender só do CONTEÚDO.
+ * criou o objeto — e "é o mesmo registro?" precisa depender só do CONTEÚDO.
+ *
+ * Exportada porque o diff (`diff-registros.js`) tem de usar EXATAMENTE a mesma
+ * definição de "mesmo conteúdo" que o id derivado usa. Duas definições que
+ * divergem em um detalhe produziriam edições fantasmas a cada save.
  */
-function _estavel(v) {
+export function serializarEstavel(v) {
     if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null';
-    if (Array.isArray(v)) return `[${v.map(_estavel).join(',')}]`;
-    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${_estavel(v[k])}`).join(',')}}`;
+    if (Array.isArray(v)) return `[${v.map(serializarEstavel).join(',')}]`;
+    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${serializarEstavel(v[k])}`).join(',')}}`;
 }
 
 /**
@@ -82,7 +86,7 @@ function _hash53(str) {
 
 /** Id derivado do conteúdo — o mesmo registro dá o mesmo id em qualquer cliente. */
 export function idDerivado(registro) {
-    return _hash53(_estavel(registro)).toString(36).padStart(11, '0');
+    return _hash53(serializarEstavel(registro)).toString(36).padStart(11, '0');
 }
 
 function _colecoesDe(profile) {

@@ -1442,7 +1442,23 @@ Coleções que precisam de diff, por frequência de uso no código:
   vezes não muda id nenhum.
 
 **37.1 · O CLIENTE MANDA O DIFF**
-- **37.1a** 🔴 `#diffColecao(antes, depois)` genérico → `{add, edit, remove}` por id.
+- **37.1a** ✅ `src/scripts/modules/diff-registros.js`: `diffColecao(antes, depois)`
+  → `{add, edit, remove}` por id, mais `aplicarOperacoes` (o espelho exato do que
+  a Edge vai fazer, e o que torna a fase de sombra uma PROVA).
+  · **O `add` carrega posição.** A ordem do array é visível — a tela mostra
+    `filtrarTransacoesParaUI().reverse()`, sem ordenar por data. Quase tudo usa
+    `push`, mas o desfazer de uma exclusão reinsere no MEIO (`splice(pos,0,t)`);
+    anexando sempre no fim, desfazer uma exclusão jogaria a transação para o topo
+    da lista no reload seguinte. Cada `add` leva `apos` = id do vizinho de trás.
+  · **Quando não dá para afirmar, RECUSA** (`{ok:false, motivo}`): registro sem
+    id, id duplicado, entrada torta. Chutar aqui apaga dinheiro; recusar só cai
+    no save de estado inteiro, que é o comportamento de hoje.
+  · **O `id` fica FORA da comparação de conteúdo** — ele é a chave. Comparar
+    identidade dentro do conteúdo dava falso positivo (meta antiga tem id inteiro,
+    nova tem UUID: um `1` que virasse `'1'` marcaria edição em TODO save, e um
+    edit por save vira um conflito por save quando o 37.3 chegar).
+  · Limitação assumida e testada: REORDENAR registros existentes sai como "nada
+    mudou". Nada no app reordena hoje; a sombra vai medir.
 - **37.1b** 🔴 Ligar em `transacoes` e enviar junto do payload, **sem** ainda o
   servidor usar. Fase de sombra: dá para comparar diff × estado e provar que
   batem antes de confiar.
