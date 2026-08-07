@@ -171,3 +171,50 @@ export function desligar() {
 export function ligado() {
     return _canal?.state === 'joined';
 }
+
+// ── A ponte com a TELA ──────────────────────────────────────────────────────
+// Filtro por perfil, adiamento enquanto há formulário aberto e o registro do
+// diagnóstico moram AQUI, e não na página, por um motivo medido: o
+// `dashboard.js` bateu 40,0/40 KB e reprovou o build da Vercel. Este código só
+// existe para quem tem tempo real ligado — não pertence ao pacote que bloqueia a
+// primeira pintura da tela.
+//
+// A página fica com o que só ela sabe: onde estão os dados e como repintar.
+
+let _pendente = false;
+
+/**
+ * @param {object}   o
+ * @param {Function} o.perfilAtual  () => string — id do perfil na tela.
+ * @param {Function} o.ocupado      () => boolean — há formulário aberto?
+ * @param {Function} o.recarregar   () => Promise<void> — busca e repinta.
+ * @returns {Promise<{reaplicarPendente: Function}>}
+ */
+export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, ocupado, recarregar }) {
+    const aplicar = () => {
+        // Formulário aberto: trocar os arrays embaixo de quem está digitando
+        // apaga o que a pessoa escreveu — a mesma perda que este passo veio
+        // consertar, só que vinda de dentro. Fica pendente, não é descartado.
+        if (ocupado?.()) { _pendente = true; _diag('ultimo', 'adiado: formulário aberto'); return; }
+        _pendente = false;
+        Promise.resolve(recarregar())
+            .then(() => _diag('ultimo', 'aplicado'))
+            .catch((e) => _diag('ultimo', `falhou: ${String(e?.message ?? e).slice(0, 60)}`));
+    };
+
+    await ligar({
+        url, apikey, conta, token,
+        aoMudar: (aviso) => {
+            // Numa conta de família, o lançamento do outro no perfil DELE não
+            // deve sacudir a minha tela.
+            const meu = perfilAtual?.() ?? '';
+            if (aviso.perfis.length && meu && !aviso.perfis.includes(meu)) {
+                _diag('ultimo', `ignorado: outro perfil (${aviso.perfis.length})`);
+                return;
+            }
+            aplicar();
+        },
+    });
+
+    return { reaplicarPendente: () => { if (_pendente) aplicar(); } };
+}

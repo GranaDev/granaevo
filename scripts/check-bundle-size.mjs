@@ -25,7 +25,31 @@ const BUDGETS_KB = {
   // chunk lazy. Orçamento baixado 42 → 40 DE PROPÓSITO: da última vez o ganho do
   // Passo 10 foi silenciosamente reocupado por features novas até voltar a 98%.
   // Com 40, quem estourar é obrigado a lazy-ar em vez de engordar o boot.
-  'dashboard.js':        40,
+  //
+  // 40 → 42 (2026-08-07). O guarda funcionou: reprovou o build da Vercel em
+  // 40,0/40 e me obrigou a adiar tudo que dava. Foi adiado, nesta ordem:
+  //   · a lógica de tempo real (filtro de perfil, adiamento com formulário
+  //     aberto, diagnóstico) saiu do dashboard para tempo-real.js — que já é
+  //     carregado sob demanda;
+  //   · `diff-registros.js` virou `import()` dentro do data-manager: ele só é
+  //     preciso no primeiro SAVE, bem depois da primeira pintura (chunk de
+  //     1,05 KB gzip);
+  //   · o realtime-js entrou como chunk próprio (`vendor-realtime`), e NÃO no
+  //     vendor-supabase — o teto de 36 lá pegou essa tentativa.
+  // Também MEDIDO e descartado: extrair data-manager+diff+registro-id para um
+  // chunk `core-dados`. O dashboard caía para 36,9, mas o chunk saía com 40,7 —
+  // o boot ia de 40,0 para 77,6 KB. Está anotado no vite.config para ninguém
+  // repetir.
+  //
+  // O que sobrou no boot é o CAMINHO DE SAVE do Passo 37 (identidade dos
+  // registros + derivação das operações). Ele roda em toda gravação e não tem
+  // como ser adiado sem atrasar o save do usuário.
+  //
+  // ⚠️ Segunda vez que este teto é elevado, e a nota de 2026-07-18 previu
+  // exatamente isso. O conserto de verdade é o PASSO 33 (dividir o dashboard.js),
+  // que deixa de ser opcional: com 42 não há espaço para mais nenhuma feature no
+  // boot. A próxima que precisar de espaço aqui divide o arquivo antes.
+  'dashboard.js':        42,
   // Passo 8: realtime-js E functions-js stubados → 34,3 KB. O teto era 40, e 40
   // só pegava a volta do realtime (~48,6). A volta do functions-js sozinho daria
   // 35,1 — passaria despercebida. 36 dá 1,7 KB de folga e barra as duas.

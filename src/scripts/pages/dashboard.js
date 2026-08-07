@@ -4734,7 +4734,7 @@ function fecharPopup() {
     _desativarFocusTrap();
     // Chegou aviso de tempo real enquanto o formulário estava aberto: agora que
     // não há nada sendo digitado, a atualização pode entrar.
-    if (_tempoRealPendente) setTimeout(() => _aplicarMudancaRemota(), 350);
+    if (_tempoRealReaplicar) setTimeout(_tempoRealReaplicar, 350);
     // Fecha bottom sheet se estiver ativo
     const bs = document.getElementById('bottomSheetOverlay');
     if (bs && bs.classList.contains('active')) {
@@ -5461,92 +5461,48 @@ const _AUTO_SAVE_MAX_FAILS = 3;
 
 // ── TEMPO REAL (Passo 37 · Camada 1) ────────────────────────────────────────
 // "Um usuário altera, outro já vê" — sem recarregar. O canal é uma CAMPAINHA:
-// avisa que a conta mudou, e a tela busca pelo caminho normal. Nenhum centavo
-// trafega pelo websocket.
+// avisa que a conta mudou, e a tela busca pelo caminho normal.
 //
-// O que chega é sempre de OUTRA aba ou de outra pessoa: o próprio eco é cortado
-// dentro de tempo-real.js, pelo id desta aba.
-let _tempoRealPendente = false;
-
-// Definido JA no carregamento do modulo, antes de qualquer tentativa. Sem isto,
-// `__tempoReal is not defined` no console e ambiguo: pode ser bundle velho, aba
-// errada, ou a funcao nunca ter rodado. Com isto, "undefined" so pode significar
-// bundle velho ou aba errada — e qualquer outro valor conta a historia.
-try { window.__tempoReal = { estado: 'nao_iniciado', avisos: 0, ultimo: null }; } catch { /* sem window */ }
+// O filtro por perfil, o adiamento com formulário aberto e o diagnóstico moram
+// em tempo-real.js, que é carregado SOB DEMANDA. Aqui fica só o que a página
+// sabe: onde estão os dados e como repintar. Não é organização — é orçamento:
+// este arquivo bateu 40,0/40 KB e reprovou o build.
+let _tempoRealReaplicar = null;
 
 async function ligarTempoReal() {
     const conta = dataManager.contaId;
-    // `return` silencioso é o suspeito nº 1 quando "nada acontece": deixa
+    // Um return silencioso é o suspeito nº 1 quando "nada acontece": deixa
     // registrado POR QUE não ligou, em vez de sumir sem deixar rastro.
     if (!conta) { try { window.__tempoReal = { estado: 'sem_conta_no_load' }; } catch {} return; }
 
     try {
-        const { ligar } = await import('../modules/tempo-real.js?v=1');
-        await ligar({
-            url:    SUPABASE_URL,
-            apikey: SUPABASE_ANON_KEY,
-            conta,
-            token:  () => getValidAccessToken(),
-            aoMudar: (aviso) => {
-                // Só interessa se mexeram no perfil que está na tela. Numa conta
-                // de família, o lançamento do outro no perfil dele não deve
-                // sacudir a minha.
-                const meu = String(perfilAtivo?.id ?? '');
-                if (aviso.perfis.length && !aviso.perfis.includes(meu)) {
-                    try { window.__tempoReal.ultimo = `ignorado: outro perfil (${aviso.perfis.length})`; } catch {}
-                    return;
-                }
-                try { window.__tempoReal.ultimo = 'aplicando'; } catch {}
-                _aplicarMudancaRemota();
+        const { ligarNaTela } = await import('../modules/tempo-real.js?v=1');
+        const r = await ligarNaTela({
+            url: SUPABASE_URL, apikey: SUPABASE_ANON_KEY, conta,
+            token:       () => getValidAccessToken(),
+            perfilAtual: () => String(perfilAtivo?.id ?? ''),
+            ocupado:     () => !!(document.getElementById('modalOverlay')?.classList.contains('active') ||
+                                  document.getElementById('bottomSheetOverlay')?.classList.contains('active')),
+            recarregar:  async () => {
+                // Save em voo pousa primeiro: recarregar no meio de um POST traz
+                // o estado de ANTES dele, e a tela mostraria o dado recém-gravado
+                // como se não existisse.
+                if (_saveEmVoo) { try { await _saveEmVoo; } catch { /* segue */ } }
+                if (!perfilAtivo) return;
+                await carregarDadosPerfil(perfilAtivo.id);
+                // carregarDadosPerfil NÃO repinta: enche os arrays e termina em
+                // atualizarReferenciasGlobais(). Sem a linha abaixo, o dado só
+                // aparecia no F5 seguinte — foi o bug de 2026-08-07.
+                atualizarTudo();
             },
         });
+        _tempoRealReaplicar = r?.reaplicarPendente ?? null;
     } catch (e) {
-        // Tempo real é conforto, não integridade. Sem ele o app funciona como
-        // sempre funcionou — só exige um F5 para ver o que o outro fez.
+        // Tempo real é conforto, não integridade: sem ele o app funciona como
+        // sempre — só exige um F5 para ver o que o outro fez.
         try { window.__tempoReal = { estado: 'erro_ao_ligar', erro: String(e?.message ?? e).slice(0, 120) }; } catch {}
         _log.warn('[TEMPO-REAL] não ligou:', e?.message ?? e);
     }
-}
-
-// Recarrega o perfil ativo por causa de um aviso do canal.
-//
-// ⚠️ NÃO recarrega com formulário aberto. Trocar os arrays embaixo de alguém que
-// está digitando apaga o que a pessoa escreveu — o mesmo tipo de perda que este
-// passo inteiro veio consertar, só que vindo de dentro. Fica pendente e entra
-// quando o popup fecha.
-function _aplicarMudancaRemota() {
-    if (document.getElementById('modalOverlay')?.classList.contains('active') ||
-        document.getElementById('bottomSheetOverlay')?.classList.contains('active')) {
-        _tempoRealPendente = true;
-        return;
-    }
-    _tempoRealPendente = false;
-    if (!perfilAtivo) return;
-
-    (async () => {
-        // Save em voo pousa primeiro. Recarregar no meio de um POST traz o
-        // estado de ANTES dele — a tela mostraria o dado que acabou de ser
-        // gravado como se não existisse. É a mesma ordem que a troca de perfil
-        // usa, e pelo mesmo motivo.
-        if (_saveEmVoo) { try { await _saveEmVoo; } catch { /* segue */ } }
-
-        await carregarDadosPerfil(perfilAtivo.id);
-
-        // ⚠️ `carregarDadosPerfil` NÃO repinta. Ele enche os arrays e termina em
-        // `atualizarReferenciasGlobais()` — foi escrito para o boot e para a
-        // troca de perfil, onde QUEM CHAMA renderiza depois (ver o trecho após a
-        // linha 1971). Chamado sozinho, ele atualizava a memória e deixava a tela
-        // parada: o dado só aparecia no próximo F5.
-        //
-        // Este é o mesmo `atualizarTudo()` que todo caminho de escrita chama —
-        // é ele que manda `_dbTransacoes.atualizarMovimentacoesUI()` repintar a
-        // lista de Movimentações.
-        atualizarTudo();
-        try { window.__tempoReal.ultimo = 'aplicado'; } catch { /* diagnóstico */ }
-    })().catch((e) => {
-        try { window.__tempoReal.ultimo = `falhou: ${String(e?.message ?? e).slice(0, 60)}`; } catch {}
-        _log.warn('[TEMPO-REAL] refetch falhou:', e?.message ?? e);
-    });
 }
 
 function iniciarAutoSave() {

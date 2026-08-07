@@ -285,6 +285,11 @@ export default defineConfig(({ mode }) => ({
           if (id.includes('node_modules/@supabase/realtime-js')) {
             return 'vendor-realtime';
           }
+          // ⚠️ NÃO extrair o núcleo de dados (data-manager + diff + registro-id)
+          // para um chunk próprio. Tentado em 2026-08-07 e MEDIDO: o dashboard
+          // caía de 40,0 para 36,9 KB, mas o chunk novo saía com 40,7 KB gzip —
+          // o boot passava de 40,0 para 77,6 KB. Ele arrasta mais do que tira.
+          // O caminho certo é o Passo 33 (dividir o dashboard.js de verdade).
           if (
             id.includes('@supabase/supabase-js') ||
             id.includes('node_modules/@supabase') ||

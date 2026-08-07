@@ -1,7 +1,17 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
 import { supabase, getValidAccessToken, refreshSession as hybridRefresh } from '../services/supabase-client.js?v=2';
 import { backfillIds, carimbarNovos, serializarEstavel, COLECOES } from './registro-id.js?v=1';
-import { diffColecao, aplicarOperacoes, diffCampos, aplicarCampos, comEndereco } from './diff-registros.js?v=1';
+// O diff de operações NÃO entra no boot: ele só é preciso no primeiro SAVE, que
+// acontece bem depois da primeira pintura da tela. Importado estaticamente, ele
+// viajava dentro do chunk do dashboard — que bateu 40,0/40 KB e reprovou o build.
+//
+// O teto foi baixado de 42 para 40 de propósito (ver check-bundle-size.mjs):
+// "quem estourar é obrigado a lazy-ar em vez de engordar o boot". É o que isto faz.
+let _diffMod = null;
+async function _diff() {
+    if (!_diffMod) _diffMod = await import('./diff-registros.js?v=1');
+    return _diffMod;
+}
 import { CLIENT_ID } from './tempo-real.js?v=1';
 import { captureError } from './error-tracking.js';
 
@@ -186,7 +196,9 @@ class DataManager {
         return out;
     }
 
-    #derivarOperacoes(profiles, tocados) {
+    async #derivarOperacoes(profiles, tocados) {
+        const { diffColecao, aplicarOperacoes, diffCampos, aplicarCampos, comEndereco } = await _diff();
+
         const alvo = new Set(tocados.map(String));
         const ops = [];
         const motivos = new Set();
@@ -595,7 +607,7 @@ class DataManager {
             // precisa declarar nada, e nenhuma pode esquecer de declarar.
             const tocados = this.#perfisTocados(safeProfiles);
 
-            const sombra = this.#derivarOperacoes(safeProfiles, tocados);
+            const sombra = await this.#derivarOperacoes(safeProfiles, tocados);
 
             // ── SAVE QUE NÃO TEM NADA A DIZER NÃO É ENVIADO ─────────────────
             // O dashboard salva a cada 30 segundos, incondicionalmente. Uma aba

@@ -179,7 +179,11 @@ describe('o diagnóstico existe, porque isto falha calado', () => {
     const DASH = readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8')
     assert.match(DASH, /estado: 'sem_conta_no_load'/)
     assert.match(DASH, /estado: 'erro_ao_ligar'/)
-    assert.match(DASH, /ignorado: outro perfil/)
+    // O filtro por perfil mudou de casa junto com a lógica (teto de bundle).
+    // Asserta a CONDIÇÃO, não a mensagem: trocar o `if` por `if (false)` deixaria
+    // a string intacta num ramo morto, e o teste passaria com o filtro desligado.
+    assert.match(CODIGO, /if \(aviso\.perfis\.length && meu && !aviso\.perfis\.includes\(meu\)\)/)
+    assert.match(CODIGO, /ignorado: outro perfil/)
   })
 
   test('o diagnóstico não carrega dado do usuário', () => {
@@ -191,9 +195,12 @@ describe('o diagnóstico existe, porque isto falha calado', () => {
 
 describe('⭐ receber o aviso não é o fim — a tela precisa repintar', () => {
   const DASH = soCodigo(readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8'))
+  // O `recarregar` que a página entrega ao módulo. Só ele ficou aqui: o filtro
+  // por perfil, o adiamento e o diagnóstico foram para tempo-real.js quando o
+  // teto de bundle do dashboard estourou (40,0/40 reprovou o build da Vercel).
   const APLICAR = (() => {
-    const i = DASH.indexOf('function _aplicarMudancaRemota()')
-    return i > 0 ? DASH.slice(i, DASH.indexOf('\nfunction ', i + 10)) : ''
+    const i = DASH.indexOf('recarregar:  async () =>')
+    return i > 0 ? DASH.slice(i, DASH.indexOf('\n        });', i)) : ''
   })()
 
   test('depois de recarregar, chama atualizarTudo()', () => {
@@ -203,7 +210,7 @@ describe('⭐ receber o aviso não é o fim — a tela precisa repintar', () => 
     // memória e deixava a tela parada — o dado só aparecia no próximo F5.
     // Diagnosticado em produção: estado 'ligado', avisos 1, ultimo 'aplicando',
     // e nada na tela.
-    assert.ok(APLICAR, 'a função sumiu')
+    assert.ok(APLICAR, 'o callback `recarregar` sumiu do dashboard')
     assert.match(APLICAR, /await carregarDadosPerfil\(perfilAtivo\.id\)/)
     assert.match(APLICAR, /atualizarTudo\(\)/)
     const i = APLICAR.indexOf('carregarDadosPerfil')
@@ -227,9 +234,14 @@ describe('⭐ receber o aviso não é o fim — a tela precisa repintar', () => 
     assert.ok(i < j)
   })
 
-  test('formulário aberto adia, não descarta', () => {
-    assert.match(APLICAR, /_tempoRealPendente = true/)
-    assert.match(DASH, /if \(_tempoRealPendente\) setTimeout/)
+  test('formulário aberto adia, não descarta — a lógica mora no módulo', () => {
+    // Trocar os arrays embaixo de quem está digitando apaga o que a pessoa
+    // escreveu: a mesma perda que este passo veio consertar, vinda de dentro.
+    assert.match(CODIGO, /if \(ocupado\?\.\(\)\) \{ _pendente = true;/)
+    assert.match(CODIGO, /reaplicarPendente: \(\) => \{ if \(_pendente\) aplicar\(\); \}/)
+    // A página só diz QUANDO está ocupada e reaplica ao fechar o formulário.
+    assert.match(DASH, /ocupado:\s+\(\) => !!\(document\.getElementById\('modalOverlay'\)/)
+    assert.match(DASH, /if \(_tempoRealReaplicar\) setTimeout\(_tempoRealReaplicar, 350\)/)
   })
 })
 
