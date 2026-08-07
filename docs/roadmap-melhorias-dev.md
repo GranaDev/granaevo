@@ -1363,8 +1363,8 @@ realmente quer offline (consultar, não lançar).
 
 ## PASSO 37 — Sincronização por OPERAÇÃO 🟡 EM ANDAMENTO ⭐
 
-**Falta:** 37.0c e os blocos 37.1 a 37.4 (14 pedaços). A identidade (37.0a/b/d)
-está feita e é o que bloqueava todo o resto.
+**Falta:** os blocos 37.1 a 37.4 (14 pedaços). O bloco 37.0 (IDENTIDADE) está
+COMPLETO — era ele que bloqueava todo o resto.
 
 **O defeito, nas palavras de quem viu:** *"se eu mexo no chat assistente com a aba
 do GranaEvo aberta, um sobrescreve o outro"*. Reproduzido: uma retirada lançada
@@ -1431,9 +1431,12 @@ Coleções que precisam de diff, por frequência de uso no código:
   dois) e registro ANTIGO precisa de id DERIVADO (id sorteado faria cada cliente
   ver "sumiu um e nasceu outro"). Por isso 37.0a e 37.0b saíram juntos: só um dos
   dois em produção seria pior que nenhum.
-- **37.0c** 🔴 `sameTx`/desfazer passam a casar por `id` quando existir, mantendo
-  o casamento por campos como fallback para registro legado.
-  **Falta:** editar `sameTx` em `tx-builder.js` e o desfazer de `db-transacoes`.
+- **37.0c** ✅ `sameTx` e `undoPagamentoConta` casam por `id` quando os DOIS
+  lados têm um; campos ficam de reserva para registro legado (exigir id nos dois
+  deixaria o desfazer de antes do deploy sem efeito, em silêncio). Conserta um
+  erro real: dois lançamentos idênticos ("café de R$ 5" duas vezes no mesmo
+  minuto) eram indistinguíveis por campo, e o desfazer removia "o último que
+  casa" — acertava por sorte. `undoCredito` já trabalhava por id.
 - **37.0d** ✅ Vale para `metas`, `cartoesCredito`, `contasFixas` e `assinaturas`
   (esta última faltava na lista original). Verificado por teste: carregar duas
   vezes não muda id nenhum.

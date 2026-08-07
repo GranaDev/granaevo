@@ -411,16 +411,21 @@ export function applyPagamentoConta(profile, conta, valorOpcional) {
 /** Desfaz o pagamento: remove a transação e restaura vencimento/pago (por id). */
 export function undoPagamentoConta(profile, txSnap, snapshot) {
     if (!profile || !snapshot) return false;
-    // Remove a transação do pagamento (match por campos, à prova de reload).
+    // Remove a transação do pagamento. Pelo `id` quando existe — pagar a mesma
+    // conta duas vezes no mesmo minuto gera duas transações iguais em todos os
+    // campos, e aí o casamento por campos não sabe qual é qual. Campos ficam de
+    // reserva para pagamento feito antes do Passo 37.
     let removed = false;
     if (Array.isArray(profile.transacoes)) {
         for (let i = profile.transacoes.length - 1; i >= 0; i--) {
             const a = profile.transacoes[i];
-            if (a && a.categoria === 'saida' && a.tipo === 'Conta Fixa' &&
-                a.descricao === txSnap.descricao && Number(a.valor) === Number(txSnap.valor) &&
-                a.data === txSnap.data && a.hora === txSnap.hora) {
-                profile.transacoes.splice(i, 1); removed = true; break;
-            }
+            if (!a) continue;
+            const casa = (a.id && txSnap?.id)
+                ? String(a.id) === String(txSnap.id)
+                : (a.categoria === 'saida' && a.tipo === 'Conta Fixa' &&
+                   a.descricao === txSnap.descricao && Number(a.valor) === Number(txSnap.valor) &&
+                   a.data === txSnap.data && a.hora === txSnap.hora);
+            if (casa) { profile.transacoes.splice(i, 1); removed = true; break; }
         }
     }
     const conta = (Array.isArray(profile.contasFixas) ? profile.contasFixas : [])
@@ -461,10 +466,22 @@ export function undoOrcamento(profile, tipo, anterior) {
     return true;
 }
 
-// Igualdade de transação por campos (à prova de reload — refs mudam no re-parse).
+/**
+ * Igualdade de transação, à prova de reload (as referências mudam no re-parse).
+ *
+ * Pelo `id` quando os dois lados têm um — é a resposta exata, e a única que
+ * acerta quando existem dois lançamentos idênticos em TODOS os campos: "café de
+ * R$ 5" duas vezes no mesmo minuto. O casamento por campos, nesse caso, não
+ * distingue os dois; desfazer removia "o último que casa", que era o certo por
+ * sorte, não por regra.
+ *
+ * O caminho por campos fica como reserva para registro legado — gravado antes
+ * do Passo 37 e ainda sem id na memória de quem não recarregou a página.
+ */
 function sameTx(a, b) {
-    return a && b &&
-        a.categoria === b.categoria && a.tipo === b.tipo && a.descricao === b.descricao &&
+    if (!a || !b) return false;
+    if (a.id && b.id) return String(a.id) === String(b.id);
+    return a.categoria === b.categoria && a.tipo === b.tipo && a.descricao === b.descricao &&
         Number(a.valor) === Number(b.valor) && a.data === b.data && a.hora === b.hora &&
         String(a.metaId ?? '') === String(b.metaId ?? '');
 }
