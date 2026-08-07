@@ -71,23 +71,30 @@ Dentro de um item: `⬜ subtarefa não feita` · `☑️ / ✅ subtarefa feita`.
 
 | # | O que testar | O que isso PROVA | Passo |
 |:--|---|---|:--|
-| ⬜ 1 | **Cadastro completo** em `/planos`: escolher plano → o widget do Turnstile aparece no modal, acima do botão → preencher e receber o código de 6 dígitos por e-mail | Que o captcha novo **não quebrou a porta paga**. É o único fluxo que gera receita e o mais recente a mudar | 26 |
-| ⬜ 2 | **Login + abrir uma tela com dados** (transações ou relatórios) | Que os stubs de `realtime-js`/`functions-js` não afetaram auth nem queries. Mexeu no caminho do cliente Supabase | 8 |
-| ⬜ 3 | **Foto de perfil** carregando no dashboard | Que `supabase.storage` segue intacto — foi o que quase stubei por acreditar num roadmap que dizia "storage não é usado" | 8 |
-| ⬜ 4 | **Assistente**, quatro frases: *"gastei 50 no mercado"* → *"e mais 30"* · *"tirei 100 da reserva"* · *"obrigado"* · *"quem é você"* | (a) memória de conversa herda categoria sem reperguntar; (b) **a retirada entra como RETIRADA, não entrada** — o bug relatado em 2026-08-04; (c) cortesia não vira "não entendi" | 36 |
-| ⬜ 5 | **2FA:** ativar, sair, entrar com o código; depois testar um **código de recuperação** | O 2FA nunca foi testado de ponta a ponta; a recuperação teve bug de "Erro de conexão" corrigido em 2026-08-03 | 6 |
-| ⬜ 6 | **Blocos 2, 3 e 4** do roteiro de testes da conta descartável | Pendentes desde 2026-08-02 | — |
-| ⬜ 8 | ⭐ **Dois aparelhos ao mesmo tempo:** você num, sua esposa no outro; cada um lança no SEU perfil, quase junto. Depois recarreguem os dois | Que o merge por perfil funciona. **Antes um apagava o outro** — era o defeito mais caro do sistema, e sumia sem erro. Testar também **apagar um perfil** num aparelho e conferir que ele não ressuscita no outro | — |
-| ⬜ 10 | ⭐ **Uma frase, duas transações** (use valor pequeno, R$1): *"tirei 1 da reserva e usei pra pagar um boleto"* e *"tirei 1 da caixinha pra comprar um presente"* | Que a retirada pergunta a reserva e o gasto entra DEPOIS, com a descrição limpa. Único fluxo que cria **duas** transações de uma frase — o risco aqui é duplicar, não faltar | 36 |
-| ⬜ 11 | **Depois dos testes:** `node scripts/remove-conta-teste.mjs` | Apaga a conta descartável. **Só depois** — é a única já nos termos 1.2 | — |
+| ✅ 1 | Cadastro completo em `/planos` com o widget do Turnstile | **APROVADO 2026-08-04** — captcha não quebrou a porta paga | 26 |
+| ✅ 2 | Login + tela com dados | **APROVADO 2026-08-04** — stubs do Supabase não afetaram auth nem queries | 8 |
+| ✅ 3 | Foto de perfil no dashboard | **APROVADO 2026-08-04** — `supabase.storage` intacto | 8 |
+| ✅ 4 | Assistente: memória de conversa, retirada, cortesia, identidade | **APROVADO 2026-08-04** | 36 |
+| ⬜ 5 | **2FA na conta descartável:** ativar · usar · desativar · recuperar. ⚠️ Com 2FA ativo, recarregar e conferir que os dados **carregam e salvam** | O 2FA nunca foi exercitado ponta a ponta; é o ponto mais delicado da fila | 6 |
+| ⬜ 6 | **Exportação (Bloco 2.2):** planilha e JSON, com 2–3 perfis criados antes | Abrir sem "arquivo corrompido" é o único ponto que teste automatizado não cobre | — |
+| ✅ 7 | Blocos 3 e 4 (paleta, sino, vitrine) | **APROVADO 2026-08-04** — achou 2 problemas na landing, os dois corrigidos | — |
+| ⬜ 8 | ⭐ **Duas janelas ao mesmo tempo** (normal + anônima), cada uma lançando num perfil diferente. Depois **apagar um perfil** numa e conferir que não ressuscita na outra | O merge por perfil. Antes um apagava o outro, sem erro. A exclusão mudou de significado — é o caso que só olho humano pega | — |
+| ⬜ 9 | **Retirada pelo chat, olhando a tela de Transações:** o **tipo** deve ser "Retirada de Reserva", não "Salário" | Corrigido hoje: a lista de tipos da retirada era a de ENTRADAS, então o navegador exibia o primeiro item | — |
+| ⬜ 10 | ⭐ **Uma frase, duas transações** (R$1): *"tirei 1 da reserva e usei pra pagar um boleto"*. Confirmar que o chat **responde** (havia balão vazio) e que saem **duas** linhas, não quatro | Único fluxo que cria duas transações de uma frase. O risco é duplicar | 36 |
+| ⬜ 11 | **Entrada + destino** (R$1): *"vendi 1 e guardei"* e *"ganhei 1 e gastei tudo no mercado"* | Nunca testado. Antes gravava só metade — *"vendi e guardei"* criava a reserva **sem** a venda | 36 |
+| ⬜ 12 | **Categorias novas:** *"gastei 50 num paflon"* → Casa, descrição "Paflon" · *"comprei 200 na steam"* → Jogos · conferir que aparecem no seletor de tipo em Transações | Casa e Jogos entraram em 7 listas do app; faltando numa, a categoria some da tela de edição | — |
+| ⬜ 13 | **Orçamento:** *"quero gastar no máximo 500 em mercado"* deve **definir orçamento**, nunca gravar gasto | Gravava uma despesa falsa de R$500 — o único item que inventava dinheiro | — |
+| ⬜ 14 | **Parcelado:** *"comprei 300 parcelado"* deve virar compra no **crédito** e aparecer na fatura | Virava saída à vista e sumia do cartão | — |
+| ⬜ 15 | **Botão Assistente na barra lateral do desktop** | Existia só no mobile — quem usa no desktop não chegava no chat | — |
+| ⬜ 16 | **Depois de tudo:** `node scripts/remove-conta-teste.mjs` | Apaga a conta descartável. **Só no fim** — é a única nos termos 1.2 | — |
 
-**Ações de configuração (não são teste, mas só o dono faz):**
+**Ações de configuração:**
 
 | # | O quê | Efeito |
 |:--|---|---|
-| ⬜ A | `sentry.io` → projeto **Browser JavaScript** → `vercel env add VITE_SENTRY_DSN production` → redeploy | Liga o rastreamento de erros. Hoje o app **não tem visibilidade nenhuma** de erro em produção, e a política de privacidade já declara o Sentry como operador |
-| ⬜ B | `supabase functions delete verify-recaptcha` | Remove a edge órfã do reCAPTCHA. Apagar o arquivo local não desfaz o deploy. Sem pressa — a vaga da Vercel, que era o que importava, já está livre |
-| ⬜ C | Revogar o token da Cloudflare, se não for usar | Foi gerado e nunca consumido |
+| ✅ A | DSN do Sentry | **FEITO 2026-08-04** — ativo, restrito a `granaevo.com` |
+| ✅ B | `supabase functions delete verify-recaptcha` | **FEITO 2026-08-04** |
+| ✅ C | Token da Cloudflare | Temporário, expira sozinho dia 06 — mantido para o /god-eyes até lá |
 
 ---
 
