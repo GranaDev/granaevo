@@ -1388,26 +1388,81 @@ por conta. Migração grande, risco alto, para um ganho que as operações entre
 atual — é o que a guarda anti-wipe e o merge por perfil fazem. Ela pode aplicar
 uma operação e recifrar. Sem migração de dados.
 
-### As quatro fases
+### A descoberta que define o plano
 
-- **37.1** 🔴 **Append como operação + UUID + idempotência.** O cliente manda
-  *"adicione esta transação ao perfil X"*, não o estado. Dois lançando ao mesmo
-  tempo viram dois appends e **nunca** conflitam. O UUID vem do cliente (funciona
-  offline) e serve de chave de idempotência: se o save der timeout e for repetido,
-  o servidor reconhece a operação e não duplica — hoje **duplica**.
-  **É o grosso do valor: resolve o caso relatado.**
-- **37.2** 🔴 **Versão por perfil + 409 em edição/exclusão.** Append não precisa;
-  editar a MESMA transação em dois lugares é conflito de verdade e deve ser
-  recusado, com o cliente recarregando e reaplicando. Sem isso, edição continua
-  last-write-wins.
-- **37.3** 🔴 **Fila local como via única de escrita.** Já existe pela metade: o
-  assistente tem `Outbox` para quando cai a rede. Falta estender ao dashboard e
-  fazer com que TODA escrita passe por ela.
-- **37.4** ⛔ **Tempo real (WebSocket/SSE) — RECUSADO POR ORA.** O Realtime do
-  Supabase foi **removido do bundle** em 2026-08-04 (−14,4 KB, ver Passo 8) porque
-  o app não usa. Trazer de volta custa peso e complexidade para resolver "o outro
-  aparelho demora a ver". Com 2–4 pessoas por conta, o reload no `visibilitychange`
-  cobre. Revisitar só se houver reclamação real de dado desatualizado.
+**As transações NÃO TÊM `id`.** `buildTransaction` devolve
+`{categoria, tipo, descricao, valor, data, hora, metaId}` — e o desfazer funciona
+por **casamento de campos** (`sameTx`) precisamente porque não há identificador.
+Sem id estável não existe diff confiável, então **identidade vem antes de tudo**.
+
+**E as 62 chamadas de escrita da UI não precisam mudar.** Levantadas:
+`dashboard.js` 29 · `db-metas.js` 11 · `db-cartoes.js` 9 · `db-transacoes.js` 8 ·
+`db-configuracoes.js` 5. Converter uma a uma seria caro e deixaria alguma para
+trás — e uma esquecida volta a sobrescrever dado alheio em silêncio.
+
+O `data-manager` **já compara** o estado com um retrato para decidir quais perfis
+mudaram (`#perfisTocados`, feito em 2026-08-04). Estender essa comparação ao
+nível de REGISTRO deriva as operações sozinho: ninguém precisa declarar nada, e
+ninguém pode esquecer de declarar. **É o ponto único por onde todo save passa.**
+
+Coleções que precisam de diff, por frequência de uso no código:
+`transacoes` · `contasFixas` · `metas` · `orcamentos` · `cartoesCredito` · `conquistas`.
+
+### Pedaços — cada um completável e verificável sozinho
+
+**37.0 · IDENTIDADE (fundação, bloqueia todo o resto)**
+- **37.0a** 🔴 `id` UUID em toda transação nova (`buildTransaction` + os pontos de
+  criação do dashboard). Gerado no CLIENTE — funciona offline e vira chave de
+  idempotência depois.
+- **37.0b** 🔴 Backfill silencioso no load: registro antigo sem `id` ganha um,
+  derivado de forma determinística dos campos, para não mudar a cada carga.
+- **37.0c** 🔴 `sameTx`/desfazer passam a casar por `id` quando existir, mantendo
+  o casamento por campos como fallback para registro legado.
+- **37.0d** 🔴 Mesmo tratamento para `metas`, `cartoesCredito`, `contasFixas`.
+  *Verificar: recarregar duas vezes e conferir que nenhum id mudou.*
+
+**37.1 · O CLIENTE MANDA O DIFF**
+- **37.1a** 🔴 `#diffColecao(antes, depois)` genérico → `{add, edit, remove}` por id.
+- **37.1b** 🔴 Ligar em `transacoes` e enviar junto do payload, **sem** ainda o
+  servidor usar. Fase de sombra: dá para comparar diff × estado e provar que
+  batem antes de confiar.
+- **37.1c** 🔴 Estender a `metas`, `cartoesCredito`, `contasFixas`, `orcamentos`,
+  `conquistas`.
+- **37.1d** 🔴 Campos escalares do perfil (nome, foto, config) como `set`.
+
+**37.2 · O SERVIDOR APLICA**
+- **37.2a** 🔴 Aplicar as operações sobre o blob decifrado, em vez de substituir.
+  Reusa o que a guarda anti-wipe e o merge por perfil já fazem.
+- **37.2b** 🔴 **Idempotência:** cada operação leva um id; a Edge guarda os
+  últimos N aplicados e ignora repetição. Hoje um retry após timeout **DUPLICA**
+  a transação — isso é bug em produção, não hipótese.
+- **37.2c** 🔴 Operação desconhecida ou malformada → recusa, sem aplicar nada
+  parcialmente.
+- **37.2d** 🔴 **Compatibilidade:** payload sem operações continua funcionando
+  como hoje. Sem isso, um cliente com bundle velho (Service Worker em cache)
+  perde dados no dia do deploy.
+
+**37.3 · VERSÃO E CONFLITO**
+- **37.3a** 🔴 Contador de versão por perfil, incrementado a cada escrita aceita.
+- **37.3b** 🔴 Edição e exclusão mandam a versão que leram; divergiu → **409**.
+- **37.3c** 🔴 Cliente recarrega e reaplica a operação sozinho; só pede ajuda ao
+  usuário se a reaplicação também falhar.
+
+**37.4 · FILA LOCAL ÚNICA**
+- **37.4a** 🔴 Promover o `Outbox` do assistente a módulo compartilhado.
+- **37.4b** 🔴 Toda escrita entra na fila; a fila é a única que fala com a rede.
+- **37.4c** 🔴 Reenvio com recuo exponencial; a idempotência do 37.2b é o que
+  torna o reenvio seguro.
+
+**37.5** ⛔ **Tempo real — RECUSADO POR ORA.** O Realtime do Supabase foi removido
+do bundle em 2026-08-04 (−14,4 KB, Passo 8) porque o app não usa. Com 2–4 pessoas
+por conta, o reload no `visibilitychange` cobre. Revisitar só diante de
+reclamação real de dado desatualizado.
+
+### Ordem sugerida
+`37.0 → 37.1 → 37.2 → 37.3 → 37.4`. A identidade bloqueia tudo; o diff sem o
+servidor aplicando (37.1b) permite provar a derivação **antes** de confiar nela.
+O 37.3 e o 37.4 são incrementais e podem esperar.
 
 **Também avaliado e dispensado:** tela de resolução assistida de conflito (com
 operações, conflito real vira raro — só edição do mesmo registro); logs de
@@ -1423,18 +1478,29 @@ nada se perde. É o teste que hoje falha.
   *"Recebi um pix de 70 reais da Ke"* → descrição **"Outros recebimentos"** (o
   rótulo da categoria, não o que ele disse); *"e gastei ele no mercado"* →
   **"Ele no Mercado"** (pronome solto virou descrição). O certo seria "Da Ke" e
-  "Mercado". Está no `describe.js`: ele cai no rótulo quando não acha item, e não
-  limpa pronomes. **Consertar MEDINDO com corpus**, como foi feito com a direção
-  do dinheiro — não a olho.
+  "Mercado".
+  · **38.1a** 🔴 Corpus de medição, como foi feito com a direção do dinheiro:
+    frases reais → descrição esperada. Sem isso o conserto é chute.
+  · **38.1b** 🔴 Pronomes e conectivos soltos ("ele", "isso", "lá") saem da
+    descrição — é o que produziu "Ele no Mercado".
+  · **38.1c** 🔴 "de/da/do + nome próprio" vira descrição ("Da Ke"), em vez de
+    cair no rótulo da categoria.
+  · **38.1d** 🔴 Quando NADA sobra, preferir o rótulo do TIPO ("Mercado") ao da
+    CATEGORIA ("Outros recebimentos") — é sempre mais específico.
 - **38.2** 🔴 **A exportação está furada** — e é o entregável central do direito
-  de portabilidade (art. 18, V). Achados do dono: **não existe aba "Transações"**;
-  "Perfis" mostra **"-"** em vez da contagem/nomes; a aba "Atividade" traz ~500
-  linhas de `UPDATE`/`DATA` ilegíveis. **Esse log de auditoria NÃO deve ir para o
-  titular** — o que a LGPD pede é o dado dele, não o diário interno do sistema.
+  de portabilidade (art. 18, V).
+  · **38.2a** 🔴 **Não existe aba "Transações"** — o dado principal do usuário.
+  · **38.2b** 🔴 "Perfis" mostra **"-"** em vez da contagem e dos nomes.
+  · **38.2c** 🔴 A aba "Atividade" traz ~500 linhas de `UPDATE`/`DATA` ilegíveis.
+    **Esse log de auditoria NÃO deve ir para o titular:** a LGPD pede o DADO dele,
+    não o diário interno do sistema. Remover ou reduzir a algo legível.
+  · **38.2d** 🔴 Conferir o JSON com os mesmos olhos (o dono tem os dois arquivos).
+  ⚠️ **Consertar com os ARQUIVOS na mão**, não pelo código: ele já enganou três
+  vezes nesta sessão.
 - **38.3** 🔴 **Perfil some no chat.** Conta com 4 perfis (dois de nome igual) e o
-  assistente mostra 1. **Descartado** que seja o merge: testado com ids repetidos,
-  ele preserva os três. Falta o dado do dono: o seletor DENTRO do chat mostra
-  quantos?
+  assistente mostra 1. **Descartado** que seja o merge por perfil: testado com ids
+  repetidos, ele preserva os três. **Falta o dado do dono:** o seletor DENTRO do
+  chat mostra quantos?
 
 **Risco:** baixo (nenhum grava dado errado). **Esforço:** ~1 dia somados.
 
@@ -1512,7 +1578,7 @@ edge que não esteja recebendo a chave nova.
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | ✅ D-1..D-5 feitos; D-6/D-7 ⛔ recusados pelo dono |
 | 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | ✅ P-2/P-3/P-6 feitos; P-1/P-4/P-5 ⛔ recusados pelo dono |
 | 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🟡 **Falta:** só herdar contexto em compra no crédito (C-1). C-1..C-8 ✅ |
-| **37** | ⭐ **Concorrência: sincronizar por OPERAÇÃO** | 37.1 … 37.4 | 🔴 **Lost Update confirmado em 2026-08-04.** O app perde dado do usuário sem avisar |
+| **37** | ⭐ **Concorrência: sincronizar por OPERAÇÃO** | 37.0 … 37.5 (18 pedaços) | 🔴 **Lost Update confirmado em 2026-08-04.** O app perde dado do usuário sem avisar. Cobre TODAS as escritas: lançar, pagar conta, reserva, retirada, crédito, orçamento, metas, cartões, perfis |
 | 38 | Descrição do lançamento + exportação | 38.1 … 38.3 | 🔴 Achados dos testes manuais de 2026-08-04 |
 
 ---
