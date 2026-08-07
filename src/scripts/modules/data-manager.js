@@ -1,7 +1,7 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
 import { supabase, getValidAccessToken, refreshSession as hybridRefresh } from '../services/supabase-client.js?v=2';
 import { backfillIds, carimbarNovos, serializarEstavel, COLECOES } from './registro-id.js?v=1';
-import { diffColecao, aplicarOperacoes, comEndereco } from './diff-registros.js?v=1';
+import { diffColecao, aplicarOperacoes, diffCampos, aplicarCampos, comEndereco } from './diff-registros.js?v=1';
 import { captureError } from './error-tracking.js';
 
 // ========== CONSTANTES PRIVADAS ==========
@@ -185,9 +185,19 @@ class DataManager {
                 ops.push(...comEndereco(d.ops, id, col));
             }
 
-            if (serializarEstavel(this.#restoDoPerfil(base)) !== serializarEstavel(this.#restoDoPerfil(p))) {
-                completo = false; motivos.add('campos_fora_das_colecoes');
+            // Campos fora das coleções (nome, foto, config, orçamentos,
+            // conquistas, saldo). Sem eles, um perfil que só foi RENOMEADO
+            // geraria zero operações — e aplicar zero operações devolveria o nome
+            // antigo. Um `set` por chave, para duas pessoas mexendo em campos
+            // diferentes não se atropelarem.
+            const dc = diffCampos(base, p, COLECOES);
+            if (dc.ok !== true) { completo = false; motivos.add(`perfil:${dc.motivo}`); continue; }
+
+            const refeitoCampos = aplicarCampos(this.#restoDoPerfil(base), dc);
+            if (serializarEstavel(refeitoCampos) !== serializarEstavel(this.#restoDoPerfil(p))) {
+                completo = false; motivos.add('perfil:reconstrucao_divergente'); continue;
             }
+            ops.push(...comEndereco(dc.ops, id, null));
         }
 
         // Divergência é a notícia; acordo é o esperado. Uma vez por sessão, para

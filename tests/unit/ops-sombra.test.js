@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { diffColecao, aplicarOperacoes, comEndereco } from '../../src/scripts/modules/diff-registros.js'
+import { diffColecao, aplicarOperacoes, comEndereco, diffCampos, aplicarCampos } from '../../src/scripts/modules/diff-registros.js'
 import { serializarEstavel, carimbarNovos, COLECOES } from '../../src/scripts/modules/registro-id.js'
 
 /** O "resto" do perfil — tudo que não é coleção. Espelha `#restoDoPerfil`. */
@@ -36,6 +36,21 @@ const tx = (id, over = {}) => ({
   id, categoria: 'saida', tipo: 'Mercado', descricao: 'Feira',
   valor: 50, data: '07/08/2026', hora: '10:00:00', metaId: null, ...over,
 })
+
+/**
+ * O PERFIL INTEIRO reconstruído a partir das operações — coleções e campos
+ * juntos, na mesma ordem que o data-manager usa. É a verificação que importa:
+ * cada metade pode estar certa sozinha e o conjunto ainda não fechar.
+ */
+const batePerfil = (antes, depois) => {
+  const refeito = aplicarCampos(resto(antes), diffCampos(antes, depois, COLECOES))
+  for (const col of COLECOES) {
+    const d = diffColecao(antes[col], depois[col])
+    if (d.ok !== true) return { ok: false, motivo: `${col}:${d.motivo}` }
+    if (col in depois) refeito[col] = aplicarOperacoes(antes[col] || [], d)
+  }
+  return { ok: serializarEstavel(refeito) === serializarEstavel(depois) }
+}
 
 /** O autoteste, exatamente como o data-manager o faz. */
 const bate = (antes, depois) => {
@@ -141,14 +156,16 @@ describe('37.1c — todas as coleções, não só transações', () => {
 })
 
 describe('37.1c — o que as operações de coleção NÃO descrevem', () => {
-  test('mudar só o nome do perfil não gera operação nenhuma', () => {
-    // Se o servidor aplicasse só as operações, o perfil renomeado voltaria ao
-    // nome antigo. É por isso que o `resto` precisa marcar incompleto até o
-    // 37.1d transformar campo escalar em operação `set`.
+  test('mudar só o nome do perfil não gera operação de COLEÇÃO nenhuma', () => {
+    // Se o servidor aplicasse só as operações de coleção, o perfil renomeado
+    // voltaria ao nome antigo. É o buraco que o 37.1d fecha com `set`.
     const antes = { id: 'p1', name: 'Lucas', transacoes: [tx('a')] }
     const depois = { id: 'p1', name: 'Lucas Oliveira', transacoes: [tx('a')] }
     assert.equal(bate(antes.transacoes, depois.transacoes).n, 0)
     assert.notEqual(serializarEstavel(resto(antes)), serializarEstavel(resto(depois)))
+    // …e aí a operação de campo aparece.
+    assert.deepEqual(diffCampos(antes, depois, COLECOES).ops,
+      [{ op: 'set', k: 'name', v: 'Lucas Oliveira' }])
   })
 
   test('orçamentos e conquistas caem no resto — são mapas, não listas', () => {
@@ -166,10 +183,43 @@ describe('37.1c — o que as operações de coleção NÃO descrevem', () => {
     assert.equal(serializarEstavel(resto(antes)), serializarEstavel(resto(depois)))
   })
 
-  test('o data-manager compara o resto e marca incompleto', () => {
+  test('o PERFIL INTEIRO é reconstruído pelas operações — coleções e campos juntos', () => {
+    // Cada metade pode estar certa sozinha e o conjunto ainda não fechar. Este
+    // é o invariante que o 37.2a vai depender: aplicar as operações no servidor
+    // tem de dar exatamente o perfil que o cliente tem na tela.
+    const base = {
+      id: 'p1', name: 'Lucas', config: { tema: 'escuro' },
+      orcamentos: { Mercado: { limite: 600 } },
+      transacoes: [tx('t1')],
+      metas: [{ id: 'm1', descricao: 'Viagem', saved: 100 }],
+      contasFixas: [{ id: 'f1', descricao: 'Luz', valor: 180 }],
+    }
+    const casos = {
+      'só lançou':            { ...base, transacoes: [tx('t1'), tx('t2')] },
+      'só renomeou':          { ...base, name: 'Lucas O.' },
+      'lançou E renomeou':    { ...base, name: 'Lucas O.', transacoes: [tx('t1'), tx('t2')] },
+      'guardou na reserva':   { ...base, transacoes: [tx('t1'), tx('t2')], metas: [{ id: 'm1', descricao: 'Viagem', saved: 150 }] },
+      'mudou orçamento':      { ...base, orcamentos: { Mercado: { limite: 800 } } },
+      'apagou o orçamento':   (() => { const c = { ...base }; delete c.orcamentos; return c })(),
+      'pagou conta fixa':     { ...base, transacoes: [tx('t1'), tx('t2')], contasFixas: [{ id: 'f1', descricao: 'Luz', valor: 180, pago: true }] },
+      'perfil novo do zero':  base,
+      'não mexeu em nada':    base,
+    }
+    for (const [nome, depois] of Object.entries(casos)) {
+      const antes = nome === 'perfil novo do zero' ? { id: 'p1' } : base
+      assert.equal(batePerfil(antes, depois).ok, true, nome)
+    }
+  })
+
+  test('o data-manager deriva os campos e confere a reconstrução', () => {
+    // Em 37.1c isto era só uma COMPARAÇÃO que marcava incompleto. Com o 37.1d
+    // virou derivação de verdade: `set`/`unset` por chave, com o mesmo autoteste
+    // das coleções. O que não pode voltar é o perfil renomeado sair sem operação.
     const fn = DM.match(/#derivarOperacoes\([\s\S]*?\n {4}\}/)[0]
-    assert.match(fn, /#restoDoPerfil\(base\)\) !== serializarEstavel\(this\.#restoDoPerfil\(p\)\)/)
-    assert.match(fn, /motivos\.add\('campos_fora_das_colecoes'\)/)
+    assert.match(fn, /diffCampos\(base, p, COLECOES\)/)
+    assert.match(fn, /aplicarCampos\(this\.#restoDoPerfil\(base\), dc\)/)
+    assert.match(fn, /motivos\.add\('perfil:reconstrucao_divergente'\)/)
+    assert.match(fn, /comEndereco\(dc\.ops, id, null\)/)
   })
 })
 

@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { diffColecao, diffVazio, contarOperacoes, aplicarOperacoes, operacoesDe, comEndereco }
+import { diffColecao, diffVazio, contarOperacoes, aplicarOperacoes, operacoesDe, comEndereco, diffCampos, aplicarCampos }
   from '../../src/scripts/modules/diff-registros.js'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -324,6 +324,111 @@ describe('o formato cabe no que o proxy aceita — o motivo de a lista ser plana
     assert.equal(op.p, 'p1')
     assert.equal(op.c, 'transacoes')
     assert.equal(op.op, 'add')
+  })
+})
+
+describe('37.1d — campos do perfil, que não são lista nem têm id', () => {
+  const perfil = (over = {}) => ({
+    id: 'p1', name: 'Lucas', foto: null, balance: 0,
+    config: { tema: 'escuro' }, orcamentos: { Mercado: { limite: 600 } },
+    transacoes: [r('a')], ...over,
+  })
+  const COLS = ['transacoes', 'metas', 'cartoesCredito', 'contasFixas', 'assinaturas']
+  const dcampos = (a, b) => diffCampos(a, b, COLS)
+
+  test('renomear o perfil vira UM set — nada mais', () => {
+    const d = dcampos(perfil(), perfil({ name: 'Lucas Oliveira' }))
+    assert.deepEqual(d.ops, [{ op: 'set', k: 'name', v: 'Lucas Oliveira' }])
+  })
+
+  test('as coleções não entram (elas viajam por operação própria)', () => {
+    const d = dcampos(perfil(), perfil({ transacoes: [r('a'), r('b')] }))
+    assert.deepEqual(d.ops, [])
+  })
+
+  test('o `id` do perfil nunca vira set — ele é a chave', () => {
+    const d = dcampos(perfil(), perfil({ id: 'outro' }))
+    assert.deepEqual(d.ops, [])
+  })
+
+  test('campo APAGADO vira unset, não set com null', () => {
+    // O app apaga campo de verdade: o allowlist do save descarta o que virou
+    // `undefined`. Confundir "removido" com "vale null" gravaria null onde havia
+    // ausência — e `'x' in obj` passaria a ser true onde era false.
+    const antes = perfil({ viagem: { destino: 'Chile' } })
+    const d = dcampos(antes, perfil())
+    assert.deepEqual(d.ops, [{ op: 'unset', k: 'viagem' }])
+  })
+
+  test('campo NOVO vira set', () => {
+    const d = dcampos(perfil(), perfil({ viagem: { destino: 'Chile' } }))
+    assert.deepEqual(d.ops, [{ op: 'set', k: 'viagem', v: { destino: 'Chile' } }])
+  })
+
+  test('objeto aninhado vai inteiro no valor', () => {
+    const d = dcampos(perfil(), perfil({ orcamentos: { Mercado: { limite: 800 } } }))
+    assert.equal(d.ops.length, 1)
+    assert.deepEqual(d.ops[0], { op: 'set', k: 'orcamentos', v: { Mercado: { limite: 800 } } })
+  })
+
+  test('reordenar chaves de um aninhado não é mudança', () => {
+    const a = perfil({ orcamentos: { Mercado: { limite: 600 }, Lazer: { limite: 100 } } })
+    const b = perfil({ orcamentos: { Lazer: { limite: 100 }, Mercado: { limite: 600 } } })
+    assert.deepEqual(dcampos(a, b).ops, [])
+  })
+
+  test('dois campos diferentes = duas operações — é o ponto da granularidade', () => {
+    // Mandar "o resto todo" num bloco só traria de volta o problema que este
+    // passo existe para resolver: duas pessoas mexendo em campos DIFERENTES do
+    // mesmo perfil voltariam a se atropelar.
+    const d = dcampos(perfil(), perfil({ name: 'Novo', config: { tema: 'claro' } }))
+    assert.deepEqual(d.ops.map((o) => o.k).sort(), ['config', 'name'])
+  })
+
+  test('aplicar reconstrói o perfil exatamente', () => {
+    const casos = [
+      [perfil(), perfil({ name: 'X' })],
+      [perfil(), perfil({ viagem: { destino: 'Chile' } })],
+      [perfil({ viagem: {} }), perfil()],
+      [perfil(), perfil({ config: { tema: 'claro' }, balance: 10 })],
+      [{ id: 'p1' }, perfil()],
+      [perfil(), perfil()],
+    ]
+    for (const [antes, depois] of casos) {
+      const semCols = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => !COLS.includes(k)))
+      const refeito = aplicarCampos(semCols(antes), dcampos(antes, depois))
+      assert.deepEqual(refeito, semCols(depois))
+    }
+  })
+
+  test('aplicar não muta o objeto original', () => {
+    const antes = perfil()
+    const copia = JSON.parse(JSON.stringify(antes))
+    aplicarCampos(antes, dcampos(antes, perfil({ name: 'X' })))
+    assert.deepEqual(antes, copia)
+  })
+
+  test('o que não é objeto recusa', () => {
+    assert.equal(diffCampos(null, {}).motivo, 'nao_e_objeto')
+    assert.equal(diffCampos({}, [1, 2]).motivo, 'nao_e_objeto')
+  })
+
+  test('operação de campo não leva `c` — ela é do perfil, não de coleção', () => {
+    const d = dcampos(perfil(), perfil({ name: 'X' }))
+    const [op] = comEndereco(d.ops, 'p1', null)
+    assert.equal(op.p, 'p1')
+    assert.ok(!('c' in op), 'mandar c:null convida quem aplica a tratar null como coleção')
+  })
+
+  test('os dois aplicadores não se atropelam na lista misturada', () => {
+    // O fio carrega uma lista só, com operações de coleção E de campo. Cada
+    // aplicador tem de ignorar o que não é dele.
+    const mistura = [
+      { p: 'p1', c: 'transacoes', op: 'add', apos: null, r: r('z') },
+      { p: 'p1', op: 'set', k: 'name', v: 'Novo' },
+    ]
+    assert.deepEqual(ids(aplicarOperacoes([], mistura)), ['z'])
+    assert.deepEqual(aplicarCampos({ name: 'Velho' }, mistura), { name: 'Novo' })
   })
 })
 

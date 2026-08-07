@@ -1363,8 +1363,15 @@ realmente quer offline (consultar, não lançar).
 
 ## PASSO 37 — Sincronização por OPERAÇÃO 🟡 EM ANDAMENTO ⭐
 
-**Falta:** os blocos 37.1 a 37.4 (14 pedaços). O bloco 37.0 (IDENTIDADE) está
-COMPLETO — era ele que bloqueava todo o resto.
+**Falta:** os blocos 37.2 a 37.4 (10 pedaços). Os blocos 37.0 (IDENTIDADE) e
+37.1 (O CLIENTE MANDA O DIFF) estão COMPLETOS: as operações já viajam no payload
+e o cliente já prova, a cada save, que aplicá-las reconstrói o perfil inteiro.
+O servidor ainda as ignora — é a fase de sombra, de propósito.
+
+📋 **A sombra precisa responder, antes do 37.2a:** o dashboard reconstrói cada
+registro pelo allowlist antes de salvar. Se algum dado legado tiver campo fora da
+lista, o PRIMEIRO save da sessão sai como "editei tudo". O log de dev
+(`🔬 sombra: N operação(ões), completo=…`) mostra o número na hora.
 
 **O defeito, nas palavras de quem viu:** *"se eu mexo no chat assistente com a aba
 do GranaEvo aberta, um sobrescreve o outro"*. Reproduzido: uma retirada lançada
@@ -1495,17 +1502,17 @@ Coleções que precisam de diff, por frequência de uso no código:
     foi renomeado gera ZERO operações — se o servidor aplicasse só elas, o nome
     antigo voltaria. Enquanto o 37.1d não existe, mudança no resto marca
     `ops_completo = false`, e a sombra mede quantas vezes isso acontece.
-- **37.1d** 🔴 Campos escalares do perfil (nome, foto, config, `orcamentos`,
-  `conquistas`, saldo) como operação `set`. É o que falta para `ops_completo`
-  poder significar "as operações descrevem TUDO" — sem isso o 37.2a não pode
-  aplicar só operações.
-  **Falta:** derivar o `set` a partir do `#restoDoPerfil` (que já existe e já é
-  comparado), decidir a granularidade (campo a campo × o resto inteiro) e cobrir
-  com teste de reconstrução como as coleções.
-  📋 **A sombra precisa responder antes:** o dashboard reconstrói cada registro
-  pelo allowlist antes de salvar. Se algum dado legado tiver campo fora da lista,
-  o PRIMEIRO save da sessão sai como "editei tudo" — o log de dev
-  (`🔬 sombra: N operação(ões)`) mostra o número na hora.
+- **37.1d** ✅ `diffCampos`/`aplicarCampos`: `set` e `unset` por chave de primeiro
+  nível. Com isso `ops_completo` passa a significar de verdade "as operações
+  descrevem o perfil INTEIRO" — que é a premissa do 37.2a.
+  · **Um `set` por chave, não um bloco só.** Mandar "o resto todo" de uma vez
+    traria de volta exatamente o problema deste passo: duas pessoas mexendo em
+    campos DIFERENTES do mesmo perfil voltariam a se atropelar.
+  · **`unset` é operação própria, não `set` com `null`.** O app apaga campo de
+    verdade (o allowlist descarta o que virou `undefined`); confundir "removido"
+    com "vale null" gravaria null onde havia ausência.
+  · Autoteste agora reconstrói o **perfil inteiro** (coleções + campos): cada
+    metade pode estar certa sozinha e o conjunto não fechar.
 
 **37.2 · O SERVIDOR APLICA**
 - **37.2a** 🔴 Aplicar as operações sobre o blob decifrado, em vez de substituir.
