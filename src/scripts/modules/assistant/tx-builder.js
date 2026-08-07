@@ -1,6 +1,6 @@
 // tx-builder.js — monta e aplica um lançamento, com desfazer reversível
 // ---------------------------------------------------------------------------
-// Produz uma transação IDÊNTICA ao schema do app: {categoria,tipo,descricao,
+// Produz uma transação IDÊNTICA ao schema do app: {id,categoria,tipo,descricao,
 // valor,data,hora,metaId}. NÃO toca em profile.balance (o saldo é sempre
 // recalculado a partir de transacoes[] — ver dashboard.js). Reserva atualiza
 // meta.saved e meta.monthly exatamente como db-transacoes.js.
@@ -15,6 +15,7 @@ import { agoraDataHora, yearMonthKey, brDateToObj } from './money.js';
 // não pode ter a sua própria versão da regra de fatura (foi assim que o modelo
 // antigo e o novo passaram a coexistir e a fatura exibiu valor errado).
 import { gerarParcelas, anexarParcelas, valorAbertoFatura, paraISO } from '../fatura-parcelas.js?v=1';
+import { novoId } from '../registro-id.js?v=1';
 
 const APLICAVEIS_V1 = ['entrada', 'saida', 'reserva'];
 
@@ -94,6 +95,7 @@ export function buildTransaction(cmd, metaId = null) {
     const data = (typeof cmd.dataOverride === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(cmd.dataOverride))
         ? cmd.dataOverride : dh.data;
     return {
+        id:        novoId(),
         categoria: cmd.categoria,
         tipo:      cmd.categoria === 'reserva' ? 'Reserva' : cmd.tipo,
         descricao: cmd.descricao || cmd.tipo || '',
@@ -169,6 +171,7 @@ export function applyRetirada(profile, cmd) {
     const dh = agoraDataHora();
     const ym = yearMonthKey();
     const t = {
+        id: novoId(),
         categoria: 'retirada_reserva',
         tipo: 'Retirada de Reserva',
         descricao: `Retirada: ${metaNome(meta)}`,
@@ -386,6 +389,7 @@ export function applyPagamentoConta(profile, conta, valorOpcional) {
     const dh = agoraDataHora();
     const desc = String(conta.descricao || 'Conta').slice(0, 100);
     const t = {
+        id: novoId(),
         categoria: 'saida',
         tipo: 'Conta Fixa',
         descricao: `${desc} (pagamento mensal)`,

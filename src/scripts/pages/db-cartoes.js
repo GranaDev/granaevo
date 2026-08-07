@@ -2,6 +2,7 @@
 import { analisarCiclo, proximaOcorrencia, meiaNoite } from '../modules/ciclo-fatura.js?v=1';
 import { valorAbertoFatura, parcelasDaCompra } from '../modules/fatura-parcelas.js?v=1';
 import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
+import { novoId } from '../modules/registro-id.js?v=1';
 
 let _ctx = null;
 
@@ -1892,6 +1893,7 @@ function processarPagamentoCompra(faturaId, compraId, valorPago) {
         const descricaoSegura = `${String(compra.tipo || '').slice(0, 100)} - ${String(compra.descricao || '').slice(0, 100)} (${nParc}/${compra.totalParcelas})`;
 
         _ctx.transacoes.push({
+            id:         novoId(),
             categoria:  'saida',
             tipo:       'Pagamento Cartão',
             descricao:  descricaoSegura,

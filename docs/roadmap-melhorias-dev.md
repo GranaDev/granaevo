@@ -1361,7 +1361,10 @@ realmente quer offline (consultar, não lançar).
 > dívida de arquitetura que sobrou, e a única que faz o app **perder dado do
 > usuário sem avisar**.
 
-## PASSO 37 — Sincronização por OPERAÇÃO 🔴 NÃO INICIADO ⭐
+## PASSO 37 — Sincronização por OPERAÇÃO 🟡 EM ANDAMENTO ⭐
+
+**Falta:** 37.0c e os blocos 37.1 a 37.4 (14 pedaços). A identidade (37.0a/b/d)
+está feita e é o que bloqueava todo o resto.
 
 **O defeito, nas palavras de quem viu:** *"se eu mexo no chat assistente com a aba
 do GranaEvo aberta, um sobrescreve o outro"*. Reproduzido: uma retirada lançada
@@ -1411,15 +1414,29 @@ Coleções que precisam de diff, por frequência de uso no código:
 ### Pedaços — cada um completável e verificável sozinho
 
 **37.0 · IDENTIDADE (fundação, bloqueia todo o resto)**
-- **37.0a** 🔴 `id` UUID em toda transação nova (`buildTransaction` + os pontos de
-  criação do dashboard). Gerado no CLIENTE — funciona offline e vira chave de
-  idempotência depois.
-- **37.0b** 🔴 Backfill silencioso no load: registro antigo sem `id` ganha um,
-  derivado de forma determinística dos campos, para não mudar a cada carga.
+- **37.0a** ✅ `id` em todo registro novo — `src/scripts/modules/registro-id.js`.
+  Carimbado nos 14 pontos de criação (assistente, dashboard, transações, metas,
+  cartões) e uma REDE em `data-manager` para o que escapar. A rede não substitui
+  o carimbo: o dashboard reconstrói cada objeto pelo allowlist antes de salvar,
+  então a rede pegaria a CÓPIA e o array vivo da tela sortearia outro id no save
+  seguinte — o mesmo registro pareceria apagado e recriado a cada gravação.
+  Guarda em `check-allowlist.mjs` (roda no CI): registro criado sem `id`, ou
+  `novoId()` chamado sem import, reprova o build.
+- **37.0b** ✅ Backfill determinístico no load, ANTES do retrato. Registro antigo
+  deriva o id de um hash do conteúdo (cyrb53, 53 bits) — dois clientes que leem a
+  mesma linha chegam ao MESMO id. Duplicatas exatas são desempatadas pela posição
+  no array, que também é igual em todo cliente.
+  ⚠️ **A inversão que sustenta o passo:** registro NOVO precisa de id ALEATÓRIO
+  (dois cafés de R$ 5 no mesmo minuto são dois cafés — id derivado fundiria os
+  dois) e registro ANTIGO precisa de id DERIVADO (id sorteado faria cada cliente
+  ver "sumiu um e nasceu outro"). Por isso 37.0a e 37.0b saíram juntos: só um dos
+  dois em produção seria pior que nenhum.
 - **37.0c** 🔴 `sameTx`/desfazer passam a casar por `id` quando existir, mantendo
   o casamento por campos como fallback para registro legado.
-- **37.0d** 🔴 Mesmo tratamento para `metas`, `cartoesCredito`, `contasFixas`.
-  *Verificar: recarregar duas vezes e conferir que nenhum id mudou.*
+  **Falta:** editar `sameTx` em `tx-builder.js` e o desfazer de `db-transacoes`.
+- **37.0d** ✅ Vale para `metas`, `cartoesCredito`, `contasFixas` e `assinaturas`
+  (esta última faltava na lista original). Verificado por teste: carregar duas
+  vezes não muda id nenhum.
 
 **37.1 · O CLIENTE MANDA O DIFF**
 - **37.1a** 🔴 `#diffColecao(antes, depois)` genérico → `{add, edit, remove}` por id.

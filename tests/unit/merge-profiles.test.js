@@ -153,8 +153,16 @@ describe('o lado cliente — quem calcula o que foi tocado', () => {
     assert.match(DM, /touched_profile_ids: tocados/)
   })
 
-  test('o retrato é tirado no load bem-sucedido', () => {
-    assert.match(DM, /this\.#lastLoadOk = true;[\s\S]{0,200}this\.#tirarRetrato\(userData\.profiles\)/)
+  test('o retrato é tirado no load bem-sucedido, antes de devolver os dados', () => {
+    // A 1ª versão media a distância em caracteres entre as duas linhas (200) —
+    // e reprovou assim que um comentário entrou no meio, sem nada ter quebrado.
+    // O que importa não é a proximidade: é que o retrato aconteça DEPOIS de o
+    // load ser dado como bem-sucedido e ANTES de os dados irem para a tela.
+    const i = DM.indexOf('this.#lastLoadOk = true;')
+    const j = DM.indexOf('this.#tirarRetrato(userData.profiles)')
+    const k = DM.indexOf('return userData;')
+    assert.ok(i > 0 && j > i, 'retrato precisa vir depois de #lastLoadOk = true')
+    assert.ok(k > j, 'retrato precisa vir antes de devolver os dados')
   })
 
   test('e ATUALIZADO após cada save bem-sucedido', () => {

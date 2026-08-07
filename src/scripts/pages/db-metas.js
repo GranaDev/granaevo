@@ -11,6 +11,7 @@ import {
     depositoLiquidoDe, ehUltimoMembro, sairDaReserva,
 } from '../modules/reserva-familia.js?v=8';
 import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
+import { novoId } from '../modules/registro-id.js?v=1';
 
 // ── Reserva compartilhada v2: propagação entre perfis ───────────────────────
 // O blob é UMA linha (array de perfis), cada perfil com suas próprias `metas`.
@@ -597,12 +598,8 @@ function abrirFormReservaExistente() {
             }
 
             // ── Criar reserva (sem transação de débito) ───────────────────────
-            const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-                ? crypto.randomUUID()
-                : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
             _ctx.metas.push({
-                id:                 novoId,
+                id:                 novoId(),
                 descricao:          desc,
                 tipoReserva:        tipoVal || 'outro',
                 objetivo,
@@ -1170,11 +1167,8 @@ function abrirMetaForm(editId = null) {
                 // Sincroniza conta fixa de aporte quando muda configuração
                 _sincronizarContaFixaAporte(meta, aporteRecorrente, valorAporte, aporteAnterior, valorAporteAnterior, desc);
             } else {
-                const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-                    ? crypto.randomUUID()
-                    : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
                 const novaMeta = {
-                    id: novoId, descricao: desc, objetivo, saved: 0, monthly: {},
+                    id: novoId(), descricao: desc, objetivo, saved: 0, monthly: {},
                     prazo, tipoRendimento: tipoR, taxaJuros, cdiPct,
                     rendimentoPeriodo, aporteRecorrente, valorAporte,
                 };
@@ -1202,9 +1196,7 @@ function abrirMetaForm(editId = null) {
                     const mm   = hoje.getMonth() + 2 > 12 ? 1 : hoje.getMonth() + 2;
                     const aa   = hoje.getMonth() + 2 > 12 ? hoje.getFullYear() + 1 : hoje.getFullYear();
                     _ctx.contasFixas.push({
-                        id:          (typeof crypto !== 'undefined' && crypto.randomUUID)
-                                         ? crypto.randomUUID()
-                                         : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                        id:          novoId(),
                         descricao:   `Aporte ${desc}`.slice(0, 200),
                         valor:       valorAporte,
                         vencimento:  `${aa}-${String(mm).padStart(2,'0')}-01`,
@@ -1263,9 +1255,7 @@ function _sincronizarContaFixaAporte(meta, aporteAtivo, valorAporte, aporteAnter
         } else if (!aporteAnterior) {
             // Cria nova conta fixa de aporte (aporte foi ativado agora)
             _ctx.contasFixas.push({
-                id: (typeof crypto !== 'undefined' && crypto.randomUUID)
-                    ? crypto.randomUUID()
-                    : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                id: novoId(),
                 descricao:  descContaFixa,
                 valor:      valorAporte,
                 vencimento: `${aa}-${String(mm).padStart(2,'0')}-01`,
@@ -1857,6 +1847,7 @@ function _sairDaReservaCompartilhada(meta) {
             if (r.valor > 0) {
                 const dh = _ctx.agoraDataHora();
                 _ctx.transacoes.push({
+                    id:             novoId(),
                     categoria:      'retirada_reserva',
                     tipo:           'Retirada de Reserva',
                     descricao:      `Saída da reserva — ${meta.descricao}`.slice(0, 200),
@@ -2892,8 +2883,8 @@ function abrirRetiradaForm() {
         const motivoFinal = motivoSelect === 'Outro' ? outroMotivoTexto : motivoSelect;
         const dh          = _ctx.agoraDataHora();
 
-        // ✅ Sem id — banco gera via gen_random_uuid()
         _ctx.transacoes.push({
+            id:              novoId(),
             categoria:       'retirada_reserva',
             tipo:            'Retirada de Reserva',
             descricao:       `Retirada: ${meta.descricao}`,
@@ -3106,8 +3097,9 @@ function abrirGuardarForm() {
 
             const dh = _ctx.agoraDataHora();
 
-            // ── Transação 'reserva' (saldo → reserva) — sem id, banco gera UUID ─
+            // ── Transação 'reserva' (saldo → reserva) ───────────────────────
             _ctx.transacoes.push({
+                id:        novoId(),
                 categoria: 'reserva',
                 tipo:      'Reserva',
                 descricao,

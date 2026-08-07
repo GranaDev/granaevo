@@ -10,6 +10,7 @@ import { migrarCompra, anexarParcelas, ehParcelaAntiga, valorAbertoFatura } from
 import { evaluate as evaluateConquistas, enqueueToasts as enqueueConquistaToasts, sanitizeUnlocked as sanitizeConquistas } from '../modules/achievements.js?v=2';
 import { sanitizarConfigPerfil as _sanitizarConfigPerfilPuro } from '../modules/config-perfil.js';
 import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
+import { novoId } from '../modules/registro-id.js?v=1';
 
 // Inicializa rastreamento de erros o quanto antes (no-op sem VITE_SENTRY_DSN / fora de produção)
 initErrorTracking();
@@ -1249,9 +1250,7 @@ function _processarCobrancaAssinatura(assinatura, cartao) {
     const dataFaturaISO = _calcularFaturaParaData(cartao, dataRef);
 
     const novaCompra = {
-        id: (typeof crypto !== 'undefined' && crypto.randomUUID)
-            ? crypto.randomUUID()
-            : `compra_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        id: novoId(),
         tipo:          'Assinatura',
         descricao:     assinatura.nome,
         valorTotal:    assinatura.valor,
@@ -1278,9 +1277,7 @@ function _processarCobrancaAssinatura(assinatura, cartao) {
         }, 0);
     } else {
         contasFixas.push({
-            id: (typeof crypto !== 'undefined' && crypto.randomUUID)
-                ? crypto.randomUUID()
-                : `fatura_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            id: novoId(),
             descricao:     `Fatura ${cartao.nomeBanco}`,
             valor:         novaCompra.valorParcela,
             vencimento:    dataFaturaISO,
@@ -4175,12 +4172,7 @@ function abrirContaFixaForm(editId = null) {
             if(isNaN(valor) || valor <= 0) return mostrarNotificacao('Informe um valor válido e positivo.', 'error');
             if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return mostrarNotificacao('Data de vencimento inválida.', 'error');
 
-            // ✅ CORREÇÃO: gera id local para que editar e excluir funcionem corretamente
-            const novoId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-                ? crypto.randomUUID()
-                : `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
-            contasFixas.push({ id: novoId, descricao: desc, valor, vencimento: venc, pago: false });
+            contasFixas.push({ id: novoId(), descricao: desc, valor, vencimento: venc, pago: false });
             if (typeof _cache !== 'undefined') _cache.cf = null;
             salvarDados();
             atualizarListaContasFixas();
@@ -4401,6 +4393,7 @@ function anteciparContaFixa(id, valorPago) {
         const descricaoSegura = String(conta.descricao || '').slice(0, 100);
 
         transacoes.push({
+            id:          novoId(),
             categoria:   'saida',
             tipo:        'Conta Fixa',
             descricao:   `${descricaoSegura} (antecipação)`,
@@ -4530,6 +4523,7 @@ function pagarContaFixa(id, valorPago) {
         const descricaoSegura = String(conta.descricao || '').slice(0, 100);
 
         transacoes.push({
+            id:          novoId(),
             categoria:   'saida',
             tipo:        'Conta Fixa',
             descricao:   `${descricaoSegura} (pagamento mensal)`,

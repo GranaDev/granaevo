@@ -80,5 +80,65 @@ if (suspeitos.size) {
   process.exit(1);
 }
 
+// ---------------------------------------------------------------------------
+// SEGUNDA PASSAGEM (Passo 37.0a): todo registro criado nasce com `id`.
+//
+// É o mesmo tipo de falha que motivou o script acima — silenciosa. Sem `id` o
+// save só sabe dizer "aqui está o estado inteiro", e é assim que uma aba apaga
+// o lançamento que a outra acabou de fazer. Nada quebra, nada avisa: o registro
+// simplesmente some no reload.
+//
+// A rede em data-manager (`carimbarNovos`) sorteia um id para quem chegar sem,
+// mas ela NÃO substitui o carimbo na criação: o dashboard reconstrói cada objeto
+// pelo allowlist antes de salvar, então a rede carimba a CÓPIA — o array vivo da
+// tela continua sem id e sortearia outro no save seguinte. O mesmo registro
+// pareceria "apagado e recriado" a cada gravação.
+// ---------------------------------------------------------------------------
+const semId = new Map();
+for (const arq of arquivos) {
+  const src = fs.readFileSync(arq, 'utf8');
+  for (const arr of Object.values(alvos).map((v) => v.arr)) {
+    const re = new RegExp(String.raw`\b` + arr + String.raw`\.push\(\s*\{([\s\S]{0,700}?)\}\s*\)`, 'g');
+    let m;
+    while ((m = re.exec(src))) {
+      if (/(?:^|[\s,{])id\s*:/.test(m[1])) continue;
+      const linha = src.slice(0, m.index).split('\n').length;
+      const chave = `${arq.split(path.sep).join('/')}:${linha}`;
+      semId.set(chave, arr);
+    }
+  }
+}
+
+if (semId.size) {
+  console.error('✗ check-allowlist: registro criado SEM `id` (Passo 37 — identidade):\n');
+  for (const [onde, arr] of semId) console.error(`   ${arr}  ←  ${onde}`);
+  console.error('\n  Use novoId() de src/scripts/modules/registro-id.js na criação.');
+  process.exit(1);
+}
+
+// E quem CHAMA novoId() tem de IMPORTAR novoId. Parece redundante e não é: o
+// rollup trata identificador não declarado como global do navegador e o build
+// passa VERDE — foi assim que os botões de Reservas quebraram em produção, com
+// ReferenceError só no clique do usuário. O import some fácil (um `git checkout`
+// desatento apagou este mesmo, hoje).
+const semImport = [];
+for (const arq of arquivos) {
+  const src = fs.readFileSync(arq, 'utf8');
+  if (!/\bnovoId\s*\(/.test(src)) continue;
+  if (arq.split(path.sep).join('/').endsWith('src/scripts/modules/registro-id.js')) continue;
+  if (/import\s*\{[^}]*\bnovoId\b[^}]*\}\s*from\s*['"][^'"]*registro-id\.js/.test(src)) continue;
+  // Declaração local com o mesmo nome (ex.: `const novoId = crypto.randomUUID()`)
+  // não é a função compartilhada — é outra coisa, e não precisa do import.
+  if (/(?:const|let|var|function)\s+novoId\b/.test(src)) continue;
+  semImport.push(arq.split(path.sep).join('/'));
+}
+
+if (semImport.length) {
+  console.error('✗ check-allowlist: chama novoId() sem importar (quebra só no clique):\n');
+  for (const a of semImport) console.error(`   ${a}`);
+  console.error("\n  Falta: import { novoId } from '<caminho>/registro-id.js?v=1';");
+  process.exit(1);
+}
+
 if (erro) process.exit(1);
-console.log('✓ check-allowlist: nenhum campo gravado fora do allowlist');
+console.log('✓ check-allowlist: nenhum campo fora do allowlist, nenhum registro sem id');

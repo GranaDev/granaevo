@@ -4,6 +4,7 @@ import { chipHorasVida } from '../modules/horas-vida.js?v=1';
 import { construirModelo, sugerirCategoria } from '../modules/categorizacao.js?v=1';
 import { gerarParcelas, anexarParcelas, paraISO } from '../modules/fatura-parcelas.js?v=1';
 import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
+import { novoId } from '../modules/registro-id.js?v=1';
 
 let _ctx = null;
 
@@ -297,9 +298,7 @@ function lancarTransacao() {
         if(!confirm(`Criar assinatura "${descricao}" de ${formatBRL(valor)} no cartão ${cartao.nomeBanco}, com cobrança todo dia ${diaCobranca}.\nProsseguir?`)) return;
 
         const novaAssinatura = {
-            id: (typeof crypto !== 'undefined' && crypto.randomUUID)
-                ? crypto.randomUUID()
-                : `assinatura_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            id: novoId(),
             nome:           descricao,
             valor,
             cartaoId:       cartao.id,
@@ -363,8 +362,12 @@ function lancarTransacao() {
             tipoSalvo   = 'Reserva';
         }
 
-        // ✅ Sem id — banco gera via gen_random_uuid() (rows individuais no Supabase)
+        // O comentário que estava aqui dizia "sem id — banco gera via
+        // gen_random_uuid()". Nunca foi verdade: transação mora no BLOB da conta,
+        // não em linha do Postgres. Sem id, o save só sabe dizer "aqui está tudo"
+        // — e é assim que uma aba apaga o que a outra acabou de lançar.
         const t = {
+            id: novoId(),
             categoria,
             tipo:    tipoSalvo,
             descricao,
@@ -2832,6 +2835,7 @@ function abrirImportarExtrato() {
                 if (!/^\d{2}\/\d{2}\/\d{4}$/.test(tx.data)) return;
 
                 _ctx.transacoes.push({
+                    id: novoId(),
                     categoria: cat,
                     tipo,
                     descricao: _ctx._sanitizeText(tx.descricao).slice(0, 300) || 'Importado do extrato',

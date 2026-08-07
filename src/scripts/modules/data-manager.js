@@ -1,5 +1,6 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
 import { supabase, getValidAccessToken, refreshSession as hybridRefresh } from '../services/supabase-client.js?v=2';
+import { backfillIds, carimbarNovos } from './registro-id.js?v=1';
 
 // ========== CONSTANTES PRIVADAS ==========
 const MAX_PAYLOAD_BYTES  = 4_900_000;
@@ -280,7 +281,21 @@ class DataManager {
             // Load real bem-sucedido: confia no estado e memoriza quem tinha dados.
             this.#lastLoadOk = true;
             this.#rememberProfilesWithData(userData.profiles);
+
+            // Identidade dos registros antigos, ANTES do retrato. Registro gravado
+            // antes do Passo 37 não tem `id`; sem um, não existe "editei ESTE
+            // lançamento" — só "aqui está tudo", que é o que faz uma aba apagar a
+            // outra. O id é DERIVADO dos campos justamente para que dois clientes
+            // que leem a mesma linha cheguem ao mesmo nome.
+            //
+            // A ordem importa: depois do retrato, o perfil inteiro apareceria como
+            // "tocado" no save seguinte, e o merge por perfil viraria enfeite
+            // (declarar tudo = substituir tudo).
+            const derivados = backfillIds(userData.profiles);
             this.#tirarRetrato(userData.profiles);
+            if (IS_DEV && derivados > 0) {
+                console.log(`🔖 [DATA-MANAGER] ${derivados} registro(s) antigo(s) ganharam id`);
+            }
 
             if (IS_DEV) {
                 console.log('✅ [DATA-MANAGER] Dados carregados:', {
@@ -396,6 +411,16 @@ class DataManager {
         document.dispatchEvent(new CustomEvent('ge:save-start'));
 
         try {
+            // Rede de segurança da identidade: o que nasceu nesta sessão e escapou
+            // de receber id na criação ganha um agora. São mais de dez lugares que
+            // criam transação — um esquecido não daria erro, só voltaria a perder o
+            // dado da outra aba em silêncio.
+            //
+            // Carimba no ORIGINAL, não no clone: o id precisa ficar na memória que a
+            // tela segura. Carimbado só no clone, o mesmo registro sortearia um id
+            // diferente no save seguinte e apareceria como "apagou e criou outro".
+            carimbarNovos(profilesData);
+
             // Deep clone — imunidade a mutação externa durante operações assíncronas
             const safeProfiles = structuredClone(profilesData);
 
